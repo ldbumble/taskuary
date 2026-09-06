@@ -84,10 +84,6 @@ test("canonical All renders every root once with truthful details and frozen pag
   t.after(() => harness.close());
   const replays = await waitForDemoReplays(harness);
   await settleDemoWatcher(harness, replays);
-  // Seed before mounting so the real source and calendar discovery requests observe the fixture.
-  // The fixture preserves the demo's durable Current and emits no feed event during setup.
-  const seed = await request(harness, "/api/fixture/processing/canonical-all", "POST", { count: 507 });
-  assert.ok(seed.total >= 507, "fixture must retain demo roots and add at least 507 canonical roots");
 
   const page = await harness.newPage();
   const errors = [];
@@ -108,6 +104,14 @@ test("canonical All renders every root once with truthful details and frozen pag
   await page.waitForSelector(".tq-pile-row.current .tq-pile-next.cur", { timeout: 15000 });
   await page.waitForFunction(() => !document.querySelector(".tq-typing"), { timeout: 15000 });
   const current = await page.$eval(".tq-pile-row.current .card b", (node) => node.textContent.trim());
+  const seed = await request(harness, "/api/fixture/processing/canonical-all", "POST", { count: 507 });
+  assert.ok(seed.total >= 507, "fixture must retain demo roots and add at least 507 canonical roots");
+  // Reload so the real source and calendar discovery requests observe the new fixture, while
+  // proving that a canonical reconciliation cannot replace the already established Current.
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 20000 });
+  await page.waitForSelector(".tq-pile-row.current .tq-pile-next.cur", { timeout: 10000 });
+  assert.equal(await page.$eval(".tq-pile-row.current .card b", (node) => node.textContent.trim()), current,
+    "canonical fixture reconciliation must preserve the durable Current across reload");
 
   await clickState(page, "all");
   await page.waitForSelector("[data-processing-item] [data-tq-open]", { timeout: 15000 });

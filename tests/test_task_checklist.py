@@ -9,12 +9,13 @@ separate from task completion: ticking every box closes nothing, and closing a t
 A later message that adds a distinct request merges in without duplicating items or resetting
 checked boxes; the owner's own edits are kept.
 """
-import json, unittest
+import json, tempfile, unittest
+from pathlib import Path
 from unittest import mock
 from fastapi.testclient import TestClient
 
 from taskuary import ingest, server, terminal
-from taskuary.store import MemoryStore
+from taskuary.store import MemoryStore, SQLiteStore
 
 MSG = {'external_id': 'e1', 'channel': 'email', 'from_email': 'dana@vendor.example', 'from_name': 'Dana', 'conversation_id': 'AAQk-onboard',
        'subject': 'Re: Re: FW: stuff', 'sent_at': '2026-09-06 09:00:00',
@@ -118,6 +119,81 @@ class ProgressTests(unittest.TestCase):
                          [('Add Priya to the payroll portal', True), ('Send Dana the August export', False), ('Remove Sam from the payroll portal', False)])
         notes = [c['Body'] for c in self.s.list_comments(self.tid)]
         self.assertTrue(any('Remove Sam from the payroll portal' in n for n in notes), notes)   # the change is surfaced, not silent
+
+
+class PreservationTests(unittest.TestCase):
+    def test_substantive_case_operators_and_internal_spacing_stay_distinct_while_old_id_and_tick_survive(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'checklist.db'
+            s = SQLiteStore(str(path))
+            tid = s.create_task({'Title': 'Exact checklist identity'}, 'owner')
+            legacy_id = 'legacy42'
+            s._exec('UPDATE task SET Checklist=? WHERE TaskId=?', (json.dumps([
+                {'id': legacy_id, 'text': 'x >= 3', 'done': True},
+            ]), tid))
+
+            added = s.merge_task_checklist(tid, [
+                'x <= 3', 'X >= 3', 'A  B', 'A B',
+            ], 'triage')
+            items = s.task_checklist(tid)
+
+            self.assertEqual(items[0], {'id': legacy_id, 'text': 'x >= 3', 'done': True})
+            self.assertEqual(added, items[1:])
+            self.assertEqual([i['text'] for i in items],
+                             ['x >= 3', 'x <= 3', 'X >= 3', 'A  B', 'A B'])
+            self.assertEqual(len({i['id'] for i in items}), 5)
+            self.assertEqual(s.set_task_checklist(tid, [i['text'] for i in items], 'owner'), items)
+            s.cx.close()
+            reopened = SQLiteStore(str(path))
+            self.assertEqual(reopened.task_checklist(tid), items)
+            reopened.cx.close()
+
+    def test_thirteenth_item_is_durable_repeated_once_and_owner_can_edit_and_tick_past_twelve(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'thirteen.db'
+            s = SQLiteStore(str(path))
+            tid = s.create_task({'Title': 'Accumulated checklist'}, 'owner')
+            first = s.set_task_checklist(tid, [f'step {i}' for i in range(12)], 'triage')
+            self.assertTrue(s.tick_checklist_item(tid, first[0]['id'], True, 'owner'))
+
+            added = s.merge_task_checklist(tid, ['step 12'], 'triage')
+            persisted = s.task_checklist(tid)
+            self.assertEqual(len(persisted), 13)
+            self.assertEqual(added, persisted[12:])
+            self.assertEqual(s.merge_task_checklist(tid, ['step 12'], 'triage'), [])
+            self.assertEqual(s.task_checklist(tid)[0], {**first[0], 'done': True})
+
+            edited = s.set_task_checklist(tid, [*[f'step {i}' for i in range(13)], 'step 13'], 'owner')
+            self.assertEqual(len(edited), 14)
+            self.assertEqual(edited[0], {**first[0], 'done': True})
+            self.assertTrue(s.tick_checklist_item(tid, edited[13]['id'], True, 'owner'))
+            s.cx.close()
+
+            reopened = SQLiteStore(str(path))
+            after = reopened.task_checklist(tid)
+            self.assertEqual(len(after), 14)
+            self.assertTrue(after[0]['done'])
+            self.assertTrue(after[13]['done'])
+            reopened.cx.close()
+
+    def test_followup_announcement_exactly_matches_the_persisted_addition(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            s = SQLiteStore(str(Path(tmp) / 'announced.db'))
+            initial = verdict(checklist=tuple(f'step {i}' for i in range(12)))
+            with mock.patch.object(ingest, '_spawn'):
+                tid = ingest.ingest_message(s, dict(MSG), llm=initial)['task_id']
+                follow = {**MSG, 'external_id': 'e2', 'sent_at': '2026-09-06 10:00:00'}
+                ingest.ingest_message(s, follow, llm=verdict(checklist=('step 12',)))
+                repeated = {**MSG, 'external_id': 'e3', 'sent_at': '2026-09-06 11:00:00'}
+                ingest.ingest_message(s, repeated, llm=verdict(checklist=('step 12',)))
+
+            persisted = s.task_checklist(tid)
+            announcements = [row['Body'] for row in s.list_comments(tid)
+                             if row['Body'].startswith('New from the latest message:')]
+            self.assertEqual(len(persisted), 13)
+            self.assertEqual(announcements, ['New from the latest message:\n- [ ] step 12'])
+            self.assertEqual([i['text'] for i in persisted[12:]], ['step 12'])
+            s.cx.close()
 
 
 class SharedContextTests(unittest.TestCase):

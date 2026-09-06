@@ -881,20 +881,30 @@ class SQLiteStore:
     CHECKLIST_MAX = 12
     @staticmethod
     def checklist_id(text: str) -> str:
-        return hashlib.sha1(re.sub(r'\W+', ' ', str(text or '').lower()).strip().encode()).hexdigest()[:8]
+        # Case, punctuation, comparison operators and internal spacing can change the work.
+        # Hash the stored words exactly (apart from their harmless outer whitespace) so
+        # "x <= 3" never aliases "x >= 3" and an owner-authored distinction stays distinct.
+        return hashlib.sha1(str(text or '').strip().encode()).hexdigest()[:8]
     @classmethod
-    def clean_checklist(cls, items) -> list:
-        """Strings only, trimmed, no repeats (case- and punctuation-blind), at most CHECKLIST_MAX."""
+    def clean_checklist(cls, items, *, cap=True) -> list:
+        """Strings only, outer whitespace trimmed, exact repeats removed.
+
+        Triage verdicts stay bounded by CHECKLIST_MAX. The owner can edit an accumulated
+        checklist beyond that per-verdict limit without silently dropping existing boxes.
+        """
         if not isinstance(items, (list, tuple)): return []
         out, seen = [], set()
         for x in items:
             if not isinstance(x, str): continue
-            text = ' '.join(x.split())[:300]
+            text = x.strip()[:300]
             if not text: continue
-            k = cls.checklist_id(text)
-            if k in seen: continue
-            seen.add(k); out.append(text)
-            if len(out) >= cls.CHECKLIST_MAX: break
+            # One model verdict can repeat the same words with capitalization noise. Keep that
+            # established validation, while punctuation/operators/spacing remain substantive.
+            # Owner edits are exact and may deliberately retain case-distinct boxes.
+            duplicate_key = text.casefold() if cap else text
+            if duplicate_key in seen: continue
+            seen.add(duplicate_key); out.append(text)
+            if cap and len(out) >= cls.CHECKLIST_MAX: break
         return out
     def task_checklist(self, task_id) -> list:
         t = self.get_task(task_id)
@@ -906,16 +916,31 @@ class SQLiteStore:
         self._bump_snapshots(); self._poke('task-changed', task_id=task_id)
     def set_task_checklist(self, task_id, texts, actor: str) -> list:
         """Replace the list with these words; a box whose words are unchanged keeps its state."""
-        old = {i['id']: i for i in self.task_checklist(task_id)}
-        items = [{'id': self.checklist_id(t), 'text': t, 'done': bool(old.get(self.checklist_id(t), {}).get('done'))} for t in self.clean_checklist(texts)]
+        old = {i['text']: i for i in self.task_checklist(task_id)}
+        items, used_ids = [], set()
+        for text in self.clean_checklist(texts, cap=actor != 'owner'):
+            prior = old.get(text) or {}
+            item_id = prior.get('id')
+            digest = hashlib.sha1(text.encode()).hexdigest()
+            if not item_id or item_id in used_ids:
+                item_id = next((digest[:n] for n in range(8, len(digest) + 1)
+                                if digest[:n] not in used_ids), digest)
+            used_ids.add(item_id)
+            items.append({'id': item_id, 'text': text, 'done': bool(prior.get('done'))})
         self._write_checklist(task_id, items, actor)
         return items
     def merge_task_checklist(self, task_id, texts, actor: str) -> list:
         """Add the items a later message brings; nothing existing moves or unticks. Returns the new ones."""
         items = self.task_checklist(task_id)
-        have = {i['id'] for i in items}
-        new = [{'id': self.checklist_id(t), 'text': t, 'done': False} for t in self.clean_checklist(texts) if self.checklist_id(t) not in have]
-        if new: self._write_checklist(task_id, (items + new)[:max(self.CHECKLIST_MAX, len(items))], actor)
+        have, used_ids, new = {i['text'] for i in items}, {i.get('id') for i in items}, []
+        for text in self.clean_checklist(texts):
+            if text in have: continue
+            digest = hashlib.sha1(text.encode()).hexdigest()
+            item_id = next((digest[:n] for n in range(8, len(digest) + 1)
+                            if digest[:n] not in used_ids), digest)
+            new.append({'id': item_id, 'text': text, 'done': False})
+            have.add(text); used_ids.add(item_id)
+        if new: self._write_checklist(task_id, items + new, actor)
         return new
     def tick_checklist_item(self, task_id, item_id: str, done: bool, actor: str) -> bool:
         items = self.task_checklist(task_id)

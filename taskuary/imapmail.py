@@ -460,7 +460,33 @@ def _external_id(sent: bool, user: str, uid: int, *, scope: str, validity, mode:
     return f'{prefix}:{scope}:v{epoch}:{uid}'
 
 
-def _prepare_folder(checkpoint, cfg: dict, *, sent: bool, scope: str, seen_validity):
+def _unmarked_folder(cfg: dict, sent: bool) -> bool:
+    return not any(name in cfg for name in _keys(sent).values())
+
+
+def _legacy_evidence(store, connector_id: int, user: str, sent: bool, uids) -> bool:
+    """Whether exact replay candidates belong to this connector's pre-checkpoint mailbox.
+
+    Legacy message rows name the mailbox but not ConnectorId. Adopt their namespace only when
+    source ownership makes that mailbox unambiguous; two connectors using the same address must
+    not suppress one another's fresh mail.
+    """
+    matching = [s for s in store.list_sources(active_only=False)
+                if s.get('Channel') == 'email'
+                and str(s.get('Address') or '').strip().casefold() == user.casefold()]
+    if not matching or any(s.get('ConnectorId') != connector_id for s in matching):
+        return False
+    prefix = 'imap-sent' if sent else 'imap'
+    for uid in uids:
+        row = store.message_by_external(f'{prefix}:{user}:{uid}')
+        if not row or row.get('Channel') != 'email': continue
+        if str(row.get('SourceName') or '').strip().casefold() != user.casefold(): continue
+        return True
+    return False
+
+
+def _prepare_folder(checkpoint, cfg: dict, *, sent: bool, scope: str, seen_validity,
+                    legacy_evidence=False):
     """Adopt or reset a folder checkpoint and persist the basis before any message lands."""
     k = _keys(sent)
     cursor = _number(cfg.get(k['uid'])) or 0
@@ -473,7 +499,7 @@ def _prepare_folder(checkpoint, cfg: dict, *, sent: bool, scope: str, seen_valid
     # An established checkpoint without a marker is an upgraded legacy epoch. Keeping its exact
     # old identity avoids re-importing a row written before an old cursor save. A genuinely fresh
     # folder starts with scoped IDs, so its first future UIDVALIDITY reset is safe too.
-    mode = mode or ('legacy' if k['uid'] in cfg or k['validity'] in cfg
+    mode = mode or ('legacy' if legacy_evidence or k['uid'] in cfg or k['validity'] in cfg
                     else 'scoped-v1' if seen_validity is not None else 'scoped-unknown-v1')
     scope_changed = stored_scope not in (None, scope)
     validity_changed = (seen_validity is not None and saved_validity is not None
@@ -522,12 +548,16 @@ def poll_sent(store, M, user: str, last_uid: int, days: int, state: dict = None)
     if typ != 'OK': raise IMAPCommandError(f'SELECT {box} returned {typ}')
     state['box'] = box
     state['validity'] = _validity(M)
+    selected_uids = _uids(M, last_uid, days)
     if state.get('prepare'):
-        folder = state['prepare'](box, state['validity'])
+        folder = state['prepare'](box, state['validity'], selected_uids)
+        if folder['cursor'] != last_uid:
+            selected_uids = _uids(M, folder['cursor'], days)
         last_uid = folder['cursor']
         state.update(folder)
     elif _rewound(user, box, state.get('saved_validity'), state['validity']):
         last_uid = 0
+        selected_uids = _uids(M, last_uid, days)
     def read(uid) -> int:
         msg, body, _atts = _fetch_message(M, uid)
         try: when = email.utils.parsedate_to_datetime(msg.get('Date')).astimezone().strftime('%Y-%m-%d %H:%M:%S')
@@ -543,7 +573,7 @@ def poll_sent(store, M, user: str, last_uid: int, days: int, state: dict = None)
     def progress(uid, holes):
         state['uid'], state['holes'] = uid, set(holes)
         if state.get('save'): state['save'](uid, holes)
-    n, done, holes, failures = _drain(_uids(M, last_uid, days), read, progress,
+    n, done, holes, failures = _drain(selected_uids, read, progress,
                                       cursor=last_uid, holes=state.get('holes', ()))
     state['uid'], state['holes'], state['failures'] = done, holes, failures
     return n, (done if done is not None else last_uid)
@@ -593,10 +623,12 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
             cfg.pop(name, None)
             expected_config[name] = None
 
-    def prepare(sent, box, validity):
+    def prepare(sent, box, validity, selected_uids):
+        legacy = (_unmarked_folder(cfg, sent)
+                  and _legacy_evidence(store, c['ConnectorId'], user, sent, selected_uids))
         return _prepare_folder(checkpoint, cfg, sent=sent,
                                scope=_scope(imap_h, imap_port, user, box),
-                               seen_validity=validity)
+                               seen_validity=validity, legacy_evidence=legacy)
     try:
         # readonly is what has always kept the funnel invisible in the mailbox: an ordinary
         # RFC822 fetch sets \Seen by itself. Only the mark-read switch opens the box for
@@ -604,7 +636,11 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
         read_it = wants_read(store)
         typ, _data = M.select('INBOX', readonly=not read_it)
         if typ != 'OK': raise IMAPCommandError(f'SELECT INBOX returned {typ}')
-        folder = prepare(False, 'INBOX', _validity(M))
+        initial_cursor = _number(cfg.get('imap_uid')) or 0
+        selected_uids = _uids(M, initial_cursor, max(backfill_days, 1))
+        folder = prepare(False, 'INBOX', _validity(M), selected_uids)
+        if folder['cursor'] != initial_cursor:
+            selected_uids = _uids(M, folder['cursor'], max(backfill_days, 1))
         last_uid = folder['cursor']
         def read(uid) -> int:
             msg, body, atts = _fetch_message(M, uid)
@@ -640,11 +676,12 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
                         folder['keys']['holes']: _hole_json(folder['scope'], folder['validity'],
                                                             folder['mode'], holes)})
         got, _done, holes, failures = _drain(
-            _uids(M, last_uid, max(backfill_days, 1)), read, progress,
+            selected_uids, read, progress,
             cursor=last_uid, holes=folder['holes'])
         n += got
         # ...and the other half of the conversation: what the owner sent from the mailbox itself
-        state = {'strict': True, 'prepare': lambda box, validity: prepare(True, box, validity)}
+        state = {'strict': True,
+                 'prepare': lambda box, validity, uids: prepare(True, box, validity, uids)}
         def save_sent(uid, sent_holes):
             checkpoint({state['keys']['uid']: uid,
                         state['keys']['holes']: _hole_json(state['scope'], state['validity'],

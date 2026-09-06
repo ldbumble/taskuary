@@ -156,6 +156,41 @@ class GapTests(unittest.TestCase):
         self.assertTrue(box.searches[0][1].startswith('(SINCE '), box.searches)
         self.assertEqual(cfg_of(s)['imap_uid'], 60)
         self.assertEqual(cfg_of(s)['imap_uidvalidity'], 7)
+        self.assertTrue(all(re.fullmatch(r'imap:[0-9a-f]{24}:v7:\d+', row['ExternalId'])
+                            for row in inbound(s)))
+
+    def test_precheckpoint_inbox_replay_adopts_attributable_legacy_identity(self):
+        s, c = store_with({})
+        cid = c['ConnectorId']
+        s.save_source({'Channel': 'email', 'Address': 'me@myco.example',
+                       'ConnectorId': cid, 'Active': 1}, 'fixture')
+        mid = s.add_message({'ExternalId': 'imap:me@myco.example:1', 'Channel': 'email',
+                             'SourceName': 'me@myco.example', 'Subject': 'already landed',
+                             'BodyText': 'keep this exact historical row', 'Status': 'surfaced'})
+        before = dict(s.get_message(mid))
+        self.assertEqual(poll(s, c, FakeBox(mails([1]), validity=7)), 0)
+        self.assertEqual(len(inbound(s)), 1)
+        self.assertEqual(dict(s.get_message(mid)), before)
+        self.assertEqual(cfg_of(s)['imap_uid_identity'], 'legacy')
+        self.assertEqual(cfg_of(s)['imap_uid'], 1)
+
+    def test_ambiguous_shared_address_does_not_borrow_another_connector_legacy_row(self):
+        s, c = store_with({})
+        current_id = c['ConnectorId']
+        other_id = s.save_connector({'Type': 'imap', 'Name': 'Other host', 'Active': 1,
+                                     'Secret': 'other-password',
+                                     'ConfigJson': json.dumps({'address': 'me@myco.example',
+                                                               'imap_host': 'other.example'})}, 'fixture')
+        for cid in (current_id, other_id):
+            s.save_source({'Channel': 'email', 'Address': 'me@myco.example',
+                           'ConnectorId': cid, 'Active': 1}, 'fixture')
+        s.add_message({'ExternalId': 'imap:me@myco.example:1', 'Channel': 'email',
+                       'SourceName': 'me@myco.example', 'Subject': 'belongs elsewhere',
+                       'BodyText': 'ambiguous legacy evidence', 'Status': 'surfaced'})
+        self.assertEqual(poll(s, c, FakeBox(mails([1]), validity=7)), 1)
+        self.assertEqual(len(inbound(s)), 2)
+        self.assertEqual(cfg_of(s)['imap_uid_identity'], 'scoped-v1')
+        self.assertRegex(inbound(s)[-1]['ExternalId'], r'^imap:[0-9a-f]{24}:v7:1$')
 
     def test_a_changed_uidvalidity_makes_the_saved_cursor_meaningless(self):
         s, c = store_with({'imap_uid': 500, 'imap_uidvalidity': 7})
@@ -281,6 +316,21 @@ class GapTests(unittest.TestCase):
 
 
 class SentTests(unittest.TestCase):
+    def test_precheckpoint_sent_replay_adopts_attributable_legacy_identity(self):
+        s, c = store_with({})
+        s.save_source({'Channel': 'email', 'Address': 'me@myco.example',
+                       'ConnectorId': c['ConnectorId'], 'Active': 1}, 'fixture')
+        mid = s.add_message({'ExternalId': 'imap-sent:me@myco.example:1', 'Channel': 'email',
+                             'SourceName': 'me@myco.example', 'Subject': 'already sent',
+                             'BodyText': 'historical owner reply', 'Status': 'context'})
+        before = dict(s.get_message(mid))
+        sent = mails([1], frm='Me <me@myco.example>')
+        self.assertEqual(poll(s, c, FakeBox({}, sent=sent, validity=7)), 0)
+        self.assertEqual(len(s._rows("SELECT * FROM message WHERE Status='context'")), 1)
+        self.assertEqual(dict(s.get_message(mid)), before)
+        self.assertEqual(cfg_of(s)['imap_sent_uid_identity'], 'legacy')
+        self.assertEqual(cfg_of(s)['imap_sent_uid'], 1)
+
     def test_the_sent_folder_drains_its_whole_gap_too(self):
         s, c = store_with({'imap_uid': 10, 'imap_sent_uid': 200, 'imap_uidvalidity': 7})
         sent = mails(range(201, 261), when=lambda u: NOW - timedelta(days=10) + timedelta(hours=u - 200), frm='Me <me@myco.example>')
@@ -340,6 +390,15 @@ class SentTests(unittest.TestCase):
 
 
 class FailureTests(unittest.TestCase):
+    def test_legacy_attribution_read_failure_aborts_before_namespace_or_cursor_write(self):
+        s, c = store_with({})
+        before = cfg_of(s)
+        with mock.patch.object(s, 'list_sources', side_effect=OSError('synthetic source read failure')):
+            with self.assertRaisesRegex(OSError, 'source read failure'):
+                poll(s, c, FakeBox(mails([1]), validity=7))
+        self.assertEqual(cfg_of(s), before)
+        self.assertEqual(inbound(s), [])
+
     def test_malformed_fetch_is_a_durable_hole_while_later_mail_progresses(self):
         s, c = store_with({'imap_uid': 100, 'imap_uidvalidity': 7})
         with self.assertRaises(imapmail.IMAPPartialFailure) as failed:

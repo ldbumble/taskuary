@@ -234,5 +234,54 @@ class ExecutionTests(unittest.TestCase):
         self.assertTrue(any('Done -' in b and f'TQ-{tid:04d}' in b for b in bodies), bodies[-3:])
 
 
+class HandoffTests(unittest.TestCase):
+    """PW-135/136: a confirmed hand-off that starts is acknowledged and moves on once; the delegated task stays in
+    Unread as Working, nothing settled; a repository still to choose, a failed start or a cancel keep the item."""
+
+    def _proposed(self):
+        s, tid, mid, item = asked()
+        p = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nDECIDE: coder')['proposal']
+        return s, tid, mid, item, p
+
+    def test_a_hand_off_that_starts_is_receipted_moving_on_and_the_task_stays_in_unread_as_working(self):
+        s, tid, mid, item, p = self._proposed()
+        started = {'dispatch': 'session', 'agent': 'coder', 'model': None, 'started': True, 'existing': False, 'taskId': tid, 'ref': f'TQ-{tid:04d}'}
+        with mock.patch.object(server, 'dispatch_message', return_value=started):
+            r = run(s, p).json()
+        self.assertEqual((r['status'], r['outcome']['started']), ('done', True))
+        from taskuary import general
+        dock, _ = general.dock_task(s, 'owner')
+        self.assertTrue(any('coder is on it - moving on' in (c.get('Body') or '') for c in general.chat_rows(s, dock['TaskId'])))
+        self.assertNotIn(item['key'], {k for k, st in s.funnel_states().items() if st.get('Status') == 'done'})   # nothing settled
+        s.update_task(tid, {'Status': 'in_progress'}, 'router')
+        live = [{'taskId': tid, 'sid': 's1', 'agent': 'coder', 'label': 'coder', 'started': ago(0), 'idle': 2, 'waiting': False, 'tail': ['reading']}]
+        with mock.patch.object(terminal, 'live_sessions', return_value=live):
+            rows = funnel.build(s, keep_surfaced=True)['items']
+        self.assertEqual([(i['key'], i['lane']) for i in rows if i.get('tid') == tid], [(f'agent:{tid}', 'working')])   # visible, Working
+
+    def test_a_repository_still_to_choose_keeps_the_item_in_place_and_the_same_confirmation_resumes(self):
+        s, tid, mid, item, p = self._proposed()
+        needs = {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'agent': 'coder', 'taskId': tid, 'ref': f'TQ-{tid:04d}',
+                 'reason': 'could not tell which checkout - pick the repository'}
+        with mock.patch.object(server, 'dispatch_message', return_value=needs):
+            r = run(s, p).json()
+        self.assertEqual((r['status'], r['outcome']['dispatch']), ('error', 'needs_repo')); self.assertIn('repository', r['error'])
+        self.assertEqual([i['key'] for i in pile(s)], [item['key']]); self.assertEqual(s.get_task(tid)['Status'], 'open')   # in place
+        self.assertEqual(operations.get(s, p['id'])['status'], 'error')
+        started = {**needs, 'dispatch': 'session', 'started': True, 'reason': None}
+        with mock.patch.object(server, 'dispatch_message', return_value=started) as dispatch:
+            r2 = run(s, p).json(); r3 = run(s, p).json()
+        self.assertEqual((r2['status'], r2['duplicate'], r3['duplicate']), ('done', False, True)); self.assertEqual(dispatch.call_count, 1)   # advances once
+
+    def test_a_failed_start_and_a_cancel_keep_the_item(self):
+        s, tid, mid, item, p = self._proposed()
+        with mock.patch.object(server, 'dispatch_message', side_effect=RuntimeError('agent did not start')):
+            self.assertEqual(run(s, p).json()['status'], 'error')
+        self.assertEqual([i['key'] for i in pile(s)], [item['key']])
+        with mock.patch.object(server, 'store', s):
+            TestClient(server.app).delete(f"/api/operations/{p['id']}")
+        self.assertEqual(run(s, p).status_code, 409); self.assertEqual([i['key'] for i in pile(s)], [item['key']])
+
+
 if __name__ == '__main__':
     unittest.main()

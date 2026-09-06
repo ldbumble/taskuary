@@ -30,9 +30,9 @@ test("the card says exactly what will happen: action, target and parameters", ()
 
 test("after the click, the receipt is the server's word and the walk moves only on a done that settles", () => {
   assert.deepEqual(afterExecute(p, { status: "done", outcome: { ref: "TQ-0007" }, duplicate: false }),
-    { receipt: "Done - Send to the coding agent.", settle: true, status: "done" });
+    { receipt: "Done - Send to the coding agent.", settle: true, status: "done", handoff: false });   // done, but no worker started
   assert.deepEqual(afterExecute({ ...p, settles: false }, { status: "done", outcome: {} }),
-    { receipt: "Done - Send to the coding agent.", settle: false, status: "done" });
+    { receipt: "Done - Send to the coding agent.", settle: false, status: "done", handoff: false });
   assert.deepEqual(afterExecute(p, { status: "error", error: "agent did not start" }),
     { receipt: "Not done - agent did not start. Nothing moved.", settle: false, status: "error" });
   assert.deepEqual(afterExecute(p, { status: "stale", error: "the context changed since this was proposed" }),

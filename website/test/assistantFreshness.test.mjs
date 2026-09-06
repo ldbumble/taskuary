@@ -25,7 +25,7 @@ test("selection freshness preserves explicit action advancement while background
   assert.doesNotMatch(events, /setCurrent|setCurrentItem|surfaceRef|deferInChat/);
   assert.match(view, /deferInChat\(\(\) => surfaceRef\.current\?\.\(\), 500\)/);
   // explicit advancement after a confirmed proposal: only a success that settles the item on the table moves the walk (PW-125)
-  assert.match(view, /if \(out\.settle && p\.key && p\.key === current\) \{ if \(p\.kind === "item\.settle"\) advance\(\); else await done\(null\); \}/);
+  assert.match(view, /if \(out\.settle && p\.key && p\.key === current\) \{ if \(p\.kind === "item\.settle" \|\| out\.handoff\) advance\(\); else await done\(null\); \}/);
 });
 
 test("lazy card reads are revision-bound and discard superseded responses", () => {

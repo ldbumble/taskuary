@@ -133,6 +133,7 @@ ALL_DONE = ("That's everything for now. The pipe is empty - nothing is waiting o
 # sentences, and the coding model is the wrong tool for them (Connections > AI CLI agents sets it)
 LIGHT_DEFAULT = {'claude': 'haiku', 'codex': 'effort:low', 'gemini': 'gemini-2.5-flash'}
 SID_KEY = 'concierge_cli_sid'          # the CLI's own conversation, resumed turn to turn (per dock task)
+CURRENT_KEY = 'assistant_current'      # what is on the table, per dock task - persisted, validated on restore (PW-162)
 
 
 AI_KEY, MODEL_KEY = 'concierge_ai', 'concierge_model'   # this page's own choice - the old dock's assistant_ai stays the dock's and WhatsApp's
@@ -197,6 +198,30 @@ def brain(store, trace=None, cancel=None, resume=None, fast=False):
 
 
 def _sid(store, tid: int) -> str: return str(store.get_settings().get(f'{SID_KEY}:{tid}') or '')
+
+
+def current_key(store, tid: int) -> str: return str(store.get_settings().get(f'{CURRENT_KEY}:{tid}') or '')
+
+
+def set_current(store, tid: int, key: str | None, actor: str = 'assistant'):
+    """The thing on the table, written down as it is put there (or taken away) - not inferred later."""
+    if current_key(store, tid) != (key or ''): store.set_setting(f'{CURRENT_KEY}:{tid}', key or '', actor)
+
+
+def restore_current(store, tid: int) -> dict | None:
+    """The persisted Current, validated against the pile as it stands (PW-162): the item as it is now when it
+    is still unread and still there; otherwise the key is cleared and nothing is chosen in its place."""
+    key = current_key(store, tid)
+    if not key: return None
+    try: item = funnel.batch_item(store, key) if key.startswith('fyis:') else funnel.next_item(store, key, include_surfaced=True)
+    except Exception as e:
+        logger.warning(f'concierge: could not validate the current item {key} - {e}'); item = None
+    if not item or item.get('settling'):
+        set_current(store, tid, None)
+        return None
+    card = card_for(item) | {'presentation_revision': item.get('presentation_revision')}
+    if item.get('kind') == 'fyis': card['items'] = [card_for(i) for i in item.get('items') or []]   # the handful, entry by entry
+    return card
 def _remember_sid(store, tid: int, llm):
     sid = getattr(llm, 'session_id', '') or ''
     if sid and sid != _sid(store, tid): store.set_setting(f'{SID_KEY}:{tid}', sid, 'assistant')
@@ -709,25 +734,20 @@ def history(store, tid: int) -> list:
     return out
 
 
-CHATS_KEPT_DAYS = 20          # a transcript older than this is nobody's memory - the list stays readable
-
-def chats(store, actor: str = 'owner') -> list:
+def chats(store, actor: str = 'owner', limit: int = 25, before: int = None) -> list:
     """Every conversation the guide has had, newest first: what it was about, when it ran, how long it
     lasted, how much of the pipe it got through, and which is open.
 
     A walk with nothing typed into it used to read "Walkthrough · 2026-09-03" three times over, with
     nothing to tell them apart (the owner, 2026-09-03: "Past chats don't really make sense... we need
     to add time to it, and how many emails processed so you can see past transacript"). So an untyped
-    walk is named by its clock and counted by the items it actually put on the table, and anything
-    past CHATS_KEPT_DAYS is dropped on the way past."""
-    cut = (datetime.now() - timedelta(days=CHATS_KEPT_DAYS)).strftime('%Y-%m-%d %H:%M:%S')
+    walk is named by its clock and counted by the items it actually put on the table. A page at a time,
+    and READ-ONLY (PW-157): what expires is retention's job on its own clock (retention.py), never a side
+    effect of looking at the list."""
     out = []
-    for t in store.dock_tasks(general.DOCK_TAG):
+    for t in store.dock_tasks(general.DOCK_TAG, limit=limit, before=before):
         rows = general.chat_rows(store, t['TaskId'])
         last = str((rows[-1]['CreatedAt'] if rows else t.get('CreatedAt')) or '')
-        if last and last < cut:
-            store.update_task(t['TaskId'], {'Status': 'dropped'}, actor)      # off the list; the task itself is history
-            continue
         first = next((c for c in rows if c.get('ActorType') == general.USER_TYPE), None)
         started = str(rows[0]['CreatedAt'] if rows else t.get('CreatedAt') or '')
         # what it got THROUGH: every card the assistant put on the table, mail counted apart
@@ -1284,6 +1304,7 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             say = "Nothing else needs you right now; " + ', '.join(parts) + '.'
         else: say = ALL_DONE
         with guarded():
+            if not key: set_current(store, tid, None, actor)                  # the walk ran out: nothing is on the table
             record(store, tid, 'assistant', say)
         return {'item': None, 'say': say, 'options': [], 'left': len(p['items']), 'exhausted': only if (only and left) else None}
     # an agent has this one now (it started after the pile was built, or the owner just sent it): there is
@@ -1329,6 +1350,7 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
                 except Exception as e: logger.warning(f'concierge: the fyi conversation did not save - {e}')
             # shown is not read (PW-154): the state is `surfaced`, and it carries the entry's own summary
             for n, i in enumerate(batch, 1): funnel.settle(store, i['key'], 'surfaced', actor, note=None if i.get('sig') else gists.get(n))
+            set_current(store, tid, card['key'], actor)
             record_related(store, tid, card, 'assistant', say, card)
         return {'item': card, 'say': say, 'options': [], 'left': len(p['items']) - len(batch)}
 
@@ -1351,6 +1373,7 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             try: _remember_sid(store, tid, llm)
             except Exception as e: logger.warning(f'concierge: the model conversation did not save - {e}')
         funnel.settle(store, item['key'], 'surfaced', actor, note=item.get('sig'))
+        set_current(store, tid, item['key'], actor)                          # on the table, written down (PW-162)
         record_related(store, tid, item, 'assistant', say + (f"\nOPTIONS: {' | '.join(options)}" if options else ''), card_for(item))
     return {'item': item, 'say': say, 'options': options, 'left': len(p['items']) - 1}
 
@@ -1543,6 +1566,9 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind == 'task.setup' and o.get('ref'):
         return (f" {o['ref']} - \"{o.get('title') or ''}\" is open as a walk-through: a conversation with the assistant, nothing built, no repository touched. "
                 'Open it when you want to start; its browser opens beside the assistant.')
+    if kind == 'task.create_from_message' and p.get('kind') in ('coding', 'general'):
+        if o.get('existing'): return f" {o.get('agent') or 'An agent'} was already on it."
+        if o.get('started') or o.get('chat'): return f" {o.get('agent') or 'The agent'} is on it - moving on."
     if kind == 'item.settle' and o.get('closed'): return f" {task_ref(int(o['closed']))} closed."
     if kind == 'agent.stop' and not p.get('wrap'): return ' The task stays open - say close it when you want it closed.'
     if kind == 'memory.remember': return ' A memory settles nothing: the walk is where it was.'

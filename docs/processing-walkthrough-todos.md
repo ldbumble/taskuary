@@ -790,10 +790,10 @@ worker actually starts, acknowledge the named agent/task, say "Moving on", and
 present the next eligible shared-Unread item. This is a consequence of confirmed
 handoff, not permission for background events to advance the conversation.
 
-- [ ] <a id="pw-135"></a>**PW-135** Keep the delegated task visible in Unread as Working; do not settle it as
+- [x] <a id="pw-135"></a>**PW-135** Keep the delegated task visible in Unread as Working; do not settle it as
   done/read merely to advance chat. Failed starts, missing repository choices,
   and cancelled confirmations must keep the current item in place.
-- [ ] <a id="pw-136"></a>**PW-136** Test successful handoff advances once, retains the working task in Unread,
+- [x] <a id="pw-136"></a>**PW-136** Test successful handoff advances once, retains the working task in Unread,
   and failure/cancellation does not advance. Agent workspace inline presentation
   is still under review; do not infer a new display decision from this exception.
 
@@ -900,22 +900,22 @@ cleanup is independent of New chat and viewing history. Pending implementation;
 retention duration is configurable in Settings, defaulting to 15 days. Cleanup
 deletes expired chat archives, not task-linked history or learned state.
 
-- [ ] <a id="pw-156"></a>**PW-156** New chat archives the current conversation, resets chat/Current, and opens
+- [x] <a id="pw-156"></a>**PW-156** New chat archives the current conversation, resets chat/Current, and opens
   a blank conversation awaiting owner input. It must not trigger retention
   deletion, change source/task read state, or automatically start a walkthrough.
-- [ ] <a id="pw-157"></a>**PW-157** Listing/opening earlier chats is read-only and paginated. Remove the
+- [x] <a id="pw-157"></a>**PW-157** Listing/opening earlier chats is read-only and paginated. Remove the
   hardcoded CHATS_KEPT_DAYS cutoff/status mutation from concierge.chats(); do not
   hide or mark old conversations dropped as a side effect of a history request.
-- [ ] <a id="pw-158"></a>**PW-158** Implement automatic retention cleanup as a separate scheduled lifecycle
+- [x] <a id="pw-158"></a>**PW-158** Implement automatic retention cleanup as a separate scheduled lifecycle
   operation with a chat retention setting defaulting to 15 days, not the existing
   hardcoded 20-day cutoff.
-- [ ] <a id="pw-159"></a>**PW-159** Preserve task-linked discussion, confirmed actions, agent results, and send
+- [x] <a id="pw-159"></a>**PW-159** Preserve task-linked discussion, confirmed actions, agent results, and send
   outcomes for the life of the task, accessible in All/task history after the chat
   archive expires. FYI discussion linked when it becomes a task is task history
   too. Ensure retained records do not depend on a deleted archive for readability.
-- [ ] <a id="pw-160"></a>**PW-160** Keep correction memory and saved rules on independent lifecycles. Chat
+- [x] <a id="pw-160"></a>**PW-160** Keep correction memory and saved rules on independent lifecycles. Chat
   deletion must not erase learning evidence, learned preferences, or exclusions.
-- [ ] <a id="pw-161"></a>**PW-161** Test New chat archives without deletion or auto-walk, history reads do not
+- [x] <a id="pw-161"></a>**PW-161** Test New chat archives without deletion or auto-walk, history reads do not
   mutate state, old retained chats remain accessible through pagination, and
   retention cleanup runs independently and only removes policy-eligible records.
   Test the 15-day default, configured overrides, and the retention cutoff boundary.
@@ -928,17 +928,17 @@ Owner-approved: opening or returning to Assistant restores the existing
 conversation and validated Current item; it must not initiate a walkthrough
 merely because the tab was opened. Pending implementation.
 
-- [ ] <a id="pw-162"></a>**PW-162** Persist Current explicitly and validate it against current canonical item
+- [x] <a id="pw-162"></a>**PW-162** Persist Current explicitly and validate it against current canonical item
   state when restoring the conversation. Do not infer Current solely from the
   last historical card. Keep historical discussion readable without reviving
   handled items as current work. If Current is no longer valid, clear it without
   automatically selecting or discussing a replacement.
-- [ ] <a id="pw-163"></a>**PW-163** Keep history/pipeline loading separate from initiating an assistant turn.
+- [x] <a id="pw-163"></a>**PW-163** Keep history/pipeline loading separate from initiating an assistant turn.
   Mounting, tab activation, remounting, reconnecting, or initial refresh must not
   itself call Next or start a walkthrough. Preserve the approved blank New chat
   behavior. Genuine live attention notifications remain a separate mechanism,
   whose interruption/auto-advance rules still need review.
-- [ ] <a id="pw-164"></a>**PW-164** Test first visit, returning from another tab, page reload/remount, stale
+- [x] <a id="pw-164"></a>**PW-164** Test first visit, returning from another tab, page reload/remount, stale
   historical cards, completed Current items, and new/empty conversations. Verify
   restored history and valid Current without unsolicited turns or duplicate posts.
 

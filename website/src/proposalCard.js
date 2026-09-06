@@ -12,10 +12,17 @@ export function describe(p) {
   return { title: p.label || p.title || p.kind, target: p.summary || "", params, confirm: p.label || "Confirm", cancel: "Cancel" };
 }
 
+// a hand-off to an agent (PW-135): when it STARTS, the walk moves on once and the delegated task stays in
+// Unread as Working - nothing is settled; a repository still to choose is a decision the card asks for
+export const isHandoff = (p) => p.kind === "task.create_from_message" && ["coding", "general"].includes(p.params?.kind);
+
 export function afterExecute(p, res) {
   const label = p.label || p.title || p.kind;
   if (res?.status === "done" && res.duplicate) return { receipt: `Already done - ${label}.`, settle: false, status: "done" };
-  if (res?.status === "done") return { receipt: `Done - ${label}.`, settle: !!p.settles, status: "done" };
+  if (res?.status === "done") return { receipt: `Done - ${label}.`, settle: !!p.settles, status: "done", handoff: isHandoff(p) && !!(res.outcome?.started || res.outcome?.chat) };
+  if (res?.status === "error" && res.outcome?.dispatch === "needs_repo")
+    return { receipt: `Not started - ${res.error || "it needs a repository first"}. Pick one on the card and confirm again.`, settle: false, status: "error",
+             repo: { taskId: res.outcome.taskId, agent: res.outcome.agent } };
   if (res?.status === "stale") return { receipt: `Not done - ${res.error || "the proposal is out of date"}. Say it again if you still want it.`, settle: false, status: "stale" };
   return { receipt: `Not done - ${res?.error || "it failed"}. Nothing moved.`, settle: false, status: res?.status || "error" };
 }

@@ -1213,18 +1213,18 @@
       "section": "Successful agent handoff: acknowledge and move on",
       "phase": "5/8",
       "requirement": "Keep the delegated task visible in Unread as Working; do not settle it as",
-      "status": "pending",
-      "test": "Required: Phase 5/8 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_chat_proposals.py`::HandoffTests (a started dispatch is receipted \"is on it - moving on\" and the page advances without a settle post - the message key is never marked done and the task shows as the `agent:<tid>` Working row; a `needs_repo` dispatch raises `operations.Halt`, the proposal stays `error` with that outcome, the item stays in the pile and the same confirmation runs again after the choice; a failed start and a cancel keep the item), `website/test/handoff.test.mjs` (`afterExecute.handoff` / `.repo`, the card's RepoPicker)",
+      "commit": "672e904; 672e904/5ad1d03, CI run 34062011407 (all jobs passed)"
     },
     {
       "id": "PW-136",
       "section": "Successful agent handoff: acknowledge and move on",
       "phase": "5/8",
       "requirement": "Test successful handoff advances once, retains the working task in Unread,",
-      "status": "pending",
-      "test": "Required: Phase 5/8 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_chat_proposals.py`::HandoffTests (3 cases: started hand-off advances once and the working task stays in Unread; repository choice keeps the item and the resumed confirmation runs the dispatch once; failed start and cancel keep the item), `website/test/handoff.test.mjs` (2 cases). Agent workspace inline presentation is untouched",
+      "commit": "672e904; 672e904/5ad1d03, CI run 34062011407 (all jobs passed)"
     },
     {
       "id": "PW-137",
@@ -1402,81 +1402,81 @@
       "section": "Chat archive and independent retention cleanup",
       "phase": "9",
       "requirement": "New chat archives the current conversation, resets chat/Current, and opens",
-      "status": "pending",
-      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_chat_retention.py`::NewChatTests (`POST /api/assistant/dock/new` archives the guide task as done with its rows intact, opens a blank one with no turn of its own, leaves every read state and the source/task untouched, and never runs retention), `website/test/chatRetention.test.mjs` (New chat posts the archive and calls no surface/turn)",
+      "commit": "2463532; 2463532/7064b7d, CI run 34063026549 (all jobs passed)"
     },
     {
       "id": "PW-157",
       "section": "Chat archive and independent retention cleanup",
       "phase": "9",
       "requirement": "Listing/opening earlier chats is read-only and paginated. Remove the",
-      "status": "pending",
-      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_chat_retention.py`::HistoryIsReadOnlyTests (`concierge.chats` has no cutoff and writes nothing - a forty-day-old chat still lists; `GET /api/concierge/chats?limit&before` pages newest-first with a `next` cursor; opening one writes nothing; `CHATS_KEPT_DAYS` is gone), `website/test/chatRetention.test.mjs` (the panel pages with the cursor and offers \"Earlier chats\")",
+      "commit": "2463532; 2463532/7064b7d, CI run 34063026549 (all jobs passed)"
     },
     {
       "id": "PW-158",
       "section": "Chat archive and independent retention cleanup",
       "phase": "9",
       "requirement": "Implement automatic retention cleanup as a separate scheduled lifecycle",
-      "status": "pending",
-      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_chat_retention.py`::RetentionTests (`retention.py`: `chat_keep_days` setting, default 15, owner override, nonsense falls back; `retention.tick` runs once a day from start-up and the sync timer, never from a history read; the boundary is the last chat row against the cutoff), Settings \u2192 Assistant \u2192 \"Keep past chats (days)\"",
+      "commit": "2463532; 2463532/7064b7d, CI run 34063026549 (all jobs passed)"
     },
     {
       "id": "PW-159",
       "section": "Chat archive and independent retention cleanup",
       "phase": "9",
       "requirement": "Preserve task-linked discussion, confirmed actions, agent results, and send",
-      "status": "pending",
-      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_chat_retention.py`::test_what_a_chat_said_about_a_task_and_every_independent_record_outlive_the_archive (mirrored task discussion, a promoted FYI's linked discussion, the operation receipt, the agent's report and the approved review all remain readable on the task after the archive is removed)",
+      "commit": "2463532; 2463532/7064b7d, CI run 34063026549 (all jobs passed)"
     },
     {
       "id": "PW-160",
       "section": "Chat archive and independent retention cleanup",
       "phase": "9",
       "requirement": "Keep correction memory and saved rules on independent lifecycles. Chat",
-      "status": "pending",
-      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_chat_retention.py`::test_what_a_chat_said_about_a_task_and_every_independent_record_outlive_the_archive (memories, mutes and correction evidence untouched by cleanup - retention removes the guide task and its rows only)",
+      "commit": "2463532; 2463532/7064b7d, CI run 34063026549 (all jobs passed)"
     },
     {
       "id": "PW-161",
       "section": "Chat archive and independent retention cleanup",
       "phase": "9",
       "requirement": "Test New chat archives without deletion or auto-walk, history reads do not",
-      "status": "pending",
-      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_chat_retention.py` (5 cases: archive without deletion or auto-walk; read-only paginated history; 15-day default, override, exact boundary; open chat and real tasks never touched, once-a-day tick; preserved task history, promoted FYI discussion, agent results, send outcomes, evidence and rules), `website/test/chatRetention.test.mjs` (2 cases)",
+      "commit": "2463532; 2463532/7064b7d, CI run 34063026549 (all jobs passed)"
     },
     {
       "id": "PW-162",
       "section": "Opening Assistant: restore without starting a walkthrough",
       "phase": "9",
       "requirement": "Persist Current explicitly and validate it against current canonical item",
-      "status": "pending",
-      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_current_restore.py`::RestoreTests (`concierge.set_current` writes the item down as surface() puts it on the table, per chat; `restore_current` validates it against the pile on `GET /api/concierge` and clears it - choosing nothing - when it was settled, deferred, closed underneath or gone; a handled card stays readable in the transcript), `website/test/currentRestore.test.mjs` (`loadState` takes `data.current`; `restorableCurrent` is no longer wired)",
+      "commit": "a87ea90; local gates passed, CI pending"
     },
     {
       "id": "PW-163",
       "section": "Opening Assistant: restore without starting a walkthrough",
       "phase": "9",
       "requirement": "Keep history/pipeline loading separate from initiating an assistant turn.",
-      "status": "pending",
-      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`website/test/currentRestore.test.mjs` (every effect only loads state or the pile; nothing on mount, activation, remount or reconnect calls Next or starts a walk), `tests/test_chat_retention.py`::NewChatTests (a new chat is blank and starts nothing)",
+      "commit": "a87ea90; local gates passed, CI pending"
     },
     {
       "id": "PW-164",
       "section": "Opening Assistant: restore without starting a walkthrough",
       "phase": "9",
       "requirement": "Test first visit, returning from another tab, page reload/remount, stale",
-      "status": "pending",
-      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_current_restore.py` (5 cases: first visit, reload/tab return with no new turn, handled/deferred/closed Current cleared without replacement, a named item and the fyi handful restored, a new chat empty), `website/test/currentRestore.test.mjs` (2 cases)",
+      "commit": "a87ea90; local gates passed, CI pending"
     },
     {
       "id": "PW-165",
@@ -1485,7 +1485,7 @@
       "requirement": "Owner-approved notification placement: unsolicited updates use a single",
       "status": "implemented",
       "test": "`tests/test_assistant_notifications.py`::WatcherTests (`funnel.announce` writes no chat line or card; a working/finished agent is a `notice:<tid>` funnel-state row `funnel.notices` folds into the pile's `alerts`; a parked/asking agent is the pile's own alert and is never kept twice), `website/test/notificationStrip.test.mjs` (a newer message on Current is a page-side notice, not a chat line; one `tq-btw` strip)",
-      "commit": "42d0d16; local gates passed, CI pending"
+      "commit": "42d0d16; 42d0d16/cb63bf7, CI run 34061032086 (the three pytest jobs and build-exe passed; the browser job failed only in its settle helper, which counted the watcher chat cards PW-165 removed - re-pinned by the lead's follow-up 2a58cdd)"
     },
     {
       "id": "PW-166",
@@ -1494,7 +1494,7 @@
       "requirement": "Keep the strip until Open, Later, or resolution; do not rely on a timed",
       "status": "implemented",
       "test": "`tests/test_assistant_notifications.py`::test_a_finished_agent_is_a_notice..., ::test_later_puts_the_notice_down_and_nothing_else (the notice survives every later look until `ack`; Later acks the notice only - no item state, task untouched; `reset_walk` drops put-down notices so a new chat does not raise them; a newer fact replaces the older notice), `website/test/notificationStrip.test.mjs` (`pendingAlerts`: notices pending whatever is on the table, \"+N more\", Open is the owner's own `surface`)",
-      "commit": "42d0d16; local gates passed, CI pending"
+      "commit": "42d0d16; 42d0d16/cb63bf7, CI run 34061032086 (the three pytest jobs and build-exe passed; the browser job failed only in its settle helper, which counted the watcher chat cards PW-165 removed - re-pinned by the lead's follow-up 2a58cdd)"
     },
     {
       "id": "PW-167",
@@ -1503,7 +1503,7 @@
       "requirement": "Test no automatic chat insertion for Current and non-Current updates,",
       "status": "implemented",
       "test": "`tests/test_assistant_notifications.py` (5 cases), `website/test/notificationStrip.test.mjs` (3 cases); `tests/test_funnel.py`, `tests/test_lifecycle.py`, `tests/processing/test_processing_selection.py` re-pinned; the approval-time material-change dialog (Section 7.5) is untouched",
-      "commit": "42d0d16; local gates passed, CI pending"
+      "commit": "42d0d16; 42d0d16/cb63bf7, CI run 34061032086 (the three pytest jobs and build-exe passed; the browser job failed only in its settle helper, which counted the watcher chat cards PW-165 removed - re-pinned by the lead's follow-up 2a58cdd)"
     },
     {
       "id": "PW-168",
@@ -1512,7 +1512,7 @@
       "requirement": "Remove event-driven clearing/replacement of Current and scheduled surface()",
       "status": "implemented",
       "test": "`website/test/notificationStrip.test.mjs` (`loadPile` holds no `surfaceRef`, `deferInChat`, `turn(` or assistant turn; the events block only speaks; the working event no longer says \"let's go to the next thing\" - `tests/test_funnel.py`)",
-      "commit": "42d0d16; local gates passed, CI pending"
+      "commit": "42d0d16; 42d0d16/cb63bf7, CI run 34061032086 (the three pytest jobs and build-exe passed; the browser job failed only in its settle helper, which counted the watcher chat cards PW-165 removed - re-pinned by the lead's follow-up 2a58cdd)"
     },
     {
       "id": "PW-169",
@@ -1521,7 +1521,7 @@
       "requirement": "Only explicit owner navigation/actions may advance under their agreed",
       "status": "implemented",
       "test": "`tests/test_assistant_notifications.py`::test_a_walk_on_is_the_owners_move_never_the_watchers (a finished agent adds no assistant turn and the item on the table stays there, `surfaced`), `website/test/notificationStrip.test.mjs` (a gone Current is cleared without a replacement; polling and live events only refresh the pile)",
-      "commit": "42d0d16; local gates passed, CI pending"
+      "commit": "42d0d16; 42d0d16/cb63bf7, CI run 34061032086 (the three pytest jobs and build-exe passed; the browser job failed only in its settle helper, which counted the watcher chat cards PW-165 removed - re-pinned by the lead's follow-up 2a58cdd)"
     },
     {
       "id": "PW-170",
@@ -1530,7 +1530,7 @@
       "requirement": "Test updates on Current, unrelated urgent arrivals, delayed event delivery,",
       "status": "implemented",
       "test": "`tests/test_assistant_notifications.py` (Current update, unrelated finished agent, delayed second look, duplicate events, new chat) + `website/test/notificationStrip.test.mjs` (poll / reconnect / tab activation call `loadPile` only; no Next, no subject replacement, no turn)",
-      "commit": "42d0d16; local gates passed, CI pending"
+      "commit": "42d0d16; 42d0d16/cb63bf7, CI run 34061032086 (the three pytest jobs and build-exe passed; the browser job failed only in its settle helper, which counted the watcher chat cards PW-165 removed - re-pinned by the lead's follow-up 2a58cdd)"
     },
     {
       "id": "PW-171",

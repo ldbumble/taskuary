@@ -30,7 +30,7 @@ import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
 import { SUGGESTIONS, afterCancel, afterExecute, proposalOf } from "./proposalCard.js";
-import { ageText, arrivals, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, followsItem, hasNextSelection, interactiveCardIndex, keysOf, nextMarkerKey, nextSelectionBody, nextSelectionScope, pendingAlerts, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, restorableCurrent, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
+import { ageText, arrivals, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, followsItem, hasNextSelection, interactiveCardIndex, keysOf, nextMarkerKey, nextSelectionBody, nextSelectionScope, pendingAlerts, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
 import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WrapupCard } from "./assistantCards.jsx";
 import FeedView from "./FeedView.jsx";
@@ -304,9 +304,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const { data } = await api.get("/api/concierge");
     if (epoch !== chatEpoch.current) return null;
     setState(data); setMsgs(data.messages || []);
-    // A closed task may have an older `agentdone` card in the transcript. It remains readable
-    // history, but it is not live work and must not be restored as CURRENT in the pipe.
-    const last = restorableCurrent(data.messages);
+    // Current is the server's persisted, validated word (PW-162) - never inferred from the last card in the
+    // transcript: a handled item stays readable history and is not revived as live work, and an invalid
+    // Current comes back null with nothing chosen in its place.
+    const last = data.current || null;
     currentRef.current = last;
     selectionRef.current = null;
     setCurrent(last?.key || null); setCurrentItem(last);
@@ -624,12 +625,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       try { res = (await api.post(`/api/operations/${p.id}/execute`, { version: p.version })).data; }
       catch (e) { res = { status: e?.response?.status === 409 ? "stale" : "error", error: e?.response?.data?.detail || errText(e) }; }
       const out = afterExecute(p, res);
-      setMsgs((m) => [...m.map((x) => (x.proposal?.id === p.id ? { ...x, proposal: { ...x.proposal, status: out.status } } : x)),
+      setMsgs((m) => [...m.map((x) => (x.proposal?.id === p.id ? { ...x, proposal: { ...x.proposal, status: out.status, repo: out.repo || null } } : x)),
                        { id: `r${Date.now()}`, role: "receipt", text: out.receipt, tid: p.tid, ref: p.ref }]);
       onChanged?.();
       // the server already settled or closed the item; a settle proposal (later, tomorrow, done) must not be
-      // re-marked "done" by the page, so it advances without the settle post
-      if (out.settle && p.key && p.key === current) { if (p.kind === "item.settle") advance(); else await done(null); }
+      // re-marked "done" by the page, so it advances without the settle post. A hand-off that STARTED advances
+      // once the same way (PW-135): the delegated task stays in Unread as Working, nothing is settled; a
+      // repository still to choose, a failed start or a cancel keep the item where it is.
+      if (out.settle && p.key && p.key === current) { if (p.kind === "item.settle" || out.handoff) advance(); else await done(null); }
       else loadPile();
     } finally { setBusy(false); }
   };
@@ -683,9 +686,18 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (!a.local) api.post("/api/funnel/settle", { key: a.key, verb: "ack" }).catch(() => {});
     if (go) surface(a.item, `Open — ${a.text}`);
   };
+  // past chats are read, a page at a time (PW-157): listing them changes nothing on the server
+  const [chatsNext, setChatsNext] = useState(null);
   const openChats = async () => {
     setChatsOpen(true); setChatsLoading(true);
-    try { setChats((await api.get("/api/concierge/chats", { timeout: 10000 })).data.data || []); }
+    try { const { data } = await api.get("/api/concierge/chats", { params: { limit: 25 }, timeout: 10000 }); setChats(data.data || []); setChatsNext(data.next || null); }
+    catch (e) { setErr(errText(e)); }
+    setChatsLoading(false);
+  };
+  const moreChats = async () => {
+    if (!chatsNext) return;
+    setChatsLoading(true);
+    try { const { data } = await api.get("/api/concierge/chats", { params: { limit: 25, before: chatsNext }, timeout: 10000 }); setChats((c) => [...c, ...(data.data || [])]); setChatsNext(data.next || null); }
     catch (e) { setErr(errText(e)); }
     setChatsLoading(false);
   };
@@ -806,6 +818,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                 <span>{[c.mail ? `${c.mail} mail` : "", c.seen ? `${c.seen} looked at` : "", c.minutes ? `${c.minutes} min` : "", ageText(c.at)].filter(Boolean).join(" · ")}</span>
               </div>
             ))}
+            {chatsNext && !chatsLoading && <button type="button" className="tq-chip" style={{ margin: 8 }} onClick={moreChats}>Earlier chats</button>}
           </div>
         </div>
       )}

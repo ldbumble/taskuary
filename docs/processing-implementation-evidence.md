@@ -2384,3 +2384,72 @@ exact failure plus projection/read regressions passed (31 tests). The new real-b
 sync scenario passed in 27.98 s after fixing the fixture's guarded WebSocket inheritance.
 It now also exercises a deliberately delayed initial list, history and next-sync values.
 Final combined regression, rendered, push and CI results remain pending.
+## Section 8.4 — a confirmed hand-off advances once; the delegated task stays in Unread as Working
+
+Status: implemented and tested locally at `672e904`; remote CI pending on the pushed
+checkpoint. Section 8.3 is CI-verified (42d0d16/cb63bf7, CI run 34061032086 (the three pytest jobs and build-exe passed; the browser job failed only in its settle helper, which counted the watcher chat cards PW-165 removed - re-pinned by the lead's follow-up 2a58cdd)).
+Acceptance PW-135 and PW-136 implemented.
+
+Confirming a hand-off proposal used to run the same road as any settling proposal: the page posted
+`done` on the message key to move on, and a dispatch that stopped to ask for a repository came back
+as a completed operation. Now a dispatch that starts is receipted "<agent> is on it - moving on" and
+the page advances without any settle post (PW-135): the message key is never marked done and the
+task shows in Unread as its `agent:<tid>` Working row. A `needs_repo` dispatch raises
+`operations.Halt` - a decision, not a failure - so the proposal stays `error` with that outcome, the
+item stays on the table, the ProposalCard asks with the shared RepoPicker, and the same confirmation
+(same id, same version) runs the dispatch again once the repository is chosen; a repeated click after
+that is the first receipt. A failed start and a cancelled confirmation keep the item where it was.
+Agent workspace inline presentation is untouched.
+
+Tests: `tests/test_chat_proposals.py`::HandoffTests (3 cases), `website/test/handoff.test.mjs` (2 cases). Frontend: `proposalCard.js`
+(`isHandoff`, `afterExecute.handoff` / `.repo`), `ProposalCard.jsx`, `AssistantView.jsx`, rebuilt
+bundle. Backend evidence: `.codex-tmp/phase3-evidence/backend-8.4.log`.
+
+## Section 9.1 — blank New chat, read-only paginated history, retention on its own clock
+
+Status: implemented and tested locally at `2463532`; remote CI pending on the pushed
+checkpoint. Section 8.4 is CI-verified (672e904/5ad1d03, CI run 34062011407 (all jobs passed)).
+Acceptance PW-156 to PW-161 implemented.
+
+`concierge.chats()` used to be the cleanup: listing past chats marked anything older than a
+hardcoded twenty days `dropped` on the way past. The list is now read-only and paged (PW-157):
+`GET /api/concierge/chats?limit&before` returns newest-first with a `next` cursor, opening a chat
+writes nothing, and the Past chats panel offers "Earlier chats". New chat (PW-156) archives the
+guide task as done with its rows intact, opens a blank conversation that waits for the owner, and
+touches neither read state nor any source or task.
+
+Retention is one scheduled lifecycle operation (`taskuary/retention.py`, PW-158): a
+`chat_keep_days` setting (fifteen by default, Settings → Assistant → "Keep past chats (days)"),
+`retention.tick` once a day from start-up and from the sync timer beside the wall roll-up - never
+from a history read - and `retention.cleanup` removes only ARCHIVED guide chats whose last row is
+older than the cutoff: the open chat is never archived and so never eligible, and real tasks are not
+guide tasks. What a chat said about a task was mirrored onto that task as it was said
+(`concierge.record_related`), a promoted FYI's discussion travelled onto its task, operation
+receipts and correction evidence are keyed to their targets, the agent's report and the approved
+review live on the task, and memories and rules are their own rows - none of it lives on the archive
+(PW-159/160).
+
+Tests: `tests/test_chat_retention.py` (5 cases), `website/test/chatRetention.test.mjs` (2 cases). Frontend:
+`AssistantView.jsx` (cursor paging), `SettingsView.jsx` (the knob), rebuilt bundle. Backend
+evidence: `.codex-tmp/phase3-evidence/backend-9.1.log`.
+
+## Section 9.2 — opening Assistant restores; it does not start
+
+Status: implemented and tested locally at `a87ea90`; remote CI pending on the pushed
+checkpoint. Section 9.1 is CI-verified (2463532/7064b7d, CI run 34063026549 (all jobs passed)).
+Acceptance PW-162 to PW-164 implemented.
+
+Current was inferred on the page from the last card in the transcript, so a handled item came back
+as live work after a reload. Now the server writes the item down as it is put on the table
+(`concierge.set_current`, per chat, as `surface()` lands an item or the fyi handful, and cleared when
+the walk runs out), validates it against the pile when the conversation is read back
+(`restore_current` on `GET /api/concierge`: the item as it is now, still unread and still there), and
+clears it - choosing nothing in its place - when it was settled or deferred (`/api/funnel/settle`),
+closed underneath, or is gone (PW-162). The transcript keeps the handled card as readable history.
+`loadState` takes the server's `current`; `restorableCurrent` is no longer wired. Nothing on mount,
+tab activation, remount or reconnect calls Next or starts a walk (PW-163): every effect only loads
+state or the pile, and a new chat is blank until the owner speaks.
+
+Tests: `tests/test_current_restore.py` (5 cases), `website/test/currentRestore.test.mjs` (2 cases); the closed-task and
+selection pins re-pinned to the server's Current. Frontend: `AssistantView.jsx`, rebuilt bundle.
+Backend evidence: `.codex-tmp/phase3-evidence/backend-9.2.log`.

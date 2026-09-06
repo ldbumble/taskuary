@@ -73,6 +73,10 @@ async def _lifespan(_app):
         from .general import retire_dock
         if retire_dock(store, ACTOR) is not None: _f.reset_walk(store)
     except Exception as e: logger.warning(f'assistant dock retire failed: {e}')
+    try:                           # archived chats past their keep-days go on the app's own clock (PW-158), never on a history read
+        from . import retention
+        retention.tick(store)
+    except Exception as e: logger.warning(f'chat retention skipped: {e}')
     _heal_owner_docs()
     _refresh_soul_connections()
     learn.note_verdicts(store)     # the evidence block in LEARNED.md tracks the verdict table
@@ -503,7 +507,12 @@ def _run_operation(op: dict, background: BackgroundTasks):
     if kind == 'task.create_from_message':
         k = str(p.get('kind') or 'task').lower()
         if k == 'general': return chat_message(mid, background)
-        if k == 'coding': return dispatch_message(mid, DispatchBody(kind='coding', agent=p.get('agent'), instruction=p.get('instructions')), background)
+        if k == 'coding':
+            out = dispatch_message(mid, DispatchBody(kind='coding', agent=p.get('agent'), instruction=p.get('instructions')), background)
+            # a repository still to choose is a decision, not a start: the item stays where it is (PW-135)
+            if out.get('dispatch') == 'needs_repo':
+                raise operations.Halt(f"{out.get('ref') or 'it'} needs a repository first - {out.get('reason') or 'pick one'}", out)
+            return out
         return mine_message(mid, MineBody(kind='task', title=p.get('title')), background)
     if kind == 'message.file': return file_message(mid, NotATaskBody(learn=bool(p.get('learn', True))), background)
     if kind == 'message.reply': return open_reply(mid, None)
@@ -2542,9 +2551,13 @@ def funnel_pile(force: bool = False, current: str = None, only: str = None,
 
 @app.post('/api/funnel/settle')
 def funnel_settle(body: SettleBody):
-    from . import funnel
-    try: return funnel.settle(store, body.key, body.verb, ACTOR, body.hours)
+    from . import concierge, funnel, general
+    try: out = funnel.settle(store, body.key, body.verb, ACTOR, body.hours)
     except ValueError as e: raise HTTPException(422, str(e))
+    if body.verb in ('done', 'later', 'skip'):                              # settled: off the table, and nothing chosen in its place
+        dock = general.dock_task(store, ACTOR)[0]['TaskId']
+        if concierge.current_key(store, dock) == body.key: concierge.set_current(store, dock, None, ACTOR)
+    return out
 
 @app.get('/api/concierge')
 def concierge_state():
@@ -2558,6 +2571,8 @@ def concierge_state():
     if pick.startswith('cli:') and not str(store.get_settings().get(concierge.MODEL_KEY) or '').strip():
         model = concierge.LIGHT_DEFAULT.get(re.split(r'[\\/]', str((chosen or {}).get('label') or pick[4:])).pop().split(' ')[0].lower(), model) or model
     return {'task': task, 'ref': task_ref(task['TaskId']), 'messages': concierge.history(store, task['TaskId']),
+            # the persisted Current, validated against the pile - never the last card of the history (PW-162)
+            'current': concierge.restore_current(store, task['TaskId']),
             'providers': options, 'pick': pick, 'provider': (chosen or {}).get('label') or pick, 'model': model}
 
 class ConciergeAiBody(BaseModel): pick: str | None = None; model: str | None = None
@@ -2592,9 +2607,13 @@ def funnel_unmute(idx: int):
     return {'ok': True, 'data': rules}
 
 @app.get('/api/concierge/chats')
-def concierge_chats():
+def concierge_chats(limit: int = 25, before: int = None):
+    """Past chats, newest first, a page at a time; `next` is the cursor for the page before this one. Reading
+    the list writes nothing (PW-157)."""
     from . import concierge
-    return {'data': concierge.chats(store, ACTOR)}
+    limit = max(1, min(int(limit or 25), 100))
+    rows = concierge.chats(store, ACTOR, limit=limit, before=before)
+    return {'data': rows, 'next': rows[-1]['taskId'] if len(rows) >= limit else None}
 
 @app.get('/api/concierge/chats/{tid}')
 def concierge_chat(tid: int):
@@ -4617,6 +4636,11 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
         except Exception as e:
             logger.warning(f'the wall roll-up failed: {e}')
         _status_progress(target_store, status, what, phase='running_reports')
+        try:                                            # ...and archived chats past their keep-days go, once a day (retention.py)
+            from . import retention
+            retention.tick(target_store)
+        except Exception as e:
+            logger.warning(f'chat retention skipped: {e}')
         run_due_reports(target_store, startup)          # ...the seeded 'Assistant' report among them (assistant.py)
         return added
     finally:

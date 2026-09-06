@@ -622,12 +622,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       try { res = (await api.post(`/api/operations/${p.id}/execute`, { version: p.version })).data; }
       catch (e) { res = { status: e?.response?.status === 409 ? "stale" : "error", error: e?.response?.data?.detail || errText(e) }; }
       const out = afterExecute(p, res);
-      setMsgs((m) => [...m.map((x) => (x.proposal?.id === p.id ? { ...x, proposal: { ...x.proposal, status: out.status } } : x)),
+      setMsgs((m) => [...m.map((x) => (x.proposal?.id === p.id ? { ...x, proposal: { ...x.proposal, status: out.status, repo: out.repo || null } } : x)),
                        { id: `r${Date.now()}`, role: "receipt", text: out.receipt, tid: p.tid, ref: p.ref }]);
       onChanged?.();
       // the server already settled or closed the item; a settle proposal (later, tomorrow, done) must not be
-      // re-marked "done" by the page, so it advances without the settle post
-      if (out.settle && p.key && p.key === current) { if (p.kind === "item.settle") advance(); else await done(null); }
+      // re-marked "done" by the page, so it advances without the settle post. A hand-off that STARTED advances
+      // once the same way (PW-135): the delegated task stays in Unread as Working, nothing is settled; a
+      // repository still to choose, a failed start or a cancel keep the item where it is.
+      if (out.settle && p.key && p.key === current) { if (p.kind === "item.settle" || out.handoff) advance(); else await done(null); }
       else loadPile();
     } finally { setBusy(false); }
   };

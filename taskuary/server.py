@@ -503,7 +503,12 @@ def _run_operation(op: dict, background: BackgroundTasks):
     if kind == 'task.create_from_message':
         k = str(p.get('kind') or 'task').lower()
         if k == 'general': return chat_message(mid, background)
-        if k == 'coding': return dispatch_message(mid, DispatchBody(kind='coding', agent=p.get('agent'), instruction=p.get('instructions')), background)
+        if k == 'coding':
+            out = dispatch_message(mid, DispatchBody(kind='coding', agent=p.get('agent'), instruction=p.get('instructions')), background)
+            # a repository still to choose is a decision, not a start: the item stays where it is (PW-135)
+            if out.get('dispatch') == 'needs_repo':
+                raise operations.Halt(f"{out.get('ref') or 'it'} needs a repository first - {out.get('reason') or 'pick one'}", out)
+            return out
         return mine_message(mid, MineBody(kind='task', title=p.get('title')), background)
     if kind == 'message.file': return file_message(mid, NotATaskBody(learn=bool(p.get('learn', True))), background)
     if kind == 'message.reply': return open_reply(mid, None)

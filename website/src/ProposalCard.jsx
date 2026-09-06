@@ -1,5 +1,6 @@
 import React from "react";
 import { describe } from "./proposalCard.js";
+import { RepoPicker } from "./RepoPicker.jsx";
 
 // The confirmation box (PW-123): what will happen, on what, with which parameters - and one specifically
 // labelled button that submits the structured proposal. Cancel leaves everything where it is. A card
@@ -8,6 +9,7 @@ export default function ProposalCard({ p, onConfirm, onCancel }) {
   if (!p) return null;
   const d = describe(p);
   const open = p.version != null && (p.status || "proposed") === "proposed";
+  const askRepo = p.status === "error" && p.repo?.taskId;      // a decision, not a failure: choose, then the same confirmation runs again (PW-135)
   const state = { done: "Confirmed.", cancelled: "Cancelled.", stale: "Out of date - say it again.", error: "Failed - nothing moved." }[p.status] || "";
   return (
     <div className="tq-proposal" style={{ border: "1px solid #d8d1c5", borderRadius: 12, padding: "10px 12px", marginTop: 6, background: "#fffdfb" }}>
@@ -18,7 +20,13 @@ export default function ProposalCard({ p, onConfirm, onCancel }) {
           {d.params.map(([k, v]) => <div key={k}><span style={{ fontWeight: 600 }}>{k}:</span> {String(v)}</div>)}
         </div>
       )}
-      {open ? (
+      {askRepo ? (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontWeight: 600, fontSize: 12, color: "#41525f" }}>Which repository should the coding agent use?</div>
+          <RepoPicker taskId={p.repo.taskId} agent={p.repo.agent} onDone={(data) => { if (data?.repo) onConfirm?.(p); }} />
+          <button type="button" className="tq-chip" onClick={() => onCancel?.(p)}>Not now</button>
+        </div>
+      ) : open ? (
         <div className="tq-options" style={{ marginTop: 8 }}>
           <button type="button" className="tq-chip primary" onClick={() => onConfirm?.(p)}>{d.confirm}</button>
           <button type="button" className="tq-chip" onClick={() => onCancel?.(p)}>{d.cancel}</button>

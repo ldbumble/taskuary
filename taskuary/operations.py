@@ -189,6 +189,13 @@ def cancel(store, op_id: str, actor: str = 'owner') -> dict:
     return get(store, op_id)
 
 
+class Halt(Exception):
+    """A handler that stopped for a decision rather than failing - a repository still to choose, say. The
+    proposal is left `error` with that outcome, so the card can ask and the same confirmation can run again."""
+    def __init__(self, why: str, outcome: dict = None):
+        super().__init__(why); self.outcome = outcome or {}
+
+
 def _stale(op, why): return {**_public(op), 'status': 'stale', 'error': why, 'duplicate': False}
 
 
@@ -209,6 +216,9 @@ def execute(store, op_id: str, version: int, run, actor: str = 'owner') -> dict:
         return _stale(op, 'the context changed since this was proposed - review it again before confirming')
     _running.op = op_id
     try: outcome = run()
+    except Halt as e:
+        store.update_operation(op_id, {'Status': 'error', 'Error': str(e)[:500], 'OutcomeJson': json.dumps(e.outcome, default=str), 'Actor': actor})
+        return {**_public(store.get_operation(op_id)), 'duplicate': False}
     except Exception as e:
         logger.warning(f'operation {op_id} ({op["Kind"]}) failed: {e}')
         store.update_operation(op_id, {'Status': 'error', 'Error': str(e)[:500], 'Actor': actor})

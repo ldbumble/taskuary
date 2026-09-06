@@ -1543,6 +1543,9 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind == 'task.setup' and o.get('ref'):
         return (f" {o['ref']} - \"{o.get('title') or ''}\" is open as a walk-through: a conversation with the assistant, nothing built, no repository touched. "
                 'Open it when you want to start; its browser opens beside the assistant.')
+    if kind == 'task.create_from_message' and p.get('kind') in ('coding', 'general'):
+        if o.get('existing'): return f" {o.get('agent') or 'An agent'} was already on it."
+        if o.get('started') or o.get('chat'): return f" {o.get('agent') or 'The agent'} is on it - moving on."
     if kind == 'item.settle' and o.get('closed'): return f" {task_ref(int(o['closed']))} closed."
     if kind == 'agent.stop' and not p.get('wrap'): return ' The task stays open - say close it when you want it closed.'
     if kind == 'memory.remember': return ' A memory settles nothing: the walk is where it was.'

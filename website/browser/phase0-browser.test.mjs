@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { bodyText, clickNav, startHarness, waitForBody } from "./harness.mjs";
+import { settleDemoWatcher, waitForDemoReplays } from "./processing-fixtures.mjs";
 
 const limits = {
   firstVisibleMs: Number(process.env.TASKUARY_BROWSER_VISIBLE_MS || 8000),
@@ -37,6 +38,19 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
   assert.deepEqual(demo, { demo: true, owner: "Dana Whitfield" });
   assert.equal(await page.$(".tq-typing"), null, "initial history/pipeline loading must not initiate an assistant turn");
 
+  // The demo's recorded agents change from working to waiting during fixture startup.
+  // That is useful rendered behavior, but it changes the server's captured Next selection. Measure
+  // the cold first paint above, then let the synthetic world finish moving and consume the helper's
+  // fresh blank dock before making deterministic owner-navigation assertions below.
+  await settleDemoWatcher(harness, await waitForDemoReplays(harness));
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 20000 });
+  await page.waitForFunction(() => {
+    const walk = [...document.querySelectorAll("button")]
+      .find((button) => button.innerText === "Walk me through my tasks");
+    return !!walk && !walk.disabled && !document.querySelector(".tq-msg")
+      && !document.querySelector(".tq-pile-row.current");
+  }, { timeout: limits.firstVisibleMs });
+
   // A fresh fixture has no Current yet. Two same-tick clicks reproduce the duplicate-turn
   // trigger while React is still scheduling its busy render; exactly one request may leave.
   await page.waitForFunction(() => [...document.querySelectorAll("button")]
@@ -49,6 +63,7 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
   });
   await page.waitForSelector(".tq-pile-row.current .tq-pile-next.cur", { timeout: 15000 });
   await page.waitForFunction(() => !document.querySelector(".tq-typing"), { timeout: 15000 });
+  await page.waitForSelector(".tq-pile-row.next .tq-pile-next", { timeout: limits.navigationMs });
   assert.equal(turnRequests, 1, "a same-tick double click must create exactly one assistant turn");
   assert.equal(await page.$$eval(".tq-msg.you", (rows) => rows.filter((row) => row.textContent.includes("Walk me through my tasks.")).length), 1);
   assert.equal(await page.$$eval(".tq-pile-row.current", (rows) => rows.length), 1);

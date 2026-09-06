@@ -131,6 +131,62 @@ test("PW-107 exposes only All and Unread without All creating assistant state", 
   assert.ok(requests.some(({ method, path }) => method === "GET" && path === "/api/concierge"),
     "background assistant reads remain available");
 
+  const race = await harness.newPage();
+  const raceErrors = [];
+  const raceWrites = [];
+  race.on("pageerror", (error) => raceErrors.push(error.message));
+  race.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.origin === harness.ui && request.method() !== "GET"
+        && (url.pathname.startsWith("/api/concierge") || url.pathname === "/api/funnel/settle")) {
+      raceWrites.push({ method: request.method(), path: url.pathname });
+    }
+  });
+  await race.goto(harness.ui, { waitUntil: "domcontentloaded", timeout: 20000 });
+  await race.waitForSelector(".tq-pile-row.current .tq-pile-next.cur", { timeout: 10000 });
+  await clickState(race, "all");
+  await race.waitForSelector(".tqRow [data-tq-open='false']", { timeout: 10000 });
+  const raceTarget = await race.$(".tqRow [data-tq-open='false']");
+  const client = await race.createCDPSession();
+  await client.send("Network.enable");
+  await client.send("Network.emulateNetworkConditions", {
+    offline: false,
+    latency: 1200,
+    downloadThroughput: -1,
+    uploadThroughput: -1,
+    connectionType: "wifi",
+  });
+  const detailRequest = race.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return request.method() === "GET" && url.origin === harness.ui
+      && (/^\/api\/tasks\/\d+$/.test(url.pathname) || /^\/api\/messages\/\d+\/thread$/.test(url.pathname));
+  }, { timeout: 10000 });
+  await raceTarget.hover();
+  const pendingDetail = await detailRequest;
+  const detailResponse = race.waitForResponse((response) => response.url() === pendingDetail.url(), { timeout: 10000 });
+  await new Promise((resolve) => setTimeout(resolve, 120)); // let the hover commit its pending selection
+  await clickState(race, "unread");
+  await race.waitForSelector(".tq-pile-row.current .tq-pile-next.cur", { timeout: 10000 });
+  const completedDetail = await detailResponse;
+  await completedDetail.buffer();
+  await race.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await client.send("Network.emulateNetworkConditions", {
+    offline: false,
+    latency: 0,
+    downloadThroughput: -1,
+    uploadThroughput: -1,
+    connectionType: "none",
+  });
+  await client.detach();
+  await race.waitForSelector(".tq-compose", { visible: true, timeout: 5000 });
+  assert.deepEqual(await pileTitles(race), established,
+    "a completed All hover response must not replace Unread Current and Next");
+  assert.deepEqual(raceWrites, [], "the delayed All detail response must not create or settle assistant state");
+  assert.deepEqual(await durableTurns(race, harness.token), turnsAfterWalk,
+    "the delayed All detail response must not create a durable assistant turn");
+  assert.deepEqual(race.fixtureEscapes, []);
+  assert.deepEqual(raceErrors, []);
+
   const narrow = await harness.newPage();
   const narrowWrites = [];
   const narrowErrors = [];

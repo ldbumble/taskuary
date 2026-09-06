@@ -393,18 +393,18 @@ Pending implementation, not authorization to launch sessions during this review.
 Owner marks this important: triage should produce a concise task summary and
 GitHub-style Markdown checklist describing the actual requested work.
 
-- [ ] <a id="pw-074"></a>**PW-074** Extend the same triage verdict with a meaningful task title/summary and
+- [x] <a id="pw-074"></a>**PW-074** Extend the same triage verdict with a meaningful task title/summary and
   actionable checklist for `intent=task`; derive these from the cleaned, assembled
   message context rather than taking the first 1000 body characters. Capture each
   distinct requested outcome without inventing requirements or claiming work done.
-- [ ] <a id="pw-075"></a>**PW-075** Persist the checklist with the task and render interactive, saved checkboxes
+- [x] <a id="pw-075"></a>**PW-075** Persist the checklist with the task and render interactive, saved checkboxes
   using GitHub Markdown task-list syntax (`- [ ]` / `- [x]`). Keep source messages
   separately accessible. Share the same task checklist across task/assistant views
   and include it in the assigned worker's context.
-- [ ] <a id="pw-076"></a>**PW-076** Give checklist items stable identity so edits, progress, and fresh-triage
+- [x] <a id="pw-076"></a>**PW-076** Give checklist items stable identity so edits, progress, and fresh-triage
   additions do not duplicate items or reset checked boxes. Preserve owner edits;
   surface substantive changes from new messages rather than overwriting silently.
-- [ ] <a id="pw-077"></a>**PW-077** Keep checklist progress separate from agent/session state and task completion;
+- [x] <a id="pw-077"></a>**PW-077** Keep checklist progress separate from agent/session state and task completion;
   rendering or generating a checklist must not mark work done. Completion rules
   remain subject to the later lifecycle walkthrough.
 - [ ] <a id="pw-078"></a>**PW-078** Add tests for multi-request chains, coding/general/personal tasks, meaningful

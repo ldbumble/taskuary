@@ -1818,3 +1818,25 @@ the task's own closure and any reply to the owner (PW-232); live wall notes leav
 Tests: `tests/test_explicit_completion.py` (6 cases). `tests/test_stay_open.py` and `tests/test_stay_open_doors.py`: the two pins that read
 `--done` on an owner-opened session as "filed, not obeyed" now expect the run to close and the task to
 stay, per PW-232, with the reason noted. No frontend change.
+
+### Section 1.6 delivery integration at dbb82f8
+
+The owned All implementation is unchanged through the latest shared worker and
+freshness changes (`b047214`). Independent Astra review cleared canonical
+membership/detail, historical reads, navigation reservations/final guards, email
+preservation, startup opt-outs, exact mailbox trust and owner-only dispatch controls.
+This is compatibility review, not blanket acceptance of incoming Phase 5/6 features.
+
+Cumulative local gate at `76b227f`: 2,764 backend tests plus 71 subtests passed,
+152 warnings, no skips, in 235.86s. All eight real browser scenarios passed across
+the isolated canonical run (78.148s scenario) and seven prior scenarios (213.417s
+process). After merging `b047214`, all 501 processing/freshness/worker/startup/core
+integration tests passed in 34.21s; all 304 frontend tests passed in 2.441s and
+the packaged UI rebuilt in 16.13s. Relevant merged browser results follow.
+
+To avoid restarting the entire local suite for each concurrent master push, the
+section's complete cumulative local gate is followed by focused merge checks,
+relevant rendered-browser checks and the full exact-SHA remote CI on the combined
+commit. No earlier assertion, timeout, or fixture-size requirement was weakened.
+User README SHA-256 remains EDF56683E29A34789B2EBEF73E131FBD7B318AE498BC761668BCB70854D91BAB.
+No live app, connector, read-state migration or custom document was used for tests.

@@ -76,6 +76,40 @@ perform cleanup. Preserve owner documents and confirmed rules without template o
 
 ## Migration and rollback gate
 
+### Phase 1.1 foundation boundary
+
+The first implementation section adds durable local identities, exact entity aliases,
+explicit memberships, context/view fingerprints and an explicit historical-evidence
+baseline operation. It does not yet switch the feed, assistant or UI consumers, and
+does not activate display-does-not-read. PW-101 and PW-104 remain partial until those
+consumers and the final semantics transition pass their own gates.
+
+Baseline evidence is versioned and captured from uncapped raw records at one clock
+and settings snapshot. Existing funnel-state rows remain verbatim, including keys
+that cannot yet be resolved. A baseline must not become the final read boundary by
+accident: capture/reconcile the final evidence atomically with the later semantics
+switch. Never apply repeated legacy age or closure inference to post-cutover arrivals.
+
+An alias resolves to an exact entity and its current canonical item. Item merges
+retain redirects and history; a review receipt does not become a blanket receipt for
+all item members. Multiple ideas referenced by a digest retain independent identities.
+Existing messages have no reliable account/source identifier, so ambiguous historical
+provider keys remain locally scoped; source display names cannot establish identity.
+
+Substantive context fingerprints cover complete bodies, explicit members, meaningful
+attachment metadata and material task context. View fingerprints additionally cover
+drafts, statuses, priority, read/defer and worker attention. Identity stays stable
+across those changes. Additive storage initialization alone performs no historical
+capture or owner-state rewrite; foundation backfill tests use disposable databases.
+
+The implemented foundation stores full context/view snapshots once per canonical
+item and baseline version in the same transaction as identity, receipts and the
+completion marker. Current snapshot getters compute revisions from persisted inputs
+inside one read transaction; cached item columns are not freshness certification.
+Worker attention is caller-supplied snapshot data, copied deeply. An unavailable
+worker snapshot is distinct from an explicitly observed empty worker set. Full email
+chain expansion and worker/discussion context adapters remain later phase work.
+
 1. Create a synthetic legacy database using the accepted pre-migration schema. Record
    identity/member, funnel-state, task/review/run/history, attachment and document/settings
    snapshots. Include explicit historical done/skip/later, custom COUNSEL and grouped mail.

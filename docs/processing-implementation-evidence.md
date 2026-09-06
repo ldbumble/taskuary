@@ -167,3 +167,103 @@ Raw local logs are preserved under the integration worktree's ignored
 
 Next: Phase 1 canonical identity/context and historical-read preservation foundation.
 Later grouping/action/deferral policy transitions remain separate pending decisions.
+
+## Section 1.1 — canonical identity and historical-evidence foundation
+
+Status: implemented, independently reviewed and cumulatively tested locally; remote
+CI is pending. This status does not accept the entire Phase 1 redesign.
+Base `8be0b769b411346b2a380e0037a54426703c5af5` passed all ten jobs in
+[CI run 34013108300](https://github.com/ldbumble/taskuary/actions/runs/34013108300).
+PW-101 and PW-104 are partial targets; no Phase 1 feature checkbox is completed by
+additive storage alone. Shared feed/UI adoption, final read cutover, ordering and
+Current/Next remain subsequent sections.
+
+### Ownership and boundaries
+
+- Sol High storage agent: isolated `processing/phase1-store`, sole owner of
+  `taskuary/store.py` and storage/migration tests.
+- Sol High model agent: isolated `processing/phase1-model`, pure
+  `taskuary/processing.py` and fingerprint/legacy-evidence tests.
+- Lead: isolated `processing/phase1-integration`, seam tests, integration,
+  cumulative gates, documentation and delivery.
+- Astra Extra High reviewer: independent architecture and final-diff review.
+
+User decisions carried forward: preserve old effective read results with their
+provenance; use display-does-not-read after the later semantics switch. Sort within
+the five approved bands by triage priority, oldest activity, then stable identity.
+New activity during deferral and grouped Done remain pending policy decisions.
+
+### Implemented scope and review
+
+Durable alias/member continuity, independent digest ideas, provider scope isolation,
+full-body/attachment context fingerprints, view-only changes, uncapped legacy
+capture of 507 messages, atomic rollback/retry, concurrent initialization, repeated reopen and
+unchanged original records/documents. Independent seam tests compare captured
+legacy evidence against both explicit expected outcomes and the unchanged feed.
+
+Startup adds storage only. Explicit synthetic baseline capture does not activate
+new read semantics. The eventual cutover must capture/reconcile final historical
+evidence atomically; later arrivals must not receive repeated legacy inference.
+No live app restart or migration is included. Browser control/UI redesign remains
+pending review.
+
+The canonical tables retain exact entity targets, active and retired memberships,
+explicit aliases, item redirects, independent wrapper relations and versioned legacy
+evidence. Unscoped provider IDs are not inferred from display names. Each baseline
+stores full context/view inputs once per item/version under the same completion
+transaction, while preserving raw legacy records. Replaying a completed baseline
+does not recapture later owner writes or new arrivals. A subsequent explicit capture
+can retain an FYI identity when it gains a task anchor.
+
+Current snapshot getters use one SQLite read transaction even across an external
+connection's merge. Their computed revisions cover complete message bodies (tested
+beyond the old 4000-character preview), task summary/context, attachment metadata,
+idea substance and explicit relations. Drafts, route verdict/errors, task status,
+priority, legacy read/defer, category settings and supplied worker attention affect
+the view revision. Missing worker observations are distinct from observed empty
+ones; copied nested payloads cannot change after a revision has been returned.
+
+Astra independently compared the legacy predicate against 1,500 synthetic cases;
+selected key and observed unread agreed in every case. It also AST-compared all
+pre-existing store methods with the accepted base: none changed. Reviews corrected
+provider display-name inference, due-note and closed-worker enrichment, idea ordering,
+omitted raw/excluded evidence, merge-history visibility, concurrent captures, mutable
+worker snapshots and an insufficient resolver-race assertion before final approval.
+No previous assertion or skip was weakened.
+
+### Local gates
+
+| Gate | Result | Duration |
+| --- | --- | --- |
+| `python -m pytest -q tests/processing` | 98 passed, including all Phase 0 fixture/isolation gates | 6.30 s |
+| First full `python -m pytest -q -ra` | 2262 passed, 66 subtests, one existing pre-08:00 skip; before final projection/worker additions | 168.73 s |
+| Final full `python -m pytest -q -ra` | 2267 passed, 66 subtests, one existing pre-08:00 skip, 150 existing warnings | 159.43 s |
+| Node 22 `npm test` | 262 passed; no failures or skips | 1.342 s |
+| Node 22 `npm run build` | Passed; packaged assets match committed source output exactly | 27.00 s |
+| Node 22 `npm run test:browser` | 2 real-browser scenarios passed | 44.364 s |
+
+The unchanged 37-item synthetic demo/browser harness measured first visibility
+5875 ms, input 738 ms, Tasks/Board/Reports 146/231/187 ms, terminal replay 3877 ms,
+input emission 122 ms and reconnect 1089 ms. All existing ceilings passed without
+changes. The demo recording still proves input emission, not provider acceptance.
+The final worker-copy repair only affects explicit foundation APIs unused by the
+current demo/production consumers; frontend source, packaged assets and browser flows
+did not change after this browser run.
+
+Local logs are retained under the isolated integration worktree's ignored
+`.codex-tmp/phase1-evidence/`. Existing FakeScreencast teardown and Pydantic warnings
+remain recorded; they are not evidence of a new shutdown fix.
+
+### Delivery checkpoint
+
+Source integration commit: `81981b8`. Agent source commits are `13d4aab` (pure
+model), `f5ac813` (storage) and `7ce76bf` (projection tests), integrated as `917123a`,
+`9a1636b` and `2e458de` before the lead's seam corrections. All local gates and
+independent review above cover the final integrated source. Remote CI verification
+is the remaining section gate; no dependent implementation begins before it passes.
+
+Rollback compatibility: additive tables and APIs leave existing consumers unchanged.
+An older app can ignore the new tables but cannot consume canonical evidence. No
+automatic backup restoration is performed; corrective migration must preserve writes
+after any baseline. The eventual live cutover still requires the consistent-backup
+and final-evidence gate in the state contract. No live migration or restart occurred.

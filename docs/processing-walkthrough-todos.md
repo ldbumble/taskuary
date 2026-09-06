@@ -522,6 +522,12 @@ Owner-approved on 2026-09-05: All is chronological; Unread is the same item set
 filtered by shared unread state, ordered by status/priority. Unread must not be a
 separately curated pipeline that loses arrivals visible in All. Pending change.
 
+Section 1.1 foundation is implemented and locally verified at `81981b8`: durable
+identity/aliases, full-content and view fingerprints, and versioned historical-read
+evidence. All/Unread/assistant adoption and the final display-does-not-read cutover
+are still pending, so PW-101 and PW-104 remain unchecked. See section evidence for
+the cumulative tests, independent review and remote checkpoint status.
+
 - [ ] <a id="pw-101"></a>**PW-101** Use one canonical item/identity/context representation for All, Unread,
   and assistant selection, including messages, reports, assistant posts/ideas,
   and agent work/attention items. Preserve legitimate task/thread grouping and

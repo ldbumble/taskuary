@@ -907,9 +907,9 @@
       "section": "All and Unread: one item set, different filter and order",
       "phase": "1",
       "requirement": "Use one canonical item/identity/context representation for All, Unread,",
-      "status": "pending",
-      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial",
+      "test": "Section 1.1: tests/processing model/store/projection/foundation; cumulative gates recorded. Shared consumer adoption pending.",
+      "commit": "81981b8 (foundation only)"
     },
     {
       "id": "PW-102",
@@ -934,9 +934,9 @@
       "section": "All and Unread: one item set, different filter and order",
       "phase": "1",
       "requirement": "Do not treat an FYI classification or merely surfacing an item as permission",
-      "status": "pending",
-      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial",
+      "test": "Section 1.1: legacy evaluator, uncapped capture, deferral/reopen/rollback and feed differential tests. Final read cutover pending.",
+      "commit": "81981b8 (foundation only)"
     },
     {
       "id": "PW-105",

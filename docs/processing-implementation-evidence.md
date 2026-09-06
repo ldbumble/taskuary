@@ -1479,3 +1479,28 @@ launches nothing. Packaged UI rebuilt.
 
 Tests: `tests/test_startup_contract.py` (7 cases), `website/test/startupSurfaces.test.mjs` (4 checks: outcome reading, the timeline's repo decision, the All-detail
 tray, the task page's shared dispatch).
+
+## Section 5.7 — mandatory freshness: what a draft read, what a send rechecks, email refreshed like chat
+
+Status: implemented and tested locally at `325d05a`; remote CI pending on the pushed
+checkpoint. 
+Acceptance PW-048, PW-054, PW-055 implemented; PW-049 partial (automatic Next/Walk and FYI-batch
+validation are PW-050); PW-050 to PW-053, PW-056, PW-057 remain open.
+
+A draft was labelled with the newest message queried AFTER the model finished, so a line that
+landed during generation was called seen; the source-refresh gate before an answer, a draft or a
+send skipped email; the reply writer read the last six messages cut at 4,000 characters each and
+said nothing about the rest. `responder.draft_for_review` now captures the inbound message and the
+message-set revision (`operations.message_revision`: the task's inbound messages and their states,
+nothing else) BEFORE the model runs, pins the review to them (`store.pin_review_context`, new
+`review.ContextRevision`/`Stale` columns) and marks the draft stale when the set moved while it was
+written. `verdicts.decide` rechecks that revision before anything leaves - the one door the Review
+button and the phone road share - and refuses a stale or moved draft with `stale: true` and nothing
+sent; a redraft repins and the next yes sends. `server._refresh_chat_context` covers email through
+the connector behind the mailbox the message arrived in (`_poll_reports(only=[type], wait=True)`, an
+incremental watermark read; the chain itself is completed by `chains.py`); a mailbox with no active
+connector is left alone and said so; a failed refresh stays a 503. `responder.draft_reply` reads the
+assembled conversation (`ingest.exchange_lines`: the whole chain, history included, cleaned,
+de-quoted, budgeted, with the cut disclosed).
+
+Tests: `tests/test_freshness.py` (9 cases). No frontend change.

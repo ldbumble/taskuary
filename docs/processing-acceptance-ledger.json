@@ -430,18 +430,18 @@
       "section": "Mandatory freshness before surfacing or acting",
       "phase": "2/4/7",
       "requirement": "Capture the exact input message IDs/context revision at task evaluation",
-      "status": "pending",
-      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_freshness.py`::DraftPinsWhatItReadTests (the review is pinned to the inbound message and message-set revision captured before the model ran; a line landing during generation marks the draft stale instead of being called seen)",
+      "commit": "325d05a; local gates passed, CI pending"
     },
     {
       "id": "PW-049",
       "section": "Mandatory freshness before surfacing or acting",
       "phase": "2/4/7",
       "requirement": "Apply a shared source-freshness check before assistant surfacing, discussion,",
-      "status": "pending",
-      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: the shared refresh gate now covers email through the mailbox's connector (incremental watermark poll; the chain is completed by chains.py, never re-downloaded) before an answer, draft, approval or dispatch about it; automatic Next/Walk and FYI-batch validation are PW-050",
+      "test": "`tests/test_freshness.py`::EmailRefreshTests plus `tests/test_chat_freshness.py`",
+      "commit": "325d05a; local gates passed, CI pending"
     },
     {
       "id": "PW-050",
@@ -484,18 +484,18 @@
       "section": "Mandatory freshness before surfacing or acting",
       "phase": "2/4/7",
       "requirement": "Use the assembled substantive chain for drafting as well as triage; remove",
-      "status": "pending",
-      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_freshness.py`::WriterReadsTheChainTests (the reply writer reads the assembled, de-quoted, budgeted conversation - history included - and the cut is disclosed; the last-six/4,000-character boundary is gone)",
+      "commit": "325d05a; local gates passed, CI pending"
     },
     {
       "id": "PW-055",
       "section": "Mandatory freshness before surfacing or acting",
       "phase": "2/4/7",
       "requirement": "Recheck the evaluated version before committing an action. Require renewed",
-      "status": "pending",
-      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_freshness.py`::SendRechecksTests (a verdict rechecks the message-set revision wherever it lands - the Review button and the phone road - and refuses a stale or moved draft without sending; a redraft repins and the next yes sends; a failed source refresh is a 503, never \"current\")",
+      "commit": "325d05a; local gates passed, CI pending"
     },
     {
       "id": "PW-056",

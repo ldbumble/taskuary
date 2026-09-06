@@ -273,7 +273,7 @@ Before the assistant surfaces or acts on an item, refresh its source context;
 new activity requires fresh triage before choosing the next action. This is a
 pending change, not a guarantee provided by the current implementation.
 
-- [ ] <a id="pw-048"></a>**PW-048** Capture the exact input message IDs/context revision at task evaluation
+- [x] <a id="pw-048"></a>**PW-048** Capture the exact input message IDs/context revision at task evaluation
   and draft generation. In `draft_for_review()`, do not label the generated draft
   with a "latest" message queried after the model finishes: a message arriving
   during generation was not necessarily in its input. Save the version actually
@@ -301,10 +301,10 @@ pending change, not a guarantee provided by the current implementation.
 - [ ] <a id="pw-053"></a>**PW-053** Tell the owner when new activity changes the item being discussed. If the
   owner already answered externally, suppress the obsolete reply and explain
   that it was answered; fresh triage must still consider any subsequent new ask.
-- [ ] <a id="pw-054"></a>**PW-054** Use the assembled substantive chain for drafting as well as triage; remove
+- [x] <a id="pw-054"></a>**PW-054** Use the assembled substantive chain for drafting as well as triage; remove
   the silent last-six-message/4000-character-per-message draft-context boundary.
   Reuse cleaned, deduplicated history and disclose any unavoidable context limits.
-- [ ] <a id="pw-055"></a>**PW-055** Recheck the evaluated version before committing an action. Require renewed
+- [x] <a id="pw-055"></a>**PW-055** Recheck the evaluated version before committing an action. Require renewed
   approval for a changed draft; never send obsolete wording or launch duplicate
   work because sync and user action raced. If source refresh fails, expose that
   failure rather than claim the context is current or proceed with stale actions.

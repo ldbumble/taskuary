@@ -573,6 +573,12 @@ preserve legacy reads, documents and exact draft targets. Local gates and indepe
 review passed at `d75d45e`; delivery CI is pending in Section 1.6 evidence. Shared Unread/read/filter/priority and
 Current/Next adoption remain pending, so PW-101/102/103/106/109 remain unchecked.
 
+Section 1.6 integration preserves concurrent Phase 7 completion and approval changes.
+All shows saved exact-review recipients and unknown delivery, retains interrupted
+owner edits after Cancel, and hydrates the exact updated message for comparison.
+Delivery gates are recorded in the implementation evidence; canonical Unread and
+the read-state transition remain pending.
+
 - [ ] <a id="pw-101"></a>**PW-101** Use one canonical item/identity/context representation for All, Unread,
   and assistant selection, including messages, reports, assistant posts/ideas,
   and agent work/attention items. Preserve legitimate task/thread grouping and
@@ -1310,17 +1316,17 @@ owner approval. Pending implementation.
   refresh/drafting failures, held-review reuse, unsupported send channels, and
   repeated completion events without duplicate drafts or automatic sending.
 
-- [ ] <a id="pw-239"></a>**PW-239** Owner clarification: when new context materially changes the task/draft and
+- [x] <a id="pw-239"></a>**PW-239** Owner clarification: when new context materially changes the task/draft and
   triage updates it, interrupt approval with a popup: "A new message arrived.
   Review it before sending." Show the new message and relevant triage change,
   with actions to review the update or cancel. Do not send on the original click
   or silently substitute a revised draft; require fresh approval of the reviewed
   draft. Preserve owner edits for comparison rather than discarding them.
-- [ ] <a id="pw-240"></a>**PW-240** Base approval invalidation on the draft's context/triage revision and
+- [x] <a id="pw-240"></a>**PW-240** Base approval invalidation on the draft's context/triage revision and
   material relevance, not every polling timestamp or unrelated arrival. Pending
   reevaluation must not be treated as proof that new context is harmless. Different
   email/chat polling cadences do not waive the approved source-freshness checks.
-- [ ] <a id="pw-241"></a>**PW-241** Test material inbound changes, externally sent replies, relevant triage
+- [x] <a id="pw-241"></a>**PW-241** Test material inbound changes, externally sent replies, relevant triage
   updates, non-material refreshes, changes while approval is open, and popup
   cancellation. Never apply the previous approval to a changed draft.
 

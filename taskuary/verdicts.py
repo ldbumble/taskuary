@@ -11,6 +11,24 @@ VERB2STATUS = {'approve': 'approved', 'edit': 'edited', 'reject': 'rejected', 'n
                'close_unsent': 'closed_unsent'}   # the owner's explicit close when sending is unavailable (PW-145) - never 'sent'
 
 
+def context_moved(store, rv: dict):
+    """Has the thread materially moved since this draft was pinned (PW-240)? A stale mark triage set, or an
+    inbound message set that differs from the pinned revision - never a polling timestamp, never an FYI filed
+    with nothing to do. Returns (moved, the newest material inbound message or None)."""
+    from . import operations
+    if rv.get('Kind') == 'action': return False, None
+    tid = rv.get('TaskId')
+    if tid:
+        latest = store.last_material_inbound_on_task(tid)
+        if rv.get('ContextRevision'): moved = operations.message_revision(store, tid) != rv['ContextRevision']
+        else: moved = bool(latest and latest.get('MessageId') != rv.get('MessageId'))
+    else:
+        m = store.get_message(rv.get('MessageId')) if rv.get('MessageId') else None
+        latest = store.last_inbound_in(m['ConversationId']) if m and m.get('ConversationId') else None
+        moved = bool(latest and latest.get('MessageId') != rv.get('MessageId'))
+    return bool(rv.get('Stale') or moved), latest
+
+
 def _now_iso() -> str:
     from datetime import datetime, timezone
     return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -106,10 +124,9 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
     # inbound message set that moved since the draft was pinned, refuses the send here - the Review button and
     # the phone road land through this one door, so neither can send yesterday's wording
     if verb_in in ('approve', 'edit') and rv.get('Kind') != 'action' and rv.get('TaskId'):
-        from . import operations
-        moved = bool(rv.get('ContextRevision')) and operations.message_revision(store, rv['TaskId']) != rv['ContextRevision']
-        if rv.get('Stale') or moved:
-            if moved and not rv.get('Stale'): store.mark_review_stale(rid)
+        moved, _latest = context_moved(store, rv)
+        if moved:
+            if not rv.get('Stale'): store.mark_review_stale(rid)
             return {'ok': False, 'status': 'pending', 'sent': None, 'stale': True,
                     'send_error': 'New messages arrived after this draft was written - nothing was sent. Redraft it with the latest context and approve again.'}
     # Close without sending (PW-145): the owner's own word that no reply will go out - the unsent draft stays,

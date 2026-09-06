@@ -18,6 +18,7 @@ def install_processing_changes(app, store):
         '/api/fixture/processing/canonical-all',
         '/api/fixture/processing/canonical-arrival',
         '/api/fixture/processing/canonical-emit',
+        '/api/fixture/processing/canonical-review-move',
     })
 
     def fixture_refuse(method, path):

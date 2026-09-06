@@ -338,6 +338,55 @@ test("canonical All renders every root once with truthful details and frozen pag
     "canonical All must not change Current");
   assert.equal(automaticWrites().length, writesAfterIntentionalDraft,
     "All/filter/pagination/tab return must not add automatic state writes");
+  // A stale approval can retarget its review to a newer exact member. Exercise the
+  // real canonical detail refresh; only the send response is synthetic, never sent.
+  await clickState(page, "all");
+  await chooseSource(page, seed.grouped.source_nonrepresentative);
+  await page.waitForFunction((itemId, mid) => [...document.querySelectorAll("[data-processing-item]")]
+    .find((node) => node.dataset.processingItem === itemId)?.dataset.processingTarget === `message:${mid}`,
+    { timeout: 10000 }, seed.grouped.item_id, seed.grouped.message_ids[0]);
+  await clickItem(page, seed.grouped.item_id);
+  const replySelector = '[data-tq-timeline-stage] textarea[placeholder="Type your reply, or generate a draft with AI"]';
+  await page.waitForSelector(replySelector, { visible: true, timeout: 10000 });
+  const keptReply = "OWNER EDIT SURVIVES EXACT MESSAGE MOVE";
+  await page.click(replySelector);
+  await page.keyboard.down("Control"); await page.keyboard.press("A"); await page.keyboard.up("Control");
+  await page.keyboard.type(keptReply);
+  const guard = page.fixtureRequestGuard;
+  assert.equal(typeof guard, "function", "fixture network guard must remain installed");
+  page.off("request", guard);
+  let sends = 0, updatedMid = null;
+  page.on("request", async (entry) => {
+    if (new URL(entry.url()).origin === harness.ui && entry.method() === "POST"
+        && new URL(entry.url()).pathname === `/api/reviews/${seed.grouped.selected_review_id}/decide`) {
+      sends += 1;
+      const data = await request(harness, "/api/fixture/processing/canonical-review-move", "POST", {});
+      updatedMid = data.interrupt.latest.MessageId;
+      data.interrupt.yours = JSON.parse(entry.postData()).final_text;
+      await entry.respond({ status: 200, contentType: "application/json", body: JSON.stringify(data) });
+    } else guard(entry);
+  });
+  const clickButton = async (label) => {
+    const button = (await page.evaluateHandle((wanted) => [...(document.querySelector('[role="dialog"]') || document).querySelectorAll("button")]
+      .find((node) => node.textContent.trim() === wanted && node.getBoundingClientRect().width > 0), label)).asElement();
+    assert.ok(button, `visible ${label} button must exist`);
+    await button.click();
+  };
+  await clickButton("Check delivery and retry");
+  await page.waitForSelector('[role="dialog"]', { visible: true, timeout: 10000 });
+  assert.ok((await page.$eval('[role="dialog"]', (node) => node.innerText)).includes("CANONICAL APPROVAL NEW CONTEXT"));
+  await clickButton("Cancel");
+  await page.waitForSelector('[role="dialog"]', { hidden: true, timeout: 10000 });
+  await page.click(`[data-interrupted-reply="${seed.grouped.selected_review_id}"] summary`);
+  assert.ok((await page.$eval(`[data-interrupted-reply="${seed.grouped.selected_review_id}"]`, (node) => node.innerText)).includes(keptReply),
+    "cancel must keep the owner's exact unsent text recoverable");
+  await clickButton("Review the update");
+  await waitForStageMarker(page, "CANONICAL REFRESHED REPLY");
+  await page.waitForFunction((selector, wanted) => document.querySelector(selector)?.value === wanted,
+    { timeout: 10000 }, replySelector, keptReply);
+  assert.ok(traffic.some(({ path, search }) => path === `/api/processing/items/${seed.grouped.item_id}/detail`
+    && new URLSearchParams(search).get("id") === String(updatedMid)), "comparison must hydrate the exact newer message");
+  assert.equal(sends, 1, "reviewing the changed context cannot send again");
   assert.deepEqual(errors, []);
   assert.deepEqual(page.fixtureEscapes, []);
 });

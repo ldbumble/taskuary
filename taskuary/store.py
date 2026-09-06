@@ -1279,6 +1279,12 @@ class SQLiteStore:
         return self._one("SELECT * FROM message WHERE TaskId=? AND Status NOT IN ('context','history','skipped') "
                          "AND IFNULL(Direction,'in')<>'out' AND IFNULL(Channel,'')<>'report' "
                          'ORDER BY SentAt DESC, MessageId DESC LIMIT 1', (task_id,))
+    def last_material_inbound_on_task(self, task_id):
+        """last_inbound_on_task minus the FYIs triage filed with nothing to do (PW-240): the line that can make a
+        drafted reply stale is one somebody sent that changed the ask."""
+        return self._one("SELECT * FROM message WHERE TaskId=? AND Status NOT IN ('context','history','skipped','filed') "
+                         "AND IFNULL(Direction,'in')<>'out' AND IFNULL(Channel,'')<>'report' "
+                         'ORDER BY SentAt DESC, MessageId DESC LIMIT 1', (task_id,))
     def last_inbound_in(self, conversation_id):
         return self._one("SELECT * FROM message WHERE ConversationId=? AND Status NOT IN ('context','history','skipped') AND IFNULL(Direction,'in')<>'out' "
                          'ORDER BY SentAt DESC LIMIT 1', (conversation_id,))

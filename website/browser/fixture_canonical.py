@@ -123,3 +123,21 @@ def install_canonical_changes(app, store):
     def emit():
         live.emit('feed-changed')
         return {'ok': True}
+
+    @app.post('/api/fixture/processing/canonical-review-move')
+    def move_review(body: dict):
+        if body or not seeded:
+            raise HTTPException(422, 'seed first; this fixture accepts only an empty object')
+        rid = seeded['grouped']['selected_review_id']
+        review = store.get_review(rid)
+        original = store.get_message(review['MessageId'])
+        with patch.object(processing_all.MembershipWorker, 'reconcile'), patch.object(store, '_poke'), patch.object(live, 'emit'):
+            mid = message('Canonical changed ask', datetime.now().isoformat(' '),
+                          task=review['TaskId'], source=original['SourceName'], status='routed',
+                          body='CANONICAL APPROVAL NEW CONTEXT')
+            store._exec('UPDATE review SET MessageId=?, DraftText=? WHERE ReviewId=?',
+                        (mid, 'CANONICAL REFRESHED REPLY', rid))
+            store.reconcile_processing_membership()
+        return {'ok': False, 'stale': True, 'draft': 'CANONICAL REFRESHED REPLY',
+                'interrupt': {'latest': {'MessageId': mid, 'preview': 'CANONICAL APPROVAL NEW CONTEXT'},
+                              'refreshed': 'CANONICAL REFRESHED REPLY'}}

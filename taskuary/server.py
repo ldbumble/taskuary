@@ -1977,6 +1977,7 @@ def get_run(run_id: int):
 
 @app.get('/api/reviews')
 def reviews(status: str = None):
+    from .verdicts import context_moved
     rows = store.list_reviews(status)
     gh_ok = store.github_replies_ok()
     for r in rows:
@@ -1984,10 +1985,9 @@ def reviews(status: str = None):
         except (TypeError, ValueError): special = False
         r['CanSend'] = special or _can_send(r.get('Channel'), bool(r.get('MessageId')), gh_ok)
         r['SendBlock'] = '' if r['CanSend'] else _send_block(r.get('Channel'), bool(r.get('MessageId')))
-        latest = _latest_context_message(r.get('TaskId'), r.get('MessageId'))
-        r['Stale'] = bool(r.get('Kind') != 'action' and latest
-                          and latest.get('MessageId') != r.get('MessageId'))
-        if r['Stale']:
+        moved, latest = context_moved(store, r)          # material change only (PW-240), never a polling timestamp
+        r['Stale'] = bool(moved)
+        if r['Stale'] and latest:
             r['LatestMessageId'] = latest.get('MessageId')
             r['LatestPreview'] = str(latest.get('BodyText') or '')[:1500]
             r['LatestSentAt'] = latest.get('SentAt')
@@ -1999,25 +1999,37 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
     (a 'approve' typed in the notify chat lands the same way this button does)."""
     rv = store.get_review(rid)
     if not rv: raise HTTPException(404, 'review not found')
-    from .verdicts import VERB2STATUS, decide as land
+    from .verdicts import VERB2STATUS, context_moved, decide as land
     if body.verb not in VERB2STATUS: raise HTTPException(422, 'bad verb')
     if body.verb == 'close_unsent' and rv.get('Kind') == 'action': raise HTTPException(422, 'a proposal is rejected, not closed without sending')
     if body.verb in ('approve', 'edit') and rv.get('Kind') != 'action':
         try: _refresh_chat_context(task_id=rv.get('TaskId'), message_id=rv.get('MessageId'))
         except RuntimeError as e: raise HTTPException(503, str(e))
         rv = store.get_review(rid) or rv
-        latest = _latest_context_message(rv.get('TaskId'), rv.get('MessageId'))
-        if latest and latest.get('MessageId') != rv.get('MessageId'):
-            # Never let a click send wording composed before the newest chat line.  Refresh the
-            # draft automatically when a brain is available, but still require a new human yes.
+        moved, latest = context_moved(store, rv)
+        if moved:
+            # The click does not send (PW-239): the context materially changed - a new inbound line, a triage
+            # update - so the owner is interrupted with what arrived. Their own edit is kept for comparison, the
+            # draft is refreshed from the current context, and the refreshed draft needs its own yes.
+            yours = str(body.final_text or '').strip()
+            if yours and yours != str(rv.get('DraftText') or '').strip() and rv.get('TaskId'):
+                store.add_comment(rv['TaskId'], ACTOR, 'human', f'Your edited reply, kept for comparison - the thread moved before it was sent:\n{yours[:4000]}')
             draft = None
             try:
                 draft = (responder.write_draft(store, rv['TaskId'], rid, actor=ACTOR)
                          if rv.get('TaskId') else responder.draft_for_message(store, latest, rid))
             except Exception as e:
                 logger.warning(f'could not refresh stale review {rid}: {e}')
+            triage = ''
+            if rv.get('TaskId'):
+                notes = [c for c in store.list_comments(rv['TaskId']) if str(c.get('Actor') or '').lower() == 'triage']
+                triage = str(notes[-1].get('Body') or '')[:600] if notes else ''
             return {'ok': False, 'status': 'pending', 'sent': None, 'stale': True,
                     'draft': draft,
+                    'interrupt': {'title': 'A new message arrived. Review it before sending.',
+                                  'latest': ({'MessageId': latest.get('MessageId'), 'FromName': latest.get('FromName'), 'FromEmail': latest.get('FromEmail'),
+                                              'SentAt': latest.get('SentAt'), 'preview': str(latest.get('BodyText') or '')[:1500]} if latest else None),
+                                  'triage': triage, 'yours': yours or None, 'refreshed': draft},
                     'send_error': ('New messages arrived after this draft. '
                                    + ('I refreshed it with the latest context; review it and approve again.' if draft
                                       else 'Nothing was sent. Redraft it with the latest context before approving.'))}

@@ -213,7 +213,7 @@ export async function startHarness() {
       const escaped = [];
       const blockedAssets = [];
       await page.setRequestInterception(true);
-      page.on("request", (request) => {
+      const fixtureRequestGuard = (request) => {
         const url = request.url();
         const protocol = new URL(url).protocol;
         if (["data:", "blob:", "about:"].includes(protocol) || new URL(url).origin === ui) {
@@ -225,7 +225,9 @@ export async function startHarness() {
           escaped.push(url);
           request.abort("blockedbyclient");
         }
-      });
+      };
+      page.on("request", fixtureRequestGuard);
+      page.fixtureRequestGuard = fixtureRequestGuard;
       page.fixtureEscapes = escaped;
       page.fixtureBlockedAssets = blockedAssets;
       page.on("close", () => pages.delete(page));

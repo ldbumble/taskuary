@@ -2115,7 +2115,7 @@
       "requirement": "Apply the approved freshness and unified reevaluation rules after work",
       "status": "implemented",
       "test": "`tests/test_completion_freshness.py`::FreshnessTests (the conversation is refreshed through `coder.REFRESH` - the server's `_refresh_chat_context` - before the result becomes a reply; an answer the owner already sent from the mail client means no draft; a newer ask is the one the reply answers; a failed refresh leaves the draft visibly stale with the reason; no hook = unchecked, never called fresh)",
-      "commit": "ecabef1; local gates passed, CI pending"
+      "commit": "ecabef1; ecabef1/aafd735, CI run 34055530583 (all ten jobs passed)"
     },
     {
       "id": "PW-236",
@@ -2124,7 +2124,7 @@
       "requirement": "Reuse the applicable held review rather than duplicating it. Generate the",
       "status": "implemented",
       "test": "`tests/test_completion_freshness.py`::ResultAndReviewTests (the held triage draft, else the pending review an earlier completion raised, is reused - a repeated completion rewrites it and never sends; the draft is written from the saved result and the current thread with its context revision pinned by `draft_for_review`; the saved result survives a failed draft, which stays retryable as an empty pending review)",
-      "commit": "ecabef1; local gates passed, CI pending"
+      "commit": "ecabef1; ecabef1/aafd735, CI run 34055530583 (all ten jobs passed)"
     },
     {
       "id": "PW-237",
@@ -2133,7 +2133,7 @@
       "requirement": "Bring coder.finish() into line with the approved always-draft rule: when",
       "status": "implemented",
       "test": "`tests/test_completion_freshness.py`::UnsupportedSendTests, `tests/test_reply_channels.py::FinishTests` (a channel that cannot carry the reply still gets its draft - `finish` returns `can_send: False` with `send_block`'s reason, the Review page hides Send and offers Close without sending; only a row nobody sent - report, own, assistant - drafts nothing; sending stays behind owner approval)",
-      "commit": "ecabef1; local gates passed, CI pending"
+      "commit": "ecabef1; ecabef1/aafd735, CI run 34055530583 (all ten jobs passed)"
     },
     {
       "id": "PW-238",
@@ -2142,34 +2142,34 @@
       "requirement": "Test changed requests, already-sent external replies, unchanged chains,",
       "status": "implemented",
       "test": "`tests/test_completion_freshness.py` (11 cases: changed request, externally sent reply, unchanged chain, refresh failure, drafting failure, held-review reuse, unsupported and switched-off send channels, a report row, repeated completion events without duplicate drafts or sending)",
-      "commit": "ecabef1; local gates passed, CI pending"
+      "commit": "ecabef1; ecabef1/aafd735, CI run 34055530583 (all ten jobs passed)"
     },
     {
       "id": "PW-239",
       "section": "Completion-to-reply freshness and approval",
       "phase": "7",
       "requirement": "Owner clarification: when new context materially changes the task/draft and",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_approval_interrupt.py`::InterruptTests, `website/test/approvalInterrupt.test.mjs` (a material new message stops the click: `POST /api/reviews/{id}/decide` answers `stale` with an `interrupt` - the new message, the latest triage change, the owner's edit kept as a task comment and in the reply box, the refreshed draft - and both the Review page and the Assistant stage open \"A new message arrived. Review it before sending.\" with Review the update / Cancel; nothing is sent on the original click, the refreshed draft is shown beside the owner's words and needs its own yes)",
+      "commit": "d8bfe62; local gates passed, CI pending"
     },
     {
       "id": "PW-240",
       "section": "Completion-to-reply freshness and approval",
       "phase": "7",
       "requirement": "Base approval invalidation on the draft's context/triage revision and",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_approval_interrupt.py`::test_an_fyi_filed_with_nothing_to_do_does_not_interrupt, ::test_a_change_while_approval_is_open_is_caught_by_the_pinned_revision_not_a_flag, ::test_the_review_list_marks_stale_by_material_change_only (`verdicts.context_moved`: the pinned context revision against the material inbound set - an FYI filed with nothing to do is excluded from `operations.message_revision` - shared by the list, the click and the verdict; no polling timestamp is consulted)",
+      "commit": "d8bfe62; local gates passed, CI pending"
     },
     {
       "id": "PW-241",
       "section": "Completion-to-reply freshness and approval",
       "phase": "7",
       "requirement": "Test material inbound changes, externally sent replies, relevant triage",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_approval_interrupt.py` (6 cases: material inbound change, externally sent reply, relevant triage update, non-material FYI, a change while approval is open and a second change before the second look, the list's stale mark) + `website/test/approvalInterrupt.test.mjs` (4 cases: the interruption model, non-interruptions, an older answer without the payload, cancel keeps the edit and review hands the refreshed draft over)",
+      "commit": "d8bfe62; local gates passed, CI pending"
     },
     {
       "id": "PW-242",

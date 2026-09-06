@@ -234,6 +234,18 @@ def test_fixture_seeds_complete_real_census_and_frozen_arrival_without_notificat
             emit.assert_not_called()
             assert client.post('/api/fixture/processing/canonical-emit').status_code == 200
             emit.assert_called_once_with('feed-changed')
+            before = list(store.cx.iterdump())
+            assert client.post('/api/fixture/processing/canonical-review-move', json={'review_id': 1}).status_code == 422
+            assert list(store.cx.iterdump()) == before
+            moved = client.post('/api/fixture/processing/canonical-review-move', json={}).json()
+            rid = seeded['grouped']['selected_review_id']
+            newer = moved['interrupt']['latest']['MessageId']
+            assert store.get_review(rid)['MessageId'] == newer
+            exact = processing_all.item_detail(store, seeded['grouped']['item_id'], kind='message', local_id=newer)
+            assert any(review['ReviewId'] == rid for review in exact['detail']['reviews'])
+            older = processing_all.item_detail(store, seeded['grouped']['item_id'], kind='message',
+                                              local_id=seeded['grouped']['message_ids'][0])
+            assert all(review['ReviewId'] != rid for review in older['detail']['reviews'])
     finally:
         store.cx.close()
 

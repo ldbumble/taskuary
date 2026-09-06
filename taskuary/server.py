@@ -40,11 +40,16 @@ for name, prof in cfg.get('agents', {}).items():
 @asynccontextmanager
 async def _lifespan(_app):
     live_bus.bind(asyncio.get_running_loop())
+    is_demo = demo.enabled()
+    if not is_demo:
+        # Preserve the owner's existing opt-out before bridges, catch-up, or drain
+        # admission can ingest anything. Failure must not enable unattended work.
+        store.upgrade_auto_start()
     if not _open_drain_workers(store):
         raise RuntimeError('previous triage drain still owns this store')
     # the demo builds its world and puts agents on the board BEFORE anything else runs - and
     # never polls, never bridges, never catches up on a mailbox that does not exist
-    if demo.enabled():
+    if is_demo:
         try:
             demo.seed(store)
             demo.start_sessions(store)
@@ -1088,7 +1093,10 @@ def work_on_task(tid: int) -> str:
     except Exception: pass
     cs = store.list_comments(tid)
     if any(str(c.get('Body') or '').startswith(('CODER REPORT', 'HANDOVER NOTE')) for c in cs): had.append('it carries an agent report')
-    if any(str(c.get('ActorType') or '') == 'agent' for c in cs) and 'it carries an agent report' not in had: had.append('an agent has worked on it')
+    # the router's own bookkeeping ('not auto-started', 'start failed', 'queued') is not an agent's work: a task
+    # nothing ever ran on stays deletable however loudly the pipeline explained why (PW-073)
+    if any(str(c.get('ActorType') or '') == 'agent' and str(c.get('Actor') or '') != 'router' for c in cs) and 'it carries an agent report' not in had:
+        had.append('an agent has worked on it')
     return ' and '.join(had)
 
 
@@ -2187,6 +2195,10 @@ def release_task(task_id: int, body: ReleaseBody, background: BackgroundTasks):
     store.tag_task(task_id, HOLD_TAG, on=False, actor=ACTOR)
     store.add_comment(task_id, ACTOR, 'human', 'Released to the agent - you vouched for this sender.')
     store.audit('task', task_id, 'release', ACTOR)
+    from . import general, ingest as _ing
+    if general.handles(store.get_task(task_id)):
+        _ing._spawn(_ing._auto_general, store, task_id)     # the assistant's session, not a CLI (PW-069)
+        return {'released': True, 'assistant': True}
     ses = start_session(store, task_id, body.agent, body.model)
     return {'released': True, 'session': ses}
 

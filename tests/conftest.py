@@ -175,7 +175,7 @@ _client_defaults()
 def isolated_runtime_boundaries():
     """Deny real integration side effects unless a test supplies a fake or registered port."""
     import httpx, imaplib, requests, smtplib, urllib.request
-    from taskuary import browserview, hooks, server, spawn, terminal, waitroom, wabridge
+    from taskuary import browserview, general, hooks, server, spawn, terminal, waitroom, wabridge
 
     # Auto-dispatch ships on.  In a suite, both coding and general execution stop at the process
     # boundaries below; switching this off also prevents routine ingest tests from trying at all.
@@ -185,6 +185,7 @@ def isolated_runtime_boundaries():
     real_async_request = httpx.AsyncClient.request
     real_urlopen = urllib.request.urlopen
     real_term_init = terminal.Term.__init__
+    real_start_session = general.start_session
     real_hook_install = hooks.install
     real_browser_listening = browserview._listening
     real_socket = socket.socket
@@ -209,6 +210,13 @@ def isolated_runtime_boundaries():
         if not reviewed_python(argv):
             return _blocked('PTY worker', command)
         return real_term_init(self, argv, *args, **kwargs)
+
+    def guarded_start_session(store, tid, connector_id=None, model=None, actor='owner', pick=None):
+        # the router's UNATTENDED assistant start (ingest._start_general, PW-069) is a process boundary
+        # like a PTY: a test that wants it supplies a fake general.start_session. An owner-opened
+        # session is ordinary test fixture and passes through.
+        if actor == 'router': return _blocked('unattended assistant session', f'task {tid}')
+        return real_start_session(store, tid, connector_id, model, actor, pick)
 
     def guarded_hooks(cwd, *args, **kwargs):
         path = Path(cwd).resolve()
@@ -388,6 +396,7 @@ def isolated_runtime_boundaries():
         patches.enter_context(mock.patch.object(smtplib, 'SMTP_SSL', side_effect=lambda *a, **k: _blocked('SMTP connection', a[0] if a else '')))
         patches.enter_context(mock.patch.object(spawn, 'popen', guarded_popen))
         patches.enter_context(mock.patch.object(terminal.Term, '__init__', guarded_term_init))
+        patches.enter_context(mock.patch.object(general, 'start_session', guarded_start_session))
         patches.enter_context(mock.patch.object(hooks, 'install', guarded_hooks))
         patches.enter_context(mock.patch.object(browserview, '_listening', guarded_browser_listening))
         patches.enter_context(mock.patch.object(server.app.router, 'lifespan_context', safe_lifespan))

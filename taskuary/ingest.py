@@ -154,6 +154,26 @@ def auto_code_ok(store, msg: dict, mid: int, kind: str) -> tuple:
                                'written to them; send it yourself if real')
 
 
+def auto_start_ok(store, msg: dict, mid: int, kind: str) -> tuple:
+    """May this task start ITS worker by itself? (ok, why-not). Both kinds start by default (owner,
+    2026-09-05, PW-069): coding opens its CLI, general opens its assistant session, a personal `task`
+    is the owner's and starts nothing. Each kind has its own switch; a kind needs its worker to be
+    configured; and the stranger gate (senders.known) is last because it is the expensive one - a
+    Sent Items search no task already staying on the Board should pay for. A hold is about the
+    unattended start only: the task is still triaged, shown and dispatchable by hand."""
+    cfg = store.get_settings()
+    if kind == 'general':
+        if cfg.get('general_auto_enabled', '1') != '1': return False, 'auto-start is off for the assistant (Settings) - open it from the task'
+        from . import general
+        if not general.provider_options(store): return False, 'no assistant provider is configured (Settings -> AI) - open it from the task once one is'
+    elif kind == 'coding':
+        if cfg.get('coder_auto_enabled') != '1': return False, 'auto-dispatch is off (Settings) - start the session from the task'
+    else: return False, 'a person has to do this one - on your list for you'
+    ok, why = senders.known(store, msg, exclude_mid=mid, deep=True)
+    return ok, why if ok else (f'{why} - not one of your domains, and this mailbox has never '
+                               'written to them; send it yourself if real')
+
+
 # One drain at a time: a conversation's second line must find the task its first one opened.
 # Fresh chat channels go to the front of the line (the chat lane in server.py names them, and a
 # drain already running is told through mark_fresh); within a channel the order stays arrival.
@@ -694,13 +714,17 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # stops, and a job left on a list does not. Only CODING self-dispatches: `general` is a
         # conversation the owner opens when they want it (starting a chat per inbound message
         # would be noise), and `task` is theirs by definition. Both still land on the Board.
-        elif f['kind'] == 'coding' and cfg.get('coder_auto_enabled') == '1' and not msg.get('no_auto'):
+        elif f['kind'] in ('coding', 'general') and not msg.get('no_auto'):
             # no_auto = the channel opted out of self-dispatch (github items always do: an
             # open repo would start an agent per drive-by PR) - the task queues as needs-you.
-            # The rest of the gate is auto_code_ok: what may start a session on this machine.
-            ok, who = auto_code_ok(store, msg, mid, f['kind'])
+            # The rest of the gate is auto_start_ok: what may start a worker on this machine, for
+            # either kind (PW-069/071). A coding job whose repository triage could not tell waits
+            # for the owner's choice - a visible hold, not a session in the wrong checkout.
+            if f['kind'] == 'coding' and intent.get('needs_repo_choice'):
+                ok, who = False, 'needs a repository choice - pick one on the task before an agent starts'
+            else: ok, who = auto_start_ok(store, msg, mid, f['kind'])
             if ok:
-                _spawn(_auto_code, store, tid)
+                _spawn(_auto_code if f['kind'] == 'coding' else _auto_general, store, tid)
                 if is_chat(msg): _spawn(_ack_chat, store, msg, mid, tid)   # they hear at once that somebody is on it
             else:
                 held = who
@@ -711,8 +735,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                 # tag rides on the task because that is what the feed row and the release both
                 # read (senders.known decided it; HOLD_TAG only records the decision).
                 if who.startswith('first message from'): store.tag_task(tid, HOLD_TAG)
-                store.add_comment(tid, 'router', 'agent', f'Coding agent not auto-started: {who}. '
-                                                          'Send it to the coding agent yourself if an agent can do it.')
+                worker = 'Coding agent' if f['kind'] == 'coding' else 'Assistant'
+                store.add_comment(tid, 'router', 'agent', f'{worker} not auto-started: {who}. '
+                                                          + ('Send it to the coding agent yourself if an agent can do it.' if f['kind'] == 'coding'
+                                                             else 'Open it from the task when you want the assistant on it.'))
                 store.audit('task', tid, 'auto_code_held', actor, 'agent', {'from': msg.get('from_email'), 'why': who})
     # the route row is the JUDGEMENT's record, and the timeline panel quotes it verbatim: the
     # verdict leads (what the classifier decided and why), routing explains new-vs-attached,
@@ -724,12 +750,11 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # task fell through to "sent to the coding agent" - which nothing had done - and the
         # Timeline quotes this verbatim, so the panel would have stated a lie under the verdict.
         act = (('a reply draft goes to Review for you' + (f' - {unsendable}, so it cannot be sent from here' if unsendable else '')) if f['kind'] == 'reply'
-               else 'talk it through with the assistant - nothing is working it' if f['kind'] == 'general'
                else 'yours to do - nothing is working it' if f['kind'] == 'task'
                else 'not auto-worked: github items queue for you to promote' if msg.get('no_auto')
                else f'not auto-worked: {held}' if held
-               else 'sent to the coding agent' if cfg.get('coder_auto_enabled') == '1'
-               else 'auto-dispatch is off (Settings) - start the session from the task')
+               else 'sent to the coding agent' if f['kind'] == 'coding'
+               else 'sent to the assistant')
         reason = (f"triage: {intent['intent']}" + (f" - {intent['why']}" if intent.get('why') else '')
                   + (f" · playbook {intent['playbook']}" if intent.get('playbook') else '')
                   + _notes_note()
@@ -742,8 +767,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     lvl = cfg.get('notify_level') or 'needs_me'
     # on an attach there was no fresh triage (`f` only exists on create) - the task itself knows
     kind = f['kind'] if r['decision'] != 'attach' else (store.get_task(tid) or {}).get('Kind')
-    # only CODING is ever auto-dispatched now, so anything else is still waiting on the owner
-    dispatched = kind == 'coding' and cfg.get('coder_auto_enabled') == '1' and not held
+    # both worker kinds are auto-dispatched (PW-069); a personal task or a held one still waits on the owner
+    dispatched = kind in ('coding', 'general') and not held and not msg.get('no_auto') and (
+        cfg.get('coder_auto_enabled') == '1' if kind == 'coding' else cfg.get('general_auto_enabled', '1') == '1')
     if lvl == 'all' or (lvl == 'needs_me' and not dispatched):
         _notify_new(store, msg, tid, mid,
                     'a question for you' if kind == 'reply' else 'new task on your list', rid=new_rid)
@@ -1312,6 +1338,37 @@ def _auto_code(store, tid):
     except Exception as e:
         logger.warning(f'auto dispatch failed for task {tid}: {e}')
         store.add_comment(tid, 'router', 'agent', f'Auto-start failed: {str(e)[:200]}')
+
+
+def _auto_general(store, tid, brief: str = None):
+    """Auto-dispatch for a GENERAL task: the assistant's own per-task session, the same one the
+    owner sees when they open the task (PW-069). A full house queues it like a coding task; the
+    queue drain knows the kind. A live conversation is reused - the ask is put once."""
+    from . import terminal as term
+    cap = auto_sessions(store)
+    if len([t for t in list(term.SESSIONS.values()) if t.alive]) >= cap:
+        store.enqueue_dispatch(tid, None, 'assistant', f'{cap} agent sessions are already live')
+        store.add_comment(tid, 'router', 'agent', f'Queued: {cap} agent sessions are already live - it starts by itself when one ends.')
+        return
+    _start_general(store, tid, brief)
+
+
+def _start_general(store, tid, brief: str = None):
+    """Open (or reuse) the assistant session and put the task to it - once. A failure is written on
+    the task as a failure, never left looking like nobody got round to it (PW-073)."""
+    from . import general
+    try:
+        t = store.get_task(tid) or {}
+        session = general.start_session(store, tid, actor='router')
+        fresh = not general.history(store, tid)
+        store.add_comment(tid, 'router', 'agent', 'auto-started the assistant on this task (general_auto_enabled)'
+                          + ('' if fresh else ' - the conversation already open on it continues'))
+        if fresh:
+            ask = (brief or str(t.get('Summary') or '').strip() or str(t.get('Title') or '').strip())
+            if ask: session.send_prompt(ask)
+    except Exception as e:
+        logger.warning(f'assistant auto-start failed for task {tid}: {e}')
+        store.add_comment(tid, 'router', 'agent', f'Assistant start failed: {str(e)[:200]}')
 
 
 def _auto_draft(store, tid, rid):

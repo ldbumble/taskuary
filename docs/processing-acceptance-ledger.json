@@ -8,8 +8,8 @@
       "phase": "2",
       "requirement": "Prevent slow AI triage and full-sync report execution from blocking fresh",
       "status": "implemented",
-      "test": "`tests/test_poll_lanes.py` (lanes, in-flight exclusion, context gate, banner); full backend 2403 passed",
-      "commit": "5c8cf60; f244803, CI run 34036813779 (all ten jobs passed)"
+      "test": "Ordered worker/claim regressions; real feed API during held triage and reports; cumulative gates",
+      "commit": "Section 2.1; delivery/CI in evidence"
     },
     {
       "id": "PW-002",
@@ -17,8 +17,8 @@
       "phase": "2",
       "requirement": "Account for chat fetches performed during a full sync in the fast-poll",
       "status": "implemented",
-      "test": "`tests/test_poll_lanes.py` (full-pass stamps, end-of-attempt stamps, skipped attempt still due)",
-      "commit": "5c8cf60; f244803, CI run 34036813779 (all ten jobs passed)"
+      "test": "Stamp before claim release; failure/skipped attempts; stale timer admission regression",
+      "commit": "Section 2.1; delivery/CI in evidence"
     },
     {
       "id": "PW-003",
@@ -26,8 +26,8 @@
       "phase": "2",
       "requirement": "Expose the supported fast-poll interval consistently for Teams, Slack,",
       "status": "implemented",
-      "test": "`website/test/pollFields.test.mjs` (every chat card carries the field; effective clock mirrors the server)",
-      "commit": "3feb86d; f244803, CI run 34036813779 (all ten jobs passed)"
+      "test": "All six rendered cards; actual backend default/zero/override parser coverage",
+      "commit": "Section 2.1; delivery/CI in evidence"
     },
     {
       "id": "PW-004",
@@ -35,8 +35,8 @@
       "phase": "2",
       "requirement": "Correct polling labels/help text: WhatsApp's interval covers connector",
       "status": "implemented",
-      "test": "`website/test/pollFields.test.mjs` (blank/0/global-off semantics, WhatsApp and iMessage wording); `_quick_due` blank-means-default test",
-      "commit": "3feb86d, 5c8cf60; f244803, CI run 34036813779 (all ten jobs passed)"
+      "test": "Read-only rendered card/Settings help; recurring versus explicit/startup semantics",
+      "commit": "Section 2.1; delivery/CI in evidence"
     },
     {
       "id": "PW-005",
@@ -44,8 +44,8 @@
       "phase": "2",
       "requirement": "Add regression tests for slow triage/report execution versus chat intake,",
       "status": "implemented",
-      "test": "`tests/test_poll_lanes.py` (20 cases) and `website/test/pollFields.test.mjs` (5 cases)",
-      "commit": "5c8cf60, 3feb86d; f244803, CI run 34036813779 (all ten jobs passed)"
+      "test": "69 focused tests; 2452 backend + 66 subtests, 281 frontend, build, seven browser scenarios",
+      "commit": "Section 2.1; delivery/CI in evidence"
     },
     {
       "id": "PW-006",
@@ -54,7 +54,7 @@
       "requirement": "Outlook: `_mail_msgs()` reads newest-first and stops at its default 500",
       "status": "implemented",
       "test": "`tests/test_mail_catchup.py`; atomic checkpoint and Sync-now API preservation tests; opaque Graph pages, replay, cutoffs, owner edits and loops",
-      "commit": "32d014b (final reviewed source); Section 2.2 delivery and exact-SHA CI in implementation evidence"
+      "commit": "32d014b; final Section 2.2 gates/delivery in evidence"
     },
     {
       "id": "PW-007",
@@ -63,7 +63,7 @@
       "requirement": "Gmail/IMAP: Inbox and Sent polling select the last 25 qualifying UIDs and",
       "status": "implemented",
       "test": "`tests/test_imap_catchup.py`; atomic checkpoint and Sync-now API reopen tests; oldest-first drain, durable failed-UID retries, epochs and exact historical identities",
-      "commit": "32d014b (final reviewed source); Section 2.2 delivery and exact-SHA CI in implementation evidence"
+      "commit": "32d014b; final Section 2.2 gates/delivery in evidence"
     },
     {
       "id": "PW-008",
@@ -72,7 +72,7 @@
       "requirement": "Gmail/IMAP: the date search window can exclude mail received during a long",
       "status": "implemented",
       "test": "`tests/test_imap_catchup.py`; long Inbox/Sent gaps, bounded bootstrap, empty resets, missing/changed UIDVALIDITY and interrupted legacy first import",
-      "commit": "32d014b (final reviewed source); Section 2.2 delivery and exact-SHA CI in implementation evidence"
+      "commit": "32d014b; final Section 2.2 gates/delivery in evidence"
     },
     {
       "id": "PW-009",
@@ -619,45 +619,45 @@
       "section": "Automatic agent startup for both work kinds",
       "phase": "5",
       "requirement": "Extend automatic dispatch to general agents, using a per-task worker",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_auto_start.py` (a general task opens its own assistant session by default; coding opens its CLI; a personal task starts nothing; the queue drain starts the kind that was queued)",
+      "commit": "d2e11e5; local gates passed, CI pending"
     },
     {
       "id": "PW-070",
       "section": "Automatic agent startup for both work kinds",
       "phase": "5",
       "requirement": "Expose clear auto-start controls for coding and general agents in Settings,",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_auto_start.py`::SettingsTests (both switches default on; an install that had switched coding off keeps unattended starts off for the assistant too; an explicit choice is never overwritten; Settings exposes both) - `coder_auto_enabled` relabelled",
+      "commit": "d2e11e5; local gates passed, CI pending"
     },
     {
       "id": "PW-071",
       "section": "Automatic agent startup for both work kinds",
       "phase": "5",
       "requirement": "Apply appropriate shared safety/permission checks to both worker kinds,",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_auto_start.py` (the stranger hold applies to both kinds with the reason on the task; no configured assistant provider and an unresolved repository choice are visible holds, not crashes or wrong-checkout sessions)",
+      "commit": "d2e11e5; local gates passed, CI pending"
     },
     {
       "id": "PW-072",
       "section": "Automatic agent startup for both work kinds",
       "phase": "5",
       "requirement": "Dispatch once per eligible work item, not per refresh or historical chain",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_auto_start.py` (one start per work item: a second message on the task starts nothing; a live conversation is reused and the ask is put once)",
+      "commit": "d2e11e5; local gates passed, CI pending"
     },
     {
       "id": "PW-073",
       "section": "Automatic agent startup for both work kinds",
       "phase": "5",
       "requirement": "Test both default auto-start paths, each settings opt-out, manual fallback,",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: both default paths, each opt-out, personal to-dos, missing worker/repo configuration, safety holds, failed launch and a held task staying deletable are covered; concurrent ingest/retriage is covered indirectly by the drain lock tests",
+      "test": "`tests/test_auto_start.py` (16 cases); `tests/test_kind_dispatch.py` and `tests/test_not_coding.py` moved to the PW-069 contract with the reason noted; the suite guards the router's unattended assistant start like a PTY",
+      "commit": "d2e11e5; local gates passed, CI pending"
     },
     {
       "id": "PW-074",
@@ -935,7 +935,7 @@
       "phase": "1",
       "requirement": "Do not treat an FYI classification or merely surfacing an item as permission",
       "status": "partial",
-      "test": "Section 1.1: legacy evaluator, uncapped capture, deferral/reopen/rollback and feed differential tests. Final read cutover pending.",
+      "test": "Section 1.1 legacy capture/deferral/reopen/rollback/differential tests; final read cutover pending",
       "commit": "81981b8 (foundation only)"
     },
     {
@@ -961,9 +961,9 @@
       "section": "All and Unread: one item set, different filter and order",
       "phase": "1",
       "requirement": "Superseding the earlier separate-filter proposal: remove the Needs me tab.",
-      "status": "pending",
-      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: two-view UI; canonical selection pending",
+      "test": "`feedViews.test.mjs`, `processing-views.test.mjs`; Section 1.2 cumulative evidence",
+      "commit": "2557c94, all ten CI jobs passed"
     },
     {
       "id": "PW-108",
@@ -988,27 +988,27 @@
       "section": "Assistant selection: top eligible Unread item",
       "phase": "1",
       "requirement": "Put genuinely immediate/time-critical items first (a current calendar",
-      "status": "pending",
-      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: internal inventory mechanics only",
+      "test": "Section 1.3 inventory model/store/integration tests; runtime adoption pending",
+      "commit": "162afbc; all ten CI jobs passed (internal foundation only)"
     },
     {
       "id": "PW-111",
       "section": "Assistant selection: top eligible Unread item",
       "phase": "1",
       "requirement": "Put tasks actively worked by either coding or general agents in band 5,",
-      "status": "pending",
-      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: internal inventory mechanics only",
+      "test": "Section 1.3 inventory model/store/integration tests; runtime adoption pending",
+      "commit": "162afbc; all ten CI jobs passed (internal foundation only)"
     },
     {
       "id": "PW-112",
       "section": "Assistant selection: top eligible Unread item",
       "phase": "1",
       "requirement": "Test coding/general working placement, transitions to owner-waiting, and",
-      "status": "pending",
-      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: internal inventory mechanics only",
+      "test": "Section 1.3 inventory model/store/integration tests; runtime adoption pending",
+      "commit": "162afbc; all ten CI jobs passed (internal foundation only)"
     },
     {
       "id": "PW-113",
@@ -1024,18 +1024,18 @@
       "section": "Assistant selection: top eligible Unread item",
       "phase": "1",
       "requirement": "Remove assistant-local filtering, ranking, and eligibility recalculation:",
-      "status": "pending",
-      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: guarded legacy selection; canonical adoption pending",
+      "test": "Section 1.5 capture/API/Node/browser tests; independent review cleared, final delivery gates in evidence",
+      "commit": "c640586, 9f82ee4, f4669a2, 98c7505, c43ef5f plus root seams; d3482e8, CI run 34037794765 (all ten jobs passed)"
     },
     {
       "id": "PW-115",
       "section": "Assistant selection: top eligible Unread item",
       "phase": "1",
       "requirement": "Clicking \"Walk me through my tasks\" resumes a valid Current item; only",
-      "status": "pending",
-      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: guarded legacy selection; canonical adoption pending",
+      "test": "Section 1.5 capture/API/Node/browser tests; independent review cleared, final delivery gates in evidence",
+      "commit": "c640586, 9f82ee4, f4669a2, 98c7505, c43ef5f plus root seams; d3482e8, CI run 34037794765 (all ten jobs passed)"
     },
     {
       "id": "PW-116",
@@ -1060,9 +1060,9 @@
       "section": "Assistant selection: top eligible Unread item",
       "phase": "1",
       "requirement": "Track Current explicitly: once selected, keep that item as the conversation",
-      "status": "pending",
-      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: guarded legacy selection; canonical adoption pending",
+      "test": "Section 1.5 capture/API/Node/browser tests; independent review cleared, final delivery gates in evidence",
+      "commit": "c640586, 9f82ee4, f4669a2, 98c7505, c43ef5f plus root seams; d3482e8, CI run 34037794765 (all ten jobs passed)"
     },
     {
       "id": "PW-119",
@@ -1179,7 +1179,7 @@
       "requirement": "Preserve the distinction between correction evidence, explicit learned",
       "status": "implemented",
       "test": "`tests/test_operations.py` (evidence is not a memory note or a policy; it reaches fresh triage as dated lines beside the notes, worded as one correction, not a rule)",
-      "commit": "1461a13; local gates passed, CI pending"
+      "commit": "1461a13; 1461a13, CI run 34048121206 (all ten jobs passed)"
     },
     {
       "id": "PW-132",
@@ -1188,7 +1188,7 @@
       "requirement": "Record evidence against source items even when an FYI has no task. Persist",
       "status": "partial: durable discussion, proposals and outcomes per source item and task through operations.py and its endpoints; the assistant conversation does not yet write its turns through discuss() (Phase 8 wiring)",
       "test": "`tests/test_operations.py`::DiscussionTests, ::EntryPointTests (history endpoint)",
-      "commit": "1461a13; local gates passed, CI pending"
+      "commit": "1461a13; 1461a13, CI run 34048121206 (all ten jobs passed)"
     },
     {
       "id": "PW-133",
@@ -1197,7 +1197,7 @@
       "requirement": "When an FYI later becomes a task, link its earlier relevant discussion and",
       "status": "implemented",
       "test": "`tests/test_operations.py`::DiscussionTests (discussion on a taskless FYI travels onto the task it becomes, by message identity; a batch sibling keeps its own)",
-      "commit": "1461a13; local gates passed, CI pending"
+      "commit": "1461a13; 1461a13, CI run 34048121206 (all ten jobs passed)"
     },
     {
       "id": "PW-134",
@@ -1206,7 +1206,7 @@
       "requirement": "Test successful corrections from every entry point, unchanged verdicts,",
       "status": "partial: every listed backend case covered; actual UI interaction coverage waits on the Phase 8 confirmation box",
       "test": "`tests/test_operations.py` (20 cases)",
-      "commit": "1461a13; local gates passed, CI pending"
+      "commit": "1461a13; 1461a13, CI run 34048121206 (all ten jobs passed)"
     },
     {
       "id": "PW-135",

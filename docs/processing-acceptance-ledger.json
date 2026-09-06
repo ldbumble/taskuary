@@ -144,7 +144,7 @@
       "requirement": "Email: link new messages by actual conversation identity, merge missing",
       "status": "partial: identity-only joining; merging missing chain records is PW-009+",
       "test": "`tests/test_email_identity_routing.py` (identical subjects stay separate; a genuine reply reuses its thread; no identity means new work; tracker items keep their own identity)",
-      "commit": "b03fa29; local gates passed, CI pending"
+      "commit": "b03fa29; b03fa29, CI run 34041128872 (all ten jobs passed)"
     },
     {
       "id": "PW-017",
@@ -153,7 +153,7 @@
       "requirement": "Keep chain storage separate from task lifecycle. A reply on a closed task's",
       "status": "implemented",
       "test": "`tests/test_email_identity_routing.py` (a reply on a closed task's thread is kept on the conversation, judged afresh, and the task stays closed)",
-      "commit": "b03fa29; CI pending"
+      "commit": "b03fa29; b03fa29, CI run 34041128872 (all ten jobs passed)"
     },
     {
       "id": "PW-018",
@@ -171,7 +171,7 @@
       "requirement": "Add regression tests: unrelated emails with identical subjects remain",
       "status": "implemented",
       "test": "`tests/test_email_identity_routing.py` (5 cases) and `tests/test_chat_relationship.py` (one chat, several asks; follow-ups join the right ask)",
-      "commit": "b03fa29; CI pending"
+      "commit": "b03fa29; b03fa29, CI run 34041128872 (all ten jobs passed)"
     },
     {
       "id": "PW-020",
@@ -826,45 +826,45 @@
       "section": "Project and repository selection in unified triage",
       "phase": "3",
       "requirement": "Supply relevant known projects, repositories, and people associations with",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_repo_choice_triage.py`::TriagePicksTests (known repositories and the sender's project context in the payload; validated pick persisted on the task; startup uses it)",
+      "commit": "f327a8b; local gates passed, CI pending"
     },
     {
       "id": "PW-093",
       "section": "Project and repository selection in unified triage",
       "phase": "3",
       "requirement": "An explicit owner-selected task repository wins. Treat sender/project",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_repo_choice_triage.py`::PrecedenceTests (owner repo: tag wins; GitHub item's own repository is authoritative; sender evidence supports, never decides)",
+      "commit": "f327a8b; CI pending"
     },
     {
       "id": "PW-094",
       "section": "Project and repository selection in unified triage",
       "phase": "3",
       "requirement": "Validate returned project/repository IDs against the supplied known",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_repo_choice_triage.py` (unknown name dropped and turned into a choice; ambiguity asks the owner; no forced match)",
+      "commit": "f327a8b; CI pending"
     },
     {
       "id": "PW-095",
       "section": "Project and repository selection in unified triage",
       "phase": "3",
       "requirement": "Before coding startup, validate/resolve the selected local checkout. Missing",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_repo_choice_triage.py`::CheckoutPathTests (a missing checkout path is a visible repository choice on dispatch, never a fallback folder)",
+      "commit": "f327a8b; CI pending"
     },
     {
       "id": "PW-096",
       "section": "Project and repository selection in unified triage",
       "phase": "3",
       "requirement": "Test explicit override precedence, mapped person with a matching request,",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: no rendered-browser run of the repository picker yet",
+      "test": "`tests/test_repo_choice_triage.py` (8 cases)",
+      "commit": "f327a8b; CI pending"
     },
     {
       "id": "PW-097",

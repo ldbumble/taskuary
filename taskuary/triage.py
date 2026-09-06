@@ -249,6 +249,20 @@ def dedupe_quoted(body: str, priors) -> str:
     return '\n'.join(out).rstrip()
 
 
+def repo_choice_of(j: dict, repos: list) -> dict:
+    """The verdict's repository, validated against the known ones (PW-094): a name not on the list is
+    dropped and becomes the owner's choice, as does anything the model called ambiguous."""
+    known = {str(r.get('repo') or '').strip().lower(): str(r.get('repo') or '').strip() for r in repos if r.get('repo')}
+    named = str(j.get('repository') or '').strip()
+    reason = ' '.join(str(j.get('repo_reason') or '').split())[:200]
+    if named and named.lower() not in known:
+        return {'repository': None, 'needs_repo_choice': True,
+                'repo_reason': f'triage named a repository that is not configured ({named[:60]})' + (f' - {reason}' if reason else '')}
+    repo = known.get(named.lower()) if named else None
+    needs = bool(j.get('needs_repo_choice')) or (repo is None and len(known) > 1 and j.get('kind') == 'coding')
+    return {'repository': repo if not bool(j.get('needs_repo_choice')) else None, 'needs_repo_choice': needs, 'repo_reason': reason}
+
+
 RELATIONSHIPS = ('new', 'continues', 'answers', 'uncertain')
 
 
@@ -275,7 +289,7 @@ def relationship_of(j: dict, candidates: list) -> dict:
 def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, images=None,
                     learned: str = None, system: str = None, notes_left: int = 0, mine=(),
                     thread: dict = None, watch: str = None, playbooks: str = None,
-                    project: dict = None, candidates: list = None) -> dict:
+                    project: dict = None, candidates: list = None, repos: list = None) -> dict:
     """`notes` are the owner's past verdicts that may bear on this message - each one dated,
     with the sender and subject it was given on - selected by sender and topic overlap
     (ingest.relevant_notes). They are EVIDENCE: the model judges how alike this message is,
@@ -307,6 +321,12 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
     prior day is new whatever it resembles; `uncertain` joins nothing; an id outside the room or
     the day is dropped. This replaced a second classifier (same_ask) that could disagree with
     this one about the same line.
+
+    `repos` are the known repositories - [{repo, about}] from the SOUL map and the learned project
+    graph. Given, the verdict also names `repository` (one of them or null), `needs_repo_choice` and
+    `repo_reason` for a task; the sender's project associations (project_context) are supporting
+    evidence, never proof. Validated by repo_choice_of (PW-092/094): an unknown name is dropped and
+    turns into a choice for the owner, as does anything the model calls ambiguous.
 
     `playbooks` is the menu of the owner's playbooks (playbooks.menu: slug, title and `when` each).
     A message that is an instance of one is answered with its slug, and that slug is what seeds
@@ -368,6 +388,14 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                            '"playbook": "<slug>" to your answer; it is then a task for the agent and it works it from that '
                            'playbook. A message that only mentions the same systems is not an instance - the `when` line '
                            'must fit. Otherwise leave the key out.\n' + str(playbooks)[:3000])
+            if repos:
+                system += ('\n\nKNOWN REPOSITORIES are listed in known_repositories (owner/name and what each is). For a task an agent '
+                           'could work from a keyboard, add "repository": "<exactly one listed owner/name>" or null, '
+                           '"needs_repo_choice": true|false and "repo_reason": "<one clause: what in the request points there>". '
+                           'Decide from what the request is ABOUT; the sender\'s project associations in project_context are '
+                           'supporting evidence, not proof that everything they write concerns that project. When two '
+                           'repositories are plausible, or none fits, say null with needs_repo_choice true and the owner will choose - '
+                           'never force a match because one repository happens to be configured.')
             if candidates is not None:
                 system += ('\n\nTHIS IS A CHAT LINE, and same_day_lines are the lines of this room from the SAME calendar day, '
                            'oldest first, each with its id and the task it belongs to (null = none yet). Add to your answer '
@@ -390,6 +418,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                                **(thread or {}),
                                **({'project_context': project} if project else {}),
                                **({'same_day_lines': [{k: c.get(k) for k in ('id', 'who', 'when', 'text', 'task_id')} for c in candidates]} if candidates is not None else {}),
+                               **({'known_repositories': [{'repo': r.get('repo'), 'about': (r.get('about') or '')[:160]} for r in repos]} if repos else {}),
                                **({'body_truncated': True} if len(strip_boilerplate(str(msg.get('body') or ''))) > BODY_BUDGET else {}),
                                'body': strip_boilerplate(str(msg.get('body') or ''))[:BODY_BUDGET]})
             if len(strip_boilerplate(str(msg.get('body') or ''))) > BODY_BUDGET:
@@ -416,6 +445,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 if playbooks and pb and out['intent'] == 'task' and re.search(rf'^- {re.escape(pb)}: ', playbooks, re.M):
                     out['playbook'], out['kind'] = pb, 'coding'
                 if candidates is not None: out.update(relationship_of(j, candidates))
+                if repos and out['intent'] == 'task': out.update(repo_choice_of(j, repos))
                 if out['intent'] == 'task':
                     # the work, named (PW-074): a title and summary of what was asked and the distinct
                     # outcomes as a list - validated, never trusted; the router falls back when absent

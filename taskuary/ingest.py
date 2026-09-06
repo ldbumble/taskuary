@@ -408,6 +408,7 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
     if ruled: notes = [ruled] + notes
     thread = others_on_thread(store, msg, mine)
     candidates = chat_candidates(store, msg) if is_chat(msg) else None
+    repos = repo_candidates(store)
     # ...and what was actually SAID before this, theirs and ours. A mail quotes its own thread
     # underneath it - until it does not: a reply typed on a phone, or one whose quote we stripped,
     # arrives with the ask two messages back invisible. A chat line quotes nothing at all, so
@@ -430,7 +431,7 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
                              watch=msg.get('watch_for'),
                              # ...and the playbooks: a message that is an instance of one is
                              # tagged with it, and the agent is seeded from it (playbooks.py)
-                             playbooks=_playbook_menu(), project=project, candidates=candidates)
+                             playbooks=_playbook_menu(), project=project, candidates=candidates, repos=repos or None)
     intent['notes'], intent['notes_left'] = notes, notes_left
     return intent, fail
 
@@ -652,6 +653,14 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                                  **({'Tags': _pb.tag(intent['playbook'])} if intent.get('playbook') else {})}, actor)
         store.audit('task', tid, 'create', actor, 'agent', {'from': msg.get('from_email'), 'reason': r['reason']})
         if intent.get('checklist'): store.set_task_checklist(tid, intent['checklist'], 'triage')
+        # the repository, decided here and written down, so startup uses it instead of guessing again
+        # (PW-092); an owner's repo: tag and a GitHub item's own repository still outrank it (terminal.guess_repo)
+        if intent.get('repository'):
+            store.tag_task(tid, f"{TRIAGE_REPO_TAG}{intent['repository']}", actor='triage')
+            store.add_comment(tid, 'triage', 'agent', f"Triage picked repository {intent['repository']}: {intent.get('repo_reason') or 'named in the request'}")
+        elif intent.get('needs_repo_choice'):
+            store.tag_task(tid, NEEDS_REPO_TAG, actor='triage')
+            store.add_comment(tid, 'triage', 'agent', f"Triage could not tell which repository: {intent.get('repo_reason') or 'more than one is plausible'} - pick one before an agent starts")
         mid = _land(store, msg, tid, 'routed')
         # the same-day lines this one continues or answers that had no task yet join the task it opens:
         # the fyi that opened a subject belongs with the ask that followed it (PW-031)
@@ -1045,6 +1054,27 @@ def exchange_lines(store, msg: dict, budget: int = None, limit: int = 200) -> li
         out.pop(0); dropped += 1
     if dropped: out.insert(0, f'… {dropped} earlier message{"s" if dropped != 1 else ""} not shown (context budget) - the thread is longer than what follows')
     return out
+
+
+TRIAGE_REPO_TAG, NEEDS_REPO_TAG = 'triage-repo:', 'needs-repo-choice'
+
+
+def repo_candidates(store) -> list:
+    """The repositories triage may name (PW-092): the learned project graph's repository edges, with
+    what each project is, plus the SOUL.md repo map. Only these can be chosen; anything else is dropped."""
+    from .projects import REPO_KIND
+    out = {}
+    try:
+        for link in store.project_links(kind=REPO_KIND):
+            repo = str(link.get('Value') or '').strip()
+            if repo and repo not in out: out[repo] = str(link.get('ProjectDescription') or link.get('ProjectName') or '')
+    except Exception as e: logger.debug(f'ingest: project repositories unavailable - {e}')
+    try:
+        from .terminal import repo_map
+        for repo, about in repo_map(store).items():
+            if repo not in out: out[repo] = about
+    except Exception as e: logger.debug(f'ingest: SOUL repo map unavailable - {e}')
+    return [{'repo': r, 'about': a} for r, a in out.items()]
 
 
 def chat_candidates(store, msg: dict) -> list:

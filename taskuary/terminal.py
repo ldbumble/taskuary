@@ -1227,7 +1227,8 @@ NO_REPO = 'none'
 
 def repo_tag(task: dict) -> str | None:
     """The `repo:` tag on a task, if it has one - the override that always wins over the guess."""
-    return (re.search(r'repo:([^\s,]+)', str((task or {}).get('Tags') or '')) or [None, None])[1]
+    # a whole token: triage's own `triage-repo:` note must never read as the owner's override (PW-093)
+    return (re.search(r'(?:^|[\s,])repo:([^\s,]+)', str((task or {}).get('Tags') or '')) or [None, None])[1]
 
 
 APP = (__package__ or 'taskuary').split('.')[0]
@@ -1265,6 +1266,18 @@ def guess_repo(store, tid: int, profile: dict) -> tuple:
     # code to change. Only the explicit tag stops that.
     if tag == NO_REPO: return None, 'a general question - no repository'
     if tag: return tag, 'tagged on the task'
+    # a GitHub item's own repository is authoritative (PW-093) - before anything triage or a word count says
+    direct = next((str(m.get('SourceName') or '').strip() for m in store.list_messages(tid)
+                   if str(m.get('Channel') or '') == 'github' and str(m.get('SourceName') or '').strip()), '')
+    if direct: return direct, 'the GitHub item belongs to this repository'
+    # triage's own decision, made with the request and the project map in front of it and written on
+    # the task (ingest: triage-repo: tag, needs-repo-choice tag); startup does not guess again (PW-092)
+    tags = str(t.get('Tags') or '')
+    picked = (re.search(r'triage-repo:([^\s,]+)', tags) or [None, None])[1]
+    note = next((str(c.get('Body') or '') for c in reversed(store.list_comments(tid))
+                 if str(c.get('Body') or '').startswith('Triage')), '')
+    if picked: return picked, f"triage selected this repository - {note.split(': ', 1)[-1] if ': ' in note else 'from the request and the project map'}"
+    if 'needs-repo-choice' in tags.split(','): return None, f"triage could not tell which repository - choose one ({note.split(': ', 1)[-1] if ': ' in note else 'more than one is plausible'})"
     paths = profile.get('cwd_map') or {}
     # no repo paths at all = this agent does not do repo routing. Naming one anyway would put a
     # REPO line in the prompt for a folder the session is not in.

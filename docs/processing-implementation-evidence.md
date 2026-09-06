@@ -767,3 +767,46 @@ Tests changed with explanation, none weakened: `test_not_coding.py` (keyword-kin
 classes rewritten to the general default), `test_urgent_and_handoff.py` (one kind expectation),
 `test_kind_dispatch.py` (prompt tie-break wording). New: `tests/test_reply_always_drafts.py` (14 cases), `sendState.test.mjs` (3).
 Frontend and packaged-build results are in the commit message; full backend and CI below.
+Delivery `3dc3a5ea53d4b1701314cc5df0699fff4f5f8f39` passed all ten jobs in
+[CI run 34037292146](https://github.com/ldbumble/taskuary/actions/runs/34037292146).
+The original workspace was fast-forwarded from the concurrently delivered `f244803`;
+its only user change remains README.md with preserved SHA-256
+`EDF56683E29A34789B2EBEF73E131FBD7B318AE498BC761668BCB70854D91BAB`.
+
+## Section 2.2 — email catch-up without skipped backlog
+
+Status: implementation in progress from CI-verified `3dc3a5e`. PW-006 through
+PW-008 form one TODO section with independent Outlook and IMAP assignments and
+one integration/review/regression/delivery gate. Claude's original Outlook/IMAP
+commits are already on master; this section resolves their independent review
+findings before marking those requirements accepted.
+
+Sol High owns Outlook `channels.py` and catch-up tests in the isolated
+`processing/email-outlook-fixes` branch. Another Sol High agent owns `imapmail.py`
+and its tests in `processing/email-imap-fixes`. The lead owns atomic checkpoint
+storage, integrated preservation tests, evidence and delivery; Astra Extra High
+reviews independently. No live connector or app restart is part of these tests.
+
+Root helper `580afb67f9f8156ca347e375e6c6f405b7c0304d` adds atomic source/connector
+poll-state merges. SQLite BEGIN IMMEDIATE precedes reading current ConfigJson;
+only specified poll keys change, conditional source/mailbox expectations reject
+stale work with no writes, and source cursor cleanup/cutoff changes commit together.
+Malformed owner configuration is preserved and reported rather than overwritten.
+The 17 focused tests passed (1.89 s), including an actual concurrent connection
+write, detached caller data, failed-CAS zero writes and rollback/reuse. Astra
+cleared this helper; connector integration and cumulative gates remain pending.
+
+The root API characterization passes on the existing implementation: a real
+`POST /api/ingest/poll` runs the Graph HTTP paging adapter against synthetic
+responses, exposes a later-page failure after the first 500 durable messages,
+and recovers all 600 IDs on retry with no duplicates. The test checks connector
+error visibility, source watermark, final feed visibility, exact historical
+message/read/document preservation, and an owner configuration edit during fetch.
+It will run again against the corrected connector implementations.
+
+Provider-contract review found that inferred message-count offsets are not a
+valid replacement for Graph continuation URLs: Microsoft documents that its
+skip position can count scanned items beyond the returned message rows.
+The Outlook correction must use complete provider continuation URLs and retain
+requests-level failure/continuity regressions. Source:
+[Microsoft Graph list messages](https://learn.microsoft.com/en-us/graph/api/user-list-messages?view=graph-rest-1.0).

@@ -281,19 +281,75 @@ def likely_overlap(store, tid: int, ps: list) -> tuple:
 
 
 _DRAINING = threading.Lock()
+MAX_ATTEMPTS = 3                 # the first try and two automatic retries (owner, PW-085)
+BACKOFF = (30, 120)              # seconds before attempt 2, then before attempt 3
+# a failure the next attempt cannot fix: configuration, a missing repository or worker, a permission
+# problem. It becomes "needs you" at once instead of burning the budget (PW-086).
+PERMANENT = ('unknown agent', 'repositor', 'repo:', 'checkout', 'permission', 'not configured', 'no such', 'not found',
+             'needs a', 'pick one', 'kind must be', 'assistant view is for', 'no task ', 'not installed')
+
+
+def live_count() -> int:
+    """Every LIVE session, whatever it is doing: working, idle at its prompt, or stopped at an approval.
+    A desk is taken until the process ends (owner, PW-084) - waiting for approval frees nothing."""
+    from . import terminal as term
+    return len([t for t in list(term.SESSIONS.values()) if t.alive])
+
+
+def is_permanent(err) -> bool:
+    s = str(err or '').lower()
+    return any(k in s for k in PERMANENT)
+
+
+def record_failure(store, tid: int, err, agent: str = 'coder', label: str = 'Queued start') -> dict | None:
+    """One failed start, wherever it happened - the queue drain or a direct auto-start: the attempt is
+    counted on the queue row (made if the task was not queued yet), the owner reads what happened and
+    what comes next, and the retry is scheduled rather than left to an unrelated session ending."""
+    if not store.get_dispatch(tid): store.enqueue_dispatch(tid, None, agent, 'start failed - retrying')
+    row = store.dispatch_failed(tid, str(err), is_permanent(err), BACKOFF, MAX_ATTEMPTS)
+    if not row: return None
+    n, short = row['Attempts'], str(err)[:200]
+    if row['State'] == 'failed':
+        why = 'a configuration problem - no automatic retry' if is_permanent(err) else f'attempt {n} of {MAX_ATTEMPTS}'
+        store.add_comment(tid, 'router', 'agent', f'Agent could not start - needs you: {short} ({why}). Retry or cancel the queued start from the task.')
+    else:
+        store.add_comment(tid, 'router', 'agent', f"{label} failed: {short} (attempt {n} of {MAX_ATTEMPTS}) - retrying in {row['wait']}s.")
+        drain_later(store, float(row['wait']) + 0.5)
+    return row
+
+
+def schedule_due(store):
+    """Arm the next retry from what is persisted - what the app does on startup, so a backoff that was
+    running when it closed neither vanishes nor restarts from zero (PW-085/088). Returns the delay."""
+    nxt = [q['NextAt'] for q in store.queued_dispatches() if q.get('State') == 'retrying' and q.get('NextAt')]
+    if not nxt: return None
+    from datetime import datetime
+    try: due = datetime.fromisoformat(min(nxt))
+    except ValueError: return None
+    delay = max(0.5, (due - datetime.now()).total_seconds() + 0.5)
+    drain_later(store, delay)
+    return delay
+
+
+def _due(q, now: str) -> bool: return not q.get('NextAt') or str(q['NextAt']) <= now
+
 
 def drain(store):
-    """A session ended (or a slot freed up): start what was queued, in arrival order. Anything
-    whose blocker is still working stays put; anything whose task moved on is just cleared."""
+    """A session ended, a slot freed up, or a retry came due: start what was queued, in order.
+    Anything whose blocker is still working stays put; anything backing off waits its turn without
+    holding the others; anything exhausted waits for the owner; anything whose task moved on is cleared."""
     from . import terminal as term, rank
     from .ingest import auto_sessions
+    from datetime import datetime
     if not _DRAINING.acquire(blocking=False): return
     try:
+        now = datetime.now().isoformat(sep=' ', timespec='seconds')
         qs = store.queued_dispatches()
         # a ranked row's value ages a little per day waited (rank.aged) so the bottom never starves
         qs.sort(key=lambda q: -(rank.aged(q['Value'], q.get('CreatedAt')) if q.get('Value') is not None else 0.5))
         for q in qs:
-            if len([t for t in list(term.SESSIONS.values()) if t.alive]) >= auto_sessions(store): return
+            if q.get('State') == 'failed' or not _due(q, now): continue          # exhausted, or backing off: not this pass
+            if live_count() >= auto_sessions(store): return                       # a capacity wait is not an attempt (PW-086)
             b = q.get('BehindTaskId')
             if b and (term.for_task(b) or any(r['TaskId'] == b for r in store.running_runs())): continue
             t = store.get_task(q['TaskId']) or {}
@@ -319,8 +375,14 @@ def drain(store):
                 store.add_comment(q['TaskId'], 'router', 'agent', 'Started from the dispatch queue - '
                                   + (f'{task_ref(b)} finished with the files it was holding.' if b else 'a session slot freed up.'))
             except Exception as e:
+                # a session that exists is a start that happened: what failed was the bookkeeping after it,
+                # and counting that as a failed launch would start the work twice (PW-088)
+                if term.for_task(q['TaskId']):
+                    store.clear_dispatch(q['TaskId'])
+                    store.add_comment(q['TaskId'], 'router', 'agent', f'Started from the dispatch queue; the bookkeeping after it failed: {str(e)[:200]}')
+                    continue
                 logger.warning(f'queued dispatch failed for task {q["TaskId"]}: {e}')
-                store.add_comment(q['TaskId'], 'router', 'agent', f'Queued start failed: {str(e)[:200]}')
+                record_failure(store, q['TaskId'], e, q.get('Agent') or 'coder')
     finally:
         _DRAINING.release()
 

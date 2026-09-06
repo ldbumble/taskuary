@@ -175,7 +175,7 @@ _client_defaults()
 def isolated_runtime_boundaries():
     """Deny real integration side effects unless a test supplies a fake or registered port."""
     import httpx, imaplib, requests, smtplib, urllib.request
-    from taskuary import browserview, general, hooks, server, spawn, terminal, waitroom, wabridge
+    from taskuary import blackboard, browserview, general, hooks, server, spawn, terminal, waitroom, wabridge
 
     # Auto-dispatch ships on.  In a suite, both coding and general execution stop at the process
     # boundaries below; switching this off also prevents routine ingest tests from trying at all.
@@ -186,6 +186,7 @@ def isolated_runtime_boundaries():
     real_urlopen = urllib.request.urlopen
     real_term_init = terminal.Term.__init__
     real_start_session = general.start_session
+    real_drain_later = blackboard.drain_later
     real_hook_install = hooks.install
     real_browser_listening = browserview._listening
     real_socket = socket.socket
@@ -217,6 +218,15 @@ def isolated_runtime_boundaries():
         # session is ordinary test fixture and passes through.
         if actor == 'router': return _blocked('unattended assistant session', f'task {tid}')
         return real_start_session(store, tid, connector_id, model, actor, pick)
+
+    def guarded_drain_later(store, delay=2.0):
+        # A failed-start retry is a real background Timer and can otherwise fire against a later
+        # fixture (or after pytest restores every other safety boundary). Tests of the timer
+        # contract explicitly replace Timer; preserve those controlled calls and stop all others.
+        if isinstance(blackboard.threading.Timer, mock.Mock):
+            return real_drain_later(store, delay)
+        _SAFETY_EVENTS.append(('dispatch retry timer', str(delay)))
+        return None
 
     def guarded_hooks(cwd, *args, **kwargs):
         path = Path(cwd).resolve()
@@ -357,7 +367,7 @@ def isolated_runtime_boundaries():
 
     @asynccontextmanager
     async def safe_lifespan(app):
-        # Preserve the production lifespan itself, including cleanup, but replace only the five
+        # Preserve the production lifespan itself, including cleanup, but replace only the six
         # background integration starters while entering it.  Their direct unit tests still call
         # the real functions outside this narrow context.
         import threading
@@ -365,13 +375,14 @@ def isolated_runtime_boundaries():
         _LIFESPAN_DONE.append(done)
         context = real_lifespan(app)
         try:
-            # Patch only __aenter__: all five calls happen before the production lifespan yields.
+            # Patch only __aenter__: all six calls happen before the production lifespan yields.
             # Restore the real functions before the server begins handling test requests so an
             # unjoined desktop thread cannot temporarily change a later direct contract test.
             with mock.patch.object(wabridge, 'start_configured', stopped('WhatsApp bridge')), \
                  mock.patch.object(server, 'catch_up_on_startup', stopped('startup catch-up')), \
                  mock.patch.object(server, 'poll_forever', stopped('poll scheduler')), \
                  mock.patch.object(server, 'quick_forever', stopped('chat poll scheduler')), \
+                 mock.patch.object(blackboard, 'schedule_due', stopped('dispatch retry scheduler')), \
                  mock.patch.object(waitroom, 'watch', stopped('waitroom watcher')):
                 entered = await context.__aenter__()
             try:
@@ -397,6 +408,7 @@ def isolated_runtime_boundaries():
         patches.enter_context(mock.patch.object(spawn, 'popen', guarded_popen))
         patches.enter_context(mock.patch.object(terminal.Term, '__init__', guarded_term_init))
         patches.enter_context(mock.patch.object(general, 'start_session', guarded_start_session))
+        patches.enter_context(mock.patch.object(blackboard, 'drain_later', guarded_drain_later))
         patches.enter_context(mock.patch.object(hooks, 'install', guarded_hooks))
         patches.enter_context(mock.patch.object(browserview, '_listening', guarded_browser_listening))
         patches.enter_context(mock.patch.object(server.app.router, 'lifespan_context', safe_lifespan))

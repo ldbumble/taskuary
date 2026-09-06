@@ -67,6 +67,8 @@ DENIED = (
     # sender the hold exists for, landing work, running an executor or a query with a card's
     # credentials, and rewriting the documents that govern the agent
     (r'POST', r'^/api/tasks/\d+/(release|land|ci)$', 'releasing a held task or landing its work is the owner\'s decision'),
+    (r'POST', r'^/api/tasks/\d+/dispatch/retry$', 'retrying a queued start is the owner\'s decision'),
+    (r'DELETE', r'^/api/tasks/\d+/dispatch$', 'cancelling a queued start is the owner\'s decision'),
     (r'POST', r'^/api/(soul|learn)(/|$)', 'SOUL.md and LEARNED.md are the owner\'s word - propose, do not write'),
     (r'PUT|PATCH', r'^/api/(owner|whoami)$', 'who the owner is'),
     (r'POST', r'^/api/(mcp|mssql)/', 'runs a command, or sends saved credentials to a host of the caller\'s choosing'),

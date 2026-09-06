@@ -432,7 +432,7 @@ Pending implementation only.
   path in the auto-start sender gate. Multiple incoming messages, historical
   imports, and retries must not turn an untrusted sender into an authorized one.
   Keep unrelated sender-history uses distinct from auto-dispatch authorization.
-- [ ] <a id="pw-080"></a>**PW-080** Retain verified Sent Items evidence that the receiving mailbox previously
+- [x] <a id="pw-080"></a>**PW-080** Retain verified Sent Items evidence that the receiving mailbox previously
   wrote to the exact sender address as an accepted trust rule, configurable in
   Settings. Display the matched reason; a lookup failure is not proof of trust
   and should leave the task available for manual dispatch with an explanation.
@@ -448,7 +448,7 @@ Pending implementation only.
 
 ## Agent capacity counting
 
-- [ ] <a id="pw-084"></a>**PW-084** Owner-approved: count all live coding/general agent sessions toward the
+- [x] <a id="pw-084"></a>**PW-084** Owner-approved: count all live coding/general agent sessions toward the
   shared capacity limit, including sessions idle at a prompt or stopped waiting
   for user approval/input. Waiting for approval does not free a slot. Distinguish
   these live sessions from terminated sessions; do not implement an actively-
@@ -460,7 +460,7 @@ Pending implementation only.
   startup attempt (three attempts total) for transient startup failures, with
   bounded backoff. Persist attempt count, last error, and next-attempt time so
   restarts or repeated queue checks cannot reset the budget or bypass backoff.
-- [ ] <a id="pw-086"></a>**PW-086** Configuration, missing repository/worker, and permission failures should
+- [x] <a id="pw-086"></a>**PW-086** Configuration, missing repository/worker, and permission failures should
   immediately become "Agent could not start - needs you" rather than consume
   blind automatic retries. Capacity waits and dependency waits are not failures
   and must not consume the retry budget.

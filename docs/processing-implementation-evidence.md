@@ -1536,3 +1536,52 @@ in the older `known_sender` path; copying it into `wrote_to_locally` did not sat
 stricter receiving-mailbox contract. The bounded scoped repair and regression are in progress;
 PW-080 stays unchecked and partial until that review completes. Combined cumulative gates
 remain pending.
+
+## Section 5.3 — capacity counting and bounded startup retries
+
+Status: implemented and tested locally at `6ed0301`; remote CI pending on the pushed
+checkpoint. Section 5.2 is CI-verified (6c560b9, CI 34049592998 74bf868 (all ten jobs passed)).
+Acceptance PW-084, PW-085, PW-086, PW-088 implemented; PW-087 and PW-089 partial (the Retry/Cancel
+task-view buttons and the attention-pipeline entry are Phase 8 surfaces; a real process restart is
+simulated by re-arming from the persisted rows).
+
+`blackboard.live_count` is the one capacity number: every live session, whatever it is doing -
+working, idle at its prompt, stopped at an approval, coding or general - until its process ends;
+`ingest._auto_code`, `ingest._auto_general` and the queue drain all read it. The dispatch queue row
+carries the retry budget (`Attempts`, `LastError`, `NextAt`, `State` waiting|retrying|failed):
+`blackboard.record_failure` counts one failed start wherever it happened (the drain or a direct
+auto-start, which used to write one line and never try again), says on the task what happened and
+what comes next ("... (attempt 1 of 3) - retrying in 30s" / "Agent could not start - needs you: ..."),
+and schedules the retry by timer (`drain_later`) rather than waiting for an unrelated session to end;
+`blackboard.schedule_due` re-arms the earliest persisted retry at startup, so a backoff in progress
+when the app closed neither vanishes nor restarts from zero. Configuration failures (an unknown
+agent, a missing repository or worker, a permission problem - `blackboard.is_permanent`) fail at
+once without consuming blind retries; a capacity wait consumes nothing. The drain skips rows that
+are exhausted or not yet due so the others proceed, and a failure raised after the session exists is
+reconciled as a started task with a bookkeeping note, never counted as a failed launch or started
+twice. Owner controls: `POST /api/tasks/{id}/dispatch/retry` (a fresh bounded cycle, tried now) and
+`DELETE /api/tasks/{id}/dispatch` (the pending start goes; the task stays); `/api/tasks` exposes
+`Queued.state/attempts/lastError/nextAt`.
+
+Tests: `tests/test_dispatch_retries.py` (13 cases). `tests/test_blackboard.py`: the failed-start test now makes the row due before
+the second drain, because a failed start backs off (PW-085). No frontend change.
+
+### Canonical All integration: startup, trust and retry boundaries
+
+The sender-trust scoping repair is complete at `64e4163`: both local evidence
+paths require the exact receiving mailbox and email channel, including the owner
+conversation row. Eight real SQLite regressions and the existing trust/hotpath
+cases passed (43 total, 1.62s); independent Astra review cleared the repair.
+This supersedes the preceding PW-080 repair-pending note.
+
+Concurrent capacity/retry changes from `f432b76` are preserved. Independent review
+found queued general startup still swallows failure: its caller clears the retry
+row and falsely records Started. Restart scheduling also only arms the earliest
+of distinct deadlines. PW-073/085/088/089 remain partial for these incoming
+limitations; they are not accepted as fully working by the All delivery.
+
+Integration adds owner-only guards to the new Retry/Cancel endpoints, preventing
+agent tokens from resetting exhausted budgets or cancelling queued work. Tests
+isolate retry timers and add retry scheduling to the startup migration boundary.
+Combined runtime review and cumulative gates are pending below. The rebuilt UI
+passed all 298 frontend tests (1.425s); packaged build passed (10.49s).

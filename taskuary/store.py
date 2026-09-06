@@ -552,7 +552,8 @@ class SQLiteStore:
             ncols = {r[1] for r in self.cx.execute('PRAGMA table_info(boardnote)')}
             if 'Rolled' not in ncols: self.cx.execute('ALTER TABLE boardnote ADD COLUMN Rolled TEXT')
             qcols = {r[1] for r in self.cx.execute('PRAGMA table_info(dispatchq)')}
-            for col, typ in (('Value', 'REAL'), ('Floor', 'REAL'), ('Why', 'TEXT')):    # rank.py: value-ordered queue
+            for col, typ in (('Value', 'REAL'), ('Floor', 'REAL'), ('Why', 'TEXT'),    # rank.py: value-ordered queue
+                             ('Attempts', 'INTEGER DEFAULT 0'), ('LastError', 'TEXT'), ('NextAt', 'TEXT'), ('State', 'TEXT')):   # PW-085: the retry budget
                 if col not in qcols: self.cx.execute(f'ALTER TABLE dispatchq ADD COLUMN {col} {typ}')
             have = {r[1] for r in self.cx.execute('PRAGMA table_info(connector)')}
             if 'Roles' not in have: self.cx.execute('ALTER TABLE connector ADD COLUMN Roles TEXT')
@@ -2353,6 +2354,27 @@ class SQLiteStore:
     def set_dispatch_value(self, task_id, value, why=None, floor_=None):
         self._exec('UPDATE dispatchq SET Value=?, Why=COALESCE(?, Why), Floor=COALESCE(?, Floor) WHERE TaskId=?', (value, why, floor_, task_id))
     def clear_dispatch(self, task_id): self._exec('DELETE FROM dispatchq WHERE TaskId=?', (task_id,))
+    def get_dispatch(self, task_id): return self._one('SELECT * FROM dispatchq WHERE TaskId=?', (task_id,))
+    def dispatch_failed(self, task_id, error: str, permanent: bool = False, backoff=(30, 120), max_attempts: int = 3) -> dict:
+        """One failed start attempt on the queue row (PW-085/086): the count, the error and the next try are
+        persisted, so a restart cannot reset the budget. A permanent failure, or the last allowed attempt,
+        leaves the row 'failed' with no next try - the owner's Retry starts a new cycle."""
+        row = self.get_dispatch(task_id)
+        if not row: return None
+        n = int(row.get('Attempts') or 0) + 1
+        done = permanent or n >= max_attempts
+        wait = None if done else backoff[min(n - 1, len(backoff) - 1)]
+        nxt = None if done else (datetime.now() + timedelta(seconds=wait)).isoformat(sep=' ', timespec='seconds')
+        self._exec('UPDATE dispatchq SET Attempts=?, LastError=?, NextAt=?, State=? WHERE TaskId=?',
+                   (n, str(error)[:500], nxt, 'failed' if done else 'retrying', task_id))
+        self._poke('task-changed', task_id=task_id)
+        return {**self.get_dispatch(task_id), 'wait': wait}
+    def dispatch_retry(self, task_id) -> bool:
+        """The owner's Retry: a fresh bounded cycle on the same row (PW-087)."""
+        if not self.get_dispatch(task_id): return False
+        self._exec("UPDATE dispatchq SET Attempts=0, NextAt=NULL, State='waiting' WHERE TaskId=?", (task_id,))
+        self._poke('task-changed', task_id=task_id)
+        return True
 
     # LEARNED.md's history (learnedgraph.py): every point a line gained or lost, and every line that died
     def add_learned_event(self, key, text, status, score, ev, action, actor):

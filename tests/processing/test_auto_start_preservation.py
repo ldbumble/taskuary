@@ -3,7 +3,7 @@ import asyncio
 from contextlib import ExitStack, asynccontextmanager, contextmanager
 from unittest import mock
 
-from taskuary import processing_all, server, wabridge
+from taskuary import blackboard, processing_all, server, wabridge
 from taskuary.store import SQLiteStore
 
 
@@ -45,6 +45,7 @@ def _lifespan_boundaries(store):
         'learn': (server.learn, 'note_verdicts', {}),
         'watch': (server.waitroom, 'watch', {}),
         'threads': (server.threading, 'Thread', {}),
+        'schedule_due': (blackboard, 'schedule_due', {}),
         'triage_upgrade': (store, 'upgrade_triage_failures', {'return_value': 0}),
     }
     with ExitStack() as stack:
@@ -77,6 +78,7 @@ def test_legacy_owner_opt_out_is_migrated_before_bridge_or_catchup_can_observe_i
         assert store.get_settings()['auto_start_upgraded'] == '1'
         assert store._one("SELECT UpdatedBy FROM setting WHERE Name='general_auto_enabled'")['UpdatedBy'] == 'upgrade'
         doubles['open_drains'].assert_called_once_with(store)
+        doubles['schedule_due'].assert_called_once_with(store)
         assert doubles['threads'].call_count == 2  # harmless mocked poll clocks start after migration
     finally:
         store.cx.close()
@@ -103,11 +105,30 @@ def test_failed_auto_start_upgrade_aborts_before_any_intake_or_worker_admission(
         doubles['bind'].assert_called_once()  # loop binding is side-effect free and precedes storage work
         for name in ('open_drains', 'close_drains', 'recover', 'shutdown_sessions',
                      'shutdown_children', 'bridge', 'catchup', 'heal_docs',
-                     'refresh_soul', 'learn', 'watch', 'threads', 'triage_upgrade'):
+                     'refresh_soul', 'learn', 'watch', 'threads', 'schedule_due',
+                     'triage_upgrade'):
             doubles[name].assert_not_called()
         assert store.get_settings()['general_auto_enabled'] == '1'
         assert not store._one(
             "SELECT UpdatedBy FROM setting WHERE Name='general_auto_enabled'")['UpdatedBy']
         assert 'auto_start_upgraded' not in store.get_settings()
+    finally:
+        store.cx.close()
+
+
+def test_retry_timer_requires_an_explicit_test_double(tmp_path, test_safety_events):
+    store = SQLiteStore(str(tmp_path / 'timer-boundary.db'))
+    try:
+        start = len(test_safety_events)
+        assert blackboard.drain_later(store, 17.0) is None
+        assert ('dispatch retry timer', '17.0') in test_safety_events[start:]
+
+        with mock.patch.object(blackboard.threading, 'Timer') as timer:
+            blackboard.drain_later(store, 23.0)
+        timer.assert_called_once()
+        assert timer.call_args.args[0] == 23.0
+        assert callable(timer.call_args.args[1])
+        assert timer.return_value.daemon is True
+        timer.return_value.start.assert_called_once_with()
     finally:
         store.cx.close()

@@ -146,7 +146,8 @@ class CoreTests(unittest.TestCase):
             self.assertEqual(ingest_message(s, mail(external_id='e2', from_email='Stranger@evil.example'), llm=CODING_LLM)['status'], 'created')
         spawn.assert_not_called()
         # ...until the owner has dealt with them: their own words on one of the stranger's threads
-        s.add_message({'ExternalId': 'own-e2', 'Channel': 'email', 'ConversationId': 'e2', 'FromEmail': 'dana@northwind.example',
+        s.add_message({'ExternalId': 'own-e2', 'Channel': 'email', 'SourceName': 'dana@northwind.example',
+                       'ConversationId': 'e2', 'FromEmail': 'dana@northwind.example',
                        'Status': 'context', 'BodyText': 'thanks - looking into it'})
         with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to') as wt:
             self.assertEqual(ingest_message(s, mail(external_id='e2b', from_email='Stranger@evil.example'), llm=CODING_LLM)['status'], 'created')

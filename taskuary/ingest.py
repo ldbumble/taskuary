@@ -1317,7 +1317,7 @@ def _auto_code(store, tid):
     # the note belongs INSIDE the worker: written before the thread started, a task could
     # claim "auto-dispatched" with no session behind it whenever the process died first
     cap = auto_sessions(store)
-    if len([t for t in list(term.SESSIONS.values()) if t.alive]) >= cap:
+    if bb.live_count() >= cap:
         store.enqueue_dispatch(tid, None, agent, f'{cap} agent sessions are already live')
         store.add_comment(tid, 'router', 'agent',
                           f'Queued: {cap} agent sessions are already live - '
@@ -1340,16 +1340,16 @@ def _auto_code(store, tid):
                           + (f' - told it about the {len(ps)} agent(s) already in the checkout' if ps else ''))
     except Exception as e:
         logger.warning(f'auto dispatch failed for task {tid}: {e}')
-        store.add_comment(tid, 'router', 'agent', f'Auto-start failed: {str(e)[:200]}')
+        bb.record_failure(store, tid, e, agent, label='Auto-start')   # counted, said, and retried on a bounded budget (PW-085)
 
 
 def _auto_general(store, tid, brief: str = None):
     """Auto-dispatch for a GENERAL task: the assistant's own per-task session, the same one the
     owner sees when they open the task (PW-069). A full house queues it like a coding task; the
     queue drain knows the kind. A live conversation is reused - the ask is put once."""
-    from . import terminal as term
+    from . import blackboard as bb
     cap = auto_sessions(store)
-    if len([t for t in list(term.SESSIONS.values()) if t.alive]) >= cap:
+    if bb.live_count() >= cap:
         store.enqueue_dispatch(tid, None, 'assistant', f'{cap} agent sessions are already live')
         store.add_comment(tid, 'router', 'agent', f'Queued: {cap} agent sessions are already live - it starts by itself when one ends.')
         return
@@ -1371,7 +1371,8 @@ def _start_general(store, tid, brief: str = None):
             if ask: session.send_prompt(ask)
     except Exception as e:
         logger.warning(f'assistant auto-start failed for task {tid}: {e}')
-        store.add_comment(tid, 'router', 'agent', f'Assistant start failed: {str(e)[:200]}')
+        from . import blackboard as bb
+        bb.record_failure(store, tid, e, 'assistant', label='Assistant start')
 
 
 def _auto_draft(store, tid, rid):

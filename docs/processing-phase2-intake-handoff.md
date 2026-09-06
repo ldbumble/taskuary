@@ -1,8 +1,9 @@
 # Phase 2 intake: agent handoff record
 
-Worker: Phase 2 intake agent, isolated worktree `../taskhub-phase2-intake`, branch
-`processing/phase2-intake-poll`, base `ccde503` (origin/master, 2026-09-06). Nothing was
-pushed; the four commits below are submitted for lead integration. No live app was
+Worker: Phase 2 intake agent (later also integrator, at the owner's direction), isolated worktree `../taskhub-phase2-intake`, branch
+`processing/phase2-intake-poll`, base `ccde503` (origin/master, 2026-09-06). The four commits
+below were rebased onto `7589b38` (Section 1.5), the UI packaged as `f244803`, and pushed to
+master on 2026-09-06 at the owner's direction; CI run 34036813779 passed all ten jobs. No live app was
 restarted, no production connector, live database, read state or owner document was
 touched: every test used `MemoryStore` or the suite's disposable TASKUARY_HOME. The
 browser-control redesign stays pending. This file is the worker's record; the lead
@@ -12,10 +13,10 @@ folds accepted rows into the evidence document and the acceptance ledger.
 
 | Section | Acceptance | Commit | Files owned |
 | --- | --- | --- | --- |
-| 2.1a Poll lanes | PW-001, PW-002, PW-005 (backend part) | `4591fcd` | `taskuary/server.py` (poll block + lifespan thread start + `/api/ingest/status` heal), `taskuary/ingest.py` (`drain`, `mark_fresh`, `await_quiet`), `tests/test_poll_lanes.py`, `tests/test_imessage.py` (one moved assertion), `tests/conftest.py` (new scheduler guard) |
-| 2.1b Poll labels | PW-003, PW-004, PW-005 (settings part) | `12c1a4e` | `website/src/pollFields.js` (new), `website/src/ConnectorsView.jsx` (six chat cards), `website/src/SettingsView.jsx` (Background sync help), `website/test/pollFields.test.mjs` |
-| 2.2 Outlook catch-up | PW-006 | `71cd588` | `taskuary/channels.py` (`_mail_msgs`, `_mail_cursor`, `_mail_folder`, outlook branch of `_poll_one`, per-folder error reporting), `tests/test_mail_catchup.py` |
-| 2.3 IMAP catch-up | PW-007, PW-008 | `c59db4f` | `taskuary/imapmail.py` (`_uids`, `_validity`, `_rewound`, `_batches`, `poll_sent`, `poll_imap`), `tests/test_imap_catchup.py` |
+| 2.1a Poll lanes | PW-001, PW-002, PW-005 (backend part) | `5c8cf60` | `taskuary/server.py` (poll block + lifespan thread start + `/api/ingest/status` heal), `taskuary/ingest.py` (`drain`, `mark_fresh`, `await_quiet`), `tests/test_poll_lanes.py`, `tests/test_imessage.py` (one moved assertion), `tests/conftest.py` (new scheduler guard) |
+| 2.1b Poll labels | PW-003, PW-004, PW-005 (settings part) | `3feb86d` | `website/src/pollFields.js` (new), `website/src/ConnectorsView.jsx` (six chat cards), `website/src/SettingsView.jsx` (Background sync help), `website/test/pollFields.test.mjs` |
+| 2.2 Outlook catch-up | PW-006 | `a26feeb` | `taskuary/channels.py` (`_mail_msgs`, `_mail_cursor`, `_mail_folder`, outlook branch of `_poll_one`, per-folder error reporting), `tests/test_mail_catchup.py` |
+| 2.3 IMAP catch-up | PW-007, PW-008 | `09bfd6a` | `taskuary/imapmail.py` (`_uids`, `_validity`, `_rewound`, `_batches`, `poll_sent`, `poll_imap`), `tests/test_imap_catchup.py` |
 
 Not touched, by design: `store.py`, `concierge.py`, `funnel.py`, `funnel_presentation.py`,
 `FeedView.jsx`, `AssistantView.jsx`, `TasksView.jsx`, the processing_* modules, the
@@ -87,7 +88,7 @@ any `git worktree remove`). Logs: ignored `.codex-tmp/phase2-evidence/` in the w
 | Neighbours after 2.1: sync clock, imessage, chat freshness, poll parallel, api, mail folders, isolation contract, async triage, chat queue | 195 passed |
 | Neighbours after 2.2/2.3: mail folders, poll parallel, imessage, chat freshness, cc, cc triage, mark read, msauth, audit fixes, setup, imapmail, imap history | 183 + 45 passed |
 | Full backend after 2.1 (`python -m pytest -q -ra`) | 2333 passed, 66 subtests, 0 failed, 164.27 s |
-| Full backend on the final tree, `python -m pytest -q -ra` (`c59db4f` + this record) | 2350 passed, 66 subtests, 0 failed, 0 skipped, 149 existing warnings, 198.55 s |
+| Full backend on the final tree, `python -m pytest -q -ra` (`09bfd6a` + this record) | 2350 passed, 66 subtests, 0 failed, 0 skipped, 149 existing warnings, 198.55 s |
 | `npm test` (Node 22; also Node 20 with an explicit file list) | 269 passed, 0 failed, 0 skipped (264 existing + 5 new) |
 | `eslint -c eslint.undef.mjs` (no-undef) | 0 no-undef problems; 9 pre-existing "rule react-hooks/exhaustive-deps not found" notices in files this work did not touch |
 | `vite build --outDir <scratch> --emptyOutDir` (Node 22.23.2) | built in 25.86 s; nothing written under `taskuary/web` (packaged output stays the integration owner's gate) |

@@ -47,14 +47,14 @@ Unchecked feature requirements below remain pending their own implementation gat
 
 ## Email catch-up must not skip backlog
 
-- [ ] <a id="pw-006"></a>**PW-006** Outlook: `_mail_msgs()` reads newest-first and stops at its default 500
+- [x] <a id="pw-006"></a>**PW-006** Outlook: `_mail_msgs()` reads newest-first and stops at its default 500
   cap, while `_poll_one()` subsequently advances the source watermark to now.
   Preserve continuation/progress until the backlog is exhausted; never advance
   past unfetched mail. Test more than 500 messages per folder and slow fetches.
-- [ ] <a id="pw-007"></a>**PW-007** Gmail/IMAP: Inbox and Sent polling select the last 25 qualifying UIDs and
+- [x] <a id="pw-007"></a>**PW-007** Gmail/IMAP: Inbox and Sent polling select the last 25 qualifying UIDs and
   advance to their maximum, skipping lower pending UIDs. Drain oldest pending
   UIDs in bounded batches, preserving retryable failures and UID validity.
-- [ ] <a id="pw-008"></a>**PW-008** Gmail/IMAP: the date search window can exclude mail received during a long
+- [x] <a id="pw-008"></a>**PW-008** Gmail/IMAP: the date search window can exclude mail received during a long
   absence even when its UID exceeds the saved cursor. Make established-cursor
   catch-up cover the full gap; distinguish initial-import limits from catch-up.
   Test both Inbox and Sent with long absences and more than 25 new messages.

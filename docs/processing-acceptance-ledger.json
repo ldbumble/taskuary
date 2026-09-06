@@ -7,72 +7,72 @@
       "section": "Poll scheduling and configuration",
       "phase": "2",
       "requirement": "Prevent slow AI triage and full-sync report execution from blocking fresh",
-      "status": "pending",
-      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_poll_lanes.py` (lanes, in-flight exclusion, context gate, banner); full backend 2403 passed",
+      "commit": "5c8cf60; f244803, CI run 34036813779 (all ten jobs passed)"
     },
     {
       "id": "PW-002",
       "section": "Poll scheduling and configuration",
       "phase": "2",
       "requirement": "Account for chat fetches performed during a full sync in the fast-poll",
-      "status": "pending",
-      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_poll_lanes.py` (full-pass stamps, end-of-attempt stamps, skipped attempt still due)",
+      "commit": "5c8cf60; f244803, CI run 34036813779 (all ten jobs passed)"
     },
     {
       "id": "PW-003",
       "section": "Poll scheduling and configuration",
       "phase": "2",
       "requirement": "Expose the supported fast-poll interval consistently for Teams, Slack,",
-      "status": "pending",
-      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`website/test/pollFields.test.mjs` (every chat card carries the field; effective clock mirrors the server)",
+      "commit": "3feb86d; f244803, CI run 34036813779 (all ten jobs passed)"
     },
     {
       "id": "PW-004",
       "section": "Poll scheduling and configuration",
       "phase": "2",
       "requirement": "Correct polling labels/help text: WhatsApp's interval covers connector",
-      "status": "pending",
-      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`website/test/pollFields.test.mjs` (blank/0/global-off semantics, WhatsApp and iMessage wording); `_quick_due` blank-means-default test",
+      "commit": "3feb86d, 5c8cf60; f244803, CI run 34036813779 (all ten jobs passed)"
     },
     {
       "id": "PW-005",
       "section": "Poll scheduling and configuration",
       "phase": "2",
       "requirement": "Add regression tests for slow triage/report execution versus chat intake,",
-      "status": "pending",
-      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_poll_lanes.py` (20 cases) and `website/test/pollFields.test.mjs` (5 cases)",
+      "commit": "5c8cf60, 3feb86d; f244803, CI run 34036813779 (all ten jobs passed)"
     },
     {
       "id": "PW-006",
       "section": "Email catch-up must not skip backlog",
       "phase": "2",
       "requirement": "Outlook: `_mail_msgs()` reads newest-first and stops at its default 500",
-      "status": "pending",
-      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_mail_catchup.py` (1050/600-mail backlogs, resume after a dead batch, same-second boundary, Sent Items, dead folder)",
+      "commit": "a26feeb; f244803, CI run 34036813779 (all ten jobs passed)"
     },
     {
       "id": "PW-007",
       "section": "Email catch-up must not skip backlog",
       "phase": "2",
       "requirement": "Gmail/IMAP: Inbox and Sent polling select the last 25 qualifying UIDs and",
-      "status": "pending",
-      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_imap_catchup.py` (80 pending UIDs oldest-first, abort at 140 then resume, one unreadable UID, Sent gap)",
+      "commit": "09bfd6a; f244803, CI run 34036813779 (all ten jobs passed)"
     },
     {
       "id": "PW-008",
       "section": "Email catch-up must not skip backlog",
       "phase": "2",
       "requirement": "Gmail/IMAP: the date search window can exclude mail received during a long",
-      "status": "pending",
-      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_imap_catchup.py` (two-week gap under a 3-day window, first import bounded, UIDVALIDITY change, no validity)",
+      "commit": "09bfd6a; f244803, CI run 34036813779 (all ten jobs passed)"
     },
     {
       "id": "PW-009",

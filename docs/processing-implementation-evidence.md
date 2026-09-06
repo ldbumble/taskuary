@@ -775,7 +775,8 @@ its only user change remains README.md with preserved SHA-256
 
 ## Section 2.2 — email catch-up without skipped backlog
 
-Status: implementation in progress from CI-verified `3dc3a5e`. PW-006 through
+Status: final reviewed source `9583acb` passed cumulative gates; delivery CI is
+recorded at the end of this evidence log. Work began from CI-verified `3dc3a5e`. PW-006 through
 PW-008 form one TODO section with independent Outlook and IMAP assignments and
 one integration/review/regression/delivery gate. Claude's original Outlook/IMAP
 commits are already on master; this section resolves their independent review
@@ -1091,3 +1092,17 @@ triage stays the opt-in it was (`reports.run_report_source`), and worker events 
 
 Tests: `tests/test_ideas_triage.py` (8 cases) and the existing `tests/test_report_triage.py`. No existing assertion changed.
 No frontend change; packaged assets unchanged.
+
+
+### Final Section 2.2 delivery gate
+
+Exact source `9583acb` integrates upstream `ffd9938` and passed 2,616 backend tests
+plus 71 subtests (150 warnings, no skips) in 206.68 s. All seven unchanged browser
+scenarios passed: isolated input 11.214 s (visible/input 1,157/645 ms), remaining six
+185.473 s (terminal visible/input/reconnect 2,242/121/807 ms). Frontend source and
+assets remain byte-identical to the 290-test, exit-0 12.25 s build on the checklist
+base. Astra cleared preservation and direct intake/navigation compatibility for
+this exact integration. TODO and both ledgers now reference the final source.
+The broader Phase 3 claims remain Claude's separately scoped evidence; full-chain,
+account-scoping and canonical read-policy cutovers are still pending. Delivery and
+exact-SHA remote CI follow this gate.

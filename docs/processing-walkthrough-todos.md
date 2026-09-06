@@ -58,9 +58,9 @@ Unchecked feature requirements below remain pending their own implementation gat
   catch-up cover the full gap; distinguish initial-import limits from catch-up.
   Test both Inbox and Sent with long absences and more than 25 new messages.
 
-  Section 2.2: independently reviewed corrections are integrated at `36a1edf`
-  with Claude's concurrent triage changes. Final regressions passed 2,535 backend
-  tests plus 71 subtests, 283 frontend tests, packaged build, and all seven real
+  Section 2.2: independently reviewed corrections are integrated at `9583acb`
+  with Claude's concurrent triage changes. Final regressions passed 2,616 backend
+  tests plus 71 subtests, 290 frontend tests, packaged build, and all seven real
   browser scenarios. The first browser run's two failures and unchanged successful
   rerun are retained in the [implementation evidence](processing-implementation-evidence.md#section-22--email-catch-up-without-skipped-backlog),
   together with delivery and exact-SHA CI. Historical messages, read state and

@@ -213,6 +213,17 @@ CREATE TABLE IF NOT EXISTS processing_context_snapshot (
   MigrationVersion TEXT NOT NULL, ItemId TEXT NOT NULL, ContextRevision TEXT NOT NULL,
   ViewRevision TEXT NOT NULL, ContextJson TEXT NOT NULL, ViewJson TEXT NOT NULL,
   PRIMARY KEY (MigrationVersion, ItemId));
+-- Raw writes and canonical identity reconciliation advance independently.  A newly
+-- widened database starts pending even when its old rows predate the triggers.
+CREATE TABLE IF NOT EXISTS processing_reconcile_state (
+  Singleton INTEGER PRIMARY KEY CHECK (Singleton=1),
+  DirtyGeneration INTEGER NOT NULL DEFAULT 1,
+  AttemptedGeneration INTEGER NOT NULL DEFAULT 0,
+  ReconciledGeneration INTEGER NOT NULL DEFAULT 0,
+  LastAttemptAt TEXT,
+  ConflictsJson TEXT NOT NULL DEFAULT '[]',
+  DiagnosticsJson TEXT NOT NULL DEFAULT '[]');
+INSERT OR IGNORE INTO processing_reconcile_state (Singleton) VALUES (1);
 CREATE TABLE IF NOT EXISTS report_run (RunId INTEGER PRIMARY KEY, SourceId INTEGER, At TEXT, Type TEXT, Title TEXT, Ms INTEGER, Subject TEXT,
   MessageId INTEGER, Failed INTEGER DEFAULT 0, Error TEXT, Said INTEGER, LinesJson TEXT, ReviewedJson TEXT, Inputs TEXT, Summary TEXT);
 -- Stateful report workflows: a scheduled run opens one monthly batch, then each customer
@@ -293,6 +304,18 @@ INDEXES = (
     'CREATE INDEX IF NOT EXISTS idx_invoice_batch_source ON invoice_batch(SourceId, Period)',
     'CREATE INDEX IF NOT EXISTS idx_invoice_item_batch ON invoice_item(BatchId, Status)',
     'CREATE INDEX IF NOT EXISTS idx_invoice_item_review ON invoice_item(ReviewId)',
+)
+
+# These are the persisted inputs to canonical identity or its complete presentation
+# projection.  Triggers, rather than Python write hooks, also cover migrations, test
+# fixtures and other direct SQL writers.  Reconciliation writes only processing_*
+# tables, so it never dirties itself.
+PROCESSING_DIRTY_TABLES = (
+    'task', 'message', 'review', 'idea', 'attachment', 'run', 'route',
+    'funnel_state', 'comment', 'task_artifact',
+)
+PROCESSING_DIRTY_SETTINGS = (
+    'feed_days', 'funnel_hours', 'funnel_mutes', 'owner_email', 'team_domains',
 )
 
 # Out of the box Taskuary WORKS the mail: a job goes to the coding agent, a question gets a
@@ -547,6 +570,26 @@ class SQLiteStore:
                     raise
             for ix in INDEXES:
                 self.cx.execute(ix)
+            for table in PROCESSING_DIRTY_TABLES:
+                for action in ('INSERT', 'UPDATE', 'DELETE'):
+                    self.cx.execute(f'''CREATE TRIGGER IF NOT EXISTS processing_dirty_{table}_{action.lower()}
+                        AFTER {action} ON {table} BEGIN
+                          UPDATE processing_reconcile_state
+                          SET DirtyGeneration=DirtyGeneration+1 WHERE Singleton=1;
+                        END''')
+            setting_names = ','.join("'" + name + "'" for name in PROCESSING_DIRTY_SETTINGS)
+            self.cx.execute(f'''CREATE TRIGGER IF NOT EXISTS processing_dirty_setting_insert
+                AFTER INSERT ON setting WHEN NEW.Name IN ({setting_names}) BEGIN
+                  UPDATE processing_reconcile_state SET DirtyGeneration=DirtyGeneration+1 WHERE Singleton=1;
+                END''')
+            self.cx.execute(f'''CREATE TRIGGER IF NOT EXISTS processing_dirty_setting_update
+                AFTER UPDATE ON setting WHEN OLD.Name IN ({setting_names}) OR NEW.Name IN ({setting_names}) BEGIN
+                  UPDATE processing_reconcile_state SET DirtyGeneration=DirtyGeneration+1 WHERE Singleton=1;
+                END''')
+            self.cx.execute(f'''CREATE TRIGGER IF NOT EXISTS processing_dirty_setting_delete
+                AFTER DELETE ON setting WHEN OLD.Name IN ({setting_names}) BEGIN
+                  UPDATE processing_reconcile_state SET DirtyGeneration=DirtyGeneration+1 WHERE Singleton=1;
+                END''')
             try: self.cx.execute(KB_FTS); self.kb_fts = True
             except sqlite3.OperationalError as e:
                 self.kb_fts = False; logger.warning(f'no FTS5 in this sqlite build - knowledge search falls back to LIKE: {e}')
@@ -1248,6 +1291,85 @@ class SQLiteStore:
             self._poke('feed-changed')
     # ── canonical processing inventory (Phase 1 additive foundation) ────────────
     @staticmethod
+    def _processing_reconcile_status_cursor(cur):
+        row = cur.execute('''SELECT * FROM processing_reconcile_state
+            WHERE Singleton=1''').fetchone()
+        if row is None:
+            raise RuntimeError('processing reconciliation state is missing')
+        dirty = int(row['DirtyGeneration'])
+        attempted = int(row['AttemptedGeneration'])
+        reconciled = int(row['ReconciledGeneration'])
+        conflicts = json.loads(row['ConflictsJson'] or '[]')
+        diagnostics = json.loads(row['DiagnosticsJson'] or '[]')
+        if dirty == reconciled:
+            status = 'complete'
+        elif attempted == dirty and conflicts:
+            status = 'conflicted'
+        else:
+            status = 'pending'
+        return {
+            'dirty_generation': dirty,
+            'attempted_generation': attempted,
+            'reconciled_generation': reconciled,
+            'pending': dirty != reconciled,
+            'status': status,
+            'conflicts': conflicts,
+            'diagnostics': diagnostics,
+            'last_attempt_at': row['LastAttemptAt'],
+        }
+
+    def processing_reconcile_status(self):
+        """Return generation/diagnostic state without allocating canonical identity."""
+        with self._processing_read() as cur:
+            return self._processing_reconcile_status_cursor(cur)
+
+    def reconcile_processing_membership(self, *, fixed_now=None):
+        """Reconcile exact raw entity relationships in one uncapped write transaction.
+
+        This is an explicit startup/background operation. Inventory and API getters
+        never call it, and it does not infer read, defer, action, or provider identity.
+        """
+        stamp = fixed_now or _now()
+        if not isinstance(stamp, str) or not stamp:
+            raise ValueError('fixed_now must be a non-empty string')
+        from .processing_membership import reconcile_membership
+        with self.lock:
+            cur = self.cx.cursor()
+            cur.execute('BEGIN IMMEDIATE')
+            try:
+                before = self._processing_reconcile_status_cursor(cur)
+                if before['dirty_generation'] == before['reconciled_generation']:
+                    self.cx.commit()
+                    return {
+                        **before,
+                        'created_items': 0, 'created_members': 0, 'moved_members': 0,
+                        'retired_members': 0, 'redirected_items': 0,
+                        'created_aliases': 0, 'created_relations': 0,
+                        'retired_relations': 0,
+                        'status': 'already_current',
+                    }
+                result = reconcile_membership(
+                    cur, stamp=stamp, new_item_id=self._processing_item_id,
+                    follow_item=self._processing_follow)
+                dirty = before['dirty_generation']
+                complete = not result['conflicts']
+                cur.execute('''UPDATE processing_reconcile_state
+                    SET AttemptedGeneration=?, ReconciledGeneration=?, LastAttemptAt=?,
+                        ConflictsJson=?, DiagnosticsJson=? WHERE Singleton=1''',
+                    (dirty, dirty if complete else before['reconciled_generation'], stamp,
+                     json.dumps(result['conflicts'], sort_keys=True),
+                     json.dumps(result['diagnostics'], sort_keys=True)))
+                after = self._processing_reconcile_status_cursor(cur)
+                self.cx.commit()
+                self._writes += 1
+                return {**after, **result, 'status': 'complete' if complete else 'conflicted'}
+            except BaseException:
+                self.cx.rollback()
+                raise
+            finally:
+                cur.close()
+
+    @staticmethod
     def _processing_item_id():
         """Opaque identity: source ids and changing funnel keys never become the primary key."""
         return 'pi_' + uuid.uuid4().hex
@@ -1471,9 +1593,19 @@ class SQLiteStore:
                 (member['EntityKind'], member['LocalId'])).fetchall():
                 aliases_by_id[row['AliasId']] = dict(row)
         aliases = [aliases_by_id[key] for key in sorted(aliases_by_id)]
-        evidence = [self._processing_evidence_row(r) for r in cur.execute(
+        evidence_by_id = {r['EvidenceId']: r for r in cur.execute(
             f"SELECT * FROM processing_legacy_evidence WHERE ItemId IN ({','.join('?' * len(lineage))}) ORDER BY EvidenceId",
-            lineage).fetchall()]
+            lineage).fetchall()}
+        # A split moves one exact entity without redirecting the old root, because
+        # that root still owns another current component. Carry the entity's frozen
+        # read evidence into its new snapshot while retaining the original ItemId.
+        for member in members:
+            for row in cur.execute('''SELECT * FROM processing_legacy_evidence
+                WHERE EntityKind=? AND LocalId=? ORDER BY EvidenceId''',
+                (member['EntityKind'], member['LocalId'])).fetchall():
+                evidence_by_id[row['EvidenceId']] = row
+        evidence = [self._processing_evidence_row(evidence_by_id[key])
+                    for key in sorted(evidence_by_id)]
         context_history = [dict(r) for r in cur.execute(
             f"SELECT * FROM processing_context_snapshot WHERE ItemId IN ({','.join('?' * len(lineage))}) ORDER BY MigrationVersion,ItemId",
             lineage).fetchall()]
@@ -1549,11 +1681,14 @@ class SQLiteStore:
                 WHERE Completion='complete' ORDER BY Version''').fetchall()]
             coverage = {
                 'canonical_item_count': len(items),
+                'visible_item_count': sum(bool(item['members']) for item in items),
+                'tombstone_item_count': sum(not item['members'] for item in items),
                 'member_count': member_count,
                 'uncatalogued': uncatalogued,
                 'completed_baselines': completed,
                 'unsupported': ['attachment_only_items', 'calendar', 'comments', 'task_artifacts',
                                 'waitroom', 'worker_questions'],
+                'processing_reconciliation': self._processing_reconcile_status_cursor(cur),
             }
 
         snapshot = {

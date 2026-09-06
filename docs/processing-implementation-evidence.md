@@ -2497,7 +2497,7 @@ Tests: `tests/test_workflows.py` (6 cases). Backend evidence: `.codex-tmp/phase3
 
 ## Section 10.2 — a set-up asked for in the chat is gathered, confirmed, and created through the tabs' own roads
 
-Status: implemented and tested locally at `aa474a8`; remote CI pending on the pushed
+Status: implemented and tested locally at `a03a539`; remote CI pending on the pushed
 checkpoint. Section 10.1 is CI-verified (0b79f40/fa797fc, CI run 34064170080 (the pytest jobs and build-exe passed; the browser job failed once on a 546-vs-545 rail count in the lead's canonical-All scenario, which passes locally twice and does not touch workflows)).
 Acceptance PW-194 to PW-198 implemented.
 

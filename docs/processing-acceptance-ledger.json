@@ -1746,7 +1746,7 @@
       "requirement": "Interpret setup requests through AI, gather missing configuration, and show",
       "status": "implemented",
       "test": "`tests/test_chat_setup.py`::ReportSetupTests (a set-up said in the chat is sorted by the model - report, connection, or digging - gathered by `compose.compose` with its questions answered on the next turn, and confirmed as a `report.create` / `connection.create` proposal; the click runs `save_source` / `save_connector`, the tabs' own roads, and the outcome carries the real id and its `#report=` / `#connector=` link)",
-      "commit": "aa474a8; local gates passed, CI pending"
+      "commit": "a03a539; local gates passed, CI pending"
     },
     {
       "id": "PW-195",
@@ -1755,7 +1755,7 @@
       "requirement": "For reports, gather source/connection, query or inputs, summary instructions,",
       "status": "implemented",
       "test": "`tests/test_chat_setup.py`::test_a_report_is_gathered_confirmed_and_created_through_the_reports_road (`concierge.report_facts`: source, inputs, summary instructions, schedule, enabled state, triage behaviour, delivery in the box), ::test_a_preview_is_a_dry_run... (`POST /api/operations/{id}/preview` strips schedule and delivery, creates nothing, and refuses an executor that writes)",
-      "commit": "aa474a8; local gates passed, CI pending"
+      "commit": "a03a539; local gates passed, CI pending"
     },
     {
       "id": "PW-196",
@@ -1764,7 +1764,7 @@
       "requirement": "For connections, gather provider and non-secret configuration, show requested",
       "status": "implemented",
       "test": "`tests/test_chat_setup.py`::ConnectionSetupTests (provider, authority and what it unlocks in the box; the card is created off and without a secret, state `authorization pending` / `connected` / `validation failed` from the row; the same card is re-targeted, never duplicated; the chat never asks for a token and `concierge.redact` strips one typed in before any chat row, mirror or memory is written)",
-      "commit": "aa474a8; local gates passed, CI pending"
+      "commit": "a03a539; local gates passed, CI pending"
     },
     {
       "id": "PW-197",
@@ -1773,7 +1773,7 @@
       "requirement": "If setup requires substantial investigation, propose a general-agent setup",
       "status": "implemented",
       "test": "`tests/test_chat_setup.py`::test_digging_is_a_walk_through_proposal_and_no_ai_says_so, ::test_a_failing_configuration... (a set-up the sort calls digging, or one the composer cannot stand behind, is a `task.setup` proposal with the reason; a simple configuration never opens a task)",
-      "commit": "aa474a8; local gates passed, CI pending"
+      "commit": "a03a539; local gates passed, CI pending"
     },
     {
       "id": "PW-198",
@@ -1782,7 +1782,7 @@
       "requirement": "Test conversational clarification/correction/cancel, exact configuration",
       "status": "implemented",
       "test": "`tests/test_chat_setup.py` (8 cases: gather/confirm/create through the shared road with the real link, clarification and answers, correction and cancel, invalid config and duplicate title, read-only preview and a writing executor refused, connection with authority and no secret, unnamed system asked and secret redaction, digging and no-AI), `website/test/chatSetup.test.mjs` (2 cases)",
-      "commit": "aa474a8; local gates passed, CI pending"
+      "commit": "a03a539; local gates passed, CI pending"
     },
     {
       "id": "PW-199",

@@ -2472,14 +2472,25 @@ def concierge_next(body: SurfaceBody = None):
         from .processing_navigation import NavigationStale
         from .funnel_selection import SelectionUnavailable
         try:
-            return reservation.run(lambda selected, guard, dock: concierge.surface(
-                store, actor=ACTOR, only=body.only, include_surfaced=body.include_surfaced,
-                exclude=body.exclude, selection=selected, commit_guard=guard, bound_dock=dock), ACTOR)
+            def _surface(selected, guard, dock):
+                # the captured pick is validated against its source before it is spoken (PW-050); a pile that
+                # moved under it is a stale navigation, and the client re-captures
+                picked = selected.selected or {}
+                if picked:
+                    members = picked.get('items') if picked.get('kind') == 'fyis' else [picked]
+                    if _refresh_items(members or []).get('newer'):
+                        from . import funnel as _f
+                        _f.invalidate()
+                        raise NavigationStale({'reason': 'new_activity', 'detail': 'new messages arrived on the item; refresh and go again'})
+                return concierge.surface(store, actor=ACTOR, only=body.only, include_surfaced=body.include_surfaced,
+                                         exclude=body.exclude, selection=selected, commit_guard=guard, bound_dock=dock)
+            return reservation.run(_surface, ACTOR)
         except NavigationStale as error:
             raise HTTPException(409, error.detail) from error
         except SelectionUnavailable as error:
             raise HTTPException(503, error.detail) from error
     if body.key: _refresh_chat_key(body.key)
+    else: _refresh_next_selection(body)          # select first, then validate the source (PW-050)
     return concierge.surface(store, body.key, actor=ACTOR, only=body.only,
                              include_surfaced=body.include_surfaced, exclude=body.exclude)
 
@@ -2548,10 +2559,18 @@ async def concierge_stream(body: ConciergeStreamBody):
         put({'type': kind, 'name': name, 'detail': detail if isinstance(detail, (dict, str)) else str(detail)})
     def work():
         try:
-            freshness = _refresh_chat_key(body.key, body.context_mid) if body.key else {}
+            # the item first, then its source (PW-050): a named item refreshes itself; Next without a key refreshes
+            # what it is about to surface, every channel of an FYI batch once, and re-picks if the pile moved
+            if body.key: freshness = _refresh_chat_key(body.key, body.context_mid)
+            elif body.mode == 'next' and not reservation: freshness = _refresh_next_selection(body)
+            else: freshness = {}
             if freshness.get('polled'):
                 put({'type': 'tool_call', 'name': 'sync_messages',
                      'detail': {'new': freshness.get('added', 0)}})
+            # said BEFORE the answer, once per new revision (PW-052/057): the owner reads that the thread moved
+            # and went through triage, then the assistant's read of it
+            notice = _notice_once(freshness)
+            if notice: put({'type': 'context_update', 'say': notice})
             if body.mode == 'open': out = concierge.open_day(store, actor=ACTOR, trace=trace, cancel=cancel)
             elif body.mode == 'next':
                 if reservation:
@@ -2563,8 +2582,7 @@ async def concierge_stream(body: ConciergeStreamBody):
                     out = concierge.surface(store, body.key, actor=ACTOR, only=body.only, trace=trace, cancel=cancel,
                                             include_surfaced=body.include_surfaced, exclude=body.exclude)
             else: out = concierge.say(store, body.text or '', body.key, actor=ACTOR, trace=trace, cancel=cancel)
-            if freshness.get('newer'):
-                out['context_update'] = _context_update_line(freshness)
+            if notice: out['context_update'] = notice
             put({'type': 'done', **out})
         except NavigationStale as error:
             put({'type': 'error', 'code': 'selection_stale', 'detail': error.detail, 'error': str(error)})
@@ -4185,6 +4203,56 @@ def _refresh_chat_context(task_id: int = None, message_id: int = None) -> dict:
             'added': int(added or 0), 'channel': channel}
 
 
+_NOTICED = {}      # funnel key -> the message-set revision the owner was last told about (PW-052: once per revision)
+
+
+def _refresh_items(items: list) -> dict:
+    """Refresh the sources behind these items - once per channel, not once per item (an FYI batch of
+    four Teams lines is one Teams read). Returns the merged freshness."""
+    out, done = {'polled': False, 'newer': False, 'added': 0}, set()
+    for it in items:
+        m = store.get_message(it.get('mid')) if it.get('mid') else None
+        ch = str((m or {}).get('Channel') or it.get('channel') or '').lower()
+        if not ch or ch in done: continue
+        done.add(ch)
+        f = _refresh_chat_context(it.get('tid'), it.get('mid'))
+        out['polled'] = out['polled'] or bool(f.get('polled')); out['newer'] = out['newer'] or bool(f.get('newer'))
+        out['added'] += int(f.get('added') or 0)
+    return out
+
+
+def _refresh_next_selection(body) -> dict:
+    """Next without a key (PW-050): pick what the walk would surface, refresh THAT item's source (every
+    channel of an FYI batch, once), and re-pick when the refresh moved the pile - so the assistant and
+    Current/Next speak about the same, current item. Rebuilding the pile from the database alone is not a
+    source refresh; this asks the provider."""
+    from . import funnel
+    item = funnel.next_item(store, None, body.only, body.include_surfaced, body.exclude)
+    if not item: return {'polled': False, 'newer': False, 'item': None}
+    members = funnel.fyi_batch(store, item) if item.get('lane') == 'fyi' else [item]
+    f = _refresh_items(members)
+    if f.get('newer'):
+        from . import funnel as _f
+        _f.invalidate()
+        item = funnel.next_item(store, None, body.only, body.include_surfaced, body.exclude) or item
+    f['item'] = item
+    f['after'] = _latest_context_message(item.get('tid'), item.get('mid'))
+    return f
+
+
+def _notice_once(freshness: dict) -> str | None:
+    """The context-update line, once per new revision of the item (PW-052/057): a poll or a re-render
+    that finds nothing new says nothing; the same new line is never announced twice."""
+    item = (freshness or {}).get('item') or {}
+    if not freshness or not freshness.get('newer') or not item.get('key'): return None
+    after = freshness.get('after') or {}
+    rev = f"{after.get('MessageId')}:{(store.get_review(item['rid']) or {}).get('Status') if item.get('rid') else ''}"
+    if _NOTICED.get(item['key']) == rev: return None
+    _NOTICED[item['key']] = rev
+    while len(_NOTICED) > 500: _NOTICED.pop(next(iter(_NOTICED)))
+    return _context_update_line(freshness)
+
+
 def _refresh_chat_key(key: str = None, seen_mid: int = None) -> dict:
     """Refresh the item held by the Assistant and compare it with what the browser saw."""
     if not key: return {}
@@ -4210,8 +4278,14 @@ def _context_update_line(freshness: dict) -> str:
     ref = item.get('ref') or item.get('title') or 'this thread'
     body = ' '.join(str(m.get('BodyText') or '').split())[:180]
     tail = f': “{body}”' if body else ''
-    draft = ' The earlier draft is now out of date; redraft it before sending.' if item.get('rid') else ''
-    return f'New message from {who} arrived on {ref}{tail}. I refreshed the context.{draft}'
+    rv = store.get_review(item['rid']) if item.get('rid') else None
+    # the owner answered outside Taskuary (PW-053): the draft was retired by the sync, so say that - not
+    # 'redraft it' - and leave any newer ask to triage, which already read it
+    if rv and rv.get('Status') == 'superseded':
+        return (f'You already answered {ref} outside Taskuary, so the pending draft was retired - nothing to send. '
+                'Anything asked since went through triage.')
+    draft = ' The earlier draft is now out of date; redraft it before sending.' if rv and rv.get('Status') == 'pending' else ''
+    return f'New message from {who} arrived on {ref}{tail}. I sent it through triage before continuing.{draft}'
 
 
 def poll_forever():

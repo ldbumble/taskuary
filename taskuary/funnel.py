@@ -390,7 +390,8 @@ def from_calendar(store, now: datetime) -> list:
     return out
 
 
-def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = frozenset()) -> list:
+def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = frozenset(),
+                   reconcile: bool = True) -> list:
     """The assistant's own open lines (assistant.py posts them on its half-hourly check: the ask that
     slipped, the promise, the thread gone quiet). They enter the pipe when SAID - LastSaid, not the
     age of the thread they are about - so a four-day-old silence raised this morning is this morning's."""
@@ -413,7 +414,8 @@ def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = froze
         from .assistant import sent_reply_for
         sent = sent_reply_for(store, {'action': a})
         if sent and _ts(sent.get('DecidedAt') or sent.get('CreatedAt')) >= _ts(i.get('LastSaid') or i.get('FirstSeen')):
-            store.set_idea_status(i['IdeaId'], 'done', 'funnel'); continue
+            if reconcile: store.set_idea_status(i['IdeaId'], 'done', 'funnel')
+            continue
         if a.get('mid') in used_mids or (a.get('tid') and a['tid'] in used_tids): continue
         lane = 'report' if a.get('section') == 'systems' else 'forgotten'
         m = (store.get_message(a['mid']) or {}) if a.get('mid') else {}
@@ -540,7 +542,8 @@ def working_tids(store) -> set:
     return out
 
 
-def build(store, now: datetime = None, keep_surfaced: bool = False) -> dict:
+def build(store, now: datetime = None, keep_surfaced: bool = False,
+          reconcile: bool = True) -> dict:
     now = now or datetime.now()
     rows = store.feed(limit=400, days=FEED_DAYS)
     items = from_feed(store, rows)
@@ -568,7 +571,7 @@ def build(store, now: datetime = None, keep_surfaced: bool = False) -> dict:
     used_mids = {i['mid'] for i in current if i.get('mid')}
     used_tids = {i['tid'] for i in current if i.get('tid')}
     used_cids = {i['cid'] for i in current if i.get('cid')}
-    items += from_forgotten(store, used_mids, used_tids, used_cids)
+    items += from_forgotten(store, used_mids, used_tids, used_cids, reconcile=reconcile)
     # Closed is authoritative. The final report remains on the task, but a task the owner or agent
     # has closed is no longer work to walk through and must never be reintroduced into the funnel.
     # an agent mid-job: nothing to do here yet, whatever the mail or the idea says about the task - so it
@@ -682,6 +685,14 @@ def present(store, payload: dict) -> dict:
     return _present(store, payload)
 
 
+def capture_selection(store, *, only: str = None, include_surfaced: bool = False,
+                      exclude: str = None, now: datetime = None):
+    """A side-effect-free automatic selection for HTTP optimistic concurrency."""
+    from .funnel_selection import capture_selection as capture
+    return capture(store, only=only, include_surfaced=include_surfaced,
+                   exclude=exclude, now=now)
+
+
 def _present_one(store, item: dict | None) -> dict | None:
     return present(store, {'items': [item]})['items'][0] if item is not None else None
 
@@ -751,6 +762,7 @@ def announce(store, actor: str = 'assistant') -> list:
             if e['kind'] in ('parked', 'asking'):
                 item = next((i for i in build(store, keep_surfaced=True)['items'] if i['key'] == f"agent:{e['tid']}"), None)
                 card = concierge.card_for(_present_one(store, item)) if item else None
+                if card: card['background_event'] = True
             concierge.record(store, concierge.general.dock_task(store)[0]['TaskId'], 'assistant', e['text'], card)
             e['card'] = card
         invalidate()

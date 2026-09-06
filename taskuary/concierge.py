@@ -20,6 +20,7 @@ multiple choice at the end of a line (OPTIONS: a | b | c) when a decision has cl
 no button covers it; the choice comes back as the owner's next words.
 """
 import json, re, threading
+from contextlib import nullcontext
 from datetime import datetime, timedelta
 from pathlib import Path
 from loguru import logger
@@ -1575,13 +1576,19 @@ def card_for(item: dict) -> dict:
 
 
 def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = None, trace=None, cancel=None,
-            include_surfaced: bool = False, exclude: str = None) -> dict:
+            include_surfaced: bool = False, exclude: str = None, selection=None, commit_guard=None) -> dict:
     """The next thing out of the pipe (or the one named; or the next piece of MAIL), said in one
     breath and marked as shown. Nothing left: says so."""
+    if selection is not None and key is not None:
+        raise ValueError('a captured automatic selection cannot name a different item')
     task, _ = general.dock_task(store, actor)
     tid = task['TaskId']
-    p = funnel.pile(store, force=True)
-    item = funnel.next_item(store, key, only, include_surfaced, exclude) or (funnel.item_for_key(store, key) if key else None)
+    p = selection.pile if selection is not None else funnel.pile(store, force=True)
+    item = selection.selected if selection is not None else (
+        funnel.next_item(store, key, only, include_surfaced, exclude)
+        or (funnel.item_for_key(store, key) if key else None)
+    )
+    guarded = (lambda: commit_guard()) if commit_guard is not None else (lambda: nullcontext())
     if not item:
         left = [i for i in p['items'] if not i.get('settling')]
         waiting = [i for i in left if i.get('surfaced') and i['lane'] != 'working']
@@ -1593,8 +1600,15 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         elif only and left:
             # the mail is done; what remains is the rest of the pipe - offer it rather than call the day over
             say = f"That's all the mail. {len(left)} other thing{'s' if len(left) != 1 else ''} still wait{'s' if len(left) == 1 else ''} - {funnel.summary(left).split(' - ', 1)[-1].split('.')[0]}. Say next and I'll take you through them."
+        elif selection is not None and any(selection.pending.values()):
+            pending = selection.pending
+            parts = ([f"{pending['working']} in progress"] if pending['working'] else [])
+            parts += ([f"{pending['settling']} still being triaged"] if pending['settling'] else [])
+            parts += ([f"{pending['scheduled']} scheduled for a little later"] if pending['scheduled'] else [])
+            say = "Nothing else needs you right now; " + ', '.join(parts) + '.'
         else: say = ALL_DONE
-        record(store, tid, 'assistant', say)
+        with guarded():
+            record(store, tid, 'assistant', say)
         return {'item': None, 'say': say, 'options': [], 'left': len(p['items']), 'exhausted': only if (only and left) else None}
     # an agent has this one now (it started after the pile was built, or the owner just sent it): there is
     # nothing for the owner to do until it stops, so say so, let it go, and take the next one. It comes
@@ -1603,14 +1617,15 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         # it stays in the pipe, at the top, in hand - and comes to the front by itself when the agent stops
         who = item.get('working') or next((t.get('agent') or t.get('label') for t in _live(store) if t.get('taskId') == item['tid']), None) or 'the agent'
         say = f"{item.get('ref') or item['title']} is with {who} right now - nothing for you until it stops or asks. I'll bring it down then."
-        record_related(store, tid, item, 'assistant', say + ('' if key else ' Moving on.'))
+        with guarded():
+            record_related(store, tid, item, 'assistant', say + ('' if key else ' Moving on.'))
         return surface(store, None, llm, actor, only, trace, cancel, include_surfaced, exclude) if not key else {'item': None, 'say': say, 'options': [], 'left': len(p['items'])}
     # FYIs have no action to take, so the normal walk brings four together. A row explicitly
     # clicked on the Timeline still opens by itself (`key` is set); only Next/Walk batches them.
     if not key and item['lane'] == 'fyi':
-        batch = funnel.fyi_batch(store, item)
+        batch = item.get('items') if selection is not None and item.get('kind') == 'fyis' else funnel.fyi_batch(store, item)
         llm = _brain_for(store, tid, llm, trace, cancel, fast=True) if (llm is not None or INTRO_AI) else None
-        say = ''
+        say, remember_llm = '', False
         if llm:
             try:
                 fx = '\n'.join(f"- {i.get('who') or '?'}: \"{i['title']}\" - {i.get('preview') or ''}" for i in batch)
@@ -1618,21 +1633,26 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
                         f"FYI - {len(batch)} thing{'s' if len(batch) != 1 else ''} people told the owner, nothing to do with any of them:\n{fx}\n\n"
                         "Sum them up in one or two sentences - who said what and the gist. No options line and no question is needed.")
                 say, _options = parse_options(str(llm(_system(store, llm), user, max_tokens=MAX_TOKENS) or '').strip())
-                _remember_sid(store, tid, llm)
+                remember_llm = True
             except Exception as e: logger.warning(f'concierge: the fyi pass failed - {e}')
         if not say:
             say = (f"{len(batch)} thing{'s' if len(batch) != 1 else ''} people told you, nothing to do: "
                    + '; '.join(f"{i.get('who') or 'someone'} - {i['title']}" for i in batch) + '.')
-        for i in batch: funnel.settle(store, i['key'], 'surfaced', actor)
         card = {'key': 'fyis:' + ','.join(i['key'] for i in batch), 'kind': 'fyis', 'lane': 'fyi',
                 'title': f"{len(batch)} fyi", 'who': '', 'when': batch[0].get('when'),
                 'since': batch[0].get('since'), 'channel': batch[0].get('channel'),
-                'why': 'people told you things; nothing to do', 'items': [card_for(i) for i in batch]}
-        record_related(store, tid, card, 'assistant', say, card)
+                'why': 'people told you things; nothing to do', 'items': [card_for(i) for i in batch],
+                'presentation_revision': item.get('presentation_revision')}
+        with guarded():
+            if remember_llm:
+                try: _remember_sid(store, tid, llm)
+                except Exception as e: logger.warning(f'concierge: the fyi conversation did not save - {e}')
+            for i in batch: funnel.settle(store, i['key'], 'surfaced', actor)
+            record_related(store, tid, card, 'assistant', say, card)
         return {'item': card, 'say': say, 'options': [], 'left': len(p['items']) - len(batch)}
 
     llm = _brain_for(store, tid, llm, trace, cancel, fast=True) if (llm is not None or INTRO_AI) else None   # the facts speak unless asked otherwise
-    say, options = '', []
+    say, options, remember_llm = '', [], False
     if llm:
         try:
             ask = ("A REPORT landed - one sentence: which report, when, and whether it failed (then name the cause from what they wrote). Do NOT summarize "
@@ -1644,11 +1664,15 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
                    + ('This is a REPLY waiting for the yes: beat 3 is whether to send THE DRAFT below. ' if item['kind'] in ('review', 'action') else '')
                    + ('The agent is parked and waiting: beat 3 is its question. ' if item['kind'] == 'agent' else ''))
             say, options = _ask(store, llm, tid, item, ask, p['items'])
-            _remember_sid(store, tid, llm)
+            remember_llm = True
         except Exception as e: logger.warning(f'concierge: the model pass failed - {e}')
     if not say: say = fallback(item, True)
-    funnel.settle(store, item['key'], 'surfaced', actor, note=item.get('sig'))
-    record_related(store, tid, item, 'assistant', say + (f"\nOPTIONS: {' | '.join(options)}" if options else ''), card_for(item))
+    with guarded():
+        if remember_llm:
+            try: _remember_sid(store, tid, llm)
+            except Exception as e: logger.warning(f'concierge: the model conversation did not save - {e}')
+        funnel.settle(store, item['key'], 'surfaced', actor, note=item.get('sig'))
+        record_related(store, tid, item, 'assistant', say + (f"\nOPTIONS: {' | '.join(options)}" if options else ''), card_for(item))
     return {'item': item, 'say': say, 'options': options, 'left': len(p['items']) - 1}
 
 

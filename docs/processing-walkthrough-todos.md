@@ -428,7 +428,7 @@ Owner-approved on 2026-09-05: expose the auto-start sender rules in Settings.
 Prior incoming mail is not trust evidence; prior sent mail is accepted evidence.
 Pending implementation only.
 
-- [ ] <a id="pw-079"></a>**PW-079** Remove `store.known_sender()` / "has written before" as an authorization
+- [x] <a id="pw-079"></a>**PW-079** Remove `store.known_sender()` / "has written before" as an authorization
   path in the auto-start sender gate. Multiple incoming messages, historical
   imports, and retries must not turn an untrusted sender into an authorized one.
   Keep unrelated sender-history uses distinct from auto-dispatch authorization.
@@ -436,10 +436,10 @@ Pending implementation only.
   wrote to the exact sender address as an accepted trust rule, configurable in
   Settings. Display the matched reason; a lookup failure is not proof of trust
   and should leave the task available for manual dispatch with an explanation.
-- [ ] <a id="pw-081"></a>**PW-081** Expose same-domain trust and non-email-channel trust behavior explicitly in
+- [x] <a id="pw-081"></a>**PW-081** Expose same-domain trust and non-email-channel trust behavior explicitly in
   Settings rather than hiding these assumptions in code. Define scope and defaults
   visibly; prior incoming mail must not reappear as an enabled trust option.
-- [ ] <a id="pw-082"></a>**PW-082** Apply the configured sender-trust contract consistently to coding and
+- [x] <a id="pw-082"></a>**PW-082** Apply the configured sender-trust contract consistently to coding and
   general auto-start, alongside their startup toggles and source restrictions.
   A hold affects unattended launch, not message intake, triage, or task visibility.
 - [ ] <a id="pw-083"></a>**PW-083** Add tests for prior incoming-only history remaining untrusted, verified sent

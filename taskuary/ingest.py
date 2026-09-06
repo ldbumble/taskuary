@@ -170,8 +170,8 @@ def auto_start_ok(store, msg: dict, mid: int, kind: str) -> tuple:
         if cfg.get('coder_auto_enabled') != '1': return False, 'auto-dispatch is off (Settings) - start the session from the task'
     else: return False, 'a person has to do this one - on your list for you'
     ok, why = senders.known(store, msg, exclude_mid=mid, deep=True)
-    return ok, why if ok else (f'{why} - not one of your domains, and this mailbox has never '
-                               'written to them; send it yourself if real')
+    if ok or not why.startswith('first message from'): return ok, why
+    return False, f'{why} - not one of your domains, and this mailbox has never written to them; send it yourself if real'
 
 
 # One drain at a time: a conversation's second line must find the task its first one opened.
@@ -724,6 +724,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                 ok, who = False, 'needs a repository choice - pick one on the task before an agent starts'
             else: ok, who = auto_start_ok(store, msg, mid, f['kind'])
             if ok:
+                # the trust rule that let it through is said on the task (PW-080), so 'why did an agent start on
+                # a stranger's mail' has an answer
+                store.add_comment(tid, 'router', 'agent', f'Unattended start allowed: {who}.')
                 _spawn(_auto_code if f['kind'] == 'coding' else _auto_general, store, tid)
                 if is_chat(msg): _spawn(_ack_chat, store, msg, mid, tid)   # they hear at once that somebody is on it
             else:

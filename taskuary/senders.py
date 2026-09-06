@@ -11,10 +11,12 @@ the Board; only the automatic session start waits for the owner's click.
 mailbox was connected, and someone the owner has written to weekly for three years would look
 like a stranger. So the deep check asks the mailbox itself - has the owner ever SENT this
 address anything (Sent Items, one search) - and it runs only for the rare message that reaches
-the auto-start decision, once per address: from then on the table knows them.
+the auto-start decision, once per address: a verified hit is remembered (sender_trust).
 
-Chat senders (Teams, Slack, ...) are already inside a workspace the owner controls; the gate
-is email only.
+The rules are the owner's to see and switch (Settings, PW-079..081): own domains, verified Sent
+Items evidence, and chat channels inside a workspace the owner controls. "Has written before" is
+NOT one of them - a stranger's own earlier mail, a historical import or a retry never turns them
+into someone the owner deals with.
 """
 import json
 from loguru import logger
@@ -33,31 +35,51 @@ def own_domains(store) -> set:
 
 
 def known(store, msg: dict, exclude_mid=None, deep: bool = False) -> tuple:
-    """(is_known, why). Cheap first - channel, own domain, our own table - and the mailbox
-    lookup only when asked (deep) and nothing cheaper answered."""
-    if (msg.get('channel') or '') != 'email': return True, 'not email'
+    """(may this sender start a worker unattended, why). Three rules, each a Settings switch (PW-079
+    to PW-081): a chat channel inside a workspace the owner controls; the owner's own domains; and
+    verified SENT evidence that THIS mailbox wrote to the exact address - what the store already
+    holds, a hit remembered from an earlier lookup, and (deep) the mail server's own Sent Items,
+    asked once per address. Prior incoming mail is never trust: a stranger's second message is a
+    stranger's message. A lookup that fails is not proof either way and is said as such."""
+    cfg = store.get_settings()
+    on = lambda k: cfg.get(k, '1') == '1'
+    if (msg.get('channel') or '') != 'email':
+        return (True, 'a chat inside a workspace you control') if on('trust_non_email') else \
+               (False, 'a chat sender - chat channels are not trusted for unattended starts (Settings)')
     addr = (msg.get('from_email') or '').strip().lower()
     if not addr or '@' not in addr: return False, 'no sender address'
-    if _domain(addr) in own_domains(store): return True, 'your own domain'
-    if store.known_sender(addr, exclude_mid): return True, 'has written before'
-    if deep and wrote_to(store, msg.get('source_name'), addr): return True, 'in your Sent Items'
+    if _domain(addr) in own_domains(store):
+        return (True, 'your own domain') if on('trust_own_domain') else \
+               (False, f'{addr} is on your own domain, and own-domain trust is switched off (Settings)')
+    if not on('trust_sent_history'): return False, f'first message from {addr} - Sent Items evidence is switched off (Settings)'
+    mailbox = (msg.get('source_name') or '').strip().lower()
+    if store.trusted_sender(mailbox, addr): return True, 'in your Sent Items'
+    if store.wrote_to_locally(mailbox, addr, exclude_mid): return True, 'you have written to them'
+    if deep:
+        try: hit = wrote_to(store, mailbox, addr)
+        except Exception as e:
+            logger.warning(f'could not check Sent Items of {mailbox} for {addr}: {e}')
+            return False, (f'could not check the Sent Items of {mailbox or "this mailbox"} ({str(e)[:120]}) - '
+                           'not proof either way; send it yourself if real')
+        if hit:
+            store.remember_trust(mailbox, addr, 'in your Sent Items')
+            return True, 'in your Sent Items'
     return False, f'first message from {addr}'
 
 
 def wrote_to(store, mailbox: str, addr: str) -> bool:
-    """Has THIS mailbox ever sent addr anything? Asked of the mail server that holds the
-    history Taskuary does not. Any failure is 'no' - an agent not starting is recoverable."""
+    """Has THIS mailbox ever sent addr anything? Asked of the mail server that holds the history
+    Taskuary does not. True/False is an answer; a failure RAISES, because 'could not check' is not
+    'no' (PW-080) - the caller says so and leaves the task for a manual start."""
     if not (mailbox and addr): return False
     src = next((s for s in store.list_sources(active_only=False)
                 if s.get('Channel') == 'email' and (s.get('Address') or '').lower() == mailbox.lower()), None)
     c = store.get_connector(src['ConnectorId'], with_secret=True) if src and src.get('ConnectorId') else None
+    # no connection to ask is absence of evidence, not a failed lookup: the sender is simply a stranger here
     if not c: return False
-    try:
-        if c['Type'] == 'outlook': return _graph_wrote_to(c, mailbox, addr)
-        if c['Type'] in ('gmail', 'imap'): return _imap_wrote_to(c, addr)
-    except Exception as e:
-        logger.warning(f'could not check Sent Items of {mailbox} for {addr}: {e}')
-    return False
+    if c['Type'] == 'outlook': return _graph_wrote_to(c, mailbox, addr)
+    if c['Type'] in ('gmail', 'imap'): return _imap_wrote_to(c, addr)
+    raise RuntimeError(f"{c['Type']} has no Sent Items lookup")
 
 
 def _graph_wrote_to(c, mailbox, addr) -> bool:

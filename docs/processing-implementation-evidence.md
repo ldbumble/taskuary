@@ -1446,8 +1446,10 @@ Before this candidate could be pushed, origin advanced again to `04fed7c`
 
 Status: implemented and tested locally at `d2e11e5`; remote CI pending on the pushed
 checkpoint. Section 4.1 is CI-verified (1461a13, CI run 34048121206 (all ten jobs passed)).
-Acceptance PW-069, PW-070, PW-071, PW-072 implemented; PW-073 partial (concurrent ingest/retriage is
-covered only indirectly through the drain-lock tests).
+Acceptance PW-069, PW-070, PW-071, PW-072 implemented; PW-073 partial. In addition to
+concurrent ingest/retriage being covered only indirectly through the drain-lock tests,
+an explicitly queued general launch that fails can clear its queue entry and record
+`Started`. Truthful queued failure/retry behavior therefore remains unaccepted.
 
 Only coding self-dispatched; a `general` task landed on the Board and waited for a click. Now
 `ingest.auto_start_ok` is one gate for both kinds - the kind first (a personal `task` starts
@@ -1475,3 +1477,62 @@ Tests: `tests/test_auto_start.py` (16 cases). `tests/test_kind_dispatch.py` and 
 "general opens no session" to the PW-069 contract with the reason noted; `tests/conftest.py` guards
 the router's unattended assistant start the way it guards a PTY, so a suite never opens a real
 assistant session unless the test supplies a fake.
+
+### Section 5.1 integration corrections
+
+Integration review found that the one-time opt-out upgrade ran after WhatsApp bridge
+startup and startup catch-up. An older owner choice of `coder_auto_enabled=0` could
+therefore be observed temporarily as the newly defaulted `general_auto_enabled=1` and
+admit unattended general work. The repaired lifespan runs `upgrade_auto_start` before
+drain admission, bridge startup, catch-up and poll threads on every non-demo start; an
+upgrade failure propagates before any of those boundaries open. Two real-SQLite lifecycle
+tests close and reopen the legacy database, exercise the constructor-seeded new setting,
+and prove both the corrected ordering and fail-closed startup. All connector, worker and
+native-session boundaries in those tests are mocked.
+
+The earlier `test_core.py` general-routing assertion had briefly been reduced to the
+absence of a coding route. The integration restores a positive deterministic oracle:
+with no assistant provider configured, no worker is spawned and the route must say so.
+The focused startup/core group passed 94 tests, including the two new lifecycle cases.
+The acceptance JSON was also aligned with the established Markdown status/evidence cells
+for PW-001 through PW-008, PW-104, PW-107, PW-110 through PW-112, PW-114, PW-115 and
+PW-118; its two ledger checks passed. Combined cumulative integration gates remain pending.
+
+## Section 5.2 — configurable sender trust for unattended starts
+
+Status: implemented and tested locally at `6c560b9`; remote CI pending on the pushed
+checkpoint. Section 5.1 is CI-verified (d2e11e5, CI run 34048763594 (all ten jobs passed)).
+Acceptance PW-079, PW-081 and PW-082 implemented. PW-080 is partial pending the
+bounded mailbox-scope repair described below. PW-083 remains partial because the live
+Graph/IMAP Sent Items queries are exercised only through the existing fakes.
+
+The stranger gate had a hidden fourth door: "has written before" (`store.known_sender`), so a
+stranger's own earlier mail, a historical import or a retry could make the next message
+'known'. `senders.known` is now three rules the owner can see and switch in Settings, and nothing
+else: chat channels inside a workspace the owner controls (`trust_non_email`), the owner's own
+domains (`trust_own_domain`), and verified SENT evidence that the receiving mailbox wrote to the
+exact address (`trust_sent_history`) - what the store already holds scoped to that mailbox
+(`store.wrote_to_locally`: the mailbox's own words on a thread with the address, or an approved
+reply to them), a hit remembered from an earlier lookup (new `sender_trust` table, per mailbox and
+address, so the mail server is asked once), and the server's own Sent Items (`senders.wrote_to`).
+`wrote_to` now RAISES on a failure instead of answering no, and `known` reports it as "could not
+check the Sent Items of <mailbox> (...) - not proof either way": the task waits for a manual start
+with that explanation, is not tagged as a stranger hold, and the negative is not remembered.
+The matched rule is written on the task when a start is allowed ("Unattended start allowed: in
+your Sent Items"). `store.known_sender` remains for the first-time-sender policy question only.
+Settings shows the three switches; packaged UI rebuilt. The same gate sits behind both worker
+kinds through `ingest.auto_start_ok` (Section 5.1).
+
+Tests: `tests/test_sender_trust.py` (11 cases). `tests/test_core.py`'s stranger walk still passes: the owner's own words on
+the stranger's thread are verified sent evidence for that mailbox.
+
+Independent review found one receiving-mailbox boundary missing from local evidence.
+The approved/edited/sent review branch has no receiving-mailbox constraint. The
+conversation branch constrains the owner's address but does not constrain both messages
+by channel/source, so the same bare `ConversationId` can bridge accounts. An AST-backed
+SQLite reproduction showed approved review evidence belonging only to mailbox A authorizing
+the same sender arriving in mailbox B without a connector lookup. This behavior also existed
+in the older `known_sender` path; copying it into `wrote_to_locally` did not satisfy PW-080's
+stricter receiving-mailbox contract. The bounded scoped repair and regression are in progress;
+PW-080 stays unchecked and partial until that review completes. Combined cumulative gates
+remain pending.

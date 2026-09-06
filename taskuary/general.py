@@ -317,6 +317,11 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         + (f'{layer}\n\n{TEACH_ME}\n\n' if layer else f'{TEACH_ME}\n\n')
         + f"OPERATOR RULES\n{_cut(soul, 4_000)}\n\nASSISTANT STYLE\n{_cut(counsel, 3_000)}"
     )
+    # the procedure triage selected for this job rides here exactly as it rides in a coding brief
+    # (playbooks.seed_block) - one task-brief structure for either worker kind (PW-206)
+    from . import playbooks as _pbk
+    pbk = _pbk.seed_block(task)
+    if pbk: system += '\n\nPROCEDURE FOR THIS JOB\n' + _cut(pbk, 3_000)
     if dock:
         system += (
             "\n\nHOVERING GUIDE\nThis conversation is the owner's always-available Taskuary guide. "

@@ -1129,7 +1129,7 @@ procedures (for example PTO handling) are a separate concept. Pending implementa
   rediscover its intent or select its procedure; do not force a coding agent.
   Automatic dispatch remains subject to approved capacity and startup-retry
   handling, and does not bypass configured write permissions or approval gates.
-- [ ] <a id="pw-205"></a>**PW-205** Keep incoming-request procedure matching in unified triage (for example,
+- [x] <a id="pw-205"></a>**PW-205** Keep incoming-request procedure matching in unified triage (for example,
   recognizing a PTO request and attaching its saved handling instructions).
   Selecting a procedure must not itself classify the task as coding. Remove the
   current playbook-match override that assigns kind='coding'.

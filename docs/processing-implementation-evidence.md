@@ -1612,3 +1612,27 @@ accepts `source: writing` so a writing instruction can be saved by hand.
 Tests: `tests/test_reply_sources.py` (7 cases); in the pre-existing `tests/test_reply_voice.py` (first-person voice) the standing-notes
 case moved to the PW-060 contract - a writing instruction rides, a triage verdict does not - with the reason noted. `tests/test_docs_flow.py`: the reply-path audit now expects the STYLE marker and a writing-note
 marker and forbids the LEARNED marker and the triage-verdict note, per PW-058/060. No frontend change.
+
+## Section 7.2 — email replies: a reviewed recipient envelope and the owner's signature, once
+
+Status: implemented and tested locally at `88f2c1b`; remote CI pending on the pushed
+checkpoint. Section 7.1 is CI-verified (691f566/2e92e2f, CI run 34054198417 (all ten jobs passed)).
+Acceptance PW-064, PW-065 implemented; PW-063, PW-066 partial (the Review page's To/mode controls
+are a Phase 8 surface; the connectors are exercised through the shared to/cc contract).
+
+A reply went to the sender alone, with a CC the owner could add at the last click, and the
+signature was whatever the model chose to write. `outbound.reply_envelope` builds the recipients an
+email reply goes to - Reply all by default: the sender or the message's Reply-To, the original To and
+CC participants, the sending mailbox's and the owner's own addresses excluded, deduplicated
+case-insensitively, never a BCC - or Reply to, the sender alone; a chat has no envelope.
+`responder.draft_for_review` and `draft_for_message` pin it to the review when the draft is written
+(`store.set_review_envelope`, in `Deliver` as `kind: reply`, never overwriting an outbound review's
+own delivery), and `verdicts.decide` sends exactly that envelope (`reply_to_message(to=, cc=)`),
+with a CC list named on the click taking precedence; a reply envelope is not an outbound send.
+`PUT /api/reviews/{id}/envelope` switches Reply all/Reply to and edits To/CC. The owner's signature
+(`responder.signature_for`: the `email_signature` setting, else STYLE.md's `Sign off:` line, quoted
+multi-line allowed) is applied once by `with_signature` when an email draft is written, redrafted or
+saved by hand (`PATCH /api/reviews/{id}`) - visible before approval, never at send time, never on
+chat, never twice, and an owner's own signed text is kept as written.
+
+Tests: `tests/test_reply_envelope.py` (9 cases). No frontend change.

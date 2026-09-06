@@ -350,10 +350,10 @@ Reply to, default to Reply all, and apply the owner's email signature.
   and editable To/CC. Resolve the original Reply-To when present, preserve relevant
   original To/CC participants for Reply all, exclude the sending account's own
   addresses, deduplicate recipients, and never infer or expose hidden BCCs.
-- [ ] <a id="pw-064"></a>**PW-064** Persist and display the selected recipient envelope with the draft so
+- [x] <a id="pw-064"></a>**PW-064** Persist and display the selected recipient envelope with the draft so
   approval sends exactly the recipients the owner reviewed. Keep behavior
   consistent across email connectors and task/Review/assistant draft surfaces.
-- [ ] <a id="pw-065"></a>**PW-065** Apply the appropriate owner's email signature once in the draft, visible
+- [x] <a id="pw-065"></a>**PW-065** Apply the appropriate owner's email signature once in the draft, visible
   before approval, including manual drafts and redrafts. Current automatic drafts
   merely instruct the model to use STYLE.md's signature (SOUL.md sign-off fallback);
   send functions do not independently apply one. Do not rely solely on model

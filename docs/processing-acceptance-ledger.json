@@ -522,7 +522,7 @@
       "requirement": "Remove general `LEARNED.md` prompt injection from reply drafting and",
       "status": "implemented",
       "test": "`tests/test_reply_sources.py`::VoiceTests (no LEARNED.md in a task draft, its redraft, a message-only draft or a new outbound message; LEARNED.md still reaches triage - `tests/test_docs_flow.py`)",
-      "commit": "691f566; local gates passed, CI pending"
+      "commit": "691f566; 691f566/2e92e2f, CI run 34054198417 (all ten jobs passed)"
     },
     {
       "id": "PW-059",
@@ -531,7 +531,7 @@
       "requirement": "Build replies using STYLE.md for voice, phrasing, greetings, and signatures;",
       "status": "implemented",
       "test": "`tests/test_reply_sources.py`::VoiceTests (STYLE.md voice and signature, SOUL identity, the refreshed conversation and the verified result are what a reply is written from)",
-      "commit": "691f566; local gates passed, CI pending"
+      "commit": "691f566; 691f566/2e92e2f, CI run 34054198417 (all ten jobs passed)"
     },
     {
       "id": "PW-060",
@@ -540,7 +540,7 @@
       "requirement": "Restrict separately retrieved standing memory notes to explicit,",
       "status": "implemented",
       "test": "`tests/test_reply_sources.py` (separately retrieved notes are only explicit writing instructions - memory source `writing`; triage verdicts never ride into a draft)",
-      "commit": "691f566; local gates passed, CI pending"
+      "commit": "691f566; 691f566/2e92e2f, CI run 34054198417 (all ten jobs passed)"
     },
     {
       "id": "PW-061",
@@ -549,7 +549,7 @@
       "requirement": "Route explicit writing-style feedback to STYLE.md rather than general",
       "status": "implemented",
       "test": "`tests/test_reply_sources.py`::FeedbackRoutingTests (an edited draft's note becomes an Owner notes line in STYLE.md outside the generated block; a rejection's note stays triage feedback for LEARNED.md; a writing note can be saved by hand)",
-      "commit": "691f566; local gates passed, CI pending"
+      "commit": "691f566; 691f566/2e92e2f, CI run 34054198417 (all ten jobs passed)"
     },
     {
       "id": "PW-062",
@@ -558,43 +558,43 @@
       "requirement": "Add model-payload tests for initial drafts, redrafts, and message-only",
       "status": "partial: model-payload tests for initial drafts, redrafts, message-only drafts and outbound messages, plus feedback routing, are in place; a reply's voice after a writing-feedback change is covered through STYLE.md's owner notes rather than a before/after payload diff",
       "test": "`tests/test_reply_sources.py` (7 cases); `tests/test_docs_flow.py` reply audit moved to the PW-058 contract",
-      "commit": "691f566; local gates passed, CI pending"
+      "commit": "691f566; 691f566/2e92e2f, CI run 34054198417 (all ten jobs passed)"
     },
     {
       "id": "PW-063",
       "section": "Email reply recipients and signatures",
       "phase": "7",
       "requirement": "Default email drafts to Reply all; offer Reply to (sender/reply address)",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: Reply all is the default envelope (sender or Reply-To, original To/CC, the mailbox's own addresses excluded, deduplicated, no BCC), Reply to is one call away and To/CC are editable through `PUT /api/reviews/{id}/envelope`; the Review page still shows only the CC row - the To/mode controls are a Phase 8 surface",
+      "test": "`tests/test_reply_envelope.py`::EnvelopeTests, ::PinnedAndSentTests",
+      "commit": "88f2c1b; local gates passed, CI pending"
     },
     {
       "id": "PW-064",
       "section": "Email reply recipients and signatures",
       "phase": "7",
       "requirement": "Persist and display the selected recipient envelope with the draft so",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_reply_envelope.py`::PinnedAndSentTests (the envelope is pinned to the draft when it is written and approval sends exactly the reviewed To/CC; an edited envelope is what goes out; the approved text leaves as reviewed)",
+      "commit": "88f2c1b; local gates passed, CI pending"
     },
     {
       "id": "PW-065",
       "section": "Email reply recipients and signatures",
       "phase": "7",
       "requirement": "Apply the appropriate owner's email signature once in the draft, visible",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_reply_envelope.py`::SignatureTests (the signature from STYLE.md or the `email_signature` setting is applied once when a draft, a redraft or a manual draft is written - visible before approval, never at send time, never on chat, never twice)",
+      "commit": "88f2c1b; local gates passed, CI pending"
     },
     {
       "id": "PW-066",
       "section": "Email reply recipients and signatures",
       "phase": "7",
       "requirement": "Test default Reply all, Reply to selection, Reply-To headers, editable To/CC,",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: default Reply all, Reply to, Reply-To headers, editable To/CC, owner exclusion, deduplication, the exact approved envelope and signature-once across drafts/redrafts/manual drafts are covered; the IMAP and Graph send fakes are exercised through `reply_to_message`'s to/cc contract rather than each connector",
+      "test": "`tests/test_reply_envelope.py` (9 cases)",
+      "commit": "88f2c1b; local gates passed, CI pending"
     },
     {
       "id": "PW-067",

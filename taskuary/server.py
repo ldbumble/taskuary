@@ -73,6 +73,10 @@ async def _lifespan(_app):
         from .general import retire_dock
         if retire_dock(store, ACTOR) is not None: _f.reset_walk(store)
     except Exception as e: logger.warning(f'assistant dock retire failed: {e}')
+    try:                           # archived chats past their keep-days go on the app's own clock (PW-158), never on a history read
+        from . import retention
+        retention.tick(store)
+    except Exception as e: logger.warning(f'chat retention skipped: {e}')
     _heal_owner_docs()
     _refresh_soul_connections()
     learn.note_verdicts(store)     # the evidence block in LEARNED.md tracks the verdict table
@@ -2597,9 +2601,13 @@ def funnel_unmute(idx: int):
     return {'ok': True, 'data': rules}
 
 @app.get('/api/concierge/chats')
-def concierge_chats():
+def concierge_chats(limit: int = 25, before: int = None):
+    """Past chats, newest first, a page at a time; `next` is the cursor for the page before this one. Reading
+    the list writes nothing (PW-157)."""
     from . import concierge
-    return {'data': concierge.chats(store, ACTOR)}
+    limit = max(1, min(int(limit or 25), 100))
+    rows = concierge.chats(store, ACTOR, limit=limit, before=before)
+    return {'data': rows, 'next': rows[-1]['taskId'] if len(rows) >= limit else None}
 
 @app.get('/api/concierge/chats/{tid}')
 def concierge_chat(tid: int):
@@ -4610,6 +4618,11 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
             blackboard.roll_daily(target_store)
         except Exception as e:
             logger.warning(f'the wall roll-up failed: {e}')
+        try:                                            # ...and archived chats past their keep-days go, once a day (retention.py)
+            from . import retention
+            retention.tick(target_store)
+        except Exception as e:
+            logger.warning(f'chat retention skipped: {e}')
         run_due_reports(target_store, startup)          # ...the seeded 'Assistant' report among them (assistant.py)
         return added
     finally:

@@ -336,6 +336,7 @@ PROCESSING_DIRTY_SETTINGS = (
 # and a session is one you watch - so ON is a safe default and OFF was just a slower start.
 DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attach_threshold': '0.42',
                     'feed_days': '14', 'intent_classify_enabled': '1', 'coder_auto_enabled': '1',
+                    'chat_keep_days': '15',        # archived assistant chats expire after this many days (retention.py, PW-158)
                     'general_auto_enabled': '1',    # general tasks open their assistant session by themselves (PW-069)
                     # who may start a worker UNATTENDED (senders.known, PW-079..081): the owner's own domains, verified
                     # Sent Items evidence that the receiving mailbox wrote to the exact address, chat channels inside a
@@ -2252,8 +2253,10 @@ class SQLiteStore:
             except BaseException:
                 self.cx.rollback(); raise
 
-    def dock_tasks(self, tag, limit=60):
-        """Every conversation the guide has had, newest first - the chats list."""
+    def dock_tasks(self, tag, limit=60, before=None):
+        """Every conversation the guide has had, newest first - the chats list, a page at a time (`before` is
+        the last task id of the previous page)."""
+        if before: return self._rows('SELECT * FROM task WHERE SourceRef=? AND TaskId<? ORDER BY TaskId DESC LIMIT ?', (tag, int(before), int(limit)))
         return self._rows('SELECT * FROM task WHERE SourceRef=? ORDER BY TaskId DESC LIMIT ?', (tag, int(limit)))
     # ── a report's run history (reports.run_report_source; the Reports tab's History) ────────
     REPORT_RUNS_KEPT = 60          # per report - a month of half-hourly assistant checks is 1400, and nobody reads past the last few dozen

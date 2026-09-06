@@ -683,9 +683,18 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (!a.local) api.post("/api/funnel/settle", { key: a.key, verb: "ack" }).catch(() => {});
     if (go) surface(a.item, `Open — ${a.text}`);
   };
+  // past chats are read, a page at a time (PW-157): listing them changes nothing on the server
+  const [chatsNext, setChatsNext] = useState(null);
   const openChats = async () => {
     setChatsOpen(true); setChatsLoading(true);
-    try { setChats((await api.get("/api/concierge/chats", { timeout: 10000 })).data.data || []); }
+    try { const { data } = await api.get("/api/concierge/chats", { params: { limit: 25 }, timeout: 10000 }); setChats(data.data || []); setChatsNext(data.next || null); }
+    catch (e) { setErr(errText(e)); }
+    setChatsLoading(false);
+  };
+  const moreChats = async () => {
+    if (!chatsNext) return;
+    setChatsLoading(true);
+    try { const { data } = await api.get("/api/concierge/chats", { params: { limit: 25, before: chatsNext }, timeout: 10000 }); setChats((c) => [...c, ...(data.data || [])]); setChatsNext(data.next || null); }
     catch (e) { setErr(errText(e)); }
     setChatsLoading(false);
   };
@@ -806,6 +815,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                 <span>{[c.mail ? `${c.mail} mail` : "", c.seen ? `${c.seen} looked at` : "", c.minutes ? `${c.minutes} min` : "", ageText(c.at)].filter(Boolean).join(" · ")}</span>
               </div>
             ))}
+            {chatsNext && !chatsLoading && <button type="button" className="tq-chip" style={{ margin: 8 }} onClick={moreChats}>Earlier chats</button>}
           </div>
         </div>
       )}

@@ -709,25 +709,20 @@ def history(store, tid: int) -> list:
     return out
 
 
-CHATS_KEPT_DAYS = 20          # a transcript older than this is nobody's memory - the list stays readable
-
-def chats(store, actor: str = 'owner') -> list:
+def chats(store, actor: str = 'owner', limit: int = 25, before: int = None) -> list:
     """Every conversation the guide has had, newest first: what it was about, when it ran, how long it
     lasted, how much of the pipe it got through, and which is open.
 
     A walk with nothing typed into it used to read "Walkthrough · 2026-09-03" three times over, with
     nothing to tell them apart (the owner, 2026-09-03: "Past chats don't really make sense... we need
     to add time to it, and how many emails processed so you can see past transacript"). So an untyped
-    walk is named by its clock and counted by the items it actually put on the table, and anything
-    past CHATS_KEPT_DAYS is dropped on the way past."""
-    cut = (datetime.now() - timedelta(days=CHATS_KEPT_DAYS)).strftime('%Y-%m-%d %H:%M:%S')
+    walk is named by its clock and counted by the items it actually put on the table. A page at a time,
+    and READ-ONLY (PW-157): what expires is retention's job on its own clock (retention.py), never a side
+    effect of looking at the list."""
     out = []
-    for t in store.dock_tasks(general.DOCK_TAG):
+    for t in store.dock_tasks(general.DOCK_TAG, limit=limit, before=before):
         rows = general.chat_rows(store, t['TaskId'])
         last = str((rows[-1]['CreatedAt'] if rows else t.get('CreatedAt')) or '')
-        if last and last < cut:
-            store.update_task(t['TaskId'], {'Status': 'dropped'}, actor)      # off the list; the task itself is history
-            continue
         first = next((c for c in rows if c.get('ActorType') == general.USER_TYPE), None)
         started = str(rows[0]['CreatedAt'] if rows else t.get('CreatedAt') or '')
         # what it got THROUGH: every card the assistant put on the table, mail counted apart

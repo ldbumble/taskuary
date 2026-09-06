@@ -399,12 +399,13 @@ class LanesTests(unittest.TestCase):
         with mock.patch('taskuary.terminal.live_sessions', return_value=working):
             ev = funnel.announce(s)
         self.assertEqual([(e['kind'], e['tid']) for e in ev], [('working', t)])
-        self.assertIn("codex is working on TQ-0001 (Pto) - nothing for you there now. Let's go to the next thing.", ev[0]['text'])
+        self.assertIn("codex is working on TQ-0001 (Pto) - nothing for you there now.", ev[0]['text'])
+        self.assertNotIn('next thing', ev[0]['text'])                                    # a worker starting is not a nudge to advance (PW-168)
         with mock.patch('taskuary.terminal.live_sessions', return_value=working):
             self.assertEqual(funnel.announce(s), [])                                  # said once
         with mock.patch('taskuary.terminal.live_sessions', return_value=parked):
             ev = funnel.announce(s)
-        self.assertEqual(ev[0]['kind'], 'asking'); self.assertIn('asked you something on TQ-0001', ev[0]['text']); self.assertEqual(ev[0]['card']['kind'], 'agent')
+        self.assertEqual(ev[0]['kind'], 'asking'); self.assertIn('asked you something on TQ-0001', ev[0]['text']); self.assertIsNone(ev[0]['card'])
         s.add_comment(t, 'codex', 'agent', 'CODER REPORT' + chr(10) + 'Summary: imported all 80 PTO files; results mailed.')
         s.update_task(t, {'Status': 'done'}, 'o')
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
@@ -412,9 +413,9 @@ class LanesTests(unittest.TestCase):
             self.assertEqual(ev[0]['kind'], 'done'); self.assertIn('imported all 80 PTO files', ev[0]['text']); self.assertIn('task is closed', ev[0]['text'])
             self.assertIsNone(ev[0]['card'])
             self.assertEqual(funnel.announce(s), [])                                  # a closed task is not watched again
-        # Status lines remain in the transcript, but a closed task never leaves a live card behind.
-        hist = concierge.history(s, general.dock_task(s)[0]['TaskId'])
-        self.assertEqual([(h['role'], (h['card'] or {}).get('kind')) for h in hist], [('assistant', None), ('assistant', 'agent'), ('assistant', None)])
+        # The watcher writes nothing into the chat (PW-165): its word is a notice on the strip, kept until Open or Later
+        self.assertEqual(concierge.history(s, general.dock_task(s)[0]['TaskId']), [])
+        self.assertEqual([(a['kind'], a['item']) for a in funnel.notices(s)], [('done', f'task:{t}')])
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             self.assertIn('events', funnel.pile(s, force=True))
 

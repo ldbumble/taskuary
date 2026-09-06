@@ -241,8 +241,12 @@ const attentionBand = (item) => {
   if (item?.kind === "meeting" && (item.calendar_ready === false || item.mins > 15)) return 3;
   return BAND[item?.lane] ?? 3;
 };
-export const topAlert = (alerts, acked, current = null, shown = null) => {
+// The strip's queue (PW-165/166): a NOTICE (the watcher's word about an agent, a newer message on Current) is
+// always pending until Open or Later, whatever is on the table; an alert the pile derives from its own rows
+// shows only while it outranks the table and is not the very card in front of the owner.
+export const pendingAlerts = (alerts, acked, current = null, shown = null) => {
   const band = current ? attentionBand(current) : 5;
-  return (alerts || []).find((a) => !acked.has(a.key) && a.item !== current?.key && !shown?.has(a.item)
-    && attentionBand(a) < band) || null;
+  return (alerts || []).filter((a) => !acked.has(a.key)
+    && (a.notice || (a.item !== current?.key && !shown?.has(a.item) && attentionBand(a) < band)));
 };
+export const topAlert = (alerts, acked, current = null, shown = null) => pendingAlerts(alerts, acked, current, shown)[0] || null;

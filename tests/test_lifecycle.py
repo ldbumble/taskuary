@@ -99,13 +99,14 @@ class LifecycleTests(unittest.TestCase):
         self.assertTrue(done['ok']); self.assertEqual(s.get_task(t)['Status'], 'done')
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             p = funnel.pile(s, force=True)
-            self.assertEqual([e['kind'] for e in p['events']], ['done'])        # the watcher offers the report, on the table
+            self.assertEqual([e['kind'] for e in p['events']], ['done'])        # the watcher's word: a strip notice, not a chat line (PW-165)
+            self.assertEqual([a['kind'] for a in p['alerts'] if a.get('notice')], ['done'])
             self.assertEqual(p['items'], [])
             out = concierge.surface(s)
         self.assertIsNone(out['item']); self.assertEqual(out['say'], concierge.ALL_DONE)
         # 9. the whole conversation reads as the day it was
         roles = self.chat()
-        self.assertEqual([c for _, _, c in roles if c], ['brief', 'todo', 'proposal', 'agent', 'agent', 'review'])   # closed is a status line, never a live card
+        self.assertEqual([c for _, _, c in roles if c], ['brief', 'todo', 'proposal', 'agent', 'review'])   # the watcher wrote no card of its own
         self.assertEqual([r for r, _, _ in roles].count('user'), 1)
 
     def test_first_agent_started_after_a_quiet_watch_is_announced_and_carries_its_session(self):

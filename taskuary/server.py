@@ -2001,6 +2001,7 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
     if not rv: raise HTTPException(404, 'review not found')
     from .verdicts import VERB2STATUS, decide as land
     if body.verb not in VERB2STATUS: raise HTTPException(422, 'bad verb')
+    if body.verb == 'close_unsent' and rv.get('Kind') == 'action': raise HTTPException(422, 'a proposal is rejected, not closed without sending')
     if body.verb in ('approve', 'edit') and rv.get('Kind') != 'action':
         try: _refresh_chat_context(task_id=rv.get('TaskId'), message_id=rv.get('MessageId'))
         except RuntimeError as e: raise HTTPException(503, str(e))
@@ -2820,14 +2821,43 @@ def draft_review(rid: int):
     store.audit('review', rid, 'redraft', ACTOR)
     return {'ok': True, 'draft': draft}
 
+class EnvelopeBody(BaseModel): mode: str | None = None; to: list[str] | None = None; cc: list[str] | None = None
+
+@app.put('/api/reviews/{rid}/envelope')
+def set_review_envelope(rid: int, body: EnvelopeBody):
+    """Reply all / Reply to, and editable To/CC, kept with the draft so approval sends exactly this (PW-063/064)."""
+    rv = store.get_review(rid)
+    if not rv: raise HTTPException(404, 'review not found')
+    if rv.get('Status') not in ('pending', 'held'): raise HTTPException(409, 'this reply has already been decided')
+    m = store.get_message(rv.get('MessageId')) if rv.get('MessageId') else None
+    if not m or str(m.get('Channel') or '').lower() != 'email': raise HTTPException(422, 'only an email reply has a recipient envelope')
+    env = store.review_envelope(rid) or outbound.reply_envelope(store, m) or {}
+    if body.mode: env = outbound.reply_envelope(store, m, mode=body.mode) or env
+    def clean(seq):
+        out = []
+        for a in seq or []:
+            a = str(a or '').strip().lower()
+            if a and '@' in a and a not in out: out.append(a)
+        return out
+    if body.to is not None: env['to'] = clean(body.to)
+    if body.cc is not None: env['cc'] = [a for a in clean(body.cc) if a not in env.get('to', [])]
+    if not env.get('to'): raise HTTPException(422, 'a reply needs at least one recipient')
+    store.set_review_envelope(rid, env)
+    store.audit('review', rid, 'envelope', ACTOR, detail={'mode': env.get('mode'), 'to': env.get('to'), 'cc': env.get('cc')})
+    return env
+
 @app.patch('/api/reviews/{rid}')
 def save_review_text(rid: int, body: TextBody):
-    """Save what is in the reply box without deciding or sending it."""
+    """Save what is in the reply box without deciding or sending it - with the owner's signature applied once
+    on an email draft (PW-065); an edit that already carries it is kept as written."""
     rv = store.get_review(rid)
     if not rv: raise HTTPException(404, 'review not found')
     if rv.get('Status') not in ('pending', 'held'):
         raise HTTPException(409, 'this reply has already been decided')
     text = str(body.body or '')[:50_000]
+    m = store.get_message(rv.get('MessageId')) if rv.get('MessageId') else None
+    if m and str(m.get('Channel') or '').lower() == 'email' and text.strip():
+        text = responder.with_signature(text, responder.signature_for(store))
     store.save_review_draft(rid, text)
     store.audit('review', rid, 'edit_draft', ACTOR, detail={'characters': len(text)})
     return {'ok': True, 'draft': text}

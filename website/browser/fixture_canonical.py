@@ -1,4 +1,5 @@
 """Canonical All census fixtures; loaded only by the socket-isolated demo server."""
+import json
 import os
 from datetime import datetime, timedelta
 from unittest.mock import patch
@@ -46,9 +47,13 @@ def install_canonical_changes(app, store):
                             body='Full older source ' + 'x' * 6000 + ' CANONICAL FULL BODY END')
             latest = message('Canonical latest grouped member', stamp, task=tid, status='routed')
             selected_review = store.add_review({'TaskId': tid, 'MessageId': older, 'Kind': 'draft_reply', 'Status': 'pending',
-                              'DraftText': 'CANONICAL SELECTED DRAFT'})
+                              'DraftText': 'CANONICAL SELECTED DRAFT', 'Deliver': json.dumps({
+                                  'kind': 'reply', 'mode': 'reply_all', 'to': ['canonical-to@example.test', 'canonical-participant@example.test'],
+                                  'cc': ['canonical-copy@example.test'], 'delivery': 'unknown'})})
             store.add_review({'TaskId': tid, 'MessageId': latest, 'Kind': 'draft_reply', 'Status': 'pending',
-                              'DraftText': 'CANONICAL SIBLING DRAFT'})
+                              'DraftText': 'CANONICAL SIBLING DRAFT', 'Deliver': json.dumps({
+                                  'kind': 'reply', 'to': ['canonical-sibling-to@example.test'],
+                                  'cc': ['canonical-sibling-copy@example.test']})})
             store.add_attachment({'MessageId': older, 'Name': 'canonical-evidence.txt',
                                   'ContentType': 'text/plain', 'Size': 12, 'ExternalId': 'canonical-attachment'})
             standalone_message = message('Canonical standalone message', stamp,

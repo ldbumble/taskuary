@@ -39,7 +39,7 @@ import MicOffIcon from "@mui/icons-material/MicOff";
 import { Md, looksMd } from "./md.jsx";
 import { subjectOf, sourceOf } from "./feedText.js";
 import { HOLD_TAG, hasTag, stateMeta, stateOf, subline } from "./timelineState.js";
-import { sendBlockLine, draftState } from "./sendState.js";
+import { sendBlockLine, draftState, replyEnvelope, replySendFailure } from "./sendState.js";
 import { timelinePhases } from "./taskLifecycle.js";
 import StateMark, { edgeOf } from "./StateMark.jsx";
 import NewSheet from "./NewSheet.jsx";
@@ -1094,7 +1094,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     // cc only on the send: rejecting or "no reply needed" copies nobody on nothing
     const { data } = await api.post(`/api/reviews/${reviewId}/decide`,
       { verb, final_text: finalText || null, cc: verb === "approve" ? (cc || []) : null });
-    if (data?.send_error) { setSendErr(data.send_error); load(); onChanged?.(); return; }
+    if (data?.send_error) { setSendErr(replySendFailure(data)); load(); onChanged?.(); return; }
     setSendErr(""); closeSelection(); setEditText(null); // stale edits must never block hover
     load(); onChanged?.();
   };
@@ -2045,13 +2045,14 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
         </Box>
       )}
       {pending && (
-        <ReviewActions reviewId={pendingId} draft={replyDraft}
+        <ReviewActions key={`${sel.MessageId}:${pendingId}`} reviewId={pendingId} draft={replyDraft} review={livePending}
           editText={editText} setEditText={writeEditText} decide={decide}
           sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend}
           onChanged={onRefresh} channel={sel.Channel} />
       )}
       {!pending && opened && (
-        <ReviewActions reviewId={opened.reviewId} draft={replyDraft}
+        <ReviewActions key={`${sel.MessageId}:${opened.reviewId}`} reviewId={opened.reviewId} draft={replyDraft}
+          review={(detail?.reviews || []).find((r) => r.ReviewId === opened.reviewId)}
           editText={editText} setEditText={writeEditText} decide={decide}
           sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend}
           onChanged={onRefresh} channel={sel.Channel} />
@@ -3335,7 +3336,10 @@ const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr
   const blocked = sendBlockLine({ ...(review || {}), CanSend: canSend, Channel: channel });
   const drafting = draftState({ ...(review || {}), HasDraft: (editText ?? draft ?? "").trim() ? 1 : 0 });
   const [draftErr, setDraftErr] = useState("");
-  const [cc, setCc] = useState([]);
+  const envelope = replyEnvelope(review);
+  const [editedCc, setCc] = useState(null);
+  const cc = editedCc ?? envelope?.cc ?? [];
+  const deliveryUnknown = sendErr?.unknown || envelope?.delivery === "unknown";
   const text = editText ?? draft ?? "";
   const save = async (value = text) => {
     try { await api.patch(`/api/reviews/${reviewId}`, { body: value }); onChanged?.(); }
@@ -3351,6 +3355,10 @@ const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr
   };
   return (
   <Box>
+    {envelope && <Typography data-reply-recipients variant="caption" sx={{ display: "block", mb: 0.75 }}>
+      To: {envelope.to.join(", ") || "No recipient selected"}
+      {cc.length > 0 && <> · CC: {cc.join(", ")}</>}
+    </Typography>}
     <CcRow cc={cc} setCc={setCc} channel={channel} />
     <TextField fullWidth multiline minRows={3} size="small" placeholder="Type your reply, or generate a draft with AI"
       value={text} onChange={(e) => setEditText(e.target.value)} onBlur={(e) => save(e.target.value)} sx={{ mb: 1 }} />
@@ -3368,13 +3376,13 @@ const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr
         <Button size="small" variant="contained" disableElevation
           sx={{ bgcolor: "#8a8276", "&:hover": { bgcolor: "#6b6459" } }}
           title="GitHub replies are off (GitHub card → Reply to issue/PR authors) — close this without sending"
-          onClick={() => decide(reviewId, "no_reply")}>No response required</Button>
+          onClick={() => decide(reviewId, "close_unsent")}>Close without sending</Button>
       ) : (
         <>
-          <Button size="small" variant="contained" disabled={!text.trim()}
+          <Button size="small" variant="contained" disabled={!text.trim() || (channel === "email" && !review) || (envelope && !envelope.to.length)}
             onClick={() => decide(reviewId, "approve", text, cc)}
             title="Sends the text above on the channel it arrived on">
-            {cc.length ? `Approve & send, copying ${cc.length}` : "Approve & send"}</Button>
+            {deliveryUnknown ? "Check delivery and retry" : cc.length ? `Approve & send, copying ${cc.length}` : "Approve & send"}</Button>
           <Button size="small" sx={{ color: "#867f74" }} onClick={() => decide(reviewId, "no_reply")}>No reply needed</Button>
         </>
       )}
@@ -3385,12 +3393,12 @@ const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr
       </Button>
     </Box>
     {draftErr && <Alert severity="error" sx={{ mt: 1 }} onClose={() => setDraftErr("")}>{draftErr}</Alert>}
-    {sendErr && (
+    {(sendErr || deliveryUnknown) && (
       <Alert severity="error" sx={{ mt: 1 }} onClose={clearSendErr}>
-        <b>Approved, but it did not send.</b> {sendErr}
+        <b>{deliveryUnknown ? "Delivery is unknown." : "Approved, but it did not send."}</b> {sendErr?.message || sendErr}
         <Box sx={{ mt: 0.5, fontSize: 11.5 }}>
-          The text is kept on the task marked NOT SENT, so nothing is lost — send it by hand, or hand
-          the task to a person on a channel that works.
+          {deliveryUnknown ? "The provider may have sent this reply. Check delivery before sending another copy; retry checks the provider first. Your draft is retained."
+            : "The draft is retained. Resolve the delivery error before retrying."}
         </Box>
       </Alert>
     )}

@@ -1,7 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { sendBlockLine, draftState } from "../src/sendState.js";
+import { sendBlockLine, draftState, replyEnvelope, replySendFailure } from "../src/sendState.js";
+
+test("reply envelopes preserve exact saved To and CC and distinguish other delivery kinds", () => {
+  const env = { kind: "reply", to: ["a@example.test", "b@example.test"], cc: ["c@example.test"], delivery: "unknown" };
+  assert.deepEqual(replyEnvelope({ Deliver: JSON.stringify(env) }), env);
+  assert.deepEqual(replyEnvelope({ Deliver: env }), env);
+  for (const Deliver of [undefined, "{", "null", '{"kind":"outbound","to":["hidden@example.test"]}']) {
+    assert.equal(replyEnvelope({ Deliver }), null);
+  }
+});
+
+test("a delivery timeout is unknown, while an explicit failed send remains a failure", () => {
+  assert.deepEqual(replySendFailure({ send_error: "provider timeout", delivery: "unknown" }),
+    { message: "provider timeout", unknown: true });
+  assert.deepEqual(replySendFailure({ send_error: "rejected", delivery: "failed" }),
+    { message: "rejected", unknown: false });
+  assert.equal(replySendFailure({ sent: { id: "sent-once" } }), null);
+});
 
 // PW-044/PW-046: a draft is always there to read and edit; whether it can be SENT is a separate
 // fact the server states, and every surface shows the same reason instead of a send button.

@@ -1890,3 +1890,78 @@ geometry/hit tests; the unchanged 10-second response budget starts at its physic
 click. Both test changes passed independent Astra review. Packaged UI build passed
 in 12.08s and all 304 frontend tests passed in 1.894s. No retries, reduced fixture
 counts, relaxed assertions or increased timeouts were introduced.
+
+## Section 7.2 — email replies: a reviewed recipient envelope and the owner's signature, once
+
+Status: implemented and tested locally at `88f2c1b`; remote CI pending on the pushed
+checkpoint. Section 7.1 is CI-verified (691f566/2e92e2f, CI run 34054198417 (all ten jobs passed)).
+Acceptance PW-064, PW-065 implemented; PW-063, PW-066 partial (the Review page's To/mode controls
+are a Phase 8 surface; the connectors are exercised through the shared to/cc contract).
+
+A reply went to the sender alone, with a CC the owner could add at the last click, and the
+signature was whatever the model chose to write. `outbound.reply_envelope` builds the recipients an
+email reply goes to - Reply all by default: the sender or the message's Reply-To, the original To and
+CC participants, the sending mailbox's and the owner's own addresses excluded, deduplicated
+case-insensitively, never a BCC - or Reply to, the sender alone; a chat has no envelope.
+`responder.draft_for_review` and `draft_for_message` pin it to the review when the draft is written
+(`store.set_review_envelope`, in `Deliver` as `kind: reply`, never overwriting an outbound review's
+own delivery), and `verdicts.decide` sends exactly that envelope (`reply_to_message(to=, cc=)`),
+with a CC list named on the click taking precedence; a reply envelope is not an outbound send.
+`PUT /api/reviews/{id}/envelope` switches Reply all/Reply to and edits To/CC. The owner's signature
+(`responder.signature_for`: the `email_signature` setting, else STYLE.md's `Sign off:` line, quoted
+multi-line allowed) is applied once by `with_signature` when an email draft is written, redrafted or
+saved by hand (`PATCH /api/reviews/{id}`) - visible before approval, never at send time, never on
+chat, never twice, and an owner's own signed text is kept as written.
+
+Tests: `tests/test_reply_envelope.py` (9 cases). No frontend change.
+
+## Section 7.3 — send outcomes: sent, failed, unknown, and an explicit close without sending
+
+Status: implemented and tested locally at `3459868`; remote CI pending on the pushed
+checkpoint. Section 7.2 is CI-verified (88f2c1b/50560d5, CI run 34054507025 (all ten jobs passed)).
+Acceptance PW-144, PW-145, PW-147, PW-148, PW-150 implemented; PW-143, PW-146, PW-149 partial.
+
+A send that timed out was reported NOT SENT and offered for a retry that could deliver the same mail
+twice, and a channel that could not carry the reply left "No response required" as the owner's only
+exit. `verdicts.decide` now knows three outcomes. A confirmed send settles the task the reply belongs
+to through `_settle_task_after_sent_reply` - unchecked checklist items and all, the owner's decision
+that a sent reply is the end of the job (the "Successful reply closes its task" resolution). A
+definite failure keeps the approved text as the draft and the task open with the error and a retry,
+and marks the review's envelope `delivery: failed`. A provider that did not answer
+(`outbound.UNKNOWN_ERRORS`: read timeouts, connection errors) is delivery UNKNOWN, its own state:
+the envelope records `delivery: unknown` and the attempt time, `outbound.reconcile_sent` asks the
+Graph Sent Items of the conversation whether the reply is there (the opening words of the reviewed
+text are the receipt), a found mail is settled as sent with no second send and a comment saying so,
+and the next approval reconciles again before it sends anything - so a retry is safe. The wording
+never says sent or not sent until it is known. A second approval of a decided review is refused by
+the existing decided-review guard (`already`).
+
+Close without sending is the owner's explicit verb, `close_unsent` (`VERB2STATUS` → `closed_unsent`):
+the unsent draft stays on the review, the closure and its reason (the click's note, else the
+channel's `send_block`) are recorded as a comment and audit row, the task closes as the owner's word,
+and nothing reads as Sent. It is never an automatic consequence of a failed or blocked send. The
+Review page's blocked-channel button now sends this verb instead of `no_reply`, with the reason in
+its title. A proposal (`Kind: action`) is rejected, not closed without sending (`422`).
+
+Decision recorded: a clarification is the one send that does not end the task - it asks, it does
+not answer - so the task stays `waiting` (the existing `_settle_task_after_sent_reply` rule).
+
+Tests: `tests/test_send_outcomes.py` (8 cases). Frontend: `website/src/ReviewView.jsx` (verb + title only; rebuilt bundle).
+
+### All compatibility with saved reply envelopes and send outcomes
+
+The merge through `9c6017e` now displays the exact selected review's saved To and
+CC, preserves owner-edited CC (including an explicit empty list) across refresh,
+and resets recipient edits when the exact message/review changes. Email approval
+waits for the full review; an explicitly empty To envelope cannot silently fall
+back to an unseen sender. Unknown delivery remains unknown on reopen, and no copy
+claims it was definitively unsent or encourages a manual duplicate. Independent
+Astra review cleared these bounded compatibility repairs.
+
+Final gates: 306 frontend tests passed (1.636s); packaged build passed (12.97s);
+38 reply-envelope/send-outcome/All/lifecycle/ledger tests passed (3.98s). The complete
+canonical browser scenario passed (69.077s scenario / 72.138s process), including
+saved recipients, persisted unknown delivery, owner-cleared CC retention during
+real draft refresh, distinct sibling-review recipients, and every earlier All
+assertion. Other cumulative and merge-specific gate results are recorded above.
+Delivery is pending the exact-SHA remote CI, not acceptance of all Phase 1 work.

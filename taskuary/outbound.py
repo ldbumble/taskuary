@@ -298,6 +298,64 @@ def send_targets(store) -> list:
     ]} for ch, tos in seen.items()]
 
 
+def reply_envelope(store, msg: dict, mode: str = 'reply_all'):
+    """Who an email reply goes to (PW-063): Reply all by default - the sender (or the message's Reply-To),
+    the original To and CC participants, the sending mailbox's own addresses excluded, deduplicated case-
+    insensitively, never a BCC - or Reply to: the sender alone. None for anything that is not email."""
+    if str((msg or {}).get('Channel') or '').lower() != 'email': return None
+    from .ingest import owner_addresses, own_addresses
+    try: rec = json.loads(msg.get('RecipientsJson') or '{}') or {}
+    except (TypeError, ValueError): rec = {}
+    try: meta = json.loads(msg.get('MailMetaJson') or '{}') or {}
+    except (TypeError, ValueError): meta = {}
+    own = {str(msg.get('SourceName') or '').lower()} | {a.lower() for a in owner_addresses(store)} | {a.lower() for a in own_addresses(store)}
+    own.discard('')
+    sender = str(meta.get('reply_to') or msg.get('FromEmail') or '').strip().lower()
+    def clean(seq, skip):
+        out = []
+        for a in seq or []:
+            a = str(a or '').strip().lower()
+            if a and '@' in a and a not in own and a not in skip and a not in out: out.append(a)
+        return out
+    to = [sender] if sender else []
+    if mode == 'reply_all':
+        to += clean(rec.get('to'), set(to))
+        cc = clean(rec.get('cc'), set(to))
+    else: cc = []
+    return {'kind': 'reply', 'mode': 'reply_all' if mode == 'reply_all' else 'reply_to', 'to': to, 'cc': cc}
+
+
+UNKNOWN_ERRORS = (requests.exceptions.ReadTimeout, requests.exceptions.ConnectionError, TimeoutError)
+
+
+def _rcpts(rows) -> list: return [str((r.get('emailAddress') or {}).get('address') or '').lower() for r in (rows or []) if isinstance(r, dict)]
+
+
+def reconcile_sent(store, msg: dict, body: str, since: str = None):
+    """Did an uncertain send actually go out? Asked of the provider (PW-144): for a Graph mailbox, the Sent Items of
+    the conversation since the attempt; the first mail whose text carries the reply's opening words is the receipt.
+    None when nothing is found or the provider cannot be asked - which is NOT proof of not sent."""
+    if str((msg or {}).get('Channel') or '').lower() != 'email': return None
+    ext = str(msg.get('ExternalId') or '')
+    if not ext.startswith('graph:'): return None
+    try:
+        box = msg.get('SourceName') or _mailbox(store)
+        tok = _graph_token(store, connector_id=_source_connector_id(store, 'email', box))
+        conv = msg.get('ConversationId')
+        params = {'$top': 10, '$orderby': 'sentDateTime desc', '$select': 'id,sentDateTime,bodyPreview,toRecipients,ccRecipients'}
+        if conv: params['$filter'] = f"conversationId eq '{conv}'"
+        r = requests.get(f'{GRAPH}/users/{box}/mailFolders/sentitems/messages', headers={'Authorization': f'Bearer {tok}'}, timeout=20, params=params)
+        if r.status_code >= 300: return None
+        head = ' '.join(str(body or '').split())[:60].lower()
+        for m in (r.json() or {}).get('value') or []:
+            if since and str(m.get('sentDateTime') or '') < since: continue
+            if head and head[:40] in ' '.join(str(m.get('bodyPreview') or '').split()).lower():
+                return {'channel': 'email', 'id': m.get('id'), 'to': _rcpts(m.get('toRecipients')), 'cc': _rcpts(m.get('ccRecipients')), 'reconciled': True}
+    except Exception as e:
+        logger.warning(f'could not reconcile an uncertain send: {e}')
+    return None
+
+
 def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = None) -> dict:
     """Answer wherever the request came from. The message row carries everything needed:
     the mailbox it arrived in, the Graph id for threading, or the chat id."""

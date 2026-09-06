@@ -6,6 +6,19 @@
 
 const FALLBACK_BLOCK = { github: "GitHub replies are off (GitHub card)" };
 
+export function replyEnvelope(review) {
+  try {
+    const env = typeof review?.Deliver === "string" ? JSON.parse(review.Deliver) : review?.Deliver;
+    if (env?.kind !== "reply") return null;
+    return { ...env, to: Array.isArray(env.to) ? env.to.filter((v) => typeof v === "string") : [],
+      cc: Array.isArray(env.cc) ? env.cc.filter((v) => typeof v === "string") : [] };
+  } catch { return null; }
+}
+
+export function replySendFailure(data) {
+  return data?.send_error ? { message: data.send_error, unknown: data.delivery === "unknown" } : null;
+}
+
 export function sendBlockLine(rv) {
   if (!rv || rv.CanSend !== false) return "";
   const why = rv.SendBlock || FALLBACK_BLOCK[String(rv.Channel || "").toLowerCase()] || `replies cannot go out on ${rv.Channel || "this channel"}`;

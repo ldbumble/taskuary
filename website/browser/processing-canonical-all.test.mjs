@@ -214,11 +214,21 @@ test("canonical All renders every root once with truthful details and frozen pag
   const olderStage = await stageContent(page);
   assert.ok(olderStage.includes(seed.grouped.selected_draft_marker), "the filtered member's exact draft must be visible");
   assert.equal(olderStage.includes(seed.grouped.sibling_draft_marker), false, "the latest sibling draft must not leak into older detail");
+  const recipients = await page.$eval("[data-reply-recipients]", (node) => node.textContent);
+  for (const address of ["canonical-to@example.test", "canonical-participant@example.test", "canonical-copy@example.test"]) {
+    assert.ok(recipients.includes(address), `the exact draft's saved recipient ${address} must be visible`);
+  }
+  assert.ok(olderStage.includes("Delivery is unknown."), "persisted uncertain delivery must remain visible on reopening");
+  assert.equal(olderStage.includes("Approved, but it did not send."), false, "uncertain delivery must not be labeled unsent");
   await clickWorkflowTab(page, "Message");
   await expandWholeMessage(page);
   await waitForStageMarker(page, seed.grouped.full_body_marker);
   await clickWorkflowTab(page, "Summary");
   await waitForStageMarker(page, seed.grouped.selected_draft_marker);
+  const removeCc = (await page.evaluateHandle(() => [...document.querySelectorAll("span")]
+    .find((node) => node.textContent === "✕" && node.parentElement.textContent.includes("canonical-copy@example.test")))).asElement();
+  assert.ok(removeCc, "the saved CC must remain editable");
+  await removeCc.click();
 
   const ownerDraft = "owner is still typing this canonical draft";
   const draftBoxes = await page.$$("textarea");
@@ -239,12 +249,18 @@ test("canonical All renders every root once with truthful details and frozen pag
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await page.waitForFunction((wanted) => [...document.querySelectorAll("textarea")]
     .some((node) => node.value === wanted), { timeout: 10000 }, ownerDraft);
+  assert.equal((await page.$eval("[data-reply-recipients]", (node) => node.textContent)).includes("canonical-copy@example.test"), false,
+    "refresh must preserve an owner's explicit empty CC while they edit the draft");
 
   await chooseSource(page, "all sources");
   await page.waitForFunction((itemId, mid) => {
     const row = [...document.querySelectorAll("[data-processing-item]")].find((node) => node.dataset.processingItem === itemId);
     return row?.dataset.processingTarget === `message:${mid}`;
   }, { timeout: 10000 }, seed.grouped.item_id, seed.grouped.message_ids.at(-1));
+  await clickItem(page, seed.grouped.item_id);
+  await waitForStageMarker(page, seed.grouped.sibling_draft_marker);
+  assert.ok((await page.$eval("[data-reply-recipients]", (node) => node.textContent)).includes("canonical-sibling-copy@example.test"),
+    "switching exact reviews must load that review's CC instead of retaining another review's edits");
 
   for (const kind of ["task", "idea", "review"]) {
     const root = seed.standalone[kind];

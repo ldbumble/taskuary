@@ -350,10 +350,10 @@ Reply to, default to Reply all, and apply the owner's email signature.
   and editable To/CC. Resolve the original Reply-To when present, preserve relevant
   original To/CC participants for Reply all, exclude the sending account's own
   addresses, deduplicate recipients, and never infer or expose hidden BCCs.
-- [ ] <a id="pw-064"></a>**PW-064** Persist and display the selected recipient envelope with the draft so
+- [x] <a id="pw-064"></a>**PW-064** Persist and display the selected recipient envelope with the draft so
   approval sends exactly the recipients the owner reviewed. Keep behavior
   consistent across email connectors and task/Review/assistant draft surfaces.
-- [ ] <a id="pw-065"></a>**PW-065** Apply the appropriate owner's email signature once in the draft, visible
+- [x] <a id="pw-065"></a>**PW-065** Apply the appropriate owner's email signature once in the draft, visible
   before approval, including manual drafts and redrafts. Current automatic drafts
   merely instruct the model to use STYLE.md's signature (SOUL.md sign-off fallback);
   send functions do not independently apply one. Do not rely solely on model
@@ -814,12 +814,12 @@ delivery. Missing send/write permission must not prevent explicit task closure.
   drafting and reading available; omit the send button when unsupported or not
   authorized and explain why. Do not depend solely on a failed send to discover
   known missing permissions.
-- [ ] <a id="pw-144"></a>**PW-144** Confirmed send closes the task; definite failure preserves the draft and
+- [x] <a id="pw-144"></a>**PW-144** Confirmed send closes the task; definite failure preserves the draft and
   leaves the task open with an error and retry when sending is available. Treat
   timeouts/ambiguous provider responses as delivery unknown, not proof of NOT SENT.
   Reconcile with the provider before retrying; use supported idempotency and
   duplicate-click protection. If delivery cannot be verified, say so explicitly.
-- [ ] <a id="pw-145"></a>**PW-145** When sending is unavailable, offer a separate confirmed Close without
+- [x] <a id="pw-145"></a>**PW-145** When sending is unavailable, offer a separate confirmed Close without
   sending action. Warn that no reply will be sent and state the reason (such as
   missing write/send permission). Preserve the unsent draft/history, record the
   owner's explicit closure, and remove its pending actionable reply obligation.
@@ -835,17 +835,17 @@ Owner-approved: once the reply is successfully sent, close the associated task.
 This supersedes the proposed distinction that other unfinished TODOs would keep
 the task open after replying. Pending implementation/verification.
 
-- [ ] <a id="pw-147"></a>**PW-147** Apply successful reply -> task done consistently across assistant approval,
+- [x] <a id="pw-147"></a>**PW-147** Apply successful reply -> task done consistently across assistant approval,
   task-view/Review sending, and reconciliation of a verified reply sent externally.
   Close only the task associated with that reply, not unrelated items in a batch.
-- [ ] <a id="pw-148"></a>**PW-148** Drafting, editing, approving without confirmed send success, failed/blocked
+- [x] <a id="pw-148"></a>**PW-148** Drafting, editing, approving without confirmed send success, failed/blocked
   sends, and cancellation must not trigger this completion rule. Do not interpret
   an incoming message as proof that the owner replied.
 - [ ] <a id="pw-149"></a>**PW-149** Refresh task, review, and canonical Unread state after confirmed send and
   closure so the old reply obligation does not remain actionable. Keep discussion
   and source history available in All. Automatic chat advancement remains a
   separate walkthrough decision; this rule does not authorize it.
-- [ ] <a id="pw-150"></a>**PW-150** Test successful send closes even with unchecked task TODOs, failed sends
+- [x] <a id="pw-150"></a>**PW-150** Test successful send closes even with unchecked task TODOs, failed sends
   leave the task open, external-reply matching, duplicate success events, and
   consistent results across send entry points.
 

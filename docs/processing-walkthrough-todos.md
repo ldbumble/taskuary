@@ -781,10 +781,10 @@ worker actually starts, acknowledge the named agent/task, say "Moving on", and
 present the next eligible shared-Unread item. This is a consequence of confirmed
 handoff, not permission for background events to advance the conversation.
 
-- [ ] <a id="pw-135"></a>**PW-135** Keep the delegated task visible in Unread as Working; do not settle it as
+- [x] <a id="pw-135"></a>**PW-135** Keep the delegated task visible in Unread as Working; do not settle it as
   done/read merely to advance chat. Failed starts, missing repository choices,
   and cancelled confirmations must keep the current item in place.
-- [ ] <a id="pw-136"></a>**PW-136** Test successful handoff advances once, retains the working task in Unread,
+- [x] <a id="pw-136"></a>**PW-136** Test successful handoff advances once, retains the working task in Unread,
   and failure/cancellation does not advance. Agent workspace inline presentation
   is still under review; do not infer a new display decision from this exception.
 

@@ -2343,3 +2343,24 @@ including the new clock-versus-worker-facts regression. Rendered freshness passe
 Current exclusion, retained email filter, and previous members remaining unread.
 Remote CI is pending on the delivery commit; it runs the cumulative suite and all
 nine browser scenarios. Sync progress work remains next, after this delivery gate.
+
+## Section 8.4 — a confirmed hand-off advances once; the delegated task stays in Unread as Working
+
+Status: implemented and tested locally at `672e904`; remote CI pending on the pushed
+checkpoint. Section 8.3 is CI-verified (42d0d16/cb63bf7, CI run 34061032086 (the three pytest jobs and build-exe passed; the browser job failed only in its settle helper, which counted the watcher chat cards PW-165 removed - re-pinned by the lead's follow-up 2a58cdd)).
+Acceptance PW-135 and PW-136 implemented.
+
+Confirming a hand-off proposal used to run the same road as any settling proposal: the page posted
+`done` on the message key to move on, and a dispatch that stopped to ask for a repository came back
+as a completed operation. Now a dispatch that starts is receipted "<agent> is on it - moving on" and
+the page advances without any settle post (PW-135): the message key is never marked done and the
+task shows in Unread as its `agent:<tid>` Working row. A `needs_repo` dispatch raises
+`operations.Halt` - a decision, not a failure - so the proposal stays `error` with that outcome, the
+item stays on the table, the ProposalCard asks with the shared RepoPicker, and the same confirmation
+(same id, same version) runs the dispatch again once the repository is chosen; a repeated click after
+that is the first receipt. A failed start and a cancelled confirmation keep the item where it was.
+Agent workspace inline presentation is untouched.
+
+Tests: `tests/test_chat_proposals.py`::HandoffTests (3 cases), `website/test/handoff.test.mjs` (2 cases). Frontend: `proposalCard.js`
+(`isHandoff`, `afterExecute.handoff` / `.repo`), `ProposalCard.jsx`, `AssistantView.jsx`, rebuilt
+bundle. Backend evidence: `.codex-tmp/phase3-evidence/backend-8.4.log`.

@@ -925,3 +925,40 @@ the chain; unique forwarded material and inline answers survive. Stored messages
 
 Tests: `tests/test_clean_context.py` (14 cases). One pinned wording in `test_follow_up_verdict.py` is unchanged (the exchange
 explanation keeps its opening words). No frontend change; packaged assets unchanged.
+
+### Chat/context merge and independently found preservation regression
+
+Merge `7420a0d` retains exact upstream `2c298ce` (chat relationships and context
+cleaning) and all reviewed email patches. Only evidence append text conflicted;
+both records were preserved. Astra verified source equivalence. Combined gates:
+2,578 backend tests plus 71 subtests (151 warnings, no skips, 214.14 s), 286 frontend
+tests, and all seven browser scenarios (203.142 s). Website source and packaged
+assets are byte-identical to the successful `85267a0`-based build.
+
+Independent review nevertheless reproduced an incoming cleaner regression:
+`dedupe_quoted` discarded an entire forwarded block when approximately 60 percent
+of its lines matched prior text, losing unique new instructions in a mixed block.
+The existing tests did not cover that case. A bounded isolated correction must
+preserve the mixed block and add the missing regression before final acceptance;
+no change to mail checkpoints or historical stored bodies is needed.
+
+Final correction source `ff6acc4` includes the independently cleared mixed-block
+fix and conservative comparison. Only quote decoration and surrounding whitespace
+are ignored; case, operators, punctuation and internal spacing remain meaningful.
+Regressions include headed and bare-quote mixed blocks, changed operators, and
+case-sensitive paths; existing exact-repeat and inline-answer checks are retained.
+Sol's focused context/triage gate passed 74 tests plus 37 subtests. Astra reviewed
+the exact final source and independently reproduced the preservation cases.
+
+The preceding mixed-block-only checkpoint `14f6525` passed 2,580 backend tests plus
+71 subtests (150 warnings, 219.82 s). Its concurrent browser run passed 6/7 in
+204.314 s, missing only the unchanged input timing limit at 1,615 ms. That is not
+the final gate. The final source is being checked with backend then browser run
+separately; no timing threshold or prior assertion has been weakened.
+
+Final cleaner checkpoint `ff6acc4` passed 2,582 backend tests plus 71 subtests
+(150 warnings, no skips) in 204.13 s. During that gate, concurrent delivery
+`cd32827` added task summaries/checklists. Preserve that work and integrate it
+before final delivery. To reduce repeated timing interference without relaxing
+any assertion, run the existing input-latency browser scenario separately first,
+then run the remaining six browser scenarios alongside backend regression.

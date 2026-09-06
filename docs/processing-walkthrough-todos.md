@@ -1155,11 +1155,11 @@ Owner-approved: configured workflows are predefined jobs triggered by a schedule
 or Run now, not incoming messages needing AI intent classification. Saved request
 procedures (for example PTO handling) are a separate concept. Pending implementation.
 
-- [ ] <a id="pw-203"></a>**PW-203** Separate scheduled/configured workflow definitions from reusable procedures
+- [x] <a id="pw-203"></a>**PW-203** Separate scheduled/configured workflow definitions from reusable procedures
   for incoming requests. A workflow carries its objective, configured inputs,
   connections, steps, allowed actions, approval requirements, and completion
   criteria; a request procedure describes how to handle a matching incoming ask.
-- [ ] <a id="pw-204"></a>**PW-204** Dispatch a triggered workflow directly to a general agent with the workflow
+- [x] <a id="pw-204"></a>**PW-204** Dispatch a triggered workflow directly to a general agent with the workflow
   definition and run-specific context. Do not send it through message triage to
   rediscover its intent or select its procedure; do not force a coding agent.
   Automatic dispatch remains subject to approved capacity and startup-retry
@@ -1168,13 +1168,13 @@ procedures (for example PTO handling) are a separate concept. Pending implementa
   recognizing a PTO request and attaching its saved handling instructions).
   Selecting a procedure must not itself classify the task as coding. Remove the
   current playbook-match override that assigns kind='coding'.
-- [ ] <a id="pw-206"></a>**PW-206** Deliver the selected procedure to either worker kind through the shared
+- [x] <a id="pw-206"></a>**PW-206** Deliver the selected procedure to either worker kind through the shared
   task-brief structure, including general API agents. For direct workflow runs,
   deliver workflow context without requiring a playbook selection by triage.
-- [ ] <a id="pw-207"></a>**PW-207** Preserve existing definitions when separating these concepts; explicitly
+- [x] <a id="pw-207"></a>**PW-207** Preserve existing definitions when separating these concepts; explicitly
   distinguish reusable request procedures from configured scheduled jobs instead
   of blindly converting all existing playbooks into scheduled workflows.
-- [ ] <a id="pw-208"></a>**PW-208** Test scheduled and manual workflow runs bypassing message triage and
+- [x] <a id="pw-208"></a>**PW-208** Test scheduled and manual workflow runs bypassing message triage and
   dispatching to general agents, workflow context delivery, retained approval
   boundaries, and PTO-style incoming requests selecting a procedure without
   forced coding or duplicate agent starts.

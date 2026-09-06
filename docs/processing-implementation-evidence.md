@@ -2471,3 +2471,26 @@ without live completion events. The parallel Unread case timed out at an existin
 reproduce; resource contention is possible but not established. Remote CI is pending. Failure-only
 diagnostics capture fixture request history and rendered Current on recurrence.
 The live app has not been restarted by this work.
+
+## Section 10.1 — workflows are configured jobs, procedures are how a request is handled
+
+Status: implemented and tested locally at `0b79f40`; remote CI pending on the pushed
+checkpoint. Section 9.2 is CI-verified (a87ea90/b5d486b, CI run 34063553989 (all jobs passed)).
+Acceptance PW-203, PW-204, PW-206, PW-207 and PW-208 implemented (PW-205 was already in).
+
+A scheduled agent workflow used to run inside the report loop through a coding CLI and file its
+answer as a report that triage read back as a fresh arrival. `taskuary/workflows.py` now reads a
+configured job apart from a request procedure (PW-203): `definition` gives the workflow's objective,
+inputs, connections, steps (its saved skill), allowed actions, ask-first, done-when, schedule and
+worker kind, and `catalog` / `GET /api/workflows` lists workflows and playbooks on separate shelves.
+Existing definitions stay on their report sources and playbooks are left exactly as they are
+(PW-207). A triggered workflow for the regular agent - scheduled, or Run now - is dispatched straight
+to its worker (PW-204): a task with the definition and this run's context, opened through
+`ingest._auto_general` so the capacity gate and startup retry apply, with no message triage, no
+coding CLI and nothing filed as a report; the run history records which task it became. A workflow
+with a checkout (or `runs_on: coding`) keeps the coding road, and a read-only agent report keeps its
+executor. The worker's brief is the workflow's own (PW-206): objective, inputs, connections, steps,
+allowed actions, ask-first, done-when, and the trigger - no procedure selection is needed, while a
+triage-selected procedure still rides in either worker's brief.
+
+Tests: `tests/test_workflows.py` (6 cases). Backend evidence: `.codex-tmp/phase3-evidence/backend-10.1.log`.

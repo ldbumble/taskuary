@@ -1458,7 +1458,7 @@
       "requirement": "Persist Current explicitly and validate it against current canonical item",
       "status": "implemented",
       "test": "`tests/test_current_restore.py`::RestoreTests (`concierge.set_current` writes the item down as surface() puts it on the table, per chat; `restore_current` validates it against the pile on `GET /api/concierge` and clears it - choosing nothing - when it was settled, deferred, closed underneath or gone; a handled card stays readable in the transcript), `website/test/currentRestore.test.mjs` (`loadState` takes `data.current`; `restorableCurrent` is no longer wired)",
-      "commit": "a87ea90; local gates passed, CI pending"
+      "commit": "a87ea90; a87ea90/b5d486b, CI run 34063553989 (all jobs passed)"
     },
     {
       "id": "PW-163",
@@ -1467,7 +1467,7 @@
       "requirement": "Keep history/pipeline loading separate from initiating an assistant turn.",
       "status": "implemented",
       "test": "`website/test/currentRestore.test.mjs` (every effect only loads state or the pile; nothing on mount, activation, remount or reconnect calls Next or starts a walk), `tests/test_chat_retention.py`::NewChatTests (a new chat is blank and starts nothing)",
-      "commit": "a87ea90; local gates passed, CI pending"
+      "commit": "a87ea90; a87ea90/b5d486b, CI run 34063553989 (all jobs passed)"
     },
     {
       "id": "PW-164",
@@ -1476,7 +1476,7 @@
       "requirement": "Test first visit, returning from another tab, page reload/remount, stale",
       "status": "implemented",
       "test": "`tests/test_current_restore.py` (5 cases: first visit, reload/tab return with no new turn, handled/deferred/closed Current cleared without replacement, a named item and the fyi handful restored, a new chat empty), `website/test/currentRestore.test.mjs` (2 cases)",
-      "commit": "a87ea90; local gates passed, CI pending"
+      "commit": "a87ea90; a87ea90/b5d486b, CI run 34063553989 (all jobs passed)"
     },
     {
       "id": "PW-165",
@@ -1825,18 +1825,18 @@
       "section": "Separate configured workflows from incoming-request procedures",
       "phase": "10",
       "requirement": "Separate scheduled/configured workflow definitions from reusable procedures",
-      "status": "pending",
-      "test": "Required: Phase 10 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_workflows.py`::DefinitionTests (`workflows.definition` reads a configured job as objective, inputs, connections, steps, allowed actions, approvals, done-when, schedule and worker kind; `workflows.catalog` / `GET /api/workflows` lists workflows and request procedures apart)",
+      "commit": "0b79f40; local gates passed, CI pending"
     },
     {
       "id": "PW-204",
       "section": "Separate configured workflows from incoming-request procedures",
       "phase": "10",
       "requirement": "Dispatch a triggered workflow directly to a general agent with the workflow",
-      "status": "pending",
-      "test": "Required: Phase 10 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_workflows.py`::DispatchTests (a scheduled or hand-run agent workflow is a task with the definition and this run's context handed straight to the regular agent through `ingest._auto_general` - no `ingest_message`, no `classify_intent`, no coding CLI, nothing filed as a report; a full house queues it on the dispatch queue; the run history records the task)",
+      "commit": "0b79f40; local gates passed, CI pending"
     },
     {
       "id": "PW-205",
@@ -1852,27 +1852,27 @@
       "section": "Separate configured workflows from incoming-request procedures",
       "phase": "10",
       "requirement": "Deliver the selected procedure to either worker kind through the shared",
-      "status": "partial: the selected procedure reaches coding and general workers through the shared brief; direct workflow runs are PW-203/204",
-      "test": "`tests/test_procedure_selection.py` (general prompt and coding brief carry the same playbook block)",
-      "commit": "b461668; b461668, CI run 34042162189 (all ten jobs passed)"
+      "status": "implemented",
+      "test": "`tests/test_workflows.py`::test_a_scheduled_run_goes_straight_to_the_regular_agent_with_the_definition (the worker's brief is the workflow's own - objective, inputs, connections, steps, allowed actions, ask-first, done-when - with no procedure selection), ::ProcedureTests (a triage-selected procedure rides in the general agent's brief as it does in a coding brief)",
+      "commit": "0b79f40; local gates passed, CI pending"
     },
     {
       "id": "PW-207",
       "section": "Separate configured workflows from incoming-request procedures",
       "phase": "10",
       "requirement": "Preserve existing definitions when separating these concepts; explicitly",
-      "status": "pending",
-      "test": "Required: Phase 10 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_workflows.py`::DefinitionTests (existing definitions stay on their sources; playbooks are listed as procedures and left as they are; a read-only agent report keeps its executor and a coding workflow with a checkout keeps its CLI road)",
+      "commit": "0b79f40; local gates passed, CI pending"
     },
     {
       "id": "PW-208",
       "section": "Separate configured workflows from incoming-request procedures",
       "phase": "10",
       "requirement": "Test scheduled and manual workflow runs bypassing message triage and",
-      "status": "pending",
-      "test": "Required: Phase 10 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_workflows.py` (6 cases: definition and catalog, scheduled dispatch, Run now on the same road, capacity queueing, preserved report and coding roads, a PTO-style request selecting its procedure without forced coding and with one agent start)",
+      "commit": "0b79f40; local gates passed, CI pending"
     },
     {
       "id": "PW-209",

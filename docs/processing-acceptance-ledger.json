@@ -828,7 +828,7 @@
       "requirement": "Supply relevant known projects, repositories, and people associations with",
       "status": "implemented",
       "test": "`tests/test_repo_choice_triage.py`::TriagePicksTests (known repositories and the sender's project context in the payload; validated pick persisted on the task; startup uses it)",
-      "commit": "f327a8b; local gates passed, CI pending"
+      "commit": "f327a8b; f327a8b, CI run 34041465044 (all ten jobs passed)"
     },
     {
       "id": "PW-093",
@@ -837,7 +837,7 @@
       "requirement": "An explicit owner-selected task repository wins. Treat sender/project",
       "status": "implemented",
       "test": "`tests/test_repo_choice_triage.py`::PrecedenceTests (owner repo: tag wins; GitHub item's own repository is authoritative; sender evidence supports, never decides)",
-      "commit": "f327a8b; CI pending"
+      "commit": "f327a8b; f327a8b, CI run 34041465044 (all ten jobs passed)"
     },
     {
       "id": "PW-094",
@@ -846,7 +846,7 @@
       "requirement": "Validate returned project/repository IDs against the supplied known",
       "status": "implemented",
       "test": "`tests/test_repo_choice_triage.py` (unknown name dropped and turned into a choice; ambiguity asks the owner; no forced match)",
-      "commit": "f327a8b; CI pending"
+      "commit": "f327a8b; f327a8b, CI run 34041465044 (all ten jobs passed)"
     },
     {
       "id": "PW-095",
@@ -855,7 +855,7 @@
       "requirement": "Before coding startup, validate/resolve the selected local checkout. Missing",
       "status": "implemented",
       "test": "`tests/test_repo_choice_triage.py`::CheckoutPathTests (a missing checkout path is a visible repository choice on dispatch, never a fallback folder)",
-      "commit": "f327a8b; CI pending"
+      "commit": "f327a8b; f327a8b, CI run 34041465044 (all ten jobs passed)"
     },
     {
       "id": "PW-096",
@@ -864,7 +864,7 @@
       "requirement": "Test explicit override precedence, mapped person with a matching request,",
       "status": "partial: no rendered-browser run of the repository picker yet",
       "test": "`tests/test_repo_choice_triage.py` (8 cases)",
-      "commit": "f327a8b; CI pending"
+      "commit": "f327a8b; f327a8b, CI run 34041465044 (all ten jobs passed)"
     },
     {
       "id": "PW-097",
@@ -1789,36 +1789,36 @@
       "section": "Assistant ideas enter shared triage",
       "phase": "3",
       "requirement": "Replace assistant idea direct feed-route classification with shared triage",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_ideas_triage.py`::SharedVerdictTests (shared verdict with evidence, report and linked-task/worker context; identity by idea key; pending and error states; retry on the next say)",
+      "commit": "3045452; local gates passed, CI pending"
     },
     {
       "id": "PW-200",
       "section": "Assistant ideas enter shared triage",
       "phase": "3",
       "requirement": "Use the resulting classification and importance for canonical Unread order,",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_ideas_triage.py` (verdict drives the pile lane; actionable ideas open work through the shared intake with kind defaults; ideas about active work create nothing; generated claims complete nothing; no second ranking)",
+      "commit": "3045452; CI pending"
     },
     {
       "id": "PW-201",
       "section": "Assistant ideas enter shared triage",
       "phase": "3",
       "requirement": "Preserve the existing opt-in report triage capability: configured reports",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_report_triage.py` (opt-in report triage unchanged: off = informational, on = the brain decides, a failed run is never triaged); workflow triggers and worker events untouched",
+      "commit": "3045452; CI pending"
     },
     {
       "id": "PW-202",
       "section": "Assistant ideas enter shared triage",
       "phase": "3",
       "requirement": "Test informational/actionable/urgent ideas, linked active work, duplicate",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: duplicate report runs and urgent ideas covered by re-say identity and lane tests; no rendered-browser check",
+      "test": "`tests/test_ideas_triage.py` (8 cases) with `tests/test_report_triage.py`",
+      "commit": "3045452; CI pending"
     },
     {
       "id": "PW-203",

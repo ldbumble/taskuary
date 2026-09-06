@@ -1088,15 +1088,15 @@ Owner-approved: assistant-generated ideas propose new work and must pass through
 the same triage as incoming messages, rather than receiving a separate automatic
 forgotten/report lane. Pending implementation.
 
-- [ ] <a id="pw-199"></a>**PW-199** Replace assistant idea direct feed-route classification with shared triage
+- [x] <a id="pw-199"></a>**PW-199** Replace assistant idea direct feed-route classification with shared triage
   using the idea, its source evidence, originating report context, and linked
   task/current worker state. Keep stable identity and legitimate grouping, show
   pending triage immediately, and reuse shared triage error/retry behavior.
-- [ ] <a id="pw-200"></a>**PW-200** Use the resulting classification and importance for canonical Unread order,
+- [x] <a id="pw-200"></a>**PW-200** Use the resulting classification and importance for canonical Unread order,
   task/draft creation, and configured agent startup rules. Do not create duplicate
   work where an idea refers to an already active task, or treat generated claims
   as verified evidence of completion. Do not add a second assistant-only ranking.
-- [ ] <a id="pw-201"></a>**PW-201** Preserve the existing opt-in report triage capability: configured reports
+- [x] <a id="pw-201"></a>**PW-201** Preserve the existing opt-in report triage capability: configured reports
   can identify potential work and submit findings to triage for task/agent routing.
   Ordinary informational reports need not be triaged; use their configured
   informational/promotion behavior. Workflow triggers execute the configured job

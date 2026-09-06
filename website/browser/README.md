@@ -1,10 +1,13 @@
 # Phase 0 rendered-browser harness
 
+Use Node 22 for all frontend gates (`npm test`, `npm run build`, and browser tests).
+The explicit recursive test glob retains every existing frontend test under Node 22.
+
 Run `npm run test:browser` from `website` for the read-only Assistant, Tasks,
 Board, and Reports baseline. The harness starts a real FastAPI server in Taskuary's
 `--demo` mode and a Vite server whose `TASKUARY_API` is the random fixture port.
 It uses an invented SQLite database in a unique temporary `TASKUARY_HOME`; browser,
-HOME, USERPROFILE, XDG, browser, Codex, Claude, AppData, and LocalAppData state are
+HOME, USERPROFILE, XDG, Codex, Claude, AppData, and LocalAppData state are
 isolated beneath that directory. The fixture uses an explicit non-secret test token.
 Chrome or Edge must already be installed. Set `TASKUARY_BROWSER_EXECUTABLE` when it
 is not in one of the standard Windows, macOS, or Linux locations.
@@ -49,5 +52,5 @@ gates replay visibility, input emission while the synthetic replay is active, an
 reconnect time at 10 seconds, 1.5 seconds, and 10 seconds respectively.
 
 Current/Next rendering is covered without changing its interaction contract.
-Assistant browser ownership and controls (walkthrough IDs PW265-PW267) remain
+Assistant browser ownership and controls (walkthrough IDs PW-265 through PW-267) remain
 review pending and are outside this harness.

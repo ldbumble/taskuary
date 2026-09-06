@@ -28,6 +28,12 @@ tests; passing on an old base is not sufficient.
 
 ## Phase 0: baseline and acceptance ledger
 
+Execution record: [implementation evidence](processing-implementation-evidence.md),
+[acceptance ledger](processing-acceptance-ledger.md),
+[state/migration contracts](processing-state-contracts.md), and
+[existing failures](processing-existing-failures.md). The ledger assigns stable
+PW IDs to every original checkbox; pending evidence is not implementation acceptance.
+
 - Inventory the existing dirty tree before touching it. At planning time it contains
   README.md, walkthrough TODO, blackboard.py, concierge.py, counsel.md, and associated
   tests. Preserve and classify each change; do not sweep unrelated edits into a commit.
@@ -105,8 +111,10 @@ in phase 0 without silently inventing policy:
 - Overlap never queues work; capacity holds and bounded failed-start retries remain.
 - COUNSEL loader/truncation fixes already checked must not be implemented twice;
   earlier prose describing them as pending is historical, not a new requirement.
-- Urgent/current calendar items rank first, agent waits second, working agents fifth.
-  Finalize exact middle-band/tie-break behavior before phase 1 ordering changes.
+- Ordering resolved by owner on 2026-09-06: urgent requests/current or starting-within-
+  15-minutes calendar first, agent waits second, other actionable tasks/finished results
+  third, FYIs fourth, working fifth. Within bands: triage priority, oldest activity first.
+  See the state contract for deterministic identity ties and preserved Current.
 - Still confirm transitions for Done on FYI batches, new activity during deferral,
   historical effects of exclusions, and auto-advance after successful sends/other
   actions. Preserve existing data; isolate unresolved policies from unrelated work.

@@ -1,0 +1,2409 @@
+{
+  "schema": 1,
+  "baseline": "2689679dd87227ff9102bb7d7feb8920e3c47ca6",
+  "items": [
+    {
+      "id": "PW-001",
+      "section": "Poll scheduling and configuration",
+      "phase": "2",
+      "requirement": "Prevent slow AI triage and full-sync report execution from blocking fresh",
+      "status": "pending",
+      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-002",
+      "section": "Poll scheduling and configuration",
+      "phase": "2",
+      "requirement": "Account for chat fetches performed during a full sync in the fast-poll",
+      "status": "pending",
+      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-003",
+      "section": "Poll scheduling and configuration",
+      "phase": "2",
+      "requirement": "Expose the supported fast-poll interval consistently for Teams, Slack,",
+      "status": "pending",
+      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-004",
+      "section": "Poll scheduling and configuration",
+      "phase": "2",
+      "requirement": "Correct polling labels/help text: WhatsApp's interval covers connector",
+      "status": "pending",
+      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-005",
+      "section": "Poll scheduling and configuration",
+      "phase": "2",
+      "requirement": "Add regression tests for slow triage/report execution versus chat intake,",
+      "status": "pending",
+      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-006",
+      "section": "Email catch-up must not skip backlog",
+      "phase": "2",
+      "requirement": "Outlook: `_mail_msgs()` reads newest-first and stops at its default 500",
+      "status": "pending",
+      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-007",
+      "section": "Email catch-up must not skip backlog",
+      "phase": "2",
+      "requirement": "Gmail/IMAP: Inbox and Sent polling select the last 25 qualifying UIDs and",
+      "status": "pending",
+      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-008",
+      "section": "Email catch-up must not skip backlog",
+      "phase": "2",
+      "requirement": "Gmail/IMAP: the date search window can exclude mail received during a long",
+      "status": "pending",
+      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-009",
+      "section": "Full email conversation context",
+      "phase": "2",
+      "requirement": "Keep incremental polling for discovering new mail. Store each new message",
+      "status": "pending",
+      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-010",
+      "section": "Full email conversation context",
+      "phase": "2",
+      "requirement": "Track thread-history coverage and unresolved message references. Retrieve",
+      "status": "pending",
+      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-011",
+      "section": "Full email conversation context",
+      "phase": "2",
+      "requirement": "Apply the same contract to Outlook/Graph and Gmail/IMAP. Scope provider",
+      "status": "pending",
+      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-012",
+      "section": "Full email conversation context",
+      "phase": "2",
+      "requirement": "Preserve individual messages, chronology, sender/recipient metadata, and",
+      "status": "pending",
+      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-013",
+      "section": "Full email conversation context",
+      "phase": "2",
+      "requirement": "Refresh the selected thread before assistant/agent context is assembled,",
+      "status": "pending",
+      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-014",
+      "section": "Full email conversation context",
+      "phase": "2",
+      "requirement": "Test across email connectors: old roots outside the watermark, sent replies,",
+      "status": "pending",
+      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-015",
+      "section": "Full email conversation context",
+      "phase": "2",
+      "requirement": "Test incremental merging explicitly: D joins stored A/B/C without repeated",
+      "status": "pending",
+      "test": "Required: Phase 2 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-016",
+      "section": "Routing: email identity versus chat intent",
+      "phase": "2/3",
+      "requirement": "Email: link new messages by actual conversation identity, merge missing",
+      "status": "pending",
+      "test": "Required: Phase 2/3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-017",
+      "section": "Routing: email identity versus chat intent",
+      "phase": "2/3",
+      "requirement": "Keep chain storage separate from task lifecycle. A reply on a closed task's",
+      "status": "pending",
+      "test": "Required: Phase 2/3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-018",
+      "section": "Routing: email identity versus chat intent",
+      "phase": "2/3",
+      "requirement": "WhatsApp/Teams/Slack: use AI to determine whether a new message continues an",
+      "status": "pending",
+      "test": "Required: Phase 2/3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-019",
+      "section": "Routing: email identity versus chat intent",
+      "phase": "2/3",
+      "requirement": "Add regression tests: unrelated emails with identical subjects remain",
+      "status": "pending",
+      "test": "Required: Phase 2/3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-020",
+      "section": "Fresh evaluation for each new message",
+      "phase": "3",
+      "requirement": "Remove the automatic thread-dismissal veto through `ruled_on_thread()` /",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-021",
+      "section": "Fresh evaluation for each new message",
+      "phase": "3",
+      "requirement": "Merge the new message into its chain before evaluation. Evaluate the latest",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-022",
+      "section": "Fresh evaluation for each new message",
+      "phase": "3",
+      "requirement": "Preserve the separately approved explicit feed-only and standing-policy",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-023",
+      "section": "Fresh evaluation for each new message",
+      "phase": "3",
+      "requirement": "Preserve old read/dismissed state: reevaluation of new activity must not",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-024",
+      "section": "Fresh evaluation for each new message",
+      "phase": "3",
+      "requirement": "Test a previously ignored/FYI chain receiving a new actionable request and",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-025",
+      "section": "Clean, complete context for AI triage",
+      "phase": "3",
+      "requirement": "Remove the historical-verdict prompt override in",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-026",
+      "section": "Clean, complete context for AI triage",
+      "phase": "3",
+      "requirement": "Replace `exchange_lines()`'s 12-message/300-character excerpt dependency",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-027",
+      "section": "Clean, complete context for AI triage",
+      "phase": "3",
+      "requirement": "Before sending email content to triage, remove signatures, automatic",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-028",
+      "section": "Clean, complete context for AI triage",
+      "phase": "3",
+      "requirement": "Represent each message's substantive content once. Remove repeated quoted",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-029",
+      "section": "Clean, complete context for AI triage",
+      "phase": "3",
+      "requirement": "Apply the same cleaning/context contract across email connectors. Extend",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-030",
+      "section": "Clean, complete context for AI triage",
+      "phase": "3",
+      "requirement": "Add regression tests for historical-verdict unanimity versus a new request,",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-031",
+      "section": "Chat relationships in the same triage evaluation",
+      "phase": "3",
+      "requirement": "Extend the single triage verdict for WhatsApp, Teams, Slack, and similar",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-032",
+      "section": "Chat relationships in the same triage evaluation",
+      "phase": "3",
+      "requirement": "Restrict automatic relationship candidates to the same chat/conversation",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-033",
+      "section": "Chat relationships in the same triage evaluation",
+      "phase": "3",
+      "requirement": "Validate returned message/task IDs against the eligible candidate context.",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-034",
+      "section": "Chat relationships in the same triage evaluation",
+      "phase": "3",
+      "requirement": "Keep this date restriction chat-only: email chains and structural identities",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-035",
+      "section": "Chat relationships in the same triage evaluation",
+      "phase": "3",
+      "requirement": "Add tests for same-day continuations, answers before a task exists, multiple",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-036",
+      "section": "Explicit triage errors and retry",
+      "phase": "3",
+      "requirement": "Store failed triage as a distinct message `Status='error'`, including model",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-037",
+      "section": "Explicit triage errors and retry",
+      "phase": "3",
+      "requirement": "Show a clear \"Triage failed\" state with a useful failure reason and a",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-038",
+      "section": "Explicit triage errors and retry",
+      "phase": "3",
+      "requirement": "Adapt the existing retriage endpoint and `claim_retriage()` to the error",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-039",
+      "section": "Explicit triage errors and retry",
+      "phase": "3",
+      "requirement": "On successful retry, apply the new verdict and clear the error indication;",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-040",
+      "section": "Explicit triage errors and retry",
+      "phase": "3",
+      "requirement": "Define a safe upgrade for identifiable historical triage-failure records",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-041",
+      "section": "Explicit triage errors and retry",
+      "phase": "3",
+      "requirement": "Test model exceptions, malformed verdicts, drain failures, linked-message",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-042",
+      "section": "Reply-needed items always get drafts",
+      "phase": "7",
+      "requirement": "Remove the `reply_only` early filing path when `can_reply()` is false.",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-043",
+      "section": "Reply-needed items always get drafts",
+      "phase": "7",
+      "requirement": "Always request draft generation for `reply_only`; do not gate this path on",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-044",
+      "section": "Reply-needed items always get drafts",
+      "phase": "7",
+      "requirement": "When sending is unavailable, omit the send/approve-and-send button and",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-045",
+      "section": "Reply-needed items always get drafts",
+      "phase": "7",
+      "requirement": "Preserve server-side send checks; hiding a UI button is not authorization.",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-046",
+      "section": "Reply-needed items always get drafts",
+      "phase": "7",
+      "requirement": "Make draft-generation failures or missing AI configuration visible with a",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-047",
+      "section": "Reply-needed items always get drafts",
+      "phase": "7",
+      "requirement": "Test sending-disabled/read-only/missing-permission cases, enabled sending,",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-048",
+      "section": "Mandatory freshness before surfacing or acting",
+      "phase": "2/4/7",
+      "requirement": "Capture the exact input message IDs/context revision at task evaluation",
+      "status": "pending",
+      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-049",
+      "section": "Mandatory freshness before surfacing or acting",
+      "phase": "2/4/7",
+      "requirement": "Apply a shared source-freshness check before assistant surfacing, discussion,",
+      "status": "pending",
+      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-050",
+      "section": "Mandatory freshness before surfacing or acting",
+      "phase": "2/4/7",
+      "requirement": "Select an item first, then validate its freshness, including automatic",
+      "status": "pending",
+      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-051",
+      "section": "Mandatory freshness before surfacing or acting",
+      "phase": "2/4/7",
+      "requirement": "On newly relevant inbound or owner-sent activity, reevaluate the updated",
+      "status": "pending",
+      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-052",
+      "section": "Mandatory freshness before surfacing or acting",
+      "phase": "2/4/7",
+      "requirement": "When new messages are detected on the item being discussed/surfaced, notify",
+      "status": "pending",
+      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-053",
+      "section": "Mandatory freshness before surfacing or acting",
+      "phase": "2/4/7",
+      "requirement": "Tell the owner when new activity changes the item being discussed. If the",
+      "status": "pending",
+      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-054",
+      "section": "Mandatory freshness before surfacing or acting",
+      "phase": "2/4/7",
+      "requirement": "Use the assembled substantive chain for drafting as well as triage; remove",
+      "status": "pending",
+      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-055",
+      "section": "Mandatory freshness before surfacing or acting",
+      "phase": "2/4/7",
+      "requirement": "Recheck the evaluated version before committing an action. Require renewed",
+      "status": "pending",
+      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-056",
+      "section": "Mandatory freshness before surfacing or acting",
+      "phase": "2/4/7",
+      "requirement": "Add regression tests for email/chat refresh, Next without a key, FYI batches,",
+      "status": "pending",
+      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-057",
+      "section": "Mandatory freshness before surfacing or acting",
+      "phase": "2/4/7",
+      "requirement": "Test that the new-message/retriage notice arrives before the triage result,",
+      "status": "pending",
+      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-058",
+      "section": "Separate triage learning from reply-writing preferences",
+      "phase": "7",
+      "requirement": "Remove general `LEARNED.md` prompt injection from reply drafting and",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-059",
+      "section": "Separate triage learning from reply-writing preferences",
+      "phase": "7",
+      "requirement": "Build replies using STYLE.md for voice, phrasing, greetings, and signatures;",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-060",
+      "section": "Separate triage learning from reply-writing preferences",
+      "phase": "7",
+      "requirement": "Restrict separately retrieved standing memory notes to explicit,",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-061",
+      "section": "Separate triage learning from reply-writing preferences",
+      "phase": "7",
+      "requirement": "Route explicit writing-style feedback to STYLE.md rather than general",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-062",
+      "section": "Separate triage learning from reply-writing preferences",
+      "phase": "7",
+      "requirement": "Add model-payload tests for initial drafts, redrafts, and message-only",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-063",
+      "section": "Email reply recipients and signatures",
+      "phase": "7",
+      "requirement": "Default email drafts to Reply all; offer Reply to (sender/reply address)",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-064",
+      "section": "Email reply recipients and signatures",
+      "phase": "7",
+      "requirement": "Persist and display the selected recipient envelope with the draft so",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-065",
+      "section": "Email reply recipients and signatures",
+      "phase": "7",
+      "requirement": "Apply the appropriate owner's email signature once in the draft, visible",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-066",
+      "section": "Email reply recipients and signatures",
+      "phase": "7",
+      "requirement": "Test default Reply all, Reply to selection, Reply-To headers, editable To/CC,",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-067",
+      "section": "Default task kind",
+      "phase": "3",
+      "requirement": "Owner-approved on 2026-09-05: a task with missing/uncertain agent kind",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-068",
+      "section": "Default task kind",
+      "phase": "3",
+      "requirement": "Test missing/invalid kind and uncertain classification across the supported",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-069",
+      "section": "Automatic agent startup for both work kinds",
+      "phase": "5",
+      "requirement": "Extend automatic dispatch to general agents, using a per-task worker",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-070",
+      "section": "Automatic agent startup for both work kinds",
+      "phase": "5",
+      "requirement": "Expose clear auto-start controls for coding and general agents in Settings,",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-071",
+      "section": "Automatic agent startup for both work kinds",
+      "phase": "5",
+      "requirement": "Apply appropriate shared safety/permission checks to both worker kinds,",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-072",
+      "section": "Automatic agent startup for both work kinds",
+      "phase": "5",
+      "requirement": "Dispatch once per eligible work item, not per refresh or historical chain",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-073",
+      "section": "Automatic agent startup for both work kinds",
+      "phase": "5",
+      "requirement": "Test both default auto-start paths, each settings opt-out, manual fallback,",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-074",
+      "section": "Triage-generated task summary and checkable list",
+      "phase": "3",
+      "requirement": "Extend the same triage verdict with a meaningful task title/summary and",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-075",
+      "section": "Triage-generated task summary and checkable list",
+      "phase": "3",
+      "requirement": "Persist the checklist with the task and render interactive, saved checkboxes",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-076",
+      "section": "Triage-generated task summary and checkable list",
+      "phase": "3",
+      "requirement": "Give checklist items stable identity so edits, progress, and fresh-triage",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-077",
+      "section": "Triage-generated task summary and checkable list",
+      "phase": "3",
+      "requirement": "Keep checklist progress separate from agent/session state and task completion;",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-078",
+      "section": "Triage-generated task summary and checkable list",
+      "phase": "3",
+      "requirement": "Add tests for multi-request chains, coding/general/personal tasks, meaningful",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-079",
+      "section": "Configurable sender trust for automatic agent startup",
+      "phase": "5",
+      "requirement": "Remove `store.known_sender()` / \"has written before\" as an authorization",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-080",
+      "section": "Configurable sender trust for automatic agent startup",
+      "phase": "5",
+      "requirement": "Retain verified Sent Items evidence that the receiving mailbox previously",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-081",
+      "section": "Configurable sender trust for automatic agent startup",
+      "phase": "5",
+      "requirement": "Expose same-domain trust and non-email-channel trust behavior explicitly in",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-082",
+      "section": "Configurable sender trust for automatic agent startup",
+      "phase": "5",
+      "requirement": "Apply the configured sender-trust contract consistently to coding and",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-083",
+      "section": "Configurable sender trust for automatic agent startup",
+      "phase": "5",
+      "requirement": "Add tests for prior incoming-only history remaining untrusted, verified sent",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-084",
+      "section": "Agent capacity counting",
+      "phase": "5",
+      "requirement": "Owner-approved: count all live coding/general agent sessions toward the",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-085",
+      "section": "Dispatch queue startup failure",
+      "phase": "5",
+      "requirement": "Owner-approved: allow at most two automatic retries after the initial",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-086",
+      "section": "Dispatch queue startup failure",
+      "phase": "5",
+      "requirement": "Configuration, missing repository/worker, and permission failures should",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-087",
+      "section": "Dispatch queue startup failure",
+      "phase": "5",
+      "requirement": "After retry exhaustion, retain the task and dispatch error visibly but stop",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-088",
+      "section": "Dispatch queue startup failure",
+      "phase": "5",
+      "requirement": "Schedule due retries without depending solely on an unrelated session ending;",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-089",
+      "section": "Dispatch queue startup failure",
+      "phase": "5",
+      "requirement": "Test transient recovery, exactly three failed attempts, persisted backoff",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-090",
+      "section": "Dispatch queue startup failure",
+      "phase": "5",
+      "requirement": "Move `clear_dispatch()` inside the startup `try`, after `start_on_task()`",
+      "status": "historically-checked",
+      "test": "Historical evidence in TODO; revalidate before dependent changes",
+      "commit": "2689679 (baseline contains historical record)"
+    },
+    {
+      "id": "PW-091",
+      "section": "Dispatch queue startup failure",
+      "phase": "5",
+      "requirement": "Add a regression test proving a failed start remains queued and a later",
+      "status": "historically-checked",
+      "test": "Historical evidence in TODO; revalidate before dependent changes",
+      "commit": "2689679 (baseline contains historical record)"
+    },
+    {
+      "id": "PW-092",
+      "section": "Project and repository selection in unified triage",
+      "phase": "3",
+      "requirement": "Supply relevant known projects, repositories, and people associations with",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-093",
+      "section": "Project and repository selection in unified triage",
+      "phase": "3",
+      "requirement": "An explicit owner-selected task repository wins. Treat sender/project",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-094",
+      "section": "Project and repository selection in unified triage",
+      "phase": "3",
+      "requirement": "Validate returned project/repository IDs against the supplied known",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-095",
+      "section": "Project and repository selection in unified triage",
+      "phase": "3",
+      "requirement": "Before coding startup, validate/resolve the selected local checkout. Missing",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-096",
+      "section": "Project and repository selection in unified triage",
+      "phase": "3",
+      "requirement": "Test explicit override precedence, mapped person with a matching request,",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-097",
+      "section": "Repository confirmation when manually sending to coding",
+      "phase": "5",
+      "requirement": "Use a consistent pre-launch repository picker on the task page, timeline",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-098",
+      "section": "Repository confirmation when manually sending to coding",
+      "phase": "5",
+      "requirement": "Cover personal-task/general-to-coding corrections and manual coding dispatch;",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-099",
+      "section": "Repository confirmation when manually sending to coding",
+      "phase": "5",
+      "requirement": "Preserve the selected item, agent/model, and instructions while choosing;",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-100",
+      "section": "Repository confirmation when manually sending to coding",
+      "phase": "5",
+      "requirement": "Add tests for all three UI entry points, conversational coding requests,",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-101",
+      "section": "All and Unread: one item set, different filter and order",
+      "phase": "1",
+      "requirement": "Use one canonical item/identity/context representation for All, Unread,",
+      "status": "pending",
+      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-102",
+      "section": "All and Unread: one item set, different filter and order",
+      "phase": "1",
+      "requirement": "All sorts by time (newest first). Unread selects the unread subset and",
+      "status": "pending",
+      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-103",
+      "section": "All and Unread: one item set, different filter and order",
+      "phase": "1",
+      "requirement": "Remove Unread-only age windows, category exclusions, and silent caps that",
+      "status": "pending",
+      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-104",
+      "section": "All and Unread: one item set, different filter and order",
+      "phase": "1",
+      "requirement": "Do not treat an FYI classification or merely surfacing an item as permission",
+      "status": "pending",
+      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-105",
+      "section": "All and Unread: one item set, different filter and order",
+      "phase": "1",
+      "requirement": "Show newly persisted arrivals in both views immediately when eligible,",
+      "status": "pending",
+      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-106",
+      "section": "All and Unread: one item set, different filter and order",
+      "phase": "1",
+      "requirement": "Replace the incomplete pipeline revision/update comparison: changes to",
+      "status": "pending",
+      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-107",
+      "section": "All and Unread: one item set, different filter and order",
+      "phase": "1",
+      "requirement": "Superseding the earlier separate-filter proposal: remove the Needs me tab.",
+      "status": "pending",
+      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-108",
+      "section": "All and Unread: one item set, different filter and order",
+      "phase": "1",
+      "requirement": "Apply all common source/category/mute exclusions identically to All and",
+      "status": "pending",
+      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-109",
+      "section": "All and Unread: one item set, different filter and order",
+      "phase": "1",
+      "requirement": "Test All/Unread item parity (after read filtering), time versus status order,",
+      "status": "pending",
+      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-110",
+      "section": "Assistant selection: top eligible Unread item",
+      "phase": "1",
+      "requirement": "Put genuinely immediate/time-critical items first (a current calendar",
+      "status": "pending",
+      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-111",
+      "section": "Assistant selection: top eligible Unread item",
+      "phase": "1",
+      "requirement": "Put tasks actively worked by either coding or general agents in band 5,",
+      "status": "pending",
+      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-112",
+      "section": "Assistant selection: top eligible Unread item",
+      "phase": "1",
+      "requirement": "Test coding/general working placement, transitions to owner-waiting, and",
+      "status": "pending",
+      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-113",
+      "section": "Assistant selection: top eligible Unread item",
+      "phase": "1",
+      "requirement": "Preserve the existing funnel UI during this selection refactor: keep its",
+      "status": "pending",
+      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-114",
+      "section": "Assistant selection: top eligible Unread item",
+      "phase": "1",
+      "requirement": "Remove assistant-local filtering, ranking, and eligibility recalculation:",
+      "status": "pending",
+      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-115",
+      "section": "Assistant selection: top eligible Unread item",
+      "phase": "1",
+      "requirement": "Clicking \"Walk me through my tasks\" resumes a valid Current item; only",
+      "status": "pending",
+      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-116",
+      "section": "Assistant selection: top eligible Unread item",
+      "phase": "1",
+      "requirement": "Replace next_item()'s surfaced-based exclusion and preference for unshown",
+      "status": "pending",
+      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-117",
+      "section": "Assistant selection: top eligible Unread item",
+      "phase": "1",
+      "requirement": "Skip working agents, deferred items, and pending-triage items for automatic",
+      "status": "pending",
+      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-118",
+      "section": "Assistant selection: top eligible Unread item",
+      "phase": "1",
+      "requirement": "Track Current explicitly: once selected, keep that item as the conversation",
+      "status": "pending",
+      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-119",
+      "section": "Assistant selection: top eligible Unread item",
+      "phase": "1",
+      "requirement": "Preserve the approved four-at-a-time FYI presentation for automatic walks;",
+      "status": "pending",
+      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-120",
+      "section": "Assistant selection: top eligible Unread item",
+      "phase": "1",
+      "requirement": "Test displayed Unread versus assistant selection, already-shown but unread",
+      "status": "pending",
+      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-121",
+      "section": "Assistant actions: AI interpretation, then explicit confirmation",
+      "phase": "8",
+      "requirement": "Remove decide_words() and other phrase/regex-based intent dispatch from",
+      "status": "pending",
+      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-122",
+      "section": "Assistant actions: AI interpretation, then explicit confirmation",
+      "phase": "8",
+      "requirement": "Give every message the same conversational action interface. Replace the",
+      "status": "pending",
+      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-123",
+      "section": "Assistant actions: AI interpretation, then explicit confirmation",
+      "phase": "8",
+      "requirement": "Before executing a requested action (except draft preparation and Next navigation below), show a confirmation box describing",
+      "status": "pending",
+      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-124",
+      "section": "Assistant actions: AI interpretation, then explicit confirmation",
+      "phase": "8",
+      "requirement": "Except for the explicitly approved draft-preparation and Next-navigation exceptions below, no",
+      "status": "pending",
+      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-125",
+      "section": "Assistant actions: AI interpretation, then explicit confirmation",
+      "phase": "8",
+      "requirement": "Use one validated action execution path shared with other app entry points.",
+      "status": "pending",
+      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-126",
+      "section": "Assistant actions: AI interpretation, then explicit confirmation",
+      "phase": "8",
+      "requirement": "Preserve draft review/editing and explicit send approval within this model.",
+      "status": "pending",
+      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-127",
+      "section": "Assistant actions: AI interpretation, then explicit confirmation",
+      "phase": "8",
+      "requirement": "Test typed/suggested-prompt parity, no phrase-dispatch bypass, clarification,",
+      "status": "pending",
+      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-128",
+      "section": "Assistant actions: AI interpretation, then explicit confirmation",
+      "phase": "8",
+      "requirement": "Owner-approved navigation exception: an unambiguous request to move Next",
+      "status": "pending",
+      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-129",
+      "section": "Action-driven triage correction memory and task discussion history",
+      "phase": "4",
+      "requirement": "After a confirmed owner action succeeds, compare its outcome with the",
+      "status": "pending",
+      "test": "Required: Phase 4 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-130",
+      "section": "Action-driven triage correction memory and task discussion history",
+      "phase": "4",
+      "requirement": "Record source/message or grouped-item identity, triage verdict/revision,",
+      "status": "pending",
+      "test": "Required: Phase 4 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-131",
+      "section": "Action-driven triage correction memory and task discussion history",
+      "phase": "4",
+      "requirement": "Preserve the distinction between correction evidence, explicit learned",
+      "status": "pending",
+      "test": "Required: Phase 4 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-132",
+      "section": "Action-driven triage correction memory and task discussion history",
+      "phase": "4",
+      "requirement": "Record evidence against source items even when an FYI has no task. Persist",
+      "status": "pending",
+      "test": "Required: Phase 4 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-133",
+      "section": "Action-driven triage correction memory and task discussion history",
+      "phase": "4",
+      "requirement": "When an FYI later becomes a task, link its earlier relevant discussion and",
+      "status": "pending",
+      "test": "Required: Phase 4 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-134",
+      "section": "Action-driven triage correction memory and task discussion history",
+      "phase": "4",
+      "requirement": "Test successful corrections from every entry point, unchanged verdicts,",
+      "status": "pending",
+      "test": "Required: Phase 4 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-135",
+      "section": "Successful agent handoff: acknowledge and move on",
+      "phase": "5/8",
+      "requirement": "Keep the delegated task visible in Unread as Working; do not settle it as",
+      "status": "pending",
+      "test": "Required: Phase 5/8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-136",
+      "section": "Successful agent handoff: acknowledge and move on",
+      "phase": "5/8",
+      "requirement": "Test successful handoff advances once, retains the working task in Unread,",
+      "status": "pending",
+      "test": "Required: Phase 5/8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-137",
+      "section": "Agent questions answered through the assistant",
+      "phase": "6",
+      "requirement": "Receive structured input/approval-needed events from worker integrations,",
+      "status": "pending",
+      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-138",
+      "section": "Agent questions answered through the assistant",
+      "phase": "6",
+      "requirement": "Let the owner answer conversationally in the assistant. Clarify ambiguous",
+      "status": "pending",
+      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-139",
+      "section": "Agent questions answered through the assistant",
+      "phase": "6",
+      "requirement": "Bind delivery to the specific outstanding request and run, never merely the",
+      "status": "pending",
+      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-140",
+      "section": "Agent questions answered through the assistant",
+      "phase": "6",
+      "requirement": "Use a supported reply/control path per worker integration; lifecycle hooks",
+      "status": "pending",
+      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-141",
+      "section": "Agent questions answered through the assistant",
+      "phase": "6",
+      "requirement": "Distinguish queued, delivered, and resumed/working states. Do not report",
+      "status": "pending",
+      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-142",
+      "section": "Agent questions answered through the assistant",
+      "phase": "6",
+      "requirement": "Test general/coding question relay, multiple waiting agents, request/run",
+      "status": "pending",
+      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-143",
+      "section": "Send outcomes and explicit closure when sending is unavailable",
+      "phase": "7",
+      "requirement": "Check connector sending capability/permissions before offering send. Keep",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-144",
+      "section": "Send outcomes and explicit closure when sending is unavailable",
+      "phase": "7",
+      "requirement": "Confirmed send closes the task; definite failure preserves the draft and",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-145",
+      "section": "Send outcomes and explicit closure when sending is unavailable",
+      "phase": "7",
+      "requirement": "When sending is unavailable, offer a separate confirmed Close without",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-146",
+      "section": "Send outcomes and explicit closure when sending is unavailable",
+      "phase": "7",
+      "requirement": "Test read-only/missing permissions, explicit close-without-send and cancel,",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-147",
+      "section": "Successful reply closes its task",
+      "phase": "7",
+      "requirement": "Apply successful reply -> task done consistently across assistant approval,",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-148",
+      "section": "Successful reply closes its task",
+      "phase": "7",
+      "requirement": "Drafting, editing, approving without confirmed send success, failed/blocked",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-149",
+      "section": "Successful reply closes its task",
+      "phase": "7",
+      "requirement": "Refresh task, review, and canonical Unread state after confirmed send and",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-150",
+      "section": "Successful reply closes its task",
+      "phase": "7",
+      "requirement": "Test successful send closes even with unchecked task TODOs, failed sends",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-151",
+      "section": "Assistant presentation: actionable FYI summaries and full task context",
+      "phase": "8",
+      "requirement": "Present up to four FYIs together with a summary for each. Each entry is",
+      "status": "pending",
+      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-152",
+      "section": "Assistant presentation: actionable FYI summaries and full task context",
+      "phase": "8",
+      "requirement": "For a single task item, show the full message/context and the task summary",
+      "status": "pending",
+      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-153",
+      "section": "Assistant presentation: actionable FYI summaries and full task context",
+      "phase": "8",
+      "requirement": "Generate the assistant's explanation according to COUNSEL, removing the",
+      "status": "pending",
+      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-154",
+      "section": "Assistant presentation: actionable FYI summaries and full task context",
+      "phase": "8",
+      "requirement": "Presenting either kind of card does not mark it read or handled and does",
+      "status": "pending",
+      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-155",
+      "section": "Assistant presentation: actionable FYI summaries and full task context",
+      "phase": "8",
+      "requirement": "Test four-item FYI presentation, per-item action targeting, untouched sibling",
+      "status": "pending",
+      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-156",
+      "section": "Chat archive and independent retention cleanup",
+      "phase": "9",
+      "requirement": "New chat archives the current conversation, resets chat/Current, and opens",
+      "status": "pending",
+      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-157",
+      "section": "Chat archive and independent retention cleanup",
+      "phase": "9",
+      "requirement": "Listing/opening earlier chats is read-only and paginated. Remove the",
+      "status": "pending",
+      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-158",
+      "section": "Chat archive and independent retention cleanup",
+      "phase": "9",
+      "requirement": "Implement automatic retention cleanup as a separate scheduled lifecycle",
+      "status": "pending",
+      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-159",
+      "section": "Chat archive and independent retention cleanup",
+      "phase": "9",
+      "requirement": "Preserve task-linked discussion, confirmed actions, agent results, and send",
+      "status": "pending",
+      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-160",
+      "section": "Chat archive and independent retention cleanup",
+      "phase": "9",
+      "requirement": "Keep correction memory and saved rules on independent lifecycles. Chat",
+      "status": "pending",
+      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-161",
+      "section": "Chat archive and independent retention cleanup",
+      "phase": "9",
+      "requirement": "Test New chat archives without deletion or auto-walk, history reads do not",
+      "status": "pending",
+      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-162",
+      "section": "Opening Assistant: restore without starting a walkthrough",
+      "phase": "9",
+      "requirement": "Persist Current explicitly and validate it against current canonical item",
+      "status": "pending",
+      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-163",
+      "section": "Opening Assistant: restore without starting a walkthrough",
+      "phase": "9",
+      "requirement": "Keep history/pipeline loading separate from initiating an assistant turn.",
+      "status": "pending",
+      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-164",
+      "section": "Opening Assistant: restore without starting a walkthrough",
+      "phase": "9",
+      "requirement": "Test first visit, returning from another tab, page reload/remount, stale",
+      "status": "pending",
+      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-165",
+      "section": "Assistant background updates must not advance the conversation",
+      "phase": "8",
+      "requirement": "Owner-approved notification placement: unsolicited updates use a single",
+      "status": "pending",
+      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-166",
+      "section": "Assistant background updates must not advance the conversation",
+      "phase": "8",
+      "requirement": "Keep the strip until Open, Later, or resolution; do not rely on a timed",
+      "status": "pending",
+      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-167",
+      "section": "Assistant background updates must not advance the conversation",
+      "phase": "8",
+      "requirement": "Test no automatic chat insertion for Current and non-Current updates,",
+      "status": "pending",
+      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-168",
+      "section": "Assistant background updates must not advance the conversation",
+      "phase": "8",
+      "requirement": "Remove event-driven clearing/replacement of Current and scheduled surface()",
+      "status": "pending",
+      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-169",
+      "section": "Assistant background updates must not advance the conversation",
+      "phase": "8",
+      "requirement": "Only explicit owner navigation/actions may advance under their agreed",
+      "status": "pending",
+      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-170",
+      "section": "Assistant background updates must not advance the conversation",
+      "phase": "8",
+      "requirement": "Test updates on Current, unrelated urgent arrivals, delayed event delivery,",
+      "status": "pending",
+      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-171",
+      "section": "Similar coding work: inform agents, do not queue for overlap",
+      "phase": "5",
+      "requirement": "Remove automatic deferral behind another task solely because of likely file",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-172",
+      "section": "Similar coding work: inform agents, do not queue for overlap",
+      "phase": "5",
+      "requirement": "Before startup, give the agent current same-checkout peer task IDs, agent",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-173",
+      "section": "Similar coding work: inform agents, do not queue for overlap",
+      "phase": "5",
+      "requirement": "Refresh coordination context as peers start, change work, or stop. Closed",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-174",
+      "section": "Similar coding work: inform agents, do not queue for overlap",
+      "phase": "5",
+      "requirement": "If AI overlap assessment is absent, uncertain, or fails, still provide the",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-175",
+      "section": "Similar coding work: inform agents, do not queue for overlap",
+      "phase": "5",
+      "requirement": "Test similar tasks launching when capacity permits, both dispatch modes,",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-176",
+      "section": "Wall notes: live coordination only",
+      "phase": "5",
+      "requirement": "Explicitly remove the deliberate closed-session wall-note injection from",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-177",
+      "section": "Wall notes: live coordination only",
+      "phase": "5",
+      "requirement": "Apply the same removal explicitly to general-assistant context:",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-178",
+      "section": "Wall notes: live coordination only",
+      "phase": "5",
+      "requirement": "Associate coordination notes with a specific agent session/run, not merely",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-179",
+      "section": "Wall notes: live coordination only",
+      "phase": "5",
+      "requirement": "Use the same live-note selection for the board UI, agent startup context,",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-180",
+      "section": "Wall notes: live coordination only",
+      "phase": "5",
+      "requirement": "Retain ended-run notes in task/run history, explicitly historical and not",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-181",
+      "section": "Wall notes: live coordination only",
+      "phase": "5",
+      "requirement": "Test active and approval-waiting runs, completed/stopped runs, same-task",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-182",
+      "section": "Simplified worker context: AGENT.md, CODER.md, and one task brief",
+      "phase": "5",
+      "requirement": "Define shared AGENT.md operating rules for both worker kinds: task scope,",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-183",
+      "section": "Simplified worker context: AGENT.md, CODER.md, and one task brief",
+      "phase": "5",
+      "requirement": "Build one authoritative task brief containing task ID, objective, triage",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-184",
+      "section": "Simplified worker context: AGENT.md, CODER.md, and one task brief",
+      "phase": "5",
+      "requirement": "Stop injecting the full SOUL.md into coding and general-worker prompts.",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-185",
+      "section": "Simplified worker context: AGENT.md, CODER.md, and one task brief",
+      "phase": "5",
+      "requirement": "Consolidate relevant source rules, playbook guidance, and saved preferences",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-186",
+      "section": "Simplified worker context: AGENT.md, CODER.md, and one task brief",
+      "phase": "5",
+      "requirement": "Add live coordination only when relevant active peers/notes exist, using",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-187",
+      "section": "Simplified worker context: AGENT.md, CODER.md, and one task brief",
+      "phase": "5",
+      "requirement": "Test both worker kinds for shared rules, coding-only additions, absence of",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-188",
+      "section": "Minimal onboarding and assistant-led Taskuary setup",
+      "phase": "11",
+      "requirement": "Simplify initial onboarding to name, then AI coding CLI selection/setup",
+      "status": "pending",
+      "test": "Required: Phase 11 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-189",
+      "section": "Minimal onboarding and assistant-led Taskuary setup",
+      "phase": "11",
+      "requirement": "Add a discoverable system-setup walkthrough entry point at the top Assistant",
+      "status": "pending",
+      "test": "Required: Phase 11 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-190",
+      "section": "Minimal onboarding and assistant-led Taskuary setup",
+      "phase": "11",
+      "requirement": "Ship a Taskuary setup skill containing the product-specific setup procedure,",
+      "status": "pending",
+      "test": "Required: Phase 11 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-191",
+      "section": "Minimal onboarding and assistant-led Taskuary setup",
+      "phase": "11",
+      "requirement": "Reuse direct report/connection setup and shared confirmed configuration",
+      "status": "pending",
+      "test": "Required: Phase 11 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-192",
+      "section": "Minimal onboarding and assistant-led Taskuary setup",
+      "phase": "11",
+      "requirement": "Support resuming incomplete setup and revisiting individual setup areas",
+      "status": "pending",
+      "test": "Required: Phase 11 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-193",
+      "section": "Minimal onboarding and assistant-led Taskuary setup",
+      "phase": "11",
+      "requirement": "Test first-run name/CLI handoff, missing CLI readiness, top-level setup entry,",
+      "status": "pending",
+      "test": "Required: Phase 11 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-194",
+      "section": "Direct report and connection setup through the assistant",
+      "phase": "10",
+      "requirement": "Interpret setup requests through AI, gather missing configuration, and show",
+      "status": "pending",
+      "test": "Required: Phase 10 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-195",
+      "section": "Direct report and connection setup through the assistant",
+      "phase": "10",
+      "requirement": "For reports, gather source/connection, query or inputs, summary instructions,",
+      "status": "pending",
+      "test": "Required: Phase 10 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-196",
+      "section": "Direct report and connection setup through the assistant",
+      "phase": "10",
+      "requirement": "For connections, gather provider and non-secret configuration, show requested",
+      "status": "pending",
+      "test": "Required: Phase 10 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-197",
+      "section": "Direct report and connection setup through the assistant",
+      "phase": "10",
+      "requirement": "If setup requires substantial investigation, propose a general-agent setup",
+      "status": "pending",
+      "test": "Required: Phase 10 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-198",
+      "section": "Direct report and connection setup through the assistant",
+      "phase": "10",
+      "requirement": "Test conversational clarification/correction/cancel, exact configuration",
+      "status": "pending",
+      "test": "Required: Phase 10 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-199",
+      "section": "Assistant ideas enter shared triage",
+      "phase": "3",
+      "requirement": "Replace assistant idea direct feed-route classification with shared triage",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-200",
+      "section": "Assistant ideas enter shared triage",
+      "phase": "3",
+      "requirement": "Use the resulting classification and importance for canonical Unread order,",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-201",
+      "section": "Assistant ideas enter shared triage",
+      "phase": "3",
+      "requirement": "Preserve the existing opt-in report triage capability: configured reports",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-202",
+      "section": "Assistant ideas enter shared triage",
+      "phase": "3",
+      "requirement": "Test informational/actionable/urgent ideas, linked active work, duplicate",
+      "status": "pending",
+      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-203",
+      "section": "Separate configured workflows from incoming-request procedures",
+      "phase": "10",
+      "requirement": "Separate scheduled/configured workflow definitions from reusable procedures",
+      "status": "pending",
+      "test": "Required: Phase 10 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-204",
+      "section": "Separate configured workflows from incoming-request procedures",
+      "phase": "10",
+      "requirement": "Dispatch a triggered workflow directly to a general agent with the workflow",
+      "status": "pending",
+      "test": "Required: Phase 10 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-205",
+      "section": "Separate configured workflows from incoming-request procedures",
+      "phase": "10",
+      "requirement": "Keep incoming-request procedure matching in unified triage (for example,",
+      "status": "pending",
+      "test": "Required: Phase 10 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-206",
+      "section": "Separate configured workflows from incoming-request procedures",
+      "phase": "10",
+      "requirement": "Deliver the selected procedure to either worker kind through the shared",
+      "status": "pending",
+      "test": "Required: Phase 10 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-207",
+      "section": "Separate configured workflows from incoming-request procedures",
+      "phase": "10",
+      "requirement": "Preserve existing definitions when separating these concepts; explicitly",
+      "status": "pending",
+      "test": "Required: Phase 10 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-208",
+      "section": "Separate configured workflows from incoming-request procedures",
+      "phase": "10",
+      "requirement": "Test scheduled and manual workflow runs bypassing message triage and",
+      "status": "pending",
+      "test": "Required: Phase 10 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-209",
+      "section": "Consistent worker startup and manual action surfaces",
+      "phase": "5",
+      "requirement": "Apply that startup contract to coding and general workers: distinguish",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-210",
+      "section": "Consistent worker startup and manual action surfaces",
+      "phase": "5",
+      "requirement": "Verify equivalent Make task and Send to agent behavior across All timeline",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-211",
+      "section": "Consistent worker startup and manual action surfaces",
+      "phase": "5",
+      "requirement": "Audit finding: All detail's SendToAgent is hidden for unconverted",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-212",
+      "section": "Consistent worker startup and manual action surfaces",
+      "phase": "5",
+      "requirement": "Audit finding: ui.jsx SendToAgent treats a successful HTTP response with",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-213",
+      "section": "Consistent worker startup and manual action surfaces",
+      "phase": "5",
+      "requirement": "Audit finding: TasksView.startGeneralAgent dispatches existing general",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-214",
+      "section": "Consistent worker startup and manual action surfaces",
+      "phase": "5",
+      "requirement": "Test the actual All-detail buttons and matching chat/Tasks actions: owner",
+      "status": "pending",
+      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-215",
+      "section": "Task-view buttons: accurate labels and shared execution",
+      "phase": "4/6/8",
+      "requirement": "Route task-view controls and assistant confirmation boxes through the same",
+      "status": "pending",
+      "test": "Required: Phase 4/6/8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-216",
+      "section": "Task-view buttons: accurate labels and shared execution",
+      "phase": "4/6/8",
+      "requirement": "Unify coding startup (currently Kind PATCH plus openTerm) and general",
+      "status": "pending",
+      "test": "Required: Phase 4/6/8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-217",
+      "section": "Task-view buttons: accurate labels and shared execution",
+      "phase": "4/6/8",
+      "requirement": "Make task completion versus agent completion explicit in labels/help and",
+      "status": "pending",
+      "test": "Required: Phase 4/6/8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-218",
+      "section": "Task-view buttons: accurate labels and shared execution",
+      "phase": "4/6/8",
+      "requirement": "Reconcile Finish agent run and Save stopped run result with the approved",
+      "status": "pending",
+      "test": "Required: Phase 4/6/8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-219",
+      "section": "Task-view buttons: accurate labels and shared execution",
+      "phase": "4/6/8",
+      "requirement": "Clarify Pause & save means end the session with saved continuation context,",
+      "status": "pending",
+      "test": "Required: Phase 4/6/8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-220",
+      "section": "Task-view buttons: accurate labels and shared execution",
+      "phase": "4/6/8",
+      "requirement": "Verify Write reply, Generate reply, and Ask sender create/open the intended",
+      "status": "pending",
+      "test": "Required: Phase 4/6/8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-221",
+      "section": "Task-view buttons: accurate labels and shared execution",
+      "phase": "4/6/8",
+      "requirement": "Add handler/backend tests plus actual UI interaction coverage for these",
+      "status": "pending",
+      "test": "Required: Phase 4/6/8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-222",
+      "section": "Event-driven worker status instead of terminal heuristics",
+      "phase": "6",
+      "requirement": "Model Working, Input needed (with the unanswered question), Approval needed",
+      "status": "pending",
+      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-223",
+      "section": "Event-driven worker status instead of terminal heuristics",
+      "phase": "6",
+      "requirement": "Integrate Claude Code lifecycle/tool hooks for prompt submission, permission",
+      "status": "pending",
+      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-224",
+      "section": "Event-driven worker status instead of terminal heuristics",
+      "phase": "6",
+      "requirement": "Integrate Codex App Server structured turn lifecycle, approval, and user-input",
+      "status": "pending",
+      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-225",
+      "section": "Event-driven worker status instead of terminal heuristics",
+      "phase": "6",
+      "requirement": "Emit regular API-agent lifecycle events directly from the execution loop.",
+      "status": "pending",
+      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-226",
+      "section": "Event-driven worker status instead of terminal heuristics",
+      "phase": "6",
+      "requirement": "Separate response/turn completion from work completion. Require an explicit",
+      "status": "pending",
+      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-227",
+      "section": "Event-driven worker status instead of terminal heuristics",
+      "phase": "6",
+      "requirement": "Persist and reconcile events by task/run/turn and request IDs. Deduplicate",
+      "status": "pending",
+      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-228",
+      "section": "Event-driven worker status instead of terminal heuristics",
+      "phase": "6",
+      "requirement": "Keep Working visible in Unread without injecting it into chat. Promote",
+      "status": "pending",
+      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-229",
+      "section": "Event-driven worker status instead of terminal heuristics",
+      "phase": "6",
+      "requirement": "Test all providers: long silent work, terminal repaint noise, questions,",
+      "status": "pending",
+      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-230",
+      "section": "Explicit completion: save the agent result, then close its run",
+      "phase": "6",
+      "requirement": "Capture the agent's actual final answer directly, rather than requiring a",
+      "status": "pending",
+      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-231",
+      "section": "Explicit completion: save the agent result, then close its run",
+      "phase": "6",
+      "requirement": "Persist the final Markdown result, evidence/artifact references, and reported",
+      "status": "pending",
+      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-232",
+      "section": "Explicit completion: save the agent result, then close its run",
+      "phase": "6",
+      "requirement": "Replace the manual-start stay-open veto for explicit successful completion.",
+      "status": "pending",
+      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-233",
+      "section": "Explicit completion: save the agent result, then close its run",
+      "phase": "6",
+      "requirement": "If result persistence fails, do not discard the session or claim successful",
+      "status": "pending",
+      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-234",
+      "section": "Explicit completion: save the agent result, then close its run",
+      "phase": "6",
+      "requirement": "Test automatic and manually started workers, matching final-answer capture,",
+      "status": "pending",
+      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-235",
+      "section": "Completion-to-reply freshness and approval",
+      "phase": "7",
+      "requirement": "Apply the approved freshness and unified reevaluation rules after work",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-236",
+      "section": "Completion-to-reply freshness and approval",
+      "phase": "7",
+      "requirement": "Reuse the applicable held review rather than duplicating it. Generate the",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-237",
+      "section": "Completion-to-reply freshness and approval",
+      "phase": "7",
+      "requirement": "Bring coder.finish() into line with the approved always-draft rule: when",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-238",
+      "section": "Completion-to-reply freshness and approval",
+      "phase": "7",
+      "requirement": "Test changed requests, already-sent external replies, unchanged chains,",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-239",
+      "section": "Completion-to-reply freshness and approval",
+      "phase": "7",
+      "requirement": "Owner clarification: when new context materially changes the task/draft and",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-240",
+      "section": "Completion-to-reply freshness and approval",
+      "phase": "7",
+      "requirement": "Base approval invalidation on the draft's context/triage revision and",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-241",
+      "section": "Completion-to-reply freshness and approval",
+      "phase": "7",
+      "requirement": "Test material inbound changes, externally sent replies, relevant triage",
+      "status": "pending",
+      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-242",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Remove shared COUNSEL injection from assistant.think() report-generation",
+      "status": "pending",
+      "test": "Required: Phase 8/10 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-243",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Audit other COUNSEL consumers, including suggestion discussions and general",
+      "status": "pending",
+      "test": "Required: Phase 8/10 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-244",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Test that changing chat COUNSEL does not alter the scheduled report prompt,",
+      "status": "pending",
+      "test": "Required: Phase 8/10 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-245",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Implemented the owner-approved COUNSEL loader change in concierge._counsel:",
+      "status": "historically-checked",
+      "test": "Historical evidence in TODO; revalidate before dependent changes",
+      "commit": "2689679 (baseline contains historical record)"
+    },
+    {
+      "id": "PW-246",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Added loader regressions for complete long instructions reaching _system,",
+      "status": "historically-checked",
+      "test": "Historical evidence in TODO; revalidate before dependent changes",
+      "commit": "2689679 (baseline contains historical record)"
+    },
+    {
+      "id": "PW-247",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Applied approved consistency pass to shipped/live COUNSEL: shared Unread",
+      "status": "historically-checked",
+      "test": "Historical evidence in TODO; revalidate before dependent changes",
+      "commit": "2689679 (baseline contains historical record)"
+    },
+    {
+      "id": "PW-248",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Owner confirmed the boundary: retain the minimal machine action contract",
+      "status": "pending",
+      "test": "Required: Phase 8/10 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-249",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Applied approved Voice section to shipped and live saved COUNSEL: concise",
+      "status": "historically-checked",
+      "test": "Historical evidence in TODO; revalidate before dependent changes",
+      "commit": "2689679 (baseline contains historical record)"
+    },
+    {
+      "id": "PW-250",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Replaced \"The post\" in shipped and live saved COUNSEL with the approved",
+      "status": "historically-checked",
+      "test": "Historical evidence in TODO; revalidate before dependent changes",
+      "commit": "2689679 (baseline contains historical record)"
+    },
+    {
+      "id": "PW-251",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Applied approved urgent-update wording to shipped and live saved COUNSEL:",
+      "status": "historically-checked",
+      "test": "Historical evidence in TODO; revalidate before dependent changes",
+      "commit": "2689679 (baseline contains historical record)"
+    },
+    {
+      "id": "PW-252",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Applied the approved named-item rule to the shipped and live saved COUNSEL:",
+      "status": "historically-checked",
+      "test": "Historical evidence in TODO; revalidate before dependent changes",
+      "commit": "2689679 (baseline contains historical record)"
+    },
+    {
+      "id": "PW-253",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Owner requested immediate implementation of the first responsibility in",
+      "status": "historically-checked",
+      "test": "Historical evidence in TODO; revalidate before dependent changes",
+      "commit": "2689679 (baseline contains historical record)"
+    },
+    {
+      "id": "PW-254",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Owner approved the walkthrough/FYI/overview rule: discuss Current and wait",
+      "status": "historically-checked",
+      "test": "Historical evidence in TODO; revalidate before dependent changes",
+      "commit": "2689679 (baseline contains historical record)"
+    },
+    {
+      "id": "PW-255",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "At the owner's explicit request, applied both approved COUNSEL edits to the",
+      "status": "historically-checked",
+      "test": "Historical evidence in TODO; revalidate before dependent changes",
+      "commit": "2689679 (baseline contains historical record)"
+    },
+    {
+      "id": "PW-256",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Remove concierge.SYSTEM's competing behavioral/routing instructions and",
+      "status": "pending",
+      "test": "Required: Phase 8/10 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-257",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Keep authorization, valid action/argument checks, target validation,",
+      "status": "pending",
+      "test": "Required: Phase 8/10 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-258",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Remove silent 3,200-character truncation of COUNSEL; apply explicit size",
+      "status": "pending",
+      "test": "Required: Phase 8/10 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-259",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Audit remaining inline prompts/action heuristics and canned receipts for",
+      "status": "pending",
+      "test": "Required: Phase 8/10 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-260",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Test that editing the assistant document affects the actual loaded prompt,",
+      "status": "pending",
+      "test": "Required: Phase 8/10 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-261",
+      "section": "Orderly app shutdown: stop workers and wait for cleanup",
+      "phase": "12",
+      "requirement": "Fix desktop shutdown's daemon-thread race: signal backend shutdown and wait",
+      "status": "pending",
+      "test": "Required: Phase 12 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-262",
+      "section": "Orderly app shutdown: stop workers and wait for cleanup",
+      "phase": "12",
+      "requirement": "Leave unfinished work open and visibly interrupted, not Working or Done.",
+      "status": "pending",
+      "test": "Required: Phase 12 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-263",
+      "section": "Orderly app shutdown: stop workers and wait for cleanup",
+      "phase": "12",
+      "requirement": "Handle stuck cleanup with visible progress/error and a bounded escalation",
+      "status": "pending",
+      "test": "Required: Phase 12 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-264",
+      "section": "Orderly app shutdown: stop workers and wait for cleanup",
+      "phase": "12",
+      "requirement": "Test native desktop quit waits for server cleanup, transcript/history",
+      "status": "pending",
+      "test": "Required: Phase 12 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-265",
+      "section": "Assistant browser control and its UI: review required",
+      "phase": "pending",
+      "requirement": "Trace browser ownership/control and actual UI with the owner: which agent",
+      "status": "review-pending",
+      "test": "Required: Phase pending focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-266",
+      "section": "Assistant browser control and its UI: review required",
+      "phase": "pending",
+      "requirement": "Review navigation versus consequential website actions, confirmation,",
+      "status": "review-pending",
+      "test": "Required: Phase pending focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-267",
+      "section": "Assistant browser control and its UI: review required",
+      "phase": "pending",
+      "requirement": "Agree the UI/interaction contract before redesigning browser control; then",
+      "status": "review-pending",
+      "test": "Required: Phase pending focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    }
+  ]
+}

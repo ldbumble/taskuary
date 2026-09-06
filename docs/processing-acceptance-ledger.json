@@ -567,7 +567,7 @@
       "requirement": "Default email drafts to Reply all; offer Reply to (sender/reply address)",
       "status": "partial: Reply all is the default envelope (sender or Reply-To, original To/CC, the mailbox's own addresses excluded, deduplicated, no BCC), Reply to is one call away and To/CC are editable through `PUT /api/reviews/{id}/envelope`; the Review page still shows only the CC row - the To/mode controls are a Phase 8 surface",
       "test": "`tests/test_reply_envelope.py`::EnvelopeTests, ::PinnedAndSentTests",
-      "commit": "88f2c1b; local gates passed, CI pending"
+      "commit": "88f2c1b; 88f2c1b/50560d5, CI run 34054507025 (all ten jobs passed)"
     },
     {
       "id": "PW-064",
@@ -576,7 +576,7 @@
       "requirement": "Persist and display the selected recipient envelope with the draft so",
       "status": "implemented",
       "test": "`tests/test_reply_envelope.py`::PinnedAndSentTests (the envelope is pinned to the draft when it is written and approval sends exactly the reviewed To/CC; an edited envelope is what goes out; the approved text leaves as reviewed)",
-      "commit": "88f2c1b; local gates passed, CI pending"
+      "commit": "88f2c1b; 88f2c1b/50560d5, CI run 34054507025 (all ten jobs passed)"
     },
     {
       "id": "PW-065",
@@ -585,7 +585,7 @@
       "requirement": "Apply the appropriate owner's email signature once in the draft, visible",
       "status": "implemented",
       "test": "`tests/test_reply_envelope.py`::SignatureTests (the signature from STYLE.md or the `email_signature` setting is applied once when a draft, a redraft or a manual draft is written - visible before approval, never at send time, never on chat, never twice)",
-      "commit": "88f2c1b; local gates passed, CI pending"
+      "commit": "88f2c1b; 88f2c1b/50560d5, CI run 34054507025 (all ten jobs passed)"
     },
     {
       "id": "PW-066",
@@ -594,7 +594,7 @@
       "requirement": "Test default Reply all, Reply to selection, Reply-To headers, editable To/CC,",
       "status": "partial: default Reply all, Reply to, Reply-To headers, editable To/CC, owner exclusion, deduplication, the exact approved envelope and signature-once across drafts/redrafts/manual drafts are covered; the IMAP and Graph send fakes are exercised through `reply_to_message`'s to/cc contract rather than each connector",
       "test": "`tests/test_reply_envelope.py` (9 cases)",
-      "commit": "88f2c1b; local gates passed, CI pending"
+      "commit": "88f2c1b; 88f2c1b/50560d5, CI run 34054507025 (all ten jobs passed)"
     },
     {
       "id": "PW-067",
@@ -1285,72 +1285,72 @@
       "section": "Send outcomes and explicit closure when sending is unavailable",
       "phase": "7",
       "requirement": "Check connector sending capability/permissions before offering send. Keep",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: the Review page already omits Send when `sendState` says the channel cannot carry the reply (`CanSend`/`SendBlock` from `outbound.can_reply`/`send_block`) and now offers Close without sending in its place; a connector-permission probe ahead of the first send (read-only Graph scope, missing SMTP) is not attempted - the definite-failure path carries that word",
+      "test": "`tests/test_send_outcomes.py`::CloseWithoutSendingTests",
+      "commit": "3459868; local gates passed, CI pending"
     },
     {
       "id": "PW-144",
       "section": "Send outcomes and explicit closure when sending is unavailable",
       "phase": "7",
       "requirement": "Confirmed send closes the task; definite failure preserves the draft and",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_send_outcomes.py`::OutcomeTests (a confirmed send closes the task; a definite failure keeps the draft and the task open with the error and a retry; a provider that did not answer is delivery UNKNOWN - `outbound.reconcile_sent` against the Sent folder before anything is retried, found = settled as sent with no second send; duplicate approvals are refused by the decided-review guard)",
+      "commit": "3459868; local gates passed, CI pending"
     },
     {
       "id": "PW-145",
       "section": "Send outcomes and explicit closure when sending is unavailable",
       "phase": "7",
       "requirement": "When sending is unavailable, offer a separate confirmed Close without",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_send_outcomes.py`::CloseWithoutSendingTests (verb `close_unsent`: the unsent draft is kept on the review, the closure and its reason are recorded as a comment and audit row, the task closes as the owner's word, nothing reads as Sent, and a failed send never closes anything by itself)",
+      "commit": "3459868; local gates passed, CI pending"
     },
     {
       "id": "PW-146",
       "section": "Send outcomes and explicit closure when sending is unavailable",
       "phase": "7",
       "requirement": "Test read-only/missing permissions, explicit close-without-send and cancel,",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: explicit close-without-send, confirmed success, definite failure, ambiguous timeout, provider reconciliation, retry-after-unknown and no success-style advancement after failure are covered; read-only/missing-permission probing and an explicit cancel are not exercised beyond the existing reject verb",
+      "test": "`tests/test_send_outcomes.py` (8 cases)",
+      "commit": "3459868; local gates passed, CI pending"
     },
     {
       "id": "PW-147",
       "section": "Successful reply closes its task",
       "phase": "7",
       "requirement": "Apply successful reply -> task done consistently across assistant approval,",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_send_outcomes.py`::OutcomeTests, `tests/test_freshness_walk.py` (every door - assistant approval, Review send, an externally sent reply matched by `channels.retire_draft_answered_elsewhere` - settles through `verdicts._settle_task_after_sent_reply`; only the task the reply belongs to closes)",
+      "commit": "3459868; local gates passed, CI pending"
     },
     {
       "id": "PW-148",
       "section": "Successful reply closes its task",
       "phase": "7",
       "requirement": "Drafting, editing, approving without confirmed send success, failed/blocked",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_send_outcomes.py`::OutcomeTests, ::CloseWithoutSendingTests (drafting, a failed or unknown send and close-without-sending never fire the completion rule; a clarification leaves the task waiting)",
+      "commit": "3459868; local gates passed, CI pending"
     },
     {
       "id": "PW-149",
       "section": "Successful reply closes its task",
       "phase": "7",
       "requirement": "Refresh task, review, and canonical Unread state after confirmed send and",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: the settled review leaves the pending set and the task leaves the actionable feed on a confirmed send or an explicit close (`_settle_task_after_sent_reply`, `store._VISIBLE_PENDING`); the Unread refresh on the live page rides the existing review/task change events rather than a dedicated assertion",
+      "test": "`tests/test_send_outcomes.py`",
+      "commit": "3459868; local gates passed, CI pending"
     },
     {
       "id": "PW-150",
       "section": "Successful reply closes its task",
       "phase": "7",
       "requirement": "Test successful send closes even with unchecked task TODOs, failed sends",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_send_outcomes.py`::OutcomeTests::test_a_confirmed_send_closes_the_task_whatever_its_checklist_says, ::test_a_definite_failure_keeps_the_draft_and_the_task_open_with_a_retry, ::test_a_retry_while_unknown_reconciles_first_and_sends_only_when_the_provider_has_nothing",
+      "commit": "3459868; local gates passed, CI pending"
     },
     {
       "id": "PW-151",

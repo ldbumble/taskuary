@@ -1636,3 +1636,36 @@ saved by hand (`PATCH /api/reviews/{id}`) - visible before approval, never at se
 chat, never twice, and an owner's own signed text is kept as written.
 
 Tests: `tests/test_reply_envelope.py` (9 cases). No frontend change.
+
+## Section 7.3 — send outcomes: sent, failed, unknown, and an explicit close without sending
+
+Status: implemented and tested locally at `3459868`; remote CI pending on the pushed
+checkpoint. Section 7.2 is CI-verified (88f2c1b/50560d5, CI run 34054507025 (all ten jobs passed)).
+Acceptance PW-144, PW-145, PW-147, PW-148, PW-150 implemented; PW-143, PW-146, PW-149 partial.
+
+A send that timed out was reported NOT SENT and offered for a retry that could deliver the same mail
+twice, and a channel that could not carry the reply left "No response required" as the owner's only
+exit. `verdicts.decide` now knows three outcomes. A confirmed send settles the task the reply belongs
+to through `_settle_task_after_sent_reply` - unchecked checklist items and all, the owner's decision
+that a sent reply is the end of the job (the "Successful reply closes its task" resolution). A
+definite failure keeps the approved text as the draft and the task open with the error and a retry,
+and marks the review's envelope `delivery: failed`. A provider that did not answer
+(`outbound.UNKNOWN_ERRORS`: read timeouts, connection errors) is delivery UNKNOWN, its own state:
+the envelope records `delivery: unknown` and the attempt time, `outbound.reconcile_sent` asks the
+Graph Sent Items of the conversation whether the reply is there (the opening words of the reviewed
+text are the receipt), a found mail is settled as sent with no second send and a comment saying so,
+and the next approval reconciles again before it sends anything - so a retry is safe. The wording
+never says sent or not sent until it is known. A second approval of a decided review is refused by
+the existing decided-review guard (`already`).
+
+Close without sending is the owner's explicit verb, `close_unsent` (`VERB2STATUS` → `closed_unsent`):
+the unsent draft stays on the review, the closure and its reason (the click's note, else the
+channel's `send_block`) are recorded as a comment and audit row, the task closes as the owner's word,
+and nothing reads as Sent. It is never an automatic consequence of a failed or blocked send. The
+Review page's blocked-channel button now sends this verb instead of `no_reply`, with the reason in
+its title. A proposal (`Kind: action`) is rejected, not closed without sending (`422`).
+
+Decision recorded: a clarification is the one send that does not end the task - it asks, it does
+not answer - so the task stays `waiting` (the existing `_settle_task_after_sent_reply` rule).
+
+Tests: `tests/test_send_outcomes.py` (8 cases). Frontend: `website/src/ReviewView.jsx` (verb + title only; rebuilt bundle).

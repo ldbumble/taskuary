@@ -14,6 +14,8 @@ historical wording; the plan lists reconciliations and unresolved policy boundar
 Execution tracking: [acceptance ledger](processing-acceptance-ledger.md) and
 [section evidence](processing-implementation-evidence.md). PW IDs are permanent;
 adding them does not change approval or completion status.
+Phase 0 infrastructure is CI-verified at `9bef568` (run 34012833267, all 10 jobs).
+Unchecked feature requirements below remain pending their own implementation gates.
 
 - [ ] <a id="pw-001"></a>**PW-001** Prevent slow AI triage and full-sync report execution from blocking fresh
   chat intake. Review the synchronous poll loop and `_POLL_BUSY` scope together;

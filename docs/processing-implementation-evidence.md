@@ -2,7 +2,7 @@
 
 ## Phase 0 / section 0.1: baseline and test infrastructure
 
-Status: implemented, cumulatively tested locally and independently reviewed; remote CI pending. Base `2689679dd87227ff9102bb7d7feb8920e3c47ca6`.
+Status: section 0.1 CI-verified at 9bef568. Phase 0 baseline infrastructure is accepted. Base `2689679dd87227ff9102bb7d7feb8920e3c47ca6`.
 No Phase 1 state migration or browser-control redesign has started.
 
 ### Baseline and ownership
@@ -42,9 +42,9 @@ are agent waits, other actionable tasks/finished results, FYIs, and working agen
 | P0-ISOLATION | Disposable test homes and external-effect prevention | Implemented and independently reviewed; executed evidence below |
 | P0-FIXTURE | Synthetic Unread/group/wait/duplicate/replay and legacy preservation | Implemented and independently reviewed; executed evidence below |
 | P0-BROWSER | Real rendered-browser harness, loading/replay timing | Implemented and independently reviewed; executed evidence below |
-| P0-REGRESSION | Full cumulative suites/build/native PTY and baseline failures | Backend 2186 + 66 subtests; frontend 262; browser 2; build parity passed |
-| P0-REVIEW | Independent final diff and isolation review | Astra Extra High independent code/isolation review approved; final evidence audit before push |
-| P0-REMOTE | Scoped push to origin/master and exact-SHA CI | Local gates passed; push and exact-SHA CI pending |
+| P0-REGRESSION | Full cumulative suites/build/native PTY and baseline failures | Backend 2187 + 66 subtests; frontend 262; browser 2; build parity passed |
+| P0-REVIEW | Independent final diff and isolation review | Astra Extra High independent code, isolation and final staged evidence review approved |
+| P0-REMOTE | Scoped push to origin/master and exact-SHA CI | 9bef568; CI run 34012833267: all 10 jobs successful |
 
 See processing-existing-failures.md for observed deficiencies separately from test
 failures. Every unchecked PW requirement remains pending implementation. Previously
@@ -149,5 +149,21 @@ changes. Preserve all original read evidence, attachments, task history and cust
 documents. No app restart, production connector use, outbound delivery or real model
 run is part of this section. Browser-control ownership/UI remains pending owner review.
 
-Remote verification is the only remaining section 0.1 delivery gate. No later phase
-may be accepted on these baseline results alone; each must rerun cumulative gates.
+Section 0.1 delivery gates are complete. No later phase may be accepted on these
+baseline results alone; each must rerun cumulative gates.
+
+### Accepted remote checkpoint
+
+Implementation checkpoint: `9bef568093b6085821e384b3cc66974fde6d2351` on
+origin/master. [CI run 34012833267](https://github.com/ldbumble/taskuary/actions/runs/34012833267)
+completed successfully for that exact SHA: six Python jobs (Windows/Linux/macOS,
+3.10/3.12), frontend tests/build/packaged parity, rendered browser, Docker smoke,
+and Windows executable. The earlier failed checkpoint is superseded, not concealed.
+
+The original README.md remains unmodified, SHA256
+`EDF56683E29A34789B2EBEF73E131FBD7B318AE498BC761668BCB70854D91BAB`.
+Raw local logs are preserved under the integration worktree's ignored
+`.codex-tmp/phase0-evidence/`; only scoped source/tests/docs entered the commits.
+
+Next: Phase 1 canonical identity/context and historical-read preservation foundation.
+Later grouping/action/deferral policy transitions remain separate pending decisions.

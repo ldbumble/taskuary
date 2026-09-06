@@ -415,6 +415,9 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
     # triage read "nope. new" with no idea what had been asked two minutes earlier.
     lines = exchange_lines(store, msg)
     if lines: thread = {**thread, 'exchange': lines}
+    # an assistant idea carries where it came from and what it is about (PW-199): the report, the task
+    # it names and whether a worker has that task - facts the model needs to judge a generated line
+    if msg.get('idea_context'): thread = {**thread, 'idea_context': msg['idea_context']}
     # ...and what the ASSISTANT has already said about this thread (a chase it suggested,
     # an ask it flagged, and what the owner did with it) - the other brain's last word
     from .assistant import said_about
@@ -479,12 +482,15 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         return {'status': 'filed', 'task_id': None, 'message_id': mid}
     mine = owner_addresses(store)        # every mailbox the funnel reads - excludes the owner's own replies from "others"
     me = own_addresses(store)            # the owner's own address - what the To/Cc lines are measured against
-    verdict = None                       # a chat line's one judgement, made BEFORE routing (chat_route); reused below
+    # a judgement made BEFORE routing rides in on the message (an assistant idea judged by triage_ideas,
+    # a chat line judged by chat_route) and is reused below - never a second model call for one message
+    verdict = msg.pop('_verdict', None)
     if is_chat(msg):
         # a room is not a topic: nothing joins on the room id alone. Two facts join without a
         # model (a line typed seconds after the last, an answer to a live agent); everything else
         # is the verdict's `relationship`, among this room's lines from this same day (PW-031..034)
-        r, verdict = chat_route(store, msg, cfg, llm, mine, me)
+        r, chat_verdict = chat_route(store, msg, cfg, llm, mine, me)
+        verdict = verdict or chat_verdict
     else:
         # mail and tracker items join by IDENTITY - the conversation their own headers name - never by
         # resemblance (PW-016); the closed task of a thread stays closed and the reply stays on the

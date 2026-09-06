@@ -871,6 +871,65 @@ def day_stats(store) -> list:
             {'n': sum(1 for t in tasks if t.get('ReviewStatus') == 'pending'), 'label': 'waiting on you', 'hot': True}]
 
 
+def _idea_message(store, i: dict, a: dict, report_title=None) -> tuple:
+    """An idea as the message triage reads: its words, its why, and idea_context - the report it came
+    from, the task it names (with status) and whether a worker has it. Returns (msg, linked task id, active)."""
+    m0 = (store.get_message(a['mid']) or {}) if a.get('mid') else {}
+    tid = a.get('tid') or m0.get('TaskId')
+    task = store.get_task(tid) if tid else None
+    active = bool(task and task.get('Status') in ('open', 'in_progress', 'waiting'))
+    working = bool(active and any(r.get('Status') == 'running' for r in store.list_runs(tid)))
+    stamp = i.get('LastSaid') or i.get('FirstSeen') or datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    who = report_title or 'Assistant'
+    msg = {'external_id': f"idea:{i['IdeaId']}:{stamp}", 'channel': CHANNEL, 'from_name': who, 'source_name': who,
+           'conversation_id': str(i.get('Key') or f"idea:{i['IdeaId']}"), 'subject': f"Assistant idea: {_short(i.get('Text'), 100)}",
+           'sent_at': stamp, 'body': str(i.get('Text') or '') + (f"\n\nwhy: {a.get('why')}" if a.get('why') else ''),
+           'idea_context': {'report': report_title, 'kind': i.get('Kind'),
+                            'linked_task': f"{task_ref(tid)} [{task.get('Status')}] {_short(task.get('Title'), 80)}" if task else None,
+                            'worker': 'an agent is working that task now' if working else ('nobody has that task' if task else None)}}
+    return msg, (tid if task else None), active
+
+
+def triage_ideas(store, rows: list, llm, report_title: str = None) -> list:
+    """The shared verdict for every newly said idea (PW-199/PW-200). Judged once per set of facts (the
+    idea's Sig); recorded on the idea as action.triage - intent, kind, why, the task it is linked to - or
+    as error (retried on the next say) or pending (no brain). An actionable idea about NO active task
+    opens work through the shared intake with the verdict it already has, so kind defaults and startup
+    rules apply and no second model call is made; one about active work creates nothing. A generated
+    claim never completes anything. Returns the ideas judged this pass."""
+    from .ingest import judge, ingest_message, owner_addresses, own_addresses
+    now, done = datetime.now().strftime('%Y-%m-%d %H:%M:%S'), []
+    for i in rows:
+        try: a = json.loads(i.get('ActionJson') or '{}')
+        except ValueError: a = {}
+        tri = a.get('triage') or {}
+        if tri and tri.get('sig') == (i.get('Sig') or '') and not tri.get('error') and not tri.get('pending'): continue
+        msg, tid, active = _idea_message(store, i, a, report_title)
+        if llm is None:
+            a['triage'] = {'pending': True, 'sig': i.get('Sig') or '', 'at': now}
+            store.set_idea_action(i['IdeaId'], a); continue
+        try:
+            intent, fail = judge(store, msg, llm, owner_addresses(store), own_addresses(store))
+            if fail: raise RuntimeError(fail.get('err') or 'the model failed')
+            if intent.get('degraded'): raise RuntimeError(intent.get('parse_error') or 'the answer was not a verdict')
+        except Exception as e:
+            a['triage'] = {'error': str(e)[:200], 'sig': i.get('Sig') or '', 'at': now}
+            store.set_idea_action(i['IdeaId'], a); continue
+        a['triage'] = {'intent': intent.get('intent'), 'kind': intent.get('kind'), 'why': str(intent.get('why') or '')[:200],
+                       'sig': i.get('Sig') or '', 'at': now, 'linked_task': tid if active else None, 'error': None}
+        if tid and active: a['tid'] = tid
+        if intent.get('intent') in ('task', 'reply_only') and not active:
+            try:
+                out = ingest_message(store, {**msg, '_verdict': (intent, {})}, actor='assistant', llm=llm)
+                if out.get('task_id'):
+                    a['tid'] = out['task_id']
+                    store.update_task(out['task_id'], {'SourceRef': f"assistant:idea:{i['IdeaId']}"}, 'assistant')
+            except Exception as e:
+                a['triage'] = {'error': f'opening the work failed: {str(e)[:160]}', 'sig': i.get('Sig') or '', 'at': now}
+        store.set_idea_action(i['IdeaId'], a); done.append(i['IdeaId'])
+    return done
+
+
 def _public(i: dict) -> dict:
     try: a = json.loads(i.get('ActionJson') or '{}')
     except ValueError: a = {}
@@ -1068,6 +1127,14 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
                                      'stats': [] if systems_only else day_stats(store)}))
     store.set_ideas_message([i['IdeaId'] for i in rows], mid)
     store.audit('message', mid, 'assistant_post', 'assistant', 'agent', {'ideas': len(rows)})
+    # the ideas are ARRIVALS: each newly said one goes through the same triage as a mail (PW-199) - by
+    # the TRIAGE brain, the one every message is judged by, not the assistant's own model
+    try:
+        from .llm import build_llm
+        try: brain = build_llm(store)
+        except Exception: brain = None
+        triage_ideas(store, rows, brain, report_title=name if systems_only else None)
+    except Exception as e: logger.warning(f'assistant: idea triage skipped - {e}')
     logger.info(f'assistant: posted {len(rows)} idea(s) as message {mid}')
     return {'ran': True, 'said': len(rows), 'message_id': mid, 'reviewed': rv, 'inputs': read, 'lines': [_public(i) for i in rows]}
 

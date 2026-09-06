@@ -1114,6 +1114,8 @@ class SQLiteStore:
             # Talking back is part of this suggestion's history. New facts may reopen and
             # rewrite the action, but must not erase the owner's correction or our answer.
             if prior.get('chat'): action['chat'] = prior['chat']
+            # the shared verdict is history too: it stays until the facts (Sig) change, when triage_ideas re-judges
+            if prior.get('triage') and 'triage' not in action: action['triage'] = prior['triage']
         act = json.dumps(action)
         if old:
             self._exec("UPDATE idea SET Kind=?, Text=?, ActionJson=?, Sig=?, Status='open', SnoozeUntil=NULL, LastSaid=?, SaidCount=SaidCount+1 WHERE Key=?",

@@ -149,6 +149,7 @@ class ProducersTests(Base):
 
     def test_an_explicit_done_is_the_finished_event_with_its_result(self):
         sess = live(self.tid); term.SESSIONS['run1'] = sess
+        selfclose.forget(self.tid)                                   # the once-only mark is process-wide; another suite may have used this id
         with mock.patch.object(selfclose, '_wrap', return_value={'closed': True, 'drafting': False}), \
              mock.patch.object(selfclose, 'blocked', return_value=''), mock.patch.object(selfclose, 'stays_open', return_value=False):
             selfclose.declare(self.s, self.tid, 'cleared the stuck cron and re-ran it', 'coder')

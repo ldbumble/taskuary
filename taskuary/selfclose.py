@@ -180,12 +180,25 @@ def declare(store, tid: int, summary: str = '', agent: str = 'agent') -> dict:
     # "either way", the box said - and TQ-0297 (2026-09-01) closed under the owner mid-review
     # because the agent decided it was finished. The agent's verdict is filed where the owner
     # reads it; the session stays at its prompt, which raises its hand; the owner presses Done.
-    if stays_open(store, tid):
-        store.add_comment(tid, agent, 'agent', f'The agent says it is finished: {line}' if line else 'The agent says it is finished.')
-        store.audit('task', tid, 'agent_done_held', agent, detail={'why': 'opened to work in'})
-        return {'closed': False, 'held': True,
-                'why': 'the owner opened this session to work in, so only they end it - your summary is on the task; stay at the prompt'}
     if not _mark(tid): return {'closed': False, 'why': 'a self-close already ran for this task'}
+    if stays_open(store, tid):
+        # an EXPLICIT finish closes the completed run and saves its result even when the owner opened the
+        # session (PW-232): the veto was for the judge, not for the agent's own word. The task's closure and
+        # any reply stay the owner's decisions, so close=False.
+        try:
+            from . import workerstate as ws
+            s = term.session_for(tid)
+            ws.record(store, tid, getattr(s, 'sid', None) or ws.current_sid(store, tid) or 'cli', 'finished', text=line, source='cli')
+        except Exception as e: logger.debug(f'finished event skipped: {e}')
+        store.add_comment(tid, agent, 'agent', f'The agent says it is finished: {line}' if line else 'The agent says it is finished.')
+        try:
+            out = coder.wrap(store, tid, close=False, actor=agent or 'coder', final_message=line)
+        except Exception as e:
+            forget(tid)
+            store.add_comment(tid, 'router', 'agent', f'The agent finished but its result could not be saved ({str(e)[:200]}) - the session is still open; try again.')
+            return {'closed': False, 'why': str(e)[:200]}
+        store.audit('task', tid, 'agent_done_run_closed', agent, detail={'why': 'opened to work in - the run closed, the task stays'})
+        return {'closed': False, 'closed_run': True, 'why': 'the run closed and its result is on the task; you opened this task, so its closure is yours', **out}
     # the explicit result, as an event (workerstate.py, PW-222/230): Finished does not close the task by itself -
     # the wrap below does that, on its own terms
     try:

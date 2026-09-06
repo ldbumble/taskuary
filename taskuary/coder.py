@@ -213,25 +213,30 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
         last = next((m['content'][0]['text'] for m in reversed(general.history(store, tid)) if m['role'] == 'assistant'), '')
         return {'wrap': 'done', 'taskId': tid, 'report': last, 'proposed': [], 'drafting': False}
     live = term.session_for(tid)
-    # Claude's Stop hook and Codex's rollout both preserve the final assistant response on the
-    # witness. Keep it separate from the card summary; snapshot() truncates it only for display.
+    # The agent's OWN final answer, matched to the run (PW-230): the explicit `--done` sentence recorded as the
+    # run's Finished event first, then the Stop hook's last message the witness kept - never a second AI's
+    # reconstruction from scrollback when the agent said it itself.
+    from . import workerstate as ws
+    word = ws.status(store, tid)
+    spoken = str(word.get('result') or '') if word.get('state') == 'finished' and (not live or str(word.get('sid')) == str(getattr(live, 'sid', ''))) else ''
     witnessed = str(getattr(getattr(live, 'witness', None), 'said', '') or '')
-    final_message = str(final_message or witnessed).strip()
+    final_message = str(final_message or spoken or witnessed).strip()
     text, agent, found = term.transcript_for(store, tid)
     if not text.strip(): raise ValueError('nothing to wrap up - this task has no session transcript')
-    if found: term.close(found)              # done means done - the pty and its shells go too
     rep = report_from_transcript(store, tid, text, agent)
     report = resolution_text(rep)
-    store.add_comment(tid, actor, 'human', 'Closed the session - wrapped up from what was on screen.')
-    store.add_comment(tid, agent, 'agent', f'CODER REPORT\n{report}')
-    # The compact result and final answer become the readable Markdown artifact. terminal.py has
-    # already filed the raw PTY stream for recovery; duplicating it here made the reader unusable.
-    artifact = None
+    # SAVE FIRST, close after (PW-231/233): the result, the final answer and the checklist items the agent
+    # reported land before the pty goes. A save that fails raises here - the session stays, the report is
+    # not written, nothing reads as finalised - and the caller may retry.
+    from . import session_artifacts
     try:
-        from . import session_artifacts
-        artifact = session_artifacts.coding(store, tid, report, text, agent or actor,
-                                            final_message=final_message)
-    except Exception as e: logger.warning(f'coding artifact failed for task {tid}: {e}')
+        artifact = session_artifacts.coding(store, tid, report, text, agent or actor, final_message=final_message)
+    except Exception as e:
+        raise ValueError(f'the result could not be saved ({str(e)[:160]}) - the session was left open; try again')
+    tick_reported_checklist(store, tid, final_message + '\n' + text, agent or actor)
+    store.add_comment(tid, agent, 'agent', f'CODER REPORT\n{report}')
+    if found: term.close(found)              # done means done - the pty and its shells go too, once the result is safe
+    store.add_comment(tid, actor, 'human', 'Closed the session - wrapped up from what was on screen.')
     # anything the agent PROPOSED becomes a pending review here, at the one moment its whole
     # transcript is in hand - and refusals are recorded rather than dropped (proposals.py)
     proposed = []
@@ -261,6 +266,28 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     store.audit('terminal', tid, 'wrap', actor, detail={'sid': sid or found, 'close': close})
     return {'wrap': 'done', 'taskId': tid, 'report': report, 'proposed': proposed,
             'drafting': bool(fin.get('drafting')), 'artifacts': [artifact] if artifact else []}
+
+
+_TICKED = re.compile(r'^\s*(?:[-*]\s*)?\[(x|X|✓|done)\]\s*(.+?)\s*$', re.M)
+
+
+def tick_reported_checklist(store, tid: int, text: str, actor: str = 'coder') -> list:
+    """Tick the checklist items the agent itself reported done - a `- [x] item` line in its result or transcript
+    that matches an item's words - and nothing else (PW-231). Item identities are kept; nothing is added, moved
+    or blindly completed; an item the agent did not name stays open."""
+    if not hasattr(store, 'task_checklist'): return []
+    items = store.task_checklist(tid)
+    if not items: return []
+    said = {' '.join(m.group(2).split()).lower().rstrip('.') for m in _TICKED.finditer(str(text or ''))}
+    ticked = []
+    for it in items:
+        if it.get('done'): continue
+        words = ' '.join(str(it.get('text') or '').split()).lower().rstrip('.')
+        if words and any(words == s or words in s or s in words for s in said):
+            try: store.tick_checklist_item(tid, it['id'], True, actor); ticked.append(it['text'])
+            except Exception as e: logger.debug(f'checklist tick skipped: {e}')
+    if ticked: store.add_comment(tid, actor, 'agent', 'Reported done:\n' + '\n'.join(f'- [x] {t}' for t in ticked))
+    return ticked
 
 
 def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,

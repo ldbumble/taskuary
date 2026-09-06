@@ -233,7 +233,7 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.match(cards, /filter\(\(m\) => String\(m\.Status \|\| ""\) !== "context"\)/);
   assert.match(cards, /messages combined by triage/);
   assert.match(cards, /const \[full, setFull\] = useState\(true\)/);
-  assert.equal((cards.match(/<CombinedTaskText card=\{card\} \/>/g) || []).length, 2); // reply + ordinary message
+  assert.equal((cards.match(/<CombinedTaskText card=\{card\} \/>/g) || []).length, 3); // reply + ordinary message + the task card (PW-152)
   assert.match(read("SettingsView.jsx"), /funnel_hours/); assert.match(read("SettingsView.jsx"), /funnel_max/);
 });
 

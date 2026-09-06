@@ -35,7 +35,9 @@ MAX_TOKENS, TURNS, FACT_CHARS = 380, 10, 1_600
 # three. So 'next' asks no model: it is instant, and it can never describe the wrong item (the owner,
 # 2026-09-03: "should not even be an AI call, just go to next task"). The model speaks only when the
 # owner types something that is not already a decision. Flip this for a model-written introduction.
-INTRO_AI = False
+# The introduction of the item on the table is the model's, per COUNSEL (PW-153). The facts line is the
+# fallback only: no AI connector, a failed pass, an answer off the subject or out of character.
+INTRO_AI = True
 MARK = '<!-- tq:card '
 _MARK = re.compile(r'\s*<!-- tq:card (\{.*?\}) -->\s*$', re.S)
 _OPTIONS = re.compile(r'\n?\s*OPTIONS:\s*(.+?)\s*$', re.I | re.S)
@@ -811,7 +813,18 @@ def _brain_for(store, tid: int, llm, trace=None, cancel=None, fast=True):
     """The caller's brain, or ours - always the fast lane: an API connector when there is one, else the CLI
     with its tools off. The assistant never runs anything, so no turn needs the slow gear."""
     if llm is not None: return llm
-    return brain(store, trace=trace, cancel=cancel, resume=_sid(store, tid) or None, fast=True)
+    try: return brain(store, trace=trace, cancel=cancel, resume=_sid(store, tid) or None, fast=True)
+    except Exception as e:
+        logger.warning(f'concierge: no brain for this turn - {e}')
+        return None
+
+
+_NUMBERED = re.compile(r'^\s*(\d+)[.)]\s*(.+?)\s*$', re.M)
+
+def _numbered(text: str, n: int) -> dict:
+    """{1: line, ..., n: line} from a numbered answer - all n of them, or nothing."""
+    got = {int(k): v for k, v in _NUMBERED.findall(text or '') if 1 <= int(k) <= n}
+    return got if len(got) == n else {}
 
 
 def open_day(store, llm=None, actor: str = 'owner', trace=None, cancel=None) -> dict:
@@ -1288,19 +1301,23 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
     if not key and item['lane'] == 'fyi':
         batch = item.get('items') if selection is not None and item.get('kind') == 'fyis' else funnel.fyi_batch(store, item)
         llm = _brain_for(store, tid, llm, trace, cancel, fast=True) if (llm is not None or INTRO_AI) else None
-        say, remember_llm = '', False
+        say, gists, remember_llm = '', {}, False
         if llm:
             try:
-                fx = '\n'.join(f"- {i.get('who') or '?'}: \"{i['title']}\" - {i.get('preview') or ''}" for i in batch)
+                # the shape is code's (one numbered line per entry, so each gets its own summary - PW-151); the words are COUNSEL's
+                fx = '\n'.join(f"{n}. {i.get('who') or '?'}: \"{i['title']}\" - {i.get('preview') or ''}" for n, i in enumerate(batch, 1))
                 user = (f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'])}\n\n"
                         f"FYI - {len(batch)} thing{'s' if len(batch) != 1 else ''} people told the owner, nothing to do with any of them:\n{fx}\n\n"
-                        "Sum them up in one or two sentences - who said what and the gist. No options line and no question is needed.")
+                        f"Answer with exactly {len(batch)} numbered line{'s' if len(batch) != 1 else ''}, in that order, one sentence each: who said what, and the gist. No options line.")
                 say, _options = parse_options(str(llm(_system(store, llm), user, max_tokens=MAX_TOKENS) or '').strip())
+                if not in_character(say): say = ''
+                gists = _numbered(say, len(batch))
                 remember_llm = True
             except Exception as e: logger.warning(f'concierge: the fyi pass failed - {e}')
         if not say:
             say = (f"{len(batch)} thing{'s' if len(batch) != 1 else ''} people told you, nothing to do: "
                    + '; '.join(f"{i.get('who') or 'someone'} - {i['title']}" for i in batch) + '.')
+        batch = [i | {'summary': gists.get(n) or i.get('summary') or i.get('preview') or ''} for n, i in enumerate(batch, 1)]
         card = {'key': 'fyis:' + ','.join(i['key'] for i in batch), 'kind': 'fyis', 'lane': 'fyi',
                 'title': f"{len(batch)} fyi", 'who': '', 'when': batch[0].get('when'),
                 'since': batch[0].get('since'), 'channel': batch[0].get('channel'),
@@ -1310,7 +1327,8 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             if remember_llm:
                 try: _remember_sid(store, tid, llm)
                 except Exception as e: logger.warning(f'concierge: the fyi conversation did not save - {e}')
-            for i in batch: funnel.settle(store, i['key'], 'surfaced', actor)
+            # shown is not read (PW-154): the state is `surfaced`, and it carries the entry's own summary
+            for n, i in enumerate(batch, 1): funnel.settle(store, i['key'], 'surfaced', actor, note=None if i.get('sig') else gists.get(n))
             record_related(store, tid, card, 'assistant', say, card)
         return {'item': card, 'say': say, 'options': [], 'left': len(p['items']) - len(batch)}
 
@@ -1318,14 +1336,12 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
     say, options, remember_llm = '', [], False
     if llm:
         try:
-            ask = ("A REPORT landed - one sentence: which report, when, and whether it failed (then name the cause from what they wrote). Do NOT summarize "
-                   "its contents; the owner reads it with the button. ") if item['kind'] == 'report' and not item.get('bad') else \
-                  ("Say it in THREE BEATS, plainly, two or three sentences: (1) WHERE IT CAME FROM - who wrote, on what channel, when, and what they "
-                    "asked in their words; when TRIAGE COMBINED messages, describe that whole bundle together in this one presentation; "
-                    "(2) WHAT WAS DONE - triage's verdict, or what the agent did and found (THE AGENT FOUND / TASK NOW), or "
-                   "nothing yet; (3) WHAT YOU NEED FROM THE OWNER - name the button: approve the draft below, answer the agent, read it, or nothing. "
-                   + ('This is a REPLY waiting for the yes: beat 3 is whether to send THE DRAFT below. ' if item['kind'] in ('review', 'action') else '')
-                   + ('The agent is parked and waiting: beat 3 is its question. ' if item['kind'] == 'agent' else ''))
+            # the card's structure is code's to state; the explanation itself is COUNSEL's (PW-153)
+            ask = ('Introduce the item on the table to the owner. '
+                   + ('A report landed: say which and when, and whether it failed - its contents are read with the button, not summarised here. '
+                      if item['kind'] == 'report' and not item.get('bad') else '')
+                   + ('The card below holds the draft that waits for their yes. ' if item['kind'] in ('review', 'action') else '')
+                   + ('The agent is parked on the question in the card. ' if item['kind'] == 'agent' else ''))
             say, options = _ask(store, llm, tid, item, ask, p['items'])
             remember_llm = True
         except Exception as e: logger.warning(f'concierge: the model pass failed - {e}')
@@ -1460,6 +1476,23 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     say_ = lead + f"{head}.{note} Nothing has been started - confirm below, or tell me what to change."
     return {**op, 'verb': verb, 'label': label, 'summary': summary, 'settles': bool(settles and not elsewhere),
             'key': it.get('key'), 'ref': it.get('ref'), 'tid': it.get('tid'), 'say': say_}
+
+
+def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'owner') -> dict:
+    """A card's own button on ONE entry (PW-151): the same proposal the words would make, without the interpreter -
+    the target is explicit. It never settles what is on the table, and the entry's siblings are not touched."""
+    if verb not in PROPOSALS: raise ValueError(f'{verb} is not something a card proposes')
+    item = funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
+    if not item: raise ValueError('that one is not in the pipe any more')
+    tid = general.dock_task(store, actor)[0]['TaskId']
+    why = cannot(item, verb, store)
+    if why: raise ValueError(why)
+    record_related(store, tid, item, 'user', f"{PROPOSALS[verb][1]}: {item.get('title') or item.get('ref') or key}")
+    prop = propose_for(store, tid, {'verb': verb, 'text': text or ''}, item, text or '', actor)
+    prop['settles'] = False
+    record_related(store, tid, item, 'assistant', prop['say'], {'kind': 'proposal', 'key': prop.get('key'), 'title': prop['label'], 'op': prop['id'],
+                                                               'tid': prop.get('tid'), 'ref': prop.get('ref'), 'lane': item.get('lane')})
+    return prop
 
 
 def describe_op(store, op: dict) -> tuple:

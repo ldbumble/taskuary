@@ -2765,6 +2765,15 @@ def concierge_say(body: ConciergeSayBody):
         return out
     except ValueError as e: raise HTTPException(422, str(e))
 
+class ConciergeProposeBody(BaseModel): verb: str; key: str; text: str | None = None
+
+@app.post('/api/concierge/propose')
+def concierge_propose(body: ConciergeProposeBody):
+    """A card's own button on one entry: the same proposal the words would make (PW-151), confirmed the same way."""
+    from . import concierge
+    try: return concierge.propose_direct(store, body.verb, body.key, body.text or '', ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+
 class SetupBody2(BaseModel): text: str
 
 @app.post('/api/concierge/setup')

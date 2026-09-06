@@ -188,7 +188,7 @@ function Line({ m, live, actions, fresh }) {
     setup: <SetupCard card={m.card} onNavigate={actions.navigate} onHandOff={actions.handOff} />,
     brief: <BriefCard card={m.card} onStart={actions.start} />,
     task: <TaskCard card={c} onDone={actions.done} onOpenTask={actions.openTask} />,
-    fyis: <FyisCard card={c} onDone={actions.done} onSurface={(k) => actions.surface(k)} onTimeline={actions.timeline} />,
+    fyis: <FyisCard card={c} onDone={actions.done} onSurface={actions.surface} onTimeline={actions.timeline} onPropose={actions.propose} />,
     wrapup: <WrapupCard card={c} onDone={actions.done} onOpenTask={actions.openTask} />,
   }[kind] : null;
   return (
@@ -618,6 +618,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       else loadPile();
     } finally { setBusy(false); }
   };
+  // a card button on ONE entry (PW-151): the same proposal road the words take, minus the interpreter - the
+  // target is explicit. The card lands in the chat and runs from its own button, like any proposal.
+  const proposeDirect = async (verb, key) => {
+    const { data } = await api.post("/api/concierge/propose", { verb, key });
+    setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: [], proposal: data,
+                            card: { kind: "proposal", key: data.key, title: data.label, op: data.id, tid: data.tid, ref: data.ref } }]);
+    say(data.say);
+  };
   const cancelProposal = async (p) => {
     try { await api.delete(`/api/operations/${p.id}`); } catch { /* it may be gone already */ }
     const out = afterCancel(p);
@@ -735,7 +743,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   };
 
   const actions = { done, start, handOff, openTask: onOpenTask, timeline, navigate: onNavigate, pick: (o) => send(o),
-    confirm: confirmProposal, cancel: cancelProposal,
+    confirm: confirmProposal, cancel: cancelProposal, propose: proposeDirect,
     surface: (key, note) => {
       if (note) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: note }]);
       deferInChat(() => key ? surfaceRef.current?.(key) : loadPileRef.current?.(), 900);

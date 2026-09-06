@@ -516,6 +516,8 @@ def _apply_states(items: list, states: dict, now: datetime, keep_surfaced: bool 
                 # owner (a draft/approval or an agent question) remains addressable and marked.
                 if not keep_surfaced and i['lane'] not in ('blocked', 'approve', 'working'): continue
                 i = i | {'surfaced': True, 'surfaced_at': st.get('At')}
+                # an fyi's shown-state note is the summary the assistant wrote for it (PW-151); a sig'd item's note is its sig
+                if i.get('lane') == 'fyi' and not i.get('sig') and st.get('Note'): i = i | {'summary': st['Note']}
         out.append(i)
     return out
 

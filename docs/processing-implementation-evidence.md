@@ -2198,3 +2198,33 @@ Tests: `tests/test_assistant_presentation.py` (8 cases), `website/test/fyiCard.t
 `tests/test_lifecycle.py` and `website/test/funnelPile.test.mjs` re-pinned. Frontend:
 `assistantCards.jsx` (FyisCard, CombinedTaskText, TaskCard), `AssistantView.jsx` (`proposeDirect`),
 rebuilt bundle. Backend evidence: `.codex-tmp/phase3-evidence/backend-8.2.log`.
+
+## Section 8.3 — background updates go to one strip and never advance the conversation
+
+Status: implemented and tested locally at `42d0d16`; remote CI pending on the pushed
+checkpoint. Section 8.2 is CI-verified (1fb5469/4f58096, CI run 34060354066 (browser, build-exe, docker passed; the Windows pytest jobs failed only on tests/test_ideas_triage.py's fixed 09:00 stamp once the runner's clock passed 21:00 UTC - made relative in 13c93de)).
+Acceptance PW-165 to PW-170 implemented.
+
+The watcher (`funnel.announce`) used to write every agent transition into the chat as an assistant
+line, an asking agent with a card, and the page narrated a newer message on Current as a line of its
+own. Now an unsolicited update is a NOTICE on the one bottom strip (PW-165): a working or finished
+agent is kept as a `notice:<tid>` funnel-state row (`funnel.notify` / `funnel.notices`) folded into
+the pile's `alerts`, and nothing is written into the chat by the watcher; a parked or asking agent is
+the pile's own alert and is never kept twice; a newer message on Current raises a page-side notice
+and refreshes the presentation passively, the subject unchanged. The strip's queue
+(`pendingAlerts`) keeps every notice pending whatever is on the table, shows "+N more", and keeps the
+pile's own outranking rule for its alerts; the strip stays until Open or Later (PW-166): Open is the
+owner's own navigation to the item (`surface`), Later marks only the notice `ack` - no item state, the
+task untouched - a newer fact about the same task replaces the older notice, and `reset_walk` drops
+put-down notices so a new chat does not raise them again.
+
+`loadPile` holds no scheduled `surface()`, no `deferInChat` and writes no turn (PW-168/169): polling,
+live events and tab activation refresh the pile only; a Current the server says is gone is cleared
+without a replacement being discussed; the working event no longer nudges "let's go to the next
+thing". The approval-time material-change dialog of Section 7.5 is an action-blocking validation
+and is untouched.
+
+Tests: `tests/test_assistant_notifications.py` (5 cases), `website/test/notificationStrip.test.mjs` (3 cases); `tests/test_funnel.py`,
+`tests/test_lifecycle.py`, `tests/processing/test_processing_selection.py` and the live-chat line
+pin re-pinned. Frontend: `funnelPile.js` (`pendingAlerts`), `AssistantView.jsx` (notices, strip,
+`ack`), rebuilt bundle. Backend evidence: `.codex-tmp/phase3-evidence/backend-8.3.log`.

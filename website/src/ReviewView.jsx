@@ -7,6 +7,8 @@ import api from "./api";
 import { proposalPresentation, reviewText } from "./reviewProposal.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, PILL_COLORS } from "./theme.jsx";
 import { CcRow, ChannelIcon, RefChip, timeAgo, Empty, FilterPills, cleanText, splitQuoted } from "./ui.jsx";
+import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
+import { interruptOf, resolveInterrupt } from "./approvalInterrupt.js";
 
 // What they wrote, above what we would say back. The queue used to show only the draft: you
 // approved an answer without the question in front of you, or opened the task to find it. Four
@@ -73,6 +75,8 @@ export default function ReviewView({ onOpenTask, onChanged }) {
   const [rows, setRows] = useState(null);
   const [filter, setFilter] = useState("pending");
   const [edits, setEdits] = useState({});
+  const [interrupt, setInterrupt] = useState(null);   // PW-239: the click that did not send
+  const [compare, setCompare] = useState(null);       // the refreshed draft, shown beside the owner's edit
   const [busy, setBusy] = useState(null);
   const [err, setErr] = useState("");
   const [sendErr, setSendErr] = useState(null);   // approved, but the channel refused it
@@ -97,6 +101,8 @@ export default function ReviewView({ onOpenTask, onChanged }) {
         { verb, final_text: verb === "approve" ? (edits[r.ReviewId] ?? reviewText(r)) : null, note: null,
           // only on the send: rejecting or "no reply needed" copies nobody on nothing
           cc: verb === "approve" && !proposalPresentation(r) ? ccFor(r) : null });
+      const it = interruptOf(data, r.ReviewId);
+      if (it) { setInterrupt(it); load(); setBusy(null); return; }
       if (data.send_error) setSendErr({ id: r.ReviewId, msg: data.send_error });
       load(); onChanged?.();
     } catch (e) { setErr(e?.response?.data?.detail || "Decide failed"); }
@@ -127,6 +133,11 @@ export default function ReviewView({ onOpenTask, onChanged }) {
         {rows && <Typography variant="caption" sx={{ color: FAINT }}>{rows.length} shown</Typography>}
       </Box>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mt: 1.5 }}>{err}</Alert>}
+      <ApprovalInterrupt it={interrupt} onResolve={(choice) => {
+        // the click did not send; the owner's edit stays theirs, the refreshed draft is shown beside it (PW-239)
+        const res = resolveInterrupt(interrupt, choice, edits);
+        setEdits(res.edits); setCompare(res.compare); setInterrupt(null);
+      }} />
       {!rows ? <CircularProgress size={22} sx={{ m: 4 }} /> : !rows.length ? (
         <Empty>{filter === "pending" ? "Queue is clear — nothing needs you."
           : filter === "held" ? "Nothing is waiting on an agent."
@@ -193,6 +204,19 @@ export default function ReviewView({ onOpenTask, onChanged }) {
                   onChange={(e) => setEdits({ ...edits, [r.ReviewId]: e.target.value })}
                   placeholder={r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — hit Draft with AI"}
                   inputProps={{ style: { fontSize: 12.5, lineHeight: 1.45 } }} />
+                {compare?.reviewId === r.ReviewId && (
+                  <Box sx={{ mt: 0.75, border: "1px solid #d2d6cf", borderRadius: 1.5, px: 1.25, py: 0.75, bgcolor: PANEL2 }}>
+                    <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 700, display: "block" }}>
+                      Refreshed draft - written after the new message. Your edit stays in the box above.
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: INK, whiteSpace: "pre-wrap", fontSize: 12.5, mt: 0.5 }}>{compare.refreshed || "(no refreshed draft - hit Redraft)"}</Typography>
+                    <Box sx={{ display: "flex", gap: 0.75, mt: 0.75 }}>
+                      <Button size="small" variant="outlined" disabled={!compare.refreshed}
+                        onClick={() => { setEdits({ ...edits, [r.ReviewId]: compare.refreshed }); setCompare(null); }}>Use the refreshed draft</Button>
+                      <Button size="small" sx={{ color: DIM }} onClick={() => setCompare(null)}>Keep mine</Button>
+                    </Box>
+                  </Box>
+                )}
                 <Box sx={{ display: "flex", gap: 0.75, mt: 0.75 }}>
                   {/* ONE approve: it sends whatever is in the box above, edited or not. Two buttons
                       asked you to declare something the text already shows. */}

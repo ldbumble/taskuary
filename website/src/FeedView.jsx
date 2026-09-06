@@ -6,6 +6,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert, Box, Button, Chip, CircularProgress, Drawer, IconButton, ListSubheader, MenuItem, Select, TextField, Typography, useMediaQuery,
 } from "@mui/material";
+import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
+import { interruptOf, resolveInterrupt } from "./approvalInterrupt.js";
 import CloseIcon from "@mui/icons-material/Close";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
@@ -773,6 +775,8 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   }, []);
   const [sel, setSel] = useState(null);
   const [sendErr, setSendErr] = useState("");     // approved, but the channel refused it
+  const [interrupt, setInterrupt] = useState(null);   // PW-239: the click that did not send
+  const [compare, setCompare] = useState(null);       // the refreshed draft, shown beside the owner's edit
   const hoverTimer = useRef(null);
   const want = useRef(null);                    // newest selection wins if fetches land out of order
   // `quiet` is the hover path: the panel keeps showing the row you were on until the next one's
@@ -931,8 +935,10 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     // cc only on the send: rejecting or "no reply needed" copies nobody on nothing
     const { data } = await api.post(`/api/reviews/${reviewId}/decide`,
       { verb, final_text: finalText || null, cc: verb === "approve" ? (cc || []) : null });
+    const it = interruptOf(data, reviewId);
+    if (it) { setInterrupt(it); load(); onChanged?.(); return; }          // the click did not send (PW-239)
     if (data?.send_error) { setSendErr(data.send_error); load(); onChanged?.(); return; }
-    setSendErr(""); setSel(null); setEditText(null);   // stale edits must never block hover
+    setSendErr(""); setSel(null); setEditText(null); setCompare(null);   // stale edits must never block hover
     load(); onChanged?.();
   };
 
@@ -1037,6 +1043,10 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
       // a whole message, the agent's work and the draft.
       gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "minmax(0, 500px) minmax(0, 1fr)" },
       mt: { xs: -1.5, md: -2.25 }, pt: { xs: 1.5, md: 2 } }}>
+      <ApprovalInterrupt it={interrupt} onResolve={(choice) => {
+        const res = resolveInterrupt(interrupt, choice, { [interrupt.reviewId]: editText ?? "" });
+        setCompare(res.compare); setInterrupt(null);
+      }} />
 
       {/* ── the rail ────────────────────────────────────────────────────────────── */}
       <Box data-tq-keep onMouseEnter={disarmClose} onMouseLeave={armClose}
@@ -1386,7 +1396,8 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
               onSkipped={() => { setSel(null); load(); onChanged?.(); }}
               onRefresh={() => { cache.current.delete(sel.MessageId); load(); }}
               onMessageChanged={messageBodyChanged}
-              sendErr={sendErr} clearSendErr={() => setSendErr("")} onLock={setPanelLock} active={active} />
+              sendErr={sendErr} clearSendErr={() => setSendErr("")} onLock={setPanelLock} active={active}
+              compare={compare} clearCompare={() => setCompare(null)} />
           ) : visibleStage || (
             // an empty stage is not a broken one. It says what the rail is for and what the
             // one button on it does, which is the only thing a new install has to be told.
@@ -1420,7 +1431,8 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                 onSkipped={() => { setSel(null); load(); onChanged?.(); }}
                 onRefresh={() => { cache.current.delete(sel.MessageId); load(); }}
                 onMessageChanged={messageBodyChanged}
-                sendErr={sendErr} clearSendErr={() => setSendErr("")} onLock={setPanelLock} active={active} />
+                sendErr={sendErr} clearSendErr={() => setSendErr("")} onLock={setPanelLock} active={active}
+                compare={compare} clearCompare={() => setCompare(null)} />
             ) : null}
         </Drawer>
       )}
@@ -1601,7 +1613,7 @@ const StoryTimelineStep = ({ title, status, summary, onOpen, first, last, state 
 // The pop-out review panel: everything about the selected line, editable and decidable
 // without leaving the page. All text hard-left-aligned.
 const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, onClose, onSkipped, onRefresh,
-                        onMessageChanged, sendErr, clearSendErr, onLock, active = true }) => {
+                        onMessageChanged, sendErr, clearSendErr, onLock, active = true, compare = null, clearCompare = null }) => {
   // one click turns a flood sender (100s of automated mails) into a skip policy - their
   // mail is deduped but never shows on the timeline again, and their HISTORY goes with it
   const [skipped, setSkipped] = useState(null);
@@ -1772,13 +1784,13 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
         <ReviewActions reviewId={pendingId} draft={replyDraft}
           editText={editText} setEditText={setEditText} decide={decide}
           sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend}
-          onChanged={onRefresh} channel={sel.Channel} />
+          onChanged={onRefresh} channel={sel.Channel} compare={compare} clearCompare={clearCompare} />
       )}
       {!pending && opened && (
         <ReviewActions reviewId={opened.reviewId} draft={replyDraft}
           editText={editText} setEditText={setEditText} decide={decide}
           sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend}
-          onChanged={onRefresh} channel={sel.Channel} />
+          onChanged={onRefresh} channel={sel.Channel} compare={compare} clearCompare={clearCompare} />
       )}
       {!answered && !replyOpen && (["report", "assistant"].includes(sel.Channel) ? (
         <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.7 }}>
@@ -3047,7 +3059,7 @@ const SplitTask = ({ row, onSplit, compact = false }) => {
   );
 };
 
-const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr, clearSendErr, canSend, onChanged, channel, review }) => {
+const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr, clearSendErr, canSend, onChanged, channel, review, compare = null, clearCompare = null }) => {
   const [generating, setGenerating] = useState(false);
   // the server's two facts about this reply, said the same way on every surface (sendState.js):
   // whether it can leave from here, and whether a draft exists or failed to be written
@@ -3104,6 +3116,19 @@ const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr
       </Button>
     </Box>
     {draftErr && <Alert severity="error" sx={{ mt: 1 }} onClose={() => setDraftErr("")}>{draftErr}</Alert>}
+    {compare?.reviewId === reviewId && (
+      <Box sx={{ mt: 1, border: "1px solid #d2d6cf", borderRadius: 1.5, px: 1.25, py: 0.75 }}>
+        <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 700, display: "block" }}>
+          Refreshed draft - written after the new message. Your edit stays in the box above.
+        </Typography>
+        <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", fontSize: 12.5, mt: 0.5 }}>{compare.refreshed || "(no refreshed draft - hit Redraft)"}</Typography>
+        <Box sx={{ display: "flex", gap: 0.75, mt: 0.75 }}>
+          <Button size="small" variant="outlined" disabled={!compare.refreshed}
+            onClick={() => { setEditText(compare.refreshed); clearCompare?.(); }}>Use the refreshed draft</Button>
+          <Button size="small" onClick={() => clearCompare?.()}>Keep mine</Button>
+        </Box>
+      </Box>
+    )}
     {sendErr && (
       <Alert severity="error" sx={{ mt: 1 }} onClose={clearSendErr}>
         <b>Approved, but it did not send.</b> {sendErr}

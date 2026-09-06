@@ -2392,3 +2392,24 @@ review live on the task, and memories and rules are their own rows - none of it 
 Tests: `tests/test_chat_retention.py` (5 cases), `website/test/chatRetention.test.mjs` (2 cases). Frontend:
 `AssistantView.jsx` (cursor paging), `SettingsView.jsx` (the knob), rebuilt bundle. Backend
 evidence: `.codex-tmp/phase3-evidence/backend-9.1.log`.
+
+## Section 9.2 — opening Assistant restores; it does not start
+
+Status: implemented and tested locally at `a87ea90`; remote CI pending on the pushed
+checkpoint. Section 9.1 is CI-verified (2463532/7064b7d, CI run 34063026549 (all jobs passed)).
+Acceptance PW-162 to PW-164 implemented.
+
+Current was inferred on the page from the last card in the transcript, so a handled item came back
+as live work after a reload. Now the server writes the item down as it is put on the table
+(`concierge.set_current`, per chat, as `surface()` lands an item or the fyi handful, and cleared when
+the walk runs out), validates it against the pile when the conversation is read back
+(`restore_current` on `GET /api/concierge`: the item as it is now, still unread and still there), and
+clears it - choosing nothing in its place - when it was settled or deferred (`/api/funnel/settle`),
+closed underneath, or is gone (PW-162). The transcript keeps the handled card as readable history.
+`loadState` takes the server's `current`; `restorableCurrent` is no longer wired. Nothing on mount,
+tab activation, remount or reconnect calls Next or starts a walk (PW-163): every effect only loads
+state or the pile, and a new chat is blank until the owner speaks.
+
+Tests: `tests/test_current_restore.py` (5 cases), `website/test/currentRestore.test.mjs` (2 cases); the closed-task and
+selection pins re-pinned to the server's Current. Frontend: `AssistantView.jsx`, rebuilt bundle.
+Backend evidence: `.codex-tmp/phase3-evidence/backend-9.2.log`.

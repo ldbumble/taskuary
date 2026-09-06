@@ -1404,7 +1404,7 @@
       "requirement": "New chat archives the current conversation, resets chat/Current, and opens",
       "status": "implemented",
       "test": "`tests/test_chat_retention.py`::NewChatTests (`POST /api/assistant/dock/new` archives the guide task as done with its rows intact, opens a blank one with no turn of its own, leaves every read state and the source/task untouched, and never runs retention), `website/test/chatRetention.test.mjs` (New chat posts the archive and calls no surface/turn)",
-      "commit": "2463532; local gates passed, CI pending"
+      "commit": "2463532; 2463532/7064b7d, CI run 34063026549 (all jobs passed)"
     },
     {
       "id": "PW-157",
@@ -1413,7 +1413,7 @@
       "requirement": "Listing/opening earlier chats is read-only and paginated. Remove the",
       "status": "implemented",
       "test": "`tests/test_chat_retention.py`::HistoryIsReadOnlyTests (`concierge.chats` has no cutoff and writes nothing - a forty-day-old chat still lists; `GET /api/concierge/chats?limit&before` pages newest-first with a `next` cursor; opening one writes nothing; `CHATS_KEPT_DAYS` is gone), `website/test/chatRetention.test.mjs` (the panel pages with the cursor and offers \"Earlier chats\")",
-      "commit": "2463532; local gates passed, CI pending"
+      "commit": "2463532; 2463532/7064b7d, CI run 34063026549 (all jobs passed)"
     },
     {
       "id": "PW-158",
@@ -1422,7 +1422,7 @@
       "requirement": "Implement automatic retention cleanup as a separate scheduled lifecycle",
       "status": "implemented",
       "test": "`tests/test_chat_retention.py`::RetentionTests (`retention.py`: `chat_keep_days` setting, default 15, owner override, nonsense falls back; `retention.tick` runs once a day from start-up and the sync timer, never from a history read; the boundary is the last chat row against the cutoff), Settings \u2192 Assistant \u2192 \"Keep past chats (days)\"",
-      "commit": "2463532; local gates passed, CI pending"
+      "commit": "2463532; 2463532/7064b7d, CI run 34063026549 (all jobs passed)"
     },
     {
       "id": "PW-159",
@@ -1431,7 +1431,7 @@
       "requirement": "Preserve task-linked discussion, confirmed actions, agent results, and send",
       "status": "implemented",
       "test": "`tests/test_chat_retention.py`::test_what_a_chat_said_about_a_task_and_every_independent_record_outlive_the_archive (mirrored task discussion, a promoted FYI's linked discussion, the operation receipt, the agent's report and the approved review all remain readable on the task after the archive is removed)",
-      "commit": "2463532; local gates passed, CI pending"
+      "commit": "2463532; 2463532/7064b7d, CI run 34063026549 (all jobs passed)"
     },
     {
       "id": "PW-160",
@@ -1440,7 +1440,7 @@
       "requirement": "Keep correction memory and saved rules on independent lifecycles. Chat",
       "status": "implemented",
       "test": "`tests/test_chat_retention.py`::test_what_a_chat_said_about_a_task_and_every_independent_record_outlive_the_archive (memories, mutes and correction evidence untouched by cleanup - retention removes the guide task and its rows only)",
-      "commit": "2463532; local gates passed, CI pending"
+      "commit": "2463532; 2463532/7064b7d, CI run 34063026549 (all jobs passed)"
     },
     {
       "id": "PW-161",
@@ -1449,34 +1449,34 @@
       "requirement": "Test New chat archives without deletion or auto-walk, history reads do not",
       "status": "implemented",
       "test": "`tests/test_chat_retention.py` (5 cases: archive without deletion or auto-walk; read-only paginated history; 15-day default, override, exact boundary; open chat and real tasks never touched, once-a-day tick; preserved task history, promoted FYI discussion, agent results, send outcomes, evidence and rules), `website/test/chatRetention.test.mjs` (2 cases)",
-      "commit": "2463532; local gates passed, CI pending"
+      "commit": "2463532; 2463532/7064b7d, CI run 34063026549 (all jobs passed)"
     },
     {
       "id": "PW-162",
       "section": "Opening Assistant: restore without starting a walkthrough",
       "phase": "9",
       "requirement": "Persist Current explicitly and validate it against current canonical item",
-      "status": "pending",
-      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_current_restore.py`::RestoreTests (`concierge.set_current` writes the item down as surface() puts it on the table, per chat; `restore_current` validates it against the pile on `GET /api/concierge` and clears it - choosing nothing - when it was settled, deferred, closed underneath or gone; a handled card stays readable in the transcript), `website/test/currentRestore.test.mjs` (`loadState` takes `data.current`; `restorableCurrent` is no longer wired)",
+      "commit": "a87ea90; local gates passed, CI pending"
     },
     {
       "id": "PW-163",
       "section": "Opening Assistant: restore without starting a walkthrough",
       "phase": "9",
       "requirement": "Keep history/pipeline loading separate from initiating an assistant turn.",
-      "status": "pending",
-      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`website/test/currentRestore.test.mjs` (every effect only loads state or the pile; nothing on mount, activation, remount or reconnect calls Next or starts a walk), `tests/test_chat_retention.py`::NewChatTests (a new chat is blank and starts nothing)",
+      "commit": "a87ea90; local gates passed, CI pending"
     },
     {
       "id": "PW-164",
       "section": "Opening Assistant: restore without starting a walkthrough",
       "phase": "9",
       "requirement": "Test first visit, returning from another tab, page reload/remount, stale",
-      "status": "pending",
-      "test": "Required: Phase 9 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_current_restore.py` (5 cases: first visit, reload/tab return with no new turn, handled/deferred/closed Current cleared without replacement, a named item and the fyi handful restored, a new chat empty), `website/test/currentRestore.test.mjs` (2 cases)",
+      "commit": "a87ea90; local gates passed, CI pending"
     },
     {
       "id": "PW-165",

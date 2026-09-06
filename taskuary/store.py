@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 
 _LIVE_UNSET = object()
+_POLL_UNSET = object()
 GENESIS = '0' * 64
 TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Source', 'SourceRef', 'Tags')
 MSG_COLS = ('TaskId', 'ExternalId', 'ConversationId', 'Channel', 'SourceName', 'Subject',
@@ -750,6 +751,58 @@ class SQLiteStore:
     def _exec(self, q, p=()):
         with self.lock:
             cur = self.cx.execute(q, p); self.cx.commit(); self._writes += 1; return cur.lastrowid
+    def _patch_poll_state(self, table, row_id, *, config_set=None, config_remove=(),
+                          expect_fields=None, expect_config=None, last_polled_at=_POLL_UNSET):
+        """Merge poll metadata into the latest config under a SQLite write transaction.
+
+        Expectations compare only supplied keys; expected config None accepts either a
+        missing key or JSON null. An omitted last_polled_at leaves it alone, while explicit
+        None clears it. Missing rows and stale expectations return False without writes.
+        Invalid/non-object JSON raises, preserving the owner's original configuration.
+        """
+        key = {'source': 'SourceId', 'connector': 'ConnectorId'}[table]
+        updates = copy.deepcopy({} if config_set is None else config_set)
+        removed = tuple(config_remove)
+        fields = copy.deepcopy({} if expect_fields is None else expect_fields)
+        expected = copy.deepcopy({} if expect_config is None else expect_config)
+        if not isinstance(updates, dict) or not isinstance(fields, dict) or not isinstance(expected, dict):
+            raise TypeError('poll checkpoint patches and expectations must be dictionaries')
+        if any(not isinstance(k, str) for k in (*updates, *removed, *fields, *expected)):
+            raise TypeError('poll checkpoint keys must be strings')
+        if set(updates).intersection(removed):
+            raise ValueError('a poll checkpoint cannot set and remove the same config key')
+        with self.lock:
+            self.cx.execute('BEGIN IMMEDIATE')
+            try:
+                found = self.cx.execute(f'SELECT * FROM {table} WHERE {key}=?', (row_id,)).fetchone()
+                if found is None:
+                    self.cx.rollback()
+                    return False
+                row = dict(found)
+                if any(k not in row for k in fields):
+                    raise ValueError('unknown poll checkpoint row expectation')
+                current = json.loads(row['ConfigJson']) if row.get('ConfigJson') else {}
+                if not isinstance(current, dict):
+                    raise ValueError('poll checkpoint requires an object ConfigJson')
+                if (any(row[k] != value for k, value in fields.items()) or
+                        any(current.get(k) != value for k, value in expected.items())):
+                    self.cx.rollback()
+                    return False
+                current.update(updates)
+                for name in removed: current.pop(name, None)
+                values, assignments = [json.dumps(current)], ['ConfigJson=?']
+                if last_polled_at is not _POLL_UNSET:
+                    if table != 'source': raise ValueError('only sources have LastPolledAt')
+                    values.append(last_polled_at)
+                    assignments.append('LastPolledAt=?')
+                self.cx.execute(f"UPDATE {table} SET {','.join(assignments)} WHERE {key}=?",
+                                [*values, row_id])
+                self.cx.commit()
+                self._writes += 1
+                return True
+            except BaseException:
+                self.cx.rollback()
+                raise
     def _insert(self, table, fields, allowed, extra=None):
         d = {k: fields[k] for k in allowed if k in fields and fields[k] is not None} | (extra or {})
         cols = list(d)
@@ -2190,6 +2243,12 @@ class SQLiteStore:
             return sid
         return self._insert('source', fields, SOURCE_COLS)
     def touch_source(self, sid): self._exec('UPDATE source SET LastPolledAt=? WHERE SourceId=?', (_now(), sid))
+    def patch_source_poll_state(self, source_id, *, config_set=None, config_remove=(),
+                                last_polled_at=_POLL_UNSET, expect_fields=None, expect_config=None):
+        """Atomically checkpoint source progress; False means the captured source changed."""
+        return self._patch_poll_state('source', source_id, config_set=config_set,
+                                     config_remove=config_remove, last_polled_at=last_polled_at,
+                                     expect_fields=expect_fields, expect_config=expect_config)
     def rewind_source(self, sid):
         """Forget this source's watermark, so the next poll reaches back over history instead
         of only forward. What a source that was OFF needs the moment it is switched on: the
@@ -2281,6 +2340,12 @@ class SQLiteStore:
         """Just the config JSON - how the pollers keep their watermark (Telegram's update
         offset, the WhatsApp bridge's sequence) without touching secrets or roles."""
         self._exec('UPDATE connector SET ConfigJson=? WHERE ConnectorId=?', (json.dumps(cfg), cid))
+    def patch_connector_poll_state(self, connector_id, *, config_set=None, config_remove=(),
+                                   expect_fields=None, expect_config=None):
+        """Atomically merge only poll-owned config keys while checking mailbox identity."""
+        return self._patch_poll_state('connector', connector_id, config_set=config_set,
+                                     config_remove=config_remove, expect_fields=expect_fields,
+                                     expect_config=expect_config)
     def touch_connector(self, cid, error=None):
         if error: self._exec('UPDATE connector SET LastError=? WHERE ConnectorId=?', (error[:500], cid))
         else: self._exec('UPDATE connector SET LastSyncAt=?, LastError=NULL WHERE ConnectorId=?', (_now(), cid))

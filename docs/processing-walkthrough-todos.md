@@ -233,21 +233,21 @@ Owner-approved behavior: always generate a draft for `reply_only`. Sending
 capability controls sending, not whether the question is actionable or drafted.
 Pending implementation only.
 
-- [ ] <a id="pw-042"></a>**PW-042** Remove the `reply_only` early filing path when `can_reply()` is false.
+- [x] <a id="pw-042"></a>**PW-042** Remove the `reply_only` early filing path when `can_reply()` is false.
   Retain reply-needed work and create/reuse its pending review regardless of
   whether the connector supports sending or outgoing replies are enabled.
-- [ ] <a id="pw-043"></a>**PW-043** Always request draft generation for `reply_only`; do not gate this path on
+- [x] <a id="pw-043"></a>**PW-043** Always request draft generation for `reply_only`; do not gate this path on
   `auto_draft_enabled`. Reconcile the setting/help text for this scope. Apply the
   same behavior to fresh questions attached to existing tasks, reusing that task
   without creating duplicate pending reviews for the same message.
-- [ ] <a id="pw-044"></a>**PW-044** When sending is unavailable, omit the send/approve-and-send button and
+- [x] <a id="pw-044"></a>**PW-044** When sending is unavailable, omit the send/approve-and-send button and
   display the concrete reason beside the draft (for example, replies disabled,
   read-only connector, or missing send permission). Keep the draft readable and
   editable for manual use. Apply consistently across Review, task, and assistant
   draft surfaces; availability must reflect current capability/configuration.
-- [ ] <a id="pw-045"></a>**PW-045** Preserve server-side send checks; hiding a UI button is not authorization.
+- [x] <a id="pw-045"></a>**PW-045** Preserve server-side send checks; hiding a UI button is not authorization.
   Always drafting must not enable outgoing replies or automatically send anything.
-- [ ] <a id="pw-046"></a>**PW-046** Make draft-generation failures or missing AI configuration visible with a
+- [x] <a id="pw-046"></a>**PW-046** Make draft-generation failures or missing AI configuration visible with a
   retry action; keep the item reply-needed rather than treating it as FYI or
   falsely claiming a draft exists.
 - [ ] <a id="pw-047"></a>**PW-047** Test sending-disabled/read-only/missing-permission cases, enabled sending,
@@ -355,12 +355,12 @@ Reply to, default to Reply all, and apply the owner's email signature.
 
 ## Default task kind
 
-- [ ] <a id="pw-067"></a>**PW-067** Owner-approved on 2026-09-05: a task with missing/uncertain agent kind
+- [x] <a id="pw-067"></a>**PW-067** Owner-approved on 2026-09-05: a task with missing/uncertain agent kind
   defaults to `general` (a general assistant-style agent), not coding. Align
   intake fallbacks and classifier instructions, including "Cannot tell? Say coding",
   with this default. Preserve explicit coding and owner-personal-task decisions.
   Automatic startup follows the owner-approved settings contract below.
-- [ ] <a id="pw-068"></a>**PW-068** Test missing/invalid kind and uncertain classification across the supported
+- [x] <a id="pw-068"></a>**PW-068** Test missing/invalid kind and uncertain classification across the supported
   task-creation paths: default general, no unintended coding-session launch.
 
 ## Automatic agent startup for both work kinds

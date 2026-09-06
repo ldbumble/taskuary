@@ -324,7 +324,7 @@
       "requirement": "Store failed triage as a distinct message `Status='error'`, including model",
       "status": "implemented",
       "test": "`tests/test_triage_errors.py` (model exception, unusable verdict, drain failure, no-AI awaiting state, linked follow-up keeps its task)",
-      "commit": "ed2bb98; local gates passed, CI pending"
+      "commit": "ed2bb98; ed2bb98, CI run 34038415374 (all ten jobs passed)"
     },
     {
       "id": "PW-037",
@@ -333,7 +333,7 @@
       "requirement": "Show a clear \"Triage failed\" state with a useful failure reason and a",
       "status": "implemented",
       "test": "`website/test/timelineState.test.mjs`, `website/test/feedLoad.test.mjs` (error state, subline, detail phase); FeedView blurb/Retry wiring",
-      "commit": "ed2bb98; CI pending"
+      "commit": "ed2bb98; ed2bb98, CI run 34038415374 (all ten jobs passed)"
     },
     {
       "id": "PW-038",
@@ -342,7 +342,7 @@
       "requirement": "Adapt the existing retriage endpoint and `claim_retriage()` to the error",
       "status": "implemented",
       "test": "`tests/test_triage_errors.py`::RetryTests (error claim, linked message retry, legacy filed failure, concurrent clicks -> one task)",
-      "commit": "ed2bb98; CI pending"
+      "commit": "ed2bb98; ed2bb98, CI run 34038415374 (all ten jobs passed)"
     },
     {
       "id": "PW-039",
@@ -351,7 +351,7 @@
       "requirement": "On successful retry, apply the new verdict and clear the error indication;",
       "status": "implemented",
       "test": "`tests/test_triage_errors.py` (successful retry lands the verdict; another failure returns to error with the new reason)",
-      "commit": "ed2bb98; CI pending"
+      "commit": "ed2bb98; ed2bb98, CI run 34038415374 (all ten jobs passed)"
     },
     {
       "id": "PW-040",
@@ -360,7 +360,7 @@
       "requirement": "Define a safe upgrade for identifiable historical triage-failure records",
       "status": "implemented",
       "test": "`tests/test_triage_errors.py`::LegacyUpgradeTests (identifiable failures only; genuine fyi, owner-ruled and no-AI history untouched; read state kept; once at startup)",
-      "commit": "ed2bb98; CI pending"
+      "commit": "ed2bb98; ed2bb98, CI run 34038415374 (all ten jobs passed)"
     },
     {
       "id": "PW-041",
@@ -369,61 +369,61 @@
       "requirement": "Test model exceptions, malformed verdicts, drain failures, linked-message",
       "status": "partial: no rendered-browser click test of the Retry control yet",
       "test": "`tests/test_triage_errors.py` (16 cases) plus updated `test_api.py`, `test_async_triage.py`, `test_assistant_reactions.py`, `test_verdict_sticks.py`",
-      "commit": "ed2bb98; CI pending"
+      "commit": "ed2bb98; ed2bb98, CI run 34038415374 (all ten jobs passed)"
     },
     {
       "id": "PW-042",
       "section": "Reply-needed items always get drafts",
       "phase": "7",
       "requirement": "Remove the `reply_only` early filing path when `can_reply()` is false.",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_reply_always_drafts.py`::AlwaysDraftTests (replies off still opens the reply task and review)",
+      "commit": "8b89e26; local gates passed, CI pending"
     },
     {
       "id": "PW-043",
       "section": "Reply-needed items always get drafts",
       "phase": "7",
       "requirement": "Always request draft generation for `reply_only`; do not gate this path on",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_reply_always_drafts.py` (draft requested with auto_draft off; fresh question on an existing task reuses it with one review); reclassify path shares _auto_draft",
+      "commit": "8b89e26; CI pending"
     },
     {
       "id": "PW-044",
       "section": "Reply-needed items always get drafts",
       "phase": "7",
       "requirement": "When sending is unavailable, omit the send/approve-and-send button and",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_reply_always_drafts.py`::SendBlockedTests (SendBlock reason on reviews and feed rows); `website/test/sendState.test.mjs` (shared reason and draft state on Review and assistant surfaces)",
+      "commit": "8b89e26; CI pending"
     },
     {
       "id": "PW-045",
       "section": "Reply-needed items always get drafts",
       "phase": "7",
       "requirement": "Preserve server-side send checks; hiding a UI button is not authorization.",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_reply_always_drafts.py` (approve on a blocked channel is refused, nothing sent, draft kept)",
+      "commit": "8b89e26; CI pending"
     },
     {
       "id": "PW-046",
       "section": "Reply-needed items always get drafts",
       "phase": "7",
       "requirement": "Make draft-generation failures or missing AI configuration visible with a",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_reply_always_drafts.py`::DraftFailureTests (DraftError recorded, item stays reply-needed, successful redraft clears it); `sendState.test.mjs` draft state with retry",
+      "commit": "8b89e26; CI pending"
     },
     {
       "id": "PW-047",
       "section": "Reply-needed items always get drafts",
       "phase": "7",
       "requirement": "Test sending-disabled/read-only/missing-permission cases, enabled sending,",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: no rendered-browser check of the hidden send button yet",
+      "test": "`tests/test_reply_always_drafts.py` (14 cases) plus updated `test_not_coding.py`, `test_urgent_and_handoff.py`, `test_kind_dispatch.py`",
+      "commit": "8b89e26; CI pending"
     },
     {
       "id": "PW-048",
@@ -601,18 +601,18 @@
       "section": "Default task kind",
       "phase": "3",
       "requirement": "Owner-approved on 2026-09-05: a task with missing/uncertain agent kind",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_reply_always_drafts.py`::GeneralDefaultTests, `tests/test_not_coding.py` (fallback and classifier instructions default to general; explicit coding/task kept)",
+      "commit": "8b89e26; CI pending"
     },
     {
       "id": "PW-068",
       "section": "Default task kind",
       "phase": "3",
       "requirement": "Test missing/invalid kind and uncertain classification across the supported",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_reply_always_drafts.py`::GeneralDefaultTests and `tests/test_not_coding.py::DispatchGateTests` (missing/invalid kind -> general, no coding session on a guess)",
+      "commit": "8b89e26; CI pending"
     },
     {
       "id": "PW-069",

@@ -743,3 +743,27 @@ cases), `test_verdict_sticks.py` (unusable answer). New: `tests/test_triage_erro
 and two frontend state cases. Frontend 283 passed; no-undef lint clean (nine pre-existing
 rule-definition notices). Full backend and packaged build results are in the commit message
 and the CI record below.
+
+## Section 3.3 — reply-needed items always get drafts; uncertain kind is general
+
+Status: implemented and tested locally at `8b89e26`; remote CI pending on the pushed
+checkpoint. Section 3.2 is CI-verified at `ed2bb98` (run 34038415374, all ten jobs).
+Acceptance PW-042 to PW-046 and PW-067/PW-068 implemented; PW-047 partial (no rendered-browser
+check of the hidden send button; API, backend and pure-UI state tests cover the rest).
+
+`reply_only` on a channel with replies off used to be filed - a question wearing "nothing to do".
+Every reply-needed message now opens (or reuses) its task and pending review and asks for a draft
+at once, on both the create and attach paths; `auto_draft_enabled` no longer gates drafting and is
+retired from Settings (value left untouched). `outbound.send_block()` states why sending is
+unavailable; it rides on reviews and feed rows as `SendBlock`, and `website/src/sendState.js` shows
+the same sentence beside the draft on Review and the assistant card while the send button is
+omitted; the server's `can_reply` refusals are unchanged. A draft that could not be written is
+recorded on the review (`DraftError`, additive column), the item stays reply-needed, and a
+successful redraft clears it. A task whose kind the classifier did not name is `general`
+(`routing.draft_task_fields`, `INTENT_SYSTEM`, shipped TRIAGE.md); the keyword coding guess is gone,
+so no coding session starts without an explicit `coding` verdict.
+
+Tests changed with explanation, none weakened: `test_not_coding.py` (keyword-kind and dispatch-gate
+classes rewritten to the general default), `test_urgent_and_handoff.py` (one kind expectation),
+`test_kind_dispatch.py` (prompt tie-break wording). New: `tests/test_reply_always_drafts.py` (14 cases), `sendState.test.mjs` (3).
+Frontend and packaged-build results are in the commit message; full backend and CI below.

@@ -45,6 +45,16 @@ os.environ.pop('TASKUARY_ALLOW_TEST_HOME', None)
 os.environ.pop('TASKUARY_DEMO', None)
 os.environ.pop('TASKUARY_API', None)
 
+# The console ``pytest`` entrypoint does not prepend cwd like ``python -m pytest``.
+# An editable install may point at the owner's other checkout: always test THIS
+# worktree, and fail rather than mix already-imported application modules.
+_CHECKOUT_ROOT = Path(__file__).resolve().parents[1]
+_loaded_package = sys.modules.get('taskuary')
+if _loaded_package is not None:
+    if Path(getattr(_loaded_package, '__file__', '')).resolve().parent != _CHECKOUT_ROOT / 'taskuary':
+        raise RuntimeError('Taskuary was imported from another checkout before test isolation')
+sys.path.insert(0, str(_CHECKOUT_ROOT))
+
 # Cache the read-only platform probe before the subprocess guard is installed.  On Windows,
 # ``platform`` otherwise invokes ``ver`` lazily while numpy/botocore are imported by tests.
 platform.uname()

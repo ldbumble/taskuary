@@ -116,6 +116,31 @@ The backend suite separately tests native ConPTY with synthetic Python children.
 Performance budgets are repeatable smoke/regression ceilings, not a general load-test
 or provider-response guarantee. Keep the recorded fixture size and ceilings in later gates.
 
+### Remote checkpoint repair
+
+First push: `75a7604b374e8eb7f5cc1543eb9e1b38413d730c`,
+[CI run 34012476316](https://github.com/ldbumble/taskuary/actions/runs/34012476316).
+Web tests/build/parity, rendered browser and Docker passed. The Python matrix
+failed collecting the new fixture package: `pytest` does not add the repository
+root to imports in the same way as `python -m pytest`. The sibling import was
+changed from `tests.processing.fixtures` to `.fixtures`; no test assertions changed.
+Independent Astra review approved the correction. The exact console entrypoint
+`pytest -q -ra` then revealed the local editable install selected the original
+checkout rather than this worktree: 2184 passed and the two new Replay tests failed
+in 158.42 s, with traceback paths proving the wrong source. Test data remained in
+the isolated home. The bootstrap now prepends its own checkout before application
+imports and rejects a previously loaded wrong-root package; a new test verifies
+package/config/server provenance. This correction also received independent Astra
+review. The corrected console entrypoint is rerun locally, followed by another
+scoped push and exact-SHA CI.
+This first remote checkpoint is not accepted; no Phase 1 code has started.
+
+Corrected console-entrypoint gate: `pytest -q -ra` on the integration worktree
+passed **2187 tests and 66 subtests**, with the same one existing time-dependent
+skip and 150 warnings, in **155.86 s**. Application import paths now resolve to the
+tested checkout. Frontend/browser/runtime source and dependency lock did not change
+during this collection/bootstrap repair; their passing results above remain applicable.
+
 ### Migration, rollback and limitations
 
 Phase 0 makes no database schema or live data migration. Synthetic reopen evidence

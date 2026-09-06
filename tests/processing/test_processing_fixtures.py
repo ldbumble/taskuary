@@ -4,7 +4,7 @@ from unittest import mock
 
 from taskuary import funnel, terminal
 
-from tests.processing.fixtures import processing_picture
+from .fixtures import processing_picture
 
 
 def test_existing_feed_marks_reported_missing_shapes_unread_without_resurrecting_a_read_row():

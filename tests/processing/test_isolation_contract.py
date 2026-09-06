@@ -16,6 +16,14 @@ from fastapi.testclient import TestClient
 from taskuary import hooks, server, spawn, terminal
 
 
+def test_application_imports_come_from_the_worktree_being_tested():
+    import taskuary
+    from taskuary import config
+    expected = Path(__file__).resolve().parents[2] / 'taskuary'
+    for module in (taskuary, config, server):
+        assert Path(module.__file__).resolve().parent == expected
+
+
 def test_taskuary_and_user_configuration_live_under_the_generated_suite_root():
     taskuary_home = Path(os.environ['TASKUARY_HOME']).resolve()
     user_home = Path.home().resolve()

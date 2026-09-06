@@ -955,18 +955,18 @@ not a dependency queue. This replaces overlap-based blocking only; the approved
 live-session capacity limit and startup-failure retry handling remain in effect.
 Pending implementation only.
 
-- [ ] <a id="pw-171"></a>**PW-171** Remove automatic deferral behind another task solely because of likely file
+- [x] <a id="pw-171"></a>**PW-171** Remove automatic deferral behind another task solely because of likely file
   overlap, in both immediate and ranked/queued dispatch paths. Treat any overlap
   assessment as advisory, not a launch veto. Existing overlap dependencies must
   no longer block dispatch, while retaining normal capacity checks.
-- [ ] <a id="pw-172"></a>**PW-172** Before startup, give the agent current same-checkout peer task IDs, agent
+- [x] <a id="pw-172"></a>**PW-172** Before startup, give the agent current same-checkout peer task IDs, agent
   identities, task summaries, known touched files, and relevant live handoff notes.
   Clearly flag similar work and require coordination before changing shared files;
   preserve other agents' edits and stage/commit only the agent's own changes.
 - [ ] <a id="pw-173"></a>**PW-173** Refresh coordination context as peers start, change work, or stop. Closed
   sessions' historical notes must not masquerade as current file ownership.
   Do not claim that a briefing provides enforced locking or isolated worktrees.
-- [ ] <a id="pw-174"></a>**PW-174** If AI overlap assessment is absent, uncertain, or fails, still provide the
+- [x] <a id="pw-174"></a>**PW-174** If AI overlap assessment is absent, uncertain, or fails, still provide the
   factual live-peer briefing and proceed subject to capacity and other approved
   authorization/repository gates. Missing assessment is not proof of no overlap.
 - [ ] <a id="pw-175"></a>**PW-175** Test similar tasks launching when capacity permits, both dispatch modes,
@@ -979,25 +979,25 @@ Owner-approved: agents should be able to check the wall for current coordination
 notes belong on the live wall only while their agent run is active. Pending
 implementation, not a deletion of historical notes.
 
-- [ ] <a id="pw-176"></a>**PW-176** Explicitly remove the deliberate closed-session wall-note injection from
+- [x] <a id="pw-176"></a>**PW-176** Explicitly remove the deliberate closed-session wall-note injection from
   terminal startup (`terminal.py` seed context -> `blackboard.wall_text()`).
   Replace the unfiltered historical wall lookup with live-run notes only and
   remove the comment endorsing notes from agents that are no longer running.
   With no active runs' notes, inject no wall paragraph; do not fall back to
   historical notes. Keep this scoped to wall coordination, not saved task results.
-- [ ] <a id="pw-177"></a>**PW-177** Apply the same removal explicitly to general-assistant context:
+- [x] <a id="pw-177"></a>**PW-177** Apply the same removal explicitly to general-assistant context:
   `general._prompt()` -> `blackboard.chat_text()` / `house_wall()` must not inject
   closed runs' notes. Shared notes from general agents need run ownership and the
   same active-run filtering; no historical house-lane fallback when none are live.
-- [ ] <a id="pw-178"></a>**PW-178** Associate coordination notes with a specific agent session/run, not merely
+- [x] <a id="pw-178"></a>**PW-178** Associate coordination notes with a specific agent session/run, not merely
   a task ID. Include active coding, general, and headless workers, including live
   sessions waiting for approval/input. Remove notes from live surfaces when that
   run ends; restarting the same task must not revive the previous run's notes.
-- [ ] <a id="pw-179"></a>**PW-179** Use the same live-note selection for the board UI, agent startup context,
+- [x] <a id="pw-179"></a>**PW-179** Use the same live-note selection for the board UI, agent startup context,
   wall-reading commands/tools, and refreshed coordination context. Currently
   terminal startup uses unfiltered wall(), the UI filters by live task IDs, and
   general-agent context uses a separate unfiltered house lane.
-- [ ] <a id="pw-180"></a>**PW-180** Retain ended-run notes in task/run history, explicitly historical and not
+- [x] <a id="pw-180"></a>**PW-180** Retain ended-run notes in task/run history, explicitly historical and not
   presented as current file ownership. Taskless/house notes must not bypass the
   lifecycle rule; separate durable owner guidance from live agent coordination.
 - [ ] <a id="pw-181"></a>**PW-181** Test active and approval-waiting runs, completed/stopped runs, same-task

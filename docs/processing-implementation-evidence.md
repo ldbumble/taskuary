@@ -1361,7 +1361,7 @@ the stranger's thread are verified sent evidence for that mailbox.
 ## Section 5.3 — capacity counting and bounded startup retries
 
 Status: implemented and tested locally at `6ed0301`; remote CI pending on the pushed
-checkpoint. Section 5.2 is CI-verified (6c560b9, CI 34049592998 74bf868 (all ten jobs passed)).
+checkpoint. Section 5.2 is CI-verified (6c560b9, CI run 34049592998 (all ten jobs passed)).
 Acceptance PW-084, PW-085, PW-086, PW-088 implemented; PW-087 and PW-089 partial (the Retry/Cancel
 task-view buttons and the attention-pipeline entry are Phase 8 surfaces; a real process restart is
 simulated by re-arming from the persisted rows).
@@ -1386,3 +1386,34 @@ twice. Owner controls: `POST /api/tasks/{id}/dispatch/retry` (a fresh bounded cy
 
 Tests: `tests/test_dispatch_retries.py` (13 cases). `tests/test_blackboard.py`: the failed-start test now makes the row due before
 the second drain, because a failed start backs off (PW-085). No frontend change.
+
+## Section 5.4 — similar work is a briefing; the wall is live coordination only
+
+Status: implemented and tested locally at `165af37`; remote CI pending on the pushed
+checkpoint. Section 5.3 is CI-verified (6ed0301, CI run 34049840835 (all ten jobs passed)).
+Acceptance PW-171, PW-172, PW-174, PW-176, PW-177, PW-178, PW-179, PW-180 implemented; PW-173,
+PW-175, PW-181 partial (no push-style refresh into a running agent; a headless run's own posting is
+covered only through the task fallback).
+
+Overlap is advisory (PW-171): `ingest._auto_code` and `blackboard.drain` no longer park a task
+behind a peer the model judged likely to touch the same files, in either the immediate or the
+ranked path; a queue row that was parked that way is simply due. `blackboard.briefing` (the OTHER
+AGENTS paragraph of the seed, `terminal.seed_text`) carries the facts - each peer's task id, agent,
+summary, touched files and what its live session said - then the model's read of similarity as a
+read ("SIMILAR WORK (the model's read, not a lock)"), the plain "read no overlap", or "NOT assessed"
+when there was no model, never read as no overlap (PW-174); `likely_overlap` now distinguishes an
+answer of no overlap from no assessment. Wall notes belong to a session (PW-178): `boardnote.Sid`,
+`blackboard.post(..., sid=)`, `TASKUARY_SID` in every session shell (`terminal.session_env`,
+`Term`, the assistant's browser env) and `taskuary --note` records it. `blackboard.live_notes` is
+the one live selection (PW-179) behind the Board's live handoff, the seed (`wall_text`, live only,
+no fallback - PW-176), the assistant's prompt (`chat_text`/`house_wall`, PW-177) and `taskuary
+--board`: notes from sessions alive now - working, idle or waiting for approval - plus the owner's
+own notes as durable guidance; a note from before notes knew their session follows its task. An
+ended session's notes leave every live surface and a restart of the same task does not revive
+them; `blackboard.history` (`GET /api/board/notes?all=1`) keeps them and flags each note live or
+historical (PW-180).
+
+Tests: `tests/test_coordination.py` (17 cases). `tests/test_blackboard.py`: the overlap-queues test became
+"overlap is a briefing, not a queue" and the drain test no longer expects a parked row to stay,
+per PW-171; `tests/test_agent_wall.py`: the seed tests post from live sessions, per PW-176. No
+frontend change (the Board already reads the live handoff endpoint).

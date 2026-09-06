@@ -452,8 +452,7 @@ The original workspace was then fast-forwarded with its README change preserved.
 
 ## Section 1.4 — complete display freshness
 
-Status: implementation and integration validation in progress from CI-verified
-`162afbc`. PW-106 is a partial target: this section refreshes the existing runtime
+Status: CI-verified at `3ef0bdc`. PW-106 is a partial target: this section refreshes the existing runtime
 presentation without activating canonical identities/read policy or shared Next.
 
 Sol High backend work in `processing/phase1-freshness-backend` owns funnel presentation
@@ -531,7 +530,7 @@ are later work.
 
 ## Section 1.5 — shared captured Next and stable Current
 
-Status: implementation in progress from CI-verified `3ef0bdc`.
+Status: CI-verified at `7589b38`, implemented from CI-verified `3ef0bdc`.
 Sol High backend owns funnel selection, the captured concierge surface path and
 focused backend tests. Sol High UI owns server-derived Next, exact request scope,
 Walk resume, stale-response handling and passive-event Current preservation.
@@ -603,4 +602,74 @@ Final backend (`python -m pytest -q -ra --tb=short`): 2367 passed plus 66 subtes
 and fake-screencast cleanup observations. All local gates passed. No live restart,
 connector test, read migration or owner-document change was performed.
 Logs are ignored `.codex-tmp/selection-*.log` in the isolated integration checkout.
-Delivery and exact-SHA CI remain pending until the following checkpoint is verified.
+Delivery `7589b386f166e70450f3baa6481e6da1d937e5f0` passed all ten jobs in
+[CI run 34035165692](https://github.com/ldbumble/taskuary/actions/runs/34035165692).
+The original workspace was fast-forwarded; its README hash remains the preserved
+`EDF56683E29A34789B2EBEF73E131FBD7B318AE498BC761668BCB70854D91BAB`.
+
+## Section 2.1 — independent poll scheduling and settings
+
+Status: integration in progress from CI-verified `7589b38`. This section does not
+depend on the still-pending Phase 1 read-policy answers or activate the canonical
+inventory. The owner assigned Phase 2 intake to Claude in parallel; its isolated
+handoff is in `processing/phase2-intake-poll`. Only the polling/settings commits
+are integrated here: `4591fcd` as `e7c47dc`, and `12c1a4e` as `2daacc6`.
+Outlook/IMAP catch-up and full-chain work remain separate sections.
+
+The handoff introduces separate full/quick polling clocks, fresh-channel ordered
+drain priority, full-fetch interval bookkeeping and shared polling labels for all
+six chat connector cards. The six earlier rendered-browser scenarios remain gates.
+Astra Extra High review found four issues before acceptance: non-atomic connector
+admission, a synchronous quick-owned judge still blocking intake, stale banner
+ownership on quick-first overlap, and connector types incorrectly used as message
+channels for email overrides. Sol High owns bounded poll/ingest fixes and regression
+tests; another Sol High agent owns rendered settings coverage. The lead owns API
+responsiveness/preservation tests, integration, assets, evidence and pushes.
+
+Worker `bff3e89e63805f03b479c8f91b9a182f01b51e22` integrates as `e7354f4`.
+Connector admission is now atomic with owned release; the full lane stamps each
+claimed chat attempt before releasing its claim, including failures. A skipped
+attempt remains due. Fetch clocks submit to one ordered drain worker and release
+their fetch locks before an explicit action waits for routing. Fresh-channel
+tickets wait through route/review writes, but empty channels and finished fresh
+routes need not wait for unrelated mail. Connector types map to stored channels.
+Banner ownership is coordinated for either overlap order. Workers capture their
+store/model factory; shutdown closes admission, retains timed-out workers, and
+tests join owned drains before closing disposable stores.
+
+Corrected label/browser source `4534104f3d5162c6dd2d6540921dd3e7d5c03370` integrates
+as `841e085`. Copy distinguishes both recurring clocks from explicit/action/startup
+fetches and separates inbound notification-chat replies from event-driven sends.
+The unused handoff-only JavaScript parser and its duplicate-oracle tests were
+replaced with tests of the actual Python parser; no previously accepted assertion
+was removed or weakened. All six connector cards and Settings are checked in a
+real read-only browser scenario with unchanged fixture state and zero writes.
+
+Integrated focused gate: 68 tests passed (3.85 s), including the 33 polling-worker
+tests and 35 root API/parser cases. The real feed API exposes two arrivals before
+a held judge finishes, then verifies arrival-order routing and preserved historical
+funnel state/custom documents. Another case fetches Teams in the full pass, holds
+its report, then confirms a second Teams fetch and API visibility before that
+report ends. Frontend: 281 passed (1.800 s); packaged build exit 0 (13.36 s).
+Follow-up `de837503922a5efcb4a0ec73cb651378378777b6` integrates as `a4fdb5f`.
+Scheduled polls recheck their due list while holding connector ownership, so a
+timer decision made before a full fetch cannot immediately refetch after it.
+Explicit context refreshes bypass cadence. Astra Extra High cleared the final
+source, labels/browser and root API tests with no remaining source blockers.
+
+An intermediate cumulative backend run passed 2434 tests plus 66 subtests and
+failed the new fresh-route/unrelated-backlog test because its held mail was
+released before the quick request was actually submitted. The follow-up waits
+for the real ticket submission before releasing mail, preserving the same
+completion assertion. Final focused integration passed 69 tests (3.67 s).
+The intermediate browser run passed all seven scenarios (205.141 s). Full backend
+and browser gates are being rerun on the final integrated source.
+
+During those gates, another agent pushed its original polling and Outlook/IMAP
+handoff to `origin/master` at `f244803beeee21f6079b4749e1df6c6e7ed4de8d`.
+The polling source matches the handoff already reviewed here. Integration will
+preserve that remote history and apply the reviewed polling corrections on top.
+The email catch-up code's presence on master is not acceptance: repeated-page
+completion, UIDVALIDITY identity, retry failures and concurrent settings updates
+remain review findings for the following email catch-up section. No live app
+restart or connector invocation has activated these changes in the owner's app.

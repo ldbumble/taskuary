@@ -17,6 +17,11 @@ Read it as a matrix:
                never again · that sender is noise · remember X · send it to the coder · I'll do it ·
                close the task · stop the agent · wrap it up · rerun the report · sweep them away ·
                split it in two · set something up · a correction · a question · a lookup
+
+    Since Section 8.1 the model interprets the words and every consequential response is a PROPOSAL
+    (say() returns it; nothing runs) that the owner confirms with its button - here, run() posts the
+    structured proposal to /api/operations/{id}/execute and the effect is asserted after that. Only
+    Next (moves the walk) and a reply request (drafts, sends nothing) act on the words.
 """
 import json, os, unittest
 from datetime import datetime, timedelta
@@ -24,7 +29,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import concierge, funnel, general, ingest, server, terminal
+from taskuary import concierge, funnel, general, ingest, operations, server, terminal
 from taskuary.store import MemoryStore
 
 
@@ -90,6 +95,23 @@ def session(tid, **kw):
     base = {'taskId': tid, 'sid': f's{tid}', 'agent': 'coder', 'label': 'coder', 'started': ago(hours=1),
             'idle': 2, 'waiting': False, 'tail': ['reading…']}
     return [{**base, **kw}]
+
+
+def decide(s, text, verb, key=None, live=(), text_arg=None, on=None):
+    """The model read the owner's words and named a verb - the DECIDE line, scripted (PW-121)."""
+    return say(s, text, key=key, live=live, model=f"Ok.\nDECIDE: {verb}" + (f": {text_arg}" if text_arg else '') + (f" ON: {on}" if on else ''))
+
+
+def run(s, p, live=(), version=None):
+    """The confirmation button: the structured proposal by id and version, through the shared handler (PW-124/125)."""
+    with mock.patch.object(server, 'store', s), mock.patch.object(terminal, 'live_sessions', return_value=list(live)):
+        return TestClient(server.app).post(f"/api/operations/{p['id']}/execute", json={'version': version if version is not None else p['version']})
+
+
+def receipts(s):
+    """What the chat says happened - the lines on the dock task."""
+    dock, _ = general.dock_task(s, 'owner')
+    return [r.get('Body') or '' for r in general.chat_rows(s, dock['TaskId'])]
 
 
 # ── what arrives, and where it lands ─────────────────────────────────────────────────────────
@@ -412,109 +434,135 @@ class ResponseTests(unittest.TestCase):
 
     def test_next_moves_on_and_marks_the_one_shown_read(self):
         s, tid, mid, item = self._asked()
-        out = say(s, 'next', key=item['key'])
-        self.assertEqual(out['decision']['verb'], 'next')
+        out = decide(s, 'next', 'next', key=item['key'])
+        self.assertEqual(out['decision'], {'verb': 'next'}); self.assertIsNone(out.get('proposal'))
         self.assertEqual(out['say'], 'Next.')
         surface(s, item['key'])                                        # showing it IS reading it
         self.assertTrue(funnel.next_item(s, item['key'])['surfaced'])
 
-    def test_done_closes_the_task_behind_the_item(self):
+    def test_done_is_confirmed_then_closes_the_task_behind_the_item(self):
         s, tid, mid, item = self._asked()
-        self.assertEqual(say(s, 'done, i handled it', key=item['key'])['decision']['verb'], 'done')
-        funnel.settle(s, item['key'], 'done', 'owner')
-        self.assertEqual([i['key'] for i in pile(s)], [])
+        p = decide(s, 'done, i handled it', 'done', key=item['key'])['proposal']
+        self.assertEqual((p['kind'], p['params']['verb'], p['params']['key'], p['label']), ('item.settle', 'done', item['key'], 'Mark it handled'))
+        self.assertEqual([i['key'] for i in pile(s)], [item['key']])   # nothing moved on the words
+        self.assertEqual(run(s, p).json()['status'], 'done')
+        self.assertEqual([i['key'] for i in pile(s)], []); self.assertEqual(s.get_task(tid)['Status'], 'done')
 
     def test_later_and_tomorrow_put_it_back_with_a_clock_on_it(self):
         s, tid, mid, item = self._asked()
-        self.assertEqual(say(s, 'later', key=item['key'])['decision']['verb'], 'later')
-        funnel.settle(s, item['key'], 'later', 'owner')
+        p = decide(s, 'later', 'later', key=item['key'])['proposal']
+        self.assertEqual((p['kind'], p['params']['verb'], p['label']), ('item.settle', 'later', 'Push it back'))
+        self.assertEqual(len(pile(s)), 1)                              # still there until the click
+        run(s, p)
         self.assertEqual(pile(s), [])                                  # gone for now…
         st = s.funnel_states()[item['key']]
         self.assertEqual(st['Status'], 'later'); self.assertTrue(st['Until'])   # …and it comes back at its time
         s2, tid2, mid2, item2 = self._asked()
-        self.assertEqual(say(s2, 'tomorrow', key=item2['key'])['decision']['verb'], 'skip')
+        p2 = decide(s2, 'tomorrow', 'skip', key=item2['key'])['proposal']
+        self.assertEqual((p2['params']['verb'], p2['label']), ('skip', 'Skip until tomorrow'))
 
-    def test_reply_carries_the_gist_into_the_draft(self):
+    def test_reply_carries_the_gist_into_the_draft_at_once_and_sends_nothing(self):
         s, tid, mid, item = self._asked()
-        out = say(s, 'reply and tell them the export is fixed and shipping tonight', key=item['key'])
-        self.assertEqual(out['decision']['verb'], 'reply')
-        self.assertIn('export is fixed', out['decision']['text'])      # the page passes this as the instruction
+        with mock.patch('taskuary.outbound.reply_to_message') as send:
+            out = decide(s, 'reply and tell them the export is fixed and shipping tonight', 'reply', key=item['key'],
+                         text_arg='the export is fixed and shipping tonight')
+        self.assertEqual(out['decision'], {'verb': 'reply', 'text': 'the export is fixed and shipping tonight'})   # the page drafts with this
+        self.assertIsNone(out.get('proposal')); send.assert_not_called()                                    # nothing goes out
 
-    def test_approve_sends_the_drafted_reply_and_the_task_settles(self):
-        from taskuary import verdicts
+    def test_approve_is_confirmed_then_sends_the_drafted_reply_and_the_task_settles(self):
         s, tid, rid, item = self._drafted()
-        out = say(s, 'approve', key=item['key'])
-        self.assertEqual(out['decision']['verb'], 'approve')
+        p = decide(s, 'approve', 'approve', key=item['key'])['proposal']
+        self.assertEqual((p['kind'], p['target'], p['label']), ('review.approve', rid, 'Send the reply'))
+        self.assertEqual(s.get_review(rid)['Status'], 'pending')       # nothing sent on the words
         sent = {'ok': True, 'to': 'craig@vendor.com', 'subject': 'RE:', 'provider': 'test', 'channel': 'email'}
-        with mock.patch('taskuary.outbound.reply_to_message', return_value=sent), \
-             mock.patch.object(terminal, 'live_sessions', return_value=[]):
-            verdicts.decide(s, s.get_review(rid), 'approve', 'Attached.', None, 'owner')
+        with mock.patch('taskuary.outbound.reply_to_message', return_value=sent):
+            self.assertEqual(run(s, p).json()['status'], 'done')
         self.assertIn(s.get_review(rid)['Status'], ('approved', 'edited'))   # 'edited' when the text was touched
         self.assertEqual(s.get_task(tid)['Status'], 'done')            # a sent reply closes its task
         self.assertIsNotNone(s.sent_reply(task_id=tid))
 
     def test_not_ours_files_it_and_never_again_writes_the_verdict_down(self):
         s, tid, mid, item = self._asked()
-        self.assertEqual(say(s, "not my issue, let them sort it out", key=item['key'])['decision']['verb'], 'not_ours')
+        p = decide(s, "not my issue, let them sort it out", 'not_ours', key=item['key'])['proposal']
+        self.assertEqual((p['kind'], p['target'], p['params'], p['label']), ('message.file', mid, {'learn': False}, 'File it'))
+        self.assertNotEqual(s.get_message(mid)['Status'], 'ignored')  # untouched until the click
+        run(s, p)
+        self.assertEqual(s.get_message(mid)['Status'], 'ignored'); self.assertEqual(s.list_memories(active_only=True), [])
         s2, tid2, mid2, item2 = self._asked()
-        self.assertEqual(say(s2, 'never again for this kind', key=item2['key'])['decision']['verb'], 'not_ours_remember')
+        p2 = decide(s2, 'never again for this kind', 'not_ours_remember', key=item2['key'])['proposal']
+        self.assertEqual((p2['kind'], p2['target'], p2['params']['scope']), ('preference.exclude_sender', mid2, 'subject'))
+        self.assertEqual(s2.list_memories(active_only=True), [])
+        run(s2, p2)
+        self.assertTrue(s2.list_memories(active_only=True), 'the verdict is written down')
         s3, tid3, mid3, item3 = self._asked()
-        self.assertEqual(say(s3, 'that sender is junk, block them', key=item3['key'])['decision']['verb'], 'not_ours_sender')
+        p3 = decide(s3, 'that sender is junk, block them', 'not_ours_sender', key=item3['key'])['proposal']
+        self.assertEqual((p3['kind'], p3['params']['scope'], p3['label']), ('preference.exclude_sender', 'sender', 'Silence this sender'))
+        run(s3, p3)
+        self.assertTrue(any('craig@vendor.com' in (n['ScopeKey'] or '').lower() for n in s3.list_memories(active_only=True)))
 
-    def test_remember_keeps_the_fact_in_the_owners_words(self):
+    def test_remember_keeps_the_fact_in_the_owners_words_once_confirmed(self):
         s, tid, mid, item = self._asked()
-        out = say(s, 'remember that Hindy is the CFO and signs off on refunds', key=item['key'])
-        # the row is written HERE, so the receipt is a fact and the page has nothing to carry out
-        self.assertEqual(out['decision']['verb'], 'remembered')
-        self.assertEqual(out['decision']['note'], 'Hindy is the CFO and signs off on refunds')
-        self.assertIn('Hindy is the CFO and signs off on refunds', [m['Note'] for m in s.list_memories()])          # the row exists, not just the receipt
-        self.assertIn('still on the table', out['say'])                               # ...and the walk did not move
+        p = decide(s, 'remember that Hindy is the CFO and signs off on refunds', 'remember', key=item['key'],
+                   text_arg='Hindy is the CFO and signs off on refunds')['proposal']
+        self.assertEqual((p['kind'], p['params']['note'], p['settles']), ('memory.remember', 'Hindy is the CFO and signs off on refunds', False))
+        self.assertEqual([m['Note'] for m in s.list_memories()], [])     # nothing written on the words
+        run(s, p)
+        self.assertIn('Hindy is the CFO and signs off on refunds', [m['Note'] for m in s.list_memories()])   # the row exists, not just the receipt
+        self.assertEqual(funnel.next_item(s, item['key'])['key'], item['key'])                                 # ...and the walk did not move
 
-    def test_send_it_to_the_coder_with_nothing_on_the_table_still_opens_a_task(self):
+    def test_send_it_to_the_coder_with_nothing_on_the_table_proposes_a_new_task(self):
         s = store()
+        p = decide(s, 'look into why the bulk approve fix did not stick', 'coder', text_arg='look into why the bulk approve fix did not stick')['proposal']
+        self.assertEqual((p['kind'], p['params']['kind'], p['label']), ('task.create_from_text', 'coding', 'Start a coding agent on it'))
+        self.assertEqual(s.list_tasks(active_only=True), [])           # no task on the words
         with mock.patch.object(ingest, '_spawn') as spawn:
-            out = say(s, 'look into why the bulk approve fix did not stick')
-        self.assertEqual(out['decision']['verb'], 'created')
-        t = s.get_task(out['decision']['taskId'])
+            r = run(s, p)
+        t = s.get_task(r.json()['outcome']['taskId'])
         self.assertEqual(t['Kind'], 'coding'); self.assertTrue(spawn.called)
         self.assertIn('did not stick', t['Summary'])
 
     def test_mine_takes_it_off_the_agents_hands(self):
         s, tid, mid, item = self._asked()
-        self.assertEqual(say(s, "i'll do it myself", key=item['key'])['decision']['verb'], 'mine')
+        p = decide(s, "i'll do it myself", 'mine', key=item['key'])['proposal']
+        self.assertEqual((p['kind'], p['target'], p['params']['kind'], p['label']), ('task.create_from_message', mid, 'task', 'Put it on my list'))
+        self.assertEqual(run(s, p).json()['status'], 'done')
+        self.assertEqual(s.get_task(tid)['Assignee'], 'owner')
 
-    def test_close_the_task_closes_it_and_says_which(self):
+    def test_close_the_task_is_confirmed_then_closes_it_and_says_which(self):
         s, tid, mid, item = self._asked()
-        out = say(s, 'close it', key=item['key'])
-        self.assertEqual(out['decision'], {'verb': 'closed', 'taskId': tid, 'ref': f'TQ-{tid:04d}'})
+        p = decide(s, 'close it', 'close', key=item['key'])['proposal']
+        self.assertEqual((p['kind'], p['target'], p['label']), ('task.complete', tid, 'Close the task'))
+        self.assertEqual(s.get_task(tid)['Status'], 'open')
+        run(s, p)
         self.assertEqual(s.get_task(tid)['Status'], 'done')
-        self.assertIn(f'TQ-{tid:04d} closed', out['say'])
+        self.assertTrue(any('Done - Close the task' in b and f'TQ-{tid:04d}' in b for b in receipts(s)), receipts(s)[-2:])
 
     def test_stopping_the_agent_is_not_closing_the_task(self):
         s, tid, mid, item = self._asked()
         s.update_task(tid, {'Status': 'in_progress'}, 'router')
         live = session(tid)
-        out = say(s, 'close the agent working', key=item['key'], live=live)
-        self.assertEqual(out['decision']['verb'], 'stop_agent')
-        self.assertEqual(out['decision']['taskId'], tid)
-        self.assertFalse(out['decision']['wrap'])
-        self.assertIn('task stays open', out['say'])
-        self.assertNotEqual(s.get_task(tid)['Status'], 'done')         # the page ends the session; the task stands
+        p = decide(s, 'close the agent working', 'stop_agent', key=item['key'], live=live)['proposal']
+        self.assertEqual((p['kind'], p['target'], p['params']['wrap'], p['label'], p['settles']), ('agent.stop', tid, False, 'Stop the agent', False))
+        held = mock.Mock(sid='s1', alive=True, label='coder', agent='coder', task_id=tid)
+        with mock.patch.object(server.hub_term, 'session_for', return_value=held), mock.patch.object(server.hub_term, 'close', return_value=True) as close:
+            self.assertEqual(run(s, p, live=live).json()['status'], 'done')
+        self.assertTrue(close.called)
+        self.assertNotEqual(s.get_task(tid)['Status'], 'done')         # the session ends; the task stands
+        self.assertTrue(any('The task stays open' in b for b in receipts(s)))
         # a wrap writes the report FROM the transcript: with one, "wrap it up" wraps
         s.add_transcript(tid, 'sid1', 'ran the tests, fixed the filter', 'coder')
-        out = say(s, "it's finished, wrap it up", key=item['key'], live=live)
-        self.assertTrue(out['decision']['wrap'])
+        p = decide(s, "it's finished, wrap it up", 'stop_agent', key=item['key'], live=live)['proposal']
+        self.assertTrue(p['params']['wrap']); self.assertEqual(p['label'], 'Wrap it up')
 
     def test_the_agent_that_is_named_is_the_one_stopped(self):
         s, tid, mid, item = self._asked()
-        s2 = s
         with mock.patch.object(ingest, '_spawn'):
-            other = arrive(s2, subject='Second job', body='and this too', conv='c:2', hours=2, llm=brain('task', 'coding'))
+            other = arrive(s, subject='Second job', body='and this too', conv='c:2', hours=2, llm=brain('task', 'coding'))
         both = session(tid) + session(other['task_id'])
-        out = say(s2, f"stop the agent on TQ-{other['task_id']:04d}", key=item['key'], live=both)
-        self.assertEqual(out['decision']['taskId'], other['task_id'])   # named wins over what is on the table
+        p = decide(s, f"stop the agent on TQ-{other['task_id']:04d}", 'stop_agent', key=item['key'], live=both)['proposal']
+        self.assertEqual(p['target'], other['task_id'])                # named wins over what is on the table
 
-    def test_rerun_queues_the_report_again(self):
+    def test_rerun_is_confirmed_then_queues_the_report_again(self):
         s = store()
         sid = s.save_source({'Channel': 'report', 'Address': 'Nightly export', 'Owner': 'o', 'Active': 1,
                              'ConfigJson': json.dumps({'type': 'agent', 'title': 'Nightly export'})}, 'o')
@@ -524,9 +572,16 @@ class ResponseTests(unittest.TestCase):
         s.add_route(m, None, 'feed', None, 'a report you set up', [], 'feed')
         item = pile(s)[0]
         self.assertEqual(item['source_id'], sid)
-        self.assertEqual(say(s, 'run it again', key=item['key'])['decision']['verb'], 'rerun')
+        p = decide(s, 'run it again', 'rerun', key=item['key'])['proposal']
+        self.assertEqual((p['kind'], p['target'], p['label']), ('report.rerun', sid, 'Run the report again'))
+        with mock.patch.object(server, 'run_report_source') as ran:    # queued on a thread, so wait for it
+            r = run(s, p)
+            for _ in range(50):
+                if ran.called: break
+                import time; time.sleep(0.02)
+        self.assertEqual(r.json()['status'], 'done'); self.assertTrue(ran.called, 'the report actually ran')
 
-    def test_a_sweep_clears_these_and_remembers_the_kind(self):
+    def test_a_sweep_is_confirmed_then_clears_these_and_remembers_the_kind(self):
         s = store()
         for n in range(3):
             arrive(s, subject=f'MFA Financial Report - .0{n}', body='from Intacct', who='Nechama Ozur',
@@ -534,17 +589,22 @@ class ResponseTests(unittest.TestCase):
         keep = arrive(s, subject='RE: PointClickCare', body='please respond', who='Kishan',
                       email='kishan@vendor.com', hours=1, llm=brain('fyi', None))
         self.assertEqual(len(pile(s)), 4)
-        out = say(s, "skip all the mfa financial reports, that is taken care of", key=pile(s)[0]['key'])
-        self.assertEqual(out['decision']['cleared']['cleared'], 3)
+        words = "skip all the mfa financial reports, that is taken care of"
+        p = decide(s, words, 'clear', key=pile(s)[0]['key'])['proposal']
+        self.assertEqual((p['kind'], p['params']['text'], p['label']), ('pipe.clear', words, 'Clear them from the pipe'))
+        self.assertEqual(len(pile(s)), 4)                              # nothing swept on the words
+        r = run(s, p)
+        self.assertEqual(r.json()['outcome']['cleared'], 3)
         self.assertEqual([i['who'] for i in pile(s)], ['Kishan'])
         self.assertEqual([r['sender'] for r in funnel.mutes(s)], ['nozur@hrtgcs.com'])
+        self.assertTrue(any('Cleared 3 from the pipe' in b for b in receipts(s)), receipts(s)[-2:])
         self.assertTrue(keep['message_id'])
 
-    def test_split_breaks_one_arrival_into_two_jobs(self):
+    def test_split_is_confirmed_then_breaks_one_arrival_into_two_jobs(self):
         s = store()
         with mock.patch.object(ingest, '_spawn'):
             out = arrive(s, subject='Two things', hours=1, llm=brain('task', 'coding'),
-                         body=('Can you fix the nightly export? It drops inter-company rows.\\n\\n'
+                         body=('Can you fix the nightly export? It drops inter-company rows.\n\n'
                                'Also, please add Priya to the payroll distribution list.'))
         tid = out['task_id']
         item = pile(s)[0]
@@ -553,20 +613,24 @@ class ResponseTests(unittest.TestCase):
                'second': {'title': 'Add Priya to the payroll distribution list', 'summary': 'mailing list'},
                'move_message_ids': []}
         with mock.patch('taskuary.reshape.propose_split', return_value=two):
-            out = say(s, 'these are two different things, split it', key=item['key'])
-        self.assertEqual(out['decision']['verb'], 'split')
+            p = decide(s, 'these are two different things, split it', 'split', key=item['key'])['proposal']
+            self.assertEqual((p['kind'], p['target'], p['label']), ('task.split', tid, 'Split it in two'))
+            self.assertEqual(len(s.list_tasks(active_only=True)), 1)   # one task until the click
+            r = run(s, p)
         self.assertEqual(s.get_task(tid)['Title'], 'Fix the nightly export')
-        new = s.get_task(out['decision']['taskId'])
+        new = s.get_task(r.json()['outcome']['taskId'])
         self.assertEqual((new['Title'], new['Kind']), ('Add Priya to the payroll distribution list', 'coding'))
-        self.assertIn('Split', out['say'])
-        self.assertEqual(len([t for t in s.list_tasks(active_only=True)]), 2)
+        self.assertEqual(len(s.list_tasks(active_only=True)), 2)
+        self.assertTrue(any('each is its own job now' in b for b in receipts(s)), receipts(s)[-2:])
 
-    def test_set_something_up_opens_a_walk_through_not_a_build(self):
+    def test_set_something_up_is_confirmed_then_opens_a_walk_through_not_a_build(self):
         s = store()
+        p = decide(s, 'set up the Zoho invoice integration so it drafts the monthly invoices', 'setup')['proposal']
+        self.assertEqual((p['kind'], p['label']), ('task.setup', 'Open the walk-through'))
+        self.assertEqual(s.list_tasks(active_only=True), [])           # nothing opened on the words
         with mock.patch.object(ingest, '_spawn') as spawn:
-            out = say(s, 'set up the Zoho invoice integration so it drafts the monthly invoices')
-        self.assertEqual(out['decision']['verb'], 'walkthrough')
-        self.assertEqual(s.get_task(out['decision']['taskId'])['Kind'], 'general')
+            r = run(s, p)
+        self.assertEqual(s.get_task(r.json()['outcome']['taskId'])['Kind'], 'general')
         self.assertFalse(spawn.called)                                  # nobody is sent into a repository
 
     def test_a_correction_is_taken_not_shrugged_off(self):
@@ -592,11 +656,11 @@ class ResponseTests(unittest.TestCase):
         self.assertIn('Rivka', f"{out['item'].get('who')} {out['say']}")
 
     def test_every_verb_the_contract_offers_is_one_the_code_can_carry_out(self):
-        """The model may answer with any verb in the contract; each has to mean something here."""
+        """The model may answer with any verb in the contract; each has to be a proposal or one of the roads."""
         for verb in concierge.VERBS:
             if verb == 'none': continue
-            self.assertTrue(verb in concierge.RECEIPTS or verb in ('clear', 'split', 'stop_agent', 'close', 'setting', 'forward'),
-                            f'{verb} has no receipt and no branch')
+            self.assertTrue(verb in concierge.PROPOSALS or verb in ('reply', 'redraft', 'next', 'setting', 'forward'),
+                            f'{verb} has no proposal and no road')
 
 
 # ── the break test of 2026-09-03, one case per finding (docs/assistant-break-test-2026-09-03.md) ──
@@ -615,33 +679,39 @@ class WrongTargetTests(unittest.TestCase):
                        email='miriam@ours.com', conv='c:outage', channel='teams', hours=0, llm=brain('task', 'general'))
         return s, out, rv['ReviewId'], other
 
-    def test_a_verb_about_another_subject_is_carried_out_there_not_here(self):
+    def test_a_verb_about_another_subject_is_proposed_there_not_here(self):
         s, mine, rid, other = self._two()
         item = next(i for i in pile(s) if i.get('rid') == rid)
         with mock.patch.object(ingest, '_spawn'):
-            out = say(s, 'not ours, this is the payroll portal outage - facilities handle that', key=item['key'])
-        d = out['decision'] or {}
-        self.assertEqual(d.get('verb'), 'not_ours')
-        self.assertEqual((d.get('target') or {}).get('mid'), other['message_id'])     # THAT one, by its own ids
+            out = decide(s, 'not ours, this is the payroll portal outage - facilities handle that', 'not_ours', key=item['key'],
+                         on='payroll portal outage')
+        p = out['proposal']
+        self.assertEqual((p['kind'], p['target']), ('message.file', other['message_id']))   # THAT one, by its own ids
+        self.assertFalse(p['settles'])                                                        # ...and the walk stays here
         self.assertIn('not the one on the table', out['say'])
         self.assertEqual(s.get_review(rid)['Status'], 'pending')                     # ...and this one is untouched
         self.assertEqual(s.get_task(mine['task_id'])['Status'], 'open')
+        run(s, p)
+        self.assertEqual(s.get_review(rid)['Status'], 'pending'); self.assertEqual(s.get_task(mine['task_id'])['Status'], 'open')
 
     def test_a_verb_about_a_subject_we_cannot_find_asks_instead_of_acting(self):
         s, mine, rid, other = self._two()
         item = next(i for i in pile(s) if i.get('rid') == rid)
-        out = say(s, 'not ours, the badge printer contract is legal’s', key=item['key'])
-        self.assertIsNone(out['decision'])
+        out = decide(s, 'not ours, the badge printer contract is legal’s', 'not_ours', key=item['key'], on='badge printer contract')
+        self.assertIsNone(out['decision']); self.assertIsNone(out.get('proposal'))
         self.assertIn('nothing has been touched', out['say'])
         self.assertEqual(s.get_task(mine['task_id'])['Status'], 'open')
 
     def test_plain_words_still_act_on_the_thing_on_the_table(self):
         s, mine, rid, other = self._two()
         item = next(i for i in pile(s) if i.get('rid') == rid)
-        for words in ('not ours', 'not my problem', "it's not my issue so let them sort it out", 'done, thanks'):
-            out = say(s, words, key=item['key'])
-            self.assertIsNotNone(out['decision'], words)                             # no false alarm on ordinary speech
-            self.assertNotIn('target', out['decision'], words)
+        for words, verb in (('not ours', 'not_ours'), ('not my problem', 'not_ours'),
+                            ("it's not my issue so let them sort it out", 'not_ours'), ('done, thanks', 'done')):
+            out = decide(s, words, verb, key=item['key'])
+            p = out['proposal']
+            self.assertIsNotNone(p, words); self.assertNotIn('not the one on the table', out['say'], words)
+            self.assertEqual(p['target'], item['mid'] if verb == 'not_ours' else item['tid'], words)   # this one, and settles it
+            self.assertTrue(p['settles'], words)
 
     def test_filing_a_message_whose_task_an_agent_worked_archives_it(self):
         s, tid, mid, item = ResponseTests()._asked()
@@ -668,8 +738,9 @@ class ApproveOnceTests(unittest.TestCase):
         self.assertEqual(s.get_review(rv['ReviewId'])['Status'], 'pending')
         self.assertEqual(s.get_task(out['task_id'])['Status'], 'open')               # the task did NOT close
         item = next(i for i in pile(s) if i.get('rid') == rv['ReviewId'])
-        said = say(s, 'approve', key=item['key'])
-        self.assertIsNone(said['decision']); self.assertIn('nothing to approve', said['say'].lower())
+        said = decide(s, 'approve', 'approve', key=item['key'])
+        self.assertIsNone(said['decision']); self.assertIsNone(said.get('proposal'))   # no card for an empty draft
+        self.assertIn('nothing to approve', said['say'].lower())
 
     def test_approving_twice_sends_once(self):
         from taskuary import verdicts
@@ -686,88 +757,101 @@ class ApproveOnceTests(unittest.TestCase):
 class OneTruthPerTurnTests(unittest.TestCase):
     """B. The receipt is what happened. No verb is receipted that the card cannot carry out."""
 
-    def test_a_verb_the_card_cannot_carry_is_refused_before_it_is_receipted(self):
+    def test_a_verb_the_card_cannot_carry_is_refused_before_it_is_proposed(self):
         s, tid, mid, item = ResponseTests()._asked()                                  # an ask: no draft, no report
-        for words, word in (('approve', 'approve'), ('rerun it', 'rerun'), ('tell the agent yes', 'answer')):
-            out = say(s, words, key=item['key'])
-            self.assertIsNone(out['decision'], words)
+        for words, verb in (('approve', 'approve'), ('rerun it', 'rerun'), ('tell the agent yes', 'answer_agent')):
+            out = decide(s, words, verb, key=item['key'])
+            self.assertIsNone(out['decision'], words); self.assertIsNone(out.get('proposal'), words)
             self.assertIn('nothing to', out['say'].lower(), words)
             self.assertNotIn('Moving on', out['say'], words)
 
     def test_a_hand_off_with_no_agent_on_the_machine_says_so(self):
         s, tid, mid, item = ResponseTests()._asked()
         s._exec('DELETE FROM agent')
-        out = say(s, 'send it to the coder', key=item['key'])
-        self.assertIsNone(out['decision']); self.assertIn('not set up on this machine', out['say'])
+        out = decide(s, 'send it to the coder', 'coder', key=item['key'])
+        self.assertIsNone(out['decision']); self.assertIsNone(out.get('proposal')); self.assertIn('not set up on this machine', out['say'])
 
-    def test_remembering_writes_the_row_and_leaves_the_walk_where_it_was(self):
+    def test_remembering_writes_the_row_on_the_click_and_leaves_the_walk_where_it_was(self):
         s, tid, mid, item = ResponseTests()._asked()
-        out = say(s, 'remember that Dovid handles the badge printers', key=item['key'])
-        self.assertEqual(out['decision']['verb'], 'remembered')
+        out = decide(s, 'remember that Dovid handles the badge printers', 'remember', key=item['key'], text_arg='Dovid handles the badge printers')
+        self.assertEqual(out['proposal']['kind'], 'memory.remember'); self.assertNotIn('Moving on', out['say'])
+        self.assertEqual(s.list_memories(), [])
+        run(s, out['proposal'])
         self.assertEqual([m['Note'] for m in s.list_memories()], ['Dovid handles the badge printers'])
-        self.assertNotIn('Moving on', out['say'])
         self.assertEqual(funnel.next_item(s, item['key'])['key'], item['key'])        # still on the table
 
-    def test_approve_and_remember_does_both(self):
+    def test_a_second_decision_replaces_the_proposal_on_the_table(self):
+        """"approve and remember that Kishan handles refunds" is two decisions: one proposal is on the table at a
+        time, so the second replaces the first - the approve is cancelled, never sent on the side."""
         s, tid, rid, item = ResponseTests()._drafted()
-        out = say(s, 'approve and remember that Kishan handles refunds', key=item['key'])
-        self.assertEqual(out['decision']['verb'], 'approve')
+        first = decide(s, 'approve', 'approve', key=item['key'])['proposal']
+        second = decide(s, 'and remember that Kishan handles refunds', 'remember', key=item['key'], text_arg='Kishan handles refunds')['proposal']
+        self.assertEqual(second['kind'], 'memory.remember')
+        self.assertEqual(operations.get(s, first['id'])['status'], 'cancelled')
+        self.assertEqual(s.list_memories(), [])
+        run(s, second)
         self.assertEqual([m['Note'] for m in s.list_memories()], ['Kishan handles refunds'])
-        self.assertIn('remembered', out['say'].lower())
+        self.assertEqual(s.get_review(rid)['Status'], 'pending')                     # the approve never went out
 
 
 class WordsTheOwnerUsesTests(unittest.TestCase):
     """The phrases from the break test that meant the opposite of what they did."""
 
-    def test_holding_something_open_is_never_a_verdict(self):
-        for words in ("don't ignore this one", 'leave it open', 'leave it with the agent', "don't close it yet"):
-            self.assertIsNone(concierge.decide_words(words), words)
+    def test_words_alone_decide_nothing_the_model_does(self):
+        """Holding something open, telling somebody something, asking about state: each used to match a verb
+        phrase and do the opposite of what it meant. There is no phrase table now - a model answer with no
+        DECIDE line proposes nothing and touches nothing."""
+        s, tid, mid, item = ResponseTests()._asked()
+        for words in ("don't ignore this one", 'leave it open', 'leave it with the agent', "don't close it yet",
+                      'can you check if the report ran?', 'tell them to ignore it'):
+            out = say(s, words, key=item['key'], model='Leaving it exactly as it is.')
+            self.assertIsNone(out['decision'], words); self.assertIsNone(out.get('proposal'), words)
+        self.assertEqual(s.get_task(tid)['Status'], 'open'); self.assertEqual(s.list_memories(), [])
+        self.assertEqual([i['key'] for i in pile(s)], [item['key']])
+        # ...and telling them something is a reply the model names, drafted at once - never a filing
+        out = decide(s, 'let them know we will fix it by Friday', 'reply', key=item['key'], text_arg='we will fix it by Friday')
+        self.assertEqual(out['decision'], {'verb': 'reply', 'text': 'we will fix it by Friday'}); self.assertIsNone(out.get('proposal'))
 
-    def test_telling_them_something_is_a_reply_not_a_filing(self):
-        for words in ('let them know we will fix it by Friday', 'tell them to ignore it',
-                      'reply: not ours, sorry', 'remember to reply to him'):
-            self.assertEqual((concierge.decide_words(words) or {}).get('verb'), 'reply', words)
-
-    def test_a_question_about_state_is_not_a_coding_job(self):
-        self.assertIsNone(concierge.decide_words('can you check if the report ran?'))
-
-    def test_the_verbs_the_owner_kept_using(self):
-        for words, verb in (('skip it', 'skip_choice'), ('delete it', 'archive'), ('archive it', 'archive'),
-                            ('snooze it', 'later'), ('remind me tomorrow', 'skip'),
-                            ('make the reply shorter', 'redraft'), ('forward it to Chana', 'forward'),
-                            ('ask Chana to handle it', 'forward'), ('tell the agent yes', 'answer_agent'),
-                            ('answer the agent: yes remove them', 'answer_agent')):
-            self.assertEqual((concierge.decide_words(words) or {}).get('verb'), verb, words)
+    def test_the_verbs_the_owner_kept_using_each_have_a_proposal_kind(self):
+        for verb, kind in (('archive', 'message.archive'), ('later', 'item.settle'), ('skip', 'item.settle'), ('not_ours', 'message.file'),
+                           ('not_ours_remember', 'preference.exclude_sender'), ('not_ours_sender', 'preference.exclude_sender'),
+                           ('coder', 'task.create_from_message'), ('regular_agent', 'task.create_from_message'),
+                           ('mine', 'task.create_from_message'), ('close', 'task.complete'), ('done', 'item.settle')):
+            s, tid, mid, item = ResponseTests()._asked()
+            p = decide(s, verb, verb, key=item['key'])['proposal']
+            self.assertEqual((p['kind'], p['label'], p['status']), (kind, concierge.PROPOSALS[verb][1], 'proposed'), verb)
 
     def test_skip_it_asks_once_or_forever_and_each_answer_has_a_distinct_verdict(self):
         s, tid, mid, item = ResponseTests()._asked()
-        ask = say(s, 'skip it', key=item['key'])
-        self.assertIsNone(ask['decision'])
+        ask = say(s, 'skip it', key=item['key'],
+                  model='Only this one, or this kind from now on? Nothing has changed yet.' + chr(10) + 'OPTIONS: Just this once | Forever for this kind')
+        self.assertIsNone(ask['decision']); self.assertIsNone(ask.get('proposal'))
         self.assertEqual(ask['options'], ['Just this once', 'Forever for this kind'])
         self.assertEqual(s.list_memories(), [])
-        self.assertEqual(say(s, 'Just this once', key=item['key'])['decision']['verb'], 'not_ours')
-
+        self.assertEqual(decide(s, 'Just this once', 'not_ours', key=item['key'])['proposal']['kind'], 'message.file')
         s2, tid2, mid2, item2 = ResponseTests()._asked()
-        self.assertEqual(say(s2, 'Forever for this kind', key=item2['key'])['decision']['verb'],
-                         'not_ours_remember')
+        p = decide(s2, 'Forever for this kind', 'not_ours_remember', key=item2['key'])['proposal']
+        self.assertEqual((p['kind'], p['params']['scope']), ('preference.exclude_sender', 'subject'))
 
     def test_yes_means_whatever_the_card_in_front_of_them_does(self):
         s, tid, rid, item = ResponseTests()._drafted()
-        for words in ('yes', 'ok', 'go ahead', 'do it'):
-            self.assertEqual(say(s, words, key=item['key'])['decision']['verb'], 'approve', words)
+        p = decide(s, 'yes', 'approve', key=item['key'])['proposal']
+        self.assertEqual((p['kind'], p['target']), ('review.approve', rid))
         s2, tid2, mid2, item2 = ResponseTests()._asked()
         live = session(tid2, idle=200, waiting=True, tail=['Remove the old rows too? (y/n)'])
         s2.update_task(tid2, {'Status': 'in_progress'}, 'router')
         agent = next(i for i in pile(s2, live) if i['kind'] == 'agent')
-        for words in ('yes', 'yes remove them'):
-            out = say(s2, words, key=agent['key'], live=live)
-            self.assertEqual(out['decision']['verb'], 'answer_agent', words)
-            self.assertIn('remove them' if 'remove' in words else 'yes', out['decision']['text'])
+        p = decide(s2, 'yes remove them', 'answer_agent', key=agent['key'], live=live, text_arg='yes remove them')['proposal']
+        self.assertEqual((p['kind'], p['target'], p['params']['text']), ('agent.answer', tid2, 'yes remove them'))
+        from taskuary import waitroom
+        with mock.patch.object(waitroom, 'deliver', return_value={'delivered': 0}):
+            self.assertEqual(run(s2, p, live=live).json()['status'], 'done')
+        self.assertTrue(any('remove them' in str(x) for x in s2.waitroom(tid2)))   # queued for the agent, on the click
 
     def test_a_yes_with_nothing_to_say_yes_to_asks_rather_than_guesses(self):
         s, tid, mid, item = ResponseTests()._asked()
-        out = say(s, 'yes', key=item['key'])
-        self.assertIsNone(out['decision']); self.assertIn('Yes to what', out['say'])
+        out = say(s, 'yes', key=item['key'], model='Yes to what, exactly? Nothing on this one is waiting on a yes.')
+        self.assertIsNone(out['decision']); self.assertIsNone(out.get('proposal')); self.assertIn('Yes to what', out['say'])
 
 
 class AgentEndingsTests(unittest.TestCase):
@@ -781,25 +865,28 @@ class AgentEndingsTests(unittest.TestCase):
 
     def test_close_it_from_the_chat_stops_the_session_too(self):
         s, tid, live, item = self._parked()
+        p = decide(s, 'close it', 'close', key=item['key'], live=live)['proposal']
+        self.assertEqual((p['kind'], p['target']), ('task.complete', tid))
+        self.assertEqual(s.get_task(tid)['Status'], 'in_progress')                   # nothing until the click
         with mock.patch.object(terminal, 'session_for') as found, mock.patch.object(terminal, 'close') as closed:
             found.return_value = mock.Mock(sid='s1', alive=True)
-            out = say(s, 'close it', key=item['key'], live=live)
-        self.assertEqual(out['decision']['verb'], 'closed')
+            run(s, p, live=live)
         self.assertEqual(s.get_task(tid)['Status'], 'done')
         closed.assert_called_once_with('s1')
 
     def test_done_on_a_parked_agent_closes_the_task_and_the_session(self):
         s, tid, live, item = self._parked()
+        p = decide(s, 'done', 'done', key=item['key'], live=live)['proposal']
+        self.assertEqual((p['kind'], p['target'], p['params'], p['label']), ('task.complete', tid, {'agent': True}, 'Close the task and stop its agent'))
         with mock.patch.object(terminal, 'session_for') as found, mock.patch.object(terminal, 'close') as closed:
             found.return_value = mock.Mock(sid='s1', alive=True)
-            out = say(s, 'done', key=item['key'], live=live)
-        self.assertEqual(out['decision']['verb'], 'closed')
+            run(s, p, live=live)
         self.assertEqual(s.get_task(tid)['Status'], 'done'); closed.assert_called_once_with('s1')
 
     def test_wrap_it_up_with_nothing_to_wrap_says_so(self):
         s, tid, live, item = self._parked()
-        out = say(s, 'wrap it up', key=item['key'], live=live)
-        self.assertFalse(out['decision']['wrap'])                                     # the page would 422 on a wrap
+        out = decide(s, 'wrap it up', 'stop_agent', key=item['key'], live=live)
+        self.assertFalse(out['proposal']['params']['wrap'])                          # the wrap would 422: it stops instead
         self.assertIn('nothing to wrap', out['say'])
 
 
@@ -818,22 +905,22 @@ class WalkFromWordsTests(unittest.TestCase):
         return s
 
     def test_next_and_done_with_nothing_on_the_table_bring_the_next_thing_up(self):
-        for words in ('next', 'done', 'walk me through my tasks', "what's next"):
+        for words, verb in (('next', 'next'), ('done', 'done'), ('walk me through my tasks', 'next'), ("what's next", 'next')):
             s = self._three()
-            out = say(s, words, key=None)
+            out = decide(s, words, verb, key=None)
             self.assertIsNotNone(out.get('item'), words)                      # something came out of the pipe
-            self.assertIsNone(out.get('decision'), words)
+            self.assertIsNone(out.get('decision'), words); self.assertIsNone(out.get('proposal'), words)
 
     def test_start_with_the_mail_walks_only_the_mail(self):
         s = self._three()
-        out = say(s, 'start with the mail', key=None)
+        out = decide(s, 'start with the mail', 'next', key=None)
         self.assertTrue(out['item']['mid'])
 
     def test_a_verb_with_nothing_on_the_table_says_so_instead_of_claiming(self):
         s = self._three()
-        for words in ('close it', 'approve', 'rerun it'):
-            out = say(s, words, key=None)
-            self.assertIsNone(out.get('decision'), words)
+        for words, verb in (('close it', 'close'), ('approve', 'approve'), ('rerun it', 'rerun')):
+            out = decide(s, words, verb, key=None)
+            self.assertIsNone(out.get('decision'), words); self.assertIsNone(out.get('proposal'), words)
             self.assertIn('Nothing is on the table', out['say'], words)
 
     def test_words_land_on_the_fyi_batch_the_way_buttons_do(self):
@@ -843,9 +930,9 @@ class WalkFromWordsTests(unittest.TestCase):
             card = concierge.surface(s, llm=None)                             # ...then the FYI handful
         self.assertTrue(card['item']['key'].startswith('fyis:'))
         self.assertEqual((card['item']['kind'], len(card['item']['items'])), ('fyis', 2))
-        for words, verb in (('next', 'next'), ('done', 'done')):
-            out = say(s, words, key=card['item']['key'])
-            self.assertEqual((out.get('decision') or {}).get('verb'), verb, words)
+        self.assertEqual(decide(s, 'next', 'next', key=card['item']['key'])['decision'], {'verb': 'next'})
+        p = decide(s, 'done', 'done', key=card['item']['key'])['proposal']
+        self.assertEqual((p['kind'], p['params']['key']), ('item.settle', card['item']['key']))
 
     def test_a_new_chat_brings_a_waiting_agent_back(self):
         s, tid, mid, item = ResponseTests()._asked()
@@ -1115,17 +1202,23 @@ class TellingItInAdvanceTests(unittest.TestCase):
         for i in pile(s): funnel.settle(s, i['key'], 'done', 'owner')      # read already; the pipe is clear
         funnel.invalidate()
 
+    def _sweep(self, s, text):
+        """The owner's rule in words, proposed and confirmed."""
+        p = decide(s, text, 'clear')['proposal']
+        return p, run(s, p).json()
+
     def test_the_words_alone_write_the_rule_and_the_next_batch_never_enters(self):
         s = store()
         self._history(s)
         self.assertEqual(pile(s), [])
-        out = say(s, 'nechama emails about mfa financials reports should not show up anymore')
-        self.assertEqual(out['decision']['verb'], 'clear')
-        self.assertEqual(out['decision']['cleared']['cleared'], 0)          # nothing to clear…
-        self.assertTrue(out['decision']['cleared']['ahead'])                 # …so it was noted instead
+        p = decide(s, 'nechama emails about mfa financials reports should not show up anymore', 'clear')['proposal']
+        self.assertEqual(p['kind'], 'pipe.clear'); self.assertEqual(funnel.mutes(s), [])   # no rule on the words
+        out = run(s, p).json()['outcome']
+        self.assertEqual(out['cleared'], 0)                                  # nothing to clear…
+        self.assertTrue(out['ahead'])                                        # …so it was noted instead
         self.assertEqual([(r['sender'], r['words']) for r in funnel.mutes(s)],
                          [('nozur@hrtgcs.com', ['nechama', 'mfa', 'financials'])])
-        self.assertIn('it is noted', out['say']); self.assertIn('stay on the Timeline', out['say'])
+        self.assertTrue(any('it is noted' in b and 'stay on the Timeline' in b for b in receipts(s)), receipts(s)[-2:])
         # …and it is visible as a memory too, so the owner can see and undo it
         notes = [n for n in s.list_memories(active_only=True) if (n['ScopeKey'] or '') == 'nozur@hrtgcs.com']
         self.assertTrue(notes and 'should not show up' in notes[0]['Note'])
@@ -1138,7 +1231,7 @@ class TellingItInAdvanceTests(unittest.TestCase):
     def test_a_real_ask_from_a_muted_sender_still_reaches_the_owner(self):
         s = store()
         self._history(s)
-        say(s, 'nechama emails about mfa financials reports should not show up anymore')
+        self._sweep(s, 'nechama emails about mfa financials reports should not show up anymore')
         with mock.patch.object(ingest, '_spawn'):
             arrive(s, subject='MFA Financial Report - can you re-run .02 for me?', body='please re-run it',
                    who='Nechama Ozur', email='nozur@hrtgcs.com', conv='c:rerun', hours=0, llm=brain('task', 'coding'))
@@ -1148,7 +1241,7 @@ class TellingItInAdvanceTests(unittest.TestCase):
     def test_the_rule_is_the_owners_to_take_off_again(self):
         s = store()
         self._history(s)
-        say(s, 'nechama emails about mfa financials reports should not show up anymore')
+        self._sweep(s, 'nechama emails about mfa financials reports should not show up anymore')
         c = TestClient(server.app)
         with mock.patch.object(server, 'store', s), mock.patch.dict(terminal.SESSIONS, {}, clear=True):
             listed = c.get('/api/funnel/mutes').json()['data']
@@ -1226,7 +1319,7 @@ class SettingProposalTests(unittest.TestCase):
         s = store()
         s.save_connector({'Type': 'github', 'Name': 'GitHub', 'Secret': 'x', 'Active': 1,
                           'ConfigJson': json.dumps({'use_as_tracker': True})}, 'o')
-        out = say(s, 'turn PRs into timeline items not tasks')
+        out = decide(s, 'turn PRs into timeline items not tasks', 'setting')
         self.assertEqual(out['decision']['verb'], 'setting')
         rid = out['decision']['reviewId']
         rv = s.get_review(rid)
@@ -1245,7 +1338,7 @@ class SettingProposalTests(unittest.TestCase):
 
     def test_a_number_the_owner_says_out_loud_is_the_value(self):
         s = store()
-        out = say(s, 'check the mail every 5 minutes')
+        out = decide(s, 'check the mail every 5 minutes', 'setting')
         self.assertEqual(out['decision']['changes'], [{'name': 'poll_minutes', 'value': '5'}])
         self.assertNotEqual(s.get_settings().get('poll_minutes'), '5', 'still theirs to approve')
 
@@ -1267,7 +1360,7 @@ class SettingProposalTests(unittest.TestCase):
         s = store()
         before = dict(s.get_settings())
         for words in ('stop auto-starting the coder', 'never read my calendar', 'the pipe should hold at most 15'):
-            say(s, words)
+            decide(s, words, 'setting')
         after = dict(s.get_settings())
         self.assertEqual({k: v for k, v in after.items() if k in ('coder_auto_enabled', 'calendar_enabled', 'funnel_max')},
                          {k: v for k, v in before.items() if k in ('coder_auto_enabled', 'calendar_enabled', 'funnel_max')})
@@ -1464,7 +1557,7 @@ class ApiActionsTests(unittest.TestCase):
     def test_a_task_closed_from_the_chat_is_closed_on_the_board_too(self):
         s = store(); out = self._ask(s)
         item = pile(s)[0]
-        say(s, 'close it', key=item['key'])
+        run(s, decide(s, 'close it', 'close', key=item['key'])['proposal'])
         c = self.client(s)
         got = c.get(f"/api/tasks/{out['task_id']}").json()['task']
         self.assertEqual(got['Status'], 'done')                            # one record, both doors

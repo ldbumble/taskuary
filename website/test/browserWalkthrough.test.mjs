@@ -9,11 +9,12 @@ test("a new walkthrough is offered as a link and never yanks the tab", () => {
   const view = read("AssistantView.jsx");
   // it used to navigate away the moment the owner asked for a walk-through, and sixty seconds
   // later the walk-through's own session raised a hand at them from the tab they landed on
-  // (the 2026-09-03 break test). The receipt carries the ref; going there is their move.
-  const branch = view.slice(view.indexOf('verb === "walkthrough"'), view.indexOf('verb === "walkthrough"') + 500);
+  // (the 2026-09-03 break test). A set-up is a proposal now (task.setup); confirming it lands a
+  // receipt that carries the ref, and going there is their move.
+  const branch = view.slice(view.indexOf("const confirmProposal"), view.indexOf("const cancelProposal"));
   assert.doesNotMatch(branch, /onOpenTask/);
-  assert.match(branch, /ref: d\.ref/);
-  assert.match(view, /walkthrough\. Open it when you want to start; its browser opens beside the assistant/);
+  assert.match(branch, /ref: p\.ref/);
+  assert.doesNotMatch(view, /onNavigate\("Board"/);
   const card = read("assistantCards.jsx");
   assert.match(card, />Open walkthrough<\/Button>/);
   assert.doesNotMatch(card.slice(card.indexOf("export function SetupCard")), /Hand it to the coding agent/);

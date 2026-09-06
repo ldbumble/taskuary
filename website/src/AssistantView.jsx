@@ -28,6 +28,8 @@ import { onLive } from "./live.js";
 import { Md, looksMd } from "./md.jsx";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
+import ProposalCard from "./ProposalCard.jsx";
+import { SUGGESTIONS, afterCancel, afterExecute, proposalOf } from "./proposalCard.js";
 import { ageText, arrivals, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, followsItem, hasNextSelection, interactiveCardIndex, keysOf, nextMarkerKey, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, restorableCurrent, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
 import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WrapupCard } from "./assistantCards.jsx";
@@ -173,8 +175,9 @@ function Line({ m, live, actions, fresh }) {
   // ``fresh`` is a complete presentation, not a patch. Exact replacement clears source fields
   // that disappeared while retaining the durable conversation line and the card's local UI state.
   const c = follows ? fresh : m.card;                     // the live card follows the pile
-  const kind = c?.kind === "setup" ? "setup" : cardFor(c);
+  const kind = c?.kind === "setup" ? "setup" : (m.proposal || c?.kind === "proposal") ? "proposal" : cardFor(c);
   const card = live && m.card && kind ? {
+    proposal: <ProposalCard p={m.proposal || c} onConfirm={actions.confirm} onCancel={actions.cancel} />,
     reply: <ReplyCard card={c} onDone={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} />,
     agent: <AgentCard card={c} onDone={actions.done} onOpenTask={actions.openTask} />,
     meeting: <MeetingCard card={c} onDone={actions.done} onOpenTask={actions.openTask} />,
@@ -550,8 +553,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       noticedRef.current = null;
       if (data.item) landed(data);                       // the words pointed at something: it is on the table now
       else {
-        setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: data.options || [] }]); say(data.say);
-        if (data.decision) await decide(data.decision);  // the words were a decision: carry it out, then move on
+        const prop = proposalOf(data);      // a consequential decision arrives as a proposal to confirm (PW-123)
+        setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: data.options || [],
+                                ...(prop ? { proposal: prop, card: { kind: "proposal", key: prop.key, title: prop.label, op: prop.id, tid: prop.tid, ref: prop.ref } } : {}) }]);
+        say(data.say);
+        if (!prop && data.decision) await decide(data.decision);  // the two immediate exceptions: a reply drafts, Next moves (PW-126/128)
       }
     } catch (e) { setErr(errText(e)); }
     turnFlight.current = false;
@@ -564,157 +570,71 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (text.trim()) setText((v) => `${v}${/\s$/.test(v) ? "" : " "}${emoji}`);
     else send(emoji);
   };
-  // the owner decided in words: the same doors the card's buttons open, then the next thing. Never stuck.
+  // the owner decided in words. Only two decisions still run without a confirmation (PW-126/128): a reply
+  // request DRAFTS (nothing is sent, nothing is marked), and Next moves the walk without marking, closing
+  // or deferring anything. Everything else arrives as a proposal card and runs from its button.
   const decide = async (d) => {
-    // The card is looked up by the key on the table, and it can be MISSING - a key that changed under
-    // a pile refresh, a card older than the thread we hold. Every branch below is guarded on it, so a
-    // missing card used to mean nothing happened at all while the server had already said "Closing the
-    // task. Moving on." (the owner, 2026-09-03: "I told the ai to close it but it did not"). The live
-    // item is the same shape and is the fallback; when neither has what the verb needs, say so.
-    // ...and when the owner's SENTENCE named another subject, the server resolves it and sends the
-    // item it meant along as `target`. That one is acted on; the card on the table is not touched
-    // and does not settle (2026-09-03: "not ours" about the outage deleted the finished coding task).
     const cur = d.target || [...msgs].reverse().find((m) => m.card && m.card.key === current)?.card || currentItem || null;
     const elsewhere = !!d.target;
     const mid = cur?.mid, verb = d.verb;
-    const needs = { reply: mid, approve: cur?.rid, redraft: cur?.rid, not_ours: mid, not_ours_remember: mid, not_ours_sender: mid,
-                    coder: mid, mine: mid, forward: mid, archive: mid, answer_agent: cur?.tid, rerun: cur?.source_id, close: cur?.tid };
-    if (verb in needs && !needs[verb]) {
-      setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt",
-                              text: `I could not do that from here - ${cur ? `${cur.ref || "this one"} has nothing to ${verb} on it` : "nothing is on the table"}. Open it and the buttons will.`,
-                              tid: cur?.tid, ref: cur?.ref }]);
-      return;
-    }
-    // moving on happens ONLY on the item that is on the table, and only when the verb settled it
-    const after = async (receipt) => {
-      if (receipt) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: receipt, tid: cur?.tid, ref: cur?.ref }]);
-      if (elsewhere) { loadPile(); return; }
-      await done(null);
-    };
     try {
+      if (verb === "next") {
+        currentRef.current = null; selectionRef.current = null; setCurrent(null); setCurrentItem(null);
+        deferInChat(() => surfaceRef.current?.(), 300); return;
+      }
       if (verb === "reply" && mid) {
         const { data } = await api.post(`/api/messages/${mid}/reply`, { draft: true, instruction: d.text || null });
-        if (data.reviewId && !elsewhere) { await api.post("/api/funnel/settle", { key: current, verb: "done" }); setCurrent(null); deferInChat(() => surfaceRef.current?.(`review:${data.reviewId}`), 300); return; }
-        if (data.reviewId) { loadPile(); return; }
-      } else if (verb === "redraft" && cur?.rid && mid) {
-        // the draft itself is rewritten and the SAME review comes back up - the model used to claim
-        // the edit and the next approve sent the untouched original (2026-09-03)
+        if (data.reviewId && !elsewhere) { setCurrent(null); deferInChat(() => surfaceRef.current?.(`review:${data.reviewId}`), 300); return; }
+        loadPile(); return;
+      }
+      if (verb === "redraft" && cur?.rid && mid) {
         const { data } = await api.post(`/api/messages/${mid}/reply`, { draft: true, redraft: true, instruction: d.text || null });
         setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: data.draft ? "Rewritten - read it below before you send it." : "I could not rewrite it here; edit the draft on the card and send that." }]);
         if (!elsewhere) { setCurrent(null); deferInChat(() => surfaceRef.current?.(`review:${cur.rid}`), 300); } else loadPile();
         return;
-      } else if (verb === "approve" && cur?.rid) {
-        const { data } = await api.post(`/api/reviews/${cur.rid}/decide`, { verb: "approve", final_text: null, note: null });
-        // a refusal is not an error banner: nothing was sent, the review is untouched, and the
-        // card stays where it is (an empty draft, or a verdict that already landed)
-        if (data.empty || data.already) {
-          setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: cur.tid, ref: cur.ref,
-                                  text: data.empty ? "Nothing was sent - there is no draft on this one yet. Say reply and what to tell them, and it lands here for your yes."
-                                                   : `Nothing was sent - ${cur.ref || "this one"} was already ${data.status}. It is off the queue.` }]);
-          loadPile(); return;
-        }
-        if (data.send_error) throw new Error(data.send_error);
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: `Sent${cur.who ? ` to ${cur.who}` : ""}.${cur.tid ? ` ${cur.ref} closed.` : ""}` }]);
-      } else if (verb === "answer_agent" && cur?.tid) {
-        await api.post(`/api/tasks/${cur.tid}/waitroom`, { text: d.text || "yes" });
-        await after(`Told ${cur.agent || "the agent"}: “${String(d.text || "yes").slice(0, 80)}”`);
-        return;
-      } else if (verb === "archive" && mid) {
-        const { data } = await api.post(`/api/messages/${mid}/file`, { learn: false, archive: true });
-        await after(`Archived${data.ref ? ` - ${data.ref} is closed, not deleted` : " - off the pipe, nothing deleted"}.`);
-        return;
-      } else if (verb === "remembered" || verb === "forwarded" || verb === "setting" || verb === "split") {
-        // Taskuary already did these itself and said so; the card the server recorded is in the
-        // thread. Nothing to settle - a memory is not a verdict about the thing on the table.
-        loadPile(); return;
-      } else if (verb === "remember" && d.text) { await api.post("/api/memory", { note: d.text, scope: "global" }); loadPile(); return; }
-      else if (verb === "followup" && current) { await api.post("/api/concierge/act", { key: current, verb: "followup" }); await after("Follow-up drafted - it waits for your yes."); return; }
-      else if (verb === "not_ours_sender" && mid) await api.post(`/api/messages/${mid}/not-mine`, { scope: "sender" });
-      else if (verb === "not_ours" && mid) {
-        const { data } = await api.post(`/api/messages/${mid}/file`, { learn: false });
-        if (data.taskArchived) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: cur?.tid, ref: data.ref, text: `Filed. ${data.ref} was kept and closed, not deleted - an agent had worked it.` }]);
       }
-      else if (verb === "not_ours_remember" && mid) await api.post(`/api/messages/${mid}/not-mine`, { scope: "subject" });
-      else if (verb === "coder" && mid) {
-        const { data } = await api.post(`/api/messages/${mid}/dispatch`, { kind: "coding", instruction: d.text || null });
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: `${data.ref || "It"} is with the coding agent${d.text ? " with your note" : ""} - I'll bring it back when it's done.` }]);
-      }
-      else if (verb === "regular_agent" && mid) {
-        const { data } = await api.post(`/api/messages/${mid}/dispatch`, { kind: "general", instruction: d.text || null });
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: `${data.ref || "It"} is with ${data.agent || "the regular agent"}${d.text ? " with your note" : ""} - I'll bring it back when it's done.` }]);
-      }
-      else if (verb === "mine" && mid) await api.post(`/api/messages/${mid}/mine`, { kind: "task" });
-      else if (verb === "rerun" && cur?.source_id) {
-        const { data } = await api.post(`/api/reports/${cur.source_id}/rerun`);
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: `${data.title || "The report"} is rerunning in the background - it lands back in the pipe when it's done.` }]);
-      } else if (verb === "close" && cur?.tid) {
-        await api.patch(`/api/tasks/${cur.tid}`, { Status: "done" });
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: `${cur.ref || "The task"} closed.` }]);
-      }
-      else if (verb === "stop_agent" && d.taskId) {       // ending the AGENT, which is not closing the task
-        if (d.wrap) await api.post(`/api/tasks/${d.taskId}/wrap`, { close: true });
-        else await api.post(`/api/tasks/${d.taskId}/agent/stop`);
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: d.taskId, ref: d.ref,
-                                text: d.wrap ? `${d.ref} wrapped up - the report is on it and the task is closed.`
-                                             : `The agent on ${d.ref} is stopped. The task is still open.` }]);
-        loadPile(); return;
-      }
-      else if (verb === "walkthrough" && d.taskId) {      // a set-up is a conversation, not a build
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: d.taskId, ref: d.ref,
-                                text: `${d.ref} is open as a walk-through - nothing was built. Open it when you want to start; its browser opens beside the assistant.` }]);
-        loadPile(); return;                              // the owner is mid-conversation: do not yank the tab
-      }
-      else if (verb === "created") {                      // the words WERE the brief: the task exists already
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: d.taskId, ref: d.ref,
-                                text: `${d.ref} is with the coding agent - it comes back here when it is done.` }]);
-        loadPile(); return;
-      }
-      else if (verb === "clear") {
-        const c = d.cleared || {};
-        // a standing RULE already keeps these out of the pipe; a sender-wide verdict on top of it would
-        // reach everything that person ever sends, which is not what "don't need these" means
-        if (c.remember && c.mid && !c.rules?.length) { try { await api.post(`/api/messages/${c.mid}/not-mine`, { scope: "sender" }); } catch { /* the sweep still happened */ } }
-        loadPile(); return;
-      }
-      else if (verb === "setup" && d.text) {
-        const { data } = await api.post("/api/concierge/setup", { text: d.text });
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: data.taskId, ref: data.ref,
-                                text: `${data.ref} — "${data.title}" is open as a step-by-step walkthrough. Open it when you want to start; its browser opens beside the assistant.` }]);
-        if (!current) return;                       // ...and the walk stays where it was: see handOff
-      }
-      else if (["later", "skip", "next", "done", "closed", "ack"].includes(verb)) { /* settled below */ }
-      else if (!(verb in needs)) {
-        // NOTHING falls through to done(null) any more: an unknown verb used to mark the item on
-        // the table done for good while the chat said something else entirely (2026-09-03)
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: cur?.tid, ref: cur?.ref,
-                                text: `I don't have a road for that here${cur?.ref ? ` - ${cur.ref} is untouched` : ""}. Open it and its own buttons will.` }]);
-        return;
-      }
-      if (verb === "done" && cur && cur.kind !== "agent") {
-        // done on a task-backed item means the TASK is done: its pending draft is dismissed and it closes
-        if (cur.rid) { try { await api.post(`/api/reviews/${cur.rid}/decide`, { verb: "no_reply", final_text: null, note: "handled - the owner said so" }); } catch { /* it may be decided already */ } }
-        if (cur.tid) { try { await api.patch(`/api/tasks/${cur.tid}`, { Status: "done" }); setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: `${cur.ref} closed.` }]); } catch { /* fine */ } }
-      }
-      if (["later", "skip"].includes(verb)) { await settle(verb); return; }
-      await after(null);
+      if (verb === "setting" || verb === "forwarded") { loadPile(); return; }   // Taskuary put these in Review itself
+      setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: cur?.tid, ref: cur?.ref,
+                              text: `That needs a confirmation card and none came back${cur?.ref ? ` - ${cur.ref} is untouched` : ""}. Say it again.` }]);
     } catch (e) { setErr(errText(e)); }
   };
+  // the confirmation button (PW-124/125): the structured proposal by id and version - never a phrase sent
+  // back through the interpreter. The receipt is what the server said happened; the walk moves only on a
+  // success that settles the item on the table.
+  const confirmProposal = async (p) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      let res;
+      try { res = (await api.post(`/api/operations/${p.id}/execute`, { version: p.version })).data; }
+      catch (e) { res = { status: e?.response?.status === 409 ? "stale" : "error", error: e?.response?.data?.detail || errText(e) }; }
+      const out = afterExecute(p, res);
+      setMsgs((m) => [...m.map((x) => (x.proposal?.id === p.id ? { ...x, proposal: { ...x.proposal, status: out.status } } : x)),
+                       { id: `r${Date.now()}`, role: "receipt", text: out.receipt, tid: p.tid, ref: p.ref }]);
+      onChanged?.();
+      // the server already settled or closed the item; a settle proposal (later, tomorrow, done) must not be
+      // re-marked "done" by the page, so it advances without the settle post
+      if (out.settle && p.key && p.key === current) { if (p.kind === "item.settle") advance(); else await done(null); }
+      else loadPile();
+    } finally { setBusy(false); }
+  };
+  const cancelProposal = async (p) => {
+    try { await api.delete(`/api/operations/${p.id}`); } catch { /* it may be gone already */ }
+    const out = afterCancel(p);
+    setMsgs((m) => [...m.map((x) => (x.proposal?.id === p.id ? { ...x, proposal: { ...x.proposal, status: out.status } } : x)),
+                     { id: `r${Date.now()}`, role: "receipt", text: out.receipt, tid: p.tid, ref: p.ref }]);
+  };
   // a card did its thing: say so in the thread, then move on
-  const done = async (receipt) => {
-    if (receipt) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: receipt }]);
-    if (current) { try { await api.post("/api/funnel/settle", { key: current, verb: "done" }); } catch { /* it may already be gone */ } }
+  const advance = () => {
     currentRef.current = null; selectionRef.current = null;
     setCurrent(null); setCurrentItem(null);
     onChanged?.();                                     // a draft may have gone out: the Review badge recounts
     deferInChat(() => surfaceRef.current?.(), 500);
   };
-  const settle = async (verb) => {
-    if (!current) { surface(); return; }
-    try { await api.post("/api/funnel/settle", { key: current, verb }); } catch { /* fine */ }
-    setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: verb === "done" ? "Done." : verb === "later" ? "Pushed back a few hours — it comes back into the pipe then." : "Skipped until tomorrow morning." }]);
-    currentRef.current = null; selectionRef.current = null;
-    setCurrent(null); setCurrentItem(null); loadPile();
-    deferInChat(() => surfaceRef.current?.(), 400);
+  const done = async (receipt) => {
+    if (receipt) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: receipt }]);
+    if (current) { try { await api.post("/api/funnel/settle", { key: current, verb: "done" }); } catch { /* it may already be gone */ } }
+    advance();
   };
   const setup = () => setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: "Tell me what to set up - a report, a connection, an automation - in a sentence. I open it as a walk-through with the assistant: it takes you through it here, nothing is built and no repository is touched. If something does have to be built, say send it to the coding agent.",
     card: { key: "setup", kind: "setup", lane: "report", title: "Set something up" }, options: [] }]);
@@ -815,6 +735,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   };
 
   const actions = { done, start, handOff, openTask: onOpenTask, timeline, navigate: onNavigate, pick: (o) => send(o),
+    confirm: confirmProposal, cancel: cancelProposal,
     surface: (key, note) => {
       if (note) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: note }]);
       deferInChat(() => key ? surfaceRef.current?.(key) : loadPileRef.current?.(), 900);
@@ -904,11 +825,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         <div className="tq-compose">
           <div className="tq-quick">
             <button type="button" className="tq-chip" disabled={busy || resetting || !canAdvance} onClick={() => surface()}>Next</button>
-            {current && <>
-              <button type="button" className="tq-chip" disabled={busy || resetting} onClick={() => settle("done")}>Done</button>
-              <button type="button" className="tq-chip" disabled={busy || resetting} onClick={() => settle("later")}>Later</button>
-              <button type="button" className="tq-chip" disabled={busy || resetting} onClick={() => settle("skip")}>Tomorrow</button>
-            </>}
+            {/* suggestions are TEXT (PW-122): each goes through the same interpretation as typing, and a
+                consequential one comes back as a proposal to confirm - never straight to an action */}
+            {current && SUGGESTIONS.filter((s) => s !== "Next").map((s) => (
+              <button key={s} type="button" className="tq-chip" disabled={busy || resetting} onClick={() => send(s)}>{s}</button>
+            ))}
             <button type="button" className="tq-chip" disabled={busy || resetting} onClick={setup}>Set something up</button>
           </div>
           <div className="tq-compose-box">

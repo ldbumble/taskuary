@@ -29,6 +29,23 @@ def _verb(d):
     return (None if d is None else (d.get('verb'), d.get('text')))
 
 
+def decided(s, text, verb, key=None, arg=None, on=None):
+    """The model named the decision: the DECIDE line is the contract, the words are the owner's (PW-121)."""
+    line = f"Ok.\nDECIDE: {verb}" + (f": {arg}" if arg else '') + (f" ON: {on}" if on else '')
+    return concierge.say(s, text, key=key, llm=lambda *a, **k: line)
+
+
+def run(s, p, version=None):
+    """The confirmation button: the structured proposal by id and version, through the shared execute road (PW-124/125)."""
+    with mock.patch.object(server, 'store', s), mock.patch.object(terminal, 'live_sessions', return_value=[]):
+        return TestClient(server.app).post(f"/api/operations/{p['id']}/execute", json={'version': version if version is not None else p['version']})
+
+
+def last_receipt(s):
+    rows = [c for c in general.chat_rows(s, general.dock_task(s)[0]['TaskId']) if c.get('ActorType') == general.ASSISTANT_TYPE]
+    return concierge._MARK.sub('', rows[-1].get('Body') or '') if rows else ''
+
+
 def drafted(s, subject='Export still broken', who='Dana', hours=5, draft='Attached.'):
     t = s.create_task({'Title': subject, 'Kind': 'coding', 'Status': 'waiting'}, 'o')
     m = s.add_message({'TaskId': t, 'ExternalId': f'x:{subject}', 'ConversationId': f'c:{subject}', 'Channel': 'email', 'Subject': subject, 'FromName': who,
@@ -77,33 +94,38 @@ class TurnTests(unittest.TestCase):
                           concierge.DISCUSSION_ASSISTANT_TYPE])
         self.assertIn('corrected export', discussion[0]['Body'])
 
-    def test_a_deep_dive_is_dispatched_to_a_regular_agent_instead_of_merely_offered(self):
+    def test_a_deep_dive_is_proposed_for_a_regular_agent_and_starts_only_on_the_click(self):
         s = store()
+        out = decided(s, 'can you do a deep dive on the ECC agent harness?', 'regular_agent', arg='do a deep dive on the ECC agent harness')
+        p = out['proposal']
+        self.assertEqual((p['kind'], p['params']['kind'], p['label']), ('task.create_from_text', 'general', 'Start a regular agent on it'))
+        self.assertIn('deep dive', p['params']['text']); self.assertEqual(s.list_tasks(active_only=True), [])   # nothing started on the words
         session = mock.Mock()
         with mock.patch.object(concierge.general, 'start_session', return_value=session), \
              mock.patch.object(concierge.threading, 'Thread') as thread:
-            out = concierge.say(s, 'can you do a deep dive on the ECC agent harness?')
-        task = s.get_task(out['decision']['taskId'])
+            r = run(s, p).json()
+        task = s.get_task(r['outcome']['taskId'])
         self.assertEqual((task['Kind'], task['SourceRef']), ('general', 'assistant:agent'))
         self.assertIn('deep dive', task['Summary'])
         thread.assert_called_once()
         thread.return_value.start.assert_called_once()
-        self.assertIn('regular agent now', out['say'])
+        self.assertIn('is with the regular agent now', last_receipt(s))
 
-    def test_okay_send_it_accepts_the_regular_work_offer_and_keeps_the_prior_brief(self):
+    def test_okay_send_it_is_read_with_the_conversation_and_keeps_the_prior_brief(self):
         s = store()
         dock, _ = general.dock_task(s)
         concierge.record(s, dock['TaskId'], 'user', 'back to GitHub: do a deep dive on the ECC harness')
         concierge.record(s, dock['TaskId'], 'assistant', 'I can dig into the ECC harness. That is reading and analysis work, not a code change.')
-        session = mock.Mock()
-        with mock.patch.object(concierge.general, 'start_session', return_value=session), \
-             mock.patch.object(concierge.threading, 'Thread') as thread:
-            out = concierge.say(s, 'okay send it')
-        task = s.get_task(out['decision']['taskId'])
-        self.assertIn('ECC harness', task['Summary'])
-        self.assertNotEqual(task['Title'].lower(), 'okay send it')
-        self.assertEqual(task['SourceRef'], 'assistant:agent')
-        thread.return_value.start.assert_called_once()
+        seen = {}
+        def model(system, user, **kw):
+            seen['user'] = user
+            return 'A regular agent, then.\nDECIDE: regular_agent: do a deep dive on the ECC harness'
+        out = concierge.say(s, 'okay send it', llm=model)
+        self.assertIn('CONVERSATION SO FAR', seen['user']); self.assertIn('ECC harness', seen['user'])   # the model has what was offered
+        p = out['proposal']
+        self.assertIn('ECC harness', p['params']['text']); self.assertIn('ECC harness', p['params']['title'])
+        self.assertNotEqual(p['params']['title'].lower(), 'okay send it')
+        self.assertEqual(s.list_tasks(active_only=True), [])                                       # a proposal, not a task yet
 
     def test_without_a_model_the_facts_speak(self):
         s = store()
@@ -207,78 +229,53 @@ class TurnTests(unittest.TestCase):
 
 
 class DecisionTests(unittest.TestCase):
-    def test_the_owners_words_about_the_item_are_a_decision_the_model_names_and_the_page_carries_out(self):
+    def test_the_owners_words_about_the_item_are_a_decision_the_model_names_and_a_proposal_carries_out(self):
         s = store()
         t, m, r = drafted(s)
         concierge.surface(s, llm=lambda *a, **k: 'Dana wants the file.')
-        fake = lambda sy, u, **k: "Not ours, then - I'll file it and move on.\nDECIDE: not_ours"
-        never = lambda sy, u, **k: (_ for _ in ()).throw(AssertionError('a clear decision must not call the model'))
-        out = concierge.say(s, "it's not my issue, let them sort it out", key=f'review:{r}', llm=never)
-        self.assertEqual(_verb(out['decision']), ('not_ours', ''))
-        self.assertEqual(out['say'], 'Not ours, then - filed. Moving on.')            # the receipt, instantly, no model
-        out = concierge.say(s, 'tell her the file is with the coder, Friday', key=f'review:{r}', llm=never)
-        self.assertEqual(_verb(out['decision']), ('reply', 'the file is with the coder, Friday'))   # the words ride into the draft
+        out = concierge.say(s, "it's not my issue, let them sort it out", key=f'review:{r}', llm=lambda sy, u, **k: "Not ours, then.\nDECIDE: not_ours")
+        self.assertIsNone(out['decision']); p = out['proposal']
+        self.assertEqual((p['kind'], p['target'], p['label']), ('message.file', m, 'File it'))
+        self.assertEqual(s.get_message(m)['Status'], 'routed')                              # nothing filed on the words
+        self.assertIn('confirm below', out['say'])
+        # a reply request drafts at once and sends nothing (PW-126): the words ride into the draft
+        out = concierge.say(s, 'tell her the file is with the coder, Friday', key=f'review:{r}',
+                            llm=lambda sy, u, **k: "I'll draft that.\nDECIDE: reply: the file is with the coder, Friday")
+        self.assertEqual(_verb(out['decision']), ('reply', 'the file is with the coder, Friday')); self.assertIsNone(out.get('proposal'))
         told = lambda sy, u, **k: "I'll draft that.\nDECIDE: reply: mention the Friday delivery"
         out = concierge.say(s, 'can you mention the Friday delivery in the response', key=f'review:{r}', llm=told)
-        self.assertEqual(out['decision'], {'verb': 'reply', 'text': 'mention the Friday delivery'})   # a softer phrasing: the model names it
+        self.assertEqual(out['decision'], {'verb': 'reply', 'text': 'mention the Friday delivery'})
         # a remark is not a decision
         out = concierge.say(s, 'who is Dana again?', key=f'review:{r}', llm=lambda *a, **k: 'Dana is the vendor contact on the export.')
-        self.assertIsNone(out['decision'])
-        # ...and nothing on the table means nothing to decide - the words move the WALK instead,
-        # which is what "next" and "done" typed into an empty table always meant (2026-09-03)
+        self.assertIsNone(out['decision']); self.assertIsNone(out.get('proposal'))
+        # ...and nothing on the table means nothing to decide - the words move the WALK instead
         out = concierge.say(s, 'done', key=None, llm=lambda *a, **k: 'Nothing is on the table.\nDECIDE: done')
         self.assertIsNone(out.get('decision'))
         self.assertIn('still wait', out['say'])
 
-    def test_plain_phrases_decide_without_a_model(self):
-        # decide_words also hands back what was SAID and what is left of it once every verb phrase is
-        # taken out - the subject guard reads that, so the shape is checked by field, not by equality
-        self.assertEqual(_verb(concierge.decide_words("it's not my issue so let them respond if they still need it")), ('not_ours', ''))
-        self.assertEqual(_verb(concierge.decide_words('reply: we are on it, expect the file Friday')), ('reply', 'we are on it, expect the file Friday'))
-        self.assertEqual(concierge.decide_words('tell them the import runs tonight')['verb'], 'reply')
-        self.assertEqual(concierge.decide_words('send it to the coding agent')['verb'], 'coder')
-        self.assertEqual(_verb(concierge.decide_words('coding agent')), ('coder', ''))
-        self.assertEqual(_verb(concierge.decide_words('regular agent')), ('regular_agent', ''))
-        self.assertEqual(concierge.decide_words('send to agent')['verb'], 'agent_choice')
-        self.assertEqual(concierge.decide_words('send to codex to review')['verb'], 'coder')
-        self.assertEqual(concierge.decide_words('rerun please')['verb'], 'rerun')
-        self.assertEqual(concierge.decide_words('approve')['verb'], 'approve')
-        self.assertEqual(concierge.decide_words('looks good, send it')['verb'], 'approve')
-        self.assertEqual(concierge.decide_words('this sender is garbage, never again')['verb'], 'not_ours_sender')
-        self.assertEqual(concierge.decide_words('remember that Marcus owns the AP cutover'), {'verb': 'remember', 'text': 'Marcus owns the AP cutover'})
-        self.assertEqual(concierge.decide_words('remember that this sender is junk')['verb'], 'not_ours_sender')
-        self.assertEqual(concierge.decide_words('can you run it again')['verb'], 'rerun')
-        self.assertEqual(concierge.decide_words('claude should look at this')['verb'], 'coder')
-        coder = concierge.decide_words("send it to the coding agent and figure out why this wasn't updated - we did this before")
-        self.assertEqual(coder['text'], "send it to the coding agent and figure out why this wasn't updated - we did this before")   # every word rides along
+    def test_the_contract_line_is_parsed_and_the_words_alone_decide_nothing(self):
         self.assertEqual(concierge.parse_decision('On it.\nDECIDE: coder: find out why the fix did not stick, and add an admin login')[1],
                          {'verb': 'coder', 'text': 'find out why the fix did not stick, and add an admin login'})
-        self.assertEqual(concierge.decide_words("I'll do it myself")['verb'], 'mine')
-        self.assertEqual(concierge.decide_words('I will do this just make it a task')['verb'], 'mine')
-        # a decision is receipted, not narrated: the model's claim gives way to the plain fact of what happens now
-        s2 = store(); t2, m2, r2 = drafted(s2)
-        concierge.surface(s2, llm=lambda *a, **k: 'Dana wants the file.')
-        out = concierge.say(s2, 'I will do this just make it a task', key=f'review:{r2}', llm=lambda *a, **k: 'Task created - all set!')
-        self.assertEqual((out['decision']['verb'], out['say']), ('mine', 'On your list. Moving on.'))
-        self.assertIn('NEVER use your own task, todo or plan tools', concierge.tools_block(s2))
-        self.assertEqual(concierge.decide_words('later')['verb'], 'later')
-        self.assertEqual(concierge.decide_words('just close task')['verb'], 'close')
-        self.assertEqual(concierge.decide_words('I did it next')['verb'], 'done')
-        self.assertEqual(concierge.decide_words('ok that one is fine, next')['verb'], 'next')
-        self.assertIsNone(concierge.decide_words('did you respond yet on this, it was responded to?'))   # a question is a question
-        self.assertEqual(concierge.decide_words('it was responded to already')['verb'], 'done')
-        self.assertEqual(concierge.decide_words('next')['verb'], 'next')
-        self.assertIsNone(concierge.decide_words('what did she attach?'))
+        self.assertEqual(concierge.parse_decision('Filing that one.\nDECIDE: not_ours ON: payroll portal outage')[1],
+                         {'verb': 'not_ours', 'text': '', 'on': 'payroll portal outage'})
+        self.assertEqual(concierge.parse_decision('Sure.\nDECIDE: bogus'), ('Sure.', None))
+        self.assertFalse(hasattr(concierge, 'decide_words'))                                # no phrase table (PW-121)
         s = store(); t, m, r = drafted(s)
         concierge.surface(s, llm=lambda *a, **k: 'Dana wants the file.')
+        # the model's claim to have acted is never the receipt: with no DECIDE line nothing is proposed, nothing changes
+        out = concierge.say(s, 'I will do this just make it a task', key=f'review:{r}', llm=lambda *a, **k: 'Task created - all set!')
+        self.assertIsNone(out.get('proposal')); self.assertEqual(s.get_task(t)['Status'], 'waiting')
+        self.assertIn('NEVER use your own task, todo or plan tools', concierge.tools_block(s))
+        # ...and with no model at all the plain phrases are not read: the facts are said, nothing is decided
         with mock.patch.object(concierge, 'brain', return_value=None):
             out = concierge.say(s, 'not mine, ignore it', key=f'review:{r}')
-        self.assertEqual(out['decision']['verb'], 'not_ours'); self.assertIn('filed', out['say'])
-        out = concierge.say(s, 'send to agent', key=f'review:{r}', llm=lambda *a, **k: 'must not be asked')
-        self.assertIsNone(out['decision'])
+        self.assertIsNone(out.get('proposal')); self.assertIn('AI', out['say']); self.assertEqual(s.get_message(m)['Status'], 'routed')
+        # a clarification is the model's, as options - nothing started
+        out = concierge.say(s, 'send to agent', key=f'review:{r}',
+                            llm=lambda *a, **k: 'Which kind should take it? Nothing has been started yet.\nOPTIONS: Coding agent | Regular agent')
+        self.assertIsNone(out['decision']); self.assertIsNone(out.get('proposal'))
         self.assertEqual(out['options'], ['Coding agent', 'Regular agent'])
         self.assertIn('Nothing has been started', out['say'])
-        self.assertEqual(concierge.parse_decision('Sure.\nDECIDE: bogus'), ('Sure.', None))
 
 
 class BrainTests(unittest.TestCase):
@@ -472,13 +469,15 @@ class ThreadTests(unittest.TestCase):
         self.assertIn('YOU: Sent it over just now', fx)                     # the chain names the owner's own side
         self.assertIn('never say you cannot see', fx)
 
-    def test_a_polite_request_is_carried_out_not_answered_with_the_mail_it_names(self):
+    def test_a_polite_request_is_a_hand_off_proposal_not_answered_with_the_mail_it_names(self):
         s = store()
         t, m, r = drafted(s)
-        out = concierge.say(s, 'can you ask assistant to look into that server and what the file looks like?',
-                            key=f'review:{r}', llm=lambda *a, **k: 'never asked')
-        self.assertEqual(out['decision']['verb'], 'coder')
-        self.assertIn('coding agent', out['say'])
+        out = concierge.say(s, 'can you ask assistant to look into that server and what the file looks like?', key=f'review:{r}',
+                            llm=lambda *a, **k: 'On it.\nDECIDE: coder: look into that server and what the file looks like')
+        p = out['proposal']
+        self.assertEqual((p['kind'], p['target'], p['params']['kind']), ('task.create_from_message', m, 'coding'))
+        self.assertIn('server', p['params']['instructions'])
+        self.assertIn('coding agent', out['say'].lower())
         self.assertIsNone(out.get('item'))                                  # not pulled in as "here is the mail you mean"
 
 
@@ -537,15 +536,15 @@ class SetupAndTroubleTests(unittest.TestCase):
         self.assertIn('Zoho invoices', t['Summary'])
         self.assertIn('needs:browser', t['Tags'])          # the walkthrough owns the visible browser, not a coder
         self.assertFalse(spawn.called)                       # nobody is sent into a checkout
-        self.assertEqual(concierge.decide_words('please set up a connection to Sage Intacct')['verb'], 'setup')
-        self.assertEqual(concierge.decide_words('set up a monthly invoice workflow in Zoho')['verb'], 'setup')
-        self.assertIsNone(concierge.decide_words('set it aside'))
+        # said in the chat, a set-up is a PROPOSAL: the walk-through opens on the click, never on the words
+        n0 = len(s.list_tasks())
+        said = decided(s, 'create a report of open AR by facility', 'setup', arg='create a report of open AR by facility')
+        p = said['proposal']; self.assertEqual((p['kind'], p['label']), ('task.setup', 'Open the walk-through'))
+        self.assertIsNone(said['decision']); self.assertEqual(len(s.list_tasks()), n0)
         with mock.patch('taskuary.ingest._spawn') as spawn:
-            said = concierge.say(s, 'create a report of open AR by facility', key=None, llm=lambda *a, **k: 'never')
-        self.assertEqual(said['decision']['verb'], 'walkthrough')
-        self.assertIn('walk you through it', said['say']); self.assertIn('no repository is touched', said['say'])
-        self.assertEqual(s.get_task(said['decision']['taskId'])['Kind'], 'general')
-        self.assertFalse(spawn.called)
+            made = run(s, p).json()['outcome']
+        self.assertEqual(s.get_task(made['taskId'])['Kind'], 'general'); self.assertFalse(spawn.called)
+        self.assertIn('walk-through', last_receipt(s)); self.assertIn('no repository touched', last_receipt(s))
         # ...and a hand-off the owner asks for by name IS the coder, in a checkout
         with mock.patch('taskuary.ingest._spawn') as spawn:
             made = concierge.setup_task(s, 'find out why the export drops inter-company rows', kind='coding')
@@ -570,7 +569,7 @@ class SetupAndTroubleTests(unittest.TestCase):
 
 
 class SweepTests(unittest.TestCase):
-    def test_remove_all_the_reports_from_a_sender_sweeps_them_read_and_remembers_when_asked(self):
+    def test_remove_all_the_reports_from_a_sender_is_a_proposal_that_sweeps_them_read_on_the_click(self):
         s = store()
         s.set_setting('team_domains', 'ours.com', 't')
         for n in range(3):
@@ -581,18 +580,16 @@ class SweepTests(unittest.TestCase):
                            'FromEmail': 'kishan@vendor.com', 'SentAt': ago(1), 'BodyText': 'please respond', 'Status': 'filed'})
         s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
         self.assertEqual(len(funnel.build(s)['items']), 4)
-        out = concierge.say(s, "all the reports for nechama ozur you can remove. I don't need them", key=None, llm=lambda *a, **k: 'never')
-        self.assertEqual(out['decision']['verb'], 'clear'); self.assertEqual(out['decision']['cleared']['cleared'], 3); self.assertTrue(out['decision']['cleared']['remember'])
-        self.assertIn('Cleared 3 from the pipe', out['say']); self.assertIn('Read, not deleted', out['say']); self.assertIn('remembered', out['say'])
+        out = decided(s, "all the reports for nechama ozur you can remove. I don't need them", 'clear')
+        p = out['proposal']; self.assertEqual((p['kind'], p['label']), ('pipe.clear', 'Clear them from the pipe'))
+        self.assertEqual(len(funnel.build(s)['items']), 4)                                       # nothing swept on the words
+        o = run(s, p).json()['outcome']
+        self.assertEqual((o['cleared'], bool(o['remember'])), (3, True))
+        line = last_receipt(s)
+        self.assertIn('Cleared 3 from the pipe', line); self.assertIn('Read, not deleted', line); self.assertIn('remembered', line)
         self.assertEqual([i['who'] for i in funnel.build(s)['items']], ['Kishan Patel'])                # Kishan stays
-        again = concierge.say(s, 'same for all resident refunds', key=None, llm=lambda *a, **k: 'never')
-        self.assertEqual(again['decision']['cleared']['cleared'], 0); self.assertIn('Nothing in the pipe matches', again['say'])
-        # a polite request is an ORDER, question mark and all (the owner, 2026-09-03: "it should be being brought in on a task")
-        self.assertEqual(concierge.decide_words('can you look into that server and what the file looks like?')['verb'], 'coder')
-        self.assertEqual(concierge.decide_words('can you ask assistant to look into that server?')['verb'], 'coder')
-        self.assertEqual(concierge.decide_words('look into that server and tell me what the file looks like')['verb'], 'coder')
-        self.assertEqual(concierge.decide_words('I responded. do you see the response?'), None)          # a real question stays a question
-        self.assertEqual(concierge.decide_words('what did Kishan send?'), None)
+        again = decided(s, 'same for all resident refunds', 'clear')
+        self.assertEqual(run(s, again['proposal']).json()['outcome']['cleared'], 0); self.assertIn('Nothing in the pipe matches', last_receipt(s))
         al = funnel.alerts(s, funnel.build(s)['items'])
         self.assertEqual([(a['kind'], a['text']) for a in al], [('asked', 'Kishan Patel asked you: RE: PointClickCare')] if any(i['lane'] == 'asked' for i in funnel.build(s)['items']) else [])
 
@@ -610,12 +607,13 @@ class SweepPronounTests(unittest.TestCase):
         keep = s.add_message({'ExternalId': 'k', 'ConversationId': 'k', 'Channel': 'email', 'Subject': 'RE: PointClickCare', 'FromName': 'Kishan Patel',
                               'FromEmail': 'kishan@vendor.com', 'SentAt': ago(1), 'BodyText': 'please respond', 'Status': 'filed'})
         s.add_route(keep, None, 'file', None, 'triage: fyi', [], 'triage')
-        first = concierge.say(s, 'skip all the mfa financial reports. Those are part of the financials process, taken care of.',
-                              key=None, llm=lambda *a, **k: 'never')
-        self.assertEqual(first['decision']['verb'], 'clear'); self.assertEqual(first['decision']['cleared']['cleared'], 3)
-        self.assertIn('Cleared 3 from the pipe', first['say'])
-        self.assertIn('remembered as a rule: financial mfa from nozur@hrtgcs.com', first['say'])
-        self.assertIn('still reaches you', first['say'])
+        first = decided(s, 'skip all the mfa financial reports. Those are part of the financials process, taken care of.', 'clear')
+        self.assertEqual(first['proposal']['kind'], 'pipe.clear'); self.assertEqual(funnel.mutes(s), [])      # no rule on the words
+        self.assertEqual(run(s, first['proposal']).json()['outcome']['cleared'], 3)
+        line = last_receipt(s)
+        self.assertIn('Cleared 3 from the pipe', line)
+        self.assertIn('remembered as a rule: financial mfa from nozur@hrtgcs.com', line)
+        self.assertIn('still reaches you', line)
         notes = [n['Note'] for n in s.list_memories(active_only=True)]                       # the reason is kept, in the owner's words
         self.assertTrue(any('financials process' in n for n in notes), notes)
         self.assertEqual([m['Scope'] for m in s.list_memories(active_only=True)], ['sender'])
@@ -642,22 +640,25 @@ class SweepPronounTests(unittest.TestCase):
 
 
 class ClosingTests(unittest.TestCase):
-    """"close it" is the one verb Taskuary honours itself. It used to be the page's job, and a page
-    that could not find the card did nothing while the chat had already said the task was closed
-    (the owner, 2026-09-03: "I told the ai to close it but it did not")."""
+    """"close it" is a proposal like any other decision; the click runs the shared task.complete road and
+    the receipt is the fact. It used to be the page's job, and a page that could not find the card did
+    nothing while the chat had already said the task was closed (the owner, 2026-09-03: "I told the ai
+    to close it but it did not")."""
 
     def _wrapped(self, s):
         t, m, r = drafted(s)
         s.decide_review(r, 'approved', 'Attached.', 'owner')          # the reply went out; the task stayed open
         return t, funnel.build(s)['items'][0]['key']
 
-    def test_close_it_closes_the_task_and_the_receipt_is_the_fact(self):
+    def test_close_it_is_a_proposal_and_the_receipt_after_the_click_is_the_fact(self):
         s = store()
         t, key = self._wrapped(s)
-        out = concierge.say(s, 'close it', key=key, llm=lambda *a, **k: 'never asked')
+        out = decided(s, 'close it', 'close', key=key)
+        self.assertEqual((out['proposal']['kind'], out['proposal']['target']), ('task.complete', t))
+        self.assertEqual(s.get_task(t)['Status'], 'waiting')                        # not closed on the words
+        self.assertEqual(run(s, out['proposal']).json()['status'], 'done')
         self.assertEqual(s.get_task(t)['Status'], 'done')
-        self.assertEqual(out['decision'], {'verb': 'closed', 'taskId': t, 'ref': f'TQ-{t:04d}'})
-        self.assertIn(f'TQ-{t:04d} closed', out['say'])
+        self.assertIn(f'Done - Close the task · TQ-{t:04d}', last_receipt(s))
         self.assertEqual([i for i in funnel.build(s)['items'] if i.get('tid') == t], [])
 
     def test_closing_dismisses_a_draft_that_was_still_waiting(self):
@@ -709,10 +710,11 @@ class TwoRulesInOneSentenceTests(unittest.TestCase):
         s = store()
         self._pile(s)
         on_the_table = funnel.build(s)['items'][0]['key']          # a card IS open, as it was for the owner
-        out = concierge.say(s, self.ASK, key=on_the_table, llm=lambda *a, **k: 'never asked')
-        self.assertEqual(out['decision']['verb'], 'clear')
-        self.assertEqual(out['decision']['cleared']['cleared'], 5)          # the ones in front of them, now
-        self.assertIn('remembered as 2 rules', out['say'])
+        out = decided(s, self.ASK, 'clear', key=on_the_table)
+        self.assertEqual(out['proposal']['kind'], 'pipe.clear'); self.assertEqual(funnel.mutes(s), [])   # no rule on the words
+        o = run(s, out['proposal']).json()['outcome']
+        self.assertEqual(o['cleared'], 5)                                     # the ones in front of them, now
+        self.assertIn('remembered as 2 rules', last_receipt(s))
         self.assertEqual([(r['sender'], sorted(r['words'])) for r in funnel.mutes(s)],
                          [('nozur@hrtgcs.com', ['financials', 'mfa', 'nechama']),
                           ('elisheva@mfaheritage.net', ['refunds', 'resident'])])
@@ -734,7 +736,7 @@ class TwoRulesInOneSentenceTests(unittest.TestCase):
         # ...and a rule never becomes "everything from that person": the sender's own words are dropped
         self.assertNotIn('nozur', sum([r['words'] for r in funnel.mutes(s)], []))
         # ...nor a second, broader verdict on the sender - the rule is the whole mechanism
-        self.assertFalse(out['decision']['cleared']['remember'] and not out['decision']['cleared']['rules'])
+        self.assertFalse(o['remember'] and not o['rules'])
 
 
 class OpeningTests(unittest.TestCase):

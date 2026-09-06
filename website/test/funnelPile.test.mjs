@@ -175,15 +175,19 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.match(view, /onPull=\{\(r\) => pull\(keyForRow\(r\)/);   // a Timeline row is pulled in by the pipe's own key
   assert.match(view, /window\.location\.hash = `msg=\$\{mid\}`/);   // "on the Timeline" pins the row over the chat
   assert.doesNotMatch(view, /turn\(\{ mode: "open" \}\)/);   // the day never writes itself: the welcome is the door
-  assert.match(view, /if \(data\.decision\) await decide\(data\.decision\)/);   // words are carried out, never left as advice
-  assert.match(view, /dispatch`, \{ kind: "coding", instruction: d\.text \|\| null \}/); // ...and an explicit coding hand-off carries them
-  assert.match(view, /verb === "regular_agent"/);                                  // regular and coding are different roads
+  // words are interpreted, never dispatched (PW-121..125): the two immediate exceptions (Next, a reply
+  // draft) run on the decision; everything else arrives as a proposal card whose button submits the
+  // structured proposal by id and version to the shared execute road
+  assert.match(view, /if \(!prop && data\.decision\) await decide\(data\.decision\)/);
+  assert.match(view, /\/api\/operations\/\$\{p\.id\}\/execute`, \{ version: p\.version \}/);
+  assert.doesNotMatch(view, /dispatch`, \{ kind: "coding"/);                       // no verb is carried out from the chat itself
+  assert.match(view, /SUGGESTIONS\.filter\(\(s\) => s !== "Next"\)\.map/);       // the bottom suggestions are text, sent like typing (PW-122)
   assert.match(view, /triage moved it up/);                // the rail shows promotions
   assert.match(view, /data\.events\?\.length/);           // the watcher's lines land in the chat as they happen
   assert.match(cardsSrc(), /Show the final report/);        // ...and a finished job's report reads right there
   assert.match(cardsSrc(), /Run it again/);                 // a rerun is queued, never run in the chat
   assert.match(cardsSrc(), /Open walkthrough/);             // set-up opens the Assistant operator, not a coding checkout
-  assert.match(view, /verb === "done" && cur && cur\.kind !== "agent"/);   // done on a task closes the task
+  assert.doesNotMatch(view, /onClick=\{\(\) => settle\("done"\)\}/);   // Done is a suggestion, not a button that settles
   assert.match(read("FeedView.jsx"), /\/api\/ingest\/poll/);            // sync now, on the rail's header
   assert.match(view, /new ResizeObserver\(\(\) => \{ if \(el\.scrollHeight/);   // the chat keeps its bottom in view as it grows
   assert.doesNotMatch(view, /maxWidth: 1380/);             // the chat takes the width it has

@@ -46,13 +46,22 @@ class LifecycleTests(unittest.TestCase):
             out = concierge.surface(s, only='mail')
         self.assertEqual(out['item']['key'], f'msg:{m}')
         self.assertIn('Craig wrote on email', out['say']); self.assertIn('From you:', out['say'])
-        # 4. the owner decides in words: hand it to the coder, with every word of the ask
+        # 4. the owner decides in words: the model names the hand-off, it comes back as a PROPOSAL with every
+        #    word of the ask, and only the click on its button starts the agent (PW-123/124)
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
-            said = concierge.say(s, 'send it to the coding agent and find out why the old fix did not stick', key=f'msg:{m}')
-        self.assertEqual(said['decision']['verb'], 'coder'); self.assertIn('old fix did not stick', said['decision']['text'])
+            said = concierge.say(s, 'send it to the coding agent and find out why the old fix did not stick', key=f'msg:{m}',
+                                 llm=lambda *a, **k: 'On it.\nDECIDE: coder: find out why the old fix did not stick')
+        self.assertIsNone(said['decision']); prop = said['proposal']
+        self.assertEqual((prop['kind'], prop['target'], prop['params']['kind']), ('task.create_from_message', m, 'coding'))
+        self.assertIn('old fix did not stick', prop['params']['instructions'])
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.terminal.live_sessions', return_value=[]), \
+             mock.patch.object(server, 'dispatch_message', return_value={'taskId': t, 'ref': f'TQ-{t:04d}', 'dispatch': 'started'}) as dispatch:
+            ran = TestClient(server.app).post(f"/api/operations/{prop['id']}/execute", json={'version': prop['version']}).json()
+        self.assertEqual(ran['status'], 'done'); self.assertEqual(dispatch.call_count, 1)
         # ...and 'next' costs no model call at all: the introduction is the facts
         self.assertFalse(concierge.INTRO_AI)
-        self.assertIn('Sent off to the coding agent', said['say']); self.assertIn('watch it on the Board', said['say'])
+        self.assertIn('Nothing has been started', said['say'])                                            # the proposal says what WILL happen
+        self.assertIn('Done - Send to the coding agent', self.chat()[-1][1])                                # ...and the receipt what did
         # 5. the coder works: the item rides at the top, in hand, under the agent's key; the watcher says so.
         # The watcher only believes a state that HOLDS (funnel.DWELL, so a moment of quiet is not "it
         # stopped") - this walk changes state on purpose, line by line, so it opts out of the wait.
@@ -96,7 +105,7 @@ class LifecycleTests(unittest.TestCase):
         self.assertIsNone(out['item']); self.assertEqual(out['say'], concierge.ALL_DONE)
         # 9. the whole conversation reads as the day it was
         roles = self.chat()
-        self.assertEqual([c for _, _, c in roles if c], ['brief', 'todo', 'agent', 'agent', 'review'])   # closed is a status line, never a live card
+        self.assertEqual([c for _, _, c in roles if c], ['brief', 'todo', 'proposal', 'agent', 'agent', 'review'])   # closed is a status line, never a live card
         self.assertEqual([r for r, _, _ in roles].count('user'), 1)
 
     def test_first_agent_started_after_a_quiet_watch_is_announced_and_carries_its_session(self):
@@ -132,10 +141,14 @@ class LifecycleTests(unittest.TestCase):
             nxt = c.post('/api/concierge/next', json={'only': 'mail'}).json()
             self.assertEqual(nxt['item']['rid'], r)
             self.assertEqual(c.get('/api/funnel/pile?force=1').json()['items'][0]['surfaced'], True)      # on the table, still in the pipe
-            said = c.post('/api/concierge/say', json={'text': 'looks good, send it', 'key': f'review:{r}'}).json()
-            self.assertEqual(said['decision']['verb'], 'approve'); self.assertEqual(said['say'], 'Sending it as drafted. Moving on.')   # a word too
-            decided = c.post(f'/api/reviews/{r}/decide', json={'verb': 'approve', 'final_text': 'Resent - see attached.', 'note': None}).json()
-            self.assertTrue(decided['ok'])
+            # the words are read by the model and come back as a proposal; the click sends (PW-123/126)
+            with mock.patch.object(concierge, 'brain', return_value=lambda *a, **k: 'Sending it.\nDECIDE: approve'):
+                said = c.post('/api/concierge/say', json={'text': 'looks good, send it', 'key': f'review:{r}'}).json()
+            self.assertIsNone(said['decision']); prop = said['proposal']
+            self.assertEqual((prop['kind'], prop['target'], prop['label']), ('review.approve', r, 'Send the reply'))
+            self.assertEqual(s.get_review(r)['Status'], 'pending')                                            # nothing sent on the words
+            ran = c.post(f"/api/operations/{prop['id']}/execute", json={'version': prop['version']}).json()
+            self.assertEqual(ran['status'], 'done')
             self.assertEqual(c.get(f'/api/tasks/{t}').json()['task']['Status'], 'done')
             self.assertEqual(c.get('/api/funnel/pile?force=1').json()['items'], [])
             self.assertEqual(c.post('/api/concierge/next', json={}).json()['say'], concierge.ALL_DONE)

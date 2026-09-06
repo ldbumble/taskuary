@@ -31,6 +31,18 @@ KINDS = {
     'task.reopen':              ('task', (), None),
     'task.defer':               ('task', ('until',), None),
     'preference.exclude_sender': ('message', ('scope',), None),
+    # ...and what the assistant's chat can put in front of the owner (concierge.PROPOSALS, PW-123)
+    'task.create_from_text':    ('text', ('kind', 'text'), None),
+    'message.archive':          ('message', (), 'dismissed'),
+    'item.settle':              ('item', ('key', 'verb'), None),
+    'review.approve':           ('review', (), None),
+    'agent.answer':             ('task', ('text',), None),
+    'agent.stop':               ('task', (), None),
+    'report.rerun':             ('source', (), None),
+    'memory.remember':          ('memory', ('note',), None),
+    'task.split':               ('task', ('text',), None),
+    'pipe.clear':               ('pipe', ('text',), None),
+    'task.setup':               ('text', ('text',), None),
 }
 # triage's `task` and `general` are one answer for this comparison (work, no coder); `coding` is another
 SAME = {frozenset(('task', 'general'))}
@@ -76,7 +88,8 @@ def _verdict(store, target_kind: str, target_id: int) -> tuple:
     if target_kind == 'message':
         m = store.get_message(target_id)
         return verdict_of_message(store, m) if m else ('', None)
-    return verdict_of_task(store, target_id)
+    if target_kind == 'task': return verdict_of_task(store, target_id)
+    return ('', None)
 
 
 def context_revision(store, target_kind: str, target_id: int) -> str:
@@ -86,6 +99,10 @@ def context_revision(store, target_kind: str, target_id: int) -> str:
         m = store.get_message(target_id) or {}
         rows = store.thread_messages(m.get('ConversationId'), m.get('Subject'), limit=500) if m.get('ConversationId') else [m]
         basis = [(r.get('MessageId'), r.get('Status'), r.get('TaskId')) for r in rows]
+    elif target_kind == 'review':
+        rv = store.get_review(target_id) or {}
+        return context_revision(store, 'task', rv['TaskId']) if rv.get('TaskId') else ''
+    elif target_kind != 'task': return ''              # a memory, a sweep, a report rerun: nothing to go stale against
     else:
         t = store.get_task(target_id) or {}
         basis = [(r.get('MessageId'), r.get('Status')) for r in store.list_messages(target_id)] + [t.get('Kind'), t.get('Status')]

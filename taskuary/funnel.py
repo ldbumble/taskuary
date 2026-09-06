@@ -37,6 +37,7 @@ from loguru import logger
 
 from .store import task_ref
 from .assistant import _ts, _dt, _short, _gist, _agenda, _OOO
+from .funnel_presentation import present as _present
 
 LANES = ('blocked', 'time', 'approve', 'broken', 'asked', 'forgotten', 'report', 'fyi', 'working')
 # the lane's one word on the card, and which role colours its dot (theme.jsx ROLES)
@@ -639,8 +640,9 @@ def build(store, now: datetime = None, keep_surfaced: bool = False) -> dict:
     items = queue + shelf                                        # what an agent has rides above the cap, always visible
     rev = hashlib.sha1('|'.join(f"{i['key']}:{i['lane']}:{int(bool(i.get('settling')))}" for i in items).encode()).hexdigest()[:12] + f':{hidden}:{len(quiet)}'
     return {'rev': rev, 'items': items, 'hidden': hidden, 'muted': len(quiet),
-            'rules': [str(r.get('why') or ' '.join(r.get('words') or []))[:120] for r in rules], 'lanes': [{'lane': l, 'word': LANE_WORDS[l][0], 'role': LANE_WORDS[l][1],
-                                                                       'n': sum(1 for i in items if i['lane'] == l)} for l in LANES]}
+            'rules': [str(r.get('why') or ' '.join(r.get('words') or []))[:120] for r in rules],
+            'lanes': [{'lane': l, 'word': LANE_WORDS[l][0], 'role': LANE_WORDS[l][1],
+                       'n': sum(1 for i in items if i['lane'] == l)} for l in LANES]}
 
 
 def pile(store, force: bool = False) -> dict:
@@ -673,6 +675,15 @@ def pile(store, force: bool = False) -> dict:
 
 def invalidate(): _CACHE.update(at=0.0, pile=None, store=None); _SOURCES.update(at=0.0, by={})
 def forget_states(): _STATE.clear(); _SEEN.clear(); _WATCHED[0] = False
+
+
+def present(store, payload: dict) -> dict:
+    """Detach and fingerprint a selected funnel payload without changing its selection."""
+    return _present(store, payload)
+
+
+def _present_one(store, item: dict | None) -> dict | None:
+    return present(store, {'items': [item]})['items'][0] if item is not None else None
 
 
 def agent_states(store) -> dict:
@@ -738,7 +749,8 @@ def announce(store, actor: str = 'assistant') -> list:
         for e in events:
             card = None
             if e['kind'] in ('parked', 'asking'):
-                card = next((concierge.card_for(i) for i in build(store, keep_surfaced=True)['items'] if i['key'] == f"agent:{e['tid']}"), None)
+                item = next((i for i in build(store, keep_surfaced=True)['items'] if i['key'] == f"agent:{e['tid']}"), None)
+                card = concierge.card_for(_present_one(store, item)) if item else None
             concierge.record(store, concierge.general.dock_task(store)[0]['TaskId'], 'assistant', e['text'], card)
             e['card'] = card
         invalidate()
@@ -778,7 +790,9 @@ def next_item(store, key: str = None, only: str = None, include_surfaced: bool =
     the first unread one - of the mail alone when `only` is 'mail'. Something still being triaged is
     not ready to be talked about."""
     # by key, whatever its state: read already, or with an agent on it now - the concierge decides what to say
-    if key: return next((i for i in build(store, keep_surfaced=True)['items'] if i['key'] == key), None) or batch_item(store, key)
+    if key:
+        item = next((i for i in build(store, keep_surfaced=True)['items'] if i['key'] == key), None)
+        return _present_one(store, item) or batch_item(store, key)
     again = (datetime.now() - timedelta(minutes=30)).strftime('%Y-%m-%d %H:%M:%S')
     ready = [i for i in pile(store, force=True)['items'] if not i.get('settling') and i['lane'] != 'working'
              and not _not_yet(i) and i.get('key') != exclude
@@ -788,7 +802,7 @@ def next_item(store, key: str = None, only: str = None, include_surfaced: bool =
     # New arrivals still lead.  Once those are exhausted, a merely-shown row is walked normally:
     # being put in the conversation never counted as the owner's decision, so it cannot make an
     # unread row unreachable.
-    return next((i for i in ready if not i.get('surfaced')), ready[0] if ready else None)
+    return _present_one(store, next((i for i in ready if not i.get('surfaced')), ready[0] if ready else None))
 
 
 def batch_item(store, key: str) -> dict | None:
@@ -800,9 +814,9 @@ def batch_item(store, key: str) -> dict | None:
     have = {i['key']: i for i in build(store, keep_surfaced=True)['items']}
     got = [have[k] for k in want if k in have]
     if not got: return None
-    return _item(key, 'fyis', 'fyi', f"{len(got)} fyi", who='', when=got[0].get('when'), since=got[0].get('since'),
-                 channel=got[0].get('channel'), why='people told you things; nothing to do',
-                 items=[dict(i) for i in got], members=[i['key'] for i in got])
+    return _present_one(store, _item(key, 'fyis', 'fyi', f"{len(got)} fyi", who='', when=got[0].get('when'), since=got[0].get('since'),
+                                     channel=got[0].get('channel'), why='people told you things; nothing to do',
+                                     items=[dict(i) for i in got], members=[i['key'] for i in got]))
 
 
 def fyi_batch(store, first: dict) -> list:
@@ -824,9 +838,9 @@ def item_for_key(store, key: str) -> dict | None:
         row = next((r for r in store.feed(limit=500, days=FEED_DAYS) if r.get('TaskId') == tid), None)
         if row:
             got = from_feed(store, [row | {'Category': 'info' if row.get('Category') in _QUIET else row.get('Category')}])
-            if got: return got[0] | {'lane': got[0]['lane'] if got[0]['lane'] != 'fyi' else 'asked'}
-        return _item(f'task:{tid}', 'task', 'asked', task.get('Title'), when=task.get('UpdatedAt') or task.get('CreatedAt'), tid=tid,
-                     summary=agent_found(store, tid), why=f"{task.get('Status')} {task.get('Kind')} task you asked about")
+            if got: return _present_one(store, got[0] | {'lane': got[0]['lane'] if got[0]['lane'] != 'fyi' else 'asked'})
+        return _present_one(store, _item(f'task:{tid}', 'task', 'asked', task.get('Title'), when=task.get('UpdatedAt') or task.get('CreatedAt'), tid=tid,
+                                               summary=agent_found(store, tid), why=f"{task.get('Status')} {task.get('Kind')} task you asked about"))
     m = re.match(r'^(msg|report):(\d+)$', key or '')
     if not m: return None
     mid = int(m.group(2))
@@ -834,7 +848,8 @@ def item_for_key(store, key: str) -> dict | None:
     if not row: return None
     items = from_feed(store, [row | {'Category': 'info' if row.get('Category') in _QUIET else row.get('Category')}])
     it = next((i for i in items if i.get('mid') == mid), None)
-    return it | {'lane': 'fyi', 'why': row.get('RouteReason') or it['why']} if it and it['kind'] == 'fyi' else it
+    if it and it['kind'] == 'fyi': it = it | {'lane': 'fyi', 'why': row.get('RouteReason') or it['why']}
+    return _present_one(store, it)
 
 
 VERBS = ('surfaced', 'done', 'later', 'skip', 'ack')

@@ -890,7 +890,20 @@ def _ask(store, llm, tid: int, item: dict | None, instruction: str, pile_items: 
 
 
 def record(store, tid: int, role: str, text: str, card: dict = None):
-    body = text.strip() + (f"\n\n{MARK}{json.dumps(card, default=str)} -->" if card else '')
+    # A presentation revision is transport freshness, not conversation meaning.  Persisting it
+    # made the same adjacent card into a second durable turn when surfacing changed only its read
+    # state.  Keep every semantic field, including nested FYI cards, and let the current HTTP
+    # response carry the newest revision.
+    def durable(value):
+        if not isinstance(value, dict): return value
+        out = dict(value); out.pop('presentation_revision', None)
+        children = out.get('items')
+        if isinstance(children, list):
+            out['items'] = [durable(child) if isinstance(child, dict)
+                            and all(k in child for k in ('key', 'kind', 'lane')) else child for child in children]
+        return out
+    saved_card = durable(card) if card else None
+    body = text.strip() + (f"\n\n{MARK}{json.dumps(saved_card, default=str)} -->" if saved_card else '')
     actor = 'owner' if role == 'user' else 'assistant'
     actor_type = general.USER_TYPE if role == 'user' else general.ASSISTANT_TYPE
     # A double click must not duplicate the owner's words: those two calls may reach the backend
@@ -1557,7 +1570,8 @@ def card_for(item: dict) -> dict:
     """The card under the line - by kind, by code. The renderer draws it from these few fields
     and reloads the live facts (draft text, agent tail) from the item's ids."""
     return {k: item.get(k) for k in ('key', 'kind', 'lane', 'title', 'who', 'when', 'why', 'mid', 'tid', 'ref', 'rid', 'idea', 'coding', 'source_id', 'preview', 'sent', 'stale', 'sig', 'more',
-                                       'idea_kind', 'agent', 'asking', 'tail', 'event', 'summary', 'bad', 'draft', 'channel', 'category', 'action', 'sid', 'mode')}
+                                       'idea_kind', 'agent', 'asking', 'tail', 'event', 'summary', 'bad', 'draft', 'channel', 'category', 'action', 'sid', 'mode',
+                                       'presentation_revision')}
 
 
 def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = None, trace=None, cancel=None,

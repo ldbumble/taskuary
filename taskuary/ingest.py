@@ -5,7 +5,7 @@ Pipeline per message: dedup -> deterministic policy -> route to a task -> intent
 (task / reply_only / fyi) -> file or create. Real tasks NEVER get an auto reply-draft:
 answering is the responder's job (reply_only), doing is the coder's.
 """
-import contextlib, json, re, threading
+import contextlib, json, re, threading, time
 from loguru import logger
 from .routing import ask_line, route, draft_task_fields, tokens
 from .policy import evaluate
@@ -154,25 +154,76 @@ def auto_code_ok(store, msg: dict, mid: int, kind: str) -> tuple:
                                'written to them; send it yourself if real')
 
 
-def drain(store, llm=None, progress=None, limit: int = 500) -> int:
+# One drain at a time: a conversation's second line must find the task its first one opened.
+# Fresh chat channels go to the front of the line (the chat lane in server.py names them, and a
+# drain already running is told through mark_fresh); within a channel the order stays arrival.
+_DRAIN_LOCK = threading.Lock()
+_FRESH, _FRESH_LOCK = set(), threading.Lock()
+_ALL = 1_000_000                 # pending_triage's LIMIT when the whole queue has to be seen to reorder it
+
+
+def mark_fresh(channels):
+    """Tell the running drain (or the next one) that these channels have lines that just landed."""
+    with _FRESH_LOCK: _FRESH.update(channels)
+
+
+def _take_fresh() -> set:
+    with _FRESH_LOCK:
+        got = set(_FRESH); _FRESH.clear()
+        return got
+
+
+def _queue(store, done: set, first: set, only_first: bool, limit: int) -> list:
+    rows = [r for r in store.pending_triage(_ALL) if r['MessageId'] not in done]
+    head = [r for r in rows if r['Channel'] in first]
+    return (head if only_first else head + [r for r in rows if r['Channel'] not in first])[:limit]
+
+
+def await_quiet(store, channels, timeout: float) -> bool:
+    """True once no line of these channels is still waiting to be judged; False when the timeout passes first."""
+    end = time.monotonic() + timeout
+    while True:
+        if not any(r['Channel'] in channels for r in store.pending_triage(_ALL)): return True
+        if time.monotonic() >= end: return False
+        time.sleep(0.2)
+
+
+def drain(store, llm=None, progress=None, limit: int = 500, fresh=(), only_fresh: bool = False, wait: bool = True) -> int:
     """Judge what deferred() stored - oldest first, one at a time, because a thread's second
     message must find the task its first one opened. A message whose triage raises is filed
-    with the error on its route rather than left spinning; the next one still gets judged."""
-    rows = store.pending_triage(limit)
-    with store.freeze_snapshots():
-        for i, r in enumerate(rows):
-            mid = r['MessageId']
-            with _PENDING_LOCK: held = _PENDING.pop(mid, None)
-            msg = {**(held or _from_row(r)), '_mid': mid}
-            try:
-                ingest_message(store, msg, llm=llm)
-            except Exception as e:
-                logger.warning(f'deferred triage failed for message {mid}: {e}')
-                store.place_message(mid, None, 'filed')
-                store.add_route(mid, None, 'file', None, f'triage failed ({str(e)[:160]}) - filed; it can be promoted by hand', [], 'triage')
-                store.set_setting('triage_last_error', str(e)[:200], 'system')
-            if progress: progress(len(rows) - i - 1)
-    return len(rows)
+    with the error on its route rather than left spinning; the next one still gets judged.
+
+    `fresh` names channels whose lines just landed: they are judged first, and a drain that is
+    already running takes them at its next row. only_fresh judges just those and leaves the
+    backlog to the full lane; wait=False returns at once when another drain holds the lock."""
+    mark_fresh(fresh)
+    if not _DRAIN_LOCK.acquire(blocking=wait): return 0
+    try:
+        done, first, n = set(), _take_fresh() | set(fresh), 0
+        rows = _queue(store, done, first, only_fresh, limit)
+        with store.freeze_snapshots():
+            while rows:
+                more = _take_fresh()
+                if more:
+                    first |= more
+                    rows = _queue(store, done, first, only_fresh, limit - n)
+                    if not rows: break
+                r = rows.pop(0)
+                mid = r['MessageId']
+                done.add(mid); n += 1
+                with _PENDING_LOCK: held = _PENDING.pop(mid, None)
+                msg = {**(held or _from_row(r)), '_mid': mid}
+                try:
+                    ingest_message(store, msg, llm=llm)
+                except Exception as e:
+                    logger.warning(f'deferred triage failed for message {mid}: {e}')
+                    store.place_message(mid, None, 'filed')
+                    store.add_route(mid, None, 'file', None, f'triage failed ({str(e)[:160]}) - filed; it can be promoted by hand', [], 'triage')
+                    store.set_setting('triage_last_error', str(e)[:200], 'system')
+                if progress: progress(len(rows))
+        return n
+    finally:
+        _DRAIN_LOCK.release()
 
 
 def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:

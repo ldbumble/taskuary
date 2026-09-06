@@ -1,7 +1,7 @@
 """The local HTTP API + built-in minimal web UI. Localhost-only by default; set
 [server].token in config to require an X-Taskuary-Token header (for LAN/self-hosting).
 """
-import asyncio, json, re, secrets, sys, threading, time
+import asyncio, contextlib, json, re, secrets, sys, threading, time
 import requests
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -64,6 +64,7 @@ async def _lifespan(_app):
     _refresh_soul_connections()
     learn.note_verdicts(store)     # the evidence block in LEARNED.md tracks the verdict table
     threading.Thread(target=poll_forever, daemon=True).start()
+    threading.Thread(target=quick_forever, daemon=True).start()   # the chat clock, never behind a slow sync
     waitroom.watch(store)          # notes queued for a working agent land when it stops
     from . import msauth
     msauth.on_rotate = lambda cid, rt: store.save_connector({'ConnectorId': cid, 'Secret': rt}, 'msauth')   # a rotated Microsoft refresh token outlives a restart
@@ -3796,11 +3797,45 @@ def toggle_memory(mid: int, body: MemoryToggle):
 @app.get('/api/audit/recent')
 def audit_recent(limit: int = 100): return {'data': store.list_audit(limit=min(limit, 500))}
 
-_POLL_BUSY = threading.Lock()   # whether a poll runs IN THIS PROCESS; the DB flag is only for the UI
+# Two lanes. The FULL lane reads every connector, judges the queue, watches CI and runs reports,
+# one at a time in this process (the DB flag is only for the UI). The CHAT lane reads chat
+# connectors on their own fast clock and has their lines judged ahead of the backlog - it used to
+# share the full lane's lock, so an AI triage over a 3-day catch-up or a slow report kept Teams
+# and WhatsApp from arriving for as long as it ran (PW-001). A connector type is read by ONE lane
+# at a time, so dedupe never races two fetches of the same message.
+_POLL_BUSY = threading.Lock()
+_QUICK_BUSY = threading.Lock()
 _LAST_POLL = [time.time()]      # startup's own catch-up counts as the first one
-POLL_TICK = 30                  # how often the loop wakes to look at the clock
+POLL_TICK = 30                  # how often the full loop wakes to look at the clock
+QUICK_TICK = 5                  # the chat loop looks more often, so "every 30 seconds" means that
+DRAIN_WAIT = 45                 # the context gate's patience for its lines to be judged (the old lock wait)
 CHAT_CONNECTORS = {'teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'discord'}
 CHAT_POLL_SECONDS = 30
+_FETCHING = {}                  # connector type -> lane reading it right now
+_FETCH_CV = threading.Condition()
+
+
+@contextlib.contextmanager
+def _fetching(types, lane):
+    with _FETCH_CV:
+        for t in types: _FETCHING[t] = lane
+    try: yield
+    finally:
+        with _FETCH_CV:
+            for t in types: _FETCHING.pop(t, None)
+            _FETCH_CV.notify_all()
+
+
+def _free_of_fetch(types, wait=False, timeout=None) -> list:
+    """The requested types no other lane is reading. wait=True holds until all of them are free."""
+    with _FETCH_CV:
+        if wait: _FETCH_CV.wait_for(lambda: not any(t in _FETCHING for t in types), timeout=timeout or DRAIN_WAIT)
+        return [t for t in types if t not in _FETCHING]
+
+
+def _ingest_status(what: str = None):
+    st = {'state': 'running', 'what': what, 'at': datetime.now().isoformat(sep=' ', timespec='seconds')} if what else {'state': 'idle'}
+    store.set_setting('ingest_status', json.dumps(st), 'system')
 
 
 def _latest_context_message(task_id: int = None, message_id: int = None):
@@ -3882,20 +3917,33 @@ def poll_forever():
     countdown every time a filter changed the effect's dependencies; and with no window open
     nothing polled at all - which also meant a report scheduled for 8am Monday only ran if
     somebody happened to have the Timeline on screen at 8am on Monday. The mailbox does not care
-    which tab is open, so the clock does not live there any more."""
+    which tab is open, so the clock does not live there any more.
+
+    This is the FULL lane's clock only. The chat clock is quick_forever, on its own thread: while
+    this loop sits inside a long sync, a branch here could never fire."""
     while True:
         try:
             try: mins = int(store.get_settings().get('poll_minutes') or 0)
             except (TypeError, ValueError): mins = 10
             if mins > 0 and time.time() - _LAST_POLL[0] >= mins * 60:
                 _poll_reports(0, what='syncing')
-            elif mins > 0:
-                # poll_minutes 0 is "background sync off", and that includes the fast clock
-                quick = _quick_due()
-                if quick: _poll_reports(0, what='syncing', only=quick)
         except Exception as e:
             logger.warning(f'scheduled poll failed: {e}')      # a bad cycle must not end the loop
         time.sleep(POLL_TICK)
+
+
+def quick_forever():
+    """The chat clock. poll_minutes 0 is "background sync off", and that includes this clock."""
+    while True:
+        try:
+            try: mins = int(store.get_settings().get('poll_minutes') or 0)
+            except (TypeError, ValueError): mins = 10
+            if mins > 0:
+                quick = _quick_due()
+                if quick: _poll_reports(0, what='syncing', only=quick)
+        except Exception as e:
+            logger.warning(f'chat poll failed: {e}')
+        time.sleep(QUICK_TICK)
 
 
 # A chat channel on the ten-minute mailbox clock is a slow conversation. Chat connectors default
@@ -3909,51 +3957,51 @@ def _quick_due() -> list:
         if not c['Active']: continue
         try:
             cfg = json.loads(c.get('ConfigJson') or '{}')
-            raw = cfg.get('poll_seconds', CHAT_POLL_SECONDS if c.get('Type') in CHAT_CONNECTORS else 0) if isinstance(cfg, dict) else 0
-            secs = int(raw or 0)
+            raw = cfg.get('poll_seconds') if isinstance(cfg, dict) else 0
+            # blank is "the default", as the card says - a cleared field saved as '' is not an explicit 0
+            if raw is None or str(raw).strip() == '': raw = CHAT_POLL_SECONDS if c.get('Type') in CHAT_CONNECTORS else 0
+            secs = int(str(raw).strip())
         except (TypeError, ValueError): secs = 0
         if secs > 0 and time.time() - _QUICK_LAST.get(c['Type'], 0) >= secs:
             due.append(c['Type'])
     return due
 
 def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool = False, only=None, wait: bool = False):
-    # one poll at a time, enforced by a lock instead of the old 10-minute timestamp guard: a
+    """The full lane; `only` hands the call to the chat lane (_poll_quick) instead."""
+    if only is not None: return _poll_quick(only, what, wait)
+    # one full poll at a time, enforced by a lock instead of the old 10-minute timestamp guard: a
     # slow catch-up (CLI triage over a 3-day backfill) legitimately outlives 10 minutes, so
     # the timeline's auto-sync kept starting SECOND polls over the same watermarks - each one
     # rewriting 'running', and the "catching up" banner never ended.
-    acquired = _POLL_BUSY.acquire(timeout=45) if wait else _POLL_BUSY.acquire(blocking=False)
+    acquired = _POLL_BUSY.acquire(timeout=DRAIN_WAIT) if wait else _POLL_BUSY.acquire(blocking=False)
     if not acquired:
         logger.info('poll already running - skipped'); return False
-    if only is None:
-        _LAST_POLL[0] = time.time()  # a manual Sync now resets the clock too, so the timer
-                                     # does not fire again moments later over the same watermarks
-    else:
-        for t in only: _QUICK_LAST[t] = time.time()
-    store.set_setting('ingest_status', json.dumps(
-        {'state': 'running', 'what': what, 'at': datetime.now().isoformat(sep=' ', timespec='seconds')}), 'system')
+    _LAST_POLL[0] = time.time()  # a manual Sync now resets the clock too, so the timer
+                                 # does not fire again moments later over the same watermarks
+    _ingest_status(what)
     try:
         # channels FIRST: the Morning digest is a report over Taskuary's own data, and run
         # before the catch-up it would summarize yesterday while today sat in the mailbox
-        from .channels import poll_channels
-        def _say(kind, so_far):
-            # the ORIGINAL what is kept and appended to: "catching up on the last 3 day(s)" is
-            # the context, "reading outlook · 12 in so far" is the progress, and replacing the
-            # first with the second loses why the poll is running at all
-            store.set_setting('ingest_status', json.dumps(
-                {'state': 'running', 'at': datetime.now().isoformat(sep=' ', timespec='seconds'),
-                 'what': f'{what} · reading {kind}' + (f' · {so_far} in so far' if so_far else '')}), 'system')
+        from .channels import poll_channels, _poll_jobs
+        # the ORIGINAL what is kept and appended to: "catching up on the last 3 day(s)" is
+        # the context, "reading outlook · 12 in so far" is the progress, and replacing the
+        # first with the second loses why the poll is running at all
+        def _say(kind, so_far): _ingest_status(f'{what} · reading {kind}' + (f' · {so_far} in so far' if so_far else ''))
         # show first, judge next: the poll stores every message as it reads it (the timeline
         # shows them at once, wearing 'triaging'), and the AI calls come afterwards, in order
         from . import ingest as ingest_mod
-        with ingest_mod.deferred():
-            added = poll_channels(store, backfill_days, progress=_say, **({'only': only} if only is not None else {}))
-        def _left(n):
-            store.set_setting('ingest_status', json.dumps(
-                {'state': 'running', 'at': datetime.now().isoformat(sep=' ', timespec='seconds'),
-                 'what': f'{what} · triaging' + (f' · {n} left' if n else '')}), 'system')
+        # a type the chat lane is reading this very second is left to it (one lane per type)
+        mine = list(dict.fromkeys(c['Type'] for c, _ in _poll_jobs(store)))
+        types = _free_of_fetch(mine)
+        with ingest_mod.deferred(), _fetching(types, 'full'):
+            added = poll_channels(store, backfill_days, progress=_say, **({'only': types} if len(types) < len(mine) else {}))
+        # a full pass IS a chat fetch (PW-002): the fast clock must not read the same chats again a moment later
+        now = time.time()
+        for t in types:
+            if t in CHAT_CONNECTORS: _QUICK_LAST[t] = now
+        def _left(n): _ingest_status(f'{what} · triaging' + (f' · {n} left' if n else ''))
         try: ingest_mod.drain(store, _llm(), progress=_left)
         except Exception as e: logger.warning(f'deferred triage drain failed: {e}')
-        if only is not None: return added      # a quick pass reads its channels and stops
         # the git loop: a task's PR is watched here, and a red build goes back to the agent
         # that wrote the code (ci.py) - off unless the owner turned ci_watch on
         try:
@@ -3970,8 +4018,46 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
         run_due_reports(store, startup)          # ...the seeded 'Assistant' report among them (assistant.py)
         return added
     finally:
-        try: store.set_setting('ingest_status', json.dumps({'state': 'idle'}), 'system')
+        try: _ingest_status()
         finally: _POLL_BUSY.release()
+
+
+def _poll_quick(only, what: str = 'syncing', wait: bool = False):
+    """The chat lane: read ONLY these connector types, have their fresh lines judged ahead of
+    whatever backlog the full lane's drain is working through, and stop - no CI, no reports.
+
+    Returns what it added, or False when nothing was read: the lane was busy, every type was in
+    the full lane's hands, or the fetch failed - and with wait=True (the context gate before an
+    answer about a chat) also when the new lines could not be judged within DRAIN_WAIT. The fast
+    clock is stamped when an ATTEMPT ENDS, success or failure: a broken connector retries one
+    interval later, while an attempt that never ran is not stamped and is due again next tick.
+    The full lane's banner tells the longer story, so this lane neither rewrites nor ends it."""
+    acquired = _QUICK_BUSY.acquire(timeout=DRAIN_WAIT) if wait else _QUICK_BUSY.acquire(blocking=False)
+    if not acquired:
+        logger.info('chat poll already running - skipped'); return False
+    try:
+        types = _free_of_fetch(list(dict.fromkeys(only)), wait=wait)
+        if not types: return False
+        banner = not _POLL_BUSY.locked()
+        if banner: _ingest_status(what)
+        try:
+            from .channels import poll_channels
+            from . import ingest as ingest_mod
+            def _say(kind, so_far):
+                if banner: _ingest_status(f'{what} · reading {kind}' + (f' · {so_far} in so far' if so_far else ''))
+            with ingest_mod.deferred(), _fetching(types, 'quick'):
+                added = poll_channels(store, 0, progress=_say, only=types)
+            ingest_mod.drain(store, _llm(), fresh=types, only_fresh=True, wait=False)
+            if wait and not ingest_mod.await_quiet(store, types, timeout=DRAIN_WAIT): return False
+            return added
+        except Exception as e:
+            logger.warning(f"chat poll failed ({', '.join(types)}): {e}"); return False
+        finally:
+            now = time.time()
+            for t in types: _QUICK_LAST[t] = now
+            if banner and not _POLL_BUSY.locked(): _ingest_status()
+    finally:
+        _QUICK_BUSY.release()
 
 
 def _catchup_days(ceiling: int) -> int:
@@ -4062,7 +4148,7 @@ def ingest_status():
     # a poll that died with the app leaves 'running' behind with nobody holding the lock - a
     # ghost the timeline banner would show forever (the poll sets the flag only AFTER taking
     # the lock, so running-but-unlocked is always a ghost). Heal it on read.
-    if st.get('state') == 'running' and not _POLL_BUSY.locked():
+    if st.get('state') == 'running' and not (_POLL_BUSY.locked() or _QUICK_BUSY.locked()):
         st = {'state': 'idle'}
         store.set_setting('ingest_status', json.dumps(st), 'system')
     # the cadence rides along so the timeline's caption can state the truth instead of a

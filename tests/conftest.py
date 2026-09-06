@@ -344,7 +344,7 @@ def isolated_runtime_boundaries():
 
     @asynccontextmanager
     async def safe_lifespan(app):
-        # Preserve the production lifespan itself, including cleanup, but replace only the four
+        # Preserve the production lifespan itself, including cleanup, but replace only the five
         # background integration starters while entering it.  Their direct unit tests still call
         # the real functions outside this narrow context.
         import threading
@@ -352,12 +352,13 @@ def isolated_runtime_boundaries():
         _LIFESPAN_DONE.append(done)
         context = real_lifespan(app)
         try:
-            # Patch only __aenter__: all four calls happen before the production lifespan yields.
+            # Patch only __aenter__: all five calls happen before the production lifespan yields.
             # Restore the real functions before the server begins handling test requests so an
             # unjoined desktop thread cannot temporarily change a later direct contract test.
             with mock.patch.object(wabridge, 'start_configured', stopped('WhatsApp bridge')), \
                  mock.patch.object(server, 'catch_up_on_startup', stopped('startup catch-up')), \
                  mock.patch.object(server, 'poll_forever', stopped('poll scheduler')), \
+                 mock.patch.object(server, 'quick_forever', stopped('chat poll scheduler')), \
                  mock.patch.object(waitroom, 'watch', stopped('waitroom watcher')):
                 entered = await context.__aenter__()
             try:

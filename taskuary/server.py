@@ -2187,7 +2187,9 @@ def funnel_pile(force: bool = False, current: str = None):
     # "reply pending" for as long as the tab stayed open (the owner, 2026-09-03: "why is it
     # showing back up if the ai agent replied, i edited it and sent??").
     if current: p = {**p, 'current': funnel.next_item(store, current)}
-    return p
+    # Current is query-specific and may be absent from the ordinary pile. Include
+    # its complete presentation in the revision after attaching it to the response.
+    return funnel.present(store, p)
 
 @app.post('/api/funnel/settle')
 def funnel_settle(body: SettleBody):

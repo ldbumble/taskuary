@@ -1,0 +1,68 @@
+"""Narrow synthetic source edits, installed only by the disposable browser server."""
+import os
+from datetime import datetime, timedelta
+
+from fastapi import HTTPException
+
+
+def install_processing_changes(app, store):
+    if os.environ.get('TASKUARY_DEMO') != '1' or not os.environ.get('TASKUARY_HOME'):
+        raise RuntimeError('processing changes require the isolated demo fixture')
+    from taskuary import demo
+    refuse = demo.refuse
+    fixture_paths = frozenset({
+        '/api/fixture/processing/source', '/api/fixture/processing/member',
+        '/api/fixture/processing/draft',
+    })
+
+    def fixture_refuse(method, path):
+        # Only these test-installed, bounded database edits are extra allowances.
+        # Every production route retains the original demo guard and socket guard.
+        if method == 'POST' and path in fixture_paths:
+            return ''
+        return refuse(method, path)
+
+    demo.refuse = fixture_refuse
+
+    @app.post('/api/fixture/processing/draft')
+    def change_draft(body: dict):
+        if set(body) != {'review_id', 'body'} or type(body['review_id']) is not int:
+            raise HTTPException(422, 'exact review_id and body are required')
+        if not isinstance(body['body'], str) or len(body['body']) > 50000:
+            raise HTTPException(422, 'body must be a bounded string')
+        review = store.get_review(body['review_id'])
+        if not review or review.get('Status') not in ('pending', 'held'):
+            raise HTTPException(404, 'synthetic pending review missing')
+        store.save_review_draft(body['review_id'], body['body'])
+        return {'ok': True, 'draft': body['body']}
+
+    @app.post('/api/fixture/processing/source')
+    def change_source(body: dict):
+        if set(body) != {'message_id', 'body'} or type(body['message_id']) is not int:
+            raise HTTPException(422, 'exact message_id and body are required')
+        if not isinstance(body['body'], str) or len(body['body']) > 50000:
+            raise HTTPException(422, 'body must be a bounded string')
+        mid = body['message_id']
+        if not store.get_message(mid):
+            raise HTTPException(404, 'synthetic message missing')
+        store.update_message_body(mid, body['body'])
+        # Exercise the actual websocket consumer after a synthetic source update.
+        store._poke('feed-changed', message_id=mid)
+        return {'ok': True, 'message_id': mid}
+
+    @app.post('/api/fixture/processing/member')
+    def add_older_member(body: dict):
+        if set(body) != {'message_id', 'body'} or type(body['message_id']) is not int:
+            raise HTTPException(422, 'exact message_id and body are required')
+        if not isinstance(body['body'], str) or len(body['body']) > 50000:
+            raise HTTPException(422, 'body must be a bounded string')
+        original = store.get_message(body['message_id'])
+        if not original or not original.get('TaskId'):
+            raise HTTPException(404, 'synthetic task member missing')
+        sent = datetime.fromisoformat(original['SentAt']) - timedelta(days=1)
+        mid = store.add_message({
+            'TaskId': original['TaskId'], 'Channel': original['Channel'],
+            'Status': 'filed', 'Subject': 'Synthetic older context member',
+            'SentAt': sent.isoformat(sep=' '), 'BodyText': body['body'],
+        })
+        return {'ok': True, 'message_id': mid}

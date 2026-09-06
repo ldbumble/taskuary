@@ -535,6 +535,12 @@ Timezone, calendar and live attention adapters plus final read-policy adoption
 remain pending. Related PW-101/102/103/106/109/110/111/112 remain unchecked until
 their rendered/runtime requirements pass; see Section 1.3 implementation evidence.
 
+Section 1.4 adds complete display revisions and same-identity Current/source/draft
+refresh, including cleared fields and rejection of delayed older content. Its real
+browser test preserves Current, durable history and unsaved owner edits during
+external updates. PW-106 remains partial until shared selection and canonical
+consumer adoption; see Section 1.4 evidence for final gates and delivery status.
+
 - [ ] <a id="pw-101"></a>**PW-101** Use one canonical item/identity/context representation for All, Unread,
   and assistant selection, including messages, reports, assistant posts/ideas,
   and agent work/attention items. Preserve legitimate task/thread grouping and

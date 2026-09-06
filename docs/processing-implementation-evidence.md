@@ -334,8 +334,7 @@ production connector was used. Browser-control redesign remains pending.
 
 ## Section 1.3 — frozen inventory, ordering and pagination foundation
 
-Status: implemented, independently reviewed and cumulatively tested from
-CI-verified `2557c94`; remote CI pending.
+Status: CI-verified at `162afbc`, from accepted base `2557c94`.
 Partial acceptance targets: PW-101/102/103/106/109/110/111/112. This section adds
 internal read-only enumeration and pure ordering/pagination mechanics. No server
 endpoint, feed/assistant consumer, live migration or read-policy transition is
@@ -447,4 +446,79 @@ Logs remain in ignored `.codex-tmp/phase1-inventory-evidence/` in the isolated
 integration checkout. README SHA256 remains
 `EDF56683E29A34789B2EBEF73E131FBD7B318AE498BC761668BCB70854D91BAB`.
 No live data, read states or documents were migrated; no live app was restarted.
-The exact pushed checkpoint must pass remote CI before Section 1.4 begins.
+Delivery `162afbc7760192bdb0ef039f663c522e88ca8cb7` passed all ten jobs in
+[CI run 34017816426](https://github.com/ldbumble/taskuary/actions/runs/34017816426).
+The original workspace was then fast-forwarded with its README change preserved.
+
+## Section 1.4 — complete display freshness
+
+Status: implementation and integration validation in progress from CI-verified
+`162afbc`. PW-106 is a partial target: this section refreshes the existing runtime
+presentation without activating canonical identities/read policy or shared Next.
+
+Sol High backend work in `processing/phase1-freshness-backend` owns funnel presentation
+fingerprints and focused tests. Sol High UI work in `processing/phase1-freshness-ui`
+owns Assistant presentation replacement, lazy content refresh and frontend tests.
+The lead owns the completed HTTP response seam, API/browser evidence, packaged build,
+integration and delivery. Astra Extra High independently reviews the changes.
+
+Backend `8b634b9` integrates as `334642a`; UI `ef324b8` as `5109c9d`.
+Per-item `presentation_revision` covers complete backing rows, including full source
+bodies, exact task members, drafts, attachments, comments, runs, waitroom and reply
+capability inputs. Taskless conversation context is tracked separately from the exact
+task membership boundary. Nested FYI presentations are stamped recursively. The
+completed response's `display_revision` includes ordered items, displayed counts,
+rules, lanes, alerts and query-specific Current, including explicit null. Transient
+events and revision fields do not create a self-changing hash; legacy `rev` remains.
+
+The UI prefers the complete display revision and replaces fresh Current data rather
+than merging removed fields back into it. Lazy source/draft/report readers refetch on
+presentation changes and discard obsolete responses. Unsaved local draft edits stay
+intact. Current refs are synchronized before asynchronous responses arrive; a response
+for an earlier Current cannot overwrite a later selection. Explicit null clears stale
+data, with the existing narrow same-task working handoff retained. Next selection,
+event scheduling, read semantics and actions are not redesigned in this section.
+
+An accepted repeat-Next test caught display metadata defeating durable duplicate
+suppression. Only transient `presentation_revision` is omitted from serialized durable
+cards, including actual nested FYI children; live responses retain it. Atomic store
+deduplication and semantic card fields are unchanged. No earlier assertion was weakened.
+
+Initial integrated display/API tests pass. The browser fixture's existing startup
+stabilization was extracted unchanged into `processing-fixtures.mjs`. New private
+fixture edits simulate source/member/draft updates in the disposable database, with
+bounded parameters and actual feed-change delivery. They are installed only by the
+fixture server after outbound guards; every production route retains its original
+demo refusal. A unit test checks those refusals and rejects malformed edits.
+
+### Final local gates and delivery
+
+The real browser scenario uses actual saved drafts, a two-message task and websocket
+source updates. It verifies same-ID draft edits/clearing, source edits/clearing,
+and preservation of unsaved owner text after observing the newer saved draft response.
+The delayed-response case captures the old body and waits for that exact network
+request to finish after release before checking that newer rendered context survives.
+Current, durable conversation history and assistant/settle request counts stay fixed.
+The focused scenario passed (32.058 s; 53.178 s including process setup/teardown).
+
+| Gate | Result | Duration |
+| --- | --- | --- |
+| Integrated processing tests | 162 passed | 13.05 s |
+| Full backend (`python -m pytest -q -ra`) | 2332 passed plus 66 subtests; no skips | 203.13 s |
+| Node 22 frontend (`npm test`) | 271 passed; no failures/skips | 1.676 s |
+| Packaged build (`npm run build`) | Passed; generated assets included | 37.40 s |
+| Cumulative real browser (`npm run test:browser`) | 4 passed; no failures/skips | 121.037 s |
+
+The prior clock-dependent digest test ran after 08:00 in this suite. Backend emitted
+151 warnings; details are retained in the full log. Browser first visibility/input
+were 2515/957 ms, Tasks/Board/Reports 234/383/250 ms, and terminal replay/input/reconnect
+2520/107/1045 ms, all within the existing ceilings. No earlier assertion was weakened.
+Independent Astra Extra High review cleared backend/UI source, root API and fixture
+seams, the delivered-old-response proof, and generated asset integrity. Logs are in
+ignored `.codex-tmp/phase1-freshness-evidence/` in the integration checkout.
+
+README SHA256 remains
+`EDF56683E29A34789B2EBEF73E131FBD7B318AE498BC761668BCB70854D91BAB`.
+No live app restart, live data migration, read-state reset or owner-document edit.
+Delivery commit and exact-SHA remote CI verification are pending below; PW-106
+remains partial because shared selection and canonical runtime adoption are later work.

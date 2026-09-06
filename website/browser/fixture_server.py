@@ -72,7 +72,9 @@ async def run() -> None:
         raise RuntimeError("browser fixture event-loop connection guard is not active")
     print("PHASE0_FIXTURE_NETWORK_GUARD=blocked", flush=True)
 
-    from taskuary.server import app
+    from taskuary.server import app, store
+    from fixture_changes import install_processing_changes
+    install_processing_changes(app, store)
 
     config = uvicorn.Config(app, host=HOST, port=PORT, log_level="warning")
     server = uvicorn.Server(config)

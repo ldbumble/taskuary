@@ -833,3 +833,20 @@ Ticking every box completes nothing, and closing a task ticks nothing.
 
 Tests: `tests/test_task_checklist.py` (9 cases), `website/test/checklist.test.mjs` (4). No existing assertion changed.
 Packaged UI rebuilt from this source in the isolated worktree (Node 22).
+
+## Section 3.7 — email joins by conversation identity, never by resemblance
+
+Status: implemented and tested locally at `b03fa29`; remote CI pending on the pushed
+checkpoint. Section 3.6 is CI-verified (82a56a3, CI run 34040813007 (all ten jobs passed)).
+Acceptance PW-017, PW-018 (through Section 3.4) and PW-019 implemented; PW-016 partial - joining
+is identity-only now, while merging fetched history into one stored chain is PW-009 to PW-015.
+
+`ingest.identity_route` replaces `routing.route` for mail and tracker items: a message joins the
+open task its own conversation already belongs to (Graph's conversationId, IMAP's
+References/Message-ID, a tracker item's own id) and nothing else; without an identity it is new
+work whatever it resembles, and the route says so. A closed task's thread does not reopen it: the
+reply is stored on the conversation and evaluated afresh, and new work opens only if triage says
+so. `routing.route`'s similarity scoring remains as a unit-tested helper and is no longer consulted
+at intake; `own_thread_only` remains for its callers and tests.
+
+Tests: `tests/test_email_identity_routing.py` (5 cases). No existing assertion changed. No frontend change; packaged assets unchanged.

@@ -28,7 +28,7 @@ import { onLive } from "./live.js";
 import { Md, looksMd } from "./md.jsx";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
-import { ageText, arrivals, cardFor, currentItemFromPile, displayRevision, drawOrder, followsItem, keysOf, refreshCurrentPresentation, refreshPilePresentation, rowMeta, statusLine, topAlert } from "./funnelPile.js";
+import { ageText, arrivals, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, followsItem, hasNextSelection, keysOf, nextMarkerKey, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, restorableCurrent, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
 import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WrapupCard } from "./assistantCards.jsx";
 import FeedView from "./FeedView.jsx";
@@ -51,7 +51,15 @@ const EMOJI_REPLIES = [
   ["👏", "Well done"], ["🙏", "Thank you"], ["✅", "Confirmed"], ["👀", "Looking"],
   ["🤔", "Thinking"], ["😕", "Unsure"], ["👎", "No thanks"], ["🔥", "Excellent"],
 ];
-const errText = (e) => e?.response?.data?.detail || e?.message || "Taskuary could not answer.";
+const errText = (e) => {
+  const detail = e?.response?.data?.detail || e?.detail;
+  if (detail?.code?.startsWith("selection_")) return detail.message || (detail.code === "selection_unavailable"
+    ? "Next is temporarily unavailable. Review the refreshed list and try again."
+    : detail.retryable === false
+    ? "That Next request may already have completed. Review the refreshed conversation before acting again."
+    : "Next changed while the list refreshed. Review the updated Next item and press Next again.");
+  return (typeof detail === "string" ? detail : null) || e?.message || "Taskuary could not answer.";
+};
 const speakOn = () => { try { return localStorage.getItem("taskuary_speak") === "1"; } catch { return false; } };
 const speak = (text) => {
   if (!text || typeof window === "undefined" || !window.speechSynthesis) return;
@@ -88,8 +96,9 @@ function Pile({ pile, current, onPull }) {
   // The NEXT pill has to be what the Next button will actually bring up. The server skips what an
   // agent has in hand and what this walk already showed (funnel.next_item); the pill did not, so a
   // coder parked on a question wore NEXT while two fyi about lunch came out instead (2026-09-03).
-  const upNext = (i) => !i.settling && i.lane !== "working" && i.key !== current?.key;
-  const nextKey = (items.find((i) => upNext(i) && !i.surfaced) || items.find(upNext))?.key;
+  // New servers capture the selection from the same snapshot as this pile. FYI batches have a
+  // composite selected key, so their first ordered member wears the visible NEXT marker.
+  const nextKey = nextMarkerKey(pile, items, current);
   // how close to empty, once that is worth saying (the owner asked for it at "halfway down the
   // funnel", so from fifteen: the count is the encouragement - no header, no total)
   const left = items.filter((i) => !i.settling && i.lane !== "working").length;
@@ -231,17 +240,21 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const turnFlight = useRef(false);       // React state updates after the event; this closes same-tick double submits
   // Pile construction is comparatively expensive. Never let a timer tick and a websocket
   // notification queue duplicate requests in this tab; remember one forced refresh instead.
-  const pileFlight = useRef(false);
+  const pileFlight = useRef(null);
   const pileForcePending = useRef(false);
   const loadPileRef = useRef(null);
   const currentRef = useRef(null); const surfaceRef = useRef(null); const speakRef = useRef(null);
+  const only = useRef(null);                                       // "mail" once the owner chose to start with the mail
+  const selectionRef = useRef(null);
+  const selectionContractSeen = useRef(false);
 
   // one turn of the assistant, streamed: tool calls show under the dots as they happen, `done` is the answer
   const turn = useCallback(async (body) => {
     setWork([]);
     const plain = async () => {
       const endpoint = body.mode === "open" ? "/api/concierge/open" : body.mode === "next" ? "/api/concierge/next" : "/api/concierge/say";
-      return (await api.post(endpoint, body.mode === "next" ? { key: body.key, only: body.only, include_surfaced: body.include_surfaced, exclude: body.exclude }
+      return (await api.post(endpoint, body.mode === "next" ? { key: body.key, only: body.only, include_surfaced: body.include_surfaced, exclude: body.exclude,
+        selection_revision: body.selection_revision, expected_next_key: body.expected_next_key, expected_next_members: body.expected_next_members }
         : body.mode === "say" ? { text: body.text, key: body.key, context_mid: body.context_mid } : {})).data;
     };
     // The public demo is intentionally a local script. Do not even attempt the streaming AI
@@ -249,12 +262,24 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (DEMO) return plain();
     const token = localStorage.getItem("taskuary_token");
     const res = await fetch("/api/concierge/stream", { method: "POST", headers: { "Content-Type": "application/json", ...(token ? { "X-Taskuary-Token": token } : {}) }, body: JSON.stringify(body) });
-    if (!res.ok || !res.body) {                       // the static demo, or an older server: the plain door
-      return plain();
+    if (!res.ok) {
+      // An old server may not have the streaming door. A selection conflict is authoritative:
+      // replaying it through the plain endpoint would submit the same navigation twice.
+      if ([404, 405, 501].includes(res.status)) return plain();
+      let payload = null;
+      try { payload = await res.json(); } catch { /* retain the HTTP status */ }
+      const error = new Error(typeof payload?.detail === "string" ? payload.detail : `Assistant request failed (${res.status})`);
+      error.response = { status: res.status, data: payload || {} };
+      throw error;
     }
+    if (!res.body) return plain();                    // the static demo, or an older server: the plain door
     for await (const ev of readNdjson(res.body)) {
       if (ev.type === "done") { setWork([]); return ev; }
-      if (ev.type === "error") throw new Error(ev.error || "The assistant could not answer.");
+      if (ev.type === "error") {
+        const error = new Error(ev.error || "The assistant could not answer.");
+        error.code = ev.code; error.detail = ev.detail;
+        throw error;
+      }
       // only real work shows under the dots - a command, a read, a call - never the CLI's own housekeeping
       if (ev.type === "tool_call" && !/^(ToolSearch|TodoWrite|TaskCreate|TaskUpdate|TaskList|Skill)$/.test(ev.name || ""))
         setWork((w) => [...w, `${ev.name || "tool"} ${toolTarget(ev.detail?.args).slice(0, 90)}`].slice(-6));
@@ -269,9 +294,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     setState(data); setMsgs(data.messages || []);
     // A closed task may have an older `agentdone` card in the transcript. It remains readable
     // history, but it is not live work and must not be restored as CURRENT in the pipe.
-    const last = [...(data.messages || [])].reverse().find((m) => m.card && !["brief", "setup", "agentdone"].includes(m.card.kind));
-    currentRef.current = last?.card || null;
-    setCurrent(last?.card?.key || null); setCurrentItem(last?.card || null);
+    const last = restorableCurrent(data.messages);
+    currentRef.current = last;
+    selectionRef.current = null;
+    setCurrent(last?.key || null); setCurrentItem(last);
     return data;
   }, []);
   // A decision can schedule the next card a few hundred milliseconds later. Those callbacks
@@ -301,21 +327,30 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (resettingRef.current) return;
     if (pileFlight.current) {
       if (force) pileForcePending.current = true;
-      return;
+      return pileFlight.current;
     }
-    pileFlight.current = true;
     const epoch = chatEpoch.current;
     // The optional `current` response belongs to this exact key. A click can put B on the table
     // while the request for A is in flight; that older response may still refresh the rail, but it
     // must never replace or clear B.
     const requestedCurrentKey = currentRef.current?.key || null;
-    try {
+    const requestedScope = nextSelectionScope(only.current, requestedCurrentKey);
+    const request = (async () => { try {
       // the key we are holding rides along, so the server can say whether it is still a thing
       const { data } = await api.get("/api/funnel/pile", { params: {
         ...(requestedCurrentKey ? { current: requestedCurrentKey } : {}),
+        only: requestedScope.only, include_surfaced: requestedScope.include_surfaced,
+        exclude: requestedScope.exclude,
         ...(force ? { force: 1 } : {}),
       } });
-      if (epoch !== chatEpoch.current || resettingRef.current) return;
+      const activeScope = nextSelectionScope(only.current, currentRef.current?.key || null);
+      if (epoch !== chatEpoch.current || resettingRef.current || !sameSelectionScope(requestedScope, activeScope)) {
+        pileForcePending.current = true;
+        return null;
+      }
+      const captured = captureNextSelection(data, requestedScope);
+      if (hasNextSelection(data)) selectionContractSeen.current = true;
+      selectionRef.current = captured;
       setPile((p) => refreshPilePresentation(p, data));
       // Provider messages can arrive while this conversation is already open. The server writes
       // the resulting correction (for example, "you replied in WhatsApp; draft removed") into the
@@ -323,24 +358,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       // watcher event happens to accompany them.
       const { data: st } = await api.get("/api/concierge");
       if (epoch !== chatEpoch.current || resettingRef.current) return;
-      const fresh = [];
-      setMsgs((m) => {
-        const merged = mergeDurableTurns(m, st.messages || []);
-        fresh.push(...merged.added);
-        return merged.messages;
-      });
+      setMsgs((m) => mergeDurableTurns(m, st.messages || []).messages);
       if (data.events?.length) {
-        const eventCurrent = currentRef.current;
-        // the watcher recorded its lines on the conversation: pick them up, and if one is about the item on
-        // the table, the table clears and the walk moves on
-        // ...and a line the WATCHER wrote puts its card on the table, exactly as surfacing one does.
-        // It did not, so the page still thought nothing was current and drew the "By the way" bar for
-        // the very card sitting in the chat (the owner, 2026-09-03: "Don't show bottom prompt if it's
-        // already in main chat").
-        const put = [...fresh].reverse().find((x) => x.card && !["brief", "setup", "agentdone"].includes(x.card.kind));
-        if (put) { currentRef.current = put.card; setCurrent(put.card.key); setCurrentItem(put.card); }
-        const hit = data.events.find((e) => eventCurrent && e.tid === eventCurrent.tid && e.kind !== "parked" && e.kind !== "asking");
-        if (hit) { currentRef.current = null; setCurrent(null); setCurrentItem(null); deferInChat(() => surfaceRef.current?.(), 900); }
+        // Watcher turns stay readable and audible. Background activity is never permission to
+        // choose, replace, clear, or advance the conversation subject.
         for (const e of data.events) if (e.kind === "done" || e.kind === "asking") speakRef.current?.(e.text);
       }
       // the item on the table is live: an agent that stops and starts again changes what its row and card say
@@ -348,7 +369,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       // the table clears itself instead of showing a draft that is no longer waiting on anybody.
       {
         const cur = currentRef.current;
-        if ((cur?.key || null) !== requestedCurrentKey) return;
+        if ((cur?.key || null) !== requestedCurrentKey) return captured;
         // Starting from Tasks/Board changes msg:<mid> into agent:<tid>. The old key is correctly
         // absent, but the task is not gone: prefer its working row before clearing the table.
         const fresh = currentItemFromPile(cur, data);
@@ -370,18 +391,31 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           }
         } else if (cur?.key && "current" in data && data.current === null) {
           currentRef.current = null;
+          selectionRef.current = null;
           setCurrent(null); setCurrentItem(null);
         }
       }
-    } catch { /* the live event or safety timer will retry */ }
+      return captured;
+    } catch (error) {
+      const guard = selectionGuardDetail(error);
+      if (guard) {
+        selectionContractSeen.current = true;
+        selectionRef.current = null;
+        setPile((p) => replaceSelectionToken(p, guard));
+        setErr(errText(error));
+      }
+      return null; /* the live event or safety timer will retry */
+    }
     finally {
-      pileFlight.current = false;
+      pileFlight.current = null;
       if (pileForcePending.current && !resettingRef.current) {
         pileForcePending.current = false;
         queueMicrotask(() => loadPileRef.current?.(true));
       }
-    }
-  }, [deferInChat]);
+    } })();
+    pileFlight.current = request;
+    return request;
+  }, []);
   useEffect(() => { loadPileRef.current = loadPile; }, [loadPile]);
   useEffect(() => { currentRef.current = currentItem; }, [currentItem]);
   useEffect(() => { loadState().catch((e) => setErr(errText(e))); }, [loadState]);
@@ -403,35 +437,74 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
 
   const items = pile?.items || [];
   const ready = items.filter((i) => !i.settling);
+  const canAdvance = hasNextSelection(pile) ? !!pile.expected_next_key
+    : ready.some((item) => item.lane !== "working");
   // an alert about something already IN the conversation is noise: the card is right there
   const shownKeys = useMemo(() => new Set(msgs.slice(-8).map((m) => m.card?.key).filter(Boolean)), [msgs]);
   const alert = useMemo(() => topAlert(pile?.alerts, acked, currentItem, shownKeys), [pile, acked, currentItem, shownKeys]);
   const say = useCallback((line) => { if (speakOnState) speak(line); }, [speakOnState]);
   useEffect(() => { speakRef.current = say; }, [say]);
-  const only = useRef(null);                                       // "mail" once the owner chose to start with the mail
   const landed = useCallback((data) => {
     if (data.exhausted) only.current = null;            // the mail ran out: Next continues with the rest of the pipe
     const card = data.item ? { ...data.item } : null;
     setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: data.options || [], card }]);
     currentRef.current = card;
+    selectionRef.current = null;
     if (card) { setCurrent(card.key); setCurrentItem(card); } else { setCurrent(null); setCurrentItem(null); }
-    say(data.say); loadPile();
+    say(data.say); loadPile(true);
   }, [loadPile, say]);
+
+  const ensureNextSelection = useCallback(async (scope) => {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const captured = selectionRef.current;
+      if (captured && sameSelectionScope(captured.scope, scope)) return captured;
+      await loadPileRef.current?.(true);
+    }
+    const captured = selectionRef.current;
+    return captured && sameSelectionScope(captured.scope, scope) ? captured : null;
+  }, []);
 
   // pull the next thing (or the one named; or the next piece of mail) out of the pipe and say it
   const surface = useCallback(async (key = null, asUser = null) => {
     if (busy || resetting || turnFlight.current) return;
     turnFlight.current = true;
     setBusy(true); setErr("");
-    if (asUser) setMsgs((m) => [...m, { id: `u${Date.now()}`, role: "user", text: asUser }]);
-    try { landed(await turn({ mode: "next", key, only: key ? null : only.current,
-                              exclude: key ? null : currentRef.current?.key || null })); }
-    catch (e) { setErr(errText(e)); }
+    const scope = nextSelectionScope(key ? null : only.current, key ? null : currentRef.current?.key || null);
+    const capture = key ? null : await ensureNextSelection(scope);
+    const optimisticId = asUser ? `u${Date.now()}` : null;
+    if (optimisticId) setMsgs((m) => [...m, { id: optimisticId, role: "user", text: asUser }]);
+    try {
+      // A named Timeline/pile row remains an explicit pull. Automatic Walk/Next echoes the exact
+      // server capture; demo/old-server payloads alone retain the legacy tokenless fallback.
+      if (!key && selectionContractSeen.current && !capture) throw new Error("Next is still refreshing. Review the updated list and press Next again.");
+      const navigation = capture ? nextSelectionBody(capture) : scope;
+      landed(await turn({ mode: "next", key, ...navigation }));
+    } catch (e) {
+      const guard = selectionGuardDetail(e);
+      if (guard) {
+        if (optimisticId) setMsgs((m) => m.filter((message) => message.id !== optimisticId));
+        const freshCapture = captureNextSelection(guard, scope);
+        selectionContractSeen.current = true;
+        selectionRef.current = freshCapture;
+        setPile((p) => replaceSelectionToken(p, guard));
+        loadPile(true);                       // refresh the rows, never retry the navigation
+      }
+      setErr(errText(e));
+    }
     turnFlight.current = false;
     setBusy(false);
-  }, [busy, landed, resetting, turn]);
+  }, [busy, ensureNextSelection, landed, loadPile, resetting, turn]);
   useEffect(() => { surfaceRef.current = surface; }, [surface]);
-  const start = (what) => { only.current = what; surface(null, what === "mail" ? "Just what came in." : "Walk me through my tasks."); };
+  const startFlight = useRef(false);
+  const start = async (what) => {
+    if (busy || resetting || turnFlight.current || startFlight.current) return;
+    startFlight.current = true;
+    only.current = what;
+    selectionRef.current = null;
+    await loadPile(true);                     // validate/resume Current under the requested scope
+    if (!currentRef.current) await surface(null, what === "mail" ? "Just what came in." : "Walk me through my tasks.");
+    startFlight.current = false;
+  };
 
   // The day used to write itself the moment the page opened - a model call nobody asked for, which
   // also landed UNDER a "Set something up" the owner had already pressed (2026-09-03: "I hit new chat
@@ -605,6 +678,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const done = async (receipt) => {
     if (receipt) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: receipt }]);
     if (current) { try { await api.post("/api/funnel/settle", { key: current, verb: "done" }); } catch { /* it may already be gone */ } }
+    currentRef.current = null; selectionRef.current = null;
     setCurrent(null); setCurrentItem(null);
     onChanged?.();                                     // a draft may have gone out: the Review badge recounts
     deferInChat(() => surfaceRef.current?.(), 500);
@@ -613,6 +687,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (!current) { surface(); return; }
     try { await api.post("/api/funnel/settle", { key: current, verb }); } catch { /* fine */ }
     setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: verb === "done" ? "Done." : verb === "later" ? "Pushed back a few hours — it comes back into the pipe then." : "Skipped until tomorrow morning." }]);
+    currentRef.current = null; selectionRef.current = null;
     setCurrent(null); setCurrentItem(null); loadPile();
     deferInChat(() => surfaceRef.current?.(), 400);
   };
@@ -655,6 +730,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // Keep provider and pile metadata on screen while the server swaps the hidden durable chat.
     only.current = null;
     currentRef.current = null;
+    selectionRef.current = null;
     setMsgs([]); setText(""); setWork([]); setErr(""); setAcked(new Set());
     setOld(null); setChatsOpen(false); setCurrent(null); setCurrentItem(null);
     setState((s) => s ? { ...s, messages: [] } : s);
@@ -772,7 +848,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               <span>{items.length ? `How can I help? ${waitingLine(ready)}`
                 : "How can I help? Nothing is waiting on you - ask me anything, or set something up."}</span>
               <div className="tq-modes">
-                <button type="button" className="tq-chip primary" disabled={resetting || !ready.length} onClick={() => start(null)}
+                <button type="button" className="tq-chip primary" disabled={resetting || !canAdvance} onClick={() => start(null)}
                   title="Everything in the pipe, most important first - mail, reports, agents, meetings">Walk me through my tasks</button>
                 <button type="button" className="tq-chip" disabled={resetting || !incoming(ready).length} onClick={() => start("mail")}
                   title="Only what people sent you - mail and chat">Just what came in</button>
@@ -802,7 +878,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       {!old && (
         <div className="tq-compose">
           <div className="tq-quick">
-            <button type="button" className="tq-chip" disabled={busy || resetting || !ready.length} onClick={() => surface()}>Next</button>
+            <button type="button" className="tq-chip" disabled={busy || resetting || !canAdvance} onClick={() => surface()}>Next</button>
             {current && <>
               <button type="button" className="tq-chip" disabled={busy || resetting} onClick={() => settle("done")}>Done</button>
               <button type="button" className="tq-chip" disabled={busy || resetting} onClick={() => settle("later")}>Later</button>

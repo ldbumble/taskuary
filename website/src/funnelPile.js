@@ -53,8 +53,83 @@ export const keysOf = (items) => new Set((items || []).map((i) => i.key));
 export const displayRevision = (pile) => pile?.display_revision || pile?.rev || null;
 export const refreshPilePresentation = (current, fresh) => {
   const revision = displayRevision(fresh);
-  return current && revision && displayRevision(current) === revision ? current : fresh;
+  if (!(current && revision && displayRevision(current) === revision)) return fresh;
+  // Selection capture is intentionally separate from the completed display revision. A transient
+  // unavailable result can therefore recover with the same rows/revision, and a newly captured
+  // token must still replace the disabled or older marker.
+  const membersMatch = Array.isArray(current.expected_next_members)
+    && Array.isArray(fresh.expected_next_members)
+    && current.expected_next_members.length === fresh.expected_next_members.length
+    && current.expected_next_members.every((member, index) => member === fresh.expected_next_members[index]);
+  const selectionMatches = current.selection_unavailable === fresh.selection_unavailable
+    && current.selection_revision === fresh.selection_revision
+    && current.expected_next_key === fresh.expected_next_key
+    && (current.expected_next_members === undefined && fresh.expected_next_members === undefined || membersMatch);
+  return selectionMatches ? current : fresh;
 };
+
+// A completed pile response captures the server's exact automatic selection.  Keep the scope
+// beside the token in the browser: a token for "all except A" cannot authorize a mail-only walk,
+// nor can it authorize moving on after Current has changed to B.
+export const nextSelectionScope = (only = null, exclude = null, includeSurfaced = false) => ({
+  only: only || null,
+  include_surfaced: !!includeSurfaced,
+  exclude: exclude || null,
+});
+export const sameSelectionScope = (left, right) => !!left && !!right
+  && left.only === right.only
+  && left.include_surfaced === right.include_surfaced
+  && left.exclude === right.exclude;
+export const hasNextSelection = (pile) => !!pile
+  && (pile.selection_unavailable === true || (typeof pile.selection_revision === "string"
+    && Object.prototype.hasOwnProperty.call(pile, "expected_next_key")
+    && Array.isArray(pile.expected_next_members)));
+export const captureNextSelection = (pile, scope) => hasNextSelection(pile) && !pile.selection_unavailable ? {
+  selection_revision: pile.selection_revision,
+  expected_next_key: pile.expected_next_key ?? null,
+  expected_next_members: [...pile.expected_next_members],
+  selection_pending: pile.selection_pending ?? null,
+  scope: nextSelectionScope(scope?.only, scope?.exclude, scope?.include_surfaced),
+} : null;
+export const nextSelectionBody = (capture) => ({
+  selection_revision: capture.selection_revision,
+  expected_next_key: capture.expected_next_key,
+  expected_next_members: [...capture.expected_next_members],
+  only: capture.scope.only,
+  include_surfaced: capture.scope.include_surfaced,
+  exclude: capture.scope.exclude,
+});
+export const nextMarkerKey = (pile, items, current) => {
+  if (hasNextSelection(pile))
+    return pile.expected_next_members[0] || pile.expected_next_key || null;
+  const eligible = (item) => !item.settling && item.lane !== "working" && item.key !== current?.key;
+  return ((items || []).find((item) => eligible(item) && !item.surfaced)
+    || (items || []).find(eligible))?.key || null;
+};
+
+// Both an initial HTTP conflict and a late streamed conflict carry this shape.  Keeping parsing
+// here lets the UI share one no-retry path and avoids rendering a structured `detail` object.
+export const selectionGuardDetail = (error) => {
+  const detail = error?.detail || error?.response?.data?.detail;
+  if (detail?.code === "selection_unavailable") return detail;
+  return detail?.code === "selection_stale" && typeof detail.selection_revision === "string"
+    && Array.isArray(detail.expected_next_members) ? detail : null;
+};
+export const replaceSelectionToken = (pile, detail) => pile ? (detail.code === "selection_unavailable" ? {
+  ...pile, selection_unavailable: true, expected_next_key: null, expected_next_members: [],
+  selection_pending: detail.selection_pending ?? null,
+} : {
+  ...pile, selection_unavailable: false, selection_revision: detail.selection_revision,
+  expected_next_key: detail.expected_next_key ?? null,
+  expected_next_members: [...detail.expected_next_members],
+  selection_pending: detail.selection_pending ?? null,
+}) : pile;
+
+// Until durable Current lands, reload restores the latest explicitly surfaced card. Passive
+// watcher cards stay readable in history but cannot silently become the conversation subject.
+export const restorableCurrent = (messages) => [...(messages || [])].reverse().find((message) =>
+  message?.card && !message.card.background_event
+  && !["brief", "setup", "agentdone"].includes(message.card.kind))?.card || null;
 
 // A live task changes keys as ownership changes: msg:<mid> before dispatch, agent:<tid> while a
 // coder has it. The task id is the stable identity across that hand-off.

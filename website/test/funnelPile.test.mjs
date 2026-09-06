@@ -167,7 +167,8 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   // superseded response cannot reconcile a newer Current selected while the request was pending.
   assert.match(pileRequest, /requestedCurrentKey \? \{ current: requestedCurrentKey \}/);
   assert.doesNotMatch(pileRequest, /\b(cat|pick|channel|source)\b/);
-  assert.match(view, /\{ key: body\.key, only: body\.only, include_surfaced: body\.include_surfaced, exclude: body\.exclude \}/);
+  assert.match(view, /key: body\.key, only: body\.only, include_surfaced: body\.include_surfaced, exclude: body\.exclude,/);
+  assert.match(view, /selection_revision: body\.selection_revision, expected_next_key: body\.expected_next_key, expected_next_members: body\.expected_next_members/);
   assert.doesNotMatch(view, /include_surfaced: true/); // a read row is not presented again by Next
   assert.doesNotMatch(view, /i\.surfaced && !i\.current \? "shown"/);                              // unread never looks processed
   assert.match(view, /stage=\{stageMode === "chat" \? chat : placeholder\} rowMode=\{stageMode\}/);   // the two ways to use the stage

@@ -520,5 +520,87 @@ ignored `.codex-tmp/phase1-freshness-evidence/` in the integration checkout.
 README SHA256 remains
 `EDF56683E29A34789B2EBEF73E131FBD7B318AE498BC761668BCB70854D91BAB`.
 No live app restart, live data migration, read-state reset or owner-document edit.
-Delivery commit and exact-SHA remote CI verification are pending below; PW-106
-remains partial because shared selection and canonical runtime adoption are later work.
+Delivery `3ef0bdc4e999d3b4ca268b56ca01e90e8f6789e9` passed all ten jobs in
+[CI run 34033187439](https://github.com/ldbumble/taskuary/actions/runs/34033187439).
+The first normal push encountered an intervening download-statistics bot commit;
+rebasing preserved that docs-only update. The tested application and test files
+were unchanged. Final backend/UI source commits are `34d4d65` and `87a69e4`.
+The original workspace was fast-forwarded with its README edit preserved.
+PW-106 remains partial because shared selection and canonical runtime adoption
+are later work.
+
+## Section 1.5 — shared captured Next and stable Current
+
+Status: implementation in progress from CI-verified `3ef0bdc`.
+Sol High backend owns funnel selection, the captured concierge surface path and
+focused backend tests. Sol High UI owns server-derived Next, exact request scope,
+Walk resume, stale-response handling and passive-event Current preservation.
+The lead owns API admission/concurrency, New chat coordination, real browser
+evidence, integration and delivery; Astra Extra High independently reviews.
+Claude separately owns Phase 2 intake; this section does not edit intake files.
+
+This slice retains legacy eligibility and read policy. It adds a read-only capture,
+an explicit revision/key/FYI-members binding and a guarded modern automatic Next
+path. Named-key pulls and old clients remain compatible and outside that guard.
+The process-local reservation coordinates navigation and New chat, including a
+post-model check and short commit lock. It does not provide a transaction against
+external SQLite writers or durable/restart/multi-process operation idempotency.
+An accepted request may create an empty dock before model work; initially stale
+requests must not create a dock or make any selection-dependent writes.
+
+The backend's single native observation required one authorized additive store
+seam: `feed(..., live_state=...)` can consume the captured list; its default keeps
+legacy behavior. Captured questions retain their rendered text. Failed native
+observations raise `selection_unavailable`, never a known-empty selection.
+Only the selected item/FYI members bind full presentation revisions; unrelated
+working-tail churn cannot repeatedly invalidate an otherwise unchanged Next.
+Calendar selection hashes its eligibility boundary rather than elapsed minutes.
+Background cards receive explicit provenance going forward; historical untagged
+cards are preserved and are not guessed or rewritten.
+
+The original backend source is `83ddd3c8263a57fcda0da0f3fe212c1fb33f5352`, integrated
+as `c640586`; its consistency follow-up `d878d7e3805b776689a0c62f8a0d81480adbbbbd`
+integrates as `9f82ee4`. Integrated API/display/fixture seams passed
+31 tests (3.45 s); cumulative processing tests passed 197 tests (20.36 s).
+
+UI source `170de0b`, `8dd0baa`, `995944c` integrates as `f4669a2`, `98c7505`,
+`c43ef5f`. Modern Next uses the exact scope/revision/key/member binding. Structured
+initial or late stale/unavailable responses never fall back to a second request;
+sparse late errors invalidate the token, and server outcome messages remain truthful.
+Walk validates/resumes its current subject and aborts across a chat epoch change.
+The existing rendered Walk control is welcome-only, so valid-Current Walk resume
+is not claimed as a newly exposed UI control. Scoped-empty mail navigation remains
+reachable to clear mail scope without inventing a Next badge. Passive cards remain
+readable but cannot choose Current or become its interactive action card.
+
+The real-browser stale-Next case pauses the actual POST, changes the selected task's
+context, and observes HTTP 409 with no plain fallback, no Current change and no
+durable assistant turn. A new owner click consumes the displayed next item exactly.
+A bounded synthetic passive card then tests live ingestion/reload while preserving
+both Current and its original interactive card title/buttons; native watcher
+production of the provenance flag is covered by backend tests.
+
+Two negative controls demonstrate the browser checks detect the prior behavior:
+the old UI sends no selection revision; the pre-fix async Walk, after its held pile
+response is released following a completed New chat, sends an obsolete navigation
+request. The final Walk test waits for that exact old response to finish delivery,
+then verifies no navigation request, Current or durable turn enters the new chat.
+The first positive navigation run passed its behavioral assertions but used the
+wrong object for the isolation assertion; it was corrected to `page.fixtureEscapes`.
+An intermediate cumulative run passed four scenarios and failed only launching
+Chrome for the terminal fixture's unique profile. No owned browser remained after
+cleanup; the final unchanged terminal scenario passed, without weakening its gates.
+
+Final frontend tests: 278 passed (1.385 s). Final packaged build: exit 0 (13.09 s).
+Final cumulative rendered browser: six passed (186.280 s), no skips. First
+visibility/input were 933/502 ms; Tasks/Board/Reports 170/166/150 ms; terminal
+replay/input/reconnect 2089/81/952 ms, within every existing ceiling. Independent
+Astra Extra High review cleared final backend, UI, root API/fixture/browser seams,
+and generated assets. Final backend rerun and remote delivery are recorded below.
+
+Final backend (`python -m pytest -q -ra --tb=short`): 2367 passed plus 66 subtests,
+151 warnings, no skips, 197.21 seconds. The warnings retain the existing Pydantic
+and fake-screencast cleanup observations. All local gates passed. No live restart,
+connector test, read migration or owner-document change was performed.
+Logs are ignored `.codex-tmp/selection-*.log` in the isolated integration checkout.
+Delivery and exact-SHA CI remain pending until the following checkpoint is verified.

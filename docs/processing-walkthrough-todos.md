@@ -541,6 +541,13 @@ browser test preserves Current, durable history and unsaved owner edits during
 external updates. PW-106 remains partial until shared selection and canonical
 consumer adoption; see Section 1.4 evidence for final gates and delivery status.
 
+Section 1.5 binds the displayed legacy Next and exact FYI members to the request,
+rejects stale modern navigation before effects, and keeps tagged passive updates
+from choosing Current or its interactive controls. Walk validation is cancelled
+when its conversation changes. Legacy eligibility, canonical consumer adoption,
+durable read/current cutover and historical untagged watcher provenance remain
+pending; related requirements are still partial. See Section 1.5 evidence.
+
 - [ ] <a id="pw-101"></a>**PW-101** Use one canonical item/identity/context representation for All, Unread,
   and assistant selection, including messages, reports, assistant posts/ideas,
   and agent work/attention items. Preserve legitimate task/thread grouping and

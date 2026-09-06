@@ -13,6 +13,8 @@ def install_processing_changes(app, store):
     fixture_paths = frozenset({
         '/api/fixture/processing/source', '/api/fixture/processing/member',
         '/api/fixture/processing/draft',
+        '/api/fixture/processing/context',
+        '/api/fixture/processing/background',
     })
 
     def fixture_refuse(method, path):
@@ -23,6 +25,33 @@ def install_processing_changes(app, store):
         return refuse(method, path)
 
     demo.refuse = fixture_refuse
+
+    @app.post('/api/fixture/processing/background')
+    def background_card(body: dict):
+        if set(body) != {'task_id'} or type(body['task_id']) is not int:
+            raise HTTPException(422, 'exact task_id is required')
+        from taskuary import concierge, funnel, general
+        item = funnel.next_item(store, f"agent:{body['task_id']}")
+        if not item or item.get('kind') != 'agent':
+            raise HTTPException(404, 'synthetic agent missing')
+        card = {**concierge.card_for(item), 'background_event': True}
+        # The native watcher producer has separate service coverage. This fixture
+        # exercises persisted passive-card ingestion and restoration in the browser.
+        dock, _ = general.dock_task(store, 'fixture')
+        concierge.record(store, dock['TaskId'], 'assistant', 'Synthetic passive worker notice', card)
+        store._poke('feed-changed', task_id=body['task_id'])
+        return {'ok': True, 'key': card['key']}
+
+    @app.post('/api/fixture/processing/context')
+    def add_context(body: dict):
+        if set(body) != {'task_id', 'body'} or type(body['task_id']) is not int:
+            raise HTTPException(422, 'exact task_id and body are required')
+        if not isinstance(body['body'], str) or len(body['body']) > 50000:
+            raise HTTPException(422, 'body must be a bounded string')
+        if not store.get_task(body['task_id']):
+            raise HTTPException(404, 'synthetic task missing')
+        store.add_comment(body['task_id'], 'fixture', 'user', body['body'])
+        return {'ok': True}
 
     @app.post('/api/fixture/processing/draft')
     def change_draft(body: dict):

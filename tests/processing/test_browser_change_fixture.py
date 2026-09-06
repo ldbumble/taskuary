@@ -39,6 +39,19 @@ def test_private_fixture_edits_preserve_all_production_demo_refusals(tmp_path, m
         assert db.get_message(mid)['BodyText'] == 'Original synthetic source'
         assert client.post('/api/fixture/processing/source', json={'message_id': mid, 'body': 'New source'}).status_code == 200
         assert db.get_message(mid)['BodyText'] == 'New source'
+        tid = db.create_task({'Title': 'Synthetic navigation context'}, 'fixture')
+        before = list(db.cx.iterdump())
+        for bad in ({'task_id': True, 'body': 'bad'}, {'task_id': tid, 'body': 'x' * 50001},
+                    {'task_id': tid, 'body': 'bad', 'extra': 'not allowed'}):
+            assert client.post('/api/fixture/processing/context', json=bad).status_code == 422
+        assert list(db.cx.iterdump()) == before
+        assert client.post('/api/fixture/processing/context', json={
+            'task_id': tid, 'body': 'New synthetic context'}).status_code == 200
+        assert list(db.cx.iterdump()) != before
+        before = list(db.cx.iterdump())
+        for bad in ({'task_id': True}, {'task_id': tid, 'card': {'kind': 'agent'}}):
+            assert client.post('/api/fixture/processing/background', json=bad).status_code == 422
+        assert list(db.cx.iterdump()) == before
     finally:
         if client:
             client.close()

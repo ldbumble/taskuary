@@ -362,6 +362,12 @@ def assistant_dock():
 
 @app.post('/api/assistant/dock/new')
 def assistant_dock_new(background: BackgroundTasks):
+    from .processing_navigation import chat_change
+    with chat_change(store):
+        return _assistant_dock_new(background)
+
+
+def _assistant_dock_new(background: BackgroundTasks):
     """Archive the current dock conversation and return a genuinely fresh one.
 
     A client-side clear is dishonest here: the model session and the task comments would still
@@ -2173,15 +2179,27 @@ class SurfaceBody(BaseModel):
     only: str | None = None
     include_surfaced: bool = False
     exclude: str | None = None
+    selection_revision: str | None = None
+    expected_next_key: str | None = None
+    expected_next_members: list[str] | None = None
 class ConciergeSayBody(BaseModel): text: str; key: str | None = None; context_mid: int | None = None
 class ConciergeActBody(BaseModel): key: str; verb: str; hours: float | None = None
 
 @app.get('/api/funnel/pile')
-def funnel_pile(force: bool = False, current: str = None):
+def funnel_pile(force: bool = False, current: str = None, only: str = None,
+                include_surfaced: bool = False, exclude: str = None):
     """The ranked pile the Assistant page draws: next-first, every item with the words it rests
     on, plus the alerts that interrupt. Cached a few seconds - it is polled while the page is open."""
     from . import funnel
-    p = funnel.pile(store, force)
+    from .funnel_selection import capture_selection, SelectionUnavailable
+    from .processing_navigation import fields
+    watched = funnel.pile(store, force)
+    try:
+        capture = capture_selection(store, only=only, include_surfaced=include_surfaced, exclude=exclude)
+    except SelectionUnavailable as error:
+        raise HTTPException(503, error.detail) from error
+    p = {**capture.pile, **fields(store, capture),
+         'alerts': funnel.alerts(store, capture.pile['items']), 'events': watched.get('events', [])}
     # ...and what the page is HOLDING: an item whose review was decided (or whose task closed)
     # leaves the pile, and nothing told the page - so a sent reply sat on the table as
     # "reply pending" for as long as the tab stayed open (the owner, 2026-09-03: "why is it
@@ -2259,6 +2277,18 @@ def concierge_next(body: SurfaceBody = None):
     """Pull the next thing out of the pipe - or the one named, or the next piece of mail - and say it."""
     from . import concierge
     body = body or SurfaceBody()
+    reservation = _navigation_reservation(body)
+    if reservation:
+        from .processing_navigation import NavigationStale
+        from .funnel_selection import SelectionUnavailable
+        try:
+            return reservation.run(lambda selected, guard, dock: concierge.surface(
+                store, actor=ACTOR, only=body.only, include_surfaced=body.include_surfaced,
+                exclude=body.exclude, selection=selected, commit_guard=guard, bound_dock=dock), ACTOR)
+        except NavigationStale as error:
+            raise HTTPException(409, error.detail) from error
+        except SelectionUnavailable as error:
+            raise HTTPException(503, error.detail) from error
     if body.key: _refresh_chat_key(body.key)
     return concierge.surface(store, body.key, actor=ACTOR, only=body.only,
                              include_surfaced=body.include_surfaced, exclude=body.exclude)
@@ -2272,6 +2302,32 @@ def concierge_open():
 class ConciergeStreamBody(BaseModel):
     mode: str = 'say'; text: str | None = None; key: str | None = None; only: str | None = None; context_mid: int | None = None
     include_surfaced: bool = False; exclude: str | None = None
+    selection_revision: str | None = None
+    expected_next_key: str | None = None
+    expected_next_members: list[str] | None = None
+
+
+def _navigation_reservation(body):
+    """Validate modern selection fields before dock, model, refresh or stream work."""
+    from .processing_navigation import reserve, NavigationStale
+    from .funnel_selection import SelectionUnavailable
+    names = {'selection_revision', 'expected_next_key', 'expected_next_members'}
+    supplied = names.intersection(body.model_fields_set)
+    if not supplied:
+        return None  # Compatibility for older callers during the staged cutover.
+    if (supplied != names or body.key or getattr(body, 'mode', 'next') != 'next'
+            or not re.fullmatch(r'[0-9a-f]{64}', body.selection_revision or '')
+            or body.expected_next_members is None):
+        raise HTTPException(422, 'automatic navigation requires the complete selection binding')
+    try:
+        return reserve(store, selection_revision=body.selection_revision,
+                       expected_next_key=body.expected_next_key,
+                       expected_next_members=body.expected_next_members,
+                       only=body.only, include_surfaced=body.include_surfaced, exclude=body.exclude)
+    except NavigationStale as error:
+        raise HTTPException(409, error.detail) from error
+    except SelectionUnavailable as error:
+        raise HTTPException(503, error.detail) from error
 
 @app.post('/api/concierge/stream')
 async def concierge_stream(body: ConciergeStreamBody):
@@ -2279,6 +2335,20 @@ async def concierge_stream(body: ConciergeStreamBody):
     `done` with the same payload the plain endpoints return. Same shape as the task assistant's
     stream; the browser walking away detaches, the stop button (cancel) is not wired here yet."""
     from . import concierge
+    from .processing_navigation import NavigationStale
+    from .funnel_selection import SelectionUnavailable
+    admission = asyncio.create_task(asyncio.to_thread(_navigation_reservation, body))
+    try:
+        reservation = await asyncio.shield(admission)
+    except asyncio.CancelledError:
+        def release_admission(done):
+            try:
+                held = done.result()
+                if held: held.close()
+            except Exception:
+                pass
+        admission.add_done_callback(release_admission)
+        raise
     loop, events, cancel = asyncio.get_running_loop(), asyncio.Queue(), threading.Event()
     def put(e):
         try: loop.call_soon_threadsafe(events.put_nowait, e)
@@ -2293,16 +2363,33 @@ async def concierge_stream(body: ConciergeStreamBody):
                 put({'type': 'tool_call', 'name': 'sync_messages',
                      'detail': {'new': freshness.get('added', 0)}})
             if body.mode == 'open': out = concierge.open_day(store, actor=ACTOR, trace=trace, cancel=cancel)
-            elif body.mode == 'next': out = concierge.surface(store, body.key, actor=ACTOR, only=body.only, trace=trace, cancel=cancel,
-                                                               include_surfaced=body.include_surfaced, exclude=body.exclude)
+            elif body.mode == 'next':
+                if reservation:
+                    out = reservation.run(lambda selected, guard, dock: concierge.surface(
+                        store, actor=ACTOR, only=body.only, trace=trace, cancel=cancel,
+                        include_surfaced=body.include_surfaced, exclude=body.exclude,
+                        selection=selected, commit_guard=guard, bound_dock=dock), ACTOR)
+                else:
+                    out = concierge.surface(store, body.key, actor=ACTOR, only=body.only, trace=trace, cancel=cancel,
+                                            include_surfaced=body.include_surfaced, exclude=body.exclude)
             else: out = concierge.say(store, body.text or '', body.key, actor=ACTOR, trace=trace, cancel=cancel)
             if freshness.get('newer'):
                 out['context_update'] = _context_update_line(freshness)
             put({'type': 'done', **out})
+        except NavigationStale as error:
+            put({'type': 'error', 'code': 'selection_stale', 'detail': error.detail, 'error': str(error)})
+        except SelectionUnavailable as error:
+            put({'type': 'error', 'code': 'selection_unavailable', 'detail': error.detail, 'error': str(error)})
         except Exception as e:
             logger.warning(f'concierge stream failed: {e}')
             put({'type': 'error', 'error': str(e)})
-    threading.Thread(target=work, daemon=True).start()
+        finally:
+            if reservation: reservation.close()
+    try:
+        threading.Thread(target=work, daemon=True).start()
+    except BaseException:
+        if reservation: reservation.close()
+        raise
     async def generate():
         while True:
             e = await events.get()

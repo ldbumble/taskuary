@@ -47,6 +47,11 @@ import AddIcon from "@mui/icons-material/Add";
 import { isVoicePlaceholder, voiceNoteBody } from "./voiceNote.js";
 import { TerminalPane } from "./TerminalView.jsx";
 import { feedInteraction, feedViews } from "./feedViews.js";
+import {
+  appendProcessingPage, firstProcessingPage, fullProcessingRow, isCoveragePending, isSnapshotExpired,
+  processingAllParams, processingDetailPath, processingErrorMessage, processingMessageDetail, processingRefreshCandidate,
+  processingRowId, processingSelectionKey, processingTarget, processingTransportLimit, rowOwnsMessage,
+} from "./processingAll.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // guarded: a stale chunk reloads once (lazyGeneral.js)
 
@@ -491,7 +496,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   const narrow = useMediaQuery("(max-width:899.95px)");
   // Unread alone owns the conversational walk. All is deliberately a one-item review surface even
   // if the parent still has its chat selected from the previous tab.
-  const [view, setView] = useState(top ? "unread" : "");
+  const [view, setViewState] = useState(top ? "unread" : "");
   const interaction = feedInteraction(view, rowMode, !!onPull);
   const visibleStage = interaction.showChatStage ? stage : null;
   const chatMode = interaction.pullRowIntoChat;
@@ -562,6 +567,15 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   useEffect(() => () => clearTimeout(dateJumpTimer.current), []);
   const [newOpen, setNewOpen] = useState(false);     // the ＋ New sheet (NewSheet.jsx)
   const [rows, setRows] = useState(null);
+  // All consumes one compact row per canonical root. The opaque cursor belongs to one frozen
+  // snapshot; Unread continues to use the accepted Assistant pile and legacy message lookup.
+  const allPage = useRef(null);
+  const allRequest = useRef(0);
+  const allLegacyFallback = useRef(false);
+  const setView = (next) => {
+    allRequest.current += 1; detailEpoch.current += 1; want.current = null;
+    setViewState(next);
+  };
   // Unread is the ranked live pipe supplied by the Assistant; All is chronological history.
   const views = feedViews(!!top).map((entry) => ({ ...entry, c: PILL_COLORS.pick }));
   const [openFolds, setOpenFolds] = useState(() => new Set());   // conversations unfolded by hand
@@ -573,6 +587,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   const [detail, setDetail] = useState(null);
   const [editText, setEditText] = useState(null);    // null = untouched; "" = deliberately cleared
   const [err, setErr] = useState("");
+  const [allFallbackNotice, setAllFallbackNotice] = useState("");
   const seen = useRef(new Set());               // MessageIds already animated in
   const rowsLen = useRef(0);
   const etagRef = useRef("");
@@ -613,37 +628,108 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
       setSrcByChannel(by);
     }).catch(() => {});
   }, []);
-  useEffect(() => { setPick(""); }, [cat]);          // switching category clears the narrower pick
+  useEffect(() => { allRequest.current += 1; setPick(""); }, [cat]); // switching category clears the narrower pick
 
   // (Re)fetch from the top - span covers everything already on screen so the 30s
   // refresh never shrinks the list under the user.
   const load = useCallback(async (span) => {
+    const request = ++allRequest.current;
     try {
-      const limit = Math.max(span || 0, PAGE);
+      const desired = Math.max(span || 0, PAGE);
+      const limit = processingTransportLimit(desired);
+      if (!view) {
+        try {
+          const { data } = await api.get("/api/processing/all", {
+            params: processingAllParams({ category: cat, pick, discovered: Object.keys(srcByChannel), limit }),
+          });
+          if (request !== allRequest.current) return;
+          let page = firstProcessingPage(data);
+          // A live refresh keeps the span the owner already scrolled through, but every transport
+          // page stays within the backend's 500-row bound and on the first response's frozen lease.
+          while (page.rows.length < desired && page.nextCursor) {
+            const more = await api.get("/api/processing/all", { params: processingAllParams({ category: cat, pick,
+              discovered: Object.keys(srcByChannel), limit: processingTransportLimit(desired - page.rows.length), cursor: page.nextCursor }) });
+            if (request !== allRequest.current) return;
+            page = appendProcessingPage(page, more.data);
+          }
+          page.rows = page.rows.map((row) => ({ ...row, AllLoadGeneration: request }));
+          allPage.current = page; allLegacyFallback.current = false;
+          setRows(page.rows); rowsLen.current = page.rows.length;
+          setNoMore(page.nextCursor == null); setAllFallbackNotice(""); setErr("");
+          return;
+        } catch (e) {
+          // During an incremental identity migration the backend explicitly says this account is
+          // not complete enough to claim one canonical row per root. Only that audited response
+          // may use the legacy Timeline temporarily; a network/shape/auth failure stays visible.
+          if (!isCoveragePending(e)) throw e;
+          if (request !== allRequest.current) return;
+          const res = await api.get("/api/feed", {
+            params: { limit, ...fparams() }, headers: feedHeaders(etagRef.current), validateStatus: feedOk,
+          });
+          if (request !== allRequest.current) return;
+          const batch = takeFeed(res, etagRef);
+          if (batch == null) return;
+          allPage.current = null; allLegacyFallback.current = true;
+          setRows(batch); rowsLen.current = batch.length;
+          setNoMore(batch.length < limit);
+          setAllFallbackNotice("Canonical grouping is still finishing; showing the legacy Timeline temporarily.");
+          setErr("");
+          return;
+        }
+      }
       const res = await api.get("/api/feed", {
         params: { limit, ...fparams() },
         headers: feedHeaders(etagRef.current),
         validateStatus: feedOk,
       });
+      if (request !== allRequest.current) return;
       const batch = takeFeed(res, etagRef);
       if (batch == null) return;                 // 304: the list on screen is still the truth
+      allPage.current = null; allLegacyFallback.current = false;
       setRows(batch); rowsLen.current = batch.length;
-      setNoMore(batch.length < limit);
-    } catch (e) { setErr(e?.response?.data?.detail || "Failed to load the feed"); }
-  }, [fparams]);
+      setNoMore(batch.length < limit); setAllFallbackNotice(""); setErr("");
+    } catch (e) {
+      if (request === allRequest.current) setErr(processingErrorMessage(e, "Failed to load the feed"));
+    }
+  }, [view, cat, pick, srcByChannel, fparams]);
 
   // Infinite scroll: append the next page when the bottom sentinel shows.
   const loadMore = useCallback(async () => {
     if (busyMore.current || noMore || !rowsLen.current) return;
     busyMore.current = true;
+    const request = allRequest.current;
     try {
+      if (!view && !allLegacyFallback.current) {
+        const frozen = allPage.current;
+        if (!frozen?.nextCursor) { setNoMore(true); return; }
+        try {
+          const { data } = await api.get("/api/processing/all", {
+            params: processingAllParams({ category: cat, pick, discovered: Object.keys(srcByChannel),
+              limit: PAGE, cursor: frozen.nextCursor }),
+          });
+          if (request !== allRequest.current || allPage.current?.snapshotRevision !== frozen.snapshotRevision) return;
+          const joined = appendProcessingPage(frozen, data);
+          const generation = frozen.rows[0]?.AllLoadGeneration ?? request;
+          joined.rows = joined.rows.map((row) => ({ ...row, AllLoadGeneration: generation }));
+          allPage.current = joined; setRows(joined.rows); rowsLen.current = joined.rows.length;
+          setNoMore(joined.nextCursor == null); setErr("");
+        } catch (e) {
+          if (request !== allRequest.current || allPage.current?.snapshotRevision !== frozen.snapshotRevision) return;
+          if (isSnapshotExpired(e)) { await load(rowsLen.current); return; }
+          throw e;
+        }
+        return;
+      }
       const { data } = await api.get("/api/feed", { params: { limit: PAGE, offset: rowsLen.current, ...fparams() } });
+      if (request !== allRequest.current) return;
       const batch = data.data || [];
       setNoMore(batch.length < PAGE);
       if (batch.length) setRows((cur) => { const next = [...(cur || []), ...batch]; rowsLen.current = next.length; return next; });
-    } catch (e) { setErr(e?.response?.data?.detail || "Failed to load more"); }
-    busyMore.current = false;
-  }, [fparams, noMore]);
+    } catch (e) {
+      if (request === allRequest.current) setErr(processingErrorMessage(e, "Failed to load more"));
+    }
+    finally { busyMore.current = false; }
+  }, [view, cat, pick, srcByChannel, fparams, noMore, load]);
 
   // Sync = trigger a real mailbox/Teams ingest server-side, then TRACK its actual state
   // (/ingest/status) instead of guessing with a fixed wait - the button stays "Updating"
@@ -731,7 +817,9 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
 
   useEffect(() => {
     setRows(null); rowsLen.current = 0; setNoMore(false);
+    allPage.current = null; allLegacyFallback.current = false;
     etagRef.current = "";                        // a new filter is not the same page
+    detailEpoch.current += 1; want.current = null;
     setSel(null); setEditText("");   // filter switch: never leave a stale review panel up
     load();
     // Rows only. The INGEST clock lives on the server; this socket is how the list learns
@@ -746,7 +834,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     if (endRef.current) obs.observe(endRef.current);
     return () => obs.disconnect();
   }, [loadMore]);
-  useEffect(() => { (rows || []).forEach((r) => seen.current.add(r.MessageId)); }, [rows]);
+  useEffect(() => { (rows || []).forEach((r) => seen.current.add(processingRowId(r))); }, [rows]);
 
   // Hovering a line opens it in the review panel after a SHORT rest (120ms: 260 read as lag, 0
   // made the panel flicker through every row you scrolled past); click pins it. A draft mid-edit
@@ -773,8 +861,10 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   }, []);
   const [sel, setSel] = useState(null);
   const [sendErr, setSendErr] = useState("");     // approved, but the channel refused it
+  const editOwner = useRef("");                  // canonical item + exact review whose draft is being edited
   const hoverTimer = useRef(null);
   const want = useRef(null);                    // newest selection wins if fetches land out of order
+  const detailEpoch = useRef(0);                // request ownership across filters, views and closes
   // `quiet` is the hover path: the panel keeps showing the row you were on until the next one's
   // detail has ARRIVED, then header and body swap in one render. Clearing the detail first
   // meant every hover flashed a spinner in the panel before filling it - sweeping down a list
@@ -784,17 +874,26 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   // started after the rest. (no task = report / filed / ignored: the message itself, whole - the
   // feed row only carries a truncated preview.)
   const cache = useRef(new Map());
-  const fetchDetail = (row) => {
-    const hit = cache.current.get(row.MessageId);
+  const fetchDetail = (row, targetOverride = null) => {
+    const key = processingSelectionKey(row, targetOverride);
+    const hit = cache.current.get(key);
     if (hit && Date.now() - hit.at < 60000) return hit.p;
+    const canonicalPath = processingDetailPath(row, targetOverride);
     // ...and a row with no task gets its whole CONVERSATION, not just itself. A chat is a
     // conversation by nature: showing one line of it hid every reply the owner sent from Teams
     // or Outlook, which is ingested as a `context` row and which the assistant has been reading
     // all along. The panel was the only place the history looked incomplete.
-    const p = (row.TaskId ? api.get(`/api/tasks/${row.TaskId}`).then((r) => r.data)
-      : api.get(`/api/messages/${row.MessageId}/thread`).then((r) => threadDetail(r.data)))
-      .catch(() => ({ messages: [] }));                                  // panel falls back to the preview
-    cache.current.set(row.MessageId, { at: Date.now(), p });
+    const p = canonicalPath
+      ? api.get(canonicalPath).then(({ data }) => {
+          const requested = targetOverride ? { ...row, OpenTarget: targetOverride } : row;
+          const full = fullProcessingRow(requested, data);
+          if (data.view_changed) cache.current.delete(key);
+          return { canonical: true, row: full, detail: processingMessageDetail(full, data.detail || {}) };
+        })
+      : (row.TaskId ? api.get(`/api/tasks/${row.TaskId}`).then((r) => ({ canonical: false, detail: r.data }))
+        : api.get(`/api/messages/${row.MessageId}/thread`).then((r) => ({ canonical: false, detail: threadDetail(r.data) })))
+        .catch(() => ({ canonical: false, detail: { messages: [] } }));   // legacy panel falls back to the preview
+    cache.current.set(key, { at: Date.now(), p });
     return p;
   };
   // pinned = you CLICKED it: it stays until you click something else or the page ground. A hover
@@ -802,24 +901,50 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   const pinned = useRef(false);
   const [pinnedOn, setPinnedOn] = useState(false);
   const setPinned = (v) => { pinned.current = v; setPinnedOn(v); };
+  const closeSelection = () => {
+    clearTimeout(hoverTimer.current); detailEpoch.current += 1; want.current = null;
+    setPinned(false); setSel(null); setDetail(null);
+  };
   // Switching between All and Unread closes any row detail without re-fetching the unchanged All
   // inventory. The Assistant owns Current separately, so this cannot advance or clear the walk.
   useEffect(() => {
     clearTimeout(hoverTimer.current);
-    want.current = null; // Ignore an outstanding detail response from the previous view.
+    detailEpoch.current += 1; want.current = null; // Ignore an outstanding response from the previous view.
+    editOwner.current = "";
     pinned.current = false; setPinnedOn(false); setSel(null); setCalSel(null); setEditText("");
   }, [view]);
-  const drill = async (row, quiet = false) => {
-    if (quiet && pinned.current && sel?.MessageId === row.MessageId) return;   // pinned outranks hover
+  const drill = async (row, quiet = false, targetOverride = null) => {
+    const semanticKey = processingSelectionKey(row, targetOverride);
+    const requestKey = `${++detailEpoch.current}:${semanticKey}`;
+    const requestedTarget = processingTarget(row, targetOverride);
+    const selectedTarget = processingTarget(sel);
+    const sameSubject = processingRowId(sel) === processingRowId(row)
+      && (!requestedTarget || !selectedTarget
+        || (requestedTarget.kind === selectedTarget.kind && String(requestedTarget.id) === String(selectedTarget.id)));
+    if (quiet && pinned.current && sameSubject) return;                 // pinned outranks hover
     if (!quiet) clearTimeout(hoverTimer.current);
     setCalSel(null);   // a message row takes the panel back from an opened meeting
-    want.current = row.MessageId; setPinned(!quiet);
-    const p = fetchDetail(row);
-    if (!quiet) { setSel(row); setDetail(null); setEditText(null); setSendErr(""); setPanelLock(false); }
-    const d = await p;
-    if (want.current !== row.MessageId) return;                          // a newer hover won
-    if (quiet) { setSel(row); setEditText(null); setSendErr(""); setPanelLock(false); }
-    setDetail(d);
+    want.current = requestKey; setPinned(!quiet);
+    const requested = targetOverride && row.ProcessingItemId ? { ...row, OpenTarget: targetOverride } : row;
+    const p = fetchDetail(row, targetOverride);
+    if (!quiet) { editOwner.current = ""; setSel(requested); setDetail(null); setEditText(null); setSendErr(""); setPanelLock(false); }
+    try {
+      const loaded = await p;
+      if (want.current !== requestKey) return;                           // a newer hover won
+      const selected = loaded.canonical ? loaded.row : requested;
+      if (quiet) { editOwner.current = ""; setEditText(null); setSendErr(""); setPanelLock(false); }
+      setSel(selected); setDetail(loaded.detail);
+    } catch (e) {
+      if (want.current !== requestKey) return;
+      cache.current.delete(semanticKey);
+      const code = e?.response?.data?.detail?.code;
+      if (code === "processing_target_moved") {
+        setErr(e.response.data.detail.message || "That item changed. Refreshing the Timeline.");
+        closeSelection(); load(rowsLen.current);
+      } else {
+        setErr(e?.response?.data?.detail?.message || e?.message || "Failed to load item detail");
+      }
+    }
   };
   // The unread rail is the PIPE, drawn by whoever passed `top` in - so in task mode a click there
   // has no way to reach this stage, and did nothing at all. `top` may be a function, and this is
@@ -827,7 +952,8 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   // False means there is nothing here to open, so the caller can fall back to its chat.
   const openByMid = (mid) => {
     if (!mid) return false;
-    drill((rows || []).find((r) => r.MessageId === mid) || { MessageId: mid });
+    const row = (rows || []).find((r) => r.MessageId === mid || rowOwnsMessage(r, mid));
+    drill(row || { MessageId: mid }, false, row?.ProcessingItemId ? { kind: "message", id: mid } : null);
     return true;
   };
   // what a click on a row does: pull it into the chat (rowMode chat) or open it on the stage
@@ -841,10 +967,11 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     const m = /^#msg=(\d+)/.exec(window.location.hash || "");
     const cur = rowsRef.current;
     if (!m || !cur) return;
-    const row = cur.find((r) => r.MessageId === Number(m[1]));
+    const mid = Number(m[1]);
+    const row = cur.find((r) => r.MessageId === mid || rowOwnsMessage(r, mid));
     if (!row) return;
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
-    drill(row);
+    drill(row, false, row.ProcessingItemId ? { kind: "message", id: mid } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => { openHash(); }, [rows, openHash]);
@@ -855,17 +982,42 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   // forever on yesterday's object while the rail beside it already shows the verdict.
   useEffect(() => {
     if (!sel || !rows) return;
-    const fresh = rows.find((r) => r.MessageId === sel.MessageId);
+    const fresh = sel.ProcessingItemId
+      ? rows.find((r) => r.ProcessingItemId === sel.ProcessingItemId)
+      : rows.find((r) => r.MessageId === sel.MessageId);
+    if (sel.ProcessingItemId) {
+      const candidate = processingRefreshCandidate(sel, rows);
+      if (fresh && fresh.ViewRevision === sel.ViewRevision && fresh.AllLoadGeneration === sel.AllLoadGeneration) return;
+      const target = processingTarget(sel);
+      // Exact-member deep links stay exact. If reconciliation moved that member away, the
+      // authoritative detail endpoint returns processing_target_moved instead of substituting.
+      const base = target ? { ...candidate, OpenTarget: target } : candidate;
+      const requestKey = `${++detailEpoch.current}:${processingSelectionKey(base)}`;
+      want.current = requestKey;
+      for (const key of cache.current.keys()) if (key.startsWith(`${sel.ProcessingItemId}|`)) cache.current.delete(key);
+      fetchDetail(base).then((loaded) => {
+        if (want.current !== requestKey) return;
+        setSel(loaded.row); setDetail(loaded.detail);
+      }).catch((e) => {
+        if (want.current !== requestKey) return;
+        cache.current.delete(processingSelectionKey(base));
+        const detail = e?.response?.data?.detail;
+        setErr(detail?.message || e?.message || "Failed to refresh item detail");
+        if (detail?.code === "processing_target_moved" || e?.response?.status === 404) closeSelection();
+      });
+      return;
+    }
     if (!fresh) return;
     const finishedTriage = sel.MsgStatus === "triaging" && fresh.MsgStatus !== "triaging";
     const changedTask = fresh.TaskId !== sel.TaskId;
     setSel(fresh);
     if (!finishedTriage && !changedTask) return;
-    want.current = fresh.MessageId;
-    cache.current.delete(fresh.MessageId);
+    const requestKey = `${++detailEpoch.current}:${processingSelectionKey(fresh)}`;
+    want.current = requestKey;
+    cache.current.delete(processingSelectionKey(fresh));
     setDetail(null);
-    fetchDetail(fresh).then((d) => {
-      if (want.current === fresh.MessageId) setDetail(d);
+    fetchDetail(fresh).then((loaded) => {
+      if (want.current === requestKey) setDetail(loaded.detail);
     });
     // rows is the event: sel is intentionally the previous snapshot used to detect the boundary.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -873,7 +1025,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   // Transcription replaces the message body in place. Reflect the returned body immediately,
   // and invalidate the minute-long detail cache so reopening cannot resurrect the placeholder.
   const messageBodyChanged = useCallback((mid, body) => {
-    cache.current.delete(mid);
+    for (const key of cache.current.keys()) if (key === `legacy-message:${mid}` || key.includes(`|message:${mid}|`)) cache.current.delete(key);
     setRows((cur) => (cur || []).map((r) => r.MessageId === mid ? { ...r, Preview: body } : r));
     setSel((cur) => cur?.MessageId === mid ? { ...cur, Preview: body } : cur);
     setDetail((cur) => cur ? { ...cur, messages: (cur.messages || []).map((m) =>
@@ -888,7 +1040,9 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     clearTimeout(leaveTimer.current);
     if (pinned.current || narrow) return;
     leaveTimer.current = setTimeout(() => {
-      if (!pinned.current && !panelLock && !(editText ?? "").trim()) { clearTimeout(hoverTimer.current); setSel(null); }
+      if (!pinned.current && !panelLock && !(editText ?? "").trim()) {
+        clearTimeout(hoverTimer.current); detailEpoch.current += 1; want.current = null; setSel(null);
+      }
     }, 400);
   };
   // A verdict being TYPED locks the panel the same way a draft does. It did not, and a sync
@@ -900,7 +1054,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     clearTimeout(hoverTimer.current);
     if (narrow || chatMode) return;                     // a phone taps; the drawer opens on the tap - and a chat is not a preview pane
     if (!hoverArmed.current) return;
-    if (sel?.MessageId === row.MessageId) return;
+    if (processingRowId(sel) === processingRowId(row)) return;
     if (sel && ((editText ?? "").trim() || panelLock)) return;   // don't yank an OPEN panel mid-edit
     // a meeting you CLICKED stays until you click something else; one that opened on hover gives
     // way to the next hover like any row - otherwise the panel stuck on the first meeting
@@ -919,7 +1073,8 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     const h = (e) => {
       if (e.target.closest?.("[data-tq-keep], .MuiPopover-root, .MuiModal-root, #tqTopNav")) return;
       if (panelLock || (editText ?? "").trim()) return;
-      clearTimeout(hoverTimer.current); setPinned(false); setSel(null); setCalSel(null);
+      clearTimeout(hoverTimer.current); detailEpoch.current += 1; want.current = null;
+      setPinned(false); setSel(null); setCalSel(null);
     };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
@@ -932,7 +1087,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     const { data } = await api.post(`/api/reviews/${reviewId}/decide`,
       { verb, final_text: finalText || null, cc: verb === "approve" ? (cc || []) : null });
     if (data?.send_error) { setSendErr(data.send_error); load(); onChanged?.(); return; }
-    setSendErr(""); setSel(null); setEditText(null);   // stale edits must never block hover
+    setSendErr(""); closeSelection(); setEditText(null); // stale edits must never block hover
     load(); onChanged?.();
   };
 
@@ -947,10 +1102,15 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     const cid = String(r.ConversationId || "");
     if (cid.startsWith("calendar:")) (prepFor[cid] = prepFor[cid] || []).push(r);
   }
+  const canonicalAll = !view && !!allPage.current && !allLegacyFallback.current;
   const sorted = [...(rows || [])]
-    .filter((r) => !String(r.ConversationId || "").startsWith("calendar:"))
-    .filter((r) => !catChans || catChans.includes(r.Channel))
-    .sort((a, b) => (b.SentAt || "").localeCompare(a.SentAt || ""));
+    .filter((r) => !String(r.ConversationId || "").startsWith("calendar:"));
+  // Canonical All is already filtered, ordered, and deduplicated by the frozen server snapshot.
+  // Reapplying message-only client rules would drop standalone roots or reorder equal activities.
+  if (!canonicalAll) {
+    const kept = sorted.filter((r) => !catChans || catChans.includes(r.Channel));
+    sorted.splice(0, sorted.length, ...kept.sort((a, b) => (b.SentAt || "").localeCompare(a.SentAt || "")));
+  }
   const days = sorted.reduce((acc, r) => {
     const d = localDay(r.SentAt) || "undated";
     (acc[d] = acc[d] || []).push(r);
@@ -970,14 +1130,18 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     const day = localDay(calEvents[0].start);
     if (day) days[day] = [];
   }
-  const dayEntries = Object.entries(days).sort(([a], [b]) => b.localeCompare(a));
+  const dayEntries = Object.entries(days).sort(([a], [b]) => {
+    if (a === "undated") return 1;
+    if (b === "undated") return -1;
+    return b.localeCompare(a);
+  });
   // ONE TASK, ONE ROW. Not one conversation: on a report, on the assistant's posts and in a
   // WhatsApp chat the conversation id is the CHANNEL, so grouping on it collapsed five runs of
   // one report, twelve assistant posts and a day of one person into single lines - and hid a
   // photo the owner was hunting for. A task is the honest unit: triage or a thread put those
   // messages together. Rows nothing has judged to be one thing never fold.
   const foldOf = new Map(), memberOf = new Map();
-  for (const [, dayRows] of dayEntries) {
+  for (const [, dayRows] of canonicalAll ? [] : dayEntries) {
     for (const e of groupThreads(dayRows)) {
       if (e.kind !== "fold") continue;
       foldOf.set(e.row.MessageId, e);                 // the newest member is where the fold sits
@@ -1062,7 +1226,9 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, ml: { md: "auto" }, minWidth: 0,
               order: { xs: 3, md: 2 }, flex: { xs: "1 1 100%", md: "0 0 auto" },
               "& > .MuiInputBase-root": { flex: { xs: 1, md: "0 0 auto" } } }}>
-            <Select size="small" value={cat} displayEmpty onChange={(e) => setCat(e.target.value)}
+            <Select size="small" value={cat} displayEmpty onChange={(e) => {
+              allRequest.current += 1; detailEpoch.current += 1; want.current = null; setCat(e.target.value);
+            }}
               inputProps={{ "aria-label": "Timeline category" }}
               renderValue={(v) => CATEGORIES.find((o) => o.key === v)?.label || "all kinds"}
               sx={{ height: 34, fontSize: 11.5, fontWeight: 600, borderRadius: 2, bgcolor: PANEL2,
@@ -1071,7 +1237,10 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                 "& .MuiOutlinedInput-notchedOutline": { borderColor: BORDER } }}>
               {CATEGORIES.map((o) => <MenuItem key={o.key} value={o.key} sx={{ fontSize: 12 }}>{o.label}</MenuItem>)}
             </Select>
-            <Select size="small" value={pickerChannels.length ? pick : ""} displayEmpty onChange={(e) => setPick(e.target.value)}
+            <Select size="small" value={pickerChannels.length ? pick : ""} displayEmpty
+              onChange={(e) => {
+                allRequest.current += 1; detailEpoch.current += 1; want.current = null; setPick(e.target.value);
+              }}
               onClose={() => setSrcQ("")}
               inputProps={{ "aria-label": "Timeline source" }}
               MenuProps={{ PaperProps: { sx: { maxHeight: 440, maxWidth: 420 } } }}
@@ -1149,6 +1318,10 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
               triage brain failing — {triageErr}
             </Typography>
           )}
+          {allFallbackNotice && !view && (
+            <Alert severity="info" variant="outlined" sx={{ py: 0, borderRadius: 2, bgcolor: PANEL,
+              "& .MuiAlert-message": { fontSize: 11.5, py: 0.5 } }}>{allFallbackNotice}</Alert>
+          )}
           {err && (
             <Alert severity="error" variant="outlined" onClose={() => setErr("")}
               action={<Button size="small" color="error" onClick={() => { setErr(""); setRows(null); load(rowsLen.current); }}
@@ -1196,7 +1369,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
         </Box>
 
         {/* ── the scroller ── */}
-        <Box ref={railRef}
+        <Box ref={railRef} data-processing-all-rail={!view ? "true" : undefined}
           onPointerMoveCapture={() => {
             // Capture runs before the row's mousemove. The first real pointer move after the rail
             // settles arms that row; wheel movement by itself never does.
@@ -1237,7 +1410,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                 if (el) dayRefs.current[day] = el; else delete dayRefs.current[day];
                 dayLayoutDirty.current = true;
               }}>
-                {di === 0 && !view && !cat && !pick && <ComingUp events={upcoming} picked={calSel} onPick={(e) => { setSel(null); setCalSel(e); }} />}
+                {di === 0 && !view && !cat && !pick && <ComingUp events={upcoming} picked={calSel} onPick={(e) => { closeSelection(); setCalSel(e); }} />}
                 <Box>
                   {items.map((r, i) => {
                     // ONE state per row, from one table (timelineState.js). It renders as a small
@@ -1246,8 +1419,10 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                     // as making none of it loud.
                     const st = stateOf(r);
                     const phases = timelinePhases(r);
-                    const fold = foldOf.get(r.MessageId);
-                    const inFold = memberOf.get(r.MessageId);
+                    const rowId = processingRowId(r);
+                    const generic = !!r.ProcessingItemId && r.OpenTarget?.kind !== "message";
+                    const fold = canonicalAll ? null : foldOf.get(r.MessageId);
+                    const inFold = canonicalAll ? null : memberOf.get(r.MessageId);
                     // A member is never drawn HERE, open or shut - the fold draws its own, in one
                     // block. Revealing them in place looked right until a fold opened: its members
                     // are not contiguous, so an unrelated row landing between two of them (a CI
@@ -1255,18 +1430,18 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                     // display:none rather than skipping the entry, because the meeting slots are
                     // placed by INDEX into this day's rows and dropping one would move them.
                     const showRow = !inFold;
-                    const open = sel?.MessageId === r.MessageId;
+                    const open = processingRowId(sel) === rowId;
                     // hovering PREVIEWS (a soft edge, the stage follows the cursor); clicking
                     // PINS (a ring in the brand colour, the stage holds). Both used to draw the
                     // same border, so there was no way to know which one you were in.
                     const held = open && pinnedOn;
                     return (
-                      <React.Fragment key={r.MessageId}>
+                      <React.Fragment key={rowId}>
                         {/* Calendar rows follow the same kind/source filters as the rest of All. */}
                         {!view && !cat && !pick && meetingsAt(day, items, i).map((e, j) => (
                           <MeetingRow key={`m-${e.start}-${j}`} e={e} picked={calSel}
                             preps={prepFor[evKey(e)] || []} onOpenRow={(p) => { setCalSel(null); openRow(p); }}
-                            onPick={(ev) => { setSel(null); setCalSel(ev); }} />
+                            onPick={(ev) => { closeSelection(); setCalSel(ev); }} />
                         ))}
                         {fold && (
                           <ThreadFold entry={fold} open={openFolds.has(fold.tid)} onOpenRow={openRow} sel={sel}
@@ -1276,9 +1451,12 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                               return next;
                             })} />
                         )}
-                        <Box className="tqRow" sx={{ display: showRow ? "grid" : "none", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`,
+                        <Box className="tqRow" data-processing-item={r.ProcessingItemId || undefined}
+                          data-processing-target={r.OpenTarget ? `${r.OpenTarget.kind}:${r.OpenTarget.id}` : undefined}
+                          data-processing-members={r.ProcessingCounts?.members ?? undefined}
+                          sx={{ display: showRow ? "grid" : "none", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`,
                           alignItems: "stretch", mb: "3px",
-                          ...(seen.current.has(r.MessageId) ? {} : { ...fadeIn, animationDelay: `${Math.min(i * 35, 320)}ms`, animationFillMode: "backwards" }) }}>
+                          ...(seen.current.has(rowId) ? {} : { ...fadeIn, animationDelay: `${Math.min(i * 35, 320)}ms`, animationFillMode: "backwards" }) }}>
                           {/* the clock sits in its own gutter with air on BOTH sides - 8px off the
                               container edge, 12px off the rail - so it never reads as crushed
                               against the frame the way a flush-left column does */}
@@ -1331,14 +1509,20 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                                   sx={{ ...mono, fontSize: 9.5, color: ACCENT, flexShrink: 0 }}>out</Typography>
                               )}
                               {r.TaskId && <LifecycleChip kind="task" phase={phases.task} compact sx={{ flexShrink: 0 }} />}
-                              <StateMark row={r} state={st} />
+                              {generic ? (
+                                <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 9.5, flexShrink: 0 }}>
+                                  {r.OpenTarget.kind}{r.MsgStatus ? ` · ${r.MsgStatus}` : ""}
+                                </Typography>
+                              ) : <StateMark row={r} state={st} />}
                             </Box>
                             {/* the second line, only on the row you are on: who has it and what
                                 it is waiting for, every clause from a field the server sent */}
                             <Box sx={{ display: "grid", gridTemplateRows: open ? "1fr" : "0fr", transition: "grid-template-rows .2s ease" }}>
                               <Box sx={{ overflow: "hidden" }}>
                                 <Typography noWrap sx={{ fontSize: 10.5, lineHeight: 1.5, pt: "2px", pl: "24px",
-                                  color: FAINT }}>{subline(r, ref)}</Typography>
+                                  color: FAINT }}>{generic
+                                    ? `${r.ProcessingCounts?.members || r.ProcessingMemberIds?.length || 1} member${(r.ProcessingCounts?.members || r.ProcessingMemberIds?.length || 1) === 1 ? "" : "s"}`
+                                    : subline(r, ref)}</Typography>
                                 {r.Preview && (
                                   <Typography noWrap sx={{ fontSize: 10.5, lineHeight: 1.5, pl: "24px", color: DIM }}>
                                     “{r.Preview}”
@@ -1355,14 +1539,15 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                   {!view && !cat && !pick && meetingsAt(day, items, items.length).map((e, j) => (
                     <MeetingRow key={`m-${e.start}-${j}`} e={e} picked={calSel}
                             preps={prepFor[evKey(e)] || []} onOpenRow={(p) => { setCalSel(null); openRow(p); }}
-                            onPick={(ev) => { setSel(null); setCalSel(ev); }} />
+                            onPick={(ev) => { closeSelection(); setCalSel(ev); }} />
                   ))}
                 </Box>
               </Box>
             ))}
             {/* infinite-scroll sentinel: crossing it loads the next page */}
             <Box ref={endRef} sx={{ height: 8 }} />
-            {!!sorted.length && !noMore && <CircularProgress size={16} sx={{ display: "block", mx: "auto", my: 1 }} />}
+            {!!sorted.length && !noMore && <CircularProgress data-processing-all-loading={!view ? "true" : undefined}
+              size={16} sx={{ display: "block", mx: "auto", my: 1 }} />}
           </Box>
           )}
         </Box>
@@ -1381,10 +1566,14 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
         sx={{ minWidth: 0, minHeight: 0, display: stageShown ? "flex" : "none", flexDirection: "column", "& > *": { minHeight: 0 } }}>
         {calSel && !sel ? <EventPanel e={calSel} onClose={() => setCalSel(null)} onOpenTask={onOpenTask} />
           : sel ? (
-            <ReviewCanvas sel={sel} detail={detail} editText={editText} setEditText={setEditText}
-              decide={decide} onOpenTask={onOpenTask} onClose={() => { setPinned(false); setSel(null); }}
-              onSkipped={() => { setSel(null); load(); onChanged?.(); }}
-              onRefresh={() => { cache.current.delete(sel.MessageId); load(); }}
+            sel.ProcessingItemId && sel.OpenTarget?.kind !== "message" ? (
+              <CanonicalDetail sel={sel} detail={detail} onOpenTask={onOpenTask}
+                onOpenMessage={(mid) => openByMid(mid)}
+                onClose={closeSelection} />
+            ) : <ReviewCanvas sel={sel} detail={detail} editText={editText} setEditText={setEditText} editOwner={editOwner}
+              decide={decide} onOpenTask={onOpenTask} onClose={closeSelection}
+              onSkipped={() => { closeSelection(); load(); onChanged?.(); }}
+              onRefresh={() => { for (const key of cache.current.keys()) if (key.startsWith(`${sel.ProcessingItemId || `legacy-message:${sel.MessageId}`}|`) || key === `legacy-message:${sel.MessageId}`) cache.current.delete(key); load(); }}
               onMessageChanged={messageBodyChanged}
               sendErr={sendErr} clearSendErr={() => setSendErr("")} onLock={setPanelLock} active={active} />
           ) : visibleStage || (
@@ -1411,14 +1600,18 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
       {/* the same stage, over the rail, on a phone */}
       {narrow && (
         <Drawer anchor="right" open={!!(sel || calSel)} data-tq-keep
-          onClose={() => { setPinned(false); setSel(null); setCalSel(null); }}
+          onClose={() => { closeSelection(); setCalSel(null); }}
           PaperProps={{ sx: { width: "100%", p: 1, bgcolor: BG, borderRadius: 0 } }}>
           {calSel && !sel ? <EventPanel e={calSel} onClose={() => setCalSel(null)} onOpenTask={onOpenTask} />
             : sel ? (
-              <ReviewCanvas sel={sel} detail={detail} editText={editText} setEditText={setEditText}
-                decide={decide} onOpenTask={onOpenTask} onClose={() => { setPinned(false); setSel(null); }}
-                onSkipped={() => { setSel(null); load(); onChanged?.(); }}
-                onRefresh={() => { cache.current.delete(sel.MessageId); load(); }}
+              sel.ProcessingItemId && sel.OpenTarget?.kind !== "message" ? (
+                <CanonicalDetail sel={sel} detail={detail} onOpenTask={onOpenTask}
+                  onOpenMessage={(mid) => openByMid(mid)}
+                  onClose={closeSelection} />
+              ) : <ReviewCanvas sel={sel} detail={detail} editText={editText} setEditText={setEditText} editOwner={editOwner}
+                decide={decide} onOpenTask={onOpenTask} onClose={closeSelection}
+                onSkipped={() => { closeSelection(); load(); onChanged?.(); }}
+                onRefresh={() => { for (const key of cache.current.keys()) if (key.startsWith(`${sel.ProcessingItemId || `legacy-message:${sel.MessageId}`}|`) || key === `legacy-message:${sel.MessageId}`) cache.current.delete(key); load(); }}
                 onMessageChanged={messageBodyChanged}
                 sendErr={sendErr} clearSendErr={() => setSendErr("")} onLock={setPanelLock} active={active} />
             ) : null}
@@ -1432,6 +1625,73 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
 }
 
 // Day rail label: "Today · Friday, Aug 14" / "Yesterday · ..." / "Thursday, Aug 13".
+// Standalone canonical roots have no message envelope, so the message workflow canvas would
+// invent reply/task semantics for them. This stage is deliberately read-only; opening a real
+// task or an explicitly linked message remains a named owner action.
+const CanonicalDetail = ({ sel, detail, onOpenTask, onOpenMessage, onClose }) => {
+  if (!detail) return <Box data-processing-generic-detail sx={{ ...card, p: 2 }}><CircularProgress size={20} /></Box>;
+  const target = sel.OpenTarget || {};
+  const history = Array.isArray(detail.history) ? detail.history : [];
+  const links = Array.isArray(detail.links) ? detail.links : [];
+  const actionLinks = links.filter((link) => ["task", "message"].includes(link.kind)
+    && !(target.kind === link.kind && String(target.id) === String(link.id)));
+  const checklist = Array.isArray(detail.checklist) ? detail.checklist
+    : detail.checklist ? String(detail.checklist).split("\n").filter(Boolean) : [];
+  return (
+    <Box data-processing-generic-detail data-processing-detail-kind={target.kind || ""}
+      sx={{ ...card, p: 0, height: "100%", overflow: "auto" }}>
+      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, p: 1.5, borderBottom: `1px solid ${BORDER}` }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="caption" sx={{ ...mono, color: FAINT, textTransform: "uppercase" }}>{target.kind || "item"}</Typography>
+          <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16 }}>{detail.title || sel.Subject || "Untitled item"}</Typography>
+          {(detail.status || sel.MsgStatus) && <Typography variant="caption" sx={{ color: DIM }}>{detail.status || sel.MsgStatus}</Typography>}
+        </Box>
+        <IconButton aria-label="Close detail" size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+      </Box>
+      <Box sx={{ p: 1.5 }}>
+        {detail.body ? (
+          looksMd(detail.body) ? <Md>{detail.body}</Md>
+            : <Typography sx={{ whiteSpace: "pre-wrap", color: INK, fontSize: 13, lineHeight: 1.6 }}>{detail.body}</Typography>
+        ) : <Typography variant="caption" sx={{ color: FAINT }}>No body was recorded for this item.</Typography>}
+        {!!checklist.length && (
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="caption" sx={{ ...mono, color: FAINT, textTransform: "uppercase" }}>Checklist</Typography>
+            {checklist.map((entry, i) => {
+              const words = typeof entry === "string" ? entry : entry.text || entry.label || JSON.stringify(entry);
+              const done = typeof entry === "object" && !!(entry.done ?? entry.Done ?? entry.checked);
+              return <Typography key={i} sx={{ color: done ? FAINT : DIM, fontSize: 12.5, mt: 0.4,
+                textDecoration: done ? "line-through" : "none" }}>{done ? "✓" : "○"} {words}</Typography>;
+            })}
+          </Box>
+        )}
+        {!!history.length && (
+          <Box data-processing-detail-history sx={{ mt: 2 }}>
+            <Typography variant="caption" sx={{ ...mono, color: FAINT, textTransform: "uppercase" }}>History</Typography>
+            {history.map((entry, i) => (
+              <Box key={`${entry.at || ""}-${i}`} sx={{ mt: 0.75 }}>
+                <Typography variant="caption" sx={{ color: FAINT }}>{entry.at || ""}{entry.actor ? ` · ${entry.actor}` : ""}</Typography>
+                <Typography sx={{ color: DIM, fontSize: 12.5, whiteSpace: "pre-wrap" }}>{entry.text || ""}</Typography>
+              </Box>
+            ))}
+          </Box>
+        )}
+        {(target.kind === "task" || actionLinks.length > 0) && (
+          <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", mt: 2 }}>
+            {target.kind === "task" && <Button size="small" variant="contained" disableElevation
+              onClick={() => onOpenTask?.(target.id)}>Open {ref(target.id)}</Button>}
+            {actionLinks.map((link, i) => (
+              <Button key={`${link.kind}:${link.id}:${i}`} size="small" variant="outlined"
+                onClick={() => link.kind === "task" ? onOpenTask?.(link.id) : onOpenMessage?.(link.id)}>
+                {link.label || (link.kind === "task" ? `Open ${ref(link.id)}` : "Open message")}
+              </Button>
+            ))}
+          </Box>
+        )}
+      </Box>
+    </Box>
+  );
+};
+
 const fmtDay = (d) => {
   return timelineDayLabel(d);
 };
@@ -1600,7 +1860,7 @@ const StoryTimelineStep = ({ title, status, summary, onOpen, first, last, state 
 
 // The pop-out review panel: everything about the selected line, editable and decidable
 // without leaving the page. All text hard-left-aligned.
-const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, onClose, onSkipped, onRefresh,
+const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, onOpenTask, onClose, onSkipped, onRefresh,
                         onMessageChanged, sendErr, clearSendErr, onLock, active = true }) => {
   // one click turns a flood sender (100s of automated mails) into a skip policy - their
   // mail is deduped but never shows on the timeline again, and their HISTORY goes with it
@@ -1660,6 +1920,12 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
   const livePending = (detail?.reviews || []).find((r) => r.Status === "pending" && r.Kind !== "action");
   const pending = detail ? !!livePending : !!(sel.ReviewId && sel.ReviewStatus === "pending");
   const pendingId = livePending?.ReviewId || sel.ReviewId;
+  const draftOwner = `${sel.ProcessingItemId || `message:${sel.MessageId}`}|review:${pendingId || opened?.reviewId || ""}`;
+  useEffect(() => {
+    if (editText == null || !editOwner?.current || editOwner.current === draftOwner) return;
+    setEditText(null);
+  }, [draftOwner, editText, editOwner, setEditText]);
+  const writeEditText = (value) => { if (editOwner) editOwner.current = draftOwner; setEditText(value); };
   // is somebody already on this? a live pty session or a running headless run both count,
   // and a session gone quiet is a question waiting for an answer, not work in progress
   const ses = detail?.session;
@@ -1723,7 +1989,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
   const correctedRef = useRef(null);
   useEffect(() => {
     if (!detail || !sel?.MessageId) return;
-    const staleAgent = sel.Working && !detail.session;
+    const staleAgent = sel.Working && detail.session_available !== false && !detail.session;
     const staleReply = (sel.ReviewStatus === "pending") !== !!livePending;
     if (!staleAgent && !staleReply) return;
     if (correctedRef.current === sel.MessageId) return;
@@ -1770,13 +2036,13 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
       )}
       {pending && (
         <ReviewActions reviewId={pendingId} draft={replyDraft}
-          editText={editText} setEditText={setEditText} decide={decide}
+          editText={editText} setEditText={writeEditText} decide={decide}
           sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend}
           onChanged={onRefresh} channel={sel.Channel} />
       )}
       {!pending && opened && (
         <ReviewActions reviewId={opened.reviewId} draft={replyDraft}
-          editText={editText} setEditText={setEditText} decide={decide}
+          editText={editText} setEditText={writeEditText} decide={decide}
           sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend}
           onChanged={onRefresh} channel={sel.Channel} />
       )}
@@ -2014,7 +2280,12 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                   {diffRun && <Box sx={{ mt: 1 }}><DiffBlock text={diffRun.DiffText} /></Box>}
                   {sel.TaskId && (rep || diffRun) && <Box sx={{ mt: 1 }}><ProofCard taskId={sel.TaskId} onOpenTask={onOpenTask} /></Box>}
                   {/* a session RAN and is gone: say that, rather than that none ever started */}
-                  {!chatTask && !onIt && !rep && !diffRun && detail?.transcript && (
+                  {!chatTask && !onIt && !rep && !diffRun && detail?.session_available === false && (
+                    <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.7 }}>
+                      Live session status is unavailable. Open the task page for its persisted history.
+                    </Typography>
+                  )}
+                  {!chatTask && !onIt && !rep && !diffRun && detail?.session_available !== false && detail?.transcript && (
                     <>
                       <PanelLabel>The session that was working this has ended</PanelLabel>
                       <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.7 }}>
@@ -2029,7 +2300,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, decide, onOpenTask, 
                       </Typography>
                     </>
                   )}
-                  {!chatTask && !onIt && !rep && !diffRun && !detail?.transcript && (
+                  {!chatTask && !onIt && !rep && !diffRun && detail?.session_available !== false && !detail?.transcript && (
                     <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.7 }}>
                       {held ? "Nothing is working this — it is held until you release it."
                         : codeless ? "No agent was sent: triage read this as something a reply settles."

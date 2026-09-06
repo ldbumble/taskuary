@@ -1233,7 +1233,7 @@
       "requirement": "Receive structured input/approval-needed events from worker integrations,",
       "status": "partial: structured input/approval events carry task, run, request id, question and choices and are served by `GET /api/tasks/{id}/worker`; the attention-item presentation and the bottom-strip notification are Phase 8 surfaces",
       "test": "`tests/test_worker_events.py`::ApiTests",
-      "commit": "353d083; local gates passed, CI pending"
+      "commit": "353d083; 353d083, CI run 34052731720 (all ten jobs passed)"
     },
     {
       "id": "PW-138",
@@ -1251,7 +1251,7 @@
       "requirement": "Bind delivery to the specific outstanding request and run, never merely the",
       "status": "implemented",
       "test": "`tests/test_worker_events.py`::AnswerBindingTests (an answer is bound to the request and its run; delivered once; a second click is resolved; a changed run is stale and never forwarded; a dead run is disconnected)",
-      "commit": "353d083; local gates passed, CI pending"
+      "commit": "353d083; 353d083, CI run 34052731720 (all ten jobs passed)"
     },
     {
       "id": "PW-140",
@@ -1269,16 +1269,16 @@
       "requirement": "Distinguish queued, delivered, and resumed/working states. Do not report",
       "status": "implemented",
       "test": "`tests/test_worker_events.py`::AnswerBindingTests (queued/delivered/failed outcomes recorded in the task discussion; \"delivered\" is never claimed from HTTP success alone - the delivery call must succeed)",
-      "commit": "353d083; local gates passed, CI pending"
+      "commit": "353d083; 353d083, CI run 34052731720 (all ten jobs passed)"
     },
     {
       "id": "PW-142",
       "section": "Agent questions answered through the assistant",
       "phase": "6",
       "requirement": "Test general/coding question relay, multiple waiting agents, request/run",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: general/coding relay through the request binding, request/run identity, duplicate clicks, stale runs, disconnected workers and delivery failure are covered by `tests/test_worker_events.py`; restart recovery and visible confirmation of worker acceptance in the UI are open",
+      "test": "`tests/test_worker_events.py`, `tests/test_worker_surfaces.py`",
+      "commit": "c16a861; local gates passed, CI pending"
     },
     {
       "id": "PW-143",
@@ -1998,7 +1998,7 @@
       "requirement": "Model Working, Input needed (with the unanswered question), Approval needed",
       "status": "implemented",
       "test": "`tests/test_worker_events.py`::EventModelTests (Working, Input needed with the question, Approval needed with the action, Finished with the result - which closes nothing - Failed, Disconnected and Stopped, each derived from explicit events; an idle prompt is unknown and raises no hand)",
-      "commit": "353d083; local gates passed, CI pending"
+      "commit": "353d083; 353d083, CI run 34052731720 (all ten jobs passed)"
     },
     {
       "id": "PW-223",
@@ -2007,7 +2007,7 @@
       "requirement": "Integrate Claude Code lifecycle/tool hooks for prompt submission, permission",
       "status": "partial: Claude Code hooks are wired for UserPromptSubmit (Working), AskUserQuestion (Input needed with the exact question and choices), Notification permission prompts (Approval needed, observed not granted) and Stop (the response ended, never a finish); the installed hook set is not yet validated against the CLI version",
       "test": "`tests/test_worker_events.py`::ProducersTests",
-      "commit": "353d083; local gates passed, CI pending"
+      "commit": "353d083; 353d083, CI run 34052731720 (all ten jobs passed)"
     },
     {
       "id": "PW-224",
@@ -2025,7 +2025,7 @@
       "requirement": "Emit regular API-agent lifecycle events directly from the execution loop.",
       "status": "partial: the assistant's turns record Working; explicit request_input/finish_work signals for API workers are not yet provided",
       "test": "`tests/test_worker_events.py` (general sessions record working through `GeneralSession.send_prompt`)",
-      "commit": "353d083; local gates passed, CI pending"
+      "commit": "353d083; 353d083, CI run 34052731720 (all ten jobs passed)"
     },
     {
       "id": "PW-226",
@@ -2034,7 +2034,7 @@
       "requirement": "Separate response/turn completion from work completion. Require an explicit",
       "status": "implemented",
       "test": "`tests/test_worker_events.py`::EventModelTests::test_a_response_ending_is_not_a_finish, ::test_a_dead_session_with_no_finish_is_disconnected_not_finished_and_an_idle_one_raises_no_hand",
-      "commit": "353d083; local gates passed, CI pending"
+      "commit": "353d083; 353d083, CI run 34052731720 (all ten jobs passed)"
     },
     {
       "id": "PW-227",
@@ -2043,16 +2043,16 @@
       "requirement": "Persist and reconcile events by task/run/turn and request IDs. Deduplicate",
       "status": "implemented",
       "test": "`tests/test_worker_events.py` (events persisted by task, run and request id; replays and duplicate open requests rejected; a run that is not the task's live one is ignored; answering one request leaves the others open)",
-      "commit": "353d083; local gates passed, CI pending"
+      "commit": "353d083; 353d083, CI run 34052731720 (all ten jobs passed)"
     },
     {
       "id": "PW-228",
       "section": "Event-driven worker status instead of terminal heuristics",
       "phase": "6",
       "requirement": "Keep Working visible in Unread without injecting it into chat. Promote",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: the funnel, the hand-raise, a session's info and the task list read the worker's own word first - an open request is the hand with its exact question or action and choices, a working run raises none however quiet its screen, the same event is never announced twice; a run that never reported keeps the screen heuristic; finished results as a result row (rather than blocked work) wait on Section 6.3",
+      "test": "`tests/test_worker_surfaces.py` (7 cases)",
+      "commit": "c16a861; local gates passed, CI pending"
     },
     {
       "id": "PW-229",

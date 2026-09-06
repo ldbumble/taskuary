@@ -486,6 +486,10 @@ class Replay:
     def tap(self, fn): self.taps.append(fn)
     def untap(self, fn): self.taps = [f for f in self.taps if f is not fn]
     def write(self, data): pass                      # a replay does not take dictation
+    def quiet_for(self, secs):
+        # Terminal attachment suppresses resize repaint activity. A recording's resize
+        # emits nothing, so there is no synthetic activity to suppress or idle clock to reset.
+        pass
     def resize(self, rows, cols): self.rows, self.cols = rows, cols
     def idle(self): return time.time() - self.last
     def phase(self): return 'working' if self.busy else 'parked'

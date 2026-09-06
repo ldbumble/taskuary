@@ -1148,6 +1148,7 @@ def _poll_one(store, c, file_only, backfill_days, llm, read_it) -> int:
                             s['SourceId'], config_set=config_set, config_remove=tuple(config_remove),
                             expect_fields=expect_fields, expect_config=expect_config):
                         raise _MailSourceChanged('source changed while Outlook catch-up was running')
+                history_pending = {}
                 def inbound(folder):
                     def take(m) -> int:
                         frm = (m.get('from') or {}).get('emailAddress') or {}
@@ -1182,9 +1183,11 @@ def _poll_one(store, c, file_only, backfill_days, llm, read_it) -> int:
                         # a duplicate is still mail the hub has read - the flag may just be
                         # older than the switch, and skipping it would strand those bold rows
                         if read_it and not m.get('isRead'): mark_mail_read(tok, s['Address'], m['id'])
-                        if fresh_thread and out['status'] != 'duplicate':
-                            try: chains.refresh_outlook(store, tok, s['Address'], conv, before=_local(m.get('receivedDateTime') or ''))
-                            except Exception as e: logger.warning(f'chain history for {conv} skipped: {e}')
+                        if fresh_thread:
+                            # Another configured folder may still own older messages in this
+                            # conversation. History must wait for every intake folder to finish.
+                            before = _local(m.get('receivedDateTime') or '')
+                            history_pending[conv] = max(history_pending.get(conv, ''), before)
                         return int(out['status'] != 'duplicate')
                     return take
                 # your replies ride along as CONTEXT: attached to the thread's task, visible on the
@@ -1210,6 +1213,14 @@ def _poll_one(store, c, file_only, backfill_days, llm, read_it) -> int:
                         last_polled_at=_local(through), expect_fields=expect_fields,
                         expect_config=expect_config):
                     errors.append(f"{s['Address']}: source changed while Outlook catch-up was finishing")
+                else:
+                    # Only a completed, still-owned intake cycle may fetch missing history.
+                    # Replay duplicates participate when completed folders are read again after
+                    # another folder failed; their arrivals have already landed.
+                    from . import chains
+                    for conv, before in history_pending.items():
+                        try: chains.refresh_outlook(store, tok, s['Address'], conv, before=before)
+                        except Exception as e: logger.warning(f'chain history for {conv} skipped: {e}')
                 continue                            # exact cutoff above replaces generic touch_source(now)
             elif c['Type'] == 'teams':
                 n += ingest_teams_chats(store, s['Address'], tok, since, llm, file_only, read_it)

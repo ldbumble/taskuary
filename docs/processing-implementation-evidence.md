@@ -1590,3 +1590,25 @@ the task's own closure and any reply to the owner (PW-232); live wall notes leav
 Tests: `tests/test_explicit_completion.py` (6 cases). `tests/test_stay_open.py` and `tests/test_stay_open_doors.py`: the two pins that read
 `--done` on an owner-opened session as "filed, not obeyed" now expect the run to close and the task to
 stay, per PW-232, with the reason noted. No frontend change.
+
+## Section 7.1 — replies are written from STYLE.md, SOUL.md and the conversation; triage's learning stays with triage
+
+Status: implemented and tested locally at `691f566`; remote CI pending on the pushed
+checkpoint. Section 6.3 is CI-verified (3d5af15, CI run 34053604179 (all ten jobs passed)).
+Acceptance PW-058, PW-059, PW-060, PW-061 implemented; PW-062 partial.
+
+Every draft carried LEARNED.md - what the system has learned about which mail deserves a task - and
+the owner's standing triage verdicts (NOT A TASK, NOT OURS), so a reply prompt was half a routing
+manual. `responder.draft_reply`, `responder.draft_for_message` and `outbox.draft_message` now write
+from STYLE.md (voice and signature), SOUL.md (identity and responsibilities), the refreshed
+conversation (Section 5.7) and the verified result, plus - as separately retrieved notes - only
+explicit writing instructions (`responder.writing_notes`: memory rows with source `writing`);
+LEARNED.md and the routing verdicts no longer ride into any draft (they still reach triage).
+`responder.style_feedback` puts an edited draft's note into STYLE.md under `## Owner notes`, outside
+the generated block so a regenerate keeps it; `verdicts.decide` routes an edit's note there and
+keeps a rejection's or no-reply's note as triage feedback for LEARNED.md (PW-061). `POST /api/memory`
+accepts `source: writing` so a writing instruction can be saved by hand.
+
+Tests: `tests/test_reply_sources.py` (7 cases); in the pre-existing `tests/test_reply_voice.py` (first-person voice) the standing-notes
+case moved to the PW-060 contract - a writing instruction rides, a triage verdict does not - with the reason noted. `tests/test_docs_flow.py`: the reply-path audit now expects the STYLE marker and a writing-note
+marker and forbids the LEARNED marker and the triage-verdict note, per PW-058/060. No frontend change.

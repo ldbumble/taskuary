@@ -479,19 +479,19 @@ Owner-approved: use the SOUL project/people map and structured learned project
 relationships as evidence in the same AI triage evaluation that classifies work.
 Pending implementation only.
 
-- [ ] <a id="pw-092"></a>**PW-092** Supply relevant known projects, repositories, and people associations with
+- [x] <a id="pw-092"></a>**PW-092** Supply relevant known projects, repositories, and people associations with
   the cleaned request/context. Extend the verdict with project/repository selection,
   `needs_repo_choice`, and a concrete reason; persist the decision so startup uses
   it instead of independently guessing from word overlap.
-- [ ] <a id="pw-093"></a>**PW-093** An explicit owner-selected task repository wins. Treat sender/project
+- [x] <a id="pw-093"></a>**PW-093** An explicit owner-selected task repository wins. Treat sender/project
   relationships as supporting evidence, not proof that every message from that
   person concerns that project. Preserve authoritative source repository identity
   for repository-scoped items such as GitHub issues/PRs.
-- [ ] <a id="pw-094"></a>**PW-094** Validate returned project/repository IDs against the supplied known
+- [x] <a id="pw-094"></a>**PW-094** Validate returned project/repository IDs against the supplied known
   candidates and their associations. Ambiguous evidence or multiple plausible
   repositories must prompt the owner to choose; do not force a match merely
   because one checkout happens to be configured.
-- [ ] <a id="pw-095"></a>**PW-095** Before coding startup, validate/resolve the selected local checkout. Missing
+- [x] <a id="pw-095"></a>**PW-095** Before coding startup, validate/resolve the selected local checkout. Missing
   or invalid paths require a visible repository/path choice, not silent fallback
   to an unrelated working directory. General-agent work does not become coding
   merely because a project has a repository.

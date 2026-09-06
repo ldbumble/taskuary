@@ -850,3 +850,23 @@ so. `routing.route`'s similarity scoring remains as a unit-tested helper and is 
 at intake; `own_thread_only` remains for its callers and tests.
 
 Tests: `tests/test_email_identity_routing.py` (5 cases). No existing assertion changed. No frontend change; packaged assets unchanged.
+
+## Section 3.8 — project and repository selection in the one triage verdict
+
+Status: implemented and tested locally at `f327a8b`; remote CI pending on the pushed
+checkpoint. Section 3.7 is CI-verified (b03fa29, CI run 34041128872 (all ten jobs passed)).
+Acceptance PW-092 to PW-095 implemented; PW-096 partial (no rendered-browser run of the picker).
+
+Coding startup guessed the checkout from word overlap after the fact. The triage verdict now sees
+`known_repositories` (`ingest.repo_candidates`: the learned project graph's repository edges with
+what each project is, plus the SOUL.md repo map) beside the sender's project context, and answers
+`repository`, `needs_repo_choice` and `repo_reason`; `triage.repo_choice_of` validates against those
+candidates - an unknown name is dropped and becomes the owner's choice, as does anything the model
+calls ambiguous. The decision is written on the task (`triage-repo:` or `needs-repo-choice` tag and a
+task comment with the reason) and `terminal.guess_repo` uses it instead of guessing again, after the
+owner's `repo:` tag and a GitHub item's own repository, which stay authoritative; the owner-tag
+pattern now matches a whole token so triage's note can never read as the override. Both dispatch
+endpoints turn "no repository decided", "several plausible", "no local path" and "path does not
+exist" into a visible repository choice instead of a session in some other checkout.
+
+Tests: `tests/test_repo_choice_triage.py` (8 cases). No existing assertion changed. No frontend change; packaged assets unchanged.

@@ -9,6 +9,16 @@ isolated beneath that directory. The fixture uses an explicit non-secret test to
 Chrome or Edge must already be installed. Set `TASKUARY_BROWSER_EXECUTABLE` when it
 is not in one of the standard Windows, macOS, or Linux locations.
 
+Puppeteer 25.8.0 requires Node 22.12 or newer. On a machine whose default Node is
+older, run the complete gate without changing the global runtime:
+
+```
+npm exec --yes --package=node@22 -- node --test --test-concurrency=1 browser/phase0-browser.test.mjs browser/terminal-replay.test.mjs
+```
+
+When the active runtime is already Node 22.12+, `npm run test:browser` is the same
+gate. CI should select Node 22 before dependency installation and the browser run.
+
 The browser blocks HTTP and WebSocket requests outside its Vite fixture origin;
 expected Google font requests are blocked and reported separately. Ports 7787 and
 7790 are forbidden. The server's pre-bound listener is installed before guards

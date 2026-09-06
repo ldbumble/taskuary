@@ -2551,9 +2551,13 @@ def funnel_pile(force: bool = False, current: str = None, only: str = None,
 
 @app.post('/api/funnel/settle')
 def funnel_settle(body: SettleBody):
-    from . import funnel
-    try: return funnel.settle(store, body.key, body.verb, ACTOR, body.hours)
+    from . import concierge, funnel, general
+    try: out = funnel.settle(store, body.key, body.verb, ACTOR, body.hours)
     except ValueError as e: raise HTTPException(422, str(e))
+    if body.verb in ('done', 'later', 'skip'):                              # settled: off the table, and nothing chosen in its place
+        dock = general.dock_task(store, ACTOR)[0]['TaskId']
+        if concierge.current_key(store, dock) == body.key: concierge.set_current(store, dock, None, ACTOR)
+    return out
 
 @app.get('/api/concierge')
 def concierge_state():
@@ -2567,6 +2571,8 @@ def concierge_state():
     if pick.startswith('cli:') and not str(store.get_settings().get(concierge.MODEL_KEY) or '').strip():
         model = concierge.LIGHT_DEFAULT.get(re.split(r'[\\/]', str((chosen or {}).get('label') or pick[4:])).pop().split(' ')[0].lower(), model) or model
     return {'task': task, 'ref': task_ref(task['TaskId']), 'messages': concierge.history(store, task['TaskId']),
+            # the persisted Current, validated against the pile - never the last card of the history (PW-162)
+            'current': concierge.restore_current(store, task['TaskId']),
             'providers': options, 'pick': pick, 'provider': (chosen or {}).get('label') or pick, 'model': model}
 
 class ConciergeAiBody(BaseModel): pick: str | None = None; model: str | None = None

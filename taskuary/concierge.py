@@ -133,6 +133,7 @@ ALL_DONE = ("That's everything for now. The pipe is empty - nothing is waiting o
 # sentences, and the coding model is the wrong tool for them (Connections > AI CLI agents sets it)
 LIGHT_DEFAULT = {'claude': 'haiku', 'codex': 'effort:low', 'gemini': 'gemini-2.5-flash'}
 SID_KEY = 'concierge_cli_sid'          # the CLI's own conversation, resumed turn to turn (per dock task)
+CURRENT_KEY = 'assistant_current'      # what is on the table, per dock task - persisted, validated on restore (PW-162)
 
 
 AI_KEY, MODEL_KEY = 'concierge_ai', 'concierge_model'   # this page's own choice - the old dock's assistant_ai stays the dock's and WhatsApp's
@@ -197,6 +198,30 @@ def brain(store, trace=None, cancel=None, resume=None, fast=False):
 
 
 def _sid(store, tid: int) -> str: return str(store.get_settings().get(f'{SID_KEY}:{tid}') or '')
+
+
+def current_key(store, tid: int) -> str: return str(store.get_settings().get(f'{CURRENT_KEY}:{tid}') or '')
+
+
+def set_current(store, tid: int, key: str | None, actor: str = 'assistant'):
+    """The thing on the table, written down as it is put there (or taken away) - not inferred later."""
+    if current_key(store, tid) != (key or ''): store.set_setting(f'{CURRENT_KEY}:{tid}', key or '', actor)
+
+
+def restore_current(store, tid: int) -> dict | None:
+    """The persisted Current, validated against the pile as it stands (PW-162): the item as it is now when it
+    is still unread and still there; otherwise the key is cleared and nothing is chosen in its place."""
+    key = current_key(store, tid)
+    if not key: return None
+    try: item = funnel.batch_item(store, key) if key.startswith('fyis:') else funnel.next_item(store, key, include_surfaced=True)
+    except Exception as e:
+        logger.warning(f'concierge: could not validate the current item {key} - {e}'); item = None
+    if not item or item.get('settling'):
+        set_current(store, tid, None)
+        return None
+    card = card_for(item) | {'presentation_revision': item.get('presentation_revision')}
+    if item.get('kind') == 'fyis': card['items'] = [card_for(i) for i in item.get('items') or []]   # the handful, entry by entry
+    return card
 def _remember_sid(store, tid: int, llm):
     sid = getattr(llm, 'session_id', '') or ''
     if sid and sid != _sid(store, tid): store.set_setting(f'{SID_KEY}:{tid}', sid, 'assistant')
@@ -1279,6 +1304,7 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             say = "Nothing else needs you right now; " + ', '.join(parts) + '.'
         else: say = ALL_DONE
         with guarded():
+            if not key: set_current(store, tid, None, actor)                  # the walk ran out: nothing is on the table
             record(store, tid, 'assistant', say)
         return {'item': None, 'say': say, 'options': [], 'left': len(p['items']), 'exhausted': only if (only and left) else None}
     # an agent has this one now (it started after the pile was built, or the owner just sent it): there is
@@ -1324,6 +1350,7 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
                 except Exception as e: logger.warning(f'concierge: the fyi conversation did not save - {e}')
             # shown is not read (PW-154): the state is `surfaced`, and it carries the entry's own summary
             for n, i in enumerate(batch, 1): funnel.settle(store, i['key'], 'surfaced', actor, note=None if i.get('sig') else gists.get(n))
+            set_current(store, tid, card['key'], actor)
             record_related(store, tid, card, 'assistant', say, card)
         return {'item': card, 'say': say, 'options': [], 'left': len(p['items']) - len(batch)}
 
@@ -1346,6 +1373,7 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             try: _remember_sid(store, tid, llm)
             except Exception as e: logger.warning(f'concierge: the model conversation did not save - {e}')
         funnel.settle(store, item['key'], 'surfaced', actor, note=item.get('sig'))
+        set_current(store, tid, item['key'], actor)                          # on the table, written down (PW-162)
         record_related(store, tid, item, 'assistant', say + (f"\nOPTIONS: {' | '.join(options)}" if options else ''), card_for(item))
     return {'item': item, 'say': say, 'options': options, 'left': len(p['items']) - 1}
 

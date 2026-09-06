@@ -30,7 +30,7 @@ import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
 import { SUGGESTIONS, afterCancel, afterExecute, proposalOf } from "./proposalCard.js";
-import { ageText, arrivals, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, followsItem, hasNextSelection, interactiveCardIndex, keysOf, nextMarkerKey, nextSelectionBody, nextSelectionScope, pendingAlerts, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, restorableCurrent, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
+import { ageText, arrivals, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, followsItem, hasNextSelection, interactiveCardIndex, keysOf, nextMarkerKey, nextSelectionBody, nextSelectionScope, pendingAlerts, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
 import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WrapupCard } from "./assistantCards.jsx";
 import FeedView from "./FeedView.jsx";
@@ -302,9 +302,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const { data } = await api.get("/api/concierge");
     if (epoch !== chatEpoch.current) return null;
     setState(data); setMsgs(data.messages || []);
-    // A closed task may have an older `agentdone` card in the transcript. It remains readable
-    // history, but it is not live work and must not be restored as CURRENT in the pipe.
-    const last = restorableCurrent(data.messages);
+    // Current is the server's persisted, validated word (PW-162) - never inferred from the last card in the
+    // transcript: a handled item stays readable history and is not revived as live work, and an invalid
+    // Current comes back null with nothing chosen in its place.
+    const last = data.current || null;
     currentRef.current = last;
     selectionRef.current = null;
     setCurrent(last?.key || null); setCurrentItem(last);

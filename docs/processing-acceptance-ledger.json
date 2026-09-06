@@ -1087,72 +1087,72 @@
       "section": "Assistant actions: AI interpretation, then explicit confirmation",
       "phase": "8",
       "requirement": "Remove decide_words() and other phrase/regex-based intent dispatch from",
-      "status": "pending",
-      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_chat_proposals.py`::InterpretationTests, `tests/test_concierge.py`::DecisionTests (`concierge.decide_words` and its phrase tables are gone - `hasattr` pinned; the model interprets the words with the item, the pile and the conversation in front of it and answers with a DECIDE line or a clarifying OPTIONS line; without an AI connector nothing is decided and the chat says so)",
+      "commit": "945c666; local gates passed, CI pending"
     },
     {
       "id": "PW-122",
       "section": "Assistant actions: AI interpretation, then explicit confirmation",
       "phase": "8",
       "requirement": "Give every message the same conversational action interface. Replace the",
-      "status": "pending",
-      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`website/test/proposalCard.test.mjs` (the bottom suggestions Next / Done / Create task / Create agent / Reply are text sent through the same `send()` as typing; `website/test/funnelPile.test.mjs` pins that no chip settles or dispatches directly)",
+      "commit": "945c666; local gates passed, CI pending"
     },
     {
       "id": "PW-123",
       "section": "Assistant actions: AI interpretation, then explicit confirmation",
       "phase": "8",
       "requirement": "Before executing a requested action (except draft preparation and Next navigation below), show a confirmation box describing",
-      "status": "pending",
-      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_chat_proposals.py`::ProposalTests (a decision becomes an `operations.propose` row - kind, exact target, parameters, label - and the chat says what WILL happen; a correction before the click revises the same proposal to a new version), `website/src/ProposalCard.jsx` (action, target, parameters, a specifically labelled button and Cancel)",
+      "commit": "945c666; local gates passed, CI pending"
     },
     {
       "id": "PW-124",
       "section": "Assistant actions: AI interpretation, then explicit confirmation",
       "phase": "8",
       "requirement": "Except for the explicitly approved draft-preparation and Next-navigation exceptions below, no",
-      "status": "pending",
-      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_chat_proposals.py`::test_a_decision_is_a_proposal_the_owner_confirms_not_an_action_the_words_took, ::test_words_alone_decide_nothing_the_model_does, `tests/test_assistant_reactions.py` (every consequential response asserts nothing moved before the click; the button posts `/api/operations/{id}/execute` with the id and version, never a phrase)",
+      "commit": "945c666; local gates passed, CI pending"
     },
     {
       "id": "PW-125",
       "section": "Assistant actions: AI interpretation, then explicit confirmation",
       "phase": "8",
       "requirement": "Use one validated action execution path shared with other app entry points.",
-      "status": "pending",
-      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_chat_proposals.py`::ProposalTests (one shared `server._run_operation` handler per kind - the same code the page's buttons run; stale version and changed context answer 409; a repeated click returns the first receipt without a second effect; a failing handler is reported as `error` and settles nothing; the receipt is written after execution), `website/test/proposalCard.test.mjs` (the walk moves only on a done that settles)",
+      "commit": "945c666; local gates passed, CI pending"
     },
     {
       "id": "PW-126",
       "section": "Assistant actions: AI interpretation, then explicit confirmation",
       "phase": "8",
       "requirement": "Preserve draft review/editing and explicit send approval within this model.",
-      "status": "pending",
-      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_chat_proposals.py`::test_a_reply_request_drafts_at_once_and_sends_nothing, ::test_approve_is_confirmed_then_sent, ::test_a_decision_that_names_one_fyi_targets_that_entry_not_the_handful (a reply request is an immediate draft through the reply writer, no dispatch, nothing sent; sending still needs the approve proposal; naming one FYI of the handful targets that entry and its siblings stay unread)",
+      "commit": "945c666; local gates passed, CI pending"
     },
     {
       "id": "PW-127",
       "section": "Assistant actions: AI interpretation, then explicit confirmation",
       "phase": "8",
       "requirement": "Test typed/suggested-prompt parity, no phrase-dispatch bypass, clarification,",
-      "status": "pending",
-      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_chat_proposals.py` (17 cases), `tests/test_concierge.py`, `tests/test_assistant_reactions.py` (103 cases re-pinned to the proposal model), `tests/test_lifecycle.py`, `website/test/proposalCard.test.mjs` (5 cases: parity, card facts, receipts, cancel)",
+      "commit": "945c666; local gates passed, CI pending"
     },
     {
       "id": "PW-128",
       "section": "Assistant actions: AI interpretation, then explicit confirmation",
       "phase": "8",
       "requirement": "Owner-approved navigation exception: an unambiguous request to move Next",
-      "status": "pending",
-      "test": "Required: Phase 8 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_chat_proposals.py`::test_next_moves_on_without_marking_closing_or_deferring (Next moves the walk and writes no read mark, close, deferral or memory; \"is the agent done?\" is answered, not acted on), `tests/test_assistant_reactions.py`::WalkFromWordsTests",
+      "commit": "945c666; local gates passed, CI pending"
     },
     {
       "id": "PW-129",
@@ -2151,7 +2151,7 @@
       "requirement": "Owner clarification: when new context materially changes the task/draft and",
       "status": "implemented",
       "test": "`tests/test_approval_interrupt.py`::InterruptTests, `website/test/approvalInterrupt.test.mjs` (a material new message stops the click: `POST /api/reviews/{id}/decide` answers `stale` with an `interrupt` - the new message, the latest triage change, the owner's edit kept as a task comment and in the reply box, the refreshed draft - and both the Review page and the Assistant stage open \"A new message arrived. Review it before sending.\" with Review the update / Cancel; nothing is sent on the original click, the refreshed draft is shown beside the owner's words and needs its own yes)",
-      "commit": "d8bfe62; local gates passed, CI pending"
+      "commit": "d8bfe62; d8bfe62/1455cee, CI run 34055784019 (all ten jobs passed)"
     },
     {
       "id": "PW-240",
@@ -2160,7 +2160,7 @@
       "requirement": "Base approval invalidation on the draft's context/triage revision and",
       "status": "implemented",
       "test": "`tests/test_approval_interrupt.py`::test_an_fyi_filed_with_nothing_to_do_does_not_interrupt, ::test_a_change_while_approval_is_open_is_caught_by_the_pinned_revision_not_a_flag, ::test_the_review_list_marks_stale_by_material_change_only (`verdicts.context_moved`: the pinned context revision against the material inbound set - an FYI filed with nothing to do is excluded from `operations.message_revision` - shared by the list, the click and the verdict; no polling timestamp is consulted)",
-      "commit": "d8bfe62; local gates passed, CI pending"
+      "commit": "d8bfe62; d8bfe62/1455cee, CI run 34055784019 (all ten jobs passed)"
     },
     {
       "id": "PW-241",
@@ -2169,7 +2169,7 @@
       "requirement": "Test material inbound changes, externally sent replies, relevant triage",
       "status": "implemented",
       "test": "`tests/test_approval_interrupt.py` (6 cases: material inbound change, externally sent reply, relevant triage update, non-material FYI, a change while approval is open and a second change before the second look, the list's stale mark) + `website/test/approvalInterrupt.test.mjs` (4 cases: the interruption model, non-interruptions, an older answer without the payload, cancel keeps the edit and review hands the refreshed draft over)",
-      "commit": "d8bfe62; local gates passed, CI pending"
+      "commit": "d8bfe62; d8bfe62/1455cee, CI run 34055784019 (all ten jobs passed)"
     },
     {
       "id": "PW-242",

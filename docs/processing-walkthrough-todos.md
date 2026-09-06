@@ -688,33 +688,33 @@ Owner-approved: supersedes the earlier assistant per-message action menus and
 immediate execution of typed commands. Requests are conversational; execution is
 through a concrete confirmation box. Pending implementation, not a runtime change.
 
-- [ ] <a id="pw-121"></a>**PW-121** Remove decide_words() and other phrase/regex-based intent dispatch from
+- [x] <a id="pw-121"></a>**PW-121** Remove decide_words() and other phrase/regex-based intent dispatch from
   assistant messages. Use AI with Current, conversation, and verified task/source
   context to interpret the request. Ask for clarification when intent, target,
   scope, agent type, or repository is uncertain; do not guess a consequential action.
-- [ ] <a id="pw-122"></a>**PW-122** Give every message the same conversational action interface. Replace the
+- [x] <a id="pw-122"></a>**PW-122** Give every message the same conversational action interface. Replace the
   assistant's sprawling per-message action menus with bottom prompt examples such
   as Next, Done, Create task, Create agent, and Reply. Clicking a suggestion submits
   text through the same AI path as typing; it must not directly execute an action.
   Preserve the funnel layout, Current/Next indicators, and promotions approved above.
-- [ ] <a id="pw-123"></a>**PW-123** Before executing a requested action (except draft preparation and Next navigation below), show a confirmation box describing
+- [x] <a id="pw-123"></a>**PW-123** Before executing a requested action (except draft preparation and Next navigation below), show a confirmation box describing
   exactly what will happen: action, target, and relevant parameters (for example,
   task, agent kind, repository, and instructions; or recipient and draft for a send).
   Offer a specifically labelled execution button and Cancel. Allow conversational
   corrections before confirmation; edits must update the proposal being confirmed.
-- [ ] <a id="pw-124"></a>**PW-124** Except for the explicitly approved draft-preparation and Next-navigation exceptions below, no
+- [x] <a id="pw-124"></a>**PW-124** Except for the explicitly approved draft-preparation and Next-navigation exceptions below, no
   requested action executes merely because the AI interpreted it or the
   user submitted text. The confirmation button submits the structured action,
   not a phrase sent back through the interpreter. Explanation and clarification
   do not themselves mutate task, read, memory, or agent state.
-- [ ] <a id="pw-125"></a>**PW-125** Use one validated action execution path shared with other app entry points.
+- [x] <a id="pw-125"></a>**PW-125** Use one validated action execution path shared with other app entry points.
   Code retains schemas, permissions, target/freshness checks, and safe execution;
   COUNSEL governs interpretation and conversation. Bind confirmation to the exact
   proposal and context revision, reject stale/changed proposals for review, and
   prevent duplicate execution from repeated clicks. Report actual success/error,
   never success before execution. Failed/cancelled actions must not settle Current
   or advance the walk.
-- [ ] <a id="pw-126"></a>**PW-126** Preserve draft review/editing and explicit send approval within this model.
+- [x] <a id="pw-126"></a>**PW-126** Preserve draft review/editing and explicit send approval within this model.
   Owner-approved exception: an explicit reply/draft request immediately generates
   the editable draft, without a preliminary Draft reply confirmation. Clarify an
   ambiguous target or instruction first. This uses the reply writer, not a worker
@@ -724,12 +724,12 @@ through a concrete confirmation box. Pending implementation, not a runtime chang
   Selecting an FYI to act on targets only that entry, not its whole batch. The FYI
   actions described below are capabilities through this conversational proposal
   flow, not a requirement to retain separate immediate-action menus.
-- [ ] <a id="pw-127"></a>**PW-127** Test typed/suggested-prompt parity, no phrase-dispatch bypass, clarification,
+- [x] <a id="pw-127"></a>**PW-127** Test typed/suggested-prompt parity, no phrase-dispatch bypass, clarification,
   exact target/parameter display, correction/cancel, no execution before clicking
   for confirmation-required actions, immediate drafting without send or dispatch,
   stale confirmation, duplicate clicks, failed execution, and per-FYI isolation.
 
-- [ ] <a id="pw-128"></a>**PW-128** Owner-approved navigation exception: an unambiguous request to move Next
+- [x] <a id="pw-128"></a>**PW-128** Owner-approved navigation exception: an unambiguous request to move Next
   immediately selects the next eligible shared-Unread item without confirmation,
   marking read, closing a task, or writing a deferral/memory. Interpret intent
   through AI, not keyword matching; bottom suggestions submit ordinary text.

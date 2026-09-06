@@ -982,3 +982,17 @@ Ticking every box completes nothing, and closing a task ticks nothing.
 
 Tests: `tests/test_task_checklist.py` (9 cases), `website/test/checklist.test.mjs` (4). No existing assertion changed.
 Packaged UI rebuilt from this source in the isolated worktree (Node 22).
+
+Checklist-base integration `0d16bde` passed 2,591 backend tests plus 71 subtests
+(149 warnings, no skips, 215.61 s), 290 frontend tests (1.446 s), and packaged
+build (12.25 s, no asset drift). All seven unchanged browser scenarios passed:
+input scenario alone in 12.435 s (first visible 1,199 ms, input 729 ms), then the
+other six in 192.827 s alongside backend regression. Terminal visible/input/
+reconnect measured 2,035/104/1,107 ms.
+
+Independent merge review also reproduced two incoming checklist preservation
+bugs: punctuation/case-blind IDs collapse distinct requirements, and the merge
+reports a thirteenth addition while truncating it out of persistence. A bounded
+store/test correction is being prepared separately, preserving old IDs/ticks and
+making reported additions match durable rows. Subsequent concurrent `fb43c92`
+adds identity-based email routing; retain and review that merge before delivery.

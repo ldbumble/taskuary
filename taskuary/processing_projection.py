@@ -118,6 +118,19 @@ def processing_projection(cur, item_id, *, live_state=None):
                 worker_attention=sorted((dict(row) for row in (live_state or ())
                     if str(row.get('taskId', row.get('task_id'))) in set(map(str, task_ids))),
                     key=lambda row: json.dumps(row, sort_keys=True)))
+    from .processing_reads import project as read_projection
+    view['processing_read'] = read_projection(cur, item_id, view)
+    if any(m.get('Channel') == 'report' for m in messages):
+        outcomes = {}
+        for source in cur.execute("SELECT SourceId,Address,ConfigJson FROM source WHERE Channel='report'").fetchall():
+            last = cur.execute('SELECT Failed FROM report_run WHERE SourceId=? ORDER BY RunId DESC LIMIT 1', (source['SourceId'],)).fetchone()
+            if last is None:
+                continue
+            try: title = json.loads(source['ConfigJson'] or '{}').get('title')
+            except (ValueError, TypeError): title = None
+            for name in (source['Address'], title):
+                if name: outcomes[str(name)] = bool(last['Failed'])
+        view['report_outcomes'] = outcomes
     return dict(item_id=item_id, member_ids=member_ids,
                 related_entity_ids=sorted({
                     f"{row[side + 'EntityKind']}:{row[side + 'LocalId']}"

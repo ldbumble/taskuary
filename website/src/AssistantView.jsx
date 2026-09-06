@@ -423,6 +423,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     return request;
   }, []);
   useEffect(() => { loadPileRef.current = loadPile; }, [loadPile]);
+  const sharedFilter = useRef(null);
+  const inventoryFilterChanged = useCallback((filter) => {
+    if (sharedFilter.current === filter) return;
+    sharedFilter.current = filter;
+    only.current = filter === '{}' ? null : `view:${filter}`;
+    selectionRef.current = null;
+    loadPileRef.current?.(true);
+  }, []);
   useEffect(() => { currentRef.current = currentItem; }, [currentItem]);
   useEffect(() => { loadState().catch((e) => setErr(errText(e))); }, [loadState]);
   // Writes push an event and force one fresh rebuild. The timer is only a disconnected-socket
@@ -450,7 +458,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const say = useCallback((line) => { if (speakOnState) speak(line); }, [speakOnState]);
   useEffect(() => { speakRef.current = say; }, [say]);
   const landed = useCallback((data) => {
-    if (data.exhausted) only.current = null;            // the mail ran out: Next continues with the rest of the pipe
+    if (data.exhausted && !only.current?.startsWith("view:")) only.current = null;            // the mail ran out: Next continues with the rest of the pipe
     const card = data.item ? { ...data.item } : null;
     setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: data.options || [], card }]);
     currentRef.current = card;
@@ -520,7 +528,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     startFlight.current = true;
     const epoch = chatEpoch.current;
     try {
-      only.current = what;
+      only.current = sharedFilter.current && sharedFilter.current !== "{}" ? `view:${sharedFilter.current}` : (pile?.canonical ? null : what);
       selectionRef.current = null;
       await loadPile(true);                   // validate/resume Current under the requested scope
       if (epoch !== chatEpoch.current || resettingRef.current) return;
@@ -753,7 +761,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     setResetting(true);
     // Clear first. Archiving is not a prompt and must never draw Taskuary's thinking animation.
     // Keep provider and pile metadata on screen while the server swaps the hidden durable chat.
-    only.current = null;
+    only.current = sharedFilter.current && sharedFilter.current !== "{}" ? `view:${sharedFilter.current}` : null;
     currentRef.current = null;
     selectionRef.current = null;
     setMsgs([]); setText(""); setWork([]); setErr(""); setAcked(new Set());
@@ -875,8 +883,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               <div className="tq-modes">
                 <button type="button" className="tq-chip primary" disabled={resetting || !canAdvance} onClick={() => start(null)}
                   title="Everything in the pipe, most important first - mail, reports, agents, meetings">Walk me through my tasks</button>
-                <button type="button" className="tq-chip" disabled={resetting || !incoming(ready).length} onClick={() => start("mail")}
-                  title="Only what people sent you - mail and chat">Just what came in</button>
+                {!pile?.canonical && <button type="button" className="tq-chip" disabled={resetting || !incoming(ready).length} onClick={() => start("mail")}
+                  title="Only what people sent you - mail and chat">Just what came in</button>}
                 <button type="button" className="tq-chip" disabled={resetting} onClick={setup}
                   title="A scheduled check that reads and summarises, or a workflow that writes data">Set up a report or workflow</button>
               </div>
@@ -964,6 +972,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
 
   return (
     <FeedView onOpenTask={onOpenTask} onChanged={onChanged} active={active}
+      onInventoryFilter={inventoryFilterChanged} unreadInventory={pile}
       top={({ openByMid }) => <Pile pile={pile} current={old ? null : currentItem}
         onPull={(key, asUser) => pullOrOpen(key, asUser, openByMid)} />}
       stage={stageMode === "chat" ? chat : placeholder} rowMode={stageMode}

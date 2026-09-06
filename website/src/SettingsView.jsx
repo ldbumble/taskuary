@@ -222,6 +222,7 @@ const GROUPS = ["Triage & routing", "Replies", "Assistant", "Coder agent", "Noti
 // used to catch every bookkeeping value the server ever wrote (digest_report_seeded, task_id_mark,
 // learn_pending, owner_bio...), each with a switch that did something nobody could predict.
 const HIDDEN = new Set(["ingest_status", "agent_issues_enabled", "agent_push_enabled",   // github card decisions
+                        "funnel_hours", "funnel_max", // retained values; All and Unread now share history without an item cap
                         "auto_draft_enabled",   // replies are always drafted (PW-043); the old switch no longer gates anything
                         "last_pinged_review", "triage_last_error",                          // bookkeeping
                         "setup_dismissed", "task_id_mark", "learn_pending", "learn_last_reflect"]);

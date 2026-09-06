@@ -7,6 +7,14 @@ import { LANES, LANE_META, ageText, arrivals, cardFor, currentItemFromPile, curr
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 const cardsSrc = () => read("assistantCards.jsx");
 
+test('Current follows only an explicit canonical migration or lineage alias', () => {
+  const prior = { key: 'review:8', tid: 3 };
+  const fresh = { key: 'processing:root', processing_id: 'root', aliases: ['review:8'], tid: 3, lane: 'approve' };
+  assert.equal(followsItem(prior, fresh), true);
+  assert.equal(currentItemFromPile(prior, { items: [], current: fresh }), fresh);
+  assert.equal(followsItem({ ...prior, key: 'review:9' }, fresh), false);
+});
+
 test("every lane the server knows has a word, a mark and a role the theme can colour", () => {
   assert.deepStrictEqual(LANES, ["blocked", "time", "approve", "broken", "asked", "forgotten", "report", "fyi", "working"]);
   // a failed check is second only to an agent that is stuck, wears the oxblood `bad` role, and

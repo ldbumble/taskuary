@@ -158,22 +158,22 @@ def thread_speaker(rows: list) -> dict:
     return {group: mid for group, (_rank, mid) in best.items()}
 
 
-def from_feed(store, rows: list) -> list:
+def from_feed(store, rows: list, *, canonical=False) -> list:
     out, agents, reviews, threads = [], set(), set(), {}
     speaks, more = thread_speaker(rows), {}
     for r in rows:
-        if _feed_skip(r): continue
+        if not canonical and _feed_skip(r): continue
         # Generated Assistant reports carry durable ideas. Those ideas are produced below as the
         # actionable unread cards, one latest copy per idea; admitting the wrapper as a second FYI
         # is what made the same Assistant line appear over and over. A plain Assistant message with
         # no idea payload is still an ordinary unread arrival.
-        if _assistant_wrapper(r): continue
+        if not canonical and _assistant_wrapper(r): continue
         # ONE line per triaged task. Before triage makes a task, the conversation is the boundary.
         # This lets seven messages combined onto TQ-0367 come out as one task with +7, without also
         # swallowing every other job discussed later in the same WhatsApp room.
         cid = r.get('ConversationId')
         group = _feed_group(r)
-        if group and speaks.get(group) != r['MessageId']:
+        if not canonical and group and speaks.get(group) != r['MessageId']:
             more[group] = more.get(group, 0) + 1
             continue
         who = r.get('FromName') or r.get('FromEmail') or r.get('SourceName') or r.get('Channel') or ''
@@ -194,7 +194,7 @@ def from_feed(store, rows: list) -> list:
             # at the front of its thread, but let its card speak with the newest inbound line on
             # the task.  Otherwise the Assistant can truthfully have six newer Teams messages in
             # SQLite and still show only the old "yes" that opened the draft.
-            latest = (store.last_inbound_on_task(r.get('TaskId')) if r.get('TaskId') else
+            latest = None if canonical else (store.last_inbound_on_task(r.get('TaskId')) if r.get('TaskId') else
                       store.last_inbound_in(cid) if cid else None)
             stale = bool(latest and latest.get('MessageId') != rv.get('MessageId'))
             if latest:
@@ -225,7 +225,7 @@ def from_feed(store, rows: list) -> list:
             # Timeline and nowhere else - three of them came out of the pipe, one per turn, on a
             # fresh install's first day (the 2026-09-03 break test)
             from .reports import NO_BRAIN
-            if NO_BRAIN in str(r.get('Preview') or ''): continue
+            if not canonical and NO_BRAIN in str(r.get('Preview') or ''): continue
             sid = report_source_id(store, r.get('SourceName'))
             bad = r['ReportFailed'] if 'ReportFailed' in r else report_failed(store, sid, subj)
             # ...and a run the owner asked to be TOLD about is not news, it is work. When a report
@@ -244,7 +244,7 @@ def from_feed(store, rows: list) -> list:
         cat = r.get('Category') or ''
         # A triage category is not a read receipt.  Filed/ignored/automated/promotional rows are
         # still incoming rows; the owner's explicit funnel state is what later removes them.
-        if r.get('TheirTurn') or r.get('AnsweredAt'): continue
+        if not canonical and (r.get('TheirTurn') or r.get('AnsweredAt')): continue
         urgent = priority_rank(r.get('Priority')) == 0
         if cat in ('coding', 'todo') and (r.get('NeedsYou') or r.get('Working')):   # a worked row is kept, tagged, and let go in build()
             out.append(_item(f"msg:{r['MessageId']}", 'todo', 'time' if urgent else 'asked', subj, coding=cat == 'coding',
@@ -564,6 +564,10 @@ def working_tids(store, live_state=_LIVE_UNSET, now: datetime = None) -> set:
 def build(store, now: datetime = None, keep_surfaced: bool = False,
           reconcile: bool = True, live_state=_LIVE_UNSET) -> dict:
     now = now or datetime.now()
+    if getattr(store, 'processing_reads_active', lambda: False)():
+        from .processing_unread import build as shared_build
+        return shared_build(store, now=now, include_read=keep_surfaced,
+                            live_state=None if live_state is _LIVE_UNSET else live_state)
     # Explicit Current/named-item lookup must not lose its subject behind the
     # ordinary transport cap. Its existing history/read/grouping rules still apply.
     feed_limit = -1 if keep_surfaced else 400
@@ -784,7 +788,7 @@ def announce(store, actor: str = 'assistant') -> list:
         for e in events:
             card = None
             if e['kind'] in ('parked', 'asking'):
-                item = next((i for i in build(store, keep_surfaced=True)['items'] if i['key'] == f"agent:{e['tid']}"), None)
+                item = next((i for i in build(store, keep_surfaced=True)['items'] if i['key'] == f"agent:{e['tid']}" or f"agent:{e['tid']}" in i.get('aliases', [])), None)
                 card = concierge.card_for(_present_one(store, item)) if item else None
                 if card: card['background_event'] = True
             concierge.record(store, concierge.general.dock_task(store)[0]['TaskId'], 'assistant', e['text'], card)
@@ -829,8 +833,11 @@ def next_item(store, key: str = None, only: str = None, include_surfaced: bool =
     not ready to be talked about."""
     # by key, whatever its state: read already, or with an agent on it now - the concierge decides what to say
     if key:
-        item = next((i for i in build(store, keep_surfaced=True)['items'] if i['key'] == key), None)
+        item = next((i for i in build(store, keep_surfaced=True)['items']
+                     if i['key'] == key or key in i.get('aliases', [])), None)
         return _present_one(store, item) or batch_item(store, key)
+    if getattr(store, 'processing_reads_active', lambda: False)():
+        return capture_selection(store, only=only, exclude=exclude).selected
     again = (datetime.now() - timedelta(minutes=30)).strftime('%Y-%m-%d %H:%M:%S')
     ready = [i for i in pile(store, force=True)['items'] if not i.get('settling') and i['lane'] != 'working'
              and not _not_yet(i) and i.get('key') != exclude
@@ -849,8 +856,11 @@ def batch_item(store, key: str) -> dict | None:
     until a button was clicked (the 2026-09-03 break test)."""
     if not key or not key.startswith('fyis:'): return None
     want = [k for k in key[5:].split(',') if k]
-    have = {i['key']: i for i in build(store, keep_surfaced=True)['items']}
-    got = [have[k] for k in want if k in have]
+    have = {alias: i for i in build(store, keep_surfaced=True)['items']
+            for alias in [i['key'], *i.get('aliases', [])]}
+    seen = set()
+    got = [have[k] for k in want if k in have
+           and not (have[k]['key'] in seen or seen.add(have[k]['key']))]
     if not got: return None
     return _present_one(store, _item(key, 'fyis', 'fyi', f"{len(got)} fyi", who='', when=got[0].get('when'), since=got[0].get('since'),
                                      channel=got[0].get('channel'), why='people told you things; nothing to do',

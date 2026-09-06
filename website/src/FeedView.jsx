@@ -494,7 +494,7 @@ const TodayStrip = () => {
 // `stage` is the Unread conversation. All is a review list: it never mounts that chat;
 // each row opens by itself on the right. A card's "open on the Timeline" (#msg=) still pins its row.
 // On a phone the chat and the rail take turns: `railOnNarrow` says which one is up.
-export default function FeedView({ onOpenTask, onChanged, active = true, top = null, stage = null, rowMode = "task", onPull = null, railOnNarrow = false }) {
+export default function FeedView({ onOpenTask, onChanged, active = true, top = null, stage = null, rowMode = "task", onPull = null, railOnNarrow = false, onInventoryFilter = null, unreadInventory = null }) {
   // below md there is no stage beside the rail; whatever is opened slides over it instead, so a
   // tap on a row is never a tap that did nothing
   const narrow = useMediaQuery("(max-width:899.95px)");
@@ -614,6 +614,10 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     return p;
   }, [cat, pick, srcByChannel]);
 
+  const canonicalUnread = Boolean(unreadInventory?.canonical);
+  const inventoryFilter = JSON.stringify(fparams());
+  useEffect(() => { onInventoryFilter?.(inventoryFilter); }, [inventoryFilter, onInventoryFilter]);
+
   // Every channel is a CATEGORY; the picker next to it narrows to one actual connection —
   // this mailbox, this repo, this Slack channel, this report.
   useEffect(() => {
@@ -641,7 +645,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     try {
       const desired = Math.max(span || 0, PAGE);
       const limit = processingTransportLimit(desired);
-      if (!view) {
+      if (!view || canonicalUnread) {
         try {
           const { data } = await api.get("/api/processing/all", {
             params: processingAllParams({ category: cat, pick, discovered: Object.keys(srcByChannel), limit }),
@@ -695,7 +699,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     } catch (e) {
       if (request === allRequest.current) setErr(processingErrorMessage(e, "Failed to load the feed"));
     }
-  }, [view, cat, pick, srcByChannel, fparams]);
+  }, [view, cat, pick, srcByChannel, fparams, canonicalUnread]);
 
   // Infinite scroll: append the next page when the bottom sentinel shows.
   const loadMore = useCallback(async () => {
@@ -703,7 +707,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     busyMore.current = true;
     const request = allRequest.current;
     try {
-      if (!view && !allLegacyFallback.current) {
+      if ((!view || canonicalUnread) && !allLegacyFallback.current) {
         const frozen = allPage.current;
         if (!frozen?.nextCursor) { setNoMore(true); return; }
         try {
@@ -733,7 +737,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
       if (request === allRequest.current) setErr(processingErrorMessage(e, "Failed to load more"));
     }
     finally { busyMore.current = false; }
-  }, [view, cat, pick, srcByChannel, fparams, noMore, load]);
+  }, [view, cat, pick, srcByChannel, fparams, noMore, load, canonicalUnread]);
 
   // Sync = trigger a real mailbox/Teams ingest server-side, then TRACK its actual state
   // (/ingest/status) instead of guessing with a fixed wait - the button stays "Updating"
@@ -1223,15 +1227,18 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   const pickerChannels = availablePickerChannels(cat, availableChannels);
 
   const today = new Date().toLocaleDateString("sv-SE");
-  const todays = (rows || []).filter((r) => localDay(r.SentAt) === today);
+  const todays = (view === 'unread' && unreadInventory?.canonical
+    ? (unreadInventory.items || []).map(i => ({ SentAt: i.when, Category: i.category, MsgStatus: i.status }))
+    : (rows || [])).filter((r) => localDay(r.SentAt) === today);
   // meetings are rows too. Counting only messages meant the rail showed three lines under a
   // heading that said two - the invite was on screen and in no total.
   const todayMeetings = timelineMeetings.filter((e) => localDay(e.start) === today).length;
-  const stats = [{ label: "in today", n: todays.length + todayMeetings, f: "" }, ...[
+  const inventoryCounts = !view ? allPage.current?.counts : null;
+  const stats = [{ label: "in today", n: (inventoryCounts?.today ?? todays.length) + (view === "unread" && canonicalUnread ? 0 : todayMeetings), f: "" }, ...[
     { label: "auto", n: todays.filter((r) => r.ReviewStatus === "auto").length, f: "" },
-    { label: "info", n: todays.filter((r) => r.Category === "info").length, f: "" },
-    { label: "promo", n: todays.filter((r) => r.Category === "promo").length, f: "" },
-    { label: "ignored", n: todays.filter((r) => r.MsgStatus === "ignored").length, f: "" },
+    { label: "info", n: inventoryCounts?.today_info ?? todays.filter((r) => r.Category === "info").length, f: "" },
+    { label: "promo", n: inventoryCounts?.today_promo ?? todays.filter((r) => r.Category === "promo").length, f: "" },
+    { label: "ignored", n: inventoryCounts?.today_ignored ?? todays.filter((r) => r.MsgStatus === "ignored").length, f: "" },
   ].filter((s) => s.n > 0)];
 
   return (

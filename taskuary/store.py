@@ -213,6 +213,17 @@ CREATE TABLE IF NOT EXISTS processing_context_snapshot (
   MigrationVersion TEXT NOT NULL, ItemId TEXT NOT NULL, ContextRevision TEXT NOT NULL,
   ViewRevision TEXT NOT NULL, ContextJson TEXT NOT NULL, ViewJson TEXT NOT NULL,
   PRIMARY KEY (MigrationVersion, ItemId));
+CREATE TABLE IF NOT EXISTS processing_read_activation (
+  Singleton INTEGER PRIMARY KEY CHECK (Singleton=1), Version TEXT NOT NULL, ActivatedAt TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS processing_read_receipt (
+  EntityKind TEXT NOT NULL, LocalId TEXT NOT NULL, Fingerprint TEXT NOT NULL,
+  Version TEXT NOT NULL, ReadAt TEXT NOT NULL, ReadBy TEXT, Origin TEXT NOT NULL,
+  PRIMARY KEY (EntityKind,LocalId,Fingerprint));
+CREATE TABLE IF NOT EXISTS processing_read_defer (
+  Key TEXT PRIMARY KEY, TargetItemId TEXT NOT NULL, TargetEntityKind TEXT, TargetLocalId TEXT,
+  Status TEXT NOT NULL, Until TEXT, At TEXT NOT NULL, By TEXT);
+CREATE INDEX IF NOT EXISTS idx_processing_read_defer_entity
+  ON processing_read_defer(TargetEntityKind,TargetLocalId);
 -- Raw writes and canonical identity reconciliation advance independently.  A newly
 -- widened database starts pending even when its old rows predate the triggers.
 CREATE TABLE IF NOT EXISTS processing_reconcile_state (
@@ -1347,22 +1358,164 @@ class SQLiteStore:
     def funnel_states(self) -> dict:
         return {r['Key']: r for r in self._rows('SELECT * FROM funnel_state')}
     def set_funnel_state(self, key, status, by='owner', until=None, note=None):
-        self._exec('INSERT INTO funnel_state (Key,Status,Until,Note,By,At) VALUES (?,?,?,?,?,?) '
-                   'ON CONFLICT(Key) DO UPDATE SET Status=excluded.Status, Until=excluded.Until, Note=excluded.Note, By=excluded.By, At=excluded.At',
-                   (key, status, until, note, by, _now()))
+        from . import processing_reads
+        stamp = _now()
+        with self.lock:
+            cur = self.cx.cursor()
+            cur.execute('BEGIN IMMEDIATE')
+            try:
+                version = processing_reads.active_version(cur)
+                clean = bool(version) and not self._processing_reconcile_status_cursor(cur)['pending']
+                if version and status in ('done', 'later', 'skip'):
+                    calendar = str(key).startswith('meeting:')
+                    target = ('', 'calendar', key) if calendar else self._processing_read_target(cur, key)
+                    if target is None and str(key).split(':', 1)[0] in (
+                            'processing', 'msg', 'report', 'review', 'idea', 'agent', 'wrap', 'task'):
+                        raise ValueError('processing target is unavailable')
+                    if target is not None:
+                        if not calendar and not clean:
+                            self._processing_validate_settlement_census(cur, stamp)
+                            clean = True
+                        iid, kind, local_id = target
+                        if status == 'done':
+                            if calendar:
+                                current_units = [dict(entity_kind='calendar', local_id=key, fingerprint='identity-v1')]
+                                deferred_keys = [key]
+                            else:
+                                from .processing_projection import processing_projection
+                                picture = processing_projection(cur, iid)
+                                current_units = processing_reads.units(picture['view'])
+                                deferred_keys = [d['key'] for d in picture['view']['processing_read']['deferrals']]
+                            processing_reads.record(cur, current_units,
+                                version=version, at=stamp, by=by, origin='explicit_done')
+                            for deferred_key in deferred_keys:
+                                cur.execute('DELETE FROM processing_read_defer WHERE Key=?', (deferred_key,))
+                        else:
+                            self._processing_write_defer(cur, key, target, status, until, stamp, by)
+                cur.execute('INSERT INTO funnel_state (Key,Status,Until,Note,By,At) VALUES (?,?,?,?,?,?) '
+                    'ON CONFLICT(Key) DO UPDATE SET Status=excluded.Status, Until=excluded.Until, Note=excluded.Note, By=excluded.By, At=excluded.At',
+                    (key, status, until, note, by, stamp))
+                self._processing_finish_funnel_write(cur, clean)
+                self.cx.commit()
+                self._writes += 1
+            except BaseException:
+                self.cx.rollback()
+                raise
+            finally:
+                cur.close()
         self._poke('feed-changed')                 # Unread is a feed filter; remove/read it immediately
     def clear_funnel_state(self, key):
         """Forget one row's state entirely - it is new again. A new chat does this to an agent
         that is still waiting on you: shown once yesterday is not an answer."""
-        self._exec('DELETE FROM funnel_state WHERE Key=?', (key,))
+        self._clear_funnel_compat('Key=?', (key,))
         self._poke('feed-changed')
     def clear_funnel_states(self, statuses=('surfaced',)):
         """A new chat walks the pile afresh: what was merely SHOWN comes back; what the owner
         decided (done, later) stands."""
         if statuses:
-            self._exec(f"DELETE FROM funnel_state WHERE Status IN ({','.join('?' * len(statuses))})", list(statuses))
+            self._clear_funnel_compat(f"Status IN ({','.join('?' * len(statuses))})", list(statuses))
             self._poke('feed-changed')
+
+    @staticmethod
+    def _processing_finish_funnel_write(cur, clean):
+        # Only this transaction's funnel_state trigger changed the census. No
+        # entity/FK can move under BEGIN IMMEDIATE. Never clear earlier raw dirt.
+        if clean:
+            cur.execute('''UPDATE processing_reconcile_state
+                SET AttemptedGeneration=DirtyGeneration, ReconciledGeneration=DirtyGeneration
+                WHERE Singleton=1''')
+
+    def _processing_validate_settlement_census(self, cur, stamp):
+        """Accept pending writes only when a fresh census changes no identity structure.
+
+        This is an explicit writer, never a GET. A savepoint prevents a failed
+        validation from accidentally accepting newly arrived/moved members. Done
+        still covers current substantive versions; this is not a content-CAS API.
+        """
+        from .processing_membership import reconcile_membership
+        cur.execute('SAVEPOINT processing_settlement_census')
+        before_changes = self.cx.total_changes
+        try:
+            result = reconcile_membership(cur, stamp=stamp, new_item_id=self._processing_item_id,
+                                          follow_item=self._processing_follow)
+            structural = self.cx.total_changes != before_changes
+            if structural or result['conflicts']:
+                raise ValueError('processing membership must be reconciled before settlement')
+            cur.execute('''UPDATE processing_reconcile_state
+                SET AttemptedGeneration=DirtyGeneration,ReconciledGeneration=DirtyGeneration,
+                    LastAttemptAt=?,ConflictsJson=?,DiagnosticsJson=? WHERE Singleton=1''',
+                (stamp, json.dumps(result['conflicts'], sort_keys=True),
+                 json.dumps(result['diagnostics'], sort_keys=True)))
+            cur.execute('RELEASE processing_settlement_census')
+        except BaseException:
+            cur.execute('ROLLBACK TO processing_settlement_census')
+            cur.execute('RELEASE processing_settlement_census')
+            raise
+
+    def _clear_funnel_compat(self, where, params):
+        from .processing_reads import active_version
+        with self.lock:
+            cur = self.cx.cursor()
+            cur.execute('BEGIN IMMEDIATE')
+            try:
+                clean = bool(active_version(cur)) and not self._processing_reconcile_status_cursor(cur)['pending']
+                cur.execute('DELETE FROM funnel_state WHERE ' + where, params)
+                self._processing_finish_funnel_write(cur, clean)
+                self.cx.commit()
+                self._writes += 1
+            except BaseException:
+                self.cx.rollback()
+                raise
+            finally:
+                cur.close()
     # ── canonical processing inventory (Phase 1 additive foundation) ────────────
+    def processing_reads_active(self):
+        from .processing_reads import active_version
+        with self._processing_read() as cur:
+            return bool(active_version(cur))
+
+    def processing_calendar_states(self):
+        """The explicit legacy-calendar exception; no canonical calendar allocation."""
+        with self._processing_read() as cur:
+            result = {row['LocalId']: {'read': True} for row in cur.execute('''
+                SELECT LocalId FROM processing_read_receipt
+                WHERE EntityKind='calendar' AND Fingerprint='identity-v1' ''').fetchall()}
+            for row in cur.execute('''SELECT * FROM processing_read_defer
+                WHERE TargetEntityKind='calendar' ''').fetchall():
+                result.setdefault(row['TargetLocalId'], {'read': False}).update(
+                    status=row['Status'], until=row['Until'], at=row['At'], by=row['By'])
+            return result
+
+    def activate_processing_reads(self, *, fixed_now, live_state=None):
+        """Explicit, fresh legacy capture and activation in one writer transaction.
+
+        The caller owns the consistent backup and startup admission barrier. A
+        dirty census fails closed; constructors and getters never activate reads.
+        """
+        return self.backfill_processing('canonical-reads-' + uuid.uuid4().hex,
+            fixed_now=fixed_now, live_state=live_state, _activate_reads=True)
+
+    def _processing_read_target(self, cur, key):
+        if str(key).startswith('processing:'):
+            iid = self._processing_follow(cur, str(key).split(':', 1)[1])
+            return (iid, None, None) if iid else None
+        row = cur.execute('''SELECT a.EntityKind,a.LocalId,m.ItemId FROM processing_alias a
+            JOIN processing_member m ON m.EntityKind=a.EntityKind AND m.LocalId=a.LocalId
+            WHERE a.Namespace='legacy_funnel' AND a.Scope='local' AND a.Value=?
+              AND a.RetiredAt IS NULL AND m.RetiredAt IS NULL''', (key,)).fetchone()
+        return ((self._processing_follow(cur, row['ItemId']), row['EntityKind'], row['LocalId'])
+                if row else None)
+
+    @staticmethod
+    def _processing_write_defer(cur, key, target, status, until, at, by):
+        iid, kind, local_id = target
+        cur.execute('''INSERT INTO processing_read_defer
+            (Key,TargetItemId,TargetEntityKind,TargetLocalId,Status,Until,At,By)
+            VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(Key) DO UPDATE SET
+            TargetItemId=excluded.TargetItemId,TargetEntityKind=excluded.TargetEntityKind,
+            TargetLocalId=excluded.TargetLocalId,Status=excluded.Status,Until=excluded.Until,
+            At=excluded.At,By=excluded.By''', (key, iid, kind, local_id, status, until, at, by))
+
     @staticmethod
     def _processing_reconcile_status_cursor(cur):
         row = cur.execute('''SELECT * FROM processing_reconcile_state
@@ -1793,7 +1946,8 @@ class SQLiteStore:
         return {'version': version, 'status': status, 'input_watermark': json.loads(migration['InputWatermark']),
                 **counts, 'unresolved_keys': unresolved}
 
-    def backfill_processing(self, version, *, fixed_now, live_state=None, evaluator=None):
+    def backfill_processing(self, version, *, fixed_now, live_state=None, evaluator=None,
+                            _activate_reads=False):
         """Capture an idempotent legacy baseline; this does not switch reads to the new tables.
 
         The transaction reads every legacy row without feed windows/caps, writes canonical identity
@@ -1818,6 +1972,14 @@ class SQLiteStore:
                 return self._processing_backfill_summary(cur, str(version), 'already_complete')
             cur.execute('BEGIN IMMEDIATE')
             try:
+                if _activate_reads:
+                    from . import processing_reads
+                    active = processing_reads.active_version(cur)
+                    if active:
+                        self.cx.commit()
+                        return self._processing_backfill_summary(cur, active, 'already_active')
+                    if self._processing_reconcile_status_cursor(cur)['pending']:
+                        raise ValueError('processing membership must be reconciled before activation')
                 prior = cur.execute("SELECT Completion FROM processing_migration WHERE Version=?", (str(version),)).fetchone()
                 if prior and prior[0] == 'complete':
                     self.cx.commit()
@@ -2037,6 +2199,8 @@ class SQLiteStore:
                     'SELECT ItemId FROM processing_item WHERE RedirectItemId IS NULL ORDER BY ItemId').fetchall()]
                 for item_id in item_ids:
                     picture = processing_projection(cur, item_id, live_state=live_state)
+                    if _activate_reads:
+                        processing_reads.capture_legacy(cur, str(version), picture, at=str(fixed_now))
                     cur.execute('''INSERT INTO processing_context_snapshot
                         (MigrationVersion,ItemId,ContextRevision,ViewRevision,ContextJson,ViewJson)
                         VALUES (?,?,?,?,?,?)''',
@@ -2048,6 +2212,22 @@ class SQLiteStore:
                     cur.execute('''UPDATE processing_legacy_evidence SET ContextFingerprint=?
                                    WHERE MigrationVersion=? AND ItemId=?''',
                                 (picture['context_revision'], str(version), item_id))
+                if _activate_reads:
+                    for key, legacy_state in states.items():
+                        calendar = key.startswith('meeting:')
+                        if calendar and legacy_state.get('Status') in ('surfaced', 'done'):
+                            processing_reads.record(cur, [dict(entity_kind='calendar', local_id=key,
+                                fingerprint='identity-v1')], version=str(version), at=str(fixed_now),
+                                by='legacy', origin='legacy_preserved')
+                        if legacy_state.get('Status') not in ('later', 'skip'):
+                            continue
+                        target = ('', 'calendar', key) if calendar else self._processing_read_target(cur, key)
+                        if target:
+                            self._processing_write_defer(cur, key, target, legacy_state['Status'],
+                                legacy_state.get('Until'), legacy_state.get('At') or str(fixed_now),
+                                legacy_state.get('By'))
+                    cur.execute('''INSERT INTO processing_read_activation
+                        (Singleton,Version,ActivatedAt) VALUES (1,?,?)''', (str(version), str(fixed_now)))
                 cur.execute("UPDATE processing_migration SET Completion='complete' WHERE Version=?", (str(version),))
                 self.cx.commit(); self._writes += 1
                 return self._processing_backfill_summary(cur, str(version), 'complete')

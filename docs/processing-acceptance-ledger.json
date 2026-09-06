@@ -907,180 +907,180 @@
       "section": "All and Unread: one item set, different filter and order",
       "phase": "1",
       "requirement": "Use one canonical item/identity/context representation for All, Unread,",
-      "status": "partial: canonical All adopted; shared Unread/read/selection pending",
-      "test": "Section 1.6 membership/All/detail/lifecycle, cumulative regressions and rendered 507-root/recipient/interruption coverage; full exact-SHA CI and independent review passed",
-      "commit": "d75d45e; integrated 1f7118e, CI run 34056568028 (all ten jobs passed; canonical All only)"
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
     },
     {
       "id": "PW-102",
       "section": "All and Unread: one item set, different filter and order",
       "phase": "1",
       "requirement": "All sorts by time (newest first). Unread selects the unread subset and",
-      "status": "partial: canonical All adopted; shared Unread/read/selection pending",
-      "test": "Section 1.6 membership/All/detail/lifecycle, cumulative regressions and rendered 507-root/recipient/interruption coverage; full exact-SHA CI and independent review passed",
-      "commit": "d75d45e; integrated 1f7118e, CI run 34056568028 (all ten jobs passed; canonical All only)"
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
     },
     {
       "id": "PW-103",
       "section": "All and Unread: one item set, different filter and order",
       "phase": "1",
       "requirement": "Remove Unread-only age windows, category exclusions, and silent caps that",
-      "status": "partial: canonical All adopted; shared Unread/read/selection pending",
-      "test": "Section 1.6 membership/All/detail/lifecycle, cumulative regressions and rendered 507-root/recipient/interruption coverage; full exact-SHA CI and independent review passed",
-      "commit": "d75d45e; integrated 1f7118e, CI run 34056568028 (all ten jobs passed; canonical All only)"
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
     },
     {
       "id": "PW-104",
       "section": "All and Unread: one item set, different filter and order",
       "phase": "1",
       "requirement": "Do not treat an FYI classification or merely surfacing an item as permission",
-      "status": "partial",
-      "test": "Section 1.1 legacy capture/deferral/reopen/rollback/differential tests; final read cutover pending",
-      "commit": "81981b8 (foundation only)"
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
     },
     {
       "id": "PW-105",
       "section": "All and Unread: one item set, different filter and order",
       "phase": "1",
       "requirement": "Show newly persisted arrivals in both views immediately when eligible,",
-      "status": "pending",
-      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
     },
     {
       "id": "PW-106",
       "section": "All and Unread: one item set, different filter and order",
       "phase": "1",
       "requirement": "Replace the incomplete pipeline revision/update comparison: changes to",
-      "status": "partial: canonical All adopted; shared Unread/read/selection pending",
-      "test": "Section 1.6 membership/All/detail/lifecycle, cumulative regressions and rendered 507-root/recipient/interruption coverage; full exact-SHA CI and independent review passed",
-      "commit": "d75d45e; integrated 1f7118e, CI run 34056568028 (all ten jobs passed; canonical All only)"
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
     },
     {
       "id": "PW-107",
       "section": "All and Unread: one item set, different filter and order",
       "phase": "1",
       "requirement": "Superseding the earlier separate-filter proposal: remove the Needs me tab.",
-      "status": "partial: two-view UI; canonical selection pending",
-      "test": "`feedViews.test.mjs`, `processing-views.test.mjs`; Section 1.2 cumulative evidence",
-      "commit": "2557c94, all ten CI jobs passed"
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
     },
     {
       "id": "PW-108",
       "section": "All and Unread: one item set, different filter and order",
       "phase": "1",
       "requirement": "Apply all common source/category/mute exclusions identically to All and",
-      "status": "pending",
-      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
     },
     {
       "id": "PW-109",
       "section": "All and Unread: one item set, different filter and order",
       "phase": "1",
       "requirement": "Test All/Unread item parity (after read filtering), time versus status order,",
-      "status": "partial: canonical All adopted; shared Unread/read/selection pending",
-      "test": "Section 1.6 membership/All/detail/lifecycle, cumulative regressions and rendered 507-root/recipient/interruption coverage; full exact-SHA CI and independent review passed",
-      "commit": "d75d45e; integrated 1f7118e, CI run 34056568028 (all ten jobs passed; canonical All only)"
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
     },
     {
       "id": "PW-110",
       "section": "Assistant selection: top eligible Unread item",
       "phase": "1",
       "requirement": "Put genuinely immediate/time-critical items first (a current calendar",
-      "status": "partial: runtime five-band ordering tested; canonical Unread cutover pending",
-      "test": "Section 1.7 ordering/agent transitions/calendar boundaries, cumulative backend/frontend, rendered arrival order and Current preservation; independent review passed",
-      "commit": "Section 1.7; local gates passed, remote CI pending"
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
     },
     {
       "id": "PW-111",
       "section": "Assistant selection: top eligible Unread item",
       "phase": "1",
       "requirement": "Put tasks actively worked by either coding or general agents in band 5,",
-      "status": "partial: runtime five-band ordering tested; canonical Unread cutover pending",
-      "test": "Section 1.7 ordering/agent transitions/calendar boundaries, cumulative backend/frontend, rendered arrival order and Current preservation; independent review passed",
-      "commit": "Section 1.7; local gates passed, remote CI pending"
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
     },
     {
       "id": "PW-112",
       "section": "Assistant selection: top eligible Unread item",
       "phase": "1",
       "requirement": "Test coding/general working placement, transitions to owner-waiting, and",
-      "status": "partial: runtime five-band ordering tested; canonical Unread cutover pending",
-      "test": "Section 1.7 ordering/agent transitions/calendar boundaries, cumulative backend/frontend, rendered arrival order and Current preservation; independent review passed",
-      "commit": "Section 1.7; local gates passed, remote CI pending"
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
     },
     {
       "id": "PW-113",
       "section": "Assistant selection: top eligible Unread item",
       "phase": "1",
       "requirement": "Preserve the existing funnel UI during this selection refactor: keep its",
-      "status": "pending",
-      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
     },
     {
       "id": "PW-114",
       "section": "Assistant selection: top eligible Unread item",
       "phase": "1",
       "requirement": "Remove assistant-local filtering, ranking, and eligibility recalculation:",
-      "status": "partial: guarded legacy selection; canonical adoption pending",
-      "test": "Section 1.5 capture/API/Node/browser tests; independent review cleared, final delivery gates in evidence",
-      "commit": "c640586, 9f82ee4, f4669a2, 98c7505, c43ef5f plus root seams; d3482e8, CI run 34037794765 (all ten jobs passed)"
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
     },
     {
       "id": "PW-115",
       "section": "Assistant selection: top eligible Unread item",
       "phase": "1",
       "requirement": "Clicking \"Walk me through my tasks\" resumes a valid Current item; only",
-      "status": "partial: guarded legacy selection; canonical adoption pending",
-      "test": "Section 1.5 capture/API/Node/browser tests; independent review cleared, final delivery gates in evidence",
-      "commit": "c640586, 9f82ee4, f4669a2, 98c7505, c43ef5f plus root seams; d3482e8, CI run 34037794765 (all ten jobs passed)"
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
     },
     {
       "id": "PW-116",
       "section": "Assistant selection: top eligible Unread item",
       "phase": "1",
       "requirement": "Replace next_item()'s surfaced-based exclusion and preference for unshown",
-      "status": "pending",
-      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
     },
     {
       "id": "PW-117",
       "section": "Assistant selection: top eligible Unread item",
       "phase": "1",
       "requirement": "Skip working agents, deferred items, and pending-triage items for automatic",
-      "status": "pending",
-      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
     },
     {
       "id": "PW-118",
       "section": "Assistant selection: top eligible Unread item",
       "phase": "1",
       "requirement": "Track Current explicitly: once selected, keep that item as the conversation",
-      "status": "partial: guarded legacy selection; canonical adoption pending",
-      "test": "Section 1.5 capture/API/Node/browser tests; independent review cleared, final delivery gates in evidence",
-      "commit": "c640586, 9f82ee4, f4669a2, 98c7505, c43ef5f plus root seams; d3482e8, CI run 34037794765 (all ten jobs passed)"
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
     },
     {
       "id": "PW-119",
       "section": "Assistant selection: top eligible Unread item",
       "phase": "1",
       "requirement": "Preserve the approved four-at-a-time FYI presentation for automatic walks;",
-      "status": "pending",
-      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
     },
     {
       "id": "PW-120",
       "section": "Assistant selection: top eligible Unread item",
       "phase": "1",
       "requirement": "Test displayed Unread versus assistant selection, already-shown but unread",
-      "status": "pending",
-      "test": "Required: Phase 1 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
     },
     {
       "id": "PW-121",

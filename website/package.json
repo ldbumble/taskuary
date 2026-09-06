@@ -8,7 +8,7 @@
     "build": "vite build",
     "build:demo": "vite build --mode demo --outDir ../site/demo --base=./",
     "test": "node --test \"test/**/*.test.mjs\"",
-    "test:browser": "node --test --test-concurrency=1 browser/phase0-browser.test.mjs browser/processing-views.test.mjs browser/processing-freshness.test.mjs browser/processing-selection.test.mjs browser/processing-poll-settings.test.mjs browser/processing-canonical-all.test.mjs browser/terminal-replay.test.mjs",
+    "test:browser": "node --test --test-concurrency=1 browser/phase0-browser.test.mjs browser/processing-views.test.mjs browser/processing-freshness.test.mjs browser/processing-selection.test.mjs browser/processing-poll-settings.test.mjs browser/processing-canonical-all.test.mjs browser/processing-unread.test.mjs browser/terminal-replay.test.mjs",
     "test:browser:terminal": "node --test browser/terminal-replay.test.mjs",
     "lint:undef": "eslint -c eslint.undef.mjs src/*.jsx src/*.js"
   },

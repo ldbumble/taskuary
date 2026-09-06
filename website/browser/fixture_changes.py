@@ -16,6 +16,8 @@ def install_processing_changes(app, store):
         '/api/fixture/processing/context',
         '/api/fixture/processing/background',
         '/api/fixture/processing/ordering',
+        '/api/fixture/processing/unread-activate',
+        '/api/fixture/processing/unread-arrivals',
         '/api/fixture/processing/canonical-all',
         '/api/fixture/processing/canonical-arrival',
         '/api/fixture/processing/canonical-emit',
@@ -32,6 +34,36 @@ def install_processing_changes(app, store):
     demo.refuse = fixture_refuse
     from website.browser.fixture_canonical import install_canonical_changes
     install_canonical_changes(app, store)
+
+    @app.post('/api/fixture/processing/unread-activate')
+    def activate_unread(body: dict):
+        if body:
+            raise HTTPException(422, 'empty fixture input required')
+        from taskuary import funnel, terminal
+        from taskuary.processing_startup import initialize
+        result = initialize(store, live_state=terminal.live_sessions(tail=6))
+        funnel.invalidate()
+        return result
+
+    @app.post('/api/fixture/processing/unread-arrivals')
+    def unread_arrivals(body: dict):
+        if body:
+            raise HTTPException(422, 'empty fixture input required')
+        if not store.processing_reads_active():
+            raise HTTPException(409, 'activate synthetic read boundary first')
+        from taskuary import funnel
+        ids = []
+        for index in range(507):
+            ids.append(store.add_message({'Channel': 'email', 'SourceName': 'unread-fixture@example.test',
+                'ExternalId': f'unread-arrival-{index}', 'ConversationId': f'unread-arrival-{index}',
+                'FromName': 'Unread fixture', 'FromEmail': 'fixture@example.test',
+                'Subject': f'Shared arrival {index:03}', 'BodyText': f'Fixture information {index:03}',
+                'SentAt': '2020-01-01 12:00:00' if index == 506 else datetime.now().isoformat(' '),
+                'Status': 'triaging' if index == 505 else 'ignored' if index % 2 else 'filed'}))
+        store.reconcile_processing_membership()
+        funnel.invalidate()
+        store._poke('feed-changed')
+        return {'ids': ids}
 
     @app.post('/api/fixture/processing/background')
     def background_card(body: dict):

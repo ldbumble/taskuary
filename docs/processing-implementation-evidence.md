@@ -2114,3 +2114,76 @@ independently cleared these changes; root reviewed the added regression. Sol's
 implementation slots were unavailable due to usage limits, so root integrated the
 bounded follow-ups. No live app restart, connector test, or historical read change.
 Remote exact-SHA CI remains the delivery gate for this section.
+
+Section 1.7 delivered to origin/master at `53dc94225c06033c31a574192ed1a397900c092b`.
+Exact-SHA CI run 34058274039 passed all ten jobs. Section 1.8 now replaces the
+legacy Unread inventory; the sync indicator investigation follows that work.
+
+## Section 1.8 - shared All/Unread inventory and preserved read boundary
+
+Root integrated the canonical Unread/card adapter, All read metadata/common member
+filters, shared filter navigation and counts. Astra implemented and independently
+tested the additive read/deferral store and then reviewed root's integration. Sol
+bounded implementation remained unavailable because of its usage limit.
+
+All and Unread now derive from the same canonical roots and common history/source
+filters. Unread no longer applies the 400-row feed input, configured item cap,
+12-hour window, FYI/category/assistant/report exclusions, or display-based eligibility.
+Stable processing keys retain exact legacy/merged-root aliases for existing Current.
+The assistant consumes the same ordered filtered pile, with working, deferred and
+pending-triage eligibility supplied by that shared state. Existing lane presentation,
+Current/Next controls and four-item FYI batching remain. The old private mail-only
+shortcut is absent in canonical mode; the visible shared source/category filters
+select those items instead. Obsolete funnel age/cap values remain stored but their
+controls are hidden. All's counts cover its frozen inventory rather than only loaded
+pages. Existing standing rules apply to candidate members in both views while
+preserving protection for urgent work, approvals, waits and failed reports.
+
+Read activation is explicit at startup before intake, worker recovery or chat reset,
+not in schema construction or a GET. It first creates a SQLite backup through the
+backup API (including committed WAL data) and an attachment manifest. A fresh
+atomic baseline captures the actual historical read results and activates exact
+substantive-member receipts together; old foundation baselines cannot stand in for
+that boundary. Temporary intervals stay separate from permanent reads. Future
+surfaced/ack writes do not create or erase reads/deferrals. New members or changed
+substance become unread; priority, draft edits and display metadata do not. Exact
+receipts survive membership merges/splits. Calendar retains its identity adapter
+with durable historical/new Done and temporary deferral compatibility.
+
+Independent review repaired exact older-review targeting within the allowed source
+members, standalone persisted worker visibility, old-key Current exclusions,
+protected mute lanes, shared filters across Walk/New chat and calendar receipts.
+Explicit settlement fences membership inside its transaction; a no-structural-change
+census admits the action's own comments while actual unseen member changes reject.
+This is membership fencing, not a new content-CAS operation policy. Batch Done scope,
+new-activity deferral policy and new standing-rule historical reach remain unchanged
+pending their separately requested owner decisions; this section preserves existing
+behavior instead of choosing new policy.
+
+Local evidence before final cumulative gate: 34 startup/read/shared tests passed
+(5.08s), including 507 arrivals, synthetic backup/custom-document preservation,
+legacy inferred reads, rollback/reopen, real concierge Done, source filtering,
+member-scoped draft targeting, working/waiting, explicit Done and deferred expiry.
+The first new browser attempt rendered all 507 and passed API parity, then its test
+helper assumed the view pills were buttons. The corrected physical-pill helper
+passed the full new scenario (41.24s). It was then extended to verify the visible
+source filter survives actual Walk and New chat. Frontend passed 314 tests (1.54s);
+packaged build passed (13.86s). Final cumulative/backend and full browser results
+follow below. An initial backend run was interrupted because a test's global thread
+mock prevented the proposed threaded startup migration from running; synchronous
+startup initialization preserves the admission barrier and the existing startup
+regressions pass without weakening their assertions.
+
+No live app restart, live migration, production connector test, owner-document
+rewrite, or user checkout cleanup was performed. The unification will activate on
+the next normal start of the updated application. Sync-status work follows this
+section as the owner explicitly requested.
+
+Final cumulative backend passed 2934 tests plus 76 subtests (259.92s). The
+subsequent legacy FYI Current alias regression and shared/funnel/read group passed
+83 tests (11.71s); no prior assertion was removed. Full browser is still running.
+
+All nine final browser scenarios passed (456.35s), including the extended shared
+507-root/filter/Walk/New chat case (64.37s). Packaged terminal replay remained
+responsive (visible 2000ms, input 101ms, reconnect 828ms). Concurrent origin a80f039
+adds Phase 8.1 confirmed actions; integration compatibility gates follow before push.

@@ -85,10 +85,12 @@ def _eligible(items: list[dict], scope: dict, now: datetime) -> list[dict]:
                      if exclude and exclude.startswith("fyis:") else {exclude})
     ready = [
         item for item in items
-        if not item.get("settling")
+        if item.get('actionable', True)
+        and not item.get("settling")
         and item.get("lane") != "working"
         and not funnel._not_yet(item)
         and item.get("key") not in excluded_keys
+        and not excluded_keys.intersection(item.get('aliases', []))
         and (
             scope["include_surfaced"]
             or not item.get("surfaced")
@@ -98,7 +100,7 @@ def _eligible(items: list[dict], scope: dict, now: datetime) -> list[dict]:
             )
         )
     ]
-    if scope["only"] == "mail":
+    if scope["only"] == "mail" and not any(item.get("processing_id") for item in items):
         ready = [item for item in ready
                  if funnel.came_in(item) or item.get("kind") in funnel.INTERRUPTS]
     return ready
@@ -108,7 +110,7 @@ def _selection_facts(item: dict) -> dict:
     from . import funnel
 
     facts = {name: copy.deepcopy(item.get(name)) for name in (
-        "key", "lane", "settling", "surfaced", "surfaced_at",
+        "key", "lane", "settling", "surfaced", "surfaced_at", "actionable", "unread", "deferred",
     )}
     facts["not_yet"] = funnel._not_yet(item)
     return facts
@@ -171,9 +173,17 @@ def capture_selection(store, *, only=None, include_surfaced=False,
             rendered = []
         if rendered:
             worker["tail"] = rendered
-    pile = funnel.present(store, funnel.build(
-        store, now=captured_now, reconcile=False, live_state=live_state
-    ))
+    if getattr(store, 'processing_reads_active', lambda: False)():
+        from .processing_unread import build
+        from .processing_all import AllError
+        try:
+            pile = funnel.present(store, build(store, now=captured_now, live_state=live_state, only=only))
+        except AllError as error:
+            raise SelectionUnavailable(str(error)) from error
+    else:
+        pile = funnel.present(store, funnel.build(
+            store, now=captured_now, reconcile=False, live_state=live_state
+        ))
     items = pile.get("items") or []
     ready = _eligible(items, scope, captured_now)
     first = next((item for item in ready if not item.get("surfaced")),

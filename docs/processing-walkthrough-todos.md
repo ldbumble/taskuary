@@ -579,52 +579,56 @@ owner edits after Cancel, and hydrates the exact updated message for comparison.
 Delivery gates are recorded in the implementation evidence; canonical Unread and
 the read-state transition remain pending.
 
-- [ ] <a id="pw-101"></a>**PW-101** Use one canonical item/identity/context representation for All, Unread,
+- [x] <a id="pw-101"></a>**PW-101** Use one canonical item/identity/context representation for All, Unread,
   and assistant selection, including messages, reports, assistant posts/ideas,
   and agent work/attention items. Preserve legitimate task/thread grouping and
   prevent duplicate wrappers, but apply the same representation to both views.
-- [ ] <a id="pw-102"></a>**PW-102** All sorts by time (newest first). Unread selects the unread subset and
+- [x] <a id="pw-102"></a>**PW-102** All sorts by time (newest first). Unread selects the unread subset and
   promotes by status/priority, with deterministic chronological tie-breaking.
   Sorting is derived from the single triage result plus current task/agent state,
   not a second AI classification. Exact status bands and read transitions remain
   subjects for the next walkthrough steps.
-- [ ] <a id="pw-103"></a>**PW-103** Remove Unread-only age windows, category exclusions, and silent caps that
+- [x] <a id="pw-103"></a>**PW-103** Remove Unread-only age windows, category exclusions, and silent caps that
   hide otherwise unread All items. Paginate the shared dataset without treating
   unloaded rows as absent; any common source/history filters must apply equally.
   Catch-up arrivals must not disappear because provider SentAt is old. Do not
   confuse the approved same-day chat association rule with unread eligibility.
-- [ ] <a id="pw-104"></a>**PW-104** Do not treat an FYI classification or merely surfacing an item as permission
+- [x] <a id="pw-104"></a>**PW-104** Do not treat an FYI classification or merely surfacing an item as permission
   to silently settle it without an agreed read/handled action. Audit existing
   `surfaced`, ignored, closed-task, and age-based handling against explicit read
   semantics before implementing; preserve genuine historical read/dismissed state
   and existing deliberate skip/standing-policy choices. No blanket mark-read or
   mark-unread migration to make the lists look equal.
-- [ ] <a id="pw-105"></a>**PW-105** Show newly persisted arrivals in both views immediately when eligible,
+- [x] <a id="pw-105"></a>**PW-105** Show newly persisted arrivals in both views immediately when eligible,
   including a pending-triage state. Do not wait for the whole sync/triage batch to
   finish before Unread updates. Keep unread active-agent status visible under the
   earlier contract, without making working items actionable in chat until needed.
-- [ ] <a id="pw-106"></a>**PW-106** Replace the incomplete pipeline revision/update comparison: changes to
+- [x] <a id="pw-106"></a>**PW-106** Replace the incomplete pipeline revision/update comparison: changes to
   relevant message/context IDs, previews, chain counts, drafts, status, read state,
   and priority must reach the UI even when key/lane/settling did not change.
   Reconcile counts, Current/Next, and assistant context from the shared revision.
-- [ ] <a id="pw-107"></a>**PW-107** Superseding the earlier separate-filter proposal: remove the Needs me tab.
+- [x] <a id="pw-107"></a>**PW-107** Superseding the earlier separate-filter proposal: remove the Needs me tab.
   The owner approved exactly two views: All (chronological, task/detail view only,
   no chat) and Unread (read-state filtered, importance/status sorted). Action-needed
   flags remain useful for promotion, not a third view. Apply live state before
   selection so an approval-waiting agent cannot be lost by an earlier SQL filter.
   Section 1.2 is CI-verified at `2557c94`: two-view controls and All detail-only behavior, with
-  frontend and rendered desktop/narrow-screen coverage. This remains unchecked:
-  live-state-before-selection and canonical read-filter adoption require the later
-  Phase 1 inventory cutover. See the implementation evidence for delivery gates.
-- [ ] <a id="pw-108"></a>**PW-108** Apply all common source/category/mute exclusions identically to All and
+  frontend and rendered desktop/narrow-screen coverage. Section 1.8 completes live-state-before-selection and canonical read-filter adoption. See the implementation evidence for delivery gates.
+- [x] <a id="pw-108"></a>**PW-108** Apply all common source/category/mute exclusions identically to All and
   Unread; remove funnel-only exclusions. Being classified as not-a-task/FYI is not
   itself a read receipt. An ignored-policy item visible in All must not be silently
   removed from Unread solely by a second funnel filter; resolve policy scope and
   read state consistently in the shared representation.
-- [ ] <a id="pw-109"></a>**PW-109** Test All/Unread item parity (after read filtering), time versus status order,
+- [x] <a id="pw-109"></a>**PW-109** Test All/Unread item parity (after read filtering), time versus status order,
   initial sync and long catch-up, FYI/assistant/report arrivals, pending triage,
   live working/waiting transitions, grouping, pagination beyond old caps, genuine
   historical read-state preservation, and updates with unchanged keys/lanes.
+
+Section 1.8 implementation now unifies these views and preserves historical reads.
+The full backend gate passed 2934 tests plus 76 subtests; all nine rendered browser
+scenarios passed. These checkboxes record implementation/local acceptance; remote
+delivery and exact-SHA CI are recorded separately. See
+[implementation evidence](processing-implementation-evidence.md) for exact scope.
 
 ## Assistant selection: top eligible Unread item
 
@@ -637,48 +641,48 @@ browser tests; canonical Unread/read-state cutover remains pending. Delivery and
 CI evidence is recorded in processing-implementation-evidence.md.
 
 Ordering clarification approved during the detailed walkthrough:
-- [ ] <a id="pw-110"></a>**PW-110** Put genuinely immediate/time-critical items first (a current calendar
+- [x] <a id="pw-110"></a>**PW-110** Put genuinely immediate/time-critical items first (a current calendar
   event or a request needed now); agent input/approval waits rank second behind
   those. A calendar item's mere existence does not make it immediately urgent.
-- [ ] <a id="pw-111"></a>**PW-111** Put tasks actively worked by either coding or general agents in band 5,
+- [x] <a id="pw-111"></a>**PW-111** Put tasks actively worked by either coding or general agents in band 5,
   with a visible agent-working emoji/status. They remain visible in Unread but
   are not selected for owner action; waiting for owner input/approval is not
   Working and must move to band 2. Preserve Current during background reordering.
-- [ ] <a id="pw-112"></a>**PW-112** Test coding/general working placement, transitions to owner-waiting, and
+- [x] <a id="pw-112"></a>**PW-112** Test coding/general working placement, transitions to owner-waiting, and
   time-critical precedence. Remaining band details/tie-breakers are still under review.
 
 Owner-approved: the assistant picks the top eligible item in the same ordered
 Unread list the owner sees. No separate ranking or already-shown eligibility
-filter. Pending implementation.
+filter. Implemented in Section 1.8.
 
-- [ ] <a id="pw-113"></a>**PW-113** Preserve the existing funnel UI during this selection refactor: keep its
+- [x] <a id="pw-113"></a>**PW-113** Preserve the existing funnel UI during this selection refactor: keep its
   layout, Current/Next indicators and navigation controls, and status/importance
   promotions. Remove duplicate selection logic, not these user-facing features.
   This does not undo the separately approved removal of the Needs me tab.
   Regression-test Current/Next visibility, navigation, and promoted ordering.
-- [ ] <a id="pw-114"></a>**PW-114** Remove assistant-local filtering, ranking, and eligibility recalculation:
+- [x] <a id="pw-114"></a>**PW-114** Remove assistant-local filtering, ranking, and eligibility recalculation:
   consume the canonical Unread order and shared actionability state directly.
   The working/deferred/pending-triage rules below belong in that shared state,
   not another assistant-side funnel. Preserve shared read state and promotion.
-- [ ] <a id="pw-115"></a>**PW-115** Clicking "Walk me through my tasks" resumes a valid Current item; only
+- [x] <a id="pw-115"></a>**PW-115** Clicking "Walk me through my tasks" resumes a valid Current item; only
   when there is no valid Current does it select the top eligible Unread item.
   Remove the unconditional Current-key exclusion from this start/resume path.
   Next is the owner's explicit request to move on, not a side effect of starting
   or resuming the walkthrough. Test repeat Walk clicks preserve Current.
-- [ ] <a id="pw-116"></a>**PW-116** Replace next_item()'s surfaced-based exclusion and preference for unshown
+- [x] <a id="pw-116"></a>**PW-116** Replace next_item()'s surfaced-based exclusion and preference for unshown
   items with selection from the canonical ordered Unread dataset. Being shown in
   chat does not make an item read, handled, or ineligible for subsequent selection.
-- [ ] <a id="pw-117"></a>**PW-117** Skip working agents, deferred items, and pending-triage items for automatic
+- [x] <a id="pw-117"></a>**PW-117** Skip working agents, deferred items, and pending-triage items for automatic
   chat selection. Working agents remain visible in Unread and become eligible
   when input/approval or a finished result requires attention.
-- [ ] <a id="pw-118"></a>**PW-118** Track Current explicitly: once selected, keep that item as the conversation
+- [x] <a id="pw-118"></a>**PW-118** Track Current explicitly: once selected, keep that item as the conversation
   subject until the owner acts or moves on. Derive Next from the same ordered
   eligible items and keep the visible Current/Next labels and chat context aligned.
   New arrivals must not silently replace the item being discussed. Moving on must
   not implicitly mark an item read; exact action/read transitions remain to review.
-- [ ] <a id="pw-119"></a>**PW-119** Preserve the approved four-at-a-time FYI presentation for automatic walks;
+- [x] <a id="pw-119"></a>**PW-119** Preserve the approved four-at-a-time FYI presentation for automatic walks;
   batching must follow shared ordering rather than introducing another ranking.
-- [ ] <a id="pw-120"></a>**PW-120** Test displayed Unread versus assistant selection, already-shown but unread
+- [x] <a id="pw-120"></a>**PW-120** Test displayed Unread versus assistant selection, already-shown but unread
   items, working/pending/deferred exclusions, Current stability during updates,
   Next labels, and absence of false all-done claims when eligible items remain.
 

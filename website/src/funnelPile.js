@@ -158,6 +158,7 @@ export const interactiveCardIndex = (messages) => {
 // A live task changes keys as ownership changes: msg:<mid> before dispatch, agent:<tid> while a
 // coder has it. The task id is the stable identity across that hand-off.
 export const followsItem = (card, fresh) => !!(card && fresh && (fresh.key === card.key
+  || (fresh.processing_id && fresh.aliases?.includes(card.key))
   || (fresh.tid && fresh.tid === card.tid && fresh.lane === "working")));
 export const currentItemFromPile = (current, pile) => {
   if (!current) return null;

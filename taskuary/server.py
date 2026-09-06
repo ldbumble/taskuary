@@ -42,6 +42,10 @@ async def _lifespan(_app):
     live_bus.bind(asyncio.get_running_loop())
     is_demo = demo.enabled()
     if not is_demo:
+        # Capture historical read results before startup catch-up, worker repair,
+        # or New chat can change the inputs. Schema construction alone never cuts over.
+        from .processing_startup import initialize
+        initialize(store, live_state=[])
         # Preserve the owner's existing opt-out before bridges, catch-up, or drain
         # admission can ingest anything. Failure must not enable unattended work.
         store.upgrade_auto_start()
@@ -2467,11 +2471,13 @@ def funnel_pile(force: bool = False, current: str = None, only: str = None,
     from . import funnel
     from .funnel_selection import capture_selection, SelectionUnavailable
     from .processing_navigation import fields
-    watched = funnel.pile(store, force)
     try:
+        watched = funnel.pile(store, force)
         capture = capture_selection(store, only=only, include_surfaced=include_surfaced, exclude=exclude)
     except SelectionUnavailable as error:
         raise HTTPException(503, error.detail) from error
+    except processing_all.AllError as error:
+        raise HTTPException(error.status, error.detail) from error
     p = {**capture.pile, **fields(store, capture),
          'alerts': funnel.alerts(store, capture.pile['items']), 'events': watched.get('events', [])}
     # ...and what the page is HOLDING: an item whose review was decided (or whose task closed)

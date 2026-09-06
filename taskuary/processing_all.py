@@ -165,12 +165,36 @@ def message_row(message, item, threads, now, *, full=False):
     # Classification needs the existing 4k window even when the HTTP preview is compact.
     row['Category'] = category_of({**row, 'Preview': (message.get('BodyText') or '')[:4000]},
                                   team_domains_of(view.get('settings', {})))
+    if row.get('Channel') == 'report':
+        from .funnel import _FAILED
+        row['ReportFailed'] = view.get('report_outcomes', {}).get(str(row.get('SourceName') or ''),
+                                                                bool(_FAILED.search(str(row.get('Subject') or ''))))
     if full:
         row.update(BodyText=message.get('BodyText'), Brief=message.get('Brief'))
     return row
 
 
-def _generic_target(item, query, cutoff):
+def _muted_candidate(item, row, lane=None):
+    """Existing standing rules apply to candidate members in both views."""
+    from .funnel import muted, MUTED_LANES
+    from .processing_order import feed_band
+    try:
+        rules = json.loads(item['view'].get('settings', {}).get('funnel_mutes') or '[]')
+    except (ValueError, TypeError):
+        rules = []
+    if not isinstance(rules, list):
+        return False
+    lane = lane or {1: 'time', 2: 'approve', 3: 'report' if row.get('Channel') == 'report' else 'asked', 4: 'fyi', 5: 'working'}[feed_band(row)]
+    if lane not in MUTED_LANES:
+        return False
+    if row.get('ReportFailed'):
+        return False
+    candidate = {'email': row.get('FromEmail'), 'who': row.get('FromName'),
+                 'title': row.get('Subject') or row.get('Title'), 'lane': lane}
+    return any(isinstance(rule, dict) and muted(rule, candidate) for rule in rules)
+
+
+def _generic_target(item, query, cutoff, include_excluded=False):
     if item['view'].get('messages'):
         return None  # Hidden or filtered message roots must not reappear as generic work.
     for kind, id_field, collection, stamp_field in (
@@ -188,7 +212,18 @@ def _generic_target(item, query, cutoff):
             channel = 'assistant' if kind == 'idea' else 'own'
             source = str(entity.get('Source') or '')
             stamp = entity.get(stamp_field) or entity.get('FirstSeen') or entity.get('CreatedAt')
-            if _matches(channel, source, query) and _in_history(stamp, cutoff):
+            candidate = {'Subject': entity.get('Title') or entity.get('Text') or entity.get('Reason'),
+                         'FromName': entity.get('CreatedBy'), 'Channel': channel}
+            lane = 'asked' if kind == 'task' else 'approve' if kind == 'review' else 'fyi'
+            if kind == 'idea':
+                try:
+                    action = json.loads(entity.get('ActionJson') or '{}')
+                    if (action.get('triage') or {}).get('intent') in ('task', 'reply_only'):
+                        lane = 'asked'
+                except (ValueError, TypeError):
+                    pass
+            if (_matches(channel, source, query) and _in_history(stamp, cutoff)
+                    and (include_excluded or not _muted_candidate(item, candidate, lane))):
                 candidates.append((entity, stamp, channel, source))
         if candidates:
             entity, stamp, channel, source = max(candidates, key=lambda x: (_time_key(x[1]) or (), x[0][id_field]))
@@ -196,7 +231,7 @@ def _generic_target(item, query, cutoff):
     return None
 
 
-def compact_inventory(snapshot, query):
+def compact_inventory(snapshot, query, *, include_excluded=False):
     coverage = copy.deepcopy(snapshot['coverage'])
     reconciliation = coverage.get('processing_reconciliation') or {}
     if (reconciliation.get('pending', True) or reconciliation.get('status') == 'conflicted'
@@ -217,6 +252,9 @@ def compact_inventory(snapshot, query):
         candidates = [m for m in view.get('messages', []) if m.get('Status') not in HIDDEN_MESSAGES
                       and _matches(m.get('Channel'), m.get('SourceName'), query)
                       and _in_history(m.get('CreatedAt'), cutoff)]
+        if (view.get('processing_read') or {}).get('active') and not include_excluded:
+            candidates = [m for m in candidates if not _muted_candidate(
+                item, message_row(m, item, threads, now.strftime('%Y-%m-%d %H:%M:%S')))]
         message = _newest(candidates, 'SentAt', 'MessageId')
         if message:
             legacy = message_row(message, item, threads, now.strftime('%Y-%m-%d %H:%M:%S'))
@@ -226,7 +264,7 @@ def compact_inventory(snapshot, query):
             channel, source, status = message.get('Channel') or '', message.get('SourceName') or '', message.get('Status') or ''
             preview, category = legacy['Preview'], legacy['Category']
         else:
-            generic = _generic_target(item, query, cutoff)
+            generic = _generic_target(item, query, cutoff, include_excluded=include_excluded or not (view.get('processing_read') or {}).get('active'))
             if not generic:
                 hidden += 1
                 continue
@@ -243,7 +281,17 @@ def compact_inventory(snapshot, query):
         counts = {kind: sum(mid.startswith(prefix + ':') for mid in members) for kind, prefix in (
             ('messages', 'message'), ('tasks', 'task'), ('ideas', 'idea'), ('reviews', 'review'))}
         counts.update(members=len(members), attachments=len(view.get('attachments', [])))
+        if (view.get('processing_read') or {}).get('active'):
+            from .processing_reads import state
+            read = state(item, now)
+            active_tasks = {t['TaskId'] for t in view.get('tasks', []) if t.get('Status') not in ('done', 'dropped')}
+            working = bool((legacy.get('Working') and legacy.get('TaskStatus') not in ('done', 'dropped'))
+                           or any(w.get('taskId') in active_tasks for w in view.get('worker_attention', []))
+                           or any(r.get('TaskId') in active_tasks and r.get('Status') == 'running' for r in view.get('runs', [])))
+            legacy.update(Unread=int((read['unread'] and not read.get('deferred')) or working), Deferred=bool(read.get('deferred')),
+                          DeferUntil=read.get('defer_until'), FunnelKey='processing:' + item['item_id'])
         rows.append({'item_id': item['item_id'], 'member_ids': list(members),
+                     'display_message_ids': [m['MessageId'] for m in candidates],
                      'context_revision': item['context_revision'], 'view_revision': item['view_revision'],
                      'activity_at': stamp if _stamp(stamp) else None,
                      'activity_basis': 'stored_local_wall_clock' if _stamp(stamp) else 'unknown',
@@ -252,8 +300,12 @@ def compact_inventory(snapshot, query):
                      'counts': counts, 'open_target': target, 'row': legacy})
     rows.sort(key=lambda row: (0, tuple(-v for v in _time_key(row['activity_at'])), row['item_id'])
               if _time_key(row['activity_at']) else (1, (), row['item_id']))
+    today = [row for row in rows if (_stamp(row['activity_at']) or datetime.min).date() == now.date()]
     return rows, coverage, {'total': len(rows), 'canonical_roots': len(snapshot['items']),
-                            'tombstones': tombstones, 'not_presented': hidden}
+                            'tombstones': tombstones, 'not_presented': hidden,
+                            'today': len(today), 'today_info': sum(r['category'] == 'info' for r in today),
+                            'today_promo': sum(r['category'] == 'promo' for r in today),
+                            'today_ignored': sum(r['status'] == 'ignored' for r in today)}
 
 
 class AllInventory:

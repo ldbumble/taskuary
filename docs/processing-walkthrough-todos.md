@@ -49,7 +49,10 @@ Unchecked feature requirements below remain pending their own implementation gat
   Observe completion through a cancellable status fallback even if live events
   are missed. A timeout or elapsed three minutes must never imply completion.
   Completed fetch timestamps describe finished checks, not successful delivery
-  from every source. Implementation and acceptance evidence are recorded separately.
+  from every source. The loading follow-up retains history/count/next-sync controls,
+  prevents unloaded inventory from appearing as All done, and avoids rebuilding
+  migration archives for runtime lists. Combined backend/frontend and delayed-load
+  browser checks passed; delivery/CI results are in the implementation evidence.
 
 ## Email catch-up must not skip backlog
 

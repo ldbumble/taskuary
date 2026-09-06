@@ -46,6 +46,14 @@ test('All and Unread share 507 fresh roots, including ignored and pending triage
   assert.deepEqual(new Set(all.filter(i => i.title.startsWith('Shared arrival') && i.row.Unread).map(i => i.item_id)),
     new Set(arrivals.map(i => i.processing_id)));
   const page = await h.newPage();
+  const traffic = [];
+  page.on('response', response => {
+    if (new URL(response.url()).pathname.startsWith('/api/')) {
+      traffic.push({ path: new URL(response.url()).pathname, status: response.status() });
+      if (traffic.length > 30) traffic.shift();
+    }
+  });
+  try {
   await page.goto(h.ui, { waitUntil: 'domcontentloaded', timeout: 20000 });
   await page.waitForFunction(() => [...document.querySelectorAll('.tq-pile-row .card b')]
     .filter(n => n.textContent.startsWith('Shared arrival')).length === 507, { timeout: 30000 });
@@ -139,4 +147,10 @@ test('All and Unread share 507 fresh roots, including ignored and pending triage
   assert.deepEqual((await request(h, '/api/funnel/pile')).items.map(i => i.key), before,
     'switching views must not read any arrival');
   assert.deepEqual(page.fixtureEscapes, []);
+  } catch (error) {
+    console.error('Unread failure diagnostics', JSON.stringify({ traffic, ui: await page.evaluate(() => ({
+      text: document.body.innerText.slice(-7000), current: document.querySelector('.tq-pile-row.current')?.innerText,
+    })).catch(() => null) }));
+    throw error;
+  }
 });

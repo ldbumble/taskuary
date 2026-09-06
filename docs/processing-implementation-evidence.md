@@ -2453,3 +2453,21 @@ state or the pile, and a new chat is blank until the owner speaks.
 Tests: `tests/test_current_restore.py` (5 cases), `website/test/currentRestore.test.mjs` (2 cases); the closed-task and
 selection pins re-pinned to the server's Current. Frontend: `AssistantView.jsx`, rebuilt bundle.
 Backend evidence: `.codex-tmp/phase3-evidence/backend-9.2.log`.
+
+### Final loading/sync integration verification
+
+Merged through Section 9.2 (`b5d486b`) while preserving the owner's README edits.
+The combined build passed; 335 frontend tests and the complete backend suite
+(2,988 tests plus 76 subtests, 327.25 s) passed. Direct review retained full audit
+snapshots for history, limited caching to runtime reads, and checked local writes,
+external commits, worker changes, and query-time refresh invalidate or refresh
+the cached view. No earlier assertion or timeout was weakened.
+
+Real-browser canonical All passed (168.32 s). The delayed-initial-load/sync
+scenario passed (25.61 s), including visible history, count labels and next-sync
+countdown, no premature All done, usable rows during triage/reports, and recovery
+without live completion events. The parallel Unread case timed out at an existing
+20-second wait; the isolated unchanged rerun passed (98.69 s). The timeout did not
+reproduce; resource contention is possible but not established. Remote CI is pending. Failure-only
+diagnostics capture fixture request history and rendered Current on recurrence.
+The live app has not been restarted by this work.

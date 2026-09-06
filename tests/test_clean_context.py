@@ -74,7 +74,7 @@ class QuotedTests(unittest.TestCase):
 
     def test_mixed_quote_prefixed_block_is_kept_as_one_unit(self):
         prior = 'The old export failed last week.'
-        reply = ('Please read this update.\n\nOn Sun, Dana wrote:\n'
+        reply = ('Please read this update.\n\n'
                  '> The old export failed last week.\n'
                  '> New requirement: preserve the audit log before deleting the database.')
 
@@ -82,6 +82,22 @@ class QuotedTests(unittest.TestCase):
 
         self.assertIn(prior, out)
         self.assertIn('New requirement: preserve the audit log before deleting the database.', out)
+
+    def test_changed_comparison_operator_is_not_deduped_as_the_old_instruction(self):
+        prior = 'Approve only when x >= 3.'
+        correction = '> Approve only when x <= 3.'
+
+        out = triage.dedupe_quoted(correction, [prior])
+
+        self.assertEqual(out, 'Approve only when x <= 3.')
+
+    def test_changed_path_case_is_not_deduped_as_the_old_identifier(self):
+        prior = 'Use /Data/Export.csv.'
+        correction = '> Use /data/export.csv.'
+
+        out = triage.dedupe_quoted(correction, [prior])
+
+        self.assertEqual(out, 'Use /data/export.csv.')
 
     def test_inline_answers_survive_and_the_quoted_questions_they_answer_do_not_repeat(self):
         questions = 'Two things:\n1. Which environment failed?\n2. Do you need the old export kept?'

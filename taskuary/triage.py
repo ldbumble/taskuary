@@ -206,7 +206,10 @@ _QUOTE_HEAD = _re.compile(r'^\s*(on .{6,160} wrote:\s*$|-{2,}\s*original message
 _MAIL_HDR = _re.compile(r'^\s*(from|sent|to|cc|subject|date):\s', _re.I)
 
 
-def _norm_line(l: str) -> str: return _re.sub(r'\W+', ' ', str(l).lower()).strip()
+def _norm_line(l: str) -> str:
+    """Remove quote framing without erasing case, operators or literal spacing."""
+    text = _re.sub(r'^\s*(?:>\s+)+', '', str(l or ''))
+    return text.strip()
 
 
 def dedupe_quoted(body: str, priors) -> str:

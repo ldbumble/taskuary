@@ -301,6 +301,10 @@ INDEXES = (
 DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attach_threshold': '0.42',
                     'feed_days': '14', 'intent_classify_enabled': '1', 'coder_auto_enabled': '1',
                     'general_auto_enabled': '1',    # general tasks open their assistant session by themselves (PW-069)
+                    # who may start a worker UNATTENDED (senders.known, PW-079..081): the owner's own domains, verified
+                    # Sent Items evidence that the receiving mailbox wrote to the exact address, chat channels inside a
+                    # workspace the owner controls. Prior incoming mail is never a rule here.
+                    'trust_own_domain': '1', 'trust_sent_history': '1', 'trust_non_email': '1',
                     'auto_sessions': '4',           # unattended agent sessions at once; the rest queue
                     'triage_ai': '',      # '' = first active AI connector | connector:<id> | cli:<agent>
                     'startup_sync_days': '3',       # backfill window when the app starts: catch what arrived while it was shut
@@ -505,6 +509,9 @@ class SQLiteStore:
                             'Sender TEXT, Topic TEXT, Verdict TEXT, VerdictRouteId INTEGER, Change TEXT, ContextJson TEXT, CreatedAt TEXT)')
             self.cx.execute('CREATE TABLE IF NOT EXISTS discussion (Id INTEGER PRIMARY KEY, MessageId INTEGER, TaskId INTEGER, Actor TEXT, '
                             'Body TEXT, OpId TEXT, CreatedAt TEXT)')
+            # a verified 'this mailbox wrote to them' hit, remembered so the mail server is asked once per address (PW-080)
+            self.cx.execute('CREATE TABLE IF NOT EXISTS sender_trust (Mailbox TEXT, Address TEXT, Reason TEXT, CheckedAt TEXT, '
+                            'PRIMARY KEY (Mailbox, Address))')
             # the assistant's private read on the message (counsel.py) - JSON, shown on the panel
             if 'Brief' not in mcols:
                 self.cx.execute('ALTER TABLE message ADD COLUMN Brief TEXT')
@@ -2541,6 +2548,22 @@ class SQLiteStore:
                                        AND o.MessageId<>m.MessageId AND (o.Status='context' OR o.Direction='out'))
                             OR EXISTS (SELECT 1 FROM review r WHERE r.MessageId=m.MessageId AND r.Status IN ('approved','edited','sent')))
                             LIMIT 1""", (email, exclude_mid or 0)) is not None
+    def wrote_to_locally(self, mailbox: str, email: str, exclude_mid=None) -> bool:
+        """Verified SENT evidence this store already holds, scoped to the receiving mailbox: the mailbox's own
+        words on a thread with this address (a 'context' row or an outbound one from the mailbox), or a reply
+        to them the owner approved or sent. Incoming rows alone never count (PW-079)."""
+        if not (email and mailbox): return False
+        return self._one("""SELECT 1 x FROM message m WHERE LOWER(m.FromEmail)=LOWER(?) AND m.MessageId<>? AND (
+                               EXISTS (SELECT 1 FROM message o WHERE o.ConversationId=m.ConversationId AND o.ConversationId IS NOT NULL
+                                       AND o.MessageId<>m.MessageId AND LOWER(o.FromEmail)=LOWER(?) AND (o.Status='context' OR o.Direction='out'))
+                            OR EXISTS (SELECT 1 FROM review r WHERE r.MessageId=m.MessageId AND r.Status IN ('approved','edited','sent')))
+                            LIMIT 1""", (email, exclude_mid or 0, mailbox)) is not None
+    def trusted_sender(self, mailbox: str, email: str):
+        r = self._one('SELECT * FROM sender_trust WHERE LOWER(Mailbox)=LOWER(?) AND LOWER(Address)=LOWER(?)', (mailbox or '', email or ''))
+        return r['Reason'] if r else None
+    def remember_trust(self, mailbox: str, email: str, reason: str):
+        self._exec('INSERT OR REPLACE INTO sender_trust (Mailbox, Address, Reason, CheckedAt) VALUES (?,?,?,?)',
+                   ((mailbox or '').lower(), (email or '').lower(), reason, _now()))
     def add_memory(self, fields): return self._insert('memory', fields, MEMORY_COLS, {'CreatedAt': _now()})
     def list_memories(self, active_only=True):
         return self._rows('SELECT * FROM memory' + (' WHERE Active=1' if active_only else '') + ' ORDER BY MemoryId DESC')

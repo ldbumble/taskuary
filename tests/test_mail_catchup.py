@@ -120,6 +120,27 @@ class MailMsgsTests(unittest.TestCase):
         self.assertEqual([m['id'] for m in got], ['inbox-1', 'inbox-2', 'inbox-3'])
         self.assertEqual(asked[1], ('https://graph/messages?$skip=173', None))
 
+    def test_irregular_graph_pages_cross_batch_cap_without_losing_a_provider_page(self):
+        asked = []
+        pages = iter([
+            {'value': [graph_mail(i, T0) for i in range(49)],
+             '@odata.nextLink': 'https://graph/page-two'},
+            {'value': [graph_mail(i, T0) for i in range(49, 99)],
+             '@odata.nextLink': 'https://graph/page-three'},
+        ])
+        def get(url, headers=None, timeout=None, params=None):
+            asked.append(url)
+            response = mock.Mock(); response.raise_for_status = lambda: None
+            response.json.return_value = next(pages)
+            return response
+        with mock.patch.object(channels.requests, 'get', get):
+            batch, continuation = channels._mail_msgs(
+                'tok', 'me@x.com', _iso(T0 - timedelta(hours=1)), cap=50,
+                with_continuation=True)
+        self.assertEqual(len(batch), 99, 'a complete provider page must never be truncated')
+        self.assertEqual(continuation, 'https://graph/page-three')
+        self.assertEqual(asked[-1], 'https://graph/page-two')
+
     def test_graph_is_asked_oldest_first_and_at_most_cap_come_back(self):
         pages = [{'value': [graph_mail(i, T0 + timedelta(minutes=i)) for i in range(50)], '@odata.nextLink': 'https://graph/next1'},
                  {'value': [graph_mail(i, T0 + timedelta(minutes=i)) for i in range(50, 100)], '@odata.nextLink': 'https://graph/next2'},

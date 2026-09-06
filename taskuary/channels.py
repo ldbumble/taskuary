@@ -463,13 +463,14 @@ def _mail_msgs(tok, upn, since, folder='inbox', cap=MAIL_BATCH, inclusive=False,
         r = requests.get(url, headers={'Authorization': f'Bearer {tok}'}, timeout=30, params=params)
         r.raise_for_status(); j = r.json()
         page = j.get('value') or []
-        if len(out) + len(page) > cap:
-            raise RuntimeError(f'Graph mail page exceeded the remaining batch capacity for {folder}')
         out += page
         url, params = j.get('@odata.nextLink'), None       # the nextLink carries the filter itself
     if url in seen_urls:
         raise RuntimeError(f'Graph repeated mail continuation for {folder}')
-    return (out, url) if with_continuation else out
+    # A provider page is indivisible: short pages can leave us just below cap before the next
+    # full page. Durable callers keep that bounded one-page overshoot and its exact nextLink;
+    # the historical list-only helper retains its advertised hard view cap.
+    return (out, url) if with_continuation else out[:cap]
 
 
 _MAIL_MSGS_IMPLEMENTATION = _mail_msgs

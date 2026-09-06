@@ -220,15 +220,25 @@ def dedupe_quoted(body: str, priors) -> str:
     while i < len(lines):
         l = lines[i]
         if l.lstrip().startswith('>'):
-            inner = l.lstrip()[1:].strip()
-            if inner and _norm_line(inner) not in known: out.append(inner)
-            i += 1; continue
+            # A run of quote-prefixed lines is one block. Dropping its familiar lines one by
+            # one can splice a new instruction out of its context, so keep the whole run when
+            # any substantive line is new. A single quoted question in an inline reply remains
+            # removable because the sender's unquoted answer ends that run.
+            quoted = []
+            while i < len(lines) and lines[i].lstrip().startswith('>'):
+                quoted.append(lines[i].lstrip()[1:].strip())
+                i += 1
+            subst = [_norm_line(x) for x in quoted if _norm_line(x)]
+            if not subst or any(x not in known for x in subst): out.extend(quoted)
+            continue
         head = _QUOTE_HEAD.match(l) or (_re.match(r'^\s*from:\s', l, _re.I) and i + 1 < len(lines) and _re.match(r'^\s*(sent|date):\s', lines[i + 1], _re.I))
         if head:
             rest = [x for x in lines[i + 1:] if not _MAIL_HDR.match(x)]
             subst = [_norm_line(x.lstrip('> ').strip()) for x in rest if _norm_line(x)]
-            if subst and sum(1 for x in subst if x in known) >= max(1, int(0.6 * len(subst))): break   # a copy of what the chain holds
-            out.extend(x.lstrip('> ') if x.lstrip().startswith('>') else x for x in rest); break        # unique material: kept, minus the header lines
+            if subst and all(x in known for x in subst): break                           # an exact copy of what the chain holds
+            # Mixed quoted/forwarded blocks stay whole: a familiar majority is not evidence
+            # that the remaining lines are disposable. Header fields alone are still wrapper.
+            out.extend(x.lstrip('> ') if x.lstrip().startswith('>') else x for x in rest); break
         out.append(l); i += 1
     return '\n'.join(out).rstrip()
 

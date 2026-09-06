@@ -59,6 +59,30 @@ class QuotedTests(unittest.TestCase):
         out = triage.dedupe_quoted(fwd, [PRIOR])
         self.assertIn('renews on 1 October', out); self.assertIn('see what the vendor said', out)
 
+    def test_mixed_outlook_block_keeps_new_instructions_and_their_known_context(self):
+        prior = 'The old export failed last week.'
+        reply = ('Please read this update.\n\n-----Original Message-----\n'
+                 'From: Dana Whitfield\nSent: Sunday, September 6, 2026 9:00 AM\n'
+                 'Subject: Export cleanup\n\nThe old export failed last week.\n'
+                 'New requirement: preserve the audit log before deleting the database.')
+
+        out = triage.dedupe_quoted(reply, [prior])
+
+        self.assertIn('Please read this update.', out)
+        self.assertIn(prior, out)
+        self.assertIn('New requirement: preserve the audit log before deleting the database.', out)
+
+    def test_mixed_quote_prefixed_block_is_kept_as_one_unit(self):
+        prior = 'The old export failed last week.'
+        reply = ('Please read this update.\n\nOn Sun, Dana wrote:\n'
+                 '> The old export failed last week.\n'
+                 '> New requirement: preserve the audit log before deleting the database.')
+
+        out = triage.dedupe_quoted(reply, [prior])
+
+        self.assertIn(prior, out)
+        self.assertIn('New requirement: preserve the audit log before deleting the database.', out)
+
     def test_inline_answers_survive_and_the_quoted_questions_they_answer_do_not_repeat(self):
         questions = 'Two things:\n1. Which environment failed?\n2. Do you need the old export kept?'
         reply = '> 1. Which environment failed?\nProduction, both nights.\n> 2. Do you need the old export kept?\nNo, overwrite it.'

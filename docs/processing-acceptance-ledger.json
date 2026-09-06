@@ -180,7 +180,7 @@
       "requirement": "Remove the automatic thread-dismissal veto through `ruled_on_thread()` /",
       "status": "implemented",
       "test": "`tests/test_fresh_evaluation.py`, `tests/test_verdict_sticks.py`, `tests/test_verdict_paths.py` (ruling is evidence on attach and create paths)",
-      "commit": "c8769f6; local gates passed, CI pending"
+      "commit": "c8769f6; d3482e8, CI run 34037794765 (all ten jobs passed)"
     },
     {
       "id": "PW-021",
@@ -189,7 +189,7 @@
       "requirement": "Merge the new message into its chain before evaluation. Evaluate the latest",
       "status": "partial: evaluated in stored thread context; full-chain merge pending PW-009+",
       "test": "`tests/test_fresh_evaluation.py` (ruling leads the evidence, model decides)",
-      "commit": "c8769f6; CI pending"
+      "commit": "c8769f6; d3482e8, CI run 34037794765 (all ten jobs passed)"
     },
     {
       "id": "PW-022",
@@ -198,7 +198,7 @@
       "requirement": "Preserve the separately approved explicit feed-only and standing-policy",
       "status": "implemented",
       "test": "`tests/test_fresh_evaluation.py::BypassesStayTests` (policy, feed, duplicate, no standing policy from a dismissal)",
-      "commit": "c8769f6; CI pending"
+      "commit": "c8769f6; d3482e8, CI run 34037794765 (all ten jobs passed)"
     },
     {
       "id": "PW-023",
@@ -207,7 +207,7 @@
       "requirement": "Preserve old read/dismissed state: reevaluation of new activity must not",
       "status": "implemented",
       "test": "`tests/test_fresh_evaluation.py::HistoryIsPreservedTests` (judged messages untouched, closed task not reopened)",
-      "commit": "c8769f6; CI pending"
+      "commit": "c8769f6; d3482e8, CI run 34037794765 (all ten jobs passed)"
     },
     {
       "id": "PW-024",
@@ -216,7 +216,7 @@
       "requirement": "Test a previously ignored/FYI chain receiving a new actionable request and",
       "status": "implemented",
       "test": "`tests/test_fresh_evaluation.py` (actionable and non-actionable follow-ups, open and closed tasks, duplicate fetch); agent-run case in `test_verdict_sticks.py`",
-      "commit": "c8769f6; CI pending"
+      "commit": "c8769f6; d3482e8, CI run 34037794765 (all ten jobs passed)"
     },
     {
       "id": "PW-025",
@@ -225,7 +225,7 @@
       "requirement": "Remove the historical-verdict prompt override in",
       "status": "implemented",
       "test": "`tests/test_fresh_evaluation.py::NoForcedVerdictTests`, `tests/test_cc_triage.py`, `tests/test_learnedgraph.py`, `tests/test_kind_dispatch.py`",
-      "commit": "c8769f6; CI pending"
+      "commit": "c8769f6; d3482e8, CI run 34037794765 (all ten jobs passed)"
     },
     {
       "id": "PW-026",
@@ -322,54 +322,54 @@
       "section": "Explicit triage errors and retry",
       "phase": "3",
       "requirement": "Store failed triage as a distinct message `Status='error'`, including model",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_triage_errors.py` (model exception, unusable verdict, drain failure, no-AI awaiting state, linked follow-up keeps its task)",
+      "commit": "ed2bb98; local gates passed, CI pending"
     },
     {
       "id": "PW-037",
       "section": "Explicit triage errors and retry",
       "phase": "3",
       "requirement": "Show a clear \"Triage failed\" state with a useful failure reason and a",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`website/test/timelineState.test.mjs`, `website/test/feedLoad.test.mjs` (error state, subline, detail phase); FeedView blurb/Retry wiring",
+      "commit": "ed2bb98; CI pending"
     },
     {
       "id": "PW-038",
       "section": "Explicit triage errors and retry",
       "phase": "3",
       "requirement": "Adapt the existing retriage endpoint and `claim_retriage()` to the error",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_triage_errors.py`::RetryTests (error claim, linked message retry, legacy filed failure, concurrent clicks -> one task)",
+      "commit": "ed2bb98; CI pending"
     },
     {
       "id": "PW-039",
       "section": "Explicit triage errors and retry",
       "phase": "3",
       "requirement": "On successful retry, apply the new verdict and clear the error indication;",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_triage_errors.py` (successful retry lands the verdict; another failure returns to error with the new reason)",
+      "commit": "ed2bb98; CI pending"
     },
     {
       "id": "PW-040",
       "section": "Explicit triage errors and retry",
       "phase": "3",
       "requirement": "Define a safe upgrade for identifiable historical triage-failure records",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_triage_errors.py`::LegacyUpgradeTests (identifiable failures only; genuine fyi, owner-ruled and no-AI history untouched; read state kept; once at startup)",
+      "commit": "ed2bb98; CI pending"
     },
     {
       "id": "PW-041",
       "section": "Explicit triage errors and retry",
       "phase": "3",
       "requirement": "Test model exceptions, malformed verdicts, drain failures, linked-message",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: no rendered-browser click test of the Retry control yet",
+      "test": "`tests/test_triage_errors.py` (16 cases) plus updated `test_api.py`, `test_async_triage.py`, `test_assistant_reactions.py`, `test_verdict_sticks.py`",
+      "commit": "ed2bb98; CI pending"
     },
     {
       "id": "PW-042",

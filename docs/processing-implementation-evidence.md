@@ -716,3 +716,30 @@ rewritten), `test_assistant_reactions.py` (one case), `test_cc_triage.py` and
 (15 cases). Full backend on this tree: 2415 passed plus 66 subtests, 151 warnings,
 224.74 s. No frontend change; packaged assets unchanged. No live restart, connector, database
 or owner-document change.
+
+## Section 3.2 — explicit triage errors and retry
+
+Status: implemented and tested locally at `ed2bb98`; remote CI pending on the pushed
+checkpoint. Acceptance PW-036 to PW-040 implemented; PW-041 partial (no rendered-browser
+click of the Retry control yet; backend, API and pure-UI state tests cover the rest).
+
+Failed triage - a model exception, an answer that is not a verdict, a queue-drain failure, a
+missing AI connector, and a failed follow-up judgement on an existing task - now lands the
+message as `Status='error'` with the reason on its route, keeping content, attachments and any
+task link; it was `filed`, the face of "nothing to do". `claim_retriage` claims error -> triaging
+atomically (a legacy taskless `filed` row qualifies only when its last route is a failure
+diagnostic); the retriage endpoint accepts linked error rows and returns a row to error with the
+new reason when the retry fails again. `store.upgrade_triage_failures()` runs once at startup
+and converts historical failures identified by their last route (never genuine fyi, never a row
+the owner later ruled on, never a no-AI install's "awaiting" history), leaving funnel read state
+untouched. In the pile an error row is unread information (fyi lane) as the Phase 1 inventory
+tests already required; the All view and detail panel show "triage failed" with Retry.
+
+Decision recorded for the owner: a no-AI install now shows new arrivals as "awaiting AI triage"
+errors (with Retry explaining that no brain is configured) instead of filed fyi; historical
+no-AI rows are left as they were. Tests changed with explanation, none weakened:
+`test_api.py` (push without AI), `test_async_triage.py`, `test_assistant_reactions.py` (two
+cases), `test_verdict_sticks.py` (unusable answer). New: `tests/test_triage_errors.py` (16 cases)
+and two frontend state cases. Frontend 283 passed; no-undef lint clean (nine pre-existing
+rule-definition notices). Full backend and packaged build results are in the commit message
+and the CI record below.

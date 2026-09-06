@@ -205,21 +205,21 @@ of similarity or shared room identity.
 Owner-approved requirement: failed triage is an error, not FYI/filed, and must have
 a visible retry button. Pending implementation only.
 
-- [ ] <a id="pw-036"></a>**PW-036** Store failed triage as a distinct message `Status='error'`, including model
+- [x] <a id="pw-036"></a>**PW-036** Store failed triage as a distinct message `Status='error'`, including model
   call failures, unusable/degraded verdicts, and exceptions caught by the queue
   drain. Audit existing-task follow-up failures too; do not silently treat them
   as successfully classified work. Preserve message content, existing task links,
   and diagnostic route records.
-- [ ] <a id="pw-037"></a>**PW-037** Show a clear "Triage failed" state with a useful failure reason and a
+- [x] <a id="pw-037"></a>**PW-037** Show a clear "Triage failed" state with a useful failure reason and a
   "Retry triage" button on the affected timeline item/message detail. Keep failed
   items discoverable; do not present them as successfully processed FYI.
-- [ ] <a id="pw-038"></a>**PW-038** Adapt the existing retriage endpoint and `claim_retriage()` to the error
+- [x] <a id="pw-038"></a>**PW-038** Adapt the existing retriage endpoint and `claim_retriage()` to the error
   state, including linked messages. Retry the same message with refreshed context
   and attachments, atomically claiming error -> triaging. Prevent repeated clicks
   or concurrent requests from creating duplicate tasks, drafts, or agent starts.
-- [ ] <a id="pw-039"></a>**PW-039** On successful retry, apply the new verdict and clear the error indication;
+- [x] <a id="pw-039"></a>**PW-039** On successful retry, apply the new verdict and clear the error indication;
   on another failure, return to error with the updated reason and retry available.
-- [ ] <a id="pw-040"></a>**PW-040** Define a safe upgrade for identifiable historical triage-failure records
+- [x] <a id="pw-040"></a>**PW-040** Define a safe upgrade for identifiable historical triage-failure records
   currently stored as filed. Do not bulk-convert genuine FYI or reset historical
   read state. Handle missing AI configuration explicitly rather than presenting it
   as a successful FYI evaluation.

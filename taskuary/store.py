@@ -1286,6 +1286,47 @@ class SQLiteStore:
         if local_id is not None: q += ' AND LocalId=?'; p.append(str(local_id))
         return [self._processing_evidence_row(r) for r in self._rows(q + ' ORDER BY EvidenceId', p)]
 
+    def _processing_snapshot_cursor(self, cur, resolved, *, live_state=None, lineage=None, item=None):
+        """Build the public item picture inside a caller-owned read transaction."""
+        from .processing_projection import processing_projection
+        if item is None:
+            row = cur.execute('SELECT * FROM processing_item WHERE ItemId=?', (resolved,)).fetchone()
+            if not row: return None
+            item = dict(row)
+        else:
+            item = dict(item)
+        lineage = list(lineage) if lineage is not None else self._processing_lineage(cur, resolved)
+        item_history = [dict(r) for r in cur.execute(
+            f"SELECT * FROM processing_item WHERE ItemId IN ({','.join('?' * len(lineage))}) ORDER BY CreatedAt,ItemId",
+            lineage).fetchall()]
+        members = [dict(r) for r in cur.execute('''SELECT * FROM processing_member
+                                                   WHERE ItemId=? AND RetiredAt IS NULL ORDER BY MemberId''', (resolved,))]
+        member_history = [dict(r) for r in cur.execute(
+            f"SELECT * FROM processing_member WHERE ItemId IN ({','.join('?' * len(lineage))}) ORDER BY MemberId",
+            lineage).fetchall()]
+        aliases_by_id = {}
+        for member in member_history:
+            for row in cur.execute('''SELECT * FROM processing_alias
+                WHERE EntityKind=? AND LocalId=? AND RetiredAt IS NULL ORDER BY AliasId''',
+                (member['EntityKind'], member['LocalId'])).fetchall():
+                aliases_by_id[row['AliasId']] = dict(row)
+        aliases = [aliases_by_id[key] for key in sorted(aliases_by_id)]
+        evidence = [self._processing_evidence_row(r) for r in cur.execute(
+            f"SELECT * FROM processing_legacy_evidence WHERE ItemId IN ({','.join('?' * len(lineage))}) ORDER BY EvidenceId",
+            lineage).fetchall()]
+        context_history = [dict(r) for r in cur.execute(
+            f"SELECT * FROM processing_context_snapshot WHERE ItemId IN ({','.join('?' * len(lineage))}) ORDER BY MigrationVersion,ItemId",
+            lineage).fetchall()]
+        exact = {(m['EntityKind'], m['LocalId']) for m in member_history}
+        related = [dict(r) for r in cur.execute(
+            'SELECT * FROM processing_relation WHERE RetiredAt IS NULL ORDER BY RelationId').fetchall()
+                   if (r['FromEntityKind'], r['FromLocalId']) in exact
+                   or (r['ToEntityKind'], r['ToLocalId']) in exact]
+        return {'item': item, 'item_history': item_history, 'members': members,
+                'member_history': member_history, 'aliases': aliases,
+                'relations': related, 'legacy_evidence': evidence, 'context_history': context_history,
+                **processing_projection(cur, resolved, live_state=live_state)}
+
     def processing_snapshot(self, item_id, *, live_state=None):
         """Read current fingerprints and preserved history without creating read receipts.
 
@@ -1294,40 +1335,79 @@ class SQLiteStore:
         certification. Native worker attention is an explicit caller snapshot.
         """
         live_state = None if live_state is None else copy.deepcopy(tuple(live_state))
-        from .processing_projection import processing_projection
         with self._processing_read() as cur:
             resolved = self._processing_follow(cur, str(item_id))
             if not resolved: return None
-            lineage = self._processing_lineage(cur, resolved)
-            item = dict(cur.execute('SELECT * FROM processing_item WHERE ItemId=?', (resolved,)).fetchone())
-            item_history = [dict(r) for r in cur.execute(
-                f"SELECT * FROM processing_item WHERE ItemId IN ({','.join('?' * len(lineage))}) ORDER BY CreatedAt,ItemId",
-                lineage).fetchall()]
-            members = [dict(r) for r in cur.execute('''SELECT * FROM processing_member
-                                                       WHERE ItemId=? AND RetiredAt IS NULL ORDER BY MemberId''', (resolved,))]
-            member_history = [dict(r) for r in cur.execute(
-                f"SELECT * FROM processing_member WHERE ItemId IN ({','.join('?' * len(lineage))}) ORDER BY MemberId",
-                lineage).fetchall()]
-            aliases_by_id = {}
-            for member in member_history:
-                for row in cur.execute('''SELECT * FROM processing_alias
-                    WHERE EntityKind=? AND LocalId=? AND RetiredAt IS NULL ORDER BY AliasId''',
-                    (member['EntityKind'], member['LocalId'])).fetchall():
-                    aliases_by_id[row['AliasId']] = dict(row)
-            aliases = [aliases_by_id[key] for key in sorted(aliases_by_id)]
-            evidence = [self._processing_evidence_row(r) for r in cur.execute(
-                f"SELECT * FROM processing_legacy_evidence WHERE ItemId IN ({','.join('?' * len(lineage))}) ORDER BY EvidenceId",
-                lineage).fetchall()]
-            context_history = [dict(r) for r in cur.execute(
-                f"SELECT * FROM processing_context_snapshot WHERE ItemId IN ({','.join('?' * len(lineage))}) ORDER BY MigrationVersion,ItemId",
-                lineage).fetchall()]
-            exact = {(m['EntityKind'], m['LocalId']) for m in member_history}
-            related = [dict(r) for r in cur.execute('SELECT * FROM processing_relation WHERE RetiredAt IS NULL ORDER BY RelationId').fetchall()
-                       if (r['FromEntityKind'], r['FromLocalId']) in exact or (r['ToEntityKind'], r['ToLocalId']) in exact]
-            return {'item': item, 'item_history': item_history, 'members': members,
-                    'member_history': member_history, 'aliases': aliases,
-                    'relations': related, 'legacy_evidence': evidence, 'context_history': context_history,
-                    **processing_projection(cur, resolved, live_state=live_state)}
+            return self._processing_snapshot_cursor(cur, resolved, live_state=live_state)
+
+    def processing_inventory_snapshot(self, *, fixed_now, live_state=None):
+        """Read the complete, non-activating canonical inventory from one SQLite snapshot.
+
+        This reports gaps in explicit membership but never allocates identity, infers read or
+        action state, calls a worker, or changes which runtime views consume legacy storage.
+        """
+        if not isinstance(fixed_now, str) or not fixed_now:
+            raise ValueError('fixed_now must be a non-empty string')
+        as_of = fixed_now
+        frozen_live = None if live_state is None else copy.deepcopy(tuple(live_state))
+        worker_rows = [] if frozen_live is None else sorted(
+            (dict(row) for row in frozen_live),
+            key=lambda row: json.dumps(row, ensure_ascii=False, sort_keys=True,
+                                       separators=(',', ':'), allow_nan=False))
+        worker_payload = {'available': frozen_live is not None, 'rows': worker_rows}
+        worker_revision = hashlib.sha256(json.dumps(
+            worker_payload, ensure_ascii=False, sort_keys=True,
+            separators=(',', ':'), allow_nan=False).encode()).hexdigest()
+
+        with self._processing_read() as cur:
+            item_rows = [dict(r) for r in cur.execute(
+                'SELECT * FROM processing_item ORDER BY ItemId').fetchall()]
+            roots = {row['ItemId']: row for row in item_rows if row['RedirectItemId'] is None}
+            lineage_by_root = {item_id: [] for item_id in roots}
+            for row in item_rows:
+                resolved = self._processing_follow(cur, row['ItemId'])
+                if resolved in lineage_by_root: lineage_by_root[resolved].append(row['ItemId'])
+            items = [self._processing_snapshot_cursor(
+                cur, item_id, live_state=frozen_live,
+                lineage=lineage_by_root[item_id], item=roots[item_id])
+                for item_id in sorted(roots)]
+
+            member_count = cur.execute('''SELECT COUNT(*) FROM processing_member pm
+                JOIN processing_item pi ON pi.ItemId=pm.ItemId
+                WHERE pm.RetiredAt IS NULL AND pi.RedirectItemId IS NULL''').fetchone()[0]
+            uncatalogued = {}
+            for entity_kind, table, column in (
+                    ('message', 'message', 'MessageId'), ('task', 'task', 'TaskId'),
+                    ('review', 'review', 'ReviewId'), ('idea', 'idea', 'IdeaId')):
+                uncatalogued[entity_kind] = cur.execute(f'''SELECT COUNT(*) FROM {table} source
+                    WHERE NOT EXISTS (SELECT 1 FROM processing_member pm
+                        JOIN processing_item pi ON pi.ItemId=pm.ItemId
+                        WHERE pm.EntityKind=? AND pm.LocalId=CAST(source.{column} AS TEXT)
+                          AND pm.RetiredAt IS NULL AND pi.RedirectItemId IS NULL)''',
+                    (entity_kind,)).fetchone()[0]
+            completed = [r[0] for r in cur.execute('''SELECT Version FROM processing_migration
+                WHERE Completion='complete' ORDER BY Version''').fetchall()]
+            coverage = {
+                'canonical_item_count': len(items),
+                'member_count': member_count,
+                'uncatalogued': uncatalogued,
+                'completed_baselines': completed,
+                'unsupported': ['attachment_only_items', 'calendar', 'comments', 'task_artifacts',
+                                'waitroom', 'worker_questions'],
+            }
+
+        snapshot = {
+            'schema_version': 'taskuary.processing.inventory.v1',
+            'as_of': as_of,
+            'items': items,
+            'coverage': coverage,
+            'worker_attention_available': frozen_live is not None,
+            'worker_input_revision': worker_revision,
+        }
+        snapshot['snapshot_revision'] = hashlib.sha256(json.dumps(
+            snapshot, ensure_ascii=False, sort_keys=True,
+            separators=(',', ':'), allow_nan=False).encode()).hexdigest()
+        return snapshot
 
     @staticmethod
     def _processing_backfill_summary(cur, version, status):

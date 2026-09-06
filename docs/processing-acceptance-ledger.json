@@ -1278,7 +1278,7 @@
       "requirement": "Test general/coding question relay, multiple waiting agents, request/run",
       "status": "partial: general/coding relay through the request binding, request/run identity, duplicate clicks, stale runs, disconnected workers and delivery failure are covered by `tests/test_worker_events.py`; restart recovery and visible confirmation of worker acceptance in the UI are open",
       "test": "`tests/test_worker_events.py`, `tests/test_worker_surfaces.py`",
-      "commit": "c16a861; local gates passed, CI pending"
+      "commit": "c16a861; c16a861, CI run 34053073590 (all ten jobs passed)"
     },
     {
       "id": "PW-143",
@@ -2052,7 +2052,7 @@
       "requirement": "Keep Working visible in Unread without injecting it into chat. Promote",
       "status": "partial: the funnel, the hand-raise, a session's info and the task list read the worker's own word first - an open request is the hand with its exact question or action and choices, a working run raises none however quiet its screen, the same event is never announced twice; a run that never reported keeps the screen heuristic; finished results as a result row (rather than blocked work) wait on Section 6.3",
       "test": "`tests/test_worker_surfaces.py` (7 cases)",
-      "commit": "c16a861; local gates passed, CI pending"
+      "commit": "c16a861; c16a861, CI run 34053073590 (all ten jobs passed)"
     },
     {
       "id": "PW-229",
@@ -2068,45 +2068,45 @@
       "section": "Explicit completion: save the agent result, then close its run",
       "phase": "6",
       "requirement": "Capture the agent's actual final answer directly, rather than requiring a",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: the agent's own final answer is captured directly - the `--done` sentence recorded as the run's Finished event, then the Stop hook's last message - and matched to the run; Codex App Server agentMessage items are not integrated (PW-224)",
+      "test": "`tests/test_explicit_completion.py`::SaveBeforeCloseTests::test_the_final_answer_is_the_agents_own_and_matched_to_the_run",
+      "commit": "3d5af15; local gates passed, CI pending"
     },
     {
       "id": "PW-231",
       "section": "Explicit completion: save the agent result, then close its run",
       "phase": "6",
       "requirement": "Persist the final Markdown result, evidence/artifact references, and reported",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_explicit_completion.py`::SaveBeforeCloseTests (the Markdown result with the final answer and the report land before the run closes; only checklist items the agent reported done are ticked, by identity; nothing blindly completed)",
+      "commit": "3d5af15; local gates passed, CI pending"
     },
     {
       "id": "PW-232",
       "section": "Explicit completion: save the agent result, then close its run",
       "phase": "6",
       "requirement": "Replace the manual-start stay-open veto for explicit successful completion.",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_explicit_completion.py`::ExplicitFinishTests (an explicit finish closes the completed run even when the owner opened it, saves the result, publishes one Finished event and leaves the task's closure to the owner; live wall notes leave with the session)",
+      "commit": "3d5af15; local gates passed, CI pending"
     },
     {
       "id": "PW-233",
       "section": "Explicit completion: save the agent result, then close its run",
       "phase": "6",
       "requirement": "If result persistence fails, do not discard the session or claim successful",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_explicit_completion.py` (a save that fails raises before the session is closed, writes no report, claims nothing and is retryable; a second finish for the same run does nothing twice)",
+      "commit": "3d5af15; local gates passed, CI pending"
     },
     {
       "id": "PW-234",
       "section": "Explicit completion: save the agent result, then close its run",
       "phase": "6",
       "requirement": "Test automatic and manually started workers, matching final-answer capture,",
-      "status": "pending",
-      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: automatic and owner-opened workers, final-answer capture, save-before-close ordering, incomplete checklist entries, duplicate finishes and persistence failures are covered; pending approvals at finish and retained follow-up context are exercised only through Sections 6.1/5.5",
+      "test": "`tests/test_explicit_completion.py` (6 cases)",
+      "commit": "3d5af15; local gates passed, CI pending"
     },
     {
       "id": "PW-235",

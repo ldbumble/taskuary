@@ -1564,3 +1564,29 @@ The funnel, the hand-raise and the task list still read the terminal's latched p
 those consumers to this model is Section 6.2.
 
 Tests: `tests/test_worker_events.py` (13 cases). No frontend change.
+
+## Section 6.3 — explicit completion: save the agent's own result, tick what it reported, then close its run
+
+Status: implemented and tested locally at `3d5af15`; remote CI pending on the pushed
+checkpoint. Section 6.2 is CI-verified (c16a861, CI run 34053073590 (all ten jobs passed)).
+Acceptance PW-231, PW-232, PW-233 implemented; PW-230 and PW-234 partial (Codex App Server
+messages are not integrated; pending approvals at finish and retained follow-up context are
+exercised only through Sections 6.1 and 5.5).
+
+`coder.wrap` now takes the agent's OWN final answer first - the `--done` sentence recorded as the
+run's Finished event (`workerstate`), matched to the live run, then the Stop hook's last message the
+witness kept - and only then the report a second AI writes from the transcript. The result artifact
+(`session_artifacts.coding`: compact result plus the final answer) is written BEFORE the pty is
+closed; a save that fails raises `the result could not be saved ... the session was left open`,
+writes no CODER REPORT, closes nothing and leaves the finish retryable (`selfclose._wrap`/`declare`
+forget their once-only mark and say so on the task). `coder.tick_reported_checklist` ticks only the
+checklist items the agent itself reported done (`- [x] item` lines in its result or transcript,
+matched by words, by item identity) and says which; nothing is added, moved or blindly completed.
+`selfclose.declare` on a session the owner opened no longer holds: the explicit finish records the
+Finished event, saves the result and closes the completed run (`coder.wrap(close=False)`), leaving
+the task's own closure and any reply to the owner (PW-232); live wall notes leave with the session
+(Section 5.4). A second finish for the same run does nothing twice.
+
+Tests: `tests/test_explicit_completion.py` (6 cases). `tests/test_stay_open.py` and `tests/test_stay_open_doors.py`: the two pins that read
+`--done` on an owner-opened session as "filed, not obeyed" now expect the run to close and the task to
+stay, per PW-232, with the reason noted. No frontend change.

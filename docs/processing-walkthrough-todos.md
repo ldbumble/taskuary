@@ -1266,15 +1266,15 @@ implementation; task closure and outbound sending remain separate decisions.
   the reply text; regular workers already receive the response directly.
   Match the answer to the correct run/turn and explicit work-finished signal:
   Stop, final_answer, and turn completion alone do not prove the task is finished.
-- [ ] <a id="pw-231"></a>**PW-231** Persist the final Markdown result, evidence/artifact references, and reported
+- [x] <a id="pw-231"></a>**PW-231** Persist the final Markdown result, evidence/artifact references, and reported
   completed/remaining checklist items on the task before closing the worker.
   Preserve item identities and do not blindly mark the entire checklist complete.
   Keep the original final answer even if an optional compact summary is generated.
-- [ ] <a id="pw-232"></a>**PW-232** Replace the manual-start stay-open veto for explicit successful completion.
+- [x] <a id="pw-232"></a>**PW-232** Replace the manual-start stay-open veto for explicit successful completion.
   Close only the completed run, release capacity, remove its live wall notes, and
   publish one result-ready event. Retain history and continuation identifiers for
   follow-up; never terminate a shared provider service or unrelated runs.
-- [ ] <a id="pw-233"></a>**PW-233** If result persistence fails, do not discard the session or claim successful
+- [x] <a id="pw-233"></a>**PW-233** If result persistence fails, do not discard the session or claim successful
   finalization. Make persistence/finalization retryable and idempotent; duplicate
   finish hooks must not duplicate artifacts, drafts, or completion notifications.
 - [ ] <a id="pw-234"></a>**PW-234** Test automatic and manually started workers, matching final-answer capture,

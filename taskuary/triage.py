@@ -433,10 +433,12 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 # definition, so its word wins when given, and the regex is only the fallback.
                 out = {'intent': j['intent'], 'why': str(j.get('why') or '')[:240]}
                 if j['intent'] == 'task' and j.get('kind') in ('coding', 'general', 'task'): out['kind'] = j['kind']
-                # a playbook the menu actually offered: an agent works it, whatever kind said
+                # a playbook the menu actually offered rides on the task as ITS PROCEDURE; it says how the job
+                # is done here, not who does it - the kind stays the model's own (PW-205: the old override to
+                # coding sent a PTO request, a general job, into a checkout)
                 pb = str(j.get('playbook') or '').strip().lower()
                 if playbooks and pb and out['intent'] == 'task' and re.search(rf'^- {re.escape(pb)}: ', playbooks, re.M):
-                    out['playbook'], out['kind'] = pb, 'coding'
+                    out['playbook'] = pb
                 if candidates is not None: out.update(relationship_of(j, candidates))
                 if repos and out['intent'] == 'task': out.update(repo_choice_of(j, repos))
                 if out['intent'] == 'task':

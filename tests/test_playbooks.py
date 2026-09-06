@@ -89,11 +89,12 @@ class TriageNamesThePlaybook(unittest.TestCase):
         self.msg = {'from_email': 'alerts@card.example', 'subject': 'Transaction: 84.10 at a hardware store',
                     'body': 'A new transaction posted to card ending 4412.'}
 
-    def test_the_menu_rides_and_the_slug_comes_back_as_a_coding_task(self):
+    def test_the_menu_rides_and_the_slug_comes_back_with_the_models_own_kind(self):
         llm, seen = _llm_saying({'intent': 'task', 'kind': 'task', 'why': 'a card line', 'playbook': 'bill'})
         out = triage.classify_intent(self.msg, llm=llm, playbooks=playbooks.menu())
         self.assertIn('PLAYBOOKS', seen['system']); self.assertIn('- bill: ', seen['system'])
-        self.assertEqual((out['playbook'], out['kind']), ('bill', 'coding'))   # an agent works a playbook, whatever kind said
+        # PW-205 (2026-09-06): the procedure says how the job is done, not who does it - it no longer forces coding
+        self.assertEqual((out['playbook'], out['kind']), ('bill', 'task'))
 
     def test_a_slug_the_menu_never_offered_is_ignored(self):
         llm, _ = _llm_saying({'intent': 'task', 'kind': 'coding', 'why': 'x', 'playbook': 'made-up'})

@@ -418,9 +418,10 @@ class Term:
         # Keep this module-level for the deliberately small terminal stand-ins used by the API
         # and hook tests; production Terms and fakes must go through the same state machine.
         phase = stable_phase_of(self)          # compute once: every field in this payload tells one truth
+        word = worker_fields(getattr(self, 'store', None), self)      # the run's own word outranks the screen (PW-228)
         base = {'sid': self.sid, 'label': self.label, 'cwd': self.cwd, 'taskId': self.task_id,
                 'agent': self.agent, 'cli': cli_of(self.argv), 'alive': self.alive, 'started': self.started,
-                'idle': self.idle(), 'phase': phase, 'waiting': phase == 'parked', 'accepted': getattr(self, 'accepted', None),
+                'idle': self.idle(), 'phase': phase, 'waiting': word['waiting'], 'request': word['request'], 'accepted': getattr(self, 'accepted', None),
                 'cmd': ' '.join(self.argv), **({'tail': self.tail(tail)} if tail else {})}
         if not details:
             # Task lists need identity and lifecycle only. files() shells out to git and witness
@@ -433,6 +434,21 @@ class Term:
                 'work': w.snapshot(files, self.cwd, (self.tail(1) or [''])[-1]) if w else None}
 
 
+def worker_fields(store, t) -> dict:
+    """{waiting, request} for a session: the run's own word when it has reported (workerstate), the
+    screen's latched phase otherwise (PW-228)."""
+    from . import workerstate as ws
+    req = None
+    try:
+        w = ws.waiting_of(store, t) if store is not None else None
+        if w is not None: req = ws.asking_of(store, t) if w else None
+    except Exception as e:
+        logger.debug(f'worker state unavailable for {getattr(t, "sid", "?")}: {e}'); w = None
+    if w is None:
+        w = (stable_phase_of(t) == 'parked') if isinstance(t, Term) else waiting_of(t)
+    return {'waiting': bool(w), 'request': req}
+
+
 def cli_of(argv) -> str:
     """'claude' for C:\\...\\claude.exe or claude.cmd - the CLI a session runs, whatever the profile is
     called. A profile named codex that runs claude showed 'codex' on the card next to a 'claude' badge."""
@@ -440,7 +456,7 @@ def cli_of(argv) -> str:
 
 
 _LIGHT_INFO = {'sid', 'label', 'cwd', 'taskId', 'agent', 'cli', 'mode', 'alive', 'busy',
-               'started', 'idle', 'phase', 'waiting', 'cmd', 'provider', 'pick',
+               'started', 'idle', 'phase', 'waiting', 'request', 'accepted', 'cmd', 'provider', 'pick',
                'connector_id', 'model', 'tail'}
 
 def _info(t, tail=0, details=True) -> dict:

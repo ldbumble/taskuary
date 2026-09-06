@@ -31,11 +31,18 @@ def tick(store) -> int:
     for sid, term in list(terminal.SESSIONS.items()):
         if not getattr(term, 'alive', False) or not getattr(term, 'task_id', None): continue
         ident = _identity(sid, term)
-        waiting = term.waiting() if hasattr(term, 'waiting') else terminal.waiting_of(term)
+        # the run's own word first (workerstate.py, PW-228): an open request is the hand, a working run raises
+        # none however quiet its screen; a run that never reported keeps the screen heuristic
+        from . import workerstate as ws
+        word = ws.waiting_of(store, term)
+        waiting = word if word is not None else (term.waiting() if hasattr(term, 'waiting') else terminal.waiting_of(term))
+        req = ws.asking_of(store, term) if word else None
         current[ident] = bool(waiting)
         if waiting and not _state.get(ident):
-            asking = waitroom.looks_like_question(term.tail(waitroom.TAIL_LINES))
-            events.append((term, asking, _line(term, waitroom)))
+            if req: events.append((term, req.get('kind') == 'input_needed', ws.request_line(getattr(term, 'agent', None) or getattr(term, 'label', None) or 'agent', req)))
+            else:
+                asking = waitroom.looks_like_question(term.tail(waitroom.TAIL_LINES))
+                events.append((term, asking, _line(term, waitroom)))
     _state = current
 
     if store.get_settings().get('notify_level', 'needs_me') == 'off': return 0
@@ -43,8 +50,10 @@ def tick(store) -> int:
         tid = int(term.task_id)
         task = store.get_task(tid) or {}
         agent = getattr(term, 'agent', None) or getattr(term, 'label', None) or 'agent'
-        what = f'{agent} asked you something' if asking else f'{agent} stopped and is waiting on you'
-        detail = f'\n\n{tail}' if tail else ''
+        # a request line already names the agent and the ask; a screen tail rides under the generic line
+        from_word = tail.startswith(f'{agent} ')
+        what = tail if from_word else (f'{agent} asked you something' if asking else f'{agent} stopped and is waiting on you')
+        detail = '' if from_word else (f'\n\n{tail}' if tail else '')
         try:
             outbound.notify(store, f'{task_ref(tid)} · {what}: {task.get("Title") or "untitled"}'
                              f'{detail}{phone.task_ping_tail(store, tid)}')

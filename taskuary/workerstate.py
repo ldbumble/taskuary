@@ -124,3 +124,34 @@ def answer(store, tid: int, request_id: str, text: str, actor: str = 'owner') ->
     store.add_comment(tid, actor, 'human', f'Answered "{req["text"][:160]}": {text[:500]} - delivered to {who} (run {sess.sid}).')
     store.audit('task', tid, 'worker_answer', actor, detail={'request_id': request_id, 'sid': sess.sid})
     return {'delivered': True, 'state': 'delivered', 'sid': sess.sid}
+
+
+def waiting_of(store, t):
+    """Is this session waiting on the owner, by ITS OWN WORD? True/False when its run has reported through
+    events (an open request is a hand raised; a working run raises none however quiet its screen); None when
+    the run never reported, so the caller may fall back to the screen (PW-228)."""
+    tid, sid = getattr(t, 'task_id', None), str(getattr(t, 'sid', '') or '')
+    if not tid or not sid: return None
+    evs = events(store, tid, sid)
+    if not evs: return None
+    answered = {e['RequestId'] for e in evs if e['Kind'] == 'answered'}
+    return any(e['Kind'] in REQUESTS and e['RequestId'] not in answered for e in evs)
+
+
+def asking_of(store, t):
+    """The newest open request of this session - what to show and what an answer is bound to - or None."""
+    tid, sid = getattr(t, 'task_id', None), str(getattr(t, 'sid', '') or '')
+    if not tid or not sid: return None
+    evs = events(store, tid, sid)
+    answered = {e['RequestId'] for e in evs if e['Kind'] == 'answered'}
+    open_ = [e for e in evs if e['Kind'] in REQUESTS and e['RequestId'] not in answered]
+    if not open_: return None
+    approvals = [e for e in open_ if e['Kind'] == 'approval_needed']
+    return _public_request((approvals or open_)[-1])
+
+
+def request_line(agent: str, req: dict) -> str:
+    """One sentence for a raised hand, from the request itself."""
+    text = ' '.join(str(req.get('text') or '').split())[:300]
+    if req.get('kind') == 'approval_needed': return f'{agent} needs your approval: {text}'
+    return f'{agent} asked you: {text}'

@@ -92,6 +92,14 @@ def context_revision(store, target_kind: str, target_id: int) -> str:
     return hashlib.sha1(json.dumps(basis, default=str).encode()).hexdigest()[:16]
 
 
+def message_revision(store, task_id: int) -> str:
+    """The inbound message set of a task - which messages, in what state - and nothing else: a task's kind
+    or status changing is not new context for a REPLY, a new inbound line is (PW-048/055)."""
+    rows = [(m['MessageId'], m.get('Status')) for m in store.list_messages(task_id)
+            if m.get('Status') not in ('context', 'history', 'skipped') and str(m.get('Direction') or 'in') != 'out']
+    return hashlib.sha1(json.dumps(rows, default=str).encode()).hexdigest()[:16]
+
+
 def _public(op: dict) -> dict:
     try: params = json.loads(op.get('ParamsJson') or '{}')
     except ValueError: params = {}

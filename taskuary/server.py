@@ -4156,14 +4156,20 @@ def _refresh_chat_context(task_id: int = None, message_id: int = None) -> dict:
     """
     before = _latest_context_message(task_id, message_id)
     channel = str((before or {}).get('Channel') or '').lower()
-    if channel not in CHAT_CONNECTORS:
-        return {'polled': False, 'newer': False, 'before': before, 'after': before, 'added': 0}
+    # email is refreshed too (PW-049): through the connector behind the mailbox the message arrived in,
+    # incrementally - the poll is a watermark read, and the chain is completed by chains.py, never re-downloaded
+    if channel == 'email':
+        mailbox = str((before or {}).get('SourceName') or '').lower()
+        src = next((x for x in store.list_sources(active_only=False) if x.get('Channel') == 'email' and str(x.get('Address') or '').lower() == mailbox), None)
+        conn = store.get_connector(src['ConnectorId']) if src and src.get('ConnectorId') else None
+        types = [str(conn.get('Type') or '').lower()] if conn and conn.get('Active') else []
+    elif channel in CHAT_CONNECTORS: types = [channel]
+    else: return {'polled': False, 'newer': False, 'before': before, 'after': before, 'added': 0}
     connectors = [c for c in store.list_connectors()
-                  if c.get('Active') and str(c.get('Type') or '').lower() == channel]
-    active = {str(c.get('Type') or '').lower() for c in connectors}
-    if channel not in active:
-        return {'polled': False, 'newer': False, 'before': before, 'after': before, 'added': 0}
-    added = _poll_reports(0, what=f'refreshing {channel} context', only=[channel], wait=True)
+                  if c.get('Active') and str(c.get('Type') or '').lower() in types]
+    if not types or not connectors:
+        return {'polled': False, 'newer': False, 'before': before, 'after': before, 'added': 0, 'channel': channel}
+    added = _poll_reports(0, what=f'refreshing {channel} context', only=types, wait=True)
     if added is False:
         raise RuntimeError('messages are still syncing; I did not use stale chat context - try again in a moment')
     failed = [store.get_connector(c['ConnectorId']) for c in connectors]

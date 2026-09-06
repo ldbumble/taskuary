@@ -491,6 +491,10 @@ class SQLiteStore:
             rvcols = {r[1] for r in self.cx.execute('PRAGMA table_info(review)')}
             if 'DraftError' not in rvcols:
                 self.cx.execute('ALTER TABLE review ADD COLUMN DraftError TEXT')
+            # what the draft was written against (PW-048): the inbound message set's revision, and whether the
+            # thread has moved since - a verdict rechecks it wherever it lands (PW-055)
+            if 'ContextRevision' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN ContextRevision TEXT')
+            if 'Stale' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN Stale INTEGER DEFAULT 0')
             # the triage-generated checklist (PW-075): JSON items with stable ids, separate from Status
             tcols = {r[1] for r in self.cx.execute('PRAGMA table_info(task)')}
             if 'Checklist' not in tcols:
@@ -2367,6 +2371,14 @@ class SQLiteStore:
     def set_review_draft_error(self, rid, error: str):
         """The draft could not be written: keep the review pending and say why (PW-046)."""
         self._exec('UPDATE review SET DraftError=? WHERE ReviewId=?', ((error or '')[:300] or None, rid))
+        self._review_changed(rid)
+    def pin_review_context(self, rid, mid, revision: str):
+        """The exact inbound message and message-set revision this draft answered - captured BEFORE the
+        model ran, so a line landing during generation is not called seen (PW-048)."""
+        self._exec('UPDATE review SET MessageId=?, ContextRevision=?, Stale=0 WHERE ReviewId=?', (mid, revision, rid))
+        self._review_changed(rid)
+    def mark_review_stale(self, rid, on: bool = True):
+        self._exec('UPDATE review SET Stale=? WHERE ReviewId=?', (1 if on else 0, rid))
         self._review_changed(rid)
     def update_review_message(self, rid, mid):
         """Pin a reply draft to the newest inbound message it was written against.

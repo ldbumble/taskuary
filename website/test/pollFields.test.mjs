@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { CHAT_CONNECTORS, CHAT_POLL_SECONDS, pollSecondsField, chatClock } from "../src/pollFields.js";
+import { CHAT_CONNECTORS, CHAT_POLL_SECONDS, pollSecondsField } from "../src/pollFields.js";
 
 // PW-003/PW-004: one description of the chat connectors' fast clock, shared by every chat card,
 // and it has to say what the server actually does (server._quick_due / quick_forever).
@@ -18,31 +18,25 @@ test("every chat connector offers the fast-poll interval, mail does not", () => 
   assert.equal(pollSecondsField("gmail"), null);
 });
 
-test("the effective clock mirrors the server: blank = default, 0 = background sync only, garbage = background sync only", () => {
-  assert.deepEqual(chatClock({ type: "teams", cfg: {}, pollMinutes: 10 }), { mode: "fast", seconds: 30 });
-  assert.deepEqual(chatClock({ type: "imessage", cfg: { poll_seconds: "60" }, pollMinutes: 10 }), { mode: "fast", seconds: 60 });
-  assert.deepEqual(chatClock({ type: "whatsapp", cfg: { poll_seconds: "0" }, pollMinutes: 10 }), { mode: "background", seconds: 600 });
-  assert.deepEqual(chatClock({ type: "slack", cfg: { poll_seconds: "lots" }, pollMinutes: 10 }), { mode: "background", seconds: 600 });
-  assert.deepEqual(chatClock({ type: "outlook", cfg: {}, pollMinutes: 10 }), { mode: "background", seconds: 600 });
-});
-
-test("background sync 0 turns the fast clock off too", () => {
-  assert.deepEqual(chatClock({ type: "teams", cfg: { poll_seconds: "30" }, pollMinutes: 0 }), { mode: "off", seconds: 0 });
-  assert.deepEqual(chatClock({ type: "teams", cfg: {}, pollMinutes: "0" }), { mode: "off", seconds: 0 });
-});
-
-test("the help text states all three semantics and stops singling out one connector", () => {
+test("the help text states recurring and explicit fetch semantics without singling out one connector", () => {
   for (const type of CHAT_CONNECTORS) {
     const [label, , , helper] = pollSecondsField(type);
     const copy = `${label} ${helper}`;
     assert.match(copy, /blank = 30/i, type);
-    assert.match(copy, /0 = /i, type);
-    assert.match(copy, /background sync/i, type);
+    assert.match(copy, /0 = no fast polling/i, type);
+    assert.match(copy, /recurring background sync can still poll/i, type);
+    assert.match(copy, /manual Sync now, action-time freshness checks, and startup catch-up/i, type);
+    assert.match(copy, /Background sync 0 in Settings disables both recurring clocks/i, type);
+    assert.match(copy, /explicit and startup fetches remain available/i, type);
     assert.doesNotMatch(copy, /only (this connector|whatsapp) polls faster/i, type);
     assert.doesNotMatch(copy, /global sync interval/i, `${type}: blank is not the global interval`);
+    assert.doesNotMatch(copy, /never holds a chat back/i, type);
   }
   const [, , , wa] = pollSecondsField("whatsapp");
-  assert.match(wa, /every chat|all chats|not only the assistant/i, "WhatsApp's clock covers the connector's intake, not just the assistant chat");
+  assert.match(wa, /inbound messages from every chat/i);
+  assert.match(wa, /not only the assistant chat/i);
+  assert.match(wa, /replies in the notification chat are polled/i);
+  assert.match(wa, /sending notifications is event-driven/i);
 });
 
 test("every chat card and the Settings help are wired to the shared description", () => {
@@ -50,6 +44,9 @@ test("every chat card and the Settings help are wired to the shared description"
   for (const type of CHAT_CONNECTORS) assert.match(view, new RegExp(`pollSecondsField\\("${type}"\\)`), type);
   assert.doesNotMatch(view, /"poll_seconds"/, "no card keeps a private copy of the field");
   const settings = readFileSync(new URL("../src/SettingsView.jsx", import.meta.url), "utf8");
-  assert.match(settings, /poll_minutes:[\s\S]{0,1500}fast clock|poll_minutes:[\s\S]{0,1500}chat connectors/i,
-    "Background sync explains that 0 also stops the chat clock");
+  const pollHelp = settings.slice(settings.indexOf("poll_minutes:"), settings.indexOf("startup_sync_days:"));
+  assert.match(pollHelp, /0 turns recurring background polling off/);
+  assert.match(pollHelp, /Sync now, startup catch-up, and an action that must refresh chat context can still fetch/);
+  assert.match(pollHelp, /0 here disables both recurring clocks/);
+  assert.doesNotMatch(pollHelp, /Sync now as the only road|never holds a chat back/);
 });

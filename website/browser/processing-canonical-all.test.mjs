@@ -77,6 +77,18 @@ const clickWorkflowTab = async (page, label) => {
   assert.fail(`visible ${label} workflow tab was not found`);
 };
 
+const expandWholeMessage = async (page) => {
+  const nodes = await page.$$("[data-tq-timeline-stage] *");
+  for (const node of nodes) {
+    if (await node.evaluate((element) => element.children.length === 0
+      && element.textContent.trim().startsWith("show the whole message")
+      && element.getBoundingClientRect().width > 0)) {
+      await node.click(); return;
+    }
+  }
+  assert.fail("visible full-message expansion control was not found");
+};
+
 async function drainCanonicalAll(page, minimum) {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const ids = await rowIds(page);
@@ -157,6 +169,7 @@ test("canonical All renders every root once with truthful details and frozen pag
   assert.ok(olderStage.includes(seed.grouped.selected_draft_marker), "the filtered member's exact draft must be visible");
   assert.equal(olderStage.includes(seed.grouped.sibling_draft_marker), false, "the latest sibling draft must not leak into older detail");
   await clickWorkflowTab(page, "Message");
+  await expandWholeMessage(page);
   await waitForStageMarker(page, seed.grouped.full_body_marker);
   await clickWorkflowTab(page, "Summary");
   await waitForStageMarker(page, seed.grouped.selected_draft_marker);

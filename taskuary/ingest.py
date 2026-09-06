@@ -485,8 +485,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # is the verdict's `relationship`, among this room's lines from this same day (PW-031..034)
         r, verdict = chat_route(store, msg, cfg, llm, mine, me)
     else:
-        r = route(msg, store.snapshots(), float(cfg.get('attach_threshold', 0.42)))
-        r = own_thread_only(store, msg, r)
+        # mail and tracker items join by IDENTITY - the conversation their own headers name - never by
+        # resemblance (PW-016); the closed task of a thread stays closed and the reply stays on the
+        # thread, judged afresh (PW-017)
+        r = identity_route(store, msg)
     new_rid = None                     # set when a fresh reply task opens a review below
     held = ''                            # why the coding agent was NOT auto-started (a robot or a stranger)
     notes, notes_left = [], 0            # standing notes the classifier saw, and any that did not fit
@@ -878,6 +880,29 @@ def thread_ruling(store, msg: dict) -> str:
                                               sender=msg.get('from_email') or msg.get('from_name'),
                                               channel=msg.get('channel'))
     return f'On this very conversation you ruled earlier: "{on_thread}" - weigh whether this message changes that' if on_thread else ''
+
+
+def identity_route(store, msg: dict) -> dict:
+    """Where a mail or tracker item goes: the OPEN task its own conversation already belongs to, else
+    new work. The router used to score subject words, sender and body cosine against every open
+    task, so two unrelated mails with one subject line joined a task, a rewritten References header
+    landed a reply on a look-alike, and a bounce joined the task its text resembled (the wrong-thread
+    reply of 2026-09-03). Identity is Graph's conversationId, IMAP's References/Message-ID, a tracker
+    item's own id (PW-016); without one, resemblance never decides. A closed task's thread does not
+    reopen it: the reply is kept on the conversation and evaluated on its own (PW-017)."""
+    conv = msg.get('conversation_id')
+    if not conv:
+        return {'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [],
+                'reason': 'new task - no conversation identity to join on, and resemblance never decides'}
+    home = store.task_for_conversation(conv)
+    if not home:
+        return {'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [], 'reason': 'new task - no open task on this conversation'}
+    t = store.get_task(home) or {}
+    if t.get('Status') in ('done', 'dropped'):
+        logger.info(f"ingest: this thread's task {task_ref(home)} is closed - new work, not a reopening")
+        return {'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [],
+                'reason': f"this thread's task {task_ref(home)} is closed - judged as new; the reply stays on the thread"}
+    return {'decision': 'attach', 'task_id': home, 'score': 1.0, 'candidates': [], 'reason': 'attached: same conversation thread'}
 
 
 def own_thread_only(store, msg: dict, r: dict) -> dict:

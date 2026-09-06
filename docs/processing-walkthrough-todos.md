@@ -112,13 +112,13 @@ implementation; current `routing.route()` still scores email subjects/senders/bo
   chain records, and use the conversation's existing task association. Do not
   attach unrelated threads based on subject, sender, or body similarity. Missing
   thread identity must not fall back to fuzzy automatic attachment.
-- [ ] <a id="pw-017"></a>**PW-017** Keep chain storage separate from task lifecycle. A reply on a closed task's
+- [x] <a id="pw-017"></a>**PW-017** Keep chain storage separate from task lifecycle. A reply on a closed task's
   email thread is retained as conversation context without automatically reopening
   the task. Triage determines whether the new reply requires further work.
-- [ ] <a id="pw-018"></a>**PW-018** WhatsApp/Teams/Slack: use AI to determine whether a new message continues an
+- [x] <a id="pw-018"></a>**PW-018** WhatsApp/Teams/Slack: use AI to determine whether a new message continues an
   existing ask or starts a different ask. A shared chat/room ID alone must not
   decide task membership. Preserve the conversation context for that decision.
-- [ ] <a id="pw-019"></a>**PW-019** Add regression tests: unrelated emails with identical subjects remain
+- [x] <a id="pw-019"></a>**PW-019** Add regression tests: unrelated emails with identical subjects remain
   separate; genuine replies reuse their chain/task association; missing identity
   cannot force a similarity match; closed-task replies do not automatically reopen
   work; one chat can contain multiple asks while follow-ups join the correct ask.

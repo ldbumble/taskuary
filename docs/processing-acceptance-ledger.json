@@ -142,36 +142,36 @@
       "section": "Routing: email identity versus chat intent",
       "phase": "2/3",
       "requirement": "Email: link new messages by actual conversation identity, merge missing",
-      "status": "pending",
-      "test": "Required: Phase 2/3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: identity-only joining; merging missing chain records is PW-009+",
+      "test": "`tests/test_email_identity_routing.py` (identical subjects stay separate; a genuine reply reuses its thread; no identity means new work; tracker items keep their own identity)",
+      "commit": "b03fa29; local gates passed, CI pending"
     },
     {
       "id": "PW-017",
       "section": "Routing: email identity versus chat intent",
       "phase": "2/3",
       "requirement": "Keep chain storage separate from task lifecycle. A reply on a closed task's",
-      "status": "pending",
-      "test": "Required: Phase 2/3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_email_identity_routing.py` (a reply on a closed task's thread is kept on the conversation, judged afresh, and the task stays closed)",
+      "commit": "b03fa29; CI pending"
     },
     {
       "id": "PW-018",
       "section": "Routing: email identity versus chat intent",
       "phase": "2/3",
       "requirement": "WhatsApp/Teams/Slack: use AI to determine whether a new message continues an",
-      "status": "pending",
-      "test": "Required: Phase 2/3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_chat_relationship.py` (Section 3.4: room id never decides; one verdict relates a line to same-day asks)",
+      "commit": "78c6dd1; CI run 34039988682"
     },
     {
       "id": "PW-019",
       "section": "Routing: email identity versus chat intent",
       "phase": "2/3",
       "requirement": "Add regression tests: unrelated emails with identical subjects remain",
-      "status": "pending",
-      "test": "Required: Phase 2/3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_email_identity_routing.py` (5 cases) and `tests/test_chat_relationship.py` (one chat, several asks; follow-ups join the right ask)",
+      "commit": "b03fa29; CI pending"
     },
     {
       "id": "PW-020",
@@ -666,7 +666,7 @@
       "requirement": "Extend the same triage verdict with a meaningful task title/summary and",
       "status": "implemented",
       "test": "`tests/test_task_checklist.py`::VerdictNamesTheWorkTests (title, summary and checklist from the verdict; validated; router fallback kept)",
-      "commit": "82a56a3; local gates passed, CI pending"
+      "commit": "82a56a3; 82a56a3, CI run 34040813007 (all ten jobs passed)"
     },
     {
       "id": "PW-075",
@@ -675,7 +675,7 @@
       "requirement": "Persist the checklist with the task and render interactive, saved checkboxes",
       "status": "implemented",
       "test": "`tests/test_task_checklist.py`::ProgressTests, ::SharedContextTests (persisted items with ids, task-list Markdown, task detail, worker brief); `website/test/checklist.test.mjs` (task page and assistant card wired)",
-      "commit": "82a56a3; CI pending"
+      "commit": "82a56a3; 82a56a3, CI run 34040813007 (all ten jobs passed)"
     },
     {
       "id": "PW-076",
@@ -684,7 +684,7 @@
       "requirement": "Give checklist items stable identity so edits, progress, and fresh-triage",
       "status": "implemented",
       "test": "`tests/test_task_checklist.py` (stable ids; owner edit keeps progress where the words stayed; a later message adds distinct items, no duplicates, no resets, change surfaced on the task)",
-      "commit": "82a56a3; CI pending"
+      "commit": "82a56a3; 82a56a3, CI run 34040813007 (all ten jobs passed)"
     },
     {
       "id": "PW-077",
@@ -693,7 +693,7 @@
       "requirement": "Keep checklist progress separate from agent/session state and task completion;",
       "status": "implemented",
       "test": "`tests/test_task_checklist.py`::ProgressTests (ticking every box completes nothing; closing ticks nothing); `checklist.test.mjs` progress wording",
-      "commit": "82a56a3; CI pending"
+      "commit": "82a56a3; 82a56a3, CI run 34040813007 (all ten jobs passed)"
     },
     {
       "id": "PW-078",
@@ -702,7 +702,7 @@
       "requirement": "Add tests for multi-request chains, coding/general/personal tasks, meaningful",
       "status": "partial: coding/general/personal kinds and multi-request chains covered; no rendered-browser click of a checkbox yet",
       "test": "`tests/test_task_checklist.py` (9 cases) and `checklist.test.mjs` (4)",
-      "commit": "82a56a3; CI pending"
+      "commit": "82a56a3; 82a56a3, CI run 34040813007 (all ten jobs passed)"
     },
     {
       "id": "PW-079",

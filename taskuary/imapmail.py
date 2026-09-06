@@ -473,7 +473,8 @@ def _prepare_folder(checkpoint, cfg: dict, *, sent: bool, scope: str, seen_valid
     scope_changed = stored_scope not in (None, scope)
     validity_changed = (seen_validity is not None and saved_validity is not None
                         and int(seen_validity) != saved_validity)
-    if scope_changed or validity_changed:
+    reset = scope_changed or validity_changed
+    if reset:
         logger.warning(f'imap folder identity changed; resetting cursor for scope {scope}')
         cursor, mode, holes = 0, 'scoped-v1', set()
         saved_validity = seen_validity
@@ -487,8 +488,9 @@ def _prepare_folder(checkpoint, cfg: dict, *, sent: bool, scope: str, seen_valid
     values = {k['uid']: cursor, k['scope']: scope, k['mode']: mode,
               k['holes']: _hole_json(scope, saved_validity, mode, holes)}
     if saved_validity is not None: values[k['validity']] = saved_validity
-    if any(cfg.get(name) != value for name, value in values.items()):
-        checkpoint(values)
+    remove = (k['validity'],) if reset and saved_validity is None else ()
+    if any(cfg.get(name) != value for name, value in values.items()) or any(name in cfg for name in remove):
+        checkpoint(values, remove)
     return {'keys': k, 'cursor': cursor, 'validity': saved_validity,
             'scope': scope, 'mode': mode, 'holes': holes}
 
@@ -571,16 +573,19 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
     expected_config = {name: cfg.get(name) for name in (*_POLL_IDENTITY_FIELDS, *sorted(poll_keys))}
     expected_fields = {name: c.get(name) for name in ('Type', 'Active', 'Secret')}
 
-    def checkpoint(values):
+    def checkpoint(values, remove=()):
         values = dict(values or {})
         ok = store.patch_connector_poll_state(
-            c['ConnectorId'], config_set=values,
+            c['ConnectorId'], config_set=values, config_remove=remove,
             expect_fields=expected_fields, expect_config=expected_config)
         if not ok:
             raise RuntimeError('mailbox changed while IMAP was polling; its stale checkpoint was not saved')
         cfg.update(values)
         for name, value in values.items():
             expected_config[name] = value
+        for name in remove:
+            cfg.pop(name, None)
+            expected_config[name] = None
 
     def prepare(sent, box, validity):
         return _prepare_folder(checkpoint, cfg, sent=sent,

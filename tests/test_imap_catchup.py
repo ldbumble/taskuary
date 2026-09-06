@@ -236,6 +236,26 @@ class GapTests(unittest.TestCase):
         self.assertEqual(saved['imap_retry_uids']['uids'], [])
         self.assertNotEqual(saved['imap_uid_scope'], old_scope)
 
+    def test_scope_reset_without_validity_clears_old_epoch_and_keeps_new_unknown_hole(self):
+        old_scope = imapmail._scope('imap.gmail.com', 993, 'me@myco.example', 'INBOX')
+        s, c = store_with({'imap_host': 'new.mail.example', 'imap_uid': 500,
+                           'imap_uidvalidity': 7, 'imap_uid_scope': old_scope,
+                           'imap_uid_identity': 'legacy',
+                           'imap_retry_uids': {'scope': old_scope, 'uidvalidity': 7,
+                                               'identity': 'legacy', 'uids': [499]}})
+        with self.assertRaises(imapmail.IMAPPartialFailure):
+            poll(s, c, FakeBox(mails([1]), validity=None, bad={1}))
+        reset = cfg_of(s)
+        self.assertNotIn('imap_uidvalidity', reset)
+        self.assertEqual(reset['imap_uid'], 1)
+        self.assertEqual(reset['imap_retry_uids']['uidvalidity'], None)
+        self.assertEqual(reset['imap_retry_uids']['uids'], [1])
+
+        c = s.get_connector_by_type('gmail', with_secret=True)
+        self.assertEqual(poll(s, c, FakeBox(mails([1]), validity=None)), 1)
+        self.assertEqual(cfg_of(s)['imap_retry_uids']['uids'], [])
+        self.assertRegex(inbound(s)[0]['ExternalId'], r'^imap:[0-9a-f]{24}:vunknown:1$')
+
 
 class SentTests(unittest.TestCase):
     def test_the_sent_folder_drains_its_whole_gap_too(self):

@@ -62,7 +62,7 @@ def clean_env(extra: dict = None) -> dict:
     return env
 
 
-def session_env(agent: str = '', task_id=None, cwd: str = '') -> dict:
+def session_env(agent: str = '', task_id=None, cwd: str = '', sid: str = None) -> dict:
     """What a CLI needs to know about ITSELF. `taskuary --note "..."` inside an agent's terminal
     should not have to be told which agent or which task it is - the session already knows, so
     it says so in the environment."""
@@ -70,7 +70,7 @@ def session_env(agent: str = '', task_id=None, cwd: str = '') -> dict:
     srv = config.load()['server']
     host = '127.0.0.1' if srv.get('host') in ('0.0.0.0', '::', '', None) else srv.get('host')
     out = {k: str(v) for k, v in (('TASKUARY_AGENT', agent), ('TASKUARY_TASK', task_id or ''),
-                                  ('TASKUARY_CWD', cwd),
+                                  ('TASKUARY_CWD', cwd), ('TASKUARY_SID', sid or ''),   # the run a --note belongs to (PW-178)
                                   # A bare shell has no Taskuary job and should carry no ambient
                                   # app context. Task-backed agents need the exact running URL so
                                   # they reuse it instead of starting another port.
@@ -163,7 +163,7 @@ class Term:
         # the pane's browser name, and who this session IS - so `taskuary --note` inside it needs
         # no arguments to know which agent, task and checkout it is speaking for
         self.pty = (_WinPty if os.name == 'nt' else _UnixPty)(
-            argv, cwd, rows, cols, {**_bv.env(self.sid), **session_env(agent or label, task_id, cwd)})
+            argv, cwd, rows, cols, {**_bv.env(self.sid), **session_env(agent or label, task_id, cwd, sid=self.sid)})
         self.alive = True
         # started LAST, and store comes in through the constructor: a CLI that dies immediately
         # used to reach keep() before the caller had handed the session anywhere to file itself
@@ -976,7 +976,7 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     from . import browserview as _bv
     if _bv.wanted(t) and shutil.which('agent-browser'): parts.append(_bv.brief())
     from . import blackboard as bb
-    aware = bb.briefing(store, cwd, exclude_tid=tid) if cwd else ''
+    aware = bb.briefing(store, cwd, exclude_tid=tid, assess_for=tid) if cwd else ''
     if aware: parts.append(aware)
     # ...and what those agents SAID, which is the half no amount of reading git can reconstruct.
     # It rides even when nobody else is running: the last session's "ready to push, tests green"

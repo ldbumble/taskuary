@@ -528,6 +528,7 @@ class SQLiteStore:
             # they were rolled up, so the live wall stays short without anything being deleted
             ncols = {r[1] for r in self.cx.execute('PRAGMA table_info(boardnote)')}
             if 'Rolled' not in ncols: self.cx.execute('ALTER TABLE boardnote ADD COLUMN Rolled TEXT')
+            if 'Sid' not in ncols: self.cx.execute('ALTER TABLE boardnote ADD COLUMN Sid TEXT')   # the run that wrote it (PW-178)
             qcols = {r[1] for r in self.cx.execute('PRAGMA table_info(dispatchq)')}
             for col, typ in (('Value', 'REAL'), ('Floor', 'REAL'), ('Why', 'TEXT'),    # rank.py: value-ordered queue
                              ('Attempts', 'INTEGER DEFAULT 0'), ('LastError', 'TEXT'), ('NextAt', 'TEXT'), ('State', 'TEXT')):   # PW-085: the retry budget
@@ -2395,7 +2396,7 @@ class SQLiteStore:
     # ── the agent wall (blackboard.py) ──────────────────────────────────────────────────
     def add_note(self, fields) -> int:
         return self._insert('boardnote', {**fields, 'CreatedAt': _now()},
-                            ('TaskId', 'Agent', 'Cwd', 'Kind', 'Body', 'Files', 'CreatedAt', 'ReadBy'))
+                            ('TaskId', 'Agent', 'Cwd', 'Kind', 'Body', 'Files', 'CreatedAt', 'ReadBy', 'Sid'))
     def roll_notes(self, ids: list, day: str) -> int:
         """Mark these as composted into a summary. Nothing is deleted - the Board can still show
         the whole wall, and an agent that wants the detail can still read it."""

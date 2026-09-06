@@ -163,11 +163,11 @@ def main():
             else: print(f"filed in the Hub under {p['Topic']} as #{p['LoreId']}: {p['Title']}")
             return
         if args.note:
-            try: n = bb.post(store, args.note, args.kind, who, cwd, int(tid) if str(tid).isdigit() else None)
+            try: n = bb.post(store, args.note, args.kind, who, cwd, int(tid) if str(tid).isdigit() else None, sid=os.environ.get('TASKUARY_SID'))
             except ValueError as e: print(f'not posted: {e}'); return
             print(f"posted to the wall as {n['Agent']} [{n['Kind']}]")
             return
-        rows = store.notes(bb.norm(cwd), 40 if args.all else 20, rolled=args.all)
+        rows = store.notes(bb.norm(cwd), 40, rolled=True) if args.all else bb.live_notes(store, cwd, 20)   # the same live selection the Board and the seed read (PW-179)
         print(f'the wall - {cwd}' if rows else f'the wall is empty for {cwd} - you are first')
         if not args.all and rows: print('  (older days are folded into [summary] lines; --board --all for every note)')
         for r in reversed(rows):

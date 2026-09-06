@@ -67,22 +67,28 @@ class ReadingTests(unittest.TestCase):
         self.assertNotIn('closed task note', bodies)
 
     def test_the_prompt_gets_a_pointer_and_the_newest_note_not_the_whole_wall(self):
-        """A seed is typed into a TUI on one line; the transcript does not belong there."""
+        """A seed is typed into a TUI on one line; the transcript does not belong there. The notes
+        come from sessions alive now (PW-176) - here three live fakes."""
+        from types import SimpleNamespace
         s = MemoryStore()
         for i, (k, body) in enumerate((('working', 'taking auth.py'), ('blocked', 'need the staging key'),
                                        ('ready', 'auth done, suite green'))):
-            bb.post(s, body, k, f'agent{i}', CWD)
+            terminal.SESSIONS[f'live{i}'] = SimpleNamespace(sid=f'live{i}', alive=True, task_id=None)
+            self.addCleanup(terminal.SESSIONS.pop, f'live{i}', None)
+            bb.post(s, body, k, f'agent{i}', CWD, sid=f'live{i}')
         text = bb.wall_text(s, CWD)
         self.assertIn('auth done, suite green', text)       # the newest, in full
         self.assertNotIn('taking auth.py', text)            # ...and not the whole history
         self.assertIn('taskuary --board', text)             # with the way to read the rest
-        self.assertIn('3 note(s)', text)
+        self.assertIn('3 live note(s)', text)                # live sessions only (PW-176)
         self.assertLessEqual(len(text), bb.SEED_BUDGET)     # it shares one line with the task itself
 
     def test_a_loud_wall_cannot_eat_the_prompt(self):
         """The wall is the one part of a seed that grows every time an agent says something."""
+        from types import SimpleNamespace
         s = MemoryStore()
-        for i in range(40): bb.post(s, f'note {i} ' + 'x' * 400, 'note', f'agent{i}', CWD)
+        terminal.SESSIONS['loud'] = SimpleNamespace(sid='loud', alive=True, task_id=None); self.addCleanup(terminal.SESSIONS.pop, 'loud', None)
+        for i in range(40): bb.post(s, f'note {i} ' + 'x' * 400, 'note', f'agent{i}', CWD, sid='loud')
         self.assertLessEqual(len(bb.wall_text(s, CWD)), bb.SEED_BUDGET)
 
     def test_an_empty_wall_says_nothing_at_all(self):
@@ -119,9 +125,13 @@ class TheSeedTests(unittest.TestCase):
         self.assertEqual(env[guard.AGENT_ENV], config.load()['server']['agent_token'])
 
     def test_the_wall_rides_into_the_next_agents_prompt(self):
+        """...from a session that is alive right now (PW-176): an ended session's note is history."""
+        from types import SimpleNamespace
         s = MemoryStore()
         tid = s.create_task({'Title': 'ship the thing', 'Kind': 'coding'}, 'o')
-        bb.post(s, 'the migration is half applied - do not run the tests yet', 'blocked', 'codex', CWD)
+        terminal.SESSIONS['peer'] = SimpleNamespace(sid='peer', alive=True, task_id=None, cwd='', agent='codex', label='codex', files=lambda: [])
+        self.addCleanup(terminal.SESSIONS.pop, 'peer', None)
+        bb.post(s, 'the migration is half applied - do not run the tests yet', 'blocked', 'codex', CWD, sid='peer')
         seed = terminal.seed_text(s, tid, repo=None, cwd=CWD)
         self.assertIn('half applied', seed)
         self.assertIn('taskuary --board', seed)

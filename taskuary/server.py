@@ -2773,7 +2773,7 @@ def report_rerun(sid: int):
     src = store.get_source(sid)
     if not src or src.get('Channel') != 'report': raise HTTPException(404, 'no such report')
     def work():
-        try: run_report_source(store, src, _llm()); store.touch_source(sid)
+        try: run_report_source(store, src, _llm(), trigger='manual'); store.touch_source(sid)
         except Exception as e: logger.warning(f'rerun of report {sid} failed: {e}')
     # queued, not awaited: the report lands on the Timeline like a scheduled run, and the pipe picks it up
     threading.Thread(target=work, daemon=True).start()
@@ -3561,6 +3561,13 @@ def report_compose(body: dict):
                                                            'confidence': out.get('confidence')})
     return out
 
+
+@app.get('/api/workflows')
+def workflows_catalog():
+    """Configured workflows and request procedures, read apart (PW-203/207): a job the owner scheduled is not
+    a playbook, and a playbook is not a scheduled job."""
+    from . import workflows
+    return workflows.catalog(store)
 
 @app.post('/api/workflows/compose')
 def workflow_compose(body: dict):

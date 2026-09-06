@@ -1028,7 +1028,7 @@ def last_runs(store) -> dict:
     return out
 
 
-def run_report_source(store, src: dict, llm=None) -> dict:
+def run_report_source(store, src: dict, llm=None, trigger: str = 'schedule') -> dict:
     """Execute one due report and file it on the timeline - and leave a record of the run on the
     source (LAST_RUN): when, how long, what it read, what it reviewed, what it posted or why it
     stayed quiet. A quiet assistant check posts NOTHING, so without this there was no way to see
@@ -1042,7 +1042,7 @@ def run_report_source(store, src: dict, llm=None) -> dict:
         try: store.add_report_run(src['SourceId'], rec)
         except Exception as e: logger.warning(f'report run history not kept for {src["Address"]}: {e}')
     try:
-        out = _run_report_source(store, src, cfg, llm)
+        out = _run_report_source(store, src, cfg, llm, trigger)
     except Exception as e:
         rec.update({'ms': int((time.time() - t0) * 1000), 'failed': True, 'error': str(e)[:600]})
         keep(); raise
@@ -1054,10 +1054,17 @@ def run_report_source(store, src: dict, llm=None) -> dict:
     return out
 
 
-def _run_report_source(store, src: dict, cfg: dict, llm=None) -> dict:
+def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'schedule') -> dict:
     """Execute one due report (executor + optional AI pass) and file it on the timeline.
     Errors file visibly too."""
     title = cfg.get('title') or src['Address']
+    # a WORKFLOW for the regular agent is not run here and not filed as a report: it is handed to its worker
+    # as a task with the definition and this run's context, through the usual start gates (workflows.py, PW-204)
+    from . import workflows
+    if workflows.is_workflow(cfg) and cfg.get('type') == 'agent' and workflows.runs_on(cfg) == 'general':
+        out = workflows.run(store, src, actor='schedule' if trigger == 'schedule' else 'owner', trigger=trigger)
+        return {'message_id': None, 'subject': f"{title} → {out['ref']} (regular agent, {trigger})", 'files': 0, 'said': 0,
+                'summary': f"handed to the regular agent as {out['ref']} ({trigger})", 'task_id': out['task_id']}
     logger.debug(f'report run: {title} ({cfg.get("type", "rest")}, ai={bool(cfg.get("ai_prompt"))})')
     if cfg.get('type') == 'zoho_monthly_invoices':
         from .invoice_workflow import run_report

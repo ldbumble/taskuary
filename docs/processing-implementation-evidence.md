@@ -1330,3 +1330,30 @@ Tests: `tests/test_auto_start.py` (16 cases). `tests/test_kind_dispatch.py` and 
 "general opens no session" to the PW-069 contract with the reason noted; `tests/conftest.py` guards
 the router's unattended assistant start the way it guards a PTY, so a suite never opens a real
 assistant session unless the test supplies a fake.
+
+## Section 5.2 — configurable sender trust for unattended starts
+
+Status: implemented and tested locally at `6c560b9`; remote CI pending on the pushed
+checkpoint. Section 5.1 is CI-verified (d2e11e5, CI run 34048763594 (all ten jobs passed)).
+Acceptance PW-079, PW-080, PW-081, PW-082 implemented; PW-083 partial (the live Graph/IMAP Sent
+Items queries are exercised only through the existing fakes).
+
+The stranger gate had a hidden fourth door: "has written before" (`store.known_sender`), so a
+stranger's own earlier mail, a historical import or a retry could make the next message
+'known'. `senders.known` is now three rules the owner can see and switch in Settings, and nothing
+else: chat channels inside a workspace the owner controls (`trust_non_email`), the owner's own
+domains (`trust_own_domain`), and verified SENT evidence that the receiving mailbox wrote to the
+exact address (`trust_sent_history`) - what the store already holds scoped to that mailbox
+(`store.wrote_to_locally`: the mailbox's own words on a thread with the address, or an approved
+reply to them), a hit remembered from an earlier lookup (new `sender_trust` table, per mailbox and
+address, so the mail server is asked once), and the server's own Sent Items (`senders.wrote_to`).
+`wrote_to` now RAISES on a failure instead of answering no, and `known` reports it as "could not
+check the Sent Items of <mailbox> (...) - not proof either way": the task waits for a manual start
+with that explanation, is not tagged as a stranger hold, and the negative is not remembered.
+The matched rule is written on the task when a start is allowed ("Unattended start allowed: in
+your Sent Items"). `store.known_sender` remains for the first-time-sender policy question only.
+Settings shows the three switches; packaged UI rebuilt. The same gate sits behind both worker
+kinds through `ingest.auto_start_ok` (Section 5.1).
+
+Tests: `tests/test_sender_trust.py` (11 cases). `tests/test_core.py`'s stranger walk still passes: the owner's own words on
+the stranger's thread are verified sent evidence for that mailbox.

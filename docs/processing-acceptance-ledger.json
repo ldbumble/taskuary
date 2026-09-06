@@ -621,7 +621,7 @@
       "requirement": "Extend automatic dispatch to general agents, using a per-task worker",
       "status": "implemented",
       "test": "`tests/test_auto_start.py` (a general task opens its own assistant session by default; coding opens its CLI; a personal task starts nothing; the queue drain starts the kind that was queued)",
-      "commit": "d2e11e5; local gates passed, CI pending"
+      "commit": "d2e11e5; d2e11e5, CI run 34048763594 (all ten jobs passed)"
     },
     {
       "id": "PW-070",
@@ -630,7 +630,7 @@
       "requirement": "Expose clear auto-start controls for coding and general agents in Settings,",
       "status": "implemented",
       "test": "`tests/test_auto_start.py`::SettingsTests (both switches default on; an install that had switched coding off keeps unattended starts off for the assistant too; an explicit choice is never overwritten; Settings exposes both) - `coder_auto_enabled` relabelled",
-      "commit": "d2e11e5; local gates passed, CI pending"
+      "commit": "d2e11e5; d2e11e5, CI run 34048763594 (all ten jobs passed)"
     },
     {
       "id": "PW-071",
@@ -639,7 +639,7 @@
       "requirement": "Apply appropriate shared safety/permission checks to both worker kinds,",
       "status": "implemented",
       "test": "`tests/test_auto_start.py` (the stranger hold applies to both kinds with the reason on the task; no configured assistant provider and an unresolved repository choice are visible holds, not crashes or wrong-checkout sessions)",
-      "commit": "d2e11e5; local gates passed, CI pending"
+      "commit": "d2e11e5; d2e11e5, CI run 34048763594 (all ten jobs passed)"
     },
     {
       "id": "PW-072",
@@ -648,7 +648,7 @@
       "requirement": "Dispatch once per eligible work item, not per refresh or historical chain",
       "status": "implemented",
       "test": "`tests/test_auto_start.py` (one start per work item: a second message on the task starts nothing; a live conversation is reused and the ask is put once)",
-      "commit": "d2e11e5; local gates passed, CI pending"
+      "commit": "d2e11e5; d2e11e5, CI run 34048763594 (all ten jobs passed)"
     },
     {
       "id": "PW-073",
@@ -657,7 +657,7 @@
       "requirement": "Test both default auto-start paths, each settings opt-out, manual fallback,",
       "status": "partial: both default paths, each opt-out, personal to-dos, missing worker/repo configuration, safety holds, failed launch and a held task staying deletable are covered; concurrent ingest/retriage is covered indirectly by the drain lock tests",
       "test": "`tests/test_auto_start.py` (16 cases); `tests/test_kind_dispatch.py` and `tests/test_not_coding.py` moved to the PW-069 contract with the reason noted; the suite guards the router's unattended assistant start like a PTY",
-      "commit": "d2e11e5; local gates passed, CI pending"
+      "commit": "d2e11e5; d2e11e5, CI run 34048763594 (all ten jobs passed)"
     },
     {
       "id": "PW-074",
@@ -709,45 +709,45 @@
       "section": "Configurable sender trust for automatic agent startup",
       "phase": "5",
       "requirement": "Remove `store.known_sender()` / \"has written before\" as an authorization",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_sender_trust.py`::RulesTests (prior incoming mail is not trust even when the table knows the address; `store.known_sender` stays for the first-time-sender policy only and is out of `senders.known`)",
+      "commit": "6c560b9; local gates passed, CI pending"
     },
     {
       "id": "PW-080",
       "section": "Configurable sender trust for automatic agent startup",
       "phase": "5",
       "requirement": "Retain verified Sent Items evidence that the receiving mailbox previously",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_sender_trust.py` (verified Sent Items evidence allows and names the reason; the reason is shown on the task; a verified hit is remembered per mailbox and address; a failed lookup is not trust, is said on the task, is not a stranger verdict and is not remembered as no)",
+      "commit": "6c560b9; local gates passed, CI pending"
     },
     {
       "id": "PW-081",
       "section": "Configurable sender trust for automatic agent startup",
       "phase": "5",
       "requirement": "Expose same-domain trust and non-email-channel trust behavior explicitly in",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_sender_trust.py`::RulesTests::test_each_rule_has_a_switch, ::SettingsTests (own-domain, Sent Items and chat-channel trust are three visible switches with defaults; no incoming-history option exists)",
+      "commit": "6c560b9; local gates passed, CI pending"
     },
     {
       "id": "PW-082",
       "section": "Configurable sender trust for automatic agent startup",
       "phase": "5",
       "requirement": "Apply the configured sender-trust contract consistently to coding and",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_sender_trust.py`::BothKindsTests (the configured trust gates coding and general alike; a hold affects the unattended start only - intake, triage and the task are untouched)",
+      "commit": "6c560b9; local gates passed, CI pending"
     },
     {
       "id": "PW-083",
       "section": "Configurable sender trust for automatic agent startup",
       "phase": "5",
       "requirement": "Add tests for prior incoming-only history remaining untrusted, verified sent",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: incoming-only history, verified sent history, each disabled rule, same-domain and chat settings, failed lookups, mailbox scoping and both worker kinds covered; the live Graph/IMAP Sent Items queries are exercised only through the existing fakes",
+      "test": "`tests/test_sender_trust.py` (11 cases)",
+      "commit": "6c560b9; local gates passed, CI pending"
     },
     {
       "id": "PW-084",

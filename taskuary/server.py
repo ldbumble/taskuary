@@ -22,7 +22,7 @@ from . import policy as policy_engine
 from . import reshape
 from . import terminal as hub_term
 from .coder import PAUSE_MARKER, pause_note, reply_target as coder_reply_target, wrap as coder_wrap
-from . import aisetup, assistant, demo, deps, learn, learnedgraph, outbound, playbooks, rank, responder, waitroom
+from . import aisetup, assistant, demo, deps, learn, learnedgraph, operations, outbound, playbooks, rank, responder, waitroom
 from . import live as live_bus
 
 # whatever the owner's Install button added lives beside their data, not in the build - and it has
@@ -432,6 +432,91 @@ def edit_checklist(task_id: int, body: ChecklistEdit):
     """The owner's words for the list; a box whose words are unchanged keeps its state (PW-076)."""
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     return {'ok': True, 'checklist': store.set_task_checklist(task_id, body.items, ACTOR)}
+
+
+# ── shared operations (operations.py): propose, edit, confirm once, and the durable record ──────
+class OperationBody(BaseModel): kind: str; target: int; params: dict = {}
+class OperationEdit(BaseModel): params: dict
+class OperationConfirm(BaseModel): version: int
+class DiscussBody(BaseModel): body: str; actor: str = 'owner'
+
+def _run_operation(op: dict, background: BackgroundTasks):
+    """The shared handler for each kind - the same code the task page and the timeline run."""
+    kind, tid, mid, p = op['kind'], op['target'], op['target'], op['params'] or {}
+    if kind == 'task.create_from_message':
+        k = str(p.get('kind') or 'task').lower()
+        if k == 'general': return chat_message(mid, background)
+        if k == 'coding': return dispatch_message(mid, DispatchBody(kind='coding', agent=p.get('agent'), instruction=p.get('instructions')), background)
+        return mine_message(mid, MineBody(kind='task', title=p.get('title')), background)
+    if kind == 'message.file': return file_message(mid, NotATaskBody(learn=bool(p.get('learn', True))), background)
+    if kind == 'message.reply': return open_reply(mid, None)
+    if kind == 'dispatch.prepare':
+        return _dispatch_task_to_its_agent(tid, DispatchBody(kind=p.get('kind'), agent=p.get('agent'), instruction=p.get('instructions'), model=p.get('model')), background)
+    if kind == 'task.set_kind':
+        if str(p.get('kind')) == 'task': return not_coding(tid, NotATaskBody(learn=bool(p.get('learn', True))), background)
+        store.update_task(tid, {'Kind': str(p.get('kind'))}, ACTOR); return {'kind': p.get('kind')}
+    if kind == 'task.not_a_task': return not_a_task(tid, NotATaskBody(learn=bool(p.get('learn', True))), background)
+    if kind == 'task.complete':
+        if not store.get_task(tid): raise HTTPException(404, 'task not found')
+        store.update_task(tid, {'Status': 'done'}, ACTOR); return {'status': 'done'}
+    if kind == 'task.reopen':
+        if not store.get_task(tid): raise HTTPException(404, 'task not found')
+        store.update_task(tid, {'Status': 'open'}, ACTOR); return {'status': 'open'}
+    raise HTTPException(501, f'{kind} has no shared handler yet')
+
+@app.post('/api/operations')
+def propose_operation(body: OperationBody):
+    try: return operations.propose(store, body.kind, body.target, body.params, ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+
+@app.get('/api/operations/{oid}')
+def get_operation(oid: str):
+    op = operations.get(store, oid)
+    if not op: raise HTTPException(404, 'no such proposal')
+    return op
+
+@app.patch('/api/operations/{oid}')
+def edit_operation(oid: str, body: OperationEdit):
+    try: return operations.revise(store, oid, body.params, ACTOR)
+    except ValueError as e: raise HTTPException(404 if 'no such' in str(e) else 422, str(e))
+
+@app.delete('/api/operations/{oid}')
+def cancel_operation(oid: str):
+    try: return operations.cancel(store, oid, ACTOR)
+    except ValueError as e: raise HTTPException(404, str(e))
+
+@app.post('/api/operations/{oid}/execute')
+def execute_operation(oid: str, body: OperationConfirm, background: BackgroundTasks):
+    """The confirmation button: the structured proposal, by id and version - never a phrase sent back
+    through an interpreter. Stale or cancelled is 409 with the reason; a failed handler is reported as
+    such; a repeated click is the first receipt again (PW-124, PW-125)."""
+    op = operations.get(store, oid)
+    if not op: raise HTTPException(404, 'no such proposal')
+    out = operations.execute(store, oid, body.version, lambda: _run_operation(op, background), ACTOR)
+    if out['status'] in ('stale', 'cancelled'): raise HTTPException(409, out.get('error') or out['status'])
+    return out
+
+@app.get('/api/tasks/{task_id}/history')
+def task_history(task_id: int):
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    return {'data': operations.history(store, task_id=task_id)}
+
+@app.get('/api/messages/{mid}/history')
+def message_history(mid: int):
+    if not store.get_message(mid): raise HTTPException(404, 'message not found')
+    return {'data': operations.history(store, message_id=mid)}
+
+@app.post('/api/tasks/{task_id}/discussion')
+def task_discuss(task_id: int, body: DiscussBody):
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    try: return {'id': operations.discuss(store, body.actor, body.body, task_id=task_id)}
+    except ValueError as e: raise HTTPException(422, str(e))
+
+@app.post('/api/messages/{mid}/discussion')
+def message_discuss(mid: int, body: DiscussBody):
+    if not store.get_message(mid): raise HTTPException(404, 'message not found')
+    try: return {'id': operations.discuss(store, body.actor, body.body, message_id=mid)}
+    except ValueError as e: raise HTTPException(422, str(e))
 
 
 @app.get('/api/tasks/{task_id}')
@@ -849,8 +934,10 @@ def not_coding(task_id: int, body: NotATaskBody = None, background: BackgroundTa
     if not t: raise HTTPException(404, 'task not found')
     live = hub_term.session_for(task_id)
     if live and live.alive: hub_term.close(live.sid)
+    was_kind, was_route = operations.verdict_of_task(store, task_id)
     store.update_task(task_id, {'Kind': 'task'}, ACTOR)
     store.clear_dispatch(task_id)
+    operations.record_direct(store, 'task.set_kind', task_id, {'kind': 'task'}, ACTOR, {'kind': 'task'}, verdict=was_kind, route_id=was_route)
     msgs = store.list_messages(task_id)
     learned = None
     if msgs and (body is None or body.learn):
@@ -880,6 +967,8 @@ def not_a_task(task_id: int, body: NotATaskBody = None, background: BackgroundTa
     nothing to conclude - delete the task and teach nothing."""
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     msgs, learned = store.list_messages(task_id), None
+    was_kind, was_route = operations.verdict_of_task(store, task_id)
+    operations.record_direct(store, 'task.not_a_task', task_id, {}, ACTOR, {'deleted': True}, verdict=was_kind, route_id=was_route)
     if msgs and (body is None or body.learn):
         mid = _teach_not_a_task(msgs[0], background)
         if mid: learned = {'memory_id': mid}
@@ -1293,8 +1382,10 @@ def file_message(mid: int, body: NotATaskBody = None, background: BackgroundTask
             store.update_task(tid, {'Status': 'done'}, ACTOR)
             store.add_comment(tid, ACTOR, 'human', 'Archived from the pipe - closed, not deleted.')
     learned = _teach_not_a_task(m, background) if (body is None or body.learn) else None
+    verdict, route_id = operations.verdict_of_message(store, m)
     store.set_message_status(mid, 'ignored')
     store.add_route(mid, None, 'ignore', None, 'nothing to do - filed by the owner', [], ACTOR)
+    operations.record_direct(store, 'message.file', mid, {}, ACTOR, {'taskDeleted': fate == 'deleted', 'taskArchived': fate == 'archived'}, verdict=verdict, route_id=route_id)
     return {'ok': True, 'taskDeleted': fate == 'deleted', 'taskArchived': fate == 'archived',
             'ref': task_ref(tid) if tid else None, 'memoryId': learned}
 
@@ -1372,7 +1463,9 @@ def _dispatch_task_to_its_agent(tid: int, body: DispatchBody, background: Backgr
         if live and live.alive:
             who = getattr(live, 'agent', None) or getattr(live, 'label', None) or 'agent'
             raise HTTPException(409, f'{who} is already working on this task; stop that agent before changing agent type')
+        was_kind, was_route = operations.verdict_of_task(store, tid)
         store.update_task(tid, {'Kind': requested}, ACTOR)
+        operations.record_direct(store, 'dispatch.prepare', tid, {'kind': requested}, ACTOR, {'kind': requested}, verdict=was_kind, route_id=was_route)
         task = store.get_task(tid)
         task_kind = requested
 
@@ -1412,10 +1505,14 @@ def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
     if not requested and not body.agent:
         raise HTTPException(422, 'Choose an agent type: general or coding')
     _learn_promotion(m, background)
+    verdict, route_id = operations.verdict_of_message(store, m)
     tid = m.get('TaskId') or task_from_message(
         store, mid, ACTOR, requested if requested in ('general', 'coding') else 'coding')
     try:
-        return _dispatch_task_to_its_agent(tid, body, background)
+        out = _dispatch_task_to_its_agent(tid, body, background)
+        operations.record_direct(store, 'task.create_from_message', mid, {'kind': requested if requested in ('general', 'coding') else 'coding'}, ACTOR,
+                                 {'taskId': tid, 'dispatch': out.get('dispatch')}, verdict=verdict, route_id=route_id)
+        return out
     except HTTPException as e:
         reason = str(e.detail or '')
         # This is a decision, not a failed action. The message may only just have become a task,
@@ -1624,10 +1721,12 @@ def mine_message(mid: int, body: MineBody = None, background: BackgroundTasks = 
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
     _learn_promotion(m, background)
+    verdict, route_id = operations.verdict_of_message(store, m)
     tid = m.get('TaskId') or task_from_message(store, mid, ACTOR, (body.kind if body else None) or 'task', ACTOR)
     from . import selfclose
     selfclose.claim(store, tid, ACTOR)
     if not (store.get_task(tid) or {}).get('Assignee'): store.update_task(tid, {'Assignee': ACTOR}, ACTOR)
+    operations.record_direct(store, 'task.create_from_message', mid, {'kind': (body.kind if body else None) or 'task'}, ACTOR, {'taskId': tid}, verdict=verdict, route_id=route_id)
     if body and (body.title or '').strip(): store.update_task(tid, {'Title': body.title.strip()[:200]}, ACTOR)
     store.audit('task', tid, 'mine', ACTOR, detail={'message_id': mid, 'subject': m.get('Subject')})
     return {'taskId': tid, 'ref': task_ref(tid)}
@@ -1645,7 +1744,9 @@ def chat_message(mid: int, background: BackgroundTasks = None):
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
     _learn_promotion(m, background)
+    verdict, route_id = operations.verdict_of_message(store, m)
     tid = m.get('TaskId') or task_from_message(store, mid, ACTOR, 'general', ACTOR)
+    operations.record_direct(store, 'task.create_from_message', mid, {'kind': 'general'}, ACTOR, {'taskId': tid}, verdict=verdict, route_id=route_id)
     from . import selfclose
     selfclose.claim(store, tid, ACTOR)
     t = store.get_task(tid) or {}

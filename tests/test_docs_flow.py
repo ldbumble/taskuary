@@ -11,13 +11,14 @@ import unittest
 from taskuary import agents, ingest, outbound, responder, terminal
 from taskuary.store import MemoryStore
 
-MARK = {d: f'ZZMARK{d.upper()}ZZ' for d in ('soul', 'coder', 'triage', 'learned', 'style')}
+MARK = {d: f'ZZMARK{d.upper()}ZZ' for d in ('soul', 'agent', 'coder', 'triage', 'learned', 'style')}
 NOTE, OFF = 'ZZMARKNOTEZZ', 'ZZMARKOFFZZ'
 
 
 def seeded():
     s = MemoryStore()
     s.save_doc('soul', f'You work for **Test Owner**.\n{MARK["soul"]}\nrepo map here.', 'owner')
+    s.save_doc('agent', f'# Agent rules\n- {MARK["agent"]}', 'owner')
     s.save_doc('coder', f'# Coder rules\n- {MARK["coder"]}', 'owner')
     s.save_doc('triage', f'Classify one inbound work message. Answer JSON only. {MARK["triage"]}', 'owner')
     # LEARNED.md injects its ACTIVE sections only, so the marker has to live inside one
@@ -66,11 +67,11 @@ class DocsReachThePromptTests(unittest.TestCase):
                                     llm=lambda sysm, usr, **k: (seen2.update(p=sysm + usr), 'ok')[1])
         self.assertFlows(seen2['p'], [MARK['soul'], MARK['style'], MARK['learned'], NOTE], forbid=[MARK['coder']])
 
-    def test_the_coding_agent_gets_soul_coder_and_the_notes(self):
+    def test_the_coding_agent_gets_agent_coder_and_the_notes_but_not_soul(self):
         """The notes are the part that was missing: an agent was handed the operator rules and
         the coder rules, and none of the verdicts the owner had actually given."""
         s = seeded()
-        self.assertFlows(terminal.seed_text(s, _task(s)), [MARK['soul'], MARK['coder'], NOTE])
+        self.assertFlows(terminal.seed_text(s, _task(s)), [MARK['agent'], MARK['coder'], NOTE], forbid=[MARK['soul']])   # PW-184: SOUL stays with triage
 
     def test_task_context_and_the_handoff_writer_carry_them_too(self):
         s = seeded()

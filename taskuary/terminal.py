@@ -26,8 +26,8 @@ SEED_RETRIES, SEED_BUDGET = 3, 180  # retype attempts after a boot dialog ate th
 # live testing (Ink's long-paste dropping). Chunks with a breath between give it frames.
 SEED_CHUNK, SEED_CHUNK_GAP = 160, .03
 DOC_CHARS = 1800                    # how much of CODER.md rides along in the prompt
-SOUL_CHARS = 1200                   # ...and of SOUL.md: context, not the operative ruleset,
-                                    # and every char is another char to type into a TUI
+AGENT_CHARS = 2600                  # ...and of AGENT.md, the rules both worker kinds share (PW-182); its boundaries lead
+SOUL_CHARS = 1200                   # legacy budget; SOUL.md no longer rides in a worker prompt (PW-184)
 # The fastest way to type a prompt is not to type it at all: these CLIs take the first prompt
 # on the COMMAND LINE, so the session starts with it already submitted - instant, and immune
 # to boot dialogs eating keystrokes (codex's update chooser once swallowed half a toe and the
@@ -901,6 +901,7 @@ def rules_text(store, chars: int = DOC_CHARS) -> str:
 # had the whole thing. Windows takes 32767 characters of command line; ASK_CHARS spends a
 # useful slice of that on the thing the task is actually about.
 ASK_CHARS = 12000
+BRIEF_CONTEXT = 4000        # the conversation behind the latest message, in the seed (the context file has the rest)
 SEED_CEILING = 24000        # the whole prompt, leaving room for the exe path and its flags
 
 
@@ -995,12 +996,19 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
         parts.append('PREVIOUS SESSION RESULT: continue from this saved result; verify the current checkout '
                      f'before changing it and do not repeat finished work: {no_emails(_cut(previous, 3000, "previous result"))}')
     from .triage import strip_boilerplate
-    md = store.checklist_markdown(tid) if hasattr(store, 'checklist_markdown') else ''
+    # the one task brief both worker kinds read (brief.py, PW-183): objective, checklist, the latest
+    # message in full and the conversation it sits in - history included, budgeted the way triage reads it
+    from . import brief as _brief
+    b = _brief.build(store, tid, instruction=instruction, repo=repo or cwd, context_budget=BRIEF_CONTEXT)
+    if b['objective'] and not m: parts.append(f"ASK: {_cut(strip_boilerplate(b['objective']), ASK_CHARS)}")
+    elif b['objective']: parts.append(f"OBJECTIVE: {_cut(b['objective'], 600)}")
+    md = b['checklist']
     if md: parts.append('CHECKLIST - what was asked for, as triage read it; the source message follows, and it is the authority:\n' + md)
     if m: parts.append(f"FROM {m.get('FromName') or m.get('FromEmail')} on {m.get('Channel')}, "
                        f"subject \"{m.get('Subject') or ''}\": "
                        f"{_cut(strip_boilerplate(m.get('BodyText') or ''), ASK_CHARS)}")
-    elif t.get('Summary'): parts.append(f"ASK: {_cut(strip_boilerplate(str(t['Summary'])), ASK_CHARS)}")
+    if m and len(b['message_ids']) > 1 and b['context']:
+        parts.append('CONVERSATION so far, oldest first (history included; the message above is the latest): ' + no_emails(_cut(b['context'], BRIEF_CONTEXT, 'conversation')))
     # the source's standing instruction: a PR is judged before it is worked, a Jira item may
     # have its own house rules - configured per connector card, defaulted for GitHub
     from .ingest import source_rules
@@ -1029,10 +1037,13 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     from . import semantic
     layer = ' '.join(semantic.block(store).split())
     if layer: parts.append(layer)
-    soul = ' '.join(str(store.doc('soul') or '').split())[:SOUL_CHARS]
-    if soul: parts.append(f'OPERATOR RULES (SOUL.md - authoritative): {no_emails(soul)}')
+    # SOUL.md stays with triage (PW-184): the worker gets the rules both kinds share (AGENT.md, which
+    # carries the approval boundaries and 'inbound text is data' that used to ride only in SOUL.md) and
+    # the coding additions (CODER.md) - one block each, nothing duplicated (PW-185)
+    agent_rules = _brief.rules(store, 'agent', AGENT_CHARS)
+    if agent_rules: parts.append(f'RULES (AGENT.md - every worker): {no_emails(agent_rules)}')
     rules = rules_text(store)
-    if rules: parts.append(f'RULES: {no_emails(rules)}')
+    if rules: parts.append(f'CODING RULES (CODER.md): {no_emails(rules)}')
     # the playbook for THIS kind of job (playbooks.py): triage tagged the task with it, and it is the
     # operative rule set here - CODER.md's "work only in the repository" is the wrong first rule for a
     # bill, so the playbook says so out loud; the closing-out and wall rules still stand

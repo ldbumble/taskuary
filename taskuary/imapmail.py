@@ -15,7 +15,8 @@ from email.header import decode_header, make_header
 from email.mime.text import MIMEText
 from loguru import logger
 
-BATCH = 25                  # messages per poll, like every other channel
+BATCH = 25                  # messages per batch: the watermark is saved after each, the poll goes on until the gap is drained
+TRANSPORT = (imaplib.IMAP4.abort, OSError)   # the CONNECTION went, not one message: stop, keep the watermark, retry next poll
 HOSTS = {'gmail': ('imap.gmail.com', 'smtp.gmail.com')}
 
 
@@ -293,7 +294,58 @@ def sent_history(store, days: int, cap: int = 300, progress=None) -> list:
     return sorted(out, key=lambda m: m.get('sent_at') or '')
 
 
-def poll_sent(store, M, user: str, last_uid: int, days: int) -> tuple:
+def _validity(M):
+    """The selected mailbox's UIDVALIDITY, or None when the server (or a fake) does not say."""
+    try:
+        _typ, data = M.response('UIDVALIDITY')
+        return int(data[0]) if data and data[0] else None
+    except Exception: return None
+
+
+def _uids(M, last_uid: int, days: int) -> list:
+    """Which UIDs to read, OLDEST first. With a cursor: everything above it - the whole gap,
+    whatever the date. A window sized from the startup catch-up (3 days) excluded the mail of a
+    two-week absence even though its UIDs were above the cursor (PW-008). Without a cursor, the
+    first import, the date window stands: years of history never import by accident."""
+    if last_uid > 0: typ, data = M.uid('search', None, f'(UID {last_uid + 1}:*)')
+    else:
+        since = (datetime.now() - timedelta(days=max(1, days))).strftime('%d-%b-%Y')
+        typ, data = M.uid('search', None, f'(SINCE {since})')
+    if typ != 'OK': return []
+    # RFC 3501: `n:*` never comes back empty - it returns the highest UID even below n, hence the filter
+    return sorted(u for u in (int(x) for x in (data[0] or b'').split()) if u > last_uid)
+
+
+def _rewound(user: str, box: str, saved, seen) -> bool:
+    """A changed UIDVALIDITY renumbered the mailbox: the saved cursor points at nothing. Say so, import afresh."""
+    if seen is None or saved in (None, ''): return False
+    try: changed = int(saved) != seen
+    except (TypeError, ValueError): changed = True
+    if changed: logger.warning(f'imap {user} {box}: UIDVALIDITY changed {saved} -> {seen}; the saved cursor means nothing now, importing afresh')
+    return changed
+
+
+def _batches(uids: list, read, progress) -> tuple:
+    """Read `uids` in order through read(uid) -> int, in BATCHes; progress(last_uid_done) after each
+    batch and after a transport failure (which is re-raised: the poll stops, the rest is read next time).
+    One message that will not fetch or parse is stepped over as before - it must not stall the mailbox."""
+    n, done = 0, None
+    try:
+        for i in range(0, len(uids), BATCH):
+            for uid in uids[i:i + BATCH]:
+                try: n += read(uid)
+                except TRANSPORT: raise
+                except Exception as e: logger.warning(f'imap uid {uid} skipped: {e}')
+                done = uid
+            progress(done)
+    except TRANSPORT as e:
+        logger.warning(f'imap: connection lost after uid {done} - {e}; the rest is read next poll')
+        if done is not None: progress(done)
+        raise
+    return n, done
+
+
+def poll_sent(store, M, user: str, last_uid: int, days: int, state: dict = None) -> tuple:
     """The replies the owner wrote in Outlook, Gmail's web UI, their phone - anywhere but here.
 
     Graph's mailbox has read them since the beginning (channels.ingest_outbound_mail); an IMAP
@@ -302,34 +354,35 @@ def poll_sent(store, M, user: str, last_uid: int, days: int) -> tuple:
     thread, never work, never a timeline row of its own. Its own watermark - the Sent folder is
     a separate UID space from INBOX, and sharing one would skip whole days of either.
 
+    `state` (optional) carries the saved UIDVALIDITY in and takes the observed one, each
+    batch's watermark and a save() call out, so a poll that dies keeps its progress.
     Returns (ingested, new watermark)."""
     from .channels import ingest_own_message
+    state = state if state is not None else {}
     box = sent_folder(M)
     if not box: return 0, last_uid
     typ, _d = M.select(_quoted(box), readonly=True)
     if typ != 'OK': return 0, last_uid
-    since = (datetime.now() - timedelta(days=max(1, days))).strftime('%d-%b-%Y')
-    typ, data = M.uid('search', None, f'(SINCE {since})')
-    if typ != 'OK': return 0, last_uid
-    uids = [u for u in sorted(int(x) for x in (data[0] or b'').split()) if u > last_uid][-BATCH:]
-    n = 0
-    for uid in uids:
-        try:
-            typ, parts = M.uid('fetch', str(uid), '(RFC822)')
-            if typ != 'OK' or not parts or parts[0] is None: continue
-            msg = email.message_from_bytes(parts[0][1])
-            body, _atts = _body_and_attachments(msg)
-            try: when = email.utils.parsedate_to_datetime(msg.get('Date')).astimezone().strftime('%Y-%m-%d %H:%M:%S')
-            except Exception: when = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            n += ingest_own_message(store, {
-                'external_id': f'imap-sent:{user}:{uid}', 'channel': 'email', 'source_name': user,
-                'subject': _dec(msg.get('Subject')), 'body': body[:20000], 'from_email': user, 'sent_at': when,
-                # the SAME thread key the inbound side derives, or the reply lands on nothing
-                'conversation_id': (msg.get('References') or msg.get('Message-ID') or '').split()[0][:200] or None},
-                'your reply on this thread - kept for context')
-        except Exception as e:
-            logger.warning(f'imap {user} sent uid {uid} skipped: {e}')
-    return n, (max(uids) if uids else last_uid)
+    state['validity'] = _validity(M)
+    if _rewound(user, box, state.get('saved_validity'), state['validity']): last_uid = 0
+    def read(uid) -> int:
+        typ, parts = M.uid('fetch', str(uid), '(RFC822)')
+        if typ != 'OK' or not parts or parts[0] is None: return 0
+        msg = email.message_from_bytes(parts[0][1])
+        body, _atts = _body_and_attachments(msg)
+        try: when = email.utils.parsedate_to_datetime(msg.get('Date')).astimezone().strftime('%Y-%m-%d %H:%M:%S')
+        except Exception: when = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        return ingest_own_message(store, {
+            'external_id': f'imap-sent:{user}:{uid}', 'channel': 'email', 'source_name': user,
+            'subject': _dec(msg.get('Subject')), 'body': body[:20000], 'from_email': user, 'sent_at': when,
+            # the SAME thread key the inbound side derives, or the reply lands on nothing
+            'conversation_id': (msg.get('References') or msg.get('Message-ID') or '').split()[0][:200] or None},
+            'your reply on this thread - kept for context')
+    def progress(uid):
+        state['uid'] = uid
+        if state.get('save'): state['save']()
+    n, done = _batches(_uids(M, last_uid, days), read, progress)
+    return n, (done if done is not None else last_uid)
 
 
 def ensure_source(store, c) -> bool:
@@ -347,66 +400,73 @@ def ensure_source(store, c) -> bool:
 
 def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days: int = 0) -> int:
     """UIDs are IMAP's own cursor: strictly increasing per mailbox, so the watermark on the
-    connector never re-ingests - and a backfill just lowers the SINCE date, with dedupe
-    catching anything already seen."""
+    connector never re-ingests. With a cursor the poll asks for everything above it and drains
+    it oldest-first in batches, saving the watermark as each lands (PW-007/PW-008); the SINCE
+    window applies to the first import only. The 25-highest-then-jump of before skipped the
+    lower pending UIDs for good, and the date window hid a long absence."""
     from .channels import images_for_triage, save_attachments, wants_read
     from .ingest import ingest_message
     M, user = _login(c)
     n = 0
+    _imap_h, _smtp_h, cfg = _hosts(c)
+    moved = {}
+    def save():
+        if moved: store.set_connector_config(c['ConnectorId'], {**cfg, **moved})
     try:
         # readonly is what has always kept the funnel invisible in the mailbox: an ordinary
         # RFC822 fetch sets \Seen by itself. Only the mark-read switch opens the box for
         # writing, and then the flag is set explicitly, per message, after it is safely in.
         read_it = wants_read(store)
         M.select('INBOX', readonly=not read_it)
-        _imap_h, _smtp_h, cfg = _hosts(c)
-        last_uid = int(cfg.get('imap_uid') or 0)
-        since = (datetime.now() - timedelta(days=max(backfill_days, 1))).strftime('%d-%b-%Y')
-        typ, data = M.uid('search', None, f'(SINCE {since})')
-        uids = [int(u) for u in (data[0] or b'').split()]
-        new = [u for u in uids if u > last_uid][-BATCH:]
-        for uid in new:
-            try:
-                typ, parts = M.uid('fetch', str(uid), '(RFC822)')
-                if typ != 'OK' or not parts or parts[0] is None: continue
-                msg = email.message_from_bytes(parts[0][1])
-                frm_name, frm_addr = email.utils.parseaddr(_dec(msg.get('From')))
-                if frm_addr.lower() == user.lower(): continue           # my own mail is not inbound work
-                body, atts = _body_and_attachments(msg)
-                try: sent = email.utils.parsedate_to_datetime(msg.get('Date')).astimezone().strftime('%Y-%m-%d %H:%M:%S')
-                except Exception: sent = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                out = ingest_message(store, file_only=file_only, msg={
-                    'external_id': f'imap:{user}:{uid}', 'channel': 'email',
-                    'subject': _dec(msg.get('Subject')), 'body': body[:20000],
-                    'from_name': frm_name or frm_addr, 'from_email': frm_addr,
-                    'to': _hdr_addrs(msg, 'To'), 'cc': _hdr_addrs(msg, 'Cc'),
-                    # References threads replies the way Graph's conversationId does
-                    'conversation_id': (msg.get('References') or msg.get('Message-ID') or '').split()[0][:200] or None,
-                    'sent_at': sent, 'source_name': user,
-                    'images': images_for_triage(store, atts)}, llm=llm)
-                n += out['status'] != 'duplicate'
-                if atts and out.get('message_id') and out['status'] != 'duplicate':
-                    try: save_attachments(store, out['message_id'], atts, f'imap:{user}:{uid}')
-                    except Exception as e: logger.warning(f'imap attachments failed: {e}')
-                if read_it:
-                    try: M.uid('store', str(uid), '+FLAGS', r'(\Seen)')
-                    except Exception as e: logger.warning(f'marking {user} uid {uid} seen failed: {e}')
-            except Exception as e:
-                # one bad message (a date the parser rejects, a part that will not decode) raised out of
-                # the loop and left the watermark behind it, so the same message failed every poll and
-                # nothing after it was ever read. Step over it, say so, and let the watermark move
-                logger.warning(f'imap {user} uid {uid} skipped: {e}')
+        last_uid, validity = int(cfg.get('imap_uid') or 0), _validity(M)
+        if _rewound(user, 'INBOX', cfg.get('imap_uidvalidity'), validity): last_uid = 0
+        if validity is not None: moved['imap_uidvalidity'] = validity
+        def read(uid) -> int:
+            typ, parts = M.uid('fetch', str(uid), '(RFC822)')
+            if typ != 'OK' or not parts or parts[0] is None: return 0
+            msg = email.message_from_bytes(parts[0][1])
+            frm_name, frm_addr = email.utils.parseaddr(_dec(msg.get('From')))
+            if frm_addr.lower() == user.lower(): return 0           # my own mail is not inbound work
+            body, atts = _body_and_attachments(msg)
+            try: sent = email.utils.parsedate_to_datetime(msg.get('Date')).astimezone().strftime('%Y-%m-%d %H:%M:%S')
+            except Exception: sent = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            out = ingest_message(store, file_only=file_only, msg={
+                'external_id': f'imap:{user}:{uid}', 'channel': 'email',
+                'subject': _dec(msg.get('Subject')), 'body': body[:20000],
+                'from_name': frm_name or frm_addr, 'from_email': frm_addr,
+                'to': _hdr_addrs(msg, 'To'), 'cc': _hdr_addrs(msg, 'Cc'),
+                # References threads replies the way Graph's conversationId does
+                'conversation_id': (msg.get('References') or msg.get('Message-ID') or '').split()[0][:200] or None,
+                'sent_at': sent, 'source_name': user,
+                'images': images_for_triage(store, atts)}, llm=llm)
+            if atts and out.get('message_id') and out['status'] != 'duplicate':
+                try: save_attachments(store, out['message_id'], atts, f'imap:{user}:{uid}')
+                except Exception as e: logger.warning(f'imap attachments failed: {e}')
+            if read_it:
+                try: M.uid('store', str(uid), '+FLAGS', r'(\Seen)')
+                except Exception as e: logger.warning(f'marking {user} uid {uid} seen failed: {e}')
+            return int(out['status'] != 'duplicate')
+        def progress(uid):
+            moved['imap_uid'] = uid; save()
+        # one bad message (a date the parser rejects, a part that will not decode) used to raise out
+        # of the loop and leave the watermark behind it, so the same message failed every poll and
+        # nothing after it was ever read: _batches steps over it, says so, and lets the watermark move
+        got, _done = _batches(_uids(M, last_uid, max(backfill_days, 1)), read, progress)
+        n += got
         # ...and the other half of the conversation: what the owner sent from the mailbox itself
-        sent_uid = int(cfg.get('imap_sent_uid') or 0)
-        try: got, sent_uid = poll_sent(store, M, user, sent_uid, max(backfill_days, 1))
+        state = {'saved_validity': cfg.get('imap_sent_uidvalidity'),
+                 'save': lambda: (moved.__setitem__('imap_sent_uid', state['uid']), save())}
+        try:
+            got, _sent_uid = poll_sent(store, M, user, int(cfg.get('imap_sent_uid') or 0), max(backfill_days, 1), state)
+            if state.get('validity') is not None: moved['imap_sent_uidvalidity'] = state['validity']
         except Exception as e:
             got = 0
             logger.warning(f'imap: could not read {user} sent mail - {e}')
         n += got
-        moved = {k: v for k, v in (('imap_uid', max(new) if new else None), ('imap_sent_uid', sent_uid or None)) if v}
-        if moved: store.set_connector_config(c['ConnectorId'], {**cfg, **moved})
+        save()
     finally:
-        M.logout()
+        try: M.logout()
+        except Exception: pass
     return n
 
 

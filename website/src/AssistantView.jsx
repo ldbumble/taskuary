@@ -471,12 +471,19 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     setBusy(true); setErr("");
     const scope = nextSelectionScope(key ? null : only.current, key ? null : currentRef.current?.key || null);
     const capture = key ? null : await ensureNextSelection(scope);
+    // A failed modern capture (including selection_unavailable) never becomes an optimistic owner
+    // turn. The pile refresh already supplied the bounded error; a later explicit gesture retries.
+    if (!key && selectionContractSeen.current && !capture) {
+      setErr((message) => message || "Next is still refreshing. Review the updated list and press Next again.");
+      turnFlight.current = false;
+      setBusy(false);
+      return;
+    }
     const optimisticId = asUser ? `u${Date.now()}` : null;
     if (optimisticId) setMsgs((m) => [...m, { id: optimisticId, role: "user", text: asUser }]);
     try {
       // A named Timeline/pile row remains an explicit pull. Automatic Walk/Next echoes the exact
       // server capture; demo/old-server payloads alone retain the legacy tokenless fallback.
-      if (!key && selectionContractSeen.current && !capture) throw new Error("Next is still refreshing. Review the updated list and press Next again.");
       const navigation = capture ? nextSelectionBody(capture) : scope;
       landed(await turn({ mode: "next", key, ...navigation }));
     } catch (e) {

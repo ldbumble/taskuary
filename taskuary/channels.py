@@ -538,11 +538,15 @@ def _mail_folder(tok, s: dict, folder: str, since_iso: str, through: str,
     provider cursor."""
     since = cursor.get(folder) or since_iso
     inclusive = folder in cursor
-    continuation, seen, n = None, set(), 0
+    continuation, used_continuations, seen, n = None, set(), set(), 0
     while True:
+        if continuation:
+            if continuation in used_continuations:
+                raise RuntimeError(f'Graph repeated mail continuation for {folder}')
+            used_continuations.add(continuation)
         try:
             result = _mail_msgs(
-                tok, s['Address'], since, folder=folder, through=through,
+                tok, s['Address'], since, folder=folder, cap=MAIL_BATCH, through=through,
                 **({'inclusive': True} if inclusive else {}), continuation=continuation,
                 with_continuation=True)
         except TypeError as exc:

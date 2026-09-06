@@ -141,6 +141,30 @@ class MailMsgsTests(unittest.TestCase):
         self.assertEqual(continuation, 'https://graph/page-three')
         self.assertEqual(asked[-1], 'https://graph/page-two')
 
+    def test_alternating_continuations_fail_across_folder_batches(self):
+        asked = []
+        pages = {
+            'initial': {'value': [graph_mail(1, T0)], '@odata.nextLink': 'https://graph/A'},
+            'https://graph/A': {'value': [graph_mail(2, T0)], '@odata.nextLink': 'https://graph/B'},
+            'https://graph/B': {'value': [graph_mail(3, T0)], '@odata.nextLink': 'https://graph/A'},
+        }
+        def get(url, headers=None, timeout=None, params=None):
+            asked.append(url)
+            response = mock.Mock(); response.raise_for_status = lambda: None
+            response.json.return_value = pages['initial' if params is not None else url]
+            return response
+        handled, cursor = [], {}
+        with mock.patch.object(channels.requests, 'get', get), mock.patch.object(channels, 'MAIL_BATCH', 1):
+            with self.assertRaisesRegex(RuntimeError, 'repeated mail continuation'):
+                channels._mail_folder(
+                    'tok', {'Address': 'me@x.com'}, 'inbox', _iso(T0 - timedelta(hours=1)),
+                    _iso(T0 + timedelta(hours=1)), cursor, lambda row: handled.append(row['id']) or 1,
+                    lambda: None)
+        self.assertEqual(asked, [
+            f'{channels.GRAPH}/users/me@x.com/mailFolders/inbox/messages',
+            'https://graph/A', 'https://graph/B'])
+        self.assertEqual(handled, ['inbox-1', 'inbox-2', 'inbox-3'])
+
     def test_graph_is_asked_oldest_first_and_at_most_cap_come_back(self):
         pages = [{'value': [graph_mail(i, T0 + timedelta(minutes=i)) for i in range(50)], '@odata.nextLink': 'https://graph/next1'},
                  {'value': [graph_mail(i, T0 + timedelta(minutes=i)) for i in range(50, 100)], '@odata.nextLink': 'https://graph/next2'},

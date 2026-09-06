@@ -170,8 +170,8 @@ Later grouping/action/deferral policy transitions remain separate pending decisi
 
 ## Section 1.1 — canonical identity and historical-evidence foundation
 
-Status: implemented, independently reviewed and cumulatively tested locally; remote
-CI is pending. This status does not accept the entire Phase 1 redesign.
+Status: section 1.1 is CI-verified at `85c2e1b`. This accepts the foundation only,
+not the entire Phase 1 redesign.
 Base `8be0b769b411346b2a380e0037a54426703c5af5` passed all ten jobs in
 [CI run 34013108300](https://github.com/ldbumble/taskuary/actions/runs/34013108300).
 PW-101 and PW-104 are partial targets; no Phase 1 feature checkbox is completed by
@@ -259,11 +259,74 @@ remain recorded; they are not evidence of a new shutdown fix.
 Source integration commit: `81981b8`. Agent source commits are `13d4aab` (pure
 model), `f5ac813` (storage) and `7ce76bf` (projection tests), integrated as `917123a`,
 `9a1636b` and `2e458de` before the lead's seam corrections. All local gates and
-independent review above cover the final integrated source. Remote CI verification
-is the remaining section gate; no dependent implementation begins before it passes.
+independent review above cover the final integrated source. Delivery checkpoint
+`85c2e1b104059e906fbfcca46809db9b0a2a7d4c` passed all ten jobs in
+[CI run 34014667609](https://github.com/ldbumble/taskuary/actions/runs/34014667609):
+the six Python matrix jobs, frontend/build parity, real browser, Docker and Windows
+executable. The original checkout was fast-forwarded after that result; README SHA256
+remains `EDF56683E29A34789B2EBEF73E131FBD7B318AE498BC761668BCB70854D91BAB`.
 
 Rollback compatibility: additive tables and APIs leave existing consumers unchanged.
 An older app can ignore the new tables but cannot consume canonical evidence. No
 automatic backup restoration is performed; corrective migration must preserve writes
 after any baseline. The eventual live cutover still requires the consistent-backup
 and final-evidence gate in the state contract. No live migration or restart occurred.
+
+## Section 1.2 — All and Unread view controls
+
+Status: implemented, independently reviewed and cumulatively tested from
+CI-verified `85c2e1b`; remote CI gate pending.
+Scope: PW-107's approved two-view UI. Remove every Needs me navigation/filter entry
+and enforce All as a detail-only surface while preserving the Unread funnel,
+Current/Next and deliberate task/detail actions. Canonical inventory adoption, new
+read semantics, ordering and unresolved grouped/defer/exclusion transitions remain
+separate work; this section does not activate them.
+
+Sol High UI agent owns `FeedView.jsx` and frontend contract tests in isolated
+`processing/phase1-views-ui`. A second Sol High agent owns rendered-browser acceptance
+in `processing/phase1-views-browser`. The lead integrates on `processing/phase1-views`,
+builds packaged assets, runs cumulative gates and delivers. Astra Extra High provides
+independent review. Existing assertions are retained unless a Needs me expectation is
+explicitly superseded by PW-107, with replacement behavioral evidence recorded here.
+
+The feed no longer constructs `pending_only` or exposes Needs me navigation and
+statistics. Action-needed status remains available. All retains deliberate detail
+actions; entering, hovering, pinning and returning to it cannot start Walk, settle
+an item or create an assistant turn. Unread retains Current/Next and chat/task mode.
+All/Unread changes reuse their identical underlying feed query rather than fetching
+it again solely because the view changed. Existing refresh and mutation paths still
+refresh data. Switching views clears detail and invalidates pending hover responses;
+it does not clear or advance Current.
+
+The two old source-location assertions in `funnelPile.test.mjs` now verify wiring
+to the extracted `feedInteraction` helper. Its behavioral truth table covers All,
+Unread, chat/task mode and callback availability. All other prior assertions remain;
+the new real-browser tests additionally verify rendered controls and durable state.
+PW-107 stays partial because live-state-before-selection is not activated here.
+
+Local cumulative backend gate: `python -m pytest -q -ra`, 2267 passed plus 66
+subtests, one existing pre-08:00 skip and 150 existing warnings, 159.72 seconds.
+Final Node 22 frontend gate: 264 passed, no failures/skips, 1.325 seconds.
+Final packaged build: passed in 11.43 seconds, including the pending-detail fix.
+Logs remain in ignored `.codex-tmp/phase1-views-evidence/` in the isolated integration
+worktree. Final browser race coverage, review and remote checkpoint follow below.
+
+Independent Astra Extra High review approved the final UI, tests and scope. Its
+pending-hover finding is fixed in `ac5f192`. The real browser regression in
+`d60e2ab` uses a fresh page and CDP latency on an actual fixture detail GET, switches
+to Unread while that request is pending, and waits for the full body and rendering.
+It then verifies visible Unread chat, unchanged Current/Next and exact durable turns.
+Negative control against the exact pre-fix UI `3a5fc4a` fails because stale detail
+replaces chat; the exact fixed UI passes (15.710 seconds for the focused scenario).
+No harness network guards or previously accepted tests/ceilings were relaxed.
+Agent commits: UI `3a5fc4a`, browser `c535f4e` and race follow-up `830094b`;
+integrated as `0435ce9`, `2977162` and `d60e2ab`, with the lead's `ac5f192` fix.
+
+Final integrated Node 22 `npm run test:browser`: 3/3 passed, no failures/skips,
+35.762 seconds. First visibility/input: 2348/472 ms; Tasks/Board/Reports:
+136/160/136 ms. Terminal replay/input/reconnect: 3459/52/698 ms. Existing ceilings
+and network isolation passed unchanged. Desktop, narrow-screen and delayed-response
+tests cover the final source; packaged assets were generated from that exact UI.
+Original workspace remains at the previously accepted checkpoint until remote CI
+passes; its README hash is unchanged. No live app restart, data migration or
+production connector was used. Browser-control redesign remains pending.

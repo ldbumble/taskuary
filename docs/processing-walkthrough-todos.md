@@ -522,7 +522,7 @@ Owner-approved on 2026-09-05: All is chronological; Unread is the same item set
 filtered by shared unread state, ordered by status/priority. Unread must not be a
 separately curated pipeline that loses arrivals visible in All. Pending change.
 
-Section 1.1 foundation is implemented and locally verified at `81981b8`: durable
+Section 1.1 foundation is CI-verified at `85c2e1b` (source `81981b8`, all ten jobs): durable
 identity/aliases, full-content and view fingerprints, and versioned historical-read
 evidence. All/Unread/assistant adoption and the final display-does-not-read cutover
 are still pending, so PW-101 and PW-104 remain unchecked. See section evidence for
@@ -561,6 +561,10 @@ the cumulative tests, independent review and remote checkpoint status.
   no chat) and Unread (read-state filtered, importance/status sorted). Action-needed
   flags remain useful for promotion, not a third view. Apply live state before
   selection so an approval-waiting agent cannot be lost by an earlier SQL filter.
+  Section 1.2 implements the two-view controls and All detail-only behavior, with
+  frontend and rendered desktop/narrow-screen coverage. This remains unchecked:
+  live-state-before-selection and canonical read-filter adoption require the later
+  Phase 1 inventory cutover. See the implementation evidence for delivery gates.
 - [ ] <a id="pw-108"></a>**PW-108** Apply all common source/category/mute exclusions identically to All and
   Unread; remove funnel-only exclusions. Being classified as not-a-task/FYI is not
   itself a read receipt. An ignored-policy item visible in All must not be silently

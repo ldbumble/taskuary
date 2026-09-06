@@ -52,5 +52,11 @@ gates replay visibility, input emission while the synthetic replay is active, an
 reconnect time at 10 seconds, 1.5 seconds, and 10 seconds respectively.
 
 Current/Next rendering is covered without changing its interaction contract.
+Section 1.2 adds `processing-views.test.mjs` to the cumulative browser command.
+It checks the All/Unread controls at desktop and narrow widths, opens actual All
+detail panels, and verifies no concierge write, settle operation or stored assistant
+turn is created by those gestures. It also verifies Current/Next after view changes,
+outer-tab navigation and reload. On narrow screens it uses the existing Timeline
+button to open the rail and closes the detail drawer before changing views.
 Assistant browser ownership and controls (walkthrough IDs PW-265 through PW-267) remain
 review pending and are outside this harness.

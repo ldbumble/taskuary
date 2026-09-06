@@ -123,6 +123,7 @@ def test_context_revision_is_deterministic_for_entity_order_and_dict_order():
     [
         ("members", "BodyText", "The body changed in place"),
         ("members", "MemberId", "message:41-replaced"),
+        ("members", "TaskId", 18),
         ("attachments", "Filename", "corrected-plan.pdf"),
         ("attachments", "ContentSha256", "def"),
         ("tasks", "Description", "Cover a new material requirement"),

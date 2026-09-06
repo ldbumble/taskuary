@@ -2,7 +2,7 @@
 default) and in-memory (tests/demo). Every mutation is meant to be paired with .audit();
 the audit log is a Buzz-style tamper-evident hash chain (each row hashes the previous).
 """
-import contextlib, hashlib, json, re, sqlite3, threading, uuid
+import contextlib, copy, hashlib, json, re, sqlite3, threading, uuid
 from datetime import datetime, timedelta
 from loguru import logger
 
@@ -207,6 +207,10 @@ CREATE TABLE IF NOT EXISTS processing_legacy_evidence (EvidenceId INTEGER PRIMAR
   UNIQUE(MigrationVersion, EntityKind, LocalId));
 CREATE TABLE IF NOT EXISTS processing_migration (Version TEXT PRIMARY KEY, CapturedAt TEXT NOT NULL,
   InputWatermark TEXT NOT NULL, SettingsJson TEXT NOT NULL, Completion TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS processing_context_snapshot (
+  MigrationVersion TEXT NOT NULL, ItemId TEXT NOT NULL, ContextRevision TEXT NOT NULL,
+  ViewRevision TEXT NOT NULL, ContextJson TEXT NOT NULL, ViewJson TEXT NOT NULL,
+  PRIMARY KEY (MigrationVersion, ItemId));
 CREATE TABLE IF NOT EXISTS report_run (RunId INTEGER PRIMARY KEY, SourceId INTEGER, At TEXT, Type TEXT, Title TEXT, Ms INTEGER, Subject TEXT,
   MessageId INTEGER, Failed INTEGER DEFAULT 0, Error TEXT, Said INTEGER, LinesJson TEXT, ReviewedJson TEXT, Inputs TEXT, Summary TEXT);
 -- Stateful report workflows: a scheduled run opens one monthly batch, then each customer
@@ -1214,11 +1218,26 @@ class SQLiteStore:
             except BaseException:
                 self.cx.rollback(); raise
 
+    @contextlib.contextmanager
+    def _processing_read(self):
+        """Hold one SQLite snapshot across related reads, including external merges."""
+        with self.lock:
+            cur = self.cx.cursor()
+            cur.execute('BEGIN')
+            try:
+                yield cur
+            except BaseException:
+                self.cx.rollback()
+                raise
+            else:
+                self.cx.commit()
+            finally:
+                cur.close()
+
     def resolve_processing_target(self, namespace, value, scope='local'):
         """Resolve an alias to both its durable item and the exact entity it names."""
         if not namespace or not value or not scope: raise ValueError('namespace, scope and value are required')
-        with self.lock:
-            cur = self.cx.cursor()
+        with self._processing_read() as cur:
             alias = cur.execute('''SELECT * FROM processing_alias WHERE Namespace=? AND Scope=? AND Value=?
                                    AND RetiredAt IS NULL ORDER BY AliasId DESC LIMIT 1''',
                                 (str(namespace), str(scope), str(value))).fetchone()
@@ -1234,8 +1253,8 @@ class SQLiteStore:
                     'redirected_from': member['ItemId'] if member['ItemId'] != resolved else None}
 
     def processing_members(self, item_id, *, include_retired=False):
-        with self.lock:
-            cur = self.cx.cursor(); resolved = self._processing_follow(cur, str(item_id))
+        with self._processing_read() as cur:
+            resolved = self._processing_follow(cur, str(item_id))
             if not resolved: return []
             if not include_retired:
                 return [dict(r) for r in cur.execute('''SELECT * FROM processing_member WHERE ItemId=?
@@ -1267,9 +1286,17 @@ class SQLiteStore:
         if local_id is not None: q += ' AND LocalId=?'; p.append(str(local_id))
         return [self._processing_evidence_row(r) for r in self._rows(q + ' ORDER BY EvidenceId', p)]
 
-    def processing_snapshot(self, item_id):
-        with self.lock:
-            cur = self.cx.cursor(); resolved = self._processing_follow(cur, str(item_id))
+    def processing_snapshot(self, item_id, *, live_state=None):
+        """Read current fingerprints and preserved history without creating read receipts.
+
+        Top-level revisions are computed from current persisted inputs; nullable
+        revisions in ``item`` are historical capture/cache metadata, not freshness
+        certification. Native worker attention is an explicit caller snapshot.
+        """
+        live_state = None if live_state is None else copy.deepcopy(tuple(live_state))
+        from .processing_projection import processing_projection
+        with self._processing_read() as cur:
+            resolved = self._processing_follow(cur, str(item_id))
             if not resolved: return None
             lineage = self._processing_lineage(cur, resolved)
             item = dict(cur.execute('SELECT * FROM processing_item WHERE ItemId=?', (resolved,)).fetchone())
@@ -1291,12 +1318,16 @@ class SQLiteStore:
             evidence = [self._processing_evidence_row(r) for r in cur.execute(
                 f"SELECT * FROM processing_legacy_evidence WHERE ItemId IN ({','.join('?' * len(lineage))}) ORDER BY EvidenceId",
                 lineage).fetchall()]
+            context_history = [dict(r) for r in cur.execute(
+                f"SELECT * FROM processing_context_snapshot WHERE ItemId IN ({','.join('?' * len(lineage))}) ORDER BY MigrationVersion,ItemId",
+                lineage).fetchall()]
             exact = {(m['EntityKind'], m['LocalId']) for m in member_history}
             related = [dict(r) for r in cur.execute('SELECT * FROM processing_relation WHERE RetiredAt IS NULL ORDER BY RelationId').fetchall()
                        if (r['FromEntityKind'], r['FromLocalId']) in exact or (r['ToEntityKind'], r['ToLocalId']) in exact]
             return {'item': item, 'item_history': item_history, 'members': members,
                     'member_history': member_history, 'aliases': aliases,
-                    'relations': related, 'legacy_evidence': evidence}
+                    'relations': related, 'legacy_evidence': evidence, 'context_history': context_history,
+                    **processing_projection(cur, resolved, live_state=live_state)}
 
     @staticmethod
     def _processing_backfill_summary(cur, version, status):
@@ -1313,16 +1344,18 @@ class SQLiteStore:
         return {'version': version, 'status': status, 'input_watermark': json.loads(migration['InputWatermark']),
                 **counts, 'unresolved_keys': unresolved}
 
-    def backfill_processing(self, version, *, fixed_now, live_state=(), evaluator=None):
+    def backfill_processing(self, version, *, fixed_now, live_state=None, evaluator=None):
         """Capture an idempotent legacy baseline; this does not switch reads to the new tables.
 
         The transaction reads every legacy row without feed windows/caps, writes canonical identity
         and verbatim evidence, and commits the journal marker last. ``live_state`` is an explicit
-        caller snapshot; its empty default means "none supplied", not "no native worker exists".
+        caller snapshot; None means "not supplied", while an empty collection explicitly
+        records that the caller observed no native workers.
         """
         if not version or not fixed_now: raise ValueError('version and fixed_now are required')
         if evaluator is None:
             from .processing import legacy_read_evidence as evaluator
+        live_state = None if live_state is None else copy.deepcopy(tuple(live_state))
         live_by_task = {}
         for raw in live_state or ():
             tid = raw.get('taskId', raw.get('task_id'))
@@ -1348,7 +1381,8 @@ class SQLiteStore:
                     count, maximum = cur.execute(f'SELECT COUNT(*),MAX({key}) FROM {table}').fetchone()
                     watermark[table] = {'count': count, 'max_id': maximum}
                 watermark['funnel_state'] = {'count': cur.execute('SELECT COUNT(*) FROM funnel_state').fetchone()[0]}
-                watermark['live_state'] = 'caller_supplied' if live_by_task else 'caller_supplied_empty'
+                watermark['live_state'] = ('not_supplied' if live_state is None else
+                                           'caller_supplied' if live_by_task else 'caller_supplied_empty')
                 cur.execute('''INSERT OR REPLACE INTO processing_migration
                     (Version,CapturedAt,InputWatermark,SettingsJson,Completion) VALUES (?,?,?,?,?)''',
                     (str(version), str(fixed_now), json.dumps(watermark, sort_keys=True),
@@ -1546,6 +1580,25 @@ class SQLiteStore:
                         (str(version), item_id, entity_kind, key, key,
                          json.dumps(['legacy_state_receipt' if target else 'unresolved_legacy_key']), fingerprint,
                          json.dumps(original, sort_keys=True, default=str), str(fixed_now)))
+                # Store each full context once per item/version, rather than duplicating
+                # a large chain in every message receipt. The completion marker covers
+                # identity, receipts and these exact context/view inputs atomically.
+                from .processing_projection import processing_projection
+                item_ids = [r[0] for r in cur.execute(
+                    'SELECT ItemId FROM processing_item WHERE RedirectItemId IS NULL ORDER BY ItemId').fetchall()]
+                for item_id in item_ids:
+                    picture = processing_projection(cur, item_id, live_state=live_state)
+                    cur.execute('''INSERT INTO processing_context_snapshot
+                        (MigrationVersion,ItemId,ContextRevision,ViewRevision,ContextJson,ViewJson)
+                        VALUES (?,?,?,?,?,?)''',
+                        (str(version), item_id, picture['context_revision'], picture['view_revision'],
+                         json.dumps(picture['context'], sort_keys=True, ensure_ascii=False),
+                         json.dumps(picture['view'], sort_keys=True, ensure_ascii=False)))
+                    cur.execute('UPDATE processing_item SET ContextRevision=?,ViewRevision=? WHERE ItemId=?',
+                                (picture['context_revision'], picture['view_revision'], item_id))
+                    cur.execute('''UPDATE processing_legacy_evidence SET ContextFingerprint=?
+                                   WHERE MigrationVersion=? AND ItemId=?''',
+                                (picture['context_revision'], str(version), item_id))
                 cur.execute("UPDATE processing_migration SET Completion='complete' WHERE Version=?", (str(version),))
                 self.cx.commit(); self._writes += 1
                 return self._processing_backfill_summary(cur, str(version), 'complete')

@@ -44,7 +44,7 @@ _MEMBER_CONTEXT_FIELDS = {
     "mailmetajson", "memberid", "messageid", "messageids", "metadata", "namespace",
     "payload",
     "provider", "providerid", "recipientsjson", "role", "sentat", "sig",
-    "sourcename", "sourcescope", "sourcelink", "subject", "text", "threadid",
+    "sourcename", "sourcescope", "sourcelink", "subject", "taskid", "text", "threadid",
 }
 _TASK_CONTEXT_FIELDS = {
     "checklist", "description", "details", "entityid", "entitykind", "instruction",

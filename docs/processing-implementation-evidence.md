@@ -1364,6 +1364,18 @@ shared filtering/priority and Current/Next adoption are separate pending work.
 Browser-control redesign remains review-pending. Normal master push and exact-SHA
 remote CI verification follow; no live restart or production connector testing occurred.
 
+### Section 1.6 integration with concurrent shared operations
+
+Before delivery, origin advanced to `d5f976f` (runtime `1461a13`), whose CI run
+34048121206 succeeded. Merge `654a01522af385d0471d1a72567157318c6f0cff` preserves
+both implementations; only the append-only evidence document required conflict
+resolution, and both records were retained. Astra compared the merged functions
+and files: canonical service/membership/projection/UI/tests and earlier mail repairs
+are intact, with the operations tables added alongside membership triggers.
+The combined focused suite passed 69 cases; cumulative merged gates are running.
+Structured operations/discussion history is not yet part of All's comment/activity
+detail and remains the separate Phase 8 adoption work identified below.
+
 ## Section 4.1 — shared operations, correction evidence and durable discussion
 
 Status: implemented and tested locally at `1461a13`; remote CI pending on the pushed
@@ -1400,4 +1412,32 @@ that message's earlier discussion onto the task it becomes, by identity (PW-133)
 
 Tests: `tests/test_operations.py` (20 cases). No frontend change; the Phase 8 confirmation box and history panel consume
 these endpoints. Packaged assets unchanged.
+
+### Independent integration limits on Section 4.1
+
+The upstream CI result is green, but it does not establish the full execute-once or
+exact-context guarantees above. Astra's controlled in-memory reproduction of the
+incoming execute function ran two simultaneous confirmations twice; both receipts
+reported `duplicate=False`. Execution lacks an atomic claim before the handler.
+The server also captures operation parameters before execute rereads its version,
+so a concurrent edit can validate one version while running earlier parameters.
+The operation context hash omits source bodies/drafts and caps message history at
+500. The direct not-a-task endpoint records done/correction before later teaching
+and deletion succeed, so a subsequent failure can leave premature success evidence.
+
+These are incoming operation-service limits, not canonical All regressions. They
+remain a separate bounded repair; current PW-129/PW-130 acceptance is partial.
+The historical implementation report above is retained, and this review does not
+clear execute-once, exact-context or success-only evidence claims. Canonical Unread
+and structured operation/discussion history adoption remain pending as before.
+
+### Combined operations/All gate before concurrent startup delivery
+
+Merge `654a015` passed the complete backend suite: 2,697 tests plus 71 subtests,
+150 warnings, no skips, 190.20 s. UI source, tests and packaged assets are byte-
+identical to reviewed `d75d45e`. The complete eight-scenario browser command passed
+in 280.116 s: cold visibility/input 1,175/504 ms and terminal visibility/input/
+reconnect 1,726/78/852 ms. The canonical scenario passed again in 69.659 s.
+Before this candidate could be pushed, origin advanced again to `04fed7c`
+(automatic-startup source `d2e11e5`); integration and its combined gates follow.
 

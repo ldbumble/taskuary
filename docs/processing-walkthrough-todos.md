@@ -734,11 +734,11 @@ Owner-approved: successful action handlers automatically record owner changes
 that differ from triage. The assistant does not independently write correction
 memory from conversational interpretation. Pending implementation/verification.
 
-- [x] <a id="pw-129"></a>**PW-129** After a confirmed owner action succeeds, compare its outcome with the
+- [ ] <a id="pw-129"></a>**PW-129** After a confirmed owner action succeeds, compare its outcome with the
   relevant triage verdict and record any correction as learning evidence without
   a second memory confirmation. Use the same handler behavior across assistant
   confirmations, Tasks, and All timeline detail; do not depend on the UI entry point.
-- [x] <a id="pw-130"></a>**PW-130** Record source/message or grouped-item identity, triage verdict/revision,
+- [ ] <a id="pw-130"></a>**PW-130** Record source/message or grouped-item identity, triage verdict/revision,
   relevant context, the owner's change, and the successful action identity.
   Cover FYI -> task, general -> coding, and reply-needed -> dismissed as unnecessary.
   Deferring until tomorrow or merely discussing an item is not by itself a triage

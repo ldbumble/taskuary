@@ -1159,18 +1159,18 @@
       "section": "Action-driven triage correction memory and task discussion history",
       "phase": "4",
       "requirement": "After a confirmed owner action succeeds, compare its outcome with the",
-      "status": "implemented",
-      "test": "`tests/test_operations.py`::EntryPointTests (mine, not-coding, file and the proposal API record the same operation and evidence; no second memory confirmation)",
-      "commit": "1461a13; local gates passed, CI pending"
+      "status": "partial: shared records exist; concurrent execution and premature not-a-task success evidence remain unresolved",
+      "test": "`tests/test_operations.py`::EntryPointTests (mine, not-coding, file and the proposal API record the same operation and evidence; no second memory confirmation); independent integration review reproduced duplicate concurrent execution and identified stale parameter/context and premature-success paths (implementation evidence)",
+      "commit": "1461a13; CI run 34048121206 on d5f976f passed; identified guarantees remain partial"
     },
     {
       "id": "PW-130",
       "section": "Action-driven triage correction memory and task discussion history",
       "phase": "4",
       "requirement": "Record source/message or grouped-item identity, triage verdict/revision,",
-      "status": "implemented",
-      "test": "`tests/test_operations.py`::CorrectionTests (source identity, verdict and its route id, the change and the operation id; FYI->task, general->coding, reply->dismissed; deferral and discussion teach nothing; cancelled/failed write nothing; retries do not duplicate; evidence recovered without repeating the action)",
-      "commit": "1461a13; local gates passed, CI pending"
+      "status": "partial: correction fields exist; exact context/parameter binding and concurrent execute-once guarantees remain unresolved",
+      "test": "`tests/test_operations.py`::CorrectionTests (source identity, verdict and its route id, the change and the operation id; FYI->task, general->coding, reply->dismissed; deferral and discussion teach nothing; cancelled/failed write nothing; retries do not duplicate; evidence recovered without repeating the action); independent integration review reproduced duplicate concurrent execution and identified stale parameter/context and premature-success paths (implementation evidence)",
+      "commit": "1461a13; CI run 34048121206 on d5f976f passed; identified guarantees remain partial"
     },
     {
       "id": "PW-131",

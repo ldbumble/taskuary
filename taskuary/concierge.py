@@ -21,6 +21,7 @@ no button covers it; the choice comes back as the owner's next words.
 """
 import json, re, threading
 from datetime import datetime, timedelta
+from pathlib import Path
 from loguru import logger
 
 from . import funnel, general, llm as llm_mod
@@ -316,10 +317,21 @@ def tools_block(store) -> str:
 
 
 def _counsel(store) -> str:
-    """COUNSEL.md - who the assistant is and how it speaks (Docs tab, the owner's to edit)."""
+    """Load complete COUNSEL; recover missing/blank content from the visible default."""
     doc = re.sub(r'<!--.*?-->', '', store.doc('counsel') or '', flags=re.S).strip()
-    return doc[:3200] or ('You are Taskuary, the assistant. You walk the owner through their inbox one thing at a time '
-                          'and do no work yourself. Plain, direct, first person. Take a position.')
+    if doc:
+        return doc
+    path = Path(__file__).parent / 'templates' / 'counsel.md'
+    try:
+        template = path.read_text(encoding='utf-8')
+    except OSError as e:
+        raise RuntimeError('COUNSEL is missing or blank and its shipped default could not be read. Restore COUNSEL in Docs.') from e
+    if not re.sub(r'<!--.*?-->', '', template, flags=re.S).strip():
+        raise RuntimeError('COUNSEL and its shipped default are blank. Restore COUNSEL in Docs.')
+    store.save_doc('counsel', template, 'template')
+    store.audit('doc', 0, 'restored_blank', 'system', detail={'doc': 'counsel'})
+    logger.warning('COUNSEL was missing or blank; restored the shipped default in Docs')
+    return re.sub(r'<!--.*?-->', '', store.doc('counsel') or '', flags=re.S).strip()
 
 
 def _owner(store) -> str:

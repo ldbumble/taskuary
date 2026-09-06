@@ -775,8 +775,8 @@ its only user change remains README.md with preserved SHA-256
 
 ## Section 2.2 — email catch-up without skipped backlog
 
-Status: final reviewed source `9583acb` passed cumulative gates; delivery CI is
-recorded at the end of this evidence log. Work began from CI-verified `3dc3a5e`. PW-006 through
+Status: reviewed source `32d014b` passed all final local gates. Remote delivery CI
+is pending and will be recorded below. Work began from CI-verified `3dc3a5e`. PW-006 through
 PW-008 form one TODO section with independent Outlook and IMAP assignments and
 one integration/review/regression/delivery gate. Claude's original Outlook/IMAP
 commits are already on master; this section resolves their independent review
@@ -1094,7 +1094,7 @@ Tests: `tests/test_ideas_triage.py` (8 cases) and the existing `tests/test_repor
 No frontend change; packaged assets unchanged.
 
 
-### Final Section 2.2 delivery gate
+### Prior Section 2.2 gate before concurrent procedure and chain delivery
 
 Exact source `9583acb` integrates upstream `ffd9938` and passed 2,616 backend tests
 plus 71 subtests (150 warnings, no skips) in 206.68 s. All seven unchanged browser
@@ -1102,7 +1102,7 @@ scenarios passed: isolated input 11.214 s (visible/input 1,157/645 ms), remainin
 185.473 s (terminal visible/input/reconnect 2,242/121/807 ms). Frontend source and
 assets remain byte-identical to the 290-test, exit-0 12.25 s build on the checklist
 base. Astra cleared preservation and direct intake/navigation compatibility for
-this exact integration. TODO and both ledgers now reference the final source.
+this exact integration. TODO and both ledgers referenced this candidate source at that gate.
 The broader Phase 3 claims remain Claude's separately scoped evidence; full-chain,
 account-scoping and canonical read-policy cutovers are still pending. Delivery and
 exact-SHA remote CI follow this gate.
@@ -1183,3 +1183,79 @@ and the tests now pin: history stops at the mail being judged (a newer reply was
 as history and never triaged), and the Graph listing walk is bounded (an unbounded next-link loop
 ran a test process to 16 GB). Test-side: FakeBox in
 `tests/test_imap_catchup.py` learned HEADER searches. No frontend change; packaged assets unchanged.
+
+### Concurrent chain integration
+
+`6d88cf0` preserves upstream `e665df7` (chain source `3293a6e`) and the reviewed
+email catch-up work. The IMAP merge retains strict FETCH failure handling, scoped
+identities, durable retry holes, atomic checkpoints and attachment retries, while
+adding the upstream history hook. Integration review and a fresh cumulative backend
+run are in progress. Browser fixture correction `15cf089` exactly matches independently
+reviewed `1f7a66d`; its focused run passed with unchanged limits. No live app or
+production connector was used. Delivery and exact-SHA remote CI remain pending.
+
+Independent integration review reproduced three interactions requiring correction:
+history used legacy IMAP IDs instead of the poll's scoped/epoch identities; failed
+Inbox restoration could leave Sent selected for the next Inbox UID; and history
+could consume a pending UID/retry hole before normal triage. These initial findings were repaired in `753b8ec`
+with real-store synthetic-IMAP tests, as recorded below. Upstream Section 2.4 is not accepted by this
+review: truncated/failed provider listings can claim complete coverage, coverage is
+keyed by bare conversation ID across mailboxes, and the incomplete-history notice
+can be trimmed from bounded context. Its earlier author-recorded claims above are
+retained as history; these limitations still require follow-up.
+
+The seven-scenario browser gate passed (245.938 s, no skips), including the fixture
+correction: cold visibility/input 2,462/987 ms; terminal visibility/input/reconnect
+2,549/131/1,271 ms. This run began on `15cf089` and overlapped the chain merge, so it
+is diagnostic evidence, not an exact-final-source gate. The final source will be
+tested after the compatibility repair. Upstream `e665df7` CI run 34043373718 failed
+the freshness browser scenario (held Current title mismatch); its other nine jobs
+passed. That separate failure was diagnosed and fixed in `f8baa09` without weakening assertions.
+
+### Reviewed compatibility repairs and final gate candidate
+
+IMAP repair `753b8ec` (worker `08f67f9`) passed 10 new real-SQLite compatibility
+cases and 58 combined IMAP cases plus five subtests. It shares exact poll identities
+with history, protects pending/hole and post-census UIDs, reads history readonly,
+and refuses to continue on failed restoration or changed Inbox epoch. Failed
+history SELECT/SEARCH records incompleteness before any Sent checkpoint preparation.
+Astra cleared the source and the strengthened failure fixtures.
+
+The Graph repair queues history until all configured intake folders complete and
+the source CAS succeeds. Independent regressions `4a2f793` (worker `cd5a9d4`) failed
+on the old code by swallowing an older Archive arrival while processing Inbox;
+both pass with the repair. The combined Graph/IMAP compatibility and mail/chain
+gate passed 44 tests. An interrupted folder can still leave earlier conversations
+outside the replay boundary awaiting another history trigger; this belongs to
+partial PW-010 history completion, not acceptance of complete chain recovery.
+
+Fixture correction `3c0f575` preserves all old assertions while freezing two polls
+around a genuinely later arrival and separating fake history HTTP from folder
+pagination. The 32-case mail/chain gate passed. Browser correction `f8baa09`
+(worker `54d7b88`) retains the physical click after the exact card is stationary and
+hit-testable; a causal trace showed the previous overlapping animation sent a
+different card key. Its focused browser case passed and Astra cleared it.
+Frontend tests passed 290 (1.474 s), packaged build exited 0 in 24.74 s; no asset drift.
+Final cumulative backend/browser results and exact-SHA delivery CI follow.
+
+### Final Section 2.2 browser gate
+
+Exact source `32d014b` passed all seven browser scenarios with unchanged assertions
+and budgets: isolated P0 34.719 s (visible/input 1,400/870 ms), remaining six 183.911 s
+(terminal visible/input/reconnect 1,846/95/786 ms), no skips. The earlier race/failure
+evidence remains above. Final independent review cleared this source and confirmed
+all 267 ledger IDs/rows; PW-010/PW-011/PW-013/PW-021 retain the identified partial
+chain scope. Final backend result and remote delivery are pending below.
+
+### Final Section 2.2 backend and delivery candidate
+
+Reviewed source `32d014bff8b0d09ffea5b62b8fc5d81e01979bf3` passed the complete
+backend suite: 2,643 tests plus 71 subtests, 149 warnings, no skips, 225.10 s.
+Together with the 290 frontend tests, exit-0 packaged build and seven final browser
+scenarios above, all local acceptance gates pass. Ledger consistency checks passed;
+source/assets match, and README's owner change remains exactly SHA-256
+`EDF56683E29A34789B2EBEF73E131FBD7B318AE498BC761668BCB70854D91BAB`.
+TODO and both ledgers now reference this source. Full-chain gaps remain explicitly
+partial. Delivery is a normal master push preserving upstream `e665df7`; exact-SHA
+remote CI verification is pending. No live restart, live data modification, or
+production connector testing was performed.

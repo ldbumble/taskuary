@@ -58,13 +58,12 @@ Unchecked feature requirements below remain pending their own implementation gat
   catch-up cover the full gap; distinguish initial-import limits from catch-up.
   Test both Inbox and Sent with long absences and more than 25 new messages.
 
-  Section 2.2: independently reviewed corrections are integrated at `9583acb`
-  with Claude's concurrent triage changes. Final regressions passed 2,616 backend
-  tests plus 71 subtests, 290 frontend tests, packaged build, and all seven real
-  browser scenarios. The first browser run's two failures and unchanged successful
-  rerun are retained in the [implementation evidence](processing-implementation-evidence.md#section-22--email-catch-up-without-skipped-backlog),
-  together with delivery and exact-SHA CI. Historical messages, read state and
-  custom documents are checked through real Sync-now API tests on disposable data.
+  Section 2.2: independently reviewed source `32d014b` passed 2,643 backend tests
+  plus 71 subtests, 290 frontend tests, the packaged build, and all seven real
+  browser scenarios. Earlier failures, their diagnoses, and the unchanged
+  regression assertions are retained in the [implementation evidence](processing-implementation-evidence.md#section-22--email-catch-up-without-skipped-backlog),
+  with delivery and exact-SHA CI tracked there. Historical messages, read state,
+  and custom documents are checked through real Sync-now API tests on disposable data.
 
 ## Full email conversation context
 
@@ -77,13 +76,13 @@ This is pending implementation, not a claim that current intake does this.
   once and link it to existing thread records before context-dependent triage/task
   routing. For A -> B -> C already stored, receiving D must reuse A/B/C, not
   download their bodies again or copy their content into D.
-- [x] <a id="pw-010"></a>**PW-010** Track thread-history coverage and unresolved message references. Retrieve
+- [ ] <a id="pw-010"></a>**PW-010** Track thread-history coverage and unresolved message references. Retrieve
   missing history when a thread is newly encountered or has gaps; listing provider
   thread IDs/metadata to discover gaps is distinct from re-fetching stored bodies.
   Include
   inbound and sent messages across accessible relevant folders, regardless of
   read status or the incremental polling window; follow pagination to completion.
-- [x] <a id="pw-011"></a>**PW-011** Apply the same contract to Outlook/Graph and Gmail/IMAP. Scope provider
+- [ ] <a id="pw-011"></a>**PW-011** Apply the same contract to Outlook/Graph and Gmail/IMAP. Scope provider
   conversation/thread IDs to the mailbox/account; use Gmail native thread IDs
   where available and Message-ID/References/In-Reply-To relationships for generic
   IMAP. Preserve those headers for matching; do not merge unrelated mail merely
@@ -102,6 +101,11 @@ This is pending implementation, not a claim that current intake does this.
   body downloads or duplicate records; D referencing absent C retrieves the
   missing history. Repeated polls must remain idempotent, with complete context
   assembled from individual records rather than a copied chain per message.
+
+Integration review keeps PW-010/PW-011 partial: provider listing completeness and
+account/epoch-scoped coverage remain unresolved. PW-013 also needs its incomplete
+history warning to survive context budgeting. The earlier authored Section 2.4
+evidence is retained with these follow-up findings.
 
 ## Routing: email identity versus chat intent
 
@@ -132,7 +136,7 @@ chain. An old message/chain evaluation must not determine the new verdict.
   `store.owner_verdict_on_thread()` from both existing-task and new-task intake
   paths. An earlier owner `ignore` must not cause a new reply to be filed without
   fresh evaluation, whether or not an agent run is recorded as running.
-- [x] <a id="pw-021"></a>**PW-021** Merge the new message into its chain before evaluation. Evaluate the latest
+- [ ] <a id="pw-021"></a>**PW-021** Merge the new message into its chain before evaluation. Evaluate the latest
   message in full conversation context, without carrying over an old FYI/ignore
   verdict or using that verdict as a presumption about the new message. Retain old
   decisions as history, not as an automatic suppression rule.

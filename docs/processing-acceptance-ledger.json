@@ -54,7 +54,7 @@
       "requirement": "Outlook: `_mail_msgs()` reads newest-first and stops at its default 500",
       "status": "implemented",
       "test": "`tests/test_mail_catchup.py`; atomic checkpoint and Sync-now API preservation tests; opaque Graph pages, replay, cutoffs, owner edits and loops",
-      "commit": "9583acb (final reviewed integration); Section 2.2 delivery and exact-SHA CI in implementation evidence"
+      "commit": "32d014b (final reviewed source); Section 2.2 delivery and exact-SHA CI in implementation evidence"
     },
     {
       "id": "PW-007",
@@ -63,7 +63,7 @@
       "requirement": "Gmail/IMAP: Inbox and Sent polling select the last 25 qualifying UIDs and",
       "status": "implemented",
       "test": "`tests/test_imap_catchup.py`; atomic checkpoint and Sync-now API reopen tests; oldest-first drain, durable failed-UID retries, epochs and exact historical identities",
-      "commit": "9583acb (final reviewed integration); Section 2.2 delivery and exact-SHA CI in implementation evidence"
+      "commit": "32d014b (final reviewed source); Section 2.2 delivery and exact-SHA CI in implementation evidence"
     },
     {
       "id": "PW-008",
@@ -72,7 +72,7 @@
       "requirement": "Gmail/IMAP: the date search window can exclude mail received during a long",
       "status": "implemented",
       "test": "`tests/test_imap_catchup.py`; long Inbox/Sent gaps, bounded bootstrap, empty resets, missing/changed UIDVALIDITY and interrupted legacy first import",
-      "commit": "9583acb (final reviewed integration); Section 2.2 delivery and exact-SHA CI in implementation evidence"
+      "commit": "32d014b (final reviewed source); Section 2.2 delivery and exact-SHA CI in implementation evidence"
     },
     {
       "id": "PW-009",
@@ -88,8 +88,8 @@
       "section": "Full email conversation context",
       "phase": "2",
       "requirement": "Track thread-history coverage and unresolved message references. Retrieve",
-      "status": "implemented",
-      "test": "`tests/test_email_chains.py` (coverage per conversation; listing is ids/metadata only and follows pagination; missing history fetched once; a failed attempt is retried on the next mail)",
+      "status": "partial: stored history and coverage exist; empty/duplicate continued pages and failed IMAP FETCH/LIST commands can still claim complete coverage",
+      "test": "`tests/test_email_chains.py` (coverage per conversation; listing is ids/metadata only and follows pagination; missing history fetched once; a failed attempt is retried on the next mail); independent integration review found remaining gaps (implementation evidence: concurrent chain integration)",
       "commit": "3293a6e; local gates passed, CI pending"
     },
     {
@@ -97,8 +97,8 @@
       "section": "Full email conversation context",
       "phase": "2",
       "requirement": "Apply the same contract to Outlook/Graph and Gmail/IMAP. Scope provider",
-      "status": "implemented",
-      "test": "`tests/test_email_chains.py` (Graph by conversationId scoped to the mailbox; IMAP by root Message-ID through References across INBOX and Sent; same-subject mail on another conversation is never merged)",
+      "status": "partial: provider retrieval is mailbox-targeted; bare conversation coverage is not account/epoch scoped",
+      "test": "`tests/test_email_chains.py` (Graph by conversationId scoped to the mailbox; IMAP by root Message-ID through References across INBOX and Sent; same-subject mail on another conversation is never merged); independent integration review found remaining gaps (implementation evidence: concurrent chain integration)",
       "commit": "3293a6e; local gates passed, CI pending"
     },
     {
@@ -115,8 +115,8 @@
       "section": "Full email conversation context",
       "phase": "2",
       "requirement": "Refresh the selected thread before assistant/agent context is assembled,",
-      "status": "partial: the chain is completed at intake and an incomplete or failed retrieval is disclosed in the exchange; a refresh at assistant/agent context assembly time is not wired",
-      "test": "`tests/test_email_chains.py` (failed retrieval recorded and disclosed, never presented as complete)",
+      "status": "partial: intake history hook exists; refresh before assistant/agent context is not wired and budget trimming can remove the incomplete-history warning",
+      "test": "`tests/test_email_chains.py` (failed retrieval recorded and disclosed, never presented as complete); independent integration review found remaining gaps (implementation evidence: concurrent chain integration)",
       "commit": "3293a6e; local gates passed, CI pending"
     },
     {
@@ -124,9 +124,9 @@
       "section": "Full email conversation context",
       "phase": "2",
       "requirement": "Test across email connectors: old roots outside the watermark, sent replies,",
-      "status": "partial: old roots outside the watermark, sent replies, multi-page listing, duplicate fetches, unrelated same-subject mail, later replies and retrieval failures covered; attachments and archived-folder cases are not exercised by a fake",
-      "test": "`tests/test_email_chains.py` (12 cases) plus `tests/test_imap_catchup.py` FakeBox HEADER search",
-      "commit": "3293a6e; local gates passed, CI pending"
+      "status": "partial: old roots, sent replies, multi-page listing, duplicate fetches, unrelated subjects, later replies and configured Archive intake covered; fetched-history attachment associations remain untested",
+      "test": "`tests/test_email_chains.py`; `tests/processing/test_graph_chain_catchup_compat.py`; `tests/processing/test_chain_catchup_compat.py`",
+      "commit": "3293a6e; 32d014b integration compatibility; final gates in evidence"
     },
     {
       "id": "PW-015",
@@ -187,8 +187,8 @@
       "section": "Fresh evaluation for each new message",
       "phase": "3",
       "requirement": "Merge the new message into its chain before evaluation. Evaluate the latest",
-      "status": "implemented",
-      "test": "`tests/test_fresh_evaluation.py` (ruling leads the evidence, model decides) plus `tests/test_email_chains.py` (the chain is completed before the new mail is judged in stored context)",
+      "status": "partial: fresh triage evaluation exists; complete chain before an active context-dependent triage worker is not verified",
+      "test": "`tests/test_fresh_evaluation.py` (ruling leads the evidence, model decides) plus `tests/test_email_chains.py` (the chain is completed before the new mail is judged in stored context); feed-mode chain tests do not establish ordering against active triage workers (independent integration review)",
       "commit": "3293a6e; local gates passed, CI pending"
     },
     {

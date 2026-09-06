@@ -525,7 +525,7 @@ after startup fails. Pending implementation only.
   a confident guess or single configured repository must not bypass this manual
   confirmation step. Keep automatic dispatch governed by the separately approved
   triage-selection and uncertainty rules.
-- [ ] <a id="pw-099"></a>**PW-099** Preserve the selected item, agent/model, and instructions while choosing;
+- [x] <a id="pw-099"></a>**PW-099** Preserve the selected item, agent/model, and instructions while choosing;
   persist the confirmed repository on the task and validate its local path before
   launch. Cancelling the picker must not start a session. Reconcile any existing
   live session explicitly rather than silently launching a duplicate or replacing it.
@@ -1154,21 +1154,21 @@ Owner-approved: dispatch submits the task brief, records the live worker, and
 updates the timeline. Merely opening/viewing a workspace must not claim that an
 agent is working. Pending implementation.
 
-- [ ] <a id="pw-209"></a>**PW-209** Apply that startup contract to coding and general workers: distinguish
+- [x] <a id="pw-209"></a>**PW-209** Apply that startup contract to coding and general workers: distinguish
   workspace/session creation from accepted work submission, publish consistent
   live-state updates, and retain duplicate-start protection. Failures or pending
   repository selection must not be reported as successful starts.
-- [ ] <a id="pw-210"></a>**PW-210** Verify equivalent Make task and Send to agent behavior across All timeline
+- [x] <a id="pw-210"></a>**PW-210** Verify equivalent Make task and Send to agent behavior across All timeline
   detail, Unread/chat cards, and Tasks. Make task creates/reuses an owner task
   without launching a worker; Send to agent uses explicit worker choice and the
   shared dispatch contract, including required repository confirmation.
-- [ ] <a id="pw-211"></a>**PW-211** Audit finding: All detail's SendToAgent is hidden for unconverted
+- [x] <a id="pw-211"></a>**PW-211** Audit finding: All detail's SendToAgent is hidden for unconverted
   FYI/reply_only rows by the codeless guard in FeedView.jsx. Resolve this mismatch
   with chat cards, which expose manual agent dispatch for those items.
-- [ ] <a id="pw-212"></a>**PW-212** Audit finding: ui.jsx SendToAgent treats a successful HTTP response with
+- [x] <a id="pw-212"></a>**PW-212** Audit finding: ui.jsx SendToAgent treats a successful HTTP response with
   dispatch='needs_repo' as a live start; unlike assistantCards.jsx, it has no
   repository-selection branch. Handle the decision state without success claims.
-- [ ] <a id="pw-213"></a>**PW-213** Audit finding: TasksView.startGeneralAgent dispatches existing general
+- [x] <a id="pw-213"></a>**PW-213** Audit finding: TasksView.startGeneralAgent dispatches existing general
   tasks, but switching another kind only patches Kind/ask tags. Unify explicit
   dispatch instead of relying on workspace mount behavior to initiate work.
 - [ ] <a id="pw-214"></a>**PW-214** Test the actual All-detail buttons and matching chat/Tasks actions: owner

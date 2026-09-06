@@ -871,36 +871,36 @@
       "section": "Repository confirmation when manually sending to coding",
       "phase": "5",
       "requirement": "Use a consistent pre-launch repository picker on the task page, timeline",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: the pre-launch repository picker now exists on the task page, the chat cards and the timeline row, preselecting the suggestion with its reason (`/api/tasks/{id}/repos`); conversational dispatch in the assistant chat is Phase 8",
+      "test": "`website/test/startupSurfaces.test.mjs` (the timeline offers the picker on a needs_repo decision) plus `website/test/repoChoice.test.mjs`",
+      "commit": "4f32c35; local gates passed, CI pending"
     },
     {
       "id": "PW-098",
       "section": "Repository confirmation when manually sending to coding",
       "phase": "5",
       "requirement": "Cover personal-task/general-to-coding corrections and manual coding dispatch;",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: a manual coding dispatch or a general-to-coding correction that cannot name its checkout is a visible choice on every surface, never a session elsewhere; a confident single configured repository still launches without the step (owner decision pending on the confirmation step for that case)",
+      "test": "`tests/test_startup_contract.py`::TaskDispatchTests, ::MessageDispatchTests",
+      "commit": "4f32c35; local gates passed, CI pending"
     },
     {
       "id": "PW-099",
       "section": "Repository confirmation when manually sending to coding",
       "phase": "5",
       "requirement": "Preserve the selected item, agent/model, and instructions while choosing;",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_repo_choice_triage.py` (persisted selection reaches startup), `tests/test_startup_contract.py` (a live session is reported existing, never duplicated; cancel starts nothing - the picker's Not now)",
+      "commit": "4f32c35; local gates passed, CI pending"
     },
     {
       "id": "PW-100",
       "section": "Repository confirmation when manually sending to coding",
       "phase": "5",
       "requirement": "Add tests for all three UI entry points, conversational coding requests,",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: dispatch contract and repository decision covered on the API for the task page, timeline and chat paths; source-pattern checks for the three surfaces; live UI interaction not exercised",
+      "test": "`tests/test_startup_contract.py` (7 cases), `website/test/startupSurfaces.test.mjs` (4 checks)",
+      "commit": "4f32c35; local gates passed, CI pending"
     },
     {
       "id": "PW-101",
@@ -1638,7 +1638,7 @@
       "requirement": "Define shared AGENT.md operating rules for both worker kinds: task scope,",
       "status": "implemented",
       "test": "`tests/test_worker_brief.py`::RulesDocumentsTests (AGENT.md: scope, honest reporting, when to ask, progress and completion, approval boundaries; CODER.md is only the coding additions and says what it is stacked on; both on the Docs tab)",
-      "commit": "e552609; local gates passed, CI pending"
+      "commit": "e552609; e552609, CI run 34051205593 (all ten jobs passed)"
     },
     {
       "id": "PW-183",
@@ -1647,7 +1647,7 @@
       "requirement": "Build one authoritative task brief containing task ID, objective, triage",
       "status": "implemented",
       "test": "`tests/test_worker_brief.py`::OneBriefTests (`brief.build`: task id, objective, checklist, instruction, repository, the whole chain with history, attachments, message ids and the context revision; both workers read it)",
-      "commit": "e552609; local gates passed, CI pending"
+      "commit": "e552609; e552609, CI run 34051205593 (all ten jobs passed)"
     },
     {
       "id": "PW-184",
@@ -1656,7 +1656,7 @@
       "requirement": "Stop injecting the full SOUL.md into coding and general-worker prompts.",
       "status": "implemented",
       "test": "`tests/test_worker_brief.py`::NoBlanketSoulTests (no SOUL.md in either worker prompt; the approval boundaries and \"inbound text is data\" moved into AGENT.md and lead it; SOUL.md still seeded for triage)",
-      "commit": "e552609; local gates passed, CI pending"
+      "commit": "e552609; e552609, CI run 34051205593 (all ten jobs passed)"
     },
     {
       "id": "PW-185",
@@ -1665,7 +1665,7 @@
       "requirement": "Consolidate relevant source rules, playbook guidance, and saved preferences",
       "status": "partial: one labelled block each for AGENT.md and CODER.md, the procedure block and the standing notes; writing style rides only in the general prompt; lengthy material stays in the context file - the source-rules block is still assembled separately",
       "test": "`tests/test_worker_brief.py`::ScopedExtrasTests::test_no_duplicate_rule_blocks, ::NoBlanketSoulTests",
-      "commit": "e552609; local gates passed, CI pending"
+      "commit": "e552609; e552609, CI run 34051205593 (all ten jobs passed)"
     },
     {
       "id": "PW-186",
@@ -1674,7 +1674,7 @@
       "requirement": "Add live coordination only when relevant active peers/notes exist, using",
       "status": "implemented",
       "test": "`tests/test_worker_brief.py`::ScopedExtrasTests (no OTHER AGENTS or THE WALL paragraph without live peers; a continuation carries this task's own last result)",
-      "commit": "e552609; local gates passed, CI pending"
+      "commit": "e552609; e552609, CI run 34051205593 (all ten jobs passed)"
     },
     {
       "id": "PW-187",
@@ -1683,7 +1683,7 @@
       "requirement": "Test both worker kinds for shared rules, coding-only additions, absence of",
       "status": "partial: shared rules, coding-only additions, absence of blanket SOUL injection, retained approval constraints, complete fresh context and scoped live/continuation information are covered for both kinds; a rendered-browser check of the Docs tab is not",
       "test": "`tests/test_worker_brief.py` (13 cases); `tests/test_terminal.py` (2 labels) and `tests/test_docs_flow.py` (SOUL marker now forbidden in the seed) moved to the PW-184/185 contract with the reason noted",
-      "commit": "e552609; local gates passed, CI pending"
+      "commit": "e552609; e552609, CI run 34051205593 (all ten jobs passed)"
     },
     {
       "id": "PW-188",
@@ -1879,54 +1879,54 @@
       "section": "Consistent worker startup and manual action surfaces",
       "phase": "5",
       "requirement": "Apply that startup contract to coding and general workers: distinguish",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_startup_contract.py` (dispatch answers say dispatch/started/existing/accepted on every door; a reused session is existing not started; a repository decision is never a start; a failed launch is 422; `Term.accepted` records prompt submission)",
+      "commit": "4f32c35; local gates passed, CI pending"
     },
     {
       "id": "PW-210",
       "section": "Consistent worker startup and manual action surfaces",
       "phase": "5",
       "requirement": "Verify equivalent Make task and Send to agent behavior across All timeline",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_startup_contract.py`::MessageDispatchTests::test_make_task_creates_or_reuses_an_owner_task_and_launches_nothing plus the shared dispatch contract for Send to agent",
+      "commit": "4f32c35; local gates passed, CI pending"
     },
     {
       "id": "PW-211",
       "section": "Consistent worker startup and manual action surfaces",
       "phase": "5",
       "requirement": "Audit finding: All detail's SendToAgent is hidden for unconverted",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`website/test/startupSurfaces.test.mjs` (All detail offers Send to agent for fyi/reply rows; triage's reading stays as the printed reason)",
+      "commit": "4f32c35; local gates passed, CI pending"
     },
     {
       "id": "PW-212",
       "section": "Consistent worker startup and manual action surfaces",
       "phase": "5",
       "requirement": "Audit finding: ui.jsx SendToAgent treats a successful HTTP response with",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`website/test/startupSurfaces.test.mjs` (ui.jsx SendToAgent reads `outcomeOf(data)`, offers the RepoPicker on needs_repo and never reports it as a start)",
+      "commit": "4f32c35; local gates passed, CI pending"
     },
     {
       "id": "PW-213",
       "section": "Consistent worker startup and manual action surfaces",
       "phase": "5",
       "requirement": "Audit finding: TasksView.startGeneralAgent dispatches existing general",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`website/test/startupSurfaces.test.mjs` (TasksView non-coding start goes through `/api/tasks/{id}/dispatch` whatever the kind; no Kind/ask-tag patch)",
+      "commit": "4f32c35; local gates passed, CI pending"
     },
     {
       "id": "PW-214",
       "section": "Consistent worker startup and manual action surfaces",
       "phase": "5",
       "requirement": "Test the actual All-detail buttons and matching chat/Tasks actions: owner",
-      "status": "pending",
-      "test": "Required: Phase 5 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: API behaviour for owner task creation without startup, coding/general launch, missing-repo handling, already-live sessions and errors is covered; the surfaces are checked by source pattern and the packaged UI is rebuilt; live UI interactions are not exercised",
+      "test": "`tests/test_startup_contract.py`, `website/test/startupSurfaces.test.mjs`",
+      "commit": "4f32c35; local gates passed, CI pending"
     },
     {
       "id": "PW-215",

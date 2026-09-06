@@ -1450,3 +1450,32 @@ Tests: `tests/test_worker_brief.py` (13 cases). `tests/test_terminal.py`: two `R
 end-to-end TUI test blanks AGENT.md as it blanks CODER.md and SOUL.md (it owns the seed's inputs);
 `tests/test_docs_flow.py`: the coding-agent audit now expects the AGENT marker and forbids the
 SOUL marker (PW-184). Packaged UI rebuilt for the Docs tab entry.
+
+## Section 5.6 — one startup contract and the surfaces that start a worker
+
+Status: implemented and tested locally at `4f32c35`; remote CI pending on the pushed
+checkpoint. Section 5.5 is CI-verified (e552609, CI run 34051205593 (all ten jobs passed)).
+Acceptance PW-099, PW-209, PW-210, PW-211, PW-212, PW-213 implemented; PW-097, PW-098, PW-100,
+PW-214 partial (conversational dispatch in the assistant chat is Phase 8; a single confident
+repository still launches without a confirmation step pending the owner's word; live UI
+interactions are not exercised - the surfaces are checked by source pattern).
+
+Dispatch used to answer with whatever the path it took happened to return, and one screen read a
+`needs_repo` decision as a live start. Every dispatch answer - `/api/tasks/{id}/dispatch`,
+`/api/messages/{id}/dispatch`, the chat cards - now says the same four things: `dispatch`
+(session | assistant | needs_repo), `started` (a worker session was created for this request),
+`existing` (a live session or conversation was reused; nothing new started) and, for a coding
+session, `accepted` (`Term.accepted`: the prompt was submitted - True when the CLI takes it on its
+command line or the typed seed was answered, False when it was typed but never taken, None before
+any prompt) - exposed on the session's `info`. A repository decision carries `started: false`; a
+failed launch is a 422, never a success. `website/src/dispatchOutcome.js` (`outcomeOf`) is the one
+reading of that answer: the timeline's SendToAgent (`ui.jsx`) now offers the `RepoPicker` on a
+needs_repo decision with a "Not now - nothing was started" exit and reports what actually happened;
+All detail (`FeedView.jsx`) offers Send to agent for fyi/reply rows as the chat cards do, with
+triage's reading kept as the printed reason; the task page's non-coding start (`TasksView.jsx`)
+goes through the shared dispatch whatever the task's kind was instead of re-labelling the task and
+leaving a workspace mount to start work. Make task (`/mine`) creates or reuses an owner task and
+launches nothing. Packaged UI rebuilt.
+
+Tests: `tests/test_startup_contract.py` (7 cases), `website/test/startupSurfaces.test.mjs` (4 checks: outcome reading, the timeline's repo decision, the All-detail
+tray, the task page's shared dispatch).

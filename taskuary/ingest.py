@@ -162,6 +162,149 @@ _FRESH, _FRESH_LOCK = set(), threading.Lock()
 _ALL = 1_000_000                 # pending_triage's LIMIT when the whole queue has to be seen to reorder it
 
 
+class DrainTicket:
+    """Completion handle for one request handed to :class:`DrainWorker`."""
+
+    def __init__(self):
+        self._done = threading.Event()
+        self.count = 0
+        self.error = None
+
+    def wait(self, timeout=None) -> bool:
+        return self._done.wait(timeout)
+
+
+class DrainWorker:
+    """One ordered, short-lived drain thread for one store.
+
+    Connector fetch clocks only enqueue here.  That leaves them free to fetch the next batch
+    while slow model triage continues, without allowing two conversations to be judged beside
+    each other.  The worker exits whenever its queue is empty; ``close`` makes its captured store
+    and model factory explicitly releasable by server shutdown and isolated tests.
+    """
+
+    def __init__(self, store, llm_factory):
+        self.store = store
+        self._llm_factory = llm_factory
+        self._cv = threading.Condition()
+        self._requests = []
+        self._active_requests = []
+        self._active_channel = None
+        self._thread = None
+        self._closed = False
+
+    @property
+    def active(self) -> bool:
+        with self._cv:
+            return bool(self._thread and self._thread.is_alive())
+
+    def submit(self, *, fresh=(), only_fresh=False, progress=None) -> DrainTicket:
+        ticket = DrainTicket()
+        channels = tuple(dict.fromkeys(fresh))
+        # Wake a drain which is already between backlog rows before waiting for this request's
+        # turn in the worker queue.  _FRESH and the request queue each have their own lock, so the
+        # running drain either observes this now or the queued pass observes it afterwards.
+        mark_fresh(channels)
+        pending = bool(channels and any(r['Channel'] in channels
+                                        for r in self.store.pending_triage(_ALL)))
+        with self._cv:
+            if self._closed:
+                raise RuntimeError('drain worker is closed')
+            # A successful fetch which found nothing has nothing to wait behind.  Keep the
+            # exception for a row of that channel whose final route writes are still running.
+            if only_fresh and not pending and self._active_channel not in channels:
+                ticket._done.set()
+                return ticket
+            request = (ticket, channels, bool(only_fresh), progress)
+            self._requests.append(request)
+            if not self._thread or not self._thread.is_alive():
+                self._thread = threading.Thread(target=self._run, name='taskuary-triage', daemon=True)
+                try:
+                    self._thread.start()
+                except Exception as exc:
+                    self._thread = None
+                    self._requests.remove(request)
+                    ticket.error = exc
+                    ticket._done.set()
+                    self._cv.notify_all()
+                    raise
+            self._cv.notify_all()
+        return ticket
+
+    def _run(self):
+        while True:
+            with self._cv:
+                if not self._requests:
+                    self._thread = None
+                    self._cv.notify_all()
+                    return
+                requests, self._requests = self._requests, []
+                self._active_requests = requests
+            fresh = tuple(dict.fromkeys(ch for _, channels, _, _ in requests for ch in channels))
+            # Any full request widens this pass to the complete backlog.  A quick-only batch
+            # leaves unrelated mail for the full lane, exactly as synchronous drain did.
+            only_fresh = all(r[2] for r in requests)
+            progress = next((r[3] for r in requests if r[3] is not None), None)
+            count, error = 0, None
+            try:
+                count = drain(self.store, self._llm_factory(), progress=progress,
+                              fresh=fresh, only_fresh=only_fresh,
+                              on_start=self._message_start, on_complete=self._message_complete)
+            except Exception as exc:
+                error = exc
+                logger.warning(f'deferred triage drain failed: {exc}')
+            for ticket, _, _, _ in requests:
+                if not ticket._done.is_set():
+                    ticket.count, ticket.error = count, error
+                    ticket._done.set()
+            with self._cv:
+                self._active_requests = []
+
+    def _message_start(self, row):
+        with self._cv:
+            self._active_channel = row.get('Channel')
+
+    def _message_complete(self, row):
+        """Release quick tickets after their last fetched row's route/review writes finish.
+
+        A quick request can arrive while a full backlog pass is already running.  mark_fresh()
+        moves its rows forward; completing the ticket here lets the context gate proceed after
+        those rows, without waiting for unrelated mail still behind them.
+        """
+        channel = row.get('Channel')
+        with self._cv:
+            self._active_channel = None
+            candidates = [r for r in self._active_requests + self._requests
+                          if r[2] and channel in r[1] and not r[0]._done.is_set()]
+        if not candidates: return
+        pending_channels = {r['Channel'] for r in self.store.pending_triage(_ALL)}
+        completed = [r for r in candidates if not any(ch in pending_channels for ch in r[1])]
+        if not completed: return
+        with self._cv:
+            for request in completed:
+                ticket = request[0]
+                if ticket._done.is_set(): continue
+                ticket._done.set()
+                if request in self._requests: self._requests.remove(request)
+            self._cv.notify_all()
+
+    def join(self, timeout=None) -> bool:
+        """Wait until all submitted requests finish, without closing the reusable worker."""
+        end = None if timeout is None else time.monotonic() + timeout
+        with self._cv:
+            while self._thread or self._requests:
+                left = None if end is None else end - time.monotonic()
+                if left is not None and left <= 0: return False
+                self._cv.wait(left)
+        return True
+
+    def close(self, timeout=None) -> bool:
+        """Reject new requests and wait for the captured store to leave the worker thread."""
+        with self._cv:
+            self._closed = True
+        return self.join(timeout)
+
+
 def mark_fresh(channels):
     """Tell the running drain (or the next one) that these channels have lines that just landed."""
     with _FRESH_LOCK: _FRESH.update(channels)
@@ -188,7 +331,8 @@ def await_quiet(store, channels, timeout: float) -> bool:
         time.sleep(0.2)
 
 
-def drain(store, llm=None, progress=None, limit: int = 500, fresh=(), only_fresh: bool = False, wait: bool = True) -> int:
+def drain(store, llm=None, progress=None, limit: int = 500, fresh=(), only_fresh: bool = False,
+          wait: bool = True, on_start=None, on_complete=None) -> int:
     """Judge what deferred() stored - oldest first, one at a time, because a thread's second
     message must find the task its first one opened. A message whose triage raises is filed
     with the error on its route rather than left spinning; the next one still gets judged.
@@ -213,6 +357,7 @@ def drain(store, llm=None, progress=None, limit: int = 500, fresh=(), only_fresh
                 done.add(mid); n += 1
                 with _PENDING_LOCK: held = _PENDING.pop(mid, None)
                 msg = {**(held or _from_row(r)), '_mid': mid}
+                if on_start: on_start(r)
                 try:
                     ingest_message(store, msg, llm=llm)
                 except Exception as e:
@@ -220,6 +365,7 @@ def drain(store, llm=None, progress=None, limit: int = 500, fresh=(), only_fresh
                     store.place_message(mid, None, 'filed')
                     store.add_route(mid, None, 'file', None, f'triage failed ({str(e)[:160]}) - filed; it can be promoted by hand', [], 'triage')
                     store.set_setting('triage_last_error', str(e)[:200], 'system')
+                if on_complete: on_complete(r)
                 if progress: progress(len(rows))
         return n
     finally:

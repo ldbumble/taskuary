@@ -144,7 +144,12 @@ def test_safety_events():
 @pytest.fixture(autouse=True)
 def no_background_lifespan_overlap():
     """A desktop test must finish server cleanup before the next test uses real boundaries."""
+    from taskuary import server
+    assert server._open_drain_workers(server.store), \
+        'P0-ISOLATION: a prior triage drain still owns the test store'
     yield
+    assert server._close_drain_workers(timeout=15), \
+        'P0-ISOLATION: a triage drain worker survived its test store'
     pending = [done for done in list(_LIFESPAN_DONE) if not done.is_set()]
     for done in pending:
         assert done.wait(15), 'P0-ISOLATION: a test server lifespan survived its test'

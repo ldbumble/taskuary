@@ -1,7 +1,7 @@
 """The local HTTP API + built-in minimal web UI. Localhost-only by default; set
 [server].token in config to require an X-Taskuary-Token header (for LAN/self-hosting).
 """
-import asyncio, contextlib, json, re, secrets, sys, threading, time
+import asyncio, contextlib, json, re, secrets, sys, threading, time, weakref
 import requests
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -39,6 +39,8 @@ for name, prof in cfg.get('agents', {}).items():
 @asynccontextmanager
 async def _lifespan(_app):
     live_bus.bind(asyncio.get_running_loop())
+    if not _open_drain_workers(store):
+        raise RuntimeError('previous triage drain still owns this store')
     # the demo builds its world and puts agents on the board BEFORE anything else runs - and
     # never polls, never bridges, never catches up on a mailbox that does not exist
     if demo.enabled():
@@ -71,6 +73,8 @@ async def _lifespan(_app):
     try:
         yield
     finally:
+        if not _close_drain_workers(timeout=DRAIN_WAIT, target_store=store):
+            logger.warning('triage drain still stopping during shutdown')
         # Both watched PTYs and one-shot CLI brains are children of this process. An orderly
         # Taskuary close owns them: leaving them alive creates invisible Claude/Codex sessions
         # that can keep consuming resources after there is no UI capable of reaching them.
@@ -2553,10 +2557,11 @@ def save_review_text(rid: int, body: TextBody):
     store.audit('review', rid, 'edit_draft', ACTOR, detail={'characters': len(text)})
     return {'ok': True, 'draft': text}
 
-def _llm():
+def _llm(target_store=None):
+    target_store = target_store or store
     try:
         from .llm import build_llm
-        return build_llm(store)
+        return build_llm(target_store)
     except Exception:
         return None
 
@@ -3813,24 +3818,130 @@ CHAT_CONNECTORS = {'teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'discor
 CHAT_POLL_SECONDS = 30
 _FETCHING = {}                  # connector type -> lane reading it right now
 _FETCH_CV = threading.Condition()
+_STATUS_LOCK = threading.Lock()
+_STATUS_OWNERS = {}             # store id -> {token: {lane, what, at, store}}
+_STATUS_SEQ = [0]
+_DRAIN_WORKERS = {}             # store id -> DrainWorker which captured that exact store
+_DRAIN_WORKERS_LOCK = threading.Lock()
+_DRAIN_CLOSED = weakref.WeakSet()  # stores shutting down reject a late poll's drain submission
 
 
 @contextlib.contextmanager
-def _fetching(types, lane):
+def _claim_fetch(types, lane, wait=False, timeout=None):
+    """Atomically reserve the connector types this lane may fetch.
+
+    The old check-then-register pair let two lanes both observe a free connector.  A unique owner
+    token also prevents one lane's cleanup from releasing a newer claim after an exception race.
+    A waiting correctness gate requires its complete requested set; background lanes take the
+    currently available subset and retry skipped connectors on their next clock tick.
+    """
+    requested = list(dict.fromkeys(types))
+    owner = object()
     with _FETCH_CV:
-        for t in types: _FETCHING[t] = lane
-    try: yield
+        if wait:
+            ready = _FETCH_CV.wait_for(lambda: not any(t in _FETCHING for t in requested),
+                                       timeout=timeout if timeout is not None else DRAIN_WAIT)
+            claimed = requested if ready else []
+        else:
+            claimed = [t for t in requested if t not in _FETCHING]
+        for t in claimed: _FETCHING[t] = (lane, owner)
+    try:
+        yield claimed
     finally:
         with _FETCH_CV:
-            for t in types: _FETCHING.pop(t, None)
+            for t in claimed:
+                if _FETCHING.get(t) == (lane, owner): _FETCHING.pop(t, None)
             _FETCH_CV.notify_all()
 
 
-def _free_of_fetch(types, wait=False, timeout=None) -> list:
-    """The requested types no other lane is reading. wait=True holds until all of them are free."""
-    with _FETCH_CV:
-        if wait: _FETCH_CV.wait_for(lambda: not any(t in _FETCHING for t in types), timeout=timeout or DRAIN_WAIT)
-        return [t for t in types if t not in _FETCHING]
+def _visible_status(owners):
+    if not owners: return {'state': 'idle'}
+    full = [x for x in owners.values() if x['lane'] == 'full']
+    chosen = max(full or list(owners.values()), key=lambda x: x['seq'])
+    return {'state': 'running', 'what': chosen['what'], 'at': chosen['at']}
+
+
+def _status_write(target_store, owners):
+    target_store.set_setting('ingest_status', json.dumps(_visible_status(owners)), 'system')
+
+
+def _status_begin(target_store, lane, what):
+    token = object()
+    with _STATUS_LOCK:
+        _STATUS_SEQ[0] += 1
+        owners = _STATUS_OWNERS.setdefault(id(target_store), {})
+        owners[token] = {'store': target_store, 'lane': lane, 'what': what,
+                         'at': datetime.now().isoformat(sep=' ', timespec='seconds'),
+                         'seq': _STATUS_SEQ[0]}
+        _status_write(target_store, owners)
+    return token
+
+
+def _status_progress(target_store, token, what):
+    with _STATUS_LOCK:
+        owners = _STATUS_OWNERS.get(id(target_store), {})
+        if token not in owners: return
+        owners[token]['what'] = what
+        owners[token]['at'] = datetime.now().isoformat(sep=' ', timespec='seconds')
+        _status_write(target_store, owners)
+
+
+def _status_end(target_store, token):
+    with _STATUS_LOCK:
+        owners = _STATUS_OWNERS.get(id(target_store), {})
+        owners.pop(token, None)
+        _status_write(target_store, owners)
+        if not owners: _STATUS_OWNERS.pop(id(target_store), None)
+
+
+def _drain_worker(target_store):
+    from . import ingest as ingest_mod
+    key = id(target_store)
+    with _DRAIN_WORKERS_LOCK:
+        if target_store in _DRAIN_CLOSED:
+            raise RuntimeError('triage drain is closed for this store')
+        worker = _DRAIN_WORKERS.get(key)
+        if worker is None:
+            worker = ingest_mod.DrainWorker(target_store, lambda: _llm(target_store))
+            _DRAIN_WORKERS[key] = worker
+        return worker
+
+
+def join_drains(target_store=None, timeout=None) -> bool:
+    """Wait for the exact store's queued triage; used by shutdown and isolated fixtures."""
+    target = target_store or store
+    with _DRAIN_WORKERS_LOCK: worker = _DRAIN_WORKERS.get(id(target))
+    return True if worker is None else worker.join(timeout)
+
+
+def _open_drain_workers(target_store=None) -> bool:
+    """Admit drains for a new lifecycle only after an older worker has fully stopped."""
+    target = target_store or store
+    key = id(target)
+    with _DRAIN_WORKERS_LOCK:
+        worker = _DRAIN_WORKERS.get(key)
+        if worker and worker.active: return False
+        if worker: _DRAIN_WORKERS.pop(key, None)
+        _DRAIN_CLOSED.discard(target)
+    return True
+
+
+def _close_drain_workers(timeout=None, target_store=None) -> bool:
+    with _DRAIN_WORKERS_LOCK:
+        targets = [target_store] if target_store is not None else [w.store for w in _DRAIN_WORKERS.values()]
+        keys = [id(target) for target in targets]
+        _DRAIN_CLOSED.update(targets)
+        workers = [(key, _DRAIN_WORKERS.get(key)) for key in keys if _DRAIN_WORKERS.get(key)]
+    end = None if timeout is None else time.monotonic() + timeout
+    ok = True
+    for key, worker in workers:
+        left = None if end is None else max(0, end - time.monotonic())
+        stopped = worker.close(left)
+        if stopped:
+            with _DRAIN_WORKERS_LOCK:
+                if _DRAIN_WORKERS.get(key) is worker: _DRAIN_WORKERS.pop(key, None)
+        ok = stopped and ok
+    return ok
 
 
 def _ingest_status(what: str = None):
@@ -3969,6 +4080,7 @@ def _quick_due() -> list:
 def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool = False, only=None, wait: bool = False):
     """The full lane; `only` hands the call to the chat lane (_poll_quick) instead."""
     if only is not None: return _poll_quick(only, what, wait)
+    target_store = store                 # a test or shutdown cannot retarget work already started
     # one full poll at a time, enforced by a lock instead of the old 10-minute timestamp guard: a
     # slow catch-up (CLI triage over a 3-day backfill) legitimately outlives 10 minutes, so
     # the timeline's auto-sync kept starting SECOND polls over the same watermarks - each one
@@ -3978,7 +4090,7 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
         logger.info('poll already running - skipped'); return False
     _LAST_POLL[0] = time.time()  # a manual Sync now resets the clock too, so the timer
                                  # does not fire again moments later over the same watermarks
-    _ingest_status(what)
+    status = _status_begin(target_store, 'full', what)
     try:
         # channels FIRST: the Morning digest is a report over Taskuary's own data, and run
         # before the catch-up it would summarize yesterday while today sat in the mailbox
@@ -3986,78 +4098,97 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
         # the ORIGINAL what is kept and appended to: "catching up on the last 3 day(s)" is
         # the context, "reading outlook · 12 in so far" is the progress, and replacing the
         # first with the second loses why the poll is running at all
-        def _say(kind, so_far): _ingest_status(f'{what} · reading {kind}' + (f' · {so_far} in so far' if so_far else ''))
+        def _say(kind, so_far): _status_progress(target_store, status, f'{what} · reading {kind}' + (f' · {so_far} in so far' if so_far else ''))
         # show first, judge next: the poll stores every message as it reads it (the timeline
         # shows them at once, wearing 'triaging'), and the AI calls come afterwards, in order
         from . import ingest as ingest_mod
         # a type the chat lane is reading this very second is left to it (one lane per type)
-        mine = list(dict.fromkeys(c['Type'] for c, _ in _poll_jobs(store)))
-        types = _free_of_fetch(mine)
-        with ingest_mod.deferred(), _fetching(types, 'full'):
-            added = poll_channels(store, backfill_days, progress=_say, **({'only': types} if len(types) < len(mine) else {}))
-        # a full pass IS a chat fetch (PW-002): the fast clock must not read the same chats again a moment later
-        now = time.time()
-        for t in types:
-            if t in CHAT_CONNECTORS: _QUICK_LAST[t] = now
-        def _left(n): _ingest_status(f'{what} · triaging' + (f' · {n} left' if n else ''))
-        try: ingest_mod.drain(store, _llm(), progress=_left)
-        except Exception as e: logger.warning(f'deferred triage drain failed: {e}')
+        mine = list(dict.fromkeys(c['Type'] for c, _ in _poll_jobs(target_store)))
+        with _claim_fetch(mine, 'full') as types:
+            try:
+                with ingest_mod.deferred():
+                    added = poll_channels(target_store, backfill_days, progress=_say, only=types) if types else 0
+            finally:
+                # A full pass IS a chat attempt (PW-002). Stamp before releasing its connector
+                # claims, so the quick clock cannot enter the release-to-stamp gap and duplicate it.
+                now = time.time()
+                for t in types:
+                    if t in CHAT_CONNECTORS: _QUICK_LAST[t] = now
+        def _left(n): _status_progress(target_store, status, f'{what} · triaging' + (f' · {n} left' if n else ''))
+        try:
+            ticket = _drain_worker(target_store).submit(progress=_left)
+            ticket.wait()                   # full sync/reports retain their established sequencing
+            if ticket.error: logger.warning(f'deferred triage drain failed: {ticket.error}')
+        except Exception as e:
+            logger.warning(f'deferred triage drain failed: {e}')
         # the git loop: a task's PR is watched here, and a red build goes back to the agent
         # that wrote the code (ci.py) - off unless the owner turned ci_watch on
         try:
             from . import ci
-            ci.poll(store)
+            ci.poll(target_store)
         except Exception as e:
             logger.warning(f'CI poll failed: {e}')
         # the agent wall composts once a day: yesterday's notes become one summary per checkout,
         # so what an agent reads tomorrow is what still matters (blackboard.roll_up)
         try:
-            blackboard.roll_daily(store)
+            blackboard.roll_daily(target_store)
         except Exception as e:
             logger.warning(f'the wall roll-up failed: {e}')
-        run_due_reports(store, startup)          # ...the seeded 'Assistant' report among them (assistant.py)
+        run_due_reports(target_store, startup)          # ...the seeded 'Assistant' report among them (assistant.py)
         return added
     finally:
-        try: _ingest_status()
+        try: _status_end(target_store, status)
         finally: _POLL_BUSY.release()
 
 
 def _poll_quick(only, what: str = 'syncing', wait: bool = False):
-    """The chat lane: read ONLY these connector types, have their fresh lines judged ahead of
-    whatever backlog the full lane's drain is working through, and stop - no CI, no reports.
+    """The chat lane: read ONLY these connector types, put their lines first on the one ordered
+    drain worker, and release the fetch clock - no CI, no reports.
 
     Returns what it added, or False when nothing was read: the lane was busy, every type was in
     the full lane's hands, or the fetch failed - and with wait=True (the context gate before an
-    answer about a chat) also when the new lines could not be judged within DRAIN_WAIT. The fast
+    answer about a chat) also waits until its lines' complete routes finish within DRAIN_WAIT. The fast
     clock is stamped when an ATTEMPT ENDS, success or failure: a broken connector retries one
     interval later, while an attempt that never ran is not stamped and is due again next tick.
-    The full lane's banner tells the longer story, so this lane neither rewrites nor ends it."""
+    A full lane owns the visible banner while both are active; either lane remains truthful when
+    the other finishes first."""
+    target_store = store                 # every asynchronous drain keeps this exact store
+    deadline = time.monotonic() + DRAIN_WAIT if wait else None
     acquired = _QUICK_BUSY.acquire(timeout=DRAIN_WAIT) if wait else _QUICK_BUSY.acquire(blocking=False)
     if not acquired:
         logger.info('chat poll already running - skipped'); return False
+    ticket, added, fresh_channels = None, False, []
     try:
-        types = _free_of_fetch(list(dict.fromkeys(only)), wait=wait)
-        if not types: return False
-        banner = not _POLL_BUSY.locked()
-        if banner: _ingest_status(what)
-        try:
-            from .channels import poll_channels
-            from . import ingest as ingest_mod
-            def _say(kind, so_far):
-                if banner: _ingest_status(f'{what} · reading {kind}' + (f' · {so_far} in so far' if so_far else ''))
-            with ingest_mod.deferred(), _fetching(types, 'quick'):
-                added = poll_channels(store, 0, progress=_say, only=types)
-            ingest_mod.drain(store, _llm(), fresh=types, only_fresh=True, wait=False)
-            if wait and not ingest_mod.await_quiet(store, types, timeout=DRAIN_WAIT): return False
-            return added
-        except Exception as e:
-            logger.warning(f"chat poll failed ({', '.join(types)}): {e}"); return False
-        finally:
-            now = time.time()
-            for t in types: _QUICK_LAST[t] = now
-            if banner and not _POLL_BUSY.locked(): _ingest_status()
+        remaining = max(0, deadline - time.monotonic()) if wait else None
+        with _claim_fetch(list(dict.fromkeys(only)), 'quick', wait=wait, timeout=remaining) as types:
+            if types:
+                status = _status_begin(target_store, 'quick', what)
+                try:
+                    from .channels import CH2SRC, poll_channels
+                    from . import ingest as ingest_mod
+                    fresh_channels = list(dict.fromkeys(CH2SRC[t] for t in types if t in CH2SRC))
+                    def _say(kind, so_far):
+                        _status_progress(target_store, status, f'{what} · reading {kind}' + (f' · {so_far} in so far' if so_far else ''))
+                    with ingest_mod.deferred():
+                        added = poll_channels(target_store, 0, progress=_say, only=types)
+                    ticket = _drain_worker(target_store).submit(fresh=fresh_channels, only_fresh=True)
+                except Exception as e:
+                    logger.warning(f"chat poll failed ({', '.join(types)}): {e}")
+                finally:
+                    now = time.time()
+                    for t in types: _QUICK_LAST[t] = now
+                    _status_end(target_store, status)
     finally:
         _QUICK_BUSY.release()
+    # Waiting belongs to the explicit action's correctness gate, not the connector fetch lane.
+    # Background ticks can claim and fetch this connector while its earlier rows are triaged.
+    if ticket is None: return False
+    if wait:
+        remaining = max(0, deadline - time.monotonic())
+        if not ticket.wait(remaining) or ticket.error: return False
+        remaining = max(0, deadline - time.monotonic())
+        if not ingest_mod.await_quiet(target_store, fresh_channels, timeout=remaining): return False
+    return added
 
 
 def _catchup_days(ceiling: int) -> int:

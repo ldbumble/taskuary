@@ -199,8 +199,14 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
     store.audit('review', rid, verb, actor, detail={'kind': rv.get('Kind'), 'sent': bool(sent)})
     if verb in ('edit', 'reject', 'no_reply'):
         m = (store.get_message(rv['MessageId']) if rv.get('MessageId') else None) or {}
+        # an EDIT's note is about the wording - it goes to STYLE.md as a writing instruction (PW-061); a rejection's
+        # or no-reply's note is about whether a reply was owed at all, which is triage's to learn
+        if verb == 'edit' and note:
+            from . import responder
+            try: responder.style_feedback(store, note, actor)
+            except Exception as e: logger.warning(f'style feedback not saved: {e}')
         ev = (f"rv{rid}: owner verdict '{verb}' on a drafted reply to \"{(m.get('Subject') or rv.get('Kind') or '')[:80]}\" "
-              f"from {m.get('FromEmail') or '?'}" + (f"; their note: {note[:200]}" if note else ''))
+              f"from {m.get('FromEmail') or '?'}" + (f"; their note: {note[:200]}" if note and verb != 'edit' else ''))
         if verb == 'edit': ev += f"\nDRAFT:\n{(rv.get('DraftText') or '')[:700]}\nSENT INSTEAD:\n{(final or '')[:700]}"
         if learn_async: learn_async(learn.learn_from, store, ev)
         else: learn.learn_from(store, ev)

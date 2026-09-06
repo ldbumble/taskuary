@@ -49,21 +49,33 @@ class CanReplyTests(unittest.TestCase):
 
 
 class FinishTests(unittest.TestCase):
-    """coder.finish is the truth: no reply road means no review, and it SAYS so."""
-    def test_github_replies_off_drafts_nothing(self):
-        s = MemoryStore(); tid, _ = task_with(s, 'github')
-        out = coder.finish(s, tid, {'summary': 'fixed'}, None, 'coder')
-        self.assertEqual((out['drafting'], out['message_id']), (False, None))
-        self.assertEqual(s.list_reviews('pending'), [])
-        self.assertEqual(s.get_task(tid)['Status'], 'done')      # closed, not left waiting
+    """coder.finish is the truth, and the UI promises exactly what it did: a channel that cannot carry the
+    reply still gets its draft (the always-draft rule, PW-237) - Send is hidden and the reason said."""
+    def test_github_replies_off_still_drafts_but_cannot_send(self):
+        s = MemoryStore(); tid, mid = task_with(s, 'github')
+        with mock.patch('taskuary.responder.write_draft', return_value='hi'):
+            out = coder.finish(s, tid, {'summary': 'fixed'}, None, 'coder')
+        self.assertEqual((out['drafting'], out['message_id'], out['can_send']), (True, mid, False))
+        self.assertIn('GitHub replies are off', out['send_block'])
+        self.assertEqual(len(s.list_reviews('pending')), 1)
+        self.assertEqual(s.get_task(tid)['Status'], 'waiting')   # the draft waits on the owner's word: send elsewhere, or close without sending
 
-    def test_a_channel_switched_off_drafts_nothing(self):
+    def test_a_channel_switched_off_drafts_but_hides_send(self):
         s = MemoryStore(); s.set_setting('reply_channels', 'email', 't')
         tid, _ = task_with(s, 'slack')
+        with mock.patch('taskuary.responder.write_draft', return_value='hi') as wd:
+            out = coder.finish(s, tid, {'summary': 'fixed'}, None, 'coder')
+        wd.assert_called_once()
+        self.assertEqual((out['drafting'], out['can_send']), (True, False))
+        self.assertIn('Settings', out['send_block'])
+
+    def test_a_report_row_drafts_nothing_because_nobody_sent_it(self):
+        s = MemoryStore(); tid, _ = task_with(s, 'report')
         with mock.patch('taskuary.responder.write_draft') as wd:
             out = coder.finish(s, tid, {'summary': 'fixed'}, None, 'coder')
         wd.assert_not_called()
-        self.assertFalse(out['drafting'])
+        self.assertEqual((out['drafting'], out['can_send']), (False, False))
+        self.assertEqual(s.get_task(tid)['Status'], 'done')
 
     def test_email_still_drafts(self):
         s = MemoryStore(); tid, mid = task_with(s, 'email')
@@ -88,9 +100,10 @@ class WrapEndpointTests(unittest.TestCase):
              mock.patch('taskuary.responder.write_draft', return_value='hi'):
             return c.post(f'/api/tasks/{tid}/wrap', json={'close': True}).json()
 
-    def test_github_wrap_does_not_promise_a_draft(self):
+    def test_github_wrap_promises_the_draft_and_says_it_cannot_be_sent(self):
         out = self._wrap('github')
-        self.assertFalse(out['drafting'])          # the button must not render
+        self.assertEqual((out['drafting'], out['can_send']), (True, False))   # the button renders; Send does not
+        self.assertIn('GitHub replies are off', out['send_block'])
 
     def test_email_wrap_does_promise_one(self):
         self.assertTrue(self._wrap('email')['drafting'])

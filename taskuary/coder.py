@@ -126,20 +126,60 @@ def nobody_waiting(store, mid: int, rep: dict) -> bool:
     return sender_class(store.get_message(mid) or {}, team_domains_of(store.get_settings())) != 'person'
 
 
+# The server installs its conversation refresh here (PW-235): called as REFRESH(store, task_id, mid)
+# before finished work becomes a reply, it reads the provider so the draft answers the thread as it
+# stands. None means the freshness is UNCHECKED - said as such, never called fresh.
+REFRESH = None
+
+
+def no_one_behind(channel) -> bool:
+    """A row Taskuary wrote itself - a report, work started here, the assistant speaking - has no
+    correspondent, so there is nobody a reply could go to. Every other channel has a person behind it,
+    whether or not a reply can LEAVE on it (that is outbound.can_reply's question, PW-237)."""
+    from . import assistant, ownwork
+    return str(channel or '').lower() in ('', 'report', ownwork.CHANNEL, assistant.CHANNEL)
+
+
+def answered_elsewhere(store, msg: dict, task_id: int):
+    """The owner's own line on this conversation, newer than the newest inbound message: they already
+    answered from the mail client or the chat itself, so no reply is owed here (PW-235)."""
+    conv = msg.get('ConversationId')
+    if not conv: return None
+    from .ingest import is_ours
+    latest = store.last_inbound_on_task(task_id) or msg
+    cut = max(str(msg.get('SentAt') or ''), str(latest.get('SentAt') or ''))
+    own = [m for m in store.thread_messages(conv) if is_ours(m) and str(m.get('SentAt') or '') > cut]
+    return own[-1] if own else None
+
+
+def freshen(store, task_id: int, mid: int) -> dict:
+    """Refresh the source conversation and say where the ask stands before the result becomes a reply:
+    fresh | changed (a newer inbound message - the draft answers that one) | answered (the owner already
+    did, elsewhere) | unresolved (the refresh failed - the draft is shown stale until one succeeds) |
+    unchecked (no refresh installed)."""
+    if REFRESH is None: return {'state': 'unchecked', 'mid': mid}
+    try: REFRESH(store, task_id, mid)
+    except Exception as e: return {'state': 'unresolved', 'mid': mid, 'error': str(e)[:200]}
+    m = store.get_message(mid) or {}
+    own = answered_elsewhere(store, m, task_id)
+    if own: return {'state': 'answered', 'mid': mid, 'by': own}
+    latest = store.last_inbound_on_task(task_id) or m
+    if latest.get('MessageId') and latest['MessageId'] != mid: return {'state': 'changed', 'mid': latest['MessageId'], 'latest': latest}
+    return {'state': 'fresh', 'mid': mid}
+
+
 def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'coder',
            complete_result: str = None) -> dict:
-    """The end of finished work: the responder drafts the reply the sender gets and the task waits
+    """The end of finished work: the conversation is refreshed, the ask reassessed, and the responder
+    drafts the reply the sender gets from the saved result and the thread as it stands; the task waits
     on you to send it. Nothing to reply to means nothing to wait for, so it just closes."""
     # a held draft is itself proof there is someone waiting on an answer, so it names the message
     # to reply to when reply_target cannot find one (a chat thread, a promoted feed item)
     held = store.held_review(task_id) or {}
     mid = reply_target(store, task_id) or held.get('MessageId')
-    # can this channel carry a reply at all? outbound.can_reply is the ONE answer - the
-    # owner's per-channel setting, plus the rules that are not theirs to change (a public
-    # GitHub comment needs that card's switch; a tracker is read-only by design). With it
-    # off, finished work just closes: the report lands on the task, no dead-end draft.
+    can_send, block = True, ''
     if mid:
-        from .outbound import can_reply
+        from .outbound import can_reply, send_block
         m = store.get_message(mid) or {}
         if not can_reply(store, m.get('Channel')):
             # a report cannot be replied to (nobody sent it), but its card may name somewhere its
@@ -150,20 +190,34 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'cod
             if tgt:
                 deliver_findings(store, task_id, mid, run_id, rep, tgt)
                 store.update_task(task_id, {'Status': 'waiting'}, actor)
-                return {'drafting': True, 'message_id': mid}
-            mid = None
+                return {'drafting': True, 'message_id': mid, 'can_send': True, 'send_block': '', 'freshness': 'unchecked'}
+            # the always-draft rule (PW-237): a channel that cannot CARRY the reply hides Send and says why -
+            # it does not hide the answer. Only a row nobody sent has nobody to answer.
+            if no_one_behind(m.get('Channel')): mid = None
+            else: can_send, block = False, send_block(store, m.get('Channel'))
     # a held draft is proof somebody IS waiting on an answer, so it is never quietly dropped here
     if mid and not held and nobody_waiting(store, mid, rep):
         store.add_comment(task_id, actor, 'agent', 'Nothing needed doing here and the sender is not waiting on an '
                                                    'answer - filed with the report, no reply drafted.')
         mid = None
+    # refresh first, draft second (PW-235): an answer the owner already sent means none is owed; a newer
+    # ask is the one the reply answers; a failed refresh is shown, not assumed away
+    fresh = freshen(store, task_id, mid) if mid else {'state': 'unchecked', 'mid': mid}
+    if fresh['state'] == 'answered':
+        by = fresh['by']
+        store.add_comment(task_id, actor, 'agent', f"You already answered this thread yourself ({by.get('SentAt')}) - the result is "
+                                                   'filed with the report, no reply drafted.')
+        if held: store.decide_review(held['ReviewId'], 'no_reply', None, actor, 'answered from the mail client before the work finished')
+        mid = None
+    elif fresh['state'] == 'changed': mid = fresh['mid']
     # The terminal and report are already closed at this point. Publish that truth BEFORE the
     # reply-writing AI call: it can take seconds (or fail), and during that time the task used to
     # remain `in_progress` with no live agent. A pending review is already durable, so `waiting`
     # is honest even while its draft text is being filled in.
     store.update_task(task_id, {'Status': 'waiting' if mid else 'done'}, actor)
-    if mid: raise_reply(store, task_id, mid, run_id, rep, complete_result)
-    return {'drafting': bool(mid), 'message_id': mid}
+    if mid: raise_reply(store, task_id, mid, run_id, rep, complete_result, fresh=fresh)
+    return {'drafting': bool(mid), 'message_id': mid, 'can_send': bool(mid) and can_send,
+            'send_block': block if mid else '', 'freshness': fresh['state']}
 
 
 def deliver_findings(store, task_id: int, mid: int, run_id: int, rep: dict, tgt: dict) -> None:
@@ -265,7 +319,8 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     if pbd: proposed.append(pbd)
     store.audit('terminal', tid, 'wrap', actor, detail={'sid': sid or found, 'close': close})
     return {'wrap': 'done', 'taskId': tid, 'report': report, 'proposed': proposed,
-            'drafting': bool(fin.get('drafting')), 'artifacts': [artifact] if artifact else []}
+            'drafting': bool(fin.get('drafting')), 'can_send': bool(fin.get('can_send')), 'send_block': fin.get('send_block') or '',
+            'freshness': fin.get('freshness') or 'unchecked', 'artifacts': [artifact] if artifact else []}
 
 
 _TICKED = re.compile(r'^\s*(?:[-*]\s*)?\[(x|X|✓|done)\]\s*(.+?)\s*$', re.M)
@@ -291,7 +346,7 @@ def tick_reported_checklist(store, tid: int, text: str, actor: str = 'coder') ->
 
 
 def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,
-                complete_result: str = None) -> None:
+                complete_result: str = None, fresh: dict = None) -> None:
     """The session reported; the responder writes what the sender actually reads. One voice for
     every reply the owner sends - and no coding CLI drafting prose from inside a repo. A draft
     that fails to write still leaves the review standing: 'Draft with AI' retries it.
@@ -300,14 +355,30 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,
     promised what the agent had not looked at yet. That same review comes back here and is
     rewritten from the report, so the sender gets one answer, and it is the true one."""
     from . import responder
+    fresh = fresh or {}
+    why = 'the agent finished - the reply is rewritten from what it found'
+    if fresh.get('state') == 'changed': why = 'the agent finished, and the thread moved on after the work began - the reply answers the newest message; reread it before sending'
+    if fresh.get('state') == 'unresolved': why = f"the agent finished, but the conversation could not be refreshed ({fresh.get('error')}) - drafted from the saved result; refresh it before sending"
     held = store.held_review(task_id, mid) or store.held_review(task_id)
+    # one review per answer (PW-236): the held triage draft, else the pending one an earlier completion
+    # event already raised - a repeated completion rewrites it, never duplicates it
+    live = None if held else (store.pending_review(task_id, 'draft_reply', live_only=False) or store.pending_review(task_id, 'draft', live_only=False))
     if held:
         rid = held['ReviewId']
-        store.unhold_review(rid, 'the agent finished - the reply is rewritten from what it found')
-        store.update_review_reason(rid, 'the agent finished - the reply is rewritten from what it found', run_id)
+        store.unhold_review(rid, why)
+        store.update_review_reason(rid, why, run_id)
+    elif live:
+        rid = live['ReviewId']
+        store.update_review_reason(rid, why, run_id)
     else:
-        rid = store.add_review({'TaskId': task_id, 'MessageId': mid, 'RunId': run_id, 'Kind': 'draft_reply',
-                                'Status': 'pending', 'Reason': 'coder finished the work - reply awaiting approval'})
+        rid = store.add_review({'TaskId': task_id, 'MessageId': mid, 'RunId': run_id, 'Kind': 'draft_reply', 'Status': 'pending',
+                                'Reason': why if fresh.get('state') in ('changed', 'unresolved') else 'coder finished the work - reply awaiting approval'})
+    if (held or live) and (held or live).get('MessageId') != mid: store.update_review_message(rid, mid)
+    src = complete_result or resolution_text(rep)
+    if fresh.get('state') == 'changed' and fresh.get('latest'):
+        l = fresh['latest']
+        src += (f"\n\nTHE THREAD MOVED ON after the work began. Newest message from {l.get('FromName') or l.get('FromEmail') or 'them'} ({l.get('SentAt')}):\n"
+                f"{str(l.get('BodyText') or '')[:800]}\nAnswer what is asked NOW; say plainly if the result above does not cover it.")
     # The report is intentionally compact UI copy. Draft from the complete final response (or
     # transcript fallback), so every question the session answered remains available here.
     try:
@@ -315,11 +386,12 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,
         except (TypeError, ValueError): deliver = {}
         if deliver.get('channel') and deliver.get('kind') != 'zoho_invoice':
             from . import outbox
-            outbox.redraft_review(store, store.get_review(rid),
-                                  complete_result or resolution_text(rep))
+            outbox.redraft_review(store, store.get_review(rid), src)
         else:
-            responder.write_draft(store, task_id, rid, complete_result or resolution_text(rep), 'coder')
+            responder.write_draft(store, task_id, rid, src, 'coder')
     except Exception as e: logger.warning(f'reply draft failed for task {task_id}: {e}')
+    # a refresh that failed is an unresolved freshness state the owner sees: the draft waits, stale, for one that succeeds
+    if fresh.get('state') == 'unresolved': store.mark_review_stale(rid)
     # the ping that matters most: work FINISHED and its reply is sitting in Review on you
     if (store.get_settings().get('notify_level') or 'needs_me') != 'off':
         from .outbound import notify

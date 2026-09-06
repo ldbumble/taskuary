@@ -84,12 +84,13 @@ class GithubIngestTests(unittest.TestCase):
             s.save_connector({'ConnectorId': gh['ConnectorId'], 'ConfigJson': '{"reply_comments": true}'}, 'o')
         return s
 
-    def test_finished_github_work_closes_clean_unless_replies_are_on(self):
-        """Answering a GitHub author means posting a PUBLIC comment - the owner's call (the
-        card's 'Reply to issue/PR authors'). Off: finished work closes with its report and no
-        dead-end draft sits in Review. On: the draft is raised, as for any other channel."""
+    def test_finished_github_work_drafts_its_reply_whether_or_not_replies_are_on(self):
+        """Answering a GitHub author means posting a PUBLIC comment - the owner's call (the card's
+        'Reply to issue/PR authors'). The always-draft rule (PW-237): the draft is raised either way;
+        with the switch off it cannot be SENT from here - Send is hidden, the reason said, and the
+        owner's exit is Close without sending - but the answer itself is never suppressed."""
         from taskuary import coder
-        for on, status, reviews in ((False, 'done', 0), (True, 'waiting', 1)):
+        for on, status, reviews in ((False, 'waiting', 1), (True, 'waiting', 1)):
             s = self._store(on)
             tid = s.create_task({'Title': 'pr work', 'Kind': 'coding'}, 'o')
             s.add_message({'TaskId': tid, 'ExternalId': 'gh:o/app#5', 'Channel': 'github',

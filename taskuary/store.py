@@ -898,12 +898,10 @@ class SQLiteStore:
             if not isinstance(x, str): continue
             text = x.strip()[:300]
             if not text: continue
-            # One model verdict can repeat the same words with capitalization noise. Keep that
-            # established validation, while punctuation/operators/spacing remain substantive.
-            # Owner edits are exact and may deliberately retain case-distinct boxes.
-            duplicate_key = text.casefold() if cap else text
-            if duplicate_key in seen: continue
-            seen.add(duplicate_key); out.append(text)
+            # Case can be substantive in paths, identifiers, and commands. Only the exact
+            # stored text is safe to treat as a duplicate.
+            if text in seen: continue
+            seen.add(text); out.append(text)
             if cap and len(out) >= cls.CHECKLIST_MAX: break
         return out
     def task_checklist(self, task_id) -> list:
@@ -917,12 +915,20 @@ class SQLiteStore:
     def set_task_checklist(self, task_id, texts, actor: str) -> list:
         """Replace the list with these words; a box whose words are unchanged keeps its state."""
         old = {i['text']: i for i in self.task_checklist(task_id)}
-        items, used_ids = [], set()
-        for text in self.clean_checklist(texts, cap=actor != 'owner'):
+        clean = self.clean_checklist(texts, cap=actor != 'owner')
+        # Reserve every retained box before allocating IDs to new boxes. A new earlier row's
+        # digest prefix must not steal a later unchanged box's legacy ID and its UI target.
+        retained_id_owner = {}
+        for text in clean:
+            item_id = (old.get(text) or {}).get('id')
+            if item_id and item_id not in retained_id_owner:
+                retained_id_owner[item_id] = text
+        items, used_ids = [], set(retained_id_owner)
+        for text in clean:
             prior = old.get(text) or {}
             item_id = prior.get('id')
             digest = hashlib.sha1(text.encode()).hexdigest()
-            if not item_id or item_id in used_ids:
+            if not item_id or retained_id_owner.get(item_id) != text:
                 item_id = next((digest[:n] for n in range(8, len(digest) + 1)
                                 if digest[:n] not in used_ids), digest)
             used_ids.add(item_id)

@@ -56,12 +56,20 @@ class VerdictNamesTheWorkTests(unittest.TestCase):
 
     def test_the_checklist_is_validated_not_trusted(self):
         s = MemoryStore()
-        junk = ['  Add Priya to the payroll portal ', 'add priya to the payroll portal', '', 42, {'x': 1}] + [f'step {i}' for i in range(20)]
+        junk = [
+            '  Add Priya to the payroll portal ',
+            'add priya to the payroll portal',
+            ' Add Priya to the payroll portal ',
+            '', 42, {'x': 1},
+        ] + [f'step {i}' for i in range(20)]
         with mock.patch.object(ingest, '_spawn'):
             out = ingest.ingest_message(s, dict(MSG), llm=verdict(checklist=junk, title='x' * 500))
         items = s.task_checklist(out['task_id'])
         self.assertEqual(items[0]['text'], 'Add Priya to the payroll portal')
-        self.assertEqual(len([i for i in items if i['text'].lower() == 'add priya to the payroll portal']), 1)
+        # Exact post-trim duplicates collapse, while case remains substantive for paths,
+        # identifiers, and commands.
+        self.assertEqual(len([i for i in items if i['text'].lower() == 'add priya to the payroll portal']), 2)
+        self.assertEqual(len([i for i in items if i['text'] == 'Add Priya to the payroll portal']), 1)
         self.assertLessEqual(len(items), 12)
         self.assertLessEqual(len(s.get_task(out['task_id'])['Title']), 120)
         s2 = MemoryStore()
@@ -134,18 +142,43 @@ class PreservationTests(unittest.TestCase):
 
             added = s.merge_task_checklist(tid, [
                 'x <= 3', 'X >= 3', 'A  B', 'A B',
+                'Inspect /Data/Export.csv.', 'Inspect /data/export.csv.',
             ], 'triage')
             items = s.task_checklist(tid)
 
             self.assertEqual(items[0], {'id': legacy_id, 'text': 'x >= 3', 'done': True})
             self.assertEqual(added, items[1:])
             self.assertEqual([i['text'] for i in items],
-                             ['x >= 3', 'x <= 3', 'X >= 3', 'A  B', 'A B'])
-            self.assertEqual(len({i['id'] for i in items}), 5)
+                             ['x >= 3', 'x <= 3', 'X >= 3', 'A  B', 'A B',
+                              'Inspect /Data/Export.csv.', 'Inspect /data/export.csv.'])
+            self.assertEqual(len({i['id'] for i in items}), 7)
             self.assertEqual(s.set_task_checklist(tid, [i['text'] for i in items], 'owner'), items)
             s.cx.close()
             reopened = SQLiteStore(str(path))
             self.assertEqual(reopened.task_checklist(tid), items)
+            reopened.cx.close()
+
+    def test_owner_reorder_cannot_let_a_new_box_steal_a_retained_legacy_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'reserved-id.db'
+            s = SQLiteStore(str(path))
+            tid = s.create_task({'Title': 'Stable action targets'}, 'owner')
+            retained_id = s.checklist_id('step 1')
+            s._exec('UPDATE task SET Checklist=? WHERE TaskId=?', (json.dumps([
+                {'id': retained_id, 'text': 'Step 1.', 'done': True},
+            ]), tid))
+
+            items = s.set_task_checklist(tid, ['step 1', 'Step 1.'], 'owner')
+
+            self.assertEqual(items[1], {'id': retained_id, 'text': 'Step 1.', 'done': True})
+            self.assertNotEqual(items[0]['id'], retained_id)
+            self.assertEqual(len({item['id'] for item in items}), 2)
+            s.cx.close()
+
+            reopened = SQLiteStore(str(path))
+            self.assertEqual(reopened.task_checklist(tid), items)
+            self.assertTrue(reopened.tick_checklist_item(tid, retained_id, False, 'owner'))
+            self.assertFalse(reopened.task_checklist(tid)[1]['done'])
             reopened.cx.close()
 
     def test_thirteenth_item_is_durable_repeated_once_and_owner_can_edit_and_tick_past_twelve(self):

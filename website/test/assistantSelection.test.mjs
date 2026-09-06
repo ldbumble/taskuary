@@ -2,8 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  canAdvanceSelection,
   captureNextSelection,
   hasNextSelection,
+  interactiveCardIndex,
   nextMarkerKey,
   nextSelectionBody,
   nextSelectionScope,
@@ -60,6 +62,15 @@ test("the server capture owns the visible Next marker, including FYI batches and
     expected_next_members: [] }, items, null), null);
   // Static demos and old servers have no capture fields and keep their established local marker.
   assert.equal(nextMarkerKey({ rev: "legacy" }, items, null), "msg:1");
+
+  const emptyMail = { selection_revision: "mail-empty", expected_next_key: null,
+    expected_next_members: [] };
+  const nonMailReady = [{ key: "task:7", kind: "task", lane: "asked" }];
+  assert.equal(nextMarkerKey(emptyMail, nonMailReady, null), null);
+  assert.equal(canAdvanceSelection(emptyMail, nonMailReady, "mail"), true,
+    "a guarded empty mail request must reach the server so it can release mail scope");
+  assert.equal(canAdvanceSelection(emptyMail, nonMailReady, null), false);
+  assert.equal(canAdvanceSelection({ ...emptyMail, selection_unavailable: true }, nonMailReady, "mail"), false);
 });
 
 test("HTTP and streamed stale conflicts share one authoritative no-retry detail", () => {
@@ -69,6 +80,10 @@ test("HTTP and streamed stale conflicts share one authoritative no-retry detail"
   assert.equal(selectionGuardDetail({ response: { data: { detail } } }), detail);
   assert.equal(selectionGuardDetail({ code: "selection_stale", detail }), detail);
   assert.equal(selectionGuardDetail({ response: { data: { detail: "ordinary error" } } }), null);
+
+  const lateSparse = { code: "selection_stale", reason: "navigation_in_progress",
+    retryable: true, message: "Next changed while this response was being prepared." };
+  assert.equal(selectionGuardDetail({ code: "selection_stale", detail: lateSparse }), lateSparse);
 
   const old = { display_revision: "display-old", selection_revision: "old-r",
     expected_next_key: "msg:11", expected_next_members: ["msg:11"], items: [] };
@@ -86,11 +101,19 @@ test("HTTP and streamed stale conflicts share one authoritative no-retry detail"
   assert.equal(captureNextSelection(disabled, nextSelectionScope()), null);
   assert.equal(nextMarkerKey(disabled, [{ key: "msg:11", lane: "asked" }], null), null);
 
+  const invalidated = replaceSelectionToken(old, lateSparse);
+  assert.equal(hasNextSelection(invalidated), true);
+  assert.equal(invalidated.selection_invalidated, true);
+  assert.equal(captureNextSelection(invalidated, nextSelectionScope()), null);
+  assert.equal(nextMarkerKey(invalidated, [{ key: "msg:11", lane: "asked" }], null), null);
+  assert.equal(old.expected_next_key, "msg:11");
+
   // The capture is outside display_revision. A successful retry with unchanged rows must clear a
   // transient unavailable marker instead of preserving it through the presentation cache.
   const recovered = { ...old, selection_revision: "old-r", expected_next_key: "msg:11",
-    expected_next_members: ["msg:11"], selection_unavailable: false };
+    expected_next_members: ["msg:11"], selection_unavailable: false, selection_invalidated: false };
   assert.equal(refreshPilePresentation(disabled, recovered), recovered);
+  assert.equal(refreshPilePresentation(invalidated, recovered), recovered);
 });
 
 test("reload restores only the latest explicit subject and leaves passive watcher cards in history", () => {
@@ -102,6 +125,11 @@ test("reload restores only the latest explicit subject and leaves passive watche
   ]), explicit);
   assert.equal(restorableCurrent([{ id: 2, card: watcher }]), null);
   assert.equal(restorableCurrent([{ id: 1, card: explicit }, { id: 3, card: { key: "brief", kind: "brief" } }]), explicit);
+
+  const withPassiveHistory = [{ id: 1, card: explicit }, { id: 2, card: watcher }];
+  assert.equal(interactiveCardIndex(withPassiveHistory), 0,
+    "a passive history line cannot replace the explicit subject's interactive controls");
+  assert.equal(interactiveCardIndex([{ id: 2, card: watcher }]), -1);
 });
 
 test("Assistant echoes one captured selection and never retries a 409 through the plain endpoint", () => {
@@ -116,8 +144,14 @@ test("Assistant echoes one captured selection and never retries a 409 through th
 test("Walk validates Current without creating a turn and stale gestures remove their optimistic line", () => {
   const start = view.slice(view.indexOf("const start = async"), view.indexOf("// The day used to write itself"));
   assert.ok(start.indexOf("await loadPile(true)") < start.indexOf("if (!currentRef.current) await surface"));
+  assert.ok(start.indexOf("epoch !== chatEpoch.current") < start.indexOf("if (!currentRef.current) await surface"),
+    "a reset while the pile request is held cancels the old Walk before navigation");
+  assert.match(start, /finally \{\s*startFlight\.current = false/);
   assert.match(start, /if \(!currentRef\.current\) await surface/);
   const surface = view.slice(view.indexOf("const surface = useCallback"), view.indexOf("useEffect(() => { surfaceRef.current"));
+  assert.ok(surface.indexOf("const activeScope") < surface.indexOf("const optimisticId"),
+    "an async capture is revalidated before drawing or posting its navigation");
+  assert.match(surface, /epoch !== chatEpoch\.current \|\| resettingRef\.current \|\| \(!key && !sameSelectionScope\(scope, activeScope\)\)/);
   assert.ok(surface.indexOf("selectionContractSeen.current && !capture") < surface.indexOf("setMsgs((m) => [...m"),
     "an unavailable capture is rejected before drawing an optimistic owner turn");
   assert.match(view, /m\.filter\(\(message\) => message\.id !== optimisticId\)/);
@@ -129,4 +163,5 @@ test("background events can notify but cannot choose, clear, or advance Current"
   assert.match(events, /speakRef\.current/);
   assert.doesNotMatch(events, /setCurrent|setCurrentItem|currentRef\.current\s*=|surfaceRef|deferInChat/);
   assert.match(view, /const last = restorableCurrent\(data\.messages\)/);
+  assert.match(view, /const lastCardIdx = useMemo\(\(\) => interactiveCardIndex\(shown\), \[shown\]\)/);
 });

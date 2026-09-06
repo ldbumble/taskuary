@@ -62,6 +62,7 @@ export const refreshPilePresentation = (current, fresh) => {
     && current.expected_next_members.length === fresh.expected_next_members.length
     && current.expected_next_members.every((member, index) => member === fresh.expected_next_members[index]);
   const selectionMatches = current.selection_unavailable === fresh.selection_unavailable
+    && current.selection_invalidated === fresh.selection_invalidated
     && current.selection_revision === fresh.selection_revision
     && current.expected_next_key === fresh.expected_next_key
     && (current.expected_next_members === undefined && fresh.expected_next_members === undefined || membersMatch);
@@ -81,10 +82,12 @@ export const sameSelectionScope = (left, right) => !!left && !!right
   && left.include_surfaced === right.include_surfaced
   && left.exclude === right.exclude;
 export const hasNextSelection = (pile) => !!pile
-  && (pile.selection_unavailable === true || (typeof pile.selection_revision === "string"
+  && (pile.selection_unavailable === true || pile.selection_invalidated === true
+    || (typeof pile.selection_revision === "string"
     && Object.prototype.hasOwnProperty.call(pile, "expected_next_key")
     && Array.isArray(pile.expected_next_members)));
-export const captureNextSelection = (pile, scope) => hasNextSelection(pile) && !pile.selection_unavailable ? {
+export const captureNextSelection = (pile, scope) => hasNextSelection(pile)
+  && !pile.selection_unavailable && !pile.selection_invalidated ? {
   selection_revision: pile.selection_revision,
   expected_next_key: pile.expected_next_key ?? null,
   expected_next_members: [...pile.expected_next_members],
@@ -106,20 +109,35 @@ export const nextMarkerKey = (pile, items, current) => {
   return ((items || []).find((item) => eligible(item) && !item.surfaced)
     || (items || []).find(eligible))?.key || null;
 };
+export const canAdvanceSelection = (pile, ready, only = null) => {
+  if (!hasNextSelection(pile)) return (ready || []).length > 0;
+  if (pile.selection_unavailable || pile.selection_invalidated) return false;
+  if (pile.expected_next_key) return true;
+  // An empty mail capture is still a guarded operation: the server returns exhausted:"mail", the
+  // client drops that scope, and the following Next continues with non-mail work already in view.
+  return only === "mail" && (ready || []).length > 0;
+};
 
 // Both an initial HTTP conflict and a late streamed conflict carry this shape.  Keeping parsing
 // here lets the UI share one no-retry path and avoids rendering a structured `detail` object.
 export const selectionGuardDetail = (error) => {
   const detail = error?.detail || error?.response?.data?.detail;
   if (detail?.code === "selection_unavailable") return detail;
-  return detail?.code === "selection_stale" && typeof detail.selection_revision === "string"
-    && Array.isArray(detail.expected_next_members) ? detail : null;
+  return detail?.code === "selection_stale" ? detail : null;
 };
 export const replaceSelectionToken = (pile, detail) => pile ? (detail.code === "selection_unavailable" ? {
-  ...pile, selection_unavailable: true, expected_next_key: null, expected_next_members: [],
+  ...pile, selection_unavailable: true, selection_invalidated: false,
+  expected_next_key: null, expected_next_members: [],
+  selection_pending: detail.selection_pending ?? null,
+} : typeof detail.selection_revision !== "string" || !Array.isArray(detail.expected_next_members) ? {
+  // The post-model commit guard can detect staleness after streaming began, when it cannot safely
+  // promise a replacement capture. Invalidate the old marker until the authoritative GET returns.
+  ...pile, selection_unavailable: false, selection_invalidated: true,
+  expected_next_key: null, expected_next_members: [],
   selection_pending: detail.selection_pending ?? null,
 } : {
-  ...pile, selection_unavailable: false, selection_revision: detail.selection_revision,
+  ...pile, selection_unavailable: false, selection_invalidated: false,
+  selection_revision: detail.selection_revision,
   expected_next_key: detail.expected_next_key ?? null,
   expected_next_members: [...detail.expected_next_members],
   selection_pending: detail.selection_pending ?? null,
@@ -130,6 +148,12 @@ export const replaceSelectionToken = (pile, detail) => pile ? (detail.code === "
 export const restorableCurrent = (messages) => [...(messages || [])].reverse().find((message) =>
   message?.card && !message.card.background_event
   && !["brief", "setup", "agentdone"].includes(message.card.kind))?.card || null;
+export const interactiveCardIndex = (messages) => {
+  for (let index = (messages || []).length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.card && !messages[index].card.background_event) return index;
+  }
+  return -1;
+};
 
 // A live task changes keys as ownership changes: msg:<mid> before dispatch, agent:<tid> while a
 // coder has it. The task id is the stable identity across that hand-off.

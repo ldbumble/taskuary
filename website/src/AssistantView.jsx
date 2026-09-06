@@ -28,7 +28,7 @@ import { onLive } from "./live.js";
 import { Md, looksMd } from "./md.jsx";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
-import { ageText, arrivals, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, followsItem, hasNextSelection, keysOf, nextMarkerKey, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, restorableCurrent, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
+import { ageText, arrivals, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, followsItem, hasNextSelection, interactiveCardIndex, keysOf, nextMarkerKey, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, restorableCurrent, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
 import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WrapupCard } from "./assistantCards.jsx";
 import FeedView from "./FeedView.jsx";
@@ -437,8 +437,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
 
   const items = pile?.items || [];
   const ready = items.filter((i) => !i.settling);
-  const canAdvance = hasNextSelection(pile) ? !!pile.expected_next_key
-    : ready.some((item) => item.lane !== "working");
+  const canAdvance = canAdvanceSelection(pile, ready, only.current);
   // an alert about something already IN the conversation is noise: the card is right there
   const shownKeys = useMemo(() => new Set(msgs.slice(-8).map((m) => m.card?.key).filter(Boolean)), [msgs]);
   const alert = useMemo(() => topAlert(pile?.alerts, acked, currentItem, shownKeys), [pile, acked, currentItem, shownKeys]);
@@ -469,8 +468,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (busy || resetting || turnFlight.current) return;
     turnFlight.current = true;
     setBusy(true); setErr("");
+    const epoch = chatEpoch.current;
     const scope = nextSelectionScope(key ? null : only.current, key ? null : currentRef.current?.key || null);
     const capture = key ? null : await ensureNextSelection(scope);
+    const activeScope = nextSelectionScope(key ? null : only.current, key ? null : currentRef.current?.key || null);
+    if (epoch !== chatEpoch.current || resettingRef.current || (!key && !sameSelectionScope(scope, activeScope))) {
+      turnFlight.current = false;
+      setBusy(false);
+      return;
+    }
     // A failed modern capture (including selection_unavailable) never becomes an optimistic owner
     // turn. The pile refresh already supplied the bounded error; a later explicit gesture retries.
     if (!key && selectionContractSeen.current && !capture) {
@@ -506,11 +512,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const start = async (what) => {
     if (busy || resetting || turnFlight.current || startFlight.current) return;
     startFlight.current = true;
-    only.current = what;
-    selectionRef.current = null;
-    await loadPile(true);                     // validate/resume Current under the requested scope
-    if (!currentRef.current) await surface(null, what === "mail" ? "Just what came in." : "Walk me through my tasks.");
-    startFlight.current = false;
+    const epoch = chatEpoch.current;
+    try {
+      only.current = what;
+      selectionRef.current = null;
+      await loadPile(true);                   // validate/resume Current under the requested scope
+      if (epoch !== chatEpoch.current || resettingRef.current) return;
+      if (!currentRef.current) await surface(null, what === "mail" ? "Just what came in." : "Walk me through my tasks.");
+    } finally {
+      startFlight.current = false;
+    }
   };
 
   // The day used to write itself the moment the page opened - a model call nobody asked for, which
@@ -802,7 +813,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       deferInChat(() => key ? surfaceRef.current?.(key) : loadPileRef.current?.(), 900);
     } };
   const shown = old ? old.messages : msgs;
-  const lastCardIdx = useMemo(() => { for (let i = shown.length - 1; i >= 0; i -= 1) if (shown[i].card) return i; return -1; }, [shown]);
+  const lastCardIdx = useMemo(() => interactiveCardIndex(shown), [shown]);
 
   const chat = (
     <div className="tq-asst-col" style={{ position: "relative", flex: 1, minHeight: 0 }}>

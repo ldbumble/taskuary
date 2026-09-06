@@ -204,7 +204,9 @@ class SnapshotFreezeTests(unittest.TestCase):
         with s.freeze_snapshots():
             ingest_message(s, {**self.FYI, 'external_id': 'f1'})
             ingest_message(s, {**self.FYI, 'external_id': 'f2'})
-        self.assertEqual(n['n'], 1)
+        # at most one rebuild for the whole catch-up; mail routes by conversation identity now (PW-016),
+        # so ordinary intake may not need the open-task picture at all
+        self.assertLessEqual(n['n'], 1)
 
     def test_opening_a_task_drops_the_cache_so_the_next_on_the_thread_attaches(self):
         from taskuary.ingest import ingest_message, drain, deferred

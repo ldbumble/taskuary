@@ -107,7 +107,7 @@ const expandWholeMessage = async (page) => {
   assert.fail("visible full-message expansion control was not found");
 };
 
-const clickCalendarPrep = async (page, label) => {
+const prepareCalendarPrep = async (page, label) => {
   const titles = await page.$$(".tqPrepTitle");
   for (const title of titles) {
     if (await title.evaluate((node, wanted) => node.textContent.trim() === wanted, label)) {
@@ -123,7 +123,7 @@ const clickCalendarPrep = async (page, label) => {
         const rect = node.getBoundingClientRect();
         return node.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2));
       }), true, "calendar prep must receive the physical click");
-      await title.click(); return;
+      return title;
     }
   }
   assert.fail(`calendar prep ${label} was not found`);
@@ -289,6 +289,7 @@ test("canonical All renders every root once with truthful details and frozen pag
   assert.ok(body.includes(seed.calendar.upcoming), "the unfiltered All calendar banner must retain an upcoming event");
   assert.ok(body.includes(seed.calendar.started), "the unfiltered All calendar banner must retain a started event");
   assert.equal(body.split(seed.calendar.prep).length - 1, 1, "calendar prep must render once under its event");
+  const prepTarget = await prepareCalendarPrep(page, seed.calendar.prep);
   await page.evaluate(() => {
     window.__prepClicks = [];
     document.addEventListener("click", (event) => window.__prepClicks.push({
@@ -301,7 +302,7 @@ test("canonical All renders every root once with truthful details and frozen pag
     return url.pathname === `/api/processing/items/${seed.calendar.prep_item_id}/detail`
       && url.searchParams.get("kind") === "message"
       && url.searchParams.get("id") === String(seed.calendar.prep_message_id);
-  }, () => clickCalendarPrep(page, seed.calendar.prep)).catch(async (error) => {
+  }, () => prepTarget.click()).catch(async (error) => {
     console.log(JSON.stringify({ prepFailure: { expected: seed.calendar,
       traffic: traffic.slice(-20), errors, stage: (await stageContent(page)).slice(0, 1200),
       clicks: await page.evaluate(() => window.__prepClicks),

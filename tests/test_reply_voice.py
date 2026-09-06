@@ -73,12 +73,17 @@ class VoiceTests(unittest.TestCase):
         self.assertIn('He runs finance systems', sys_)        # the document itself still arrives
 
     def test_standing_notes_are_the_writers_own_notes(self):
+        """...and since PW-060 only WRITING instructions ride into a reply: a triage verdict about the
+        sender is routing, not voice, and stays out."""
         s, tid = self._store()
-        s.add_memory({'Scope': 'sender', 'ScopeKey': 'meyy@partner.example', 'Active': 1,
+        s.add_memory({'Scope': 'global', 'ScopeKey': None, 'Active': 1, 'Source': 'writing',
+                      'Note': 'Keep it to two sentences for Meyy.', 'CreatedBy': 'o'})
+        s.add_memory({'Scope': 'sender', 'ScopeKey': 'meyy@partner.example', 'Active': 1, 'Source': 'verdict',
                       'Note': 'Meyy schedules for the whole vendor team.', 'CreatedBy': 'o'})
         sys_ = _capture(s, tid)['system']
-        self.assertIn('Your own standing notes', sys_)
+        self.assertIn('Your own writing instructions', sys_); self.assertIn('two sentences for Meyy', sys_)
         self.assertNotIn('Standing notes from the owner', sys_)
+        self.assertNotIn('schedules for the whole vendor team', sys_)
 
     def test_work_that_needs_doing_is_answered_in_the_first_person(self):
         """The old line told the model "the owner will turn it into a task" - so it wrote a

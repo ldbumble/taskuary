@@ -204,7 +204,9 @@ class PolicyBody(BaseModel):
     PolicyId: int | None = None; Name: str | None = None; Kind: str | None = None
     Pattern: str | None = None; Action: str | None = None; Reason: str | None = None
     SortOrder: int | None = None; Active: bool | None = None
-class MemoryBody(BaseModel): note: str; scope: str = 'global'; scope_key: str | None = None
+class MemoryBody(BaseModel):
+    note: str; scope: str = 'global'; scope_key: str | None = None
+    source: str = 'manual'          # 'writing' = an instruction about how to write, read by the drafter only (PW-060)
 class MemoryToggle(BaseModel): active: bool
 class ConnectorBody(BaseModel):
     ConnectorId: int | None = None; Type: str | None = None; Name: str | None = None
@@ -4063,8 +4065,9 @@ def add_memory(body: MemoryBody):
     if body.scope != 'global' and not (body.scope_key or '').strip():
         raise HTTPException(422, f'a {body.scope} note needs a scope_key to match on')
     if not body.note.strip(): raise HTTPException(422, 'note is required')
+    source = body.source if body.source in ('manual', 'writing') else 'manual'
     mid = store.add_memory({'Scope': body.scope, 'ScopeKey': body.scope_key, 'Note': body.note.strip()[:1000],
-                            'Source': 'manual', 'Active': 1, 'CreatedBy': ACTOR})
+                            'Source': source, 'Active': 1, 'CreatedBy': ACTOR})
     store.audit('memory', mid, 'create', ACTOR)
     return {'ok': True, 'memoryId': mid}
 

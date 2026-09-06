@@ -520,45 +520,45 @@
       "section": "Separate triage learning from reply-writing preferences",
       "phase": "7",
       "requirement": "Remove general `LEARNED.md` prompt injection from reply drafting and",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_reply_sources.py`::VoiceTests (no LEARNED.md in a task draft, its redraft, a message-only draft or a new outbound message; LEARNED.md still reaches triage - `tests/test_docs_flow.py`)",
+      "commit": "691f566; local gates passed, CI pending"
     },
     {
       "id": "PW-059",
       "section": "Separate triage learning from reply-writing preferences",
       "phase": "7",
       "requirement": "Build replies using STYLE.md for voice, phrasing, greetings, and signatures;",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_reply_sources.py`::VoiceTests (STYLE.md voice and signature, SOUL identity, the refreshed conversation and the verified result are what a reply is written from)",
+      "commit": "691f566; local gates passed, CI pending"
     },
     {
       "id": "PW-060",
       "section": "Separate triage learning from reply-writing preferences",
       "phase": "7",
       "requirement": "Restrict separately retrieved standing memory notes to explicit,",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_reply_sources.py` (separately retrieved notes are only explicit writing instructions - memory source `writing`; triage verdicts never ride into a draft)",
+      "commit": "691f566; local gates passed, CI pending"
     },
     {
       "id": "PW-061",
       "section": "Separate triage learning from reply-writing preferences",
       "phase": "7",
       "requirement": "Route explicit writing-style feedback to STYLE.md rather than general",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_reply_sources.py`::FeedbackRoutingTests (an edited draft's note becomes an Owner notes line in STYLE.md outside the generated block; a rejection's note stays triage feedback for LEARNED.md; a writing note can be saved by hand)",
+      "commit": "691f566; local gates passed, CI pending"
     },
     {
       "id": "PW-062",
       "section": "Separate triage learning from reply-writing preferences",
       "phase": "7",
       "requirement": "Add model-payload tests for initial drafts, redrafts, and message-only",
-      "status": "pending",
-      "test": "Required: Phase 7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: model-payload tests for initial drafts, redrafts, message-only drafts and outbound messages, plus feedback routing, are in place; a reply's voice after a writing-feedback change is covered through STYLE.md's owner notes rather than a before/after payload diff",
+      "test": "`tests/test_reply_sources.py` (7 cases); `tests/test_docs_flow.py` reply audit moved to the PW-058 contract",
+      "commit": "691f566; local gates passed, CI pending"
     },
     {
       "id": "PW-063",
@@ -2070,7 +2070,7 @@
       "requirement": "Capture the agent's actual final answer directly, rather than requiring a",
       "status": "partial: the agent's own final answer is captured directly - the `--done` sentence recorded as the run's Finished event, then the Stop hook's last message - and matched to the run; Codex App Server agentMessage items are not integrated (PW-224)",
       "test": "`tests/test_explicit_completion.py`::SaveBeforeCloseTests::test_the_final_answer_is_the_agents_own_and_matched_to_the_run",
-      "commit": "3d5af15; local gates passed, CI pending"
+      "commit": "3d5af15; 3d5af15, CI run 34053604179 (all ten jobs passed)"
     },
     {
       "id": "PW-231",
@@ -2079,7 +2079,7 @@
       "requirement": "Persist the final Markdown result, evidence/artifact references, and reported",
       "status": "implemented",
       "test": "`tests/test_explicit_completion.py`::SaveBeforeCloseTests (the Markdown result with the final answer and the report land before the run closes; only checklist items the agent reported done are ticked, by identity; nothing blindly completed)",
-      "commit": "3d5af15; local gates passed, CI pending"
+      "commit": "3d5af15; 3d5af15, CI run 34053604179 (all ten jobs passed)"
     },
     {
       "id": "PW-232",
@@ -2088,7 +2088,7 @@
       "requirement": "Replace the manual-start stay-open veto for explicit successful completion.",
       "status": "implemented",
       "test": "`tests/test_explicit_completion.py`::ExplicitFinishTests (an explicit finish closes the completed run even when the owner opened it, saves the result, publishes one Finished event and leaves the task's closure to the owner; live wall notes leave with the session)",
-      "commit": "3d5af15; local gates passed, CI pending"
+      "commit": "3d5af15; 3d5af15, CI run 34053604179 (all ten jobs passed)"
     },
     {
       "id": "PW-233",
@@ -2097,7 +2097,7 @@
       "requirement": "If result persistence fails, do not discard the session or claim successful",
       "status": "implemented",
       "test": "`tests/test_explicit_completion.py` (a save that fails raises before the session is closed, writes no report, claims nothing and is retryable; a second finish for the same run does nothing twice)",
-      "commit": "3d5af15; local gates passed, CI pending"
+      "commit": "3d5af15; 3d5af15, CI run 34053604179 (all ten jobs passed)"
     },
     {
       "id": "PW-234",
@@ -2106,7 +2106,7 @@
       "requirement": "Test automatic and manually started workers, matching final-answer capture,",
       "status": "partial: automatic and owner-opened workers, final-answer capture, save-before-close ordering, incomplete checklist entries, duplicate finishes and persistence failures are covered; pending approvals at finish and retained follow-up context are exercised only through Sections 6.1/5.5",
       "test": "`tests/test_explicit_completion.py` (6 cases)",
-      "commit": "3d5af15; local gates passed, CI pending"
+      "commit": "3d5af15; 3d5af15, CI run 34053604179 (all ten jobs passed)"
     },
     {
       "id": "PW-235",

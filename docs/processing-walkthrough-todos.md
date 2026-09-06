@@ -322,18 +322,18 @@ Owner-approved requirement: general LEARNED.md injection belongs to triage, not
 reply generation. This records a pending change; no document content is migrated
 or removed during the walkthrough.
 
-- [ ] <a id="pw-058"></a>**PW-058** Remove general `LEARNED.md` prompt injection from reply drafting and
+- [x] <a id="pw-058"></a>**PW-058** Remove general `LEARNED.md` prompt injection from reply drafting and
   redrafting paths, including task-linked and message-only drafts. Keep relevant
   learned preferences available to triage, subject to the fresh-evaluation rules
   above; past judgments must not force a new message's verdict.
-- [ ] <a id="pw-059"></a>**PW-059** Build replies using STYLE.md for voice, phrasing, greetings, and signatures;
+- [x] <a id="pw-059"></a>**PW-059** Build replies using STYLE.md for voice, phrasing, greetings, and signatures;
   SOUL.md for identity/responsibilities; and the refreshed conversation, verified
   work result, and relevant factual context for what the reply says.
-- [ ] <a id="pw-060"></a>**PW-060** Restrict separately retrieved standing memory notes to explicit,
+- [x] <a id="pw-060"></a>**PW-060** Restrict separately retrieved standing memory notes to explicit,
   reply-relevant writing instructions. Do not reintroduce operational triage
   judgments (ignore, not my responsibility, task classification/routing) through
   another memory block after removing LEARNED.md.
-- [ ] <a id="pw-061"></a>**PW-061** Route explicit writing-style feedback to STYLE.md rather than general
+- [x] <a id="pw-061"></a>**PW-061** Route explicit writing-style feedback to STYLE.md rather than general
   triage learning. Keep scope clear and preserve existing document/history data;
   do not blindly migrate mixed historical notes into the style document.
 - [ ] <a id="pw-062"></a>**PW-062** Add model-payload tests for initial drafts, redrafts, and message-only

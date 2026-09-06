@@ -49,11 +49,11 @@ def _voice(store) -> str:
     """The same three documents every outgoing reply is written from, so a message the owner
     starts and a message the owner answers sound like the same person. Assembled here rather
     than imported from responder because that module's blocks are all about a thread."""
-    from .learn import injectable
-    from .responder import BREVITY, CHAT, EMAIL, SYSTEM, style_doc
+    from .responder import BREVITY, CHAT, EMAIL, SYSTEM, style_doc, writing_notes
     soul = store.doc('soul') or ''
     owner = soul.split('You work for **')[1].split('**')[0] if 'You work for **' in soul else 'the owner'
-    return (SYSTEM.format(owner=owner), soul, style_doc(store), injectable(store.doc('learned') or ''), BREVITY, CHAT, EMAIL)
+    # STYLE for voice, SOUL for identity, explicit writing instructions - and no LEARNED.md, which is triage's (PW-058/059)
+    return (SYSTEM.format(owner=owner), soul, style_doc(store), '\n'.join(f'- {n}' for n in writing_notes(store)), BREVITY, CHAT, EMAIL)
 
 
 def draft_message(store, channel: str, to, about: str, resolution: str = None, llm=None,
@@ -69,7 +69,7 @@ def draft_message(store, channel: str, to, about: str, resolution: str = None, l
     system = (ident + brevity + (chat if is_chat else email) + '\n' + COMPOSE_SYSTEM
               + (f'\n\nYOUR OWN document - your voice, your rules, your responsibilities:\n{soul[:4000]}' if soul else '')
               + (f'\n\nYour own style, distilled from mail you have actually sent - write like this:\n{sty[:2500]}' if sty else '')
-              + (f'\n\nYour learned profile:\n{lrn[:2000]}' if lrn else ''))
+              + (f'\n\nYour own writing instructions:\n{lrn[:2000]}' if lrn else ''))
     recipients = ', '.join(to) if isinstance(to, (list, tuple)) else str(to)
     copies = ', '.join(cc or [])
     user = f'TO: {recipients}' + (f'\nCC: {copies}' if copies else '') + \

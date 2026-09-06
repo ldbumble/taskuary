@@ -968,6 +968,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   // the hash changes while the rows are already here; the hash is cleared so a reload does not reopen
   // it. A row older than the loaded page stays a plain Timeline visit, which is still the right place
   // to have landed. It pins the row in EVERY mode: over the chat, this is how a card says "read it whole".
+  const drillRef = useRef(drill); drillRef.current = drill;
   const rowsRef = useRef(null); rowsRef.current = rows;
   const openHash = useCallback(() => {
     const m = /^#msg=(\d+)/.exec(window.location.hash || "");
@@ -977,7 +978,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     const row = cur.find((r) => r.MessageId === mid || rowOwnsMessage(r, mid));
     if (!row) return;
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
-    drill(row, false, row.ProcessingItemId ? { kind: "message", id: mid } : null);
+    drillRef.current(row, false, row.ProcessingItemId ? { kind: "message", id: mid } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => { openHash(); }, [rows, openHash]);

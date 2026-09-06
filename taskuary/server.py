@@ -24,6 +24,7 @@ from . import terminal as hub_term
 from .coder import PAUSE_MARKER, pause_note, reply_target as coder_reply_target, wrap as coder_wrap
 from . import aisetup, assistant, demo, deps, learn, learnedgraph, outbound, playbooks, rank, responder, waitroom
 from . import live as live_bus
+from . import processing_all
 
 # whatever the owner's Install button added lives beside their data, not in the build - and it has
 # to be importable BEFORE any card reaches for it (deps.py)
@@ -48,7 +49,8 @@ async def _lifespan(_app):
             demo.seed(store)
             demo.start_sessions(store)
         except Exception as e: logger.warning(f'demo seed failed: {e}')
-        yield
+        async with processing_all.membership_lifecycle(store):
+            yield
         return
     # No interactive or headless worker survives into this process. Repair any persisted
     # in-progress/running flags before the Board and funnel get their first read.
@@ -75,7 +77,8 @@ async def _lifespan(_app):
     from . import msauth
     msauth.on_rotate = lambda cid, rt: store.save_connector({'ConnectorId': cid, 'Secret': rt}, 'msauth')   # a rotated Microsoft refresh token outlives a restart
     try:
-        yield
+        async with processing_all.membership_lifecycle(store):
+            yield
     finally:
         if not _close_drain_workers(timeout=DRAIN_WAIT, target_store=store):
             logger.warning('triage drain still stopping during shutdown')
@@ -312,6 +315,45 @@ def feed(limit: int = 100, offset: int = 0, pending_only: bool = False, channel:
         r['CanSend'] = _can_send(r.get('Channel'), True, gh_ok)
         r['SendBlock'] = '' if r['CanSend'] else _send_block(r.get('Channel'), True)
     return JSONResponse({'data': rows}, headers={'ETag': tag, 'Cache-Control': 'no-cache'})
+
+
+def _processing_live():
+    try:
+        return hub_term.live_sessions(tail=0)
+    except Exception:
+        return None  # Unavailable observation is distinct from an observed empty roster.
+
+
+@app.get('/api/processing/all')
+def processing_all_page(limit: int = 100, cursor: str = None, channel: str = None, source: str = None):
+    try:
+        days = int(store.get_settings().get('feed_days') or 14)
+    except (TypeError, ValueError):
+        days = 14
+    try:
+        return processing_all.inventory.page(store, limit=limit, cursor=cursor, channel=channel,
+                                             source=source, days=days, live_state=_processing_live())
+    except processing_all.AllError as exc:
+        raise HTTPException(exc.status, exc.detail) from exc
+
+
+@app.get('/api/processing/items/{item_id}/detail')
+def processing_item_detail(item_id: str, kind: str = None, id: int = None, view_revision: str = None):
+    try:
+        result = processing_all.item_detail(store, item_id, kind=kind, local_id=id,
+                                             view_revision=view_revision, live_state=_processing_live())
+        row = result.get('row')
+        detail = result.get('detail') or {}
+        if detail.get('task'):
+            detail['artifacts'] = [_artifact_row(a) for a in detail.get('artifacts') or []]
+        if row is not None:
+            row['CanSend'] = _can_send(row.get('Channel'), True, store.github_replies_ok())
+            row['SendBlock'] = '' if row['CanSend'] else _send_block(row.get('Channel'), True)
+            result['detail_revision'] = processing_all._digest({key: value for key, value in result.items()
+                                                               if key != 'detail_revision'})
+        return result
+    except processing_all.AllError as exc:
+        raise HTTPException(exc.status, exc.detail) from exc
 
 
 def _queued_info(q):

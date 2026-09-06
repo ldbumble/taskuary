@@ -312,7 +312,7 @@ INDEXES = (
 # tables, so it never dirties itself.
 PROCESSING_DIRTY_TABLES = (
     'task', 'message', 'review', 'idea', 'attachment', 'run', 'route',
-    'funnel_state', 'comment', 'task_artifact',
+    'funnel_state', 'comment', 'task_artifact', 'transcript',
 )
 PROCESSING_DIRTY_SETTINGS = (
     'feed_days', 'funnel_hours', 'funnel_mutes', 'owner_email', 'team_domains',
@@ -1686,7 +1686,8 @@ class SQLiteStore:
                 'member_count': member_count,
                 'uncatalogued': uncatalogued,
                 'completed_baselines': completed,
-                'unsupported': ['attachment_only_items', 'calendar', 'comments', 'task_artifacts',
+                # Comments/artifacts are included as task-associated detail, not roots.
+                'unsupported': ['attachment_only_items', 'calendar', 'comment_only_items', 'task_artifact_only_items',
                                 'waitroom', 'worker_questions'],
                 'processing_reconciliation': self._processing_reconcile_status_cursor(cur),
             }

@@ -113,13 +113,17 @@ def test_capture_is_deterministic_strict_and_does_not_call_mutating_pile_or_anno
         repeated = capture_selection(value, now=NOW)
         assert (value.cx.total_changes, value._writes) == writes
         value.update_message_body(mid, "x" * 5000 + " changed ending")
+        # One source row plus its durable dirty-generation trigger. The subsequent
+        # selection read must still perform exactly zero writes.
+        after_update = (value.cx.total_changes, value._writes)
+        assert after_update == (writes[0] + 2, writes[1] + 1)
         changed = capture_selection(value, now=NOW)
 
     assert (first.revision, first.member_keys) == (repeated.revision, repeated.member_keys)
     assert len(first.revision) == 64
     assert changed.member_keys == first.member_keys
     assert changed.revision != first.revision
-    assert (value.cx.total_changes, value._writes) == (writes[0] + 1, writes[1] + 1)
+    assert (value.cx.total_changes, value._writes) == after_update
 
 
 def test_scope_and_complete_order_are_revision_bound_while_events_are_not():

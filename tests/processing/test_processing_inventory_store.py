@@ -58,13 +58,21 @@ def test_empty_inventory_reports_uncatalogued_raw_entities_without_allocating(tm
     assert picture['schema_version'] == 'taskuary.processing.inventory.v1'
     assert picture['as_of'] == NOW
     assert picture['items'] == []
+    reconciliation = store.processing_reconcile_status()
+    assert reconciliation['pending'] is True
+    assert reconciliation['dirty_generation'] > 0
+    assert reconciliation['attempted_generation'] == reconciliation['reconciled_generation'] == 0
+    assert reconciliation['conflicts'] == []
     assert picture['coverage'] == {
         'canonical_item_count': 0,
+        'visible_item_count': 0,
+        'tombstone_item_count': 0,
         'member_count': 0,
         'uncatalogued': {'message': 1, 'task': 1, 'review': 1, 'idea': 1},
         'completed_baselines': [],
-        'unsupported': ['attachment_only_items', 'calendar', 'comments', 'task_artifacts',
+        'unsupported': ['attachment_only_items', 'calendar', 'comment_only_items', 'task_artifact_only_items',
                         'waitroom', 'worker_questions'],
+        'processing_reconciliation': reconciliation,
     }
     assert picture['worker_attention_available'] is False
     assert len(picture['worker_input_revision']) == 64

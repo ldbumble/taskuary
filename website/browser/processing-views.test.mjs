@@ -164,7 +164,8 @@ test("PW-107 exposes only All and Unread without All creating assistant state", 
   const detailRequest = race.waitForRequest((request) => {
     const url = new URL(request.url());
     return request.method() === "GET" && url.origin === harness.ui
-      && (/^\/api\/tasks\/\d+$/.test(url.pathname) || /^\/api\/messages\/\d+\/thread$/.test(url.pathname));
+      && (/^\/api\/tasks\/\d+$/.test(url.pathname) || /^\/api\/messages\/\d+\/thread$/.test(url.pathname)
+        || /^\/api\/processing\/items\/[^/]+\/detail$/.test(url.pathname));
   }, { timeout: 10000 });
   await raceTarget.hover();
   const pendingDetail = await detailRequest;

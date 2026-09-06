@@ -15,6 +15,9 @@ def install_processing_changes(app, store):
         '/api/fixture/processing/draft',
         '/api/fixture/processing/context',
         '/api/fixture/processing/background',
+        '/api/fixture/processing/canonical-all',
+        '/api/fixture/processing/canonical-arrival',
+        '/api/fixture/processing/canonical-emit',
     })
 
     def fixture_refuse(method, path):
@@ -25,6 +28,8 @@ def install_processing_changes(app, store):
         return refuse(method, path)
 
     demo.refuse = fixture_refuse
+    from website.browser.fixture_canonical import install_canonical_changes
+    install_canonical_changes(app, store)
 
     @app.post('/api/fixture/processing/background')
     def background_card(body: dict):

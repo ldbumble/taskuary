@@ -1,8 +1,8 @@
 """Read a canonical foundation snapshot using a caller-owned SQLite transaction.
 
 No identity allocation, historical inference, runtime worker access or writes happen
-here. Consumers have not switched to this projection yet; membership is reconciled
-explicitly by the foundation store API.
+here. All consumes this projection; membership is reconciled explicitly by the
+owned background lifecycle. Canonical Unread/read adoption remains separate.
 """
 import copy
 import json
@@ -42,6 +42,13 @@ def processing_projection(cur, item_id, *, live_state=None):
     tasks = _rows_for(cur, 'task', 'TaskId', ids.get('task', []))
     message_ids = [row['MessageId'] for row in messages]
     task_ids = [row['TaskId'] for row in tasks]
+    transcripts = []
+    for tid in task_ids:
+        row = cur.execute('''SELECT TaskId, Sid sid, Agent agent, Cwd cwd, CreatedAt at,
+            LENGTH(IFNULL(Text,'')) chars FROM transcript WHERE TaskId=?
+            ORDER BY TranscriptId DESC LIMIT 1''', (tid,)).fetchone()
+        if row:
+            transcripts.append(dict(row))
     attachments = _rows_for(cur, 'attachment', 'MessageId', message_ids)
 
     relations = {}
@@ -77,7 +84,7 @@ def processing_projection(cur, item_id, *, live_state=None):
         'EntityKind': row['EntityKind'], 'LocalId': row['LocalId'],
     } for row in aliases if row['Namespace'] != 'legacy_funnel')
     context = dict(members=context_members,
-                   tasks=[_pick(row, ('TaskId', 'Title', 'Summary', 'Kind', 'Source', 'SourceRef', 'Tags'))
+                   tasks=[_pick(row, ('TaskId', 'Title', 'Summary', 'Checklist', 'Kind', 'Source', 'SourceRef', 'Tags'))
                           for row in tasks],
                    attachments=[_pick(row, ('AttachmentId', 'MessageId', 'ExternalId', 'Name',
                                            'ContentType', 'Size', 'ContentId', 'Inline', 'Path'))
@@ -102,6 +109,8 @@ def processing_projection(cur, item_id, *, live_state=None):
         WHERE Name IN ('funnel_hours','funnel_mutes','feed_days','team_domains','owner_email') ORDER BY Name''')}
     view = dict(member_ids=member_ids, messages=messages, tasks=tasks,
                 attachments=attachments, ideas=ideas, relations=relations,
+                comments=_rows_for(cur, 'comment', 'TaskId', task_ids),
+                artifacts=_rows_for(cur, 'task_artifact', 'TaskId', task_ids), transcripts=transcripts,
                 reviews=[reviews[key] for key in sorted(reviews)], runs=runs,
                 routes=_rows_for(cur, 'route', 'MessageId', message_ids),
                 legacy_states=states, settings=settings, aliases=aliases,

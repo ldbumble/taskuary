@@ -24,7 +24,11 @@ def test_additive_startup_and_getters_do_not_capture_or_change_owner_state(tmp_p
         processing = {name: rows for name, rows in before.items()
                       if name.startswith('processing_')}
         assert len(processing) >= 5
-        assert all(not rows for rows in processing.values())
+        assert len(processing['processing_reconcile_state']) == 1
+        assert all(not rows for name, rows in processing.items() if name != 'processing_reconcile_state')
+        status = db.processing_reconcile_status()
+        assert status['pending'] is True
+        assert status['attempted_generation'] == status['reconciled_generation'] == 0
         _assert_preserved(db, expected)
         assert db.resolve_processing_target('legacy_funnel', 'msg:71') is None
         assert not db.processing_members('nonexistent-synthetic-item')

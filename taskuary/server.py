@@ -411,6 +411,29 @@ def _assistant_dock_new(background: BackgroundTasks):
     return {'task': task, 'ref': task_ref(task['TaskId']), 'created': created,
             'archivedTaskId': old['TaskId']}
 
+class ChecklistTick(BaseModel):
+    done: bool = True
+
+
+class ChecklistEdit(BaseModel):
+    items: list
+
+
+@app.patch('/api/tasks/{task_id}/checklist/{item_id}')
+def tick_checklist(task_id: int, item_id: str, body: ChecklistTick):
+    """One box. Progress on the list, never task completion (PW-077)."""
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    if not store.tick_checklist_item(task_id, item_id, body.done, ACTOR): raise HTTPException(404, 'no such checklist item')
+    return {'ok': True, 'checklist': store.task_checklist(task_id)}
+
+
+@app.put('/api/tasks/{task_id}/checklist')
+def edit_checklist(task_id: int, body: ChecklistEdit):
+    """The owner's words for the list; a box whose words are unchanged keeps its state (PW-076)."""
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    return {'ok': True, 'checklist': store.set_task_checklist(task_id, body.items, ACTOR)}
+
+
 @app.get('/api/tasks/{task_id}')
 def task_detail(task_id: int):
     d = store.task_detail(task_id)

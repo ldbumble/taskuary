@@ -995,6 +995,8 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
         parts.append('PREVIOUS SESSION RESULT: continue from this saved result; verify the current checkout '
                      f'before changing it and do not repeat finished work: {no_emails(_cut(previous, 3000, "previous result"))}')
     from .triage import strip_boilerplate
+    md = store.checklist_markdown(tid) if hasattr(store, 'checklist_markdown') else ''
+    if md: parts.append('CHECKLIST - what was asked for, as triage read it; the source message follows, and it is the authority:\n' + md)
     if m: parts.append(f"FROM {m.get('FromName') or m.get('FromEmail')} on {m.get('Channel')}, "
                        f"subject \"{m.get('Subject') or ''}\": "
                        f"{_cut(strip_boilerplate(m.get('BodyText') or ''), ASK_CHARS)}")

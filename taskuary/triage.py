@@ -91,6 +91,9 @@ INTENT_SYSTEM = (
     + FIELDS['others_replied'] + '\n'
     + FIELDS['exchange'] + '\n'
     + FIELDS['assistant_said'] + '\n'
+    'For a task, also answer "title" (what the work is, 12 words max), "summary" (what was asked and by whom, two sentences) and '
+    '"checklist": ["<one distinct requested outcome each>"] - drawn only from what the message and exchange actually ask for; never invent a requirement, '
+    'never list anything as already done.\n'
     'Torn between task and reply_only? Choose task. Torn between task and fyi? Choose task unless the mail plainly asks '
     'nobody for anything - a task the owner glances at and drops costs less than a job nobody did, and a drafted reply '
     'is no substitute for either.')
@@ -413,6 +416,14 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 if playbooks and pb and out['intent'] == 'task' and re.search(rf'^- {re.escape(pb)}: ', playbooks, re.M):
                     out['playbook'], out['kind'] = pb, 'coding'
                 if candidates is not None: out.update(relationship_of(j, candidates))
+                if out['intent'] == 'task':
+                    # the work, named (PW-074): a title and summary of what was asked and the distinct
+                    # outcomes as a list - validated, never trusted; the router falls back when absent
+                    title = ' '.join(str(j.get('title') or '').split())[:120]
+                    summary = str(j.get('summary') or '').strip()[:1000]
+                    if title: out['title'] = title
+                    if summary: out['summary'] = summary
+                    if isinstance(j.get('checklist'), list): out['checklist'] = [x for x in j['checklist'] if isinstance(x, str)]
                 return out
             parse_error = f"invalid intent {j.get('intent')!r}; expected task, reply_only, or fyi"
         except Exception as e:

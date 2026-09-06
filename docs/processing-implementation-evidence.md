@@ -962,3 +962,23 @@ Final cleaner checkpoint `ff6acc4` passed 2,582 backend tests plus 71 subtests
 before final delivery. To reduce repeated timing interference without relaxing
 any assertion, run the existing input-latency browser scenario separately first,
 then run the remaining six browser scenarios alongside backend regression.
+## Section 3.6 — triage-generated task summary and checklist
+
+Status: implemented and tested locally at `82a56a3`; remote CI pending on the pushed
+checkpoint. Section 3.5 is CI-verified (0dea527, CI run 34040312825 (all ten jobs passed)).
+Acceptance PW-074 to PW-077 implemented; PW-078 partial (no rendered-browser click yet).
+
+The one triage verdict now carries `title`, `summary` and `checklist` for `intent=task`; the
+classifier is told to draw them only from what the message and exchange ask for, never to invent
+a requirement or list anything as done. The task takes the verdict's title and summary (the
+router's subject/body cut remains the fallback); the checklist is persisted on the task
+(`Checklist`, additive JSON column) as items with ids derived from their words, validated (strings,
+trimmed, no repeats, at most twelve), rendered as GitHub task-list Markdown (`ChecklistMd` on the
+task detail), shared by the task page (interactive boxes), the assistant card (read-only) and the
+worker brief (`terminal.seed_text`, beside the source message which stays the authority). A later
+message on the task merges distinct new items without duplicating or unticking anything and says
+so in a task comment; an owner edit through the API keeps a box's state wherever its words stayed.
+Ticking every box completes nothing, and closing a task ticks nothing.
+
+Tests: `tests/test_task_checklist.py` (9 cases), `website/test/checklist.test.mjs` (4). No existing assertion changed.
+Packaged UI rebuilt from this source in the isolated worktree (Node 22).

@@ -234,7 +234,7 @@
       "requirement": "Replace `exchange_lines()`'s 12-message/300-character excerpt dependency",
       "status": "partial: budgeted whole-message exchange with disclosed cuts; the assembled email-chain merge is PW-009+",
       "test": "`tests/test_clean_context.py`::ExchangeBudgetTests, ::PayloadTests (20-message chain whole, 2,400-character message whole, oldest dropped with disclosure, body budget disclosed)",
-      "commit": "0dea527; local gates passed, CI pending"
+      "commit": "0dea527; 0dea527, CI run 34040312825 (all ten jobs passed)"
     },
     {
       "id": "PW-027",
@@ -243,7 +243,7 @@
       "requirement": "Before sending email content to triage, remove signatures, automatic",
       "status": "implemented",
       "test": "`tests/test_clean_context.py`::CleanerTests (banner, sender hint, client stamps, unsubscribe strip, signature, legal footer; requests about notices kept)",
-      "commit": "0dea527; CI pending"
+      "commit": "0dea527; 0dea527, CI run 34040312825 (all ten jobs passed)"
     },
     {
       "id": "PW-028",
@@ -252,7 +252,7 @@
       "requirement": "Represent each message's substantive content once. Remove repeated quoted",
       "status": "implemented",
       "test": "`tests/test_clean_context.py`::QuotedTests (quoted copy dropped when retained; Outlook history; unique forwarded material kept; inline answers kept; quote of unknown text kept; stored body untouched)",
-      "commit": "0dea527; CI pending"
+      "commit": "0dea527; 0dea527, CI run 34040312825 (all ten jobs passed)"
     },
     {
       "id": "PW-029",
@@ -261,7 +261,7 @@
       "requirement": "Apply the same cleaning/context contract across email connectors. Extend",
       "status": "implemented",
       "test": "one cleaner (`triage.strip_boilerplate`, `triage.dedupe_quoted`) for every connector and surface; assistant banner pattern moved into triage",
-      "commit": "0dea527; CI pending"
+      "commit": "0dea527; 0dea527, CI run 34040312825 (all ten jobs passed)"
     },
     {
       "id": "PW-030",
@@ -270,7 +270,7 @@
       "requirement": "Add regression tests for historical-verdict unanimity versus a new request,",
       "status": "partial: chain-merge cases wait for PW-009+",
       "test": "`tests/test_clean_context.py` (14 cases) plus `test_fresh_evaluation.py::NoForcedVerdictTests`",
-      "commit": "0dea527; CI pending"
+      "commit": "0dea527; 0dea527, CI run 34040312825 (all ten jobs passed)"
     },
     {
       "id": "PW-031",
@@ -664,45 +664,45 @@
       "section": "Triage-generated task summary and checkable list",
       "phase": "3",
       "requirement": "Extend the same triage verdict with a meaningful task title/summary and",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_task_checklist.py`::VerdictNamesTheWorkTests (title, summary and checklist from the verdict; validated; router fallback kept)",
+      "commit": "82a56a3; local gates passed, CI pending"
     },
     {
       "id": "PW-075",
       "section": "Triage-generated task summary and checkable list",
       "phase": "3",
       "requirement": "Persist the checklist with the task and render interactive, saved checkboxes",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_task_checklist.py`::ProgressTests, ::SharedContextTests (persisted items with ids, task-list Markdown, task detail, worker brief); `website/test/checklist.test.mjs` (task page and assistant card wired)",
+      "commit": "82a56a3; CI pending"
     },
     {
       "id": "PW-076",
       "section": "Triage-generated task summary and checkable list",
       "phase": "3",
       "requirement": "Give checklist items stable identity so edits, progress, and fresh-triage",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_task_checklist.py` (stable ids; owner edit keeps progress where the words stayed; a later message adds distinct items, no duplicates, no resets, change surfaced on the task)",
+      "commit": "82a56a3; CI pending"
     },
     {
       "id": "PW-077",
       "section": "Triage-generated task summary and checkable list",
       "phase": "3",
       "requirement": "Keep checklist progress separate from agent/session state and task completion;",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_task_checklist.py`::ProgressTests (ticking every box completes nothing; closing ticks nothing); `checklist.test.mjs` progress wording",
+      "commit": "82a56a3; CI pending"
     },
     {
       "id": "PW-078",
       "section": "Triage-generated task summary and checkable list",
       "phase": "3",
       "requirement": "Add tests for multi-request chains, coding/general/personal tasks, meaningful",
-      "status": "pending",
-      "test": "Required: Phase 3 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: coding/general/personal kinds and multi-request chains covered; no rendered-browser click of a checkbox yet",
+      "test": "`tests/test_task_checklist.py` (9 cases) and `checklist.test.mjs` (4)",
+      "commit": "82a56a3; CI pending"
     },
     {
       "id": "PW-079",

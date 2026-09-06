@@ -486,6 +486,10 @@ class SQLiteStore:
             rvcols = {r[1] for r in self.cx.execute('PRAGMA table_info(review)')}
             if 'DraftError' not in rvcols:
                 self.cx.execute('ALTER TABLE review ADD COLUMN DraftError TEXT')
+            # the triage-generated checklist (PW-075): JSON items with stable ids, separate from Status
+            tcols = {r[1] for r in self.cx.execute('PRAGMA table_info(task)')}
+            if 'Checklist' not in tcols:
+                self.cx.execute('ALTER TABLE task ADD COLUMN Checklist TEXT')
             # the assistant's private read on the message (counsel.py) - JSON, shown on the panel
             if 'Brief' not in mcols:
                 self.cx.execute('ALTER TABLE message ADD COLUMN Brief TEXT')
@@ -871,6 +875,57 @@ class SQLiteStore:
         # Timeline rows carry task/review state too, so a task transition changes both views.
         self._poke('feed-changed', 'task-changed', task_id=task_id)
     def get_task(self, task_id): return self._one('SELECT * FROM task WHERE TaskId=?', (task_id,))
+    # ── the checklist: what the message actually asked for, as boxes (PW-074..077) ───────────
+    # Items carry a stable id derived from their words, so a re-triage or an owner edit that
+    # keeps an item's text keeps its box; progress is never task completion.
+    CHECKLIST_MAX = 12
+    @staticmethod
+    def checklist_id(text: str) -> str:
+        return hashlib.sha1(re.sub(r'\W+', ' ', str(text or '').lower()).strip().encode()).hexdigest()[:8]
+    @classmethod
+    def clean_checklist(cls, items) -> list:
+        """Strings only, trimmed, no repeats (case- and punctuation-blind), at most CHECKLIST_MAX."""
+        if not isinstance(items, (list, tuple)): return []
+        out, seen = [], set()
+        for x in items:
+            if not isinstance(x, str): continue
+            text = ' '.join(x.split())[:300]
+            if not text: continue
+            k = cls.checklist_id(text)
+            if k in seen: continue
+            seen.add(k); out.append(text)
+            if len(out) >= cls.CHECKLIST_MAX: break
+        return out
+    def task_checklist(self, task_id) -> list:
+        t = self.get_task(task_id)
+        try: items = json.loads((t or {}).get('Checklist') or '[]')
+        except (TypeError, ValueError): items = []
+        return [i for i in items if isinstance(i, dict) and i.get('text')] if isinstance(items, list) else []
+    def _write_checklist(self, task_id, items: list, actor: str):
+        self._exec('UPDATE task SET Checklist=?, UpdatedBy=?, UpdatedAt=? WHERE TaskId=?', (json.dumps(items), actor, _now(), task_id))
+        self._bump_snapshots(); self._poke('task-changed', task_id=task_id)
+    def set_task_checklist(self, task_id, texts, actor: str) -> list:
+        """Replace the list with these words; a box whose words are unchanged keeps its state."""
+        old = {i['id']: i for i in self.task_checklist(task_id)}
+        items = [{'id': self.checklist_id(t), 'text': t, 'done': bool(old.get(self.checklist_id(t), {}).get('done'))} for t in self.clean_checklist(texts)]
+        self._write_checklist(task_id, items, actor)
+        return items
+    def merge_task_checklist(self, task_id, texts, actor: str) -> list:
+        """Add the items a later message brings; nothing existing moves or unticks. Returns the new ones."""
+        items = self.task_checklist(task_id)
+        have = {i['id'] for i in items}
+        new = [{'id': self.checklist_id(t), 'text': t, 'done': False} for t in self.clean_checklist(texts) if self.checklist_id(t) not in have]
+        if new: self._write_checklist(task_id, (items + new)[:max(self.CHECKLIST_MAX, len(items))], actor)
+        return new
+    def tick_checklist_item(self, task_id, item_id: str, done: bool, actor: str) -> bool:
+        items = self.task_checklist(task_id)
+        hit = [i for i in items if i['id'] == item_id]
+        if not hit: return False
+        hit[0]['done'] = bool(done)
+        self._write_checklist(task_id, items, actor)
+        return True
+    def checklist_markdown(self, task_id) -> str:
+        return '\n'.join(f"- [{'x' if i.get('done') else ' '}] {i['text']}" for i in self.task_checklist(task_id))
 
     def tag_task(self, task_id, tag, on=True, actor='router'):
         """Add or remove ONE tag, leaving the others alone. Tags is a csv the UI and the router
@@ -2761,7 +2816,8 @@ class SQLiteStore:
         t = self.get_task(task_id)
         if not t: return None
         msgs = self.list_messages(task_id)
-        return {'task': t, 'ref': task_ref(task_id), 'messages': msgs,
+        return {'task': {**t, 'ChecklistMd': self.checklist_markdown(task_id)}, 'ref': task_ref(task_id), 'messages': msgs,
+                'checklist': self.task_checklist(task_id),
                 'attachments': [a for m in msgs for a in self.list_attachments(m['MessageId'])],
                 'artifacts': self.list_task_artifacts(task_id),
                 'routes': self.list_routes(task_id), 'comments': self.list_comments(task_id),

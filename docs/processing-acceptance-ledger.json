@@ -81,7 +81,7 @@
       "requirement": "Keep incremental polling for discovering new mail. Store each new message",
       "status": "implemented",
       "test": "`tests/test_email_chains.py` (a known chain is listed, not refetched; D joins stored A/B/C; polls stay incremental)",
-      "commit": "3293a6e; local gates passed, CI pending"
+      "commit": "3293a6e; 3293a6e, CI run 34044710317 on the lead's follow-up 8247d81 (all ten jobs passed; the browser job on e665df7 failed on a pile-click fixture the lead then stabilised)"
     },
     {
       "id": "PW-010",
@@ -90,7 +90,7 @@
       "requirement": "Track thread-history coverage and unresolved message references. Retrieve",
       "status": "partial: stored history and coverage exist; empty/duplicate continued pages and failed IMAP FETCH/LIST commands can still claim complete coverage",
       "test": "`tests/test_email_chains.py` (coverage per conversation; listing is ids/metadata only and follows pagination; missing history fetched once; a failed attempt is retried on the next mail); independent integration review found remaining gaps (implementation evidence: concurrent chain integration)",
-      "commit": "3293a6e; local gates passed, CI pending"
+      "commit": "3293a6e; 3293a6e, CI run 34044710317 on the lead's follow-up 8247d81 (all ten jobs passed; the browser job on e665df7 failed on a pile-click fixture the lead then stabilised)"
     },
     {
       "id": "PW-011",
@@ -99,7 +99,7 @@
       "requirement": "Apply the same contract to Outlook/Graph and Gmail/IMAP. Scope provider",
       "status": "partial: provider retrieval is mailbox-targeted; bare conversation coverage is not account/epoch scoped",
       "test": "`tests/test_email_chains.py` (Graph by conversationId scoped to the mailbox; IMAP by root Message-ID through References across INBOX and Sent; same-subject mail on another conversation is never merged); independent integration review found remaining gaps (implementation evidence: concurrent chain integration)",
-      "commit": "3293a6e; local gates passed, CI pending"
+      "commit": "3293a6e; 3293a6e, CI run 34044710317 on the lead's follow-up 8247d81 (all ten jobs passed; the browser job on e665df7 failed on a pile-click fixture the lead then stabilised)"
     },
     {
       "id": "PW-012",
@@ -108,7 +108,7 @@
       "requirement": "Preserve individual messages, chronology, sender/recipient metadata, and",
       "status": "partial: chronology, sender/recipients and the owner-vs-others identity are kept on history rows; attachment associations for fetched history are not kept yet",
       "test": "`tests/test_email_chains.py` (history opens no task, is not an arrival, is never Unread)",
-      "commit": "3293a6e; local gates passed, CI pending"
+      "commit": "3293a6e; 3293a6e, CI run 34044710317 on the lead's follow-up 8247d81 (all ten jobs passed; the browser job on e665df7 failed on a pile-click fixture the lead then stabilised)"
     },
     {
       "id": "PW-013",
@@ -117,7 +117,7 @@
       "requirement": "Refresh the selected thread before assistant/agent context is assembled,",
       "status": "partial: intake history hook exists; refresh before assistant/agent context is not wired and budget trimming can remove the incomplete-history warning",
       "test": "`tests/test_email_chains.py` (failed retrieval recorded and disclosed, never presented as complete); independent integration review found remaining gaps (implementation evidence: concurrent chain integration)",
-      "commit": "3293a6e; local gates passed, CI pending"
+      "commit": "3293a6e; 3293a6e, CI run 34044710317 on the lead's follow-up 8247d81 (all ten jobs passed; the browser job on e665df7 failed on a pile-click fixture the lead then stabilised)"
     },
     {
       "id": "PW-014",
@@ -135,7 +135,7 @@
       "requirement": "Test incremental merging explicitly: D joins stored A/B/C without repeated",
       "status": "implemented",
       "test": "`tests/test_email_chains.py` (D joins A/B/C without body downloads; D on a thread with absent C retrieves only C; repeated polls list once and add nothing)",
-      "commit": "3293a6e; local gates passed, CI pending"
+      "commit": "3293a6e; 3293a6e, CI run 34044710317 on the lead's follow-up 8247d81 (all ten jobs passed; the browser job on e665df7 failed on a pile-click fixture the lead then stabilised)"
     },
     {
       "id": "PW-016",
@@ -144,7 +144,7 @@
       "requirement": "Email: link new messages by actual conversation identity, merge missing",
       "status": "implemented",
       "test": "`tests/test_email_identity_routing.py` (identity joining) plus `tests/test_email_chains.py` (missing chain records merged from the provider)",
-      "commit": "3293a6e; local gates passed, CI pending"
+      "commit": "3293a6e; 3293a6e, CI run 34044710317 on the lead's follow-up 8247d81 (all ten jobs passed; the browser job on e665df7 failed on a pile-click fixture the lead then stabilised)"
     },
     {
       "id": "PW-017",
@@ -189,7 +189,7 @@
       "requirement": "Merge the new message into its chain before evaluation. Evaluate the latest",
       "status": "partial: fresh triage evaluation exists; complete chain before an active context-dependent triage worker is not verified",
       "test": "`tests/test_fresh_evaluation.py` (ruling leads the evidence, model decides) plus `tests/test_email_chains.py` (the chain is completed before the new mail is judged in stored context); feed-mode chain tests do not establish ordering against active triage workers (independent integration review)",
-      "commit": "3293a6e; local gates passed, CI pending"
+      "commit": "3293a6e; 3293a6e, CI run 34044710317 on the lead's follow-up 8247d81 (all ten jobs passed; the browser job on e665df7 failed on a pile-click fixture the lead then stabilised)"
     },
     {
       "id": "PW-022",
@@ -234,7 +234,7 @@
       "requirement": "Replace `exchange_lines()`'s 12-message/300-character excerpt dependency",
       "status": "implemented",
       "test": "`tests/test_clean_context.py`::ExchangeBudgetTests, ::PayloadTests plus `tests/test_email_chains.py` (exchange assembled from individual chain records; incomplete history disclosed)",
-      "commit": "3293a6e; local gates passed, CI pending"
+      "commit": "3293a6e; 3293a6e, CI run 34044710317 on the lead's follow-up 8247d81 (all ten jobs passed; the browser job on e665df7 failed on a pile-click fixture the lead then stabilised)"
     },
     {
       "id": "PW-027",
@@ -270,7 +270,7 @@
       "requirement": "Add regression tests for historical-verdict unanimity versus a new request,",
       "status": "implemented",
       "test": "`tests/test_clean_context.py` (14 cases), `test_fresh_evaluation.py::NoForcedVerdictTests` plus `tests/test_email_chains.py` (chain-merge cases)",
-      "commit": "3293a6e; local gates passed, CI pending"
+      "commit": "3293a6e; 3293a6e, CI run 34044710317 on the lead's follow-up 8247d81 (all ten jobs passed; the browser job on e665df7 failed on a pile-click fixture the lead then stabilised)"
     },
     {
       "id": "PW-031",
@@ -1159,54 +1159,54 @@
       "section": "Action-driven triage correction memory and task discussion history",
       "phase": "4",
       "requirement": "After a confirmed owner action succeeds, compare its outcome with the",
-      "status": "pending",
-      "test": "Required: Phase 4 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_operations.py`::EntryPointTests (mine, not-coding, file and the proposal API record the same operation and evidence; no second memory confirmation)",
+      "commit": "1461a13; local gates passed, CI pending"
     },
     {
       "id": "PW-130",
       "section": "Action-driven triage correction memory and task discussion history",
       "phase": "4",
       "requirement": "Record source/message or grouped-item identity, triage verdict/revision,",
-      "status": "pending",
-      "test": "Required: Phase 4 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_operations.py`::CorrectionTests (source identity, verdict and its route id, the change and the operation id; FYI->task, general->coding, reply->dismissed; deferral and discussion teach nothing; cancelled/failed write nothing; retries do not duplicate; evidence recovered without repeating the action)",
+      "commit": "1461a13; local gates passed, CI pending"
     },
     {
       "id": "PW-131",
       "section": "Action-driven triage correction memory and task discussion history",
       "phase": "4",
       "requirement": "Preserve the distinction between correction evidence, explicit learned",
-      "status": "pending",
-      "test": "Required: Phase 4 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_operations.py` (evidence is not a memory note or a policy; it reaches fresh triage as dated lines beside the notes, worded as one correction, not a rule)",
+      "commit": "1461a13; local gates passed, CI pending"
     },
     {
       "id": "PW-132",
       "section": "Action-driven triage correction memory and task discussion history",
       "phase": "4",
       "requirement": "Record evidence against source items even when an FYI has no task. Persist",
-      "status": "pending",
-      "test": "Required: Phase 4 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: durable discussion, proposals and outcomes per source item and task through operations.py and its endpoints; the assistant conversation does not yet write its turns through discuss() (Phase 8 wiring)",
+      "test": "`tests/test_operations.py`::DiscussionTests, ::EntryPointTests (history endpoint)",
+      "commit": "1461a13; local gates passed, CI pending"
     },
     {
       "id": "PW-133",
       "section": "Action-driven triage correction memory and task discussion history",
       "phase": "4",
       "requirement": "When an FYI later becomes a task, link its earlier relevant discussion and",
-      "status": "pending",
-      "test": "Required: Phase 4 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_operations.py`::DiscussionTests (discussion on a taskless FYI travels onto the task it becomes, by message identity; a batch sibling keeps its own)",
+      "commit": "1461a13; local gates passed, CI pending"
     },
     {
       "id": "PW-134",
       "section": "Action-driven triage correction memory and task discussion history",
       "phase": "4",
       "requirement": "Test successful corrections from every entry point, unchanged verdicts,",
-      "status": "pending",
-      "test": "Required: Phase 4 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: every listed backend case covered; actual UI interaction coverage waits on the Phase 8 confirmation box",
+      "test": "`tests/test_operations.py` (20 cases)",
+      "commit": "1461a13; local gates passed, CI pending"
     },
     {
       "id": "PW-135",

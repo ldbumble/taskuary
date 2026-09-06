@@ -67,6 +67,8 @@ async def _lifespan(_app):
     learn.note_verdicts(store)     # the evidence block in LEARNED.md tracks the verdict table
     try: store.upgrade_auto_start()   # an old 'no auto-dispatch' opt-out covers the assistant's new switch too (PW-070)
     except Exception as e: logger.warning(f'auto-start upgrade skipped: {e}')
+    try: blackboard.schedule_due(store)   # a retry that was backing off when the app closed is re-armed, not reset (PW-085)
+    except Exception as e: logger.warning(f'retry scheduling skipped: {e}')
     try:                           # historical triage failures stored as filed become retriable errors, once (PW-040)
         n = store.upgrade_triage_failures()
         if n: logger.info(f'{n} historical triage failure(s) now show as errors with a retry')
@@ -322,7 +324,9 @@ def _queued_info(q):
     b = q.get('BehindTaskId')
     return {'behind': task_ref(b) if b else None, 'value': q.get('Value'), 'why': q.get('Why'),
             'behindTitle': (store.get_task(b) or {}).get('Title') if b else None,
-            'reason': q.get('Reason'), 'since': q.get('CreatedAt')}
+            'reason': q.get('Reason'), 'since': q.get('CreatedAt'),
+            # the retry budget (PW-085..087): waiting | retrying | failed, how many tries, the last error and the next one
+            'state': q.get('State') or 'waiting', 'attempts': int(q.get('Attempts') or 0), 'lastError': q.get('LastError'), 'nextAt': q.get('NextAt')}
 
 
 def _playbook_brief(task, books=None):
@@ -2329,6 +2333,26 @@ def funnel_later(tid: int):
     if not any(q['TaskId'] == tid for q in store.queued_dispatches()): raise HTTPException(404, 'that task is not waiting')
     store.set_dispatch_value(tid, rank.LATER, 'pushed back by you')
     store.audit('task', tid, 'funnel_later', ACTOR)
+    return {'ok': True}
+
+@app.post('/api/tasks/{tid}/dispatch/retry')
+def dispatch_retry(tid: int):
+    """The owner's Retry after a start failed or ran out of attempts: a new bounded cycle, tried now (PW-087)."""
+    if not store.get_task(tid): raise HTTPException(404, 'task not found')
+    if not store.dispatch_retry(tid): raise HTTPException(404, 'that task has no queued start')
+    store.add_comment(tid, ACTOR, 'human', 'Retrying the start - a fresh set of attempts.')
+    store.audit('task', tid, 'dispatch_retry', ACTOR)
+    blackboard.drain(store)
+    return {'ok': True, 'queued': _queued_info(store.get_dispatch(tid))}
+
+@app.delete('/api/tasks/{tid}/dispatch')
+def dispatch_cancel(tid: int):
+    """Cancel queued start: the pending dispatch goes; the task is neither deleted nor completed (PW-087)."""
+    if not store.get_task(tid): raise HTTPException(404, 'task not found')
+    if not store.get_dispatch(tid): raise HTTPException(404, 'that task has no queued start')
+    store.clear_dispatch(tid)
+    store.add_comment(tid, ACTOR, 'human', 'Cancelled the queued start - the task stays on your list.')
+    store.audit('task', tid, 'dispatch_cancel', ACTOR)
     return {'ok': True}
 
 @app.post('/api/funnel/rerank')

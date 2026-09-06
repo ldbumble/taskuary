@@ -136,6 +136,7 @@ class BlackboardTests(unittest.TestCase):
         def start(store, task_id, *args, **kwargs):
             self.assertEqual([q['TaskId'] for q in store.queued_dispatches()], [task_id])
 
+        self.s._exec('UPDATE dispatchq SET NextAt=NULL')   # PW-085: a failed start backs off before the next try; make it due
         with patch.object(term, 'start_on_task', side_effect=start) as launch:
             bb.drain(self.s)
             launch.assert_called_once()

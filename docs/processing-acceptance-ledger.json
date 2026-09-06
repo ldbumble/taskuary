@@ -432,7 +432,7 @@
       "requirement": "Capture the exact input message IDs/context revision at task evaluation",
       "status": "implemented",
       "test": "`tests/test_freshness.py`::DraftPinsWhatItReadTests (the review is pinned to the inbound message and message-set revision captured before the model ran; a line landing during generation marks the draft stale instead of being called seen)",
-      "commit": "325d05a; local gates passed, CI pending"
+      "commit": "325d05a; 325d05a, CI run 34051887301 (all ten jobs passed)"
     },
     {
       "id": "PW-049",
@@ -441,43 +441,43 @@
       "requirement": "Apply a shared source-freshness check before assistant surfacing, discussion,",
       "status": "partial: the shared refresh gate now covers email through the mailbox's connector (incremental watermark poll; the chain is completed by chains.py, never re-downloaded) before an answer, draft, approval or dispatch about it; automatic Next/Walk and FYI-batch validation are PW-050",
       "test": "`tests/test_freshness.py`::EmailRefreshTests plus `tests/test_chat_freshness.py`",
-      "commit": "325d05a; local gates passed, CI pending"
+      "commit": "325d05a; 325d05a, CI run 34051887301 (all ten jobs passed)"
     },
     {
       "id": "PW-050",
       "section": "Mandatory freshness before surfacing or acting",
       "phase": "2/4/7",
       "requirement": "Select an item first, then validate its freshness, including automatic",
-      "status": "pending",
-      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_freshness_walk.py`::SelectThenValidateTests (Next without a key picks, refreshes that item's source - every channel of an FYI batch once - and re-picks when the pile moved; the reservation path raises a stale navigation so the client re-captures; a quiet source is a no-op)",
+      "commit": "af2f15f; local gates passed, CI pending"
     },
     {
       "id": "PW-051",
       "section": "Mandatory freshness before surfacing or acting",
       "phase": "2/4/7",
       "requirement": "On newly relevant inbound or owner-sent activity, reevaluate the updated",
-      "status": "pending",
-      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_freshness_walk.py`::SupersedeTests (a new ask on a task with a pending draft marks it behind and redrafts that same review when triage says a reply is still owed - never a second review, never a second task; an fyi line leaves it alone) plus `tests/test_freshness.py`",
+      "commit": "af2f15f; local gates passed, CI pending"
     },
     {
       "id": "PW-052",
       "section": "Mandatory freshness before surfacing or acting",
       "phase": "2/4/7",
       "requirement": "When new messages are detected on the item being discussed/surfaced, notify",
-      "status": "pending",
-      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: the notice is its own stream event before the assistant's answer, once per new revision, says the new lines went through triage, and never repeats on a quiet poll or re-render; it is emitted after the refresh completed rather than at detection, because the poll waits for the triage of what it fetched",
+      "test": "`tests/test_freshness_walk.py`::NoticeTests",
+      "commit": "af2f15f; local gates passed, CI pending"
     },
     {
       "id": "PW-053",
       "section": "Mandatory freshness before surfacing or acting",
       "phase": "2/4/7",
       "requirement": "Tell the owner when new activity changes the item being discussed. If the",
-      "status": "pending",
-      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "`tests/test_freshness_walk.py`::SupersedeTests::test_the_owners_external_answer_retires_the_draft_and_the_notice_says_so (the sync retires the draft as superseded; the notice says it was answered and nothing is to send; a newer ask still goes through triage)",
+      "commit": "af2f15f; local gates passed, CI pending"
     },
     {
       "id": "PW-054",
@@ -486,7 +486,7 @@
       "requirement": "Use the assembled substantive chain for drafting as well as triage; remove",
       "status": "implemented",
       "test": "`tests/test_freshness.py`::WriterReadsTheChainTests (the reply writer reads the assembled, de-quoted, budgeted conversation - history included - and the cut is disclosed; the last-six/4,000-character boundary is gone)",
-      "commit": "325d05a; local gates passed, CI pending"
+      "commit": "325d05a; 325d05a, CI run 34051887301 (all ten jobs passed)"
     },
     {
       "id": "PW-055",
@@ -495,25 +495,25 @@
       "requirement": "Recheck the evaluated version before committing an action. Require renewed",
       "status": "implemented",
       "test": "`tests/test_freshness.py`::SendRechecksTests (a verdict rechecks the message-set revision wherever it lands - the Review button and the phone road - and refuses a stale or moved draft without sending; a redraft repins and the next yes sends; a failed source refresh is a 503, never \"current\")",
-      "commit": "325d05a; local gates passed, CI pending"
+      "commit": "325d05a; 325d05a, CI run 34051887301 (all ten jobs passed)"
     },
     {
       "id": "PW-056",
       "section": "Mandatory freshness before surfacing or acting",
       "phase": "2/4/7",
       "requirement": "Add regression tests for email/chat refresh, Next without a key, FYI batches,",
-      "status": "pending",
-      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: email/chat refresh, Next without a key, FYI batches, new activity before surfacing and during generation, external owner replies, subsequent asks, refresh failures, unchanged-context no-op, stale approval, draft version markers and no duplicate work are covered; a concurrent sync racing an action is covered only through the revision recheck",
+      "test": "`tests/test_freshness_walk.py` (9 cases) plus `tests/test_freshness.py` (9) and `tests/test_chat_freshness.py`",
+      "commit": "af2f15f; local gates passed, CI pending"
     },
     {
       "id": "PW-057",
       "section": "Mandatory freshness before surfacing or acting",
       "phase": "2/4/7",
       "requirement": "Test that the new-message/retriage notice arrives before the triage result,",
-      "status": "pending",
-      "test": "Required: Phase 2/4/7 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "partial: the notice precedes the assistant's answer, is not duplicated on polling or re-render, and a failed refresh is an error event rather than a fresh answer; the notice does not precede the triage result itself (see PW-052)",
+      "test": "`tests/test_freshness_walk.py`::NoticeTests",
+      "commit": "af2f15f; local gates passed, CI pending"
     },
     {
       "id": "PW-058",

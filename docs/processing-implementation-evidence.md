@@ -1504,3 +1504,31 @@ assembled conversation (`ingest.exchange_lines`: the whole chain, history includ
 de-quoted, budgeted, with the cut disclosed).
 
 Tests: `tests/test_freshness.py` (9 cases). No frontend change.
+
+## Section 5.8 — freshness on the walk: select, validate, say it once, supersede what is behind
+
+Status: implemented and tested locally at `af2f15f`; remote CI pending on the pushed
+checkpoint. Section 5.7 is CI-verified (325d05a, CI run 34051887301 (all ten jobs passed)).
+Acceptance PW-050, PW-051, PW-053 implemented; PW-052, PW-056, PW-057 partial (the notice is
+emitted after the refresh completed rather than at detection, because the quick poll waits for the
+triage of what it fetched before returning; a concurrent sync racing an action is covered only
+through the revision recheck).
+
+Next without a key surfaced whatever the pile held without asking the source whether the item had
+moved; an FYI batch was never checked; a new line on a task with a drafted reply left the draft
+sitting as current; the "new message" notice repeated on every render. `server._refresh_next_selection`
+picks what the walk would surface, refreshes that item's source through `_refresh_items` (once per
+channel across an FYI batch), and re-picks when the refresh moved the pile; the plain Next endpoint
+and the stream's next mode call it, and the reservation path raises a stale navigation (409) so the
+client re-captures. `_notice_once` emits the context-update line as its own `context_update` stream
+event before the assistant's answer, once per new revision of the item (`_NOTICED`), worded as what
+happened ("New message from X arrived on Y ... I sent it through triage before continuing"); a failed
+refresh stays an error event. In `ingest`, a new inbound line joining a task with a pending draft
+marks that draft behind (`Stale`) and, when the follow-up verdict says a reply is still owed, redrafts
+the same review - never a second review, never a second task; an fyi line leaves it alone. The
+owner's own external answer retires the draft (`channels.retire_draft_answered_elsewhere`, already
+in place) and the notice now says it was answered and nothing is to send.
+
+Tests: `tests/test_freshness_walk.py` (9 cases) and `website/test/contextNotice.test.mjs` (2 checks). Frontend: `AssistantView.jsx`
+renders the `context_update` stream event as it arrives - before the answer - and does not show the
+done payload's copy a second time; packaged UI rebuilt.

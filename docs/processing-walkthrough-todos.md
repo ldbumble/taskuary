@@ -283,11 +283,11 @@ pending change, not a guarantee provided by the current implementation.
   well as chats; `_refresh_chat_context()` currently skips email. Use incremental
   source retrieval plus the approved thread-history merge, not repeated downloads
   of the entire chain.
-- [ ] <a id="pw-050"></a>**PW-050** Select an item first, then validate its freshness, including automatic
+- [x] <a id="pw-050"></a>**PW-050** Select an item first, then validate its freshness, including automatic
   Next/Walk without an explicit key and every item in an FYI batch. Rebuilding the
   pipeline from the database alone is not a source refresh. Reconcile selection
   after fresh triage so Current/Next and the assistant refer to the same item.
-- [ ] <a id="pw-051"></a>**PW-051** On newly relevant inbound or owner-sent activity, reevaluate the updated
+- [x] <a id="pw-051"></a>**PW-051** On newly relevant inbound or owner-sent activity, reevaluate the updated
   context and supersede stale drafts/verdicts. Route according to the fresh result:
   FYI, reply-needed, or work-needed. Do not blindly redraft or start another agent;
   respect chat same-day grouping and reuse existing tasks/sessions as appropriate.
@@ -298,7 +298,7 @@ pending change, not a guarantee provided by the current implementation.
   verdict as current. Emit this notice once per newly detected context revision,
   not repeatedly on every poll/render, and only claim retriage started when it did.
   Follow up with the fresh result, or a visible error/retry if evaluation fails.
-- [ ] <a id="pw-053"></a>**PW-053** Tell the owner when new activity changes the item being discussed. If the
+- [x] <a id="pw-053"></a>**PW-053** Tell the owner when new activity changes the item being discussed. If the
   owner already answered externally, suppress the obsolete reply and explain
   that it was answered; fresh triage must still consider any subsequent new ask.
 - [x] <a id="pw-054"></a>**PW-054** Use the assembled substantive chain for drafting as well as triage; remove

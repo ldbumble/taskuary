@@ -151,17 +151,17 @@ chain. An old message/chain evaluation must not determine the new verdict.
   too: `classify_intent()` currently truncates the cleaned current body to 1500
   characters. Preserve substantive requests and replies throughout the chain;
   disclose context-budget limitations instead of silently claiming completeness.
-- [ ] <a id="pw-027"></a>**PW-027** Before sending email content to triage, remove signatures, automatic
+- [x] <a id="pw-027"></a>**PW-027** Before sending email content to triage, remove signatures, automatic
   external-sender banners, confidentiality/legal notices, tracking/footer clutter,
   and other boilerplate. Keep original stored messages unchanged; cleaning creates
   a separate triage representation, not a destructive edit to source history.
-- [ ] <a id="pw-028"></a>**PW-028** Represent each message's substantive content once. Remove repeated quoted
+- [x] <a id="pw-028"></a>**PW-028** Represent each message's substantive content once. Remove repeated quoted
   copies only when their content is retained elsewhere in the assembled chain;
   preserve unique forwarded/quoted context and inline replies. Keep sender,
   recipients, timestamp, message identity, and meaningful attachment references as
   structured context. Do not strip actual requests merely because they mention
   security, notices, or signatures.
-- [ ] <a id="pw-029"></a>**PW-029** Apply the same cleaning/context contract across email connectors. Extend
+- [x] <a id="pw-029"></a>**PW-029** Apply the same cleaning/context contract across email connectors. Extend
   existing `strip_boilerplate()` where appropriate rather than creating divergent
   per-connector cleaners.
 - [ ] <a id="pw-030"></a>**PW-030** Add regression tests for historical-verdict unanimity versus a new request,

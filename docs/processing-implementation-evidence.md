@@ -792,3 +792,23 @@ never decides (PW-018). Mail and tracker routing is untouched. The shipped TRIAG
 Tests changed with explanation, none weakened: `test_chat_is_not_one_task.py` (single-verdict
 brain; triage-off and no-brain cases now open their own work per PW-033), `test_assistant_reactions.py`
 (one chat-burst case). New: `tests/test_chat_relationship.py` (17 cases). No frontend change; packaged assets unchanged.
+
+## Section 3.5 — clean, complete context for triage
+
+Status: implemented and tested locally at `0dea527`; remote CI pending on the pushed
+checkpoint. Section 3.4 is CI-verified (78c6dd1, CI run 34039988682 (all ten jobs passed)).
+Acceptance PW-027, PW-028, PW-029 implemented; PW-026 and PW-030 partial - the exchange now
+carries every message's cleaned, de-quoted words whole under `triage.EXCHANGE_BUDGET` (12,000
+characters) and says how many older messages it dropped, and the current body reaches the model
+whole up to `triage.BODY_BUDGET` (6,000) with a disclosed `body_truncated`; the merge of fetched
+history into one stored chain is PW-009 to PW-015 and still pending.
+
+`triage.strip_boilerplate` (the one cleaner every connector and surface already used) now also
+removes the external-sender banner and "you don't often get email" hint (pattern moved from
+assistant.py), mail-client stamps and unsubscribe/preferences strips, while a request that mentions
+a notice, security or a signature stays. `triage.dedupe_quoted` drops a quoted copy ('> ' runs,
+"On ... wrote:", "Original Message", "Forwarded message" blocks) only when its lines are already in
+the chain; unique forwarded material and inline answers survive. Stored messages are never edited.
+
+Tests: `tests/test_clean_context.py` (14 cases). One pinned wording in `test_follow_up_verdict.py` is unchanged (the exchange
+explanation keeps its opening words). No frontend change; packaged assets unchanged.

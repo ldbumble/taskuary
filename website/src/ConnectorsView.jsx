@@ -27,6 +27,7 @@ import { hasLogo } from "./logos.jsx";
 import { AgentsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
 import { plannedFor } from "./connectorCatalog.js";
+import { pollSecondsField } from "./pollFields.js";
 
 /* ── Get AI to set it up: the card's Guide becomes the coding agent's prompt, in a live terminal ON
    the card (taskuary/aisetup.py). The agent asks here for what only a human can fetch, saves it onto
@@ -103,7 +104,8 @@ const META = {
       "Run Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on (POST {base}/api/connectors{hdr} with {\"ConnectorId\": {cid}, \"Active\": true}) and say SETUP DONE."] },
   teams: { group: "Messaging", channel: "teams", srcLabel: "Users / chat ids", srcPh: "user UPN, e.g. jsmith@yourcompany.com",
     fields: [["tenant_id", "tenant_id"], ["client_id", "client_id"],
-      ["Notify chat id", "notify_chat", "19:…@thread.v2", "Only for the Notifications role — the chat id from a Teams URL"]],
+      ["Notify chat id", "notify_chat", "19:…@thread.v2", "Only for the Notifications role — the chat id from a Teams URL"],
+      pollSecondsField("teams")],
     secretLabel: "client secret",
     desc: "Ingest Teams chats via Graph. Leave credentials blank to reuse the Outlook connector's app.",
     howto: ["Credentials: leave everything blank and Teams automatically reuses the Outlook connector's saved Graph app (or the server's AZURE_* env vars). Only fill these to use a different app registration.",
@@ -115,7 +117,7 @@ const META = {
       "Find the owner's UPN yourself when you can: on a domain-joined Windows machine run `whoami /upn`; otherwise ask - it is usually their work email. Add it with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"teams\", \"Address\": \"<upn>\", \"ConnectorId\": {cid}, \"Active\": true}.",
       "Run Test (POST {base}/api/connectors/{cid}/test{hdr}). A 403 naming Chat.Read.All means the tenant has not been granted the protected API - report that as the blocker, it is not something to retry. Otherwise turn the connector on and say SETUP DONE."] },
   slack: { group: "Messaging", channel: "slack", srcLabel: "Channel IDs", srcPh: "C0123456789",
-    fields: [], secretLabel: "bot token (xoxb-…)",
+    fields: [pollSecondsField("slack")], secretLabel: "bot token (xoxb-…)",
     desc: "Ingest Slack channels with a bot token - messages land on the Timeline through triage.",
     howto: ["Create a Slack app (api.slack.com/apps) → OAuth & Permissions → bot token scopes: channels:history, channels:read.",
       "Install the app to your workspace and invite the bot to the channels to ingest (/invite @yourbot).",
@@ -126,7 +128,8 @@ const META = {
       "List the channels yourself instead of asking for IDs: GET https://slack.com/api/conversations.list?types=public_channel,private_channel&limit=200 with header Authorization: Bearer <token>. Show the owner names, ask which to watch, and add each chosen id with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"slack\", \"Address\": \"<channel id>\", \"ConnectorId\": {cid}, \"Active\": true}.",
       "Remind the owner the bot must be invited into each of those channels (/invite @bot) or the read will fail; then Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on, SETUP DONE."] },
   telegram: { group: "Messaging", channel: "telegram", srcLabel: "Chat IDs — only chats flipped ON become work", srcPh: "-1001234567890",
-    fields: [["Notify chat id", "notify_chat", "", "Only for the Notifications role — same id the chat's Source card shows"]],
+    fields: [["Notify chat id", "notify_chat", "", "Only for the Notifications role — same id the chat's Source card shows"],
+      pollSecondsField("telegram")],
     secretLabel: "bot token (from @BotFather)",
     desc: "A Telegram bot as an inbound channel - approved chats flow through triage; approved replies go back into the same chat. Unknown chats never become work: a bot is public.",
     howto: ["Message @BotFather in Telegram → /newbot → copy the token.",
@@ -144,8 +147,7 @@ const META = {
        "Your private Message yourself chat; this does not turn on ordinary Taskuary notifications"],
       ["Notify chat JID", "notify_chat", "15551234567@s.whatsapp.net",
        "Only for the Notifications role — alerts and approval requests are separate from Assistant chat"],
-      ["Check assistant chat every N seconds", "poll_seconds", "30",
-       "Only WhatsApp polls faster; mail and the other connectors keep the global sync interval"]],
+      pollSecondsField("whatsapp")],
     secretLabel: null,
     desc: "Your own WhatsApp, via a small bridge that runs beside Taskuary (Baileys, installed separately) - chats flow through triage, approved replies go back into the chat.",
     howto: ["Three steps, all in the Pair with your phone box above. 1 - Node 18+ on this machine (Windows: `winget install OpenJS.NodeJS.LTS`, or nodejs.org). The box checks for it and tells you if it is missing; nothing else to install.",
@@ -163,7 +165,7 @@ const META = {
       "Turn the connector on (POST {base}/api/connectors{hdr} with {\"ConnectorId\": {cid}, \"Active\": true}), remind the owner the bridge must stay running, and say SETUP DONE."] },
   imessage: { group: "Messaging", channel: "imessage", srcLabel: "Chat ids (optional — blank takes every chat)", srcPh: "iMessage;-;+15551234567",
     fields: [["Look back this many days on first sync (blank = from now on)", "lookback_days", "", "Only read on the FIRST sync — years of private history never import by accident"],
-      ["Check for new messages every N seconds (blank = the global sync interval)", "poll_seconds", "60", "A chat is slower on the ten-minute mailbox clock; 60 is a good number. Only this connector polls faster"]],
+      pollSecondsField("imessage")],
     secretLabel: null,
     desc: "The Mac's own Messages — iMessage, SMS and RCS that reach this machine. Chats flow through triage, approved replies go back into the same chat through Messages.app. macOS only.",
     howto: ["No token: Messages.app is the account. Taskuary reads the history macOS already keeps on this Mac (~/Library/Messages/chat.db) and asks Messages.app to send.",
@@ -324,7 +326,7 @@ const META = {
       "Paste the secret under Credentials (write-only). Test authenticates the integration.",
       "Every sync surfaces pages edited since the last poll. It ships as a feed; flip the trigger role on if edits should become work."] },
   discord: { group: "Messaging", channel: "discord", srcLabel: "Channel IDs", srcPh: "1234567890123456789",
-    fields: [],
+    fields: [pollSecondsField("discord")],
     secretLabel: "bot token",
     desc: "Watch Discord channels with a bot — messages land on the Timeline through triage, and approved replies post back to the channel.",
     howto: ["Create an app at discord.com/developers → Bot → Reset Token, and turn ON the Message Content intent.",

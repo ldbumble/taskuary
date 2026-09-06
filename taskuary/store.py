@@ -2,7 +2,7 @@
 default) and in-memory (tests/demo). Every mutation is meant to be paired with .audit();
 the audit log is a Buzz-style tamper-evident hash chain (each row hashes the previous).
 """
-import contextlib, hashlib, json, re, sqlite3, threading
+import contextlib, hashlib, json, re, sqlite3, threading, uuid
 from datetime import datetime, timedelta
 from loguru import logger
 
@@ -186,6 +186,27 @@ CREATE TABLE IF NOT EXISTS idea (IdeaId INTEGER PRIMARY KEY, Key TEXT UNIQUE, Ki
 -- behind an item are never stored here, they are recomputed - a reply approved or a task closed
 -- leaves the pile on its own.
 CREATE TABLE IF NOT EXISTS funnel_state (Key TEXT PRIMARY KEY, Status TEXT, Until TEXT, Note TEXT, By TEXT, At TEXT);
+-- Phase 1 inventory foundation.  These tables are additive and deliberately stay empty until
+-- backfill_processing is called explicitly after a consistent legacy snapshot is available.
+CREATE TABLE IF NOT EXISTS processing_item (ItemId TEXT PRIMARY KEY, Kind TEXT NOT NULL,
+  ContextRevision TEXT, ViewRevision TEXT, RedirectItemId TEXT, CreatedAt TEXT NOT NULL, UpdatedAt TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS processing_member (MemberId INTEGER PRIMARY KEY, ItemId TEXT NOT NULL,
+  EntityKind TEXT NOT NULL, LocalId TEXT NOT NULL, Role TEXT NOT NULL DEFAULT 'member',
+  JoinedAt TEXT NOT NULL, RetiredAt TEXT);
+CREATE TABLE IF NOT EXISTS processing_alias (AliasId INTEGER PRIMARY KEY, Namespace TEXT NOT NULL,
+  Scope TEXT NOT NULL, Value TEXT NOT NULL, EntityKind TEXT NOT NULL, LocalId TEXT NOT NULL,
+  Provenance TEXT NOT NULL, CreatedAt TEXT NOT NULL, RetiredAt TEXT);
+CREATE TABLE IF NOT EXISTS processing_relation (RelationId INTEGER PRIMARY KEY,
+  FromEntityKind TEXT NOT NULL, FromLocalId TEXT NOT NULL, ToEntityKind TEXT NOT NULL,
+  ToLocalId TEXT NOT NULL, Kind TEXT NOT NULL, Provenance TEXT NOT NULL, CreatedAt TEXT NOT NULL,
+  RetiredAt TEXT);
+CREATE TABLE IF NOT EXISTS processing_legacy_evidence (EvidenceId INTEGER PRIMARY KEY,
+  MigrationVersion TEXT NOT NULL, ItemId TEXT, EntityKind TEXT NOT NULL, LocalId TEXT NOT NULL,
+  SelectedLegacyKey TEXT, ObservedUnread INTEGER, PermanentRead INTEGER, ReasonsJson TEXT NOT NULL,
+  TemporaryDeferJson TEXT, ContextFingerprint TEXT NOT NULL, OriginalJson TEXT NOT NULL, CapturedAt TEXT NOT NULL,
+  UNIQUE(MigrationVersion, EntityKind, LocalId));
+CREATE TABLE IF NOT EXISTS processing_migration (Version TEXT PRIMARY KEY, CapturedAt TEXT NOT NULL,
+  InputWatermark TEXT NOT NULL, SettingsJson TEXT NOT NULL, Completion TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS report_run (RunId INTEGER PRIMARY KEY, SourceId INTEGER, At TEXT, Type TEXT, Title TEXT, Ms INTEGER, Subject TEXT,
   MessageId INTEGER, Failed INTEGER DEFAULT 0, Error TEXT, Said INTEGER, LinesJson TEXT, ReviewedJson TEXT, Inputs TEXT, Summary TEXT);
 -- Stateful report workflows: a scheduled run opens one monthly batch, then each customer
@@ -255,6 +276,13 @@ INDEXES = (
     'CREATE INDEX IF NOT EXISTS idx_dispatchq_task ON dispatchq(TaskId)',
     'CREATE INDEX IF NOT EXISTS idx_waitroom_task ON waitroom(TaskId, DeliveredAt)',
     'CREATE INDEX IF NOT EXISTS idx_idea_status ON idea(Status, MessageId)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_processing_primary ON processing_member(ItemId) WHERE RetiredAt IS NULL AND Role="primary"',
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_processing_entity ON processing_member(EntityKind, LocalId) WHERE RetiredAt IS NULL',
+    'CREATE INDEX IF NOT EXISTS idx_processing_member_item ON processing_member(ItemId, RetiredAt)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_processing_alias_active ON processing_alias(Namespace, Scope, Value) WHERE RetiredAt IS NULL',
+    'CREATE INDEX IF NOT EXISTS idx_processing_alias_entity ON processing_alias(EntityKind, LocalId, RetiredAt)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_processing_relation_active ON processing_relation(FromEntityKind, FromLocalId, ToEntityKind, ToLocalId, Kind) WHERE RetiredAt IS NULL',
+    'CREATE INDEX IF NOT EXISTS idx_processing_redirect ON processing_item(RedirectItemId)',
     'CREATE INDEX IF NOT EXISTS idx_connector_type ON connector(Type, ConnectorId)',
     'CREATE INDEX IF NOT EXISTS idx_invoice_batch_source ON invoice_batch(SourceId, Period)',
     'CREATE INDEX IF NOT EXISTS idx_invoice_item_batch ON invoice_item(BatchId, Status)',
@@ -1054,6 +1082,476 @@ class SQLiteStore:
         if statuses:
             self._exec(f"DELETE FROM funnel_state WHERE Status IN ({','.join('?' * len(statuses))})", list(statuses))
             self._poke('feed-changed')
+    # ── canonical processing inventory (Phase 1 additive foundation) ────────────
+    @staticmethod
+    def _processing_item_id():
+        """Opaque identity: source ids and changing funnel keys never become the primary key."""
+        return 'pi_' + uuid.uuid4().hex
+
+    @staticmethod
+    def _processing_follow(cur, item_id):
+        seen, current = set(), item_id
+        while current and current not in seen:
+            seen.add(current)
+            row = cur.execute('SELECT RedirectItemId FROM processing_item WHERE ItemId=?', (current,)).fetchone()
+            if not row: return None
+            if not row[0]: return current
+            current = row[0]
+        raise ValueError(f'processing item redirect cycle at {item_id}')
+
+    @classmethod
+    def _processing_lineage(cls, cur, resolved):
+        return [r['ItemId'] for r in cur.execute('SELECT ItemId FROM processing_item').fetchall()
+                if cls._processing_follow(cur, r['ItemId']) == resolved]
+
+    def reconcile_processing_entities(self, *, kind, members, aliases=(), item_id=None,
+                                      context_revision=None, view_revision=None, fixed_now=None):
+        """Attach newly persisted exact entities without activating the new read model.
+
+        Existing membership wins, so an FYI can later become a task without changing its item id.
+        Entities already owned by different items require ``merge_processing_items``; conversation
+        ids, external ids and display names never merge items implicitly.
+        """
+        stamp = fixed_now or _now()
+        clean = []
+        for member in members or ():
+            entity_kind, local_id = str(member.get('entity_kind') or ''), str(member.get('local_id') or '')
+            if not entity_kind or not local_id: raise ValueError('processing members require entity_kind and local_id')
+            clean.append({'entity_kind': entity_kind, 'local_id': local_id,
+                          'role': str(member.get('role') or 'member')})
+        if not clean: raise ValueError('a processing item requires at least one member')
+        exact = {(m['entity_kind'], m['local_id']) for m in clean}
+        clean_aliases = []
+        for alias in aliases or ():
+            a = {k: str(alias.get(k) or '') for k in
+                 ('namespace', 'scope', 'value', 'entity_kind', 'local_id', 'provenance')}
+            if not all(a.values()): raise ValueError('processing aliases require namespace, scope, value, exact entity and provenance')
+            if (a['entity_kind'], a['local_id']) not in exact:
+                raise ValueError('processing alias target must be one of the reconciled exact entities')
+            clean_aliases.append(a)
+        with self.lock:
+            cur = self.cx.cursor(); cur.execute('BEGIN IMMEDIATE')
+            try:
+                existing = set()
+                for member in clean:
+                    row = cur.execute('''SELECT ItemId FROM processing_member
+                                         WHERE EntityKind=? AND LocalId=? AND RetiredAt IS NULL''',
+                                      (member['entity_kind'], member['local_id'])).fetchone()
+                    if row: existing.add(self._processing_follow(cur, row[0]))
+                if item_id:
+                    chosen = self._processing_follow(cur, str(item_id))
+                    if not chosen: raise KeyError(f'unknown processing item {item_id}')
+                    if existing and existing != {chosen}: raise ValueError('entities belong to another item; merge explicitly')
+                elif len(existing) > 1: raise ValueError('entities belong to multiple items; merge explicitly')
+                elif existing: chosen = next(iter(existing))
+                else:
+                    chosen = self._processing_item_id()
+                    cur.execute('''INSERT INTO processing_item
+                        (ItemId,Kind,ContextRevision,ViewRevision,CreatedAt,UpdatedAt) VALUES (?,?,?,?,?,?)''',
+                        (chosen, str(kind), context_revision, view_revision, stamp, stamp))
+                primary = cur.execute("SELECT 1 FROM processing_member WHERE ItemId=? AND Role='primary' AND RetiredAt IS NULL", (chosen,)).fetchone()
+                for i, member in enumerate(clean):
+                    old = cur.execute('''SELECT ItemId FROM processing_member
+                                         WHERE EntityKind=? AND LocalId=? AND RetiredAt IS NULL''',
+                                      (member['entity_kind'], member['local_id'])).fetchone()
+                    if old:
+                        if self._processing_follow(cur, old['ItemId']) != chosen:
+                            raise ValueError('entity belongs to another item; merge explicitly')
+                        continue
+                    role = member['role']
+                    if role == 'primary' and primary: role = 'member'
+                    if not primary and (role == 'primary' or i == 0): role, primary = 'primary', True
+                    cur.execute('''INSERT INTO processing_member
+                        (ItemId,EntityKind,LocalId,Role,JoinedAt) VALUES (?,?,?,?,?)''',
+                        (chosen, member['entity_kind'], member['local_id'], role, stamp))
+                for alias in clean_aliases:
+                    old = cur.execute('''SELECT EntityKind,LocalId FROM processing_alias
+                        WHERE Namespace=? AND Scope=? AND Value=? AND RetiredAt IS NULL''',
+                        (alias['namespace'], alias['scope'], alias['value'])).fetchone()
+                    if old and (old['EntityKind'], old['LocalId']) != (alias['entity_kind'], alias['local_id']):
+                        raise ValueError('processing alias already identifies another exact entity')
+                    if not old:
+                        cur.execute('''INSERT INTO processing_alias
+                            (Namespace,Scope,Value,EntityKind,LocalId,Provenance,CreatedAt)
+                            VALUES (?,?,?,?,?,?,?)''',
+                            (alias['namespace'], alias['scope'], alias['value'], alias['entity_kind'],
+                             alias['local_id'], alias['provenance'], stamp))
+                # Reconciliation changes the item's inputs. A caller may supply freshly computed
+                # revisions; otherwise invalidate them rather than retaining a stale fingerprint.
+                cur.execute('''UPDATE processing_item SET Kind=?, ContextRevision=?,
+                    ViewRevision=?, UpdatedAt=? WHERE ItemId=?''',
+                    (str(kind), context_revision, view_revision, stamp, chosen))
+                self.cx.commit(); self._writes += 1
+                return chosen
+            except BaseException:
+                self.cx.rollback(); raise
+
+    def merge_processing_items(self, source_item_id, target_item_id, *, fixed_now=None):
+        """Explicitly redirect one item while retaining old memberships and alias receipts."""
+        stamp = fixed_now or _now()
+        with self.lock:
+            cur = self.cx.cursor(); cur.execute('BEGIN IMMEDIATE')
+            try:
+                source = self._processing_follow(cur, str(source_item_id))
+                target = self._processing_follow(cur, str(target_item_id))
+                if not source or not target: raise KeyError('unknown processing item')
+                if source == target: self.cx.commit(); return target
+                target_primary = cur.execute("SELECT 1 FROM processing_member WHERE ItemId=? AND Role='primary' AND RetiredAt IS NULL", (target,)).fetchone()
+                for row in cur.execute('SELECT * FROM processing_member WHERE ItemId=? AND RetiredAt IS NULL', (source,)).fetchall():
+                    cur.execute('UPDATE processing_member SET RetiredAt=? WHERE MemberId=?', (stamp, row['MemberId']))
+                    duplicate = cur.execute('''SELECT 1 FROM processing_member WHERE EntityKind=? AND LocalId=?
+                                               AND RetiredAt IS NULL''', (row['EntityKind'], row['LocalId'])).fetchone()
+                    if duplicate: continue
+                    role = row['Role'] if row['Role'] != 'primary' or not target_primary else 'member'
+                    cur.execute('''INSERT INTO processing_member
+                        (ItemId,EntityKind,LocalId,Role,JoinedAt) VALUES (?,?,?,?,?)''',
+                        (target, row['EntityKind'], row['LocalId'], role, stamp))
+                    if role == 'primary': target_primary = True
+                cur.execute('UPDATE processing_item SET RedirectItemId=?,UpdatedAt=? WHERE ItemId=?', (target, stamp, source))
+                cur.execute('UPDATE processing_item SET ContextRevision=NULL,ViewRevision=NULL,UpdatedAt=? WHERE ItemId=?',
+                            (stamp, target))
+                self.cx.commit(); self._writes += 1; return target
+            except BaseException:
+                self.cx.rollback(); raise
+
+    def resolve_processing_target(self, namespace, value, scope='local'):
+        """Resolve an alias to both its durable item and the exact entity it names."""
+        if not namespace or not value or not scope: raise ValueError('namespace, scope and value are required')
+        with self.lock:
+            cur = self.cx.cursor()
+            alias = cur.execute('''SELECT * FROM processing_alias WHERE Namespace=? AND Scope=? AND Value=?
+                                   AND RetiredAt IS NULL ORDER BY AliasId DESC LIMIT 1''',
+                                (str(namespace), str(scope), str(value))).fetchone()
+            if not alias: return None
+            member = cur.execute('''SELECT ItemId FROM processing_member WHERE EntityKind=? AND LocalId=?
+                                    AND RetiredAt IS NULL ORDER BY MemberId DESC LIMIT 1''',
+                                 (alias['EntityKind'], alias['LocalId'])).fetchone()
+            if not member: return None
+            resolved = self._processing_follow(cur, member['ItemId'])
+            return {'item_id': resolved, 'entity_kind': alias['EntityKind'], 'local_id': alias['LocalId'],
+                    'namespace': alias['Namespace'], 'scope': alias['Scope'], 'value': alias['Value'],
+                    'provenance': alias['Provenance'],
+                    'redirected_from': member['ItemId'] if member['ItemId'] != resolved else None}
+
+    def processing_members(self, item_id, *, include_retired=False):
+        with self.lock:
+            cur = self.cx.cursor(); resolved = self._processing_follow(cur, str(item_id))
+            if not resolved: return []
+            if not include_retired:
+                return [dict(r) for r in cur.execute('''SELECT * FROM processing_member WHERE ItemId=?
+                                                        AND RetiredAt IS NULL ORDER BY MemberId''', (resolved,)).fetchall()]
+            item_ids = self._processing_lineage(cur, resolved)
+            return [dict(r) for r in cur.execute(
+                f"SELECT * FROM processing_member WHERE ItemId IN ({','.join('?' * len(item_ids))}) ORDER BY MemberId",
+                item_ids).fetchall()]
+
+    @staticmethod
+    def _processing_evidence_row(row):
+        out = dict(row)
+        for old, new in (('EvidenceId', 'evidence_id'), ('MigrationVersion', 'migration_version'),
+                         ('ItemId', 'item_id'), ('EntityKind', 'entity_kind'), ('LocalId', 'local_id'),
+                         ('SelectedLegacyKey', 'selected_key'), ('ContextFingerprint', 'context_fingerprint'),
+                         ('CapturedAt', 'captured_at')):
+            out[new] = out.pop(old)
+        value = out.pop('ObservedUnread'); out['observed_unread'] = None if value is None else bool(value)
+        value = out.pop('PermanentRead'); out['permanent_read'] = None if value is None else bool(value)
+        out['reasons'] = json.loads(out.pop('ReasonsJson') or '[]')
+        raw = out.pop('TemporaryDeferJson'); out['temporary_defer'] = json.loads(raw) if raw else None
+        out['original'] = json.loads(out.pop('OriginalJson') or '{}')
+        return out
+
+    def processing_legacy_evidence(self, version=None, *, entity_kind=None, local_id=None):
+        q, p = 'SELECT * FROM processing_legacy_evidence WHERE 1=1', []
+        if version is not None: q += ' AND MigrationVersion=?'; p.append(str(version))
+        if entity_kind is not None: q += ' AND EntityKind=?'; p.append(str(entity_kind))
+        if local_id is not None: q += ' AND LocalId=?'; p.append(str(local_id))
+        return [self._processing_evidence_row(r) for r in self._rows(q + ' ORDER BY EvidenceId', p)]
+
+    def processing_snapshot(self, item_id):
+        with self.lock:
+            cur = self.cx.cursor(); resolved = self._processing_follow(cur, str(item_id))
+            if not resolved: return None
+            lineage = self._processing_lineage(cur, resolved)
+            item = dict(cur.execute('SELECT * FROM processing_item WHERE ItemId=?', (resolved,)).fetchone())
+            item_history = [dict(r) for r in cur.execute(
+                f"SELECT * FROM processing_item WHERE ItemId IN ({','.join('?' * len(lineage))}) ORDER BY CreatedAt,ItemId",
+                lineage).fetchall()]
+            members = [dict(r) for r in cur.execute('''SELECT * FROM processing_member
+                                                       WHERE ItemId=? AND RetiredAt IS NULL ORDER BY MemberId''', (resolved,))]
+            member_history = [dict(r) for r in cur.execute(
+                f"SELECT * FROM processing_member WHERE ItemId IN ({','.join('?' * len(lineage))}) ORDER BY MemberId",
+                lineage).fetchall()]
+            aliases_by_id = {}
+            for member in member_history:
+                for row in cur.execute('''SELECT * FROM processing_alias
+                    WHERE EntityKind=? AND LocalId=? AND RetiredAt IS NULL ORDER BY AliasId''',
+                    (member['EntityKind'], member['LocalId'])).fetchall():
+                    aliases_by_id[row['AliasId']] = dict(row)
+            aliases = [aliases_by_id[key] for key in sorted(aliases_by_id)]
+            evidence = [self._processing_evidence_row(r) for r in cur.execute(
+                f"SELECT * FROM processing_legacy_evidence WHERE ItemId IN ({','.join('?' * len(lineage))}) ORDER BY EvidenceId",
+                lineage).fetchall()]
+            exact = {(m['EntityKind'], m['LocalId']) for m in member_history}
+            related = [dict(r) for r in cur.execute('SELECT * FROM processing_relation WHERE RetiredAt IS NULL ORDER BY RelationId').fetchall()
+                       if (r['FromEntityKind'], r['FromLocalId']) in exact or (r['ToEntityKind'], r['ToLocalId']) in exact]
+            return {'item': item, 'item_history': item_history, 'members': members,
+                    'member_history': member_history, 'aliases': aliases,
+                    'relations': related, 'legacy_evidence': evidence}
+
+    @staticmethod
+    def _processing_backfill_summary(cur, version, status):
+        migration = cur.execute('SELECT * FROM processing_migration WHERE Version=?', (version,)).fetchone()
+        if not migration: return None
+        counts = {}
+        for name, table in (('items', 'processing_item'), ('members', 'processing_member'),
+                            ('aliases', 'processing_alias'), ('relations', 'processing_relation')):
+            counts[name] = cur.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0]
+        counts['evidence'] = cur.execute('SELECT COUNT(*) FROM processing_legacy_evidence WHERE MigrationVersion=?',
+                                         (version,)).fetchone()[0]
+        unresolved = [r[0] for r in cur.execute('''SELECT LocalId FROM processing_legacy_evidence
+            WHERE MigrationVersion=? AND EntityKind='legacy_key' ORDER BY LocalId''', (version,)).fetchall()]
+        return {'version': version, 'status': status, 'input_watermark': json.loads(migration['InputWatermark']),
+                **counts, 'unresolved_keys': unresolved}
+
+    def backfill_processing(self, version, *, fixed_now, live_state=(), evaluator=None):
+        """Capture an idempotent legacy baseline; this does not switch reads to the new tables.
+
+        The transaction reads every legacy row without feed windows/caps, writes canonical identity
+        and verbatim evidence, and commits the journal marker last. ``live_state`` is an explicit
+        caller snapshot; its empty default means "none supplied", not "no native worker exists".
+        """
+        if not version or not fixed_now: raise ValueError('version and fixed_now are required')
+        if evaluator is None:
+            from .processing import legacy_read_evidence as evaluator
+        live_by_task = {}
+        for raw in live_state or ():
+            tid = raw.get('taskId', raw.get('task_id'))
+            if tid is None: continue
+            live_by_task[int(tid)] = {'working': raw.get('Working') or raw.get('agent') or raw.get('label') or 'agent',
+                                      'waiting': bool(raw.get('AgentWaiting', raw.get('waiting', False)))}
+        with self.lock:
+            cur = self.cx.cursor()
+            prior = cur.execute("SELECT Completion FROM processing_migration WHERE Version=?", (str(version),)).fetchone()
+            if prior and prior[0] == 'complete':
+                return self._processing_backfill_summary(cur, str(version), 'already_complete')
+            cur.execute('BEGIN IMMEDIATE')
+            try:
+                prior = cur.execute("SELECT Completion FROM processing_migration WHERE Version=?", (str(version),)).fetchone()
+                if prior and prior[0] == 'complete':
+                    self.cx.commit()
+                    return self._processing_backfill_summary(cur, str(version), 'already_complete')
+                settings = {r['Name']: r['Value'] for r in cur.execute('SELECT Name,Value FROM setting').fetchall()}
+                tables = {'message': 'MessageId', 'task': 'TaskId', 'review': 'ReviewId',
+                          'idea': 'IdeaId', 'run': 'RunId', 'attachment': 'AttachmentId'}
+                watermark = {}
+                for table, key in tables.items():
+                    count, maximum = cur.execute(f'SELECT COUNT(*),MAX({key}) FROM {table}').fetchone()
+                    watermark[table] = {'count': count, 'max_id': maximum}
+                watermark['funnel_state'] = {'count': cur.execute('SELECT COUNT(*) FROM funnel_state').fetchone()[0]}
+                watermark['live_state'] = 'caller_supplied' if live_by_task else 'caller_supplied_empty'
+                cur.execute('''INSERT OR REPLACE INTO processing_migration
+                    (Version,CapturedAt,InputWatermark,SettingsJson,Completion) VALUES (?,?,?,?,?)''',
+                    (str(version), str(fixed_now), json.dumps(watermark, sort_keys=True),
+                     json.dumps(settings, sort_keys=True), 'capturing'))
+
+                def existing_item(entity_kind, local_id):
+                    row = cur.execute('''SELECT ItemId FROM processing_member WHERE EntityKind=? AND LocalId=?
+                                         AND RetiredAt IS NULL''', (entity_kind, str(local_id))).fetchone()
+                    return self._processing_follow(cur, row[0]) if row else None
+
+                def new_item(kind):
+                    iid = self._processing_item_id()
+                    cur.execute('''INSERT INTO processing_item (ItemId,Kind,CreatedAt,UpdatedAt)
+                                   VALUES (?,?,?,?)''', (iid, kind, str(fixed_now), str(fixed_now)))
+                    return iid
+
+                def member(iid, entity_kind, local_id, role='member'):
+                    local_id = str(local_id)
+                    old = existing_item(entity_kind, local_id)
+                    if old:
+                        if old != iid: raise ValueError(f'{entity_kind}:{local_id} belongs to another processing item')
+                        return
+                    if role == 'primary' and cur.execute("SELECT 1 FROM processing_member WHERE ItemId=? AND Role='primary' AND RetiredAt IS NULL", (iid,)).fetchone():
+                        role = 'member'
+                    cur.execute('''INSERT INTO processing_member
+                        (ItemId,EntityKind,LocalId,Role,JoinedAt) VALUES (?,?,?,?,?)''',
+                        (iid, entity_kind, local_id, role, str(fixed_now)))
+
+                legacy_values = set()
+                def alias(namespace, scope, value, entity_kind, local_id, provenance='legacy-backfill'):
+                    if not namespace or not scope or not value: raise ValueError('aliases require explicit namespace, scope and value')
+                    old = cur.execute('''SELECT EntityKind,LocalId FROM processing_alias
+                        WHERE Namespace=? AND Scope=? AND Value=? AND RetiredAt IS NULL''',
+                        (namespace, scope, str(value))).fetchone()
+                    if old and (old['EntityKind'], old['LocalId']) != (entity_kind, str(local_id)):
+                        raise ValueError(f'alias collision for {namespace}/{scope}/{value}')
+                    if not old:
+                        cur.execute('''INSERT INTO processing_alias
+                            (Namespace,Scope,Value,EntityKind,LocalId,Provenance,CreatedAt)
+                            VALUES (?,?,?,?,?,?,?)''',
+                            (namespace, scope, str(value), entity_kind, str(local_id), provenance, str(fixed_now)))
+                    if namespace == 'legacy_funnel': legacy_values.add(str(value))
+
+                tasks = [dict(r) for r in cur.execute('SELECT * FROM task ORDER BY TaskId').fetchall()]
+                messages = [dict(r) for r in cur.execute('SELECT * FROM message ORDER BY MessageId').fetchall()]
+                messages_by_id = {r['MessageId']: r for r in messages}
+                reviews = [dict(r) for r in cur.execute('SELECT * FROM review ORDER BY ReviewId').fetchall()]
+                ideas = [dict(r) for r in cur.execute('SELECT * FROM idea ORDER BY IdeaId').fetchall()]
+                attachments = [dict(r) for r in cur.execute('SELECT * FROM attachment ORDER BY AttachmentId').fetchall()]
+                runs = [dict(r) for r in cur.execute('SELECT * FROM run ORDER BY RunId').fetchall()]
+                item_by_task, item_by_message = {}, {}
+                for task in tasks:
+                    tid = task['TaskId']
+                    task_item = existing_item('task', tid)
+                    message_items = {existing_item('message', m['MessageId']) for m in messages
+                                     if m.get('TaskId') == tid and existing_item('message', m['MessageId'])}
+                    anchors = ({task_item} if task_item else set()) | message_items
+                    if len(anchors) > 1:
+                        raise ValueError(f'task:{tid} joins multiple established items; merge explicitly')
+                    iid = next(iter(anchors), None) or new_item('task')
+                    member(iid, 'task', tid, 'primary'); item_by_task[tid] = iid
+                    for key in (f'task:{tid}', f'agent:{tid}', f'wrap:{tid}'):
+                        alias('legacy_funnel', 'local', key, 'task', tid); legacy_values.add(key)
+                for message_row in messages:
+                    mid, tid = message_row['MessageId'], message_row.get('TaskId')
+                    iid = item_by_task.get(tid) or existing_item('message', mid) or new_item('message')
+                    member(iid, 'message', mid, 'member' if tid else 'primary'); item_by_message[mid] = iid
+                    alias('legacy_funnel', 'local', f'msg:{mid}', 'message', mid)
+                    if message_row.get('Channel') == 'report':
+                        alias('legacy_funnel', 'local', f'report:{mid}', 'message', mid)
+                for review in reviews:
+                    rid = review['ReviewId']
+                    iid = item_by_message.get(review.get('MessageId')) or item_by_task.get(review.get('TaskId')) or existing_item('review', rid) or new_item('review')
+                    member(iid, 'review', rid, 'member' if (review.get('MessageId') or review.get('TaskId')) else 'primary')
+                    alias('legacy_funnel', 'local', f'review:{rid}', 'review', rid)
+                for idea in ideas:
+                    iid = existing_item('idea', idea['IdeaId']) or new_item('idea')
+                    member(iid, 'idea', idea['IdeaId'], 'primary')
+                    alias('legacy_funnel', 'local', f"idea:{idea['IdeaId']}", 'idea', idea['IdeaId'])
+                    if idea.get('MessageId'):
+                        cur.execute('''INSERT OR IGNORE INTO processing_relation
+                            (FromEntityKind,FromLocalId,ToEntityKind,ToLocalId,Kind,Provenance,CreatedAt)
+                            VALUES ('message',?,'idea',?,'mentions','legacy-assistant-wrapper',?)''',
+                            (str(idea['MessageId']), str(idea['IdeaId']), str(fixed_now)))
+                known_ideas = {i['IdeaId'] for i in ideas}
+                for message_row in messages:
+                    try: brief_ideas = (json.loads(message_row.get('Brief') or '{}').get('ideas') or [])
+                    except (TypeError, ValueError, json.JSONDecodeError): brief_ideas = []
+                    for entry in brief_ideas:
+                        idea_id = entry.get('id') if isinstance(entry, dict) else None
+                        if idea_id not in known_ideas: continue
+                        cur.execute('''INSERT OR IGNORE INTO processing_relation
+                            (FromEntityKind,FromLocalId,ToEntityKind,ToLocalId,Kind,Provenance,CreatedAt)
+                            VALUES ('message',?,'idea',?,'mentions','legacy-assistant-brief',?)''',
+                            (str(message_row['MessageId']), str(idea_id), str(fixed_now)))
+                for attachment in attachments:
+                    iid = item_by_message.get(attachment.get('MessageId'))
+                    if iid: member(iid, 'attachment', attachment['AttachmentId'], 'attachment')
+                for run in runs:
+                    iid = item_by_task.get(run.get('TaskId'))
+                    if iid: member(iid, 'run', run['RunId'], 'work')
+
+                states = {r['Key']: dict(r) for r in cur.execute('SELECT * FROM funnel_state').fetchall()}
+                latest_running = {}
+                for run in reversed(runs):
+                    if run.get('Status') == 'running' and run.get('TaskId'):
+                        latest_running[run['TaskId']] = run.get('AgentName') or 'agent'
+                linked = {}
+                for idea in ideas:
+                    if idea.get('MessageId'): linked.setdefault(idea['MessageId'], []).append(idea)
+                for idea_rows in linked.values(): idea_rows.sort(key=lambda x: x['IdeaId'], reverse=True)
+                q = f'''SELECT m.MessageId,m.Channel,m.SourceName,m.Subject,m.FromName,m.FromEmail,
+                    m.SentAt,m.CreatedAt IngestedAt,m.ConversationId,substr(m.BodyText,1,4000) Preview,
+                    m.Status MsgStatus,m.SourceLink,m.TaskId,m.Direction,m.Brief,
+                    t.Title,t.Status TaskStatus,t.Priority,t.Kind TaskKind,t.Tags TaskTags,
+                    IFNULL(ch.n,0) ChainSize,rt.Decision,rt.Reason RouteReason,
+                    rv.ReviewId,rv.Status ReviewStatus,rv.Kind ReviewKind,
+                    CASE WHEN IFNULL(rv.DraftText,'')<>'' THEN 1 ELSE 0 END HasDraft,
+                    IFNULL(att.n,0) Attachments,{self.ANSWERED_AT} AnsweredAt,{self.THEIR_TURN} TheirTurn
+                    FROM message m LEFT JOIN task t ON t.TaskId=m.TaskId
+                    LEFT JOIN (SELECT MessageId,Decision,Reason FROM route WHERE RouteId IN
+                      (SELECT MAX(RouteId) FROM route GROUP BY MessageId)) rt ON rt.MessageId=m.MessageId
+                    LEFT JOIN (SELECT * FROM review WHERE ReviewId IN
+                      (SELECT MAX(ReviewId) FROM review GROUP BY MessageId)) rv ON rv.MessageId=m.MessageId
+                    LEFT JOIN (SELECT MessageId,COUNT(*) n FROM attachment GROUP BY MessageId) att ON att.MessageId=m.MessageId
+                    LEFT JOIN (SELECT TaskId,COUNT(*) n FROM message WHERE Status<>'context' GROUP BY TaskId) ch ON ch.TaskId=m.TaskId
+                    WHERE m.Status NOT IN ('context','skipped') ORDER BY m.MessageId'''
+                feed_rows = [dict(r) for r in cur.execute(q).fetchall()]
+                from .categories import category_of, team_domains_of
+                team = team_domains_of(settings)
+                try: funnel_hours = max(1, int(settings.get('funnel_hours') or 12))
+                except (TypeError, ValueError): funnel_hours = 12
+                evaluated_mids, selected_state_keys = set(), set()
+                for row in feed_rows:
+                    tid = row.get('TaskId'); live = live_by_task.get(tid)
+                    active_task = tid is not None and row.get('TaskStatus') not in ('done', 'dropped')
+                    working = ((live or {}).get('working') or latest_running.get(tid)) if active_task else None
+                    waiting = bool((live or {}).get('waiting', False)) if active_task else False
+                    needs = bool(row.get('ReviewStatus') == 'pending' or
+                                 (active_task and not latest_running.get(tid)
+                                  and (row.get('TaskKind') != 'note' or str(row.get('SentAt') or '') <= str(fixed_now))
+                                  and row.get('MsgStatus') != 'withdrawn' and not row.get('AnsweredAt')
+                                  and not row.get('TheirTurn')))
+                    if working and active_task and row.get('ReviewStatus') != 'pending': needs = waiting
+                    row.update(Category=category_of(row, team), Working=working,
+                               AgentWaiting=waiting, NeedsYou=1 if needs else 0,
+                               LinkedIdeas=[dict(i) for i in linked.get(row['MessageId'], [])])
+                    result = evaluator(row, states, now=str(fixed_now), funnel_hours=funnel_hours)
+                    required = {'selected_key', 'observed_unread', 'permanent_read', 'reasons', 'deferral', 'raw_evidence'}
+                    missing = required - set(result)
+                    if missing: raise ValueError(f'legacy evaluator omitted {sorted(missing)}')
+                    evaluated_mids.add(row['MessageId'])
+                    if result['selected_key'] in states: selected_state_keys.add(result['selected_key'])
+                    payload = {'row': row, 'source_message': messages_by_id[row['MessageId']],
+                               'raw_evidence': result['raw_evidence']}
+                    fingerprint = hashlib.sha256(json.dumps(row, sort_keys=True, default=str,
+                                                            separators=(',', ':')).encode()).hexdigest()
+                    cur.execute('''INSERT INTO processing_legacy_evidence
+                        (MigrationVersion,ItemId,EntityKind,LocalId,SelectedLegacyKey,ObservedUnread,
+                         PermanentRead,ReasonsJson,TemporaryDeferJson,ContextFingerprint,OriginalJson,CapturedAt)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''',
+                        (str(version), item_by_message[row['MessageId']], 'message', str(row['MessageId']),
+                         result['selected_key'], int(bool(result['observed_unread'])), int(bool(result['permanent_read'])),
+                         json.dumps(result['reasons'], sort_keys=True, default=str),
+                         json.dumps(result['deferral'], sort_keys=True, default=str) if result['deferral'] else None,
+                         fingerprint, json.dumps(payload, sort_keys=True, default=str), str(fixed_now)))
+                # Context/skipped rows were outside the legacy feed, but remain part of the uncapped
+                # source inventory. Record that exclusion without inventing an unread result.
+                for row in messages:
+                    if row['MessageId'] in evaluated_mids: continue
+                    original = {'row': row, 'legacy_exclusion': 'message_status_outside_feed'}
+                    fingerprint = hashlib.sha256(json.dumps(original, sort_keys=True, default=str).encode()).hexdigest()
+                    cur.execute('''INSERT INTO processing_legacy_evidence
+                        (MigrationVersion,ItemId,EntityKind,LocalId,SelectedLegacyKey,ObservedUnread,
+                         PermanentRead,ReasonsJson,TemporaryDeferJson,ContextFingerprint,OriginalJson,CapturedAt)
+                        VALUES (?,?,?,?,?,NULL,NULL,?,NULL,?,?,?)''',
+                        (str(version), item_by_message[row['MessageId']], 'message', str(row['MessageId']),
+                         f"msg:{row['MessageId']}", json.dumps(['excluded_from_legacy_feed']), fingerprint,
+                         json.dumps(original, sort_keys=True, default=str), str(fixed_now)))
+                # Every raw funnel receipt is versioned. A receipt not selected by a message may
+                # still belong to a task, idea, wrap-up, or an old key no current entity resolves.
+                for key in sorted(set(states) - selected_state_keys):
+                    target = cur.execute('''SELECT EntityKind,LocalId FROM processing_alias
+                        WHERE Namespace='legacy_funnel' AND Scope='local' AND Value=? AND RetiredAt IS NULL''',
+                        (key,)).fetchone()
+                    item_id = existing_item(target['EntityKind'], target['LocalId']) if target else None
+                    entity_kind = 'legacy_state' if target else 'legacy_key'
+                    original = {'legacy_key': key, 'state': states[key],
+                                'target': dict(target) if target else None}
+                    fingerprint = hashlib.sha256(json.dumps(original, sort_keys=True, default=str).encode()).hexdigest()
+                    cur.execute('''INSERT INTO processing_legacy_evidence
+                        (MigrationVersion,ItemId,EntityKind,LocalId,SelectedLegacyKey,ObservedUnread,
+                         PermanentRead,ReasonsJson,TemporaryDeferJson,ContextFingerprint,OriginalJson,CapturedAt)
+                        VALUES (?,?,?,?,?,NULL,NULL,?,NULL,?,?,?)''',
+                        (str(version), item_id, entity_kind, key, key,
+                         json.dumps(['legacy_state_receipt' if target else 'unresolved_legacy_key']), fingerprint,
+                         json.dumps(original, sort_keys=True, default=str), str(fixed_now)))
+                cur.execute("UPDATE processing_migration SET Completion='complete' WHERE Version=?", (str(version),))
+                self.cx.commit(); self._writes += 1
+                return self._processing_backfill_summary(cur, str(version), 'complete')
+            except BaseException:
+                self.cx.rollback(); raise
+
     def dock_tasks(self, tag, limit=60):
         """Every conversation the guide has had, newest first - the chats list."""
         return self._rows('SELECT * FROM task WHERE SourceRef=? ORDER BY TaskId DESC LIMIT ?', (tag, int(limit)))

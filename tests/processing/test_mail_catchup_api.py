@@ -1,12 +1,13 @@
 """An isolated Sync now request retries a paged mailbox without changing old reads."""
 from datetime import datetime, timedelta, timezone
+from email.message import EmailMessage
 import json
 import re
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 from fastapi.testclient import TestClient
 
-from taskuary import channels, server, terminal
+from taskuary import channels, imapmail, server, terminal
 from taskuary.store import SQLiteStore
 
 
@@ -105,6 +106,94 @@ def test_sync_api_recovers_a_late_mail_page_and_preserves_owner_state(tmp_path, 
         assert db.get_doc('soul') == 'Owner document must remain exact.'
         assert json.loads(db.get_source(sid)['ConfigJson'])['custom'] == 'owner edit during fetch'
         assert any(folder == 'sentitems' for folder, _ in fetched)
+    finally:
+        assert server.join_drains(db, timeout=5)
+        client.close()
+        db.cx.close()
+
+
+def test_sync_api_reopens_and_retries_imap_hole_below_advanced_cursor(tmp_path, monkeypatch):
+    path = str(tmp_path / 'imap-api.db')
+    db = SQLiteStore(path)
+    monkeypatch.setattr(server, 'store', db)
+    monkeypatch.setattr(server, '_llm', lambda *args: object())
+    monkeypatch.setattr(terminal, 'live_sessions', lambda **kwargs: [])
+    monkeypatch.setattr(server, 'run_due_reports', lambda *args: None)
+    monkeypatch.setattr('taskuary.ci.poll', lambda *args: None)
+    monkeypatch.setattr(server.blackboard, 'roll_daily', lambda *args: None)
+    address = 'synthetic@example.invalid'
+    cid = db.get_connector_by_type('imap')['ConnectorId']
+    db.save_connector({'ConnectorId': cid, 'Active': 1, 'Secret': 'synthetic', 'Roles': 'feed',
+                       'ConfigJson': json.dumps({'address': address, 'imap_host': 'imap.example.invalid',
+                                                'imap_uid': 100, 'imap_uidvalidity': 7})}, 'fixture')
+    sid = db.save_source({'Channel': 'email', 'Address': address, 'ConnectorId': cid, 'Active': 1}, 'fixture')
+    watermark = '2026-08-01 08:00:00'
+    db._exec('UPDATE source SET LastPolledAt=? WHERE SourceId=?', (watermark, sid))
+    db.set_setting('mark_read_enabled', '0', 'fixture')
+    old_mid = db.add_message({'ExternalId': f'imap:{address}:100', 'Channel': 'email',
+                              'Status': 'filed', 'BodyText': 'Historical IMAP item'})
+    db.set_funnel_state(f'msg:{old_mid}', 'done', 'owner')
+    before, reads = db.get_message(old_mid), db.funnel_states()
+    db.save_doc('soul', 'Preserve IMAP owner document.', 'owner')
+
+    class Mailbox:
+        broken = True
+        fetched = []
+
+        def list(self): return 'OK', [br'(\HasNoChildren) "/" "INBOX"']
+        def select(self, folder, readonly=False):
+            assert folder == 'INBOX' and readonly
+            return 'OK', [b'30']
+        def response(self, code):
+            assert code == 'UIDVALIDITY'
+            return code, [b'7']
+        def logout(self): return 'BYE', []
+        def uid(self, command, *args):
+            if command == 'search':
+                match = re.fullmatch(r'\(UID (\d+):\*\)', args[1])
+                assert match, 'established catch-up must not use a date window'
+                hits = [uid for uid in range(101, 131) if uid >= int(match.group(1))] or [130]
+                return 'OK', [' '.join(map(str, hits)).encode()]
+            assert command == 'fetch', 'fixture mailbox must remain read-only'
+            uid = int(args[0])
+            self.fetched.append(uid)
+            if self.broken and uid == 110: return 'NO', [None]
+            msg = EmailMessage()
+            msg['From'], msg['To'] = 'sender@example.invalid', address
+            msg['Subject'], msg['Message-ID'] = f'IMAP backlog {uid}', f'<fixture-{uid}@example.invalid>'
+            msg['Date'] = 'Sun, 06 Sep 2026 08:00:00 +0000'
+            msg.set_content(f'IMAP synthetic body {uid}')
+            return 'OK', [(f'{uid} (RFC822)'.encode(), msg.as_bytes())]
+
+    mailbox = Mailbox()
+    monkeypatch.setattr(imapmail, '_login', lambda connector: (mailbox, address))
+    client = TestClient(server.app)
+    try:
+        assert client.post('/api/ingest/poll').status_code == 200
+        cards = client.get('/api/connectors').json()['data']
+        error = next(c for c in cards if c['ConnectorId'] == cid)['LastError']
+        assert error and '110' in error
+        assert db.get_source(sid)['LastPolledAt'] == watermark
+        cfg = json.loads(db.get_connector(cid)['ConfigJson'])
+        assert cfg['imap_uid'] == 130, 'later UIDs must arrive despite the retryable hole'
+        assert db._one("SELECT COUNT(*) n FROM message WHERE Subject LIKE 'IMAP backlog %'")['n'] == 29
+
+        # Reopen only this disposable database: retry must be durable, not worker memory.
+        assert server._close_drain_workers(target_store=db, timeout=5)
+        db.cx.close()
+        db = SQLiteStore(path)
+        monkeypatch.setattr(server, 'store', db)
+        mailbox.broken = False
+        assert client.post('/api/ingest/poll').status_code == 200
+        assert not db.get_connector(cid).get('LastError')
+        assert db.get_source(sid)['LastPolledAt'] != watermark
+        assert db._one("SELECT COUNT(*) n FROM message WHERE Subject LIKE 'IMAP backlog %'")['n'] == 30
+        assert mailbox.fetched.count(110) == 2
+        assert client.post('/api/ingest/poll').status_code == 200
+        assert mailbox.fetched.count(110) == 2, 'a recovered hole must not be fetched again'
+        assert db.get_message(old_mid) == before
+        assert db.funnel_states() == reads
+        assert db.get_doc('soul') == 'Preserve IMAP owner document.'
     finally:
         assert server.join_drains(db, timeout=5)
         client.close()

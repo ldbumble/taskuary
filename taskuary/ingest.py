@@ -407,6 +407,7 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
     ruled = thread_ruling(store, msg)
     if ruled: notes = [ruled] + notes
     thread = others_on_thread(store, msg, mine)
+    candidates = chat_candidates(store, msg) if is_chat(msg) else None
     # ...and what was actually SAID before this, theirs and ours. A mail quotes its own thread
     # underneath it - until it does not: a reply typed on a phone, or one whose quote we stripped,
     # arrives with the ask two messages back invisible. A chat line quotes nothing at all, so
@@ -429,7 +430,7 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
                              watch=msg.get('watch_for'),
                              # ...and the playbooks: a message that is an instance of one is
                              # tagged with it, and the agent is seeded from it (playbooks.py)
-                             playbooks=_playbook_menu(), project=project)
+                             playbooks=_playbook_menu(), project=project, candidates=candidates)
     intent['notes'], intent['notes_left'] = notes, notes_left
     return intent, fail
 
@@ -475,23 +476,20 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         store.add_route(mid, None, 'file', None, 'an opening line on a chat - waiting for the ask it opens', [], 'triage')
         logger.info(f"ingest: chat opener filed, waiting for the point - {(msg.get('body') or '')[:40]}")
         return {'status': 'filed', 'task_id': None, 'message_id': mid}
-    r = route(msg, store.snapshots(), float(cfg.get('attach_threshold', 0.42)))
-    r = own_thread_only(store, msg, r)
-    # ...and on a chat, the room it shares with the task is not a reason to join it
-    # (chat_continues). Off with triage: an owner who has switched the classifier off has said
-    # they do not want the brain reading their messages, and this is the brain reading them.
-    if r['decision'] == 'attach' and is_chat(msg) and cfg.get('intent_classify_enabled', '1') == '1':
-        cont = chat_continues(store, msg, r['task_id'], llm)
-        if not cont['same']:
-            logger.info(f"ingest: a separate ask in the same chat - not joining {task_ref(r['task_id'])}")
-            r = {**r, 'decision': 'create', 'task_id': None,
-                 'reason': f"a separate ask in the same chat, so it did not join {task_ref(r['task_id'])}"
-                           + (f" - {cont['why']}" if cont['why'] else '')}
+    mine = owner_addresses(store)        # every mailbox the funnel reads - excludes the owner's own replies from "others"
+    me = own_addresses(store)            # the owner's own address - what the To/Cc lines are measured against
+    verdict = None                       # a chat line's one judgement, made BEFORE routing (chat_route); reused below
+    if is_chat(msg):
+        # a room is not a topic: nothing joins on the room id alone. Two facts join without a
+        # model (a line typed seconds after the last, an answer to a live agent); everything else
+        # is the verdict's `relationship`, among this room's lines from this same day (PW-031..034)
+        r, verdict = chat_route(store, msg, cfg, llm, mine, me)
+    else:
+        r = route(msg, store.snapshots(), float(cfg.get('attach_threshold', 0.42)))
+        r = own_thread_only(store, msg, r)
     new_rid = None                     # set when a fresh reply task opens a review below
     held = ''                            # why the coding agent was NOT auto-started (a robot or a stranger)
     notes, notes_left = [], 0            # standing notes the classifier saw, and any that did not fit
-    mine = owner_addresses(store)        # every mailbox the funnel reads - excludes the owner's own replies from "others"
-    me = own_addresses(store)            # the owner's own address - what the To/Cc lines are measured against
     def _notes_note():
         # a cap that goes unmentioned reads as "everything you told me was applied". It was
         # not, and only the owner can judge whether the notes that missed out mattered - so
@@ -511,9 +509,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # fyi verdict keeps it on the task for the chain and off the owner's pile. Never while an
         # agent is waiting on this thread: that round trip IS the answer it asked for.
         follow, _fail = None, {}
-        # chat has its own reader for this (chat_continues/same_ask): a room is not a topic, and a
-        # fragment typed seconds later is one thought in two messages, not a thing to re-judge
-        if not busy and cfg.get('intent_classify_enabled', '1') == '1' and llm is not None and not is_chat(msg) and not decided_intent(msg, mine):
+        # a chat line was judged once already, before routing (chat_route): that verdict is the follow-up's
+        if verdict is not None: follow, _fail = verdict
+        # a chat line joined on a FACT (burst, live agent) was not read and is not re-judged here
+        elif not busy and cfg.get('intent_classify_enabled', '1') == '1' and llm is not None and not is_chat(msg) and not decided_intent(msg, mine):
             try: follow, _fail = judge(store, msg, llm, mine, me)
             except Exception as e:
                 logger.warning(f'ingest: the follow-up verdict failed - {e}')
@@ -587,7 +586,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                 logger.debug(f"ingest: awaiting triage (no AI connector) - {msg.get('subject') or ''}")
                 return {'status': 'error', 'task_id': None, 'message_id': mid}
             else:
-                intent, fail = judge(store, msg, llm, mine, me)
+                intent, fail = verdict if verdict is not None else judge(store, msg, llm, mine, me)
                 notes, notes_left = intent.get('notes') or [], intent.get('notes_left') or 0
                 if fail:
                     # the AI errored: an ERROR the owner can see and retry, never a filed row that
@@ -643,6 +642,12 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                                  **({'Tags': _pb.tag(intent['playbook'])} if intent.get('playbook') else {})}, actor)
         store.audit('task', tid, 'create', actor, 'agent', {'from': msg.get('from_email'), 'reason': r['reason']})
         mid = _land(store, msg, tid, 'routed')
+        # the same-day lines this one continues or answers that had no task yet join the task it opens:
+        # the fyi that opened a subject belongs with the ask that followed it (PW-031)
+        for rel_mid in (intent.get('related_message_ids') or []):
+            prior = store.get_message(rel_mid) or {}
+            if prior and prior.get('TaskId') is None and prior.get('Status') not in ('context', 'skipped'):
+                store.attach_message(rel_mid, tid)
         # the agents actually pick work up here:
         # - reply tasks ALWAYS enter the review queue ("needs me"); auto_draft_enabled
         #   additionally has the responder write the draft in the background
@@ -996,22 +1001,66 @@ def exchange_lines(store, msg: dict, limit: int = 12, chars: int = 300) -> list:
     return out
 
 
-def chat_continues(store, msg: dict, tid: int, llm=None) -> dict:
-    """Is this chat line part of the task the room already has open? {'same', 'why', 'asked'}.
+def chat_candidates(store, msg: dict) -> list:
+    """The lines of THIS room on the SAME local calendar day as the message - by the message's own
+    stamp, never the clock (a delayed sync is still yesterday's conversation) - and never a line
+    that came after it. The only lines a relationship may name (PW-032). Ours are included: an
+    answer to what we asked is a relationship too."""
+    from .store import norm_stamp
+    at = norm_stamp(msg.get('sent_at')); day = at[:10]
+    out = []
+    for m in store.thread_messages(msg.get('conversation_id'), None, limit=60):
+        if m.get('Status') == 'skipped' or (msg.get('_mid') and m['MessageId'] == msg['_mid']): continue
+        when = str(m.get('SentAt') or '')
+        if when[:10] != day or when > at: continue
+        who = 'you' if is_ours(m) else (m.get('FromName') or m.get('FromEmail') or 'them')
+        out.append({'id': m['MessageId'], 'who': who, 'when': when[11:16],
+                    'text': ' '.join(str(m.get('BodyText') or '').split())[:300], 'task_id': m.get('TaskId')})
+    return out[-20:]
 
-    Two things answer without spending a call, because they are facts rather than judgements:
-    a line typed seconds after the last one is one thought in two messages, and an answer
-    arriving while an agent is live on the task is the round trip it asked for. Everything else
-    is a reading, and triage.same_ask does the reading."""
-    from .triage import same_ask
-    prior = store.list_messages(tid)
-    last = prior[-1] if prior else None
-    if last and not is_ours(last) and _secs(last.get('SentAt'), msg.get('sent_at')) <= BURST_SECONDS:
-        return {'same': True, 'why': 'typed seconds after their last line - one thought, two messages', 'asked': False}
-    if any(x['Status'] == 'running' for x in store.list_runs(tid)):
-        return {'same': True, 'why': 'an agent is working this and asked on this chat', 'asked': False}
-    return same_ask((store.get_task(tid) or {}).get('Title') or '', exchange_lines(store, msg),
-                    msg.get('body') or '', llm)
+
+def _open_task(store, tid):
+    t = store.get_task(tid) if tid else None
+    return tid if t and t.get('Status') not in ('done', 'dropped') else None
+
+
+def chat_route(store, msg: dict, cfg: dict, llm, mine=(), me=()) -> tuple:
+    """Where a chat line goes: (route dict, (verdict, fail) or None).
+
+    Two FACTS join without a model: a line typed within BURST_SECONDS of the room's last inbound
+    line is the same thought finished, and a line arriving while an agent is live on the room's
+    task is the round trip it asked for. Everything else is the one triage verdict's
+    `relationship`, judged among this room's same-day lines (chat_candidates): continues/answers
+    with a valid related line or task joins that task; new and uncertain open work of their own.
+    The room id alone never joins (PW-018/PW-032); without a brain, nothing but the facts does."""
+    cands = chat_candidates(store, msg)
+    last = next((c for c in reversed(cands) if c['who'] != 'you'), None)
+    if last and _open_task(store, last['task_id']) and _secs(store.get_message(last['id']).get('SentAt'), msg.get('sent_at')) <= BURST_SECONDS:
+        return ({'decision': 'attach', 'task_id': last['task_id'], 'score': 1.0, 'candidates': [],
+                 'reason': 'typed seconds after their last line - one thought, two messages'}, None)
+    live = next((c['task_id'] for c in reversed(cands) if _open_task(store, c['task_id'])
+                 and any(x['Status'] == 'running' for x in store.list_runs(c['task_id']))), None)
+    if live:
+        return ({'decision': 'attach', 'task_id': live, 'score': 1.0, 'candidates': [],
+                 'reason': 'an agent is working this and asked on this chat'}, None)
+    room = next((c['task_id'] for c in reversed(cands) if _open_task(store, c['task_id'])), None)
+    apart = f", so it did not join {task_ref(room)}" if room else ''
+    if cfg.get('intent_classify_enabled', '1') != '1' or llm is None:
+        why = 'triage is off' if cfg.get('intent_classify_enabled', '1') != '1' else 'no brain to judge it'
+        return ({'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [],
+                 'reason': f'a chat line on its own - {why}, and a room is not a topic{apart}'}, None)
+    intent, fail = judge(store, msg, llm, mine, me)
+    rel = intent.get('relationship') or 'uncertain'
+    target = _open_task(store, intent.get('existing_task_id'))
+    for rel_mid in (intent.get('related_message_ids') or []):
+        if target: break
+        target = _open_task(store, (store.get_message(rel_mid) or {}).get('TaskId'))
+    if rel in ('continues', 'answers') and target:
+        return ({'decision': 'attach', 'task_id': target, 'score': 1.0, 'candidates': [],
+                 'reason': f'{rel} the ask on {task_ref(target)} (same chat, same day)'}, (intent, fail))
+    why = ('a separate ask in the same chat' if rel == 'new' else
+           'uncertain whether it continues an ask in this chat - not joined on a guess')
+    return ({'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [], 'reason': why + apart}, (intent, fail))
 
 
 # ── the first thing they hear ───────────────────────────────────────────────────────────

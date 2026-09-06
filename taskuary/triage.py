@@ -191,10 +191,33 @@ def strip_boilerplate(text: str) -> str:
     return out if out.strip() else (text or '')
 
 
+RELATIONSHIPS = ('new', 'continues', 'answers', 'uncertain')
+
+
+def relationship_of(j: dict, candidates: list) -> dict:
+    """The verdict's relationship, validated against the same-day room lines it was shown (PW-033):
+    ids outside them are dropped, a task id must be one of theirs, and a join with nothing valid
+    left to join - or an unknown word - is `uncertain`, which joins nothing."""
+    ids = {int(c['id']) for c in candidates if c.get('id') is not None}
+    tasks = {int(c['task_id']) for c in candidates if c.get('task_id')}
+    rel = str(j.get('relationship') or 'uncertain').strip().lower()
+    if rel not in RELATIONSHIPS: rel = 'uncertain'
+    related = []
+    for x in (j.get('related_message_ids') or []):
+        try: v = int(x)
+        except (TypeError, ValueError): continue
+        if v in ids and v not in related: related.append(v)
+    try: task = int(j.get('existing_task_id')) if j.get('existing_task_id') is not None else None
+    except (TypeError, ValueError): task = None
+    if task not in tasks: task = None
+    if rel in ('continues', 'answers') and not related and task is None: rel = 'uncertain'
+    return {'relationship': rel, 'related_message_ids': related, 'existing_task_id': task}
+
+
 def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, images=None,
                     learned: str = None, system: str = None, notes_left: int = 0, mine=(),
                     thread: dict = None, watch: str = None, playbooks: str = None,
-                    project: dict = None) -> dict:
+                    project: dict = None, candidates: list = None) -> dict:
     """`notes` are the owner's past verdicts that may bear on this message - each one dated,
     with the sender and subject it was given on - selected by sender and topic overlap
     (ingest.relevant_notes). They are EVIDENCE: the model judges how alike this message is,
@@ -218,6 +241,14 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
     stripped (the doc's own how-to-edit note is for the owner, not the model), and a blanked
     doc falls back to the shipped default. An edit that breaks the JSON contract degrades to
     the keyword heuristics, never to a crash.
+
+    `candidates` (chat only) are the lines of the SAME room on the SAME local calendar day as the
+    message - [{id, who, when, text, task_id}] - and asking for them makes the verdict also answer
+    `relationship` (new | continues | answers | uncertain) with `related_message_ids` and an
+    optional `existing_task_id`, all validated against exactly these lines (PW-031/032/033). A
+    prior day is new whatever it resembles; `uncertain` joins nothing; an id outside the room or
+    the day is dropped. This replaced a second classifier (same_ask) that could disagree with
+    this one about the same line.
 
     `playbooks` is the menu of the owner's playbooks (playbooks.menu: slug, title and `when` each).
     A message that is an instance of one is answered with its slug, and that slug is what seeds
@@ -279,6 +310,16 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                            '"playbook": "<slug>" to your answer; it is then a task for the agent and it works it from that '
                            'playbook. A message that only mentions the same systems is not an instance - the `when` line '
                            'must fit. Otherwise leave the key out.\n' + str(playbooks)[:3000])
+            if candidates is not None:
+                system += ('\n\nTHIS IS A CHAT LINE, and same_day_lines are the lines of this room from the SAME calendar day, '
+                           'oldest first, each with its id and the task it belongs to (null = none yet). Add to your answer '
+                           '"relationship": "new" | "continues" | "answers" | "uncertain", "related_message_ids": [<ids of the '
+                           'lines it continues or answers>] and "existing_task_id": <that task id, or null>. continues = it '
+                           'carries on, finishes, corrects, narrows or adds detail to an ask in those lines (people type in '
+                           'fragments); answers = it replies to something asked in them; new = it turns to a different subject, '
+                           'however politely ("Also...", "one more thing", "separately") - two problems in one app are two jobs; '
+                           'uncertain = you cannot tell. Only ids from same_day_lines count; anything older is a new subject by '
+                           'rule, whatever it resembles, and a room is not a topic.')
             if project:
                 system += ('\n\nPROJECT RELATIONSHIP CONTEXT - selected from the owner\'s prior explicit repository '
                            'choices for this sender/channel. It helps identify what the message is about; it does '
@@ -290,6 +331,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                                    'recipients': len(msg.get('to') or []) + len(msg.get('cc') or [])} if how else {}),
                                **(thread or {}),
                                **({'project_context': project} if project else {}),
+                               **({'same_day_lines': [{k: c.get(k) for k in ('id', 'who', 'when', 'text', 'task_id')} for c in candidates]} if candidates is not None else {}),
                                'body': strip_boilerplate(str(msg.get('body') or ''))[:1500]})
             if images:
                 system += ('\n\nImages from the message are attached. They are part of the ask - a '
@@ -311,6 +353,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 pb = str(j.get('playbook') or '').strip().lower()
                 if playbooks and pb and out['intent'] == 'task' and re.search(rf'^- {re.escape(pb)}: ', playbooks, re.M):
                     out['playbook'], out['kind'] = pb, 'coding'
+                if candidates is not None: out.update(relationship_of(j, candidates))
                 return out
             parse_error = f"invalid intent {j.get('intent')!r}; expected task, reply_only, or fyi"
         except Exception as e:
@@ -345,42 +388,3 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
 # reader, so the reader decides, on the one question that matters, with the exchange in front of
 # it: the lines they sent AND the answers we sent back, in order, because a reply of ours is the
 # clearest boundary there is.
-SAME_ASK_SYSTEM = (
-    'A chat is one room where several separate jobs get asked for. You are given TASK (the piece of '
-    'work already open), EXCHANGE (what was said on it, theirs and ours, oldest first) and NEW (the '
-    'line that just arrived). Answer ONE question: is NEW part of the ask already open, or the start '
-    'of a different one?\n'
-    'Answer JSON only: {"same": true|false, "why": "<one short clause, 12 words max>"}.\n'
-    'SAME when it continues, finishes, corrects, narrows or adds detail to what the exchange is '
-    'about - people type in fragments, and a thought finished in the next message is one thought. '
-    'A screenshot or a file sent right after describing something is part of it.\n'
-    'SAME, always, when it answers something WE asked in the exchange - a round trip is not a new job.\n'
-    'NEW when it turns to a different subject, however politely it is introduced. "Also...", "One more '
-    'thing", "By the way", "Separately", "Different question" almost always open a new one. So does any '
-    'line that would make complete sense to somebody who had never read the exchange: if it needs no '
-    'context, it is not carrying any.\n'
-    'A reply from us in between is a strong boundary - the ask it answered is finished unless NEW '
-    'plainly pushes back on that answer.\n'
-    'Being about the same SYSTEM, product or person is not enough to be the same ask: two bugs in one '
-    'app are two jobs. When it is genuinely 50/50, answer false - two tasks the owner merges cost less '
-    'than one task an agent half-reads.'
-)
-
-
-def same_ask(task_title: str, exchange: list, new: str, llm=None) -> dict:
-    """Does this new chat line belong on the task the room already has open?
-
-    {'same': bool, 'why': str, 'asked': bool} - `asked` is False when nothing was asked of a
-    model (no llm, or it failed), so the caller can say which decided. Undecidable falls to
-    SAME: attaching keeps the conversation whole, and the owner can split it in one click
-    (ingest.split_message), which is the cheaper mistake of the two to be wrong in."""
-    if not llm: return {'same': True, 'why': 'no brain to judge it - kept on the open task', 'asked': False}
-    try:
-        user = json.dumps({'task': (task_title or '')[:200], 'exchange': [str(l)[:400] for l in exchange][-12:],
-                           'new': str(new or '')[:1500]})
-        j = json.loads(re.sub(r'^```(json)?|```$', '', str(llm(SAME_ASK_SYSTEM, user) or '').strip(), flags=re.M))
-        if isinstance(j.get('same'), bool):
-            return {'same': j['same'], 'why': str(j.get('why') or '')[:120], 'asked': True}
-        return {'same': True, 'why': 'the answer was not a verdict - kept on the open task', 'asked': False}
-    except Exception as e:
-        return {'same': True, 'why': f'could not be judged ({type(e).__name__}) - kept on the open task', 'asked': False}

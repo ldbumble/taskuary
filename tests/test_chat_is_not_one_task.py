@@ -9,7 +9,9 @@ prompt, and the agent sent at it only ever saw the first ask (owner, 2026-09-02)
 Nothing mechanical splits that - "Also..." opens a new ask and a continuation equally often -
 so the reader decides, holding the exchange, ours and theirs. What is decided WITHOUT a model
 here is only what is a fact rather than a judgement: a line typed seconds later, and an answer
-arriving while an agent is live on the task.
+arriving while an agent is live on the task. Since PW-031 (2026-09-06) the reader is the ONE
+triage verdict - `relationship` among the room's same-day lines - not a second classifier, and
+the room id alone never joins: without a brain, nothing but the facts does (PW-018/PW-033).
 """
 import json, unittest
 from unittest import mock
@@ -26,14 +28,13 @@ def ago(minutes: int) -> str:
 
 
 def brain(same=False, seen=None):
-    """One callable for both prompts, told apart by the contract each asks for - which is how
-    the funnel calls them: triage.same_ask and triage.classify_intent share the ingest llm."""
+    """The one triage call per chat line: intent, kind and `relationship` together. `same` makes it
+    say the line continues every same-day line it was shown; otherwise it is a new subject."""
     def llm(system, user, **kw):
-        if 'is NEW part of the ask already open' in system:
-            if seen is not None: seen.append(json.loads(user))
-            return json.dumps({'same': same, 'why': 'a different subject'})
-        if seen is not None: seen.append(json.loads(user))
-        return json.dumps({'intent': 'task', 'kind': 'coding', 'why': 'an ask'})
+        u = json.loads(user)
+        if seen is not None: seen.append(u)
+        rel = {'relationship': 'continues', 'related_message_ids': [c['id'] for c in u.get('same_day_lines', [])]} if same else {'relationship': 'new'}
+        return json.dumps({'intent': 'task', 'kind': 'coding', 'why': 'an ask', **rel})
     return llm
 
 
@@ -86,9 +87,8 @@ class OneRoomManyJobs(unittest.TestCase):
         asked = seen[0]['exchange']
         self.assertTrue(any(l.startswith('you ') and 'fixed - try it now' in l for l in asked))
         self.assertTrue(any(l.startswith('Gabi ') and 'dashboard' in l for l in asked))
-        self.assertEqual(seen[0]['new'], 'nope. new')
-        # ...and triage got it too: a bare "nope. new" means nothing without what it answers
-        self.assertIn('exchange', seen[1])
+        self.assertEqual(seen[0]['body'], 'nope. new')
+        self.assertEqual(len(seen), 1)                    # one call: intent, kind and relationship together
 
     def test_the_reader_is_never_shown_the_lines_that_came_after(self):
         """A whole poll lands on the timeline as 'triaging' before any of it is judged. Reading
@@ -99,7 +99,7 @@ class OneRoomManyJobs(unittest.TestCase):
             line(self.s, 'the one after it', '2026-09-02 17:20:00', ext='wa:later')
         seen = []
         drain(self.s, brain(same=False, seen=seen))
-        first = next(a for a in seen if a.get('new') == 'first of the burst')
+        first = next(a for a in seen if a.get('body') == 'first of the burst')
         self.assertFalse([l for l in first['exchange'] if 'the one after it' in l])
         self.assertFalse([l for l in first['exchange'] if 'first of the burst' in l])
 
@@ -119,19 +119,20 @@ class OneRoomManyJobs(unittest.TestCase):
         self.assertEqual((out['status'], out['task_id']), ('attached', self.first['task_id']))
         self.assertEqual(seen, [])
 
-    def test_triage_switched_off_means_nothing_is_read(self):
-        """Switching the classifier off is a statement about the brain reading your messages."""
+    def test_triage_switched_off_means_nothing_is_read_and_nothing_joins_on_the_room(self):
+        """Switching the classifier off is a statement about the brain reading your messages - and
+        the room id alone never joins (PW-018/PW-033), so the line opens its own work."""
         self.s.set_setting('intent_classify_enabled', '0', 'owner')
         seen = []
         out = line(self.s, 'Also, a completely different thing', '2026-09-02 17:20:00', brain(same=False, seen=seen))
-        self.assertEqual(out['task_id'], self.first['task_id'])
+        self.assertNotEqual(out['task_id'], self.first['task_id'])
         self.assertEqual(seen, [])
 
-    def test_with_no_brain_the_conversation_is_kept_whole(self):
-        """Undecidable falls to attaching: the owner splits it in one click, and the opposite
-        mistake - a task per line - is one nobody can undo."""
+    def test_with_no_brain_nothing_joins_but_the_facts(self):
+        """Undecidable no longer falls to attaching (PW-033: uncertain must not cause an automatic
+        join); the owner can still merge two rows by hand."""
         out = line(self.s, 'Also, a completely different thing', '2026-09-02 17:20:00')
-        self.assertEqual(out['task_id'], self.first['task_id'])
+        self.assertNotEqual(out['task_id'], self.first['task_id'])
 
 
 class MailIsStillAThread(unittest.TestCase):

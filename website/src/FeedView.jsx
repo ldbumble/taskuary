@@ -278,7 +278,7 @@ const MeetingRow = ({ e, onPick, picked, preps = [], onOpenRow }) => {
             stamped whenever the session happened to open, so the invite and the prep for it sat
             an hour apart on a rail that is meant to read as a day. */}
         {preps.map((p) => (
-          <Box key={p.MessageId} onClick={(ev) => { ev.stopPropagation(); onOpenRow?.(p); }}
+          <Box key={p.MessageId} onClick={(ev) => { clearTimeout(hover.current); ev.stopPropagation(); onOpenRow?.(p); }}
             sx={{ display: "flex", alignItems: "center", gap: 0.7, mt: 0.4, pt: 0.4, minWidth: 0,
               borderTop: `1px dashed ${BORDER}`, cursor: "pointer",
               "&:hover .tqPrepTitle": { color: INK } }}>

@@ -89,6 +89,16 @@ const expandWholeMessage = async (page) => {
   assert.fail("visible full-message expansion control was not found");
 };
 
+const clickCalendarPrep = async (page, label) => {
+  const titles = await page.$$(".tqPrepTitle");
+  for (const title of titles) {
+    if (await title.evaluate((node, wanted) => node.textContent.trim() === wanted, label)) {
+      await title.click(); return;
+    }
+  }
+  assert.fail(`calendar prep ${label} was not found`);
+};
+
 async function drainCanonicalAll(page, minimum) {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const ids = await rowIds(page);
@@ -242,6 +252,18 @@ test("canonical All renders every root once with truthful details and frozen pag
   assert.ok(body.includes(seed.calendar.upcoming), "the unfiltered All calendar banner must retain an upcoming event");
   assert.ok(body.includes(seed.calendar.started), "the unfiltered All calendar banner must retain a started event");
   assert.equal(body.split(seed.calendar.prep).length - 1, 1, "calendar prep must render once under its event");
+  const prepDetail = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === `/api/processing/items/${seed.calendar.prep_item_id}/detail`
+      && url.searchParams.get("kind") === "message"
+      && url.searchParams.get("id") === String(seed.calendar.prep_message_id);
+  }, { timeout: 10000 });
+  await clickCalendarPrep(page, seed.calendar.prep);
+  assert.equal((await prepDetail).status(), 200, "calendar prep must open its exact canonical message target");
+  await waitForStageMarker(page, `Prep: ${seed.calendar.prep}`);
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  assert.ok((await stageContent(page)).includes(`Prep: ${seed.calendar.prep}`),
+    "the parent meeting hover must not replace the prep detail after its physical click");
   assert.ok([seed.ignored_item_id, seed.muted_item_id].every((id) => firstIds.includes(id)),
     "ignored and standing-rule-muted roots must remain visible in All");
 

@@ -140,6 +140,7 @@ class Term:
         self.buf, self.n, self.ended, self.last = deque(), 0, None, time.time()
         self.calm_until = 0                               # output until then must not reset idle()
         self.seeded = ''                                  # the prompt we typed: echoed back, not said
+        self.accepted = None                              # None: no prompt yet; True: submitted; False: typed but not taken (PW-209)
         self.store = store                                # so the pty can file its own transcript when it ends
         self.keep_transcript = True                       # off for a session the owner types secrets into (aisetup)
         self.subs = []                                    # (loop, asyncio.Queue)
@@ -334,9 +335,10 @@ class Term:
                     was = self.n
                     self.write(key)
                     time.sleep(SEED_ENTER)
-                    if self.n > was: return               # it answered: the prompt went in
+                    if self.n > was: self.accepted = True; return   # it answered: the prompt went in
                     if not self.settle(SEED_SETTLE): return
-                return                                    # echoed but never submitted: stop typing
+                self.accepted = False; return             # echoed but never submitted: stop typing
+            self.accepted = False
             logger.warning(f'terminal {self.sid}: prompt typed but nothing came back - press Enter')
         threading.Thread(target=go, daemon=True).start()
 
@@ -418,7 +420,7 @@ class Term:
         phase = stable_phase_of(self)          # compute once: every field in this payload tells one truth
         base = {'sid': self.sid, 'label': self.label, 'cwd': self.cwd, 'taskId': self.task_id,
                 'agent': self.agent, 'cli': cli_of(self.argv), 'alive': self.alive, 'started': self.started,
-                'idle': self.idle(), 'phase': phase, 'waiting': phase == 'parked',
+                'idle': self.idle(), 'phase': phase, 'waiting': phase == 'parked', 'accepted': getattr(self, 'accepted', None),
                 'cmd': ' '.join(self.argv), **({'tail': self.tail(tail)} if tail else {})}
         if not details:
             # Task lists need identity and lifecycle only. files() shells out to git and witness
@@ -675,7 +677,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         from .witness import RolloutTail
         RolloutTail(t).start()
     if seed:
-        if extra: t.seeded = seed        # the CLI submits it itself; kept so harvest drops the echo
+        if extra: t.seeded, t.accepted = seed, True   # the CLI submits it itself; kept so harvest drops the echo
         else: t.seed(seed)               # no prompt argument on this CLI: type it in, verified
     # A reply drafted from the mail alone promises what this session has not worked out yet, so
     # it stops waiting in Review and comes back rewritten from the report - see coder.raise_reply.

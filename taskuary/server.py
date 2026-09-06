@@ -822,7 +822,7 @@ def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks)
         # a repository the agent cannot open - none chosen, several plausible, a path that is gone - is a
         # DECISION for the owner, shown as a visible choice, never a session in some other checkout (PW-095)
         if e.status_code == 422 and NEEDS_REPO.search(str(e.detail or '')):
-            return {'dispatch': 'needs_repo', 'agent': body.agent or hub_agents.default_agent(store), 'taskId': task_id,
+            return {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'agent': body.agent or hub_agents.default_agent(store), 'taskId': task_id,
                     'ref': task_ref(task_id), 'reason': str(e.detail or '')}
         raise
 
@@ -1481,6 +1481,7 @@ def _dispatch_task_to_its_agent(tid: int, body: DispatchBody, background: Backgr
     regular = general.handles(task)
 
     if regular:
+        had_session = general.session_for(tid) is not None
         try:
             session = general.start_session(store, tid, model=body.model, actor=ACTOR)
         except (ValueError, RuntimeError) as e:
@@ -1494,13 +1495,16 @@ def _dispatch_task_to_its_agent(tid: int, body: DispatchBody, background: Backgr
             prompt = str(task.get('Summary') or task.get('Title') or '').strip()
         if prompt:
             background.add_task(session.send_prompt, prompt)
-        return {'dispatch': 'assistant', 'agent': session.provider, 'model': session.model,
+        # the same four words every door speaks (PW-209): a reused conversation is not a new start
+        return {'dispatch': 'assistant', 'agent': session.provider, 'model': session.model, 'started': not had_session, 'existing': had_session,
                 'taskId': tid, 'ref': task_ref(tid), 'session': session.info(tail=3)}
 
     agent = body.agent or hub_agents.default_agent(store)
     if not store.get_agent(agent): raise HTTPException(422, f'unknown agent: {agent}')
     ses = start_session(store, tid, agent, body.model, body.instruction)
-    return {'dispatch': 'session', 'agent': agent, 'model': body.model,
+    existing = bool((ses or {}).get('existing'))
+    return {'dispatch': 'session', 'agent': agent, 'model': body.model, 'started': not existing, 'existing': existing,
+            'accepted': (ses or {}).get('accepted'),      # the prompt was submitted, not merely typed (PW-209)
             'taskId': tid, 'ref': task_ref(tid), 'session': ses}
 
 @app.post('/api/messages/{mid}/dispatch')
@@ -1527,7 +1531,7 @@ def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
         # This is a decision, not a failed action. The message may only just have become a task,
         # so return its id and let the card ask which repo before resuming the same dispatch.
         if e.status_code == 422 and NEEDS_REPO.search(reason):
-            return {'dispatch': 'needs_repo', 'agent': body.agent or hub_agents.default_agent(store), 'taskId': tid,
+            return {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'agent': body.agent or hub_agents.default_agent(store), 'taskId': tid,
                     'ref': task_ref(tid), 'reason': reason}
         raise
 

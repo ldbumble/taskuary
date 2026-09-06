@@ -14,6 +14,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
 import { lazyGeneral } from "./lazyGeneral.js";
 import { taskMatchesQuery } from "./taskSearch.js";
+import { outcomeOf } from "./dispatchOutcome.js";
 import { progressLine } from "./checklist.js";
 import { completionTransition, filterForSelectedState } from "./taskFilter.js";
 import { onLive } from "./live.js";
@@ -591,14 +592,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     const id = selected;
     setStartingAgent("general"); setErr("");
     try {
-      if (isGeneral) {
-        const { data } = await api.post(`/api/tasks/${id}/dispatch`, { kind: "general" });
-        if (!stale(id)) setTerm(data.session || null);
-      } else {
-        const tags = String(t.Tags || "").split(/[\s,]+/).filter(Boolean);
-        if (!tags.includes(ASK_TAG)) tags.push(ASK_TAG);
-        await api.patch(`/api/tasks/${id}`, { Kind: "general", Tags: tags.join(",") });
-      }
+      // one shared dispatch whatever the task's kind was: it switches the kind, starts (or reuses) the
+      // assistant session and records the live worker - a relabelled task is not a started one (PW-213)
+      const { data } = await api.post(`/api/tasks/${id}/dispatch`, { kind: "general" });
+      const outcome = outcomeOf(data);
+      if (!stale(id)) setTerm(outcome.state === "started" || outcome.state === "existing" ? (data.session || null) : null);
       if (!stale(id)) setRestartOpen(false);
       await Promise.all([loadDetail(id), loadTasks()]);
       onChanged?.();

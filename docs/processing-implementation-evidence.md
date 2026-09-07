@@ -2573,3 +2573,65 @@ Tests: `tests/test_counsel_consumers.py`, `tests/test_counsel_migration.py`,
 covered by the existing `tests/test_operations.py::test_an_unknown_kind_or_missing_parameter_is_refused_before_anything_is_written`
 and `::test_a_stale_confirmation_is_refused_by_the_api`. Frontend/browser: none - this section is
 backend prompt assembly only, no UI changed.
+
+## Stream D — quitting waits, interrupted work says so, every task-view button names its effect
+
+Status: implemented and tested locally at `c0fe948` on `worktree-agent-a34bcb49a83c9bb15`; nothing
+pushed or merged, remote CI pending. Section 10.2 is the last CI-verified section
+(a03a539). Acceptance PW-189, PW-190, PW-202, PW-215 to PW-221, PW-261 to PW-264.
+
+Quitting the desktop used to flip `should_exit` on a daemon thread and return, so the process died
+before the server's lifespan ran and an orphaned Claude or Codex was the result. `desktop.start_server`
+now keeps that thread and `desktop.stop_server` joins it (PW-261): the cleanup - workers stopped, CLI
+children killed, task and run state written - actually finishes before the process exits. The wait is
+bounded by `SHUTDOWN_WAIT` (30s), logs progress every five seconds, and past it says a worker or CLI
+child may still be running rather than claiming cleanup, with `main()` returning non-zero (PW-263).
+The browser fallback loop ends the moment the server is told to exit instead of sleeping for ever.
+
+Work Taskuary interrupted is now visible as interrupted (PW-262). `terminal.release_task` tags the task
+`interrupted` when the actor is `shutdown` or `startup`; the task is open, not Working and not Done, and
+nothing restarts by itself. `terminal.resume_task` clears the tag only where a worker actually starts -
+both starters call it - so Reopen task alone leaves the mark standing, and a browser tab navigating away
+from a terminal still releases nothing at all.
+
+Every task-view control now runs one road and says what it does. `website/src/taskOps.js` `runOperation`
+proposes to `POST /api/operations` and executes by id and version - the same two endpoints the assistant's
+confirmation card uses - and complete, reopen, coding start and agent stop all go through it, with the kind
+taken from the button and no phrase read anywhere (PW-215). Coding start is `dispatch.prepare
+{kind:'coding'}` taking its session from the result: the Kind PATCH and `openTerm` are gone, an unknown
+agent is a 422 that changes nothing, a live worker is a 409 with no second start, and one proposal executed
+twice has one effect (PW-216). The captions are the owner's approved words: Mark task done closes the task
+and ends the live session with it, Reopen task reopens the task only (PW-217); Finish agent run reads "Save
+result & end session" and says the task stays open (PW-218); Pause & save reads "End session & save
+handover" with Stop session kept distinct (PW-219); Write/Generate reply, Ask sender and Review changes each
+say that nothing is sent, approved or committed (PW-220).
+
+Assistant ideas got the rest of their matrix (PW-202): urgent ordering proved through the owner's escalate
+policy - the model calling its own idea urgent escalates nothing - informational versus actionable ranking,
+a duplicate report run that judges and opens nothing twice, pending to error to judged, report triage off
+filing its run untriaged while a workflow trigger never asks triage at all, and worker-status events that
+reach no verdict.
+
+The setup walkthrough reads a shipped skill instead of branching in code (PW-190):
+`taskuary/skills/taskuary-setup/SKILL.md` carries the prerequisites, how to read `/api/setup` before saying
+anything, the tabs' own roads, verification, that secrets never pass through chat, and the resume rules, and
+it rides into a setup task's worker prompt as PROCEDURE FOR THIS JOB - the same slot a playbook uses. The
+entry is on the Assistant header (PW-189): a "Set up Taskuary" control calling the chat's own `setup()`,
+which appends to the running conversation rather than navigating anywhere.
+
+PW-188, PW-191, PW-192 and PW-193 stay open with a note under each: they cut SetupWizard.jsx (599 lines)
+back to name and CLI readiness and move draft-style generation into the assistant with preview and confirm,
+which needs the owner's decision on which wizard steps move. PW-265 to PW-267 stay open too and now carry
+the browser-control review the owner asked for - ownership and the three ways a browser opens (two of them
+automatic), what the pane shows and what it does not, the absent line between navigation and a consequential
+action, the single global cookie-restore profile, no cancellation for an action in flight - with one proposed
+decision each and nothing treated as accepted.
+
+Tests: `tests/test_desktop.py`, `tests/test_interrupted_work.py`, `tests/test_task_controls_operations.py`
+(6 cases), `tests/test_ideas_triage.py` (14 cases), `tests/test_setup_skill.py` (3 cases);
+`website/test/taskControls.test.mjs` (5 cases), `website/test/setupEntry.test.mjs` (2 cases).
+Gates on this branch: `python -m pytest -q -p no:cacheprovider` - 3035 passed, 76 subtests passed;
+`node --test "test/**/*.test.mjs"` in `website/` - 345 passed; `node --test taskuary/whatsapp/` - 7 passed;
+`npm run build` rebuilt the committed bundle because JSX changed. Limit, stated: the browser harness runs in
+demo mode where mutating requests are denied, so no rendered-click test exercises the task-view controls
+(PW-221) - the TestClient tests and the JSX source assertions stand in for it.

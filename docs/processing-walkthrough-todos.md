@@ -1084,15 +1084,22 @@ AI coding CLI setup, then hands off to assistant-led system setup. Pending work.
   (PW-189) are in; cutting SetupWizard.jsx (599 lines) back to name + CLI readiness is not,
   because which of its steps move into the assistant and which stay in first run is the
   owner's call. Nothing was removed from the wizard, so no install lost a step.
-- [ ] <a id="pw-189"></a>**PW-189** Add a discoverable system-setup walkthrough entry point at the top Assistant
+- [x] <a id="pw-189"></a>**PW-189** Add a discoverable system-setup walkthrough entry point at the top Assistant
   button/navigation area, available after onboarding as well as during first run.
   It starts an AI-led setup conversation, not a separate hardcoded wizard or
   keyword-dispatch path, and must not lose the user's existing conversation.
-- [ ] <a id="pw-190"></a>**PW-190** Ship a Taskuary setup skill containing the product-specific setup procedure,
+  Done: a "Set up Taskuary" control on the Assistant header calls the chat's own `setup()`, which
+  appends to the running conversation - no route, no wizard, no phrase to interpret
+  (`website/test/setupEntry.test.mjs`).
+- [x] <a id="pw-190"></a>**PW-190** Ship a Taskuary setup skill containing the product-specific setup procedure,
   prerequisites, supported configuration tools, and verification guidance. The AI
   uses that skill to inspect existing configuration, explain choices, ask relevant
   questions, and adapt the walkthrough. Keep procedure knowledge in the skill,
   not hardcoded dialogue/branching or a competing general assistant system prompt.
+  Done: `taskuary/skills/taskuary-setup/SKILL.md` ships with the package and rides into a setup
+  task's worker prompt as PROCEDURE FOR THIS JOB, the same slot a playbook uses; the procedure -
+  prerequisites, the tabs' roads, verification, secrets never in chat, resume rules - is in the
+  document, not in code (`tests/test_setup_skill.py`).
 - [ ] <a id="pw-191"></a>**PW-191** Reuse direct report/connection setup and shared confirmed configuration
   actions. Draft style generation is a preview; show the proposed document and
   confirm before saving/replacing it. Preserve existing customized settings/docs
@@ -1168,10 +1175,15 @@ forgotten/report lane. Pending implementation.
   informational/promotion behavior. Workflow triggers execute the configured job
   directly, and agent status/input/approval events remain explicit execution state,
   not requests for AI reclassification. All use the shared timeline representation.
-- [ ] <a id="pw-202"></a>**PW-202** Test informational/actionable/urgent ideas, linked active work, duplicate
+- [x] <a id="pw-202"></a>**PW-202** Test informational/actionable/urgent ideas, linked active work, duplicate
   report runs, pending/error states, report triage on/off, and no accidental
   retrigger loop from generated output. Verify normal workflow and worker-status
   paths remain independent of triage.
+  Done: `tests/test_ideas_triage.py`::MatrixTests adds the urgent case (the owner's escalate policy
+  leads the shared order; the model's own "urgent" escalates nothing), informational versus
+  actionable ranking, a duplicate report run judging and opening nothing twice, pending to error to
+  judged, report triage off filing the run untriaged while a workflow trigger never asks triage at
+  all, and worker-status events reaching no verdict - 14 cases in the file.
 
 ## Separate configured workflows from incoming-request procedures
 
@@ -1237,31 +1249,60 @@ Owner-approved after the button code review: fix task-view inconsistencies; keep
 the task-view controls. Assistant chat's removal of action menus does not remove
 these controls. Findings are code-traced, not live-click verified. Pending work.
 
-- [ ] <a id="pw-215"></a>**PW-215** Route task-view controls and assistant confirmation boxes through the same
+- [x] <a id="pw-215"></a>**PW-215** Route task-view controls and assistant confirmation boxes through the same
   validated operations, with consistent targets, permissions, freshness checks,
   errors, and confirmed outcomes. Do not add phrase interpretation to button clicks.
-- [ ] <a id="pw-216"></a>**PW-216** Unify coding startup (currently Kind PATCH plus openTerm) and general
+  Done: `website/src/taskOps.js` `runOperation` proposes to `POST /api/operations` and executes by
+  id and version, and complete, reopen, coding start and agent stop all go through it - the kind is
+  the button's and no phrase is read (`tests/test_task_controls_operations.py`,
+  `website/test/taskControls.test.mjs`).
+- [x] <a id="pw-216"></a>**PW-216** Unify coding startup (currently Kind PATCH plus openTerm) and general
   startup through shared dispatch. Fix Use non-coding agent changing Kind/ask
   tags without explicitly submitting work. Handle missing repository, failed
   launch, and already-live workers without false success or duplicate starts.
-- [ ] <a id="pw-217"></a>**PW-217** Make task completion versus agent completion explicit in labels/help and
+  Done: `startCodingAgent` runs `dispatch.prepare {kind:'coding'}` and takes the session from the
+  result - the Kind PATCH and `openTerm` are gone; an unknown agent is a 422 that changes nothing, a
+  live worker is a 409 with no second start, and executing one proposal twice has one effect
+  (`tests/test_task_controls_operations.py`).
+- [x] <a id="pw-217"></a>**PW-217** Make task completion versus agent completion explicit in labels/help and
   behavior: Mark task done currently closes the live worker too; Reopen task
   changes task status without starting a worker. Preserve next-in-progress
   navigation after completion, including when opened from All/search.
-- [ ] <a id="pw-218"></a>**PW-218** Reconcile Finish agent run and Save stopped run result with the approved
+  Done: the owner's words are the captions - "Mark task done: Closes the task and ends the live agent
+  session with it." and "Reopen task: Reopens the task only. No agent starts until you choose one." -
+  and the backend proves both (`tests/test_task_controls_operations.py`,
+  `website/test/taskControls.test.mjs`).
+- [x] <a id="pw-218"></a>**PW-218** Reconcile Finish agent run and Save stopped run result with the approved
   save-result/completion/reply lifecycle. Current wrap(close=False) stops/saves
   but skips task completion and normal completion-to-reply processing; do not
   imply the full completion workflow happened when only a result was saved.
-- [ ] <a id="pw-219"></a>**PW-219** Clarify Pause & save means end the session with saved continuation context,
+  Done: Finish agent run reads "Save result & end session" and says "The task stays open: Mark task
+  done completes it and drafts the reply."; Save stopped run result says the same; both still post
+  `{ close: false }` (`website/test/taskControls.test.mjs`).
+- [x] <a id="pw-219"></a>**PW-219** Clarify Pause & save means end the session with saved continuation context,
   not suspend a live process. Keep Stop session distinct: stop without generating
   a wrap-up report, update worker/task state accurately, and preserve saved history.
-- [ ] <a id="pw-220"></a>**PW-220** Verify Write reply, Generate reply, and Ask sender create/open the intended
+  Done: Pause & save reads "End session & save handover" - "Ends the session and saves a handover
+  note for the next one. Nothing keeps running." - and Stop session stays distinct: "Ends the session
+  without a report or handover. The task keeps its state." (`website/test/taskControls.test.mjs`).
+- [x] <a id="pw-220"></a>**PW-220** Verify Write reply, Generate reply, and Ask sender create/open the intended
   draft/review and never send immediately. Make clarification approval explicit.
   Review changes must remain a viewer, not imply approval or a commit.
-- [ ] <a id="pw-221"></a>**PW-221** Add handler/backend tests plus actual UI interaction coverage for these
+  Done: Write/Generate reply says "Opens a draft in Review. Nothing is sent until you approve it.",
+  Ask sender posts to `/clarify` and says it waits in Review, and Review changes says "A viewer of the
+  agent's diff. Nothing is approved or committed here." - no handler reaches a send route
+  (`website/test/taskControls.test.mjs`).
+- [x] <a id="pw-221"></a>**PW-221** Add handler/backend tests plus actual UI interaction coverage for these
   controls: matching labels/outcomes, general/coding dispatch parity, repository
   cancellation/errors, task versus worker completion, pause/stop, saved results,
   reply/clarification approval, next-in-progress selection, and duplicate clicks.
+  Done for handler and backend coverage: `tests/test_task_controls_operations.py` (6 cases: task
+  versus worker completion, reopen starting nothing, unknown agent, live worker, one effect per
+  proposal, stop ends only the worker) and `website/test/taskControls.test.mjs` (5 cases: every label
+  and caption, the four handlers on the shared road, saved results never completing, the propose then
+  execute helper, interrupted work). Limit, stated: the browser harness runs in demo mode where
+  mutating requests are denied, so no rendered-click test exercises these controls; the source
+  assertions and the TestClient tests stand in for it.
 
 ## Event-driven worker status instead of terminal heuristics
 
@@ -1530,19 +1571,35 @@ action rules one at a time before implementing. Pending implementation only.
 Owner-approved: quitting Taskuary closes it, rather than leaving it running in
 the background, and waits for cleanup. Pending implementation/verification.
 
-- [ ] <a id="pw-261"></a>**PW-261** Fix desktop shutdown's daemon-thread race: signal backend shutdown and wait
+- [x] <a id="pw-261"></a>**PW-261** Fix desktop shutdown's daemon-thread race: signal backend shutdown and wait
   for completion before exiting the desktop process. Preserve available history,
   stop Taskuary-owned coding/general workers and CLI children, and finish durable
   task/run state updates. Do not terminate unrelated user processes.
-- [ ] <a id="pw-262"></a>**PW-262** Leave unfinished work open and visibly interrupted, not Working or Done.
+  Done: `desktop.start_server` keeps the server's thread and `desktop.stop_server` sets `should_exit`
+  then JOINS it, so the lifespan's cleanup - workers stopped, CLI children killed, task and run state
+  written - actually runs before the process exits (`tests/test_desktop.py`).
+- [x] <a id="pw-262"></a>**PW-262** Leave unfinished work open and visibly interrupted, not Working or Done.
   Reopening offers explicit continuation rather than silently dispatching another
   worker. Tab navigation/browser disconnection must not act as backend shutdown.
-- [ ] <a id="pw-263"></a>**PW-263** Handle stuck cleanup with visible progress/error and a bounded escalation
+  Done: `terminal.release_task` tags the task `interrupted` when the actor is shutdown or startup, so
+  it is open and visibly interrupted rather than Working or Done; `resume_task` clears it only when a
+  worker actually starts, Reopen alone does not, and a WebSocket detach releases nothing
+  (`tests/test_interrupted_work.py`, `website/test/taskControls.test.mjs`).
+- [x] <a id="pw-263"></a>**PW-263** Handle stuck cleanup with visible progress/error and a bounded escalation
   strategy; do not silently exit before cleanup or claim all workers stopped when
   that is unverified. Reconcile interrupted runs after crashes as well as normal quit.
-- [ ] <a id="pw-264"></a>**PW-264** Test native desktop quit waits for server cleanup, transcript/history
+  Done: the wait is bounded by `SHUTDOWN_WAIT` (30s) with progress logged every five seconds; past it
+  `stop_server` returns 'timeout', logs that a worker or CLI child may still be running rather than
+  claiming cleanup, and `main()` returns non-zero. A crash is reconciled by `recover_after_restart`
+  leaving the work open and interrupted (`tests/test_desktop.py`, `tests/test_interrupted_work.py`).
+- [x] <a id="pw-264"></a>**PW-264** Test native desktop quit waits for server cleanup, transcript/history
   persistence, general/coding/one-shot child cleanup, interrupted state on restart,
   and no unintended worker termination on tab navigation.
+  Done: `tests/test_desktop.py` (a live thread joined clean, a hung cleanup bounded and reported, a
+  server already gone, the browser fallback ending on `should_exit`) and
+  `tests/test_interrupted_work.py` (restart leaves the task open and interrupted with its comment, an
+  ordinary session end is not an interruption, only a real start clears the mark, a tab leaving the
+  terminal releases nothing).
 
 ## Assistant browser control and its UI: review required
 

@@ -13,7 +13,7 @@ Take it back on the desktop and the chat is told the walk is over.
 Only messages the owner themself sent in that named, private chat are accepted. Other people, other
 chats and groups continue through the normal funnel.
 """
-import json, re, threading
+import json, re, threading, time
 
 from loguru import logger
 
@@ -42,10 +42,31 @@ def chat_of(connector) -> str:
                or (cfg.get('notify_chat') if (connector or {}).get('Type') == 'whatsapp' else '') or '').strip()
 
 
+def is_private(store, connector, chat: str) -> bool:
+    """Whether this chat is the owner ALONE. A group must never be able to command the assistant,
+    and an answer about the owner's mail must never be posted where other people are reading.
+
+    The exception, and the reason this is not one line: WhatsApp gives the owner's own "Message
+    yourself" thread a LEGACY GROUP jid - `<their number>-<when it was made>@g.us` - so refusing
+    everything that ends in @g.us refused the very chat the pairing box tells people to use. Sending
+    hid it, because a DM to your own address lands in that same thread; only the inbound half was
+    wrong, and the walk Taskuary had just sent there could not be answered (the owner, 2026-09-07:
+    "whatsapp did not work, i said reply and nothing happened"). So: a group jid is accepted only
+    when it is the paired account's own self-chat, which its number-prefix is what proves.
+    """
+    chat = str(chat or '').strip()
+    if not chat: return False
+    if not chat.endswith('@g.us'): return True
+    if (connector or {}).get('Type') != 'whatsapp': return False
+    from . import messengers
+    me = messengers.wa_self_number(store, connector)
+    return bool(me) and chat.split('-', 1)[0] == me
+
+
 def doorway(store, channel: str):
     """The active connector of that channel whose card names an Assistant chat, if there is one."""
     return next((c for c in store.connectors_by_type(channel, with_secret=True)
-                 if c and c.get('Active') and chat_of(c)), None)
+                 if c and c.get('Active') and chat_of(c) and is_private(store, c, chat_of(c))), None)
 
 
 def doorways(store) -> list:
@@ -80,8 +101,8 @@ def handoff(store) -> dict | None:
 def enabled(store, channel: str, chat: str, connector=None) -> bool:
     """Whether a message in this chat is the owner talking to the assistant. The setting is the standing
     permission; a live handoff to this chat is the owner asking for it right now."""
-    if not chat or str(chat).endswith('@g.us'): return False
-    if connector_for_chat(store, channel, chat, connector) is None: return False
+    c = connector_for_chat(store, channel, chat, connector)
+    if c is None or not is_private(store, c, chat): return False
     h = handoff(store)
     return (store.get_settings().get('phone_assistant') == '1'
             or bool(h and h['channel'] == channel and h.get('chat') == str(chat).strip()))
@@ -132,6 +153,50 @@ def end_handoff(store, actor: str = 'owner', note: str = CLOSED) -> dict:
     try: send(store, h['channel'], h['chat'], note, h.get('connector_id'))
     except Exception as e: logger.warning(f"could not close the {h['channel']} walk: {e}")
     return {'ended': True, **h}
+
+
+ALERT_EVERY = 20.0                     # seconds between looks; the walk is on the phone, not on a screen
+_looked = [0.0]
+
+
+def push_alerts(store, force: bool = False) -> int:
+    """While the walk is in a chat, an interruption goes THERE.
+
+    The desktop's "By the way" strip lives on the tab this handoff has locked - which is precisely
+    where the owner is not looking, so a coding agent raising its hand mid-walk reached nobody (the
+    owner, 2026-09-07). Each one is said once per handoff: what has been told rides in the handoff
+    record, so it is forgotten when the walk comes home and the strip can still raise anything the
+    owner never acted on.
+
+    It is also RECORDED in the conversation, which is what makes it answerable: the next turn's
+    history carries the line, so "answer it - use the staging db" has a TQ number to land on.
+    """
+    if not force and time.monotonic() - _looked[0] < ALERT_EVERY: return 0
+    _looked[0] = time.monotonic()
+    h = handoff(store)
+    if not h: return 0
+    from . import concierge, funnel, general
+    try: p = funnel.pile(store)
+    except Exception as e:
+        logger.warning(f'could not look for interruptions to send to {h["channel"]}: {e}'); return 0
+    task, _ = general.dock_task(store, 'owner')
+    on_the_table = concierge.current_key(store, task['TaskId'])
+    told = list(h.get('told') or [])
+    refs = {i['key']: i.get('ref') or '' for i in p.get('items') or []}
+    fresh = [a for a in (p.get('alerts') or [])
+             if a.get('key') not in told and a.get('item') != on_the_table][:3]
+    if not fresh: return 0
+    named = [f"{a['text']}{' (' + refs[a['item']] + ')' if refs.get(a['item']) and refs[a['item']] not in a['text'] else ''}"
+             for a in fresh]
+    lead = 'By the way — '            # the same words the desktop strip uses, in the place he is reading
+    say = lead + named[0] + '.' if len(named) == 1 else lead.rstrip() + '\n' + '\n'.join('· ' + n for n in named)
+    handle = next((refs[a['item']] for a in fresh if refs.get(a['item'])), '')
+    tail = (f'Say {handle} to take it now, or keep going.' if handle
+            else 'Name it and I will take you to it, or keep going.')
+    send(store, h['channel'], h['chat'], f'{say}\n\n{tail}', h.get('connector_id'))
+    concierge.record(store, task['TaskId'], 'assistant', say)
+    store.set_setting(HANDOFF_KEY, json.dumps({**h, 'told': told + [a['key'] for a in fresh]}), 'owner')
+    return len(fresh)
 
 
 def _now() -> str:

@@ -215,6 +215,28 @@ def wa_status(c) -> dict:
     return out
 
 
+def wa_self_number(store, c) -> str:
+    """The paired account's own number, cached on the card.
+
+    It is what tells the owner's private "Message yourself" chat from any other group: WhatsApp
+    gives that thread a LEGACY GROUP jid, `<your number>-<when it was made>@g.us`, and Taskuary
+    refused it as a group - so the walk it had just sent there could not be answered (the owner,
+    2026-09-07: "i said reply and nothing happened"). Sending is what hid it: a DM to your own
+    `@s.whatsapp.net` address lands in that same thread, so only the INBOUND half was ever wrong.
+    """
+    cfg = _cfg(c)
+    known = str(cfg.get('me_number') or '').strip()
+    if known: return known
+    try: jid = str(_wa(c, '/status').get('jid') or '')
+    except Exception as e:
+        logger.debug(f'whatsapp: the bridge did not say who is paired - {e}'); return ''
+    number = jid.partition('@')[0].split(':', 1)[0]
+    if not number.isdigit(): return ''
+    try: store.patch_connector_poll_state(c['ConnectorId'], config_set={'me_number': number})
+    except Exception as e: logger.debug(f'whatsapp: could not remember the paired number - {e}')
+    return number
+
+
 def wa_chats(c) -> list:
     """Chats reachable through the paired account, newest first.
 

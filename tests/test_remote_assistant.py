@@ -70,6 +70,34 @@ class DoorwayBoundaryTests(unittest.TestCase):
         remote_assistant.end_handoff(store)
         self.assertFalse(remote_assistant.enabled(store, 'whatsapp', JID, connector))
 
+    def test_the_owners_own_message_yourself_chat_is_not_a_group(self):
+        """WhatsApp gives that thread a legacy GROUP jid, and refusing it refused the one chat the
+        pairing box points people at (the owner, 2026-09-07: "i said reply and nothing happened")."""
+        mine, theirs = '18483734737-1612296871@g.us', '120363407840479752@g.us'
+        store, connector = armed_store('whatsapp', mine)
+        with mock.patch.object(messengers, 'wa_self_number', return_value='18483734737'):
+            self.assertTrue(remote_assistant.is_private(store, connector, mine))
+            self.assertFalse(remote_assistant.is_private(store, connector, theirs))
+            self.assertEqual([d['chat'] for d in remote_assistant.doorways(store)], [mine])
+            with mock.patch.object(remote_assistant.threading, 'Thread') as thread:
+                self.assertTrue(remote_assistant.intercept(store, 'whatsapp', mine, 'what needs me?',
+                                                           from_me=True, connector=connector))
+                thread.assert_called_once()
+        # a REAL group named as the assistant chat is still refused, and offers no doorway at all
+        store2, connector2 = armed_store('whatsapp', theirs)
+        with mock.patch.object(messengers, 'wa_self_number', return_value='18483734737'):
+            self.assertFalse(remote_assistant.enabled(store2, 'whatsapp', theirs, connector2))
+            self.assertEqual(remote_assistant.doorways(store2), [])
+
+    def test_the_paired_number_is_asked_for_once_and_remembered(self):
+        store, connector = armed_store('whatsapp', '18483734737-1612296871@g.us')
+        with mock.patch.object(messengers, '_wa', return_value={'jid': '18483734737:30@s.whatsapp.net'}) as bridge:
+            self.assertEqual(messengers.wa_self_number(store, connector), '18483734737')
+        fresh = store.get_connector(connector['ConnectorId'], with_secret=True)
+        self.assertEqual(json.loads(fresh['ConfigJson'])['me_number'], '18483734737')
+        with mock.patch.object(messengers, '_wa', side_effect=AssertionError('asked twice')):
+            self.assertEqual(messengers.wa_self_number(store, fresh), '18483734737')
+
     def test_taskuary_bridge_echo_is_claimed_without_starting_an_answer(self):
         store, connector = armed_store()
         with mock.patch.object(remote_assistant.threading, 'Thread') as thread:
@@ -251,6 +279,57 @@ class HandoffTests(unittest.TestCase):
             state = TestClient(server.app).get('/api/concierge').json()
         self.assertEqual([d['label'] for d in state['doorways']], ['WhatsApp'])
         self.assertIsNone(state['handoff'])
+
+
+class InterruptionsReachThePhoneTests(unittest.TestCase):
+    """The desktop's by-the-way strip is on the tab the handoff locked - the wrong place to raise
+    an agent's question (the owner, 2026-09-07)."""
+    def pile(self, key='agent:tq412', text='coder asked you something', ref='TQ-0412'):
+        return {'items': [{'key': key, 'ref': ref}],
+                'alerts': [{'key': f'alert:{key}', 'item': key, 'kind': 'agent', 'text': text}]}
+
+    def handed_over(self):
+        store, connector = armed_store()
+        with mock.patch.object(concierge, 'brain', return_value=None), mock.patch.object(messengers, 'wa_send'):
+            remote_assistant.start_handoff(store, 'whatsapp')
+        return store, connector
+
+    def test_an_agents_question_is_sent_to_the_chat_once_and_kept_in_the_conversation(self):
+        store, _c = self.handed_over()
+        with mock.patch.object(funnel, 'pile', return_value=self.pile()),              mock.patch.object(messengers, 'wa_send') as send:
+            self.assertEqual(remote_assistant.push_alerts(store, force=True), 1)
+            self.assertEqual(remote_assistant.push_alerts(store, force=True), 0)     # said once per handoff
+        sent = send.call_args.args[2]
+        self.assertIn('By the way', sent)
+        self.assertIn('coder asked you something (TQ-0412)', sent)
+        self.assertIn('Say TQ-0412 to take it now', sent)                            # a ref lookup() can find
+        rows = general.chat_rows(store, general.dock_task(store)[0]['TaskId'])
+        self.assertTrue(any('By the way' in (r['Body'] or '') for r in rows))        # answerable next turn
+
+    def test_nothing_is_sent_when_the_walk_is_at_the_desk(self):
+        store, _connector = armed_store()
+        with mock.patch.object(funnel, 'pile', return_value=self.pile()),              mock.patch.object(messengers, 'wa_send') as send:
+            self.assertEqual(remote_assistant.push_alerts(store, force=True), 0)
+        send.assert_not_called()
+
+    def test_the_item_already_on_the_table_is_not_announced(self):
+        store, _c = self.handed_over()
+        concierge.set_current(store, general.dock_task(store)[0]['TaskId'], 'agent:tq412')
+        with mock.patch.object(funnel, 'pile', return_value=self.pile()),              mock.patch.object(messengers, 'wa_send') as send:
+            self.assertEqual(remote_assistant.push_alerts(store, force=True), 0)
+        send.assert_not_called()
+
+    def test_taking_it_back_forgets_what_was_told(self):
+        store, _c = self.handed_over()
+        with mock.patch.object(messengers, 'wa_send'):
+            with mock.patch.object(funnel, 'pile', return_value=self.pile()):
+                remote_assistant.push_alerts(store, force=True)
+                self.assertTrue(remote_assistant.handoff(store)['told'])
+            remote_assistant.end_handoff(store)
+            with mock.patch.object(concierge, 'brain', return_value=None):
+                remote_assistant.start_handoff(store, 'whatsapp')                    # a fresh walk...
+            with mock.patch.object(funnel, 'pile', return_value=self.pile()):
+                self.assertEqual(remote_assistant.push_alerts(store, force=True), 1)  # ...hears it again
 
 
 class PhoneApprovalsStillWorkTests(unittest.TestCase):

@@ -2393,8 +2393,9 @@ const WaChats = ({ conn, mine, reload }) => {
         <Button size="small" onClick={load} sx={{ ml: 1, fontSize: 11, textTransform: "none", py: 0 }}>refresh</Button>
       </Typography>
       <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 0.75, p: 0.8, bgcolor: PANEL2, borderRadius: 1 }}>
-        For remote help, choose your private <b>Message yourself</b> chat below. Messages you send there ask the same Taskuary guide
-        that floats on the desktop; its walkthrough may include private mail, tasks, reviews, and agent output. Groups cannot be used.
+        For remote help, choose your private <b>Message yourself</b> chat below — it is the row marked <b>Myself</b>, and WhatsApp
+        gives that thread a group-shaped id, which is fine: the bridge checks it is your own number. Messages you send there run the
+        same walk the Assistant tab runs; it may include private mail, tasks, reviews, and agent output. Real groups cannot be used.
       </Typography>
       {err && <Typography variant="caption" sx={{ color: "#6b2733", display: "block" }}>✗ {err}</Typography>}
       {rows && !rows.length && !err && <Typography variant="caption" sx={{ color: FAINT }}>no reachable chats loaded yet — refresh, or send a message in a direct chat</Typography>}
@@ -2405,7 +2406,9 @@ const WaChats = ({ conn, mine, reload }) => {
             <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>{r.name || r.jid}</Typography>
             <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10.5 }} noWrap>{r.jid} · {r.n} msg · {r.last}{r.snippet ? ` · “${r.snippet}”` : ""}</Typography>
           </Box>
-          {!r.group && (guideJid === r.jid
+          {/* your own "Message yourself" thread is a GROUP jid on WhatsApp (r.self says the bridge
+              proved it is your own number), and it is exactly the chat this is for */}
+          {(!r.group || r.self) && (guideJid === r.jid
             ? <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 700 }}>✓ assistant chat</Typography>
             : <Button size="small" variant="contained" disableElevation disabled={!!guideBusy}
                 onClick={() => useForGuide(r.jid)} sx={{ fontSize: 11.5, whiteSpace: "nowrap" }}>

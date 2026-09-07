@@ -2232,9 +2232,14 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
             You answered this in {sel.Channel === "email" ? "your mailbox" : sel.Channel} · {fmtDateTime(sel.AnsweredAt || threadReply?.SentAt)}
             {" "}— nothing here sent it, and nothing is waiting on you.
           </Typography>
+          {/* your own words, quoted under the line that says where you said them. This used to be
+              pushed right like a chat bubble, which on a left-aligned summary left a bald gutter
+              beside it and read as a stray (the owner, 2026-09-07). It fills the column now, in the
+              tint the chat already gives your own messages, and the top-left corner is squared off
+              so it hangs from the line above instead of floating. */}
           {outsideReply && (
-            <Box sx={{ mt: 0.65, ml: "auto", maxWidth: "88%", bgcolor: "#e9e3d8",
-              border: "1px solid #d8d0c4", borderRadius: "14px 14px 4px 14px",
+            <Box sx={{ mt: 0.65, bgcolor: "#f1eee8", border: "1px solid #dfdbd3",
+              borderRadius: "4px 14px 14px 14px",
               px: 1.25, py: 0.9, color: INK, fontSize: 12.5, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
               {cleanText(outsideReply)}
             </Box>

@@ -3514,8 +3514,13 @@ def wa_chats(cid: int):
     from .messengers import wa_chats as _chats
     c = store.get_connector(cid, with_secret=True)
     if not c or c['Type'] != 'whatsapp': raise HTTPException(404, 'not a WhatsApp connector')
-    try: return {'data': _chats(c)}
+    from . import remote_assistant
+    try: rows = _chats(c)
     except RuntimeError as e: raise HTTPException(409, str(e))
+    # the owner's own "Message yourself" thread wears a legacy GROUP jid, so the card cannot tell it
+    # from a real group by its shape alone - the paired number can (remote_assistant.is_private)
+    for r in rows: r['self'] = bool(r.get('group')) and remote_assistant.is_private(store, c, r.get('jid'))
+    return {'data': rows}
 
 # ── Get AI to set it up (taskuary/aisetup.py): the card's guide as the agent's prompt, live on the card ──
 @app.post('/api/connectors/{cid}/ai-setup')
@@ -4678,9 +4683,16 @@ def poll_forever():
 
 
 def quick_forever():
-    """The chat clock. poll_minutes 0 is "background sync off", and that includes this clock."""
+    """The chat clock. poll_minutes 0 is "background sync off", and that includes this clock.
+
+    It also carries the by-the-way push: while the walk is in a phone chat, an interruption has to
+    go THERE, and an agent raising its hand is not something a mailbox poll would ever discover.
+    That is why it sits outside the sync switch and throttles itself (remote_assistant.push_alerts)."""
     while True:
         try:
+            from . import remote_assistant
+            try: remote_assistant.push_alerts(store)
+            except Exception as e: logger.warning(f'could not send an interruption to the chat: {e}')
             try: mins = int(store.get_settings().get('poll_minutes') or 0)
             except (TypeError, ValueError): mins = 10
             if mins > 0:

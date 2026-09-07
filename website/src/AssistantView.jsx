@@ -1011,7 +1011,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       </div>
       {/* ONE bottom strip for every unsolicited update (PW-165), kept until Open or Later (PW-166); the rest of
           the queue waits behind it and comes up as each is put down */}
-      {alert && !old && (
+      {/* while the walk is in a chat the interruption is SENT there (remote_assistant.push_alerts);
+          a strip on the locked tab would only be a button that cannot act */}
+      {alert && !old && !handoff && (
         <div className="tq-btw" role="status">
           <span className="dot" /><div className="txt"><b>By the way —</b>{alert.text}.{pending.length > 1 ? ` (+${pending.length - 1} more)` : ""}</div>
           <button type="button" className="tq-chip primary" onClick={() => ack(alert, true)}>{alert.item === current ? "Open the update" : current ? "Switch to it" : "Open"}</button>

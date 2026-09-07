@@ -2525,3 +2525,51 @@ offers Preview for a report, and links "Open it" after the click.
 Tests: `tests/test_chat_setup.py` (8 cases), `website/test/chatSetup.test.mjs` (2 cases); the concierge set-up pin re-pinned.
 Frontend: `proposalCard.js`, `ProposalCard.jsx`, `AssistantView.jsx`, rebuilt bundle. Backend
 evidence: `.codex-tmp/phase3-evidence/backend-10.2.log`.
+
+## Section: Assistant instructions — the document owns the prompt, code owns the machine contract
+
+Status: implemented and tested locally on `worktree-assistant-prompt-ownership` (base 550d582,
+commits ed3bdd2..044ec97); not yet merged or pushed - the owner asked to review the branch before
+anything lands (2026-09-06). Full pytest 3032 passed/76 subtests, website `node --test` 338 passed,
+`taskuary/whatsapp` `node --test` 7 passed, all locally, none 0 failed.
+Acceptance PW-242, PW-243, PW-244, PW-248, PW-256, PW-257, PW-258, PW-259, PW-260 implemented.
+
+COUNSEL.md used to be cut three ways: concierge.SYSTEM carried its own hardcoded behavioral/routing
+prose that competed with the document, a scheduled report's prompt (assistant.think) pulled in the
+whole chat document including walkthrough rules that make no sense outside a chat, and general.py
+sliced the document at 3,000 characters. `taskuary/counsel.py` now owns the document as sections
+(`sections()`, `pick()`) and hands each role only what it needs - `for_chat` the whole thing,
+`for_brief`/`for_discussion`/`for_worker` the Voice (and Goal for briefs) - falling back to the whole
+document if the owner renames a heading, never dropping guidance silently (PW-243). Scheduled report
+prompts no longer call into COUNSEL at all (PW-242): each report keeps its own configured
+instruction, data scope, output contract and safety constraints, proven independent of live chat
+COUNSEL edits (PW-244). `check_budget` (PW-258) replaces the silent slice: past 8,000 characters it
+warns and audits but always returns the text whole, called both when a worker prompt is built and
+when a migrated document is saved.
+
+`concierge.CONTRACT` (PW-248, PW-257) is now the only hardcoded prompt text: the two machine line
+shapes (`DECIDE:`/`OPTIONS:`) and the verb vocabulary behind the card's buttons - no behavioral
+prose. `concierge._system` is the document plus CONTRACT and nothing else; `parse_decision` still
+refuses any verb outside VERBS regardless of what the document says, and target/freshness/execution
+checks stay in `operations.py`, untouched. The deciding rules that left concierge.SYSTEM (coder vs.
+setup, correction handling, stop_agent discipline, password handling) now live in COUNSEL's `## When
+the owner decides` section (PW-256); `counsel.migrate` gives a shipped-stock document the new section
+outright, and gives an owner-edited document the section by insertion - fence-aware (a bare substring
+match on `## My goal` would mangle a `### My goal` subheading or fenced sample), before the real goal
+heading, budget-checked - keeping every word the owner wrote. A blank or whitespace-only document
+takes the stock path rather than being "migrated" into duplicate content.
+
+PW-259 audits every remaining inline heuristic in concierge.py against the owner's no-hardcoded-words
+rule (2026-09-06): RECEIPTS, fallback(), cannot()/NEEDS/ASSENT_VERB, parse_decision/_DECIDE/_OPTIONS/
+VERBS and _BROKE_CHARACTER/in_character/off_subject keep - they are machine contract or output
+validation, not competing instruction. _POLITE, _CORRECTION, and the keyword routes in trouble(),
+switch_ask() and _sweep_words() are contradictions - regexes deciding intent before the model reads
+the words - and are left open as PW-268 (the OPENING instruction), PW-269 (the keyword routes) and
+PW-270 (remove _POLITE/_CORRECTION), each needing its own walkthrough rather than an unreviewed
+blanket rewrite.
+
+Tests: `tests/test_counsel_consumers.py`, `tests/test_counsel_migration.py`,
+`tests/test_report_prompt_isolation.py`, `tests/test_concierge_counsel.py`; unapproved operations
+covered by the existing `tests/test_operations.py::test_an_unknown_kind_or_missing_parameter_is_refused_before_anything_is_written`
+and `::test_a_stale_confirmation_is_refused_by_the_api`. Frontend/browser: none - this section is
+backend prompt assembly only, no UI changed.

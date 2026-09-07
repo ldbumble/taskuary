@@ -1421,7 +1421,7 @@
       "phase": "9",
       "requirement": "Implement automatic retention cleanup as a separate scheduled lifecycle",
       "status": "implemented",
-      "test": "`tests/test_chat_retention.py`::RetentionTests (`retention.py`: `chat_keep_days` setting, default 15, owner override, nonsense falls back; `retention.tick` runs once a day from start-up and the sync timer, never from a history read; the boundary is the last chat row against the cutoff), Settings \u2192 Assistant \u2192 \"Keep past chats (days)\"",
+      "test": "`tests/test_chat_retention.py`::RetentionTests (`retention.py`: `chat_keep_days` setting, default 15, owner override, nonsense falls back; `retention.tick` runs once a day from start-up and the sync timer, never from a history read; the boundary is the last chat row against the cutoff), Settings → Assistant → \"Keep past chats (days)\"",
       "commit": "2463532; 2463532/7064b7d, CI run 34063026549 (all jobs passed)"
     },
     {
@@ -2176,27 +2176,27 @@
       "section": "Assistant instructions: remove the hardcoded behavioral prompt",
       "phase": "8/10",
       "requirement": "Remove shared COUNSEL injection from assistant.think() report-generation",
-      "status": "pending",
-      "test": "Required: Phase 8/10 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "tests/test_report_prompt_isolation.py",
+      "commit": "worktree-assistant-prompt-ownership 7abc29b (not yet merged, owner review pending)"
     },
     {
       "id": "PW-243",
       "section": "Assistant instructions: remove the hardcoded behavioral prompt",
       "phase": "8/10",
       "requirement": "Audit other COUNSEL consumers, including suggestion discussions and general",
-      "status": "pending",
-      "test": "Required: Phase 8/10 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "tests/test_counsel_consumers.py",
+      "commit": "worktree-assistant-prompt-ownership ed3bdd2 (not yet merged, owner review pending)"
     },
     {
       "id": "PW-244",
       "section": "Assistant instructions: remove the hardcoded behavioral prompt",
       "phase": "8/10",
       "requirement": "Test that changing chat COUNSEL does not alter the scheduled report prompt,",
-      "status": "pending",
-      "test": "Required: Phase 8/10 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "tests/test_report_prompt_isolation.py",
+      "commit": "worktree-assistant-prompt-ownership 7abc29b (not yet merged, owner review pending)"
     },
     {
       "id": "PW-245",
@@ -2230,9 +2230,9 @@
       "section": "Assistant instructions: remove the hardcoded behavioral prompt",
       "phase": "8/10",
       "requirement": "Owner confirmed the boundary: retain the minimal machine action contract",
-      "status": "pending",
-      "test": "Required: Phase 8/10 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "tests/test_concierge_counsel.py",
+      "commit": "worktree-assistant-prompt-ownership f3c0a49/ef8a114 (not yet merged, owner review pending)"
     },
     {
       "id": "PW-249",
@@ -2302,42 +2302,69 @@
       "section": "Assistant instructions: remove the hardcoded behavioral prompt",
       "phase": "8/10",
       "requirement": "Remove concierge.SYSTEM's competing behavioral/routing instructions and",
-      "status": "pending",
-      "test": "Required: Phase 8/10 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "tests/test_counsel_migration.py",
+      "commit": "worktree-assistant-prompt-ownership f3c0a49/ef8a114/1b60533/900691d (not yet merged, owner review pending)"
     },
     {
       "id": "PW-257",
       "section": "Assistant instructions: remove the hardcoded behavioral prompt",
       "phase": "8/10",
       "requirement": "Keep authorization, valid action/argument checks, target validation,",
-      "status": "pending",
-      "test": "Required: Phase 8/10 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "tests/test_concierge_counsel.py",
+      "commit": "worktree-assistant-prompt-ownership f3c0a49/ef8a114 (not yet merged, owner review pending)"
     },
     {
       "id": "PW-258",
       "section": "Assistant instructions: remove the hardcoded behavioral prompt",
       "phase": "8/10",
       "requirement": "Remove silent 3,200-character truncation of COUNSEL; apply explicit size",
-      "status": "pending",
-      "test": "Required: Phase 8/10 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "tests/test_counsel_consumers.py, tests/test_counsel_migration.py",
+      "commit": "worktree-assistant-prompt-ownership 81995bb/900691d (not yet merged, owner review pending)"
     },
     {
       "id": "PW-259",
       "section": "Assistant instructions: remove the hardcoded behavioral prompt",
       "phase": "8/10",
       "requirement": "Audit remaining inline prompts/action heuristics and canned receipts for",
-      "status": "pending",
-      "test": "Required: Phase 8/10 focused behavior/failure tests plus cumulative gates",
-      "commit": "pending"
+      "status": "implemented",
+      "test": "Audit table in processing-walkthrough-todos.md under PW-259; tests/test_concierge_counsel.py",
+      "commit": "worktree-assistant-prompt-ownership 38151ac/044ec97 (not yet merged, owner review pending)"
     },
     {
       "id": "PW-260",
       "section": "Assistant instructions: remove the hardcoded behavioral prompt",
       "phase": "8/10",
       "requirement": "Test that editing the assistant document affects the actual loaded prompt,",
+      "status": "implemented",
+      "test": "tests/test_concierge_counsel.py::test_editing_the_document_changes_the_loaded_prompt_and_the_backend_still_refuses_bad_actions; tests/test_operations.py::test_an_unknown_kind_or_missing_parameter_is_refused_before_anything_is_written, ::test_a_stale_confirmation_is_refused_by_the_api",
+      "commit": "worktree-assistant-prompt-ownership 044ec97 (not yet merged, owner review pending)"
+    },
+    {
+      "id": "PW-268",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Decide whether OPENING (the day's first-line instruction, concierge.py) moves",
+      "status": "review-pending",
+      "test": "Required: Phase 8/10 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-269",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "List each keyword route in trouble(), switch_ask() and _sweep_words()",
+      "status": "pending",
+      "test": "Required: Phase 8/10 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-270",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Remove _POLITE and _CORRECTION: the model reads the owner's words and",
       "status": "pending",
       "test": "Required: Phase 8/10 focused behavior/failure tests plus cumulative gates",
       "commit": "pending"

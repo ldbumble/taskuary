@@ -1359,10 +1359,11 @@ owner approval. Pending implementation.
 
 Owner-approved, pending implementation:
 
-- [ ] <a id="pw-242"></a>**PW-242** Remove shared COUNSEL injection from assistant.think() report-generation
+- [x] <a id="pw-242"></a>**PW-242** Remove shared COUNSEL injection from assistant.think() report-generation
   prompts. Preserve each report's configured instruction, configured data scope,
   valid output contract, and required safety constraints. The main chat's Current,
   walkthrough, and wait-for-owner rules must not govern scheduled idea generation.
+  Done 2026-09-06: tests/test_report_prompt_isolation.py.
 - [x] <a id="pw-243"></a>**PW-243** Audit other COUNSEL consumers, including suggestion discussions and general
   worker prompts, for role leakage before further changes. Review their appropriate
   instructions separately; do not silently remove required guidance.
@@ -1371,10 +1372,11 @@ Owner-approved, pending implementation:
   talk-back) Voice; workers (general.py ASSISTANT STYLE) Voice, uncut; scheduled
   reports (assistant.think) none (PW-242). Renamed headings fall back to the whole
   document rather than dropping guidance. Tests: tests/test_counsel_consumers.py.
-- [ ] <a id="pw-244"></a>**PW-244** Test that changing chat COUNSEL does not alter the scheduled report prompt,
+- [x] <a id="pw-244"></a>**PW-244** Test that changing chat COUNSEL does not alter the scheduled report prompt,
   report configuration remains intact, and report findings still enter the shared
   timeline. Existing live COUNSEL edits currently affect both consumers until
   this separation is implemented.
+  Done 2026-09-06: tests/test_report_prompt_isolation.py.
 
 ### Main-chat prompt cleanup
 
@@ -1397,9 +1399,10 @@ Owner-approved, pending implementation:
   Verified live content before and after writing. Actual UI/selection enforcement
   remains pending. Rendered COUNSEL now measures 3,927 characters; current loader
   still drops the final 727 characters until truncation is removed.
-- [ ] <a id="pw-248"></a>**PW-248** Owner confirmed the boundary: retain the minimal machine action contract
+- [x] <a id="pw-248"></a>**PW-248** Owner confirmed the boundary: retain the minimal machine action contract
   needed to render validated action buttons, but no competing hardcoded behavior.
   Removing behavioral prose must not remove action schemas or backend checks.
+  Done 2026-09-06: tests/test_concierge_counsel.py.
 
 Owner-approved: remove the hardcoded assistant behavioral prompt and maintain
 the reviewed instructions in editable COUNSEL.md. Review responsibilities and
@@ -1450,23 +1453,27 @@ action rules one at a time before implementing. Pending implementation only.
   state changes. Hardcoded behavioral-prompt removal is still pending, so these
   document edits alone do not establish full runtime behavior compliance.
 
-- [ ] <a id="pw-256"></a>**PW-256** Remove concierge.SYSTEM's competing behavioral/routing instructions and
+- [x] <a id="pw-256"></a>**PW-256** Remove concierge.SYSTEM's competing behavioral/routing instructions and
   hidden behavioral fallback. Consolidate approved assistant behavior into the
   database-backed COUNSEL document and its shipped default, preserving existing
   owner edits through an explicit migration rather than overwriting them.
-- [ ] <a id="pw-257"></a>**PW-257** Keep authorization, valid action/argument checks, target validation,
+  Done 2026-09-06: tests/test_counsel_migration.py.
+- [x] <a id="pw-257"></a>**PW-257** Keep authorization, valid action/argument checks, target validation,
   freshness, and execution acknowledgment enforced in backend code. Removing
   prompt prose must not remove these safeguards or silently break DECIDE/OPTIONS
   parsing. Separate the machine action contract from editable behavioral policy;
   review its replacement before changing the execution interface.
+  Done 2026-09-06: tests/test_concierge_counsel.py.
 - [x] <a id="pw-258"></a>**PW-258** Remove silent 3,200-character truncation of COUNSEL; apply explicit size
   validation/budget handling so approved instructions are not silently dropped.
   Done 2026-09-06: no consumer slices COUNSEL. general.py's two 3,000-character cuts
   are gone; counsel.check_budget warns and audits past 8,000 characters (on save and
   when a worker prompt is built) and returns the text whole.
-- [ ] <a id="pw-259"></a>**PW-259** Audit remaining inline prompts/action heuristics and canned receipts for
+- [x] <a id="pw-259"></a>**PW-259** Audit remaining inline prompts/action heuristics and canned receipts for
   contradictory behavior (including research-to-setup and skip-as-tomorrow).
   Resolve each through the walkthrough, not an unreviewed blanket rewrite.
+  Done 2026-09-06: every entry below resolved to keep, document (already moved to
+  COUNSEL), or contradiction opened as PW-268/269/270.
 
   Audit 2026-09-06 (concierge.py):
   | where | what | verdict |
@@ -1480,9 +1487,12 @@ action rules one at a time before implementing. Pending implementation only.
   | OPENING | the day's opening line instruction | document: still a hardcoded behavioural instruction - OPEN as PW-268 (owner to decide whether the opening moves into COUNSEL or stays a code contract) |
   | trouble() / switch_ask() / _sweep_words() | keyword routes for "what's wrong", settings switches and pipe sweeps | contradiction with PW-128 "Interpret intent through AI, not keyword matching" and the owner's 2026-09-06 rule - OPEN as PW-269 (list each regex and what it intercepts before the model sees the words) |
   | research-to-setup | the coder/setup road | document: moved to COUNSEL in PW-256; no code heuristic routes it |
-- [ ] <a id="pw-260"></a>**PW-260** Test that editing the assistant document affects the actual loaded prompt,
+- [x] <a id="pw-260"></a>**PW-260** Test that editing the assistant document affects the actual loaded prompt,
   without a hidden competing behavioral block, while malformed actions and
   unapproved operations remain blocked by the backend.
+  Done 2026-09-06: tests/test_concierge_counsel.py::test_editing_the_document_changes_the_loaded_prompt_and_the_backend_still_refuses_bad_actions;
+  unapproved operations covered by tests/test_operations.py::test_an_unknown_kind_or_missing_parameter_is_refused_before_anything_is_written
+  and ::test_a_stale_confirmation_is_refused_by_the_api.
 - [ ] <a id="pw-268"></a>**PW-268** Decide whether OPENING (the day's first-line instruction, concierge.py) moves
   into COUNSEL as owner-editable prose or stays a code contract, and act on that
   decision. Currently a hardcoded behavioural instruction outside the document.

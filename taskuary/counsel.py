@@ -153,10 +153,21 @@ MARKER = '<!-- counsel:deciding -->'
 
 def _squash(s): return ' '.join(str(s or '').split())
 
+def _goal_line(lines):
+    """Index of the REAL '## My goal' heading - never a line merely identical to it inside a fenced
+    code block, and never a mid-line match: a bare substring .replace() found both, gluing a stray
+    '#' onto '### My goal' and mangling a code sample (PW-256 review)."""
+    in_fence = False
+    for i, l in enumerate(lines):
+        if l.strip().startswith('```'): in_fence = not in_fence; continue
+        if not in_fence and l.strip() == f'## {GOAL_HEAD}': return i
+    return None
+
 def migrate(store) -> str:
     """The shipped document gained `## When the owner decides` (the prose that left concierge.SYSTEM). A stock
-    document - never edited, or matching any previously shipped template - is replaced outright; an owner's
-    document keeps every word and gets the section appended before My goal (or at the end), audited (PW-256)."""
+    document - blank, never edited, or matching any previously shipped template - is replaced outright; an
+    owner's document keeps every word and gets the section inserted before the real My goal heading (or
+    appended at the end), budget-checked and audited (PW-256, PW-258)."""
     from pathlib import Path
     tdir = Path(__file__).parent / 'templates'
     new = tdir.joinpath('counsel.md').read_text(encoding='utf-8')
@@ -164,13 +175,17 @@ def migrate(store) -> str:
     if cur and MARKER in cur: return 'unchanged'
     row = store.get_doc_row('counsel')
     stock = {_squash(p.read_text(encoding='utf-8')) for p in tdir.glob('history/counsel-*.md')}
-    if not cur or (row and row.get('UpdatedBy') == 'template') or _squash(cur) in stock:
+    if not (cur or '').strip() or (row and row.get('UpdatedBy') == 'template') or _squash(cur) in stock:
         store.save_doc('counsel', new, 'template'); return 'replaced'
-    lines = new.splitlines()
-    section = '\n'.join(lines[lines.index(f'## {DECIDING_HEAD}'):]).split('\n## ', 1)[0].rstrip('\n')
-    text = cur.rstrip('\n')
-    if f'## {GOAL_HEAD}' in text: text = text.replace(f'## {GOAL_HEAD}', section + f'\n\n## {GOAL_HEAD}', 1)
-    else: text = text + '\n\n' + section + '\n'
-    store.save_doc('counsel', text, 'migration')
+    new_lines = new.splitlines()
+    start = new_lines.index(f'## {DECIDING_HEAD}')
+    end = next((i for i in range(start + 1, len(new_lines)) if new_lines[i].startswith('## ')), len(new_lines))
+    section = new_lines[start:end]
+    while section and not section[-1].strip(): section.pop()
+    lines = cur.rstrip('\n').splitlines()
+    at = _goal_line(lines)
+    lines = lines + [''] + section if at is None else lines[:at] + section + [''] + lines[at:]
+    text = '\n'.join(lines) + '\n'
+    store.save_doc('counsel', check_budget(store, 'counsel', text), 'migration')
     store.audit('doc', 0, 'migrated', 'system', detail={'doc': 'counsel', 'section': DECIDING_HEAD})
     return 'appended'

@@ -181,34 +181,39 @@ def declare(store, tid: int, summary: str = '', agent: str = 'agent') -> dict:
     # because the agent decided it was finished. The agent's verdict is filed where the owner
     # reads it; the session stays at its prompt, which raises its hand; the owner presses Done.
     if not _mark(tid): return {'closed': False, 'why': 'a self-close already ran for this task'}
+    result = _finished(store, tid, term.session_for(tid), line)
     if stays_open(store, tid):
         # an EXPLICIT finish closes the completed run and saves its result even when the owner opened the
         # session (PW-232): the veto was for the judge, not for the agent's own word. The task's closure and
         # any reply stay the owner's decisions, so close=False.
-        try:
-            from . import workerstate as ws
-            s = term.session_for(tid)
-            ws.record(store, tid, getattr(s, 'sid', None) or ws.current_sid(store, tid) or 'cli', 'finished', text=line, source='cli')
-        except Exception as e: logger.debug(f'finished event skipped: {e}')
         store.add_comment(tid, agent, 'agent', f'The agent says it is finished: {line}' if line else 'The agent says it is finished.')
         try:
-            out = coder.wrap(store, tid, close=False, actor=agent or 'coder', final_message=line)
+            out = coder.wrap(store, tid, close=False, actor=agent or 'coder', final_message=result)
         except Exception as e:
             forget(tid)
             store.add_comment(tid, 'router', 'agent', f'The agent finished but its result could not be saved ({str(e)[:200]}) - the session is still open; try again.')
             return {'closed': False, 'why': str(e)[:200]}
         store.audit('task', tid, 'agent_done_run_closed', agent, detail={'why': 'opened to work in - the run closed, the task stays'})
         return {'closed': False, 'closed_run': True, 'why': 'the run closed and its result is on the task; you opened this task, so its closure is yours', **out}
-    # the explicit result, as an event (workerstate.py, PW-222/230): Finished does not close the task by itself -
-    # the wrap below does that, on its own terms
-    try:
-        from . import workerstate as ws
-        s = term.session_for(tid)
-        ws.record(store, tid, getattr(s, 'sid', None) or ws.current_sid(store, tid) or 'cli', 'finished', text=line, source='cli')
-    except Exception as e: logger.debug(f'finished event skipped: {e}')
     store.add_comment(tid, agent, 'agent',
                       f'The agent closed this itself: {line}' if line else 'The agent closed this itself.')
-    return _wrap(store, tid, agent, 'the agent said it was finished' + (f' - {line}' if line else ''))
+    return _wrap(store, tid, agent, 'the agent said it was finished' + (f' - {line}' if line else ''), result)
+
+
+def _finished(store, tid: int, s, line: str) -> str:
+    """The explicit result as an event (workerstate.py, PW-222/230). The RESULT is the agent's own last message -
+    the Stop hook kept this run's last_assistant_message as its newest turn_end - and the `--done` sentence is
+    the summary; only with nothing spoken does the sentence stand in. Finished does not close the task by
+    itself: the wrap does that, on its own terms."""
+    try:
+        from . import workerstate as ws
+        sid = getattr(s, 'sid', None) or ws.current_sid(store, tid) or 'cli'
+        spoken = next((e['Text'] for e in reversed(ws.events(store, tid, sid)) if e['Kind'] == 'turn_end' and e['Text']), '')
+        result = spoken or line
+        ws.record(store, tid, sid, 'finished', text=result, source='cli')
+        return result
+    except Exception as e:
+        logger.debug(f'finished event skipped: {e}'); return line
 
 
 def on_stop(store, term, said: str = '') -> dict:

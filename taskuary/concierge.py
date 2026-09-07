@@ -1124,17 +1124,19 @@ def _sweep(store, words: list, actor: str) -> tuple[int, list, list, list]:
     sender and the words that actually hit, which is what a standing rule is made of."""
     from .routing import tokens
     if not words: return 0, [], [], []
-    hit, titles, mids, swept = 0, [], [], []
+    hit, titles, mids, swept, cleared = 0, [], [], [], []
     for i in funnel.build(store, keep_surfaced=True)['items']:
         if i['lane'] in ('blocked', 'working'): continue                                   # an agent's question is never swept
         hay = set(tokens(f"{i.get('who') or ''} {i.get('email') or ''} {i.get('title') or ''}"))
         who = set(tokens(f"{i.get('who') or ''} {i.get('email') or ''}"))
         n = funnel.like(words, hay)
         if not n or (n < 2 and not funnel.like(words, who)): continue                      # the sender alone, or two words of the subject
-        funnel.settle(store, i['key'], 'done', actor, note='swept by the owner'); hit += 1
+        if not _clear_one(store, i['key'], actor, 'swept by the owner'): continue
+        hit += 1; cleared.append(i)
         titles.append(i['title']); mids.append(i.get('mid'))
         swept.append({'email': (i.get('email') or '').lower(), 'who': i.get('who') or '',
                       'words': [w for w in words if funnel.like([w], hay)]})
+    _off_the_table(store, cleared, actor)
     return hit, titles, mids, swept
 
 
@@ -1171,12 +1173,36 @@ def select_items(store, sel: dict) -> list:
     return out
 
 
+def _clear_one(store, key: str, actor: str, note: str) -> bool:
+    """One item off the pipe, and say whether it actually went. A sweep that dies on its third item
+    left the first two read and told the owner nothing had moved."""
+    try:
+        funnel.settle(store, key, 'done', actor, note=note)
+        return True
+    except (ValueError, RuntimeError) as e:
+        logger.warning(f'concierge: {key} stayed in the pipe - {e}')
+        return False
+
+
+def _off_the_table(store, cleared: list, actor: str):
+    """What a sweep clears cannot stay in front of the owner. Settling ONE item drops Current with it
+    (the /api/funnel/settle road does), and the sweep did not - so "clear the reports" cleared seven
+    and left the report it was holding on the table (the owner, 2026-09-07: "did not clear current one
+    when i said clear the reports")."""
+    keys = {i['key'] for i in cleared}
+    if not keys: return
+    tid = general.dock_task(store, actor)[0]['TaskId']
+    if current_key(store, tid) in keys: set_current(store, tid, None, actor)
+
+
 def clear_selected(store, sel: dict, actor: str = 'owner') -> dict:
     """Mark every item a selector names read. Read, never deleted - they stay on the Timeline."""
     items = select_items(store, sel)
-    for i in items: funnel.settle(store, i['key'], 'done', actor, note='cleared by the owner')
-    return {'cleared': len(items), 'titles': [i['title'] for i in items][:8],
-            'mid': next((i.get('mid') for i in items if i.get('mid')), None), 'remember': False,
+    cleared = [i for i in items if _clear_one(store, i['key'], actor, 'cleared by the owner')]
+    _off_the_table(store, cleared, actor)
+    return {'cleared': len(cleared), 'stuck': len(items) - len(cleared),
+            'titles': [i['title'] for i in cleared][:8],
+            'mid': next((i.get('mid') for i in cleared if i.get('mid')), None), 'remember': False,
             'note': '', 'words': [], 'rules': [], 'select': sel}
 
 
@@ -2072,6 +2098,8 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
         if o.get('cleared'):
             return (f" Cleared {o['cleared']} from the pipe - {', '.join((o.get('titles') or [])[:3])}{'…' if o['cleared'] > 3 else ''}. "
                     'Read, not deleted; they are on the Timeline.'
+                    + (f" {o['stuck']} would not move just then and {'is' if o['stuck'] == 1 else 'are'} still in the pipe"
+                       ' - say it again and they go too.' if o.get('stuck') else '')
                     + (f" And remembered as {'a rule' if len(o['rules']) == 1 else str(len(o['rules'])) + ' rules'}: " + '; '.join(o['rules'])
                        + ' - the next ones file themselves, and anything that actually asks you something still reaches you.' if o.get('rules') else '')
                     + (' And that sender goes straight past you from now on.' if o.get('remember') and not o.get('rules') else ''))

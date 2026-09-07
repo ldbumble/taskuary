@@ -234,8 +234,10 @@ def _muted_candidate(item, row, lane=None):
     return any(isinstance(rule, dict) and muted(rule, candidate) for rule in rules)
 
 
-def _generic_target(item, query, cutoff, include_excluded=False):
-    if item['view'].get('messages'):
+def _generic_target(item, query, cutoff, include_excluded=False, vehicles_only=False):
+    # `vehicles_only`: every message this item owns is an assistant VEHICLE, which is never a row of
+    # its own - so the task or idea it carries is the item, and generic work is exactly right here.
+    if item['view'].get('messages') and not vehicles_only:
         return None  # Hidden or filtered message roots must not reappear as generic work.
     for kind, id_field, collection, stamp_field in (
             ('task', 'TaskId', 'tasks', 'CreatedAt'),
@@ -243,7 +245,7 @@ def _generic_target(item, query, cutoff, include_excluded=False):
             ('review', 'ReviewId', 'reviews', 'CreatedAt')):
         rows = _owned(item, kind, id_field, collection)
         # A filtered-out message-backed task must not reappear as an unfiltered task.
-        if kind == 'task' and item['view'].get('messages'):
+        if kind == 'task' and item['view'].get('messages') and not vehicles_only:
             continue
         candidates = []
         for entity in rows:
@@ -292,8 +294,8 @@ def compact_inventory(snapshot, query, *, include_excluded=False):
         # an Assistant digest post is only the container for its ideas, which are roots of their own; in both
         # views it is not presented (the duplicate-Assistant regression of 2026-09-04, back on 2026-09-06)
         from .funnel import _assistant_wrapper
-        candidates = [m for m in view.get('messages', []) if m.get('Status') not in HIDDEN_MESSAGES and not _assistant_wrapper(m)
-                      and _matches(m.get('Channel'), m.get('SourceName'), query)
+        shown = [m for m in view.get('messages', []) if m.get('Status') not in HIDDEN_MESSAGES and not _assistant_wrapper(m)]
+        candidates = [m for m in shown if _matches(m.get('Channel'), m.get('SourceName'), query)
                       and _in_history(m.get('CreatedAt'), cutoff)]
         if (view.get('processing_read') or {}).get('active') and not include_excluded:
             candidates = [m for m in candidates if not _muted_candidate(
@@ -307,7 +309,8 @@ def compact_inventory(snapshot, query, *, include_excluded=False):
             channel, source, status = message.get('Channel') or '', message.get('SourceName') or '', message.get('Status') or ''
             preview, category = legacy['Preview'], legacy['Category']
         else:
-            generic = _generic_target(item, query, cutoff, include_excluded=include_excluded or not (view.get('processing_read') or {}).get('active'))
+            generic = _generic_target(item, query, cutoff, vehicles_only=not shown,
+                                      include_excluded=include_excluded or not (view.get('processing_read') or {}).get('active'))
             if not generic:
                 hidden += 1
                 continue

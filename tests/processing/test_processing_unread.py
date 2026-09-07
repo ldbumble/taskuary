@@ -165,6 +165,45 @@ def test_the_message_an_idea_rides_into_triage_on_is_never_a_row(store):
     assert next(i for i in unread['items'] if i['kind'] == 'idea')['idea'] == idea['IdeaId']
 
 
+def test_the_task_an_ideas_vehicle_carries_is_still_a_row_while_an_agent_works_it(store):
+    """The vehicle is not a row - but once triage hangs a task off it, it is the ONLY message the
+    item owns, and dropping it dropped the work with it: the Board showed a coder busy on an
+    assistant idea that appeared on neither timeline (the owner, 2026-09-07: "shows agent working on
+    a idea of a assistant but don't see it on the work timeline")."""
+    stamp = datetime.now().isoformat(' ')
+    tid = store.create_task({'Title': 'Fix the browser CI job on master', 'Kind': 'coding', 'Status': 'in_progress'}, 'fixture')
+    idea = store.upsert_idea({'key': 'idea:browser-job', 'kind': 'idea', 'text': 'Four master runs today all fail "browser"',
+                              'action': {'type': 'task', 'tid': tid, 'triage': {'intent': 'task'}}}, stamp)
+    vehicle = store.add_message({'ExternalId': f"idea:{idea['IdeaId']}", 'ConversationId': f"idea:{idea['IdeaId']}",
+                                 'Channel': 'assistant', 'SourceName': 'Assistant', 'FromName': 'Assistant', 'TaskId': tid,
+                                 'Subject': 'Assistant idea: four master runs today', 'BodyText': 'all fail "browser"',
+                                 'Status': 'routed', 'SentAt': stamp})
+    all_rows, unread = both(store)
+    assert [r['open_target'] for r in all_rows] == [{'kind': 'task', 'id': tid}], 'the task it became, not the vehicle'
+    assert vehicle not in {r['row'].get('MessageId') for r in all_rows}
+    assert [(i['kind'], i['lane'], i['tid']) for i in unread['items']] == [('todo', 'asked', tid)]
+    working = processing_unread.build(store, live_state=[{'taskId': tid, 'agent': 'claude', 'sid': 'browser-job', 'waiting': False}])
+    assert [(i['lane'], i['order_band'], i['tid']) for i in working['items']] == [('working', 5, tid)]
+
+
+def test_a_census_that_moved_under_a_settle_is_reconciled_instead_of_refused(store):
+    """Mail landing mid-sweep moves the membership census, and the settlement guard rolled the whole
+    write back - the owner was handed "processing membership must be reconciled before settlement"
+    with 27 items still in the pipe (the owner, 2026-09-07: "what does this mean as well when I got it
+    to clear the rest of what was left?"). It is the worker's lag: reconcile once and settle."""
+    add(store, 'First FYI')
+    _, unread = both(store)
+    key = unread['items'][0]['key']
+    add(store, 'A late arrival')                       # census dirty; nothing has reconciled it yet
+    census = store.processing_reconcile_status()
+    assert census['dirty_generation'] > census['reconciled_generation']
+    with pytest.raises(ValueError, match='reconciled before settlement'):
+        store.set_funnel_state(key, 'done', 'owner')   # the raw write is what refused
+    funnel.settle(store, key, 'done', 'owner')         # ...and the pipe's own road settles it anyway
+    assert store.funnel_states()[key]['Status'] == 'done'
+    assert key not in {i['key'] for i in both(store)[1]['items']}
+
+
 def test_fyi_summary_survives_refresh_but_is_dropped_when_its_source_changes(store):
     mid = add(store, 'Summary subject')
     _, initial = both(store)

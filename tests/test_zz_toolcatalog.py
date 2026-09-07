@@ -100,6 +100,18 @@ class SelectorTests(unittest.TestCase):
         self.assertEqual(left, [], 'every report must be gone from Unread, not just the word-matches')
         print(f"  confirmed -> cleared {(r.json().get('outcome') or {}).get('cleared')}; reports left unread: {len(left)}")
 
+    def test_the_sweep_takes_what_it_cleared_off_the_table(self):
+        """Settling one item drops Current with it; the sweep left it there, so clearing the reports
+        cleared seven and kept the report the owner was holding (the owner, 2026-09-07)."""
+        s = self._pile()
+        dock, _ = concierge.general.dock_task(s, 'owner')
+        cat, members = self._class_of(s)
+        held = members[0]
+        concierge.set_current(s, dock['TaskId'], held['key'], 'owner')
+        out = concierge.clear_selected(s, {'category': cat}, 'owner')
+        self.assertEqual(out['cleared'], len(members))
+        self.assertEqual(concierge.current_key(s, dock['TaskId']), '', 'the cleared item stayed on the table')
+
     def test_a_selector_that_matches_nothing_says_so_instead_of_claiming(self):
         s = self._pile()
         dock, _ = concierge.general.dock_task(s, 'owner')

@@ -974,10 +974,19 @@ def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, n
     if verb == 'skip':
         tomorrow = (datetime.now() + timedelta(days=1)).replace(hour=7, minute=0, second=0)
         until = tomorrow.strftime('%Y-%m-%d %H:%M:%S')
-    if expected_context is None:
-        store.set_funnel_state(key, verb, by, until, note, read=read)
-    else:
-        store.set_funnel_state(key, verb, by, until, note, expected_context=expected_context, read=read)
+    kw = {'read': read} if expected_context is None else {'read': read, 'expected_context': expected_context}
+    try:
+        store.set_funnel_state(key, verb, by, until, note, **kw)
+    except ValueError as e:
+        # Mail landing mid-settle moves the membership census, and the owner was handed that sentence
+        # verbatim while nothing moved - 27 items stayed in the pipe (the owner, 2026-09-07: "what does
+        # this mean as well when I got it to clear the rest of what was left?"). It is the worker's lag,
+        # not a refusal: do the very thing the message asks for, once, and settle again.
+        if 'reconciled before settlement' not in str(e): raise
+        from . import processing_all
+        processing_all.wait_settled(store)
+        store.reconcile_processing_membership()
+        store.set_funnel_state(key, verb, by, until, note, **kw)
     invalidate()
     return {'key': key, 'verb': verb, 'until': until}
 

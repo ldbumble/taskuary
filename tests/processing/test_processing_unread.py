@@ -143,6 +143,28 @@ def test_assistant_digest_post_does_not_duplicate_its_own_idea(store):
     assert next(i for i in unread['items'] if i['kind'] == 'idea')['who'] == 'Assistant'
 
 
+def test_the_message_an_idea_rides_into_triage_on_is_never_a_row(store):
+    """assistant._idea_message writes one message per idea, external id idea:<n>, so the verdict has
+    something to hang off. It is a VEHICLE: showing it beside the idea it carries is one thought as
+    two rows, and the one you could open said nothing (the owner, 2026-09-07: "still duplicating
+    this in timeline?? and when you click on message it says nothing")."""
+    stamp = datetime.now().isoformat(' ')
+    source = add(store, 'FW: AI Modus', status='filed')
+    idea = store.upsert_idea({'key': 'idea:empty-forward', 'kind': 'idea', 'action': {'type': 'message', 'mid': source},
+                              'text': 'Hindy forwarded "FW: AI Modus" with nothing but her signature'}, stamp)
+    vehicle = store.add_message({'ExternalId': f"idea:{idea['IdeaId']}", 'ConversationId': f"idea:{idea['IdeaId']}",
+                                 'Channel': 'assistant', 'SourceName': 'Assistant', 'FromName': 'Assistant',
+                                 'Subject': 'Assistant idea: Hindy forwarded "FW: AI Modus"',
+                                 'BodyText': 'Hindy forwarded it with nothing but her signature', 'Status': 'filed',
+                                 'SentAt': stamp})
+    all_rows, unread = both(store)
+    assert vehicle not in {r['row'].get('MessageId') for r in all_rows}, 'the vehicle is not a row in All'
+    assert vehicle not in {i.get('mid') for i in unread['items']}, 'nor in work'
+    # ...and what it carried still speaks, beside the mail it is about
+    assert sorted(i['kind'] for i in unread['items']) == ['fyi', 'idea']
+    assert next(i for i in unread['items'] if i['kind'] == 'idea')['idea'] == idea['IdeaId']
+
+
 def test_fyi_summary_survives_refresh_but_is_dropped_when_its_source_changes(store):
     mid = add(store, 'Summary subject')
     _, initial = both(store)

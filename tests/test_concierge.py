@@ -311,10 +311,14 @@ class BrainTests(unittest.TestCase):
         t, m, r = drafted(s)
         with mock.patch.object(concierge.llm_mod, 'make_cli_llm', fake_make):
             out = concierge.surface(s)
-            self.assertEqual(out['say'], 'Dana wants the file - the draft is below.')                    # the introduction is the model's, per COUNSEL (PW-153)
+            # the introduction is the FACTS and it is instant: the model's sentence (PW-153) put a
+            # blocking call in front of every Next (the owner, 2026-09-07: "next still take 5 seconds?")
+            self.assertEqual(out['say'], 'Dana wrote on email (5h ago): "Export still broken". Since then: triage judged it a reply to write. From you: approve the draft below, or redraft it.')
+            self.assertEqual(seen, {}, 'the introduction asks no model at all, so there is no gear to pick')
+            concierge.say(s, 'what did she attach?', key=f'review:{r}')                                 # a question: the model's
             self.assertEqual((seen['name'], seen['model'], seen['resume'], seen['cwd']), ('coder', 'haiku', None, None))   # on its quick gear, tools off
             self.assertIn('I am Taskuary', seen['system'])
-            concierge.say(s, 'what did she attach?', key=f'review:{r}')                                 # a question: the same conversation, resumed
+            concierge.say(s, 'and when did she send it?', key=f'review:{r}')                            # ...and the same conversation, resumed
             self.assertEqual((seen['name'], seen['model'], seen['resume'], seen['cwd']), ('coder', 'haiku', 'sess-1', None))   # tools off
             self.assertNotIn('WHAT YOU CAN DO YOURSELF', seen['system'])                                # ...so it is not told it has any
             tid = general.dock_task(s)[0]['TaskId']
@@ -365,8 +369,11 @@ class BrainTests(unittest.TestCase):
             c = TestClient(server.app)
             with c.stream('POST', '/api/concierge/stream', json={'mode': 'next'}) as r:
                 lines = [json.loads(l) for l in r.iter_lines() if l.strip()]
-            self.assertEqual([l['type'] for l in lines], ['tool_call', 'done'])                          # 'next' is the model's introduction too (PW-153)
-            self.assertEqual(lines[1]['item']['key'], it['key']); self.assertIn('reran', lines[1]['say'])
+            # 'next' asks no model at all now, so there is no tool_call to stream ahead of it: the
+            # introduction is the item's own facts, and it is instant (2026-09-07)
+            self.assertEqual([l['type'] for l in lines], ['done'])
+            self.assertEqual(lines[0]['item']['key'], it['key'])
+            self.assertIn('GitHub Trending', lines[0]['say'])
             with c.stream('POST', '/api/concierge/stream', json={'mode': 'say', 'text': 'why did it fail?', 'key': it['key']}) as r:
                 lines = [json.loads(l) for l in r.iter_lines() if l.strip()]
             self.assertEqual([l['type'] for l in lines], ['tool_call', 'done'])                          # a question: the model's turn streams
@@ -514,7 +521,7 @@ class FastLaneTests(unittest.TestCase):
             concierge.surface(s)                                             # an introduction: the facts, no model
             concierge.say(s, 'what did she attach?', key=f'review:{r}')       # a question: the model, tools off
             concierge.say(s, 'I think the export is the old one from June', key=f'review:{r}')   # a remark: the model, tools off
-        self.assertEqual(calls, [None, None, None])                          # the introduction and both turns: no cwd = read-only gear, no tools
+        self.assertEqual(calls, [None, None])                               # both typed turns: no cwd = read-only gear, no tools; the introduction asks nothing
         # with an API connector configured, the fast lane is that connector - a second, not a launch
         c = s.get_connector_by_type('openai')
         s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'Secret': 'k', 'Name': 'Fast', 'ConfigJson': '{"model": "gpt-fast"}'}, 'o')
@@ -855,7 +862,8 @@ class ApiTests(unittest.TestCase):
             # above a person's ask instead of behind every report (funnel.LANES)
             self.assertEqual([l['n'] for l in pile['lanes']], [0, 0, 1, 0, 0, 0, 0, 0, 0, 0])   # ten lanes since 'queued' (2026-09-07)
             nxt = c.post('/api/concierge/next', json={}).json()
-            self.assertEqual(nxt['item']['rid'], r); self.assertEqual(nxt['say'], 'Dana wants the file - the draft is below.')   # the model's introduction (PW-153)
+            self.assertEqual(nxt['item']['rid'], r)
+            self.assertEqual(nxt['say'], 'Dana wrote on email (5h ago): "Export still broken". Since then: triage judged it a reply to write. From you: approve the draft below, or redraft it.')      # the facts, instant (2026-09-07)
             # The browser's walk resumes unresolved rows it already showed; a shown card is not read.
             resumed = c.post('/api/concierge/next', json={'include_surfaced': True}).json()
             self.assertEqual(resumed['item']['rid'], r)

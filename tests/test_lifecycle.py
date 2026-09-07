@@ -59,7 +59,7 @@ class LifecycleTests(unittest.TestCase):
             ran = TestClient(server.app).post(f"/api/operations/{prop['id']}/execute", json={'version': prop['version']}).json()
         self.assertEqual(ran['status'], 'done'); self.assertEqual(dispatch.call_count, 1)
         # ...the introduction is the model's when there is one (PW-153); this walk has none, so the facts spoke
-        self.assertTrue(concierge.INTRO_AI)
+        self.assertFalse(concierge.INTRO_AI)     # the introduction is the facts, instant (2026-09-07)
         self.assertIn('Nothing has been started', said['say'])                                            # the proposal says what WILL happen
         self.assertIn('Done - Send to the coding agent', self.chat()[-1][1])                                # ...and the receipt what did
         # 5. the coder works: the item rides at the top, in hand, under the agent's key; the watcher says so.

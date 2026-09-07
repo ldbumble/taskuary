@@ -5,12 +5,15 @@ import path from "node:path";
 
 const src = (name) => fs.readFileSync(path.join(process.cwd(), "src", name), "utf8");
 
-test("the assistant card requires an explicit coding or regular agent choice", () => {
+test("the assistant offers an explicit coding or regular agent choice, in ONE place", () => {
   const cards = src("assistantCards.jsx");
-  assert.match(cards, /"Coding agent"/);
-  assert.match(cards, /"Regular agent"/);
-  assert.match(cards, /startAgent\("coding"\)/);
-  assert.match(cards, /startAgent\("general"\)/);
+  // the card is what the thing IS; the verbs are the chat line's (concierge.CHIPS)
+  assert.doesNotMatch(cards, /"Coding agent"/);
+  assert.doesNotMatch(cards, /"Regular agent"/);
+  const py = fs.readFileSync(path.join(process.cwd(), "..", "taskuary", "concierge.py"), "utf8");
+  assert.match(py, /'coder': 'Hand it to a coding agent'/);      // still two separate roads...
+  assert.match(py, /'regular_agent': 'Hand it to an agent'/);    // ...never one guessed kind
+  assert.match(py, /'coder', 'mine', 'not_ours', 'next'/);       // both offered on a message
   assert.doesNotMatch(cards, /kind: coding \? "coding" : "general"/);
 });
 

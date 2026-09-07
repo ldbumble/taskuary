@@ -4,7 +4,7 @@
 // queue or the Board; the card only puts it under the sentence that was just said. Reading
 // happens IN the card (the full text unfolds under it) and every card links to where the whole of
 // it lives - the task, or the row on the Timeline - because everything is the chat.
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Button, TextField } from "@mui/material";
 import SendRoundedIcon from "@mui/icons-material/SendRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
@@ -46,9 +46,10 @@ const Where = ({ card, onOpenTask, onTimeline }) => card?.tid
 // the whole text, unfolded under the card on request - a report as markdown, a mail as it was written
 function FullText({ mid, revision }) {
   const [doc, setDoc] = useState(null);
+  const shownFor = useRef(null);
   useEffect(() => {
     let live = true;
-    setDoc(null);
+    if (shownFor.current !== mid) { setDoc(null); shownFor.current = mid; }   // a different message: blank
     api.get(`/api/messages/${mid}`).then(({ data }) => live && setDoc(data)).catch((e) => live && setDoc({ error: errText(e) }));
     return () => { live = false; };
   }, [mid, revision]);
@@ -70,10 +71,13 @@ function FullText({ mid, revision }) {
 // combined. Context rows helped triage decide, but are not part of the grouped ask shown to the owner.
 function CombinedTaskText({ card }) {
   const [doc, setDoc] = useState(null);
+  const shownFor = useRef(null);
   useEffect(() => {
     let live = true;
     if (!card?.tid) { setDoc({ messages: [] }); return () => { live = false; }; }
-    setDoc(null);
+    // same task, newer presentation: keep what is on screen and swap it when the fresh copy lands
+    const identity = `${card.tid}:${card.mid || ""}`;
+    if (shownFor.current !== identity) { setDoc(null); shownFor.current = identity; }
     api.get(`/api/tasks/${card.tid}`).then(({ data }) => live && setDoc(data)).catch((e) => live && setDoc({ error: errText(e) }));
     return () => { live = false; };
   }, [card?.tid, card?.mid, card?.presentation_revision]);

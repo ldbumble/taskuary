@@ -1633,8 +1633,8 @@ SETUP_SORT_SYSTEM = ('You sort one set-up request from the owner of a small comp
 def redact(text: str) -> str: return _SECRETISH.sub('[redacted]', str(text or ''))
 
 
-def _compose_llm(store):
-    try: return llm_mod.build_llm(store)
+def _compose_llm(store, trace=None, cancel=None):
+    try: return llm_mod.build_llm(store, trace=trace, cancel=cancel)
     except Exception as e:
         logger.warning(f'concierge: no composer brain - {e}'); return None
 
@@ -1698,12 +1698,13 @@ def _walkthrough(store, tid: int, ask: str, item: dict | None, actor: str, lead:
     return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}
 
 
-def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: str = 'owner', llm=None) -> dict:
+def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: str = 'owner', llm=None,
+               trace=None, cancel=None) -> dict:
     """A set-up asked for in the chat (PW-194): sorted by the model, gathered by the composer - its questions come back as
     questions and the next words answer them - and put in front of the owner as a proposal that the shared Reports /
     Connections road creates on the click. Secrets never pass through here (PW-196); digging is a walk-through (PW-197)."""
     rec = lambda body, card=None: record_related(store, tid, item, 'assistant', body, card)
-    cllm = llm or _compose_llm(store)
+    cllm = llm or _compose_llm(store, trace, cancel)
     if not cllm:
         say_ = 'Setting that up needs an AI connector - Connections → AI - or the Reports and Connections tabs, where the forms are. Nothing is set up.'
         rec(say_); return {'say': say_, 'options': [], 'decision': None}
@@ -1727,7 +1728,8 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
         return _walkthrough(store, tid, ask, item, actor, f"I could not configure that from here ({out.get('error') or 'no configuration came back'}).")
     cfg, facts = out['config'], report_facts(out['config'])
     params = {'config': cfg, **facts}
-    tail = ((out.get('explain') + ' ') if out.get('explain') else '') + '; '.join(f"{k.replace('_', ' ')}: {v}" for k, v in facts.items() if k != 'title' and v)            + '. Nothing is saved - confirm below, tell me what to change, or preview a dry run first.'
+    looked = ', '.join(str(x) for x in (out.get('looked_at') or [])[:4])
+    tail = ((out.get('explain') + ' ') if out.get('explain') else '') + '; '.join(f"{k.replace('_', ' ')}: {v}" for k, v in facts.items() if k != 'title' and v)            + (f'. I read {looked} to build it' if looked else '')            + '. Nothing is saved - confirm below, tell me what to change, or preview a dry run first.'
     prop = _propose_raw(store, tid, 'report.create', 0, params, 'Create the report', f"{facts['title']} ({cfg.get('type')})", tail, actor, item)
     return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}
 
@@ -1945,7 +1947,7 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         if elsewhere: d['target'] = card_for(target_item)
         return {'say': RECEIPTS[verb], 'options': [], 'chips': [], 'decision': d}
     if decision and verb == 'setup':                                     # a report, a connection: gathered, then confirmed (PW-194)
-        return setup_turn(store, tid, text, decision.get('text') or text, item, actor)
+        return setup_turn(store, tid, text, decision.get('text') or text, item, actor, trace=trace, cancel=cancel)
     if decision and verb in PROPOSALS:
         try: prop = propose_for(store, tid, decision, target_item, text, actor, elsewhere=elsewhere, table=item)
         except ValueError as e:

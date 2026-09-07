@@ -119,12 +119,21 @@ def _feed_skip(r: dict) -> bool:
 
 
 def _assistant_wrapper(r: dict) -> bool:
-    """True for a generated Assistant digest whose durable ideas are surfaced separately.
+    """True for an Assistant message that is only a VEHICLE for an idea shown in its own right.
 
-    Plain Assistant messages are real unread arrivals. A generated wrapper is only a container for
-    its ``ideas`` rows; showing both is the duplicate-Assistant regression from 2026-09-04.
+    Plain Assistant messages are real unread arrivals. Two kinds are not:
+
+    - a generated digest post, which is a container for the ``ideas`` in its Brief;
+    - the message an idea is carried into triage on (assistant._idea_message writes one per idea,
+      external id ``idea:<n>``, so the verdict has a message to hang off).
+
+    Showing either beside the idea it belongs to is the duplicate-Assistant regression of
+    2026-09-04, and the second kind was still doing it on both roads (the owner, 2026-09-07: "still
+    duplicating this in timeline??" - one thought, two rows, the vehicle saying nothing when opened).
     """
-    if r.get('Channel') != 'assistant' or not r.get('Brief'): return False
+    if r.get('Channel') != 'assistant': return False
+    if re.fullmatch(r'idea:\d+', str(r.get('ExternalId') or '')): return True
+    if not r.get('Brief'): return False
     try: return bool(json.loads(r['Brief']).get('ideas'))
     except (TypeError, ValueError, json.JSONDecodeError): return False
 

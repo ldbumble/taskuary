@@ -206,7 +206,8 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.match(view, /triage moved it up/);                // the rail shows promotions
   assert.match(view, /data\.events\?\.length/);           // the watcher's lines land in the chat as they happen
   assert.match(cardsSrc(), /Show the final report/);        // ...and a finished job's report reads right there
-  assert.match(cardsSrc(), /Run it again/);                 // a rerun is queued, never run in the chat
+  // a rerun is the chat line's word now, not a second button on the card (2026-09-07: "only one place")
+  assert.doesNotMatch(cardsSrc(), /Run it again/);
   assert.match(cardsSrc(), /Open walkthrough/);             // set-up opens the Assistant operator, not a coding checkout
   assert.doesNotMatch(view, /onClick=\{\(\) => settle\("done"\)\}/);   // Done is a suggestion, not a button that settles
   assert.match(read("FeedView.jsx"), /\/api\/ingest\/poll/);            // sync now, on the rail's header
@@ -243,7 +244,8 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   const cards = read("assistantCards.jsx");
   // the two "not ours" doors the owner asked for: one that teaches memory, one that does not
   assert.match(cards, /not-mine/); assert.match(cards, /Not ours — remember it/); assert.match(cards, /Not ours, just this once/);
-  assert.match(cards, /Approve & send/); assert.match(cards, /Prep me/);
+  // prep is the chat line's word now (concierge.CHIPS meeting), not a button on the card
+  assert.doesNotMatch(cardsSrc(), /Prep me/);
   assert.match(cards, /SourceMark/); assert.match(cards, /ChannelIcon/);   // the logo of where it came from
   assert.match(cards, /On the Timeline/);                                   // every card links to the whole of it
   // Once triage combines chat lines into a task, both an ordinary item and its pending reply show

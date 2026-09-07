@@ -147,7 +147,9 @@ class CounselIntroductionTests(unittest.TestCase):
         def model(system, user, **kw):
             seen['system'], seen['user'] = system, user
             return 'Craig at the vendor says the nightly export drops inter-company rows - a coding fix. Send it to the coding agent, or reply first?'
-        self.assertTrue(concierge.INTRO_AI)
+        # the walk's introduction is the facts line now - instant, and never the wrong item; the
+        # model speaks when the owner types something that is not already a decision (2026-09-07)
+        self.assertFalse(concierge.INTRO_AI)
         with quiet(): said = concierge.surface(s, llm=model)
         self.assertTrue(said['say'].startswith('Craig at the vendor says'))
         self.assertIn('I am Taskuary', seen['system']); self.assertIn('THE CONTRACT', seen['system'])   # COUNSEL, then the contract code reads

@@ -2719,3 +2719,81 @@ Completion, Routes), extending `tests/test_blackboard.py` (+3), `tests/test_agen
 `node --test taskuary/whatsapp/` unaffected (no whatsapp files touched); website
 tests not required (no JSX changed). Full detail in
 `.superpowers/sdd/worker-lifecycle/stream-b-final-report.md`.
+
+## Triage, context and delivery gaps — the named partials closed
+
+Status: implemented and tested locally at `f35c1b1`..`a062635` on
+`worktree-agent-a7c47fe1acd407bd3` (base 550d582); nothing pushed, no CI run on this work.
+Gates from the worktree root: `python -m pytest -q -p no:cacheprovider` — 3041 passed, 76
+subtests, 0 failed; `node --test taskuary/whatsapp/` — 7 tests, 7 pass. No JSX was touched,
+so the committed bundle is unchanged.
+Acceptance PW-010 to PW-014, PW-021, PW-035, PW-049, PW-052, PW-056, PW-057, PW-062, PW-066,
+PW-073, PW-083, PW-085, PW-088, PW-089, PW-129, PW-130, PW-132, PW-143, PW-146 and PW-149
+implemented.
+
+Each of these rows already had an implementation and one named gap. Chain coverage now tells the
+truth and belongs to a mailbox: `chains.list_ids_graph` returns why a listing STOPPED (an empty or
+repeated continued page, the page budget) and `refresh_outlook` records that as `complete: False`
+with the reason; `refresh_imap` counts failed FETCHes the same way; the `chain` table is keyed
+`(Mailbox, ConversationId)` through a one-time copy, so one account's coverage can never satisfy
+another's on the same conversation id (PW-010, PW-011). Fetched history keeps its attachments,
+bound to the history `MessageId`, on both providers and never twice (PW-012, PW-014) - and stays
+`history`/`context`, on no task, creating nothing. The incomplete-history warning is inserted AFTER
+budget trimming, so the one sentence that says the context is partial can no longer be the line the
+budget drops (PW-013). The refresh before assistant/agent context is the poll `_refresh_chat_context`
+runs, which re-lists any chain `chains.needs_history` still reports incomplete.
+
+The owner now hears that retriage STARTED when the lines land, not its result first: `_poll_reports`
+takes an `on_fetched` callback fired the moment the fetch returns with new lines, before the drain is
+waited on, and `concierge_stream` says `RETRIAGE_STARTED` once per turn ahead of the existing result
+line (PW-052, PW-057). A queued general launch that fails is a counted retry - `_start_general`
+returns its failure instead of swallowing it, so the dispatch row stays `retrying` with its attempt
+and nothing claims it Started - and `drain` re-arms after every pass, so two distinct restored
+deadlines both fire rather than only the earliest (PW-073, PW-085, PW-088, PW-089). A proposal
+executes once under concurrent confirms: `store.claim_operation(op_id, version)` is a versioned
+status transition, so the second confirm is a `duplicate`, and an outcome that says `ok: False`
+records `Evidence: 'none'` and teaches nothing (PW-129, PW-130). What is said about an item in the
+chat is kept against the ITEM through `operations.discuss`, attributed by actor, with the dock
+conversation's own history unchanged (PW-132).
+
+A reply that cannot leave says why before the first send is tried (PW-143, PW-146).
+`outbound.send_probe` answers from what is already on the connector cards - an IMAP mailbox with no
+SMTP host, a Microsoft sign-in whose `granted_scope` does not include `Mail.Send` - and `send_block`
+and `can_reply` both consult it, so every surface hides Send with that sentence on it instead of
+discovering the missing permission from a bounce. `msauth._tokens` carries the granted `scope`
+through, and `ms_poll` persists it as `granted_scope` on the Outlook card; a sign-in that recorded no
+scopes is left alone, because unknown is not missing. Because the probe reads the cards,
+`server._send_state` memoizes the answer per channel for the life of one feed or reviews response -
+500 Timeline rows must not read the connector table 500 times.
+
+PW-149 was not the test-only closure the plan assumed. Canonical Unread empties on read receipts, and
+approving a reply from the Review page writes none, so an answered thread stayed in the pile as "a
+person asked you for something" with its task already closed and its reply obligation over.
+`verdicts._settle_task_after_sent_reply` now settles the item on the same branch that closes the
+task; All keeps the whole thread.
+
+Tests: `tests/test_email_chains.py` (CoverageHonestyTests, HistoryAttachmentTests,
+IncompleteHistoryWarningTests), `tests/test_chat_freshness.py` (the retriage notice;
+ConcurrentSyncTests), `tests/test_dispatch_retries.py` (queued general failure; every restored
+deadline armed), `tests/test_operations.py` (execute-once; a failed outcome teaches nothing),
+`tests/test_concierge.py`::ThreadTests, `tests/test_send_outcomes.py`::SendProbeTests,
+`tests/processing/test_processing_unread.py`::test_a_confirmed_send_leaves_unread_and_stays_in_all,
+`tests/test_fresh_evaluation.py`::ChainBeforeEvaluationTests,
+`tests/test_chat_relationship.py` (the local-day boundary; a tracker item across midnight),
+`tests/test_reply_voice.py`::WritingFeedbackTests,
+`tests/test_reply_envelope.py`::PerConnectorEnvelopeTests.
+`tests/test_assistant_presentation.py` and `tests/test_send_targets.py` were re-pinned, not
+weakened: the first now names the row types it means by "nothing proposed, nothing run" (PW-132's
+kept turn is a discussion), and the second's IMAP fixtures gained the `imap_host` every working IMAP
+card has, since a card with no host at all now correctly fails the send probe.
+
+What stays open, and the surface each needs — none of it is faked here:
+
+- PW-041, PW-047, PW-078, PW-096, PW-100 and PW-134's UI half need rendered-browser runs (Retry, the
+  hidden Send, the checkbox, the repository picker, the confirmation box). A test that needs a
+  rendered browser stays open until that run exists; PW-134's backend half is in.
+- PW-063 needs the To/mode controls on the Review page.
+- PW-087 needs the task-view Retry/Cancel buttons and the attention-pipeline row.
+- PW-097 needs the conversational repository picker.
+- PW-098 is an owner decision, not code: does a single configured repository still need the
+  confirmation step?

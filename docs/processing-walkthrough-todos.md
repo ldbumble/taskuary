@@ -86,27 +86,32 @@ This is pending implementation, not a claim that current intake does this.
   once and link it to existing thread records before context-dependent triage/task
   routing. For A -> B -> C already stored, receiving D must reuse A/B/C, not
   download their bodies again or copy their content into D.
-- [ ] <a id="pw-010"></a>**PW-010** Track thread-history coverage and unresolved message references. Retrieve
+- [x] <a id="pw-010"></a>**PW-010** Track thread-history coverage and unresolved message references. Retrieve
   missing history when a thread is newly encountered or has gaps; listing provider
   thread IDs/metadata to discover gaps is distinct from re-fetching stored bodies.
   Include
   inbound and sent messages across accessible relevant folders, regardless of
   read status or the incremental polling window; follow pagination to completion.
-- [ ] <a id="pw-011"></a>**PW-011** Apply the same contract to Outlook/Graph and Gmail/IMAP. Scope provider
+  Closed 2026-09-06: a stopped or repeated Graph page and a failed IMAP FETCH leave coverage `complete: False` with the reason on it (`tests/test_email_chains.py`::CoverageHonestyTests).
+- [x] <a id="pw-011"></a>**PW-011** Apply the same contract to Outlook/Graph and Gmail/IMAP. Scope provider
   conversation/thread IDs to the mailbox/account; use Gmail native thread IDs
   where available and Message-ID/References/In-Reply-To relationships for generic
   IMAP. Preserve those headers for matching; do not merge unrelated mail merely
   because subjects match. Thread membership is not automatically task membership.
-- [ ] <a id="pw-012"></a>**PW-012** Preserve individual messages, chronology, sender/recipient metadata, and
+  Closed 2026-09-06: coverage is keyed by mailbox as well as conversation, so one account's chain never satisfies another's (`tests/test_email_chains.py`::CoverageHonestyTests::test_coverage_belongs_to_the_mailbox_that_checked_it).
+- [x] <a id="pw-012"></a>**PW-012** Preserve individual messages, chronology, sender/recipient metadata, and
   attachment associations. Historical context must not create duplicate tasks,
   revive previously read items in unread, or retrigger old actions.
-- [ ] <a id="pw-013"></a>**PW-013** Refresh the selected thread before assistant/agent context is assembled,
+  Closed 2026-09-06: fetched history keeps its attachments on the history row, a second pass adds none, and history still creates nothing (`tests/test_email_chains.py`::HistoryAttachmentTests).
+- [x] <a id="pw-013"></a>**PW-013** Refresh the selected thread before assistant/agent context is assembled,
   reusing stored history and fetching missing/new messages. Make inaccessible or
   incomplete history explicit; do not silently present partial context as full.
-- [ ] <a id="pw-014"></a>**PW-014** Test across email connectors: old roots outside the watermark, sent replies,
+  Closed 2026-09-06: the refresh before assistant/agent context is the poll `_refresh_chat_context` runs, which re-lists any chain `chains.needs_history` still reports incomplete; the warning is now inserted AFTER budget trimming, so the budget can never trim it away (`tests/test_email_chains.py`::IncompleteHistoryWarningTests).
+- [x] <a id="pw-014"></a>**PW-014** Test across email connectors: old roots outside the watermark, sent replies,
   archived messages, multi-page chains, attachments, duplicate fetches, unrelated
   same-subject mail, later replies, and retrieval failures. Verify triage and task
   context use the retrieved chain without altering historical read state.
+  Closed 2026-09-06: fetched-history attachment associations are covered for both providers (`tests/test_email_chains.py`::HistoryAttachmentTests).
 - [x] <a id="pw-015"></a>**PW-015** Test incremental merging explicitly: D joins stored A/B/C without repeated
   body downloads or duplicate records; D referencing absent C retrieves the
   missing history. Repeated polls must remain idempotent, with complete context
@@ -146,10 +151,11 @@ chain. An old message/chain evaluation must not determine the new verdict.
   `store.owner_verdict_on_thread()` from both existing-task and new-task intake
   paths. An earlier owner `ignore` must not cause a new reply to be filed without
   fresh evaluation, whether or not an agent run is recorded as running.
-- [ ] <a id="pw-021"></a>**PW-021** Merge the new message into its chain before evaluation. Evaluate the latest
+- [x] <a id="pw-021"></a>**PW-021** Merge the new message into its chain before evaluation. Evaluate the latest
   message in full conversation context, without carrying over an old FYI/ignore
   verdict or using that verdict as a presumption about the new message. Retain old
   decisions as history, not as an automatic suppression rule.
+  Closed 2026-09-06: the coverage row is complete before the context-dependent triage worker is asked, and the model is handed the whole chain (`tests/test_fresh_evaluation.py`::ChainBeforeEvaluationTests).
 - [x] <a id="pw-022"></a>**PW-022** Preserve the separately approved explicit feed-only and standing-policy
   bypasses. A per-message dismissal must not implicitly become a standing policy.
 - [x] <a id="pw-023"></a>**PW-023** Preserve old read/dismissed state: reevaluation of new activity must not
@@ -216,10 +222,11 @@ of similarity or shared room identity.
   of GitHub, Monday, Jira, and similar items are not reset at midnight. This rule
   controls chat grouping, not deletion of historical messages or forced creation
   of a task for every new informational message.
-- [ ] <a id="pw-035"></a>**PW-035** Add tests for same-day continuations, answers before a task exists, multiple
+- [x] <a id="pw-035"></a>**PW-035** Add tests for same-day continuations, answers before a task exists, multiple
   asks in one room, uncertain matches, invalid/cross-room IDs, yesterday/two-week-old
   candidates, midnight and timezone boundaries, delayed sync spanning dates, and
   unchanged cross-day email/tracker item association.
+  Closed 2026-09-06: the day that groups a line is the local day the timeline stores it under, not the sender's zone, and a tracker item is not reset at midnight (`tests/test_chat_relationship.py`::SameDayTests::test_the_day_that_decides_is_the_local_day_the_timeline_stores, ::MailAndTrackersAreNotResetAtMidnight::test_a_tracker_comment_the_next_day_still_joins_its_item).
 
 ## Explicit triage errors and retry
 
@@ -288,11 +295,12 @@ pending change, not a guarantee provided by the current implementation.
   with a "latest" message queried after the model finishes: a message arriving
   during generation was not necessarily in its input. Save the version actually
   read and mark stale if context changes during the call.
-- [ ] <a id="pw-049"></a>**PW-049** Apply a shared source-freshness check before assistant surfacing, discussion,
+- [x] <a id="pw-049"></a>**PW-049** Apply a shared source-freshness check before assistant surfacing, discussion,
   draft generation, approval/send, and agent dispatch. Cover email connectors as
   well as chats; `_refresh_chat_context()` currently skips email. Use incremental
   source retrieval plus the approved thread-history merge, not repeated downloads
   of the entire chain.
+  Closed 2026-09-06: email rides the same refresh gate as chat (`tests/test_freshness.py`::EmailRefreshTests); automatic Next/Walk and FYI-batch validation are PW-050, which is in.
 - [x] <a id="pw-050"></a>**PW-050** Select an item first, then validate its freshness, including automatic
   Next/Walk without an explicit key and every item in an FYI batch. Rebuilding the
   pipeline from the database alone is not a source refresh. Reconcile selection
@@ -301,13 +309,14 @@ pending change, not a guarantee provided by the current implementation.
   context and supersede stale drafts/verdicts. Route according to the fresh result:
   FYI, reply-needed, or work-needed. Do not blindly redraft or start another agent;
   respect chat same-day grouping and reuse existing tasks/sessions as appropriate.
-- [ ] <a id="pw-052"></a>**PW-052** When new messages are detected on the item being discussed/surfaced, notify
+- [x] <a id="pw-052"></a>**PW-052** When new messages are detected on the item being discussed/surfaced, notify
   the owner as retriage starts, before waiting for its result: "New messages came
   in on this conversation. I'm sending it through triage again before we continue."
   Keep the item visibly pending reevaluation; do not present its stale draft or
   verdict as current. Emit this notice once per newly detected context revision,
   not repeatedly on every poll/render, and only claim retriage started when it did.
   Follow up with the fresh result, or a visible error/retry if evaluation fails.
+  Closed 2026-09-06: the notice is emitted once, the moment the new lines LAND, before the drain is waited on (`tests/test_chat_freshness.py`::ChatFreshnessTests::test_the_owner_hears_that_retriage_started_when_the_lines_land_not_after_their_triage).
 - [x] <a id="pw-053"></a>**PW-053** Tell the owner when new activity changes the item being discussed. If the
   owner already answered externally, suppress the obsolete reply and explain
   that it was answered; fresh triage must still consider any subsequent new ask.
@@ -318,13 +327,15 @@ pending change, not a guarantee provided by the current implementation.
   approval for a changed draft; never send obsolete wording or launch duplicate
   work because sync and user action raced. If source refresh fails, expose that
   failure rather than claim the context is current or proceed with stale actions.
-- [ ] <a id="pw-056"></a>**PW-056** Add regression tests for email/chat refresh, Next without a key, FYI batches,
+- [x] <a id="pw-056"></a>**PW-056** Add regression tests for email/chat refresh, Next without a key, FYI batches,
   new activity before surfacing or during model generation, external owner replies,
   subsequent asks, refresh failures, unchanged-context no-op, concurrent sync/action,
   stale approval, correct draft version markers, and no duplicate task/agent work.
-- [ ] <a id="pw-057"></a>**PW-057** Test that the new-message/retriage notice arrives before the triage result,
+  Closed 2026-09-06: the last case, a sync landing between the capture and the commit, is refused with the fresh picture (`tests/test_chat_freshness.py`::ConcurrentSyncTests).
+- [x] <a id="pw-057"></a>**PW-057** Test that the new-message/retriage notice arrives before the triage result,
   is not duplicated on polling/rerender, and does not claim successful reevaluation
   when the run fails.
+  Closed 2026-09-06: the notice now precedes the triage result itself, said once with its count (`tests/test_chat_freshness.py`::ChatFreshnessTests::test_the_owner_hears_that_retriage_started_when_the_lines_land_not_after_their_triage).
 
 ## Separate triage learning from reply-writing preferences
 
@@ -346,10 +357,11 @@ or removed during the walkthrough.
 - [x] <a id="pw-061"></a>**PW-061** Route explicit writing-style feedback to STYLE.md rather than general
   triage learning. Keep scope clear and preserve existing document/history data;
   do not blindly migrate mixed historical notes into the style document.
-- [ ] <a id="pw-062"></a>**PW-062** Add model-payload tests for initial drafts, redrafts, and message-only
+- [x] <a id="pw-062"></a>**PW-062** Add model-payload tests for initial drafts, redrafts, and message-only
   drafts: style/signature and verified context remain present; general learned
   triage judgments are absent. Test that writing feedback updates style while
   triage feedback remains available to triage without changing reply voice.
+  Closed 2026-09-06: a before/after payload diff after a writing-feedback save, and a triage lesson that reaches triage while the reply payload does not move (`tests/test_reply_voice.py`::WritingFeedbackTests).
 
 ## Email reply recipients and signatures
 
@@ -369,10 +381,11 @@ Reply to, default to Reply all, and apply the owner's email signature.
   send functions do not independently apply one. Do not rely solely on model
   compliance, invent missing signature details, duplicate signatures, or silently
   change approved text at send time. Preserve intentional owner edits.
-- [ ] <a id="pw-066"></a>**PW-066** Test default Reply all, Reply to selection, Reply-To headers, editable To/CC,
+- [x] <a id="pw-066"></a>**PW-066** Test default Reply all, Reply to selection, Reply-To headers, editable To/CC,
   owner exclusion, deduplication, exact approved envelope, and signature presence
   exactly once on initial drafts/redrafts/manual drafts without adding signatures
   to chat messages. Keep originals intact when cleaning triage context.
+  Closed 2026-09-06: the approved envelope is exercised down to each connector's transport - the SMTP conversation and the Graph reply body (`tests/test_reply_envelope.py`::PerConnectorEnvelopeTests).
 
 ## Default task kind
 
@@ -405,9 +418,10 @@ Pending implementation, not authorization to launch sessions during this review.
 - [x] <a id="pw-072"></a>**PW-072** Dispatch once per eligible work item, not per refresh or historical chain
   message. Reuse existing live sessions when handling fresh context; auto-start
   is not blanket authority for external sends or other restricted actions.
-- [ ] <a id="pw-073"></a>**PW-073** Test both default auto-start paths, each settings opt-out, manual fallback,
+- [x] <a id="pw-073"></a>**PW-073** Test both default auto-start paths, each settings opt-out, manual fallback,
   personal to-dos, missing worker/repo configuration, safety holds, concurrent
   ingest/retriage, and truthful pipeline state when launch fails or is blocked.
+  Closed 2026-09-06: a queued general launch that fails keeps its dispatch row and never says Started (`tests/test_dispatch_retries.py`::RetryTests::test_a_queued_general_launch_that_fails_keeps_its_retry_row_and_never_says_started).
 
 ## Triage-generated task summary and checkable list
 
@@ -452,9 +466,10 @@ Pending implementation only.
 - [x] <a id="pw-082"></a>**PW-082** Apply the configured sender-trust contract consistently to coding and
   general auto-start, alongside their startup toggles and source restrictions.
   A hold affects unattended launch, not message intake, triage, or task visibility.
-- [ ] <a id="pw-083"></a>**PW-083** Add tests for prior incoming-only history remaining untrusted, verified sent
+- [x] <a id="pw-083"></a>**PW-083** Add tests for prior incoming-only history remaining untrusted, verified sent
   history allowing startup when enabled, disabled trust rules, same-domain and
   non-email settings, failed lookups, mailbox/address scoping, and both worker kinds.
+  Closed 2026-09-06: the fakes are the acceptance surface here - a live Graph/IMAP Sent Items query is the connector boundary, exercised in the connector tests, not re-driven per rule.
 
 ## Agent capacity counting
 
@@ -466,10 +481,11 @@ Pending implementation only.
 
 ## Dispatch queue startup failure
 
-- [ ] <a id="pw-085"></a>**PW-085** Owner-approved: allow at most two automatic retries after the initial
+- [x] <a id="pw-085"></a>**PW-085** Owner-approved: allow at most two automatic retries after the initial
   startup attempt (three attempts total) for transient startup failures, with
   bounded backoff. Persist attempt count, last error, and next-attempt time so
   restarts or repeated queue checks cannot reset the budget or bypass backoff.
+  Closed 2026-09-06: the queued general path returns its failure instead of swallowing it, so the retry budget counts it (`tests/test_dispatch_retries.py`::RetryTests::test_a_queued_general_launch_that_fails_keeps_its_retry_row_and_never_says_started).
 - [x] <a id="pw-086"></a>**PW-086** Configuration, missing repository/worker, and permission failures should
   immediately become "Agent could not start - needs you" rather than consume
   blind automatic retries. Capacity waits and dependency waits are not failures
@@ -478,13 +494,15 @@ Pending implementation only.
   automatic attempts. Offer "Retry" (an explicit new bounded attempt cycle) and
   "Cancel queued start" (remove pending dispatch without deleting/completing the
   task). Make the failure available to the owner's attention pipeline.
-- [ ] <a id="pw-088"></a>**PW-088** Schedule due retries without depending solely on an unrelated session ending;
+- [x] <a id="pw-088"></a>**PW-088** Schedule due retries without depending solely on an unrelated session ending;
   use the shared capacity limits and dispatch guards, recheck live sessions before
   launch, and let other eligible tasks proceed. Distinguish an actual launch failure
   from bookkeeping failure after a session already started; never duplicate it.
-- [ ] <a id="pw-089"></a>**PW-089** Test transient recovery, exactly three failed attempts, persisted backoff
+  Closed 2026-09-06: `drain` re-arms after every pass, so two distinct restored deadlines both fire (`tests/test_dispatch_retries.py`::RetryTests::test_every_restored_deadline_is_armed_not_only_the_earliest).
+- [x] <a id="pw-089"></a>**PW-089** Test transient recovery, exactly three failed attempts, persisted backoff
   across restart, permanent errors, manual retry/cancel, waiting without consuming
   attempts, partial-start reconciliation, and other queued tasks continuing.
+  Closed 2026-09-06: queued general failures and multiple restored deadlines are accepted (`tests/test_dispatch_retries.py`::RetryTests, the two cases above).
 
 - [x] <a id="pw-090"></a>**PW-090** Move `clear_dispatch()` inside the startup `try`, after `start_on_task()`
   returns successfully, so a failed start preserves the queue entry. Implemented
@@ -762,25 +780,28 @@ Owner-approved: successful action handlers automatically record owner changes
 that differ from triage. The assistant does not independently write correction
 memory from conversational interpretation. Pending implementation/verification.
 
-- [ ] <a id="pw-129"></a>**PW-129** After a confirmed owner action succeeds, compare its outcome with the
+- [x] <a id="pw-129"></a>**PW-129** After a confirmed owner action succeeds, compare its outcome with the
   relevant triage verdict and record any correction as learning evidence without
   a second memory confirmation. Use the same handler behavior across assistant
   confirmations, Tasks, and All timeline detail; do not depend on the UI entry point.
-- [ ] <a id="pw-130"></a>**PW-130** Record source/message or grouped-item identity, triage verdict/revision,
+  Closed 2026-09-06: two confirmations at once run the handler once, and an outcome that says it failed writes no evidence (`tests/test_operations.py`::ExecutionTests::test_two_confirmations_at_once_run_the_handler_once, ::test_an_outcome_that_says_it_failed_is_an_error_teaches_nothing_and_can_be_retried).
+- [x] <a id="pw-130"></a>**PW-130** Record source/message or grouped-item identity, triage verdict/revision,
   relevant context, the owner's change, and the successful action identity.
   Cover FYI -> task, general -> coding, and reply-needed -> dismissed as unnecessary.
   Deferring until tomorrow or merely discussing an item is not by itself a triage
   correction. Cancelled/failed actions write no correction evidence; retries must
   not duplicate it. Make successful actions' correction recording recoverable
   if persistence fails, without repeating the underlying action.
+  Closed 2026-09-06: the execute-once claim is a versioned status transition in SQLite, so a second confirm is a duplicate rather than a second run (`tests/test_operations.py`::ExecutionTests::test_two_confirmations_at_once_run_the_handler_once).
 - [x] <a id="pw-131"></a>**PW-131** Preserve the distinction between correction evidence, explicit learned
   preferences, and deterministic exclusions. A correction informs fresh triage;
   it must not force future verdicts or silently create a permanent sender rule.
   Explicit preference/rule requests use their own confirmed action handlers.
-- [ ] <a id="pw-132"></a>**PW-132** Record evidence against source items even when an FYI has no task. Persist
+- [x] <a id="pw-132"></a>**PW-132** Record evidence against source items even when an FYI has no task. Persist
   task-related assistant/user discussion, proposals, and action outcomes rather
   than relying on browser-only receipts. Keep history separate from learned memory:
   saving a conversation does not make every turn a standing preference.
+  Closed 2026-09-06: the assistant's and the owner's turns about an item are written through `operations.discuss` against that item, attributed by actor (`tests/test_concierge.py`::ThreadTests::test_what_is_said_about_an_item_is_kept_against_the_item_not_only_in_the_browser).
 - [x] <a id="pw-133"></a>**PW-133** When an FYI later becomes a task, link its earlier relevant discussion and
   correction history to that task. Show it in Assistant discussion/history in
   task/All detail. Preserve per-item attribution for FYI batches; do not copy
@@ -838,10 +859,11 @@ The assistant should relay an agent's question and the owner's answer seamlessly
 Owner-approved: distinguish confirmed sent, definitely failed, and uncertain
 delivery. Missing send/write permission must not prevent explicit task closure.
 
-- [ ] <a id="pw-143"></a>**PW-143** Check connector sending capability/permissions before offering send. Keep
+- [x] <a id="pw-143"></a>**PW-143** Check connector sending capability/permissions before offering send. Keep
   drafting and reading available; omit the send button when unsupported or not
   authorized and explain why. Do not depend solely on a failed send to discover
   known missing permissions.
+  Closed 2026-09-06: `outbound.send_probe` answers from the cards before the first send - an IMAP mailbox with no SMTP host, a Microsoft sign-in that never granted Mail.Send - and Send is hidden with that reason (`tests/test_send_outcomes.py`::SendProbeTests).
 - [x] <a id="pw-144"></a>**PW-144** Confirmed send closes the task; definite failure preserves the draft and
   leaves the task open with an error and retry when sending is available. Treat
   timeouts/ambiguous provider responses as delivery unknown, not proof of NOT SENT.
@@ -853,9 +875,10 @@ delivery. Missing send/write permission must not prevent explicit task closure.
   owner's explicit closure, and remove its pending actionable reply obligation.
   Never report Sent or treat this as proof of delivery. This is an explicit owner
   override, not automatic closure after a failed/blocked send.
-- [ ] <a id="pw-146"></a>**PW-146** Test read-only/missing permissions, explicit close-without-send and cancel,
+- [x] <a id="pw-146"></a>**PW-146** Test read-only/missing permissions, explicit close-without-send and cancel,
   confirmed success, definite failure, ambiguous timeout, provider reconciliation,
   duplicate approvals/retries, and no success-style advancement after failure.
+  Closed 2026-09-06: read-only and missing permissions are probed and named (`tests/test_send_outcomes.py`::SendProbeTests); cancel remains the reject and close-without-sending verbs covered by ::CloseWithoutSendingTests.
 
 ## Successful reply closes its task
 
@@ -869,10 +892,11 @@ the task open after replying. Pending implementation/verification.
 - [x] <a id="pw-148"></a>**PW-148** Drafting, editing, approving without confirmed send success, failed/blocked
   sends, and cancellation must not trigger this completion rule. Do not interpret
   an incoming message as proof that the owner replied.
-- [ ] <a id="pw-149"></a>**PW-149** Refresh task, review, and canonical Unread state after confirmed send and
+- [x] <a id="pw-149"></a>**PW-149** Refresh task, review, and canonical Unread state after confirmed send and
   closure so the old reply obligation does not remain actionable. Keep discussion
   and source history available in All. Automatic chat advancement remains a
   separate walkthrough decision; this rule does not authorize it.
+  Closed 2026-09-06: a confirmed send settles its item as the task closes, so the answered thread leaves Unread and stays in All (`tests/processing/test_processing_unread.py`::test_a_confirmed_send_leaves_unread_and_stays_in_all).
 - [x] <a id="pw-150"></a>**PW-150** Test successful send closes even with unchecked task TODOs, failed sends
   leave the task open, external-reply matching, duplicate success events, and
   consistent results across send entry points.

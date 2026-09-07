@@ -559,7 +559,13 @@ def _run_operation(op: dict, background: BackgroundTasks):
         out = decide(tid, DecideBody(verb='approve'), background)
         if not out.get('ok'): raise RuntimeError(out.get('send_error') or 'the reply was not sent')
         return out
-    if kind == 'agent.answer': return waitroom_add(tid, {'text': str(p.get('text') or 'yes')})
+    if kind == 'agent.answer':
+        # the exact outstanding request of the run that asked (PW-138/139); nothing asked = the waiting room (PW-140)
+        from . import workerstate as ws
+        out = ws.answer_open(store, tid, str(p.get('text') or 'yes'), ACTOR)
+        if out['state'] == 'no_request': return waitroom_add(tid, {'text': str(p.get('text') or 'yes')})
+        if not out['delivered']: raise RuntimeError(f"{out['state']}: {out.get('why') or ''}")
+        return out
     if kind == 'agent.stop': return _wrap_task(tid, True) if p.get('wrap') else stop_task_agent(tid)
     if kind == 'report.rerun': return report_rerun(tid)
     if kind == 'memory.remember':

@@ -126,6 +126,22 @@ def answer(store, tid: int, request_id: str, text: str, actor: str = 'owner') ->
     return {'delivered': True, 'state': 'delivered', 'sid': sess.sid}
 
 
+def delivery_path(sess) -> str | None:
+    """The integration's own reply road (PW-140): an API session takes a prompt, a pty is typed into;
+    None means there is nothing to deliver to - open the workspace."""
+    if not sess or not getattr(sess, 'alive', False): return None
+    return 'api' if hasattr(sess, 'send_prompt') else 'pty'
+
+
+def answer_open(store, tid: int, text: str, actor: str = 'owner') -> dict:
+    """The chat's answer, bound to the newest open request of the run that has the task - an approval first
+    (PW-138). No open request from a live run is `no_request`: the caller's waiting room takes the words."""
+    sess = _live(tid)
+    req = asking_of(store, sess) if sess else None
+    if not req: return {'delivered': False, 'state': 'no_request', 'why': 'no open request from a live run'}
+    return {**answer(store, tid, req['request_id'], text, actor), 'path': delivery_path(sess), 'request_id': req['request_id']}
+
+
 def waiting_of(store, t):
     """Is this session waiting on the owner, by ITS OWN WORD? True/False when its run has reported through
     events (an open request is a hand raised; a working run raises none however quiet its screen); None when

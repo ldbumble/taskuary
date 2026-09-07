@@ -668,6 +668,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   <LifecycleChip kind="task" phase={taskPhase(task.Status)} compact />
                   <StateChip task={task} />
                   {task.Priority === "urgent" && <Chip size="small" label="urgent" sx={{ bgcolor: PILL_COLORS.red.bg, color: PILL_COLORS.red.fg, height: 17, fontSize: 10 }} />}
+                  {String(task.Tags || "").split(/[\s,]+/).includes("interrupted") && <Chip size="small" label="interrupted"
+                    title="Taskuary closed while an agent was working this. Nothing restarts until you choose an agent."
+                    sx={{ height: 17, fontSize: 9.5, bgcolor: "#eee7d6", color: "#7a5c1e" }} />}
                   {assignedAgent(task.Assignee) && <Chip size="small" icon={<TaskuaryMark size={11} />}
                     label={assignedAgent(task.Assignee)} title={`${assignedAgent(task.Assignee)} owns this task`}
                     sx={{ height: 17, fontSize: 9.5, bgcolor: "#e3e6e1", color: "#47654a",

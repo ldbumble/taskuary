@@ -1352,6 +1352,7 @@ def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, inst
     import json
     t = store.get_task(tid)
     if not t: raise ValueError(f'no task {tid}')
+    resume_task(store, tid, actor)
     # the owner opening a session makes the task theirs to end (selfclose.claim) - before the seed
     # is built, so the prompt says "stay at the prompt" instead of "run --done"
     from . import selfclose as _sc
@@ -1626,6 +1627,15 @@ def close(sid):
     return bool(t)
 
 
+INTERRUPTED = 'interrupted'      # Taskuary closed (or restarted) while a worker had this; the owner decides what continues (PW-262)
+INTERRUPTING = ('shutdown', 'startup')
+
+
+def resume_task(store, task_id, actor='owner') -> bool:
+    """A worker is starting on the task by the owner's choice: the interruption is over. Both starters call this."""
+    return store.tag_task(task_id, INTERRUPTED, False, actor)
+
+
 def release_task(store, task_id, actor='terminal', note=None) -> bool:
     """Release unfinished work when its worker has really gone away.
 
@@ -1638,6 +1648,8 @@ def release_task(store, task_id, actor='terminal', note=None) -> bool:
         if run.get('Status') == 'running':
             store.update_run(run['RunId'], {'Status': 'stopped'}, finished=True)
     store.update_task(task_id, {'Status': 'open'}, actor)
+    # not Working, not Done: interrupted, visibly - and nothing restarts by itself (PW-262)
+    if actor in INTERRUPTING: store.tag_task(task_id, INTERRUPTED, True, actor)
     store.add_comment(task_id, actor, 'agent', note or
                       'The agent session ended. The task is open again - nobody is working it.')
     return True

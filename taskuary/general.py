@@ -873,6 +873,7 @@ def start_session(store, tid: int, connector_id=None, model=None, actor='owner',
     task = store.get_task(tid)
     if not task: raise ValueError(f'no task {tid}')
     if not handles(task): raise ValueError('assistant view is for general, research, marketing, and triage tasks')
+    terminal.resume_task(store, tid, actor)
     # A setup walkthrough needs an operator, not a coder in a checkout. If the dock is normally
     # backed by an API-only chat model, choose the first configured CLI for this task so it can
     # actually drive the embedded browser. An explicit provider choice still wins.

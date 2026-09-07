@@ -69,6 +69,23 @@ test('the Unread heading names the run the rail is crossing, and jumps between t
   assert.ok(Object.values(RUN_META).some((m) => m.word === opening), `${opening} is not one of the runs`);
   assert.equal(opening, runLabel((await crossingRun(page)).crossing));
 
+  // A row pinned on top takes the heading with it. The pile draws [current, ...items], so the row
+  // on top can be one the inventory does not contain - and a heading read off the inventory said
+  // "reports" over a row that said asked you (the owner, 2026-09-07: "it says reports when there
+  // is ask you?"). "Walk me through my tasks" is how a Current appears, the way the owner makes one.
+  await page.waitForFunction(() => [...document.querySelectorAll('button')]
+    .some((button) => button.innerText === 'Walk me through my tasks' && !button.disabled), { timeout: 15000 });
+  await page.evaluate(() => [...document.querySelectorAll('button')]
+    .find((button) => button.innerText === 'Walk me through my tasks').click());
+  await page.waitForSelector('.tq-pile-row.current[data-tq-run]', { timeout: 20000 });
+  const pinned = await page.$eval('.tq-pile-row.current[data-tq-run]', (node) => node.dataset.tqRun);
+  for (let tries = 0; tries < 40 && (await dockText(page)) !== runLabel(pinned); tries += 1) {
+    await new Promise((done) => setTimeout(done, 100));
+  }
+  const geometry = await crossingRun(page);
+  assert.equal(await dockText(page), runLabel(pinned),
+    `the heading names the row on top (pinned ${pinned}, crossing ${geometry.crossing}, runs ${geometry.runs}, scrollTop ${geometry.scrollTop})`);
+
   // scrolling relabels it. Wherever the rail ends up - arrivals keep landing under it - the
   // heading names the run that is actually crossing the dock.
   await page.$$eval('.tq-pile-row[data-tq-run]', (rows) => {

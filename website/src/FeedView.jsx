@@ -568,6 +568,12 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   // chronological and keeps its date. Same spy, same dock, different axis (the owner, 2026-09-07:
   // "the date on top makes no sense on the unread tab since we don't sort by date").
   const [curRun, setCurRun] = useState("");
+  // ...and which runs the dock offers comes from the rail as DRAWN, in draw order. Reading it off
+  // the inventory instead put the wrong word over the rail: the pile draws [current, ...items], so
+  // the row pinned on top is not necessarily in `items` at all, and with nothing scrolled the label
+  // fell back to the inventory's first run - "reports" over a row saying asked you (the owner,
+  // 2026-09-07: "it says reports when there is ask you?").
+  const [railRuns, setRailRuns] = useState([]);
   const spy = useCallback(() => {
     const rail = railRef.current; if (!rail) return;
     const ranked = view === "unread";
@@ -602,8 +608,12 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     // edge): the label is the FIRST group's day, not whatever day the owner last scrolled through in the
     // other view (2026-09-07: "Saturday, Sep 5" over Monday's rows)
     const crossing = cur || dayLayout.current[0]?.day || "";
-    if (ranked) setCurRun((was) => crossing || was);                // the updater form keeps this
-    else setCurDay((was) => crossing || was);                      // callback off the scroll listener's deps
+    if (ranked) {
+      setCurRun((was) => crossing || was);                          // the updater form keeps this
+      const drawn = [];                                             // callback off the scroll listener's deps
+      for (const entry of dayLayout.current) if (entry.day && !drawn.includes(entry.day)) drawn.push(entry.day);
+      setRailRuns((was) => (was.length === drawn.length && was.every((run, i) => run === drawn[i]) ? was : drawn));
+    } else setCurDay((was) => crossing || was);
   }, [view]);
   useEffect(() => {
     const rail = railRef.current; if (!rail) return undefined;
@@ -614,9 +624,20 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     onScroll();
     return () => { rail.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onScroll); if (raf) cancelAnimationFrame(raf); };
   }, [spy]);
-  // a new pile is a new layout: re-measure at once rather than at the owner's next scroll, or the
-  // dock keeps the band of a rail that has already been redrawn under it
-  useEffect(() => { dayLayoutDirty.current = true; spy(); }, [unreadInventory, spy]);
+  // A new pile is a new layout, and the pile admits its rows a batch per animation frame - so the
+  // rail keeps changing under a heading measured once. Watch the rows themselves: any row added,
+  // removed or re-banded re-measures, without waiting for the owner to scroll.
+  useEffect(() => {
+    const rail = railRef.current; if (!rail) return undefined;
+    const remeasure = () => { dayLayoutDirty.current = true; spy(); };
+    // All groups its rows by day in wrappers that do not move: one measure per response is enough,
+    // and observing that list would watch every row of a 500-row history for nothing.
+    if (view !== "unread" || typeof MutationObserver === "undefined") { remeasure(); return undefined; }
+    const observer = new MutationObserver(remeasure);
+    observer.observe(rail, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-tq-run", "style"] });
+    remeasure();
+    return () => observer.disconnect();
+  }, [unreadInventory, spy, view]);
   useEffect(() => () => clearTimeout(dateJumpTimer.current), []);
   const [newOpen, setNewOpen] = useState(false);     // the ＋ New sheet (NewSheet.jsx)
   const [rows, setRows] = useState(null);
@@ -1277,7 +1298,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   const dateEntries = dayEntries.length ? dayEntries : [[today, []]];
   // the same dock on Unread, on the axis Unread is actually sorted by: the bands the pile holds,
   // in the order it draws them, and the one the rail is crossing is the label
-  const pileRuns = view === "unread" ? runsOf(unreadInventory?.items) : [];
+  const pileRuns = view === "unread" ? (railRuns.length ? railRuns : runsOf(unreadInventory?.items)) : [];
   const shownRun = pileRuns.includes(curRun) ? curRun : (pileRuns[0] || "");
   const jumpToDay = (day) => {
     dateJump.current = String(day);

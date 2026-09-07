@@ -188,6 +188,24 @@ def test_confirmed_done_rejects_new_context_instead_of_reading_unseen_arrival(st
     assert list(store.cx.iterdump()) == before
 
 
+def test_a_confirmed_send_leaves_unread_and_stays_in_all(store):
+    """PW-149: the reply really left, so the item is answered. It drops out of Unread on the same
+    pass that closed its task, and All still carries it - a sent answer is history, not a hole."""
+    from taskuary import verdicts
+    tid = store.create_task({'Title': 'Please reply', 'Kind': 'reply', 'Status': 'open'}, 'fixture')
+    mid = add(store, 'Please reply', tid=tid, status='routed')
+    rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'reply', 'Status': 'pending', 'DraftText': 'Draft'})
+    all_rows, unread = both(store)
+    assert next(i for i in unread['items'] if i.get('rid') == rid)['lane'] == 'approve'
+    assert mid in {r['row']['MessageId'] for r in all_rows}
+    verdicts._settle_task_after_sent_reply(store, store.get_review(rid), 'owner', True)
+    store.decide_review(rid, 'approved', 'Draft', 'owner')
+    assert store.get_task(tid)['Status'] == 'done'
+    all_after, after = both(store)
+    assert [i for i in after['items'] if i.get('mid') == mid] == [], 'a sent reply is out of Unread'
+    assert mid in {r['row']['MessageId'] for r in all_after}, 'and still in All'
+
+
 def test_grouped_root_identity_survives_review_and_new_member_activity(store):
     tid = store.create_task({'Title': 'Shared task', 'Kind': 'general', 'Status': 'open'}, 'test')
     mid = add(store, 'Original request', tid=tid, status='routed')

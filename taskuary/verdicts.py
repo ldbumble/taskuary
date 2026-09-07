@@ -96,6 +96,12 @@ def _settle_task_after_sent_reply(store, rv: dict, actor: str, was_sent: bool):
     if task.get('Status') not in ('done', 'dropped'):
         store.update_task(task_id, {'Status': 'done'}, actor)
         store.add_comment(task_id, actor, 'human', 'Closed - the reply went out.')
+        # ...and the item leaves Unread with it (PW-149). Canonical Unread empties on read receipts, and
+        # nobody writes one for a reply approved from the Review page - so the answered thread sat in the
+        # pile as 'a person asked you for something' with its task already closed. All keeps the whole thread.
+        from . import funnel
+        try: funnel.settle(store, f'task:{task_id}', 'done', actor, note='the reply went out')
+        except Exception as e: logger.debug(f'the sent reply did not settle its item: {e}')
     if stopped:
         store.add_comment(task_id, actor, 'human', 'Stopped the parked agent because the task reply was sent.')
 

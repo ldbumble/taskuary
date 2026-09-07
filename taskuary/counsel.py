@@ -148,3 +148,29 @@ def check_budget(store, name: str, text: str) -> str:
         logger.warning(f'{name}: {len(text)} characters is past the {BUDGET} budget - read whole, but consider shortening it')
         store.audit('doc', 0, 'over_budget', 'system', detail={'doc': name, 'chars': len(text), 'budget': BUDGET})
     return text
+
+MARKER = '<!-- counsel:deciding -->'
+
+def _squash(s): return ' '.join(str(s or '').split())
+
+def migrate(store) -> str:
+    """The shipped document gained `## When the owner decides` (the prose that left concierge.SYSTEM). A stock
+    document - never edited, or matching any previously shipped template - is replaced outright; an owner's
+    document keeps every word and gets the section appended before My goal (or at the end), audited (PW-256)."""
+    from pathlib import Path
+    tdir = Path(__file__).parent / 'templates'
+    new = tdir.joinpath('counsel.md').read_text(encoding='utf-8')
+    cur = store.get_doc('counsel')
+    if cur and MARKER in cur: return 'unchanged'
+    row = store.get_doc_row('counsel')
+    stock = {_squash(p.read_text(encoding='utf-8')) for p in tdir.glob('history/counsel-*.md')}
+    if not cur or (row and row.get('UpdatedBy') == 'template') or _squash(cur) in stock:
+        store.save_doc('counsel', new, 'template'); return 'replaced'
+    lines = new.splitlines()
+    section = '\n'.join(lines[lines.index(f'## {DECIDING_HEAD}'):]).split('\n## ', 1)[0].rstrip('\n')
+    text = cur.rstrip('\n')
+    if f'## {GOAL_HEAD}' in text: text = text.replace(f'## {GOAL_HEAD}', section + f'\n\n## {GOAL_HEAD}', 1)
+    else: text = text + '\n\n' + section + '\n'
+    store.save_doc('counsel', text, 'migration')
+    store.audit('doc', 0, 'migrated', 'system', detail={'doc': 'counsel', 'section': DECIDING_HEAD})
+    return 'appended'

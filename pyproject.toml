@@ -67,4 +67,4 @@ include = ["taskuary*"]
 [tool.setuptools.package-data]
 # whatsapp/ too: the bridge error tells you to run `node bridge.mjs` out of the package, and
 # a pip install without it is an instruction pointing at a directory that does not exist.
-taskuary = ["web/*", "web/assets/*", "templates/*.md", "skills/*/*.md", "whatsapp/*"]
+taskuary = ["web/*", "web/assets/*", "templates/*.md", "templates/history/*.md", "skills/*/*.md", "whatsapp/*"]

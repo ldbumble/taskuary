@@ -46,6 +46,9 @@ async def _lifespan(_app):
         # or New chat can change the inputs. Schema construction alone never cuts over.
         from .processing_startup import initialize
         initialize(store, live_state=[])
+        from . import counsel as _counsel
+        try: logger.info(f"COUNSEL migration: {_counsel.migrate(store)}")
+        except Exception as e: logger.warning(f'COUNSEL migration skipped: {e}')
         # Preserve the owner's existing opt-out before bridges, catch-up, or drain
         # admission can ingest anything. Failure must not enable unattended work.
         store.upgrade_auto_start()

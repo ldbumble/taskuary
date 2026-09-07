@@ -1226,6 +1226,13 @@ class SQLiteStore:
     def add_operation(self, fields: dict) -> str:
         self._insert('operation', fields, self.OP_COLS, {'CreatedAt': _now(), 'UpdatedAt': _now()}); return fields['OpId']
     def get_operation(self, op_id: str): return self._one('SELECT * FROM operation WHERE OpId=?', (op_id,))
+    def claim_operation(self, op_id: str, version: int) -> bool:
+        """The compare-and-set two simultaneous confirms race on (PW-129): exactly one turns the row `running`."""
+        with self.lock:
+            cur = self.cx.execute("UPDATE operation SET Status='running', UpdatedAt=? WHERE OpId=? AND Version=? AND Status IN ('proposed','error')",
+                                  (_now(), op_id, int(version)))
+            self.cx.commit(); self._writes += 1
+            return cur.rowcount == 1
     def update_operation(self, op_id: str, fields: dict):
         d = {k: v for k, v in fields.items() if k in self.OP_COLS and k != 'OpId'} | {'UpdatedAt': _now()}
         self._exec(f"UPDATE operation SET {', '.join(k + '=?' for k in d)} WHERE OpId=?", [*d.values(), op_id])

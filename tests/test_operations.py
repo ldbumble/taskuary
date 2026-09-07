@@ -42,6 +42,37 @@ class ExecutionTests(unittest.TestCase):
         self.assertEqual((again['status'], again['outcome'], again['duplicate']), ('done', {'taskId': 7}, True))
         self.assertEqual(runs, [1])
 
+    def test_two_confirmations_at_once_run_the_handler_once(self):
+        """PW-129/130: two confirms that both read 'proposed' both ran the handler. The claim is a compare-and-set
+        on the row; the loser gets the same receipt shape with duplicate=True and runs nothing."""
+        import threading, time
+        op = operations.propose(self.s, 'task.create_from_message', self.mid, {'kind': 'task'}, 'owner')
+        self.assertTrue(self.s.claim_operation(op['id'], op['version']))
+        self.assertFalse(self.s.claim_operation(op['id'], op['version']), 'the second confirm loses the race')
+        runs = []
+        lost = operations.execute(self.s, op['id'], op['version'], lambda: runs.append(1) or {'taskId': 9}, 'owner')
+        self.assertEqual(runs, []); self.assertTrue(lost['duplicate']); self.assertEqual(lost['status'], 'running')
+        # and truly concurrent: two threads, one barrier, one run
+        op2 = operations.propose(self.s, 'task.create_from_message', self.mid, {'kind': 'task'}, 'owner')
+        gate, ran, results = threading.Barrier(2), [], []
+        def confirm():
+            gate.wait()
+            results.append(operations.execute(self.s, op2['id'], op2['version'], lambda: (time.sleep(0.05), ran.append(1))[1] or {'taskId': 10}, 'owner'))
+        ts = [threading.Thread(target=confirm) for _ in range(2)]
+        for t in ts: t.start()
+        for t in ts: t.join(5)
+        self.assertEqual(ran, [1]); self.assertEqual(sorted(r['duplicate'] for r in results), [False, True])
+
+    def test_an_outcome_that_says_it_failed_is_an_error_teaches_nothing_and_can_be_retried(self):
+        """PW-130: a handler that returned {'ok': False} was recorded as done and its 'correction' as evidence."""
+        op = operations.propose(self.s, 'task.create_from_message', self.mid, {'kind': 'task'}, 'owner')
+        out = operations.execute(self.s, op['id'], op['version'], lambda: {'ok': False, 'error': 'the repository is missing'}, 'owner')
+        self.assertEqual((out['status'], out['evidence']), ('error', 'none')); self.assertIn('repository', out['error'])
+        self.assertEqual(self.s.corrections(message_id=self.mid), [])
+        retry = operations.execute(self.s, op['id'], op['version'], lambda: {'taskId': 11}, 'owner')
+        self.assertEqual((retry['status'], retry['duplicate']), ('done', False))
+        self.assertEqual(len(self.s.corrections(message_id=self.mid)), 1, 'the success afterwards is the correction')
+
     def test_an_edited_proposal_is_a_new_version_and_the_old_confirmation_is_stale(self):
         runs = []
         op = operations.propose(self.s, 'task.create_from_message', self.mid, {'kind': 'task'}, 'owner')

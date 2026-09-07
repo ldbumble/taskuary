@@ -208,7 +208,7 @@ def execute(store, op_id: str, version: int, run, actor: str = 'owner') -> dict:
     op = store.get_operation(op_id)
     if not op: raise ValueError('no such proposal')
     if op['Status'] == 'cancelled': return {**_public(op), 'error': 'this proposal was cancelled', 'duplicate': False}
-    if op['Status'] == 'done': return {**_public(op), 'duplicate': True}
+    if op['Status'] in ('done', 'running'): return {**_public(op), 'duplicate': True}
     if int(version) != int(op['Version']):
         return _stale(op, f"the proposal was edited since (it is now version {op['Version']}) - confirm the current one")
     params = json.loads(op.get('ParamsJson') or '{}')
@@ -217,6 +217,9 @@ def execute(store, op_id: str, version: int, run, actor: str = 'owner') -> dict:
             return _stale(op, 'The item changed since this was proposed. Review it again before confirming.')
     if op.get('ContextRevision') and context_revision(store, op['TargetKind'], op['TargetId']) != op['ContextRevision']:
         return _stale(op, 'the context changed since this was proposed - review it again before confirming')
+    # one winner per confirmation (PW-129): the row is claimed before the handler runs, so a second confirm
+    # arriving in the same instant gets the receipt shape and runs nothing
+    if not store.claim_operation(op_id, version): return {**_public(store.get_operation(op_id)), 'duplicate': True}
     _running.op = op_id
     try: outcome = run()
     except Halt as e:
@@ -227,10 +230,21 @@ def execute(store, op_id: str, version: int, run, actor: str = 'owner') -> dict:
         store.update_operation(op_id, {'Status': 'error', 'Error': str(e)[:500], 'Actor': actor})
         return {**_public(store.get_operation(op_id)), 'duplicate': False}
     finally: _running.op = None
+    if _failed(outcome):
+        # the handler came back, but its own word is that nothing happened: an error the owner can retry, and
+        # never a lesson - a 'not a task' success was recorded off a start that never launched (PW-130)
+        store.update_operation(op_id, {'Status': 'error', 'Error': str(outcome.get('error') or 'the action did not complete')[:500],
+                                       'OutcomeJson': json.dumps(outcome, default=str), 'Evidence': 'none', 'Actor': actor})
+        return {**_public(store.get_operation(op_id)), 'duplicate': False}
     store.update_operation(op_id, {'Status': 'done', 'OutcomeJson': json.dumps(outcome, default=str) if outcome is not None else None,
                                    'Error': None, 'ExecutedAt': _now(), 'Actor': actor})
     _evidence(store, op_id)
     return {**_public(store.get_operation(op_id)), 'duplicate': False}
+
+
+def _failed(outcome) -> bool:
+    """A handler's outcome that says the action did not happen: ok=False, or an error it reports itself."""
+    return isinstance(outcome, dict) and (outcome.get('ok') is False or bool(outcome.get('error')))
 
 
 def under_operation() -> bool:
@@ -249,10 +263,12 @@ def record_direct(store, kind: str, target_id: int, params: dict, actor: str, ou
         if verdict is None: verdict, route_id = _verdict(store, tk, target_id)
         oid = uuid.uuid4().hex[:12]
         store.add_operation({'OpId': oid, 'Kind': kind, 'TargetKind': tk, 'TargetId': int(target_id), 'ParamsJson': json.dumps(params),
-                             'Actor': actor, 'ContextRevision': context_revision(store, tk, target_id), 'Version': 1, 'Status': 'done',
+                             'Actor': actor, 'ContextRevision': context_revision(store, tk, target_id), 'Version': 1,
+                             'Status': 'error' if _failed(outcome) else 'done', 'Error': str(outcome.get('error') or '')[:500] if _failed(outcome) else None,
                              'Verdict': verdict or '', 'VerdictRouteId': route_id, 'ExecutedAt': _now(),
                              'OutcomeJson': json.dumps(outcome, default=str) if outcome is not None else None})
-        _evidence(store, oid)
+        if _failed(outcome): store.update_operation(oid, {'Evidence': 'none'})   # a direct action that says it failed teaches nothing (PW-130)
+        else: _evidence(store, oid)
         return get(store, oid)
     except Exception as e:
         logger.warning(f'operation record skipped ({kind} on {target_id}): {e}')

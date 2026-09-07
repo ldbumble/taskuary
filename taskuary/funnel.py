@@ -376,7 +376,7 @@ def from_calendar(store, now: datetime) -> list:
         # into (2026-09-07: an hour-old meeting sat at the top of Unread as "next - coming up")
         if not st or (en and en <= now) or st <= now - timedelta(minutes=STARTED_MIN): continue
         mins = int((st - now).total_seconds() // 60)
-        if mins > SOON_MIN: continue
+        if mins > SOON_MIN and st.date() != now.date(): continue   # the rest of today is visible; the walk still waits for ALERT_MIN
         who = [w for w in (e.get('who') or []) if w]
         key = f"meeting:{str(e.get('start') or '')[:16]}:{_short(e.get('subject'), 40)}"
         out.append(_item(key, 'meeting', 'time', e.get('subject') or 'the meeting', who=', '.join(who[:3]), when=e.get('start'),

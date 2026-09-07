@@ -581,7 +581,10 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
       if (entry.top === lastTop) continue;             // two groups at one top: nothing is laid out yet
       cur = entry.day; lastTop = entry.top;
     }
-    setCurDay((was) => cur || was);
+    // nothing has crossed the dock yet (the rail is at its top, with the first group's margin above the
+    // edge): the label is the FIRST group's day, not whatever day the owner last scrolled through in the
+    // other view (2026-09-07: "Saturday, Sep 5" over Monday's rows)
+    setCurDay((was) => cur || dayLayout.current[0]?.day || was);
   }, [view]);
   useEffect(() => {
     const rail = railRef.current; if (!rail) return undefined;

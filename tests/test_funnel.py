@@ -425,7 +425,7 @@ class LanesTests(unittest.TestCase):
         s.add_route(m1, None, 'file', None, 'triage: fyi - a person told you something', [], 'triage')
         ev = [{'start': ahead(10), 'end': ahead(40), 'subject': 'Standup', 'who': ['Priya Shah', 'Marcus Lee'], 'about': 'weekly', 'all_day': False},
               {'start': ahead(90), 'end': ahead(120), 'subject': 'Budget review', 'who': [], 'all_day': False},
-              {'start': ahead(600), 'end': ahead(660), 'subject': 'Far away', 'who': [], 'all_day': False}]
+              {'start': ahead(60 * 26), 'end': ahead(60 * 27), 'subject': 'Far away', 'who': [], 'all_day': False}]   # tomorrow: today's are all visible (2026-09-07)
         with mock.patch.object(funnel, '_agenda', return_value=ev):
             p = funnel.build(s)
             al = funnel.alerts(s, p['items'])

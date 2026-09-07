@@ -106,7 +106,7 @@ def test_producer_sort_activity_keeps_subseconds_and_normalizes_equivalent_offse
 
 @pytest.mark.parametrize(("start_seconds", "end_seconds", "ready", "present"), [
     (900, 1800, True, True), (900.001, 1800, False, True), (901, 1800, False, True), (959, 1800, False, True),
-    (0, 1800, True, True), (-600, 1, True, True), (-600, 0, False, False),
+    (0, 1800, True, True), (-240, 1800, True, True), (-600, 1, True, False), (-600, 0, False, False),   # started: gone after the grace (2026-09-07)
 ])
 def test_calendar_uses_exact_fifteen_minute_and_current_event_boundaries(
         store, start_seconds, end_seconds, ready, present):

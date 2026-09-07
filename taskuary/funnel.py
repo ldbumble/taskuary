@@ -22,7 +22,7 @@ LANES = ('blocked', 'time', 'approve', 'asked', 'queued', 'broken', 'forgotten',
 LANE_WORDS = {'blocked': ('agent waiting', 'you'), 'broken': ('a check failed', 'bad'), 'time': ('coming up', 'working'), 'approve': ('needs your yes', 'you'),
               'asked': ('asked you', 'working'), 'queued': ('waiting to start', 'working'), 'forgotten': ('slipped', 'info'), 'report': ('landed', 'info'), 'fyi': ('fyi', None),
               'working': ('agent working', 'working')}   # visible in band 5 until the agent stops or asks
-SOON_MIN, ALERT_MIN = 120, 15     # calendar visibility window; exact fifteen-minute attention boundary
+SOON_MIN, ALERT_MIN, STARTED_MIN = 120, 15, 5   # calendar visibility window; attention boundary; grace after the start
 SETUP_GRACE_MIN = 15              # a walk-through the owner is still in does not raise its own hand
 LATER_HOURS = 3                   # "not now" - it comes back this much later
 FEED_DAYS = 7
@@ -372,7 +372,9 @@ def from_calendar(store, now: datetime) -> list:
     out = []
     for e in _agenda(store):
         st, en = _activity_time(e.get('start')), _activity_time(e.get('end')) or _activity_time(e.get('start'))
-        if not st or (en and en <= now): continue
+        # a meeting is unread work until it starts; a few minutes into it there is nothing to walk the owner
+        # into (2026-09-07: an hour-old meeting sat at the top of Unread as "next - coming up")
+        if not st or (en and en <= now) or st <= now - timedelta(minutes=STARTED_MIN): continue
         mins = int((st - now).total_seconds() // 60)
         if mins > SOON_MIN: continue
         who = [w for w in (e.get('who') or []) if w]

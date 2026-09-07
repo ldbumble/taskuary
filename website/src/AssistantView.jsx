@@ -160,7 +160,7 @@ function Pile({ pile, current, onPull }) {
             const who = i.who && !i.title.toLowerCase().startsWith(i.who.toLowerCase()) ? i.who : "";
             const tag = i.settling ? "triaging…" : i.kind === "agent" && i.asking ? "asked you" : meta.word;
             const loud = i.lane === "blocked" || i.lane === "time";
-            const promoted = i.promoted ?? (loud || i.lane === "approve");   // triage moved it up: the little arrow says so
+            const promoted = !!i.promoted;                                  // triage moved it up: a server fact, never a lane
             return (
               <div key={i.key} className={cls} data-tq-day={localDay(i.kind === "meeting" ? i.when : (i.since || i.when)) || "undated"}
                 style={{ top: landing.has(i.key) ? -ROW_H : top, "--edge": role }}>

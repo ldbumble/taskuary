@@ -97,13 +97,11 @@ class ResearchIsAWalkThroughTests(unittest.TestCase):
         """It had `coder` and no way to say "let's talk this through", so reading work had nowhere
         to go but a checkout. The rule moved from the code's SYSTEM string into COUNSEL's own
         document (PW-248/256): the code keeps only the coder/regular_agent/setup verbs themselves."""
-        from pathlib import Path
-        from taskuary import counsel
-        text = (Path(concierge.__file__).parent / 'templates' / 'counsel.md').read_text(encoding='utf-8')
-        body = counsel.sections(text)[counsel.DECIDING_HEAD]
-        self.assertIn('coder and setup are not the same road', body)
-        self.assertIn('the test is whether there is a SYSTEM to type at', body)
-        self.assertIn('because the sentence was polite', body)
+        # a blank store loads the shipped template - prove the rule REACHES the model, not just the file
+        system = ' '.join(concierge._system(MemoryStore()).split())
+        self.assertIn('coder and setup are not the same road', system)
+        self.assertIn('the test is whether there is a SYSTEM to type at', system)
+        self.assertIn('because the sentence was polite', system)
 
     def test_a_walk_through_opens_a_general_task_and_starts_no_agent(self):
         s = MemoryStore()

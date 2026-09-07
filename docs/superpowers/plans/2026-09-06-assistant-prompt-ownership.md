@@ -726,15 +726,15 @@ Open `taskuary/concierge.py` and, for each entry below, read the code and decide
   | fallback() | facts when no model answers | keep: facts, not behaviour; used only without an AI connector or after an off-subject/out-of-character answer |
   | cannot() / NEEDS / ASSENT_VERB | why a verb cannot land on this card | keep: backend validation of target and prerequisites (PW-257) |
   | parse_decision / _DECIDE / _OPTIONS / VERBS | the machine contract | keep: unknown verbs are refused |
-  | _POLITE | strips a polite opener before intent parsing | keep: parsing aid; the rule it serves ("a polite request is not a question") is in COUNSEL |
-  | _CORRECTION | a correction cancels next/skip/later/done | keep: safety net; the rule is in COUNSEL |
+  | _POLITE | strips a polite opener before intent parsing | contradiction with the owner's rule (2026-09-06: "don't want hard coded words ... the model can translate next or any other word to intention") - a word list decides before the model reads - OPEN as PW-263 |
+  | _CORRECTION | a correction cancels the model's next/skip/later/done | contradiction with the same rule: a regex overrides the model's DECIDE; the rule itself ("never answer a correction by moving on") is in COUNSEL - OPEN as PW-263 |
   | _BROKE_CHARACTER / in_character / off_subject | discard an answer about the model's own plumbing or another item | keep: output validation, not instruction |
   | OPENING | the day's opening line instruction | document: still a hardcoded behavioural instruction - OPEN as PW-261 (owner to decide whether the opening moves into COUNSEL or stays a code contract) |
-  | trouble() / switch_ask() / _sweep_words() | keyword routes for "what's wrong", settings switches and pipe sweeps | contradiction with PW-128 "Interpret intent through AI, not keyword matching" - OPEN as PW-262 (list each regex and what it intercepts before the model sees the words) |
+  | trouble() / switch_ask() / _sweep_words() | keyword routes for "what's wrong", settings switches and pipe sweeps | contradiction with PW-128 "Interpret intent through AI, not keyword matching" and the owner's 2026-09-06 rule - OPEN as PW-262 (list each regex and what it intercepts before the model sees the words) |
   | research-to-setup | the coder/setup road | document: moved to COUNSEL in PW-256; no code heuristic routes it |
 ```
 
-Where the table says OPEN, add the two new items under the section as `- [ ] <a id="pw-261"></a>**PW-261** ...` and `- [ ] <a id="pw-262"></a>**PW-262** ...` with the wording above. Check first that `pw-261`/`pw-262` are not already used (`grep -c 'pw-261' docs/processing-walkthrough-todos.md` must print 0); if they are, take the next free numbers and use them consistently.
+Where the table says OPEN, add the three new items under the section as `- [ ] <a id="pw-261"></a>**PW-261** ...`, `- [ ] <a id="pw-262"></a>**PW-262** ...` and `- [ ] <a id="pw-263"></a>**PW-263** Remove _POLITE and _CORRECTION: the model reads the owner's words and returns the intent; code validates the verb only (owner rule 2026-09-06: no hardcoded words). Needs tests that a correction phrased any way is not answered with next/skip/later/done by the MODEL under COUNSEL, before the regex net comes out.` Check first that `pw-261`..`pw-263` are not already used (`grep -c 'pw-261' docs/processing-walkthrough-todos.md` must print 0); if they are, take the next free numbers and use them consistently.
 
 - [ ] **Step 2: Write the PW-260 test** (append to `tests/test_concierge_counsel.py`)
 

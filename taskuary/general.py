@@ -305,7 +305,8 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # approval boundaries SOUL.md used to carry - and, because this work is writing, the assistant's voice
     from . import brief as _brief
     agent_rules = _cut(_brief.rules(store, 'agent', 4_000), 4_000)
-    counsel = _cut(store.doc('counsel') or '', 3_000)
+    from . import counsel as _counsel
+    counsel = _counsel.check_budget(store, 'counsel', _counsel.for_worker(store))   # the voice, whole (PW-258)
     # What is CERTIFIED about the company's own systems. Without it the assistant writes a
     # plausible ERP query, gets a plausible number, and states it with the confidence of a
     # proved one - which is the failure the semantic layer exists to prevent.
@@ -318,7 +319,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         "something, or changed a record unless a tool actually did it. Ask when a necessary fact is "
         "missing. Do not turn this into a coding task or instruct a coding CLI.\n\n"
         + (f'{layer}\n\n{TEACH_ME}\n\n' if layer else f'{TEACH_ME}\n\n')
-        + f"RULES (AGENT.md - every worker)\n{agent_rules}\n\nASSISTANT STYLE\n{_cut(counsel, 3_000)}"
+        + f"RULES (AGENT.md - every worker)\n{agent_rules}\n\nASSISTANT STYLE\n{counsel}"
     )
     # the procedure triage selected for this job rides here exactly as it rides in a coding brief
     # (playbooks.seed_block) - one task-brief structure for either worker kind (PW-206)

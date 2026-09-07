@@ -52,9 +52,10 @@ _RECEIPT = re.compile(
 
 def system(store) -> str:
     """Use Taskuary's normal assistant voice while enforcing the evening brief shape."""
-    doc = re.sub(r'<!--.*?-->', '', store.doc('counsel') or '', flags=re.S).strip()
+    from . import counsel
+    voice = counsel.for_brief(store)
     soul = store.doc('soul') or ''
-    return (doc + CONTRACT
+    return (voice + CONTRACT
             + (f"\n\nWho the owner is (their own document; its reply rules are for text sent to OTHERS):\n{soul[:1500]}"
                if soul else ''))
 

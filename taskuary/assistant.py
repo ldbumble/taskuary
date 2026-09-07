@@ -955,7 +955,8 @@ def talk(store, idea_id: int, text: str, actor: str = 'owner', llm=None) -> dict
         from .llm import build_llm
         llm = build_llm(store)
     if not llm: raise ValueError('the assistant needs an active AI connector to answer')
-    counsel = re.sub(r'<!--.*?-->', '', store.doc('counsel') or '', flags=re.S).strip()
+    from . import counsel as _counsel
+    counsel = _counsel.for_discussion(store)
     system = ((counsel + '\n\n') if counsel else '') + (
         'The owner is talking back to one of your assistant suggestions. Answer as their assistant, '
         'not as customer support. If they correct you, acknowledge the mistake plainly and update your '

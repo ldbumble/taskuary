@@ -4042,6 +4042,8 @@ def put_doc(name: str, body: DocBody):
     if not str(body.content or '').strip() and _template_text(name).strip():
         store.save_doc(name, _template_text(name), 'template')
         return {'ok': True, 'restored': True}
+    from . import counsel as _counsel
+    if name == 'counsel': _counsel.check_budget(store, name, body.content)
     store.save_doc(name, body.content, ACTOR)
     return {'ok': True}
 

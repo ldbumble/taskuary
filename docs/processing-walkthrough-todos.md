@@ -1363,9 +1363,14 @@ Owner-approved, pending implementation:
   prompts. Preserve each report's configured instruction, configured data scope,
   valid output contract, and required safety constraints. The main chat's Current,
   walkthrough, and wait-for-owner rules must not govern scheduled idea generation.
-- [ ] <a id="pw-243"></a>**PW-243** Audit other COUNSEL consumers, including suggestion discussions and general
+- [x] <a id="pw-243"></a>**PW-243** Audit other COUNSEL consumers, including suggestion discussions and general
   worker prompts, for role leakage before further changes. Review their appropriate
   instructions separately; do not silently remove required guidance.
+  Audit 2026-09-06: chat (concierge._system) whole document; morning/evening briefs
+  (digest.system, evening.system) My goal + Voice; suggestion replies (assistant.py
+  talk-back) Voice; workers (general.py ASSISTANT STYLE) Voice, uncut; scheduled
+  reports (assistant.think) none (PW-242). Renamed headings fall back to the whole
+  document rather than dropping guidance. Tests: tests/test_counsel_consumers.py.
 - [ ] <a id="pw-244"></a>**PW-244** Test that changing chat COUNSEL does not alter the scheduled report prompt,
   report configuration remains intact, and report findings still enter the shared
   timeline. Existing live COUNSEL edits currently affect both consumers until
@@ -1454,8 +1459,11 @@ action rules one at a time before implementing. Pending implementation only.
   prompt prose must not remove these safeguards or silently break DECIDE/OPTIONS
   parsing. Separate the machine action contract from editable behavioral policy;
   review its replacement before changing the execution interface.
-- [ ] <a id="pw-258"></a>**PW-258** Remove silent 3,200-character truncation of COUNSEL; apply explicit size
+- [x] <a id="pw-258"></a>**PW-258** Remove silent 3,200-character truncation of COUNSEL; apply explicit size
   validation/budget handling so approved instructions are not silently dropped.
+  Done 2026-09-06: no consumer slices COUNSEL. general.py's two 3,000-character cuts
+  are gone; counsel.check_budget warns and audits past 8,000 characters (on save and
+  when a worker prompt is built) and returns the text whole.
 - [ ] <a id="pw-259"></a>**PW-259** Audit remaining inline prompts/action heuristics and canned receipts for
   contradictory behavior (including research-to-setup and skip-as-tomorrow).
   Resolve each through the walkthrough, not an unreviewed blanket rewrite.

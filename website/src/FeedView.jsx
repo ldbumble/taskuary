@@ -45,7 +45,19 @@ import { HOLD_TAG, hasTag, stateMeta, stateOf, subline } from "./timelineState.j
 import { sendBlockLine, draftState, replyEnvelope, replySendFailure } from "./sendState.js";
 import { timelinePhases } from "./taskLifecycle.js";
 import StateMark, { edgeOf } from "./StateMark.jsx";
-import { laneMeta } from "./funnelPile.js";
+import { RUN_META, laneMeta, runLabel, runsOf } from "./funnelPile.js";
+
+// Where each pile row BELONGS, run by run, for the dock's scroll spy. It reads the row's own inline
+// top rather than its rectangle: a row still sliding into place is somewhere between the two, and a
+// cache taken during that .55s never expires, because the rail's scrollHeight does not change while
+// rows move inside a fixed-height stack. One rect is measured (the stack's), not one per row.
+export const pileBandTops = (rail, railTop) => {
+  const stack = rail.querySelector(".tq-pile-stack");
+  if (!stack) return [];
+  const base = stack.getBoundingClientRect().top - railTop + rail.scrollTop;
+  return [...stack.querySelectorAll(".tq-pile-row[data-tq-run]")]
+    .map((el) => ({ day: el.dataset.tqRun, top: base + (parseFloat(el.style.top) || 0) }));
+};
 
 // the same word the unread pile uses for this item, in the same pill (the owner, 2026-09-07: All said
 // "fyi" where unread said "a check failed")
@@ -552,22 +564,27 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   const dateJump = useRef("");                       // picker owns the label during its smooth glide
   const dateJumpTimer = useRef(null);
   const [curDay, setCurDay] = useState("");
+  // Unread is ranked by attention band, so its dock names the BAND the rail is crossing; All is
+  // chronological and keeps its date. Same spy, same dock, different axis (the owner, 2026-09-07:
+  // "the date on top makes no sense on the unread tab since we don't sort by date").
+  const [curRun, setCurRun] = useState("");
   const spy = useCallback(() => {
     const rail = railRef.current; if (!rail) return;
-    if (dateJump.current) { setCurDay(dateJump.current); return; }
+    const ranked = view === "unread";
+    const put = (value) => (ranked ? setCurRun(String(value || "")) : setCurDay(value));
+    if (dateJump.current) { put(dateJump.current); return; }
     // ...and re-measure whenever the rail has grown since the last look: rows arriving after the
     // first measurement left every group at top 0, and the last of those ties is the wrong day
     if (dayLayoutDirty.current || rail.scrollHeight !== dayLayoutAt.current) {
       // Measure once after the rows/layout change. Reading every group's bounding box on every
       // wheel frame made Chromium synchronously lay out the whole rail while it was scrolling.
       const railTop = rail.getBoundingClientRect().top;
-      // All has one wrapper per chronological day. Unread is a ranked pile, so the same day can
-      // occur in several places; read the day carried by every pile row and let whichever row is
-      // currently crossing the dock own the label.
+      // All has one wrapper per chronological day. Unread has no wrappers at all - it is a ranked
+      // pile - so read the band carried by every pile row and let whichever row is currently
+      // crossing the dock own the label. Rows of one band are contiguous because the band IS the
+      // sort, so the runs the owner scrolls through are exactly the bands.
       dayLayout.current = (view === "unread"
-        ? [...rail.querySelectorAll(".tq-pile-row[data-tq-day]")].map((el) => ({
-            day: el.dataset.tqDay, top: el.getBoundingClientRect().top - railTop + rail.scrollTop,
-          }))
+        ? pileBandTops(rail, railTop)
         : Object.entries(dayRefs.current).flatMap(([day, el]) => el
           ? [{ day, top: el.getBoundingClientRect().top - railTop + rail.scrollTop }]
           : [])).sort((a, b) => a.top - b.top);
@@ -584,7 +601,9 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     // nothing has crossed the dock yet (the rail is at its top, with the first group's margin above the
     // edge): the label is the FIRST group's day, not whatever day the owner last scrolled through in the
     // other view (2026-09-07: "Saturday, Sep 5" over Monday's rows)
-    setCurDay((was) => cur || dayLayout.current[0]?.day || was);
+    const crossing = cur || dayLayout.current[0]?.day || "";
+    if (ranked) setCurRun((was) => crossing || was);                // the updater form keeps this
+    else setCurDay((was) => crossing || was);                      // callback off the scroll listener's deps
   }, [view]);
   useEffect(() => {
     const rail = railRef.current; if (!rail) return undefined;
@@ -595,6 +614,9 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     onScroll();
     return () => { rail.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onScroll); if (raf) cancelAnimationFrame(raf); };
   }, [spy]);
+  // a new pile is a new layout: re-measure at once rather than at the owner's next scroll, or the
+  // dock keeps the band of a rail that has already been redrawn under it
+  useEffect(() => { dayLayoutDirty.current = true; spy(); }, [unreadInventory, spy]);
   useEffect(() => () => clearTimeout(dateJumpTimer.current), []);
   const [newOpen, setNewOpen] = useState(false);     // the ＋ New sheet (NewSheet.jsx)
   const [rows, setRows] = useState(null);
@@ -1253,14 +1275,18 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   const today = new Date().toLocaleDateString("sv-SE");
   const shownDay = dayEntries.some(([day]) => day === curDay) ? curDay : (dayEntries[0]?.[0] || today);
   const dateEntries = dayEntries.length ? dayEntries : [[today, []]];
+  // the same dock on Unread, on the axis Unread is actually sorted by: the bands the pile holds,
+  // in the order it draws them, and the one the rail is crossing is the label
+  const pileRuns = view === "unread" ? runsOf(unreadInventory?.items) : [];
+  const shownRun = pileRuns.includes(curRun) ? curRun : (pileRuns[0] || "");
   const jumpToDay = (day) => {
-    dateJump.current = day;
+    dateJump.current = String(day);
     clearTimeout(dateJumpTimer.current);
-    setCurDay(day);
+    if (view === "unread") setCurRun(String(day || "")); else setCurDay(day);
     requestAnimationFrame(() => {
       const rail = railRef.current;
       const group = view === "unread"
-        ? [...(rail?.querySelectorAll(".tq-pile-row[data-tq-day]") || [])].find((el) => el.dataset.tqDay === day)
+        ? [...(rail?.querySelectorAll(".tq-pile-row[data-tq-run]") || [])].find((el) => el.dataset.tqRun === String(day))
         : dayRefs.current[day];
       if (!rail || !group) return;
       const top = rail.scrollTop + group.getBoundingClientRect().top - rail.getBoundingClientRect().top;
@@ -1345,7 +1371,11 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
             </Box>
             {/* on a phone the pickers take a full second line and New sits beside the pill; from md
                 up the three share one line, right-aligned */}
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1, ml: { md: "auto" }, minWidth: 0,
+            {/* the pickers sit BESIDE the view pills, not across the width from them: ml:auto pushed
+                them to the far right and left a hole in the middle of the toolbar, which longer view
+                names only make worse (the owner, 2026-09-07: "too much space between the unread/all
+                and the 2 filters"). New keeps the right edge. */}
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, ml: { md: 1 }, minWidth: 0,
               order: { xs: 3, md: 2 }, flex: { xs: "1 1 100%", md: "0 0 auto" },
               "& > .MuiInputBase-root": { flex: { xs: 1, md: "0 0 auto" } } }}>
             <Select size="small" value={cat} displayEmpty onChange={(e) => {
@@ -1415,7 +1445,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
             <Button size="small" variant="contained" disableElevation onClick={() => setNewOpen(true)}
               startIcon={<AddIcon sx={{ fontSize: 15 }} />}
               sx={{ flexShrink: 0, height: 34, minWidth: 68, py: 0.25, px: 1.1, borderRadius: 2,
-                fontSize: 11.5, background: GRADIENT, order: { xs: 2, md: 3 }, ml: { xs: "auto", md: 0 } }}>New</Button>
+                fontSize: 11.5, background: GRADIENT, order: { xs: 2, md: 3 }, ml: "auto" }}>New</Button>
           </Box>
 
           {/* The counts describe what is in the rail. The date and sync clock belong together
@@ -1476,20 +1506,29 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
               {syncUnknown ? "Check status" : syncing || bgSync ? syncPhaseLabel(syncPhase) : "Sync now"}
             </Button>
           </Box>
-          {/* The heading is also navigation: choose any day already in this Timeline and the
-              rail glides to its first item. It stays typographically a date, not another pill. */}
-          <Select value={shownDay} onChange={(e) => jumpToDay(e.target.value)} variant="standard" disableUnderline
-            displayEmpty inputProps={{ "aria-label": "Timeline date" }}
+          {/* The heading is also navigation: choose any day already in this Timeline - or, on
+              Unread, any band the pile holds - and the rail glides to its first item. It stays
+              typographically a heading, not another pill. */}
+          <Select value={view === "unread" ? shownRun : shownDay} onChange={(e) => jumpToDay(e.target.value)}
+            variant="standard" disableUnderline
+            displayEmpty title={view === "unread" ? (RUN_META[shownRun]?.hint || "") : ""}
+            inputProps={{ "aria-label": view === "unread" ? "Pipe run" : "Timeline date" }}
+            SelectDisplayProps={view === "unread" ? { "data-tq-run-dock": "true" } : undefined}
             IconComponent={(props) => <ChevronRightIcon {...props} sx={{ ...props.sx, fontSize: 14,
               transform: "rotate(90deg)", color: `${FAINT} !important`, right: 1 }} />}
-            renderValue={(day) => fmtDay(day)}
+            renderValue={(value) => (view === "unread" ? runLabel(value) : fmtDay(value))}
             sx={{ ...mono, color: INK, fontWeight: 700, fontSize: 11.5, letterSpacing: 0.3,
               minWidth: 0, maxWidth: "100%", height: 22, textAlign: "center", cursor: "pointer",
               "& .MuiSelect-select": { py: 0, pl: 2, pr: "22px !important", textAlign: "center" },
               "&:hover": { color: ACCENT } }}>
-            {dateEntries.map(([day]) => (
-              <MenuItem key={day} value={day} sx={{ ...mono, fontSize: 11.5 }}>{fmtDay(day)}</MenuItem>
-            ))}
+            {view === "unread"
+              ? pileRuns.map((run) => (
+                <MenuItem key={run} value={run} title={RUN_META[run]?.hint || ""} sx={{ ...mono, fontSize: 11.5 }}>
+                  {runLabel(run)}</MenuItem>
+              ))
+              : dateEntries.map(([day]) => (
+                <MenuItem key={day} value={day} sx={{ ...mono, fontSize: 11.5 }}>{fmtDay(day)}</MenuItem>
+              ))}
           </Select>
         </Box>
 

@@ -9,10 +9,10 @@ const feedSource = () => readFileSync(fileURLToPath(new URL("../src/FeedView.jsx
 
 test("the Timeline exposes exactly All and Unread when the Assistant supplies its pipe", () => {
   assert.deepEqual(feedViews(true), [
-    { key: "unread", label: "unread" },
-    { key: "", label: "all" },
+    { key: "unread", label: "work" },
+    { key: "", label: "timeline" },
   ]);
-  assert.deepEqual(feedViews(false), [{ key: "", label: "all" }]);
+  assert.deepEqual(feedViews(false), [{ key: "", label: "timeline" }]);
 
   const source = feedSource();
   assert.doesNotMatch(source, /NeedsMe|pending_only|label:\s*["']needs me["']|view === ["']pending["']/);

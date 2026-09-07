@@ -139,10 +139,10 @@ test('All and Unread share 507 fresh roots, including ignored and pending triage
   await page.waitForFunction(() => !document.querySelector('.tq-pile-row.current'), { timeout: 20000 });
   await page.waitForNetworkIdle({ idleTime: 200, timeout: 20000 });
   assert.equal(JSON.parse(scopedRequests.at(-1).slice(5)).channel, 'email', 'New chat keeps the visible shared filter');
-  await clickState(page, 'all');
+  await clickState(page, 'timeline');
   await page.waitForSelector('[data-processing-item]', { timeout: 20000 });
   assert.equal(await page.$('.tq-compose'), null);
-  await clickState(page, 'unread');
+  await clickState(page, 'work');
   await page.waitForSelector('.tq-pile-row', { timeout: 20000 });
   assert.deepEqual((await request(h, '/api/funnel/pile')).items.map(i => i.key), before,
     'switching views must not read any arrival');

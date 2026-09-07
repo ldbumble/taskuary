@@ -182,7 +182,7 @@ test("canonical All renders every root once with truthful details and frozen pag
   assert.equal(await page.$eval(".tq-pile-row.current .card b", (node) => node.textContent.trim()), current,
     "canonical fixture reconciliation must preserve the durable Current across reload");
 
-  await clickState(page, "all");
+  await clickState(page, "timeline");
   await page.waitForSelector("[data-processing-item] [data-tq-open]", { timeout: 15000 });
   assert.equal(await page.$(".tq-pile-row"), null, "All remains a detail-only canonical rail");
   assert.equal(await page.$(".tq-compose"), null, "All must not mount assistant chat");
@@ -338,7 +338,7 @@ test("canonical All renders every root once with truthful details and frozen pag
   assert.ok([seed.ignored_item_id, seed.muted_item_id].every((id) => firstIds.includes(id)),
     "ignored and standing-rule-muted roots must remain visible in All");
 
-  await clickState(page, "unread");
+  await clickState(page, "work");
   await page.waitForSelector(".tq-pile-row.current .tq-pile-next.cur", { timeout: 10000 });
   assert.equal(await page.$eval(".tq-pile-row.current .card b", (node) => node.textContent.trim()), current,
     "canonical All must not change Current");
@@ -346,7 +346,7 @@ test("canonical All renders every root once with truthful details and frozen pag
     "All/filter/pagination/tab return must not add automatic state writes");
   // A stale approval can retarget its review to a newer exact member. Exercise the
   // real canonical detail refresh; only the send response is synthetic, never sent.
-  await clickState(page, "all");
+  await clickState(page, "timeline");
   await chooseSource(page, seed.grouped.source_nonrepresentative);
   await page.waitForFunction((itemId, mid) => [...document.querySelectorAll("[data-processing-item]")]
     .find((node) => node.dataset.processingItem === itemId)?.dataset.processingTarget === `message:${mid}`,

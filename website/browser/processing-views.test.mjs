@@ -13,7 +13,7 @@ const visibleExact = async (page, text) => page.$$eval("body *", (nodes, wanted)
 const stateControls = async (page) => page.$$eval('[role="group"][aria-label="Feed views"]', (groups) => [...new Set(groups.flatMap((group) => [...group.querySelectorAll("*")]).flatMap((node) => {
   const label = node.textContent.trim().toLowerCase();
   const box = node.getBoundingClientRect();
-  return node.children.length === 0 && ["all", "unread", "needs me"].includes(label)
+  return node.children.length === 0 && ["timeline", "work", "needs me"].includes(label)
     && box.width > 0 && box.height > 0 && getComputedStyle(node).cursor === "pointer" ? [label] : [];
 }))].sort());
 
@@ -69,7 +69,7 @@ test("PW-107 exposes only All and Unread without All creating assistant state", 
 
   await page.goto(harness.ui, { waitUntil: "domcontentloaded", timeout: 20000 });
   await page.waitForSelector(".tq-pile-row.next .tq-pile-next", { timeout: 10000 });
-  assert.deepEqual(await stateControls(page), ["all", "unread"]);
+  assert.deepEqual(await stateControls(page), ["timeline", "work"]);   // what each view is FOR, not a mail state
   assert.equal(await visibleExact(page, "needs me"), 0, "Needs me must be absent from controls and statistics");
   await new Promise((resolve) => setTimeout(resolve, 500));
   assert.deepEqual(assistantWrites(), [], "loading Unread must not automatically start Walk");
@@ -86,7 +86,7 @@ test("PW-107 exposes only All and Unread without All creating assistant state", 
   assert.ok(turnsAfterWalk.some((turn) => turn.role === "assistant" && turn.card?.key),
     "intentional Walk must persist its assistant card turn");
 
-  await clickState(page, "all");
+  await clickState(page, "timeline");
   await page.waitForSelector(".tqRow [data-tq-open]", { timeout: 10000 });
   assert.equal(await page.$(".tq-pile-row"), null, "All must render the chronological detail rail");
   assert.equal(await page.$(".tq-compose"), null, "All must be detail-only, without assistant chat");
@@ -117,7 +117,7 @@ test("PW-107 exposes only All and Unread without All creating assistant state", 
   assert.ok(feedReads.every(({ search }) => !new URLSearchParams(search).has("pending_only")),
     "All/Unread views must not revive the removed pending_only filter");
 
-  await clickState(page, "unread");
+  await clickState(page, "work");
   await page.waitForSelector(".tq-pile-row.current .tq-pile-next.cur", { timeout: 10000 });
   assert.deepEqual(await pileTitles(page), established, "All to Unread must retain Current and Next");
   await clickNav(page, "Board");
@@ -149,7 +149,7 @@ test("PW-107 exposes only All and Unread without All creating assistant state", 
   });
   await race.goto(harness.ui, { waitUntil: "domcontentloaded", timeout: 20000 });
   await race.waitForSelector(".tq-pile-row.current .tq-pile-next.cur", { timeout: 10000 });
-  await clickState(race, "all");
+  await clickState(race, "timeline");
   await race.waitForSelector(".tqRow [data-tq-open='false']", { timeout: 10000 });
   const raceTarget = await race.$(".tqRow [data-tq-open='false']");
   const client = await race.createCDPSession();
@@ -171,7 +171,7 @@ test("PW-107 exposes only All and Unread without All creating assistant state", 
   const pendingDetail = await detailRequest;
   const detailResponse = race.waitForResponse((response) => response.url() === pendingDetail.url(), { timeout: 10000 });
   await new Promise((resolve) => setTimeout(resolve, 120)); // let the hover commit its pending selection
-  await clickState(race, "unread");
+  await clickState(race, "work");
   await race.waitForSelector(".tq-pile-row.current .tq-pile-next.cur", { timeout: 10000 });
   const completedDetail = await detailResponse;
   await completedDetail.buffer();
@@ -213,9 +213,9 @@ test("PW-107 exposes only All and Unread without All creating assistant state", 
     const box = group?.getBoundingClientRect();
     return box && box.width > 0 && box.height > 0;
   }, { timeout: 5000 });
-  assert.deepEqual(await stateControls(narrow), ["all", "unread"]);
+  assert.deepEqual(await stateControls(narrow), ["timeline", "work"]);
   assert.equal(await visibleExact(narrow, "needs me"), 0, "Needs me must also be absent at narrow width");
-  await clickState(narrow, "all");
+  await clickState(narrow, "timeline");
   await narrow.waitForSelector(".tqRow [data-tq-open]", { timeout: 10000 });
   assert.equal(await narrow.$(".tq-compose"), null);
   const narrowSubject = await narrow.$eval(".tqRow [data-tq-open]", (node) => {
@@ -240,7 +240,7 @@ test("PW-107 exposes only All and Unread without All creating assistant state", 
       return box.width === 0 || box.height === 0 || getComputedStyle(paper).visibility === "hidden";
     });
   }, { timeout: 5000 });
-  await clickState(narrow, "unread");
+  await clickState(narrow, "work");
   await narrow.waitForSelector(".tq-pile-row.current .tq-pile-next.cur", { timeout: 10000 });
   await narrow.waitForSelector(".tq-pile-row.next .tq-pile-next", { timeout: 10000 });
   assert.deepEqual(await pileTitles(narrow), established, "narrow All to Unread must retain Current and Next");

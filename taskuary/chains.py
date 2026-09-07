@@ -79,7 +79,7 @@ def coverage(store, conversation_id: str, mailbox: str = None):
     return store.chain_coverage(conversation_id, mailbox)
 
 
-def _keep(store, conv: str, ext: str, m: dict, mailbox: str, before: str = None) -> int:
+def _keep(store, conv: str, ext: str, m: dict, mailbox: str, before: str = None, atts: list = None) -> int:
     """One historical message onto the conversation: the owner's own as `context` (the convention
     every surface reads as "you"), anyone else's as `history`. Never a task, never a route, never
     an arrival: chronology and identity kept, nothing revived (PW-012)."""
@@ -89,12 +89,14 @@ def _keep(store, conv: str, ext: str, m: dict, mailbox: str, before: str = None)
     if before and m.get('sent_at') and str(m['sent_at']) >= str(before): return 0
     frm = str(m.get('from_email') or '')
     own = bool(frm) and frm.lower() == str(mailbox or '').lower()
-    store.add_message({'TaskId': None, 'ExternalId': ext, 'ConversationId': conv, 'Channel': 'email', 'SourceName': mailbox,
+    mid = store.add_message({'TaskId': None, 'ExternalId': ext, 'ConversationId': conv, 'Channel': 'email', 'SourceName': mailbox,
                        'Subject': m.get('subject'), 'FromName': 'You' if own else m.get('from_name'), 'FromEmail': frm or None,
                        'SentAt': m.get('sent_at'), 'BodyText': m.get('body'), 'SourceLink': m.get('source_link'),
                        'Status': 'context' if own else 'history',
                        'RecipientsJson': json.dumps({'to': list(m.get('to') or []), 'cc': list(m.get('cc') or [])})
                                          if (m.get('to') or m.get('cc')) else None})
+    # the attachments travel with the history row (PW-012): the panel shows they were there, once
+    if atts and mid: _ch.save_attachments(store, mid, atts, ext)
     return 1
 
 
@@ -108,10 +110,11 @@ def refresh_outlook(store, tok: str, mailbox: str, conversation_id: str, before:
         added = 0
         for m in fetch_graph(tok, mailbox, missing):
             frm = (m.get('from') or {}).get('emailAddress') or {}
+            atts = _ch.mail_attachments(tok, mailbox, m['id']) if m.get('hasAttachments') else None   # one extra call, only when the mail says so
             added += _keep(store, conversation_id, f"graph:{m['id']}",
                            {'subject': m.get('subject'), 'body': _ch._body(m), 'from_name': frm.get('name'), 'from_email': frm.get('address'),
                             'to': _ch._addrs(m.get('toRecipients')), 'cc': _ch._addrs(m.get('ccRecipients')),
-                            'sent_at': _ch._local(m.get('receivedDateTime') or ''), 'source_link': m.get('webLink')}, mailbox, before)
+                            'sent_at': _ch._local(m.get('receivedDateTime') or ''), 'source_link': m.get('webLink')}, mailbox, before, atts)
         cov = {'complete': stopped is None, 'listed': len(listed), 'added': added, 'error': stopped}
     except Exception as e:
         logger.warning(f'chains: could not complete {conversation_id} from {mailbox}: {e}')
@@ -169,11 +172,11 @@ def refresh_imap(store, M, user: str, root: str, restore: str = 'INBOX', readonl
                 if typ != 'OK' or not parts or parts[0] is None: failed += 1; continue   # counted: a skipped body is a gap, not coverage (PW-010)
                 msg = email.message_from_bytes(parts[0][1])
                 name, addr = email.utils.parseaddr(_dec(msg.get('From')))
-                body, _atts = _body_and_attachments(msg)
+                body, atts = _body_and_attachments(msg)
                 try: when = email.utils.parsedate_to_datetime(msg.get('Date')).astimezone().strftime('%Y-%m-%d %H:%M:%S')
                 except Exception: when = None
                 added += _keep(store, root, ext, {'subject': _dec(msg.get('Subject')), 'body': body[:20000], 'from_name': name or addr,
-                                                  'from_email': addr, 'to': _hdr_addrs(msg, 'To'), 'cc': _hdr_addrs(msg, 'Cc'), 'sent_at': when}, user, before)
+                                                  'from_email': addr, 'to': _hdr_addrs(msg, 'To'), 'cc': _hdr_addrs(msg, 'Cc'), 'sent_at': when}, user, before, atts)
         cov = {'complete': failed == 0, 'listed': seen, 'added': added,
                'error': None if not failed else f'{failed} message{"s" if failed != 1 else ""} of the thread could not be fetched'}
     except IMAPIdentityError as e:

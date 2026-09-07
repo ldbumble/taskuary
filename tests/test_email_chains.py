@@ -265,5 +265,48 @@ class CoverageHonestyTests(unittest.TestCase):
         self.assertEqual(chains.coverage(s, CONV, 'b@x.com')['error'], 'x')
 
 
+class HistoryAttachmentTests(unittest.TestCase):
+    """PW-012/014: a fetched history message keeps its attachments, bound to the history row, once."""
+    def test_graph_history_keeps_its_attachments_and_a_second_pass_adds_none(self):
+        import base64
+        s, sid = outlook_store()
+        stored(s, 1)
+        mails = [gmail(i, T0 + timedelta(minutes=i)) for i in range(2)]
+        mails[0]['hasAttachments'] = True
+        fake = FakeThreadGraph(mails)
+        asked = []
+        def atts(tok, upn, gid):
+            asked.append(gid)
+            return [{'id': 'att-1', 'name': 'plan.pdf', 'contentType': 'application/pdf', 'size': 3, 'contentBytes': base64.b64encode(b'abc').decode()}]
+        with mock.patch.object(chains, 'list_ids_graph', fake.list_ids), mock.patch.object(chains, 'fetch_graph', fake.fetch), \
+             mock.patch.object(channels, 'mail_attachments', atts):
+            cov = chains.refresh_outlook(s, 'tok', ME, CONV)
+            again = chains.refresh_outlook(s, 'tok', ME, CONV)
+        self.assertEqual((cov['added'], again['added']), (1, 0)); self.assertEqual(asked, ['g-0'], 'asked once, only for the mail that said it had some')
+        hist = next(r for r in s.thread_messages(CONV) if r['ExternalId'] == 'graph:g-0')
+        rows = s.list_attachments(hist['MessageId'])
+        self.assertEqual([(r['Name'], r['ContentType'], r['Size']) for r in rows], [('plan.pdf', 'application/pdf', 3)])
+        self.assertEqual(hist['Status'], 'history', 'an attachment does not make history an arrival')
+
+    def test_imap_history_keeps_its_attachments(self):
+        from tests.test_imap_catchup import FakeBox
+        import email.message, email.utils
+        from datetime import datetime, timedelta
+        now, root = datetime.now().astimezone(), '<root@partner.example>'
+        m = email.message.EmailMessage()
+        m['From'], m['To'], m['Subject'] = 'Rita <rita@partner.example>', 'me@myco.example', 'Export'
+        m['Date'] = email.utils.format_datetime(now - timedelta(hours=2)); m['Message-ID'] = root
+        m.set_content('see attached\n'); m.add_attachment(b'col1,col2', maintype='text', subtype='csv', filename='export.csv')
+        box = FakeBox({1: (m.as_bytes(), now - timedelta(hours=2))})
+        s = MemoryStore()
+        at3 = (now - timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S')
+        s.add_message({'ExternalId': 'imap:me@myco.example:3', 'ConversationId': root, 'Channel': 'email', 'Subject': 'Re: Export',
+                       'FromEmail': 'rita@partner.example', 'BodyText': 'body 3', 'SentAt': at3, 'Status': 'routed'})
+        cov = chains.refresh_imap(s, box, 'me@myco.example', root, before=at3)
+        self.assertEqual(cov['added'], 1)
+        hist = next(r for r in s.thread_messages(root) if r['ExternalId'] == 'imap:me@myco.example:1')
+        self.assertEqual([r['Name'] for r in s.list_attachments(hist['MessageId'])], ['export.csv'])
+
+
 if __name__ == '__main__':
     unittest.main()

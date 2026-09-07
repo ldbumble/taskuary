@@ -57,7 +57,6 @@ test('All and Unread share 507 fresh roots, including ignored and pending triage
   await page.goto(h.ui, { waitUntil: 'domcontentloaded', timeout: 20000 });
   await page.waitForFunction(() => [...document.querySelectorAll('.tq-pile-row .card b')]
     .filter(n => n.textContent.startsWith('Shared arrival')).length === 507, { timeout: 30000 });
-  const before = (await request(h, '/api/funnel/pile')).items.map(i => i.key);
   const scopedRequests = [];
   page.on('request', req => {
     const url = new URL(req.url());
@@ -118,7 +117,7 @@ test('All and Unread share 507 fresh roots, including ignored and pending triage
   assert.equal((await completedTurn(said)).decision?.verb, 'next', 'the fixture must exercise the model decision path');
   const nextResult = await completedTurn(advanced);
   assert.ok(nextResult?.item?.key, 'typed Next must land an item');
-  assert.notEqual(nextResult.item.key, previousCard.key, 'typed Next advances past the still-unread Current');
+  assert.notEqual(nextResult.item.key, previousCard.key, 'typed Next advances past the Current it just put down');
   const nextBody = JSON.parse(advanced.request().postData());
   assert.equal(nextBody.exclude, previousCard.key, 'Current survives until the guarded Next captures its exclusion');
   assert.equal(nextBody.expected_next_key, nextResult.item.key);
@@ -133,17 +132,13 @@ test('All and Unread share 507 fresh roots, including ignored and pending triage
   assert.equal(nextRequests.filter(turn => turn.path === '/api/concierge/next' || turn.body.mode === 'next').length, 1,
     'one typed Next performs exactly one guarded advance');
   const afterNext = await request(h, '/api/funnel/pile');
-  // What the walk SHOWS is read - that is the owner's own rule (2026-09-06) - with one exception:
-  // a row waiting on a yes, or an agent parked on a question, stays unread and marked so Next can
-  // come back to it. Which of the two this fixture surfaced depends on what leads the pile, and
-  // since the levels became triage's verdict that is the oldest row in it, not the highest saved
-  // priority - so assert the rule rather than one side of it.
-  const heldOpen = ['approve', 'blocked'].includes(previousCard.lane);
-  for (const key of previousMembers) {
-    const item = afterNext.items.find(row => row.key === key);
-    if (heldOpen) assert.equal(item?.unread, true, 'a row waiting on a yes is not read by being shown');
-    else assert.equal(item, undefined, 'a row the walk showed is read and leaves Unread');
-  }
+  // What the walk SHOWS is read, with NO exception - the owner removed the approve/blocked one on
+  // 2026-09-07 ("hitting next or done should mark it read and then move on"): walking past a draft
+  // ends the reply obligation rather than holding the row for another pass. Which row leads the pile
+  // is nondeterministic since the levels became triage's verdict, so this stays lane-agnostic: it
+  // holds whether the row left Unread outright or merely stopped being unread.
+  for (const key of previousMembers) assert.notEqual(afterNext.items.find(item => item.key === key)?.unread, true,
+    'walking past an item reads it: it does not come back as unread');
   await page.click('button[aria-label^="New chat"]');
   await page.waitForFunction(() => !document.querySelector('.tq-pile-row.current'), { timeout: 20000 });
   await page.waitForNetworkIdle({ idleTime: 200, timeout: 20000 });

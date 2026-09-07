@@ -1,8 +1,7 @@
 // The confirmation card's logic (PW-122..125), kept pure so it can be tested without a browser: the
-// bottom suggestions are ordinary text; the card is built from the proposal the server returned, never
-// from a guess about the words; the receipt after the click is what the server said happened.
-export const SUGGESTIONS = ["Next", "Done", "Create task", "Create agent", "Reply"];
-
+// card is built from the proposal the server returned, never from a guess about the words; the receipt
+// after the click is what the server said happened. The action words themselves are no longer here -
+// they are concierge.CHIPS, chosen per item and rendered inside the assistant's own line.
 export function proposalOf(data) { return data && data.proposal && data.proposal.id ? data.proposal : null; }
 
 // the box's four facts: what will happen, on what, with which parameters, and the button that does it

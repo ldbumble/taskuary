@@ -29,8 +29,8 @@ import { Md, looksMd } from "./md.jsx";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12, localDay } from "./ui.jsx";
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
-import { SUGGESTIONS, afterCancel, afterExecute, proposalOf } from "./proposalCard.js";
-import { ageText, arrivals, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, followsItem, hasNextSelection, interactiveCardIndex, keysOf, nextMarkerKey, nextSelectionBody, nextSelectionScope, pendingAlerts, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, levelOf, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
+import { afterCancel, afterExecute, proposalOf } from "./proposalCard.js";
+import { ageText, arrivals, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, followsItem, hasNextSelection, interactiveCardIndex, keysOf, lastSaidIndex, chipsOf, nextMarkerKey, nextSelectionBody, nextSelectionScope, pendingAlerts, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, levelOf, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
 import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WrapupCard } from "./assistantCards.jsx";
@@ -211,7 +211,7 @@ const StageMode = ({ mode, setMode }) => (
 );
 
 // ── one line of the conversation, with its card ───────────────────────────────────────────
-function Line({ m, live, actions, fresh }) {
+function Line({ m, live, last, actions, fresh }) {
   if (m.role === "user") return <div className="tq-msg you"><div className="body">{m.text}</div></div>;
   if (m.role === "receipt") return (
     <div className="tq-msg receipt"><span /><div className="body">✓ {m.text}
@@ -225,6 +225,12 @@ function Line({ m, live, actions, fresh }) {
   // that disappeared while retaining the durable conversation line and the card's local UI state.
   const c = follows ? fresh : m.card;                     // the live card follows the pile
   const kind = c?.kind === "setup" ? "setup" : (m.proposal || c?.kind === "proposal") ? "proposal" : cardFor(c);
+  // From the DURABLE turn, never from `fresh`: the vocabulary was chosen when the line was written and
+  // is recorded with it, while a pile refresh rebuilds the live item WITHOUT chips - reading them off
+  // `fresh` made the words vanish on the next poll. A verb that has since stopped applying is refused
+  // server-side at propose time, which is the only place that can know.
+  // A proposal is waiting on its own Confirm: offering the item's verbs beside it invites two answers.
+  const chips = last && !m.proposal && kind !== "proposal" ? chipsOf(m) : [];
   const card = live && m.card && kind ? {
     proposal: <ProposalCard p={m.proposal || c} onConfirm={actions.confirm} onCancel={actions.cancel} onPreview={actions.preview} />,
     reply: <ReplyCard card={c} onDone={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} />,
@@ -253,11 +259,20 @@ function Line({ m, live, actions, fresh }) {
             </div>
           )}
           {card}
+          {/* The action words, in the assistant's own line - one place to look, chosen by the server from
+              the item's kind and already filtered to what this one can carry (concierge.chips_for). A
+              strip over the composer and a second row under the bubble said the same things twice and
+              neither was where the sentence was (the owner, 2026-09-07). */}
+          {last && !!chips.length && (
+            <div className="tq-verbs">
+              {chips.map((c, i) => (
+                <button key={c.verb || c.label} type="button" className={i === 0 ? "tq-verb primary" : "tq-verb"}
+                  disabled={actions.busy} onClick={() => actions.chip(c)}>{c.label}</button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
-      {live && !!m.options?.length && (
-        <div className="tq-options">{m.options.map((o) => <button key={o} type="button" className="tq-chip" onClick={() => actions.pick(o)}>{o}</button>)}</div>
-      )}
     </>
   );
 }
@@ -547,7 +562,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   }, []);
 
   // pull the next thing (or the one named; or the next piece of mail) out of the pipe and say it
-  const surface = useCallback(async (key = null, asUser = null) => {
+  const surface = useCallback(async (key = null, asUser = null, leaving = null) => {
     if (busy || resetting || turnFlight.current) return;
     turnFlight.current = true;
     setBusy(true); setErr("");
@@ -574,7 +589,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       // A named Timeline/pile row remains an explicit pull. Automatic Walk/Next echoes the exact
       // server capture; demo/old-server payloads alone retain the legacy tokenless fallback.
       const navigation = capture ? nextSelectionBody(capture) : scope;
-      landed(await turn({ mode: "next", key, ...navigation }));
+      landed(await turn({ mode: "next", key, leaving, ...navigation }));
     } catch (e) {
       const guard = selectionGuardDetail(e);
       if (guard) {
@@ -629,7 +644,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       if (data.item) landed(data);                       // the words pointed at something: it is on the table now
       else {
         const prop = proposalOf(data);      // a consequential decision arrives as a proposal to confirm (PW-123)
-        setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: data.options || [],
+        setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [],
                                 ...(prop ? { proposal: prop, card: { kind: "proposal", key: prop.key, title: prop.label, op: prop.id, tid: prop.tid, ref: prop.ref } } : {}) }]);
         say(data.say);
         if (prop?.auto) await runProposal(prop);                   // a plain verb on the item on the table: no button to press
@@ -705,19 +720,37 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     say(data.say);
     return data;
   };
-  // the four chips under the composer say one unambiguous thing each, so they take the direct road (no model
-  // turn): Done runs at once like the typed word does; a hand-off or a task still lands as a card to confirm;
-  // Reply drafts, as it always did (PW-126)
-  const quick = {
-    Done: async () => { const p = await proposeDirect("done", current, true); if (p?.auto) await runProposal(p); },
-    "Create task": () => proposeDirect("mine", current, true),
-    "Create agent": () => proposeDirect("coder", current, true),        // the server picks a regular agent for a general task
-    Reply: () => decide({ verb: "reply" }),
+  // Get me ready for this meeting: a conversation with the assistant, no checkout (server: calendar/prep)
+  const prep = async (item) => {
+    const e = item?.event || {};
+    const { data } = await api.post("/api/calendar/prep", { ...e, instruction: "Get me ready for this meeting: who is in it, what came before it, what I should say." });
+    setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: data.taskId, ref: data.ref,
+                            text: `${data.ref} - prep is open as its own conversation with the assistant.` }]);
+    advance();
   };
-  const quickAct = async (s) => {
-    if (busy || resetting) return;
+  // ONE road for every action word in the chat. A word the assistant offered is a word that runs: the
+  // verb goes to the same proposal endpoint a card button uses, with the target explicit. The two that
+  // are not proposals keep their own immediate behaviour - a reply DRAFTS (PW-126), Next moves the walk
+  // and puts down what it left. An OPTIONS choice is not a verb at all: it goes back as the owner's words.
+  const runChip = async (c) => {
+    if (busy || resetting || !c) return;
+    if (c.ask) { send(c.ask); return; }
+    const item = currentRef.current || currentItem;
+    const key = item?.key || current;
+    if (c.verb === "next") { surface(null, null, key); return; }
+    if (c.verb === "reply" || c.verb === "redraft") { await decide({ verb: c.verb }); return; }
     setBusy(true); setErr("");
-    try { await quick[s](); } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
+    try {
+      if (c.verb === "prep") await prep(item);
+      else if (c.verb === "followup") {
+        const out = await api.post("/api/concierge/act", { key, verb: "followup" });
+        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: "Follow-up drafted - it waits for your yes.", tid: out.data?.taskId }]);
+        advance();
+      } else {
+        const pr = await proposeDirect(c.verb, key, true);
+        if (pr?.auto) await runProposal(pr);
+      }
+    } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
   };
   // a dry run of a proposed report (PW-195): the server refuses anything that could write
   const previewProposal = async (p) => (await api.post(`/api/operations/${p.id}/preview`)).data;
@@ -848,7 +881,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     pull(key, asUser);
   };
 
-  const actions = { done, start, handOff, openTask: onOpenTask, timeline, navigate: onNavigate, pick: (o) => send(o),
+  const actions = { done, start, handOff, openTask: onOpenTask, timeline, navigate: onNavigate,
+    chip: runChip, busy: busy || resetting,
     confirm: confirmProposal, cancel: cancelProposal, propose: proposeDirect, preview: previewProposal,
     surface: (key, note) => {
       if (note) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: note }]);
@@ -856,6 +890,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     } };
   const shown = old ? old.messages : msgs;
   const lastCardIdx = useMemo(() => interactiveCardIndex(shown), [shown]);
+  const lastSaidIdx = useMemo(() => lastSaidIndex(shown), [shown]);
 
   const chat = (
     <div className="tq-asst-col" style={{ position: "relative", flex: 1, minHeight: 0 }}>
@@ -923,7 +958,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               </div>
             </div>
           )}
-          {shown.map((m, i) => <Line key={m.id} m={m} live={!old && i === lastCardIdx} actions={actions} fresh={currentItem} />)}
+          {shown.map((m, i) => <Line key={m.id} m={m} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx}
+                                     actions={actions} fresh={currentItem} />)}
           {busy && (
             <div className="tq-msg"><div className="avatar"><TaskuaryMark size={18} /></div>
               <div className="body"><span className="tq-typing"><i /><i /><i /></span>
@@ -945,13 +981,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       )}
       {!old && (
         <div className="tq-compose">
-          <div className="tq-quick">
-            <button type="button" className="tq-chip" disabled={busy || resetting || !canAdvance} onClick={() => surface()}>Next</button>
-            {current && SUGGESTIONS.filter((s) => s !== "Next").map((s) => (
-              <button key={s} type="button" className="tq-chip" disabled={busy || resetting} onClick={() => (quick[s] ? quickAct(s) : send(s))}>{s}</button>
-            ))}
-            <button type="button" className="tq-chip" disabled={busy || resetting} onClick={setup}>Set something up</button>
-          </div>
           <div className="tq-compose-box">
             <MicButton size={18} sx={{ width: 34, height: 34, p: 0, color: DIM }} onText={(t) => setText((v) => (v ? `${v} ${t}` : t))} />
             <Tooltip title="Send an emoji response">
@@ -980,7 +1009,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             </Box>
             {!!text.trim() && <Typography sx={{ fontSize: 10.5, color: FAINT, px: 0.4, pt: 0.75 }}>Added to your draft; press send when ready.</Typography>}
           </Popover>
-          <div className="tq-compose-hint">Enter sends · Shift+Enter adds a line · click a row on the left to pull it in · the buttons on a card do the acting</div>
+          <div className="tq-compose-hint">Enter sends · Shift+Enter adds a line · click a row on the left to pull it in · the words under each message do the acting</div>
           <button type="button" className="tq-whatsapp-connect" onClick={openWhatsApp}>
             <ChannelIcon channel="whatsapp" sx={{ fontSize: 15 }} />
             Connect WhatsApp to the Assistant

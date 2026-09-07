@@ -77,7 +77,16 @@
 .tq-chip:hover { border-color: #55697a; background: #f4f6f8; }
 .tq-chip:disabled { opacity: .5; cursor: default; }
 .tq-chip.primary { background: linear-gradient(90deg, #55697a, #7d9a7c); color: #fff; border-color: transparent; }
-.tq-options { display: flex; gap: 6px; flex-wrap: wrap; margin: 2px 0 14px 38px; }
+/* the proposal card's own Confirm/Cancel row (ProposalCard.jsx) - not the chat's verbs */
+.tq-options { display: flex; gap: 6px; flex-wrap: wrap; }
+.tq-verbs { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; margin: 9px 0 1px; }
+.tq-verb { border: 1px solid #ddd8cf; background: transparent; color: #55697a; border-radius: 99px;
+  padding: 3px 10px; font: 600 11px 'IBM Plex Sans', system-ui, sans-serif; cursor: pointer; transition: all .13s; }
+.tq-verb:hover { border-color: #55697a; background: #f2f5f7; color: #33424d; }
+.tq-verb:focus-visible { outline: 2px solid #7d9a7c; outline-offset: 2px; }
+.tq-verb:disabled { opacity: .45; cursor: default; }
+.tq-verb.primary { border-color: #8fa38f; background: #f1f5f1; color: #3f5943; }
+.tq-verb.primary:hover { background: #e6ede6; }
 
 /* the card under a line: paper, a hairline, the lane's colour on the left edge only */
 .tq-card { margin: 8px 0 4px; border: 1px solid #ddd8cf; border-left-width: 4px; border-radius: 11px; background: #fffdf9; padding: 10px 12px; box-shadow: 0 4px 16px rgba(51,45,35,.06); }
@@ -114,8 +123,6 @@
 
 /* the composer */
 .tq-compose { padding: 6px 20px 10px; border-top: 1px solid #e4e0d9; background: #fffdfb; }
-.tq-quick { display: flex; gap: 6px; flex-wrap: wrap; width: min(900px, 100%); margin: 0 auto 8px; }
-.tq-quick .tq-chip { padding: 3px 10px; font-size: 10.5px; }
 .tq-compose-box { width: min(900px, 100%); margin: 0 auto; display: flex; align-items: center; gap: 5px; padding: 6px 7px; border: 1px solid #d5d0c7; background: #fff; border-radius: 13px; box-shadow: 0 2px 8px #39352d0b; }
 .tq-compose-box textarea { flex: 1; min-width: 0; min-height: 34px; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; color: #292824; font: inherit; font-size: 13px; line-height: 1.45; padding: 7px 5px; max-height: 150px; }
 .tq-compose-box textarea::placeholder { color: #8f8b84; }

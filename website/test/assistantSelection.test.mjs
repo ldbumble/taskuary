@@ -137,7 +137,7 @@ test("Assistant echoes one captured selection and never retries a 409 through th
   assert.match(view, /if \(\[404, 405, 501\]\.includes\(res\.status\)\) return plain\(\)/);
   assert.doesNotMatch(view, /if \(!res\.ok \|\| !res\.body\).*return plain/);
   assert.match(view, /const navigation = capture \? nextSelectionBody\(capture\) : scope/);
-  assert.match(view, /landed\(await turn\(\{ mode: "next", key, \.\.\.navigation \}\)\)/);
+  assert.match(view, /landed\(await turn\(\{ mode: "next", key, leaving, \.\.\.navigation \}\)\)/);
   assert.match(view, /loadPile\(true\);\s*\/\/ refresh the rows, never retry the navigation/);
 });
 

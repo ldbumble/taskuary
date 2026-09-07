@@ -329,7 +329,15 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         "marketing, operational, and other non-coding work. The task and source material below are "
         "authoritative. Be direct and useful. Never claim you searched the web, opened a system, sent "
         "something, or changed a record unless a tool actually did it. Ask when a necessary fact is "
-        "missing. Do not turn this into a coding task or instruct a coding CLI.\n\n"
+        "missing. Do not turn this into a coding task or instruct a coding CLI.\n"
+        # Work that no repository can carry now lands here rather than stalling as a held coding task
+        # (ingest: no_repo). Some of it needs a tool nobody has wired - adding somebody to a Teams invite
+        # wants calendar WRITE, and Taskuary's calendar is read-only. Saying so in one line is the answer;
+        # a job that quietly does nothing is the failure (the owner, 2026-09-07: "if it's not capable of
+        # doing it, then it will say so").
+        "When the job needs an action you have no tool for, say exactly that in one line - name the "
+        "action, say it cannot be done from here, and say what you did instead (drafted it, gathered "
+        "what is needed, or found who can). Never leave the job looking attempted when it was not.\n\n"
         + (f'{layer}\n\n{TEACH_ME}\n\n' if layer else f'{TEACH_ME}\n\n')
         + f"RULES (AGENT.md - every worker)\n{agent_rules}\n\nASSISTANT STYLE\n{counsel}"
     )

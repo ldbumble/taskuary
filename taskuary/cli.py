@@ -39,6 +39,12 @@ def main():
     # "is the triage right?" is a rate, and nothing measured it: build the labelled cases out of
     # the owner's own verdicts, score the configured classifier over them, or export a set that
     # can leave the machine (people and prose removed) - see evalset.py
+    # coding tasks triage could not name a repository for cannot start at all: the agent wants a
+    # checkout and there is none to give it. They are the assistant's work now (ingest: no_repo), but
+    # rows that arrived before that rule are still sitting on the board unstartable.
+    ap.add_argument('--reroute-held', action='store_true',
+                    help='move open coding tasks that have no nameable repository to the agent that '
+                         'needs none, and start them; prints what moved, then exits')
     ap.add_argument('--evalset', choices=['build', 'share', 'evaluate', 'ablate'], metavar='ACTION',
                     help='triage dataset: build (labelled cases from your verdicts -> ~/.taskuary/eval), '
                          'evaluate (score the configured AI over them), ablate (score with and without memory), '
@@ -197,6 +203,16 @@ def main():
         for r in reversed(rows):
             ref = f" {task_ref(r['TaskId'])}" if r.get('TaskId') else ''
             print(f"  [{r['Kind']}] {r['Agent']}{ref} {bb._ago(r['CreatedAt'])}: {r['Body']}")
+        return
+    if args.reroute_held:
+        import sys
+        from . import ingest
+        from .store import SQLiteStore, task_ref
+        try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except (AttributeError, OSError): pass
+        moved = ingest.reroute_held_no_repo(SQLiteStore(config.db_path()))
+        for t in moved: print(f"{task_ref(t['TaskId'])} -> general: {t['Title']}")
+        print(f"{len(moved)} task{'s' if len(moved) != 1 else ''} moved.")
         return
     if args.evalset:
         import sys

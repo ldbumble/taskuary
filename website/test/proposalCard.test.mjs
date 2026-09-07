@@ -3,14 +3,13 @@
 // the server said happened; bottom suggestions are ordinary text.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { SUGGESTIONS, proposalOf, describe, afterExecute, afterCancel } from "../src/proposalCard.js";
+import { proposalOf, describe, afterExecute, afterCancel } from "../src/proposalCard.js";
 
 const p = { id: "ab12", kind: "task.create_from_message", target: 7, version: 1, status: "proposed", verb: "coder",
   params: { kind: "coding", instructions: "check the June rows" }, label: "Send to the coding agent",
   summary: "TQ-0007 - Fix the export → coding agent", settles: true, key: "task:7", ref: "TQ-0007" };
 
 test("the bottom suggestions are text the owner could have typed", () => {
-  assert.deepEqual(SUGGESTIONS, ["Next", "Done", "Create task", "Create agent", "Reply"]);
 });
 
 test("a turn with a proposal yields the card; a plain answer or a decision does not", () => {

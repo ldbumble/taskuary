@@ -149,6 +149,28 @@ export const replaceSelectionToken = (pile, detail) => pile ? (detail.code === "
 export const restorableCurrent = (messages) => [...(messages || [])].reverse().find((message) =>
   message?.card && !message.card.background_event
   && !["brief", "setup", "agentdone"].includes(message.card.kind))?.card || null;
+// Which line carries the action words. It is the LAST thing Taskuary said, card or no card: an answer
+// to a typed question offers the same verbs as the line that introduced the item, and a receipt is not a
+// place to act. interactiveCardIndex is about the card inside the bubble and stays separate.
+export const lastSaidIndex = (messages) => {
+  for (let index = (messages || []).length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role !== "assistant") continue;
+    // A passive notice is something that HAPPENED, not somewhere to act - it is not about the thing on
+    // the table, and letting it take the words moved them off the item the owner was working on the
+    // moment a background update landed. interactiveCardIndex skips these for the same reason.
+    if (message.card?.background_event) continue;
+    return index;
+  }
+  return -1;
+};
+// The words offered under one line: the item's own verbs, or a clarifying choice the assistant asked
+// with (OPTIONS) - which goes back as words, not as a verb. Never both: one row, one place to look.
+export const chipsOf = (message) => {
+  const options = (message?.options || []).map((o) => ({ ask: o, label: o }));
+  if (options.length) return options;
+  return message?.chips || message?.card?.chips || [];
+};
 export const interactiveCardIndex = (messages) => {
   for (let index = (messages || []).length - 1; index >= 0; index -= 1) {
     if (messages[index]?.card && !messages[index].card.background_event) return index;

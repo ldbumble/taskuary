@@ -1570,5 +1570,145 @@ class ApiActionsTests(unittest.TestCase):
         self.assertEqual(got['Status'], 'done')                            # one record, both doors
 
 
+    def test_work_with_no_nameable_repository_is_rerouted_off_the_board(self):
+        """The rows that arrived before "no repository = the assistant's" existed. They cannot start as
+        coding jobs at all, so they sit unstartable - TQ-0401 did (the owner: "Why was this a coding
+        agent?")."""
+        s = store()
+        with mock.patch.object(ingest, '_spawn'):
+            held = arrive(s, subject='Can you add Nathan to the call he wants to join', body='he wants to join',
+                          channel='teams', who='Hindy', email='hindy@htgcs.com', conv='c:teams',
+                          llm=brain('task', 'coding'))
+        tid = held['task_id']
+        s.tag_task(tid, ingest.NEEDS_REPO_TAG, actor='triage')
+        self.assertEqual(s.get_task(tid)['Kind'], 'coding')
+        # ...and one that a repository WAS named for: a real choice waiting, left alone
+        with mock.patch.object(ingest, '_spawn'):
+            named = arrive(s, subject='Fix the export', body='Rows drop.', conv='c:exp', hours=2, llm=brain('task', 'coding'))
+        s.tag_task(named['task_id'], ingest.NEEDS_REPO_TAG, actor='triage')
+        s.tag_task(named['task_id'], f'{ingest.TRIAGE_REPO_TAG}acme/exports', actor='triage')
+
+        with mock.patch.object(ingest, '_spawn') as spawn:
+            moved = ingest.reroute_held_no_repo(s)
+        self.assertEqual([t['TaskId'] for t in moved], [tid])
+        self.assertEqual(s.get_task(tid)['Kind'], 'general')                 # the agent that needs no repo
+        self.assertEqual(s.get_task(named['task_id'])['Kind'], 'coding')     # ...the named one is untouched
+        self.assertTrue(spawn.called, 'and it actually starts')
+        self.assertIn('needs no repository', ' '.join(c['Body'] for c in s.list_comments(tid)))
+        with mock.patch.object(ingest, '_spawn'):
+            self.assertEqual(ingest.reroute_held_no_repo(s), [])             # nothing left to move: it is idempotent
+
+
+# ── the inline verbs, and what Next now settles (2026-09-07) ─────────────────────────────────
+class InlineVerbTests(unittest.TestCase):
+    """The action words live in the assistant's own line, they come from CODE, and every one of them
+    works: a chip that is offered is a chip whose verb the item can carry."""
+
+    def test_the_chips_come_from_the_kind_and_every_one_is_runnable(self):
+        s, tid, mid, item = ResponseTests()._asked()
+        out = surface(s, item['key'])
+        chips = out['chips']
+        self.assertTrue(chips, 'an item on the table always offers its verbs')
+        self.assertEqual([c['verb'] for c in chips][-1], 'next')            # moving on is always last
+        for c in chips:
+            self.assertEqual(concierge.cannot(out['item'], c['verb'], s), '', c['verb'])
+            self.assertTrue(c['label'], c['verb'])
+        self.assertEqual(out['item']['chips'], chips)                       # …and they persist with the card
+
+    def _meeting(self):
+        s = store()
+        s.set_setting('calendar_enabled', '1', 't')
+        ev = [{'subject': 'AI Agents', 'start': ahead(20), 'end': ahead(50), 'who': ['Hindy'],
+               'all_day': False, 'where': 'Teams', 'id': 'ev1'}]
+        return s, ev
+
+    def test_a_verb_the_item_cannot_carry_is_never_offered(self):
+        s, ev = self._meeting()
+        with mock.patch.object(funnel, '_agenda', return_value=ev):
+            out = surface(s, pile(s)[0]['key'])          # a meeting still to start is pulled in by name
+        verbs = [c['verb'] for c in out['chips']]
+        self.assertEqual(out['item']['kind'], 'meeting')
+        self.assertNotIn('approve', verbs)                                  # there is no draft on a meeting
+        self.assertIn('regular_agent', verbs)                               # …but it can be handed off
+        self.assertIn('prep', verbs)
+
+    def test_an_introduction_never_prints_a_decide_line_and_its_verb_becomes_the_first_chip(self):
+        s, tid, mid, item = ResponseTests()._asked()
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            out = concierge.surface(s, item['key'],
+                                    llm=lambda *a, **k: 'Craig wants the export fixed.\nDECIDE: regular_agent')
+        self.assertNotIn('DECIDE', out['say'])                              # the marker never reaches the screen
+        self.assertEqual(out['say'], 'Craig wants the export fixed.')
+        self.assertEqual(out['chips'][0]['verb'], 'regular_agent')          # what it said it would do is the button
+        self.assertNotIn('DECIDE', ' '.join(receipts(s)))                   # …nor the transcript
+
+    def test_a_hand_off_works_on_an_item_with_no_message_behind_it(self):
+        s, ev = self._meeting()
+        with mock.patch.object(funnel, '_agenda', return_value=ev):
+            item = pile(s)[0]
+            self.assertEqual(concierge.cannot(item, 'regular_agent', s), '')     # …not "there is nothing to hand"
+            out = decide(s, 'create an agent to research buzz, grok bot and claude cowork', 'regular_agent',
+                         key=item['key'], text_arg='research buzz, grok bot and claude cowork')
+        p = out['proposal']
+        self.assertEqual((p['kind'], p['params']['kind']), ('task.create_from_text', 'general'))
+        self.assertIn('research buzz', p['params']['text'])
+
+
+    def test_the_chip_road_hands_off_with_no_sentence_behind_it(self):
+        """A chip carries no words, so the brief is the item. It proposed a task with an EMPTY text and
+        operations refused it outright - an offered word that did nothing."""
+        s, ev = self._meeting()
+        with mock.patch.object(funnel, '_agenda', return_value=ev):
+            key = pile(s)[0]['key']
+            p = concierge.propose_direct(s, 'regular_agent', key, table=True)
+        self.assertEqual((p['kind'], p['params']['kind']), ('task.create_from_text', 'general'))
+        self.assertIn('AI Agents', p['params']['text'])                      # the invite IS the brief
+        self.assertIn('Hindy', p['params']['text'])
+        self.assertEqual(p['params']['title'], 'AI Agents')                  # ...and the item names the task
+
+
+    def test_the_walk_is_offered_even_when_nothing_is_on_the_table(self):
+        """The strip over the composer used to carry Next everywhere. With the words in the lines instead,
+        a line with no item under it offered NOTHING - and the welcome block that starts the walk is gone
+        the moment the first line is written, so the walk became unreachable."""
+        s = ResponseTests()._asked()[0]
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            opened = concierge.open_day(s, llm=None)
+        self.assertEqual([c['verb'] for c in opened['chips']], ['next'])          # the opening line starts it
+        self.assertEqual([c['verb'] for c in opened['card']['chips']], ['next'])  # ...and a reload keeps it
+
+        out = say(s, 'close it', model='Ok.\nDECIDE: close')                     # a verb with nothing on the table
+        self.assertIn('Nothing is on the table', out['say'])
+        self.assertEqual([c['verb'] for c in out['chips']], ['next'])
+
+        # ...and once the pipe really is empty there is nothing to offer at all
+        empty = store()
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            self.assertEqual(concierge.open_day(empty, llm=None)['chips'], [])
+            self.assertEqual(concierge.surface(empty, llm=None)['chips'], [])
+
+    def test_next_marks_a_waiting_draft_read_and_ends_the_reply(self):
+        s, tid, rid, item = ResponseTests()._drafted()
+        self.assertEqual(item['lane'], 'approve')
+        surface(s, item['key'])
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            concierge.surface(s, llm=None, leaving=item['key'])              # …and the owner hits Next
+        self.assertEqual(s.funnel_states()[item['key']]['Status'], 'surfaced')
+        self.assertEqual(s.get_review(rid)['Status'], 'no_reply')            # no reply is owed any more
+        self.assertIsNone(s.pending_review(tid))                             # …and it is out of the Review queue
+        self.assertEqual(pile(s), [])                                        # nothing is left waiting on the owner
+
+    def test_next_on_a_parked_agent_reads_it_but_leaves_the_session_running(self):
+        s, tid, mid, item = ResponseTests()._asked()
+        s.update_task(tid, {'Status': 'in_progress'}, 'router')
+        live = session(tid, idle=200, waiting=True, tail=['Remove the old rows too? (y/n)'])
+        agent = next(i for i in pile(s, live) if i['kind'] == 'agent')
+        with mock.patch.object(terminal, 'live_sessions', return_value=live):
+            concierge.surface(s, llm=None, leaving=agent['key'])
+        self.assertEqual(s.funnel_states()[agent['key']]['Status'], 'surfaced')
+        self.assertEqual(s.get_task(tid)['Status'], 'in_progress')           # the agent is still working
+        self.assertEqual([i['lane'] for i in pile(s, live)], ['blocked'])     # ...and it is not cancelled
+
+
 if __name__ == '__main__':
     unittest.main()

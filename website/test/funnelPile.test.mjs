@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { LANES, LANE_META, ageText, arrivals, cardFor, currentItemFromPile, currentPresentationChanged, departures, displayRevision, drawOrder, followsItem, keysOf, laneMeta, refreshCurrentPresentation, refreshPilePresentation, statusLine, topAlert } from "../src/funnelPile.js";
+import { LANES, LANE_META, ageText, arrivals, chipsOf, lastSaidIndex, cardFor, currentItemFromPile, currentPresentationChanged, departures, displayRevision, drawOrder, followsItem, keysOf, laneMeta, refreshCurrentPresentation, refreshPilePresentation, statusLine, topAlert } from "../src/funnelPile.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 const cardsSrc = () => read("assistantCards.jsx");
@@ -198,7 +198,11 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.match(view, /if \(!prop && data\.decision\) await decide\(data\.decision\)/);
   assert.match(view, /\/api\/operations\/\$\{p\.id\}\/execute`, \{ version: p\.version \}/);
   assert.doesNotMatch(view, /dispatch`, \{ kind: "coding"/);                       // no verb is carried out from the chat itself
-  assert.match(view, /SUGGESTIONS\.filter\(\(s\) => s !== "Next"\)\.map/);       // the bottom suggestions are text, sent like typing (PW-122)
+  assert.doesNotMatch(view, /tq-quick/);                  // nothing sits over the composer any more
+  assert.doesNotMatch(view, /SUGGESTIONS/);               // ...and the page invents no vocabulary of its own
+  assert.match(view, /className="tq-verbs"/);             // the action words are IN the assistant's line
+  assert.match(view, /chipsOf\(m\)/);                       // from the durable turn: a poll must not erase them
+  assert.match(view, /chip: runChip/);                    // one road for every one of them
   assert.match(view, /triage moved it up/);                // the rail shows promotions
   assert.match(view, /data\.events\?\.length/);           // the watcher's lines land in the chat as they happen
   assert.match(cardsSrc(), /Show the final report/);        // ...and a finished job's report reads right there
@@ -276,4 +280,19 @@ test("alerts consume shared bands and cannot displace time-critical Current with
   assert.equal(topAlert([wait], new Set(), { key: "later", kind: "meeting", lane: "time", calendar_ready: false }), null);
   assert.equal(topAlert([urgent], new Set(), { key: "later", kind: "meeting", lane: "time", calendar_ready: false }), urgent);
   assert.equal(topAlert([urgent], new Set(), { key: "now", lane: "fyi" }, new Set(["urgent"])), null);
+});
+
+test("the action words hang on the last thing Taskuary SAID about the item, not on a passive notice", () => {
+  const item = { id: "a1", role: "assistant", card: { key: "msg:1", kind: "review", chips: [{ verb: "approve", label: "Send the reply" }] } };
+  const notice = { id: "a2", role: "assistant", card: { key: "agent:9", kind: "agent", background_event: true } };
+  assert.equal(lastSaidIndex([{ id: "u1", role: "user" }, item]), 1);
+  assert.equal(lastSaidIndex([item, notice]), 0, "a background update must not take the words off the item");
+  assert.equal(lastSaidIndex([item, { id: "r1", role: "receipt" }]), 0, "a receipt is not somewhere to act");
+  assert.equal(lastSaidIndex([]), -1);
+  // an answer to a typed question carries them on the turn itself; a surfaced item on its card
+  assert.deepEqual(chipsOf(item).map((c) => c.verb), ["approve"]);
+  assert.deepEqual(chipsOf({ role: "assistant", chips: [{ verb: "next", label: "Next" }] }).map((c) => c.verb), ["next"]);
+  // ...and a clarifying choice replaces them: it goes back as words, so mixing the two invites two answers
+  assert.deepEqual(chipsOf({ ...item, options: ["Tuesday", "Thursday"] }), [{ ask: "Tuesday", label: "Tuesday" }, { ask: "Thursday", label: "Thursday" }]);
+  assert.deepEqual(chipsOf({ role: "assistant" }), []);
 });

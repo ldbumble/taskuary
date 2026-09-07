@@ -1362,6 +1362,36 @@ def _auto_code(store, tid):
         bb.record_failure(store, tid, e, agent, label='Auto-start')   # counted, said, and retried on a bounded budget (PW-085)
 
 
+def reroute_held_no_repo(store, actor: str = 'owner', start: bool = True) -> list:
+    """Open CODING tasks that triage could not name a repository for, moved to the agent that needs
+    none - the rule from the routing above, applied to the rows that arrived before it existed.
+
+    Those tasks are unstartable by construction: the coder wants a checkout, triage said it could not
+    tell which, and the row sits on the board with nobody able to pick it up. TQ-0401 - "can you add
+    Nathan to the call he wants to join" - sat there for exactly that reason (the owner, 2026-09-07:
+    "Why was this a coding agent?"). Returns the tasks it moved.
+
+    A repository somebody DID name is left alone: a triage-repo: tag, or a github item's own, means
+    the hold is a real choice waiting, not a job with no home."""
+    moved = []
+    for t in store.list_tasks(active_only=True):
+        if t.get('Kind') != 'coding': continue
+        tags = [x.strip() for x in str(t.get('Tags') or '').split(',') if x.strip()]
+        if NEEDS_REPO_TAG not in tags: continue
+        if any(x.startswith(TRIAGE_REPO_TAG) for x in tags): continue
+        tid = t['TaskId']
+        store.update_task(tid, {'Kind': 'general'}, actor)
+        store.add_comment(tid, 'router', 'agent',
+                          'Moved to the assistant, which needs no repository: triage could not name one, so this '
+                          'could never start as a coding job. It will say so if the work needs a tool it does not have.')
+        store.audit('task', tid, 'reroute_no_repo', actor, detail={'from': 'coding', 'to': 'general'})
+        moved.append(t)
+        if start:
+            try: _spawn(_auto_general, store, tid)
+            except Exception as e: logger.warning(f'reroute: {task_ref(tid)} did not start - {e}')
+    return moved
+
+
 def _auto_general(store, tid, brief: str = None):
     """Auto-dispatch for a GENERAL task: the assistant's own per-task session, the same one the
     owner sees when they open the task (PW-069). A full house queues it like a coding task; the

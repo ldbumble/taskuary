@@ -71,7 +71,7 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
   assert.equal(await page.$eval(".tq-pile-row.current .tq-pile-next", (node) => node.textContent.trim().toLowerCase()), "current");
   assert.equal(await page.$eval(".tq-pile-row.next .tq-pile-next", (node) => node.textContent.trim().toLowerCase()), "next");
   const expectedNext = await page.$eval(".tq-pile-row.next .card b", (node) => node.textContent.trim());
-  await page.evaluate(() => [...document.querySelectorAll(".tq-compose .tq-quick button")]
+  await page.evaluate(() => [...document.querySelectorAll(".tq-msg .tq-verbs .tq-verb")]
     .find((button) => button.innerText === "Next")?.click());
   await page.waitForFunction((title) => document.querySelector(".tq-pile-row.current .card b")?.textContent.trim() === title,
     { timeout: 15000 }, expectedNext);

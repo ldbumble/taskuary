@@ -44,6 +44,25 @@ _DECIDE = re.compile(r'\n?\s*DECIDE:\s*([a-z_]+)(?::\s*(.*?))?(?:\s+ON:\s*(.+?))
 # what the owner can decide about the thing on the table - each is a button the card already has
 VERBS = ('reply', 'approve', 'setting', 'not_ours', 'not_ours_remember', 'not_ours_sender', 'remember', 'coder', 'regular_agent', 'mine', 'close', 'stop_agent',
          'rerun', 'setup', 'clear', 'split', 'done', 'later', 'skip', 'next', 'answer_agent', 'redraft', 'forward', 'archive', 'none')
+# The action words offered INSIDE the assistant's own line, and what each one reads as. The vocabulary is
+# CODE's and it is fixed (the owner, 2026-09-07: "make it hardcoded, meaning add inline in the chat words
+# that map to actions"); only which of them fits the thing on the table is decided per item, from its kind.
+# The model still reads free text - it just never invents a button. Every word here maps to a verb the cards
+# and the typed sentence already run, so a chip, a button and a sentence are one road.
+CHIP_WORDS = {'approve': 'Send the reply', 'redraft': 'Redraft it', 'reply': 'Reply', 'coder': 'Hand it to a coding agent',
+              'regular_agent': 'Hand it to an agent', 'mine': 'Put it on my list', 'not_ours': 'Not ours',
+              'not_ours_sender': 'Silence this sender', 'archive': 'Archive it', 'close': 'Close the task',
+              'done': 'Handled', 'later': 'Later', 'skip': 'Tomorrow', 'next': 'Next', 'answer_agent': 'Answer it',
+              'stop_agent': 'Stop the agent', 'rerun': 'Run it again', 'split': 'Split it in two',
+              'prep': 'Prep me', 'followup': 'Draft a follow-up'}
+# per kind, in the order they are offered. `next` is last on every one of them: moving on is always available,
+# and it is the one word that is never a decision about the thing itself.
+CHIPS = {'review': ('approve', 'redraft', 'not_ours', 'next'), 'action': ('approve', 'not_ours', 'next'),
+         'agent': ('answer_agent', 'stop_agent', 'next'), 'meeting': ('prep', 'regular_agent', 'next'),
+         'report': ('rerun', 'regular_agent', 'next'), 'agentdone': ('close', 'reply', 'next'),
+         'wrapup': ('close', 'next'), 'idea': ('followup', 'mine', 'next'), 'task': ('close', 'next'),
+         'asked': ('reply', 'regular_agent', 'coder', 'mine', 'next'), 'todo': ('reply', 'regular_agent', 'coder', 'mine', 'next'),
+         'fyi': ('not_ours', 'mine', 'next'), 'fyis': ('done', 'not_ours_sender', 'next')}
 # THE CONTRACT is the part code reads: two line shapes and the verb vocabulary behind the card's buttons.
 # How to behave is COUNSEL's - the owner's document, not this file (PW-248/256). Removing prose here
 # removed no safeguard: verbs are validated in parse_decision, targets and freshness in operations.
@@ -52,6 +71,10 @@ CONTRACT = (
     "You are speaking to {owner} in the chat on the Assistant tab. When a decision has two to four clear "
     "choices and no button covers them, end with one final line exactly like: OPTIONS: first choice | second choice. "
     "Otherwise no options line.\n"
+    "The action words under your line are the owner's buttons and they are already chosen for this item - never "
+    "list them, and never end a line with an offer to do something. When you cannot tell which of them the owner's "
+    "words mean, say which two you are choosing between and ask - one short question, no DECIDE line. Guessing is "
+    "worse than asking.\n"
     "When the owner has DECIDED about an item, end with one final line exactly like DECIDE: <verb> where verb is one of: "
     "reply (a reply to write - the gist after a colon: DECIDE: reply: tell Kishan it is not owned here), approve (send the "
     "drafted reply as it stands), redraft (write the draft again - the change after a colon), coder (hand it to the coding "
@@ -405,8 +428,12 @@ def _pile_hit(store, extra: list, item: dict) -> str | None:
 # What a card must HAVE for a verb to be carried out on it - the same map the page checks. The
 # receipt used to go out before anyone knew, so "Sending it as drafted. Moving on." and "I could
 # not do that from here" landed in the chat one after the other (2026-09-03).
+# A HAND-OFF is not in here: an agent needs a BRIEF, not a message. Requiring a `mid` refused "create an
+# agent to research these three tools" on a meeting - the one item kind that never has one - with "there is
+# nothing to hand to a regular agent on this one" (the owner, 2026-09-07). propose_for already builds those
+# through task.create_from_text from the item's facts and the owner's words.
 NEEDS = {'reply': 'mid', 'approve': 'rid', 'redraft': 'rid', 'not_ours': 'mid', 'not_ours_remember': 'mid',
-         'not_ours_sender': 'mid', 'coder': 'mid', 'regular_agent': 'mid', 'mine': 'mid', 'forward': 'mid', 'archive': 'mid',
+         'not_ours_sender': 'mid', 'mine': 'mid', 'forward': 'mid', 'archive': 'mid',
          'rerun': 'source_id', 'close': 'tid', 'answer_agent': 'tid', 'split': 'key'}
 SAYS_VERB = {'approve': 'approve', 'redraft': 'redraft', 'not_ours': 'file', 'not_ours_remember': 'file',
              'not_ours_sender': 'file', 'coder': 'hand to a coding agent', 'regular_agent': 'hand to a regular agent', 'mine': 'put on your list', 'forward': 'forward',
@@ -443,6 +470,37 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
         return (f"There is nothing to {SAYS_VERB.get(verb, verb)} on this one - {what} is "
                 f"{item.get('why') or funnel.LANE_WORDS.get(item.get('lane'), ('waiting',))[0]}. Open it if you want its own buttons.")
     return ''
+
+
+def walk_chips(left) -> list:
+    """With nothing on the table there is nothing to DECIDE about - only the walk. Offered on the opening
+    line and on every "nothing here" answer while the pipe still holds something, so Next is always
+    somewhere in the conversation: the strip over the composer that used to carry it is gone, and the
+    welcome block that offers the walk disappears the moment the first line is written."""
+    return [{'verb': 'next', 'label': CHIP_WORDS['next']}] if left else []
+
+
+def chips_for(store, item: dict | None, first: str = None) -> list:
+    """The action words to put under the assistant's line: this kind's vocabulary, minus anything this
+    particular item cannot actually carry. An offered chip is a chip that works - which is the whole
+    point of gating them through cannot() rather than letting the model name them.
+
+    `first` promotes one verb to the front: what the model said it would do becomes the button that
+    does it, instead of a sentence that promised something nothing carried out (the owner, 2026-09-07:
+    "It says x, does something else")."""
+    if not item: return []
+    verbs = list(CHIPS.get(item.get('kind')) or ('next',))
+    if first and first in CHIP_WORDS and first != 'next':
+        verbs = [first] + [v for v in verbs if v != first]
+    out = []
+    for v in verbs:
+        # the two that are the page's own actions rather than proposals, so NEEDS does not describe them:
+        # prep wants the invite it is preparing for, a follow-up wants something to follow up ON
+        if v == 'prep' and not item.get('event'): continue
+        if v == 'followup' and not (item.get('idea') or (item.get('action') or {}).get('mid')): continue
+        if v != 'next' and cannot(item, v, store): continue
+        out.append({'verb': v, 'label': CHIP_WORDS[v]})
+    return out
 
 
 def parse_options(text: str) -> tuple[str, list]:
@@ -598,21 +656,26 @@ def in_character(say: str) -> bool:
     return not _BROKE_CHARACTER.search(say or '')
 
 
-def _ask(store, llm, tid: int, item: dict | None, instruction: str, pile_items: list) -> tuple[str, list]:
+def _ask(store, llm, tid: int, item: dict | None, instruction: str, pile_items: list) -> tuple[str, list, str]:
     # the item comes FIRST and is named as the only subject; the pile is counts only while one is on the table
     user = ((f"THE ITEM ON THE TABLE - speak only about this one:\n{facts(store, item)}\n\n" if item else '')
             + f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(pile_items, coming=item is None)}{_urgent_line(pile_items, item)}\n\n"
             + (f"CONVERSATION SO FAR:\n{_turns(store, tid)}\n\n" if _turns(store, tid) else '')
             + (f"{facts(store, item)}\n\n" if not item else '') + instruction)
     text = str(llm(_system(store, llm), user, max_tokens=MAX_TOKENS) or '').strip()
+    # An INTRODUCTION is not a decision, but the model ends one with a DECIDE line anyway - and this pass
+    # used to parse only OPTIONS, so the marker printed verbatim and the thing it announced was dropped on
+    # the floor: "I'd hand this to a regular agent... DECIDE: regular_agent" and then nothing happened (the
+    # owner, 2026-09-07). The line never reaches the screen; the verb it named becomes the primary chip.
+    text, decision = parse_decision(text)
     say, options = parse_options(text)
     if off_subject(say, item):
         logger.info(f"concierge: the model spoke about another task than {item.get('ref')} - using the facts instead")
-        return '', []
+        return '', [], ''
     if not in_character(say):
         logger.info('concierge: the voice broke character - using the facts instead')
-        return '', []
-    return say, options
+        return '', [], ''
+    return say, options, (decision or {}).get('verb') or ''
 
 
 def record(store, tid: int, role: str, text: str, card: dict = None):
@@ -827,10 +890,11 @@ def open_day(store, llm=None, actor: str = 'owner', trace=None, cancel=None) -> 
     if not say:
         n = len(p['items'])
         say = ("Let's go through what we have today. " + (f"{n} thing{'s' if n != 1 else ''} waiting - {funnel.summary(p['items']).split(' - ', 1)[-1].split('.')[0]}." if n else 'Nothing is waiting on you yet.'))
+    chips = walk_chips(len(p['items']))
     card = {'key': 'brief', 'kind': 'brief', 'lane': 'report', 'title': 'Today', 'n': len(p['items']),
-            'mail': sum(1 for i in p['items'] if i['kind'] in funnel.MAIL_KINDS)}
+            'mail': sum(1 for i in p['items'] if i['kind'] in funnel.MAIL_KINDS), 'chips': chips}
     record(store, tid, 'assistant', say, card)
-    return {'say': say, 'card': card, 'opened': True}
+    return {'say': say, 'card': card, 'chips': chips, 'opened': True}
 
 
 def _live(store) -> list:
@@ -1236,13 +1300,43 @@ def card_for(item: dict) -> dict:
                                        'presentation_revision', 'order_band', 'processing_id', 'member_ids', 'aliases', 'unread', 'deferred', 'actionable')}
 
 
+def move_on(store, key: str, actor: str = 'owner') -> dict:
+    """Put down the thing the owner is walking away from. It is READ - and if it was still waiting on a
+    reply, that reply is no longer owed: the pending draft is decided `no_reply` and leaves the Review
+    queue (the owner, 2026-09-07: "if there is agent awaiting your approval for reply and you hit next
+    then no more reply needed. It's closed").
+
+    The TASK is left alone. Nothing is cancelled and no session is stopped - a parked agent goes on
+    working, it just stops interrupting; reopening is the Board's business, not the walk's."""
+    if not key: return {}
+    try: item = funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
+    except Exception as e:
+        logger.debug(f'concierge: nothing to put down for {key} - {e}'); return {}
+    if not item: return {}
+    funnel.settle(store, key, 'surfaced', actor, note=item.get('sig'), read=True)
+    ended = []
+    for rid in ([item['rid']] if item.get('rid') else []):
+        rv = store.get_review(int(rid))
+        if not rv or rv.get('Status') not in ('pending', 'held'): continue
+        from . import verdicts
+        try:
+            verdicts.decide(store, rv, 'no_reply', None, 'walked past in the chat - the owner did not want a reply', actor)
+            ended.append(int(rid))
+        except Exception as e: logger.warning(f'concierge: the draft on {key} could not be put down - {e}')
+    return {'key': key, 'read': True, 'reviews_ended': ended}
+
+
 def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = None, trace=None, cancel=None,
             include_surfaced: bool = False, exclude: str = None, selection=None, commit_guard=None,
-            bound_dock: dict = None) -> dict:
+            bound_dock: dict = None, leaving: str = None) -> dict:
     """The next thing out of the pipe (or the one named; or the next piece of MAIL), said in one
-    breath and marked as shown. Nothing left: says so."""
+    breath and marked as shown. Nothing left: says so.
+
+    `leaving` is the item the owner is walking away from - Next, and only Next. It is put down on the
+    way out (move_on): read, and any reply it was still waiting on is ended."""
     if selection is not None and key is not None:
         raise ValueError('a captured automatic selection cannot name a different item')
+    put_down = (lambda: move_on(store, leaving, actor)) if leaving else (lambda: None)
     if bound_dock is not None and selection is None:
         raise ValueError('a bound dock is only valid with a captured selection')
     task = bound_dock if bound_dock is not None else general.dock_task(store, actor)[0]
@@ -1272,9 +1366,11 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             say = "Nothing else needs you right now; " + ', '.join(parts) + '.'
         else: say = ALL_DONE
         with guarded():
+            put_down()
             if not key: set_current(store, tid, None, actor)                  # the walk ran out: nothing is on the table
             record(store, tid, 'assistant', say)
-        return {'item': None, 'say': say, 'options': [], 'left': len(p['items']), 'exhausted': only if (only and left) else None}
+        return {'item': None, 'say': say, 'options': [], 'chips': walk_chips(len(left)), 'left': len(p['items']),
+                'exhausted': only if (only and left) else None}
     # an agent has this one now (it started after the pile was built, or the owner just sent it): there is
     # nothing for the owner to do until it stops, so say so, let it go, and take the next one. It comes
     # back by itself - as the agent's question, its draft, or its finished job.
@@ -1283,8 +1379,9 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         who = item.get('working') or next((t.get('agent') or t.get('label') for t in _live(store) if t.get('taskId') == item['tid']), None) or 'the agent'
         say = f"{item.get('ref') or item['title']} is with {who} right now - nothing for you until it stops or asks. I'll bring it down then."
         with guarded():
+            put_down()
             record_related(store, tid, item, 'assistant', say + ('' if key else ' Moving on.'))
-        return surface(store, None, llm, actor, only, trace, cancel, include_surfaced, exclude) if not key else {'item': None, 'say': say, 'options': [], 'left': len(p['items'])}
+        return surface(store, None, llm, actor, only, trace, cancel, include_surfaced, exclude) if not key else {'item': None, 'say': say, 'options': [], 'chips': walk_chips(len(p['items'])), 'left': len(p['items'])}
     # FYIs have no action to take, so the normal walk brings four together. A row explicitly
     # clicked on the Timeline still opens by itself (`key` is set); only Next/Walk batches them.
     if not key and item['lane'] == 'fyi':
@@ -1313,17 +1410,19 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
                 'why': 'people told you things; nothing to do', 'items': [card_for(i) for i in batch],
                 'presentation_revision': item.get('presentation_revision')}
         with guarded():
+            put_down()
             if remember_llm:
                 try: _remember_sid(store, tid, llm)
                 except Exception as e: logger.warning(f'concierge: the fyi conversation did not save - {e}')
-            # shown is not read (PW-154): the state is `surfaced`, and it carries the entry's own summary
+            # shown IS read: the state is `surfaced`, and it carries the entry's own summary
             for n, i in enumerate(batch, 1): funnel.settle(store, i['key'], 'surfaced', actor, note=None if i.get('sig') else gists.get(n), read=True)
+            card['chips'] = chips_for(store, card)
             set_current(store, tid, card['key'], actor)
             record_related(store, tid, card, 'assistant', say, card)
-        return {'item': card, 'say': say, 'options': [], 'left': len(p['items']) - len(batch)}
+        return {'item': card, 'say': say, 'options': [], 'chips': card['chips'], 'left': len(p['items']) - len(batch)}
 
     llm = _brain_for(store, tid, llm, trace, cancel, fast=True) if (llm is not None or INTRO_AI) else None   # the facts speak unless asked otherwise
-    say, options, remember_llm = '', [], False
+    say, options, wanted, remember_llm = '', [], '', False
     if llm:
         try:
             # the card's structure is code's to state; the explanation itself is COUNSEL's (PW-153)
@@ -1332,20 +1431,24 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
                       if item['kind'] == 'report' and not item.get('bad') else '')
                    + ('The card below holds the draft that waits for their yes. ' if item['kind'] in ('review', 'action') else '')
                    + ('The agent is parked on the question in the card. ' if item['kind'] == 'agent' else ''))
-            say, options = _ask(store, llm, tid, item, ask, p['items'])
+            say, options, wanted = _ask(store, llm, tid, item, ask, p['items'])
             remember_llm = True
         except Exception as e: logger.warning(f'concierge: the model pass failed - {e}')
     if not say: say = fallback(item, True)
+    chips = chips_for(store, item, wanted)
     with guarded():
+        put_down()
         if remember_llm:
             try: _remember_sid(store, tid, llm)
             except Exception as e: logger.warning(f'concierge: the model conversation did not save - {e}')
-        # in the chat = read (the owner, 2026-09-06). A reply or agent waiting on a yes is not read by being
-        # shown: it stays in Unread, marked, and Next returns to it after a while (funnel_selection)
-        funnel.settle(store, item['key'], 'surfaced', actor, note=item.get('sig'), read=item['lane'] not in ('approve', 'blocked'))
+        # in the chat = read, without exception (the owner, 2026-09-07: "hitting next or done should mark it
+        # read and then move on"). A draft waiting on a yes used to be held back unread; walking past one now
+        # ends the reply obligation instead - see move_on(), which the Next road calls on the way out.
+        funnel.settle(store, item['key'], 'surfaced', actor, note=item.get('sig'), read=True)
         set_current(store, tid, item['key'], actor)                          # on the table, written down (PW-162)
-        record_related(store, tid, item, 'assistant', say + (f"\nOPTIONS: {' | '.join(options)}" if options else ''), card_for(item))
-    return {'item': item, 'say': say, 'options': options, 'left': len(p['items']) - 1}
+        record_related(store, tid, item, 'assistant', say + (f"\nOPTIONS: {' | '.join(options)}" if options else ''),
+                       card_for(item) | {'chips': chips})
+    return {'item': item | {'chips': chips}, 'say': say, 'options': options, 'chips': chips, 'left': len(p['items']) - 1}
 
 
 # What the owner may decide about the thing on the table, as PROPOSALS (PW-123): verb -> (operation kind,
@@ -1411,6 +1514,12 @@ def _where(it: dict) -> str:
     return f"{who + ' - ' if who else ''}{title}{' (' + it['ref'] + ')' if it.get('ref') else ''}".strip()
 
 
+def _brief_from_item(store, item: dict) -> str:
+    """What to tell an agent when the owner pressed a button instead of typing: the item itself - what it
+    is, who it is from, and everything already known about it (the same facts the assistant reads)."""
+    return f"Take this on and report back what you find: {_where(item) or 'the item below'}.\n\n{facts(store, item)}".strip()
+
+
 def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: str, actor: str = 'owner',
                 elsewhere: bool = False, table: dict | None = None) -> dict:
     """The owner's decision as a proposal row (operations.propose): the exact target and parameters, a label
@@ -1425,8 +1534,12 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
         if it.get('mid'): target, params = it['mid'], {'kind': want, 'instructions': d_text or None}
         elif verb == 'mine': raise ValueError('nothing is on the table to put on your list')
         else:
-            job = d_text or text
-            kind, target, params = 'task.create_from_text', 0, {'kind': want, 'text': job, 'title': _handoff_title(store, dock_tid, job)}
+            # A hand-off asked for by BUTTON carries no sentence, so the brief is the item itself. Without
+            # this the chip proposed a task with no text at all and operations refused it outright
+            # ('task.create_from_text needs text') - an offered word that did nothing.
+            job = (d_text or text or '').strip() or _brief_from_item(store, it)
+            title = _handoff_title(store, dock_tid, job) if (d_text or text or '').strip() else (it.get('title') or 'Look into this')
+            kind, target, params = 'task.create_from_text', 0, {'kind': want, 'text': job, 'title': title}
             label = 'Start a coding agent on it' if want == 'coding' else 'Start a regular agent on it'
     elif verb == 'not_ours': target, params = it.get('mid'), {'learn': False}
     elif verb in ('not_ours_remember', 'not_ours_sender'): target, params = it.get('mid'), {'scope': 'subject' if verb == 'not_ours_remember' else 'sender'}
@@ -1749,7 +1862,7 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
     if not llm:
         say_ = f"{fallback(item, False, p['items'])} {NO_BRAIN}".strip()
         rec('assistant', say_)
-        return {'say': say_, 'options': [], 'decision': None}
+        return {'say': say_, 'options': [], 'chips': chips_for(store, item) or walk_chips(len(p['items'])), 'decision': None}
     reply, options, decision = '', [], None
     try:
         from . import handbook as hub
@@ -1787,11 +1900,11 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         if verb in ('next', 'done', 'skip', 'later'):
             only = 'mail' if re.search(r'\b(mail|inbox|e-?mail|what came in)\b', text, re.I) else None
             return surface(store, None, llm, actor, only, trace, cancel)
-        if verb in NEEDS and verb not in ('coder', 'regular_agent'):
+        if verb in NEEDS:                              # a hand-off is NOT in NEEDS: the owner's words are its brief
             say_ = ('Nothing is on the table. Say next and I will bring the next thing up, or name the one '
                     'you mean - the sender or its TQ ref - and I will do it there.')
             rec('assistant', say_)
-            return {'say': say_, 'options': [], 'decision': None}
+            return {'say': say_, 'options': [], 'chips': walk_chips(len(p['items'])), 'decision': None}
     # a switch is already a proposal in Review (proposals.py); a hand-off to a person is a DRAFT for approval
     if decision and verb == 'setting': return _carry_out(store, tid, text, {**decision, 'said': text}, item, actor)
     if decision and verb == 'forward' and item:
@@ -1805,25 +1918,26 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
             say_ = (f"Careful - you named something that is not what is on the table. On the table is {_where(item)}, "
                     'and I could not find what you meant. Say it again with the sender or the ref and I will do it there; nothing has been touched.')
             rec('assistant', say_)
-            return {'say': say_, 'options': [], 'decision': None}
+            return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
         # one entry of the fyi handful is a thing of its own (PW-126): the verb lands on it, its siblings stay unread
         members = {e.get('key'): e for e in (item.get('items') or [])} if item.get('kind') == 'fyis' else {}
         it2 = members.get(other) or funnel.next_item(store, other) or funnel.item_for_key(store, other)
         if it2 and it2.get('key') != item.get('key'): target_item, elsewhere = it2, True
-    if decision and verb in NEEDS and target_item:
+    if decision and verb and target_item:
         why = cannot(target_item, verb, store)
         if why:
             rec('assistant', why)
-            return {'say': why, 'options': [], 'decision': None}
+            return {'say': why, 'options': [], 'chips': chips_for(store, target_item), 'decision': None}
     # the two immediate exceptions the owner approved: Next moves the walk (PW-128); a reply DRAFTS (PW-126)
     if decision and verb == 'next' and item:
+        move_on(store, item['key'], actor)
         rec('assistant', RECEIPTS['next'])
-        return {'say': RECEIPTS['next'], 'options': [], 'decision': {'verb': 'next'}}
+        return {'say': RECEIPTS['next'], 'options': [], 'chips': [], 'decision': {'verb': 'next'}}
     if decision and verb in ('reply', 'redraft') and target_item:
         rec('assistant', RECEIPTS[verb])
         d = {'verb': verb, 'text': decision.get('text') or ''}
         if elsewhere: d['target'] = card_for(target_item)
-        return {'say': RECEIPTS[verb], 'options': [], 'decision': d}
+        return {'say': RECEIPTS[verb], 'options': [], 'chips': [], 'decision': d}
     if decision and verb == 'setup':                                     # a report, a connection: gathered, then confirmed (PW-194)
         return setup_turn(store, tid, text, decision.get('text') or text, item, actor)
     if decision and verb in PROPOSALS:
@@ -1831,7 +1945,7 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         except ValueError as e:
             say_ = f"I could not put that in front of you - {e}."
             rec('assistant', say_)
-            return {'say': say_, 'options': [], 'decision': None}
+            return {'say': say_, 'options': [], 'chips': chips_for(store, target_item), 'decision': None}
         # a plain verb on the item on the table runs at once - the page presses the button itself (the owner,
         # 2026-09-07: "I did already - it should close it; only confirm when you are not sure"). A hand-off, a
         # send, a rule or a verb aimed elsewhere still waits for the button.
@@ -1841,8 +1955,9 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
                                         'tid': prop.get('tid'), 'ref': prop.get('ref'), 'lane': (target_item or {}).get('lane')})
         return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}
     if not reply: reply = fallback(item, False, p['items'])
+    chips = chips_for(store, item) or walk_chips(len(p['items']))
     rec('assistant', reply + (f"\nOPTIONS: {' | '.join(options)}" if options else ''))
-    return {'say': reply, 'options': options, 'decision': None}
+    return {'say': reply, 'options': options, 'chips': chips, 'decision': None}
 
 
 def act(store, key: str, verb: str, actor: str = 'owner', llm=None, hours: float = None) -> dict:

@@ -20,7 +20,7 @@ test("Assistant consumes full display and presentation revisions without patch-m
 
 test("selection freshness preserves explicit action advancement while background events never advance", () => {
   const view = read("AssistantView.jsx");
-  assert.match(view, /landed\(await turn\(\{ mode: "next", key, \.\.\.navigation \}\)\)/);
+  assert.match(view, /landed\(await turn\(\{ mode: "next", key, leaving, \.\.\.navigation \}\)\)/);
   const events = view.slice(view.indexOf("if (data.events?.length)"), view.indexOf("// the item on the table is live"));
   assert.doesNotMatch(events, /setCurrent|setCurrentItem|surfaceRef|deferInChat/);
   assert.match(view, /deferInChat\(\(\) => surfaceRef\.current\?\.\(\), 500\)/);

@@ -2587,6 +2587,7 @@ class SurfaceBody(BaseModel):
     exclude: str | None = None
     selection_revision: str | None = None
     expected_next_key: str | None = None
+    leaving: str | None = None          # the item Next is walking away from: read on the way out (concierge.move_on)
     expected_next_members: list[str] | None = None
 class ConciergeSayBody(BaseModel): text: str; key: str | None = None; context_mid: int | None = None
 class ConciergeActBody(BaseModel): key: str; verb: str; hours: float | None = None
@@ -2717,7 +2718,8 @@ def concierge_next(body: SurfaceBody = None):
                         _f.invalidate()
                         raise NavigationStale({'reason': 'new_activity', 'detail': 'new messages arrived on the item; refresh and go again'})
                 return concierge.surface(store, actor=ACTOR, only=body.only, include_surfaced=body.include_surfaced,
-                                         exclude=body.exclude, selection=selected, commit_guard=guard, bound_dock=dock)
+                                         exclude=body.exclude, selection=selected, commit_guard=guard, bound_dock=dock,
+                                         leaving=body.leaving)
             return reservation.run(_surface, ACTOR)
         except NavigationStale as error:
             raise HTTPException(409, error.detail) from error
@@ -2726,7 +2728,7 @@ def concierge_next(body: SurfaceBody = None):
     if body.key: _refresh_chat_key(body.key)
     else: _refresh_next_selection(body)          # select first, then validate the source (PW-050)
     return concierge.surface(store, body.key, actor=ACTOR, only=body.only,
-                             include_surfaced=body.include_surfaced, exclude=body.exclude)
+                             include_surfaced=body.include_surfaced, exclude=body.exclude, leaving=body.leaving)
 
 @app.post('/api/concierge/open')
 def concierge_open():
@@ -2736,7 +2738,7 @@ def concierge_open():
 
 class ConciergeStreamBody(BaseModel):
     mode: str = 'say'; text: str | None = None; key: str | None = None; only: str | None = None; context_mid: int | None = None
-    include_surfaced: bool = False; exclude: str | None = None
+    include_surfaced: bool = False; exclude: str | None = None; leaving: str | None = None
     selection_revision: str | None = None
     expected_next_key: str | None = None
     expected_next_members: list[str] | None = None
@@ -2814,10 +2816,11 @@ async def concierge_stream(body: ConciergeStreamBody):
                     out = reservation.run(lambda selected, guard, dock: concierge.surface(
                         store, actor=ACTOR, only=body.only, trace=trace, cancel=cancel,
                         include_surfaced=body.include_surfaced, exclude=body.exclude,
-                        selection=selected, commit_guard=guard, bound_dock=dock), ACTOR)
+                        selection=selected, commit_guard=guard, bound_dock=dock, leaving=body.leaving), ACTOR)
                 else:
                     out = concierge.surface(store, body.key, actor=ACTOR, only=body.only, trace=trace, cancel=cancel,
-                                            include_surfaced=body.include_surfaced, exclude=body.exclude)
+                                            include_surfaced=body.include_surfaced, exclude=body.exclude,
+                                            leaving=body.leaving)
             else: out = concierge.say(store, body.text or '', body.key, actor=ACTOR, trace=trace, cancel=cancel, item=freshness.get('item'))
             if notice: out['context_update'] = notice
             put({'type': 'done', **out})

@@ -43,10 +43,10 @@ test("every live agent has the same pause, finish, and stop controls", () => {
   const start = tasks.indexOf("{term?.alive && (", tasks.indexOf("Agent running"));
   const controls = tasks.slice(start, tasks.indexOf("{report &&", start));
   assert.ok(start >= 0);
-  assert.match(controls, />Finish agent run<\/Button>/);
-  assert.match(controls, />Pause & save<\/Button>/);
+  assert.match(controls, />Save result & end session<\/Button>/);      // relabelled: saving a result is not completing the task (PW-218)
+  assert.match(controls, />End session & save handover<\/Button>/);    // relabelled: nothing is paused in place (PW-219)
   assert.match(controls, />Stop session<\/Button>/);
-  assert.doesNotMatch(controls, /liveCodingSession && <Button[^>]*>Finish agent run/);
+  assert.doesNotMatch(controls, /liveCodingSession && <Button[^>]*>Save result & end session/);
 });
 
 test("task references use readable sans-serif digits", () => {

@@ -12,6 +12,7 @@ import DifferenceIcon from "@mui/icons-material/Difference";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
+import { runOperation } from "./taskOps.js";
 import { lazyGeneral } from "./lazyGeneral.js";
 import { taskMatchesQuery } from "./taskSearch.js";
 import { outcomeOf } from "./dispatchOutcome.js";
@@ -243,6 +244,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   }, [active, detailTaskStatus, hasCoderReport, hasRunningRun, hasTranscript, loadDetail, selected, sessionAlive, wrapping]);
 
   const patch = async (fields) => { await api.patch(`/api/tasks/${selected}`, fields); loadDetail(selected); loadTasks(); onChanged?.(); };
+  // Reopen changes the task's status and nothing else: no worker starts until the owner chooses one (PW-217)
+  const reopen = async () => {
+    try { await runOperation(api, "task.reopen", selected); } catch (e) { setErr(e?.message || "Could not reopen the task"); return; }
+    loadDetail(selected); loadTasks(); onChanged?.();
+  };
   const create = async () => {
     // A general task made HERE is the same thing the Board makes: a question with an answer
     // wanted. It gets the same ask tag, so the chat opens with the question already asked
@@ -306,7 +312,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     const id = selected;
     setWrapping("stop"); setErr("");
     try {
-      await api.post(`/api/tasks/${id}/agent/stop`);
+      await runOperation(api, "agent.stop", id);          // the shared road (PW-215)
       if (stale(id)) return;
       setTerm(null);
       await Promise.all([loadDetail(id), loadTasks()]);
@@ -453,10 +459,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     seenState.current = transition.seen;
     setFilter(transition.filter); setOlder(false); setQuery("");
     try {
-      await api.patch(`/api/tasks/${selected}`, { Status: status });
+      // the shared road (PW-215): the same close the assistant's card runs - draft dismissed, agent stopped
+      await runOperation(api, "task.complete", selected);
     } catch (e) {
       seenState.current = before;
-      setErr(e?.response?.data?.detail || "Failed to finish task");
+      setErr(e?.response?.data?.detail || e?.message || "Failed to finish task");
       loadTasks();
       return;
     }
@@ -575,16 +582,18 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     const id = selected;
     setStartingAgent("coding"); setErr("");
     try {
-      if (t.Kind !== "coding") await api.patch(`/api/tasks/${id}`, { Kind: "coding" });
-      if (!stale(id)) await openTerm({ agent: run.agent, model: run.model || null,
-        instruction: run.instruction.trim() || null, task_id: id, repo: repoOf(t),
-        cwd: detail?.transcript?.cwd || null, seed: true });
+      // one shared dispatch for coding too (PW-216): the kind switch, the live-worker check (409), the unknown
+      // agent (422) and the repository come from the same road the general button and the assistant use -
+      // no Kind PATCH before a terminal, so a failed start never leaves a relabelled, unstarted task
+      const data = await runOperation(api, "dispatch.prepare", id, { kind: "coding", agent: run.agent,
+        model: run.model || null, instructions: run.instruction.trim() || null });
+      if (!stale(id)) setTerm(data?.session || null);
       if (!stale(id)) {
         setRun((current) => ({ ...current, instruction: "" }));
         setRestartOpen(false);
       }
     } catch (e) {
-      if (!stale(id)) setErr(e?.response?.data?.detail || "Could not start the coding agent");
+      if (!stale(id)) setErr(e?.response?.data?.detail || e?.message || "Could not start the coding agent");
     } finally { if (!stale(id)) setStartingAgent(""); }
   };
   const startGeneralAgent = async () => {
@@ -898,13 +907,15 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         </LabeledControl>
                         <Box sx={{ flex: 1 }} />
                         <Button size="small" variant="contained" disableElevation startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />}
+                          title="Closes the task and ends the live agent session with it."
                           onClick={() => finish("done")}>Mark task done</Button>
                       </Box>
                     )}
                     {["done", "dropped"].includes(t.Status) && (
                       <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
                         <Button size="small" variant="outlined" startIcon={<RefreshIcon sx={{ fontSize: 15 }} />}
-                          onClick={() => patch({ Status: "open" })}>Reopen task</Button>
+                          title="Reopens the task only. No agent starts until you choose one."
+                          onClick={reopen}>Reopen task</Button>
                       </Box>
                     )}
                     <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.65 }}>
@@ -935,12 +946,18 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         {agentWaiting ? "Answer agent" : "Give new prompt"}{waitingN ? ` · ${waitingN} queued` : ""}
                       </Button>}
                       {liveCodingSession && <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.7 }} startIcon={<DifferenceIcon sx={{ fontSize: 14 }} />}
+                        title="A viewer of the agent's diff. Nothing is approved or committed here."
                         onClick={() => setDiffOpen(true)}>Review changes</Button>}
+                      {/* task completion and agent completion are two things (PW-217/218): saving a result ends the
+                          session and keeps the task open; Mark task done is the step that completes and drafts */}
                       <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.7 }} disabled={!!wrapping} startIcon={<DoneAllIcon sx={{ fontSize: 14 }} />}
-                        onClick={wrapUp}>Finish agent run</Button>
+                        title="Saves the agent's result and report and ends the session. The task stays open: Mark task done completes it and drafts the reply."
+                        onClick={wrapUp}>Save result & end session</Button>
                       <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.7 }} disabled={!!wrapping} startIcon={<PauseCircleIcon sx={{ fontSize: 14 }} />}
-                        onClick={pause}>Pause & save</Button>
+                        title="Ends the session and saves a handover note for the next one. Nothing keeps running."
+                        onClick={pause}>End session & save handover</Button>
                       <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.7 }} color="error" disabled={!!wrapping}
+                        title="Ends the session without a report or handover. The task keeps its state."
                         startIcon={<BlockIcon sx={{ fontSize: 14 }} />} onClick={stopAgent}>Stop session</Button>
                     </Box>
                   )}
@@ -968,6 +985,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       <Button size="small" variant="outlined" startIcon={<RefreshIcon sx={{ fontSize: 15 }} />}
                         onClick={() => setRestartOpen(true)}>Run another agent</Button>
                       {!report && <Button size="small" variant="text" disabled={!!wrapping}
+                        title="Saves the stopped session's result and report. The task stays open."
                         startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>Save stopped run result</Button>}
                       <Typography variant="caption" sx={{ color: FAINT }}>
                         Choose a different harness, model, or prompt on the next run.
@@ -998,6 +1016,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           {startingAgent === "coding" ? "Starting…" : detail?.transcript ? "Start new coding session" : "Start coding session"}
                         </Button>
                         {detail?.transcript && !report && <Button size="small" variant="outlined" disabled={!!wrapping}
+                          title="Saves the stopped session's result and report. The task stays open."
                           startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>Save stopped run result</Button>}
                         <Button size="small" variant="outlined" disabled={!!startingAgent}
                           startIcon={<TaskuaryMark size={13} />} onClick={startGeneralAgent}>Use non-coding agent</Button>
@@ -1153,11 +1172,14 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           <>
                             <Button size="small" variant="contained" disableElevation disabled={!!openingReply}
                               startIcon={openingReply === "write" ? <CircularProgress size={12} /> : <ForwardToInboxIcon sx={{ fontSize: 15 }} />}
+                              title="Opens a draft in Review. Nothing is sent until you approve it."
                               onClick={() => openReply(false)}>Write reply</Button>
                             <Button size="small" variant="outlined" disabled={!!openingReply}
                               startIcon={openingReply === "generate" ? <CircularProgress size={12} /> : <TaskuaryMark size={13} />}
+                              title="Opens a draft in Review. Nothing is sent until you approve it."
                               onClick={() => openReply(true)}>Generate reply</Button>
-                            <Button size="small" variant="text" onClick={() => setAskSenderOpen(true)}>Ask sender</Button>
+                            <Button size="small" variant="text" title="Drafts a question to the sender. It waits in Review for your approval; nothing is sent now."
+                              onClick={() => setAskSenderOpen(true)}>Ask sender</Button>
                           </>
                         )}
                       </Box>

@@ -111,7 +111,7 @@ def blocked(store, tid: int, term=None) -> str:
     """'' when this task may close itself, else the reason it may not - which is written onto the
     task, because a self-close that silently declines is indistinguishable from one that is
     broken."""
-    from . import waitroom
+    from . import waitroom, workerstate as ws
     if not tid: return 'no task'
     with _LOCK:
         if tid in _DONE: return 'a self-close already ran for this task'
@@ -119,6 +119,10 @@ def blocked(store, tid: int, term=None) -> str:
     if not t: return 'no task'
     if t.get('Status') in ('done', 'dropped'): return 'the task is already closed'
     if term is not None:
+        # a pending approval is the owner's decision to make, not the judge's (PW-234): the automatic
+        # road must not close a run that is still waiting to be let through
+        req = ws.asking_of(store, term)
+        if req and req['kind'] == 'approval_needed': return f'a pending approval is open: {req["text"][:160]}'
         age = time.time() - (getattr(term, 'started_ts', 0) or 0)
         if getattr(term, 'started_ts', 0) and age < MIN_AGE: return f'the session is younger than {int(MIN_AGE)}s'
         if getattr(term, 'n', 0) < MIN_CHARS: return 'the session has barely printed anything'

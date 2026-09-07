@@ -12,6 +12,7 @@ import json
 import os
 import unittest
 from datetime import datetime
+from types import SimpleNamespace
 from unittest import mock
 
 from taskuary import blackboard as bb, terminal
@@ -181,6 +182,68 @@ class TheChatIsOnItTooTests(unittest.TestCase):
 
     def test_an_empty_house_lane_says_nothing(self):
         self.assertEqual(bb.chat_text(MemoryStore()), '')
+
+
+class LiveSelectionTests(unittest.TestCase):
+    """PW-179/181: one live selection, read the same way by every surface - a run blocked on the
+    owner is still live, an ended run's words become history everywhere at once, and a restart
+    does not hand the old run's notes to the new one."""
+    @mock.patch.dict(terminal.SESSIONS, clear=True)
+    def test_an_approval_waiting_run_is_live(self):
+        from taskuary import workerstate as ws
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'waits for a yes', 'Kind': 'coding'}, 'o')
+        terminal.SESSIONS['run1'] = SimpleNamespace(sid='run1', alive=True, task_id=tid, cwd=CWD, agent='coder', label='coder', files=lambda: [])
+        ws.record(s, tid, 'run1', 'approval_needed', text='Push to main?', source='hook')
+        bb.post(s, 'about to push', 'working', 'coder', CWD, tid, sid='run1')
+        self.assertIn('about to push', [n['Body'] for n in bb.live_wall(s, CWD)])
+
+    @mock.patch.dict(terminal.SESSIONS, clear=True)
+    def test_a_stopped_runs_note_leaves_every_surface(self):
+        s = MemoryStore()
+        sess = SimpleNamespace(sid='run1', alive=True, task_id=None, cwd=CWD, agent='coder', label='coder', files=lambda: [])
+        terminal.SESSIONS['run1'] = sess
+        bb.post(s, 'house note from coder', 'note', 'coder', '', sid='run1')
+        bb.post(s, 'taking store.py', 'working', 'coder', CWD, sid='run1')     # newest, so wall_text quotes it
+        self.assertIn('taking store.py', [n['Body'] for n in bb.live_notes(s, CWD)])
+        self.assertIn('taking store.py', bb.wall_text(s, CWD))
+        self.assertIn('house note from coder', [n['Body'] for n in bb.house_wall(s)])
+        self.assertIn('house note from coder', bb.chat_text(s))
+        sess.alive = False                                          # the run ended
+        self.assertNotIn('taking store.py', [n['Body'] for n in bb.live_notes(s, CWD)])
+        self.assertEqual(bb.wall_text(s, CWD), '')
+        self.assertNotIn('house note from coder', [n['Body'] for n in bb.house_wall(s)])
+        self.assertEqual(bb.chat_text(s), '')
+
+    @mock.patch.dict(terminal.SESSIONS, clear=True)
+    def test_restarting_the_same_task_does_not_revive_the_old_runs_notes(self):
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'restart me', 'Kind': 'coding'}, 'o')
+        bb.post(s, 'old run note', 'working', 'coder', CWD, tid, sid='old')
+        terminal.SESSIONS['new'] = SimpleNamespace(sid='new', alive=True, task_id=tid, cwd=CWD, agent='coder', label='coder', files=lambda: [])
+        self.assertNotIn('old run note', [n['Body'] for n in bb.live_notes(s, CWD)])
+
+    @mock.patch.dict(terminal.SESSIONS, clear=True)
+    def test_a_headless_general_run_is_live_by_its_running_run_row(self):
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'headless general', 'Kind': 'general'}, 'o')
+        s.start_run(tid, 'assistant', 'work', 'owner')                # no pty: the running-run row is the only evidence
+        bb.post(s, 'headless note', 'note', 'assistant', '', tid)
+        self.assertIn('headless note', [n['Body'] for n in bb.live_notes(s, None)])
+
+    @mock.patch.dict(terminal.SESSIONS, clear=True)
+    def test_ui_prompt_and_command_read_one_selection(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'one selection', 'Kind': 'coding'}, 'o')
+        terminal.SESSIONS['run1'] = SimpleNamespace(sid='run1', alive=True, task_id=tid, cwd=CWD, agent='coder', label='coder', files=lambda: [])
+        bb.post(s, 'one true note', 'working', 'coder', CWD, tid, sid='run1')
+        live_ids = {n['NoteId'] for n in bb.live_wall(s, CWD)}
+        with mock.patch.object(server, 'store', s):
+            route_ids = {n['NoteId'] for n in TestClient(server.app).get('/api/board/notes', params={'cwd': CWD}).json()['data']}
+        self.assertEqual(live_ids, route_ids)
+        self.assertIn('one true note', bb.wall_text(s, CWD))
 
 
 class TheWallCompostsTests(unittest.TestCase):

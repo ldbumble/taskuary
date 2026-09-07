@@ -126,6 +126,18 @@ class ScopedExtrasTests(unittest.TestCase):
         seed = terminal.seed_text(s, tid, repo='org/exports', cwd=None)
         self.assertEqual(seed.count('RULES (AGENT.md'), 1); self.assertEqual(seed.count('CODING RULES (CODER.md'), 1)
 
+    def test_the_brief_is_fresh_each_turn(self):
+        """PW-187: a message that arrives after a worker's first turn is in its NEXT prompt, not just in brief.build."""
+        s = MemoryStore(); tid = make(s, 'general')
+        _system, user = general._prompt(s, tid)
+        self.assertNotIn('a follow-up from Dana', user)
+        with mock.patch.object(ingest, '_spawn'):
+            ingest.ingest_message(s, {**MSG, 'external_id': 'e2', 'body': 'a follow-up from Dana: also the July file please.',
+                                      'sent_at': '2026-09-06 09:10:00'},
+                                  llm=lambda *a, **k: json.dumps({'intent': 'task', 'kind': 'general', 'why': 'w'}))
+        _system2, user2 = general._prompt(s, tid)
+        self.assertIn('a follow-up from Dana', user2)
+
 
 if __name__ == '__main__':
     unittest.main()

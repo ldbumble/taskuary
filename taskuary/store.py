@@ -3273,6 +3273,7 @@ class SQLiteStore:
         be typed into six places across SOUL.md and three more in CODER.md, so changing it changed
         one of them - a doc that half calls you by name and half calls you John Smith."""
         return render_doc(self.get_doc(name) or '', self.owner())
+    def get_doc_row(self, name): return self._one('SELECT Name, Content, UpdatedBy, UpdatedAt FROM doc WHERE Name=?', (name,))
     def github_permissions(self) -> tuple:
         """(use_github_as_tracker, agents_may_push) - read from the GitHub CONNECTOR, where the
         GitHub decisions belong, falling back to the legacy settings so nothing regresses.

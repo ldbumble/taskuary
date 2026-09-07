@@ -67,7 +67,7 @@ class TurnTests(unittest.TestCase):
         self.assertEqual(out['options'], ['send it', 'redraft it'])
         self.assertEqual(out['left'], 0)
         # the model saw the item, the draft and the pile - and was told what it is
-        self.assertIn('I am Taskuary', seen['system']); self.assertIn('ONE item per turn', seen['system'])   # COUNSEL.md, then the contract
+        self.assertIn('I am Taskuary', seen['system']); self.assertIn('One item per turn', seen['system'])   # COUNSEL.md's own words now (PW-248/256), then the contract
         self.assertIn('LEFT IN THE PIPE: 1', seen['user']); self.assertIn('THE DRAFT', seen['user']); self.assertIn('Attached.', seen['user'])
         self.assertIn('Can you send the corrected file?', seen['user'])
         # shown once: a reply for your yes stays in the pipe, marked, and is not straight back on the table
@@ -305,7 +305,8 @@ class BrainTests(unittest.TestCase):
             concierge.say(s, 'and who is she again?', key=f'review:{r}')
             self.assertEqual(seen['resume'], 'sess-1')                                                   # the next turn resumes it
             self.assertIsNone(seen['cwd'])                                                               # a typed ask too: tools off, the assistant runs nothing
-            self.assertNotIn('WHAT YOU CAN DO YOURSELF', seen['system']); self.assertIn('You have NO tools and run nothing yourself', seen['system'])
+            self.assertNotIn('WHAT YOU CAN DO YOURSELF', seen['system'])
+            self.assertIn('I have no tools and run nothing myself', seen['system'])   # COUNSEL.md's own words now (PW-248/256), not the contract's
         s.set_setting('assistant_ai', 'connector:3', 't')
         self.assertTrue(concierge.is_cli(s))                                                            # the old dock's pick is not this page's
         s.set_setting(concierge.AI_KEY, 'connector:3', 't')

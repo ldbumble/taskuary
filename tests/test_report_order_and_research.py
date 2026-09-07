@@ -95,12 +95,15 @@ class ResearchIsAWalkThroughTests(unittest.TestCase):
 
     def test_the_brain_is_given_the_walk_through_road_and_the_test_for_it(self):
         """It had `coder` and no way to say "let's talk this through", so reading work had nowhere
-        to go but a checkout."""
-        blob = ' '.join(str(getattr(concierge, n)) for n in dir(concierge)
-                        if n.isupper() and isinstance(getattr(concierge, n), str))
-        self.assertIn('setup (reading, thinking or research with NO system to type at', blob)
-        self.assertIn('the test is whether there is a SYSTEM to type at', blob)
-        self.assertIn('because the sentence was polite', blob)
+        to go but a checkout. The rule moved from the code's SYSTEM string into COUNSEL's own
+        document (PW-248/256): the code keeps only the coder/regular_agent/setup verbs themselves."""
+        from pathlib import Path
+        from taskuary import counsel
+        text = (Path(concierge.__file__).parent / 'templates' / 'counsel.md').read_text(encoding='utf-8')
+        body = counsel.sections(text)[counsel.DECIDING_HEAD]
+        self.assertIn('coder and setup are not the same road', body)
+        self.assertIn('the test is whether there is a SYSTEM to type at', body)
+        self.assertIn('because the sentence was polite', body)
 
     def test_a_walk_through_opens_a_general_task_and_starts_no_agent(self):
         s = MemoryStore()

@@ -45,3 +45,38 @@ def test_unusable_default_fails_explicitly_without_hidden_instructions(failure):
         with pytest.raises(RuntimeError, match='Restore COUNSEL in Docs'):
             concierge._counsel(store)
     assert store.get_doc('counsel') == ''
+
+
+BEHAVIOUR = ['coder and setup are not the same road', 'Ignore it', 'polite request is not a question',
+             'take the correction', 'Never ask for a password', "the owner's own sent mail"]
+
+
+def test_the_chat_prompt_is_the_document_then_the_machine_contract_and_nothing_else():
+    st = MemoryStore(); st.save_doc('counsel', '# Mine\n\n## Voice\n- Speak like a pirate.\n', 'owner')
+    system = concierge._system(st)
+    assert system.startswith('# Mine')
+    assert 'Speak like a pirate.' in system
+    assert 'DECIDE: <verb>' in system and 'OPTIONS: first choice | second choice' in system
+    for phrase in BEHAVIOUR:
+        assert phrase not in concierge.CONTRACT, f'behavioural prose still hardcoded: {phrase}'
+        assert phrase not in system, f'behaviour reached the prompt from somewhere other than the document: {phrase}'
+
+
+def test_the_shipped_document_carries_the_deciding_rules_the_code_used_to():
+    from pathlib import Path
+    from taskuary import counsel
+    text = (Path(concierge.__file__).parent / 'templates' / 'counsel.md').read_text(encoding='utf-8')
+    body = counsel.sections(text)[counsel.DECIDING_HEAD]
+    for phrase in ('coder and setup are not the same road', 'just this once | this kind from now on | everything from this sender',
+                   'Never ask for a password', 'Never answer a correction by moving on'):
+        assert phrase in body, phrase
+    assert '<!-- counsel:deciding -->' in text
+
+
+def test_the_contract_still_parses_every_verb_and_refuses_the_rest():
+    for verb in concierge.VERBS:
+        if verb == 'none': continue
+        assert verb in concierge.CONTRACT, f'{verb} is a button the model must be able to name'
+        assert concierge.parse_decision(f'Fine.\nDECIDE: {verb}')[1] == {'verb': verb, 'text': ''}
+    assert concierge.parse_decision('Fine.\nDECIDE: launch_missiles')[1] is None
+    assert concierge.parse_decision('Fine.\nDECIDE: not_ours ON: payroll portal outage')[1] == {'verb': 'not_ours', 'text': '', 'on': 'payroll portal outage'}

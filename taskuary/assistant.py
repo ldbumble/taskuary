@@ -550,6 +550,14 @@ def parse(store, text: str, cands: list, max_lines: int = MAX_LINES) -> list:
     try: j = json.loads(re.sub(r'^```(json)?|```$', '', (text or '').strip(), flags=re.M))
     except ValueError: return []
     by = {c['key']: c for c in cands}
+    # an open idea already about this message or task keeps its key: the model invents a slug per run, and
+    # one situation came back as idea:hindy-sample-file, idea:hindy-sample-file-compass, idea:hindy-in-...
+    aimed = {}
+    for i in store.list_ideas('open'):
+        try: a = json.loads(i.get('ActionJson') or '{}')
+        except (ValueError, TypeError): a = {}
+        for f in ('tid', 'mid'):
+            if a.get(f): aimed.setdefault((f, a[f]), i['Key'])
     out, seen = [], set()
     for s in (j.get('say') or []) if isinstance(j, dict) else []:
         if not isinstance(s, dict): continue
@@ -574,6 +582,10 @@ def parse(store, text: str, cands: list, max_lines: int = MAX_LINES) -> list:
             # where in the post it goes. Only an idea gets to choose: a candidate the hub found is
             # placed by the producer that found it, and no model answer overrides that.
             act['section'] = section_of({'section': s.get('section'), 'kind': 'idea'})
+            key = aimed.get(('tid', act.get('tid'))) or aimed.get(('mid', act.get('mid'))) or key
+            if key in seen: continue
+            for f in ('tid', 'mid'):
+                if act.get(f): aimed.setdefault((f, act[f]), key)      # two lines in one answer about one thing: one idea
             out.append({'key': key[:120], 'kind': 'idea', 'sig': txt[:60], 'text': txt, 'action': act,
                         'why': why or 'the model gave no reason - treat it as a hunch' + (f' (about mid {mid})' if mid else '')})
         else: continue

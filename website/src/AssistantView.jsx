@@ -690,11 +690,26 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   };
   // a card button on ONE entry (PW-151): the same proposal road the words take, minus the interpreter - the
   // target is explicit. The card lands in the chat and runs from its own button, like any proposal.
-  const proposeDirect = async (verb, key) => {
-    const { data } = await api.post("/api/concierge/propose", { verb, key });
+  const proposeDirect = async (verb, key, table = false) => {
+    const { data } = await api.post("/api/concierge/propose", { verb, key, table });
     setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: [], proposal: data,
                             card: { kind: "proposal", key: data.key, title: data.label, op: data.id, tid: data.tid, ref: data.ref } }]);
     say(data.say);
+    return data;
+  };
+  // the four chips under the composer say one unambiguous thing each, so they take the direct road (no model
+  // turn): Done runs at once like the typed word does; a hand-off or a task still lands as a card to confirm;
+  // Reply drafts, as it always did (PW-126)
+  const quick = {
+    Done: async () => { const p = await proposeDirect("done", current, true); if (p?.auto) await runProposal(p); },
+    "Create task": () => proposeDirect("mine", current, true),
+    "Create agent": () => proposeDirect("coder", current, true),        // the server picks a regular agent for a general task
+    Reply: () => decide({ verb: "reply" }),
+  };
+  const quickAct = async (s) => {
+    if (busy || resetting) return;
+    setBusy(true); setErr("");
+    try { await quick[s](); } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
   };
   // a dry run of a proposed report (PW-195): the server refuses anything that could write
   const previewProposal = async (p) => (await api.post(`/api/operations/${p.id}/preview`)).data;
@@ -924,10 +939,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         <div className="tq-compose">
           <div className="tq-quick">
             <button type="button" className="tq-chip" disabled={busy || resetting || !canAdvance} onClick={() => surface()}>Next</button>
-            {/* suggestions are TEXT (PW-122): each goes through the same interpretation as typing, and a
-                consequential one comes back as a proposal to confirm - never straight to an action */}
             {current && SUGGESTIONS.filter((s) => s !== "Next").map((s) => (
-              <button key={s} type="button" className="tq-chip" disabled={busy || resetting} onClick={() => send(s)}>{s}</button>
+              <button key={s} type="button" className="tq-chip" disabled={busy || resetting} onClick={() => (quick[s] ? quickAct(s) : send(s))}>{s}</button>
             ))}
             <button type="button" className="tq-chip" disabled={busy || resetting} onClick={setup}>Set something up</button>
           </div>

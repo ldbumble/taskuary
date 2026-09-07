@@ -45,6 +45,14 @@ import { HOLD_TAG, hasTag, stateMeta, stateOf, subline } from "./timelineState.j
 import { sendBlockLine, draftState, replyEnvelope, replySendFailure } from "./sendState.js";
 import { timelinePhases } from "./taskLifecycle.js";
 import StateMark, { edgeOf } from "./StateMark.jsx";
+import { laneMeta } from "./funnelPile.js";
+
+// the same word the unread pile uses for this item, in the same pill (the owner, 2026-09-07: All said
+// "fyi" where unread said "a check failed")
+const LaneTag = ({ lane }) => {
+  const m = laneMeta(lane), c = m.role ? ROLES[m.role] : null;
+  return <span className="tq-pile-tag" title={m.hint} style={{ color: c ? c.ink : "#6f6960", background: c ? c.tint : "#eee9e1", borderColor: c ? c.bd : "#ddd6cb" }}>{m.word}</span>;
+};
 import NewSheet from "./NewSheet.jsx";
 import AddIcon from "@mui/icons-material/Add";
 import { isVoicePlaceholder, voiceNoteBody } from "./voiceNote.js";
@@ -782,6 +790,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   const [syncUnknown, setSyncUnknown] = useState(false);
   const syncObserver = useRef(null);
   const [lastSync, setLastSync] = useState(null);
+  const [syncFailed, setSyncFailed] = useState([]);   // connector types whose last read failed
   const [syncStarted, setSyncStarted] = useState(false);
   const [every, setEvery] = useState(10);            // the server's cadence, not a guess
   // the server's clock, as an offset from OUR clock: nextPollAt is its time, so the countdown
@@ -805,6 +814,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     if (pollAt) seenPollAt.current = pollAt;
     nextAtRef.current = data.nextPollAt ? Date.now() + (data.nextPollAt - data.now) * 1000 : null;
     setTriageErr(data.triageError || "");
+    setSyncFailed(Array.isArray(data.failed) ? data.failed : []);
     if (data.timelineFade) setFade(data.timelineFade);
     // a coalesced feed-changed can fold running+idle into one idle payload, so lastPollAt
     // advancing is how a sub-second automatic poll still gets a visible receipt
@@ -1447,7 +1457,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
           <Box sx={{ minHeight: 20, display: "flex", justifyContent: "center", alignItems: "center", gap: 0.25 }}>
             <Typography variant="caption" noWrap sx={{ color: syncing || bgSync ? ACCENT : FAINT, fontSize: 10.5 }}>
               {syncUnknown ? "Sync status unavailable — rechecking"
-                : <NextIn atRef={nextAtRef} render={(nextIn) => syncFace({ busy: syncing || bgSync, what: syncWhat, every, lastAt: lastSync, nextIn, checked: true, started: syncStarted })} />}
+                : <NextIn atRef={nextAtRef} render={(nextIn) => syncFace({ busy: syncing || bgSync, what: syncWhat, every, lastAt: lastSync, nextIn, checked: true, started: syncStarted, failed: syncFailed })} />}
             </Typography>
             <Button size="small" variant="text" disabled={!syncUnknown && (syncing || bgSync)} onClick={() => syncNow(false)}
               title={syncing || bgSync ? syncWhat : "read the mailboxes, chats and repos now"}
@@ -1623,11 +1633,12 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                                   sx={{ ...mono, fontSize: 9.5, color: ACCENT, flexShrink: 0 }}>out</Typography>
                               )}
                               {r.TaskId && <LifecycleChip kind="task" phase={phases.task} compact sx={{ flexShrink: 0 }} />}
-                              {generic ? (
+                              {r.Lane ? <LaneTag lane={r.Lane} /> : generic ? (
                                 <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 9.5, flexShrink: 0 }}>
                                   {r.OpenTarget.kind}{r.MsgStatus ? ` · ${r.MsgStatus}` : ""}
                                 </Typography>
-                              ) : <StateMark row={r} state={st} />}
+                              ) : null}
+                              {!generic && !r.Lane && <StateMark row={r} state={st} />}   {/* the lane word says it once */}
                             </Box>
                             {/* the second line, only on the row you are on: who has it and what
                                 it is waiting for, every clause from a field the server sent */}

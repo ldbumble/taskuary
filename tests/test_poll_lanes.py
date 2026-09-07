@@ -105,9 +105,9 @@ class LaneTests(unittest.TestCase):
 
     def test_a_skipped_chat_poll_is_retried_on_the_next_tick(self):
         """...but an attempt that never ran (the lane was busy) is not stamped, so it is still due."""
-        server._QUICK_BUSY.acquire()
+        server._quick_lock('teams').acquire()
         try: self.assertIs(server._poll_reports(0, what='syncing', only=['teams']), False)
-        finally: server._QUICK_BUSY.release()
+        finally: server._quick_lock('teams').release()
         self.assertNotIn('teams', server._QUICK_LAST)
         self.assertIn('teams', server._quick_due())
 
@@ -424,11 +424,11 @@ class LaneTests(unittest.TestCase):
         self.assertTrue(server._open_drain_workers(self.s))
 
     def test_a_running_chat_poll_is_not_healed_into_idle(self):
-        server._QUICK_BUSY.acquire()
+        server._quick_lock('teams').acquire()
         try:
             self.s.set_setting('ingest_status', json.dumps({'state': 'running', 'what': 'syncing · reading teams'}), 'system')
             self.assertEqual(server.ingest_status()['status']['state'], 'running')
-        finally: server._QUICK_BUSY.release()
+        finally: server._quick_lock('teams').release()
         self.assertEqual(server.ingest_status()['status']['state'], 'idle')     # nobody holds either lane: a ghost
 
     def test_the_chat_clock_has_its_own_loop_and_the_off_switch_still_covers_it(self):

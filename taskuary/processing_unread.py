@@ -68,7 +68,7 @@ def card_for(store, item, compact, live_state, now, states=None):
             try: action = json.loads(idea.get('ActionJson') or '{}')
             except (ValueError, TypeError): action = {}
             triage = action.get('triage') or {}
-            lane = 'asked' if triage.get('intent') in ('task', 'reply_only') else 'report' if action.get('section') == 'systems' else 'fyi'
+            lane = processing_all.idea_lane(idea)
             base.update(idea=idea['IdeaId'], idea_kind=idea.get('Kind'), action=action,
                         priority=triage.get('priority'), tid=action.get('tid') or tid,
                         mid=action.get('mid'), settling=bool(triage.get('pending')),
@@ -127,12 +127,16 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
     now = now or datetime.now()
     live_state = terminal.live_sessions(tail=6) if live_state is None else live_state
     query = query_for(store, only, history=not full_history)
-    processing_all.wait_settled(store)
-    snapshot = store.processing_inventory_snapshot(
-        fixed_now=now.isoformat(), live_state=live_state, display_only=True,
-        history_days=query['days'])
-    rows, coverage, counts = processing_all.compact_inventory(
-        snapshot, query, include_excluded=include_read)
+    for attempt in (1, 2):
+        processing_all.wait_settled(store)
+        snapshot = store.processing_inventory_snapshot(
+            fixed_now=now.isoformat(), live_state=live_state, display_only=True,
+            history_days=query['days'])
+        try:
+            rows, coverage, counts = processing_all.compact_inventory(snapshot, query, include_excluded=include_read)
+            break
+        except processing_all.AllError as e:      # a write landed between the settle check and the snapshot: once more
+            if attempt == 2 or e.detail.get('code') != 'processing_coverage_pending': raise
     by_id = {item['item_id']: item for item in snapshot['items']}
     states = store.funnel_states()
     cards = [card_for(store, by_id[row['item_id']], row, live_state, now, states) for row in rows]

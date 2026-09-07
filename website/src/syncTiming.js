@@ -14,12 +14,13 @@ export const syncStatusDelay = ({ running = false, nextAt = null, now = Date.now
 export const syncPhaseLabel = phase => ({ fetching: 'Reading sources', triaging: 'Organizing',
   checking: 'Checking updates', running_reports: 'Running reports' }[phase] || 'Syncing');
 
-export const syncFace = ({ busy = false, what = "", every = 10, lastAt = null, nextIn = null, terse = false, checked = false, started = false } = {}) => {
+export const syncFace = ({ busy = false, what = "", every = 10, lastAt = null, nextIn = null, terse = false, checked = false, started = false, failed = [] } = {}) => {
   if (busy) return what && !terse ? what : "syncing…";
   if (!every) return terse ? "sync off" : "background sync off";
   const at = lastAt ? lastAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "—";
   const verb = started ? 'check started' : checked ? 'checked' : 'synced';
   if (terse) return `${verb} ${at}`;
   const nxt = nextIn == null ? "" : nextIn <= 0 ? " · next sync due now" : ` · next in ${Math.floor(nextIn / 60)}:${String(nextIn % 60).padStart(2, "0")}`;
-  return `${verb} ${at}${nxt}`;
+  const bad = failed.length ? ` · ${failed.join(", ")} failed` : "";   // a source that could not be read is never covered by "checked"
+  return `${verb} ${at}${nxt}${bad}`;
 };

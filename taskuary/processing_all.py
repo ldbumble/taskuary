@@ -19,6 +19,23 @@ import weakref
 from loguru import logger
 
 from .categories import category_of, team_domains_of
+from .processing_order import feed_band
+
+
+def idea_lane(idea: dict) -> str:
+    """An idea's lane from its own triage - the same rule the unread pile applies (processing_unread.card_for)."""
+    try: action = json.loads(idea.get('ActionJson') or '{}')
+    except (ValueError, TypeError): action = {}
+    triage = action.get('triage') or {}
+    return 'asked' if triage.get('intent') in ('task', 'reply_only') else 'report' if action.get('section') == 'systems' else 'fyi'
+
+
+def row_lane(row: dict) -> str:
+    """The pile's word for a feed row, so All and unread say the same thing about one item."""
+    if row.get('ReportFailed'): return 'broken'
+    if (row.get('TaskStatus') in ('open', 'in_progress') and str(row.get('Assignee') or '').startswith('agent:')
+            and not row.get('Working') and not row.get('AgentWaiting')): return 'queued'
+    return {1: 'time', 2: 'approve', 3: 'report' if row.get('Channel') == 'report' else 'asked', 4: 'fyi', 5: 'working'}[feed_band(row)]
 
 
 SCHEMA = 'taskuary.processing.all.v1'
@@ -157,7 +174,7 @@ def message_row(message, item, threads, now, *, full=False):
         'MessageId', 'Channel', 'SourceName', 'Subject', 'FromName', 'FromEmail', 'SentAt',
         'ConversationId', 'SourceLink', 'TaskId', 'Direction')}
     row.update(IngestedAt=message.get('CreatedAt'), Preview=(message.get('BodyText') or '')[:4000 if full else 400],
-               MsgStatus=message.get('Status'), Title=task.get('Title'), TaskStatus=task.get('Status'),
+               MsgStatus=message.get('Status'), Title=task.get('Title'), TaskStatus=task.get('Status'), Assignee=task.get('Assignee'),
                Priority=task.get('Priority'), TaskKind=task.get('Kind'), TaskTags=task.get('Tags'),
                NeedsYou=int(needs), ChainSize=sum(m.get('Status') not in {'context', 'history'}
                                                 for m in view.get('messages', [])) if tid else 0,
@@ -187,6 +204,7 @@ def message_row(message, item, threads, now, *, full=False):
                                                                 bool(_FAILED.search(str(row.get('Subject') or ''))))
     if full:
         row.update(BodyText=message.get('BodyText'), Brief=message.get('Brief'))
+    row['Lane'] = row_lane(row)          # after ReportFailed and NeedsYou: the pile's word for this row
     return row
 
 
@@ -200,7 +218,7 @@ def _muted_candidate(item, row, lane=None):
         rules = []
     if not isinstance(rules, list):
         return False
-    lane = lane or {1: 'time', 2: 'approve', 3: 'report' if row.get('Channel') == 'report' else 'asked', 4: 'fyi', 5: 'working'}[feed_band(row)]
+    lane = lane or row_lane(row)
     if lane not in MUTED_LANES:
         return False
     if row.get('ReportFailed'):
@@ -295,9 +313,12 @@ def compact_inventory(snapshot, query, *, include_excluded=False):
             actor, status = (entity.get('CreatedBy') or ('Assistant' if kind == 'idea' else '')), entity.get('Status') or ''
             preview = str(entity.get('Summary') or entity.get('Text') or entity.get('Reason') or '')[:400]
             category = 'todo' if kind == 'task' else kind
+            open_task = kind == 'task' and status in ('open', 'in_progress', 'waiting')
             legacy = {'Channel': channel, 'SourceName': source, 'Subject': str(title)[:240],
                       'SentAt': stamp, 'IngestedAt': entity.get('CreatedAt') or entity.get('FirstSeen'),
-                      'Preview': preview, 'MsgStatus': status, 'Category': category}
+                      'Preview': preview, 'MsgStatus': status, 'Category': category,
+                      'Lane': ('queued' if str(entity.get('Assignee') or '').startswith('agent:') else 'asked') if open_task
+                              else 'approve' if kind == 'review' else idea_lane(entity) if kind == 'idea' else 'fyi'}
         counts = {kind: sum(mid.startswith(prefix + ':') for mid in members) for kind, prefix in (
             ('messages', 'message'), ('tasks', 'task'), ('ideas', 'idea'), ('reviews', 'review'))}
         counts.update(members=len(members), attachments=len(view.get('attachments', [])))

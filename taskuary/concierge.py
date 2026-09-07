@@ -1468,18 +1468,23 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
             'key': it.get('key'), 'ref': it.get('ref'), 'tid': it.get('tid'), 'say': say_}
 
 
-def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'owner') -> dict:
+def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'owner', table: bool = False) -> dict:
     """A card's own button on ONE entry (PW-151): the same proposal the words would make, without the interpreter -
-    the target is explicit. It never settles what is on the table, and the entry's siblings are not touched."""
+    the target is explicit. From a card it never settles what is on the table and the entry's siblings are not
+    touched; from the chips under the composer (`table`) the entry IS the table, so a plain verb runs at once and
+    settles it, exactly as the typed word would."""
     if verb not in PROPOSALS: raise ValueError(f'{verb} is not something a card proposes')
     item = funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
     if not item: raise ValueError('that one is not in the pipe any more')
+    # kind routes the task (2026-08-30): a general task goes to a regular agent, whatever the chip is called
+    if verb == 'coder' and item.get('tid') and (store.get_task(item['tid']) or {}).get('Kind') == 'general': verb = 'regular_agent'
     tid = general.dock_task(store, actor)[0]['TaskId']
     why = cannot(item, verb, store)
     if why: raise ValueError(why)
     record_related(store, tid, item, 'user', f"{PROPOSALS[verb][1]}: {item.get('title') or item.get('ref') or key}")
-    prop = propose_for(store, tid, {'verb': verb, 'text': text or ''}, item, text or '', actor)
-    prop['settles'] = False
+    prop = propose_for(store, tid, {'verb': verb, 'text': text or ''}, item, text or '', actor, table=item if table else None)
+    prop['settles'] = bool(table and PROPOSALS[verb][2])
+    if table and verb in AUTO: prop.update(auto=True, say=f"{prop['label']} - {_where(item)}.")
     record_related(store, tid, item, 'assistant', prop['say'], {'kind': 'proposal', 'key': prop.get('key'), 'title': prop['label'], 'op': prop['id'],
                                                                'tid': prop.get('tid'), 'ref': prop.get('ref'), 'lane': item.get('lane')})
     return prop

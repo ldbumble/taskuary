@@ -5,7 +5,7 @@
 // or shorter. The terminals are the same pty as the task page;
 // a pane keeps its key=sid, so reordering moves it without tearing the session down.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Box, CircularProgress, IconButton, Tooltip, Typography } from "@mui/material";
+import { Alert, Box, Button, CircularProgress, IconButton, Tooltip, Typography } from "@mui/material";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
@@ -53,6 +53,7 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
   const wrappingRef = useRef({});                   // load() must see this inside its stable callback
   const [wrapErrors, setWrapErrors] = useState({}); // sid -> visible reason the checkmark did not finish
   const [wrapNotice, setWrapNotice] = useState(""); // survives when the server already closed the failed pane
+  const [wrapDone, setWrapDone] = useState(null);   // what Done did: the report's first line, and where the task went
   const drag = useRef(null);
 
   const load = useCallback(async () => {
@@ -127,7 +128,9 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
     setWrapNotice("");
     setWrapErrors((errs) => { const next = { ...errs }; delete next[s.sid]; return next; });
     try {
-      await api.post(`/api/tasks/${s.taskId}/wrap`, { close: true });
+      const { data } = await api.post(`/api/tasks/${s.taskId}/wrap`, { close: true });
+      // the pane goes, but not silently: the result and where the task went stay on the wall until dismissed
+      setWrapDone({ tid: s.taskId, ref: tasks[s.taskId]?.ref || `TQ-${s.taskId}`, line: String(data?.report || "").split("\n")[0].slice(0, 240), drafting: !!data?.drafting });
       // Do not wait for the eight-second Wall poll to prove a successful response meant success.
       // Remove this exact pane now; other agents on the Wall keep their place and keep working.
       setSessions((rows) => withoutWallSession(rows, s.sid));
@@ -171,6 +174,10 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
   return (
     <Box>
       {wrapNotice && <Alert severity="error" onClose={() => setWrapNotice("")} sx={{ mb: 1 }}>{wrapNotice}</Alert>}
+      {wrapDone && <Alert severity="success" onClose={() => setWrapDone(null)} sx={{ mb: 1 }}
+        action={<Button color="inherit" size="small" onClick={() => onOpenTask?.(wrapDone.tid)}>Open {wrapDone.ref}</Button>}>
+        Wrapped up {wrapDone.ref}{wrapDone.line ? ` — ${wrapDone.line}` : ""}. {wrapDone.drafting ? "A reply is drafted for your approval in Review; the task closes when you send or dismiss it." : "The task is closed."}
+      </Alert>}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 1.25 }}>
         <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15 }}>The wall</Typography>
         <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5, flex: 1 }}>

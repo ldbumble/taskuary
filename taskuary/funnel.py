@@ -464,8 +464,8 @@ def from_wrapped(store, now: datetime, busy: set) -> list:
 # ── the pile ─────────────────────────────────────────────────────────────────────────────────
 # Lanes retain presentation/state semantics; the shared five bands own ordering across the pile and
 # the feed. INSIDE the actionable band the lane ranks (the owner, 2026-09-07: "asked you" sat under
-# reports because both were one band): what asks you, then what broke, then what landed.
-_SUB = {'asked': 0, 'queued': 0, 'broken': 1, 'forgotten': 2, 'report': 2}
+# reports because both were one band): what asks you, then what waits for an agent, then what broke, then what landed.
+_SUB = {'asked': 0, 'queued': 1, 'broken': 2, 'forgotten': 3, 'report': 3}   # a person asking you beats a stalled hand-off beats a failed check
 
 
 def _band(item):

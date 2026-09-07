@@ -2864,13 +2864,13 @@ def concierge_say(body: ConciergeSayBody):
         return out
     except ValueError as e: raise HTTPException(422, str(e))
 
-class ConciergeProposeBody(BaseModel): verb: str; key: str; text: str | None = None
+class ConciergeProposeBody(BaseModel): verb: str; key: str; text: str | None = None; table: bool = False
 
 @app.post('/api/concierge/propose')
 def concierge_propose(body: ConciergeProposeBody):
     """A card's own button on one entry: the same proposal the words would make (PW-151), confirmed the same way."""
     from . import concierge
-    try: return concierge.propose_direct(store, body.verb, body.key, body.text or '', ACTOR)
+    try: return concierge.propose_direct(store, body.verb, body.key, body.text or '', ACTOR, table=body.table)
     except ValueError as e: raise HTTPException(422, str(e))
 
 class SetupBody2(BaseModel): text: str
@@ -4297,7 +4297,10 @@ def audit_recent(limit: int = 100): return {'data': store.list_audit(limit=min(l
 # and WhatsApp from arriving for as long as it ran (PW-001). A connector type is read by ONE lane
 # at a time, so dedupe never races two fetches of the same message.
 _POLL_BUSY = threading.Lock()
-_QUICK_BUSY = threading.Lock()
+_QUICK_LOCKS, _QUICK_GUARD = {}, threading.Lock()     # one lock per chat type: a hung WhatsApp fetch keeps only its own
+def _quick_lock(typ: str) -> threading.Lock:
+    with _QUICK_GUARD: return _QUICK_LOCKS.setdefault(typ, threading.Lock())
+def _quick_busy() -> bool: return any(l.locked() for l in list(_QUICK_LOCKS.values()))
 _LAST_POLL = [time.time()]      # startup's own catch-up counts as the first one
 POLL_TICK = 30                  # how often the full loop wakes to look at the clock
 QUICK_TICK = 5                  # the chat loop looks more often, so "every 30 seconds" means that
@@ -4649,12 +4652,18 @@ def _recently_fetched(types, target_store=None) -> bool:
 
 
 def _poll_on_quick_clock(types):
-    """Mark only this scheduler call for a due recheck without changing the public call shape."""
-    _QUICK_TIMER.active = True
-    try:
-        return _poll_reports(0, what='syncing', only=types)
-    finally:
-        _QUICK_TIMER.active = False
+    """Each due chat type on its own thread, marked for the due recheck. One shared chat lane meant a
+    bridge that hung for forty seconds skipped every Teams, Slack and Telegram tick in between; now a
+    slow type holds only its own lock (_poll_quick) and this tick waits for it no longer than the clock."""
+    def one(typ):
+        _QUICK_TIMER.active = True
+        try: _poll_reports(0, what='syncing', only=[typ])
+        except Exception as e: logger.warning(f'chat poll failed ({typ}): {e}')
+        finally: _QUICK_TIMER.active = False
+    threads = [threading.Thread(target=one, args=(t,), name=f'quick-{t}', daemon=True) for t in dict.fromkeys(types)]
+    for th in threads: th.start()
+    deadline = time.monotonic() + QUICK_TICK
+    for th in threads: th.join(max(0.0, deadline - time.monotonic()))
 
 def _quick_due() -> list:
     due = []
@@ -4704,10 +4713,9 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
             try:
                 with ingest_mod.deferred():
                     added = poll_channels(target_store, backfill_days, progress=_say, only=types) if types else 0
-                if types:
-                    # This is completion of the available full-lane fetch attempt,
-                    # not proof every source succeeded. Connector errors stay intact.
-                    # The scheduling clock above remains the attempt's start time.
+                # "checked" means every source was read: a type the chat lane held this cycle was not,
+                # so the stamp waits for a cycle that read them all. Connector errors stay intact.
+                if types and set(types) == set(mine):
                     target_store.set_setting('ingest_last_fetch_completed_at', str(time.time()), 'system')
             finally:
                 # A full pass IS a chat attempt (PW-002). Stamp before releasing its connector
@@ -4767,9 +4775,11 @@ def _poll_quick(only, what: str = 'syncing', wait: bool = False, timer: bool = F
     the other finishes first."""
     target_store = store                 # every asynchronous drain keeps this exact store
     deadline = time.monotonic() + DRAIN_WAIT if wait else None
-    acquired = _QUICK_BUSY.acquire(timeout=DRAIN_WAIT) if wait else _QUICK_BUSY.acquire(blocking=False)
-    if not acquired:
+    held = [t for t in dict.fromkeys(only)
+            if (_quick_lock(t).acquire(timeout=DRAIN_WAIT) if wait else _quick_lock(t).acquire(blocking=False))]
+    if not held:
         logger.info('chat poll already running - skipped'); return False
+    only = held                          # a type another tick still holds is left to it; it is due again next tick
     ticket, added, fresh_channels = None, False, []
     try:
         remaining = max(0, deadline - time.monotonic()) if wait else None
@@ -4805,7 +4815,7 @@ def _poll_quick(only, what: str = 'syncing', wait: bool = False, timer: bool = F
                         _QUICK_LAST_STORE[t] = id(target_store)
                     _status_end(target_store, status)
     finally:
-        _QUICK_BUSY.release()
+        for t in held: _quick_lock(t).release()
     # Waiting belongs to the explicit action's correctness gate, not the connector fetch lane.
     # Background ticks can claim and fetch this connector while its earlier rows are triaged.
     if ticket is None: return False
@@ -4906,7 +4916,7 @@ def ingest_status():
     # a poll that died with the app leaves 'running' behind with nobody holding the lock - a
     # ghost the timeline banner would show forever (the poll sets the flag only AFTER taking
     # the lock, so running-but-unlocked is always a ghost). Heal it on read.
-    if st.get('state') == 'running' and not (_POLL_BUSY.locked() or _QUICK_BUSY.locked()):
+    if st.get('state') == 'running' and not (_POLL_BUSY.locked() or _quick_busy()):
         st = {'state': 'idle'}
         store.set_setting('ingest_status', json.dumps(st), 'system')
     # the cadence rides along so the timeline's caption can state the truth instead of a
@@ -4921,6 +4931,8 @@ def ingest_status():
     # can count down instead of asserting a cadence nobody could check
     return {'status': st, 'everyMinutes': every, 'lastPollAt': _LAST_POLL[0],
             'lastFetchCompletedAt': fetched_at,
+            # a source whose last read failed, so "checked 7:09" never covers for it (its card has the why)
+            'failed': sorted({c['Type'] for c in store.list_connectors() if c.get('Active') and c.get('LastError')}),
             'nextPollAt': (_LAST_POLL[0] + every * 60) if every > 0 else None, 'now': time.time(),
             # the brain's last failure, until it answers again - shown in the caption, not buried in rows
             'triageError': store.get_settings().get('triage_last_error') or '',

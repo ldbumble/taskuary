@@ -18,7 +18,7 @@ test("each fyi entry shows its own summary and acts alone through the proposal r
   assert.match(fyis, /api\.post\(`\/api\/messages\/\$\{i\.mid\}\/reply`, \{ draft: true \}\)/);   // a reply drafts at once
   assert.doesNotMatch(fyis.slice(0, fyis.indexOf('variant="contained"')), /onDone\?\./);  // no entry action settles the handful
   const view = read("AssistantView.jsx");
-  assert.match(view, /api\.post\("\/api\/concierge\/propose", \{ verb, key \}\)/);
+  assert.match(view, /api\.post\("\/api\/concierge\/propose", \{ verb, key, table \}\)/);
   assert.match(view, /onPropose=\{actions\.propose\}/);
   assert.match(view, /card: \{ kind: "proposal", key: data\.key, title: data\.label, op: data\.id/);   // the same card the words make
 });

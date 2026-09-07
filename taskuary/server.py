@@ -4445,7 +4445,7 @@ def _refresh_chat_context(task_id: int = None, message_id: int = None) -> dict:
                   if c.get('Active') and str(c.get('Type') or '').lower() in types]
     if not types or not connectors:
         return {'polled': False, 'newer': False, 'before': before, 'after': before, 'added': 0, 'channel': channel}
-    if _recently_fetched(types):
+    if _recently_fetched(types, store):
         return {'polled': False, 'newer': False, 'before': before, 'after': before,
                 'added': 0, 'channel': channel, 'fresh': True}
     added = _poll_reports(0, what=f'refreshing {channel} context', only=types, wait=True)
@@ -4594,15 +4594,18 @@ def quick_forever():
 # to the 30-second clock; poll_seconds can make one slower (or explicitly zero to leave it only on
 # the global clock). The quick pass polls ONLY those connectors and runs no reports or CI.
 _QUICK_LAST = {}
+_QUICK_LAST_STORE = {}
 _QUICK_TIMER = threading.local()
 
 
-def _recently_fetched(types) -> bool:
+def _recently_fetched(types, target_store=None) -> bool:
     """Whether every requested provider completed a fetch within the context grace period."""
     now = time.time()
-    return bool(types) and all(
-        now - _QUICK_LAST.get(str(provider).lower(), 0) <= CONTEXT_FRESH_SECONDS
-        for provider in types)
+    providers = [str(provider).lower() for provider in types]
+    return bool(providers) and all(
+        now - _QUICK_LAST.get(provider, 0) <= CONTEXT_FRESH_SECONDS
+        and (target_store is None or _QUICK_LAST_STORE.get(provider) == id(target_store))
+        for provider in providers)
 
 
 def _poll_on_quick_clock(types):
@@ -4671,7 +4674,9 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
                 # claims, so the quick clock cannot enter the release-to-stamp gap and duplicate it.
                 now = time.time()
                 for t in types:
-                    if t in CHAT_CONNECTORS: _QUICK_LAST[t] = now
+                    if t in CHAT_CONNECTORS:
+                        _QUICK_LAST[t] = now
+                        _QUICK_LAST_STORE[t] = id(target_store)
         def _left(n): _status_progress(target_store, status, f'{what} · processing messages' + (f' · {n} left' if n else ''), phase='triaging')
         # Drain progress runs after a judgement finishes. Publish the phase before
         # submitting so even the first slow judgement cannot still say "reading".
@@ -4750,7 +4755,9 @@ def _poll_quick(only, what: str = 'syncing', wait: bool = False, timer: bool = F
                     logger.warning(f"chat poll failed ({', '.join(types)}): {e}")
                 finally:
                     now = time.time()
-                    for t in types: _QUICK_LAST[t] = now
+                    for t in types:
+                        _QUICK_LAST[t] = now
+                        _QUICK_LAST_STORE[t] = id(target_store)
                     _status_end(target_store, status)
     finally:
         _QUICK_BUSY.release()

@@ -754,14 +754,14 @@ def systems_inputs(store, watch_source_ids=None, watch_sources=None) -> str:
 
 def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX_LINES,
           watch_source_ids=None, watch_sources=None, systems_only: bool = False) -> list:
-    """One call: COUNSEL.md's voice, the owner's instruction (the Reports tab), the candidates, the
-    day, what was already said."""
-    doc = re.sub(r'<!--.*?-->', '', store.doc('counsel') or '', flags=re.S).strip()
+    """One call: the owner's instruction (the Reports tab), the candidates, the day, what was already said."""
     soul = store.doc('soul') or ''
     direction = ((SYSTEMS_PROMPT + (f"\n\nTHE OWNER'S RULE FOR THIS MONITOR:\n{instruction.strip()}" if instruction else ''))
                  if systems_only else (instruction or PROMPT).strip())
     contract = SYSTEMS_CONTRACT if systems_only else CONTRACT
-    system = (doc + f"\n\nYOUR INSTRUCTION (the owner's, from the Reports tab):\n{direction}" + contract.replace('{max_lines}', str(max_lines))
+    # the report's prompt is the report's own: instruction, data scope, output contract, owner (PW-242).
+    # COUNSEL is the chat's document; its walkthrough rules governed idea generation until 2026-09-06.
+    system = (f"YOUR INSTRUCTION (the owner's, from the Reports tab):\n{direction}" + contract.replace('{max_lines}', str(max_lines))
               + (f"\n\nWho the owner is (their own document; its reply rules are for text sent to OTHERS):\n{soul[:1500]}" if soul else ''))
     user = (systems_inputs(store, watch_source_ids, watch_sources) if systems_only
             else inputs(store, cands, watch_source_ids=watch_source_ids, watch_sources=watch_sources))

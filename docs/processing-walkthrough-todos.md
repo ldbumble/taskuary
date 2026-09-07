@@ -1552,12 +1552,75 @@ walked through or approved as part of the direct setup design.
 - [ ] <a id="pw-265"></a>**PW-265** Trace browser ownership/control and actual UI with the owner: which agent
   owns it, when it opens, visibility of actions, manual takeover, and its relation
   to the routing chat and task workspace.
+  Findings (2026-09-06, Stream D; code read, not owner-approved). Ownership: one headless
+  Chromium per session, named `tq-<sid>`. `terminal.clean_env` / `general` put
+  `AGENT_BROWSER_SESSION` in every pty's environment, so whatever `agent-browser` command the
+  agent runs lands in the session named after its own pane - the agent cooperates in nothing and
+  cannot opt out. Cookies and storage auto-restore from ONE shared profile key
+  (`browserview.RESTORE_KEY = 'taskuary'`), so a login the owner typed by hand last week is
+  present in every later session, including a coding agent on an unrelated task.
+  When it opens - three doors, only one of which the owner touched: (a) the agent runs any
+  `agent-browser` command itself, ungated; (b) the owner ticked "It needs a browser" in the New
+  task dialog, which writes the `needs:browser` tag and `terminal`/`general` start the browser
+  with the session; (c) `concierge.setup_task` stamps that same tag on EVERY assistant setup
+  walkthrough, so "set something up" in the chat opens a browser the owner never asked for.
+  What is visible: `BrowserPane.jsx` draws agent-browser's screencast (12 fps ceiling) beside the
+  terminal in `TerminalView` - the task workspace split, and a Wall tile too narrow for two panes
+  gets a chip that opens it as an overlay. The toolbar shows a live dot, the current URL,
+  Take over / Hand back, Snapshot and fold. Whether a browser is open is polled from
+  agent-browser's own state files (`GET /api/terminals/{sid}/browser`); the UI never asks the
+  agent, and a stale file is not "open" - the screencast port has to answer.
+  Manual takeover: input reaches the page only while `driving` is on, so a stray click cannot
+  steer the agent's page. Taking over does NOT pause the agent - the pane says so in as many
+  words ("the agent's next command still runs").
+  Relation to chat and workspace: the assistant's own general session gets the same pane and the
+  chat announces it ("its browser opens beside the assistant"); Snapshot writes the newest frame
+  as a JPEG attachment on the task's first message plus a comment naming the page. Beyond that
+  and the transcript there is no record of where the browser went.
+  Proposed decision: make the `needs:browser` tag the single gate for a watched browser, and turn
+  the setup walkthrough's automatic tag into a visible line in the chat the owner can decline,
+  instead of a tag written silently by `concierge.setup_task`.
 - [ ] <a id="pw-266"></a>**PW-266** Review navigation versus consequential website actions, confirmation,
   credentials/session handling, cancellation, and recovery. Configuration setup
   approval does not imply permission for arbitrary browser actions.
+  Findings (2026-09-06, Stream D; code read, not owner-approved). Navigation versus consequential
+  actions: the code draws no line at all. `browserview.brief()` is prose aimed at the model -
+  "NEVER type a password, a 2FA code or a card number... tell the owner here" - and
+  `browserview.hint()` is one line of the same. There is no allow/deny list, no domain scope, no
+  confirmation step, and nothing that can tell a page load from a form submit or a payment. The
+  relay (`browserview.relay`) is a blind pipe.
+  The only boundary that is actually enforced runs the other way: the owner's clicks and keys
+  reach the page only while Take over is on. Nothing restricts the agent.
+  Credentials and sessions: no secret enters Taskuary's database, which is right - the owner types
+  it into the live pane. The exposure is persistence and scope: `--restore taskuary` saves and
+  restores that logged-in state under one global key for every session, so consent given once, in
+  one task, silently covers every future agent on every task.
+  Cancellation: there is no stop for an action in flight. Take over does not pause the agent;
+  closing the session closes Chrome with it (`Term._pump` -> `browserview.close`), best effort and
+  up to a 20s wait. There is no "stop what you are doing on this page".
+  Recovery: the pane reconnects itself after a dropped socket, and an idled-out daemon is not
+  reported as open. Nothing reconciles a browser orphaned by a crashed session beyond
+  agent-browser's own idle timeout.
+  Proposed decision: consequential browser actions join the shared proposal/execute road every
+  other consequential action already uses - the agent proposes the click, the owner confirms in
+  the pane - while navigation and reading stay free; and the restore profile is scoped per site
+  the owner has consented to instead of one global `taskuary` key.
 - [ ] <a id="pw-267"></a>**PW-267** Agree the UI/interaction contract before redesigning browser control; then
   add scoped implementation tasks and behavioral tests. Current or proposed
   browser behavior must not be treated as already accepted.
+  Findings (2026-09-06, Stream D; code read, not owner-approved). What ships today IS a contract,
+  by default and unreviewed: the pane's affordances (live dot, URL, Take over / Hand back,
+  Snapshot, fold), where it appears (task workspace split, Wall tile chip and overlay, assistant
+  workspace), and - as loudly - what it does not have: no address bar for the owner, no history,
+  no per-action log, no pause, no permission prompt, and two of the three ways it opens are
+  automatic. Coverage: `website/test/browserSplit.test.mjs` (geometry and message shapes) and
+  `website/test/browserWalkthrough.test.mjs`; the browser harness runs in demo mode where mutating
+  requests are denied, so no rendered-browser test proves any of this pane's behaviour.
+  Proposed decision: freeze the surface - bug fixes only, no further browser-control work - until
+  the owner signs a written interaction contract naming who may open a browser and when, which
+  actions need confirmation, what the owner sees and can stop, and how credentials persist. Scoped
+  PW items and behavioural tests are then written against that contract; these findings are its
+  input, not its acceptance.
 
 ## Review progress
 

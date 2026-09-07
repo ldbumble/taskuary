@@ -14,7 +14,7 @@ import json, unittest
 from datetime import datetime, timedelta
 from unittest import mock
 
-from taskuary import assistant, funnel, terminal
+from taskuary import assistant, funnel, reports, terminal
 from taskuary.store import MemoryStore
 
 # relative, never a clock time: the pile keeps the last twelve hours, so a fixed 09:00 failed CI every evening
@@ -122,6 +122,102 @@ class NoLoopTests(unittest.TestCase):
         self.assertTrue(rows, 'the actionable idea left a source row behind its task')
         self.assertNotIn('unpaid', assistant._recent(s))                          # not an arrival to think about
         self.assertFalse([c for c in assistant.candidates(s, assistant.cfg(s)) if 'unpaid' in json.dumps(c)])
+
+def urgent_brain(intent='task'):
+    def llm(system, user, **k):
+        return json.dumps({'intent': intent, 'kind': 'general', 'priority': 'urgent', 'why': 'the site is down',
+                           'title': 'Restore the customer portal', 'checklist': ['Check the host']})
+    return llm
+
+
+def report_src(s, cfg):
+    sid = s.save_source({'Channel': 'report', 'Address': cfg['title'], 'ConfigJson': json.dumps(cfg), 'Active': 1}, 'owner')
+    return next(x for x in s.list_sources(active_only=False) if x['SourceId'] == sid)
+
+
+class MatrixTests(unittest.TestCase):
+    """PW-202: informational / actionable / urgent, duplicate runs, pending and error, report triage on and
+    off, and the paths that must never depend on triage (workflow triggers, worker status)."""
+
+    def test_an_urgent_idea_leads_the_shared_order_and_the_models_own_word_escalates_nothing(self):
+        # 'escalate' is the owner's policy and the only thing that marks work urgent (ingest); the model
+        # calling its own idea urgent is prose, so the pipe's order is proof the policy was read.
+        s = MemoryStore()
+        s.save_policy({'Name': 'outages first', 'Kind': 'keyword', 'Pattern': 'portal is down', 'Action': 'escalate',
+                       'Reason': 'the owner jumps outages to the front', 'Active': 1}, 'owner')
+        calm = idea(s, 'idea:calm', 'The vendor invoice from 12 August is still unpaid and nobody has chased it.')
+        hot = idea(s, 'idea:hot', 'The customer portal is down for every customer since 09:00.')
+        with mock.patch('taskuary.ingest._spawn'):
+            assistant.triage_ideas(s, [calm], brain())
+            assistant.triage_ideas(s, [hot], urgent_brain())
+        tid = {k: json.loads(s.get_idea(r['IdeaId'])['ActionJson'])['tid'] for k, r in (('calm', calm), ('hot', hot))}
+        self.assertEqual(s.get_task(tid['hot'])['Priority'], 'urgent')
+        self.assertEqual(s.get_task(tid['calm'])['Priority'], 'normal', "the model's own 'urgent' escalates nothing")
+        order = [i['tid'] for i in pile(s) if i.get('tid') in tid.values()]
+        self.assertEqual(order[:1], [tid['hot']], 'the escalated work leads the shared order')
+
+    def test_an_informational_idea_never_ranks_above_the_work_an_actionable_one_opened(self):
+        s = MemoryStore()
+        fyi = idea(s, 'idea:prices', 'Three vendors sent price updates this week.')
+        work = idea(s, 'idea:vendor', 'The vendor invoice from 12 August is still unpaid and nobody has chased it.')
+        assistant.triage_ideas(s, [fyi], brain(intent='fyi'))
+        with mock.patch('taskuary.ingest._spawn'):
+            assistant.triage_ideas(s, [work], brain())
+        wtid = json.loads(s.get_idea(work['IdeaId'])['ActionJson'])['tid']
+        items = pile(s)
+        self.assertEqual([i['lane'] for i in items if i.get('idea') == fyi['IdeaId']], ['fyi'])
+        self.assertEqual(len(s.list_tasks()), 1, 'an informational idea opens nothing')
+        self.assertLess([i.get('tid') for i in items].index(wtid), [i.get('idea') for i in items].index(fyi['IdeaId']))
+
+    def test_a_duplicate_report_run_says_the_same_idea_and_opens_nothing_twice(self):
+        s = MemoryStore()
+        first = idea(s, 'idea:vendor', 'The vendor invoice from 12 August is still unpaid and nobody has chased it.')
+        with mock.patch('taskuary.ingest._spawn'):
+            assistant.triage_ideas(s, [first], brain())
+        again = idea(s, 'idea:vendor', 'The vendor invoice from 12 August is still unpaid and nobody has chased it.')   # the next run, same facts
+        self.assertEqual(again['IdeaId'], first['IdeaId'])
+        with mock.patch('taskuary.ingest.judge') as judge:
+            assistant.triage_ideas(s, [again], brain())
+        judge.assert_not_called()
+        self.assertEqual(len(s.list_tasks()), 1); self.assertEqual(len(s.list_ideas()), 1)
+
+    def test_a_pending_idea_is_judged_on_the_next_run_and_an_error_is_retried_once_the_brain_answers(self):
+        s = MemoryStore()
+        row = idea(s, 'idea:later', 'Three invoices are overdue and unassigned.')
+        assistant.triage_ideas(s, [row], None)
+        self.assertTrue(json.loads(s.get_idea(row['IdeaId'])['ActionJson'])['triage']['pending'])
+        assistant.triage_ideas(s, [s.get_idea(row['IdeaId'])], lambda *a, **k: 'not json at all')
+        self.assertTrue(json.loads(s.get_idea(row['IdeaId'])['ActionJson'])['triage'].get('error'))
+        assistant.triage_ideas(s, [s.get_idea(row['IdeaId'])], brain(intent='fyi'))
+        self.assertEqual(json.loads(s.get_idea(row['IdeaId'])['ActionJson'])['triage']['intent'], 'fyi')
+
+    def test_report_triage_off_files_the_run_and_a_workflow_trigger_never_asks_triage_at_all(self):
+        s = MemoryStore()
+        off = report_src(s, {'type': 'agent', 'title': 'Weekly numbers'})                      # triage off is the default
+        with mock.patch.object(reports, 'render_report', return_value=('12 rows', 'nothing looks off')), \
+             mock.patch('taskuary.ingest.judge') as judge:
+            reports.run_report_source(s, off, llm=brain())
+        judge.assert_not_called()
+        m = s._rows("SELECT * FROM message WHERE Channel='report'")[0]
+        self.assertEqual((m['Status'], m['TaskId']), ('feed', None))
+        self.assertEqual(s.list_tasks(), []); self.assertEqual(s.list_ideas(), [])
+        # a workflow is a triggered job, not a message: it reaches its worker whatever the switch says
+        wf = report_src(s, {'type': 'agent', 'access': 'write', 'runs_on': 'general', 'title': 'File the invoices', 'triage': True})
+        with mock.patch('taskuary.ingest._auto_general') as start, mock.patch('taskuary.ingest.judge') as judge2:
+            out = reports.run_report_source(s, wf, llm=brain())
+        judge2.assert_not_called(); start.assert_called_once()
+        self.assertEqual(s.get_task(out['task_id'])['Source'], 'workflow')
+
+    def test_worker_status_events_never_reach_triage(self):
+        from taskuary import workerstate as ws
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Work', 'Kind': 'coding'}, 'owner')
+        before = len(s.list_ideas())
+        with mock.patch('taskuary.ingest.judge') as judge:
+            ws.record(s, tid, 'sid-1', 'finished', text='All done: the portal is back.', source='hook')
+            ws.record(s, tid, 'sid-1', 'input_needed', request_id='q1', text='Which host?', choices=['a', 'b'], source='hook')
+        judge.assert_not_called()
+        self.assertEqual(len(s.list_ideas()), before)
 
 
 if __name__ == '__main__':

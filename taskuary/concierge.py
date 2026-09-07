@@ -1753,7 +1753,10 @@ def open_proposal(store, dock_tid: int) -> dict | None:
 
 def run_proposal(store, op: dict, actor: str = 'owner') -> dict:
     """Execute a confirmed proposal outside a request: the SAME handler the page's Confirm button runs,
-    with the after-work (learning, auto-drafts, closing a session) drained here instead of by FastAPI."""
+    with the after-work (learning, auto-drafts, closing a session) drained here instead of by FastAPI.
+
+    The handlers are route functions and they read the app's own store, which is this one in a running
+    Taskuary; a test that hands a different store must patch `server.store` as the API tests do."""
     import asyncio
     from fastapi import BackgroundTasks
     from .server import _run_operation

@@ -152,8 +152,11 @@ def intercept(store, channel: str, chat: str, text: str, *, from_me=False, tasku
     question = str(text or '').strip()
     if not from_me or not question or not enabled(store, channel, chat, connector): return False
     c = connector_for_chat(store, channel, chat, connector)
+    # The answer outlives the poll that heard the question, and a poll hands its workers a single
+    # writer thread it CLOSES when the cycle ends (channels._Writer) - a store call after that waits
+    # on a queue nobody reads again. The turn talks to the store underneath instead, like any request.
     threading.Thread(target=_locked_respond,
-                     args=(store, channel, str(chat), question, c.get('ConnectorId')),
+                     args=(getattr(store, '_store', store), channel, str(chat), question, c.get('ConnectorId')),
                      name=f'taskuary-{channel}-assistant', daemon=True).start()
     return True
 

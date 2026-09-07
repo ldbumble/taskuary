@@ -41,7 +41,7 @@ test("delayed next-card actions cannot cross a New chat boundary", () => {
 
 test("same-tick composer submits are synchronously locked", () => {
   assert.match(view, /const turnFlight = useRef\(false\)/);
-  assert.match(view, /if \(!t \|\| busy \|\| resetting \|\| turnFlight\.current\) return/);
+  assert.match(view, /if \(!t \|\| busy \|\| resetting \|\| handoff \|\| turnFlight\.current\) return/);
 });
 
 test("stale reply drafts cannot be approved until they are refreshed", () => {

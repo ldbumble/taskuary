@@ -206,6 +206,39 @@ def test_a_confirmed_send_leaves_unread_and_stays_in_all(store):
     assert mid in {r['row']['MessageId'] for r in all_after}, 'and still in All'
 
 
+def test_closing_a_task_takes_its_row_out_of_unread_and_a_later_reply_brings_it_back(store):
+    """The owner closed the task and its mail row stayed in the pipe as an fyi (the owner, 2026-09-07:
+    "it should just go off the unread timeline"). The close is the decision; a reply after it is new."""
+    from taskuary import concierge
+    tid = store.create_task({'Title': 'Proof runners', 'Kind': 'coding', 'Status': 'open'}, 'fixture')
+    mid = add(store, 'Proof runners', tid=tid, channel='github', status='routed')
+    _, before = both(store)
+    assert [i for i in before['items'] if i.get('mid') == mid], 'it starts in Unread'
+    assert concierge.close_task(store, tid, 'owner')
+    _, after = both(store)
+    assert [i for i in after['items'] if i.get('mid') == mid] == [], 'a closed task is off the rail'
+    add(store, 'Proof runners follow-up', tid=tid, channel='github', status='routed',
+        sent=(datetime.now() + timedelta(minutes=1)).isoformat(' '))
+    _, later = both(store)
+    assert [i for i in later['items'] if i['tid'] == tid], 'but a new arrival on it is unread again'
+
+
+def test_a_task_closed_before_this_shipped_also_leaves_unread(store):
+    """The row the owner was looking at was closed by a road that wrote no read receipt, so the fix
+    has to read the fact rather than wait for the next close. Mail that arrives after the close is
+    still new: closing a task ends the work on it, it does not deafen the thread."""
+    tid = store.create_task({'Title': 'Already closed', 'Kind': 'coding', 'Status': 'open'}, 'fixture')
+    mid = add(store, 'Already closed', tid=tid, status='routed')
+    both(store)
+    store.update_task(tid, {'Status': 'done'}, 'owner')        # no settle: the close roads before today
+    _, after = both(store)
+    assert [i for i in after['items'] if i.get('mid') == mid] == []
+    add(store, 'They wrote back after it closed', tid=tid, status='routed',
+        sent=(datetime.now() + timedelta(minutes=1)).isoformat(' '))
+    _, later = both(store)
+    assert [i for i in later['items'] if i['tid'] == tid], 'a reply after the close is unread again'
+
+
 def test_grouped_root_identity_survives_review_and_new_member_activity(store):
     tid = store.create_task({'Title': 'Shared task', 'Kind': 'general', 'Status': 'open'}, 'test')
     mid = add(store, 'Original request', tid=tid, status='routed')

@@ -683,6 +683,16 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # a kind the brain did not name is general (PW-067): draft_task_fields makes that call
         f = draft_task_fields(msg, urgent=pol['action'] == 'escalate', kind=intent.get('kind'))
         if intent['intent'] == 'reply_only': f['kind'] = 'reply'
+        # Coding is triage's default (TRIAGE.md) and the only kind that cannot start without a checkout.
+        # A lookup, a file to produce, a mail to chase with no repository anyone can name therefore became
+        # an open coding task nobody would ever pick up - three of the assistant's own ideas sat on the
+        # board like that for a day. The agent that needs no repository takes those instead (the owner,
+        # 2026-09-07: "It should be general agent that does not need a repo no?"): it reads, investigates
+        # and drafts, and says so if code has to change. A github item keeps its own repository (PW-093)
+        # and its own hand promotion, so `no_auto` work is left exactly as triage judged it.
+        no_repo = (f['kind'] == 'coding' and not msg.get('no_auto')
+                   and intent.get('needs_repo_choice') and not intent.get('repository'))
+        if no_repo: f['kind'] = 'general'
         from . import playbooks as _pb
         # the verdict's own title/summary lead (PW-074); the router's subject/body cut is the fallback
         if intent.get('title'): f['title'] = intent['title']
@@ -699,8 +709,13 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             store.tag_task(tid, f"{TRIAGE_REPO_TAG}{intent['repository']}", actor='triage')
             store.add_comment(tid, 'triage', 'agent', f"Triage picked repository {intent['repository']}: {intent.get('repo_reason') or 'named in the request'}")
         elif intent.get('needs_repo_choice'):
+            # the tag rides even on the rerouted ones: "I could not tell" is knowledge, and without it a
+            # later hand-off to the coder guesses a checkout by word overlap instead of asking (PW-094)
             store.tag_task(tid, NEEDS_REPO_TAG, actor='triage')
-            store.add_comment(tid, 'triage', 'agent', f"Triage could not tell which repository: {intent.get('repo_reason') or 'more than one is plausible'} - pick one before an agent starts")
+            store.add_comment(tid, 'triage', 'agent',
+                              f"Triage could not tell which repository: {intent.get('repo_reason') or 'more than one is plausible'} - "
+                              + ("so this is the assistant's, which needs none. Hand it to the coding agent with a repository if code has to change."
+                                 if no_repo else 'pick one before an agent starts'))
         mid = _land(store, msg, tid, 'routed')
         # the same-day lines this one continues or answers that had no task yet join the task it opens:
         # the fyi that opened a subject belongs with the ask that followed it (PW-031)
@@ -732,6 +747,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             if f['kind'] == 'coding' and intent.get('needs_repo_choice'):
                 ok, who = False, 'needs a repository choice - pick one on the task before an agent starts'
             else: ok, who = auto_start_ok(store, msg, mid, f['kind'])
+            if ok and no_repo: who = f'no repository could be named, so the assistant takes it - {who}'
             if ok:
                 # the trust rule that let it through is said on the task (PW-080), so 'why did an agent start on
                 # a stranger's mail' has an answer

@@ -95,13 +95,30 @@ class AutoStartTests(unittest.TestCase):
         self.assertIn('no assistant provider is configured', last_reason(s))
         self.assertTrue(any('not auto-started' in c for c in comments(s, out['task_id'])))
 
-    def test_coding_that_needs_a_repository_choice_waits_for_it_visibly(self):
+    def test_coding_with_no_repository_anyone_can_name_goes_to_the_agent_that_needs_none(self):
+        """Coding is triage's default and the only kind that needs a checkout, so a job with no
+        repository was an open task nobody could ever start (the owner, 2026-09-07: "It should be
+        general agent that does not need a repo no?"). The assistant takes it and actually starts."""
         s = store()
         with mock.patch.object(ingest, 'repo_candidates', return_value=[{'repo': 'org/a', 'about': 'a'}, {'repo': 'org/b', 'about': 'b'}]):
             out, spawned = ingested(s, mail(subject='fix the thing', body='fix the export in the thing'), 'coding',
                                     needs_repo_choice=True, repo_reason='two repositories are plausible')
+        self.assertEqual(spawned, ['_auto_general'])
+        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')
+        self.assertTrue(s.task_has_tag(out['task_id'], ingest.NEEDS_REPO_TAG), 'the record stays: a later hand-off still asks')
+        self.assertTrue(any('which repository' in c and 'needs none' in c for c in comments(s, out['task_id'])))
+        self.assertIn('sent to the assistant', last_reason(s))
+
+    def test_a_github_item_keeps_its_own_repository_and_its_hand_promotion(self):
+        """PW-093: a pull request belongs to the repository it came from, and github work queues for
+        the owner to promote - the no-repository reroute must not touch either."""
+        s = store()
+        with mock.patch.object(ingest, 'repo_candidates', return_value=[{'repo': 'org/a', 'about': 'a'}, {'repo': 'org/b', 'about': 'b'}]):
+            out, spawned = ingested(s, mail(channel='github', source_name='org/a', no_auto=True,
+                                            subject='PR: fix the export', body='fix the export'), 'coding',
+                                    needs_repo_choice=True, repo_reason='two repositories are plausible')
         self.assertEqual(spawned, [])
-        self.assertIn('needs a repository choice', last_reason(s))
+        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'coding')
         self.assertTrue(s.task_has_tag(out['task_id'], ingest.NEEDS_REPO_TAG))
 
     def test_a_second_message_on_the_task_does_not_start_a_second_worker(self):

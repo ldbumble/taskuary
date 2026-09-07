@@ -939,6 +939,12 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
         if live and live.alive:
             hub_term.close(live.sid)
             store.add_comment(task_id, ACTOR, 'human', 'Task closed - ended the live agent session with it.')
+        # the same read receipt concierge.close_task writes: a task the owner closed leaves Unread from
+        # whichever button closed it, and a later arrival on it is unread again (the owner, 2026-09-07)
+        if t.get('Status') not in ('done', 'dropped'):
+            from . import funnel as _funnel
+            try: _funnel.settle(store, f'task:{task_id}', 'done', ACTOR, note='the task was closed')
+            except Exception as e: logger.debug(f'the closed task did not settle its item: {e}')
     # "This is not a coding task - it just needs an answer." Changing the kind to reply IS that
     # verdict, so the task enters the Review queue the way a question would have at triage:
     # a draft review appears (auto-drafted when that is on), instead of a repo session.

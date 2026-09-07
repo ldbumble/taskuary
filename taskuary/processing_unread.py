@@ -26,6 +26,12 @@ def query_for(store, only=None, *, history=True):
     return processing_all.normalize_query(filters.get('channel'), filters.get('source'), days if history else 36500)
 
 
+def _arrived_after_close(task, view) -> bool:
+    at = processing_all._stamp(task.get('ClosedAt'))
+    if not at: return False
+    return any((processing_all._stamp(m.get('SentAt')) or at) > at for m in view.get('messages') or [])
+
+
 def card_for(store, item, compact, live_state, now, states=None):
     from . import funnel
     from .processing_reads import state
@@ -47,8 +53,13 @@ def card_for(store, item, compact, live_state, now, states=None):
                                       for r in view.get('runs', []))
     # handed to an agent and not started: on the rail until it starts, however often it was looked at
     queued = active and not workers and str(task.get('Assignee') or '').startswith('agent:') and not persisted_working
-    # a done task's own row, or the assistant's own note that became it, is not work any more
-    closed = not active and not review and (not row.get('MessageId') or row.get('Channel') == 'assistant')
+    # a done task is not work any more - its own row, the assistant's note that became it, AND the mail
+    # it was opened from. That last one used to stay in the pipe wearing an fyi face with its task
+    # already closed (the owner, 2026-09-07: "it should just go off the unread timeline"), and reading
+    # the fact rather than a receipt clears the ones closed before this shipped too. Mail that arrived
+    # AFTER the close is new: closing a task ends the work on it, it does not deafen the thread.
+    closed = not active and not review and (not row.get('MessageId') or row.get('Channel') == 'assistant'
+                                            or not _arrived_after_close(task, view))
     if row.get('MessageId'):
         if review:
             exact = next(m for m in view['messages'] if m['MessageId'] == review['MessageId'])
@@ -82,6 +93,11 @@ def card_for(store, item, compact, live_state, now, states=None):
             card.update(kind='action' if review.get('Kind') == 'action' else 'review', lane='approve',
                         rid=review['ReviewId'], mid=review.get('MessageId'), draft=bool(review.get('DraftText')),
                         why='A proposed action is waiting for your approval' if review.get('Kind') == 'action' else 'A reply is waiting for your approval')
+    # ...and the row behind it says so too: a mail-backed row read 'asked you' - as if a person were
+    # waiting on the owner - while the task under it was already an agent's (the owner, 2026-09-07:
+    # "What about all the other tasks?")
+    if queued and card['lane'] == 'asked':
+        card.update(lane='queued', why=f"handed to {task['Assignee'].split(':', 1)[-1] or 'an agent'}, not started yet")
     if worker and active:
         agent_cards = funnel.from_agents(store, live_state=[worker], now=now)
         if agent_cards:

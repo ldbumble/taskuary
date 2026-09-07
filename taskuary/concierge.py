@@ -1186,6 +1186,12 @@ def close_task(store, tid: int, actor: str = 'owner') -> bool:
     except Exception as e: logger.warning(f'concierge: the agent on {task_ref(tid)} was not stopped - {e}')
     store.update_task(tid, {'Status': 'done'}, actor)
     store.audit('task', tid, 'close_from_assistant', actor)
+    # ...and the row goes off Unread with it (the owner, 2026-09-07: "it should just go off the unread
+    # timeline"). Closing is the decision, wherever it was made; only the CHAT's close used to post the
+    # read receipt, so a close on the Tasks page left the mail behind it sitting in the pipe as an fyi.
+    # A reply that arrives afterwards is a new unit and comes back unread, and All keeps the whole thread.
+    try: funnel.settle(store, f'task:{tid}', 'done', actor, note='the task was closed')
+    except Exception as e: logger.debug(f'the closed task did not settle its item: {e}')
     funnel.invalidate()
     return True
 
@@ -1707,9 +1713,23 @@ def receipt(store, op: dict, actor: str = 'owner') -> str:
                 + ('' if op.get('duplicate') else _outcome_line(op.get('kind'), op.get('params') or {}, op.get('outcome'))))
     elif st == 'error': line = f"Not done - {op.get('error') or 'it failed'}. {ref or 'It'} is where it was."
     else: line = f"Not done - {op.get('error') or st}. {ref or 'It'} is where it was."
-    dock, _ = general.dock_task(store, actor)
-    record(store, dock['TaskId'], 'assistant', line)
+    # only what THIS chat proposed is its news. A close from the Tasks page or the wall used to be narrated
+    # here too - and opened a fresh chat to say it in (the owner, 2026-09-07: "no one asked you to do that")
+    raw = store.get_settings().get('assistant_dock_task_id')
+    dock_tid = int(raw) if str(raw or '').isdigit() else None
+    if not dock_tid or not _chat_proposed(store, dock_tid, op.get('id')): return line
+    record(store, dock_tid, 'assistant', line)
     return line
+
+
+def _chat_proposed(store, dock_tid: int, oid: str) -> bool:
+    for c in general.chat_rows(store, dock_tid):
+        m = _MARK.search(c.get('Body') or '')
+        if not m: continue
+        try: card = json.loads(m.group(1))
+        except ValueError: continue
+        if card.get('kind') == 'proposal' and card.get('op') == oid: return True
+    return False
 
 
 def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace=None, cancel=None, item: dict | None = None) -> dict:

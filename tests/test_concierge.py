@@ -684,6 +684,18 @@ class ClosingTests(unittest.TestCase):
         self.assertIn(f'Done - Close the task · TQ-{t:04d}', last_receipt(s))
         self.assertEqual([i for i in funnel.build(s)['items'] if i.get('tid') == t], [])
 
+    def test_a_close_made_outside_this_chat_says_nothing_in_it(self):
+        """The owner closed TQ-0384 on the Tasks page and the chat opened itself to announce it (the
+        owner, 2026-09-07: "no one asked you to do that"). Only what THIS chat proposed is its news."""
+        from taskuary import operations
+        s = store()
+        t, _m, _r = drafted(s)
+        p = operations.propose(s, 'task.complete', t, {}, 'owner')      # the Tasks page's own road: no chat turn
+        self.assertEqual(run(s, p).json()['status'], 'done')
+        self.assertEqual(s.get_task(t)['Status'], 'done')
+        self.assertIsNone(s.get_settings().get('assistant_dock_task_id') or None, 'no chat was opened to say it in')
+        self.assertEqual(last_receipt(s), '')
+
     def test_closing_dismisses_a_draft_that_was_still_waiting(self):
         s = store()
         t, m, r = drafted(s)

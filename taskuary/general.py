@@ -697,6 +697,8 @@ class GeneralSession:
             else:
                 from . import handbook as hub
                 if hub.enabled(self.store): system = f'{system}\n\n{hub.ASSISTANT_LINE}'
+            from . import selfclose as _sc
+            system = f'{system}\n\n{_sc.ASK_LINE}'                     # a question is an event, not prose (PW-225)
             source_paths = [a.get('Path') for a in _task_files(self.store, self.task_id) if a.get('Path')]
             paths = list(dict.fromkeys(source_paths + list(attachments or [])
                                        + [m.group('path') for m in _IMAGE_PATH.finditer(text)]))
@@ -750,6 +752,7 @@ class GeneralSession:
                 if browser_tools:
                     from . import browserview
                     system = f'{system}\n\n{browserview.brief()}'
+                system = f'{system}\n\n{_sc.ASK_LINE}'
                 build_args = dict(pick=self.pick, model=self.model or None,
                                   trace=visible, cancel=cancel)
                 if browser_tools:
@@ -776,7 +779,14 @@ class GeneralSession:
             # what gets shown - the sentence after it becomes the closing comment.
             from . import selfclose
             reply, closing = selfclose.chat_marker(reply)
-            reply = reply or (closing or '')
+            reply, asked, choices = selfclose.ask_marker(reply)
+            reply = reply or (closing or '') or (asked or '')
+            # the worker's own lifecycle, as events (PW-225): the turn ended; and if it asked, the exact question
+            try:
+                from . import workerstate as ws
+                ws.record(self.store, self.task_id, self.sid, 'turn_end', text=reply[:4000], source='api')
+                if asked: ws.record(self.store, self.task_id, self.sid, 'input_needed', request_id=ws.request_id_for(asked), text=asked, choices=choices, source='api')
+            except Exception as e: logger.debug(f'api worker event skipped: {e}')
             self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
             self.store.audit('task', self.task_id, 'assistant_reply', 'assistant', 'agent',
                              {'provider': self.provider, 'model': self.model, 'chars': len(reply)})

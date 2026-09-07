@@ -296,3 +296,22 @@ def chat_marker(text: str) -> tuple:
     m = _MARK_RE.search(text or '')
     if not m: return text, None
     return (text[:m.start()].rstrip(), ' '.join((m.group(1) or '').split())[:600])
+
+
+# ── ...and its question (PW-225) ────────────────────────────────────────────────────────
+# A regular worker has no AskUserQuestion tool and no hook: when it cannot go on without the owner it says
+# so with a marker, and Taskuary records the exact question as an Input-needed request - the one the
+# owner's answer is bound to (workerstate.answer). A marker, again, not a judge reading prose for a '?'.
+ASK_MARKER = '[[TASKUARY-ASK]]'
+_ASK_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?ASK\s*\]\]\s*:?\s*(.*)', re.I | re.S)
+ASK_LINE = (f'ASKING THE OWNER: when you cannot continue without their answer, end your reply with a final line: '
+            f'{ASK_MARKER} <the exact question> | <choice> | <choice> (choices optional). Taskuary shows it as a question '
+            f'waiting for them and brings their answer back to you. Only for a real blocker, never for a rhetorical question.')
+
+
+def ask_marker(text: str) -> tuple:
+    """(cleaned reply, question, choices) - or (text, None, []) when the reply asks nothing structurally."""
+    m = _ASK_RE.search(text or '')
+    if not m: return text, None, []
+    parts = [' '.join(p.split()) for p in m.group(1).split('|')]
+    return text[:m.start()].rstrip(), (parts[0][:600] or None), [p[:120] for p in parts[1:] if p]

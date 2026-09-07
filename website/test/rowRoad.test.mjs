@@ -33,3 +33,10 @@ test("a pile card gets the same word as the timeline row it came from", () => {
   const row = { RouteReason: "triage: task - weigh the quotes", TaskId: 8, TaskKind: "general" };
   assert.equal(roadOfCard({ route: row.RouteReason, tid: row.TaskId, task_kind: row.TaskKind }), roadOf(row));
 });
+
+// A report you set up, and an agent's own result, were judged by nobody - the row still says what
+// it IS rather than going bare (the owner, 2026-09-07: "report should say report").
+test("a row nothing triaged keeps the word for what it is", () => {
+  assert.equal(roadOf({ Channel: "report", RouteReason: "a report you set up" }), null);
+  assert.equal(roadOfCard({ route: "a report you set up", task_kind: "" }), null);
+});

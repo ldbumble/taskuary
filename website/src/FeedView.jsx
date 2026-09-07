@@ -71,8 +71,10 @@ const LaneTag = ({ lane }) => {
 // The lane is about what is waiting NOW, so everything finished read "fyi" whatever triage had
 // said about it: a question triage sent to Review showed the same word as a newsletter.
 const RoadTag = ({ row }) => {
-  const road = roadOf(row);
-  const meta = ROADS.find((r) => r.key === road);
+  const meta = ROADS.find((r) => r.key === roadOf(row))
+    // a report you set up, or an agent's own result, was judged by nobody - so it says what it IS,
+    // the same word the rail uses for it (the owner, 2026-09-07: "report should say report")
+    || (row.Channel === "report" ? { label: laneMeta("report").word, hint: laneMeta("report").hint } : null);
   if (!meta) return null;
   return <span className="tq-pile-tag" title={meta.hint}
     style={{ color: "#6f6960", background: "#eee9e1", borderColor: "#ddd6cb" }}>{meta.label}</span>;

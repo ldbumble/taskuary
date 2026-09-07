@@ -34,9 +34,14 @@ MAX_TOKENS, TURNS, FACT_CHARS = 380, 10, 1_600
 # three. So 'next' asks no model: it is instant, and it can never describe the wrong item (the owner,
 # 2026-09-03: "should not even be an AI call, just go to next task"). The model speaks only when the
 # owner types something that is not already a decision. Flip this for a model-written introduction.
-# The introduction of the item on the table is the model's, per COUNSEL (PW-153). The facts line is the
-# fallback only: no AI connector, a failed pass, an answer off the subject or out of character.
-INTRO_AI = True
+# The introduction of the item on the table is the FACTS, and it is instant. Making it the model's
+# (PW-153) put a model call in front of every Next: measured 2026-09-07 at 1419ms for a trivial 20-token
+# call on this owner's fast lane, and the real one carries the item's facts, the pile summary and the
+# conversation at max_tokens=380 - which is the five seconds the owner timed ("next still take 5
+# seconds?"). It is the same thing they asked for on 2026-09-03: "should not even be an AI call, just go
+# to next task". Flip this back only behind a non-blocking intro - facts first, the written sentence
+# streamed in after - never as a blocking call on the walk.
+INTRO_AI = False
 MARK = '<!-- tq:card '
 _MARK = re.compile(r'\s*<!-- tq:card (\{.*?\}) -->\s*$', re.S)
 _OPTIONS = re.compile(r'\n?\s*OPTIONS:\s*(.+?)\s*$', re.I | re.S)
@@ -60,8 +65,9 @@ CHIP_WORDS = {'approve': 'Send the reply', 'redraft': 'Redraft it', 'reply': 'Re
 CHIPS = {'review': ('approve', 'redraft', 'not_ours', 'next'), 'action': ('approve', 'not_ours', 'next'),
          'agent': ('answer_agent', 'stop_agent', 'next'), 'meeting': ('prep', 'regular_agent', 'next'),
          'report': ('rerun', 'regular_agent', 'next'), 'agentdone': ('close', 'reply', 'next'),
-         'wrapup': ('close', 'next'), 'idea': ('followup', 'mine', 'next'), 'task': ('close', 'next'),
-         'asked': ('reply', 'regular_agent', 'coder', 'mine', 'next'), 'todo': ('reply', 'regular_agent', 'coder', 'mine', 'next'),
+         'wrapup': ('close', 'next'), 'idea': ('followup', 'mine', 'done', 'next'), 'task': ('close', 'next'),
+         'asked': ('reply', 'regular_agent', 'coder', 'mine', 'not_ours', 'next'),
+         'todo': ('reply', 'regular_agent', 'coder', 'mine', 'not_ours', 'next'),
          'fyi': ('not_ours', 'mine', 'next'), 'fyis': ('done', 'not_ours_sender', 'next')}
 # THE CONTRACT is the part code reads: two line shapes and the verb vocabulary behind the card's buttons.
 # How to behave is COUNSEL's - the owner's document, not this file (PW-248/256). Removing prose here

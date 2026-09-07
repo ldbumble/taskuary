@@ -183,14 +183,11 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
       <div className="tq-card-actions">
         {action ? <>
           <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv} startIcon={<DoneRoundedIcon />} onClick={() => decide("approve")} sx={primary}>{busy === "approve" ? "Running…" : "Run it"}</Button>
-          <Button size="small" variant="outlined" disabled={!!busy} onClick={() => decide("reject")} sx={quiet}>Dismiss</Button>
         </> : <>
           {rv?.CanSend !== false && (
             <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv || !value.trim() || !!stale} startIcon={<SendRoundedIcon />} onClick={() => decide("approve")} sx={primary}>
               {busy === "approve" ? "Sending…" : "Approve & send"}</Button>
           )}
-          <Button size="small" variant="outlined" disabled={!!busy || !rv} startIcon={<RefreshRoundedIcon />} onClick={redraft} sx={quiet}>{busy === "redraft" ? "Drafting…" : stale ? "Refresh draft" : rv?.DraftText ? "Redraft" : "Draft with AI"}</Button>
-          <Button size="small" variant="outlined" disabled={!!busy} onClick={() => decide("no_reply")} sx={{ ...quiet, ...faint }}>Dismiss</Button>
           {card.mid && <Button size="small" onClick={() => setFull((v) => !v)} sx={faint}>{full ? "Fold" : "Read what they wrote"}</Button>}
         </>}
         <span className="sp" />
@@ -255,10 +252,6 @@ export function AgentCard({ card, onDone, onOpenTask }) {
         sx={{ mt: 1, "& textarea": { fontSize: 12.5 } }} />
       <div className="tq-card-actions">
         <Button size="small" variant="contained" disableElevation disabled={busy || !text.trim()} onClick={answer} sx={primary}>{busy ? "Sending…" : "Answer"}</Button>
-        <Button size="small" variant="outlined" disabled={!!ending} onClick={() => finish(true)} sx={quiet}
-          title="File its report, draft the reply and close the task">{ending === "wrap" ? "Wrapping up…" : "It's finished - wrap it up"}</Button>
-        <Button size="small" disabled={!!ending} onClick={() => finish(false)} sx={faint}
-          title="End the session and leave the task open">{ending === "stop" ? "Stopping…" : "Just stop it"}</Button>
         <span className="sp" />
         <Button size="small" onClick={() => onOpenTask?.(card.tid, { start: false })} sx={faint}>Open agent workspace</Button>
       </div>
@@ -282,7 +275,6 @@ export function MeetingCard({ card, onDone, onOpenTask }) {
       sub={[e.who?.length ? `with ${e.who.slice(0, 6).join(", ")}` : "", e.where].filter(Boolean).join(" · ")} err={err}>
       {e.about && <div className="tq-card-excerpt">{e.about}</div>}
       <div className="tq-card-actions">
-        <Button size="small" variant="contained" disableElevation disabled={busy} onClick={prep} sx={primary}>{busy ? "Opening…" : "Prep me"}</Button>
         {e.join && <Button size="small" variant="outlined" component="a" href={e.join} target="_blank" rel="noreferrer" sx={quiet}>Join</Button>}
       </div>
     </CardShell>
@@ -309,7 +301,6 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone }) {
       {full && card.mid && <FullText mid={card.mid} revision={card.presentation_revision} />}
       <div className="tq-card-actions">
         <Button size="small" variant="contained" disableElevation onClick={() => setFull((v) => !v)} sx={primary}>{full ? "Fold it" : "Read it"}</Button>
-        {card.source_id && <Button size="small" variant="outlined" disabled={busy} onClick={rerun} sx={quiet}>{busy ? "Queuing…" : "Run it again"}</Button>}
         <span className="sp" />
         <Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />
       </div>
@@ -371,21 +362,10 @@ export function IdeaCard({ card, onAct, onOpenTask, onTimeline }) {
   const a = card.action || {};
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
-  const act = async (verb, receipt) => {
-    setBusy(verb); setErr("");
-    try { const { data } = await api.post("/api/concierge/act", { key: card.key, verb }); onAct?.(receipt, data); }
-    catch (e) { setErr(errText(e)); }
-    setBusy("");
-  };
   const words = { followup: "waiting on them", promise: "you promised", asked: "slipped", cold: "gone quiet", idea: "worth a thought" };
   return (
     <CardShell card={card} kicker={words[card.idea_kind] || "slipped"} title={card.title} sub={card.why} err={err}>
       <div className="tq-card-actions">
-        {(a.type === "followup" || (a.mid && card.idea_kind !== "cold")) && (
-          <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={() => act("followup", "Follow-up drafted — it waits for your yes.")} sx={primary}>{busy === "followup" ? "Drafting…" : "Draft follow-up"}</Button>
-        )}
-        {a.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => act("task", "Made it a task.")} sx={quiet}>Make it a task</Button>}
-        <Button size="small" variant="outlined" disabled={!!busy} onClick={() => act("dismiss", "Noted — not this.")} sx={{ ...quiet, ...faint }}>Not this</Button>
         <span className="sp" />
         <Where card={{ ...card, tid: a.tid || card.tid, mid: a.mid || card.mid }} onOpenTask={onOpenTask} onTimeline={onTimeline} />
       </div>
@@ -446,27 +426,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface })
       {full && card.mid && <CombinedTaskText card={card} />}
       <div className="tq-card-actions">
         <Button size="small" variant="outlined" onClick={() => setFull((v) => !v)} sx={quiet}>{full ? "Fold" : "Read it"}</Button>
-        {asks && <Button size="small" variant="contained" disableElevation disabled={!!busy} sx={primary}
-          onClick={() => post("reply", `/api/messages/${card.mid}/reply`, { draft: true }, null,
-            (d) => onSurface?.(d.reviewId ? `review:${d.reviewId}` : null, "Drafting a reply…"))}>{busy === "reply" ? "Drafting…" : "Reply"}</Button>}
-        <Button size="small" variant="outlined" disableElevation disabled={!!busy} sx={quiet}
-          title="Starts a CLI coding agent in a repository" onClick={() => startAgent("coding")}>
-          {busy === "agent" ? "Starting…" : "Coding agent"}</Button>
-        <Button size="small" variant="outlined" disableElevation disabled={!!busy} sx={quiet}
-          title="Starts a non-coding agent for reading, analysis, or other general work" onClick={() => startAgent("general")}>
-          {busy === "agent" ? "Starting…" : "Regular agent"}</Button>
-        <Button size="small" variant="outlined" disabled={!!busy} sx={quiet}
-          onClick={() => post("chat", `/api/messages/${card.mid}/chat`, {}, "Opened in a full workspace.", (d) => d.taskId && onOpenTask?.(d.taskId))}>Talk it through</Button>
-        {/* On an fyi too: `asks` hid this, so the one road OFF an fyi that is actually work - turning
-            it into a task - was the one thing the card could not do. The owner asked for exactly
-            that ("turn into x, move on, make task for later", 2026-09-04), and the assistant's own
-            line now offers it out loud, so the button has to be there to keep the promise. */}
-        {card.mid && <Button size="small" variant="outlined" disabled={!!busy} sx={quiet}
-          onClick={() => post("mine", `/api/messages/${card.mid}/mine`, { kind: "task" }, "On your list.")}>
-          {busy === "mine" ? "…" : asks ? "Mine, I'll do it" : "Make it a task"}</Button>}
         <span className="sp" />
-        <Button size="small" disabled={!!busy} onClick={() => setNotOurs((v) => !v)} sx={faint}>Not ours…</Button>
-        <Button size="small" disabled={!!busy} onClick={() => setSender((v) => !v)} sx={faint}>Ignore this sender…</Button>
         <Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />
       </div>
       {repoAsk && (
@@ -614,8 +574,6 @@ export function WrapupCard({ card, onDone, onOpenTask }) {
       {card.sent && <div className="tq-card-excerpt">You sent: {card.sent}</div>}
       {card.summary && <div className="tq-card-excerpt">The agent: {card.summary}</div>}
       <div className="tq-card-actions">
-        <Button size="small" variant="contained" disableElevation disabled={busy} onClick={close} sx={primary}>{busy ? "Closing…" : `Close ${card.ref}`}</Button>
-        <Button size="small" variant="outlined" onClick={() => onDone?.("Kept open.")} sx={quiet}>Keep it open</Button>
         <span className="sp" />
         <Button size="small" onClick={() => onOpenTask?.(card.tid)} sx={faint}>Open {card.ref}</Button>
       </div>

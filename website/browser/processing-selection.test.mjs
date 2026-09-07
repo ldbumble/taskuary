@@ -184,7 +184,10 @@ test("PW-118 rejects a changed captured Next without advancing Current or retryi
     await page.waitForFunction((wanted) => document.querySelector('.tq-pile-row.next .card b')?.textContent.trim() === wanted,
       { timeout: 15000 }, ordering.titles.urgent);
     assert.equal(await title(page, "current"), currentAfterRetry, "urgent promotion cannot replace Current");
-    const expectedOrder = [ordering.titles.urgent, ordering.titles.high, ordering.titles.old, ordering.titles.new];
+    // the LEVEL, then the oldest inside it - saved priority is a fact on the row, not a tiebreak
+    // (the owner, 2026-09-07: "within one level oldest wins first"). urgent earns level 1; the
+    // other three are all the owner's task, so the 60-minute one leads the 3- and the 2-minute one.
+    const expectedOrder = [ordering.titles.urgent, ordering.titles.old, ordering.titles.new, ordering.titles.high];
     await page.waitForFunction((wanted) => {
       const titles = [...document.querySelectorAll('.tq-pile-row .card b')].map(n => n.textContent.trim());
       return wanted.every(label => titles.includes(label));
@@ -192,7 +195,7 @@ test("PW-118 rejects a changed captured Next without advancing Current or retryi
     const orderedTitles = await page.$$eval('.tq-pile-row .card b', nodes => nodes.map(n => n.textContent.trim()));
     for (const label of expectedOrder) assert.ok(orderedTitles.includes(label), `${label} must be visible`);
     assert.deepEqual(orderedTitles.filter(label => expectedOrder.includes(label)), expectedOrder,
-      "Unread must show bands, saved priority, then oldest activity");
+      "work must show the levels, then the oldest inside one");
     assert.equal(writes.length, beforeWrites + 2, "arrival reordering cannot advance the chat");
     const orderedResponse = page.waitForResponse(r => new URL(r.url()).pathname === "/api/concierge/stream"
       && r.status() === 200, { timeout: 15000 });

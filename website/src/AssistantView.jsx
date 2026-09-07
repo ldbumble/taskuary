@@ -164,6 +164,8 @@ function Pile({ pile, current, onPull }) {
             // rail now, so a lane word here only repeated it. An agent's own question is not a
             // verdict about the message, so it keeps saying so.
             const road = ROADS.find((r) => r.key === roadOfCard(i));
+            // ...and a report you set up, or an agent's own result, was judged by nobody: it keeps
+            // the word for what it IS (the owner, 2026-09-07: "report should say report")
             const tag = i.settling ? "triaging…" : i.kind === "agent" && i.asking ? "asked you"
               : road ? road.label : meta.word;
             const loud = i.lane === "blocked" || i.lane === "time";

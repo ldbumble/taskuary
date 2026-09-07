@@ -133,6 +133,9 @@ def source(store) -> dict | None:
 def _ts(s): return str(s or '')[:19].replace('T', ' ')
 def _since(days): return (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
 def _short(s, n=90): return ' '.join(str(s or '').split())[:n]
+def _cut(s, n=100):
+    t = ' '.join(str(s or '').split())
+    return t if len(t) <= n else t[:n].rsplit(' ', 1)[0] + '…'   # a subject is cut on a word, never at "I'd"
 def _dt(s):
     try: return datetime.fromisoformat(_ts(s))
     except ValueError: return None
@@ -881,8 +884,9 @@ def _idea_message(store, i: dict, a: dict, report_title=None) -> tuple:
     working = bool(active and any(r.get('Status') == 'running' for r in store.list_runs(tid)))
     stamp = i.get('LastSaid') or i.get('FirstSeen') or datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     who = report_title or 'Assistant'
-    msg = {'external_id': f"idea:{i['IdeaId']}:{stamp}", 'channel': CHANNEL, 'from_name': who, 'source_name': who,
-           'conversation_id': str(i.get('Key') or f"idea:{i['IdeaId']}"), 'subject': f"Assistant idea: {_short(i.get('Text'), 100)}",
+    # one arrival per idea: the stamp in the id made every re-say a fresh message, and a fresh task once the first closed
+    msg = {'external_id': f"idea:{i['IdeaId']}", 'channel': CHANNEL, 'from_name': who, 'source_name': who,
+           'conversation_id': str(i.get('Key') or f"idea:{i['IdeaId']}"), 'subject': f"Assistant idea: {_cut(i.get('Text'), 100)}",
            'sent_at': stamp, 'body': str(i.get('Text') or '') + (f"\n\nwhy: {a.get('why')}" if a.get('why') else ''),
            'idea_context': {'report': report_title, 'kind': i.get('Kind'),
                             'linked_task': f"{task_ref(tid)} [{task.get('Status')}] {_short(task.get('Title'), 80)}" if task else None,

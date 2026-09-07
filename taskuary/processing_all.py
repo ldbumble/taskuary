@@ -22,15 +22,31 @@ from .categories import category_of, team_domains_of
 
 
 SCHEMA = 'taskuary.processing.all.v1'
+MEMBERSHIP_RULES = 'idea-joins-task-1'     # bump when reconcile_membership groups entities differently
 PRESENTATION_VERSION = 1
 HIDDEN_MESSAGES = {'context', 'history', 'skipped'}
 
 
-class AllError(ValueError):
+class AllError(Exception):   # not a ValueError: the routes that map ValueError to 422 must not swallow it
     def __init__(self, code, message, status=409, **extra):
         super().__init__(message)
         self.status = status
         self.detail = {'code': code, 'message': message, **extra}
+
+
+SETTLE_WAIT, SETTLE_TICK = 1.5, 0.05
+def wait_settled(store, wait: float = SETTLE_WAIT) -> bool:
+    """A read that lands inside the membership worker's lag waits for it instead of failing: every
+    write bumps the dirty generation, so without this each chat line and each shown item made the
+    next read say "All items are not ready yet". Conflicted membership is a real refusal, not a race."""
+    status = getattr(store, 'processing_reconcile_status', None)
+    if status is None or getattr(store, 'membership_worker', None) is None: return True   # nobody to wait for: tests, bare stores
+    deadline = time.monotonic() + wait
+    while True:
+        st = status()
+        if st['dirty_generation'] <= st['reconciled_generation'] or st.get('status') == 'conflicted': return True
+        if time.monotonic() >= deadline: return False
+        time.sleep(SETTLE_TICK)
 
 
 def _json(value):
@@ -325,6 +341,7 @@ class AllInventory:
             raise AllError('processing_query_invalid', 'Page size must be between 1 and 500', 422)
         query = normalize_query(channel, source, days)
         query_revision = _digest(query)
+        wait_settled(store)
         position, lease_id = 0, None
         if cursor is not None:
             try:
@@ -396,6 +413,12 @@ class MembershipWorker:
 
     def start(self):
         def run():
+            # the grouping rule changed (an idea joins its task): every existing install reconciles once.
+            # The setting is in PROCESSING_DIRTY_SETTINGS, so writing it is what makes the loop below work.
+            try:
+                if self.store.get_settings().get('processing_membership_rules') != MEMBERSHIP_RULES:
+                    self.store.set_setting('processing_membership_rules', MEMBERSHIP_RULES, 'system')
+            except Exception as exc: logger.warning(f'processing membership rule stamp failed: {exc}')
             while not self.stop.is_set():
                 delay = self.interval
                 try:
@@ -407,9 +430,11 @@ class MembershipWorker:
                     break
         self.thread = threading.Thread(target=run, name='processing-membership', daemon=True)
         self.thread.start()
+        self.store.membership_worker = self       # readers wait for a worker that exists (wait_settled)
 
     def close(self):
         self.stop.set()
+        self.store.membership_worker = None
         if self.thread:
             self.thread.join()  # Do not close its store or abandon a transaction during shutdown.
 
@@ -417,7 +442,10 @@ class MembershipWorker:
 @asynccontextmanager
 async def membership_lifecycle(store):
     from . import live
-    worker = MembershipWorker(store, notify=lambda _result: live.emit('feed-changed'))
+    # a tick that reconciled nothing is not news: it made every open Assistant tab force a rebuild
+    changed = lambda r: any(r.get(k) for k in ('created_items', 'created_members', 'moved_members', 'retired_members',
+                                                'redirected_items', 'created_aliases', 'created_relations', 'retired_relations'))
+    worker = MembershipWorker(store, notify=lambda r: changed(r) and live.emit('feed-changed'))
     worker.start()
     try:
         yield

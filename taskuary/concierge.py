@@ -1357,6 +1357,7 @@ PROPOSALS = {
     'remember': ('memory.remember', 'Remember it', False), 'split': ('task.split', 'Split it in two', False),
     'clear': ('pipe.clear', 'Clear them from the pipe', False), 'setup': ('task.setup', 'Open the walk-through', False),
 }
+AUTO = ('done', 'skip', 'later', 'close')     # settles what is on the table; nothing leaves, nothing is handed off
 NO_BRAIN = ('I can read you the facts, but I cannot take an instruction without an AI connector - set one up under '
             "Connections, or use the card's own buttons.")
 
@@ -1399,7 +1400,9 @@ def open_proposal(store, dock_tid: int) -> dict | None:
 
 
 def _where(it: dict) -> str:
-    return f"{it.get('who') + ' - ' if it.get('who') else ''}{it.get('title') or ''}{' (' + it['ref'] + ')' if it.get('ref') else ''}".strip()
+    title = str(it.get('title') or '')
+    who = it.get('who') if it.get('who') and not title.lower().startswith(str(it['who']).lower()) else ''   # "Assistant - Assistant idea"
+    return f"{who + ' - ' if who else ''}{title}{' (' + it['ref'] + ')' if it.get('ref') else ''}".strip()
 
 
 def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: str, actor: str = 'owner',
@@ -1704,7 +1707,7 @@ def receipt(store, op: dict, actor: str = 'owner') -> str:
     return line
 
 
-def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace=None, cancel=None) -> dict:
+def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace=None, cancel=None, item: dict | None = None) -> dict:
     """The owner's words, answered briefly - about the item on the table when there is one. The MODEL interprets
     them (PW-121): a question is answered, a subject named is pulled in, and a decision becomes a PROPOSAL the
     owner confirms (PW-123/124) - except Next, which moves the walk and marks nothing, and a reply request, which
@@ -1714,7 +1717,7 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
     task, _ = general.dock_task(store, actor)
     tid = task['TaskId']
     p = funnel.pile(store)
-    item = funnel.next_item(store, key) if key else None
+    if item is None: item = funnel.next_item(store, key, items=funnel.full_items(store)) if key else None   # the route already built it
     record_related(store, tid, item, 'user', text)
     rec = lambda role, body, card=None: record_related(store, tid, item, role, body, card)
     llm = _brain_for(store, tid, llm, trace, cancel)
@@ -1804,6 +1807,11 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
             say_ = f"I could not put that in front of you - {e}."
             rec('assistant', say_)
             return {'say': say_, 'options': [], 'decision': None}
+        # a plain verb on the item on the table runs at once - the page presses the button itself (the owner,
+        # 2026-09-07: "I did already - it should close it; only confirm when you are not sure"). A hand-off, a
+        # send, a rule or a verb aimed elsewhere still waits for the button.
+        if verb in AUTO and not elsewhere:
+            prop.update(auto=True, say=f"{prop['label']} - {_where(target_item or {})}.")
         rec('assistant', prop['say'], {'kind': 'proposal', 'key': prop.get('key'), 'title': prop['label'], 'op': prop['id'],
                                         'tid': prop.get('tid'), 'ref': prop.get('ref'), 'lane': (target_item or {}).get('lane')})
         return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}

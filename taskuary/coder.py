@@ -178,7 +178,7 @@ def freshen(store, task_id: int, mid: int) -> dict:
 
 
 def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'coder',
-           complete_result: str = None) -> dict:
+           complete_result: str = None, owner_done: bool = False) -> dict:
     """The end of finished work: the conversation is refreshed, the ask reassessed, and the responder
     drafts the reply the sender gets from the saved result and the thread as it stands; the task waits
     on you to send it. Nothing to reply to means nothing to wait for, so it just closes."""
@@ -204,6 +204,10 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'cod
             # it does not hide the answer. Only a row nobody sent has nobody to answer.
             if no_one_behind(m.get('Channel')): mid = None
             else: can_send, block = False, send_block(store, m.get('Channel'))
+    # the owner pressed Done (2026-09-07: "Done did not close it"): a reply that CAN go out still waits for
+    # their send - dismissing it closes the task too, now that the stay-open mark comes off - but a draft
+    # nobody can send does not hold a task the owner just closed
+    if owner_done and mid and not can_send: mid = None
     # a held draft is proof somebody IS waiting on an answer, so it is never quietly dropped here
     if mid and not held and nobody_waiting(store, mid, rep):
         store.add_comment(task_id, actor, 'agent', 'Nothing needed doing here and the sender is not waiting on an '
@@ -297,7 +301,7 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     except Exception as e:
         raise ValueError(f'the result could not be saved ({str(e)[:160]}) - the session was left open; try again')
     tick_reported_checklist(store, tid, final_message + '\n' + text, agent or actor)
-    store.add_comment(tid, agent, 'agent', f'CODER REPORT\n{report}')
+    store.add_comment(tid, agent, 'agent', f'CODER REPORT\n{report}' + (f'\n\nLAST MESSAGE\n{final_message}' if final_message else ''))
     if found: term.close(found)              # done means done - the pty and its shells go too, once the result is safe
     store.add_comment(tid, actor, 'human', 'Closed the session - wrapped up from what was on screen.')
     # anything the agent PROPOSED becomes a pending review here, at the one moment its whole
@@ -318,7 +322,8 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     # replies off closed with no draft while the card still promised one in Review.
     fin = {}
     if close and (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'):
-        fin = finish(store, tid, rep, None, agent, reply_source(text, final_message)) or {}
+        fin = finish(store, tid, rep, None, agent, reply_source(text, final_message), owner_done=actor == 'owner') or {}
+        from . import selfclose; selfclose.unclaim(store, tid, actor)   # the owner ended it; the mark that kept it open has done its job
     # ...and the last question, once the report and the reply are in hand: was this a KIND of job that
     # will recur, done here for the first time? The answer is a proposal in Review, never a file
     # (playbooks.py) - the second such job matches it. Last on purpose: the receipt and the sender's

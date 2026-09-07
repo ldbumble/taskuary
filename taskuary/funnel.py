@@ -17,10 +17,10 @@ from .assistant import _ts, _dt, _short, _gist, _agenda, _OOO
 from .funnel_presentation import present as _present
 from .processing_order import attention_band, priority_rank
 
-LANES = ('blocked', 'time', 'approve', 'broken', 'asked', 'forgotten', 'report', 'fyi', 'working')
+LANES = ('blocked', 'time', 'approve', 'asked', 'queued', 'broken', 'forgotten', 'report', 'fyi', 'working')
 # the lane's one word on the card, and which role colours its dot (theme.jsx ROLES)
 LANE_WORDS = {'blocked': ('agent waiting', 'you'), 'broken': ('a check failed', 'bad'), 'time': ('coming up', 'working'), 'approve': ('needs your yes', 'you'),
-              'asked': ('asked you', 'working'), 'forgotten': ('slipped', 'info'), 'report': ('landed', 'info'), 'fyi': ('fyi', None),
+              'asked': ('asked you', 'working'), 'queued': ('waiting to start', 'working'), 'forgotten': ('slipped', 'info'), 'report': ('landed', 'info'), 'fyi': ('fyi', None),
               'working': ('agent working', 'working')}   # visible in band 5 until the agent stops or asks
 SOON_MIN, ALERT_MIN = 120, 15     # calendar visibility window; exact fifteen-minute attention boundary
 SETUP_GRACE_MIN = 15              # a walk-through the owner is still in does not raise its own hand
@@ -50,7 +50,7 @@ _FAILED = re.compile(r'FAILED\s*$')                # reports.py writes '<title> 
 # only for converting a manually named historical row into a generic FYI card.
 _QUIET = {'filed', 'ignored', 'yours', 'error'}   # error: triage failed - unread information with a retry, never work
 PILE_EVERY = 30                   # websocket writes invalidate it; this is only a disconnected-client safety net
-_CACHE = {'at': 0.0, 'pile': None, 'store': None, 'generation': 0}
+_CACHE = {'at': 0.0, 'pile': None, 'store': None, 'generation': 0, 'full': None}   # full: the same build with read items kept
 _STATE = {}                        # tid -> 'working' | 'parked' | 'asking' | 'done' | 'idle', as last seen by the watcher
 _SEEN = {}                         # tid -> (state, first seen at) - a change must HOLD before it is news
 _WATCHED = [False]                 # first LOOK, even when there were no sessions; _STATE empty is not the same thing
@@ -462,9 +462,10 @@ def from_wrapped(store, now: datetime, busy: set) -> list:
 
 
 # ── the pile ─────────────────────────────────────────────────────────────────────────────────
-# Lanes retain presentation/state semantics; the shared five bands own ordering.
-_BAND = {'blocked': 2, 'time': 1, 'approve': 2, 'broken': 3, 'asked': 3,
-         'forgotten': 3, 'report': 3, 'fyi': 4, 'working': 5}
+# Lanes retain presentation/state semantics; the shared five bands own ordering across the pile and
+# the feed. INSIDE the actionable band the lane ranks (the owner, 2026-09-07: "asked you" sat under
+# reports because both were one band): what asks you, then what broke, then what landed.
+_SUB = {'asked': 0, 'queued': 0, 'broken': 1, 'forgotten': 2, 'report': 2}
 
 
 def _band(item):
@@ -473,7 +474,7 @@ def _band(item):
         return attention_band(urgent=not _not_yet(item), actionable=True)
     return attention_band(urgent=lane == 'time' or (lane == 'asked' and bool(item.get('urgent_request'))),
                           owner_wait=lane in ('blocked', 'approve'),
-                          working=lane == 'working', actionable=lane in ('broken', 'asked', 'forgotten', 'report'))
+                          working=lane == 'working', actionable=lane in ('broken', 'asked', 'queued', 'forgotten', 'report'))
 
 
 def _activity_time(value):
@@ -486,10 +487,10 @@ def _activity_time(value):
 
 
 def _order(items: list) -> list:
-    """Five bands, saved triage priority, oldest stored-local activity, stable key."""
+    """Five bands, the lane inside the actionable band, saved triage priority, oldest stored-local activity, stable key."""
     def key(item):
         activity = _activity_time(item.get('sort_at') or item.get('since') or item.get('when'))
-        return (_band(item), priority_rank(item.get('priority')), activity is None,
+        return (_band(item), _SUB.get(item.get('lane'), 2), priority_rank(item.get('priority')), activity is None,
                 activity or datetime.max, str(item.get('key') or ''))
     return sorted(items, key=key)
 
@@ -700,15 +701,28 @@ def pile(store, force: bool = False) -> dict:
         if same_store and _CACHE['pile'] and (refreshed_while_waiting or (not force and time.time() - _CACHE['at'] < PILE_EVERY)):
             return _CACHE['pile']
         events = announce(store)                       # the watcher speaks first: a transition changes the pile too
-        p = build(store)
+        # ONE build serves the pile and the item the page is holding: the shared builder computes
+        # every card's read state anyway, and the pile is its unread subset (processing_unread.build)
+        shared = getattr(store, 'processing_reads_active', lambda: False)()
+        full = build(store, keep_surfaced=True) if shared else None
+        if shared:
+            items = [i for i in full['items'] if i['unread']]
+            p = {**full, 'items': items, 'lanes': [{**l, 'n': sum(i['lane'] == l['lane'] for i in items)} for l in full['lanes']],
+                 'counts': {**full['counts'], 'unread': len(items), 'actionable': sum(i['actionable'] for i in items)}}
+        else: p = build(store)
         p['alerts'] = alerts(store, p['items'])
         p['events'] = events
-        _CACHE.update(at=time.time(), pile=p, store=store,
+        _CACHE.update(at=time.time(), pile=p, store=store, full=full['items'] if shared else None,
                       generation=_CACHE.get('generation', 0) + 1)
         return p
 
 
-def invalidate(): _CACHE.update(at=0.0, pile=None, store=None); _SOURCES.update(at=0.0, by={})
+def full_items(store) -> list | None:
+    """The cached build with read items kept, for a same-request lookup of the item on the table."""
+    return _CACHE['full'] if _CACHE.get('store') is store and _CACHE['pile'] else None
+
+
+def invalidate(): _CACHE.update(at=0.0, pile=None, store=None, full=None); _SOURCES.update(at=0.0, by={})
 def forget_states(): _STATE.clear(); _SEEN.clear(); _WATCHED[0] = False
 
 
@@ -849,14 +863,14 @@ def _not_yet(i: dict) -> bool:
 
 
 def next_item(store, key: str = None, only: str = None, include_surfaced: bool = False,
-              exclude: str = None) -> dict | None:
+              exclude: str = None, items: list | None = None) -> dict | None:
     """What comes out of the mouth: the named item (read or not - the chat may return to it), or
     the first unread one - of the mail alone when `only` is 'mail'. Something still being triaged is
     not ready to be talked about."""
     # by key, whatever its state: read already, or with an agent on it now - the concierge decides what to say
     if key:
-        item = next((i for i in build(store, keep_surfaced=True)['items']
-                     if i['key'] == key or key in i.get('aliases', [])), None)
+        pool = items if items is not None else build(store, keep_surfaced=True)['items']
+        item = next((i for i in pool if i['key'] == key or key in i.get('aliases', [])), None)
         if item is None and getattr(store, 'processing_reads_active', lambda: False)():
             item = next((i for i in build(store, keep_surfaced=True, full_history=True)['items']
                          if i['key'] == key or key in i.get('aliases', [])), None)

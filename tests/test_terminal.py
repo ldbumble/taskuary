@@ -498,9 +498,10 @@ class TerminalTests(unittest.TestCase):
             self.assertEqual(typed, [])                                        # the agent was never asked
             self.assertNotIn(t.sid, [x['sid'] for x in terminal.listing()])     # session gone
             pend = [r for r in server.store.list_reviews('pending') if r['TaskId'] == tid]
-            self.assertEqual((len(pend), pend[0]['Kind']), (1, 'draft_reply'))
+            self.assertEqual((len(pend), pend[0]['Kind']), (1, 'draft_reply'))  # the sender is still owed the answer
             self.assertIn('no longer gets a mailbox', pend[0]['DraftText'])
-            self.assertEqual(server.store.get_task(tid)['Status'], 'waiting')  # waiting on you to send it
+            self.assertEqual(server.store.get_task(tid)['Status'], 'waiting')  # waiting on you to send it; dismissing it closes the task
+            self.assertNotIn('stay:open', server.store.get_task(tid).get('Tags') or '')   # ...because the owner's mark came off (2026-09-07)
             self.assertTrue(any('flipped it to N/N' in cm['Body'] for cm in server.store.list_comments(tid)))
         finally:
             terminal.close(t.sid)

@@ -16,7 +16,7 @@ test('Current follows only an explicit canonical migration or lineage alias', ()
 });
 
 test("every lane the server knows has a word, a mark and a role the theme can colour", () => {
-  assert.deepStrictEqual(LANES, ["blocked", "time", "approve", "broken", "asked", "forgotten", "report", "fyi", "working"]);
+  assert.deepStrictEqual(LANES, ["blocked", "time", "approve", "asked", "queued", "broken", "forgotten", "report", "fyi", "working"]);
   // a failed check is second only to an agent that is stuck, wears the oxblood `bad` role, and
   // is NOT in the server's MUTED_LANES - a rule that quiets a chatty report cannot quiet it failing
   assert.strictEqual(LANE_META.broken.role, "bad");

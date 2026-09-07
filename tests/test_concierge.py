@@ -841,7 +841,7 @@ class ApiTests(unittest.TestCase):
             self.assertEqual([i['key'] for i in pile['items']], [f'review:{r}'])
             # nine lanes now: 'broken' was added between approve and asked, so a failed check ranks
             # above a person's ask instead of behind every report (funnel.LANES)
-            self.assertEqual([l['n'] for l in pile['lanes']], [0, 0, 1, 0, 0, 0, 0, 0, 0])
+            self.assertEqual([l['n'] for l in pile['lanes']], [0, 0, 1, 0, 0, 0, 0, 0, 0, 0])   # ten lanes since 'queued' (2026-09-07)
             nxt = c.post('/api/concierge/next', json={}).json()
             self.assertEqual(nxt['item']['rid'], r); self.assertEqual(nxt['say'], 'Dana wants the file - the draft is below.')   # the model's introduction (PW-153)
             # The browser's walk resumes unresolved rows it already showed; a shown card is not read.

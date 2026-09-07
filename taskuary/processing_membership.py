@@ -121,9 +121,16 @@ def reconcile_membership(cur, *, stamp, new_item_id, follow_item):
             add_group(key, 'review', ('review', rid))
         groups[key]['entities'].add(('review', rid))
 
-    for iid in sorted(ideas, key=_id_key):
-        key = ('idea', iid)
-        add_group(key, 'idea', ('idea', iid))
+    # an idea and the task it became (or the task it is about) are ONE thing on the rail: two roots
+    # drew two rows wearing the same TQ ref (the owner, 2026-09-07), and the idea row outlived the task
+    spawned = {str(r.get('SourceRef') or ''): tid for tid, r in tasks.items()}
+    for iid, row in sorted(ideas.items(), key=lambda pair: _id_key(pair[0])):
+        try: action = json.loads(row.get('ActionJson') or '{}')
+        except (ValueError, TypeError): action = {}
+        tid = str(action.get('tid')) if action.get('tid') else spawned.get(f'assistant:idea:{iid}')
+        key = ('task', tid) if tid in tasks else ('idea', iid)
+        if key[0] == 'idea': add_group(key, 'idea', ('idea', iid))
+        groups[key]['entities'].add(('idea', iid))
 
     for aid, row in sorted(attachments.items(), key=lambda pair: _id_key(pair[0])):
         mid = None if row.get('MessageId') is None else str(row['MessageId'])

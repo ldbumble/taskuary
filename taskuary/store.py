@@ -331,7 +331,7 @@ PROCESSING_DIRTY_TABLES = (
     'funnel_state', 'comment', 'task_artifact', 'transcript',
 )
 PROCESSING_DIRTY_SETTINGS = (
-    'feed_days', 'funnel_hours', 'funnel_mutes', 'owner_email', 'team_domains',
+    'feed_days', 'funnel_hours', 'funnel_mutes', 'owner_email', 'team_domains', 'processing_membership_rules',
 )
 
 # Out of the box Taskuary WORKS the mail: a job goes to the coding agent, a question gets a

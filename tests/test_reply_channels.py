@@ -100,10 +100,11 @@ class WrapEndpointTests(unittest.TestCase):
              mock.patch('taskuary.responder.write_draft', return_value='hi'):
             return c.post(f'/api/tasks/{tid}/wrap', json={'close': True}).json()
 
-    def test_github_wrap_promises_the_draft_and_says_it_cannot_be_sent(self):
+    def test_github_wrap_by_the_owner_closes_instead_of_drafting_what_cannot_be_sent(self):
+        # the owner said Done (2026-09-07): a draft nobody can send must not hold the task open
         out = self._wrap('github')
-        self.assertEqual((out['drafting'], out['can_send']), (True, False))   # the button renders; Send does not
-        self.assertIn('GitHub replies are off', out['send_block'])
+        self.assertEqual((out['drafting'], out['can_send']), (False, False))
+        self.assertEqual(out['send_block'], '')
 
     def test_email_wrap_does_promise_one(self):
         self.assertTrue(self._wrap('email')['drafting'])

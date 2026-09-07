@@ -133,6 +133,15 @@ def blocked(store, tid: int, term=None) -> str:
     return ''
 
 
+def unclaim(store, tid: int, actor: str = 'owner') -> None:
+    """The owner closed the task they had opened a session on: the mark comes off, so a later close by
+    a draft's verdict or by an agent is not refused for it."""
+    t = store.get_task(tid)
+    if not t or not stays_open(store, tid): return
+    tags = [x.strip() for x in str(t.get('Tags') or '').replace(' ', ',').split(',') if x.strip() and x.strip() != STAY_TAG]
+    store.update_task(tid, {'Tags': ','.join(tags)}, actor)
+
+
 def claim(store, tid: int, actor: str = 'owner') -> bool:
     """The owner is opening a session on this task: mark it theirs to end. True when the mark was
     just set. A router/agent opening leaves the task as it is - that is the funnel's own work."""

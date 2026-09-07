@@ -28,8 +28,8 @@ export function processingAllParams({ category = "", pick = "", discovered = [],
 export const processingTransportLimit = (wanted) => Math.min(PROCESSING_ALL_MAX_PAGE, Math.max(1, Math.trunc(wanted)));
 
 export function processingErrorCode(error) {
-  const detail = error?.response?.data?.detail;
-  return typeof detail === "string" ? detail : detail?.code || "";
+  const detail = error?.response?.data?.detail ?? error?.detail;   // an HTTP error, or a streamed error event
+  return typeof detail === "string" ? detail : detail?.code || error?.code || "";
 }
 
 export function processingErrorMessage(error, fallback) {

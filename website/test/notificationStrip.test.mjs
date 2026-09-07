@@ -34,7 +34,7 @@ test("the pile refresh notifies and refreshes, and never advances, clears by eve
   assert.doesNotMatch(events, /setMsgs|setCurrent|surfaceRef|deferInChat/);
   // polling, live events and tab activation only refresh the pile
   assert.match(view, /pollWhileActive\(active, \(\) => loadPile\(false\), 30000\)/);
-  assert.match(view, /onLive\(\["feed-changed", "task-changed"\], \(\) => loadPile\(true\)\)/);
+  assert.match(view, /onLive\(\["feed-changed", "task-changed"\], \(\) => \{ clearTimeout\(t\); t = setTimeout\(\(\) => loadPile\(true\), 1500\); \}\)/);
   assert.doesNotMatch(view, /onLive\([^)]*surface/);
 });
 

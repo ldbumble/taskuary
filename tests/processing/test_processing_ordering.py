@@ -63,12 +63,14 @@ def test_attention_facts_have_approved_precedence(facts, expected):
     assert attention_band(**facts) == expected
 
 
-def test_middle_lanes_share_priority_then_oldest_order_without_mutating_input():
+def test_lanes_rank_asked_then_broken_then_landed_without_mutating_input():
+    # the lane is the rank (2026-09-07): an ask outranks a failed check outranks what merely landed,
+    # however old each is; inside one rank the oldest still comes first
     rows = [item("ask", "asked", at=stamp(-1)), item("broken", "broken", at=stamp(-2)),
             item("idea", "forgotten", kind="idea", at=stamp(-3)),
-            item("result", "report", at=stamp(-4))]
+            item("result", "report", at=stamp(-4)), item("todo", "queued", at=stamp(-6))]
     before = deepcopy(rows)
-    assert [row["key"] for row in funnel._order(rows)] == ["result", "idea", "broken", "ask"]
+    assert [row["key"] for row in funnel._order(rows)] == ["todo", "ask", "broken", "result", "idea"]
     assert {funnel._band(row) for row in rows} == {3}
     assert rows == before
 
@@ -83,8 +85,8 @@ def test_priority_precedes_age_and_unknown_values_never_invent_urgency():
 
 
 def test_equal_activity_uses_stable_keys_and_missing_or_invalid_activity_is_last():
-    rows = [item("msg:2", "asked"), item("msg:1", "report"),
-            item("missing", "forgotten", at=""), item("invalid", "broken", at="not a date")]
+    rows = [item("msg:2", "asked"), item("msg:1", "asked"),
+            item("missing", "asked", at=""), item("invalid", "asked", at="not a date")]
     rows[2]["when"] = ""
     for seed in range(6):
         shuffled = list(rows)
@@ -95,7 +97,7 @@ def test_equal_activity_uses_stable_keys_and_missing_or_invalid_activity_is_last
 def test_producer_sort_activity_keeps_subseconds_and_normalizes_equivalent_offsets():
     # Reverse lexical keys ensure a truncated timestamp would produce the wrong order.
     later = funnel._item("a-later", "asked", "asked", "Later", when="2026-09-06T12:00:00.900+00:00", priority="normal")
-    earlier = funnel._item("z-earlier", "report", "report", "Earlier", when="2026-09-06T12:00:00.100+00:00", priority="normal")
+    earlier = funnel._item("z-earlier", "report", "asked", "Earlier", when="2026-09-06T12:00:00.100+00:00", priority="normal")
     assert [row["key"] for row in funnel._order([later, earlier])] == ["z-earlier", "a-later"]
     equivalent = funnel._item("b-equivalent", "asked", "asked", "Same instant",
                               when="2026-09-06T08:00:00.900-04:00", priority="normal")

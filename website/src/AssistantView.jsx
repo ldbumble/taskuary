@@ -31,6 +31,7 @@ import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
 import { SUGGESTIONS, afterCancel, afterExecute, proposalOf } from "./proposalCard.js";
 import { ageText, arrivals, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, followsItem, hasNextSelection, interactiveCardIndex, keysOf, nextMarkerKey, nextSelectionBody, nextSelectionScope, pendingAlerts, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
+import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
 import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WrapupCard } from "./assistantCards.jsx";
 import FeedView from "./FeedView.jsx";
@@ -159,7 +160,7 @@ function Pile({ pile, current, onPull }) {
             const who = i.who && !i.title.toLowerCase().startsWith(i.who.toLowerCase()) ? i.who : "";
             const tag = i.settling ? "triaging…" : i.kind === "agent" && i.asking ? "asked you" : meta.word;
             const loud = i.lane === "blocked" || i.lane === "time";
-            const promoted = loud || i.lane === "approve";           // triage moved it up: the little arrow says so
+            const promoted = i.promoted ?? (loud || i.lane === "approve");   // triage moved it up: the little arrow says so
             return (
               <div key={i.key} className={cls} data-tq-day={localDay(i.kind === "meeting" ? i.when : (i.since || i.when)) || "undated"}
                 style={{ top: landing.has(i.key) ? -ROW_H : top, "--edge": role }}>
@@ -211,7 +212,7 @@ function Line({ m, live, actions, fresh }) {
   // The funnel deliberately renames msg:<mid> to agent:<tid> when somebody takes the task. Follow
   // the task identity across that rename; matching only the old key left a live coder displayed as
   // "nobody on it" until a new chat line happened to replace the card.
-  const follows = live && followsItem(m.card, fresh);
+  const follows = live && !m.proposal && followsItem(m.card, fresh);   // a proposal is its own card, never the item's
   // ``fresh`` is a complete presentation, not a patch. Exact replacement clears source fields
   // that disappeared while retaining the durable conversation line and the card's local UI state.
   const c = follows ? fresh : m.card;                     // the live card follows the pile
@@ -458,6 +459,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         setPile((p) => replaceSelectionToken(p, guard));
         setErr(errText(error));
       }
+      // membership still settling behind a write: ask again in a moment rather than freeze on stale rows
+      if (isCoveragePending(error)) setTimeout(() => loadPileRef.current?.(force), 1200);
       return null; /* the live event or safety timer will retry */
     }
     finally {
@@ -488,7 +491,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // safety net: rebuilding this multi-source pile every five seconds starved Board, Tasks and
   // Past chats behind work whose answer had not changed.
   useEffect(() => pollWhileActive(active, () => loadPile(false), 30000), [active, loadPile]);
-  useEffect(() => active ? onLive(["feed-changed", "task-changed"], () => loadPile(true)) : undefined, [active, loadPile]);
+  // a sync lands rows several times a second; one forced rebuild after the burst, not one per row
+  useEffect(() => {
+    if (!active) return undefined;
+    let t = 0;
+    const off = onLive(["feed-changed", "task-changed"], () => { clearTimeout(t); t = setTimeout(() => loadPile(true), 1500); });
+    return () => { clearTimeout(t); off?.(); };
+  }, [active, loadPile]);
   useEffect(() => { const el = bodyRef.current; if (el) el.scrollTop = el.scrollHeight; }, [msgs, busy]);
   // ...and again whenever the thread GROWS - a card that loaded its draft, a report that unfolded - so the
   // bottom of the conversation is always what you see, unless you have scrolled up to read
@@ -602,7 +611,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     setText(""); setBusy(true); setErr("");
     setMsgs((m) => [...m, { id: `u${Date.now()}`, role: "user", text: t }]);
     try {
-      const data = await turn({ mode: "say", text: t, key: current, context_mid: currentItem?.mid || null });
+      const ask = () => turn({ mode: "say", text: t, key: current, context_mid: currentItem?.mid || null });
+      const data = await ask().catch(async (e) => { if (!isCoveragePending(e)) throw e; await new Promise((r) => setTimeout(r, 1200)); return ask(); });
       if (data.context_update && noticedRef.current !== data.context_update) {   // not already said by the stream event
         setMsgs((m) => [...m, { id: `context${Date.now()}`, role: "assistant", text: data.context_update }]);
         say(data.context_update);
@@ -614,7 +624,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: data.options || [],
                                 ...(prop ? { proposal: prop, card: { kind: "proposal", key: prop.key, title: prop.label, op: prop.id, tid: prop.tid, ref: prop.ref } } : {}) }]);
         say(data.say);
-        if (!prop && data.decision) await decide(data.decision);  // the two immediate exceptions: a reply drafts, Next moves (PW-126/128)
+        if (prop?.auto) await runProposal(prop);                   // a plain verb on the item on the table: no button to press
+        else if (!prop && data.decision) await decide(data.decision);  // the two immediate exceptions: a reply drafts, Next moves (PW-126/128)
       }
     } catch (e) { setErr(errText(e)); }
     turnFlight.current = false;
@@ -658,8 +669,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // the confirmation button (PW-124/125): the structured proposal by id and version - never a phrase sent
   // back through the interpreter. The receipt is what the server said happened; the walk moves only on a
   // success that settles the item on the table.
-  const confirmProposal = async (p) => {
-    if (busy) return;
+  const confirmProposal = async (p) => { if (!busy) await runProposal(p); };
+  const runProposal = async (p) => {
     setBusy(true);
     try {
       let res;

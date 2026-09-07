@@ -47,6 +47,15 @@ def _listening() -> bool:
     except requests.RequestException: return False
 
 
+def wait_listening(secs: float) -> bool:
+    """Give a just-launched bridge a moment to answer before anyone polls it."""
+    end = time.time() + secs
+    while time.time() < end:
+        if _listening(): return True
+        time.sleep(0.5)
+    return False
+
+
 def filter_policy(store, connector_id: int) -> dict:
     """The same allow-list used by Python ingestion, ready before Baileys receives offline messages.
     Without this launch-time copy, a restarted bridge could acknowledge its pending queue before

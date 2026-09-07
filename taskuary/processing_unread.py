@@ -45,6 +45,10 @@ def card_for(store, item, compact, live_state, now, states=None):
     active = task.get('Status') not in ('done', 'dropped')
     persisted_working = active and any(r.get('TaskId') == tid and r.get('Status') == 'running'
                                       for r in view.get('runs', []))
+    # handed to an agent and not started: on the rail until it starts, however often it was looked at
+    queued = active and not workers and str(task.get('Assignee') or '').startswith('agent:') and not persisted_working
+    # a done task's own row, or the assistant's own note that became it, is not work any more
+    closed = not active and not review and (not row.get('MessageId') or row.get('Channel') == 'assistant')
     if row.get('MessageId'):
         if review:
             exact = next(m for m in view['messages'] if m['MessageId'] == review['MessageId'])
@@ -72,7 +76,8 @@ def card_for(store, item, compact, live_state, now, states=None):
             card = funnel._item('', 'idea', lane, compact['title'], **base)
         else:
             card = funnel._item('', 'todo' if kind == 'task' else 'action',
-                                'asked' if kind == 'task' and active else 'fyi', compact['title'], **base)
+                                'queued' if kind == 'task' and queued else 'asked' if kind == 'task' and active else 'fyi',
+                                compact['title'], **base)
         if review:
             card.update(kind='action' if review.get('Kind') == 'action' else 'review', lane='approve',
                         rid=review['ReviewId'], mid=review.get('MessageId'), draft=bool(review.get('DraftText')),
@@ -90,7 +95,9 @@ def card_for(store, item, compact, live_state, now, states=None):
         who = row.get('Working') or 'agent'
         card.update(kind='agent', lane='working', working=who, agent=who)
     # Worker attention is not a read operation. An active worker remains visible.
-    unread = bool((read['unread'] and not read.get('deferred')) or (active and (worker or row.get('Working') or persisted_working)))
+    unread = not closed and bool((read['unread'] and not read.get('deferred')) or (active and (worker or row.get('Working') or persisted_working or queued)))
+    # the arrow means triage moved it up: an idea or a task raised to "asked you", or an urgent ask
+    card['promoted'] = bool(card.get('urgent_request')) or (card['lane'] == 'asked' and (card['kind'] in ('idea', 'todo') or row.get('Channel') == 'assistant'))
     card.update(key='processing:' + item['item_id'], processing_id=item['item_id'],
                 member_ids=list(item['member_ids']), context_revision=item['context_revision'],
                 view_revision=item['view_revision'], aliases=[a['Value'] for a in item.get('aliases', [])
@@ -120,6 +127,7 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
     now = now or datetime.now()
     live_state = terminal.live_sessions(tail=6) if live_state is None else live_state
     query = query_for(store, only, history=not full_history)
+    processing_all.wait_settled(store)
     snapshot = store.processing_inventory_snapshot(
         fixed_now=now.isoformat(), live_state=live_state, display_only=True,
         history_days=query['days'])

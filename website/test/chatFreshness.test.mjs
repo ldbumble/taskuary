@@ -16,7 +16,7 @@ test("Assistant sends the message revision it saw and raises a newer live-chat l
 test("an open Assistant always pulls durable provider corrections", () => {
   assert.match(view, /Provider messages can arrive while this conversation is already open/);
   assert.match(view, /const \{ data: st \} = await api\.get\("\/api\/concierge"\)/);
-  assert.match(view, /onLive\(\["feed-changed", "task-changed"\], \(\) => loadPile\(true\)\)/);
+  assert.match(view, /onLive\(\["feed-changed", "task-changed"\], \(\) => \{ clearTimeout\(t\); t = setTimeout\(\(\) => loadPile\(true\), 1500\); \}\)/);
   assert.match(view, /pollWhileActive\(active, \(\) => loadPile\(false\), 30000\)/);
   assert.match(view, /if \(pileFlight\.current\)/);
   assert.match(view, /pileForcePending\.current = true/);

@@ -495,6 +495,14 @@ const TodayStrip = () => {
 // `stage` is the Unread conversation. All is a review list: it never mounts that chat;
 // each row opens by itself on the right. A card's "open on the Timeline" (#msg=) still pins its row.
 // On a phone the chat and the rail take turns: `railOnNarrow` says which one is up.
+// The countdown ticks on its own. As a 1 s state change on FeedView it re-rendered every row of the rail
+// every second for as long as the tab was open.
+function NextIn({ atRef, render }) {
+  const [, tick] = useState(0);
+  useEffect(() => { const id = setInterval(() => tick((t) => t + 1), 1000); return () => clearInterval(id); }, []);
+  return render(atRef.current ? Math.max(0, Math.round((atRef.current - Date.now()) / 1000)) : null);
+}
+
 export default function FeedView({ onOpenTask, onChanged, active = true, top = null, stage = null, rowMode = "task", onPull = null, railOnNarrow = false, onInventoryFilter = null, unreadInventory = null }) {
   // below md there is no stage beside the rail; whatever is opened slides over it instead, so a
   // tap on a row is never a tap that did nothing
@@ -778,12 +786,9 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   const [every, setEvery] = useState(10);            // the server's cadence, not a guess
   // the server's clock, as an offset from OUR clock: nextPollAt is its time, so the countdown
   // uses (next - serverNow) and never trusts the two machines to agree on the hour
-  const [nextIn, setNextIn] = useState(null);        // seconds until the next background sync, from the server
   const [triageErr, setTriageErr] = useState("");    // the brain's last failure, until it answers again
   const [fade, setFade] = useState("normal");        // Settings > Display; height of the viewport's bottom fade
   const bottomFade = fadeBand(fade);
-  const [tick, setTick] = useState(0);
-  useEffect(() => { if (!active) return undefined; const id = setInterval(() => setTick((t) => t + 1), 1000); return () => clearInterval(id); }, [active]);
   const nextAtRef = useRef(null);                     // Date.now() when the server's next poll is due
   const seenPollAt = useRef(null);
   const wasRunning = useRef(false);
@@ -833,7 +838,6 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     syncObserver.current = observer;
     return () => { observer.stop(); syncObserver.current = null; clearTimeout(completionTimer.current); };
   }, [applyStatus, active]);
-  useEffect(() => { setNextIn(nextAtRef.current ? Math.max(0, Math.round((nextAtRef.current - Date.now()) / 1000)) : null); }, [tick]);
   const syncNow = useCallback(async (silent) => {
     if (syncUnknown) { await syncObserver.current?.refresh(); return; }
     if (!silent) setSyncing(true);
@@ -1442,7 +1446,8 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
               appears to describe the sync line beneath it. */}
           <Box sx={{ minHeight: 20, display: "flex", justifyContent: "center", alignItems: "center", gap: 0.25 }}>
             <Typography variant="caption" noWrap sx={{ color: syncing || bgSync ? ACCENT : FAINT, fontSize: 10.5 }}>
-              {syncUnknown ? "Sync status unavailable — rechecking" : syncFace({ busy: syncing || bgSync, what: syncWhat, every, lastAt: lastSync, nextIn, checked: true, started: syncStarted })}
+              {syncUnknown ? "Sync status unavailable — rechecking"
+                : <NextIn atRef={nextAtRef} render={(nextIn) => syncFace({ busy: syncing || bgSync, what: syncWhat, every, lastAt: lastSync, nextIn, checked: true, started: syncStarted })} />}
             </Typography>
             <Button size="small" variant="text" disabled={!syncUnknown && (syncing || bgSync)} onClick={() => syncNow(false)}
               title={syncing || bgSync ? syncWhat : "read the mailboxes, chats and repos now"}

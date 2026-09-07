@@ -68,7 +68,8 @@ async def _lifespan(_app):
     # in-progress/running flags before the Board and funnel get their first read.
     hub_term.recover_after_restart(store)
     from . import wabridge
-    try: wabridge.start_configured(store)
+    try:
+        if wabridge.start_configured(store).get('started'): wabridge.wait_listening(8)   # else the first poll files a false "bridge not running"
     except Exception as e: logger.warning(f'wa bridge startup failed: {e}')
     catch_up_on_startup()          # defined below; resolved when the app actually starts
     try:                           # a relaunch opens a NEW chat rather than resuming the last one
@@ -352,6 +353,11 @@ def _processing_live():
     except Exception:
         return None  # Unavailable observation is distinct from an observed empty roster.
 
+
+@app.exception_handler(processing_all.AllError)
+async def _all_error(_request, error: processing_all.AllError):
+    # every route that reads the inventory can meet this; one answer, the same JSON the explicit catches give
+    return JSONResponse({'detail': error.detail}, status_code=error.status)
 
 @app.get('/api/processing/all')
 def processing_all_page(limit: int = 100, cursor: str = None, channel: str = None, source: str = None):
@@ -2595,17 +2601,18 @@ def funnel_pile(force: bool = False, current: str = None, only: str = None,
         events = (cached.get('events') or []) if cached is not None else funnel.announce(store)
         capture = capture_selection(store, only=only, include_surfaced=include_surfaced,
                                     exclude=exclude, pile=cached)
+        p = {**capture.pile, **fields(store, capture),
+             'alerts': funnel.alerts(store, capture.pile['items']), 'events': events}
+        # ...and what the page is HOLDING: an item whose review was decided (or whose task closed)
+        # leaves the pile, and nothing told the page - so a sent reply sat on the table as
+        # "reply pending" for as long as the tab stayed open (the owner, 2026-09-03: "why is it
+        # showing back up if the ai agent replied, i edited it and sent??"). Looked up in the build
+        # the pile came from, not a second one.
+        if current: p = {**p, 'current': funnel.next_item(store, current, items=funnel.full_items(store) if cached is not None else None)}
     except SelectionUnavailable as error:
         raise HTTPException(503, error.detail) from error
     except processing_all.AllError as error:
         raise HTTPException(error.status, error.detail) from error
-    p = {**capture.pile, **fields(store, capture),
-         'alerts': funnel.alerts(store, capture.pile['items']), 'events': events}
-    # ...and what the page is HOLDING: an item whose review was decided (or whose task closed)
-    # leaves the pile, and nothing told the page - so a sent reply sat on the table as
-    # "reply pending" for as long as the tab stayed open (the owner, 2026-09-03: "why is it
-    # showing back up if the ai agent replied, i edited it and sent??").
-    if current: p = {**p, 'current': funnel.next_item(store, current)}
     # Current is query-specific and may be absent from the ordinary pile. Include
     # its complete presentation in the revision after attaching it to the response.
     return funnel.present(store, p)
@@ -2805,13 +2812,15 @@ async def concierge_stream(body: ConciergeStreamBody):
                 else:
                     out = concierge.surface(store, body.key, actor=ACTOR, only=body.only, trace=trace, cancel=cancel,
                                             include_surfaced=body.include_surfaced, exclude=body.exclude)
-            else: out = concierge.say(store, body.text or '', body.key, actor=ACTOR, trace=trace, cancel=cancel)
+            else: out = concierge.say(store, body.text or '', body.key, actor=ACTOR, trace=trace, cancel=cancel, item=freshness.get('item'))
             if notice: out['context_update'] = notice
             put({'type': 'done', **out})
         except NavigationStale as error:
             put({'type': 'error', 'code': 'selection_stale', 'detail': error.detail, 'error': str(error)})
         except SelectionUnavailable as error:
             put({'type': 'error', 'code': 'selection_unavailable', 'detail': error.detail, 'error': str(error)})
+        except processing_all.AllError as error:      # the page retries on this code once membership settles
+            put({'type': 'error', 'code': error.detail['code'], 'detail': error.detail, 'error': str(error)})
         except Exception as e:
             logger.warning(f'concierge stream failed: {e}')
             put({'type': 'error', 'error': str(e)})
@@ -2850,7 +2859,7 @@ def concierge_say(body: ConciergeSayBody):
     from . import concierge
     try:
         freshness = _refresh_chat_key(body.key, body.context_mid) if body.key else {}
-        out = concierge.say(store, body.text, body.key, actor=ACTOR)
+        out = concierge.say(store, body.text, body.key, actor=ACTOR, item=freshness.get('item'))
         if freshness.get('newer'): out['context_update'] = _context_update_line(freshness)
         return out
     except ValueError as e: raise HTTPException(422, str(e))
@@ -4555,7 +4564,8 @@ def _refresh_chat_key(key: str = None, seen_mid: int = None, on_fetched=None) ->
     item = funnel.next_item(store, key) or funnel.item_for_key(store, key)
     if not item: return {}
     out = _refresh_chat_context(item.get('tid'), item.get('mid'), grace=True, on_fetched=on_fetched)
-    fresh = funnel.next_item(store, key) or funnel.item_for_key(store, key) or item
+    # the poll may have landed lines; only then is a second build worth its cost
+    fresh = (funnel.next_item(store, key) or funnel.item_for_key(store, key) or item) if out.get('newer') or out.get('added') else item
     after = _latest_context_message(fresh.get('tid'), fresh.get('mid'))
     # `stale` catches a background sync that landed before this request; seen_mid catches the
     # narrower race where it landed after the browser's last five-second pile refresh.
@@ -4885,6 +4895,7 @@ def _refresh_soul_connections():
 
 @app.post('/api/ingest/poll')
 def ingest_poll(background: BackgroundTasks):
+    if _POLL_BUSY.locked(): return {'report': 'busy'}      # a pass is running; a second would be skipped anyway
     background.add_task(_poll_reports)
     return {'report': 'running'}
 

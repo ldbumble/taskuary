@@ -22,5 +22,5 @@ test("mounting, activating, remounting and reconnecting only load - nothing call
   for (const e of effects) assert.doesNotMatch(e, /surface\(\)|surface\(null|turn\(\{ mode: "next"|start\(/, e.slice(0, 120));
   assert.match(view, /useEffect\(\(\) => \{ loadState\(\)\.catch\(\(e\) => setErr\(errText\(e\)\)\); \}, \[loadState\]\);/);
   assert.match(view, /pollWhileActive\(active, \(\) => loadPile\(false\), 30000\)/);
-  assert.match(view, /onLive\(\["feed-changed", "task-changed"\], \(\) => loadPile\(true\)\)/);
+  assert.match(view, /onLive\(\["feed-changed", "task-changed"\], \(\) => \{ clearTimeout\(t\); t = setTimeout\(\(\) => loadPile\(true\), 1500\); \}\)/);
 });

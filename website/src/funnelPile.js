@@ -4,13 +4,14 @@
 // by ROLE (theme.jsx ROLES) so this file cannot drift from the palette.
 
 // Presentation lanes; the server supplies the five attention bands and item order.
-export const LANES = ["blocked", "time", "approve", "broken", "asked", "forgotten", "report", "fyi", "working"];
+export const LANES = ["blocked", "time", "approve", "asked", "queued", "broken", "forgotten", "report", "fyi", "working"];
 export const LANE_META = {
   blocked:   { word: "agent waiting", role: "you",     mark: "👋", hint: "an agent stopped and is waiting on you — it is blocking work" },
   time:      { word: "coming up",     role: "working", mark: "⏱",  hint: "a meeting inside two hours, or an urgent sender" },
-  approve:   { word: "reply pending", role: "you",     mark: "✉️", hint: "a reply or an action is drafted and waits for you" },
+  approve:   { word: "needs your yes", role: "you",    mark: "✉️", hint: "a reply or an action is drafted and waits for you" },
   broken:    { word: "a check failed", role: "bad",     mark: "🛠",  hint: "a report or workflow you set up could not run - the cause is in it" },
   asked:     { word: "asked you",     role: "working", mark: "🙋", hint: "a person asked you for something and nobody is on it" },
+  queued:    { word: "waiting to start", role: "working", mark: "⏳", hint: "handed to an agent and not started yet" },
   forgotten: { word: "slipped",       role: "info",    mark: "🧵", hint: "the ask that slipped, the promise you made, the thread gone quiet" },
   report:    { word: "report",        role: "info",    mark: "📄", hint: "a report you set up landed, or an agent finished a job" },
   fyi:       { word: "fyi",           role: null,      mark: "👀", hint: "a person told you something — read it or don't" },
@@ -236,7 +237,7 @@ export const statusLine = (items, busy) => {
 
 // New cards and alerts carry the server's band. Old persisted cards use the same
 // five-band fallback until their current presentation is refreshed.
-const BAND = { blocked: 2, time: 1, approve: 2, broken: 3, asked: 3, forgotten: 3, report: 3, fyi: 4, working: 5 };
+const BAND = { blocked: 2, time: 1, approve: 2, broken: 3, asked: 3, queued: 3, forgotten: 3, report: 3, fyi: 4, working: 5 };
 const attentionBand = (item) => {
   if (Number.isInteger(item?.order_band) && item.order_band >= 1 && item.order_band <= 5) return item.order_band;
   if (item?.kind === "meeting" && (item.calendar_ready === false || item.mins > 15)) return 3;

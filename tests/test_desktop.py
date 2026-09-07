@@ -1,5 +1,5 @@
 """Desktop shell tests - the embedded server really boots and serves the UI + API."""
-import unittest, urllib.request
+import threading, time, unittest, urllib.request
 from taskuary import config, desktop
 
 
@@ -27,7 +27,33 @@ class DesktopTests(unittest.TestCase):
             conns = _get(f'{url}/api/connectors')
             self.assertIn('github', conns)
         finally:
-            server.should_exit = True
+            self.assertEqual(desktop.stop_server(server), 'clean')
+            self.assertFalse(server.thread.is_alive())
+
+    # Quitting used to flip should_exit and return; the daemon thread died with the process before the
+    # lifespan's cleanup (sessions, CLI children, the drain) ran - an orphaned Claude/Codex was the result (PW-261).
+    def test_stop_server_is_bounded_when_cleanup_hangs_and_says_so(self):
+        release = threading.Event()
+        class Hung: should_exit = False
+        hung = Hung(); hung.thread = threading.Thread(target=release.wait, daemon=True); hung.thread.start()
+        t0 = time.monotonic()
+        try:
+            self.assertEqual(desktop.stop_server(hung, timeout=0.3), 'timeout')
+            self.assertLess(time.monotonic() - t0, 2.0)
+            self.assertTrue(hung.should_exit)
+        finally: release.set()
+
+    def test_stop_server_reports_a_server_that_already_ended(self):
+        class Gone: should_exit = True
+        gone = Gone(); gone.thread = threading.Thread(target=lambda: None); gone.thread.start(); gone.thread.join()
+        self.assertEqual(desktop.stop_server(gone), 'not_running')
+
+    def test_the_browser_fallback_waits_until_the_server_is_told_to_exit(self):
+        class Srv: should_exit = False
+        srv = Srv()
+        threading.Timer(0.2, lambda: setattr(srv, 'should_exit', True)).start()
+        t0 = time.monotonic(); desktop.wait_for_exit(srv, poll=0.05)
+        self.assertLess(time.monotonic() - t0, 2.0)
 
 
 if __name__ == '__main__':

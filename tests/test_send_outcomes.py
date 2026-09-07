@@ -123,5 +123,58 @@ class ClarificationTests(unittest.TestCase):
         self.assertTrue(out['ok']); self.assertEqual(s.get_task(tid)['Status'], 'waiting')
 
 
+
+class SendProbeTests(unittest.TestCase):
+    """PW-143/146: a permission that is already known to be missing is said BEFORE the first send is tried -
+    Send is hidden with the reason on it, while drafting and reading carry on."""
+    def _card(self, s, ctype, cfg):
+        cid = next(c['ConnectorId'] for c in s.list_connectors() if c['Type'] == ctype)
+        s.save_connector({'ConnectorId': cid, 'Active': 1, 'ConfigJson': json.dumps(cfg)}, 'owner')
+        return cid
+
+    def test_an_imap_card_with_no_smtp_host_hides_send_and_names_the_missing_host(self):
+        s, *_ = thread()
+        cid = self._card(s, 'imap', {'address': 'me@northwind.example'})
+        self.assertIn('SMTP', outbound.send_probe(s, 'email'))
+        self.assertIn('me@northwind.example', outbound.send_probe(s, 'email'))
+        self.assertFalse(outbound.can_reply(s, 'email')); self.assertIn('SMTP', outbound.send_block(s, 'email'))
+        s.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps({'address': 'me@northwind.example', 'imap_host': 'imap.northwind.example',
+                                                                       'smtp_host': 'smtp.northwind.example'})}, 'owner')
+        self.assertEqual(outbound.send_probe(s, 'email'), ''); self.assertTrue(outbound.can_reply(s, 'email'))
+
+    def test_a_microsoft_sign_in_without_mail_send_is_named_before_any_send_is_tried(self):
+        s, *_ = thread()
+        cid = self._card(s, 'outlook', {'account': 'me@northwind.example', 'granted_scope': 'User.Read Mail.Read offline_access'})
+        self.assertIn('Mail.Send', outbound.send_probe(s, 'email'))
+        self.assertFalse(outbound.can_reply(s, 'email')); self.assertIn('Outlook card', outbound.send_block(s, 'email'))
+        s.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps({'account': 'me@northwind.example',
+                                                                       'granted_scope': 'User.Read Mail.ReadWrite Mail.Send'})}, 'owner')
+        self.assertEqual(outbound.send_probe(s, 'email'), ''); self.assertTrue(outbound.can_reply(s, 'email'))
+
+    def test_a_sign_in_that_never_recorded_its_scopes_is_not_accused_of_missing_one(self):
+        s, *_ = thread()
+        self._card(s, 'outlook', {'account': 'me@northwind.example'})
+        self.assertEqual(outbound.send_probe(s, 'email'), '')
+
+    def test_one_card_that_can_send_is_enough(self):
+        s, *_ = thread()
+        self._card(s, 'imap', {'address': 'broken@northwind.example'})
+        self._card(s, 'outlook', {'account': 'me@northwind.example', 'granted_scope': 'Mail.Send'})
+        self.assertEqual(outbound.send_probe(s, 'email'), '')
+        self.assertIn('SMTP', outbound.send_probe(s, 'email', mailbox='broken@northwind.example'))
+
+    def test_the_review_payload_hides_send_with_the_reason_on_it(self):
+        s, tid, mid, rid = thread()
+        self._card(s, 'imap', {'address': 'me@northwind.example'})
+        msg = s.get_message(mid)
+        can = outbound.can_reply(s, msg['Channel'])
+        self.assertFalse(can); self.assertIn('SMTP', outbound.send_block(s, msg['Channel']))
+
+    def test_the_token_exchange_keeps_the_scopes_microsoft_granted(self):
+        from taskuary import msauth
+        self.assertEqual(msauth._tokens({'access_token': 'a', 'refresh_token': 'r', 'expires_in': 3600,
+                                         'scope': 'User.Read Mail.Send'})['scope'], 'User.Read Mail.Send')
+        self.assertIsNone(msauth._tokens({'access_token': 'a'})['scope'])
+
 if __name__ == '__main__':
     unittest.main()

@@ -126,7 +126,9 @@ def me(token: str) -> dict:
 
 
 def _tokens(j: dict) -> dict:
-    return {'access_token': j['access_token'], 'refresh_token': j.get('refresh_token'), 'expires_in': j.get('expires_in')}
+    # the scopes Microsoft actually granted ride along: a sign-in without Mail.Send is knowable before a send (PW-143)
+    return {'access_token': j['access_token'], 'refresh_token': j.get('refresh_token'),
+            'expires_in': j.get('expires_in'), 'scope': j.get('scope')}
 
 
 def _err(r) -> str:

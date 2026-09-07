@@ -139,6 +139,37 @@ def reply_channels(store) -> set:
     return {c.strip() for c in str(raw).split(',') if c.strip()}
 
 
+def send_probe(store, channel, mailbox: str = None) -> str:
+    """Why a reply could NOT leave even with replies switched on - answered from what is already on the
+    cards, before any send is tried (PW-143): an IMAP mailbox with no SMTP host, a Microsoft sign-in that
+    never granted Mail.Send. '' when at least one sending card is not known to be blocked, which includes
+    having no card at all - "nothing is connected" is a different sentence, said elsewhere.
+
+    A missing permission is cheap to see and expensive to discover from a bounced send, so the surfaces
+    hide Send with this reason. Drafting and reading never consult it."""
+    if (channel or '').lower() != 'email': return ''
+    from .imapmail import HOSTS, _hosts
+    def _cfg(c):
+        try: return json.loads(c.get('ConfigJson') or '{}')
+        except ValueError: return {}
+    kind = lambda c: str(c.get('Type') or '').lower()
+    cards = [c for c in store.list_connectors() if c.get('Active') and kind(c) in ('outlook', 'imap', *HOSTS)]
+    if mailbox:
+        mine = [c for c in cards if str(_cfg(c).get('address') or _cfg(c).get('account') or '').lower() == str(mailbox).lower()]
+        cards = mine or cards
+    why = []
+    for c in cards:
+        cfg = _cfg(c); who = cfg.get('address') or cfg.get('account') or c.get('Name') or kind(c)
+        granted = str(cfg.get('granted_scope') or '')
+        # an older sign-in recorded no scopes: unknown is not "missing", so it is left alone
+        if kind(c) == 'outlook' and granted and 'Mail.Send' not in granted:
+            why.append(f'the Microsoft sign-in for {who} did not grant Mail.Send - sign in again on the Outlook card')
+        elif kind(c) != 'outlook' and not _hosts(c)[1]:
+            why.append(f'no SMTP host is configured for {who} (its card)')
+        else: return ''                          # one card that can send is enough
+    return '; '.join(why)
+
+
 def can_reply(store, channel) -> bool:
     """May a reply be drafted and sent on this channel at all?
 
@@ -150,6 +181,7 @@ def can_reply(store, channel) -> bool:
     if not ch or ch in NEVER: return False
     if ch in SENDABLE and ch not in reply_channels(store): return False
     if ch == 'github': return store.github_replies_ok()
+    if ch == 'email' and send_probe(store, ch): return False
     return True
 
 
@@ -162,6 +194,7 @@ def send_block(store, channel) -> str:
     if ch in NEVER: return f'{ch} items cannot be replied to from here'
     if ch == 'github': return '' if store.github_replies_ok() else 'GitHub replies are off (GitHub card)'
     if ch in SENDABLE and ch not in reply_channels(store): return f'replies are off for {ch} (Settings → Replies)'
+    if ch == 'email': return send_probe(store, ch)
     return ''
 
 

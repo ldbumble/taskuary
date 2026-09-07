@@ -321,6 +321,16 @@ def _can_send(channel, has_message=True, gh_ok=None) -> bool:
     return outbound.can_reply(store, channel)
 
 
+def _send_state(memo: dict, channel, has_message=True) -> tuple:
+    """(CanSend, SendBlock) for one channel, answered once per request. The email probe reads the
+    connector cards (PW-143) and a 500-row Timeline must not read them 500 times."""
+    k = (str(channel or '').lower(), bool(has_message))
+    if k not in memo:
+        ok = _can_send(channel, has_message)
+        memo[k] = (ok, '' if ok else _send_block(channel, has_message))
+    return memo[k]
+
+
 @app.get('/api/feed')
 def feed(limit: int = 100, offset: int = 0, pending_only: bool = False, channel: str = None, source: str = None,
          request: Request = None):
@@ -330,10 +340,9 @@ def feed(limit: int = 100, offset: int = 0, pending_only: bool = False, channel:
     if request is not None and request.headers.get('if-none-match') == tag:
         return Response(status_code=304, headers={'ETag': tag, 'Cache-Control': 'no-cache'})
     rows = store.feed(min(limit, 500), days, pending_only, channel, max(offset, 0), source)
-    gh_ok = store.github_replies_ok()
+    memo = {}
     for r in rows:
-        r['CanSend'] = _can_send(r.get('Channel'), True, gh_ok)
-        r['SendBlock'] = '' if r['CanSend'] else _send_block(r.get('Channel'), True)
+        r['CanSend'], r['SendBlock'] = _send_state(memo, r.get('Channel'), True)
     return JSONResponse({'data': rows}, headers={'ETag': tag, 'Cache-Control': 'no-cache'})
 
 
@@ -2089,12 +2098,13 @@ def get_run(run_id: int):
 def reviews(status: str = None):
     from .verdicts import context_moved
     rows = store.list_reviews(status)
-    gh_ok = store.github_replies_ok()
+    memo = {}
     for r in rows:
         try: special = json.loads(r.get('Deliver') or '{}').get('kind') == 'zoho_invoice'
         except (TypeError, ValueError): special = False
-        r['CanSend'] = special or _can_send(r.get('Channel'), bool(r.get('MessageId')), gh_ok)
-        r['SendBlock'] = '' if r['CanSend'] else _send_block(r.get('Channel'), bool(r.get('MessageId')))
+        ok, why = _send_state(memo, r.get('Channel'), bool(r.get('MessageId')))
+        r['CanSend'] = special or ok
+        r['SendBlock'] = '' if r['CanSend'] else why
         moved, latest = context_moved(store, r)          # material change only (PW-240), never a polling timestamp
         r['Stale'] = bool(moved)
         if r['Stale'] and latest:
@@ -3494,7 +3504,8 @@ def ms_poll(cid: int, body: dict):
     if not t.get('refresh_token'):
         return {'status': 'error', 'detail': 'Microsoft returned no refresh token - the offline_access scope was not granted'}
     who = msauth.me(t['access_token'])
-    cfg = {**f['cfg'], 'auth': 'user', 'account': who['account'], 'name': who['name']}
+    cfg = {**f['cfg'], 'auth': 'user', 'account': who['account'], 'name': who['name'],
+           **({'granted_scope': t['scope']} if t.get('scope') else {})}      # what was granted, for the send probe (PW-143)
     store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps(cfg), 'Secret': t['refresh_token'], 'Active': 1}, ACTOR)
     if who['account'] and not any(s['Channel'] == 'email' and (s['Address'] or '').lower() == who['account'].lower()
                                   for s in store.list_sources(active_only=False)):

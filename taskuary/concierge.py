@@ -712,7 +712,11 @@ def record_related(store, dock_tid: int, item: dict | None, role: str, text: str
     actor_type = DISCUSSION_USER_TYPE if role == 'user' else DISCUSSION_ASSISTANT_TYPE
     add = getattr(store, 'add_comment_once', store.add_comment)
     for task_tid in tids:
-        if store.get_task(task_tid): add(task_tid, actor, actor_type, redact(str(text or '')).strip())
+        if not store.get_task(task_tid): continue
+        # our words about it are not news about it: the task keeps the read it had (store.processing_own_words)
+        own = getattr(store, 'processing_own_words', None)
+        with (own(task_tid, actor) if own else nullcontext()):
+            add(task_tid, actor, actor_type, redact(str(text or '')).strip())
     return result
 
 

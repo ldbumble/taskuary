@@ -126,12 +126,6 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
     rows, coverage, counts = processing_all.compact_inventory(
         snapshot, query, include_excluded=include_read)
     by_id = {item['item_id']: item for item in snapshot['items']}
-    # an Assistant digest post is only the container for its ideas, which are cards of their own; showing
-    # both is the duplicate-Assistant regression of 2026-09-04, back on 2026-09-06 under the canonical roots
-    def wrapper(row):
-        shown = set(row['display_message_ids'])
-        return shown and all(funnel._assistant_wrapper(m) for m in by_id[row['item_id']]['view'].get('messages', []) if m['MessageId'] in shown)
-    rows = [row for row in rows if not wrapper(row)]
     states = store.funnel_states()
     cards = [card_for(store, by_id[row['item_id']], row, live_state, now, states) for row in rows]
     cards = [card for card in cards if include_read or card['unread']]

@@ -4423,7 +4423,7 @@ def _refresh_for_finish(_store, task_id: int, message_id: int) -> dict:
     return _refresh_chat_context(task_id=task_id, message_id=message_id)
 
 
-def _refresh_chat_context(task_id: int = None, message_id: int = None) -> dict:
+def _refresh_chat_context(task_id: int = None, message_id: int = None, grace: bool = False) -> dict:
     """Synchronize a live chat before its stored text is used to answer or act.
 
     The background clock keeps the screen lively; this is the correctness gate.  If an Assistant
@@ -4445,7 +4445,10 @@ def _refresh_chat_context(task_id: int = None, message_id: int = None) -> dict:
                   if c.get('Active') and str(c.get('Type') or '').lower() in types]
     if not types or not connectors:
         return {'polled': False, 'newer': False, 'before': before, 'after': before, 'added': 0, 'channel': channel}
-    if _recently_fetched(types, store):
+    # `grace`: the chat INTRODUCING an item may lean on a fetch from the last minute - a walk through ten
+    # items was ten provider round trips (2026-09-06). An action on it (a reply, an approval, an agent
+    # launch) always reads the provider first: that is the correctness gate this function exists for.
+    if grace and _recently_fetched(types, store):
         return {'polled': False, 'newer': False, 'before': before, 'after': before,
                 'added': 0, 'channel': channel, 'fresh': True}
     added = _poll_reports(0, what=f'refreshing {channel} context', only=types, wait=True)
@@ -4480,7 +4483,7 @@ def _refresh_items(items: list) -> dict:
         ch = str((m or {}).get('Channel') or it.get('channel') or '').lower()
         if not ch or ch in done: continue
         done.add(ch)
-        f = _refresh_chat_context(it.get('tid'), it.get('mid'))
+        f = _refresh_chat_context(it.get('tid'), it.get('mid'), grace=True)
         out['polled'] = out['polled'] or bool(f.get('polled')); out['newer'] = out['newer'] or bool(f.get('newer'))
         out['added'] += int(f.get('added') or 0)
     return out
@@ -4524,7 +4527,7 @@ def _refresh_chat_key(key: str = None, seen_mid: int = None) -> dict:
     from . import funnel
     item = funnel.next_item(store, key) or funnel.item_for_key(store, key)
     if not item: return {}
-    out = _refresh_chat_context(item.get('tid'), item.get('mid'))
+    out = _refresh_chat_context(item.get('tid'), item.get('mid'), grace=True)
     fresh = funnel.next_item(store, key) or funnel.item_for_key(store, key) or item
     after = _latest_context_message(fresh.get('tid'), fresh.get('mid'))
     # `stale` catches a background sync that landed before this request; seen_mid catches the

@@ -78,6 +78,23 @@ def test_shown_in_chat_is_read_and_leaves_unread_and_next(store):
     assert [i['key'] for i in still['items']] == [second['key']]
 
 
+def test_words_said_about_a_task_do_not_make_it_unread_again_but_an_agents_do(store):
+    """Next marked the task read at 21:12:45; the assistant's mirrored introduction landed as a comment
+    at 21:12:46 and the task was unread again (2026-09-06)."""
+    tid = store.create_task({'Title': 'User changes'}, 'fixture')
+    add(store, 'Please change the users', tid=tid, status='routed')
+    _, unread = both(store)
+    key = unread['items'][0]['key']
+    funnel.settle(store, key, 'surfaced', read=True)
+    with store.processing_own_words(tid, 'Taskuary'):
+        store.add_comment(tid, 'Taskuary', 'concierge_assistant', 'Your User changes task is still open.')
+    _, after = both(store)
+    assert after['items'] == [], 'the assistant talking about it is not news'
+    store.add_comment(tid, 'coder', 'agent', 'Finished: users changed, PR opened.')
+    _, news = both(store)
+    assert [i['key'] for i in news['items']] == [key], 'an agent reporting back IS news'
+
+
 def test_later_keeps_it_unread_until_its_time_then_it_comes_back(store):
     add(store, 'Sleep on it')
     _, unread = both(store)
@@ -117,9 +134,13 @@ def test_assistant_digest_post_does_not_duplicate_its_own_idea(store):
     store.set_ideas_message([idea['IdeaId']], mid)
     store.set_brief(mid, json.dumps({'ideas': [{'id': idea['IdeaId']}]}))
     add(store, 'A plain Assistant note', channel='assistant', status='feed')
-    _, unread = both(store)
+    all_rows, unread = both(store)
+    # All shows one row for it too - the owner saw both there as well (2026-09-06)
+    assert sorted(r['open_target']['kind'] for r in all_rows) == ['idea', 'message']
     kinds = sorted((i['kind'], i['title']) for i in unread['items'])
     assert kinds == [('fyi', 'A plain Assistant note'), ('idea', 'End of day checkup fired on its own')], kinds
+    # the one row that remains says who is talking - the owner saw "unknown" on it (2026-09-06)
+    assert next(i for i in unread['items'] if i['kind'] == 'idea')['who'] == 'Assistant'
 
 
 def test_fyi_summary_survives_refresh_but_is_dropped_when_its_source_changes(store):

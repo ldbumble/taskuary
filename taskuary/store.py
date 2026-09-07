@@ -1441,6 +1441,32 @@ class SQLiteStore:
             finally:
                 cur.close()
         self._poke('feed-changed')                 # Unread is a feed filter; remove/read it immediately
+    @contextlib.contextmanager
+    def processing_own_words(self, tid, by='owner'):
+        """Wrap a comment that mirrors the chat onto a task. Words said ABOUT an item are not news
+        about it: a task Next had just marked read came straight back as unread because the assistant's
+        own introduction changed its fingerprint one second later (the owner, 2026-09-06)."""
+        from . import processing_reads
+        from .processing_projection import processing_projection
+        def picture(cur):
+            row = cur.execute('''SELECT ItemId FROM processing_member WHERE EntityKind='task' AND LocalId=?
+                AND RetiredAt IS NULL''', (str(tid),)).fetchone()
+            return processing_projection(cur, self._processing_follow(cur, row['ItemId'])) if row else None
+        with self._processing_read() as cur:
+            version = processing_reads.active_version(cur)
+            before = picture(cur) if version else None
+            units_before = before['view']['processing_read']['units'] if before else []
+            was_read = bool(units_before) and all(u['read'] for u in units_before)
+        yield
+        if not was_read: return
+        with self.lock:
+            cur = self.cx.cursor(); cur.execute('BEGIN IMMEDIATE')
+            try:
+                after = picture(cur)
+                if after: processing_reads.record(cur, processing_reads.units(after['view']), version=version, at=_now(), by=by, origin='own_words')
+                self.cx.commit(); self._writes += 1
+            except BaseException: self.cx.rollback(); raise
+            finally: cur.close()
     def clear_funnel_state(self, key):
         """Forget one row's state entirely - it is new again. A new chat does this to an agent
         that is still waiting on you: shown once yesterday is not an answer."""

@@ -249,7 +249,10 @@ def compact_inventory(snapshot, query, *, include_excluded=False):
             tombstones += 1
             continue
         view = item['view']
-        candidates = [m for m in view.get('messages', []) if m.get('Status') not in HIDDEN_MESSAGES
+        # an Assistant digest post is only the container for its ideas, which are roots of their own; in both
+        # views it is not presented (the duplicate-Assistant regression of 2026-09-04, back on 2026-09-06)
+        from .funnel import _assistant_wrapper
+        candidates = [m for m in view.get('messages', []) if m.get('Status') not in HIDDEN_MESSAGES and not _assistant_wrapper(m)
                       and _matches(m.get('Channel'), m.get('SourceName'), query)
                       and _in_history(m.get('CreatedAt'), cutoff)]
         if (view.get('processing_read') or {}).get('active') and not include_excluded:
@@ -272,7 +275,8 @@ def compact_inventory(snapshot, query, *, include_excluded=False):
             id_field = {'task': 'TaskId', 'idea': 'IdeaId', 'review': 'ReviewId'}[kind]
             target = {'kind': kind, 'id': entity[id_field]}
             title = entity.get('Title') or entity.get('Subject') or entity.get('Text') or entity.get('Reason') or kind.title()
-            actor, status = entity.get('CreatedBy') or '', entity.get('Status') or ''
+            # an idea is the assistant's own word; idea rows carry no author field, and the fallback read "unknown"
+            actor, status = (entity.get('CreatedBy') or ('Assistant' if kind == 'idea' else '')), entity.get('Status') or ''
             preview = str(entity.get('Summary') or entity.get('Text') or entity.get('Reason') or '')[:400]
             category = 'todo' if kind == 'task' else kind
             legacy = {'Channel': channel, 'SourceName': source, 'Subject': str(title)[:240],

@@ -22,6 +22,24 @@ class RecentlyFetched(unittest.TestCase):
         server._QUICK_LAST.update(imap=time.time() - 5, teams=time.time() - 5)
         self.assertTrue(server._recently_fetched(['imap', 'teams']))
 
+    def test_grace_skips_the_poll_but_an_action_still_reads_the_provider(self):
+        from unittest import mock
+        from taskuary.store import MemoryStore
+        s = MemoryStore()
+        cid = s.get_connector_by_type('teams')['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Active': 1, 'ConfigJson': '{}'}, 'test')
+        tid = s.create_task({'Title': 'A chat'}, 'test')
+        mid = s.add_message({'ExternalId': 'x1', 'ConversationId': 'c1', 'TaskId': tid, 'Channel': 'teams', 'SourceName': 'teams',
+                             'FromName': 'Dana', 'FromEmail': '', 'Subject': 'hi', 'BodyText': 'hi', 'Status': 'routed',
+                             'SentAt': '2026-09-06 12:00:00'})
+        server._QUICK_LAST['teams'] = time.time() - 5
+        server._QUICK_LAST_STORE['teams'] = id(s)
+        with mock.patch.object(server, 'store', s), mock.patch.object(server, '_poll_reports', return_value=0) as poll:
+            intro = server._refresh_chat_context(task_id=tid, message_id=mid, grace=True)
+            self.assertFalse(poll.called); self.assertTrue(intro.get('fresh')); self.assertFalse(intro['polled'])
+            action = server._refresh_chat_context(task_id=tid, message_id=mid)
+            self.assertTrue(poll.called); self.assertTrue(action['polled'])
+
     def test_one_stale_type_makes_the_refresh_run(self):
         server._QUICK_LAST.update(imap=time.time() - 5, teams=time.time() - server.CONTEXT_FRESH_SECONDS - 1)
         self.assertFalse(server._recently_fetched(['imap', 'teams']))

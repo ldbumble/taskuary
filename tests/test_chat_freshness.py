@@ -102,5 +102,36 @@ class ChatFreshnessTests(unittest.TestCase):
             self.assertEqual(server._quick_due(), [])
 
 
+
+class ConcurrentSyncTests(unittest.TestCase):
+    """PW-056: the owner's yes is on the pile they were SHOWN. A line that lands while the turn is in
+    flight changes that pile, so the commit is refused and the client re-captures - the action never
+    lands on a picture nobody saw."""
+    def setUp(self): funnel.invalidate()
+
+    def _reserved(self, s):
+        from taskuary.funnel_selection import capture_selection
+        from taskuary.processing_navigation import fields, reserve
+        f = fields(s, capture_selection(s))          # the revision the client echoes is bound to the chat
+        return reserve(s, selection_revision=f['selection_revision'], expected_next_key=f['expected_next_key'],
+                       expected_next_members=f['expected_next_members'])
+
+    def test_a_sync_between_the_capture_and_the_commit_makes_the_action_stale(self):
+        from taskuary.processing_navigation import NavigationStale
+        chat = ChatFreshnessTests()
+        s, tid, _first, _rid = chat.thread()
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            held = self._reserved(s)
+            def landed(selected, guard, dock):
+                chat.add_later(s, tid); funnel.invalidate()          # the poll lands a newer line mid-turn
+                with guard(): return 'acted'
+            with self.assertRaises(NavigationStale) as e: held.run(landed)
+            self.assertIn('selection changed', e.exception.detail.get('reason') or '')   # the guard, not the door
+            self.assertTrue(e.exception.detail.get('retryable'))
+            quiet = self._reserved(s)
+            def unchanged(selected, guard, dock):
+                with guard(): return 'acted'
+            self.assertEqual(quiet.run(unchanged), 'acted')          # nothing moved, the same shape commits
+
 if __name__ == '__main__':
     unittest.main()

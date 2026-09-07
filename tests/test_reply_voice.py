@@ -14,9 +14,10 @@ the owner", SOUL.md's own "You work for **{owner}**") kept it there. So it wrote
 assistant would write and then signed somebody else's name to it.
 """
 import unittest
+from datetime import date
 from unittest import mock
 
-from taskuary import responder
+from taskuary import responder, triage
 from taskuary.store import MemoryStore
 
 OWNER = 'Uri J Whitfield'
@@ -94,6 +95,53 @@ class VoiceTests(unittest.TestCase):
     def test_a_finished_job_is_reported_as_the_writers_own_work(self):
         self.assertIn('YOU did this', responder.DONE)
 
+
+
+class WritingFeedbackTests(unittest.TestCase):
+    """PW-062: the two documents are separate, and a payload diff is the only way to prove it. What the
+    owner says about WRITING must appear in the next draft's payload; what triage learned about ROUTING
+    must not appear in it at all, while triage still reads it."""
+    def _store(self):
+        s = MemoryStore()
+        s.save_doc('soul', f'You work for **{OWNER}**. He runs finance systems.', 'owner')
+        s.save_doc('style', chr(10).join(['## Reply style', '', '- Two sentences, answer first.',
+                                        '- Say the number before the explanation.', '']), 'owner')
+        tid = s.create_task({'Title': 'Scheduling', 'Kind': 'reply'}, 'o')
+        s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'Times?', 'FromName': 'Meyy',
+                       'FromEmail': 'meyy@partner.example', 'ExternalId': 'v1',
+                       'BodyText': 'Can you suggest a few times next week?'})
+        return s, tid
+
+    NOTE = 'Never open with "I hope this finds you well" - answer in the first line.'
+
+    def test_a_writing_instruction_is_in_the_next_drafts_payload_and_is_the_whole_difference(self):
+        s, tid = self._store()
+        before = _capture(s, tid)
+        self.assertNotIn('I hope this finds you well', before['system'])
+        self.assertTrue(responder.style_feedback(s, self.NOTE))
+        after = _capture(s, tid)
+        self.assertIn(self.NOTE, after['system'])
+        self.assertEqual(before['user'], after['user'])                        # the thread it reads is untouched
+        was = set(before['system'].splitlines())
+        added = [ln for ln in after['system'].splitlines() if ln not in was and ln.strip()]
+        self.assertEqual([ln for ln in added if not ln.startswith('## ')], [f'- {date.today()}: {self.NOTE}'])
+        self.assertEqual(added[0], responder.OWNER_NOTES.strip())              # under Owner notes, outside the generated block
+
+    def test_a_triage_lesson_reaches_triage_and_never_the_reply_voice(self):
+        s, tid = self._store()
+        before = _capture(s, tid)
+        lesson = 'Invoices from vendor.example are always a task, never an FYI.'
+        s.save_doc('learned', '## Rules' + chr(10) * 2 + f'- {lesson}' + chr(10), 'learn')
+        after = _capture(s, tid)
+        self.assertEqual(before['system'], after['system'])                    # the reply voice did not move
+        self.assertNotIn(lesson, after['system'] + after['user'])
+        seen = {}
+        def llm(system, user, **kw):
+            seen['system'] = system
+            return '{"intent": "task", "reason": "x"}'
+        triage.classify_intent({'from_email': 'meyy@partner.example', 'subject': 'Times?', 'body': 'When?'},
+                               llm=llm, learned=s.doc('learned'))
+        self.assertIn(lesson, seen['system'])                                  # ...and triage still has it
 
 if __name__ == '__main__':
     unittest.main()

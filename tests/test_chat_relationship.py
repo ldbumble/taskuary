@@ -11,6 +11,7 @@ typed seconds after the last, and an answer arriving while an agent is live on t
 threads and tracker items are untouched: their identity does not reset at midnight.
 """
 import json, unittest
+from datetime import datetime
 from unittest import mock
 
 from taskuary import ingest, triage
@@ -110,6 +111,27 @@ class SameDayTests(unittest.TestCase):
         out = line(s, 'it failed at 3pm too', f'{YESTERDAY} 15:00:00', verdict(relationship='continues', related=[first['message_id']]))
         self.assertEqual((out['status'], out['task_id']), ('attached', first['task_id']))
 
+    def test_the_day_that_decides_is_the_local_day_the_timeline_stores(self):
+        """PW-035: a line carries the SENDER's zone. The calendar day that groups it is the local one the
+        timeline normalises it to (store.norm_stamp), never the provider's - otherwise a room's midnight
+        moves to whichever zone the last person to type happened to be in."""
+        from datetime import timedelta
+        from taskuary.store import norm_stamp
+        s = MemoryStore()
+        abroad = '2026-09-06T21:30:00+05:00'
+        first = line(s, 'can you look at the export?', abroad, verdict())
+        day = datetime.fromisoformat(norm_stamp(abroad)).date()
+        self.assertEqual(s.get_message(first['message_id'])['SentAt'][:10], day.isoformat())
+        seen = []
+        same = line(s, 'still failing', f'{day} 23:59:00', verdict(relationship='continues', related=[first['message_id']], seen=seen))
+        self.assertEqual((same['status'], same['task_id']), ('attached', first['task_id']))
+        self.assertIn(first['message_id'], [c['id'] for c in seen[0]['user']['same_day_lines']])
+        after = []
+        out = line(s, 'and again this morning', f'{day + timedelta(days=1)} 00:01:00',
+                   verdict(relationship='continues', related=[first['message_id']], seen=after))
+        self.assertEqual(after[0]['user'].get('same_day_lines', []), [])
+        self.assertNotEqual(out['task_id'], first['task_id'])
+
     def test_an_old_task_in_the_room_is_never_joined_on_the_room_id_alone(self):
         s = MemoryStore()
         old = line(s, 'the agent isnt working on my dashboard', '2026-08-20 09:00:00', verdict())
@@ -147,6 +169,18 @@ class MailAndTrackersAreNotResetAtMidnight(unittest.TestCase):
                                                              llm=lambda *a, **k: '{"intent": "task", "kind": "task", "why": "x"}')
         first = mail('m1', 'Can you look at the export?', f'{YESTERDAY} 14:00:00', 'Export')
         out = mail('m2', 'Any news on the export?', f'{TODAY} 09:00:00', 'Re: Export')
+        self.assertEqual((out['status'], out['task_id']), ('attached', first['task_id']))
+
+    def test_a_tracker_comment_the_next_day_still_joins_its_item(self):
+        """PW-035: an issue is not a chat room. Its identity is the item, so a comment the next morning is
+        the same piece of work - the midnight rule is the chat rule and must not reach trackers."""
+        s = MemoryStore()
+        brain = lambda *a, **k: '{"intent": "task", "kind": "task", "why": "the export job is failing"}'
+        tick = lambda ext, body, at: ingest_message(s, {'external_id': ext, 'channel': 'jira', 'from_name': 'Dana',
+                                                        'conversation_id': 'OPS-4471', 'subject': 'OPS-4471 Export job fails',
+                                                        'body': body, 'sent_at': at, 'source_name': 'jira'}, llm=brain)
+        first = tick('jira:OPS-4471:1', 'The nightly export fails on the vendor feed.', f'{YESTERDAY} 14:00:00')
+        out = tick('jira:OPS-4471:2', 'Still failing this morning - same stack trace.', f'{TODAY} 09:00:00')
         self.assertEqual((out['status'], out['task_id']), ('attached', first['task_id']))
 
     def test_the_separate_chat_classifier_is_gone(self):

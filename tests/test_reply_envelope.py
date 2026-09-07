@@ -96,6 +96,62 @@ class PinnedAndSentTests(unittest.TestCase):
         self.assertEqual(sent['body'], 'Attached - the numbers are final.\n\nBest,\nUri Nussbaum\nMFA Heritage')
 
 
+class PerConnectorEnvelopeTests(unittest.TestCase):
+    """PW-066: the approved envelope has to survive the LAST hop too. Both senders are exercised down
+    to the transport - the SMTP conversation and the Graph request body - because "to" and "cc" are
+    two different shapes there, and a cc that only reaches the header is delivered to nobody."""
+    def thread(self, ext):
+        s = store()
+        tid = s.create_task({'Title': 'August export', 'Kind': 'reply', 'Status': 'open', 'Priority': 'normal', 'Source': 'email'}, 'router')
+        mid = mail(s, tid, ext=ext)
+        rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'needs a reply'})
+        responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: 'Here it is.')
+        return s, s.get_message(mid), json.loads(s.get_review(rid)['Deliver'])
+
+    def test_the_imap_mailbox_puts_the_envelope_on_the_headers_and_in_the_smtp_conversation(self):
+        s, msg, env = self.thread('imap:99')
+        s.save_connector({'Type': 'imap', 'Name': 'Work mail', 'Active': 1, 'Secret': 'app-password',
+                          'ConfigJson': json.dumps({'address': 'uri@northwind.example', 'imap_host': 'imap.northwind.example',
+                                                    'smtp_host': 'smtp.northwind.example'})}, 'owner')
+        seen = {}
+        class FakeSMTP:
+            def __init__(self, host, port, timeout=None): seen.update(host=host, port=port)
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def starttls(self, context=None): pass
+            def login(self, user, pw): seen.update(user=user)
+            def sendmail(self, frm, rcpt, raw): seen.update(frm=frm, rcpt=list(rcpt), raw=raw)
+            sock = None
+        with mock.patch('smtplib.SMTP', FakeSMTP), mock.patch('taskuary.imapmail.verify_pin', lambda *a, **k: None):
+            out = outbound.reply_to_message(s, msg, 'Here it is.', to=env['to'], cc=env['cc'])
+        self.assertEqual((seen['host'], seen['user']), ('smtp.northwind.example', 'uri@northwind.example'))
+        self.assertEqual(seen['rcpt'], env['to'] + env['cc'])                    # the envelope, not just the header
+        self.assertIn('To: ' + ', '.join(env['to']), seen['raw'])
+        self.assertIn('Cc: ' + ', '.join(env['cc']), seen['raw'])
+        self.assertIn('In-Reply-To: AAQk-x', seen['raw'])
+        self.assertEqual((out['to'], out['cc']), (env['to'], env['cc']))
+
+    def test_the_graph_mailbox_puts_the_envelope_on_the_reply_request(self):
+        s, msg, env = self.thread('graph:AAMk-99')
+        sent = {}
+        class R:
+            status_code, text = 202, ''
+        with mock.patch.object(outbound, '_graph_token', return_value='tok'),              mock.patch.object(outbound.requests, 'post', side_effect=lambda url, **kw: sent.update(url=url, body=json.loads(kw['data'])) or R()):
+            out = outbound.reply_to_message(s, msg, 'Here it is.', to=env['to'], cc=env['cc'])
+        self.assertIn('/messages/AAMk-99/reply', sent['url'])
+        self.assertEqual([r['emailAddress']['address'] for r in sent['body']['message']['toRecipients']], env['to'])
+        self.assertEqual([r['emailAddress']['address'] for r in sent['body']['message']['ccRecipients']], env['cc'])
+        self.assertEqual((out['to'], out['cc']), (env['to'], env['cc']))
+
+    def test_a_cc_is_refused_on_a_chat_rather_than_dropped(self):
+        s = store()
+        mid = s.add_message({'ExternalId': 't9', 'ConversationId': 'teams:19:x', 'Channel': 'teams', 'SourceName': 'Mindy',
+                             'Subject': 'chat', 'FromName': 'Mindy', 'SentAt': '2026-09-06 09:00:00', 'BodyText': 'hi', 'Status': 'routed'})
+        with self.assertRaises(RuntimeError) as e:
+            outbound.reply_to_message(s, s.get_message(mid), 'ok', cc=['pat@vendor.example'])
+        self.assertIn('no cc', str(e.exception))
+
+
 class SignatureTests(unittest.TestCase):
     def thread(self, channel='email'):
         s = store()

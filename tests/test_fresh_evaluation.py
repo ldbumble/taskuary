@@ -173,5 +173,41 @@ class NoForcedVerdictTests(unittest.TestCase):
         self.assertFalse(hasattr(ingest, 'ruled_on_thread'))
 
 
+
+class ChainBeforeEvaluationTests(unittest.TestCase):
+    """PW-021: the arrival is merged into its chain BEFORE it is evaluated. The poll shows the new line
+    at once and completes the thread from the provider; the triage worker judges afterwards, so the model
+    reads the conversation rather than the one line that happened to land first."""
+    def test_the_coverage_row_is_complete_before_the_worker_judges_the_message(self):
+        from datetime import timedelta
+        from taskuary import chains, channels
+        from tests.test_email_chains import CONV, ME, FakeThreadGraph, gmail
+        from tests.test_mail_catchup import FakeGraph, T0, outlook_store
+        s, _sid = outlook_store()
+        out = s.get_connector_by_type('outlook')
+        s.save_connector({'ConnectorId': out['ConnectorId'], 'Roles': 'trigger'}, 't')     # a mailbox triage judges, not a feed
+        arrival = gmail(3, T0 + timedelta(minutes=3))
+        provider = FakeThreadGraph([gmail(i, T0 + timedelta(minutes=i)) for i in range(3)] + [arrival])
+        fake, seen = FakeGraph({'inbox': [arrival]}), {}
+        def llm(system, user, **kw):
+            seen.setdefault('coverage', chains.coverage(s, CONV, ME))
+            seen.setdefault('user', user)
+            return '{"intent": "fyi", "reason": "nothing to do"}'
+        with mock.patch.object(chains, 'list_ids_graph', provider.list_ids), mock.patch.object(chains, 'fetch_graph', provider.fetch), \
+             mock.patch.object(channels, 'graph_token', return_value='T'), mock.patch.object(channels, '_mail_msgs', fake), \
+             mock.patch.object(channels.requests, 'get', fake.history_get), \
+             mock.patch.object(channels, '_body', side_effect=lambda m: m['body']['content']), \
+             mock.patch.object(channels, '_addrs', return_value=[]):
+            with ingest.deferred():
+                channels.poll_channels(s, backfill_days=0)          # stores the arrival, then completes the chain
+            self.assertTrue(chains.coverage(s, CONV, ME)['complete'], 'the chain is completed by the poll, not by triage')
+            self.assertEqual(ingest.drain(s, llm=llm), 1)
+        self.assertTrue(seen['coverage']['complete'])                # ...and it was already complete when the model was asked
+        self.assertFalse(seen['coverage']['error'])
+        for i in range(3): self.assertIn(f'body {i}', seen['user'])  # the whole conversation, not the one line that landed
+        rows = s.thread_messages(CONV)
+        self.assertEqual([r['Status'] for r in rows[:3]], ['history'] * 3)
+        self.assertTrue(all(r['TaskId'] is None for r in rows[:3]))  # history creates nothing (PW-012)
+
 if __name__ == '__main__':
     unittest.main()

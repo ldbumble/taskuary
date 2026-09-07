@@ -22,6 +22,9 @@ ASSISTANT_TYPE = 'assistant_agent'
 # Assistant workspace without a data migration.
 GENERAL_KINDS = {'general', 'research', 'marketing', 'triage', 'assistant'}
 DOCK_TAG = 'assistant:dock'
+SETUP_REF = 'assistant:setup'          # a walkthrough opened from the Assistant (concierge.setup_task)
+SETUP_SKILL = Path(__file__).parent / 'skills' / 'taskuary-setup' / 'SKILL.md'
+SETUP_SKILL_CHARS = 8_000
 SCROLLBACK = 200_000
 MAX_CONTEXT = 24_000
 MAX_REPLY_TOKENS = 2_000
@@ -297,6 +300,15 @@ def _turn_only(store, tid: int, text: str) -> str:
     return f'{task_ref(tid)} - the owner says:\n\n{_cut(text, 8_000)}'
 
 
+def setup_skill() -> str:
+    """The product's own setup procedure, shipped as a document so it can be corrected without a release of
+    new branching code (skills/taskuary-setup/SKILL.md, the soul-interview pattern)."""
+    try: return SETUP_SKILL.read_text(encoding='utf-8')
+    except OSError as e:
+        logger.warning(f'the setup skill could not be read: {e}')
+        return ''
+
+
 def _prompt(store, tid: int) -> tuple[str, str]:
     detail = store.task_detail(tid) or {}
     task = detail.get('task') or {}
@@ -326,6 +338,11 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     from . import playbooks as _pbk
     pbk = _pbk.seed_block(task)
     if pbk: system += '\n\nPROCEDURE FOR THIS JOB\n' + _cut(pbk, 3_000)
+    # A setup walkthrough's procedure is a shipped SKILL the worker reads and adapts, never dialogue
+    # branching in here or a second assistant system prompt competing with this one (PW-190). It rides
+    # in the same slot a playbook does, so one task-brief structure serves both.
+    if str(task.get('SourceRef') or '') == SETUP_REF:
+        system += '\n\nPROCEDURE FOR THIS JOB\n' + _cut(setup_skill(), SETUP_SKILL_CHARS)
     if dock:
         system += (
             "\n\nHOVERING GUIDE\nThis conversation is the owner's always-available Taskuary guide. "
@@ -877,7 +894,7 @@ def start_session(store, tid: int, connector_id=None, model=None, actor='owner',
     # A setup walkthrough needs an operator, not a coder in a checkout. If the dock is normally
     # backed by an API-only chat model, choose the first configured CLI for this task so it can
     # actually drive the embedded browser. An explicit provider choice still wins.
-    if task.get('SourceRef') == 'assistant:setup' and connector_id is None and not model and not pick:
+    if task.get('SourceRef') == SETUP_REF and connector_id is None and not model and not pick:
         tool_cli = next((o for o in provider_options(store) if o.get('type') == 'cli'), None)
         if tool_cli: pick = tool_cli['pick']
     existing = session_for(tid)

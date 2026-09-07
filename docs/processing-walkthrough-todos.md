@@ -1080,6 +1080,10 @@ AI coding CLI setup, then hands off to assistant-led system setup. Pending work.
   and readiness validation. Clearly explain missing prerequisites; do not strand
   the user in a chat with no usable AI. Move the remaining setup walkthrough,
   including generating a draft reply-writing style, into the assistant.
+  Note (2026-09-06, Stream D): still open. The setup skill (PW-190) and the header entry
+  (PW-189) are in; cutting SetupWizard.jsx (599 lines) back to name + CLI readiness is not,
+  because which of its steps move into the assistant and which stay in first run is the
+  owner's call. Nothing was removed from the wizard, so no install lost a step.
 - [ ] <a id="pw-189"></a>**PW-189** Add a discoverable system-setup walkthrough entry point at the top Assistant
   button/navigation area, available after onboarding as well as during first run.
   It starts an AI-led setup conversation, not a separate hardcoded wizard or
@@ -1093,12 +1097,27 @@ AI coding CLI setup, then hands off to assistant-led system setup. Pending work.
   actions. Draft style generation is a preview; show the proposed document and
   confirm before saving/replacing it. Preserve existing customized settings/docs
   and use secure credential/OAuth controls rather than collecting secrets in chat.
+  Note (2026-09-06, Stream D): still open. The shipped skill tells the walkthrough to use the
+  Connections cards, the Reports composer and the Docs screens and never to take a secret in
+  chat, but STYLE.md generation is still the wizard's own step; moving it into the assistant
+  with a preview-and-confirm before it replaces a personalized document is unbuilt and needs
+  the owner's decision alongside PW-188.
 - [ ] <a id="pw-192"></a>**PW-192** Support resuming incomplete setup and revisiting individual setup areas
   without rerunning completed steps or creating duplicate resources. Display
   actual verified readiness and remaining work, not claimed completion from prose.
+  Note (2026-09-06, Stream D): still open. The skill's resume rules (re-read /api/setup, never
+  rerun a done step, never create a duplicate connector or report, preserve what the owner
+  wrote) are procedure the worker reads. The state they read is already computed from real
+  configuration, but nothing yet enforces those rules in code, and revisiting a single area
+  has no entry of its own.
 - [ ] <a id="pw-193"></a>**PW-193** Test first-run name/CLI handoff, missing CLI readiness, top-level setup entry,
   AI-guided clarification, skill use, draft-style preview/confirmation, preservation
   of user edits, resume/cancel, and no unintended worker dispatch or duplicate setup.
+  Note (2026-09-06, Stream D): still open. `tests/test_setup_skill.py` and
+  `website/test/setupEntry.test.mjs` cover the shipped skill reaching the walkthrough's prompt
+  and the top-level entry. First-run name/CLI handoff, missing-CLI readiness, draft-style
+  preview and confirmation, preservation of user edits, resume and cancel, and no unintended
+  worker dispatch wait on PW-188/191/192 being decided and built.
 
 ## Direct report and connection setup through the assistant
 

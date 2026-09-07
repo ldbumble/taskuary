@@ -829,6 +829,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         <Box sx={{ width: 30, height: 30, borderRadius: 2, background: "linear-gradient(90deg, #55697a, #7d9a7c)", display: "grid", placeItems: "center", flexShrink: 0 }}><TaskuaryMark size={22} /></Box>
         <div className="who" style={{ minWidth: 0 }}><b>Taskuary</b><span>{old ? `An earlier chat · ${fmtDateTime(old.at)}` : resetting ? "new chat" : !pile ? "Loading your items…" : statusLine(items, busy)}</span></div>
         <div className="grow" />
+        {/* Setting Taskuary up is not a first-run-only wizard (PW-189): the entry stays on the header, and it
+            opens the same AI-led walk-through in THIS conversation - nothing is navigated away from, and the
+            click carries no phrase for anything to interpret. */}
+        <Tooltip title="Walk through setting Taskuary up — the AI brain, where work arrives, your documents and reports">
+          <button type="button" className="tq-chip tq-phone-hide" disabled={busy || resetting} onClick={setup}>Set up Taskuary</button></Tooltip>
         <StageMode mode={stageMode} setMode={setStageMode} />
         <Tooltip title="The Timeline"><IconButton size="small" onClick={() => setRailOpen(true)} sx={{ display: { xs: "inline-flex", md: "none" } }}><ViewSidebarIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
         <Tooltip title={speakOnState ? "Reading replies aloud — click to stop" : "Read replies aloud"}><IconButton size="small" className="tq-phone-hide" onClick={toggleSpeak}>{speakOnState ? <VolumeUpIcon sx={{ fontSize: 18, color: "#526b53" }} /> : <VolumeOffIcon sx={{ fontSize: 18, color: DIM }} />}</IconButton></Tooltip>

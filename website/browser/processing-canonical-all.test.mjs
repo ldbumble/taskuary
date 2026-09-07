@@ -282,6 +282,10 @@ test("canonical All renders every root once with truthful details and frozen pag
   await page.waitForFunction((itemId) => [...document.querySelectorAll("[data-processing-item]")]
     .some((node) => node.dataset.processingItem === itemId), { timeout: 10000 }, seed.standalone.idea.item_id);
 
+  // Hold the disposable fixture's poll lock while checking the frozen cursor chain. On a slower
+  // CI runner, a scheduled demo sync can otherwise start a legitimate fresh lease midway through
+  // this assertion and make the intentionally silent arrival visible before the explicit emit.
+  await request(harness, "/api/fixture/processing/sync-phase", "POST", { phase: "fetching" });
   const arrival = await request(harness, "/api/fixture/processing/canonical-arrival", "POST", { emit: false });
   // The API count includes the single calendar-prep root. FeedView deliberately nests that row
   // beneath its calendar event instead of rendering it a second time in the rail.
@@ -294,6 +298,7 @@ test("canonical All renders every root once with truthful details and frozen pag
   assert.ok(traffic.some(({ path, search }) => path === "/api/processing/all" && new URLSearchParams(search).has("cursor")),
     "the rendered rail must request an opaque continuation page");
 
+  await request(harness, "/api/fixture/processing/sync-phase", "POST", { phase: "idle" });
   await request(harness, "/api/fixture/processing/canonical-emit", "POST");
   await page.waitForFunction((itemId) => [...document.querySelectorAll("[data-processing-item]")]
     .some((node) => node.dataset.processingItem === itemId), { timeout: 10000 }, arrival.item_id);

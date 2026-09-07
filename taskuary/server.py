@@ -2772,8 +2772,11 @@ async def concierge_stream(body: ConciergeStreamBody):
         try:
             # the item first, then its source (PW-050): a named item refreshes itself; Next without a key refreshes
             # what it is about to surface, every channel of an FYI batch once, and re-picks if the pile moved
-            if body.key: freshness = _refresh_chat_key(body.key, body.context_mid)
-            elif body.mode == 'next' and not reservation: freshness = _refresh_next_selection(body)
+            started = []
+            def fetched(n):                      # once per turn, as the new lines land - the result line follows
+                if not started: started.append(n); put({'type': 'context_update', 'say': RETRIAGE_STARTED, 'stage': 'started', 'new': n})
+            if body.key: freshness = _refresh_chat_key(body.key, body.context_mid, on_fetched=fetched)
+            elif body.mode == 'next' and not reservation: freshness = _refresh_next_selection(body, on_fetched=fetched)
             else: freshness = {}
             if freshness.get('polled'):
                 put({'type': 'tool_call', 'name': 'sync_messages',
@@ -4434,7 +4437,7 @@ def _refresh_for_finish(_store, task_id: int, message_id: int) -> dict:
     return _refresh_chat_context(task_id=task_id, message_id=message_id)
 
 
-def _refresh_chat_context(task_id: int = None, message_id: int = None, grace: bool = False) -> dict:
+def _refresh_chat_context(task_id: int = None, message_id: int = None, grace: bool = False, on_fetched=None) -> dict:
     """Synchronize a live chat before its stored text is used to answer or act.
 
     The background clock keeps the screen lively; this is the correctness gate.  If an Assistant
@@ -4462,7 +4465,7 @@ def _refresh_chat_context(task_id: int = None, message_id: int = None, grace: bo
     if grace and _recently_fetched(types, store):
         return {'polled': False, 'newer': False, 'before': before, 'after': before,
                 'added': 0, 'channel': channel, 'fresh': True}
-    added = _poll_reports(0, what=f'refreshing {channel} context', only=types, wait=True)
+    added = _poll_reports(0, what=f'refreshing {channel} context', only=types, wait=True, on_fetched=on_fetched)
     if added is False:
         raise RuntimeError('messages are still syncing; I did not use stale chat context - try again in a moment')
     failed = [store.get_connector(c['ConnectorId']) for c in connectors]
@@ -4483,9 +4486,11 @@ _coder_mod.REFRESH = _refresh_for_finish
 
 
 _NOTICED = {}      # funnel key -> the message-set revision the owner was last told about (PW-052: once per revision)
+# said the moment new lines land on the item under discussion, before their triage result (PW-052/057)
+RETRIAGE_STARTED = "New messages came in on this conversation. I'm sending it through triage again before we continue."
 
 
-def _refresh_items(items: list) -> dict:
+def _refresh_items(items: list, on_fetched=None) -> dict:
     """Refresh the sources behind these items - once per channel, not once per item (an FYI batch of
     four Teams lines is one Teams read). Returns the merged freshness."""
     out, done = {'polled': False, 'newer': False, 'added': 0}, set()
@@ -4494,13 +4499,13 @@ def _refresh_items(items: list) -> dict:
         ch = str((m or {}).get('Channel') or it.get('channel') or '').lower()
         if not ch or ch in done: continue
         done.add(ch)
-        f = _refresh_chat_context(it.get('tid'), it.get('mid'), grace=True)
+        f = _refresh_chat_context(it.get('tid'), it.get('mid'), grace=True, on_fetched=on_fetched)
         out['polled'] = out['polled'] or bool(f.get('polled')); out['newer'] = out['newer'] or bool(f.get('newer'))
         out['added'] += int(f.get('added') or 0)
     return out
 
 
-def _refresh_next_selection(body) -> dict:
+def _refresh_next_selection(body, on_fetched=None) -> dict:
     """Next without a key (PW-050): pick what the walk would surface, refresh THAT item's source (every
     channel of an FYI batch, once), and re-pick when the refresh moved the pile - so the assistant and
     Current/Next speak about the same, current item. Rebuilding the pile from the database alone is not a
@@ -4509,7 +4514,7 @@ def _refresh_next_selection(body) -> dict:
     item = funnel.next_item(store, None, body.only, body.include_surfaced, body.exclude)
     if not item: return {'polled': False, 'newer': False, 'item': None}
     members = funnel.fyi_batch(store, item) if item.get('lane') == 'fyi' else [item]
-    f = _refresh_items(members)
+    f = _refresh_items(members, on_fetched)
     if f.get('newer'):
         from . import funnel as _f
         _f.invalidate()
@@ -4532,13 +4537,13 @@ def _notice_once(freshness: dict) -> str | None:
     return _context_update_line(freshness)
 
 
-def _refresh_chat_key(key: str = None, seen_mid: int = None) -> dict:
+def _refresh_chat_key(key: str = None, seen_mid: int = None, on_fetched=None) -> dict:
     """Refresh the item held by the Assistant and compare it with what the browser saw."""
     if not key: return {}
     from . import funnel
     item = funnel.next_item(store, key) or funnel.item_for_key(store, key)
     if not item: return {}
-    out = _refresh_chat_context(item.get('tid'), item.get('mid'), grace=True)
+    out = _refresh_chat_context(item.get('tid'), item.get('mid'), grace=True, on_fetched=on_fetched)
     fresh = funnel.next_item(store, key) or funnel.item_for_key(store, key) or item
     after = _latest_context_message(fresh.get('tid'), fresh.get('mid'))
     # `stale` catches a background sync that landed before this request; seen_mid catches the
@@ -4646,10 +4651,10 @@ def _quick_due() -> list:
     return due
 
 def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool = False,
-                  only=None, wait: bool = False):
+                  only=None, wait: bool = False, on_fetched=None):
     """The full lane; `only` hands the call to the chat lane (_poll_quick) instead."""
     if only is not None:
-        return _poll_quick(only, what, wait, timer=bool(getattr(_QUICK_TIMER, 'active', False)))
+        return _poll_quick(only, what, wait, timer=bool(getattr(_QUICK_TIMER, 'active', False)), on_fetched=on_fetched)
     target_store = store                 # a test or shutdown cannot retarget work already started
     # one full poll at a time, enforced by a lock instead of the old 10-minute timestamp guard: a
     # slow catch-up (CLI triage over a 3-day backfill) legitimately outlives 10 minutes, so
@@ -4728,7 +4733,7 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
         finally: _POLL_BUSY.release()
 
 
-def _poll_quick(only, what: str = 'syncing', wait: bool = False, timer: bool = False):
+def _poll_quick(only, what: str = 'syncing', wait: bool = False, timer: bool = False, on_fetched=None):
     """The chat lane: read ONLY these connector types, put their lines first on the one ordered
     drain worker, and release the fetch clock - no CI, no reports.
 
@@ -4764,6 +4769,11 @@ def _poll_quick(only, what: str = 'syncing', wait: bool = False, timer: bool = F
                         _status_progress(target_store, status, f'{what} · reading {kind}' + (f' · {so_far} in so far' if so_far else ''))
                     with ingest_mod.deferred():
                         added = poll_channels(target_store, 0, progress=_say, only=types)
+                    # new lines are announced the moment they LAND (PW-052): the caller says retriage started,
+                    # then waits below for the result - the owner is never shown the result as the first word
+                    if on_fetched and added:
+                        try: on_fetched(int(added))
+                        except Exception as e: logger.warning(f'retriage notice failed: {e}')
                     ticket = _drain_worker(target_store).submit(fresh=fresh_channels, only_fresh=True)
                 except Exception as e:
                     logger.warning(f"chat poll failed ({', '.join(types)}): {e}")

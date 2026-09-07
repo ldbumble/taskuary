@@ -70,6 +70,27 @@ class ChatFreshnessTests(unittest.TestCase):
         self.assertEqual(poll.call_args.kwargs['only'], ['teams'])
         self.assertTrue(poll.call_args.kwargs['wait'])
 
+    def test_the_owner_hears_that_retriage_started_when_the_lines_land_not_after_their_triage(self):
+        """PW-052/057: the notice used to be built after the poll had waited for triage, so the owner heard the
+        RESULT and never that a re-evaluation had begun. The fetch now reports its new lines the moment they
+        land, before the drain wait; the existing result line follows."""
+        s, tid, first, _rid = self.thread()
+        cid = s.get_connector_by_type('teams')['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Active': 1, 'ConfigJson': '{}'}, 'test')
+        heard, order = [], []
+        def poll(*a, **k):
+            order.append('fetched'); k['on_fetched'](2)
+            order.append('drained'); self.add_later(s, tid); return 2
+        with mock.patch.object(server, 'store', s), mock.patch.object(server, '_poll_reports', side_effect=poll):
+            got = server._refresh_chat_context(task_id=tid, message_id=first, on_fetched=lambda n: heard.append((n, list(order))))
+        self.assertEqual(heard, [(2, ['fetched'])], 'told once, with the count, before the drain')
+        self.assertTrue(got['newer'])
+        self.assertIn('sending it through triage again', server.RETRIAGE_STARTED)
+        heard.clear()
+        with mock.patch.object(server, 'store', s), mock.patch.object(server, '_poll_reports', side_effect=lambda *a, **k: 0):
+            server._refresh_chat_context(task_id=tid, message_id=first, on_fetched=lambda n: heard.append(n))
+        self.assertEqual(heard, [], 'nothing landed, nothing said')
+
     def test_chat_connectors_default_to_fast_polling(self):
         s = MemoryStore()
         cid = s.get_connector_by_type('teams')['ConnectorId']

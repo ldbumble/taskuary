@@ -65,10 +65,18 @@ test("level off overrides a working setup", () => {
   assert.match(st.text, /Pushes are off/);
 });
 
-test("WhatsApp guide can listen while push alerts are off", () => {
+test("the assistant can listen in its chat while push alerts are off", () => {
   const st = notifyState([withAssistant({ Name: "WhatsApp" })], "off", false, true);
   assert.equal(st.kind, "pinging");
-  assert.match(st.text, /WhatsApp guide is listening/);
+  assert.match(st.text, /the assistant is listening/);
+});
+
+test("a Telegram Assistant chat counts as much as a WhatsApp one", () => {
+  const tg = conn({ Type: "telegram", Name: "Telegram", Roles: "trigger,tool",
+    ConfigJson: JSON.stringify({ assistant_chat: "900100" }) });
+  const st = notifyState([tg], "off", false, true);
+  assert.equal(st.kind, "pinging");
+  assert.match(st.text, /Telegram . 900100/);
 });
 
 test("connecting the WhatsApp Assistant does not turn on ordinary notifications", () => {
@@ -80,7 +88,7 @@ test("connecting the WhatsApp Assistant does not turn on ordinary notifications"
 
 test("assistant chat asks specifically for WhatsApp when only Teams is named", () => {
   const st = notifyState([withChat({ Type: "teams", Name: "Teams" })], "needs_me", false, true);
-  assert.match(st.text, /assistant chat needs a private WhatsApp self-chat/);
+  assert.match(st.text, /the assistant needs a private WhatsApp or Telegram chat/);
 });
 
 test("nothing configured at all names the three channels to try", () => {

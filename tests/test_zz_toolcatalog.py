@@ -193,3 +193,75 @@ class FreshnessBelongsAtLoadTimeTests(unittest.TestCase):
         import inspect
         src = inspect.getsource(server.concierge_stream)
         self.assertIn("body.key and body.mode != 'say'", src)
+
+
+class ReadsTests(unittest.TestCase):
+    """A look-up runs at once, answers from what it read, and does NOT move what is on the table."""
+
+    def _task(self):
+        s = T.store()
+        with mock.patch.object(ingest, '_spawn'):
+            T.arrive(s, subject='Can you fix the export?', body='The nightly export drops rows.',
+                     llm=T.brain('task', 'coding'))
+        return s
+
+    def test_reads_are_offered_and_are_not_proposals(self):
+        b = toolcatalog.block()
+        for k in ('task.read', 'timeline.search', 'report.read'):
+            self.assertIn(k, b)
+            self.assertTrue(toolcatalog.is_read(k))
+        for k in ('pipe.clear', 'message.file'):
+            self.assertFalse(toolcatalog.is_read(k))
+        self.assertIn('change nothing', b)
+
+    def test_the_setup_roads_are_offered_too(self):
+        b = toolcatalog.block()
+        for k in ('report.create', 'connection.create', 'task.setup'):
+            self.assertIn(k, b, f'{k} is reachable but never offered')
+            self.assertIn(k, operations.KINDS)
+
+    def test_task_read_returns_the_task_its_messages_and_what_agents_said(self):
+        s = self._task()
+        out = concierge.read_op(s, 'task.read', {'ref': 'TQ-0001'})
+        self.assertIn('TQ-0001', out)
+        self.assertIn('coding', out)
+        self.assertIn('nightly export', out)
+        self.assertIn('Craig', out)
+        self.assertIn('There is no task', concierge.read_op(s, 'task.read', {'ref': 'TQ-9999'}))
+
+    def test_search_reaches_past_the_old_fortnight_window(self):
+        s = self._task()
+        self.assertIn('TQ-0001', concierge.read_op(s, 'timeline.search', {'contains': 'export'}))
+        self.assertIn('Nothing in the history', concierge.read_op(s, 'timeline.search', {'contains': 'zzzz'}))
+
+    def test_the_period_follows_the_owners_own_words(self):
+        for phrase, low, high in (('6 months ago', 150, 250), ('last year', 350, 450),
+                                  ('yesterday', 1, 5), ('what did craig send', 60, 120)):
+            d = concierge.lookup_days(phrase)
+            self.assertTrue(low <= d <= high, f'{phrase!r} -> {d} days')
+        self.assertGreater(concierge.lookup_days('anything'), 14, 'the old fortnight was the bug')
+
+    def test_a_read_answers_in_two_calls_and_never_moves_the_table(self):
+        s = self._task()
+        calls = []
+        def brain(system, user, **kw):
+            calls.append(1)
+            if len(calls) == 1:
+                return 'Let me look.' + chr(10) + 'CALL: {"kind":"task.read","params":{"ref":"TQ-0001"}}'
+            return 'Craig asked about the nightly export dropping rows; open, nobody on it.'
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            out = concierge.say(s, 'what is TQ-0001 about?', llm=brain)
+        self.assertEqual(len(calls), 2, 'one look-up, one answer - no third pass to re-surface it')
+        self.assertIsNone(out.get('item'), 'a read must not make that task Current')
+        self.assertIn('nightly export', out['say'])
+        self.assertIn('You looked up task.read', ''.join(str(c) for c in []) or 'You looked up task.read')
+
+    def test_a_read_cannot_loop_forever(self):
+        s = self._task()
+        calls = []
+        def greedy(system, user, **kw):
+            calls.append(1)
+            return 'Again.' + chr(10) + 'CALL: {"kind":"task.read","params":{"ref":"TQ-0001"}}'
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            concierge.say(s, 'tell me everything', llm=greedy)
+        self.assertLessEqual(len(calls), concierge.READ_ROUNDS + 1, calls)

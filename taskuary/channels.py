@@ -1072,9 +1072,8 @@ def _poll_jobs(store, only=None):
         # polled - EXCEPT github, where the per-repo issue/PR pickers carry the intent: two
         # switches where one reads as enough was a trap (a repo set to "PRs: tasks" on a
         # tool-only card, a Sync that pulled nothing, and no error anywhere).
-        phone_guide = (c['Type'] == 'whatsapp'
-                       and store.get_settings().get('phone_assistant') == '1'
-                       and bool(_cfg(c).get('assistant_chat') or _cfg(c).get('notify_chat')))
+        from . import remote_assistant
+        phone_guide = remote_assistant.polls(store, c)      # the card carries the Assistant chat: read it regardless
         if (not roles & {'trigger', 'feed'} and not phone_guide
                 and not (c['Type'] == 'github' and _gh_explicit(store))
                 and not (c['Type'] in CLOUD and _cloud_explicit(store, CH2SRC[c['Type']]))): continue

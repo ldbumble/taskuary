@@ -2654,10 +2654,36 @@ def concierge_state():
     model = str(store.get_settings().get(concierge.MODEL_KEY) or '').strip() or (chosen or {}).get('model') or ''
     if pick.startswith('cli:') and not str(store.get_settings().get(concierge.MODEL_KEY) or '').strip():
         model = concierge.LIGHT_DEFAULT.get(re.split(r'[\\/]', str((chosen or {}).get('label') or pick[4:])).pop().split(' ')[0].lower(), model) or model
+    from . import remote_assistant
     return {'task': task, 'ref': task_ref(task['TaskId']), 'messages': concierge.history(store, task['TaskId']),
             # the persisted Current, validated against the pile - never the last card of the history (PW-162)
             'current': concierge.restore_current(store, task['TaskId']),
-            'providers': options, 'pick': pick, 'provider': (chosen or {}).get('label') or pick, 'model': model}
+            'providers': options, 'pick': pick, 'provider': (chosen or {}).get('label') or pick, 'model': model,
+            # the chats this walk can be handed to, and the one it is in right now
+            'doorways': remote_assistant.doorways(store), 'handoff': remote_assistant.handoff(store)}
+
+class HandoffBody(BaseModel): channel: str
+
+def _hands_off():
+    """Refuse a desktop turn while the walk is in a chat. Two screens answering the same item is how
+    the same mail gets replied to twice - the tab locks itself, and this is the same rule in the API."""
+    from . import remote_assistant
+    h = remote_assistant.handoff(store)
+    if h: raise HTTPException(409, f"the walk is in {remote_assistant.LABELS[h['channel']]} - take it back here first")
+
+@app.post('/api/concierge/handoff')
+def concierge_handoff(body: HandoffBody):
+    """Send the walk to a chat the owner already has connected: it says hello there, and the tab locks."""
+    from . import remote_assistant
+    try: return remote_assistant.start_handoff(store, body.channel, ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+    except RuntimeError as e: raise HTTPException(502, str(e))       # the bridge or the bot could not be reached
+
+@app.post('/api/concierge/handoff/end')
+def concierge_handoff_end():
+    """Take it back: the chat is told the walk is over there, and the desktop is its own again."""
+    from . import remote_assistant
+    return remote_assistant.end_handoff(store, ACTOR)
 
 class ConciergeAiBody(BaseModel): pick: str | None = None; model: str | None = None
 
@@ -2783,6 +2809,7 @@ async def concierge_stream(body: ConciergeStreamBody):
     from . import concierge
     from .processing_navigation import NavigationStale
     from .funnel_selection import SelectionUnavailable
+    _hands_off()                        # the walk is in a chat: the tab is locked and so is its road
     admission = asyncio.create_task(asyncio.to_thread(_navigation_reservation, body))
     try:
         reservation = await asyncio.shield(admission)
@@ -2891,6 +2918,7 @@ def concierge_say(body: ConciergeSayBody):
         #
         # Nothing is lost. The act boundary guards itself: operations.propose pins ContextRevision and
         # execute refuses a moved one (409), and verdicts.decide re-checks before a reply can leave.
+        _hands_off()
         return concierge.say(store, body.text, body.key, actor=ACTOR)
     except ValueError as e: raise HTTPException(422, str(e))
 

@@ -19,8 +19,8 @@ Cards are chosen by CODE from the item's kind, never by the model. The model may
 multiple choice at the end of a line (OPTIONS: a | b | c) when a decision has clear choices and
 no button covers it; the choice comes back as the owner's next words.
 """
-import json, re, threading
-from contextlib import nullcontext
+import contextvars, json, re, threading
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timedelta
 from loguru import logger
 
@@ -30,6 +30,8 @@ from . import operations
 from .store import task_ref
 
 MAX_TOKENS, TURNS, FACT_CHARS = 380, 10, 1_600
+READ_ROUNDS = 2          # a look-up may lead to one more; never an open-ended crawl
+NEWLINE = chr(10)
 # Introducing an item is a FACT - who wrote, what was done, what you need to do - and the pipe knows all
 # three. So 'next' asks no model: it is instant, and it can never describe the wrong item (the owner,
 # 2026-09-03: "should not even be an AI call, just go to next task"). The model speaks only when the
@@ -51,7 +53,8 @@ _DECIDE = re.compile(r'\n?\s*DECIDE:\s*([a-z_]+)(?::\s*(.*?))?(?:\s+ON:\s*(.+?))
 _CALL = re.compile(r'\n?\s*CALL:\s*(\{.*\})\s*$', re.I | re.S)
 # what the owner can decide about the thing on the table - each is a button the card already has
 VERBS = ('reply', 'approve', 'setting', 'not_ours', 'not_ours_remember', 'not_ours_sender', 'block_sender', 'remember', 'coder', 'regular_agent', 'mine', 'close', 'stop_agent',
-         'rerun', 'setup', 'clear', 'split', 'done', 'later', 'skip', 'next', 'answer_agent', 'redraft', 'forward', 'archive', 'none')
+         'rerun', 'setup', 'clear', 'split', 'done', 'later', 'skip', 'next', 'answer_agent', 'redraft', 'forward', 'archive',
+         'confirm', 'cancel', 'none')
 # The action words offered INSIDE the assistant's own line, and what each one reads as. The vocabulary is
 # CODE's and it is fixed (the owner, 2026-09-07: "make it hardcoded, meaning add inline in the chat words
 # that map to actions"); only which of them fits the thing on the table is decided per item, from its kind.
@@ -84,7 +87,7 @@ CHIPS = {'review': ('approve', 'redraft', 'not_ours', 'next'), 'action': ('appro
 # THE CONTRACT is the part code reads: two line shapes and the verb vocabulary behind the card's buttons.
 # How to behave is COUNSEL's - the owner's document, not this file (PW-248/256). Removing prose here
 # removed no safeguard: verbs are validated in parse_decision, targets and freshness in operations.
-CONTRACT = (
+CONTRACT_HEAD = (
     "THE CONTRACT (code reads your answer)\n"
     "You are speaking to {owner} in the chat on the Assistant tab. When a decision has two to four clear "
     "choices and no button covers them, end with one final line exactly like: OPTIONS: first choice | second choice. "
@@ -92,7 +95,10 @@ CONTRACT = (
     "The action words under your line are the owner's buttons and they are already chosen for this item - never "
     "list them, and never end a line with an offer to do something. When you cannot tell which of them the owner's "
     "words mean, say which two you are choosing between and ask - one short question, no DECIDE line. Guessing is "
-    "worse than asking.\n"
+    "worse than asking.\n")
+# The verb vocabulary is the machine half and it is the SAME wherever the turn is read: an item settled
+# from the phone is settled on the desk, because both go through parse_decision and the same operations.
+DECIDE_RULE = (
     "When the owner has DECIDED about an item, end with one final line exactly like DECIDE: <verb> where verb is one of: "
     "reply (a reply to write - the gist after a colon: DECIDE: reply: tell Kishan it is not owned here), approve (send the "
     "drafted reply as it stands), redraft (write the draft again - the change after a colon), coder (hand it to the coding "
@@ -102,9 +108,38 @@ CONTRACT = (
     "(tomorrow), next (move on), remember (a fact to keep - after a colon), setup (a walk-through with the assistant - the "
     "request after a colon), setting (a switch for the owner to approve), split (two jobs in one arrival), stop_agent (end "
     "the running agent), answer_agent (the answer for the parked agent - after a colon), rerun (run the report again), "
-    "forward (send it on - to whom after a colon), clear (clear these from the pipe). A decision about a DIFFERENT item than "
+    "forward (send it on - to whom after a colon), clear (clear these from the pipe), confirm (their yes to the card "
+    "already waiting on it - only when one is), cancel (their no to it). A decision about a DIFFERENT item than "
     "the one on the table ends the DECIDE line with ON: and the words that name it: DECIDE: not_ours ON: payroll portal outage.")
+CONTRACT = CONTRACT_HEAD + DECIDE_RULE
 SYSTEM = CONTRACT      # the old name, for one release
+
+# The same walk, read in a phone chat. There are no cards there and no action words under the line, so
+# the choices have to BE the message - remote_assistant appends them, and this tells the voice to write
+# for a screen that has nothing else on it. Only the delivery changes: the pipe, the verbs and the
+# proposals are the desk's, so an item settled from the phone is settled everywhere.
+PHONE_CONTRACT = (
+    "THE CONTRACT (code reads your answer)\n"
+    "You are speaking to {owner} in their private chat on their phone, not at the Taskuary desktop. They "
+    "cannot see a card, a button, a draft or a link here - never tell them to click, open, tap or read one "
+    "as if it were in front of them. Say the sender, the subject, why it matters and what you would do, in "
+    "no more than four short sentences, and never more than one item at a time.\n"
+    "The choices are added under your line by code from the item itself. Do not list them, do not invent "
+    "one, and never end a line with an offer to do something. When you cannot tell which of them the "
+    "owner's words mean, say which two you are choosing between and ask - one short question, no DECIDE "
+    "line. Guessing is worse than asking.\n" + DECIDE_RULE)
+
+DESK, PHONE = 'desk', 'phone'
+# Where this turn will be READ. Ambient, not an argument: every path into the voice (surface, say, the
+# opening line) would otherwise carry a parameter that decides nothing except how the words are shaped.
+DELIVERY = contextvars.ContextVar('taskuary_delivery', default=DESK)
+
+
+@contextmanager
+def delivering(where: str):
+    token = DELIVERY.set(where if where in (DESK, PHONE) else DESK)
+    try: yield
+    finally: DELIVERY.reset(token)
 
 OPENING = (
     "Open the conversation for the day. Say 'let's go through what we have today' in your own words, then in two or three "
@@ -650,7 +685,8 @@ def _turns(store, tid: int) -> str:
 
 def _system(store, llm=None) -> str:
     # the document first, the machine contract last; never the tools block - the assistant runs nothing
-    return f"{_counsel(store)}\n\n{CONTRACT.format(owner=_owner(store))}"
+    contract = PHONE_CONTRACT if DELIVERY.get() == PHONE else CONTRACT
+    return f"{_counsel(store)}\n\n{contract.format(owner=_owner(store))}"
 
 
 def _urgent_line(pile_items: list, item: dict | None) -> str:
@@ -851,11 +887,27 @@ _CUES = {'show', 'me', 'tell', 'about', 'what', 'did', 'does', 'send', 'sent', '
          'when', 'where', 'who', 'is', 'are', 'be', 'been', 'not', 'no', 'yes', 'ok', 'okay', 'sure', 'but', 'so', 'just', 'all'}
 
 
-def lookup(store, text: str, days: int = 14) -> str | None:
+def lookup_days(text: str) -> int:
+    """How far back the owner's own words reach. A fixed fortnight meant anything older simply did not
+    exist to the assistant (the owner, 2026-09-07: "widen the lookup to intent of user - if he asked 6
+    months ago, search that"). The model can also say `days` outright on timeline.search."""
+    t = (text or '').lower()
+    m = re.search(r'(\d+)\s*(day|week|month|year)s?', t)
+    if m:
+        n, unit = int(m.group(1)), m.group(2)
+        return min(3650, n * {'day': 1, 'week': 7, 'month': 31, 'year': 365}[unit] + 7)
+    for phrase, d in (('last year', 400), ('this year', 365), ('year', 365), ('months', 190),
+                      ('month', 62), ('last week', 21), ('week', 14), ('yesterday', 3), ('today', 2)):
+        if phrase in t: return d
+    return 90                                   # the default reach, not a fortnight
+
+
+def lookup(store, text: str, days: int = None) -> str | None:
     """The pile item, or Timeline row, the owner's words point at - "what did Dana send", "the invoice
     thread". Sender and subject words only (a body matches everything), most of the meaningful words
     must hit, and the newest wins a tie. None when nothing is clearly meant."""
     from .routing import tokens
+    if days is None: days = lookup_days(text)
     ref = re.search(r'\bTQ-?0*(\d+)\b|#task=(\d+)', text or '', re.I)
     if ref:
         tid = int(ref.group(1) or ref.group(2))
@@ -1182,6 +1234,76 @@ def clear_matching(store, text: str, actor: str = 'owner', hint: str = '') -> di
             'words': used, 'rules': rules}
 
 
+def search_timeline(store, sel: dict, limit: int = 12) -> list:
+    """The history, by the same selector the pipe uses - and over ALL of it, not the last fortnight.
+    lookup() only ever looked 14 days back and needed half the owner's words to hit, so anything older
+    simply did not exist to the assistant (the owner, 2026-09-07: "lookup should find the correct
+    period and surface likely match")."""
+    from .routing import tokens
+    sel = {k: v for k, v in (sel or {}).items() if v not in (None, '', [])}
+    want = lambda f: str(sel.get(f) or '').strip().lower()
+    who, cat = want('sender'), want('category')
+    words = [w for w in tokens(str(sel.get('contains') or ''))]
+    older = sel.get('older_than_hours')
+    out = []
+    for r in store.feed(limit=4000, days=int(sel.get('days') or 3650)):
+        if r.get('Channel') == 'assistant': continue
+        hay = f"{r.get('FromName') or ''} {r.get('FromEmail') or ''}".lower()
+        if who and who not in hay: continue
+        if cat and str(r.get('Category') or '').lower() != cat: continue
+        subj = str(r.get('Subject') or '')
+        if words and not all(w in set(tokens(subj + ' ' + hay)) for w in words): continue
+        if older:
+            from datetime import datetime as _dt
+            d = funnel._dt(r.get('SentAt'))
+            if not d or (datetime.now() - d).total_seconds() < float(older) * 3600: continue
+        out.append({'ref': task_ref(r['TaskId']) if r.get('TaskId') else '', 'when': str(r.get('SentAt') or ''),
+                    'who': r.get('FromName') or r.get('FromEmail') or '?', 'title': subj, 'mid': r.get('MessageId')})
+        if len(out) >= limit: break
+    return out
+
+
+def read_op(store, kind: str, params: dict) -> str:
+    """A LOOK-UP, run at once. Changes nothing, waits for no confirmation, and never moves what is on
+    the table - asking about another task must not hijack the walk (the owner, 2026-09-07). The answer
+    goes back to the model, which then speaks with it."""
+    p = params or {}
+    if kind == 'task.read':
+        ref = str(p.get('ref') or '').strip()
+        m = re.search(r'(\d+)', ref)
+        tid = int(p.get('id') or (m.group(1) if m else 0) or 0)
+        t = store.get_task(tid) if tid else None
+        if not t: return f"There is no task {ref or p.get('id')}."
+        out = [f"{task_ref(tid)} [{t.get('Kind')} / {t.get('Status')}] {t.get('Title')}",
+               f"opened {str(t.get('CreatedAt') or '')[:16]} by {t.get('CreatedBy')}"]
+        if t.get('Summary'): out.append(f"the ask: {_cut(t['Summary'], 900)}")
+        for msg in (store.list_messages(tid) or [])[:6]:
+            out.append(f"  message {str(msg.get('SentAt') or '')[:16]} from {msg.get('FromName') or msg.get('FromEmail')}: "
+                       f"{_cut(msg.get('Subject') or '', 120)} - {_cut(msg.get('BodyText') or '', 400)}")
+        for c in (store.list_comments(tid) or [])[-8:]:
+            out.append(f"  {c.get('Actor')} ({c.get('ActorType')}) {str(c.get('CreatedAt') or '')[:16]}: {_cut(c.get('Body') or '', 500)}")
+        return NEWLINE.join(out)
+    if kind == 'report.read':
+        title = str(p.get('title') or '').strip().lower()
+        srcs = [x for x in store.list_sources(active_only=False) if x.get('Channel') == 'report']
+        src = (next((x for x in srcs if str(x.get('SourceId')) == str(p.get('source_id'))), None)
+               or next((x for x in srcs if title and title in str(x.get('Address') or '').lower()), None))
+        if not src: return 'No report by that name. The ones set up: ' + ', '.join(str(x.get('Address')) for x in srcs[:20])
+        out = [f"REPORT {src.get('Address')} (active: {bool(src.get('Active'))})"]
+        for r in (store.report_runs(src['SourceId'], 6) or []):
+            out.append(f"  {str(r.get('at') or '')[:16]} {'FAILED' if r.get('failed') else 'ok'} "
+                       f"{r.get('ms') or 0}ms - {_cut(r.get('error') or r.get('summary') or r.get('said') or '', 400)}")
+        return NEWLINE.join(out)
+    if kind == 'timeline.search':
+        sel = {k: v for k, v in p.items() if k != 'limit'}
+        if sel.get('select'): sel = sel['select']
+        limit = max(1, min(int(p.get('limit') or 12), 40))
+        hits = search_timeline(store, sel, limit)
+        if not hits: return 'Nothing in the history matches that.'
+        return NEWLINE.join(f"{h['ref'] or '-'} {h['when'][:16]} {h['who']}: {_cut(h['title'], 120)}" for h in hits)
+    return f'{kind} is not a look-up this app has.'
+
+
 def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: str = 'owner') -> dict:
     """The model named an operation out of the registry. Turn it into the same proposal card a verb
     makes - NOTHING runs here (PW-123/124); the owner's confirmation is still what executes it.
@@ -1189,6 +1311,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     A SET is counted before it is offered, so the card says how many and the owner is never told
     "done" about a number nobody checked (the owner, 2026-09-07: it cleared 13 of 72 and said done)."""
     kind, params = call['kind'], dict(call.get('params') or {})
+    if toolcatalog.is_read(kind): raise ValueError(f'{kind} is a look-up, not something to confirm')
     it = item or {}
     if kind == 'pipe.clear':
         sel = params.get('select') or {}
@@ -1584,6 +1707,9 @@ PROPOSALS = {
     'clear': ('pipe.clear', 'Clear them from the pipe', False), 'setup': ('task.setup', 'Open the walk-through', False),
 }
 AUTO = ('done', 'skip', 'later', 'close')     # settles what is on the table; nothing leaves, nothing is handed off
+# the operations that take the item off the table, so the walk moves on after them (the page reads
+# `settles` off the proposal it is holding; a chat comes back a turn later and has only the kind)
+SETTLING_KINDS = frozenset(kind for kind, _label, settles in PROPOSALS.values() if settles)
 NO_BRAIN = ('I can read you the facts, but I cannot take an instruction without an AI connector - set one up under '
             "Connections, or use the card's own buttons.")
 
@@ -1623,6 +1749,42 @@ def open_proposal(store, dock_tid: int) -> dict | None:
         op = operations.get(store, card.get('op')) if card.get('op') else None
         return op if op and op.get('status') == 'proposed' else None
     return None
+
+
+def run_proposal(store, op: dict, actor: str = 'owner') -> dict:
+    """Execute a confirmed proposal outside a request: the SAME handler the page's Confirm button runs,
+    with the after-work (learning, auto-drafts, closing a session) drained here instead of by FastAPI."""
+    import asyncio
+    from fastapi import BackgroundTasks
+    from .server import _run_operation
+    bg = BackgroundTasks()
+    out = operations.execute(store, op['id'], op['version'], lambda: _run_operation(op, bg), actor)
+    if bg.tasks:
+        try: asyncio.run(bg())
+        except Exception as e: logger.warning(f'the work after {op["id"]} did not finish: {e}')
+    return out
+
+
+def confirm_open(store, tid: int, item: dict | None, cancelled: bool, actor: str = 'owner') -> dict:
+    """The owner's yes (or no) to the card already in front of them, in words instead of a click.
+
+    A chat has no buttons at all, so without this the phone could never send a drafted reply. The
+    desktop had the same hole from the other side: a typed "yes go ahead" was read as the decision
+    again, which only re-proposed the same operation (version 2) and changed nothing."""
+    prop = open_proposal(store, tid)
+    if not prop:
+        say_ = 'Nothing is waiting on your yes just now.'
+        record_related(store, tid, item, 'assistant', say_)
+        return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
+    if cancelled:
+        operations.cancel(store, prop['id'], actor)
+        say_ = f"Left alone - {describe_op(store, prop)[0].lower()} is not happening. Nothing was touched."
+        record_related(store, tid, item, 'assistant', say_)
+        return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
+    out = run_proposal(store, prop, actor)
+    return {'say': receipt(store, out, actor), 'options': [], 'chips': [], 'decision': {'verb': 'confirm'},
+            'executed': {'id': prop['id'], 'kind': prop['kind'], 'status': out.get('status')},
+            'settled': out.get('status') == 'done' and prop['kind'] in SETTLING_KINDS}
 
 
 def _where(it: dict) -> str:
@@ -1983,7 +2145,7 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         say_ = f"{fallback(item, False, p['items'])} {NO_BRAIN}".strip()
         rec('assistant', say_)
         return {'say': say_, 'options': [], 'chips': chips_for(store, item) or walk_chips(len(p['items'])), 'decision': None}
-    reply, options, decision, call = '', [], None, None
+    reply, options, decision, call, did_read = '', [], None, None, False
     try:
         from . import handbook as hub
         hub_context = hub.block(store, text, actions=False) if hub.enabled(store) else ''
@@ -1998,6 +2160,21 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
                       max_tokens=MAX_TOKENS) or '').strip()
         if hub.enabled(store): raw = hub.publish_assistant_entries(store, tid, raw, 'assistant')
         raw, call = parse_call(raw)
+        # A LOOK-UP runs at once and comes straight back, because it changes nothing and waits for
+        # nobody. The model then answers with what it read - one round only, so a question can never
+        # become an unbounded search (the owner, 2026-09-07: "read should be immediate").
+        for _ in range(READ_ROUNDS):
+            if not (call and toolcatalog.is_read(call['kind'])): break
+            did_read = True
+            found = read_op(store, call['kind'], call['params'])
+            trace and trace('tool', call['kind'], {'params': call['params']})
+            raw = str(llm(system, f"You looked up {call['kind']} and it says:\n{_cut(found, 6000)}\n\n"
+                                  f"The owner asked: {text}\nAnswer them with what you just read, briefly.",
+                          max_tokens=MAX_TOKENS) or '').strip()
+            raw, call = parse_call(raw)
+        # the budget is spent and it still wants to read: that is as far as this turn goes. A read is
+        # never handed on to call_turn, which only knows operations that CHANGE something.
+        if call and toolcatalog.is_read(call['kind']): call = None
         raw, decision = parse_decision(raw)
         reply, options = parse_options(raw)
         if not in_character(reply):
@@ -2015,12 +2192,14 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
     # as DECIDE: next, so the one thing the owner said was never taken (2026-09-03).
     if decision and decision['verb'] in ('next', 'skip', 'later', 'done') and _CORRECTION.search(text): decision = None
     # words that point at something else pull it in and talk about THAT (everything is the chat)
-    if not decision:
+    if not decision and not did_read:
         found = lookup(store, text)
         if found and found != key:
             out = surface(store, found, llm, actor, None, trace, cancel)
             if out.get('item'): return out
     verb = (decision or {}).get('verb')
+    # their yes to the card already waiting on it - the button, said in words (the only road a phone has)
+    if verb in ('confirm', 'cancel'): return confirm_open(store, tid, item, verb == 'cancel', actor)
     # a batch of fyi is one thing on the table: "not ours" about a handful of fyi is what "read" means
     if decision and item and item.get('kind') == 'fyis' and not decision.get('on') and verb in ('not_ours', 'not_ours_remember', 'archive', 'close'):
         decision, verb = {**decision, 'verb': 'done'}, 'done'

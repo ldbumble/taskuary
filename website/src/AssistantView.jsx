@@ -297,6 +297,7 @@ function Line({ m, live, last, actions, fresh }) {
 // ── the page ─────────────────────────────────────────────────────────────────────────────────
 export default function AssistantView({ onOpenTask, onNavigate, onChanged, active = true }) {
   const [state, setState] = useState(null);           // /api/concierge: the dock task, its turns, the AI choices
+  const handoff = state?.handoff || null;             // the walk is in a phone chat: this tab is locked behind it
   const [msgs, setMsgs] = useState([]);
   const [pile, setPile] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -580,7 +581,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
 
   // pull the next thing (or the one named; or the next piece of mail) out of the pipe and say it
   const surface = useCallback(async (key = null, asUser = null, leaving = null) => {
-    if (busy || resetting || turnFlight.current) return;
+    if (busy || resetting || handoff || turnFlight.current) return;
     turnFlight.current = true;
     setBusy(true); setErr("");
     const epoch = chatEpoch.current;
@@ -621,11 +622,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     }
     turnFlight.current = false;
     setBusy(false);
-  }, [busy, ensureNextSelection, landed, loadPile, resetting, turn]);
+  }, [busy, ensureNextSelection, handoff, landed, loadPile, resetting, turn]);
   useEffect(() => { surfaceRef.current = surface; }, [surface]);
   const startFlight = useRef(false);
   const start = async (what) => {
-    if (busy || resetting || turnFlight.current || startFlight.current) return;
+    if (busy || resetting || handoff || turnFlight.current || startFlight.current) return;
     startFlight.current = true;
     const epoch = chatEpoch.current;
     try {
@@ -646,7 +647,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
 
   const send = async (line) => {
     const t = String(line ?? text).trim();
-    if (!t || busy || resetting || turnFlight.current) return;
+    if (!t || busy || resetting || handoff || turnFlight.current) return;
     turnFlight.current = true;
     setText(""); setBusy(true); setErr("");
     setMsgs((m) => [...m, { id: `u${Date.now()}`, role: "user", text: t }]);
@@ -750,7 +751,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // are not proposals keep their own immediate behaviour - a reply DRAFTS (PW-126), Next moves the walk
   // and puts down what it left. An OPTIONS choice is not a verb at all: it goes back as the owner's words.
   const runChip = async (c) => {
-    if (busy || resetting || !c) return;
+    if (busy || resetting || handoff || !c) return;
     if (c.ask) { send(c.ask); return; }
     const item = currentRef.current || currentItem;
     const key = item?.key || current;
@@ -874,9 +875,20 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // a card's "open on the Timeline": the row opens on the stage, over the chat, right here - the rail
   // reads the hash and pins the row (FeedView); its close comes back to the conversation
   const timeline = (mid) => { window.location.hash = `msg=${mid}`; };
-  const openWhatsApp = () => {
-    window.location.hash = "connector=whatsapp";
-    onNavigate?.("Connections");
+  // The walk, taken to a chat you already have connected (WhatsApp, Telegram). This is not a way to
+  // CONNECT one - a chat with no Assistant card offers nothing here (the owner, 2026-09-07: "point is
+  // to talk to assistant through it not connect it"). While it is there the tab locks itself: two
+  // screens answering the same item is how the same mail gets replied to twice.
+  const handOver = async (d) => {
+    if (busy || resetting || handoff) return;
+    setBusy(true); setErr("");
+    try { await api.post("/api/concierge/handoff", { channel: d.channel }); await loadState(); }
+    catch (e) { setErr(errText(e)); } finally { setBusy(false); }
+  };
+  const takeBack = async () => {
+    setBusy(true); setErr("");
+    try { await api.post("/api/concierge/handoff/end"); await loadState(); }
+    catch (e) { setErr(errText(e)); } finally { setBusy(false); }
   };
   // a row pulled off the rail - the pipe's or the Timeline's - goes on the table exactly as the pipe's
   // own click does, by the same key (so the server puts the same item up, whichever list it came from)
@@ -899,13 +911,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   };
 
   const actions = { done, start, handOff, openTask: onOpenTask, timeline, navigate: onNavigate,
-    chip: runChip, busy: busy || resetting,
+    chip: runChip, busy: busy || resetting || !!handoff,
     confirm: confirmProposal, cancel: cancelProposal, propose: proposeDirect, preview: previewProposal,
     surface: (key, note) => {
       if (note) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: note }]);
       deferInChat(() => key ? surfaceRef.current?.(key) : loadPileRef.current?.(), 900);
     } };
   const shown = old ? old.messages : msgs;
+  const handedTo = handoff ? (state?.doorways || []).find((d) => d.channel === handoff.channel) : null;
   const lastCardIdx = useMemo(() => interactiveCardIndex(shown), [shown]);
   const lastSaidIdx = useMemo(() => lastSaidIndex(shown), [shown]);
 
@@ -972,6 +985,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                   title="Only what people sent you - mail and chat">Just what came in</button>}
                 <button type="button" className="tq-chip" disabled={resetting} onClick={setup}
                   title="A scheduled check that reads and summarises, or a workflow that writes data">Set up a report or workflow</button>
+                {/* the same walk, on your phone - offered only for a chat that is already connected and
+                    names an Assistant chat, because this talks to the assistant, it does not set one up */}
+                {(state?.doorways || []).map((d) => (
+                  <button key={d.channel} type="button" className="tq-chip tq-chip-chat" disabled={busy || resetting || !canAdvance}
+                    onClick={() => handOver(d)} title={`I say hello in ${d.name} and take you through the same items there; this tab locks until you take it back`}>
+                    <ChannelIcon channel={d.channel} sx={{ fontSize: 14 }} />
+                    Walk me through them in {d.label}
+                  </button>
+                ))}
               </div>
             </div>
           )}
@@ -996,7 +1018,17 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           <button type="button" className="tq-chip" onClick={() => ack(alert, false)}>Later</button>
         </div>
       )}
-      {!old && (
+      {/* the walk is on the phone: this tab does not get to answer the same item (the owner, 2026-09-07:
+          "make the desktop unavailable if sent to whatsapp otherwise it's confusing") */}
+      {!old && handoff && (
+        <div className="tq-handed" role="status">
+          <ChannelIcon channel={handoff.channel} sx={{ fontSize: 17 }} />
+          <div className="txt"><b>The walk is in {handedTo?.label || handoff.channel}</b>
+            <span>Answer me there and I keep going. This chat waits so the same thing is not answered twice.</span></div>
+          <button type="button" className="tq-chip primary" disabled={busy} onClick={takeBack}>Take it back</button>
+        </div>
+      )}
+      {!old && !handoff && (
         <div className="tq-compose">
           <div className="tq-compose-box">
             <MicButton size={18} sx={{ width: 34, height: 34, p: 0, color: DIM }} onText={(t) => setText((v) => (v ? `${v} ${t}` : t))} />
@@ -1027,10 +1059,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             {!!text.trim() && <Typography sx={{ fontSize: 10.5, color: FAINT, px: 0.4, pt: 0.75 }}>Added to your draft; press send when ready.</Typography>}
           </Popover>
           <div className="tq-compose-hint">Enter sends · Shift+Enter adds a line · click a row on the left to pull it in · the words under each message do the acting</div>
-          <button type="button" className="tq-whatsapp-connect" onClick={openWhatsApp}>
-            <ChannelIcon channel="whatsapp" sx={{ fontSize: 15 }} />
-            Connect WhatsApp to the Assistant
-          </button>
         </div>
       )}
     </div>

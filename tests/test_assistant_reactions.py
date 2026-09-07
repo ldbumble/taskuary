@@ -662,7 +662,7 @@ class ResponseTests(unittest.TestCase):
         """The model may answer with any verb in the contract; each has to be a proposal or one of the roads."""
         for verb in concierge.VERBS:
             if verb == 'none': continue
-            self.assertTrue(verb in concierge.PROPOSALS or verb in ('reply', 'redraft', 'next', 'setting', 'forward'),
+            self.assertTrue(verb in concierge.PROPOSALS or verb in ('reply', 'redraft', 'next', 'setting', 'forward', 'confirm', 'cancel'),
                             f'{verb} has no proposal and no road')
 
 

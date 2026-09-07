@@ -106,9 +106,15 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
         # a reply in the NOTIFY chat may be a verdict on a pinged review ("approve") - it is
         # handled before the approve-first filter, so the notify chat never needs a source
         # row and the owner's verdicts never become work (see phone.py)
-        from . import phone
+        from . import phone, remote_assistant
         if phone.intercept(store, 'telegram', cid, m.get('text') or m.get('caption') or '',
                            (m.get('reply_to_message') or {}).get('text')):
+            continue
+        # the owner's own words in the ONE private chat their card names as the Assistant chat go to
+        # the same walk the desktop is on. A bot only ever hears the other side of a chat, so that
+        # named private chat is what says the words are the owner's - there is no fromMe to read.
+        if ((m.get('text') or '').strip() and (chat.get('type') or 'private') == 'private'
+                and remote_assistant.intercept(store, 'telegram', cid, m['text'], from_me=True, connector=c)):
             continue
         if cid not in want:
             if cid not in known:      # first sight of this chat: register it OFF, ingest nothing
@@ -310,7 +316,7 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         # guide conversation as the desktop bubble. Bridge-stamped Taskuary output is swallowed
         # here too, so a notification or answer can never loop back as a fresh question.
         if (m.get('text') or '').strip() and remote_assistant.intercept(
-                store, jid, m['text'], from_me=bool(m.get('fromMe')),
+                store, 'whatsapp', jid, m['text'], from_me=bool(m.get('fromMe')),
                 connector=c):
             continue
         if m.get('group') or jid.endswith('@g.us'):

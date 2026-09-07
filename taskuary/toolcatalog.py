@@ -33,11 +33,14 @@ PURPOSE = {
     'memory.remember':          'keep a fact - `note`',
     'task.split':               'split one arrival into two jobs - `text`',
     'pipe.clear':               'clear a SET of items from the pipe at once - takes `select` (below); read, never deleted',
-    'task.setup':               'open a walk-through with the assistant - `text`',
+    'task.setup':               'open a walk-through with the assistant, for a set-up that needs digging first - `text`',
+    # (the owner, 2026-09-07: "are you adding endpoints for report setup and connector setup and
+    # taskuary setup. Include that as well"). Each goes down the same handler the tab's own form
+    # uses - report.create through save_source, connection.create through save_connector.
+    'report.create':            'create a scheduled report or workflow - `config`; the composer builds it from what the owner asked for',
+    'connection.create':        'add a system Taskuary talks to - `type`, `name`; created OFF and never carrying a secret, which the owner gives on the card',
 }
 
-# A set of items, described rather than listed. This is the part the verb vocabulary never had: it is
-# how "all the reports" or "everything from that sender" is said in a way code can carry out exactly.
 # A set of items, described rather than listed. This is the part the verb vocabulary never had: it is
 # how "all the reports" or "everything from that sender" is said in a way code can carry out exactly.
 # The vocabularies are read off the PILE ITSELF where a store is at hand, for the same reason the
@@ -78,8 +81,12 @@ def selector(store=None) -> str:
 
 
 def block(store=None) -> str:
-    """The catalogue as the model sees it: one line per operation, then the selector."""
-    lines = ['THE OPERATIONS YOU CAN ASK FOR (this is the whole surface - there is nothing else)']
+    """The catalogue as the model sees it: what it can READ, what it can DO, then the selector."""
+    lines = ['WHAT YOU CAN LOOK UP (these run at once and change nothing - use them before you guess,',
+             'and before you say you do not know. They do not move what is on the table.)']
+    for kind, purpose in READS.items():
+        lines.append(f'  {kind} - {purpose}')
+    lines += ['', 'WHAT YOU CAN ASK TO HAPPEN (each becomes a card the owner confirms - nothing runs on its own)']
     for kind, (target, required, _correction) in operations.KINDS.items():
         purpose = PURPOSE.get(kind)
         if not purpose: continue
@@ -95,9 +102,29 @@ def block(store=None) -> str:
         'The item on the table is the target unless you say otherwise; for a SET put the selector in\n'
         'params.select. Nothing runs on a CALL - it becomes a card the owner confirms, exactly like a\n'
         'DECIDE. Use DECIDE for the ordinary one-item verbs; use CALL when the target is a SET, or when\n'
-        'the operation has no verb. Never both in one answer, and never invent a kind.')
+        'the operation has no verb. Never both in one answer, and never invent a kind.'
+        '\n\nWHICH ONE, in this order:\n'
+        '  1. the owner means one of the ACTION WORDS under your line - do that. It is what the\n'
+        '     buttons run, and it is instant.\n'
+        '  2. they want detail, history or a summary of a task or a message - LOOK IT UP first and\n'
+        '     answer with what you read. Never say you cannot see something you could have read,\n'
+        '     and search the period THEY mean: six months ago means days: 200, not the last week.\n'
+        '  3. they want something SET UP - report.create, connection.create, or task.setup when it\n'
+        '     needs digging before it can be configured.\n'
+        '  4. it is not clear which - ASK, one short question, naming the two you are choosing\n'
+        '     between. Guessing at a verb that CHANGES something is the one thing not to do.')
     return '\n'.join(lines)
 
+
+# READS. Everything above CHANGES something and waits for the owner's yes; these change nothing, so
+# they run at once and their result comes straight back to the model, which then answers with it
+# (the owner, 2026-09-07: "read should be immediate, yes it can take time since it's searching").
+# A read never moves what is on the table: asking about another task must not hijack the walk.
+READS = {
+    'task.read':       'everything on one task - its summary, status, the messages on it, what agents said and did. `ref`: TQ-0401 (or `id`)',
+    'timeline.search': 'find rows anywhere in the history, however old - takes the same SELECT fields below, plus `limit`. Returns refs, senders, subjects and dates; read one with task.read',
+    'report.read':     'a report and its last runs - what it said, whether it failed and why. `title`: the report name (or `source_id`)',
+}
 
 # Parameters the CHAT supplies from what is on the table, never the model: it has no way to know a
 # pile key, and an operation listed under a header that says "this is the whole surface" has to be
@@ -105,8 +132,16 @@ def block(store=None) -> str:
 CONTEXT_FILLED = frozenset({'key'})
 
 
+def is_read(kind: str) -> bool: return kind in READS
+
+
 def valid(kind: str, params: dict) -> str:
     """'' when this CALL is one the registry actually runs, otherwise why not."""
+    if kind in READS:
+        need = {'task.read': ('ref', 'id'), 'report.read': ('title', 'source_id'), 'timeline.search': ()}[kind]
+        if need and not any(str((params or {}).get(n) or '').strip() for n in need):
+            return f"{kind} needs {' or '.join(need)}"
+        return ''
     if kind not in operations.KINDS: return f'{kind} is not an operation this app has'
     if kind not in PURPOSE: return f'{kind} is not something the chat may ask for'
     missing = [p for p in operations.KINDS[kind][1]

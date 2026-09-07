@@ -308,5 +308,19 @@ class HistoryAttachmentTests(unittest.TestCase):
         self.assertEqual([r['Name'] for r in s.list_attachments(hist['MessageId'])], ['export.csv'])
 
 
+class IncompleteHistoryWarningTests(unittest.TestCase):
+    def test_the_incomplete_history_warning_survives_the_context_budget(self):
+        """PW-013: the budget trims the OLDEST lines first - and the warning sat at index 0, so a long thread
+        with a failed retrieval was shown as if it were complete."""
+        s = MemoryStore()
+        for i in range(6): stored(s, i, status='history')
+        s.set_chain_coverage(CONV, 'email', ME, {'complete': False, 'listed': 9, 'added': 6, 'error': 'Graph 503'})
+        lines = ingest.exchange_lines(s, {'conversation_id': CONV, 'subject': 'mail 6', 'sent_at': '2026-09-06 12:00:00', 'source_name': ME}, budget=40)
+        self.assertTrue(lines[0].startswith('… history incomplete'), lines)
+        self.assertIn('Graph 503', lines[0])
+        self.assertTrue(lines[1].startswith('…') and 'not shown' in lines[1], lines)
+        self.assertLess(len(lines), 8)
+
+
 if __name__ == '__main__':
     unittest.main()

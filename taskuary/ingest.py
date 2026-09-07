@@ -1098,16 +1098,17 @@ def exchange_lines(store, msg: dict, budget: int = None, limit: int = 200) -> li
         body = ' '.join(dedupe_quoted(clean, priors).split())
         priors.append(clean)
         if body: out.append(f"{who} · {str(m.get('SentAt') or '')[5:16]}: {body}")
-    # a conversation whose history could not be completed says so (PW-013): the model sees what is
-    # stored and is told it is not the whole thread
-    try: cov = store.chain_coverage(msg.get('conversation_id'), msg.get('source_name') or None) if msg.get('conversation_id') else None
-    except Exception: cov = None
-    if cov and not cov.get('complete'):
-        out.insert(0, f"… history incomplete - {cov.get('error') or 'not all of this thread could be retrieved'}; what follows is what is stored, not the whole thread")
     dropped = 0
     while len(out) > 1 and sum(len(l) for l in out) > budget:
         out.pop(0); dropped += 1
     if dropped: out.insert(0, f'… {dropped} earlier message{"s" if dropped != 1 else ""} not shown (context budget) - the thread is longer than what follows')
+    # a conversation whose history could not be completed says so (PW-013): the model sees what is stored and
+    # is told it is not the whole thread. Said AFTER the budget trim - the trim drops the oldest lines first,
+    # and this warning sat at index 0, so exactly the long threads that mattered lost it.
+    try: cov = store.chain_coverage(msg.get('conversation_id'), msg.get('source_name') or None) if msg.get('conversation_id') else None
+    except Exception: cov = None
+    if cov and not cov.get('complete'):
+        out.insert(0, f"… history incomplete - {cov.get('error') or 'not all of this thread could be retrieved'}; what follows is what is stored, not the whole thread")
     return out
 
 

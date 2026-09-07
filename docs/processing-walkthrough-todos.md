@@ -1467,9 +1467,34 @@ action rules one at a time before implementing. Pending implementation only.
 - [ ] <a id="pw-259"></a>**PW-259** Audit remaining inline prompts/action heuristics and canned receipts for
   contradictory behavior (including research-to-setup and skip-as-tomorrow).
   Resolve each through the walkthrough, not an unreviewed blanket rewrite.
+
+  Audit 2026-09-06 (concierge.py):
+  | where | what | verdict |
+  | RECEIPTS | the sentence said when a decision runs | keep: they state the fact of what happens; 'skip' says "Tomorrow, then." and funnel.settle('skip') returns it at 07:00 tomorrow - consistent; 'setup' says nothing is built - consistent with the setup road now in COUNSEL |
+  | fallback() | facts when no model answers | keep: facts, not behaviour; used only without an AI connector or after an off-subject/out-of-character answer |
+  | cannot() / NEEDS / ASSENT_VERB | why a verb cannot land on this card | keep: backend validation of target and prerequisites (PW-257) |
+  | parse_decision / _DECIDE / _OPTIONS / VERBS | the machine contract | keep: unknown verbs are refused |
+  | _POLITE | strips a polite opener before intent parsing | contradiction with the owner's rule (2026-09-06: "don't want hard coded words ... the model can translate next or any other word to intention") - a word list decides before the model reads - OPEN as PW-270 |
+  | _CORRECTION | a correction cancels the model's next/skip/later/done | contradiction with the same rule: a regex overrides the model's DECIDE; the rule itself ("never answer a correction by moving on") is in COUNSEL - OPEN as PW-270 |
+  | _BROKE_CHARACTER / in_character / off_subject | discard an answer about the model's own plumbing or another item | keep: output validation, not instruction |
+  | OPENING | the day's opening line instruction | document: still a hardcoded behavioural instruction - OPEN as PW-268 (owner to decide whether the opening moves into COUNSEL or stays a code contract) |
+  | trouble() / switch_ask() / _sweep_words() | keyword routes for "what's wrong", settings switches and pipe sweeps | contradiction with PW-128 "Interpret intent through AI, not keyword matching" and the owner's 2026-09-06 rule - OPEN as PW-269 (list each regex and what it intercepts before the model sees the words) |
+  | research-to-setup | the coder/setup road | document: moved to COUNSEL in PW-256; no code heuristic routes it |
 - [ ] <a id="pw-260"></a>**PW-260** Test that editing the assistant document affects the actual loaded prompt,
   without a hidden competing behavioral block, while malformed actions and
   unapproved operations remain blocked by the backend.
+- [ ] <a id="pw-268"></a>**PW-268** Decide whether OPENING (the day's first-line instruction, concierge.py) moves
+  into COUNSEL as owner-editable prose or stays a code contract, and act on that
+  decision. Currently a hardcoded behavioural instruction outside the document.
+- [ ] <a id="pw-269"></a>**PW-269** List each keyword route in trouble(), switch_ask() and _sweep_words()
+  (concierge.py) and what it intercepts before the model reads the owner's words,
+  against PW-128 "Interpret intent through AI, not keyword matching" and the
+  owner's 2026-09-06 no-hardcoded-words rule; replace with model-read intent or
+  justify each survivor explicitly.
+- [ ] <a id="pw-270"></a>**PW-270** Remove _POLITE and _CORRECTION: the model reads the owner's words and
+  returns the intent; code validates the verb only (owner rule 2026-09-06: no
+  hardcoded words). Needs tests that a correction phrased any way is not answered
+  with next/skip/later/done by the MODEL under COUNSEL, before the regex net comes out.
 
 ## Orderly app shutdown: stop workers and wait for cleanup
 

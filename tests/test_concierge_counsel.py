@@ -80,3 +80,17 @@ def test_the_contract_still_parses_every_verb_and_refuses_the_rest():
         assert concierge.parse_decision(f'Fine.\nDECIDE: {verb}')[1] == {'verb': verb, 'text': ''}
     assert concierge.parse_decision('Fine.\nDECIDE: launch_missiles')[1] is None
     assert concierge.parse_decision('Fine.\nDECIDE: not_ours ON: payroll portal outage')[1] == {'verb': 'not_ours', 'text': '', 'on': 'payroll portal outage'}
+
+
+def test_editing_the_document_changes_the_loaded_prompt_and_the_backend_still_refuses_bad_actions():
+    st = MemoryStore()
+    st.save_doc('counsel', '# Mine\n\n## Voice\n- Speak like a pirate.\n', 'owner')
+    assert 'Speak like a pirate.' in concierge._system(st)
+    st.save_doc('counsel', '# Mine\n\n## Voice\n- Speak like a butler.\n', 'owner')
+    system = concierge._system(st)
+    assert 'Speak like a butler.' in system and 'pirate' not in system
+    # the machine contract is the only thing code adds, and it is not behaviour
+    assert system.count('THE CONTRACT (code reads your answer)') == 1
+    # a malformed decision is no decision, whatever the document says
+    assert concierge.parse_decision('Aye.\nDECIDE: plunder')[1] is None
+    assert concierge.parse_decision('Aye.\nDECIDE:')[1] is None

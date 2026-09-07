@@ -810,18 +810,18 @@ Owner-approved: keep worker UI in the task workspace, opened on request (coding
 CLI or general-agent chat); do not automatically embed it in the routing chat.
 The assistant should relay an agent's question and the owner's answer seamlessly.
 
-- [ ] <a id="pw-137"></a>**PW-137** Receive structured input/approval-needed events from worker integrations,
+- [x] <a id="pw-137"></a>**PW-137** Receive structured input/approval-needed events from worker integrations,
   carrying task ID, run/session ID, stable request ID, exact question, and any
   choices. Show the named agent's question when the owner opens its attention
   item; unrelated arrivals notify through the bottom strip without stealing Current.
-- [ ] <a id="pw-138"></a>**PW-138** Let the owner answer conversationally in the assistant. Clarify ambiguous
+- [x] <a id="pw-138"></a>**PW-138** Let the owner answer conversationally in the assistant. Clarify ambiguous
   targets/answers, then use the approved confirmation box to show the exact answer
   and destination before Send to agent. Keep ordinary input separate from tool
   permission/approval requests; approval must use the worker's supported mechanism.
 - [x] <a id="pw-139"></a>**PW-139** Bind delivery to the specific outstanding request and run, never merely the
   task's newest session. Reject resolved/stale requests and changed runs, prevent
   duplicate delivery, and never forward to a replacement worker silently.
-- [ ] <a id="pw-140"></a>**PW-140** Use a supported reply/control path per worker integration; lifecycle hooks
+- [x] <a id="pw-140"></a>**PW-140** Use a supported reply/control path per worker integration; lifecycle hooks
   alone do not provide reliable answer delivery. Verify each integration's input
   and approval capabilities. Keep Open agent workspace as a fallback if direct
   delivery is unsupported, disconnected, or cannot be confirmed.
@@ -829,7 +829,7 @@ The assistant should relay an agent's question and the owner's answer seamlessly
   "Told the agent" from HTTP success alone. Persist the question, confirmed answer,
   and delivery outcome in the task discussion; preserve recoverable pending state
   across reconnects without duplicate sends.
-- [ ] <a id="pw-142"></a>**PW-142** Test general/coding question relay, multiple waiting agents, request/run
+- [x] <a id="pw-142"></a>**PW-142** Test general/coding question relay, multiple waiting agents, request/run
   identity, duplicate events/clicks, stale approval, disconnected workers, delivery
   failure, restart recovery, and visible confirmation of actual worker acceptance.
 
@@ -999,13 +999,13 @@ Pending implementation only.
   identities, task summaries, known touched files, and relevant live handoff notes.
   Clearly flag similar work and require coordination before changing shared files;
   preserve other agents' edits and stage/commit only the agent's own changes.
-- [ ] <a id="pw-173"></a>**PW-173** Refresh coordination context as peers start, change work, or stop. Closed
+- [x] <a id="pw-173"></a>**PW-173** Refresh coordination context as peers start, change work, or stop. Closed
   sessions' historical notes must not masquerade as current file ownership.
   Do not claim that a briefing provides enforced locking or isolated worktrees.
 - [x] <a id="pw-174"></a>**PW-174** If AI overlap assessment is absent, uncertain, or fails, still provide the
   factual live-peer briefing and proceed subject to capacity and other approved
   authorization/repository gates. Missing assessment is not proof of no overlap.
-- [ ] <a id="pw-175"></a>**PW-175** Test similar tasks launching when capacity permits, both dispatch modes,
+- [x] <a id="pw-175"></a>**PW-175** Test similar tasks launching when capacity permits, both dispatch modes,
   advisory information reaching worker context, retained capacity queuing and
   retry limits, and removal of obsolete overlap blockers without duplicate starts.
 
@@ -1025,18 +1025,18 @@ implementation, not a deletion of historical notes.
   `general._prompt()` -> `blackboard.chat_text()` / `house_wall()` must not inject
   closed runs' notes. Shared notes from general agents need run ownership and the
   same active-run filtering; no historical house-lane fallback when none are live.
-- [ ] <a id="pw-178"></a>**PW-178** Associate coordination notes with a specific agent session/run, not merely
+- [x] <a id="pw-178"></a>**PW-178** Associate coordination notes with a specific agent session/run, not merely
   a task ID. Include active coding, general, and headless workers, including live
   sessions waiting for approval/input. Remove notes from live surfaces when that
   run ends; restarting the same task must not revive the previous run's notes.
-- [ ] <a id="pw-179"></a>**PW-179** Use the same live-note selection for the board UI, agent startup context,
+- [x] <a id="pw-179"></a>**PW-179** Use the same live-note selection for the board UI, agent startup context,
   wall-reading commands/tools, and refreshed coordination context. Currently
   terminal startup uses unfiltered wall(), the UI filters by live task IDs, and
   general-agent context uses a separate unfiltered house lane.
 - [x] <a id="pw-180"></a>**PW-180** Retain ended-run notes in task/run history, explicitly historical and not
   presented as current file ownership. Taskless/house notes must not bypass the
   lifecycle rule; separate durable owner guidance from live agent coordination.
-- [ ] <a id="pw-181"></a>**PW-181** Test active and approval-waiting runs, completed/stopped runs, same-task
+- [x] <a id="pw-181"></a>**PW-181** Test active and approval-waiting runs, completed/stopped runs, same-task
   restarts, headless/general agents, and consistent wall contents across UI,
   prompts, and commands. An instruction to read the wall is not proof it was read.
 
@@ -1059,7 +1059,7 @@ implementation only; preserve required context and authorization boundaries.
   carry only relevant facts and owner preferences into the worker task brief.
   Audit existing SOUL safety/approval constraints and preserve them in shared
   rules or applicable task constraints before removing the blanket injection.
-- [ ] <a id="pw-185"></a>**PW-185** Consolidate relevant source rules, playbook guidance, and saved preferences
+- [x] <a id="pw-185"></a>**PW-185** Consolidate relevant source rules, playbook guidance, and saved preferences
   without duplicate or conflicting instruction blocks. Include writing style
   when the task requires it, not indiscriminately for every coding run. Keep
   lengthy supporting material accessible separately with clear references.
@@ -1067,7 +1067,7 @@ implementation only; preserve required context and authorization boundaries.
   the approved run-scoped wall lifecycle. For a continuation, separately include
   this task's dated last result or pause handover; do not substitute historical
   shared wall notes or unrelated closed sessions.
-- [ ] <a id="pw-187"></a>**PW-187** Test both worker kinds for shared rules, coding-only additions, absence of
+- [x] <a id="pw-187"></a>**PW-187** Test both worker kinds for shared rules, coding-only additions, absence of
   blanket SOUL injection, retained applicable approval constraints, complete
   fresh task context, and correctly scoped live/continuation information.
 
@@ -1315,7 +1315,7 @@ during this walkthrough.
   ready for review). Finished does not itself close the task. Track failures,
   disconnections, and owner-stopped runs separately, never as successful completion.
   An idle/open workspace is not a user-facing work status or a reason to raise a hand.
-- [ ] <a id="pw-223"></a>**PW-223** Integrate Claude Code lifecycle/tool hooks for prompt submission, permission
+- [x] <a id="pw-223"></a>**PW-223** Integrate Claude Code lifecycle/tool hooks for prompt submission, permission
   requests, structured questions, and response termination. Validate supported
   hooks against the installed version. Stop means the response ended, not proof
   of task completion; observe approvals without automatically granting them.
@@ -1323,7 +1323,7 @@ during this walkthrough.
   requests. This is a provider integration change, not a passive subscription to
   the existing terminal. Validate the installed protocol/version and preserve
   interactive viewing, answering, interruption, and continuation capabilities.
-- [ ] <a id="pw-225"></a>**PW-225** Emit regular API-agent lifecycle events directly from the execution loop.
+- [x] <a id="pw-225"></a>**PW-225** Emit regular API-agent lifecycle events directly from the execution loop.
   Provide explicit request_input and finish_work tools (or equivalent validated
   structured signals). Derive approval status from the actual approval gate,
   not generated prose. Apply equivalent semantic signals to coding workers.
@@ -1336,11 +1336,11 @@ during this walkthrough.
   notifications, reject stale events from old runs, and handle reconnects and
   out-of-order delivery. All UI surfaces and the assistant consume the same state.
   Answering one request must not clear other outstanding approval/input requests.
-- [ ] <a id="pw-228"></a>**PW-228** Keep Working visible in Unread without injecting it into chat. Promote
+- [x] <a id="pw-228"></a>**PW-228** Keep Working visible in Unread without injecting it into chat. Promote
   actual input/approval requests with their content, and finished results as
   results rather than blocked work. Do not repeatedly announce the same event.
   Live approval/input-waiting sessions still count toward approved capacity.
-- [ ] <a id="pw-229"></a>**PW-229** Test all providers: long silent work, terminal repaint noise, questions,
+- [x] <a id="pw-229"></a>**PW-229** Test all providers: long silent work, terminal repaint noise, questions,
   approval allow/deny, response ending without task completion, explicit finish,
   errors/interruption, empty workspaces, duplicate/stale events, reconnection,
   and consistent timeline/chat state without duplicate hand raises.
@@ -1356,7 +1356,7 @@ automatically close its worker session after saving its result. Do not require
 the owner to close the terminal manually just because they started it. Pending
 implementation; task closure and outbound sending remain separate decisions.
 
-- [ ] <a id="pw-230"></a>**PW-230** Capture the agent's actual final answer directly, rather than requiring a
+- [x] <a id="pw-230"></a>**PW-230** Capture the agent's actual final answer directly, rather than requiring a
   second AI to reconstruct it from terminal scrollback. Claude Stop provides
   last_assistant_message; Codex App Server completed agentMessage items provide
   the reply text; regular workers already receive the response directly.
@@ -1373,7 +1373,7 @@ implementation; task closure and outbound sending remain separate decisions.
 - [x] <a id="pw-233"></a>**PW-233** If result persistence fails, do not discard the session or claim successful
   finalization. Make persistence/finalization retryable and idempotent; duplicate
   finish hooks must not duplicate artifacts, drafts, or completion notifications.
-- [ ] <a id="pw-234"></a>**PW-234** Test automatic and manually started workers, matching final-answer capture,
+- [x] <a id="pw-234"></a>**PW-234** Test automatic and manually started workers, matching final-answer capture,
   save-before-close ordering, incomplete checklist entries, pending approvals,
   duplicate events, persistence failures, and retained follow-up context.
 

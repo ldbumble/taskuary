@@ -2635,3 +2635,87 @@ Gates on this branch: `python -m pytest -q -p no:cacheprovider` - 3035 passed, 7
 `npm run build` rebuilt the committed bundle because JSX changed. Limit, stated: the browser harness runs in
 demo mode where mutating requests are denied, so no rendered-click test exercises the task-view controls
 (PW-221) - the TestClient tests and the JSX source assertions stand in for it.
+
+## Section: worker lifecycle (Stream B)
+
+Status: implemented and tested locally in worktree `agent-a7c2b2918a78c7d37`
+(branch `worktree-agent-a7c2b2918a78c7d37`, base `550d582`), commits
+`0818b34..d7d002a`; no push, no CI run - this stream stops at the review gate.
+Acceptance PW-137, 138, 140, 142, 173, 175, 178, 179, 181, 185, 187, 223, 225,
+228, 229, 230, 234 implemented. PW-224 and PW-214 left OPEN by owner-approved
+decision (below).
+
+Close the open worker-lifecycle items enumerated in Sections 6/6.1 and 5.x: an
+agent's question is answered against the exact outstanding request of the run
+that asked it, never the task's newest session by default (`workerstate.answer_open`,
+PW-138/140) - the pre-existing `answer_agent` confirmation-box operation (945c666)
+already showed the exact answer and destination before Send to agent; Task 1 fixed
+the backend binding it was missing. Regular (API) workers now emit their own
+lifecycle signals directly from the execution loop instead of a judge reading
+prose after the fact (`selfclose.ASK_MARKER`/`ask_marker`, `GeneralSession.send_prompt`
+recording `turn_end` and `input_needed`, PW-225). An explicit finish
+(`taskuary --done`) now saves the run's own last spoken message - the Stop hook's
+`turn_end` - as the Finished result, falling back to the `--done` sentence only
+when the run said nothing (`selfclose.declare`, PW-230). Peers hear about each
+other as they start and stop through the waiting room, a briefing typed in on
+the next natural pause rather than a push into a running turn
+(`blackboard.peer_update`, `terminal.open_session`, `Term._pump`, PW-173).
+Claude Code hooks are now validated against the installed CLI version
+(`hooks.cli_version`/`supported`, PW-223).
+
+Every scenario the walkthrough enumerates for the shared status model, the wall's
+live selection and the worker prompt now has a test against the real modules -
+not a description of intended behaviour: the question relay (two agents each
+answered independently, a duplicate click delivers once, a stale run is refused,
+restart recovery keeps the open request and reports `disconnected`, the accepted
+answer is visible in the discussion - PW-142), every provider ending named by the
+spec (long silence, repaint noise, approval allow/deny, a bare turn end, an
+explicit finish, failed/disconnected/stopped, an empty workspace, duplicate/stale
+events, reconnection replay, one hand raise per request - PW-229), Working staying
+in Unread without becoming a chat turn while a finished result is excluded from
+blocked work (PW-228), and explicit completion end to end - automatic and manual
+starts, save-before-close ordering, an incomplete checklist kept as reported,
+duplicate finishes producing one event, the owner stopping a run reporting
+`stopped` not `finished`, and follow-up context riding into a continuation's seed
+(PW-234). Similar coding work is exercised as advisory-only dispatch: two similar
+tasks both launch when capacity permits, the advisory reaches the seed as
+`SIMILAR WORK`, and an old dispatch-queue row parked behind a peer starts once,
+not twice, once its blocker is gone (PW-175). The wall's one live selection is
+exercised directly: an approval-waiting run counts as live, a stopped run's note
+leaves every surface together, a same-task restart does not revive the old run's
+notes, a headless general run is live by its running-run row, and the Board
+route/seed/command read the identical selection (PW-181) - the note API's only
+session-carrying path is the CLI (`taskuary --note`, via `TASKUARY_SID`), and the
+one HTTP route without it is owner-only and always live regardless of session, so
+PW-178/179's association and shared-selection requirements hold without a repair
+to that route (recorded as a Ruling rather than assumed).
+
+PW-185's audit built the coding seed and the general prompt together with a
+playbook AND a saved global preference competing for space on the same task: no
+instruction-block header (`RULES`, `CODING RULES`, `PROCEDURE FOR THIS JOB`,
+`ASSISTANT STYLE`, `OTHER AGENTS`, `THE WALL`, `ASKING THE OWNER`) repeats in
+either prompt, and the writing voice reaches only the general prompt, never the
+coding seed. No defect was found there. One real defect WAS found and fixed while
+writing the PW-234 scenario tests: `selfclose.blocked()` did not consult
+`workerstate` for an open approval request, so a pending approval could not
+actually stop the automatic self-close road it was supposed to gate - it now asks
+`workerstate.asking_of()` first.
+
+PW-224 (Codex App Server structured turn lifecycle/approval/user-input
+integration) and PW-214 (a live, rendered-browser exercise of the All-detail
+buttons against a demo server) are left OPEN by owner-approved decision: PW-224 is
+a provider-protocol change that needs the installed protocol validated with the
+owner present, not a passive subscription to the existing terminal; PW-214 needs
+the puppeteer harness against a demo server and the owner's presence for a live
+run. Neither was faked to close out this section.
+
+Tests: `tests/test_worker_scenarios.py` (37 cases: Relay, Providers, Unread,
+Completion, Routes), extending `tests/test_blackboard.py` (+3), `tests/test_agent_wall.py`
+(+5, class `LiveSelectionTests`) and `tests/test_worker_brief.py` (+3, incl. class
+`PromptAuditTests`); `tests/test_peer_updates.py`, `tests/test_hooks_version.py`,
+`tests/test_api_worker_signals.py`, `tests/test_final_answer_capture.py`,
+`tests/test_agent_answer_route.py` from Tasks 1-5. Full suite:
+`python -m pytest -q -p no:cacheprovider` from the worktree root, 3068 passed.
+`node --test taskuary/whatsapp/` unaffected (no whatsapp files touched); website
+tests not required (no JSX changed). Full detail in
+`.superpowers/sdd/worker-lifecycle/stream-b-final-report.md`.

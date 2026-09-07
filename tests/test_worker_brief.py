@@ -139,5 +139,50 @@ class ScopedExtrasTests(unittest.TestCase):
         self.assertIn('a follow-up from Dana', user2)
 
 
+PLAYBOOK = """# Post a card transaction as an AP bill
+when:      a transaction or statement line from the card feed
+uses:      quickbooks (write: bills, vendors)
+steps:     match the merchant to a vendor -> create the bill dated the transaction date
+alone:     bills under $500 to a vendor seen before
+ask first: a new vendor
+done when: the bill exists in QuickBooks
+"""
+
+
+class PromptAuditTests(unittest.TestCase):
+    """PW-185: audit the built prompts with a playbook AND a saved preference competing for
+    space on the task - no instruction block repeats, and the writing voice (ASSISTANT STYLE)
+    reaches only general (writing) work, never a coding run."""
+    HEADERS = ('RULES (AGENT.md', 'CODING RULES (CODER.md', 'PROCEDURE FOR THIS JOB', 'ASSISTANT STYLE',
+               'OTHER AGENTS', 'THE WALL', 'ASKING THE OWNER')
+
+    def setUp(self):
+        from taskuary import playbooks
+        import shutil
+        d = playbooks.folder()
+        if d.is_dir(): shutil.rmtree(d)
+        playbooks.write('bill', PLAYBOOK)
+
+    def _task(self, s, kind):
+        tid = s.create_task({'Title': 'Transaction: 84.10', 'Kind': kind, 'Source': 'email', 'Tags': 'playbook:bill'}, 't')
+        s.add_message({'TaskId': tid, 'ExternalId': f'm{tid}', 'Channel': 'email', 'Subject': 'Transaction',
+                       'FromEmail': 'alerts@card.example', 'BodyText': 'a new transaction posted', 'Status': 'routed'})
+        s.add_memory({'Scope': 'global', 'ScopeKey': '', 'Note': 'Always CC finance on vendor threads.',
+                     'Source': 'verdict', 'Active': 1, 'CreatedBy': 'owner'})
+        return tid
+
+    def test_no_block_repeats_in_the_coding_seed_and_it_carries_no_writing_voice(self):
+        s = MemoryStore(); tid = self._task(s, 'coding')
+        seed = terminal.seed_text(s, tid, repo='org/exports', cwd=None)
+        for h in self.HEADERS: self.assertLessEqual(seed.count(h), 1, h)
+        self.assertNotIn('ASSISTANT STYLE', seed)          # coding work is not a writing task
+
+    def test_no_block_repeats_in_the_general_prompt_and_it_carries_the_writing_voice(self):
+        s = MemoryStore(); tid = self._task(s, 'general')
+        system, _user = general._prompt(s, tid)
+        for h in self.HEADERS: self.assertLessEqual(system.count(h), 1, h)
+        self.assertIn('ASSISTANT STYLE', system)           # writing work gets the voice, once
+
+
 if __name__ == '__main__':
     unittest.main()

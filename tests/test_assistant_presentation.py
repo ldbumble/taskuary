@@ -177,7 +177,8 @@ class PresentingMarksNothingTests(unittest.TestCase):
         with quiet(): self.assertEqual(funnel.next_item(s, card['key'], include_surfaced=True)['key'], card['key'])   # still on the table
         self.assertEqual(s.get_task(tid)['Status'], 'open')
         self.assertEqual(s.get_message(out['message_id'])['Status'], 'routed')
-        self.assertEqual(operations.history(s, task_id=tid), [])                                    # nothing proposed, nothing run
+        self.assertEqual([h['type'] for h in operations.history(s, task_id=tid)], ['discussion'])   # what was said is kept (PW-132)
+        self.assertEqual([h for h in operations.history(s, task_id=tid) if h['type'] != 'discussion'], [])   # nothing proposed, nothing run
         dock = general.dock_task(s)[0]['TaskId']
         self.assertEqual([h['role'] for h in concierge.history(s, dock)], ['assistant'])             # one line, no receipt, no move
 

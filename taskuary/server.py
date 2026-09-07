@@ -2809,7 +2809,10 @@ async def concierge_stream(body: ConciergeStreamBody):
             started = []
             def fetched(n):                      # once per turn, as the new lines land - the result line follows
                 if not started: started.append(n); put({'type': 'context_update', 'say': RETRIAGE_STARTED, 'stage': 'started', 'new': n})
-            if body.key: freshness = _refresh_chat_key(body.key, body.context_mid, on_fetched=fetched)
+            # A typed question polls NOTHING up front: the words are read first, and the item is
+            # brought in below only if the answer turns out to be about it. Surfacing still refreshes,
+            # because there the item IS the subject (PW-050).
+            if body.key and body.mode != 'say': freshness = _refresh_chat_key(body.key, body.context_mid, on_fetched=fetched)
             elif body.mode == 'next' and not reservation: freshness = _refresh_next_selection(body, on_fetched=fetched)
             else: freshness = {}
             if freshness.get('polled'):
@@ -2817,7 +2820,10 @@ async def concierge_stream(body: ConciergeStreamBody):
                      'detail': {'new': freshness.get('added', 0)}})
             # said BEFORE the answer, once per new revision (PW-052/057): the owner reads that the thread moved
             # and went through triage, then the assistant's read of it
-            notice = _notice_once(freshness)
+            # Surfacing an item IS about that item, so the owner reads that it moved before its
+            # introduction. A typed question is not: it is triaged first, and the item is brought in
+            # only when the answer turns out to be about it (see concierge_say).
+            notice = _notice_once(freshness) if body.mode != 'say' else ''
             if notice: put({'type': 'context_update', 'say': notice})
             if body.mode == 'open': out = concierge.open_day(store, actor=ACTOR, trace=trace, cancel=cancel)
             elif body.mode == 'next':
@@ -2876,10 +2882,16 @@ def report_rerun(sid: int):
 def concierge_say(body: ConciergeSayBody):
     from . import concierge
     try:
-        freshness = _refresh_chat_key(body.key, body.context_mid) if body.key else {}
-        out = concierge.say(store, body.text, body.key, actor=ACTOR, item=freshness.get('item'))
-        if freshness.get('newer'): out['context_update'] = _context_update_line(freshness)
-        return out
+        # A TYPED TURN POLLS NOTHING. The freshness check belongs where the item is LOADED into the
+        # chat - surfaced or pulled - and that is where it still runs. Doing it again on every prompt
+        # re-triaged the same item it had just checked, and announced it: asking "can you remove all
+        # the reports in the funnel?" answered "New message from Process Error Check arrived... I sent
+        # it through triage before continuing" (the owner, 2026-09-07: "that is the retriage, not a
+        # actual triage of the same item again? what's the point of that").
+        #
+        # Nothing is lost. The act boundary guards itself: operations.propose pins ContextRevision and
+        # execute refuses a moved one (409), and verdicts.decide re-checks before a reply can leave.
+        return concierge.say(store, body.text, body.key, actor=ACTOR)
     except ValueError as e: raise HTTPException(422, str(e))
 
 class ConciergeProposeBody(BaseModel): verb: str; key: str; text: str | None = None; table: bool = False

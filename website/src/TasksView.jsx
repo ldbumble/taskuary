@@ -419,6 +419,13 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const cut = !search && filter !== "live" && !older;
   const shown = cut ? bucket.filter(touchedToday) : bucket;
   const nOlder = bucket.length - shown.length;
+  // A count that outruns the rows beneath it reads as a bug: "done 175" over fifteen rows says
+  // the list is broken, not cut. Each pill counts what clicking it would SHOW - today's, while
+  // the cut holds - and the rest stay behind "show N more from before today".
+  const countIn = (key) => {
+    const rows = (tasks || []).filter((x) => !key || inBucket(x, key));
+    return !search && key !== "live" && !older ? rows.filter(touchedToday).length : rows.length;
+  };
   // A task may finish while its detail stays open (especially an assistant conversation). Move
   // the selected bucket with it so Done never sits under an In progress filter. Search and All
   // are deliberate cross-status views, so neither is changed.
@@ -629,14 +636,14 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           height: "calc(100vh - 118px)", minHeight: 420 }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.25, py: 0.75,
             borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL2, flexShrink: 0 }}>
-            {/* each pill says how many live behind it - a filter you cannot size up is a guess.
+            {/* each pill says how many rows it would put on screen (countIn) - a filter you cannot
+                size up is a guess, and one that counts rows it does not show is worse.
                 The pills give way, never the New button: four-digit counts must not be able to
                 push it off the edge of a 340px panel again. */}
             <Box sx={{ flex: 1, minWidth: 0, overflowX: "auto", "&::-webkit-scrollbar": { display: "none" },
               scrollbarWidth: "none" }}>
               <FilterPills value={search ? "" : filter} onChange={changeFilter}
-                options={STATE_FILTERS.map((f) => ({ ...f,
-                  n: !tasks ? null : f.key ? tasks.filter((x) => inBucket(x, f.key)).length : tasks.length }))} />
+                options={STATE_FILTERS.map((f) => ({ ...f, n: !tasks ? null : countIn(f.key) }))} />
             </Box>
             {/* flexShrink: the pills would otherwise squeeze this until only half the + was
                 left on screen, and a clipped button reads as a rendering fault */}

@@ -150,3 +150,46 @@ class EveryListedOperationIsCallableTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             concierge.call_turn(s, dock['TaskId'], {'kind': 'item.settle', 'params': {'verb': 'done'}},
                                 None, 'done', 'owner')
+
+
+class FreshnessBelongsAtLoadTimeTests(unittest.TestCase):
+    """The item is checked for new lines when it is LOADED into the chat, and not again on every
+    prompt after that (the owner, 2026-09-07: "we need it to check if there is new update when it
+    loads it the task/message into the chat - that is the retriage, not a actual triage of the same
+    item again? what's the point of that")."""
+
+    def client(self, s):
+        from fastapi.testclient import TestClient
+        for pp in (mock.patch.object(server, 'store', s), mock.patch.object(ingest, '_spawn')):
+            pp.start(); self.addCleanup(pp.stop)
+        return TestClient(server.app)
+
+    def _open_item(self, s):
+        with mock.patch.object(ingest, '_spawn'):
+            T.arrive(s, llm=T.brain('task', 'coding'))
+        return T.pile(s)[0]
+
+    def test_a_typed_turn_never_polls_the_open_item(self):
+        s = T.store(); item = self._open_item(s)
+        c = self.client(s)
+        for words in ('what is in the pipe?', 'next', 'close it'):
+            with mock.patch.object(server, '_refresh_chat_key') as refresh,                  mock.patch.object(terminal, 'live_sessions', return_value=[]):
+                r = c.post('/api/concierge/say', json={'text': words, 'key': item['key']})
+            self.assertEqual(r.status_code, 200, r.text[:160])
+            self.assertFalse(refresh.called, f'{words!r} re-triaged an item that was checked on load')
+            self.assertIsNone(r.json().get('context_update'))
+        print('  three typed turns -> source polls: 0')
+
+    def test_pulling_an_item_into_the_chat_does_check_it(self):
+        s = T.store(); item = self._open_item(s)
+        c = self.client(s)
+        with mock.patch.object(server, '_refresh_chat_key', return_value={}) as refresh,              mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            r = c.post('/api/concierge/next', json={'key': item['key']})
+        self.assertEqual(r.status_code, 200, r.text[:160])
+        self.assertTrue(refresh.called, 'loading an item into the chat must check it for new lines')
+        print('  loading it into the chat -> source polls: 1')
+
+    def test_the_stream_checks_on_load_and_not_on_say(self):
+        import inspect
+        src = inspect.getsource(server.concierge_stream)
+        self.assertIn("body.key and body.mode != 'say'", src)

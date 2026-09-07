@@ -1099,7 +1099,11 @@ def select_items(store, sel: dict) -> list:
     words = [w for w in tokens(str(sel.get('contains') or ''))]
     older = sel.get('older_than_hours')
     out = []
-    for i in funnel.build(store, keep_surfaced=True)['items']:
+    # THE PIPE IS WHAT IS UNREAD. keep_surfaced=True is the whole timeline, all-time: it offered to
+    # "clear 72" when seven reports were actually waiting, because 65 of them had been read days ago
+    # (the owner, 2026-09-07: "there isn't 72 in the pipeline. There are 8 open report category in
+    # unread. 72 is all time but we don't care about those").
+    for i in funnel.build(store)['items']:
         if i['lane'] in ('blocked', 'working'): continue                  # an agent's question is never swept
         if cat and str(i.get('category') or '').lower() != cat: continue
         if kind and str(i.get('kind') or '').lower() != kind: continue

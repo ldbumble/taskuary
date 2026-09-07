@@ -7,7 +7,14 @@ export function proposalOf(data) { return data && data.proposal && data.proposal
 // the box's four facts: what will happen, on what, with which parameters, and the button that does it
 export function describe(p) {
   const hidden = new Set(["key", "tid", "rid", "hint", "config", "processing_context"]);   // a revision map, not a fact for the owner
-  const params = Object.entries(p.params || {}).filter(([k, v]) => v != null && v !== "" && !hidden.has(k)).map(([k, v]) => [k.replace(/_/g, " "), v]);
+  // A nested value printed as "[object Object]", which is the one thing a confirmation card must never
+  // do: the selector IS what the owner is being asked to approve (the owner, 2026-09-07). Flatten it
+  // into the fields it actually holds.
+  const show = (v) => (v && typeof v === "object" && !Array.isArray(v)
+    ? Object.entries(v).filter(([, x]) => x != null && x !== "").map(([k, x]) => `${k.replace(/_/g, " ")}: ${x}`).join(", ")
+    : Array.isArray(v) ? v.join(", ") : v);
+  const params = Object.entries(p.params || {}).filter(([k, v]) => v != null && v !== "" && !hidden.has(k))
+    .map(([k, v]) => [k.replace(/_/g, " "), show(v)]).filter(([, v]) => v !== "" && v != null);
   // a proposed report can be dry-run before the click (PW-195): read-only, nothing filed, sent, activated or started
   return { title: p.label || p.title || p.kind, target: p.summary || "", params, confirm: p.label || "Confirm", cancel: "Cancel", preview: p.kind === "report.create" };
 }

@@ -675,7 +675,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         try:
             # with the agent token: once [server].token is set the gate refuses a bare hook POST, and
             # the Board went dark the moment the owner did the recommended thing (audit 2026-09-02)
-            if _hooks.wanted(store, profile): _hooks.install(cwd, token=session_env(agent, task_id, cwd).get('TASKUARY_TOKEN', ''))
+            if _hooks.wanted(store, profile): _hooks.install(cwd, token=session_env(agent, task_id, cwd).get('TASKUARY_TOKEN', ''), cmd=str(profile.get('cmd') or 'claude'))
         except Exception as e: logger.debug(f'claude hooks not installed in {cwd}: {e}')
     t = Term(argv, cwd, label, task_id, agent, rows, cols, store)
     SESSIONS[t.sid] = t

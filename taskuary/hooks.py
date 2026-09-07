@@ -7,12 +7,29 @@ reads "Edit taskuary/server.py · 4s" instead of guessing from the screen. Addit
 file is the project-LOCAL settings Claude itself gitignores, existing hooks are kept, and only our
 entries (marked by the endpoint path) are replaced. Off with the agent_hooks setting.
 """
-import json, os
+import json, os, re, subprocess
 from pathlib import Path
 from loguru import logger
 
 MARK = '/api/hooks/claude'
 EVENTS = ('PostToolUse', 'Stop', 'UserPromptSubmit', 'Notification')   # Notification carries permission prompts (PW-223)
+# the CLI version these four events, AskUserQuestion's tool_input and Stop's last_assistant_message were validated
+# against (PW-223). Below it the status may be incomplete: installed anyway, said out loud.
+MIN_VERSION = (2, 0, 0)
+
+
+def cli_version(cmd: str = 'claude') -> str | None:
+    """`claude --version` -> '2.1.3'; None when the CLI is not there or will not say."""
+    try: out = subprocess.run([cmd, '--version'], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError, ValueError): return None
+    m = re.search(r'(\d+)\.(\d+)\.(\d+)', str(out or ''))
+    return m.group(0) if m else None
+
+
+def supported(version) -> bool:
+    if not version: return False
+    try: return tuple(int(x) for x in str(version).split('.')[:3]) >= MIN_VERSION
+    except ValueError: return False
 
 
 def base_url() -> str:
@@ -32,9 +49,10 @@ def command(base: str, token: str = '') -> str:
     return f'{curl} -s -m 3 -o {null} -X POST {base}{MARK} -H "Content-Type: application/json"{tok} --data-binary @-'
 
 
-def install(cwd: str, base: str = None, token: str = '') -> bool:
-    """Write (or refresh) our three hook entries in cwd/.claude/settings.local.json. True = the file
-    changed. Everything not ours is left exactly as it was."""
+def install(cwd: str, base: str = None, token: str = '', cmd: str = None) -> bool:
+    """Write (or refresh) our hook entries in cwd/.claude/settings.local.json. True = the file
+    changed. Everything not ours is left exactly as it was. `cmd` names the CLI to validate the
+    installed version against (PW-223); without it no version is read."""
     base = base or base_url()
     p = Path(cwd) / '.claude' / 'settings.local.json'
     try: cur = json.loads(p.read_text(encoding='utf-8')) if p.exists() else {}
@@ -53,7 +71,11 @@ def install(cwd: str, base: str = None, token: str = '') -> bool:
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(cur, indent=2) + '\n', encoding='utf-8')
-        logger.info(f'claude hooks -> {p}')
+        if cmd is None: logger.info(f'claude hooks -> {p}'); return True
+        v = cli_version(cmd)
+        if supported(v): logger.info(f'claude hooks -> {p} (claude {v})')
+        else: logger.warning(f'claude hooks -> {p} for claude {v or "unknown version"} - the events were validated for '
+                             f'>= {".".join(map(str, MIN_VERSION))}; worker status from this session may be incomplete')
         return True
     except OSError as e:
         logger.warning(f'could not write claude hooks to {p}: {e}'); return False

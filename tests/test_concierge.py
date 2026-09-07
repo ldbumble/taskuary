@@ -94,6 +94,23 @@ class TurnTests(unittest.TestCase):
                           concierge.DISCUSSION_ASSISTANT_TYPE])
         self.assertIn('corrected export', discussion[0]['Body'])
 
+    def test_what_is_said_about_an_item_is_kept_against_the_item_not_only_in_the_browser(self):
+        """PW-132: the chat's turns about an item lived in the dock conversation and the browser's receipts; the
+        durable per-item record (operations.discuss) never saw them."""
+        from taskuary import operations
+        s = store()
+        t, m, r = drafted(s)
+        concierge.surface(s, key=f'review:{r}', llm=lambda *a, **k: 'Dana needs the corrected export.')
+        concierge.say(s, 'what exactly did she ask?', key=f'review:{r}', llm=lambda *a, **k: 'She asked for the corrected file.')
+        concierge.say(s, 'what exactly did she ask?', key=f'review:{r}', llm=lambda *a, **k: 'She asked for the corrected file.')   # a double send
+        rows = operations.discussion(s, message_id=m)
+        self.assertEqual([(x['Actor'], x['Body']) for x in rows],
+                         [('Taskuary', 'Dana needs the corrected export.'), ('owner', 'what exactly did she ask?'),
+                          ('Taskuary', 'She asked for the corrected file.')], 'attributed, in order, once')
+        self.assertTrue(all(x['TaskId'] == t for x in rows), 'and on its task')
+        dock = general.dock_task(s)[0]['TaskId']
+        self.assertEqual(operations.discussion(s, task_id=dock), [], 'the dock conversation itself is not an item')
+
     def test_a_deep_dive_is_proposed_for_a_regular_agent_and_starts_only_on_the_click(self):
         s = store()
         out = decided(s, 'can you do a deep dive on the ECC agent harness?', 'regular_agent', arg='do a deep dive on the ECC agent harness')

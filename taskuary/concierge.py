@@ -661,6 +661,17 @@ def record_related(store, dock_tid: int, item: dict | None, role: str, text: str
         own = getattr(store, 'processing_own_words', None)
         with (own(task_tid, actor) if own else nullcontext()):
             add(task_tid, actor, actor_type, redact(str(text or '')).strip())
+    # ...and durably against the ITEM (PW-132): the dock conversation is retained on its own clock and the
+    # browser's receipts were the only other record. One item's turn is kept on that item; a handful of fyi
+    # share one line, so a batch turn is attributed to none of them rather than to all four.
+    if (item or {}).get('kind') != 'fyis' and (item or {}).get('mid') or (item or {}).get('tid') and int(item['tid']) != int(dock_tid):
+        body = redact(str(text or '')).strip()
+        tid = int(item['tid']) if item.get('tid') and int(item['tid']) != int(dock_tid) else None
+        try:
+            recent = (operations.discussion(store, message_id=item.get('mid')) if item.get('mid') else operations.discussion(store, task_id=tid))[-2:]
+            if body and not any(x.get('Actor') == actor and x.get('Body') == body for x in recent):   # a double send (owner line + answer) is one turn
+                operations.discuss(store, actor, body, message_id=item.get('mid'), task_id=tid)
+        except Exception as e: logger.warning(f'concierge: the discussion was not kept against the item - {e}')
     return result
 
 

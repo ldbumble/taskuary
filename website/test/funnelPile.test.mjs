@@ -165,7 +165,8 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.match(feedSource, /view === "unread" && top && !unreadInventory/); // wait for canonical Unread; do not race it with legacy feed reads
   assert.match(feedSource, /\{!top && <FunnelBar/); // Assistant's pile replaces the legacy funnel query
   assert.match(view, /const visibleItems = items\.slice\(0, revealed\)/); // first load paints incrementally
-  assert.match(view, /requestAnimationFrame\(addOne\)/);                 // one additional row per frame
+  assert.match(view, /requestAnimationFrame\(addBatch\)/);              // progressive batches do not impose one frame per row
+  assert.match(view, /count \+ 24/);                                     // large accounts finish promptly
   assert.match(view, /By the way/);
   assert.doesNotMatch(view, /tq-pipe-walls/);             // no funnel: what comes out next is the FIRST row
   assert.match(view, /current: true \}\] : \[\]\), \.\.\.drawOrder/);   // what is on the table sits at the TOP as CURRENT

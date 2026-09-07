@@ -84,8 +84,9 @@ function Pile({ pile, current, onPull }) {
   const items = pile?.items || [];
   // A full account can return dozens of canonical rows together. Painting that entire stack in
   // one React commit leaves the rail blank until the browser has laid out every card. On the
-  // first successful load, put the first row down immediately and admit one more per animation
-  // frame. Later live refreshes retain the established stack and use the arrival animation below.
+  // first successful load, put the first row down immediately and admit a small batch per
+  // animation frame. One row per frame made a 507-row account take at least 8.5 seconds even
+  // before layout; batching keeps progressive paint without making the inventory the timer.
   const firstLoad = useRef(null);
   const [revealed, setRevealed] = useState(1);
   useEffect(() => {
@@ -100,14 +101,14 @@ function Pile({ pile, current, onPull }) {
     setRevealed(Math.min(1, items.length));
     if (items.length <= 1) return undefined;
     let frame = 0;
-    const addOne = () => {
+    const addBatch = () => {
       setRevealed((count) => {
-        const next = Math.min(items.length, count + 1);
-        if (next < items.length) frame = requestAnimationFrame(addOne);
+        const next = Math.min(items.length, count + 24);
+        if (next < items.length) frame = requestAnimationFrame(addBatch);
         return next;
       });
     };
-    frame = requestAnimationFrame(addOne);
+    frame = requestAnimationFrame(addBatch);
     return () => cancelAnimationFrame(frame);
   }, [displayRevision(pile)]);                                     // eslint-disable-line react-hooks/exhaustive-deps
   const visibleItems = items.slice(0, revealed);
@@ -135,6 +136,14 @@ function Pile({ pile, current, onPull }) {
   const left = items.filter((i) => !i.settling && i.lane !== "working").length;
   const cheer = !left || left > 15 ? "" : left === 1 ? "One more and the pipe is clear."
     : left <= 5 ? `${left} to go, then the pipe is clear.` : `${left} away from a clear pipe.`;
+  // Position the stack in one pass. Re-summing every preceding row for every card was quadratic
+  // on each progressive render and starved refresh requests on large accounts.
+  let stackHeight = 0;
+  const positioned = drawn.map((item) => {
+    const top = stackHeight;
+    stackHeight += item.current ? CUR_H : ROW_H;
+    return { item, top };
+  });
   return (
     <div className="tq-pile" data-tq-keep>
       {!pile ? (
@@ -142,9 +151,8 @@ function Pile({ pile, current, onPull }) {
       ) : !drawn.length ? (
         <div className="tq-pile-empty"><span className="mark">✓</span><b>All done</b>Nothing is waiting on you. New things land here as they arrive, and Taskuary speaks up.</div>
       ) : (
-        <div className="tq-pile-stack" style={{ height: drawn.reduce((h, i) => h + (i.current ? CUR_H : ROW_H), 0) }}>
-          {drawn.map((i, idx) => {
-            const top = drawn.slice(0, idx).reduce((h, r) => h + (r.current ? CUR_H : ROW_H), 0);
+        <div className="tq-pile-stack" style={{ height: stackHeight }}>
+          {positioned.map(({ item: i, top }) => {
             const meta = rowMeta(i);
             const role = meta.role ? ROLES[meta.role].solid : "#d3ccc1";
             const cls = ["tq-pile-row", landing.has(i.key) ? "landing" : "", i.settling ? "settling" : "", i.current ? "current" : i.key === nextKey ? "next" : ""].filter(Boolean).join(" ");

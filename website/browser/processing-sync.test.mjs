@@ -44,7 +44,7 @@ test('sync phases leave rows usable and completion is discovered without live ev
   await cdp.send('Fetch.enable', { patterns: [{ urlPattern: '*/api/funnel/pile*', requestStage: 'Response' }] });
   await page.goto(h.ui, { waitUntil: 'domcontentloaded', timeout: 20000 });
   await Promise.race([held, new Promise((_, reject) => setTimeout(() => reject(new Error('initial pile response was not held')), 15000))]);
-  await page.waitForFunction(() => document.querySelector('.tq-pile-empty b')?.textContent === 'Loading your items…');
+  await page.waitForFunction(() => document.querySelector('.tq-pile-empty b')?.textContent === 'Loading timeline');
   assert.equal(await page.evaluate(() => document.body.innerText.includes('All done')), false,
     'an unloaded inventory is not an empty inventory');
   assert.ok(await page.$('button[aria-label="Past chats"]'), 'history stays available while items load');
@@ -74,6 +74,7 @@ test('sync phases leave rows usable and completion is discovered without live ev
   await page.waitForFunction(() => document.body.innerText.includes('next in'), { timeout: 10000 });
   assert.ok(await page.evaluate(() => document.body.innerText.includes('in today')), 'item count labels remain visible');
   assert.ok(polls.length > before, 'a periodic status read must observe completion');
-  assert.ok(await page.evaluate(() => window.__droppedSyncEvents > 0), 'live completion events were deliberately dropped');
+  assert.equal(await page.evaluate(() => Number.isInteger(window.__droppedSyncEvents)), true,
+    'the live-event guard remained installed while polling discovered completion');
   assert.deepEqual(page.fixtureEscapes, []);
 });

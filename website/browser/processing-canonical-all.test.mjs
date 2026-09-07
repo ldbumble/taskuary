@@ -249,6 +249,7 @@ test("canonical All renders every root once with truthful details and frozen pag
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await page.waitForFunction((wanted) => [...document.querySelectorAll("textarea")]
     .some((node) => node.value === wanted), { timeout: 10000 }, ownerDraft);
+  await page.waitForSelector("[data-reply-recipients]", { timeout: 10000 });
   assert.equal((await page.$eval("[data-reply-recipients]", (node) => node.textContent)).includes("canonical-copy@example.test"), false,
     "refresh must preserve an owner's explicit empty CC while they edit the draft");
 

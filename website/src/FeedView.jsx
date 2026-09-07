@@ -842,21 +842,31 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     await syncObserver.current?.refresh();
   }, [syncUnknown]);
 
+  const loadLatest = useRef(load);
+  loadLatest.current = load;
   useEffect(() => {
-    // Keep the last complete rail painted while a view/filter/sync refresh is in flight. Clearing
-    // it here made every background sync erase the Timeline and made Unread -> All look broken
-    // for the full database request.
+    // Only a real view/filter change resets paging and closes detail. `load` also changes whenever
+    // the Assistant supplies a newer Unread inventory; coupling this reset to that callback made
+    // every background sync close an All detail panel and restart its canonical snapshot.
     setNoMore(false);
     allPage.current = null; allLegacyFallback.current = false;
     etagRef.current = "";                        // a new filter is not the same page
     detailEpoch.current += 1; want.current = null;
     setSel(null); setEditText("");   // filter switch: never leave a stale review panel up
-    load();
+    loadLatest.current();
+  }, [view, inventoryFilter]);                    // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!active) return undefined;
     // Rows only. The INGEST clock lives on the server; this socket is how the list learns
-    // a row landed, instead of asking every 30s whether anything had. Gated on `active`:
-    // the Timeline stays mounted behind another tab, and coming back re-asks at once.
-    return active ? onLive("feed-changed", () => load(rowsLen.current)) : undefined;
-  }, [load, active]);
+    // a row landed. Re-entering the mounted Timeline also asks for the newest snapshot.
+    loadLatest.current(rowsLen.current);
+    return onLive("feed-changed", () => loadLatest.current(rowsLen.current));
+  }, [active]);
+  useEffect(() => {
+    // Unread is supplied by AssistantView rather than fetched here. A newer pile replaces its
+    // rows, but it is a data refresh—not a scope change and never a reason to close All detail.
+    if (active && view === "unread" && unreadInventory) loadLatest.current(rowsLen.current);
+  }, [active, view, unreadInventory]);
   useEffect(() => {
     // root: the RAIL. A viewport-rooted observer never fires for a sentinel inside a scroll
     // container that is already fully on screen - the list would simply stop at 100 rows.

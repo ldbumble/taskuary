@@ -157,6 +157,32 @@ class OwnerControlsTests(Base):
         with mock.patch.object(term, 'start_on_task', side_effect=ValueError('unknown agent: x')): bb.drain(self.s)
         self.assertEqual(self.row(tid)['State'], 'failed'); return tid
 
+    def test_a_queued_general_launch_that_fails_keeps_its_retry_row_and_never_says_started(self):
+        """PW-073/085/088: _start_general swallowed its failure, so the drain cleared the row and wrote
+        "Started from the dispatch queue" over a launch that never happened - the retry budget was lost."""
+        tid = self.task('Read the policy', kind='general'); self.s.enqueue_dispatch(tid, None, 'assistant', 'slot')
+        with mock.patch.object(general, 'start_session', side_effect=RuntimeError('assistant down')): bb.drain(self.s)
+        row = self.row(tid)
+        self.assertIsNotNone(row, 'the queue row survives the failed launch')
+        self.assertEqual((row['State'], row['Attempts']), ('retrying', 1))
+        self.assertFalse(any('Started from the dispatch queue' in c for c in self.comments(tid)))
+        self.assertTrue(any('attempt 1 of 3' in c for c in self.comments(tid)), self.comments(tid))
+
+    def test_every_restored_deadline_is_armed_not_only_the_earliest(self):
+        """PW-088/089: one timer for the earliest deadline, and the later one waited for an unrelated event."""
+        t1, t2 = self.task('a'), self.task('b')
+        for t in (t1, t2): self.s.enqueue_dispatch(t, None, 'coder', 'slot')
+        with mock.patch.object(term, 'start_on_task', side_effect=RuntimeError('boom')): bb.drain(self.s)
+        later = (datetime.now() + timedelta(seconds=90)).strftime('%Y-%m-%d %H:%M:%S')
+        self.s._exec('UPDATE dispatchq SET NextAt=? WHERE TaskId=?', (later, t2))   # as two failures at different times would sit
+        self.due(t1); self.timer.reset_mock()
+        with mock.patch.object(term, 'start_on_task') as start: bb.drain(self.s)     # t1 comes due and starts
+        self.assertEqual([c.args[1] for c in start.call_args_list], [t1])
+        self.assertIsNone(self.row(t1)); self.assertEqual(self.row(t2)['State'], 'retrying')
+        self.timer.assert_called()                                                     # ...and this pass arms t2's own deadline
+        delays = [c.args[0] for c in self.timer.call_args_list]
+        self.assertTrue(any(60 < d <= 92 for d in delays), delays)
+
     def test_retry_is_a_new_bounded_cycle(self):
         tid = self.exhausted()
         with mock.patch.object(term, 'start_on_task', return_value={'sid': 's1'}) as start:

@@ -425,7 +425,9 @@ def drain(store):
                 from . import general
                 if general.handles(t):
                     from .ingest import _start_general
-                    _start_general(store, q['TaskId'])   # a queued GENERAL task opens its assistant session, not a CLI (PW-069)
+                    # a queued GENERAL task opens its assistant session, not a CLI (PW-069). Its failure is counted and
+                    # re-armed inside; clearing the row here wrote "Started" over a launch that never happened (PW-073/085)
+                    if not _start_general(store, q['TaskId']): continue
                 else: term.start_on_task(store, q['TaskId'], q.get('Agent') or 'coder', actor='router')
                 store.clear_dispatch(q['TaskId'])
                 store.add_comment(q['TaskId'], 'router', 'agent', 'Started from the dispatch queue - '
@@ -439,6 +441,9 @@ def drain(store):
                     continue
                 logger.warning(f'queued dispatch failed for task {q["TaskId"]}: {e}')
                 record_failure(store, q['TaskId'], e, q.get('Agent') or 'coder')
+        # whatever still backs off is armed by THIS pass - a restart armed only the earliest deadline and the
+        # later ones waited for an unrelated session to end (PW-088)
+        schedule_due(store)
     finally:
         _DRAINING.release()
 

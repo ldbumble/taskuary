@@ -1359,9 +1359,10 @@ def _auto_general(store, tid, brief: str = None):
     _start_general(store, tid, brief)
 
 
-def _start_general(store, tid, brief: str = None):
+def _start_general(store, tid, brief: str = None) -> bool:
     """Open (or reuse) the assistant session and put the task to it - once. A failure is written on
-    the task as a failure, never left looking like nobody got round to it (PW-073)."""
+    the task as a failure, never left looking like nobody got round to it (PW-073), counted on the retry
+    budget, and reported as False so a queue drain neither clears the row nor says Started (PW-085)."""
     from . import general
     try:
         t = store.get_task(tid) or {}
@@ -1372,10 +1373,12 @@ def _start_general(store, tid, brief: str = None):
         if fresh:
             ask = (brief or str(t.get('Summary') or '').strip() or str(t.get('Title') or '').strip())
             if ask: session.send_prompt(ask)
+        return True
     except Exception as e:
         logger.warning(f'assistant auto-start failed for task {tid}: {e}')
         from . import blackboard as bb
         bb.record_failure(store, tid, e, 'assistant', label='Assistant start')
+        return False
 
 
 def _auto_draft(store, tid, rid):

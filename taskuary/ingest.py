@@ -1100,7 +1100,7 @@ def exchange_lines(store, msg: dict, budget: int = None, limit: int = 200) -> li
         if body: out.append(f"{who} · {str(m.get('SentAt') or '')[5:16]}: {body}")
     # a conversation whose history could not be completed says so (PW-013): the model sees what is
     # stored and is told it is not the whole thread
-    try: cov = store.chain_coverage(msg.get('conversation_id')) if msg.get('conversation_id') else None
+    try: cov = store.chain_coverage(msg.get('conversation_id'), msg.get('source_name') or None) if msg.get('conversation_id') else None
     except Exception: cov = None
     if cov and not cov.get('complete'):
         out.insert(0, f"… history incomplete - {cov.get('error') or 'not all of this thread could be retrieved'}; what follows is what is stored, not the whole thread")

@@ -679,7 +679,7 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
                 raise _UIDFetchFailure(f'uid {uid} headers could not be decoded: {e}') from e
             conv = incoming['conversation_id']
             from . import chains
-            fresh_thread = bool(conv) and chains.needs_history(store, conv)
+            fresh_thread = bool(conv) and chains.needs_history(store, conv, user)
             incoming['images'] = images_for_triage(store, atts)
             out = ingest_message(store, file_only=file_only, msg=incoming, llm=llm)
             existing = store.message_by_external(ext_id) if not out.get('message_id') else None

@@ -1159,7 +1159,7 @@ def _poll_one(store, c, file_only, backfill_days, llm, read_it) -> int:
                         # missing bodies fetched, and never again once complete (chains.py, PW-009/010)
                         from . import chains   # chains imports this module; the loop stays one-way at import time
                         conv = m.get('conversationId')
-                        fresh_thread = bool(conv) and chains.needs_history(store, conv)
+                        fresh_thread = bool(conv) and chains.needs_history(store, conv, s['Address'])
                         # the screenshot IS the ask in a "see below" mail, so it is fetched BEFORE
                         # triage and handed to it - then saved once the message row exists
                         atts = []

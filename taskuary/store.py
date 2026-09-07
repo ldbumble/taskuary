@@ -543,8 +543,18 @@ class SQLiteStore:
                 self.cx.execute('ALTER TABLE task ADD COLUMN Checklist TEXT')
             # how complete each email conversation is (chains.py, PW-010): listed at the provider, added
             # here, and the error when it could not be completed - never guessed from what is stored
-            self.cx.execute('CREATE TABLE IF NOT EXISTS chain (ConversationId TEXT PRIMARY KEY, Channel TEXT, Mailbox TEXT, '
-                            'CheckedAt TEXT, Complete INTEGER, Listed INTEGER, Added INTEGER, Error TEXT)')
+            self.cx.execute('CREATE TABLE IF NOT EXISTS chain (Mailbox TEXT NOT NULL DEFAULT "", ConversationId TEXT NOT NULL, Channel TEXT, '
+                            'CheckedAt TEXT, Complete INTEGER, Listed INTEGER, Added INTEGER, Error TEXT, PRIMARY KEY (Mailbox, ConversationId))')
+            # coverage belongs to the mailbox that checked it (PW-011): a table keyed by the bare conversation id let
+            # two accounts sharing one share one row; an older database is re-keyed once, rows kept
+            chain_sql = str((self.cx.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='chain'").fetchone() or [''])[0] or '')
+            if 'ConversationId TEXT PRIMARY KEY' in chain_sql:
+                self.cx.execute('ALTER TABLE chain RENAME TO chain_v1')
+                self.cx.execute('CREATE TABLE chain (Mailbox TEXT NOT NULL DEFAULT "", ConversationId TEXT NOT NULL, Channel TEXT, '
+                                'CheckedAt TEXT, Complete INTEGER, Listed INTEGER, Added INTEGER, Error TEXT, PRIMARY KEY (Mailbox, ConversationId))')
+                self.cx.execute("INSERT OR IGNORE INTO chain (Mailbox, ConversationId, Channel, CheckedAt, Complete, Listed, Added, Error) "
+                                "SELECT LOWER(IFNULL(Mailbox,'')), ConversationId, Channel, CheckedAt, Complete, Listed, Added, Error FROM chain_v1")
+                self.cx.execute('DROP TABLE chain_v1')
             # shared operations (operations.py, PW-129..134): a proposal with its confirmation version and the
             # context it was judged on, its one execution and real outcome; correction EVIDENCE keyed to the
             # operation (never a memory note or a rule); discussion kept against the source item and its task
@@ -1200,12 +1210,14 @@ class SQLiteStore:
         return True
 
     def set_chain_coverage(self, conversation_id: str, channel: str, mailbox: str, cov: dict):
-        self._exec('INSERT INTO chain (ConversationId, Channel, Mailbox, CheckedAt, Complete, Listed, Added, Error) VALUES (?,?,?,?,?,?,?,?) '
-                   'ON CONFLICT(ConversationId) DO UPDATE SET Channel=excluded.Channel, Mailbox=excluded.Mailbox, CheckedAt=excluded.CheckedAt, '
+        self._exec('INSERT INTO chain (Mailbox, ConversationId, Channel, CheckedAt, Complete, Listed, Added, Error) VALUES (?,?,?,?,?,?,?,?) '
+                   'ON CONFLICT(Mailbox, ConversationId) DO UPDATE SET Channel=excluded.Channel, CheckedAt=excluded.CheckedAt, '
                    'Complete=excluded.Complete, Listed=excluded.Listed, Added=excluded.Added, Error=excluded.Error',
-                   (conversation_id, channel, mailbox, _now(), 1 if cov.get('complete') else 0, int(cov.get('listed') or 0), int(cov.get('added') or 0), cov.get('error')))
-    def chain_coverage(self, conversation_id: str):
-        r = self._one('SELECT * FROM chain WHERE ConversationId=?', (conversation_id,))
+                   (str(mailbox or '').lower(), conversation_id, channel, _now(), 1 if cov.get('complete') else 0, int(cov.get('listed') or 0), int(cov.get('added') or 0), cov.get('error')))
+    def chain_coverage(self, conversation_id: str, mailbox: str = None):
+        """One mailbox's coverage of the conversation; a caller with no mailbox reads the latest row (PW-011)."""
+        r = (self._one('SELECT * FROM chain WHERE Mailbox=? AND ConversationId=?', (str(mailbox).lower(), conversation_id)) if mailbox is not None
+             else self._one('SELECT * FROM chain WHERE ConversationId=? ORDER BY CheckedAt DESC, rowid DESC LIMIT 1', (conversation_id,)))
         if not r: return None
         return {'complete': bool(r['Complete']), 'listed': r['Listed'], 'added': r['Added'], 'error': r['Error'], 'checked_at': r['CheckedAt']}
     # operations, correction evidence and discussion (operations.py)

@@ -163,15 +163,18 @@ class ListingTests(unittest.TestCase):
         self.assertEqual([x['id'] for x in ids], ['g-0', 'g-1']); self.assertEqual(len(calls), 2)
         self.assertNotIn('body', calls[0][1]['$select']); self.assertIn(CONV, calls[0][1]['$filter']); self.assertIsNone(calls[1][1])
 
-    def test_a_provider_that_keeps_pointing_at_the_same_page_cannot_hang_the_poll(self):
+    def test_a_provider_that_keeps_pointing_at_the_same_page_is_a_stopped_listing(self):
+        """It used to return the one page as if the conversation ended there (PW-010): a repeated page is
+        the provider misbehaving, and coverage must say the listing stopped."""
         calls = []
         class R:
             def raise_for_status(self): pass
             def json(self): return {'value': [{'id': 'g-0'}], '@odata.nextLink': 'again'}
         def get(url, headers=None, timeout=None, params=None): calls.append(url); return R()
         with mock.patch.object(channels.requests, 'get', get):
-            ids = chains.list_ids_graph('tok', ME, CONV)
-        self.assertEqual([x['id'] for x in ids], ['g-0']); self.assertLessEqual(len(calls), 2)
+            with self.assertRaises(chains.ListingStopped) as cm: chains.list_ids_graph('tok', ME, CONV)
+        self.assertEqual([x['id'] for x in cm.exception.ids], ['g-0']); self.assertLessEqual(len(calls), 2)
+        self.assertIn('listing', str(cm.exception))                    # the same ids again is an empty continued page
 
     def test_a_wholesale_mocked_transport_yields_nothing_rather_than_looping(self):
         with mock.patch.object(channels, 'requests') as req:                       # what tests of other features do
@@ -209,6 +212,57 @@ class ImapChainTests(unittest.TestCase):
         self.assertEqual(sorted(r['ExternalId'] for r in rows), ['imap-sent:me@myco.example:7', 'imap:me@myco.example:1', 'imap:me@myco.example:3'])
         self.assertEqual({r['ExternalId']: r['Status'] for r in rows}['imap-sent:me@myco.example:7'], 'context')
         self.assertEqual({r['ExternalId']: r['Status'] for r in rows}['imap:me@myco.example:1'], 'history')
+
+
+class CoverageHonestyTests(unittest.TestCase):
+    """PW-010/011: a listing that stopped early or a fetch that failed is INCOMPLETE coverage, said so; and
+    coverage belongs to the mailbox that checked it, never to a bare conversation id another account shares."""
+    def test_an_empty_continued_page_stops_the_listing_and_coverage_says_so(self):
+        s, sid = outlook_store()
+        pages = {'p1': {'value': [gmail(0, T0)], '@odata.nextLink': 'p2'}, 'p2': {'value': []}}
+        class R:
+            def __init__(self, j): self.j = j
+            def raise_for_status(self): pass
+            def json(self): return self.j
+        fetched = []
+        get = lambda url, headers=None, timeout=None, params=None: R(pages['p2' if url == 'p2' else 'p1'])
+        with mock.patch.object(channels.requests, 'get', get), mock.patch.object(chains, 'fetch_graph', lambda tok, upn, ids: fetched.extend(ids) or []):
+            cov = chains.refresh_outlook(s, 'tok', ME, CONV)
+        self.assertFalse(cov['complete']); self.assertIn('page', cov['error']); self.assertEqual(cov['listed'], 1)
+        self.assertEqual(fetched, ['g-0'], 'what WAS listed is still fetched')
+        self.assertTrue(chains.needs_history(s, CONV, ME), 'it is listed again next time')
+
+    def test_a_failed_imap_fetch_leaves_coverage_incomplete_but_keeps_the_rest(self):
+        from tests.test_imap_catchup import FakeBox
+        import email.message, email.utils
+        from datetime import datetime, timedelta
+        now, root = datetime.now().astimezone(), '<root@partner.example>'
+        def mail(uid, refs, when, mid=None):
+            m = email.message.EmailMessage()
+            m['From'], m['To'], m['Subject'] = 'Rita <rita@partner.example>', 'me@myco.example', 'Export'
+            m['Date'] = email.utils.format_datetime(when); m['Message-ID'] = mid or f'<{uid}@partner.example>'
+            if refs: m['References'] = refs
+            m.set_content(f'body {uid}\n'); return (m.as_bytes(), when)
+        inbox = {1: mail(1, '', now - timedelta(hours=3), mid=root), 2: mail(2, root, now - timedelta(hours=2)), 3: mail(3, root, now - timedelta(hours=1))}
+        box = FakeBox(inbox); box.bad = {1}                                             # the root's FETCH answers NO
+        s = MemoryStore()
+        at3 = (now - timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S')
+        s.add_message({'ExternalId': 'imap:me@myco.example:3', 'ConversationId': root, 'Channel': 'email', 'Subject': 'Export',
+                       'FromEmail': 'rita@partner.example', 'BodyText': 'body 3', 'SentAt': at3, 'Status': 'routed'})
+        cov = chains.refresh_imap(s, box, 'me@myco.example', root, before=at3)
+        self.assertFalse(cov['complete']); self.assertIn('could not be fetched', cov['error'])
+        self.assertEqual(cov['added'], 1, 'uid 2 is kept; only the failed uid is missing')
+        self.assertTrue(chains.needs_history(s, root, 'me@myco.example'))
+
+    def test_coverage_belongs_to_the_mailbox_that_checked_it(self):
+        s = MemoryStore()
+        s.set_chain_coverage(CONV, 'email', 'a@x.com', {'complete': True, 'listed': 2, 'added': 0, 'error': None})
+        self.assertFalse(chains.needs_history(s, CONV, 'a@x.com'))
+        self.assertTrue(chains.needs_history(s, CONV, 'b@x.com'), "another account's conversation is its own to complete")
+        self.assertEqual(chains.coverage(s, CONV)['complete'], True, 'a caller without a mailbox reads the latest row')
+        s.set_chain_coverage(CONV, 'email', 'b@x.com', {'complete': False, 'listed': 0, 'added': 0, 'error': 'x'})
+        self.assertFalse(chains.needs_history(s, CONV, 'a@x.com'), 'B failing does not touch A')
+        self.assertEqual(chains.coverage(s, CONV, 'b@x.com')['error'], 'x')
 
 
 if __name__ == '__main__':

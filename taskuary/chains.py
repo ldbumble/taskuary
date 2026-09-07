@@ -18,6 +18,13 @@ GRAPH_LIST_SELECT = 'id,receivedDateTime,from,conversationId'
 MAX_PAGES = 200              # 10,000 messages of one conversation - a listing beyond this is a provider fault, not a thread
 
 
+class ListingStopped(RuntimeError):
+    """The provider's paging ended before the conversation did (PW-010): what was listed so far, and why.
+    A repeated page, an empty continued page or the page budget used to end the walk silently, and the
+    coverage row then claimed the thread was complete."""
+    def __init__(self, ids: list, why: str): super().__init__(why); self.ids, self.why = ids, why
+
+
 class IMAPIdentityError(RuntimeError):
     """The poll's captured folder identity changed while its chain was being read."""
 
@@ -31,15 +38,19 @@ def list_ids_graph(tok: str, upn: str, conversation_id: str) -> list:
     is how gaps are found; it never carries a body (PW-010)."""
     url = f'{_ch.GRAPH}/users/{upn}/messages'
     params, out, seen, urls = {'$filter': f"conversationId eq '{conversation_id}'", '$select': GRAPH_LIST_SELECT, '$top': 50}, [], set(), set()
-    # pagination is followed to completion, but never blindly: a page that brings nothing new, a next
-    # link already visited, a non-string link or a page budget ends the walk (a mocked transport once
-    # kept this loop alive until the process ran out of memory)
-    while isinstance(url, str) and url not in urls and len(urls) < MAX_PAGES:
+    # pagination is followed to completion, but never blindly (a mocked transport once kept this loop alive
+    # until the process ran out of memory). A walk that ENDS EARLY - a repeated link, an empty continued
+    # page, the page budget - is not a complete listing: it raises with what it has, so coverage says so.
+    while isinstance(url, str):
+        if url in urls: raise ListingStopped(out, 'the provider repeated a page of the listing')
+        if len(urls) >= MAX_PAGES: raise ListingStopped(out, f'the listing passed the {MAX_PAGES}-page budget')
         urls.add(url)
         r = _ch.requests.get(url, headers={'Authorization': f'Bearer {tok}'}, timeout=30, params=params)
         r.raise_for_status(); j = r.json()
         page = [x for x in (j.get('value') if isinstance(j, dict) else None) or [] if isinstance(x, dict) and isinstance(x.get('id'), str) and x['id'] not in seen]
-        if not page: break
+        if not page:
+            if out: raise ListingStopped(out, 'an empty page ended the listing early')
+            break                                          # a conversation with nothing in it is complete, not stopped
         out += page; seen.update(x['id'] for x in page)
         url, params = j.get('@odata.nextLink'), None
     return out
@@ -55,15 +66,17 @@ def fetch_graph(tok: str, upn: str, ids: list) -> list:
     return out
 
 
-def needs_history(store, conversation_id: str) -> bool:
-    """Never completed here, or the last attempt failed - list it again; a complete chain is left alone."""
-    cov = store.chain_coverage(conversation_id)
+def needs_history(store, conversation_id: str, mailbox: str = None) -> bool:
+    """Never completed FROM THIS MAILBOX, or the last attempt failed - list it again; a complete chain is left
+    alone. Coverage is the mailbox's (PW-011): another account sharing the conversation id completes its own."""
+    cov = store.chain_coverage(conversation_id, mailbox)
     return cov is None or not cov.get('complete')
 
 
-def coverage(store, conversation_id: str):
-    """What the store knows about how complete this conversation is, or None when never checked."""
-    return store.chain_coverage(conversation_id)
+def coverage(store, conversation_id: str, mailbox: str = None):
+    """What the store knows about how complete this conversation is (for one mailbox, or the latest row
+    when the caller has none), or None when never checked."""
+    return store.chain_coverage(conversation_id, mailbox)
 
 
 def _keep(store, conv: str, ext: str, m: dict, mailbox: str, before: str = None) -> int:
@@ -87,8 +100,10 @@ def _keep(store, conv: str, ext: str, m: dict, mailbox: str, before: str = None)
 
 def refresh_outlook(store, tok: str, mailbox: str, conversation_id: str, before: str = None) -> dict:
     """Complete one Graph conversation: list it, fetch only what is missing, record coverage."""
+    stopped = None
     try:
-        listed = list_ids_graph(tok, mailbox, conversation_id)
+        try: listed = list_ids_graph(tok, mailbox, conversation_id)
+        except ListingStopped as e: listed, stopped = e.ids, e.why           # keep what was listed; the coverage says it stopped
         missing = [x['id'] for x in listed if x.get('id') and not store.message_exists(f"graph:{x['id']}")]
         added = 0
         for m in fetch_graph(tok, mailbox, missing):
@@ -97,7 +112,7 @@ def refresh_outlook(store, tok: str, mailbox: str, conversation_id: str, before:
                            {'subject': m.get('subject'), 'body': _ch._body(m), 'from_name': frm.get('name'), 'from_email': frm.get('address'),
                             'to': _ch._addrs(m.get('toRecipients')), 'cc': _ch._addrs(m.get('ccRecipients')),
                             'sent_at': _ch._local(m.get('receivedDateTime') or ''), 'source_link': m.get('webLink')}, mailbox, before)
-        cov = {'complete': True, 'listed': len(listed), 'added': added, 'error': None}
+        cov = {'complete': stopped is None, 'listed': len(listed), 'added': added, 'error': stopped}
     except Exception as e:
         logger.warning(f'chains: could not complete {conversation_id} from {mailbox}: {e}')
         cov = {'complete': False, 'listed': 0, 'added': 0, 'error': str(e)[:200]}
@@ -126,7 +141,7 @@ def refresh_imap(store, M, user: str, root: str, restore: str = 'INBOX', readonl
     protected = {str(box): {int(uid) for uid in uids}
                  for box, uids in dict(protected or {}).items()}
     protected_after = {str(box): int(uid) for box, uid in dict(protected_after or {}).items()}
-    added, seen, fatal = 0, 0, None
+    added, seen, failed, fatal = 0, 0, 0, None
     try:
         boxes = [('INBOX', False)]
         sent = sent_folder(M)
@@ -151,7 +166,7 @@ def refresh_imap(store, M, user: str, root: str, restore: str = 'INBOX', readonl
                        if identity else f'{"imap-sent" if is_sent else "imap"}:{user}:{uid}')
                 if store.message_exists(ext): continue
                 typ, parts = M.uid('fetch', str(uid), '(RFC822)')
-                if typ != 'OK' or not parts or parts[0] is None: continue
+                if typ != 'OK' or not parts or parts[0] is None: failed += 1; continue   # counted: a skipped body is a gap, not coverage (PW-010)
                 msg = email.message_from_bytes(parts[0][1])
                 name, addr = email.utils.parseaddr(_dec(msg.get('From')))
                 body, _atts = _body_and_attachments(msg)
@@ -159,7 +174,8 @@ def refresh_imap(store, M, user: str, root: str, restore: str = 'INBOX', readonl
                 except Exception: when = None
                 added += _keep(store, root, ext, {'subject': _dec(msg.get('Subject')), 'body': body[:20000], 'from_name': name or addr,
                                                   'from_email': addr, 'to': _hdr_addrs(msg, 'To'), 'cc': _hdr_addrs(msg, 'Cc'), 'sent_at': when}, user, before)
-        cov = {'complete': True, 'listed': seen, 'added': added, 'error': None}
+        cov = {'complete': failed == 0, 'listed': seen, 'added': added,
+               'error': None if not failed else f'{failed} message{"s" if failed != 1 else ""} of the thread could not be fetched'}
     except IMAPIdentityError as e:
         fatal = e
         cov = {'complete': False, 'listed': seen, 'added': added, 'error': str(e)[:200]}

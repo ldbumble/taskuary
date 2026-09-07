@@ -385,8 +385,6 @@ export function IdeaCard({ card, onAct, onOpenTask, onTimeline }) {
 export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface }) {
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
-  const [notOurs, setNotOurs] = useState(false);
-  const [sender, setSender] = useState(false);
   const [repoAsk, setRepoAsk] = useState(null);
   // Shown, not offered. Clicking "Read it" to find out what a thing IS put a step in front of every
   // decision (the owner, 2026-09-04: "by default it should show the full email - not the full chain
@@ -439,30 +437,6 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface })
           <RepoPicker taskId={repoAsk.taskId} agent={repoAsk.agent}
             onDone={(data) => { if (data?.repo) { setRepoAsk(null); startAgent("coding"); } }} />
           <Button size="small" sx={faint} onClick={() => setRepoAsk(null)}>Not now</Button>
-        </div>
-      )}
-      {sender && (
-        <div className="tq-card-actions" style={{ marginTop: 6 }}>
-          <Button size="small" variant="outlined" disabled={!!busy} sx={quiet}
-            onClick={() => post("rule", `/api/messages/${card.mid}/ignore-sender`, { how: "rule" },
-              (d) => `An exclusion rule now skips ${d.sender}${d.affected ? ` — and ${d.affected} of their older messages left the Timeline` : ""}. Settings → Rules turns it back off.`)}>
-            {busy === "rule" ? "…" : "Add an exclusion rule"}</Button>
-          <Button size="small" variant="outlined" disabled={!!busy} sx={{ ...quiet, ...faint }}
-            onClick={() => post("justmem", `/api/messages/${card.mid}/ignore-sender`, { how: "memory" },
-              (d) => `Remembered. Mail from ${d.sender} keeps arriving and stays readable — triage files it from now on.`)}>
-            {busy === "justmem" ? "…" : "Just remember it"}</Button>
-          <span className="tq-card-note">A rule stops their mail reaching triage at all and hides what already arrived. A memory leaves everything readable and teaches triage the verdict.</span>
-        </div>
-      )}
-      {notOurs && (
-        <div className="tq-card-actions" style={{ marginTop: 6 }}>
-          <Button size="small" variant="outlined" disabled={!!busy} sx={quiet}
-            onClick={() => post("remember", `/api/messages/${card.mid}/not-mine`, { scope: "subject" }, "Not ours — remembered. This kind of mail is filed from now on.")}>
-            {busy === "remember" ? "…" : "Not ours — remember it"}</Button>
-          <Button size="small" variant="outlined" disabled={!!busy} sx={{ ...quiet, ...faint }}
-            onClick={() => post("once", `/api/messages/${card.mid}/file`, { learn: false }, "Filed — just this once.")}>
-            {busy === "once" ? "…" : "Not ours, just this once"}</Button>
-          <span className="tq-card-note">Remembering writes a verdict triage reads on every later message like this one.</span>
         </div>
       )}
     </CardShell>

@@ -557,6 +557,10 @@ def _run_operation(op: dict, background: BackgroundTasks):
         return concierge.setup_task(store, str(p.get('text') or ''), ACTOR)
     if kind == 'message.archive': return file_message(mid, NotATaskBody(learn=False, archive=True), background)
     if kind == 'preference.exclude_sender': return not_mine(mid, NotMineBody(scope=str(p.get('scope') or 'sender')), background)
+    # the bigger hammer, down the SAME road the card's own button took (ignore_sender, how='rule')
+    if kind == 'preference.sender_rule': return ignore_sender(mid, IgnoreSenderBody(how='rule'), background)
+    # the bigger hammer, down the SAME road the card's own button took (ignore_sender, how='rule')
+    if kind == 'preference.sender_rule': return ignore_sender(mid, IgnoreSenderBody(how='rule'), background)
     if kind == 'item.settle':
         from . import funnel, verdicts
         verb = str(p.get('verb') or 'done')
@@ -617,6 +621,11 @@ def _run_operation(op: dict, background: BackgroundTasks):
                 'active': bool(c.get('Active')), 'link': f"#connector={out['connectorId']}"}
     if kind == 'pipe.clear':
         from . import concierge
+        # a SELECTOR names a set exactly (category/kind/lane/sender/contains/age); the word-matching
+        # road stays for the sentences that name a subject rather than a class
+        if p.get('select'):
+            out = concierge.clear_selected(store, p['select'], ACTOR)
+            return out
         out = concierge.clear_matching(store, str(p.get('text') or ''), ACTOR, hint=str(p.get('hint') or ''))
         # a standing RULE already keeps these out of the pipe; a sender-wide verdict on top of it would reach
         # everything that person ever sends, which is not what "don't need these" means

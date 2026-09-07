@@ -86,7 +86,7 @@ old files as deletions and the new ones as additions. That is expected.
 ```bash
 python -m pytest -q          # FROM THE REPO ROOT
 cd website && npm test && cd ..
-node --test taskuary/whatsapp/
+node --test taskuary/whatsapp/*.test.mjs
 ```
 
 - **From the repo root.** `pytest` in `website/` prints `no tests ran` and exits 5 — that is a
@@ -94,6 +94,8 @@ node --test taskuary/whatsapp/
 - **`npm test` is not optional.** It asserts on JSX *source text* that pytest never loads, so it
   is the only thing that catches a changed `AssistantView.jsx` line breaking
   `website/test/funnelPile.test.mjs`.
+- Pass the whatsapp tests as a GLOB. `node --test taskuary/whatsapp/` resolves the directory as a
+  *module* on Node 22 and dies with MODULE_NOT_FOUND, which reads exactly like a failing suite.
 - The whatsapp tests are **not run by CI** (the workflow only runs `npm test` in `website/`), so
   run them by hand or they are unguarded.
 

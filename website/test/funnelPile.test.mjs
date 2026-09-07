@@ -243,7 +243,8 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.match(feed, /addEventListener\("hashchange", openHash\)/);   // a card's #msg= opens the row while the rail is already up
   const cards = read("assistantCards.jsx");
   // the two "not ours" doors the owner asked for: one that teaches memory, one that does not
-  assert.match(cards, /not-mine/); assert.match(cards, /Not ours — remember it/); assert.match(cards, /Not ours, just this once/);
+  // 'not ours' is the chat line's word now (concierge.CHIPS), not a panel on the card
+  assert.doesNotMatch(cardsSrc(), /not-mine/);
   // prep is the chat line's word now (concierge.CHIPS meeting), not a button on the card
   assert.doesNotMatch(cardsSrc(), /Prep me/);
   assert.match(cards, /SourceMark/); assert.match(cards, /ChannelIcon/);   // the logo of where it came from

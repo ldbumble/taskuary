@@ -82,6 +82,14 @@ function greeting() {
   return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
 }
 
+const shortDay = (value) => {
+  const at = new Date(String(value || "").replace(" ", "T"));
+  if (!Number.isFinite(at.getTime())) return "";
+  const opts = at.getFullYear() === new Date().getFullYear()
+    ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "2-digit" };
+  return at.toLocaleDateString("en-US", opts);
+};
+
 function Pile({ pile, current, onPull }) {
   const items = pile?.items || [];
   // A full account can return dozens of canonical rows together. Painting that entire stack in
@@ -140,6 +148,7 @@ function Pile({ pile, current, onPull }) {
     : left <= 5 ? `${left} to go, then the pipe is clear.` : `${left} away from a clear pipe.`;
   // Position the stack in one pass. Re-summing every preceding row for every card was quadratic
   // on each progressive render and starved refresh requests on large accounts.
+  const today = localDay(new Date().toISOString());
   let stackHeight = 0;
   const positioned = drawn.map((item) => {
     const top = stackHeight;
@@ -158,6 +167,7 @@ function Pile({ pile, current, onPull }) {
             const meta = rowMeta(i);
             const role = meta.role ? ROLES[meta.role].solid : "#d3ccc1";
             const cls = ["tq-pile-row", landing.has(i.key) ? "landing" : "", i.settling ? "settling" : "", i.current ? "current" : i.key === nextKey ? "next" : ""].filter(Boolean).join(" ");
+            const stamp = i.kind === "meeting" ? i.when : (i.since || i.when);
             const who = i.who && !i.title.toLowerCase().startsWith(i.who.toLowerCase()) ? i.who : "";
             // triaging while the AI is deciding, then WHAT IT DECIDED - the same word the Timeline row
             // and the Triage tab show (the owner, 2026-09-07). The lane is the level heading over the
@@ -174,7 +184,12 @@ function Pile({ pile, current, onPull }) {
               <div key={i.key} className={cls} data-tq-day={localDay(i.kind === "meeting" ? i.when : (i.since || i.when)) || "undated"}
                 data-tq-run={levelOf(i)}
                 style={{ top: landing.has(i.key) ? -ROW_H : top, "--edge": role }}>
-                <span className="when">{fmtTime12(i.kind === "meeting" ? i.when : (i.since || i.when))}</span>
+                <span className="when">{fmtTime12(stamp)}
+                  {/* work is ranked, not chronological, so a row can be days old with only a clock on
+                      it - and the heading above the rail is its level now, not its day (the owner,
+                      2026-09-07: "for work don't we need date and time if it's not from today"). The
+                      date only appears when it is not today's, so today's rows are unchanged. */}
+                  {localDay(stamp) && localDay(stamp) !== today && <i className="day">{shortDay(stamp)}</i>}</span>
                 <span className="rail"><i style={{ background: role }} /></span>
                 <div className="card" onClick={() => !i.settling && !i.current && onPull(i.key, `Show me “${i.title}”`)}
                   title={`${meta.word}${promoted ? " · triage moved it up" : ""}${i.surfaced && !i.current ? " · shown already, still waiting on you" : ""} — ${i.why || ""}`}>
@@ -269,7 +284,7 @@ function Line({ m, live, last, actions, fresh }) {
             <div className="tq-verbs">
               {chips.map((c, i) => (
                 <button key={c.verb || c.label} type="button" className={i === 0 ? "tq-verb primary" : "tq-verb"}
-                  disabled={actions.busy} onClick={() => actions.chip(c)}>{c.label}</button>
+                  title={c.hint || undefined} disabled={actions.busy} onClick={() => actions.chip(c)}>{c.label}</button>
               ))}
             </div>
           )}

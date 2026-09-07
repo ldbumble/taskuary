@@ -16,7 +16,10 @@
 .tq-pile-row { position: absolute; left: 0; right: 0; height: 30px; display: grid; grid-template-columns: 70px 14px minmax(0, 1fr); align-items: stretch;
   transition: top .55s cubic-bezier(.2,.8,.2,1), opacity .3s ease, transform .3s ease; }
 .tq-pile-row.landing { opacity: 0; transform: translateY(-6px) scale(.98); }
-.tq-pile-row .when { font: 500 10px 'IBM Plex Mono', Consolas, monospace; color: #a09b92; text-align: right; padding: 6px 12px 0 8px; white-space: nowrap; letter-spacing: -.2px; font-variant-numeric: tabular-nums; }
+.tq-pile-row .when { font: 500 10px 'IBM Plex Mono', Consolas, monospace; color: #a09b92; text-align: right; padding: 5px 12px 0 8px; white-space: nowrap; letter-spacing: -.2px; font-variant-numeric: tabular-nums; line-height: 1.25; }
+/* the day under the clock, for a row that is not from today - quieter than the time, and it
+   takes no width from the title: the gutter is already 70px wide for "11:53 AM" */
+.tq-pile-row .when i.day { display: block; font-style: normal; font-size: 9px; color: #b8b2a8; letter-spacing: 0; }
 .tq-pile-row .rail { position: relative; }
 .tq-pile-row .rail::before { content: ""; position: absolute; left: 6px; top: -5px; bottom: -5px; width: 1px; background: #e1dcd5; }
 .tq-pile-row .rail i { position: absolute; left: 2.5px; top: 9px; width: 8px; height: 8px; border-radius: 50%; background: #d3ccc1; box-shadow: 0 0 0 3px #fffdfb; }

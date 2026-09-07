@@ -13,7 +13,7 @@ test("the assistant offers an explicit coding or regular agent choice, in ONE pl
   const py = fs.readFileSync(path.join(process.cwd(), "..", "taskuary", "concierge.py"), "utf8");
   assert.match(py, /'coder': 'Hand it to a coding agent'/);      // still two separate roads...
   assert.match(py, /'regular_agent': 'Hand it to an agent'/);    // ...never one guessed kind
-  assert.match(py, /'coder', 'mine', 'not_ours', 'next'/);       // both offered on a message
+  assert.match(py, /'coder', 'mine', 'not_ours'/);               // both offered on a message
   assert.doesNotMatch(cards, /kind: coding \? "coding" : "general"/);
 });
 

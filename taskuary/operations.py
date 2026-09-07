@@ -31,6 +31,8 @@ KINDS = {
     'task.reopen':              ('task', (), None),
     'task.defer':               ('task', ('until',), None),
     'preference.exclude_sender': ('message', ('scope',), None),
+    'preference.sender_rule':   ('message', (), None),      # the Settings rule, not the learned verdict
+    'preference.sender_rule':   ('message', (), None),      # the Settings rule, not the learned verdict
     # ...and what the assistant's chat can put in front of the owner (concierge.PROPOSALS, PW-123)
     'task.create_from_text':    ('text', ('kind', 'text'), None),
     'message.archive':          ('message', (), 'dismissed'),
@@ -41,7 +43,7 @@ KINDS = {
     'report.rerun':             ('source', (), None),
     'memory.remember':          ('memory', ('note',), None),
     'task.split':               ('task', ('text',), None),
-    'pipe.clear':               ('pipe', ('text',), None),
+    'pipe.clear':               ('pipe', (), None),          # `text` OR `select` - a sentence, or a named set
     'task.setup':               ('text', ('text',), None),
     # ...and what the chat sets up through the tabs' own roads (concierge.setup_turn, PW-194): a report, a connection
     'report.create':            ('report', ('config',), None),

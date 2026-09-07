@@ -496,7 +496,7 @@ class ResponseTests(unittest.TestCase):
         self.assertTrue(s2.list_memories(active_only=True), 'the verdict is written down')
         s3, tid3, mid3, item3 = self._asked()
         p3 = decide(s3, 'that sender is junk, block them', 'not_ours_sender', key=item3['key'])['proposal']
-        self.assertEqual((p3['kind'], p3['params']['scope'], p3['label']), ('preference.exclude_sender', 'sender', 'Silence this sender'))
+        self.assertEqual((p3['kind'], p3['params']['scope'], p3['label']), ('preference.exclude_sender', 'sender', 'Ignore this sender from now on'))
         run(s3, p3)
         self.assertTrue(any('craig@vendor.com' in (n['ScopeKey'] or '').lower() for n in s3.list_memories(active_only=True)))
 

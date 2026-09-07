@@ -1050,6 +1050,14 @@ def run_report_source(store, src: dict, llm=None, trigger: str = 'schedule') -> 
                 'failed': str(out.get('subject') or '').endswith('FAILED'), 'files': out.get('files'),
                 'said': out.get('said'), 'reviewed': out.get('reviewed'), 'inputs': str(out.get('inputs') or '')[:30000],
                 'lines': out.get('lines') or [], 'summary': str(out.get('summary') or '')[:2000]})
+    # A run that fails by RETURNING a FAILED subject never raised, so the except branch above - the only
+    # place that filled `error` - never ran, and the row was written Failed=1 with Error NULL. Everything
+    # that reports a failure reads `error` (store.report_runs, concierge.facts' LAST RUNS line), so the
+    # chat could only say "FAILED:" with nothing after it while the cause sat in `summary` all along
+    # (the owner, 2026-09-07: "fix teh null why it failed").
+    if rec['failed'] and not rec.get('error'):
+        why = str(out.get('error') or out.get('summary') or out.get('said') or '').strip()
+        rec['error'] = (why[:600] or f"the run reported {out.get('subject') or 'FAILED'} without saying why")
     keep()
     return out
 

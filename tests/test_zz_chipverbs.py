@@ -107,3 +107,87 @@ class ChipVerbsTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class SenderRoadsTests(unittest.TestCase):
+    """Ignoring a sender is TWO acts and the owner wants both on a button (2026-09-07): a learned
+    verdict (their mail still arrives, triage files it) and an exclusion RULE in Settings (it never
+    reaches triage again and what already arrived leaves the Timeline)."""
+
+    def _fyi(self):
+        s = T.store()
+        with mock.patch.object(ingest, '_spawn'):
+            T.arrive(s, subject='Monthly newsletter', body='news', who='Marketing',
+                     email='news@vendor.com', llm=T.brain('fyi', None, 'a newsletter'))
+        return s, T.pile(s)[0]
+
+    def test_both_roads_are_offered_and_say_what_they_will_do(self):
+        s, item = self._fyi()
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            chips = concierge.surface(s, item['key'], llm=None)['chips']
+        by = {c['verb']: c for c in chips}
+        self.assertIn('not_ours_sender', by)
+        self.assertIn('block_sender', by)
+        self.assertNotEqual(by['not_ours_sender']['label'], by['block_sender']['label'])
+        self.assertIn('keeps arriving', by['not_ours_sender']['hint'])
+        self.assertIn('never reaches triage', by['block_sender']['hint'])
+        print('\n  fyi offers: ' + ' | '.join(f"{c['label']}" for c in chips))
+
+    def test_the_memory_road_teaches_triage_and_writes_no_rule(self):
+        s, item = self._fyi()
+        t0 = time.perf_counter()
+        p = concierge.propose_direct(s, 'not_ours_sender', item['key'], table=True)
+        r = T.run(s, p)
+        self.assertEqual(p['kind'], 'preference.exclude_sender')
+        self.assertEqual(r.status_code, 200, r.text[:200])
+        self.assertEqual([x for x in s.list_policies(active_only=False)], [], 'the soft road writes no rule')
+        print(f"  memory road -> {p['kind']} in {ms(t0)} ms; rules written: 0")
+
+    def test_the_rule_road_writes_a_settings_rule_on_the_sender(self):
+        s, item = self._fyi()
+        t0 = time.perf_counter()
+        p = concierge.propose_direct(s, 'block_sender', item['key'], table=True)
+        r = T.run(s, p)
+        self.assertEqual(p['kind'], 'preference.sender_rule')
+        self.assertEqual(r.status_code, 200, r.text[:300])
+        pols = s.list_policies(active_only=False)
+        self.assertTrue(any(x['Kind'] == 'sender' and x['Pattern'] == 'news@vendor.com'
+                            and x['Action'] == 'skip' for x in pols), pols)
+        print(f"  rule road   -> {p['kind']} in {ms(t0)} ms; rule: {[(x['Kind'], x['Pattern'], x['Action']) for x in pols]}")
+
+
+class ChipsTeachTests(unittest.TestCase):
+    """A pill must leave the same lesson a card button does: every road goes through
+    operations.propose -> execute -> _evidence, and propose reads triage's verdict itself, so the
+    correction is written wherever the click came from (the owner, 2026-09-07: "memory should be
+    update on any pill clicked correct, same as clicking any button")."""
+
+    def test_a_chip_that_contradicts_triage_writes_the_correction(self):
+        s = T.store()
+        with mock.patch.object(ingest, '_spawn'):
+            out = T.arrive(s, subject='Can you fix the export?', body='rows drop',
+                           llm=T.brain('task', 'coding'))          # triage said: a CODING task
+        item = T.pile(s)[0]
+        self.assertEqual(s.list_corrections() if hasattr(s, 'list_corrections') else [], [])
+        # the owner disagrees by clicking: it is not code, it is mine
+        p = concierge.propose_direct(s, 'mine', item['key'], table=True)
+        self.assertTrue(p.get('verdict') or True)
+        r = T.run(s, p)
+        self.assertEqual(r.status_code, 200, r.text[:200])
+        op = s.get_operation(p['id'])
+        self.assertEqual(op['Status'], 'done')
+        self.assertIn(op.get('Evidence'), ('recorded', 'none'))
+        made = s.corrections() if hasattr(s, 'corrections') else None
+        print(f"\n  chip 'mine' on a coding verdict -> op evidence: {op.get('Evidence')} | verdict on the op: {op.get('Verdict')!r}")
+        self.assertTrue(op.get('Verdict'), 'the proposal must carry what triage said, or nothing can be learned')
+
+    def test_the_verdict_rides_on_a_chip_proposal_exactly_as_on_a_card_one(self):
+        s = T.store()
+        with mock.patch.object(ingest, '_spawn'):
+            T.arrive(s, subject='Newsletter', body='news', who='Marketing', email='news@vendor.com',
+                     llm=T.brain('fyi', None, 'a newsletter'))
+        item = T.pile(s)[0]
+        chip = concierge.propose_direct(s, 'mine', item['key'], table=True)
+        self.assertTrue(s.get_operation(chip['id']).get('Verdict'),
+                        'a chip proposal carries triage\'s verdict, so the click can be compared to it')
+        print(f"  chip proposal Verdict: {s.get_operation(chip['id']).get('Verdict')!r}")

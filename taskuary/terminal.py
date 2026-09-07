@@ -199,6 +199,12 @@ class Term:
                 except Exception as e: logger.debug(f'terminal tap failed: {e}')
         self.alive, self.ended = False, time.time()       # exited: the tab stays readable for a while
         self.keep()                                       # the transcript must outlive the pty
+        # ...and the peers still here learn this one is gone - its notes are history now (PW-173/178)
+        if self.task_id and self.agent and self.cwd and getattr(self, 'store', None):
+            from . import blackboard as _bb
+            from .store import task_ref as _ref
+            try: _bb.peer_update(self.store, self.cwd, _bb.PEER_STOPPED.format(ref=_ref(self.task_id), agent=self.agent), exclude_sid=self.sid)
+            except Exception as e: logger.debug(f'peer update skipped: {e}')
         self._emit(None)
         from . import browserview as _bv
         _bv.close(self.sid)                               # its browser goes with it, not into an hour of idling
@@ -673,6 +679,12 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         except Exception as e: logger.debug(f'claude hooks not installed in {cwd}: {e}')
     t = Term(argv, cwd, label, task_id, agent, rows, cols, store)
     SESSIONS[t.sid] = t
+    # the agents already here learn a newcomer arrived (PW-173): a line in their waiting room, typed when they park
+    if agent and task_id and cwd and store:
+        from . import blackboard as _bb
+        from .store import task_ref as _ref
+        try: _bb.peer_update(store, cwd, _bb.PEER_STARTED.format(ref=_ref(task_id), agent=agent), exclude_sid=t.sid)
+        except Exception as e: logger.debug(f'peer update skipped: {e}')
     # The configured profile name is the worker's identity, not just a launch option. Keep it on
     # the task after this terminal closes so an inbound auto-start and an owner-started session
     # both have a named owner, and the next session can return to the same worker deliberately.

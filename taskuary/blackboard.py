@@ -265,6 +265,25 @@ def wall_text(store, cwd: str, limit: int = 8) -> str:
     return said[:SEED_BUDGET]
 
 
+PEER_STARTED = ('PEER UPDATE: {ref} ({agent}) just started in this checkout - `taskuary --board` shows its live notes; '
+                'coordinate on the wall before touching a file it may be on.')
+PEER_STOPPED = ('PEER UPDATE: {ref} ({agent}) has stopped - its wall notes are history now, not file ownership; '
+                '`taskuary --board` shows who is still here.')
+
+
+def peer_update(store, cwd: str, text: str, exclude_sid: str = None) -> int:
+    """Refresh the peers' coordination context as it changes (PW-173): one line into each live peer's waiting room
+    on this checkout, typed when that peer parks. A briefing the agent reads, never a lock and never a worktree."""
+    from . import terminal as term, waitroom
+    n = 0
+    for t in list(term.SESSIONS.values()):
+        if not getattr(t, 'alive', False) or not getattr(t, 'task_id', None) or str(getattr(t, 'sid', '')) == str(exclude_sid or ''): continue
+        if norm(getattr(t, 'cwd', '')) != norm(cwd): continue
+        try: waitroom.add(store, t.task_id, text, actor='router'); n += 1
+        except Exception as e: logger.debug(f'peer update to task {t.task_id} skipped: {e}')
+    return n
+
+
 def briefing(store, cwd, exclude_tid=None, assess_for: int = None) -> str:
     """The OTHER AGENTS paragraph of a new agent's prompt (PW-172/174): the facts - which peers are
     in this checkout, who they are, what each is doing, which files it has touched so far, what its

@@ -252,7 +252,13 @@ def restore_current(store, tid: int) -> dict | None:
     try: item = funnel.batch_item(store, key) if key.startswith('fyis:') else funnel.next_item(store, key, include_surfaced=True)
     except Exception as e:
         logger.warning(f'concierge: could not validate the current item {key} - {e}'); item = None
-    if not item or item.get('settling'):
+    # ...and "still there" is not enough. A mail row on a closed task leaves the pile (funnel._feed_skip),
+    # but own work reaches it through the processing inventory, which keeps a finished task as a READ
+    # fyi row - so Current went on holding a task done twenty minutes ago and the assistant kept
+    # offering to hand it to an agent (TQ-0420). The test is OVER, never "read": an item the assistant
+    # puts in the chat is read, and clearing on that would empty the table as soon as it was set.
+    over = item and item.get('tid') and (store.get_task(item['tid']) or {}).get('Status') in ('done', 'dropped')
+    if not item or item.get('settling') or (over and item.get('lane') != 'approve'):
         set_current(store, tid, None)
         return None
     card = card_for(item) | {'presentation_revision': item.get('presentation_revision')}

@@ -19,6 +19,8 @@ import AddCommentOutlinedIcon from "@mui/icons-material/AddCommentOutlined";
 import api from "./api.js";
 import { streamAssistant, toolTarget } from "./assistantStream.js";
 import { wantsAsk, wantsBrowser, withoutAsk } from "./newTask.js";
+import { paneFor } from "./generalPane.js";
+import { pickFor } from "./assistantProvider.js";
 import { Md } from "./md.jsx";
 import { SessionPane, TerminalPane } from "./TerminalView.jsx";
 import SemanticPanel from "./SemanticPanel.jsx";
@@ -457,8 +459,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
 
   const accept = useCallback((payload) => {
     setData(payload);
-    const current = payload?.providers?.find((p) => String(p.id) === String(payload?.session?.pick));
-    const provider = current || payload?.providers?.find((p) => p.label === payload?.session?.provider) || payload?.providers?.[0];
+    const provider = pickFor(payload);
     if (provider) {
       setConnectorId((old) => old || String(provider.id));
       setModel((old) => old || payload?.session?.model || provider.model || "");
@@ -558,6 +559,17 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
   if (!data && !error) return <Box sx={{ height: 520, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>;
   const session = data?.session;
   const shownMessages = messagesWithTrace(data?.messages, session);
+  // the chat IS the workspace, running or not (generalPane.js) - a session only decides whether
+  // there is a terminal to show beside it
+  const pane = paneFor(view, !!session);
+  const thread = (
+    <AssistantThread key={`${task.TaskId}-${threadKey}`} task={task} messages={shownMessages}
+      onAsked={dropAsk} onStop={stopRun} selectionRef={selectionRef}
+      attachmentsRef={attachmentsRef} onSent={sent} onClearAttachments={clearAttachments}
+      onAttach={() => fileRef.current?.click()} onReport={makeReport} reportBusy={reportBusy}
+      dock={dock} dockExpanded={dockExpanded} prompt={prompt} onPromptUsed={onPromptUsed}
+      onBusyChange={onBusyChange} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged} />
+  );
   return (
     <Box className={dock ? `tq-aui-dock${dockExpanded ? " tq-aui-dock-expanded" : ""}` : undefined} onPaste={pasted} sx={{ border: dock ? 0 : `1px solid ${BORDER}`, borderRadius: dock ? 0 : 1.75, overflow: "hidden", bgcolor: PANEL2,
       minHeight: 0, display: "flex", flexDirection: "column",
@@ -642,20 +654,17 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
       <input ref={fileRef} hidden type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple onChange={(e) => upload(e.target.files)} />
       {uploading && <Box sx={{ px: 1, py: 0.5, color: FAINT, fontSize: 11 }}>Attaching image…</Box>}
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-        {view === "numbers" ? (
+        {pane === "numbers" ? (
           <SemanticPanel />
-        ) : session && view === "terminal" ? (
+        ) : pane === "terminal" ? (
           <TerminalPane sid={session.sid} height="100%" />
+        ) : pane === "terminal-empty" ? (
+          <Box sx={{ p: 2, color: FAINT, fontSize: 11.5 }}>
+            Nothing has run on this task yet — ask something and the session's own output appears here.
+          </Box>
         ) : session ? (
-          <SessionPane sid={session.sid} height="100%" expectBrowser={wantsBrowser(task)}>
-            <AssistantThread key={`${task.TaskId}-${threadKey}`} task={task} messages={shownMessages}
-              onAsked={dropAsk} onStop={stopRun} selectionRef={selectionRef}
-              attachmentsRef={attachmentsRef} onSent={sent} onClearAttachments={clearAttachments}
-              onAttach={() => fileRef.current?.click()} onReport={makeReport} reportBusy={reportBusy}
-              dock={dock} dockExpanded={dockExpanded} prompt={prompt} onPromptUsed={onPromptUsed}
-              onBusyChange={onBusyChange} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged} />
-          </SessionPane>
-        ) : null}
+          <SessionPane sid={session.sid} height="100%" expectBrowser={wantsBrowser(task)}>{thread}</SessionPane>
+        ) : thread}
       </Box>
     </Box>
   );

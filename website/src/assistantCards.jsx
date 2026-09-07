@@ -19,6 +19,8 @@ import { laneMeta, ageText } from "./funnelPile.js";
 import { sendBlockLine, draftState } from "./sendState.js";
 import { checklistMarkdown } from "./checklist.js";
 import { TerminalPane } from "./TerminalView.jsx";
+import { agentCardView } from "./agentCardView.js";
+import { lazyGeneral } from "./lazyGeneral.js";
 import { RepoPicker } from "./RepoPicker.jsx";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "That did not work";
@@ -201,16 +203,23 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
   );
 }
 
+const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // guarded: a stale chunk reloads once
+
 // an agent parked on a question: its last lines, and a box that answers it
 export function AgentCard({ card, onDone, onOpenTask }) {
+  // WHICH agent this is. A general task's chat reaches the pile down the same "an agent is waiting
+  // on you" road as a coding CLI - and both were drawn as a terminal, so a research conversation
+  // appeared here as a black screen of tool JSON under "This is the agent's own screen" (TQ-0420).
+  const chat = agentCardView(card.mode) === "chat";
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [big, setBig] = useState(false);
   // A hand-off is not the main Assistant doing the work. Keep the other agent's workspace folded
   // unless the owner explicitly asks to see it; opening a regular API agent inline made the
-  // orchestration chat look as though it had silently changed identities.
-  const [live, setLive] = useState(false);
+  // orchestration chat look as though it had silently changed identities. Its OWN chat is not a
+  // hand-off, and folding that leaves the card with nothing to read and nowhere to answer.
+  const [live, setLive] = useState(chat);
   const answer = async () => {
     if (!text.trim()) return;
     setBusy(true); setErr("");
@@ -219,6 +228,7 @@ export function AgentCard({ card, onDone, onOpenTask }) {
     setBusy(false);
   };
   const working = card.lane === "working";
+  const who = chat ? "assistant" : "agent";
   // ...and the two ways an agent ENDS, in the chat, where the owner is looking (2026-09-03: "we need
   // to button to close down agent in the chat. it's finished.."). Wrapping up is the whole ending -
   // the transcript becomes the report, proposals become reviews, the reply gets drafted, the task
@@ -235,29 +245,40 @@ export function AgentCard({ card, onDone, onOpenTask }) {
     setEnding("");
   };
   return (
-    <CardShell card={card} kicker={working ? "the agent is working again" : card.asking ? "the agent asked" : "the agent stopped"} title={card.title}
-      sub={`${card.working || card.agent || "agent"} · ${working ? "back at it - nothing for you until it stops" : card.asking ? "waiting on your answer" : "parked at its prompt"}`} err={err}>
-      {card.sid && live ? (
+    <CardShell card={card} kicker={working ? `the ${who} is working again` : card.asking ? `the ${who} asked` : `the ${who} stopped`} title={card.title}
+      sub={`${card.working || card.agent || who} · ${working ? "back at it - nothing for you until it stops" : card.asking ? "waiting on your answer" : chat ? "waiting on you" : "parked at its prompt"}`} err={err}>
+      {chat && live ? (
+        <div className="tq-card-chat" style={{ height: big ? 640 : 340 }}>
+          <React.Suspense fallback={<div className="tq-card-tail">Opening the conversation…</div>}>
+            <GeneralWorkspace task={{ TaskId: card.tid, Title: card.title }} compact />
+          </React.Suspense>
+        </div>
+      ) : card.sid && live ? (
         <div className="tq-card-term" style={{ height: big ? 640 : 340 }}>
           <TerminalPane sid={card.sid} height={big ? "640px" : "340px"} autoFocus={false} />
         </div>
       ) : !!card.tail?.length && <div className="tq-card-tail">{card.tail.join("\n")}</div>}
-      {card.sid && (
+      {(chat || card.sid) && (
         <div className="tq-card-note" style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <span>{live ? "This is the agent's own screen — click in and type to answer it there." : "Screen folded."}</span>
+          <span>{!live ? (chat ? "Conversation folded." : "Screen folded.")
+            : chat ? "This is the conversation — answer it here." : "This is the agent's own screen — click in and type to answer it there."}</span>
           <span className="sp" />
           <Button size="small" onClick={() => setBig((b) => !b)} sx={faint}>{big ? "Smaller" : "Bigger"}</Button>
-          <Button size="small" onClick={() => setLive((l) => !l)} sx={faint}>{live ? "Fold" : "Show the screen"}</Button>
+          <Button size="small" onClick={() => setLive((l) => !l)} sx={faint}>
+            {live ? "Fold" : chat ? "Show the conversation" : "Show the screen"}</Button>
         </div>
       )}
-      <TextField fullWidth multiline minRows={1} maxRows={5} value={text} onChange={(e) => setText(e.target.value)}
+      {/* the chat above already has a composer, and it talks to the assistant. This box queues into
+          the WAITING ROOM, which is a terminal's letterbox - two of them is two different sends. */}
+      {!(chat && live) && <TextField fullWidth multiline minRows={1} maxRows={5} value={text} onChange={(e) => setText(e.target.value)}
         placeholder={card.asking ? "Or answer here — it is typed in when the agent next stops" : "Tell it what to do next"}
         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); answer(); } }}
-        sx={{ mt: 1, "& textarea": { fontSize: 12.5 } }} />
+        sx={{ mt: 1, "& textarea": { fontSize: 12.5 } }} />}
       <div className="tq-card-actions">
-        <Button size="small" variant="contained" disableElevation disabled={busy || !text.trim()} onClick={answer} sx={primary}>{busy ? "Sending…" : "Answer"}</Button>
+        {!(chat && live) && <Button size="small" variant="contained" disableElevation disabled={busy || !text.trim()} onClick={answer} sx={primary}>{busy ? "Sending…" : "Answer"}</Button>}
         <span className="sp" />
-        <Button size="small" onClick={() => onOpenTask?.(card.tid, { start: false })} sx={faint}>Open agent workspace</Button>
+        <Button size="small" onClick={() => onOpenTask?.(card.tid, { start: false })} sx={faint}>
+          {chat ? "Open the task" : "Open agent workspace"}</Button>
       </div>
     </CardShell>
   );

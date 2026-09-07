@@ -99,6 +99,34 @@ class RestoreTests(unittest.TestCase):
         cur = c2.get('/api/concierge').json()['current']
         self.assertEqual((cur['key'], cur['kind'], len(cur['items'])), (batch['key'], 'fyis', 2))
 
+    def test_a_task_that_closes_under_an_own_work_row_leaves_the_table(self):
+        """The mail case above already worked: _feed_skip drops a closed row from the pile, so
+        validation finds nothing and clears the key. Own work reaches the pile through the processing
+        inventory instead, which keeps a closed task as a READ fyi row - still there, so Current went
+        on holding a task that had been done for twenty minutes, and the assistant kept offering to
+        hand it to an agent (the owner, TQ-0420, 2026-09-07)."""
+        from taskuary import ownwork
+        dock = general.dock_task(self.s)[0]['TaskId']
+        t = self.s.create_task({'Title': 'Research Instinct', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        ownwork.ensure(self.s, t, ago(0), 'the assistant started here', 'owner')
+        settle = lambda: (self.s.reconcile_processing_membership(fixed_now=ago(0)), funnel.invalidate())
+        settle(); self.s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        key = next(i['key'] for i in funnel.build(self.s, keep_surfaced=True)['items'] if i.get('tid') == t)
+        concierge.set_current(self.s, dock, key)
+        self.assertEqual(concierge.restore_current(self.s, dock)['key'], key)   # open: it is on the table
+        self.s.update_task(t, {'Status': 'done'}, 'owner'); settle()
+        self.assertIsNone(concierge.restore_current(self.s, dock))
+        self.assertEqual(concierge.current_key(self.s, dock), '')              # ...and it is not chosen again
+
+    def test_being_shown_in_the_chat_does_not_take_it_off_the_table(self):
+        """The guard is "over", never "read": an item the assistant puts in the chat IS read, and
+        clearing Current on that would empty the table the moment it was set."""
+        t, m = asked(self.s)
+        self.c.post('/api/concierge/next', json={})
+        dock = general.dock_task(self.s)[0]['TaskId']
+        self.assertEqual(self.c.get('/api/concierge').json()['current']['key'], f'msg:{m}')
+        self.assertEqual(concierge.current_key(self.s, dock), f'msg:{m}')
+
     def test_a_new_chat_has_nothing_on_the_table(self):
         t, m = asked(self.s)
         self.c.post('/api/concierge/next', json={})

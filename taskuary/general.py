@@ -104,6 +104,15 @@ def provider_options(store) -> list:
     return out
 
 
+def default_pick(store) -> str:
+    """Which provider the chat would use if nobody chose one - the SAME reading start_session makes.
+
+    The workspace used to default its picker to providers[0], and provider_options lists CLIs first,
+    so a general task with no session nominated a CODING agent and posted that as its pick. The
+    server's own answer prefers an API brain and only falls back to a CLI when there is none."""
+    return _selected(store)[0]
+
+
 def _selected(store, connector_id=None, model=None, pick=None) -> tuple[str, str, str]:
     options = provider_options(store)
     explicit = bool(pick or connector_id is not None or model)
@@ -723,8 +732,15 @@ class GeneralSession:
             # whole chat again - slower, dearer, and silently forgetful once the conversation
             # outgrew MAX_CONTEXT. Resumed, the CLI still has what it read and did last turn,
             # so the turn itself is all that has to be said.
+            # ...and it may LOOK THINGS UP. A CLI brain with no cwd and no browser fell through to
+            # make_cli_llm's classifier profile - `--tools ''`, the permission bypass stripped -
+            # because that function reads "no hands" as "reads untrusted mail, gets nothing". The
+            # chat is the OWNER talking: asked to research a company it answered "I don't have a web
+            # search tool in this session" (TQ-0420). `research` is the grant reports already use -
+            # Read/Glob/Grep/WebFetch/WebSearch, granted so a headless run need not click, and no
+            # command, edit, write, or MCP tool. Looking is not acting.
             build_args = dict(pick=self.pick, model=self.model or None, trace=visible,
-                              cancel=cancel, resume=self.cli_sid or None)
+                              cancel=cancel, resume=self.cli_sid or None, research=True)
             if browser_tools:
                 build_args.update(cli_tools=True, extra_env=browser_env)
             brain = llm_mod.build_llm(self.store, **build_args)

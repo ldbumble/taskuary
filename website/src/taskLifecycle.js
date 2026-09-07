@@ -40,6 +40,17 @@ export const replyPhase = (reviews = []) => {
   return "not drafted";
 };
 
+// Three cards open at once never say which one is asking you for something. Exactly one stage is
+// the focus and the other two fold to their heading: a pending draft outranks everything (sending
+// it is the step that closes the task), then the agent, then the task itself.
+export const focusStage = ({ kind, task, agent, reply, hasSender } = {}) => {
+  if (reply === "draft ready") return "reply";
+  if (hasSender && kind === "reply" && !["sent", "not needed"].includes(reply)) return "reply";
+  if (["done", "dropped"].includes(task)) return "task";
+  if (["coding", "general"].includes(kind) || (agent && agent !== "not started")) return "agent";
+  return "task";
+};
+
 export const timelinePhases = (row) => ({
   task: taskPhase(row?.TaskStatus),
   agent: row?.AgentWaiting ? "needs you" : row?.Working ? "working" : null,

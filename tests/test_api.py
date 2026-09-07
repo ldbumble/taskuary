@@ -746,7 +746,7 @@ class ApiTests(unittest.TestCase):
             r = c.post(f'/api/reviews/{rid}/decide', json={'verb': 'approve', 'final_text': 'On it.'})
         self.assertEqual(r.json()['status'], 'edited')            # the diff, not the verb, says edited
         self.assertIn('DRAFT:', seen['usr']); self.assertIn('On it.', seen['usr'])   # the edit IS the lesson
-        self.assertIn(bullet, server.store.get_doc('learned'))
+        self.assertIn(bullet[:-1] + ' | k: owner first drops formal openers]', server.store.get_doc('learned'))   # keyed on the way in
         # and a plain approve teaches nothing hot-path: it is aggregate confirmation, counted at reflection
         server.store.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'r', 'DraftText': 'ok'})
         rid2 = next(r2['ReviewId'] for r2 in c.get('/api/reviews', params={'status': 'pending'}).json()['data']

@@ -52,16 +52,19 @@ const clickItem = async (page, itemId) => {
   await target.click();
 };
 
+// The picker's own list is live: polling keeps discovering senders, and each channel re-slices
+// the six it shows. An option handle held from the text match to the click can therefore be
+// unmounted by then ("Node is detached from document") or have moved, putting the real mouse
+// click on the row that took its place - both seen in CI. Match and click inside one evaluation,
+// the way the level dock picker does, and there is no window for either.
 const chooseOption = async (page, ariaLabel, label) => {
   await page.click(`[aria-label="${ariaLabel}"]`);
   await page.waitForSelector('[role="option"]', { visible: true, timeout: 5000 });
-  const options = await page.$$('[role="option"]');
-  for (const option of options) {
-    if (await option.evaluate((node, wanted) => node.textContent.trim() === wanted, label)) {
-      await option.click(); return;
-    }
-  }
-  assert.fail(`${ariaLabel} option ${label} was not found`);
+  const chosen = await page.$$eval('[role="option"]', (nodes, wanted) => {
+    const option = nodes.find((node) => node.textContent.trim() === wanted);
+    option?.click(); return Boolean(option);
+  }, label);
+  assert.ok(chosen, `${ariaLabel} option ${label} was not found`);
 };
 
 const chooseSource = (page, label) => chooseOption(page, "Timeline source", label);

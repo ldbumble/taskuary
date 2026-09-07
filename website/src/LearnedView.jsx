@@ -20,8 +20,13 @@ const RED = ROLES.you.solid, RED_INK = ROLES.you.ink, RED_TINT = ROLES.you.tint,
 const day = (d) => (d ? String(d).slice(5, 10).replace("-", "/") : "");
 const short = (s, n) => { const t = String(s || "").replace(/^\d{4}-\d{2}-\d{2}:\s*/, ""); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
 
-const Score = ({ s, color }) => (
-  <Box component="span" sx={{ ...mono, fontWeight: 700, fontSize: 10, borderRadius: 1, px: 0.6, color: "#fff", bgcolor: color }}>s:{s}</Box>
+// The badge shows what the line is WORTH, not what its tag says: an untested line loses a point
+// per quiet month, so a stale s:5 counts as less and the strikethrough says by how much.
+const Score = ({ s, eff, color }) => (
+  <Box component="span" sx={{ ...mono, fontWeight: 700, fontSize: 10, borderRadius: 1, px: 0.6, color: "#fff", bgcolor: color }}>
+    {eff != null && eff !== s && <Box component="span" sx={{ opacity: 0.6, textDecoration: "line-through", mr: 0.4 }}>s:{s}</Box>}
+    s:{eff != null ? eff : s}
+  </Box>
 );
 
 // The ledger: one line's life on one clock.
@@ -118,8 +123,9 @@ export default function LearnedView({ onChanged }) {
           boxShadow: isPinned ? "0 1px 4px rgba(30,50,38,.14)" : "none" }}>
         <Box onClick={() => pin(l.key)} sx={{ cursor: "pointer" }} title={isPinned ? "Click to unpin" : "Click to keep this open"}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.4 }}>
-            <Score s={l.score} color={st.color} />
-            <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}>seen {l.seen}</Typography>
+            <Score s={l.score} eff={l.effective} color={st.color} />
+            <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}
+              title={l.effective !== l.score ? `Nothing has confirmed this since ${l.seen}, so it counts as s:${l.effective}` : ""}>seen {l.seen}</Typography>
             <Typography variant="caption" sx={{ ...mono, color: st.color, fontSize: 10, fontWeight: 700 }}>
               {isOpen ? "▾" : "▸"} {l.evidence.length} verdict{l.evidence.length === 1 ? "" : "s"}{isPinned ? " · pinned" : ""}
             </Typography>

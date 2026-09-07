@@ -753,6 +753,9 @@ def _assistant_payload(task_id: int, session=None):
         raise HTTPException(422, 'assistant view is available for general, research, marketing, and triage tasks')
     session = session or general.session_for(task_id)
     return {'messages': general.history(store, task_id), 'providers': general.provider_options(store),
+            # what the chat WOULD run on if nobody picks: the picker showed providers[0] instead,
+            # which is always a CLI, so a task with no session nominated a coding agent (TQ-0420)
+            'defaultPick': general.default_pick(store),
             'session': session.info(tail=3) if session else None}
 
 @app.get('/api/tasks/{task_id}/assistant')

@@ -28,6 +28,7 @@ import { Attachments } from "./Attachments.jsx";
 import { ChannelIcon, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, ConfirmDelete, TellAgent, WorkStrip, isWaiting, TaskuaryMark, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
 import PauseCircleIcon from "@mui/icons-material/PauseCircleOutline";
 import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
@@ -47,7 +48,7 @@ import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { agentWorkspaceMode } from "./taskWorkspace.js";
 import { ASK_TAG } from "./newTask.js";
 import {
-  agentPhase, ownerControlsCompletion, pendingReplyReview, replyPhase, sentReplyReview, taskPhase,
+  agentPhase, focusStage, ownerControlsCompletion, pendingReplyReview, replyPhase, sentReplyReview, taskPhase,
 } from "./taskLifecycle.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
@@ -160,6 +161,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const [senderQuestion, setSenderQuestion] = useState("");
   const [askingSender, setAskingSender] = useState(false);
   const [openingReply, setOpeningReply] = useState(false);
+  const [openStage, setOpenStage] = useState(null);   // a stage you opened by hand, overriding the computed focus
   const waitingN = (tasks || []).find((x) => x.TaskId === selected)?.Waiting || 0;   // prompts in this task's funnel
   const [diff, setDiff] = useState(null);
   const [diffScope, setDiffScope] = useState("task");   // this task's footprint, or the whole checkout
@@ -323,6 +325,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   useEffect(() => {
     setWrapping(false); setWrapped(null);
     setAskSenderOpen(false); setSenderQuestion(""); setAskingSender(false); setOpeningReply(false);
+    setOpenStage(null);
   }, [selected]);
 
   const [handoff, setHandoff] = useState(false);
@@ -584,6 +587,15 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     || String(t?.Tags || "").split(/[\s,]+/).includes(ASK_TAG));
   const workspaceMode = agentWorkspaceMode({ isGeneral, generalStarted, session: term, wrapping, wrapped });
   const replyState = replyPhase(detail?.reviews || []);
+  // ONE question per page. A running session is itself the agent stage, so it is never folded; the
+  // hand-picked stage wins over the computed one until you leave the task (start an agent on a task
+  // whose draft is waiting, or answer a sender the agent is still working for).
+  const stage = term?.alive ? "agent" : (openStage || focusStage({
+    kind: t?.Kind, task: taskState, agent: agentState, reply: replyState, hasSender: !!sourceMessage,
+  }));
+  // only a folded heading is a control: exactly one stage is open, so clicking the open one has
+  // nothing to do and must not offer a chevron that does nothing.
+  const stageProps = (name) => ({ folded: stage !== name, onToggle: stage === name ? null : () => setOpenStage(name) });
   const startCodingAgent = async () => {
     if (!selected || startingAgent) return;
     const id = selected;
@@ -794,10 +806,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 {/* The checkout, and why. A wrong guess means an agent editing the wrong tree in
                     good faith, so it is stated on the page rather than buried in the prompt. */}
                 {!term?.alive && (
-                  <Box sx={{ ...card, mb: 1.25, p: 1.5, bgcolor: "#fff", flexShrink: 0,
+                  <Box sx={{ ...card, mb: 1.25, p: stage === "task" ? 1.5 : 1.1, bgcolor: "#fff", flexShrink: 0,
                     borderLeft: "4px solid #55697a" }}>
                     <WorkflowHeading number="1" title="Task" description="The job itself — ownership and completion live here."
-                      chip={<LifecycleChip kind="task" phase={taskState} compact />} tone="#55697a" />
+                      chip={<LifecycleChip kind="task" phase={taskState} compact />} tone="#55697a" {...stageProps("task")} />
+                    {stage === "task" && <>
                     <Divider sx={{ my: 1.2, borderColor: BORDER }} />
                     <Box sx={{ display: "flex", gap: 1.15, alignItems: "flex-start" }}>
                       <Tooltip title={t.Status === "done" ? "Completed" : "Mark this task done"}>
@@ -930,10 +943,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         ? "You control completion. Ending an agent run or sending a reply leaves this task open."
                         : "Automatic task. When its triaged work finishes, Taskuary may close it and prepare the reply."}
                     </Typography>
+                    </>}
                   </Box>
                 )}
                 <Box sx={{ ...card, mb: liveCodingSession ? 0.55 : 1.25,
-                  px: liveCodingSession ? 1 : 1.5, py: liveCodingSession ? 0.55 : 1.5,
+                  px: liveCodingSession ? 1 : 1.5, py: liveCodingSession ? 0.55 : stage === "agent" ? 1.5 : 1.1,
                   bgcolor: "#fff", flexShrink: 0, borderLeft: "4px solid #6f8a6e",
                   display: liveCodingSession ? "flex" : "block", alignItems: "center",
                   gap: liveCodingSession ? 1 : 0, flexWrap: "wrap" }}>
@@ -942,8 +956,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     description={term?.alive
                       ? ""
                       : "Run, pause, stop, or restart an agent. None of these actions completes the task."}
-                    chip={<LifecycleChip kind="agent" phase={agentState} compact />} tone="#6f8a6e" />
+                    chip={<LifecycleChip kind="agent" phase={agentState} compact />} tone="#6f8a6e" {...stageProps("agent")} />
                   </Box>
+                  {stage === "agent" && <>
                   {term?.alive && (
                     <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end",
                       gap: 0.35, flexWrap: "wrap", flex: 1, minWidth: 0, mt: liveCodingSession ? 0 : 1 }}>
@@ -1048,6 +1063,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   {isGeneral && generalStarted && !term?.alive && <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.8 }}>
                     Send a message in the workspace below to restart its agent.
                   </Typography>}
+                  </>}
                 </Box>
                 {repoPick && (
                   <Box sx={{ ...card, mb: 1, bgcolor: PANEL2 }}>
@@ -1071,9 +1087,14 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   </Box>
                 )}
                 {workspaceMode === "general" ? (
-                  <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
-                    <GeneralWorkspace task={t} onSession={generalSession} onOpenReports={onGoReports} />
-                  </React.Suspense>
+                  /* the chat is this task's session: it gets the room a terminal gets, not the
+                     height of its own content squeezed between the cards above and below it */
+                  <Box sx={{ flex: "1 1 0", minHeight: { xs: 360, md: 420 },
+                    display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
+                    <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
+                      <GeneralWorkspace task={t} compact onSession={generalSession} onOpenReports={onGoReports} />
+                    </React.Suspense>
+                  </Box>
                 ) : workspaceMode === "wrapping" ? (
                   <Box sx={{ ...card, bgcolor: "#e3e6e1", border: "1px solid #d2d6cf" }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -1148,7 +1169,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   </>
                 ) : null}
 
-                {!term?.alive && <Box sx={{ ...card, mt: 1.25, p: 1.5,
+                {!term?.alive && <Box sx={{ ...card, mt: 1.25, p: stage === "reply" ? 1.5 : 1.1,
                   bgcolor: "#fff", flexShrink: 0,
                   borderLeft: "4px solid #9a7444" }}>
                   <WorkflowHeading number="3" title="Reply"
@@ -1158,8 +1179,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         ? "What goes back to the sender. Sending and task completion are separate decisions."
                         : "External communication, when this task has a sender."}
                     chip={<LifecycleChip kind="reply" phase={sourceMessage ? replyState : "not available"} compact />}
-                    tone="#9a7444" />
-                  {!term?.alive && (sourceMessage ? (
+                    tone="#9a7444" {...stageProps("reply")} />
+                  {stage === "reply" && (sourceMessage ? (
                     <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
                       {pendingReview?.DraftText && (
                         <Box sx={{ bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.25,
@@ -1486,17 +1507,21 @@ const Fold = ({ title, children }) => (
   </Box>
 );
 
-const WorkflowHeading = ({ number, title, description, chip, tone }) => (
-  <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
+const WorkflowHeading = ({ number, title, description, chip, tone, folded, onToggle }) => (
+  <Box onClick={onToggle} sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0,
+    cursor: onToggle ? "pointer" : "default", opacity: folded ? 0.72 : 1,
+    "&:hover": onToggle ? { opacity: 1 } : undefined }}>
     <Box sx={{ width: 24, height: 24, borderRadius: "50%", bgcolor: tone, color: "#fff",
       display: "grid", placeItems: "center", flexShrink: 0, fontSize: 11.5, fontWeight: 800 }}>
       {number}
     </Box>
     <Box sx={{ minWidth: 0, flex: 1 }}>
       <Typography sx={{ color: INK, fontSize: 13.5, fontWeight: 750, lineHeight: 1.25 }}>{title}</Typography>
-      {description && <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.35 }}>{description}</Typography>}
+      {description && !folded && <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.35 }}>{description}</Typography>}
     </Box>
     {chip}
+    {onToggle && <ExpandMoreIcon sx={{ fontSize: 18, color: FAINT, flexShrink: 0,
+      transform: folded ? "rotate(-90deg)" : "none", transition: "transform .15s" }} />}
   </Box>
 );
 

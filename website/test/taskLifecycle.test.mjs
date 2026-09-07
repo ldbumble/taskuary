@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
-  agentPhase, ownerControlsCompletion, pendingReplyReview, replyPhase, sentReplyReview, taskPhase, timelinePhases,
+  agentPhase, focusStage, ownerControlsCompletion, pendingReplyReview, replyPhase, sentReplyReview, taskPhase, timelinePhases,
 } from "../src/taskLifecycle.js";
 
 test("task, agent and reply phases remain independent", () => {
@@ -48,5 +48,30 @@ test("terminal output never triggers whole-task HTTP refreshes", () => {
   for (const file of ["ui.jsx", "FeedView.jsx", "BoardView.jsx", "WallView.jsx", "StudioView.jsx"]) {
     const view = readFileSync(fileURLToPath(new URL(`../src/${file}`, import.meta.url)), "utf8");
     assert.doesNotMatch(view, /onLive\([^\n]*run-tail/, `${file} must not turn terminal bytes into HTTP`);
+  }
+});
+
+test("one stage is open: the last thing owed wins, and a closed task shows itself", () => {
+  const draftReady = { kind: "coding", task: "open", agent: "result ready", reply: "draft ready", hasSender: true };
+  assert.equal(focusStage(draftReady), "reply");                                    // sending it is what closes the task
+  assert.equal(focusStage({ ...draftReady, agent: "needs you" }), "reply");
+  assert.equal(focusStage({ kind: "reply", task: "open", agent: "not started", reply: "not drafted", hasSender: true }), "reply");
+  assert.equal(focusStage({ kind: "coding", task: "open", agent: "not started", reply: "sent", hasSender: true }), "agent");
+  assert.equal(focusStage({ kind: "general", task: "open", agent: "not started", reply: "not needed" }), "agent");
+  assert.equal(focusStage({ kind: "task", task: "open", agent: "stopped", reply: "not drafted" }), "agent");
+  assert.equal(focusStage({ kind: "task", task: "open", agent: "not started", reply: "not drafted" }), "task");
+  assert.equal(focusStage({ kind: "reply", task: "open", agent: "not started", reply: "not drafted" }), "task");   // no sender to answer
+  assert.equal(focusStage({ kind: "coding", task: "done", agent: "result ready", reply: "sent" }), "task");
+  assert.equal(focusStage({}), "task");
+});
+
+test("the task page opens exactly one stage and lets you open the others by hand", () => {
+  const source = readFileSync(fileURLToPath(new URL("../src/TasksView.jsx", import.meta.url)), "utf8");
+  assert.match(source, /const stage = term\?\.alive \? "agent" : \(openStage \|\| focusStage\(/);
+  assert.match(source, /setOpenStage\(null\)/);
+  assert.match(source, /onToggle: stage === name \? null : \(\) => setOpenStage\(name\)/);   // the open one is not a control                                     // a new task recomputes its own focus
+  for (const name of ["task", "agent", "reply"]) {
+    assert.ok(source.includes(`{...stageProps("${name}")}`), `stage ${name} must fold and open by hand`);
+    assert.ok(source.includes(`stage === "${name}" &&`), `stage ${name} body must be gated`);
   }
 });

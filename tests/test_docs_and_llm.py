@@ -280,10 +280,11 @@ class LearnTests(unittest.TestCase):
     def test_learn_from_updates_hypotheses_and_guards_garbage(self):
         s = MemoryStore()
         bullet = '- {{owner_first}} prefers replies without pleasantries. [s:2 | ev: rv7 | seen: 2026-08-21]'
+        stamped = bullet[:-1] + ' | k: owner first prefers replies without pleasantries]'   # settle keys it on the way in
         learn.learn_from(s, 'rv7: owner EDITED a draft', llm=lambda sys_, usr, **kw: bullet)
         doc = s.get_doc('learned')
-        self.assertIn(bullet, doc.split(learn.HYP_START, 1)[1])  # landed inside the gated block
-        self.assertNotIn(bullet, learn.injectable(doc))          # a hypothesis is never injected
+        self.assertIn(stamped, doc.split(learn.HYP_START, 1)[1])  # landed inside the gated block
+        self.assertNotIn(stamped, learn.injectable(doc))          # a hypothesis is never injected
         self.assertEqual(s.get_settings().get('learn_pending'), '1')
         # a broken answer (a marker inside it would corrupt the splice) never lands in the doc
         learn.learn_from(s, 'rv8: x', llm=lambda sys_, usr, **kw: f'junk {learn.HYP_END} junk')

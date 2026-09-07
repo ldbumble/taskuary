@@ -177,9 +177,13 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
             more[group] = more.get(group, 0) + 1
             continue
         who = r.get('FromName') or r.get('FromEmail') or r.get('SourceName') or r.get('Channel') or ''
+        # ...and the two fields the ROAD is read from, so the rail's pill can say what triage said
+        # rather than what is waiting now - the same rule the Timeline row and its Triage tab use
+        # (timelineState.roadOf; the owner, 2026-09-07: "once the ai decides it should show what the
+        # ai decided. Same in work and timeline tabs")
         base = dict(who=who, when=r.get('SentAt'), mid=r['MessageId'], tid=r.get('TaskId'), channel=r.get('Channel') or '',
                     category=r.get('Category') or '', preview=r.get('Preview'), cid=cid, email=r.get('FromEmail') or '',
-                    priority=r.get('Priority'))
+                    priority=r.get('Priority'), route=r.get('RouteReason') or '', task_kind=r.get('TaskKind') or '')
         subj = r.get('Subject') or r.get('Title') or ''
         if r.get('MsgStatus') == 'triaging':
             out.append(_item(f"msg:{r['MessageId']}", 'triaging', 'fyi', subj, why='just arrived - triage is deciding', settling=True, **base))
@@ -412,7 +416,11 @@ def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = froze
             if reconcile: store.set_idea_status(i['IdeaId'], 'done', 'funnel')
             continue
         if a.get('mid') in used_mids or (a.get('tid') and a['tid'] in used_tids): continue
-        lane = 'report' if a.get('section') == 'systems' else 'forgotten'
+        # nothing to do until TRIAGE says otherwise (the owner, 2026-09-07: "assistant ideas and
+        # slipped stuff should be fyi unless triage turns it into task"). It used to open as 'slipped'
+        # - or 'report' for a systems section - so an idea whose verdict failed, or that was still
+        # waiting for an AI connector to reach one, was shown as work nobody had called work.
+        lane = 'fyi'
         # the shared verdict decides the lane (PW-200): fyi is fyi, an ask is an ask, a failed verdict says so;
         # an idea whose work was opened leaves this lane for the task row it opened (used_tids below)
         tri = a.get('triage') or {}
@@ -467,16 +475,15 @@ def from_wrapped(store, now: datetime, busy: set) -> list:
 # Lanes retain presentation/state semantics; the shared five bands own ordering across the pile and
 # the feed. INSIDE the actionable band the lane ranks (the owner, 2026-09-07: "asked you" sat under
 # reports because both were one band): what asks you, then what waits for an agent, then what broke, then what landed.
-_SUB = {'asked': 0, 'queued': 1, 'broken': 2, 'forgotten': 3, 'report': 3}   # a person asking you beats a stalled hand-off beats a failed check
-
-
 def _band(item):
     lane = item.get('lane')
     if item.get('kind') == 'meeting':
         return attention_band(urgent=not _not_yet(item), actionable=True)
+    # a landed result is its own level; 'slipped' is an idea nobody judged, which is an fyi, not work
     return attention_band(urgent=lane == 'time' or (lane == 'asked' and bool(item.get('urgent_request'))),
                           owner_wait=lane in ('blocked', 'approve'),
-                          working=lane == 'working', actionable=lane in ('broken', 'asked', 'queued', 'forgotten', 'report'))
+                          working=lane == 'working', actionable=lane in ('broken', 'asked', 'queued'),
+                          result=lane == 'report')
 
 
 def _activity_time(value):
@@ -489,11 +496,13 @@ def _activity_time(value):
 
 
 def _order(items: list) -> list:
-    """Five bands, the lane inside the actionable band, saved triage priority, oldest stored-local activity, stable key."""
+    """The five levels, then the oldest first inside one, then a stable key - and nothing else (the
+    owner, 2026-09-07: "within one level oldest wins first"). A lane sub-rank and the saved priority
+    used to sit in between, which put a reply drafted ten minutes ago ahead of an ask from Tuesday:
+    "no reason why open task is before a reply drafted". Urgency has a level of its own."""
     def key(item):
         activity = _activity_time(item.get('sort_at') or item.get('since') or item.get('when'))
-        return (_band(item), _SUB.get(item.get('lane'), 2), priority_rank(item.get('priority')), activity is None,
-                activity or datetime.max, str(item.get('key') or ''))
+        return (_band(item), activity is None, activity or datetime.max, str(item.get('key') or ''))
     return sorted(items, key=key)
 
 

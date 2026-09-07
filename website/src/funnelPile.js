@@ -237,38 +237,35 @@ export const statusLine = (items, busy) => {
 
 // New cards and alerts carry the server's band. Old persisted cards use the same
 // five-band fallback until their current presentation is refreshed.
-const BAND = { blocked: 2, time: 1, approve: 2, broken: 3, asked: 3, queued: 3, forgotten: 3, report: 3, fyi: 4, working: 5 };
+const BAND = { blocked: 2, time: 1, approve: 2, broken: 2, asked: 2, queued: 2, forgotten: 4, report: 3, fyi: 4, working: 5 };
 export const attentionBand = (item) => {
   if (Number.isInteger(item?.order_band) && item.order_band >= 1 && item.order_band <= 5) return item.order_band;
-  if (item?.kind === "meeting" && (item.calendar_ready === false || item.mins > 15)) return 3;
-  return BAND[item?.lane] ?? 3;
+  // a meeting that is not imminent, and any row whose lane this build does not know, are the
+  // owner's to deal with - never a landed result, which is what band 3 now means
+  if (item?.kind === "meeting" && (item.calendar_ready === false || item.mins > 15)) return 2;
+  return BAND[item?.lane] ?? 2;
 };
-// Unread is ranked by attention band, not by the clock, so a DATE over the rail said nothing about
-// what you were looking at - "Saturday, Sep 5" sat over rows from three different days (the owner,
+// Unread is ranked by attention, not by the clock, so a DATE over the rail said nothing about what
+// you were looking at - "Saturday, Sep 5" sat over rows from three different days (the owner,
 // 2026-09-07: "the date on top makes no sense on the unread tab since we don't sort by date"). The
-// dock names the RUN the rail is currently crossing instead, and its menu jumps between them.
+// dock names the LEVEL the rail is currently crossing instead, and its menu jumps between them.
 //
-// One run, one thing. The five bands put open work and landed results in the same band, and calling
-// that run "work & reports" merged two different things into one name (the owner, 2026-09-07: "why
-// work and reports combined ... just make each one it's own thing"). A result is its own run, below
-// all the work - funnel._SUB ranks it last inside the band, so the runs are contiguous and each
-// heading covers exactly the rows under it.
-export const RUN_META = {
-  urgent: { word: "urgent", hint: "an urgent request, or a meeting about to start" },
-  needs: { word: "needs you", hint: "an agent stopped on a question, or a draft waiting for your yes" },
-  work: { word: "work", hint: "work nobody is on, work handed over and not started, a check that failed, a promise that slipped" },
+// One level per thing triage decided, and no level it did not: work is one run whoever is waiting
+// on it, a landed result is not work, and an idea nobody has judged is an fyi. The words are the
+// levels - processing_order.attention_band is the same list on the server.
+export const LEVEL_META = {
+  urgent: { word: "urgent", hint: "a meeting inside fifteen minutes, or a sender on your escalate list" },
+  task: { word: "your task", hint: "an open task with no agent, a reply waiting for your yes, an agent waiting on your answer, a hand-off that has not started, a check that failed" },
   reports: { word: "reports", hint: "a report you set up landed, or an agent finished a job" },
-  fyi: { word: "fyi", hint: "people told you things - read them or don't" },
+  fyi: { word: "fyi", hint: "people told you things, and ideas nobody has turned into work - read them or don't" },
   agents: { word: "agents working", hint: "an agent has these; nothing for you until one stops or asks" },
 };
-export const RUN_ORDER = ["urgent", "needs", "work", "reports", "fyi", "agents"];
-const RUN_OF_BAND = { 1: "urgent", 2: "needs", 3: "work", 4: "fyi", 5: "agents" };
-// the run a row belongs to: its band, except that a landed result is its own run inside band 3
-export const runOf = (item) => (attentionBand(item) === 3 && item?.lane === "report"
-  ? "reports" : RUN_OF_BAND[attentionBand(item)] || "work");
-export const runLabel = (run) => RUN_META[run]?.word || "";
-// the runs actually present, in the order the rail draws them - the jump menu's entries
-export const runsOf = (items) => RUN_ORDER.filter((run) => (items || []).some((i) => runOf(i) === run));
+export const LEVEL_ORDER = ["urgent", "task", "reports", "fyi", "agents"];
+const LEVEL_OF_BAND = { 1: "urgent", 2: "task", 3: "reports", 4: "fyi", 5: "agents" };
+export const levelOf = (item) => LEVEL_OF_BAND[attentionBand(item)] || "fyi";
+export const levelLabel = (level) => LEVEL_META[level]?.word || "";
+// the levels actually present, in the order the rail draws them - the jump menu's entries
+export const levelsOf = (items) => LEVEL_ORDER.filter((level) => (items || []).some((i) => levelOf(i) === level));
 
 // The strip's queue (PW-165/166): a NOTICE (the watcher's word about an agent, a newer message on Current) is
 // always pending until Open or Later, whatever is on the table; an alert the pile derives from its own rows

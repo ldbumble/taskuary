@@ -1110,8 +1110,12 @@ class WalkOrderTests(unittest.TestCase):
         agent, draft, asked = self._everything(s)
         parked = session(agent, idle=200, waiting=True, tail=['Drop the old rows? (y/n)'])
         with mock.patch.object(terminal, 'live_sessions', return_value=parked):
+            # the draft, the ask and the parked agent are ONE level - the owner's task - and inside it
+            # the oldest leads (the owner, 2026-09-07: "within one level oldest wins first"): the draft
+            # came in six hours ago, the ask four, and the agent asked its question just now. Results
+            # come after all of it, and an fyi last.
             self.assertEqual([i['lane'] for i in funnel.build(s)['items']],
-                             ['approve', 'blocked', 'asked', 'report', 'fyi'])
+                             ['approve', 'asked', 'blocked', 'report', 'fyi'])
             # …and one at a time out of the mouth, in that order, each one read as it is shown
             seen = []
             for _ in range(5):
@@ -1119,7 +1123,7 @@ class WalkOrderTests(unittest.TestCase):
                 if not out.get('item'): break
                 seen.append(out['item']['lane'])
                 funnel.settle(s, out['item']['key'], 'done', 'owner')
-        self.assertEqual(seen, ['approve', 'blocked', 'asked', 'report', 'fyi'])
+        self.assertEqual(seen, ['approve', 'asked', 'blocked', 'report', 'fyi'])
 
     def test_start_with_what_came_in_walks_only_what_a_person_sent(self):
         s = store()

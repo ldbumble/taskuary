@@ -133,18 +133,30 @@ test('All and Unread share 507 fresh roots, including ignored and pending triage
   assert.equal(nextRequests.filter(turn => turn.path === '/api/concierge/next' || turn.body.mode === 'next').length, 1,
     'one typed Next performs exactly one guarded advance');
   const afterNext = await request(h, '/api/funnel/pile');
-  for (const key of previousMembers) assert.equal(afterNext.items.find(item => item.key === key)?.unread, true,
-    'moving Current must not mark the previous item read');
+  // What the walk SHOWS is read - that is the owner's own rule (2026-09-06) - with one exception:
+  // a row waiting on a yes, or an agent parked on a question, stays unread and marked so Next can
+  // come back to it. Which of the two this fixture surfaced depends on what leads the pile, and
+  // since the levels became triage's verdict that is the oldest row in it, not the highest saved
+  // priority - so assert the rule rather than one side of it.
+  const heldOpen = ['approve', 'blocked'].includes(previousCard.lane);
+  for (const key of previousMembers) {
+    const item = afterNext.items.find(row => row.key === key);
+    if (heldOpen) assert.equal(item?.unread, true, 'a row waiting on a yes is not read by being shown');
+    else assert.equal(item, undefined, 'a row the walk showed is read and leaves Unread');
+  }
   await page.click('button[aria-label^="New chat"]');
   await page.waitForFunction(() => !document.querySelector('.tq-pile-row.current'), { timeout: 20000 });
   await page.waitForNetworkIdle({ idleTime: 200, timeout: 20000 });
   assert.equal(JSON.parse(scopedRequests.at(-1).slice(5)).channel, 'email', 'New chat keeps the visible shared filter');
+  // the pile AS IT STANDS, not as it stood before the walk: the walk read what it showed, which is
+  // the point of the rule above. What must not read anything is the view SWITCH itself.
+  const beforeSwitch = (await request(h, '/api/funnel/pile')).items.map(i => i.key);
   await clickState(page, 'timeline');
   await page.waitForSelector('[data-processing-item]', { timeout: 20000 });
   assert.equal(await page.$('.tq-compose'), null);
   await clickState(page, 'work');
   await page.waitForSelector('.tq-pile-row', { timeout: 20000 });
-  assert.deepEqual((await request(h, '/api/funnel/pile')).items.map(i => i.key), before,
+  assert.deepEqual((await request(h, '/api/funnel/pile')).items.map(i => i.key), beforeSwitch,
     'switching views must not read any arrival');
   assert.deepEqual(page.fixtureEscapes, []);
   } catch (error) {

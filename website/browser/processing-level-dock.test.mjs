@@ -1,4 +1,4 @@
-// Unread is ranked, so the heading over it names the RUN the rail is crossing -
+// Unread is ranked, so the heading over it names the LEVEL the rail is crossing -
 // not a date. A date there was actively misleading: the same day appears in several places down a
 // ranked pile, so "Saturday, Sep 5" sat over rows from three different days (the owner, 2026-09-07:
 // "the date on top makes no sense on the unread tab since we don't sort by date").
@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { startHarness } from './harness.mjs';
 import { waitForDemoReplays, settleDemoWatcher } from './processing-fixtures.mjs';
-import { RUN_META, RUN_ORDER, runLabel, runOf } from '../src/funnelPile.js';
+import { LEVEL_META, LEVEL_ORDER, levelLabel, levelOf } from '../src/funnelPile.js';
 
 async function request(h, path, body) {
   const response = await fetch(`${h.fixtureApi}${path}`, {
@@ -43,14 +43,14 @@ const crossingRun = (page) => page.evaluate(() => {
            runs: [...new Set(tops.map((r) => r.run))] };
 });
 
-test('the Unread heading names the run the rail is crossing, and jumps between them', { timeout: 180000 }, async (t) => {
+test('the Unread heading names the level the rail is crossing, and jumps between them', { timeout: 180000 }, async (t) => {
   const h = await startHarness();
   t.after(() => h.close());
   await settleDemoWatcher(h, await waitForDemoReplays(h));
   await request(h, '/api/fixture/processing/unread-activate', {});
   const pile = await request(h, '/api/funnel/pile');
-  const runs = RUN_ORDER.filter((run) => pile.items.some((item) => runOf(item) === run));
-  assert.ok(runs.length > 1, `this fixture needs at least two runs to move between, got ${runs}`);
+  const runs = LEVEL_ORDER.filter((run) => pile.items.some((item) => levelOf(item) === run));
+  assert.ok(runs.length > 1, `this fixture needs at least two levels to move between, got ${runs}`);
 
   const page = await h.newPage();      // h.close() takes the browser with it; no page hook, or it
                                        // runs after the browser is gone and reports a dead socket
@@ -66,8 +66,8 @@ test('the Unread heading names the run the rail is crossing, and jumps between t
   const opening = await dockText(page);
   assert.ok(!/\d{4}|Today|Yesterday|Mon|Tue|Wed|Thu|Fri|Sat|Sun/.test(opening),
     `the heading is a run, never a date: ${opening}`);
-  assert.ok(Object.values(RUN_META).some((m) => m.word === opening), `${opening} is not one of the runs`);
-  assert.equal(opening, runLabel((await crossingRun(page)).crossing));
+  assert.ok(Object.values(LEVEL_META).some((m) => m.word === opening), `${opening} is not one of the levels`);
+  assert.equal(opening, levelLabel((await crossingRun(page)).crossing));
 
   // A row pinned on top takes the heading with it. The pile draws [current, ...items], so the row
   // on top can be one the inventory does not contain - and a heading read off the inventory said
@@ -79,43 +79,45 @@ test('the Unread heading names the run the rail is crossing, and jumps between t
     .find((button) => button.innerText === 'Walk me through my tasks').click());
   await page.waitForSelector('.tq-pile-row.current[data-tq-run]', { timeout: 20000 });
   const pinned = await page.$eval('.tq-pile-row.current[data-tq-run]', (node) => node.dataset.tqRun);
-  for (let tries = 0; tries < 40 && (await dockText(page)) !== runLabel(pinned); tries += 1) {
+  for (let tries = 0; tries < 40 && (await dockText(page)) !== levelLabel(pinned); tries += 1) {
     await new Promise((done) => setTimeout(done, 100));
   }
   const geometry = await crossingRun(page);
-  assert.equal(await dockText(page), runLabel(pinned),
+  assert.equal(await dockText(page), levelLabel(pinned),
     `the heading names the row on top (pinned ${pinned}, crossing ${geometry.crossing}, runs ${geometry.runs}, scrollTop ${geometry.scrollTop})`);
 
   // scrolling relabels it. Wherever the rail ends up - arrivals keep landing under it - the
   // heading names the run that is actually crossing the dock.
+  // to the BOTTOM: everything the owner has to do is one level now, so a fixed nudge can land
+  // inside the same run - the last row is always in the last level the pile holds
   await page.$$eval('.tq-pile-row[data-tq-run]', (rows) => {
     let scroller = rows[0].parentElement;
     while (scroller && scroller.scrollHeight <= scroller.clientHeight + 4) scroller = scroller.parentElement;
-    scroller.scrollTop += 240;
+    scroller.scrollTop = scroller.scrollHeight;
   });
   for (let tries = 0; tries < 40 && (await dockText(page)) === opening; tries += 1) {
     await new Promise((done) => setTimeout(done, 100));
   }
   const scrolled = await dockText(page);
-  assert.notEqual(scrolled, opening, 'scrolling into the next run relabels the heading');
-  assert.ok(Object.values(RUN_META).some((m) => m.word === scrolled), `${scrolled} is not one of the runs`);
-  // ...and it moved DOWN the pile, never to a run above the one we started on
-  const wordOrder = runs.map((run) => runLabel(run));
+  assert.notEqual(scrolled, opening, 'scrolling into the next level relabels the heading');
+  assert.ok(Object.values(LEVEL_META).some((m) => m.word === scrolled), `${scrolled} is not one of the levels`);
+  // ...and it moved DOWN the pile, never to a level above the one we started on
+  const wordOrder = runs.map((run) => levelLabel(run));
   assert.ok(wordOrder.indexOf(scrolled) > wordOrder.indexOf(opening), `${opening} -> ${scrolled} is not further down`);
 
-  // and the heading is navigation: pick the last run the pile holds and the rail glides to it
+  // and the heading is navigation: pick the last level the pile holds and the rail glides to it
   const last = runs[runs.length - 1];
   await page.click('[data-tq-run-dock]');
   await page.waitForSelector('[role="option"], li[role="menuitem"]', { timeout: 10000 });
   const offered = await page.$$eval('[role="option"], li[role="menuitem"]',
     (nodes) => nodes.map((node) => node.textContent.trim()));
-  assert.deepEqual(offered, runs.map((run) => runLabel(run)), 'the menu is exactly the runs the pile holds');
+  assert.deepEqual(offered, runs.map((run) => levelLabel(run)), 'the menu is exactly the levels the pile holds');
   await page.$$eval('[role="option"], li[role="menuitem"]', (nodes, word) => {
     nodes.find((node) => node.textContent.trim() === word).click();
-  }, runLabel(last));
+  }, levelLabel(last));
   // the picker owns the heading through its glide (dateJump), so this is the choice landing, not
   // the spy catching up - the glide itself is not asserted: arrivals keep resetting the rail here
   await page.waitForFunction((word) => document.querySelector('[data-tq-run-dock]')?.textContent.trim() === word,
-    { timeout: 10000 }, runLabel(last));
-  assert.equal(await dockText(page), runLabel(last));
+    { timeout: 10000 }, levelLabel(last));
+  assert.equal(await dockText(page), levelLabel(last));
 });

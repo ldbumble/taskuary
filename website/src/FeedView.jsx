@@ -41,11 +41,11 @@ import MicIcon from "@mui/icons-material/Mic";
 import MicOffIcon from "@mui/icons-material/MicOff";
 import { Md, looksMd } from "./md.jsx";
 import { subjectOf, sourceOf } from "./feedText.js";
-import { HOLD_TAG, hasTag, stateMeta, stateOf, subline } from "./timelineState.js";
+import { HOLD_TAG, ROADS, hasTag, roadOf, stateMeta, stateOf, subline } from "./timelineState.js";
 import { sendBlockLine, draftState, replyEnvelope, replySendFailure } from "./sendState.js";
 import { timelinePhases } from "./taskLifecycle.js";
 import StateMark, { edgeOf } from "./StateMark.jsx";
-import { RUN_META, laneMeta, runLabel, runsOf } from "./funnelPile.js";
+import { LEVEL_META, laneMeta, levelLabel, levelsOf } from "./funnelPile.js";
 
 // Where each pile row BELONGS, run by run, for the dock's scroll spy. It reads the row's own inline
 // top rather than its rectangle: a row still sliding into place is somewhere between the two, and a
@@ -64,6 +64,18 @@ export const pileBandTops = (rail, railTop) => {
 const LaneTag = ({ lane }) => {
   const m = laneMeta(lane), c = m.role ? ROLES[m.role] : null;
   return <span className="tq-pile-tag" title={m.hint} style={{ color: c ? c.ink : "#6f6960", background: c ? c.tint : "#eee9e1", borderColor: c ? c.bd : "#ddd6cb" }}>{m.word}</span>;
+};
+
+// ...and on the Timeline the tag is TRIAGE's word, the one the row's own Triage tab highlights -
+// nothing else (the owner, 2026-09-07: "the tag on the row should match what the triage shows").
+// The lane is about what is waiting NOW, so everything finished read "fyi" whatever triage had
+// said about it: a question triage sent to Review showed the same word as a newsletter.
+const RoadTag = ({ row }) => {
+  const road = roadOf(row);
+  const meta = ROADS.find((r) => r.key === road);
+  if (!meta) return null;
+  return <span className="tq-pile-tag" title={meta.hint}
+    style={{ color: "#6f6960", background: "#eee9e1", borderColor: "#ddd6cb" }}>{meta.label}</span>;
 };
 import NewSheet from "./NewSheet.jsx";
 import AddIcon from "@mui/icons-material/Add";
@@ -625,18 +637,30 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     return () => { rail.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onScroll); if (raf) cancelAnimationFrame(raf); };
   }, [spy]);
   // A new pile is a new layout, and the pile admits its rows a batch per animation frame - so the
-  // rail keeps changing under a heading measured once. Watch the rows themselves: any row added,
-  // removed or re-banded re-measures, without waiting for the owner to scroll.
+  // rail keeps changing under a heading measured once. Watch for rows ARRIVING or LEAVING, and
+  // re-measure once more after the .55s a landing row takes to slide into place.
+  //
+  // childList only, deliberately: an attribute watch over the rail's subtree also fired on every
+  // inline `top` React wrote and on every re-render the composer caused, which cost 600ms of
+  // keystroke latency in the phase-zero budget (2130ms against a 1500ms limit).
   useEffect(() => {
     const rail = railRef.current; if (!rail) return undefined;
-    const remeasure = () => { dayLayoutDirty.current = true; spy(); };
+    let settle = 0, frame = 0;
+    const remeasure = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => { frame = 0; dayLayoutDirty.current = true; spy(); });
+    };
     // All groups its rows by day in wrappers that do not move: one measure per response is enough,
     // and observing that list would watch every row of a 500-row history for nothing.
     if (view !== "unread" || typeof MutationObserver === "undefined") { remeasure(); return undefined; }
-    const observer = new MutationObserver(remeasure);
-    observer.observe(rail, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-tq-run", "style"] });
+    const observer = new MutationObserver(() => {
+      remeasure();
+      clearTimeout(settle);
+      settle = setTimeout(remeasure, 600);          // the landing transition, then the resting tops
+    });
+    observer.observe(rail, { childList: true, subtree: true });
     remeasure();
-    return () => observer.disconnect();
+    return () => { observer.disconnect(); clearTimeout(settle); if (frame) cancelAnimationFrame(frame); };
   }, [unreadInventory, spy, view]);
   useEffect(() => () => clearTimeout(dateJumpTimer.current), []);
   const [newOpen, setNewOpen] = useState(false);     // the ＋ New sheet (NewSheet.jsx)
@@ -1298,7 +1322,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   const dateEntries = dayEntries.length ? dayEntries : [[today, []]];
   // the same dock on Unread, on the axis Unread is actually sorted by: the bands the pile holds,
   // in the order it draws them, and the one the rail is crossing is the label
-  const pileRuns = view === "unread" ? (railRuns.length ? railRuns : runsOf(unreadInventory?.items)) : [];
+  const pileRuns = view === "unread" ? (railRuns.length ? railRuns : levelsOf(unreadInventory?.items)) : [];
   const shownRun = pileRuns.includes(curRun) ? curRun : (pileRuns[0] || "");
   const jumpToDay = (day) => {
     dateJump.current = String(day);
@@ -1532,20 +1556,20 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
               typographically a heading, not another pill. */}
           <Select value={view === "unread" ? shownRun : shownDay} onChange={(e) => jumpToDay(e.target.value)}
             variant="standard" disableUnderline
-            displayEmpty title={view === "unread" ? (RUN_META[shownRun]?.hint || "") : ""}
+            displayEmpty title={view === "unread" ? (LEVEL_META[shownRun]?.hint || "") : ""}
             inputProps={{ "aria-label": view === "unread" ? "Pipe run" : "Timeline date" }}
             SelectDisplayProps={view === "unread" ? { "data-tq-run-dock": "true" } : undefined}
             IconComponent={(props) => <ChevronRightIcon {...props} sx={{ ...props.sx, fontSize: 14,
               transform: "rotate(90deg)", color: `${FAINT} !important`, right: 1 }} />}
-            renderValue={(value) => (view === "unread" ? runLabel(value) : fmtDay(value))}
+            renderValue={(value) => (view === "unread" ? levelLabel(value) : fmtDay(value))}
             sx={{ ...mono, color: INK, fontWeight: 700, fontSize: 11.5, letterSpacing: 0.3,
               minWidth: 0, maxWidth: "100%", height: 22, textAlign: "center", cursor: "pointer",
               "& .MuiSelect-select": { py: 0, pl: 2, pr: "22px !important", textAlign: "center" },
               "&:hover": { color: ACCENT } }}>
             {view === "unread"
               ? pileRuns.map((run) => (
-                <MenuItem key={run} value={run} title={RUN_META[run]?.hint || ""} sx={{ ...mono, fontSize: 11.5 }}>
-                  {runLabel(run)}</MenuItem>
+                <MenuItem key={run} value={run} title={LEVEL_META[run]?.hint || ""} sx={{ ...mono, fontSize: 11.5 }}>
+                  {levelLabel(run)}</MenuItem>
               ))
               : dateEntries.map(([day]) => (
                 <MenuItem key={day} value={day} sx={{ ...mono, fontSize: 11.5 }}>{fmtDay(day)}</MenuItem>
@@ -1696,11 +1720,13 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                                   sx={{ ...mono, fontSize: 9.5, color: ACCENT, flexShrink: 0 }}>out</Typography>
                               )}
                               {r.TaskId && <LifecycleChip kind="task" phase={phases.task} compact sx={{ flexShrink: 0 }} />}
-                              {r.Lane ? <LaneTag lane={r.Lane} /> : generic ? (
-                                <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 9.5, flexShrink: 0 }}>
-                                  {r.OpenTarget.kind}{r.MsgStatus ? ` · ${r.MsgStatus}` : ""}
-                                </Typography>
-                              ) : null}
+                              {/* work says what is waiting NOW; the Timeline says what TRIAGE said */}
+                              {view === "unread" && r.Lane ? <LaneTag lane={r.Lane} />
+                                : generic ? (
+                                  <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 9.5, flexShrink: 0 }}>
+                                    {r.OpenTarget.kind}{r.MsgStatus ? ` · ${r.MsgStatus}` : ""}
+                                  </Typography>
+                                ) : <RoadTag row={r} />}
                               {!generic && !r.Lane && <StateMark row={r} state={st} />}   {/* the lane word says it once */}
                             </Box>
                             {/* the second line, only on the row you are on: who has it and what
@@ -2676,30 +2702,6 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
 // coding - …"), which said what happened without ever showing that there were four answers it
 // could have given. Four roads, the one it took lit, and its own sentence underneath: that is
 // the difference between a system you can correct and a system you have to trust.
-// FIVE roads, because there are five places a message can go and there were only ever four
-// words for them. `general` used to read "only you can do it" - triage's old meaning - while the
-// Board, + New and GeneralWorkspace all treated the same Kind as the assistant's chat. One value,
-// two meanings, and the road nobody could act on. general IS chat now, everywhere, and the work
-// a person genuinely has to do in the world is its own road.
-const ROADS = [
-  { key: "fyi", label: "fyi", hint: "nothing to do" },
-  { key: "reply", label: "reply", hint: "a sentence settles it" },
-  { key: "coding", label: "coding", hint: "an agent on a keyboard" },
-  { key: "general", label: "chat", hint: "talk it through with the assistant" },
-  { key: "task", label: "task", hint: "yours - nothing works it" },
-];
-// which road the route line says it took. `kind` decides coding vs general and rides on the
-// task, so the two are read from different places on purpose.
-const roadOf = (sel) => {
-  const r = String(sel.RouteReason || "");
-  if (/triage:\s*fyi/.test(r)) return "fyi";
-  if (/triage:\s*reply_only/.test(r) || sel.TaskKind === "reply") return "reply";
-  if (sel.TaskKind === "coding") return "coding";
-  if (sel.TaskKind === "note") return null;                 // you wrote it; nothing judged it
-  if (sel.TaskKind === "task") return "task";               // a person has to do it in the world
-  return sel.TaskId ? "general" : null;
-};
-
 const TriageSummary = ({ sel, detail }) => {
   const road = roadOf(sel);
   const meta = ROADS.find((r) => r.key === road);

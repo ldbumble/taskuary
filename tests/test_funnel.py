@@ -238,13 +238,16 @@ class InHandTests(unittest.TestCase):
         self.assertEqual([(i['lane'], i['key'], i['ref']) for i in items], [('working', f'agent:{t}', f'TQ-{t:04d}')])
         self.assertIn('nothing for you until it stops or asks', items[0]['why'])
 
-    def test_the_same_line_is_slipped_once_the_agent_is_no_longer_on_it(self):
+    def test_the_same_line_is_an_fyi_once_the_agent_is_no_longer_on_it(self):
         s = store()
         t = s.create_task({'Title': 'July 2026 financials', 'Kind': 'coding', 'Status': 'waiting'}, 'o')
         self._line_about(s, t, f"TQ-{t:04d} July financials hasn't moved in three hours")
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             items = funnel.build(s)['items']
-        self.assertEqual([(i['lane'], i['kind'], i['ref']) for i in items], [('forgotten', 'idea', f'TQ-{t:04d}')])
+        # the assistant's own line about a task nobody is on is an fyi until TRIAGE calls it work
+        # (the owner, 2026-09-07: "assistant ideas and slipped stuff should be fyi unless triage
+        # turns it into task") - it used to open in a lane of its own inside the actionable band
+        self.assertEqual([(i['lane'], i['kind'], i['ref']) for i in items], [('fyi', 'idea', f'TQ-{t:04d}')])
 
     def test_no_wrap_up_is_asked_for_while_an_agent_still_has_the_task(self):
         s = store()
@@ -321,8 +324,10 @@ class LanesTests(unittest.TestCase):
         self.assertEqual(by['Process Error Check FAILED']['lane'], 'broken')
         self.assertEqual(by['Headcount - 5 rows']['lane'], 'report')            # a run that worked is still just news
         # 30 hours old and still in the pipe, while the ordinary report beside it obeys the window
-        self.assertEqual(funnel._band(by['Process Error Check FAILED']), funnel._band(by['Headcount - 5 rows']))
-        self.assertLess(funnel._band({'lane': 'approve'}), funnel._band(by['Process Error Check FAILED']))  # a drafted reply still outranks it
+        # a check that could not run is the owner's task; the run that worked is a result below it
+        self.assertLess(funnel._band(by['Process Error Check FAILED']), funnel._band(by['Headcount - 5 rows']))
+        # a drafted reply and a failed check are both the owner's task now - one level, oldest first
+        self.assertEqual(funnel._band({'lane': 'approve'}), funnel._band(by['Process Error Check FAILED']))
         self.assertFalse(funnel._aged_out(by['Process Error Check FAILED'], datetime.now(), 12))
         self.assertNotIn('broken', funnel.MUTED_LANES)   # a rule that quiets a report cannot quiet it FAILING
 
@@ -523,12 +528,12 @@ class LanesTests(unittest.TestCase):
         self.assertEqual(funnel.build(s)['items'], [])
         self.assertIsNone(funnel.next_item(s, f'done:{t}'))
 
-    def test_the_assistants_open_lines_are_the_forgotten_lane(self):
+    def test_the_assistants_open_lines_are_fyi_until_triage_calls_them_work(self):
         s = store()
         s.upsert_idea({'key': 'followup:c9', 'kind': 'followup', 'text': 'No answer from Dana in 4 days - follow up?', 'sig': 'x',
                        'action': {'type': 'followup', 'mid': 5, 'why': 'you asked on Monday'}}, ago(1))
         items = funnel.build(s)['items']
-        self.assertEqual([(i['lane'], i['kind'], i['idea_kind']) for i in items], [('forgotten', 'idea', 'followup')])
+        self.assertEqual([(i['lane'], i['kind'], i['idea_kind']) for i in items], [('fyi', 'idea', 'followup')])
         self.assertEqual(items[0]['why'], 'you asked on Monday')
         # Being spoken in the Assistant marks an ordinary follow-up read and removes it.
         funnel.settle(s, items[0]['key'], 'surfaced')
@@ -556,7 +561,7 @@ class LanesTests(unittest.TestCase):
         s.upsert_idea({'key': 'cold:TQ-0009', 'kind': 'cold', 'text': 'TQ-0009 has sat quiet', 'sig': 'y', 'action': {'tid': 9}}, ago(days=3))
         self.assertEqual(funnel.build(s)['items'], [])
 
-    def test_middle_band_uses_saved_priority_then_oldest_and_fyi_is_last(self):
+    def test_one_level_for_the_owners_work_oldest_first_then_results_then_fyi(self):
         s = store()
         s.set_setting('team_domains', 'ours.com', 't')
         m = mail(s, 'Team note', who='Lee', email='lee@ours.com', body='FYI all good.', hours=9, status='filed', conv='n1')
@@ -569,9 +574,11 @@ class LanesTests(unittest.TestCase):
         t2 = s.create_task({'Title': 'Draft', 'Kind': 'coding', 'Status': 'waiting'}, 'o')
         m2 = mail(s, 'Newest ask', hours=1, tid=t2)
         s.add_review({'TaskId': t2, 'MessageId': m2, 'Kind': 'reply', 'DraftText': 'ok', 'Status': 'pending'})   # newest, but promoted
-        # Approved five bands replace the old asked > forgotten > report sub-ranking.
-        # The task has saved normal priority; report/idea have unknown priority and sort oldest first.
-        self.assertEqual([i['kind'] for i in funnel.build(s)['items']], ['review', 'todo', 'report', 'idea', 'fyi'])
+        # The five levels are triage's verdict, and inside one the oldest leads - so the ask from two
+        # hours ago comes out before the draft from one (the owner, 2026-09-07: "no reason why open
+        # task is before a reply drafted"), the landed report is a result below both, and the fyi and
+        # the unjudged idea share the last level oldest-first.
+        self.assertEqual([i['kind'] for i in funnel.build(s)['items']], ['todo', 'review', 'report', 'fyi', 'idea'])
 
     def test_marketing_mail_is_still_unread_until_the_owner_handles_it(self):
         s = store()

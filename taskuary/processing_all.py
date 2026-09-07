@@ -27,7 +27,10 @@ def idea_lane(idea: dict) -> str:
     try: action = json.loads(idea.get('ActionJson') or '{}')
     except (ValueError, TypeError): action = {}
     triage = action.get('triage') or {}
-    return 'asked' if triage.get('intent') in ('task', 'reply_only') else 'report' if action.get('section') == 'systems' else 'fyi'
+    # ...and ONLY from it: a 'systems' section used to make an unjudged idea look like a report, which
+    # is a verdict nothing had reached (the owner, 2026-09-07: "assistant ideas and slipped stuff
+    # should be fyi unless triage turns it into task")
+    return 'asked' if triage.get('intent') in ('task', 'reply_only') else 'fyi'
 
 
 def row_lane(row: dict) -> str:
@@ -35,7 +38,10 @@ def row_lane(row: dict) -> str:
     if row.get('ReportFailed'): return 'broken'
     if (row.get('TaskStatus') in ('open', 'in_progress') and str(row.get('Assignee') or '').startswith('agent:')
             and not row.get('Working') and not row.get('AgentWaiting')): return 'queued'
-    return {1: 'time', 2: 'approve', 3: 'report' if row.get('Channel') == 'report' else 'asked', 4: 'fyi', 5: 'working'}[feed_band(row)]
+    band = feed_band(row)
+    # one level for everything that is the owner's task: the lane still says WHICH kind it is
+    if band == 2: return 'approve' if (row.get('ReviewStatus') == 'pending' or row.get('AgentWaiting')) else 'asked'
+    return {1: 'time', 3: 'report', 4: 'fyi', 5: 'working'}[band]
 
 
 SCHEMA = 'taskuary.processing.all.v1'

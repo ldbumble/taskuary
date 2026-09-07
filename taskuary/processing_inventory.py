@@ -21,11 +21,11 @@ CURSOR_VERSION = 1
 MAX_PAGE_LIMIT = 500
 
 from .processing_order import PRIORITY_RANK as _PRIORITY_RANK, attention_band
-_SIGNAL_BAND = {
+_SIGNAL_BAND = {          # the signals already name work and results apart; the levels now do too
     "urgent_request": 1,
     "owner_input": 2,
     "owner_approval": 2,
-    "actionable_task": 3,
+    "actionable_task": 2,
     "finished_result": 3,
     "fyi": 4,
     "working": 5,
@@ -288,9 +288,17 @@ def _normalize_attention(value: Any, as_of: tuple[int, ...], as_of_aware: bool) 
     if not qualifying:
         return {"state": "unknown", "band": None, "signals": signals,
                 "diagnostics": [*diagnostics, "attention_unknown"]}
-    selected_band = attention_band(urgent=1 in qualifying, owner_wait=2 in qualifying,
-                                   working=5 in qualifying, actionable=3 in qualifying)
-    if selected_band == 5 and any(band in qualifying for band in (3, 4)):
+    # the SIGNAL, not its level: owner input and an actionable task share level 2, and only the
+    # first of them outranks a live session (working_suppresses_non_owner_attention, below)
+    kinds = {signal["kind"] for signal in signals if signal["band"] is not None}
+    selected_band = attention_band(urgent=1 in qualifying,
+                                   owner_wait=bool(kinds & {"owner_input", "owner_approval"}),
+                                   working=5 in qualifying,
+                                   actionable="actionable_task" in kinds,
+                                   result="finished_result" in kinds)
+    # what a live session suppressed, by SIGNAL: an actionable task shares level 2 with owner input
+    # now, and only owner input outranks the session
+    if selected_band == 5 and kinds & {"actionable_task", "finished_result", "fyi"}:
         diagnostics.append("working_suppresses_non_owner_attention")
     return {"state": "known", "band": selected_band, "signals": signals,
             "diagnostics": diagnostics}
@@ -430,13 +438,13 @@ def processing_inventory_page(
         return (0, tuple(-part for part in activity), item["item_id"])
 
     def priority_key(entry: tuple[dict[str, Any], tuple[int, ...] | None]) -> tuple[Any, ...]:
+        # the level, then the oldest inside it, then the id - the same key funnel._order uses, so the
+        # rail and the captured Next cannot disagree. Saved priority stays a FACT on the row and is
+        # no longer a tiebreak: urgency moves a row by earning level 1 (the owner, 2026-09-07).
         item, activity = entry
-        info = item["inventory_facts"]
-        band = info["attention"]["band"]
-        priority_rank = info["triage_priority"]["rank"]
+        band = item["inventory_facts"]["attention"]["band"]
         return (
             1 if band is None else 0, band if band is not None else 99,
-            priority_rank if priority_rank is not None else 99,
             1 if activity is None else 0, activity or (), item["item_id"],
         )
 

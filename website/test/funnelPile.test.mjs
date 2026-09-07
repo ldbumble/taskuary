@@ -270,6 +270,10 @@ test("alerts consume shared bands and cannot displace time-critical Current with
   const urgent = { key: "alert:urgent", item: "urgent", kind: "asked", lane: "time", order_band: 1 };
   assert.equal(topAlert([wait], new Set(), { key: "now", kind: "idea", lane: "asked", order_band: 1 }), null);
   assert.equal(topAlert([wait, urgent], new Set(), { key: "now", lane: "approve", order_band: 2 }), urgent);
-  assert.equal(topAlert([wait], new Set(), { key: "later", kind: "meeting", lane: "time", calendar_ready: false }), wait);
+  // an agent waiting and a meeting that is not imminent are BOTH the owner's task now (one level for
+  // what triage called work, 2026-09-07), so neither interrupts the other: an alert has to outrank
+  // the card on the table, and only urgent does. The agent still waits in the rail at its own age.
+  assert.equal(topAlert([wait], new Set(), { key: "later", kind: "meeting", lane: "time", calendar_ready: false }), null);
+  assert.equal(topAlert([urgent], new Set(), { key: "later", kind: "meeting", lane: "time", calendar_ready: false }), urgent);
   assert.equal(topAlert([urgent], new Set(), { key: "now", lane: "fyi" }, new Set(["urgent"])), null);
 });

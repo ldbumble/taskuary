@@ -54,8 +54,12 @@ def item(key, lane, *, kind=None, priority="normal", at=None, **extra):
             "priority": priority, "when": at or stamp(-5), **extra}
 
 
+# The five levels are triage's verdict, not a second opinion on top of it (2026-09-07): everything
+# the owner has to do is ONE level whoever is waiting on it, a landed result is its own, and a row
+# an agent has sits at the BOTTOM until it asks - then owner input promotes it back to level 2.
 @pytest.mark.parametrize(("facts", "expected"), [
-    ({}, 4), ({"actionable": True}, 3), ({"working": True, "actionable": True}, 5),
+    ({}, 4), ({"actionable": True}, 2), ({"result": True}, 3),
+    ({"working": True, "actionable": True}, 5), ({"working": True, "result": True}, 5),
     ({"owner_wait": True, "working": True}, 2),
     ({"urgent": True, "owner_wait": True, "working": True}, 1),
 ])
@@ -63,25 +67,35 @@ def test_attention_facts_have_approved_precedence(facts, expected):
     assert attention_band(**facts) == expected
 
 
-def test_lanes_rank_asked_then_broken_then_landed_without_mutating_input():
-    # the lane is the rank (2026-09-07): an ask outranks a hand-off still waiting for its agent outranks a
-    # failed check outranks what merely landed, however old each is; inside one rank the oldest still comes first
+def test_the_owners_work_is_one_level_oldest_first_and_a_result_is_not_in_it():
+    """The LEVEL is triage's verdict and nothing else decides the order inside it (the owner,
+    2026-09-07: "within one level oldest wins first"). An ask, a hand-off that never started and a
+    failed check are all the owner's task; what landed is a result below them; an idea nobody
+    judged is an fyi below that."""
     rows = [item("ask", "asked", at=stamp(-1)), item("broken", "broken", at=stamp(-2)),
             item("idea", "forgotten", kind="idea", at=stamp(-3)),
             item("result", "report", at=stamp(-4)), item("todo", "queued", at=stamp(-6))]
     before = deepcopy(rows)
-    assert [row["key"] for row in funnel._order(rows)] == ["ask", "todo", "broken", "result", "idea"]
-    assert {funnel._band(row) for row in rows} == {3}
+    assert [row["key"] for row in funnel._order(rows)] == ["todo", "broken", "ask", "result", "idea"]
+    assert {row["key"]: funnel._band(row) for row in rows} == {
+        "ask": 2, "broken": 2, "todo": 2, "result": 3, "idea": 4}
     assert rows == before
 
 
-def test_priority_precedes_age_and_unknown_values_never_invent_urgency():
+def test_age_alone_orders_one_level_and_urgency_earns_a_level_instead():
+    """Saved priority used to reorder rows inside a level, which put a draft from ten minutes ago
+    ahead of an ask from Tuesday (the owner, 2026-09-07: "no reason why open task is before a reply
+    drafted"). Urgency is not a tiebreak: an urgent request has a level of its own."""
     rows = [item("low", "asked", priority="low", at=stamp(-90)),
             item("unknown", "asked", priority="ASAP", at=stamp(-100)),
             item("normal", "asked", at=stamp(-80)),
             item("urgent", "asked", priority="urgent", at=stamp(-1)),
             item("high", "asked", priority="high", at=stamp(-2))]
-    assert [row["key"] for row in funnel._order(rows)] == ["urgent", "high", "normal", "low", "unknown"]
+    assert [row["key"] for row in funnel._order(rows)] == ["unknown", "low", "normal", "high", "urgent"]
+    # ...and the same rows, with the request triage actually called urgent, lead from level 1
+    promoted = [{**row, "urgent_request": row["key"] == "urgent"} for row in rows]
+    assert [row["key"] for row in funnel._order(promoted)][0] == "urgent"
+    assert funnel._band(promoted[3]) == 1 and funnel._band(promoted[0]) == 2
 
 
 def test_equal_activity_uses_stable_keys_and_missing_or_invalid_activity_is_last():
@@ -118,7 +132,7 @@ def test_calendar_uses_exact_fifteen_minute_and_current_event_boundaries(
     if present:
         assert rows[0]["lane"] == "time"
         assert rows[0]["calendar_ready"] is ready
-        assert funnel._band(rows[0]) == (1 if ready else 3)
+        assert funnel._band(rows[0]) == (1 if ready else 2)   # a meeting still to come is the owner's task, not a result
         assert funnel._not_yet(rows[0]) is not ready
 
 
@@ -130,9 +144,10 @@ def test_time_critical_items_lead_waits_and_scheduled_items_do_not_raise_urgency
             item("meeting", "time", kind="meeting", calendar_ready=True, mins=15),
             item("working", "working", kind="todo", priority="urgent")]
     ordered = funnel._order(rows)
-    assert [row["key"] for row in ordered] == ["meeting", "urgent", "wait", "current", "scheduled", "working"]
+    # one level for the owner's work, and inside it these share an age, so the stable key orders them
+    assert [row["key"] for row in ordered] == ["meeting", "urgent", "current", "scheduled", "wait", "working"]
     assert [row["key"] for row in funnel.more_urgent(ordered, "current")] == ["meeting", "urgent"]
-    assert [row["key"] for row in funnel.more_urgent(ordered, "scheduled")] == ["meeting", "urgent", "wait", "current"]
+    assert [row["key"] for row in funnel.more_urgent(ordered, "scheduled")] == ["meeting", "urgent"]
     assert "scheduled" not in [row["key"] for row in funnel.more_urgent(ordered, "working")]
 
 
@@ -178,7 +193,8 @@ def test_feed_review_report_and_task_producers_keep_saved_priority(store):
     assert (review["priority"], review["mid"], review["when"], funnel._band(review)) == ("urgent", latest, stamp(-1), 2)
     assert produced[f"report:{report_mid}"]["priority"] == "high"
     by_mid = {row["MessageId"]: row for row in feed}
-    for mid, band in ((ask_mid, 3), (review_mid, 2), (report_mid, 3), (standalone, 4)):
+    # an ask, a draft to approve and a check that could not run are all one level: the owner's task
+    for mid, band in ((ask_mid, 2), (review_mid, 2), (report_mid, 2), (standalone, 4)):
         assert by_mid[mid]["UnreadRank"] == band
 
 
@@ -195,7 +211,7 @@ def test_ideas_use_their_own_saved_priority_not_the_related_task_priority(store)
 
 @pytest.mark.parametrize(("intent", "priority", "expected_band"), [
     ("task", "urgent", 1), ("reply_only", "urgent", 1), ("fyi", "urgent", 4),
-    ("task", None, 3),
+    ("task", None, 2),                     # a task without the owner's urgency is still the owner's task
 ])
 def test_only_an_ideas_explicit_urgent_owner_request_is_promoted(store, intent, priority, expected_band):
     idea = store.upsert_idea({"key": "own-ranking", "kind": "followup", "text": "Urgent ASAP is only source text",
@@ -224,11 +240,11 @@ def test_failed_report_does_not_become_an_urgent_request_only_in_feed(store):
     produced = funnel.from_feed(store, [feed])[0]
     assert produced["lane"] == "broken"
     assert produced["bad"] is True
-    assert funnel._band(produced) == feed["UnreadRank"] == 3
+    assert funnel._band(produced) == feed["UnreadRank"] == 2      # work, and not urgent for being a failure
 
 
 @pytest.mark.parametrize(("failed", "subject", "expected_band"), [
-    (True, "Report with an ordinary title", 3),
+    (True, "Report with an ordinary title", 2),      # it could not run: that is work, not a result
     (False, "Old title ending FAILED", 1),
 ])
 def test_report_rank_uses_saved_run_outcome_even_when_subject_disagrees(store, monkeypatch, failed, subject, expected_band):
@@ -267,13 +283,15 @@ def test_priority_reorder_invalidates_captured_next_without_changing_read_or_tas
     store.set_funnel_state(f"msg:{deferred}", "later", until=stamp(60), note="Temporary interval")
     before = list(store.cx.iterdump())
     initial = capture_selection(store, now=NOW)
-    assert initial.selected["mid"] == first_mid
+    # inside one level the oldest leads, whatever priority it was saved with (2026-09-07); urgency
+    # moves a row by earning level 1, which is what invalidates the capture below
+    assert initial.selected["mid"] == second_mid
     assert list(store.cx.iterdump()) == before
-    store.update_task(second_tid, {"Priority": "urgent"}, "owner")
+    store.update_task(first_tid, {"Priority": "urgent"}, "owner")
     updated = list(store.cx.iterdump())
     with pytest.raises(SelectionStale) as stale:
         recheck_selection(store, initial, now=NOW)
-    assert stale.value.capture.selected["mid"] == second_mid
+    assert stale.value.capture.selected["mid"] == first_mid
     assert stale.value.capture.revision != initial.revision
     assert list(store.cx.iterdump()) == updated
     assert store.get_task(first_tid)["Status"] == store.get_task(second_tid)["Status"] == "open"

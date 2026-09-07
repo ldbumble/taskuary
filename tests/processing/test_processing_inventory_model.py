@@ -169,7 +169,7 @@ def test_related_idea_activity_does_not_replace_owned_member_activity():
     assert activity["provenance"] == "idea:11.LastSaid"
 
 
-def test_priority_order_uses_five_attention_bands_then_priority_oldest_and_id():
+def test_priority_order_uses_five_attention_levels_then_oldest_and_id():
     items = [
         _item("working", at="2026-01-01T00:00:00Z", priority="urgent"),
         _item("fyi", at="2026-01-01T00:00:00Z", priority="urgent"),
@@ -191,11 +191,13 @@ def test_priority_order_uses_five_attention_bands_then_priority_oldest_and_id():
 
     page = processing_inventory_page(_snapshot(items), order="priority", facts=facts)
 
+    # one level for everything the owner has to do, a landed result below it, and inside a level the
+    # oldest leads - saved priority is a fact on the row, not a tiebreak (2026-09-07)
     assert _ids(page) == [
-        "request", "owner", "action-urgent", "action-old-a", "action-old-z",
-        "action-new", "fyi", "working", "unknown",
+        "request", "owner", "action-old-a", "action-new", "action-urgent",
+        "action-old-z", "fyi", "working", "unknown",
     ]
-    assert [page["items"][i]["inventory_facts"]["attention"]["band"] for i in range(8)] == [1, 2, 3, 3, 3, 3, 4, 5]
+    assert [page["items"][i]["inventory_facts"]["attention"]["band"] for i in range(8)] == [1, 2, 2, 2, 2, 3, 4, 5]
     unknown = page["items"][-1]["inventory_facts"]["attention"]
     assert unknown == {"state": "unknown", "band": None, "signals": [],
                        "diagnostics": ["attention_requires_revision_bound_fact"]}

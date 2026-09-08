@@ -160,3 +160,38 @@ class TheSpendRollup(TheRows):
         rows = [json.loads(l) for l in body.splitlines() if l.strip()]
         self.assertEqual(rows[-1]['account'], 'TOTAL')
         self.assertEqual(len(rows), 3)
+
+
+class TheSpendReport(unittest.TestCase):
+    """The pipeline, not the function: a saved report config, resolved credentials, and the alert
+    rule the owner would actually write."""
+
+    def setUp(self):
+        self.s = MemoryStore(); _card(self.s)
+
+    def _run(self, cfg):
+        from taskuary import reports
+        rows = TheRows(); rows.s = self.s; rows.cfg = teller.connection(self.s)
+        with mock.patch.object(teller, 'date') as d:
+            d.today.return_value = __import__('datetime').date(2026, 9, 1)
+            with mock.patch.object(teller.requests, 'get', side_effect=lambda url, **kw: rows._get(url, **kw)):
+                return reports.render_report(self.s, reports.resolve_cfg(self.s, cfg))
+
+    def test_a_saved_report_needs_only_the_window_and_gets_the_token_from_the_card(self):
+        head, body = self._run({'type': 'teller_spend', 'title': 'Card spend today', 'days': 3})
+        self.assertTrue(head.startswith('1,518.20 spent '), head)
+        self.assertIn('"account": "TOTAL"', body.replace("'", '"')) if '"account"' in body else self.assertIn('TOTAL', body)
+
+    def test_the_owners_threshold_fires_on_dollars_and_stays_quiet_under_it(self):
+        from taskuary.reports import alert_fires
+        head, body = self._run({'type': 'teller_spend', 'days': 3})
+        over = {'alert': {'when': 'more_than', 'count': 1000, 'to': '+15550000000', 'channel': 'whatsapp'}}
+        under = {'alert': {'when': 'more_than', 'count': 2000, 'to': '+15550000000', 'channel': 'whatsapp'}}
+        self.assertIn('more than the 1000', alert_fires(over, head, body))
+        self.assertEqual(alert_fires(under, head, body), '')
+
+    def test_a_failed_run_says_so_rather_than_reporting_zero_spend(self):
+        from taskuary import reports
+        s = MemoryStore()                      # no card connected: no token
+        with self.assertRaisesRegex(teller.TellerError, 'Connect a bank'):
+            reports.render_report(s, reports.resolve_cfg(s, {'type': 'teller_spend', 'days': 0}))

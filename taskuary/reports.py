@@ -612,10 +612,11 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'teller_balances': _lazy('teller', 'run_teller_balances'),
             'teller_spend': _lazy('teller', 'run_teller_spend'),      # the rollup: how much, per card and in total
             # market data (markets.py): the watchlist, the filing and the FX rate as report sources.
-            # These four cards need no credentials at all, which is why they are the ones CI exercises.
+            # These five cards need no credentials at all, which is why they are the ones CI exercises.
             'coingecko_prices': _lazy('markets', 'run_coingecko_prices'), 'fx_rates': _lazy('markets', 'run_fx_rates'),
             'yahoo_quotes': _lazy('markets', 'run_yahoo_quotes'), 'yahoo_history': _lazy('markets', 'run_yahoo_history'),
             'edgar_filings': _lazy('markets', 'run_edgar_filings'), 'edgar_facts': _lazy('markets', 'run_edgar_facts'),
+            'fred_series': _lazy('markets', 'run_fred_series'),
             # twelvedata and alphavantage: quotes and (twelvedata only) technical indicators, keyed
             'td_quotes': _lazy('markets', 'run_td_quotes'), 'td_indicator': _lazy('markets', 'run_td_indicator'),
             'av_quotes': _lazy('markets', 'run_av_quotes'),
@@ -667,6 +668,8 @@ CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 
            'coingecko_prices': 'coingecko', 'fx_rates': 'frankfurter',
            'yahoo_quotes': 'yahoo', 'yahoo_history': 'yahoo',
            'edgar_filings': 'sec_edgar', 'edgar_facts': 'sec_edgar',
+           'td_quotes': 'twelvedata', 'td_indicator': 'twelvedata', 'av_quotes': 'alphavantage',
+           'fred_series': 'fred',
            'markets_screen': 'screen',
            'kb_search': 'knowledge', 'kb_reindex': 'knowledge',
            'handbook_search': 'handbook', 'handbook_write': 'handbook', 'handbook_vote': 'handbook',
@@ -779,6 +782,9 @@ def _screen_connection(store, connector_id=None) -> dict:
 CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database': database_connection,
                  'exa': _apikey_card('exa'), 'tavily': _apikey_card('tavily'),
                  'firecrawl': _apikey_card('firecrawl'), 'reader': _apikey_card('reader'),
+                 # fred needs no entry here - fredgraph.csv is keyless, unlike its JSON api
+                 'td_quotes': _apikey_card('twelvedata'), 'td_indicator': _apikey_card('twelvedata'),
+                 'av_quotes': _apikey_card('alphavantage'),
                  'aws': aws_connection, 's3_object': aws_connection, 'cloudwatch_logs': aws_connection,
                  'azure': azure_connection, 'azure_blob': azure_connection, 'azure_logs': azure_connection,
                  'entra_users': azure_connection, 'entra_groups': azure_connection,

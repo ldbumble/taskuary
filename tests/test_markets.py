@@ -418,3 +418,103 @@ class TheAlphaVantage(unittest.TestCase):
 
     def test_av_indicator_is_not_built(self):
         self.assertFalse(hasattr(markets, 'run_av_indicator'))
+
+
+class TheFred(unittest.TestCase):
+    # captured live 2026-09-08 from fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10&cosd=2026-08-03
+    CSV = 'observation_date,DGS10\n2026-08-03,4.70\n2026-08-04,4.63\n2026-08-05,4.63\n'
+    # captured live 2026-09-08 - an id fredgraph.csv does not recognise answers with an HTML page
+    HTML_ERROR = '<!DOCTYPE html>\n<html lang="en">\n<head>\n'
+
+    def test_needs_no_key_at_all_and_rows_come_back_newest_first(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, None, self.CSV)) as g:
+            head, body = markets.run_fred_series({'series': 'DGS10', 'from': '2026-08-03'})
+        rows = [json.loads(l) for l in body.splitlines() if l.strip()]
+        self.assertEqual(rows, [{'series': 'DGS10', 'date': '2026-08-05', 'value': 4.63},
+                                {'series': 'DGS10', 'date': '2026-08-04', 'value': 4.63},
+                                {'series': 'DGS10', 'date': '2026-08-03', 'value': 4.70}])
+        self.assertNotIn('apikey', g.call_args.kwargs.get('params') or {})
+        self.assertNotIn('api_key', g.call_args.kwargs.get('params') or {})
+
+    def test_the_series_id_is_read_by_column_position_not_by_a_hardcoded_name(self):
+        # the second CSV column is named after the series itself (DGS10 here, CPIAUCSL for that
+        # series) - reading it by header name would break on every series but the one tested
+        csv = 'observation_date,CPIAUCSL\n1947-01-01,21.480\n1947-02-01,21.620\n'
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, None, csv)):
+            head, body = markets.run_fred_series({'series': 'CPIAUCSL'})
+        rows = [json.loads(l) for l in body.splitlines() if l.strip()]
+        self.assertEqual([r['value'] for r in rows], [21.62, 21.48])
+
+    def test_a_lone_dot_is_a_missing_observation_not_a_string_a_chart_would_choke_on(self):
+        # FRED writes a missing observation (a holiday, a not-yet-reported print) as a lone "."
+        csv = 'observation_date,DGS10\n2026-01-02,4.19\n2026-01-05,.\n2026-01-06,4.18\n'
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, None, csv)):
+            head, body = markets.run_fred_series({'series': 'DGS10'})
+        rows = [json.loads(l) for l in body.splitlines() if l.strip()]
+        by_date = {r['date']: r['value'] for r in rows}
+        self.assertIsNone(by_date['2026-01-05'])
+        self.assertEqual(by_date['2026-01-02'], 4.19)
+
+    def test_an_unknown_series_answers_html_not_csv_and_is_refused_by_name(self):
+        # captured live: parsing this as CSV would have produced garbage rows instead of a refusal
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, None, self.HTML_ERROR)):
+            with self.assertRaises(markets.MarketError) as ctx:
+                markets.run_fred_series({'series': 'NOTASERIES'})
+        self.assertIn('NOTASERIES', str(ctx.exception))
+
+    def test_no_series_given_is_refused_before_any_call(self):
+        with self.assertRaisesRegex(markets.MarketError, 'series'):
+            markets.run_fred_series({})
+
+
+class TheNewProvidersWiring(unittest.TestCase):
+    KEYED = ('td_quotes', 'td_indicator', 'av_quotes')
+
+    def test_the_keyed_types_are_registered_a_read_and_owned_by_the_right_card(self):
+        from taskuary import reports, scopes
+        for t in self.KEYED:
+            self.assertIn(t, reports.REGISTRY, t)
+            self.assertIs(reports.executor_for(t), reports.REGISTRY[t], t)
+            self.assertEqual(scopes.needs(t), 'read', t)
+        self.assertEqual(reports.card_of('td_quotes'), 'twelvedata')
+        self.assertEqual(reports.card_of('td_indicator'), 'twelvedata')
+        self.assertEqual(reports.card_of('av_quotes'), 'alphavantage')
+
+    def test_fred_series_is_registered_read_and_keyless(self):
+        from taskuary import reports, scopes
+        self.assertIn('fred_series', reports.REGISTRY)
+        self.assertEqual(scopes.needs('fred_series'), 'read')
+        self.assertEqual(reports.card_of('fred_series'), 'fred')
+        self.assertNotIn('fred_series', reports.CONNECTION_OF)
+        self.assertNotIn('fred', reports.CONNECTION_OF)
+
+    def test_the_keyed_cards_resolve_their_saved_key_as_api_key(self):
+        from taskuary import reports
+        from taskuary.store import MemoryStore
+        store = MemoryStore()
+        td_id = store.connectors_by_type('twelvedata')[0]['ConnectorId']
+        store.save_connector({'ConnectorId': td_id, 'Secret': 'td_secret'}, 'owner')
+        self.assertEqual(reports.CONNECTION_OF['td_quotes'](store)['api_key'], 'td_secret')
+        av_id = store.connectors_by_type('alphavantage')[0]['ConnectorId']
+        store.save_connector({'ConnectorId': av_id, 'Secret': 'av_secret'}, 'owner')
+        self.assertEqual(reports.CONNECTION_OF['av_quotes'](store)['api_key'], 'av_secret')
+
+    def test_the_cards_are_in_the_catalog(self):
+        from taskuary.store import MemoryStore
+        types = {c['Type'] for c in MemoryStore().list_connectors()}
+        for card in ('twelvedata', 'alphavantage', 'fred'): self.assertIn(card, types, card)
+
+    def test_td_and_av_join_the_screen_but_fred_does_not(self):
+        self.assertIn('td_quotes', markets.SCREENABLE)
+        self.assertIn('td_indicator', markets.SCREENABLE)
+        self.assertIn('av_quotes', markets.SCREENABLE)
+        self.assertNotIn('fred_series', markets.SCREENABLE)
+
+    def test_the_screen_can_match_an_rsi_condition_through_td_indicator(self):
+        with mock.patch.object(markets, 'run_td_indicator', return_value=('2 values', '\n'.join([
+                json.dumps({'symbol': 'AAPL', 'indicator': 'rsi', 'date': '2026-09-08', 'rsi': 28.5}),
+                json.dumps({'symbol': 'AAPL', 'indicator': 'rsi', 'date': '2026-09-04', 'rsi': 53.9})]))):
+            head, body = markets.run_markets_screen({'provider': 'td_indicator', 'symbol': 'AAPL',
+                                                     'conditions': [['rsi', '<', 30]]})
+        rows = [json.loads(l) for l in body.splitlines() if l.strip()]
+        self.assertEqual([r['date'] for r in rows], ['2026-09-08'])

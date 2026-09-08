@@ -456,7 +456,8 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  # market data (markets.py): four keyless cards, each a report source and an agent tool
                  'coingecko': 'report,tool', 'frankfurter': 'report,tool',
                  'yahoo': 'report,tool', 'sec_edgar': 'report,tool',
-                 'twelvedata': 'report,tool', 'alphavantage': 'report,tool',
+                 # twelvedata/alphavantage need a key; fred does not (fredgraph.csv is keyless)
+                 'twelvedata': 'report,tool', 'alphavantage': 'report,tool', 'fred': 'report,tool',
                  'screen': 'report,tool',       # the strategy screen: conditions in config, matches out (markets.py)
                  # research reads the public web - a report source, and a tool an agent may use
                  'exa': 'report,tool', 'tavily': 'report,tool',
@@ -678,6 +679,7 @@ class SQLiteStore:
                          ('intacct', 'Sage Intacct'), ('quickbooks', 'QuickBooks Online'), ('teller', 'Bank & card feed (Teller)'),
                          ('coingecko', 'Crypto prices (CoinGecko)'), ('frankfurter', 'FX rates'),
                          ('yahoo', 'Yahoo Finance (best-effort)'), ('sec_edgar', 'SEC filings (EDGAR)'),
+                         ('twelvedata', 'Twelve Data'), ('alphavantage', 'Alpha Vantage'), ('fred', 'FRED (keyless)'),
                          ('screen', 'Strategy screen'),
                          ('zoho_invoice', 'Zoho Invoice'),
                          ('exa', 'Exa search'), ('tavily', 'Tavily search'),

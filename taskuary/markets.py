@@ -13,10 +13,11 @@ TWO RULES hold across the module and are not per-provider taste:
 2. A missing key names THE CARD, not the provider's 401. An owner who has not signed up yet needs
    to be told where to go, and a provider's own auth error does not say "Connections -> Finnhub".
 
-Four cards need no credentials at all (coingecko, frankfurter, yahoo, sec_edgar), which is what
-makes them the ones the test suite can exercise honestly. Stooq is deliberately absent: its CSV
-endpoint now serves a JavaScript proof-of-work challenge that a REST client cannot pass (checked
-2026-09-08), so it is PLANNED rather than quietly broken.
+Five cards need no credentials at all (coingecko, frankfurter, yahoo, sec_edgar, fred - the last
+via its keyless graph CSV, not its keyed JSON api), which is what makes them the ones the test
+suite can exercise honestly. Stooq is deliberately absent: its CSV endpoint now serves a
+JavaScript proof-of-work challenge that a REST client cannot pass (checked 2026-09-08), so it is
+PLANNED rather than quietly broken.
 """
 import json
 
@@ -85,6 +86,7 @@ def _get(url, params=None, headers=None):
 def _pct(v):
     try: return round(float(v), 2)
     except (TypeError, ValueError): return None
+
 
 def _flt(v):
     """Every keyed provider below hands numbers back as strings (twelvedata, alphavantage) - this
@@ -318,6 +320,41 @@ def run_av_quotes(cfg):
     return _rows(cfg, rows, 'quotes')
 
 
+# ---- FRED: macro series, keyless - fredgraph.csv needs no api_key at all (the JSON api does) --
+FRED_CSV = 'https://fred.stlouisfed.org/graph/fredgraph.csv'
+
+
+def _fred_csv(params):
+    r = requests.get(FRED_CSV, params=params, headers={'User-Agent': UA}, timeout=TIMEOUT)
+    if r.status_code >= 300: raise MarketError(f'{r.status_code}: fred did not return data')
+    return r.text
+
+
+def run_fred_series(cfg):
+    """{"series": "DGS10", "from": "2026-08-01" (cosd), "to": "" (coed, blank = through today)}
+    - one row per observation, newest first. Keyless - fredgraph.csv is the graph endpoint, not
+    the JSON api, and it answers with no api_key at all.
+
+    An unknown series id answers with an HTML error page, not CSV - parsing that as CSV would
+    produce garbage rows, so it is detected and refused before a single line is split. A missing
+    observation (a market holiday, a series not yet reported) is a lone "." in FRED's CSV; it
+    becomes None here, never a string a chart would have to choke on."""
+    series = str(cfg.get('series') or '').strip().upper()
+    if not series: raise MarketError('no FRED series id given - e.g. DGS10, CPIAUCSL')
+    params = {'id': series}
+    if str(cfg.get('from') or '').strip(): params['cosd'] = str(cfg['from']).strip()
+    if str(cfg.get('to') or '').strip(): params['coed'] = str(cfg['to']).strip()
+    text = _fred_csv(params)
+    if text.lstrip().lower().startswith(('<!doctype', '<html')):
+        raise MarketError(f'{series!r} is not a FRED series id - fredgraph.csv answered an error page, not data')
+    lines = [l for l in text.splitlines() if l.strip()]
+    if len(lines) < 2: raise MarketError(f'{series!r} returned no observations from FRED')
+    rows = [{'series': series, 'date': cols[0], 'value': None if cols[1] == '.' else _flt(cols[1])}
+            for l in lines[1:] for cols in [l.split(',')] if len(cols) >= 2]
+    rows.sort(key=lambda r: r['date'], reverse=True)
+    return _rows(cfg, rows, 'observations')
+
+
 # ---- the screen: conditions in CONFIG, matches out ------------------------------------------
 # The threshold lives here and not in a playbook. A playbook is prose flattened onto a command
 # line; a number living in prose is a number re-judged by a model every run, and it will drift.
@@ -328,7 +365,8 @@ OPS = {'<': lambda a, b: a < b, '<=': lambda a, b: a <= b, '>': lambda a, b: a >
 # ADDED HERE when it is built: naming one that does not exist yet would raise KeyError, not an
 # error an owner can read (see run_markets_screen below). td_indicator belongs here too, even
 # though it is not a quote: it is what lets a screen match a real strategy (["rsi", "<", 30])
-# instead of only price moves.
+# instead of only price moves. fred_series does NOT belong here - a macro series has no symbol
+# to screen per-row.
 SCREENABLE = ('yahoo_quotes', 'coingecko_prices', 'td_quotes', 'td_indicator', 'av_quotes')
 
 

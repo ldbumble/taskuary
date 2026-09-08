@@ -109,3 +109,31 @@ class TheYahoo(unittest.TestCase):
         rows = [json.loads(l) for l in body.splitlines() if l.strip()]
         self.assertEqual([r['close'] for r in rows], [318.1, 316.195])
         self.assertEqual(rows[0]['date'], '2026-09-07')
+
+
+# captured live 2026-09-08 from data.sec.gov/submissions/CIK0000320193.json (trimmed)
+EDGAR = {'cik': '0000320193', 'entityType': 'operating', 'sic': '3571', 'sicDescription': 'Electronic Computers',
+         'name': 'Apple Inc.', 'tickers': ['AAPL'],
+         'filings': {'recent': {'accessionNumber': ['0000320193-26-000081', '0000320193-26-000075'],
+                                'filingDate': ['2026-08-01', '2026-07-15'], 'form': ['10-Q', '8-K'],
+                                'primaryDocument': ['aapl-20260627.htm', 'ex991.htm'],
+                                'primaryDocDescription': ['10-Q', 'EX-99.1']}}}
+
+
+class TheEdgar(unittest.TestCase):
+    def test_filings_are_rows_newest_first_with_a_link_to_the_document(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, EDGAR)) as g:
+            head, body = markets.run_edgar_filings({'cik': '320193'})
+        rows = [json.loads(l) for l in body.splitlines() if l.strip()]
+        self.assertEqual(rows[0]['form'], '10-Q')
+        self.assertEqual(rows[0]['filed'], '2026-08-01')
+        self.assertEqual(rows[0]['company'], 'Apple Inc.')
+        self.assertIn('320193/000032019326000081/aapl-20260627.htm', rows[0]['url'])
+        self.assertIn('CIK0000320193.json', g.call_args.args[0])          # zero-padded to ten
+        self.assertIn('Taskuary', g.call_args.kwargs['headers']['User-Agent'])
+
+    def test_only_the_forms_asked_for_come_back(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, EDGAR)):
+            _, body = markets.run_edgar_filings({'cik': '320193', 'forms': '8-K'})
+        rows = [json.loads(l) for l in body.splitlines() if l.strip()]
+        self.assertEqual([r['form'] for r in rows], ['8-K'])

@@ -150,3 +150,48 @@ def run_yahoo_history(cfg):
              'close': closes[i] if i < len(closes) else None, 'volume': vols[i] if i < len(vols) else None}
             for i, t in enumerate(ts)]
     return _rows(cfg, rows, 'bars')
+
+
+# ---- SEC EDGAR: official, free, keyless - and the only source here that hands back the 8-K ----
+def _cik(cfg) -> str:
+    c = str(cfg.get('cik') or '').strip().lstrip('Cc').lstrip('IiKk').strip()
+    if not c.isdigit(): raise MarketError(f'{cfg.get("cik")!r} is not a CIK - use the number from sec.gov (Apple is 320193)')
+    return c.zfill(10)
+
+
+def run_edgar_filings(cfg):
+    """{"cik": "320193", "forms": "8-K,10-Q" (blank = every form)} - what this company has filed,
+    newest first, each row linking to the document itself. Schedule it with "can become work" and
+    a new 8-K is a message triage judges."""
+    cik = _cik(cfg)
+    j = _get(f'https://data.sec.gov/submissions/CIK{cik}.json')
+    r = ((j.get('filings') or {}).get('recent') or {})
+    want = {f.strip().upper() for f in str(cfg.get('forms') or '').replace(';', ',').split(',') if f.strip()}
+    bare, rows = cik.lstrip('0'), []
+    for i, form in enumerate(r.get('form') or []):
+        if want and str(form).upper() not in want: continue
+        acc = (r.get('accessionNumber') or [''])[i].replace('-', '')
+        doc = (r.get('primaryDocument') or [''])[i]
+        rows.append({'company': j.get('name'), 'form': form, 'filed': (r.get('filingDate') or [''])[i],
+                     'description': (r.get('primaryDocDescription') or [''])[i],
+                     'url': f'https://www.sec.gov/Archives/edgar/data/{bare}/{acc}/{doc}'})
+    return _rows(cfg, rows, 'filings')
+
+
+def run_edgar_facts(cfg):
+    """{"cik": "320193", "tag": "Revenues", "unit": "USD"} - one reported XBRL fact over time,
+    newest first: the number as the company itself filed it, with the form it came from."""
+    j = _get(f'https://data.sec.gov/api/xbrl/companyfacts/CIK{_cik(cfg)}.json')
+    tag = str(cfg.get('tag') or 'Revenues').strip()
+    facts = (j.get('facts') or {})
+    for taxonomy in ('us-gaap', 'ifrs-full', 'dei'):
+        got = (facts.get(taxonomy) or {}).get(tag)
+        if got: break
+    else:
+        raise MarketError(f'{j.get("entityName") or "this company"} reports no XBRL tag {tag!r}')
+    unit = str(cfg.get('unit') or '').strip() or next(iter(got.get('units') or {}), 'USD')
+    rows = [{'company': j.get('entityName'), 'tag': tag, 'unit': unit, 'end': f.get('end'),
+             'value': f.get('val'), 'fy': f.get('fy'), 'fp': f.get('fp'), 'form': f.get('form')}
+            for f in (got.get('units') or {}).get(unit) or []]
+    rows.sort(key=lambda r: str(r.get('end') or ''), reverse=True)
+    return _rows(cfg, rows, 'facts')

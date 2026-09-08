@@ -534,7 +534,7 @@ const DATA_META = {
       "Confirm amounts, Prepare drafts, and approve customer emails in Review. The customer/month reference prevents duplicate invoices on retries."],
     agent: ["The owner connects Zoho in the browser. Do not ask for or print refresh tokens.",
       "Invoice sends are owner-gated Review actions. Never bypass Review or create a second invoice for the same workflow/customer/period."] },
-  teller: { title: "Bank & card feed (Teller)", types: ["teller_accounts", "teller_transactions", "teller_balances"],
+  teller: { title: "Bank & card feed (Teller)", types: ["teller_accounts", "teller_transactions", "teller_balances", "teller_spend"],
     fields: [["Teller application id (teller.io → your application)", "application_id"],
       ["environment — sandbox, development (free, real banks, 100 logins) or production", "environment", "sandbox"],
       ["client certificate path (.pem) — development and production only", "cert_path", "C:/taskuary/teller/certificate.pem"],
@@ -546,9 +546,43 @@ const DATA_META = {
     howto: ["teller.io → sign up → create an application. The dashboard hands you an application id and, for development and production, a certificate.pem and private_key.pem — save both somewhere on this machine and put their paths on the card. Sandbox needs no certificate and accepts any login at its fake banks, which is how to try the loop first.",
       "Paste the application id, pick the environment, Save, then Connect a bank: the bank's sign-in opens in a modal, you sign in, and the access token for that login lands on this card. One card is one bank login - Add another for a second bank.",
       "Test lists the accounts under the login. Build the reports on the REPORTS tab: 'Bank & card — transactions' for one account (its last four digits) or all of them, so many days back; switch on 'can become work (triage decides)' and every new transaction arrives as a message - the front door of the card-to-books playbook (docs/beyond-code.md).",
-      "The development environment is free up to 100 bank logins; production is the same code with production keys and Teller's pricing."],
+      "The development environment is free up to 100 bank logins; production is the same code with production keys and Teller's pricing.",
+      "Spend as a number, not a list: the 'teller_spend' report totals what left each card over a window (days 0 = today) and adds a TOTAL row. Its headline starts with the total on purpose — an alert of 'more than 500' on this report therefore compares DOLLARS, not the number of rows, which is how you get 'tell me if I spend over 500 today'. Cents are ignored by that comparison."],
     agent: ["GET {base}/api/connectors/{cid}/teller/status{hdr}: has_app says whether the application id is saved, connected whether a token is. Neither is yours to make - the owner signs up at teller.io and signs in at their bank through Connect a bank on the card. Ask for the application id and the certificate paths, save them in ConfigJson, then ask them to press Connect a bank.",
-      "Once connected, POST {base}/api/connectors/{cid}/test{hdr}. A 403 means the certificate does not match the application or the token belongs to another environment. Turn the card on, SETUP DONE."] },
+      "Once connected, POST {base}/api/connectors/{cid}/test{hdr}. A 403 means the certificate does not match the application or the token belongs to another environment. Turn the card on, SETUP DONE.",
+      "Do not add up transactions yourself to answer 'how much did we spend' - run_tool with type teller_spend does it, per account and in total, and its numbers are the ones the owner's alerts are set against."] },
+  yahoo: { title: "Yahoo Finance (best-effort)", types: ["yahoo_quotes", "yahoo_history"], fields: [], noSecret: true,
+    desc: "Yahoo retired its official market-data API in 2017. This card reads an undocumented endpoint (v8/finance/chart) that happens to still work with no login — it may change or break without notice, so treat it as best-effort, not a supported integration.",
+    howto: ["No key, no sign-up: nothing to paste. Test calls the same endpoint Yahoo Finance's own charts use, for AAPL by default.",
+      "Build the reports on the REPORTS tab: 'yahoo_quotes' for a watchlist (symbols, comma separated) — last price, day change % and range per symbol; 'yahoo_history' for one symbol's bars over a range and interval.",
+      "Because this is not a supported API, a broken report here likely means Yahoo changed the page, not a config mistake here - check whether other tools that watch Yahoo are also failing before assuming this card needs fixing."],
+    agent: ["Nothing to configure and nothing to ask the owner for - Test yourself (POST {base}/api/connectors/{cid}/test{hdr}) and turn it on if it succeeds.",
+      "If Yahoo starts failing here, say so plainly rather than retrying: this card reads an endpoint Yahoo never documented, and it can go away with no warning."] },
+  coingecko: { title: "Crypto prices (CoinGecko)", types: ["coingecko_prices"], fields: [],
+    secretLabel: "demo API key (optional, write-only) — raises the free rate limit",
+    desc: "Spot price and 24-hour change for any coin CoinGecko lists, keyed by its own id (bitcoin, ethereum, …) rather than its ticker.",
+    howto: ["No key needed at a low request rate. For more headroom, coingecko.com → sign up → a free Demo API key, paste it here (write-only).",
+      "Test fetches bitcoin's price in USD.",
+      "Build the report on the REPORTS tab: ids (CoinGecko's own ids - 'bitcoin,ethereum', not 'BTC,ETH') and the currency to price in (vs)."],
+    agent: ["CoinGecko ids are not tickers - bitcoin, not BTC. api.coingecko.com/api/v3/coins/list gives the full mapping if the owner is unsure.",
+      "A demo key is optional; ask for one only if the owner is hitting the free rate limit."] },
+  frankfurter: { title: "FX rates (Frankfurter)", types: ["fx_rates"], fields: [], noSecret: true,
+    desc: "Reference exchange rates from the European Central Bank, served through the free Frankfurter API — no key, no account.",
+    howto: ["Nothing to configure. Test fetches the latest USD rates.",
+      "Build the report on the REPORTS tab: a base currency and, optionally, which currencies to include (symbols) - blank returns every currency the ECB publishes."],
+    agent: ["Nothing to ask the owner for. Test yourself and turn it on."] },
+  sec_edgar: { title: "SEC filings (EDGAR)", types: ["edgar_filings", "edgar_facts"], fields: [], noSecret: true,
+    desc: "US public-company filings and the XBRL facts inside them, straight from SEC EDGAR — no key, though SEC asks every caller to identify itself, which this card does for you.",
+    howto: ["Nothing to configure. Test looks up Apple's filings (CIK 320193).",
+      "Build the reports on the REPORTS tab: 'edgar_filings' for a company's recent filings by CIK (find one at sec.gov/cgi-bin/browse-edgar), optionally filtered to certain forms (8-K,10-Q); 'edgar_facts' for one reported XBRL number over time (a tag like Revenues) as the company itself filed it.",
+      "Schedule 'edgar_filings' with 'can become work' and a new 8-K is a message triage judges."],
+    agent: ["A CIK is a number, not a ticker - sec.gov/cgi-bin/browse-edgar looks one up by company name. Nothing else to ask the owner for."] },
+  screen: { title: "Strategy screen", types: ["markets_screen"], fields: [], noSecret: true,
+    desc: "Not a data source of its own: a screen BORROWS another card's connection to filter its rows down to the ones that match a condition. Its connector_id — set on the 'markets_screen' report, not here — names the provider card to read through; this card holds no credentials of its own.",
+    howto: ["Nothing to save on this card. Build the actual screen on the REPORTS tab as a 'markets_screen' report: provider (today, 'yahoo_quotes' or 'coingecko_prices'), the connector_id of THAT provider's own card (its id on this Connections page), symbols/ids, and conditions - each [field, operator, value], every one of which must hold for a row to pass.",
+      "Silence is the normal outcome: a screen only files a row when something matches, which is what makes 'something came back' the right alert to set - not a schedule you expect to fire every run."],
+    agent: ["This card's own id is never the connector_id an agent saves credentials on - find the PROVIDER's own card (yahoo or coingecko) and use ITS id as connector_id in the markets_screen report config. This card borrows a connection; it has none to lend.",
+      "conditions is a list of [field, operator, value] triples, ALL of which must hold; an empty list is refused on purpose, not a wildcard."] },
   prometheus: { title: "Prometheus", types: ["prometheus"],
     fields: [["base URL", "base_url", "http://prometheus.yourcompany.local:9090"]],
     secretLabel: "bearer token (optional — most Prometheus servers need none)",
@@ -797,7 +831,7 @@ const ConnCard = ({ c }) => (
 // The catalog's sections, named once: the rail reads them before `groups` is built (groups
 // needs the loaded connectors), and they must stay in step.
 const GROUP_TITLES = ["AI — agents & models", "AI — voice", "Email", "Messaging", "Developer", "Project management",
-  "Databases", "Cloud & infrastructure", "Corporate systems", "Observability", "Agentic web", "Files & sheets", "Everything else"];
+  "Databases", "Cloud & infrastructure", "Corporate systems", "Markets & finance", "Observability", "Agentic web", "Files & sheets", "Everything else"];
 // planned types read as raw identifiers on a card ("sharepoint_list"), which looks unfinished
 // in a way the feature is not. Named here; anything unnamed falls back to a de-underscored key.
 const PLANNED_TITLES = { google_sheets: "Google Sheets", sharepoint_list: "SharePoint list",
@@ -809,7 +843,7 @@ const PLANNED_TITLES = { google_sheets: "Google Sheets", sharepoint_list: "Share
 const KNOWN_PLANNED = [];
 const PLACED = new Set(["graphql", "sqlite", "gcp", "kubernetes", "grafana", "elastic",
   "perplexity", "serpapi", "browserbase", "google_sheets", "sharepoint_list", "smb_file", "local_file",
-  "netsuite", "sap", "workday", "adp", "epic", "cerner", "pointclickcare"]);
+  "netsuite", "sap", "workday", "adp", "epic", "cerner", "pointclickcare", "stooq"]);
 
 const VoiceVocabulary = ({ onBack }) => {
   const [text, setText] = useState("");
@@ -1047,6 +1081,11 @@ export default function ConnectorsView() {
     { title: "Corporate systems", cards: [
       ...dataCards(["intacct", "quickbooks", "zoho_invoice", "teller"]),
       ...catalogCards("Corporate systems"),
+    ]},
+    { title: "Markets & finance", cards: [
+      ...dataCards(["yahoo", "coingecko", "frankfurter", "sec_edgar", "screen"]),
+      ...plannedCards(["stooq"]),
+      ...catalogCards("Markets & finance"),
     ]},
     { title: "Observability", cards: [...dataCards(["prometheus", "datadog"]), ...catalogCards("Observability")] },
     // the web as a source: one REST call and a key each. What is deliberately NOT here is

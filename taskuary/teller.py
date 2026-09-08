@@ -126,6 +126,38 @@ def balances(cfg, which: str = '') -> list:
     return out
 
 
+def _window(days: int) -> str:
+    return 'today' if days <= 0 else 'since yesterday' if days == 1 else f'over the last {days + 1} days'
+
+
+def spend(cfg, which: str = '', days: int = 0) -> list:
+    """Per-account spend over the window, biggest spender first, and a TOTAL row.
+
+    The window is INCLUSIVE and counted in days back from today, so days=0 is today alone - which
+    is the question people actually ask. `transactions` cannot express that (it floors at one day),
+    so the fetch is widened by a day and the rows are cut here.
+
+    Inflow is carried beside spend and never subtracted from it: a card payment is not negative
+    spending, and a rollup that nets them answers a question nobody asked.
+    """
+    days = max(0, int(days or 0))
+    since = (date.today() - timedelta(days=days)).isoformat()
+    rows = [r for r in transactions(cfg, which, days=days or 1, count=500) if str(r.get('date') or '') >= since]
+    seen = {}
+    for r in rows:
+        a = seen.setdefault(r.get('account') or '?', {'account': r.get('account') or '?', 'last_four': r.get('account_last_four'),
+                                                      'charges': 0, 'spend': 0.0, 'largest': 0.0, 'inflow': 0.0})
+        try: amt = abs(float(r.get('amount')))
+        except (TypeError, ValueError): continue
+        if r.get('direction') == 'spend': a['charges'], a['spend'], a['largest'] = a['charges'] + 1, a['spend'] + amt, max(a['largest'], amt)
+        elif r.get('direction') == 'inflow': a['inflow'] += amt
+    out = sorted(seen.values(), key=lambda a: -a['spend'])
+    for a in out: a['spend'], a['largest'], a['inflow'] = round(a['spend'], 2), round(a['largest'], 2), round(a['inflow'], 2)
+    return out + [{'account': 'TOTAL', 'last_four': None, 'charges': sum(a['charges'] for a in out),
+                   'spend': round(sum(a['spend'] for a in out), 2), 'largest': max([a['largest'] for a in out] or [0.0]),
+                   'inflow': round(sum(a['inflow'] for a in out), 2)}]
+
+
 def probe(cfg) -> str:
     rows = accounts(cfg)
     if not rows: return 'connected, but the login shows no accounts'
@@ -157,3 +189,20 @@ def run_teller_balances(cfg):
     from .reports import rows_out, row_limit
     lim, mine = row_limit(cfg)
     return rows_out(balances(cfg, cfg.get('account')), lim, unit='balances', mine=mine)
+
+
+def run_teller_spend(cfg):
+    """{"days": 0 (today) | 7, "account": "1234" | "Amex" (blank = every account)} - what you
+    actually spent, per card and in total, with the largest single charge beside each.
+
+    The headline LEADS WITH THE TOTAL deliberately: reports.result_count parses a leading number
+    and strips its commas, so alert {"when": "more_than", "count": 500} on this report compares
+    DOLLARS rather than row count - the only way to say "tell me if I spend over 500 today"
+    without teaching alert_fires a new condition. Cents are ignored by that comparison.
+    """
+    from .reports import BODY_CHARS
+    days = max(0, int(cfg.get('days') or 0))
+    rows = spend(cfg, cfg.get('account') or '', days)
+    n = len(rows) - 1
+    head = f"{rows[-1]['spend']:,.2f} spent {_window(days)} across {n} account{'' if n == 1 else 's'}"
+    return head, '\n'.join(json.dumps(r, default=str) for r in rows)[:BODY_CHARS]

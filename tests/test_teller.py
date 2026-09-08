@@ -100,3 +100,48 @@ class TheRoutes(unittest.TestCase):
         self.assertEqual(json.loads(row['ConfigJson'])['institution'], 'Amex')
         self.assertTrue(c.get(f"/api/connectors/{card['ConnectorId']}/teller/status").json()['connected'])
         self.assertNotIn('test_token_new', c.get('/api/connectors').text)      # write-only means write-only
+
+
+class TheSpendRollup(TheRows):
+    """The one question the rows could not answer: how much, across which cards. Summed here,
+    because a total added up by a language model is a total nobody can check."""
+
+    def _spend(self, days=3):
+        with mock.patch.object(teller, 'date') as d:
+            d.today.return_value = __import__('datetime').date(2026, 9, 1)
+            with mock.patch.object(teller.requests, 'get', side_effect=lambda url, **kw: self._get(url, **kw)):
+                return teller.spend(self.cfg, '', days)
+
+    def test_spend_is_per_account_biggest_first_with_a_total_and_inflow_kept_apart(self):
+        rows = self._spend()
+        self.assertEqual([r['account'] for r in rows], ['Operating', 'Platinum Card', 'TOTAL'])  # biggest spender first
+        op, card, tot = rows
+        self.assertEqual((op['charges'], op['spend'], op['largest']), (1, 1200.0, 1200.0))
+        self.assertEqual((card['charges'], card['spend'], card['largest']), (1, 318.2, 318.2))
+        self.assertEqual(card['inflow'], 500.0)              # the payment is not negative spend
+        self.assertEqual((tot['charges'], tot['spend'], tot['largest'], tot['inflow']), (2, 1518.2, 1200.0, 500.0))
+
+    def test_the_window_is_inclusive_and_the_old_row_is_out(self):
+        self.assertEqual(self._spend(days=0)[-1]['spend'], 0.0)     # nothing posted on 2026-09-01 itself
+        self.assertEqual(self._spend(days=3)[-1]['charges'], 2)     # 08-29 .. 09-01, and the 01-01 row cut
+
+    def test_the_headline_leads_with_the_total_so_a_dollar_threshold_works(self):
+        from taskuary.reports import alert_fires, result_count
+        with mock.patch.object(teller, 'date') as d:
+            d.today.return_value = __import__('datetime').date(2026, 9, 1)
+            with mock.patch.object(teller.requests, 'get', side_effect=lambda url, **kw: self._get(url, **kw)):
+                head, body = teller.run_teller_spend({**self.cfg, 'days': 3})
+        self.assertTrue(head.startswith('1,518.20 spent '), head)
+        self.assertEqual(result_count(head, body), 1518)            # dollars, not rows - commas stripped
+        cfg = {'alert': {'when': 'more_than', 'count': 500, 'to': 'me@example.com'}}
+        self.assertIn('more than the 500', alert_fires(cfg, head, body))
+        self.assertEqual(alert_fires({'alert': {'when': 'more_than', 'count': 5000, 'to': 'me@example.com'}}, head, body), '')
+
+    def test_every_account_row_is_json_on_its_own_line(self):
+        with mock.patch.object(teller, 'date') as d:
+            d.today.return_value = __import__('datetime').date(2026, 9, 1)
+            with mock.patch.object(teller.requests, 'get', side_effect=lambda url, **kw: self._get(url, **kw)):
+                _, body = teller.run_teller_spend({**self.cfg, 'days': 3})
+        rows = [json.loads(l) for l in body.splitlines() if l.strip()]
+        self.assertEqual(rows[-1]['account'], 'TOTAL')
+        self.assertEqual(len(rows), 3)

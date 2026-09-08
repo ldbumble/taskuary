@@ -86,6 +86,17 @@ def _pct(v):
     try: return round(float(v), 2)
     except (TypeError, ValueError): return None
 
+def _flt(v):
+    """Every keyed provider below hands numbers back as strings (twelvedata, alphavantage) - this
+    is the one coercion the row contract insists on, so a chart never has to parse "315.41" itself."""
+    try: return float(str(v).rstrip('%'))
+    except (TypeError, ValueError): return None
+
+
+def _int(v):
+    try: return int(float(v))
+    except (TypeError, ValueError): return None
+
 
 # ---- coingecko: crypto spot, keyless (a demo key only raises the limit) -----------------
 def run_coingecko_prices(cfg):
@@ -223,6 +234,56 @@ def run_edgar_facts(cfg):
     return _rows(cfg, rows, 'facts')
 
 
+# ---- twelvedata: quotes and technical indicators, one key on the card ------------------------
+TD_BASE = 'https://api.twelvedata.com'
+TD_INDICATORS = ('rsi', 'macd', 'sma', 'ema', 'bbands')
+
+
+def _td(url, params):
+    """twelvedata answers an error at HTTP 200 - {"code":.., "message":.., "status":"error"} -
+    so _get's status-code check never sees it. A 200 that reports zero rows because of an error
+    is a report that lies, so this is checked on every call before a row is ever built."""
+    j = _get(url, params)
+    if isinstance(j, dict) and j.get('status') == 'error':
+        raise MarketError(str(j.get('message') or 'twelvedata error'))
+    return j
+
+
+def run_td_quotes(cfg):
+    """{"symbol": "AAPL" or "symbols": "AAPL,MSFT"} - price, change % and day range per symbol.
+    Every value in twelvedata's /quote response is a string; each is coerced to a number here."""
+    key = _need(cfg, 'Twelve Data', 'api_key', 'secret')
+    rows = []
+    for s in _syms(cfg, 'symbols', 'symbol') or ['AAPL']:
+        j = _td(f'{TD_BASE}/quote', {'symbol': s, 'apikey': key})
+        rows.append({'symbol': j.get('symbol') or s, 'name': j.get('name'), 'exchange': j.get('exchange'),
+                     'currency': j.get('currency'), 'price': _flt(j.get('close')), 'change_pct': _flt(j.get('percent_change')),
+                     'open': _flt(j.get('open')), 'high': _flt(j.get('high')), 'low': _flt(j.get('low')),
+                     'previous_close': _flt(j.get('previous_close')), 'volume': _int(j.get('volume'))})
+    return _rows(cfg, rows, 'quotes')
+
+
+def run_td_indicator(cfg):
+    """{"symbol": "AAPL", "indicator": "rsi|macd|sma|ema|bbands", "interval": "1day", "time_period": 14, ...}
+    - one row per bar, newest first: {symbol, indicator, date} plus every non-datetime numeric key
+    the indicator returns. RSI hands back one value (rsi); MACD hands back several - both come
+    through the same values-object unpack, which is the point of screening on either."""
+    key = _need(cfg, 'Twelve Data', 'api_key', 'secret')
+    ind = str(cfg.get('indicator') or 'rsi').strip().lower()
+    if ind not in TD_INDICATORS:
+        raise MarketError(f'{ind!r} is not a twelvedata indicator this card knows - one of: {", ".join(TD_INDICATORS)}')
+    sym = (_syms(cfg, 'symbol', 'symbols') or ['AAPL'])[0]
+    params = {'symbol': sym, 'apikey': key, 'interval': str(cfg.get('interval') or '1day')}
+    for k in ('time_period', 'series_type', 'fast_period', 'slow_period', 'signal_period'):
+        if cfg.get(k) not in (None, ''): params[k] = cfg[k]
+    j = _td(f'{TD_BASE}/{ind}', params)
+    rows = [{'symbol': sym, 'indicator': ind, 'date': v.get('datetime'),
+             **{k: _flt(x) for k, x in v.items() if k != 'datetime'}}
+            for v in j.get('values') or []]
+    rows.sort(key=lambda r: str(r.get('date') or ''), reverse=True)
+    return _rows(cfg, rows, 'values')
+
+
 # ---- the screen: conditions in CONFIG, matches out ------------------------------------------
 # The threshold lives here and not in a playbook. A playbook is prose flattened onto a command
 # line; a number living in prose is a number re-judged by a model every run, and it will drift.
@@ -231,8 +292,10 @@ OPS = {'<': lambda a, b: a < b, '<=': lambda a, b: a <= b, '>': lambda a, b: a >
 # Only the quote-shaped providers - screening wants comparable numbers on every row, which is what
 # a quote (price/change_pct/...) gives and a filing or an FX table does not. A provider must be
 # ADDED HERE when it is built: naming one that does not exist yet would raise KeyError, not an
-# error an owner can read (see run_markets_screen below).
-SCREENABLE = ('yahoo_quotes', 'coingecko_prices')
+# error an owner can read (see run_markets_screen below). td_indicator belongs here too, even
+# though it is not a quote: it is what lets a screen match a real strategy (["rsi", "<", 30])
+# instead of only price moves.
+SCREENABLE = ('yahoo_quotes', 'coingecko_prices', 'td_quotes', 'td_indicator')
 
 
 def screen_connection(store, connector_id=None) -> dict:

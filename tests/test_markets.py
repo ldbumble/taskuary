@@ -315,3 +315,68 @@ class TheScreen(unittest.TestCase):
         store.save_connector({'ConnectorId': cg_id, 'Secret': 'demo_xyz'}, 'owner')
         cfg = reports.CONNECTION_OF['markets_screen'](store, cg_id)
         self.assertEqual(cfg['api_key'], 'demo_xyz')
+
+
+# captured live 2026-09-08 from api.twelvedata.com/quote?symbol=AAPL&apikey=demo
+TD_QUOTE = {"symbol": "AAPL", "name": "Apple Inc.", "exchange": "NASDAQ", "mic_code": "XNGS", "currency": "USD",
+            "datetime": "2026-09-08", "timestamp": 1788874200, "last_quote_at": 1788893340, "open": "317.18",
+            "high": "320.71", "low": "314.98", "close": "315.02", "volume": "886145", "previous_close": "319.97000",
+            "change": "-4.95000", "percent_change": "-1.54702", "average_volume": "33681314", "is_market_open": True,
+            "fifty_two_week": {"low": "225.95000", "high": "344.57001", "low_change": "89.070003",
+                               "high_change": "-29.55001", "low_change_percent": "39.42023",
+                               "high_change_percent": "-8.57591", "range": "225.949997 - 344.570007"}}
+
+# captured live 2026-09-08 from api.twelvedata.com/rsi?symbol=AAPL&apikey=demo (trimmed to 3 values)
+TD_RSI = {"meta": {"symbol": "AAPL", "interval": "1day", "indicator": {"name": "RSI - Relative Strength Index"}},
+          "values": [{"datetime": "2026-09-08", "rsi": "49.12401"}, {"datetime": "2026-09-04", "rsi": "53.88621"},
+                     {"datetime": "2026-09-03", "rsi": "63.38419"}], "status": "ok"}
+
+# captured live 2026-09-08 from api.twelvedata.com - the demo key's error shape, HTTP 200 with status=error
+TD_ERROR = {"code": 401, "message": "The 'demo' API key is only used for initial familiarity. To become a full "
+            "user, you can request your own API key at https://twelvedata.com/pricing. It is absolutely free, "
+            "and it’s yours for a lifetime. It only takes 10 seconds to obtain your own API key!",
+            "status": "error"}
+
+
+class TheTwelveData(unittest.TestCase):
+    def test_a_quote_row_is_coerced_off_the_providers_all_string_values(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, TD_QUOTE)) as g:
+            head, body = markets.run_td_quotes({'symbol': 'AAPL', 'api_key': 'demo'})
+        row = json.loads(body.splitlines()[0])
+        self.assertEqual(row, {'symbol': 'AAPL', 'name': 'Apple Inc.', 'exchange': 'NASDAQ', 'currency': 'USD',
+                              'price': 315.02, 'change_pct': -1.54702, 'open': 317.18, 'high': 320.71, 'low': 314.98,
+                              'previous_close': 319.97, 'volume': 886145})
+        self.assertIsInstance(row['price'], float); self.assertIsInstance(row['volume'], int)
+        self.assertEqual(g.call_args.kwargs['params']['apikey'], 'demo')
+
+    def test_a_missing_key_names_the_card(self):
+        with self.assertRaisesRegex(markets.MarketError, 'Twelve Data'):
+            markets.run_td_quotes({'symbol': 'AAPL'})
+
+    def test_the_200_with_status_error_shape_is_raised_not_returned_as_a_row(self):
+        # a 200 that reports zero rows because of an error is a report that lies
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, TD_ERROR)):
+            with self.assertRaises(markets.MarketError) as ctx:
+                markets.run_td_quotes({'symbol': 'AAPL', 'api_key': 'demo'})
+        self.assertIn('own API key', str(ctx.exception))
+
+    def test_an_indicator_with_one_value_key_comes_back_newest_first(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, TD_RSI)):
+            head, body = markets.run_td_indicator({'symbol': 'AAPL', 'indicator': 'rsi', 'api_key': 'demo'})
+        rows = [json.loads(l) for l in body.splitlines() if l.strip()]
+        self.assertEqual(rows[0], {'symbol': 'AAPL', 'indicator': 'rsi', 'date': '2026-09-08', 'rsi': 49.12401})
+        self.assertEqual([r['date'] for r in rows], ['2026-09-08', '2026-09-04', '2026-09-03'])
+
+    def test_an_indicator_with_several_value_keys_carries_every_one(self):
+        # not captured (the demo key blocks MACD too) - synthesized from the documented shape to
+        # prove the code unpacks ANY non-datetime keys, not just a hardcoded "rsi"
+        macd = {"values": [{"datetime": "2026-09-08", "macd": "1.234", "macd_signal": "0.987", "macd_hist": "0.247"}]}
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, macd)):
+            head, body = markets.run_td_indicator({'symbol': 'AAPL', 'indicator': 'macd', 'api_key': 'demo'})
+        row = json.loads(body.splitlines()[0])
+        self.assertEqual(row, {'symbol': 'AAPL', 'indicator': 'macd', 'date': '2026-09-08',
+                              'macd': 1.234, 'macd_signal': 0.987, 'macd_hist': 0.247})
+
+    def test_an_indicator_this_card_does_not_know_is_refused_before_any_call(self):
+        with self.assertRaisesRegex(markets.MarketError, 'stoch'):
+            markets.run_td_indicator({'symbol': 'AAPL', 'indicator': 'stoch', 'api_key': 'demo'})

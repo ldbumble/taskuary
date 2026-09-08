@@ -67,7 +67,8 @@ def sync_connections(store, actor='system'):
                      # was the one system this list never named, so the only road an agent could SEE
                      # to the ERP was "get a report pipeline saved first"
                      'intacct|intacct_fields|quickbooks|quickbooks_vendors|quickbooks_accounts|teller_accounts|teller_transactions|teller_balances|teller_spend'
-                     '|yahoo_quotes|yahoo_history|edgar_filings|edgar_facts|coingecko_prices|fx_rates|markets_screen", ...} — '
+                     '|yahoo_quotes|yahoo_history|edgar_filings|edgar_facts|coingecko_prices|fx_rates|'
+                     'td_quotes|td_indicator|markets_screen", ...} — '
                      'saved credentials are filled in for you; if several cards have that type, pass '
                      '"connector_id": <the id named above>; the raw output comes back. '
                      # the writes exist and are named, and the road to them is the proposal - an agent

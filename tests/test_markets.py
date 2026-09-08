@@ -232,7 +232,7 @@ class TheWiring(unittest.TestCase):
     def test_stooq_is_planned_and_fails_loudly_rather_than_being_absent(self):
         from taskuary import reports
         self.assertIn('stooq', reports.PLANNED)
-        with self.assertRaises(Exception):
+        with self.assertRaisesRegex(NotImplementedError, 'roadmap'):
             reports.REGISTRY['stooq']({})
 
     def test_the_cards_are_in_the_catalog_so_they_can_be_configured(self):
@@ -269,6 +269,49 @@ class TheScreen(unittest.TestCase):
             with self.assertRaisesRegex(markets.MarketError, 'rsi'):
                 markets.run_markets_screen({'provider': 'yahoo_quotes', 'conditions': [['rsi', '<', 30]]})
 
+    def test_a_degraded_row_missing_the_field_does_not_abort_a_screen_the_other_rows_can_still_answer(self):
+        # run_yahoo_quotes degrades an unresolvable symbol to {symbol, price, error} - no change_pct.
+        # That row must be skipped as a non-match, not treated as "the provider has no such field".
+        with mock.patch.object(markets, 'run_yahoo_quotes', return_value=('2 quotes', '\n'.join([
+                json.dumps({'symbol': 'AAPL', 'price': 316.19, 'change_pct': -6.0}),
+                json.dumps({'symbol': 'NOPE', 'price': None, 'error': 'No data found'})]))):
+            head, body = markets.run_markets_screen({'provider': 'yahoo_quotes', 'symbols': 'AAPL,NOPE',
+                                                     'conditions': [['change_pct', '<=', -5]]})
+        rows = [json.loads(l) for l in body.splitlines() if l.strip()]
+        self.assertEqual([r['symbol'] for r in rows], ['AAPL'])
+
+    def test_a_malformed_condition_is_refused_not_silently_dropped(self):
+        # a 2-element condition used to vanish from the filter, which LOOSENS it - a typo must not
+        # make the alert fire every run instead of never.
+        with self.assertRaisesRegex(markets.MarketError, 'condition'):
+            markets.run_markets_screen({'provider': 'yahoo_quotes', 'conditions': [['price', '<']]})
+
+    def test_zero_conditions_is_refused_not_treated_as_match_everything(self):
+        with self.assertRaisesRegex(markets.MarketError, 'at least one condition'):
+            markets.run_markets_screen({'provider': 'yahoo_quotes', 'conditions': []})
+
+    def test_comparing_a_string_field_with_an_ordering_operator_names_what_to_fix(self):
+        with mock.patch.object(markets, 'run_yahoo_quotes', return_value=('1 quotes', json.dumps({'symbol': 'AAPL', 'currency': 'USD'}))):
+            with self.assertRaisesRegex(markets.MarketError, 'currency'):
+                markets.run_markets_screen({'provider': 'yahoo_quotes', 'conditions': [['currency', '<', 100]]})
+
+    def test_the_screen_refuses_to_borrow_a_card_of_the_wrong_type(self):
+        # a wrong connector_id must not hand an unrelated card's secret to whichever provider the
+        # screen calls - reports._connector refuses this same way for every other borrow.
+        from taskuary.store import MemoryStore
+        store = MemoryStore()
+        aws_id = store.connectors_by_type('aws')[0]['ConnectorId']
+        store.save_connector({'ConnectorId': aws_id, 'Secret': 'AKIA_fake'}, 'owner')
+        with self.assertRaisesRegex(markets.MarketError, 'aws'):
+            markets.screen_connection(store, aws_id)
+
     def test_the_screen_borrows_the_named_providers_card(self):
+        # behaviour, not identity: CONNECTION_OF['markets_screen'] must actually resolve the card
+        # connector_id names and hand back its saved key.
         from taskuary import reports
-        self.assertIs(reports.CONNECTION_OF['markets_screen'], markets.screen_connection)
+        from taskuary.store import MemoryStore
+        store = MemoryStore()
+        cg_id = store.connectors_by_type('coingecko')[0]['ConnectorId']
+        store.save_connector({'ConnectorId': cg_id, 'Secret': 'demo_xyz'}, 'owner')
+        cfg = reports.CONNECTION_OF['markets_screen'](store, cg_id)
+        self.assertEqual(cfg['api_key'], 'demo_xyz')

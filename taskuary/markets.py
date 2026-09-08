@@ -240,10 +240,19 @@ def screen_connection(store, connector_id=None) -> dict:
     (store, connector_id) - never the screen's own config - so connector_id IS the borrow: the
     owner points a markets_screen report at whichever provider's card it should read through
     (their coingecko card, say, if it carries a saved key), and that card's id is what
-    connector_id names. There is no reverse lookup to do because the id already picks the card."""
+    connector_id names. There is no reverse lookup to do because the id already picks the card -
+    but the id is owner input, and a wrong one must not hand an unrelated card's secret to
+    whichever provider the screen calls (reports._connector refuses this same way for every
+    other borrow; this is that same check, done here because CONNECTION_OF passes no cfg to
+    check it against upstream)."""
     if not connector_id: return {}
+    from .reports import card_of
     c = store.get_connector(int(connector_id), with_secret=True)
     if not c: return {}
+    allowed = {card_of(p) for p in SCREENABLE}
+    if c.get('Type') not in allowed:
+        raise MarketError(f'connector {connector_id} is a {c.get("Type")!r} card - a screen may only borrow '
+                           f'one of: {", ".join(sorted(allowed))}')
     cfg = json.loads(c.get('ConfigJson') or '{}')
     if c.get('Secret'): cfg.setdefault('api_key', c['Secret'])
     return {k: v for k, v in cfg.items() if v}
@@ -254,19 +263,39 @@ def run_markets_screen(cfg):
     - the provider's rows, filtered to the ones where EVERY condition holds, and nothing else.
 
     Silence is the normal outcome, which is what makes alert "something came back" the right rule:
-    a report that files a row every run is a report that stops being read."""
+    a report that files a row every run is a report that stops being read - which is exactly why
+    every ambiguity below refuses loudly instead of matching everything. A screen that fails OPEN
+    (a dropped condition, an empty condition list, a config error read as "no match") turns the
+    alert into one that fires every run, and an alarm that always fires is one nobody reads - a
+    worse outcome than a crash."""
     prov = str(cfg.get('provider') or '').strip()
     if prov not in SCREENABLE:
         raise MarketError(f'{prov!r} is not a market source a screen can read - one of: {", ".join(SCREENABLE)}')
-    conds = [c for c in (cfg.get('conditions') or []) if isinstance(c, (list, tuple)) and len(c) == 3]
-    for f, op, _ in conds:
+    raw_conds = cfg.get('conditions') or []
+    for c in raw_conds:
+        if not (isinstance(c, (list, tuple)) and len(c) == 3):
+            raise MarketError(f'{c!r} is not a condition - each one is [field, operator, value]')
+    if not raw_conds:
+        raise MarketError('a screen needs at least one condition - conditions: [] would match every row, every run')
+    for f, op, _ in raw_conds:
         if op not in OPS: raise MarketError(f'{op!r} is not a comparison operator - one of: {", ".join(OPS)}')
     _, body = globals()[f'run_{prov}']({k: v for k, v in cfg.items() if k not in ('provider', 'conditions')})
-    rows, out = [json.loads(l) for l in str(body or '').splitlines() if l.strip()], []
+    rows = [json.loads(l) for l in str(body or '').splitlines() if l.strip()]
+    fields_present = {k for r in rows for k in r}
+    for f, op, _ in raw_conds:
+        # a field missing from EVERY row is a misconfigured condition; missing from just THIS row
+        # (a degraded row - see run_yahoo_quotes) is handled per-row below, as a non-match, not an error
+        if rows and f not in fields_present:
+            raise MarketError(f'{prov} returns no field {f!r} to screen on - it has: {", ".join(sorted(fields_present))}')
+    out = []
     for r in rows:
-        for f, op, want in conds:
-            if f not in r: raise MarketError(f'{prov} returns no field {f!r} to screen on - it has: {", ".join(sorted(r))}')
+        for f, op, want in raw_conds:
+            if f not in r: break            # this row does not carry the field - it does not match, it is not a config error
             v = r.get(f)
-            if v is None or not OPS[op](v, want): break
+            if v is None: break
+            try: ok = OPS[op](v, want)
+            except TypeError:
+                raise MarketError(f'cannot compare {f} ({v!r}) {op} {want!r} - check the condition\'s value type')
+            if not ok: break
         else: out.append(r)
     return _rows(cfg, out, 'matches')

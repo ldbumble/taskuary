@@ -18,8 +18,7 @@ PLANNED = ['graphql', 'smb_file',
            # EMR" - and an empty Corporate systems group answers that worse than a list does.
            'netsuite', 'sap', 'workday', 'adp',            # quickbooks is BUILT (quickbooks.py)
            'epic', 'cerner', 'pointclickcare',   # smb_file is a NETWORK
-           'stooq',    # its CSV endpoint serves a JS proof-of-work challenge now (2026-09-08) - not reachable from REST
-           ]
+           'stooq']    # its CSV endpoint serves a JS proof-of-work challenge now (2026-09-08) - not reachable from REST
 # share and still planned; a path on this machine is local_file and works now
 
 MAX_ROWS, BODY_CHARS, AI_CHARS = 200, 20000, 12000     # per report; override with cfg['max_rows']
@@ -769,10 +768,10 @@ def _apikey_card(typ):
     return lambda store, connector_id=None: _card(store, typ, 'api_key', connector_id)
 
 
-# markets.screen_connection is referenced directly (not wrapped, unlike _teller_connection) so
-# that CONNECTION_OF holds the very function markets.py defines - the screen borrows a card by
-# connector_id alone, with no per-provider branching for this module to own.
-from .markets import screen_connection as _screen_connection
+def _screen_connection(store, connector_id=None) -> dict:
+    from .markets import screen_connection
+    return screen_connection(store, connector_id)
+
 
 CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database': database_connection,
                  'exa': _apikey_card('exa'), 'tavily': _apikey_card('tavily'),

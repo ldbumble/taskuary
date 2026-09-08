@@ -453,6 +453,9 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  'quickbooks': 'report,tool',
                  'zoho_invoice': 'report,tool',
                  'teller': 'report,tool',          # the bank feed: transactions as a report (and "can become work"), balances as a tool
+                 # market data (markets.py): four keyless cards, each a report source and an agent tool
+                 'coingecko': 'report,tool', 'frankfurter': 'report,tool',
+                 'yahoo': 'report,tool', 'sec_edgar': 'report,tool',
                  # research reads the public web - a report source, and a tool an agent may use
                  'exa': 'report,tool', 'tavily': 'report,tool',
                  'firecrawl': 'report,tool', 'reader': 'report,tool',
@@ -671,6 +674,8 @@ class SQLiteStore:
                          ('sentry', 'Sentry'), ('pagerduty', 'PagerDuty'),
                          ('prometheus', 'Prometheus'), ('datadog', 'Datadog'),
                          ('intacct', 'Sage Intacct'), ('quickbooks', 'QuickBooks Online'), ('teller', 'Bank & card feed (Teller)'),
+                         ('coingecko', 'Crypto prices (CoinGecko)'), ('frankfurter', 'FX rates'),
+                         ('yahoo', 'Yahoo Finance (best-effort)'), ('sec_edgar', 'SEC filings (EDGAR)'),
                          ('zoho_invoice', 'Zoho Invoice'),
                          ('exa', 'Exa search'), ('tavily', 'Tavily search'),
                          ('firecrawl', 'Firecrawl'), ('reader', 'Jina Reader'),

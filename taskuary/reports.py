@@ -17,7 +17,9 @@ PLANNED = ['graphql', 'smb_file',
            # the category is the question people arrive with - "does this reach our ERP / our
            # EMR" - and an empty Corporate systems group answers that worse than a list does.
            'netsuite', 'sap', 'workday', 'adp',            # quickbooks is BUILT (quickbooks.py)
-           'epic', 'cerner', 'pointclickcare']   # smb_file is a NETWORK
+           'epic', 'cerner', 'pointclickcare',   # smb_file is a NETWORK
+           'stooq',    # its CSV endpoint serves a JS proof-of-work challenge now (2026-09-08) - not reachable from REST
+           ]
 # share and still planned; a path on this machine is local_file and works now
 
 MAX_ROWS, BODY_CHARS, AI_CHARS = 200, 20000, 12000     # per report; override with cfg['max_rows']
@@ -610,6 +612,11 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'teller_accounts': _lazy('teller', 'run_teller_accounts'), 'teller_transactions': _lazy('teller', 'run_teller_transactions'),
             'teller_balances': _lazy('teller', 'run_teller_balances'),
             'teller_spend': _lazy('teller', 'run_teller_spend'),      # the rollup: how much, per card and in total
+            # market data (markets.py): the watchlist, the filing and the FX rate as report sources.
+            # These four cards need no credentials at all, which is why they are the ones CI exercises.
+            'coingecko_prices': _lazy('markets', 'run_coingecko_prices'), 'fx_rates': _lazy('markets', 'run_fx_rates'),
+            'yahoo_quotes': _lazy('markets', 'run_yahoo_quotes'), 'yahoo_history': _lazy('markets', 'run_yahoo_history'),
+            'edgar_filings': _lazy('markets', 'run_edgar_filings'), 'edgar_facts': _lazy('markets', 'run_edgar_facts'),
             # the semantic layer over the ERP: a number that was PROVED, and the check that keeps it proved
             'metric': run_metric, 'metric_check': run_metric_check,
             'rss': run_rss, 'digest': run_digest, 'evening_inbox': run_evening_inbox,
@@ -653,6 +660,9 @@ CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 
            'quickbooks_vendors': 'quickbooks', 'quickbooks_accounts': 'quickbooks', 'quickbooks_bill': 'quickbooks', 'quickbooks_expense': 'quickbooks',
            'zoho_monthly_invoices': 'zoho_invoice',
            'teller_accounts': 'teller', 'teller_transactions': 'teller', 'teller_balances': 'teller', 'teller_spend': 'teller',
+           'coingecko_prices': 'coingecko', 'fx_rates': 'frankfurter',
+           'yahoo_quotes': 'yahoo', 'yahoo_history': 'yahoo',
+           'edgar_filings': 'sec_edgar', 'edgar_facts': 'sec_edgar',
            'kb_search': 'knowledge', 'kb_reindex': 'knowledge',
            'handbook_search': 'handbook', 'handbook_write': 'handbook', 'handbook_vote': 'handbook',
            'hub_search': 'handbook', 'hub_write': 'handbook', 'hub_vote': 'handbook', 'hub_comment': 'handbook'}

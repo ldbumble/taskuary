@@ -210,3 +210,32 @@ class TheEdgarFacts(unittest.TestCase):
                 markets.run_edgar_facts({'cik': '1', 'unit': 'GBP'})
         self.assertIn('GBP', str(ctx.exception))
         self.assertIn('USD', str(ctx.exception))
+
+
+class TheWiring(unittest.TestCase):
+    KEYLESS = ('coingecko_prices', 'fx_rates', 'yahoo_quotes', 'yahoo_history', 'edgar_filings', 'edgar_facts')
+
+    def test_every_type_is_registered_a_read_and_owned_by_a_card(self):
+        from taskuary import reports, scopes
+        for t in self.KEYLESS:
+            self.assertIn(t, reports.REGISTRY, t)
+            self.assertIs(reports.executor_for(t), reports.REGISTRY[t], t)
+            self.assertEqual(scopes.needs(t), 'read', t)
+            self.assertIn(reports.card_of(t), ('coingecko', 'frankfurter', 'yahoo', 'sec_edgar'), t)
+
+    def test_a_keyless_card_needs_no_connection_entry_and_resolve_cfg_passes_the_config_through(self):
+        from taskuary import reports
+        from taskuary.store import MemoryStore
+        cfg = reports.resolve_cfg(MemoryStore(), {'type': 'yahoo_quotes', 'symbols': 'AAPL'})
+        self.assertEqual(cfg['symbols'], 'AAPL')
+
+    def test_stooq_is_planned_and_fails_loudly_rather_than_being_absent(self):
+        from taskuary import reports
+        self.assertIn('stooq', reports.PLANNED)
+        with self.assertRaises(Exception):
+            reports.REGISTRY['stooq']({})
+
+    def test_the_cards_are_in_the_catalog_so_they_can_be_configured(self):
+        from taskuary.store import MemoryStore
+        types = {c['Type'] for c in MemoryStore().list_connectors()}
+        for card in ('coingecko', 'frankfurter', 'yahoo', 'sec_edgar'): self.assertIn(card, types, card)

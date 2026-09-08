@@ -18,6 +18,15 @@ via its keyless graph CSV, not its keyed JSON api), which is what makes them the
 suite can exercise honestly. Stooq is deliberately absent: its CSV endpoint now serves a
 JavaScript proof-of-work challenge that a REST client cannot pass (checked 2026-09-08), so it is
 PLANNED rather than quietly broken.
+
+Five more providers (finnhub, polygon, tiingo, fmp, alpaca) were added 2026-09-08 with no signup
+available for any of them: every field mapping below is written from the provider's own published
+documentation, not a live response, and every executor's docstring says so in one line. Only the
+ERROR path was verified for these five (captured-shapes.md carries the genuine failure body for
+each); their success-path tests are fixtures marked "documented shape, NOT a live capture" -
+never "captured live", which stays the mark of an actual capture elsewhere in this file. None of
+the five joins SCREENABLE for the same reason: the screen feeds alerts, and an alert built on a
+guessed field name is worse than no alert.
 """
 import json
 
@@ -333,7 +342,54 @@ def run_fmp_ratios(cfg):
     return _rows(cfg, rows, 'ratios')
 
 
+# ---- alpaca: market data ONLY - no order or trading executor exists on this card -------------
+# Two credentials, both HEADERS (not one key like every _apikey_card provider above): key_id is
+# an ordinary ConfigJson field (it identifies, it does not authorise alone) and secret_key is the
+# card's one write-only Secret, resolved through the same _card('aws', ...) shape aws_connection
+# uses - see reports.alpaca_connection.
+ALPACA_BASE = 'https://data.alpaca.markets/v2'
 
+
+def _alpaca_auth(cfg) -> dict:
+    key_id = _need(cfg, 'Alpaca', 'key_id')
+    secret = _need(cfg, 'Alpaca', 'secret_key', 'api_key')
+    return {'APCA-API-KEY-ID': key_id, 'APCA-API-SECRET-KEY': secret}
+
+
+def run_alpaca_quotes(cfg):
+    """{"symbols": "AAPL,MSFT", "feed": "iex|sip" (blank = iex, the free tier)} - bid, ask,
+    updated per symbol. READ ONLY - no order or trading executor exists on this card.
+
+    field mapping written from alpaca's documented shape 2026-09-08, NOT verified against a
+    live response - report a mismatch rather than working around it. /stocks/quotes/latest
+    answers {"quotes": {"<SYM>": {ap,as,bp,bs,t}}} - ask price/size, bid price/size, and an ISO
+    timestamp (unlike every epoch-based provider above it). SIP without a subscription is
+    documented to answer delayed data or an error, not a clean refusal - feed defaults to iex."""
+    hdrs = _alpaca_auth(cfg)
+    syms = _syms(cfg, 'symbols', 'symbol') or ['AAPL']
+    feed = str(cfg.get('feed') or 'iex').strip().lower()
+    j = _get(f'{ALPACA_BASE}/stocks/quotes/latest', {'symbols': ','.join(syms), 'feed': feed}, hdrs)
+    quotes = j.get('quotes') or {}
+    rows = [{'symbol': s, 'bid': _flt((quotes.get(s) or {}).get('bp')), 'ask': _flt((quotes.get(s) or {}).get('ap')),
+             'updated': (quotes.get(s) or {}).get('t')} for s in syms]
+    return _rows(cfg, rows, 'quotes')
+
+
+def run_alpaca_bars(cfg):
+    """{"symbol": "AAPL", "feed": "iex|sip" (blank = iex)} - one row per daily bar, oldest first:
+    open, high, low, close, volume. READ ONLY - no order or trading executor exists on this card.
+
+    field mapping written from alpaca's documented shape 2026-09-08, NOT verified against a
+    live response - report a mismatch rather than working around it. /stocks/bars answers
+    {"bars": {"<SYM>": [{t,o,h,l,c,v}]}} - t is an ISO timestamp string here too, not an epoch."""
+    hdrs = _alpaca_auth(cfg)
+    sym = (_syms(cfg, 'symbol', 'symbols') or ['AAPL'])[0]
+    feed = str(cfg.get('feed') or 'iex').strip().lower()
+    j = _get(f'{ALPACA_BASE}/stocks/bars', {'symbols': sym, 'timeframe': '1Day', 'feed': feed}, hdrs)
+    rows = [{'symbol': sym, 'date': str(b.get('t') or '')[:10], 'open': _flt(b.get('o')), 'high': _flt(b.get('h')),
+             'low': _flt(b.get('l')), 'close': _flt(b.get('c')), 'volume': _int(b.get('v'))}
+            for b in ((j.get('bars') or {}).get(sym) or [])]
+    return _rows(cfg, rows, 'bars')
 
 
 # ---- frankfurter: FX, keyless. api.frankfurter.app 301s now; .dev/v1 is the live host --------
@@ -582,6 +638,12 @@ OPS = {'<': lambda a, b: a < b, '<=': lambda a, b: a <= b, '>': lambda a, b: a >
 # though it is not a quote: it is what lets a screen match a real strategy (["rsi", "<", 30])
 # instead of only price moves. fred_series does NOT belong here - a macro series has no symbol
 # to screen per-row.
+#
+# finnhub_quotes, polygon_snapshot and alpaca_quotes are quote-shaped too, but they stay OUT of
+# this tuple on purpose: their field mapping is written from documentation, never verified against
+# a live response (see each executor's docstring), and the screen feeds alert_fires - an unverified
+# field name landing in an alert condition is a false positive or a silent miss an owner would
+# never trace back to a guessed key. Move one in only once its shape has been confirmed live.
 SCREENABLE = ('yahoo_quotes', 'coingecko_prices', 'td_quotes', 'td_indicator', 'av_quotes')
 
 
@@ -649,3 +711,5 @@ def run_markets_screen(cfg):
             if not ok: break
         else: out.append(r)
     return _rows(cfg, out, 'matches')
+
+

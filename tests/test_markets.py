@@ -715,3 +715,84 @@ class TheFmp(unittest.TestCase):
                 markets.run_fmp_fundamentals({'symbol': 'AAPL', 'api_key': 'bad'})
 
 
+# documented shape, NOT a live capture - alpaca quotes/bars carry ISO timestamps, not epochs
+ALPACA_QUOTES = {"quotes": {"AAPL": {"ap": 315.05, "as": 2, "bp": 315.0, "bs": 3, "t": "2026-09-08T13:30:00Z"}}}
+ALPACA_BARS = {"bars": {"AAPL": [{"t": "2026-09-08T04:00:00Z", "o": 317.18, "h": 320.71,
+                                  "l": 314.98, "c": 315.02, "v": 886145}]}}
+# no captured error exists for alpaca (captured-shapes.md has none) - only the no-key path is tested
+
+
+class TheAlpaca(unittest.TestCase):
+    def test_quotes_carry_bid_ask_and_updated_with_both_credentials_as_headers(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, ALPACA_QUOTES)) as g:
+            head, body = markets.run_alpaca_quotes({'symbols': 'AAPL', 'key_id': 'kid', 'secret_key': 'sec'})
+        row = json.loads(body.splitlines()[0])
+        self.assertEqual(row, {'symbol': 'AAPL', 'bid': 315.0, 'ask': 315.05, 'updated': '2026-09-08T13:30:00Z'})
+        self.assertEqual(g.call_args.kwargs['headers']['APCA-API-KEY-ID'], 'kid')
+        self.assertEqual(g.call_args.kwargs['headers']['APCA-API-SECRET-KEY'], 'sec')
+        self.assertEqual(g.call_args.kwargs['params']['feed'], 'iex')
+
+    def test_a_missing_key_id_names_the_card(self):
+        with self.assertRaisesRegex(markets.MarketError, 'Alpaca'):
+            markets.run_alpaca_quotes({'symbols': 'AAPL', 'secret_key': 'sec'})
+
+    def test_a_missing_secret_names_the_card_too(self):
+        with self.assertRaisesRegex(markets.MarketError, 'Alpaca'):
+            markets.run_alpaca_quotes({'symbols': 'AAPL', 'key_id': 'kid'})
+
+    def test_bars_are_read_from_the_symbols_bucket_in_the_bars_envelope(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, ALPACA_BARS)):
+            head, body = markets.run_alpaca_bars({'symbol': 'AAPL', 'key_id': 'kid', 'secret_key': 'sec'})
+        row = json.loads(body.splitlines()[0])
+        self.assertEqual(row, {'symbol': 'AAPL', 'date': '2026-09-08', 'open': 317.18, 'high': 320.71,
+                              'low': 314.98, 'close': 315.02, 'volume': 886145})
+
+    def test_no_trading_or_order_executor_exists_on_this_card(self):
+        for bad in ('run_alpaca_order', 'run_alpaca_orders', 'run_alpaca_trade', 'run_alpaca_positions'):
+            self.assertFalse(hasattr(markets, bad), bad)
+
+
+class TheFiveNewProvidersWiring(unittest.TestCase):
+    TYPES = ('finnhub_quotes', 'finnhub_news', 'finnhub_earnings', 'finnhub_insiders',
+            'polygon_bars', 'polygon_snapshot', 'tiingo_history', 'tiingo_news',
+            'fmp_fundamentals', 'fmp_ratios', 'alpaca_quotes', 'alpaca_bars')
+    CARD_OF = {'finnhub_quotes': 'finnhub', 'finnhub_news': 'finnhub', 'finnhub_earnings': 'finnhub',
+              'finnhub_insiders': 'finnhub', 'polygon_bars': 'polygon', 'polygon_snapshot': 'polygon',
+              'tiingo_history': 'tiingo', 'tiingo_news': 'tiingo', 'fmp_fundamentals': 'fmp',
+              'fmp_ratios': 'fmp', 'alpaca_quotes': 'alpaca', 'alpaca_bars': 'alpaca'}
+
+    def test_every_type_is_registered_a_read_and_owned_by_the_right_card(self):
+        from taskuary import reports, scopes
+        for t in self.TYPES:
+            self.assertIn(t, reports.REGISTRY, t)
+            self.assertIs(reports.executor_for(t), reports.REGISTRY[t], t)
+            self.assertEqual(scopes.needs(t), 'read', t)
+            self.assertEqual(reports.card_of(t), self.CARD_OF[t], t)
+
+    def test_the_cards_are_in_the_catalog(self):
+        from taskuary.store import MemoryStore
+        types = {c['Type'] for c in MemoryStore().list_connectors()}
+        for card in ('finnhub', 'polygon', 'tiingo', 'fmp', 'alpaca'): self.assertIn(card, types, card)
+
+    def test_none_of_the_five_joins_the_screen_their_shape_is_unverified(self):
+        for t in self.TYPES: self.assertNotIn(t, markets.SCREENABLE, t)
+
+    def test_the_single_key_cards_resolve_their_saved_key_as_api_key(self):
+        from taskuary import reports
+        from taskuary.store import MemoryStore
+        store = MemoryStore()
+        for card, t in (('finnhub', 'finnhub_quotes'), ('polygon', 'polygon_bars'),
+                       ('tiingo', 'tiingo_history'), ('fmp', 'fmp_fundamentals')):
+            cid = store.connectors_by_type(card)[0]['ConnectorId']
+            store.save_connector({'ConnectorId': cid, 'Secret': f'{card}_secret'}, 'owner')
+            self.assertEqual(reports.CONNECTION_OF[t](store)['api_key'], f'{card}_secret', t)
+
+    def test_alpaca_resolves_key_id_from_configjson_and_secret_key_from_the_cards_secret(self):
+        from taskuary import reports
+        from taskuary.store import MemoryStore
+        store = MemoryStore()
+        cid = store.connectors_by_type('alpaca')[0]['ConnectorId']
+        store.save_connector({'ConnectorId': cid, 'Secret': 'alpaca_secret',
+                             'ConfigJson': json.dumps({'key_id': 'alpaca_key_id'})}, 'owner')
+        cfg = reports.CONNECTION_OF['alpaca_quotes'](store)
+        self.assertEqual((cfg['key_id'], cfg['secret_key']), ('alpaca_key_id', 'alpaca_secret'))

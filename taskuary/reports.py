@@ -627,6 +627,7 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'polygon_bars': _lazy('markets', 'run_polygon_bars'), 'polygon_snapshot': _lazy('markets', 'run_polygon_snapshot'),
             'tiingo_history': _lazy('markets', 'run_tiingo_history'), 'tiingo_news': _lazy('markets', 'run_tiingo_news'),
             'fmp_fundamentals': _lazy('markets', 'run_fmp_fundamentals'), 'fmp_ratios': _lazy('markets', 'run_fmp_ratios'),
+            'alpaca_quotes': _lazy('markets', 'run_alpaca_quotes'), 'alpaca_bars': _lazy('markets', 'run_alpaca_bars'),
             # the strategy screen: conditions in config, only the matches out (markets.py)
             'markets_screen': _lazy('markets', 'run_markets_screen'),
             # the semantic layer over the ERP: a number that was PROVED, and the check that keeps it proved
@@ -681,6 +682,7 @@ CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 
            'polygon_bars': 'polygon', 'polygon_snapshot': 'polygon',
            'tiingo_history': 'tiingo', 'tiingo_news': 'tiingo',
            'fmp_fundamentals': 'fmp', 'fmp_ratios': 'fmp',
+           'alpaca_quotes': 'alpaca', 'alpaca_bars': 'alpaca',
            'markets_screen': 'screen',
            'kb_search': 'knowledge', 'kb_reindex': 'knowledge',
            'handbook_search': 'handbook', 'handbook_write': 'handbook', 'handbook_vote': 'handbook',
@@ -790,6 +792,13 @@ def _screen_connection(store, connector_id=None) -> dict:
     return screen_connection(store, connector_id)
 
 
+def alpaca_connection(store, connector_id=None) -> dict:
+    """Two credentials, not one: key_id is an ordinary ConfigJson field (it identifies, it does
+    not authorise alone) and secret_key is the card's one write-only Secret - the same _card
+    shape aws_connection uses, not _apikey_card's single key."""
+    return _card(store, 'alpaca', 'secret_key', connector_id)
+
+
 CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database': database_connection,
                  'exa': _apikey_card('exa'), 'tavily': _apikey_card('tavily'),
                  'firecrawl': _apikey_card('firecrawl'), 'reader': _apikey_card('reader'),
@@ -801,6 +810,7 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  'polygon_bars': _apikey_card('polygon'), 'polygon_snapshot': _apikey_card('polygon'),
                  'tiingo_history': _apikey_card('tiingo'), 'tiingo_news': _apikey_card('tiingo'),
                  'fmp_fundamentals': _apikey_card('fmp'), 'fmp_ratios': _apikey_card('fmp'),
+                 'alpaca_quotes': alpaca_connection, 'alpaca_bars': alpaca_connection,
                  'aws': aws_connection, 's3_object': aws_connection, 'cloudwatch_logs': aws_connection,
                  'azure': azure_connection, 'azure_blob': azure_connection, 'azure_logs': azure_connection,
                  'entra_users': azure_connection, 'entra_groups': azure_connection,

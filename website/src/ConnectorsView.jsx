@@ -667,6 +667,36 @@ const DATA_META = {
       text: "The Gmail card already carries a Google OAuth client id and secret (its calendar fields). Leave those blank here and they are reused — you still mint a refresh token with the Sheets scope, because the calendar one does not cover spreadsheets.",
       clear: ["google_client_id", "google_client_secret"],
       ok: (c) => { const k = parse(c?.ConfigJson); return !!(c && k.google_client_id && k.google_client_secret); } } },
+  /* Files OUT as well as in (files.py) — the first two cards that can put a document somewhere.
+     Both ship at authority 'read', so the first save is a proposal in Review; the Authority
+     dropdown on the card, or a routing policy for the narrow case, is what stops it asking. */
+  smb_file: { title: "Network file share", types: ["smb_read", "smb_write", "smb_move"],
+    fields: [["share root — e.g. \\\\fileserv\\Ops\\Documents", "share"],
+      ["username (optional — blank uses your own Windows session)", "username"]],
+    secretLabel: "password (write-only; blank uses your own Windows session)",
+    desc: "Documents on a Windows or SMB share: read a folder, a csv or an xlsx, and FILE one — save a mail's attachment, rename it on the way in, or move it once it is dealt with.",
+    howto: ["Enter the share root — the folder everything this card does stays inside. A path outside it is refused, not adjusted, so make the root the narrowest folder that covers the job.",
+      "Leave username and password blank on a domain-joined machine: Taskuary runs as you, and it reaches whatever you can open in Explorer. Fill them in only for a share your own account cannot reach — Test says which of the two happened.",
+      "Test reaches the root and counts what is in it. \"not reachable as a folder\" means the path or the credentials, and the error says which.",
+      "REPORTS tab: 'Network share' reads a file, a folder listing (newest first — \"did today's export arrive?\") or a glob like exports/sales-*.csv, which reads the newest match.",
+      "Writing is an AGENT tool, not a report. At authority 'read' an agent proposes the save and you approve it in Review with the destination and size in front of you; raise Authority to 'write' once you are happy for it to file documents unattended."],
+    agent: ["Ask for the share root and save it as `share` in ConfigJson. Ask whether their own Windows login reaches it (usually yes on a work machine) - if so leave username and Secret empty and say why.",
+      "Test (POST {base}/api/connectors/{cid}/test{hdr}). A failure naming the folder is the path; one naming the account is the credentials. Do not retry the same values.",
+      "Turn the connector on. Leave Authority at read unless the owner ASKS for unattended filing - explain that at read they approve each save in Review, which is how the first few should go anyway. SETUP DONE."] },
+  sftp: { title: "SFTP", types: ["sftp_list", "sftp_get", "sftp_put", "sftp_move"],
+    fields: [["host", "host"], ["port (blank = 22)", "port"], ["username", "username"],
+      ["base folder (optional — blank = wherever the login lands)", "root"],
+      ["expected host key fingerprint — e.g. SHA256:abc… (Test tells you it)", "hostkey"]],
+    secretLabel: "password OR the whole private key (write-only)",
+    desc: "A vendor's or bank's SFTP server: list what arrived, fetch it, put a file back, and rename the remote copy once it is handled.",
+    howto: ["Enter host, username and the base folder the jobs work in. One secret field covers both ways in: a password, or an entire private key pasted with its BEGIN/END lines (an encrypted key is not supported).",
+      "The host key must match this card, and is never learned automatically. Press Test with the fingerprint field blank: it refuses and shows you the fingerprint the server offered. Check that against your server, paste it in, and Test again.",
+      "Test connects, verifies the host key and lists the base folder.",
+      "REPORTS tab: 'SFTP listing' answers \"did the file arrive?\" on a schedule, newest first, and can raise it as work when it did — or did not.",
+      "Fetching stages the file under ~/.taskuary and answers with its local path, which the Network file share card accepts as a source: that is pull-from-SFTP, rename, save-to-the-share, with a receipt at every step. Uploads and remote renames are writes and follow the same approve-then-raise path as the share."],
+    agent: ["Ask for host, username, port if not 22, and the folder the work happens in (`root`). Ask whether they authenticate with a password or a key; either goes in Secret and you never echo it back.",
+      "Test with `hostkey` empty ON PURPOSE (POST {base}/api/connectors/{cid}/test{hdr}): it fails with the fingerprint the server presented. Show the owner that fingerprint, ask them to confirm it against their own records or the vendor's, save it as `hostkey`, and Test again. Never invent or auto-accept a fingerprint.",
+      "Turn the connector on, leave Authority at read, SETUP DONE."] },
   azure: { title: "Microsoft Azure", types: ["azure", "azure_blob", "azure_logs"], discovers: true,
     fields: [["tenant_id", "tenant_id"], ["client_id", "client_id"]],
     secretLabel: "client secret (write-only; blank = reuse the Outlook connector's app)",
@@ -835,14 +865,14 @@ const GROUP_TITLES = ["AI — agents & models", "AI — voice", "Email", "Messag
 // planned types read as raw identifiers on a card ("sharepoint_list"), which looks unfinished
 // in a way the feature is not. Named here; anything unnamed falls back to a de-underscored key.
 const PLANNED_TITLES = { google_sheets: "Google Sheets", sharepoint_list: "SharePoint list",
-  smb_file: "Network file share", local_file: "File on this computer", graphql: "GraphQL",
+  local_file: "File on this computer", graphql: "GraphQL",
   sqlite: "SQLite", gcp: "Google Cloud", kubernetes: "Kubernetes", grafana: "Grafana",
   elastic: "Elasticsearch", perplexity: "Perplexity", serpapi: "SerpAPI", browserbase: "Browserbase",
   netsuite: "NetSuite", sap: "SAP", workday: "Workday", adp: "ADP",
   epic: "Epic (EMR)", cerner: "Oracle Cerner (EMR)", pointclickcare: "PointClickCare (EMR)" };
 const KNOWN_PLANNED = [];
 const PLACED = new Set(["graphql", "sqlite", "gcp", "kubernetes", "grafana", "elastic",
-  "perplexity", "serpapi", "browserbase", "google_sheets", "sharepoint_list", "smb_file", "local_file",
+  "perplexity", "serpapi", "browserbase", "google_sheets", "sharepoint_list", "local_file",
   "netsuite", "sap", "workday", "adp", "epic", "cerner", "pointclickcare", "stooq"]);
 
 const VoiceVocabulary = ({ onBack }) => {
@@ -1091,7 +1121,7 @@ export default function ConnectorsView() {
     // the web as a source: one REST call and a key each. What is deliberately NOT here is
     // anything that drives a browser - logging in, clicking - which needs CDP, not an API.
     { title: "Agentic web", cards: [...dataCards(["exa", "tavily", "firecrawl", "reader"]), ...catalogCards("Agentic web")] },
-    { title: "Files & sheets", cards: [...dataCards(["knowledge", "sharepoint", "google_sheets"]), ...catalogCards("Files & sheets")] },
+    { title: "Files & sheets", cards: [...dataCards(["knowledge", "sharepoint", "google_sheets", "smb_file", "sftp"]), ...catalogCards("Files & sheets")] },
     { title: "Everything else", cards: [...catalogCards("Everything else"), ...plannedCards(KNOWN_PLANNED, true)] },
   ];
   const hits = q ? groups.flatMap((g) => g.cards.filter((c) => c.haystack.toLowerCase().includes(q.toLowerCase()))

@@ -470,6 +470,10 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  # which polls nothing) - the card itself is just a connection and a tool
                  'aws': 'report,tool', 'azure': 'report,tool',
                  'sharepoint': 'report,tool', 'google_sheets': 'report,tool',
+                 # the first two cards that can WRITE a file (files.py): report and tool, never
+                 # trigger - neither pushes, and a folder is polled by a report when that is wanted.
+                 # The writes are gated by scope like QuickBooks', not by role.
+                 'smb_file': 'report,tool', 'sftp': 'report,tool',
                  'knowledge': 'report,tool',       # indexed documents: a kb_search report, and a tool for agents and the drafter
                  # the handbook the agents write themselves (handbook.py). tool, because the only
                  # things that read and write it are agents; no trigger, because it never arrives.
@@ -673,6 +677,7 @@ class SQLiteStore:
                          ('database', 'Any database (connection string)'),
                          ('aws', 'Amazon Web Services'), ('azure', 'Microsoft Azure'),
                          ('sharepoint', 'SharePoint'), ('google_sheets', 'Google Sheets'),
+                         ('smb_file', 'Network file share'), ('sftp', 'SFTP'),
                          ('knowledge', 'Knowledge base'), ('handbook', 'Company Hub'),
                          ('jira', 'Jira'), ('asana', 'Asana'), ('monday', 'Monday.com'),
                          ('clickup', 'ClickUp'), ('todoist', 'Todoist'),

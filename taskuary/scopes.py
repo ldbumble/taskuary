@@ -63,6 +63,11 @@ ACTIONS = {
     # /api/tools/run, and every one of those calls would have been refused.
     'metric': 'read', 'metric_check': 'read',
     'local_file': 'read',    # a path on this machine, opened read-only - like the sqlite above it
+    # files (files.py): the network share and the SFTP server. sftp_get WRITES a file and is still a
+    # read, for the reason this whole table measures - it reaches nothing upstream, and the only
+    # place it can land is ~/.taskuary/sftp. The four that change something on the far side are writes.
+    'smb_read': 'read', 'sftp_list': 'read', 'sftp_get': 'read',
+    'smb_write': 'write', 'smb_move': 'write', 'sftp_put': 'write', 'sftp_move': 'write',
     'kb_search': 'read',     # the knowledge base is Taskuary's own index; searching it moves nothing (kb_reindex writes it: default)
     # the handbook is Taskuary's own store and the whole point is that agents fill it, so reading
     # it is free. WRITING it is a write - not because it can reach anything (it cannot leave the
@@ -104,6 +109,11 @@ DEFAULT_SCOPE = {
     'screen': 'read',
     'zoho_invoice': 'write',
     'aws': 'read', 'azure': 'read',
+    # Both file cards ship at read, so the first save is a PROPOSAL the owner approves - the road a
+    # QuickBooks bill takes, and for the same asymmetry: read-first costs a click, write-first can
+    # cost a document mis-filed onto a share other people read, and only one of those is recoverable.
+    # Raising the card, or a routing policy for the narrow case, is how it stops asking.
+    'smb_file': 'read', 'sftp': 'read',
     'jira': 'read', 'asana': 'read', 'monday': 'read', 'gitlab': 'read', 'azdo': 'read',
     'linear': 'read', 'trello': 'read', 'notion': 'read', 'sentry': 'read', 'pagerduty': 'read',
     'clickup': 'read', 'todoist': 'read', 'dropbox': 'read',

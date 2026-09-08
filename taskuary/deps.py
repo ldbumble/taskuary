@@ -42,13 +42,14 @@ OPTIONAL = {
     'pypdf': 'pypdf',                        # reading .pdf into the knowledge base
     'faster_whisper': 'faster-whisper>=1.0',  # local speech to text
     'winpty': 'pywinpty',                    # the interactive terminal on Windows
+    'paramiko': 'paramiko>=2.11',            # the SFTP card (files.py)
 }
 
 # What Taskuary.exe ships with, read by taskuary.spec at build time so the list lives in ONE
 # place. faster_whisper is deliberately out: 200MB of runtime that then downloads models, wanted
 # by a fraction of installs, and the button below covers it. winpty is collected by the spec
 # already - it needs its binaries, not just its package.
-BUNDLE = ('boto3', 'pyodbc', 'sqlalchemy', 'psycopg2', 'pymysql', 'openpyxl', 'pypdf')
+BUNDLE = ('boto3', 'pyodbc', 'sqlalchemy', 'psycopg2', 'pymysql', 'openpyxl', 'pypdf', 'paramiko')
 
 
 class Missing(RuntimeError):

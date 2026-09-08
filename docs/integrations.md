@@ -68,7 +68,10 @@ Nothing is polled without an enabled role.
 | SQLite, REST, RSS | Available | Scheduled reports with optional AI summaries |
 | NetSuite, QuickBooks, SAP, Workday, ADP | Planned | Systems-of-record connectors |
 | Epic, Cerner, PointClickCare | Planned | Healthcare systems-of-record connectors |
-| SharePoint Lists, Google Sheets, GraphQL, SMB files | Planned | Additional report sources |
+| Network file share (SMB) | Available | Documents on a Windows/SMB share, under one configured root: `smb_read` (a file, a folder listing newest-first, or a glob) plus `smb_write` and `smb_move` — the first connector that can FILE a document, including a mail's attachment by id. Ships at authority `read`, so a save is a proposal the owner approves until they raise the card |
+| SFTP | Available | A vendor's or bank's server: `sftp_list`, `sftp_get` (stages the file and answers with its local path, which the share card accepts as a source), `sftp_put`, `sftp_move`. Needs `paramiko` (bundled in the desktop build); the host key must match the card's fingerprint and is never auto-accepted |
+| SharePoint Lists, Google Sheets | Available | A list's items or a csv/xlsx in a document library as rows; a Google Sheet's cells as rows |
+| GraphQL | Planned | Additional report source |
 | Stooq | Planned | Its CSV endpoint now serves a JavaScript proof-of-work challenge a REST client cannot pass (checked 2026-09-08), so it stays planned rather than quietly broken |
 | Finnhub, Alpha Vantage, Twelve Data, Tiingo, FMP, Polygon, FRED, Alpaca, Plaid, Interactive Brokers, Schwab, Tradier, Robinhood, EODHD, Marketstack, Intrinio, Benzinga | Planned | Market-data and brokerage providers awaiting an API key nobody has supplied yet |
 

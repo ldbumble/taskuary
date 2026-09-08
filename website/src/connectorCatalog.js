@@ -129,7 +129,6 @@ export const PLANNED_CONNECTORS = Object.freeze({
     { type: "oxylabs", title: "Oxylabs", desc: "Web scraping and proxy-backed collection" },
   ],
   "Files & sheets": [
-    { type: "smb_file", title: "Network file share", desc: "Documents on SMB and Windows shares" },
     { type: "google_drive", title: "Google Drive", desc: "Files, folders and shared drives" },
     { type: "onedrive", title: "OneDrive", desc: "Files and folders in Microsoft 365" },
     { type: "dropbox", title: "Dropbox", desc: "Files, folders and shared content" },

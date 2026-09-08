@@ -12,14 +12,13 @@ from datetime import datetime, timedelta
 from loguru import logger
 from . import spawn
 
-PLANNED = ['graphql', 'smb_file',
+PLANNED = ['graphql',
            # systems of record. Intacct is BUILT (see run_intacct); the rest are named because
            # the category is the question people arrive with - "does this reach our ERP / our
            # EMR" - and an empty Corporate systems group answers that worse than a list does.
            'netsuite', 'sap', 'workday', 'adp',            # quickbooks is BUILT (quickbooks.py)
-           'epic', 'cerner', 'pointclickcare',   # smb_file is a NETWORK
+           'epic', 'cerner', 'pointclickcare',   # smb_file is BUILT now (files.py), and so is sftp
            'stooq']    # its CSV endpoint serves a JS proof-of-work challenge now (2026-09-08) - not reachable from REST
-# share and still planned; a path on this machine is local_file and works now
 
 MAX_ROWS, BODY_CHARS, AI_CHARS = 200, 20000, 12000     # per report; override with cfg['max_rows']
 SUMMARY_TOKENS = 1500     # a report summary is prose, not a triage verdict - give it room
@@ -57,7 +56,11 @@ def ro_sqlite(path: str):
 CONNECTION_KEYS = frozenset({'base_url', 'site', 'account', 'gateway', 'server', 'host', 'database', 'username', 'password',
                              'token', 'api_key', 'app_key', 'client_id', 'client_secret', 'tenant_id', 'subscription_id',
                              'region', 'access_key', 'secret_key', 'sender_id', 'sender_password', 'company_id', 'user_id',
-                             'user_password', 'realm_id', 'connection_string', 'url', 'endpoint', 'bridge_url', 'connector_id'})
+                             'user_password', 'realm_id', 'connection_string', 'url', 'endpoint', 'bridge_url', 'connector_id',
+                             # ...and WHERE THE FILES ARE (files.py). Same lesson one connector later:
+                             # a tool call carrying its own share/root would walk straight out of the
+                             # folder the owner configured, which is the whole authority of those cards.
+                             'share', 'root', 'port', 'hostkey', 'private_key'})
 def query_only(body: dict) -> dict:
     """The body minus every connection field - what an agent may say about a tool call."""
     return {k: v for k, v in (body or {}).items() if k not in CONNECTION_KEYS}
@@ -645,6 +648,13 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'handbook_vote': _lazy('handbook', 'run_handbook_vote'),
             'hub_search': _lazy('hub', 'run_hub_search'), 'hub_write': _lazy('hub', 'run_hub_write'),
             'hub_vote': _lazy('hub', 'run_hub_vote'), 'hub_comment': _lazy('hub', 'run_hub_comment'),
+            # files in and files out (files.py): the network share and the SFTP server. The first
+            # connectors here that can PUT a file somewhere - reads reuse run_local_file's parsers,
+            # writes are proposal-gated below scope 'write' like a bill.
+            'smb_read': _lazy('files', 'run_smb_read'), 'smb_write': _lazy('files', 'run_smb_write'),
+            'smb_move': _lazy('files', 'run_smb_move'),
+            'sftp_list': _lazy('files', 'run_sftp_list'), 'sftp_get': _lazy('files', 'run_sftp_get'),
+            'sftp_put': _lazy('files', 'run_sftp_put'), 'sftp_move': _lazy('files', 'run_sftp_move'),
             **{n: _planned(n) for n in PLANNED}}
 
 
@@ -670,6 +680,8 @@ CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 
            'entra_users': 'azure', 'entra_groups': 'azure', 'entra_signins': 'azure', 'entra_licenses': 'azure',
            'intacct_fields': 'intacct', 'intacct_create': 'intacct', 'intacct_update': 'intacct',
            'sharepoint_list': 'sharepoint', 'sharepoint_file': 'sharepoint',
+           'smb_read': 'smb_file', 'smb_write': 'smb_file', 'smb_move': 'smb_file',
+           'sftp_list': 'sftp', 'sftp_get': 'sftp', 'sftp_put': 'sftp', 'sftp_move': 'sftp',
            'quickbooks_vendors': 'quickbooks', 'quickbooks_accounts': 'quickbooks', 'quickbooks_bill': 'quickbooks', 'quickbooks_expense': 'quickbooks',
            'zoho_monthly_invoices': 'zoho_invoice',
            'teller_accounts': 'teller', 'teller_transactions': 'teller', 'teller_balances': 'teller', 'teller_spend': 'teller',
@@ -787,6 +799,19 @@ def _apikey_card(typ):
     return lambda store, connector_id=None: _card(store, typ, 'api_key', connector_id)
 
 
+def smb_connection(store, connector_id=None) -> dict:
+    """The share root and its OPTIONAL credentials (blank = the owner's own Windows session), plus
+    the store itself - because `smb_write` takes an attachment id and an attachment is a row in it."""
+    return {**_card(store, 'smb_file', 'password', connector_id), 'store': store}
+
+
+def sftp_connection(store, connector_id=None) -> dict:
+    """host/port/username/root/hostkey on the card; the one secret is a password OR a private key
+    (files._client tells them apart by its BEGIN line, so one field covers both). The store rides
+    along for the same reason it does above."""
+    return {**_card(store, 'sftp', 'password', connector_id), 'store': store}
+
+
 def _screen_connection(store, connector_id=None) -> dict:
     from .markets import screen_connection
     return screen_connection(store, connector_id)
@@ -823,6 +848,8 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  # both borrow: SharePoint the Outlook tenant app, Sheets the Gmail card's Google client
                  'sharepoint_list': _sharepoint_connection, 'sharepoint_file': _sharepoint_connection,
                  'google_sheets': _sheets_connection,
+                 **{t: smb_connection for t in ('smb_read', 'smb_write', 'smb_move')},
+                 **{t: sftp_connection for t in ('sftp_list', 'sftp_get', 'sftp_put', 'sftp_move')},
                  'markets_screen': _screen_connection}
 
 

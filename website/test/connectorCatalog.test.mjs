@@ -5,7 +5,7 @@ import { PLANNED_CONNECTORS, plannedFor } from "../src/connectorCatalog.js";
 const CATEGORIES = [
   "AI — agents & models", "AI — voice", "Email", "Messaging", "Developer",
   "Project management", "Databases", "Cloud & infrastructure", "Corporate systems",
-  "Observability", "Agentic web", "Files & sheets", "Everything else",
+  "Markets & finance", "Observability", "Agentic web", "Files & sheets", "Everything else",
 ];
 
 test("every connector category has several roadmap entries", () => {

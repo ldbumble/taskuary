@@ -104,6 +104,37 @@ the period was open. A thin card still says what is missing.
      message triage judges.
 4. **Proof for non-code.** Teach `proof.py` to read a playbook's `done when` and check it.
 
+## A second worked example: a document, not a bill
+
+*Added 2026-09-08, when someone asked to read their mail, save documents onto their local network,
+have a different skill per type of mail, and "pull from sftp and rename and save."*
+
+The AP bill above is one shape of job. A document is another, and it needed the same three things -
+a connection, a playbook, a receipt - of which only the connection was missing: every file-shaped
+connector was a `read`, so filing a document meant handing the job to a coding CLI for its shell.
+Two cards closed that (`taskuary/files.py`, 2026-09-08): **smb_file** (`smb_read` / `smb_write` /
+`smb_move`) and **sftp** (`sftp_list` / `sftp_get` / `sftp_put` / `sftp_move`).
+
+The whole job, with nothing new beyond them:
+
+1. A vendor mails a statement. The mailbox card ingests it; `channels.save_attachments` writes the
+   PDF under `~/.taskuary/attachments/<mid>/`.
+2. Triage matches it against a playbook's `when:` and tags the task `playbook:vendor-statements`.
+3. The playbook's `uses:` says `smb_file (write)` and `sftp (read)`, so both cards list this job on
+   their own faces, and its steps ride in the worker's seed.
+4. The worker calls `sftp_list` to see what arrived, `sftp_get` to pull it (which answers with a
+   local path the share card accepts as a source), `smb_write` to file it under the name the
+   playbook dictates - or one `smb_write` with the mail's `attachment` id, for the copy that came by
+   mail - and `sftp_move` to mark the remote file handled.
+5. Each call is an audit row, and each write was either approved in Review or covered by a routing
+   policy the owner wrote from the playbook's `alone:` line.
+6. `done when:` names the destination path, so there is something for `proof.py` to check.
+
+Two rules make those writes safe enough to hand to an agent, and they are enforced rather than
+documented: a path is proved to be under the card's configured root before any I/O and is never
+adjusted into it, and a write never replaces an existing document unless the call says
+`overwrite: true` - a collision is saved under a numbered name and the headline says which.
+
 ## What this is not
 
 - Not a workflow builder. No boxes and arrows; a playbook is a page of prose the agent reads, the

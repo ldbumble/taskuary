@@ -46,6 +46,10 @@ ACTIONS = {
     'coingecko_prices': 'read', 'fx_rates': 'read', 'yahoo_quotes': 'read', 'yahoo_history': 'read',
     'edgar_filings': 'read', 'edgar_facts': 'read', 'fred_series': 'read',
     'td_quotes': 'read', 'td_indicator': 'read', 'av_quotes': 'read',
+    # five more providers (2026-09-08), field mapping written from documentation, not a live
+    # response - still a read: nothing upstream moves for any of them, including alpaca, which
+    # ships market DATA only, no order/trading executor at all
+    'finnhub_quotes': 'read', 'finnhub_news': 'read', 'finnhub_earnings': 'read', 'finnhub_insiders': 'read',
     'markets_screen': 'read',    # the screen only reads through whichever provider it borrows
     # the semantic layer (semantic.py) reaches the ERP only through those same reads. The check
     # DOES write - a metric it cannot reconcile is demoted, a verified one is frozen to a skill -
@@ -92,6 +96,7 @@ DEFAULT_SCOPE = {
     'intacct': 'read', 'quickbooks': 'read', 'teller': 'read',
     'coingecko': 'read', 'frankfurter': 'read', 'yahoo': 'read', 'sec_edgar': 'read',
     'twelvedata': 'read', 'alphavantage': 'read', 'fred': 'read',
+    'finnhub': 'read',
     'screen': 'read',
     'zoho_invoice': 'write',
     'aws': 'read', 'azure': 'read',

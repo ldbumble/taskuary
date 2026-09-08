@@ -115,10 +115,86 @@ def run_coingecko_prices(cfg):
     return _rows(cfg, rows, 'prices')
 
 
+# ---- finnhub: quotes, company news and earnings, one key as a `token` query param -----------
+# field mapping written from finnhub's documented shape 2026-09-08, NOT verified against a live
+# response - report a mismatch rather than working around it. Its own error shape ({"error": ...})
+# is already the flat case _err_msg checks first, so nothing there needed extending for this card.
+FINNHUB_BASE = 'https://finnhub.io/api/v1'
+
+
 def run_finnhub_quotes(cfg):
-    """{"symbols": "AAPL,MSFT"} - last, change and day range per symbol. Filled in at Task 6."""
-    _need(cfg, 'Finnhub', 'api_key', 'secret')
-    raise MarketError('finnhub quotes not implemented yet')
+    """{"symbols": "AAPL,MSFT"} - price, change and day range per symbol.
+
+    field mapping written from finnhub's documented shape 2026-09-08, NOT verified against a
+    live response - report a mismatch rather than working around it. /quote answers bare-letter
+    keys with no self-description at all: c current, d change, dp change percent, o/h/l open/
+    high/low, pc previous close, t an epoch this card does not need."""
+    key = _need(cfg, 'Finnhub', 'api_key', 'secret')
+    rows = []
+    for s in _syms(cfg, 'symbols', 'symbol') or ['AAPL']:
+        j = _get(f'{FINNHUB_BASE}/quote', {'symbol': s, 'token': key})
+        rows.append({'symbol': s, 'price': _flt(j.get('c')), 'change': _flt(j.get('d')), 'change_pct': _flt(j.get('dp')),
+                     'open': _flt(j.get('o')), 'high': _flt(j.get('h')), 'low': _flt(j.get('l')), 'previous_close': _flt(j.get('pc'))})
+    return _rows(cfg, rows, 'quotes')
+
+
+def run_finnhub_news(cfg):
+    """{"symbol": "AAPL", "from": "2026-09-01" (blank = 7 days back), "to": "" (blank = today)} -
+    company news, whatever order the provider answers in: headline, source, url, published (an
+    ISO date, converted here from finnhub's epoch).
+
+    field mapping written from finnhub's documented shape 2026-09-08, NOT verified against a
+    live response - report a mismatch rather than working around it. /company-news is a bare
+    ARRAY of {headline, source, url, datetime, summary, ...}; datetime is epoch SECONDS."""
+    from datetime import datetime, timedelta, timezone
+    key = _need(cfg, 'Finnhub', 'api_key', 'secret')
+    sym = (_syms(cfg, 'symbol', 'symbols') or ['AAPL'])[0]
+    frm = str(cfg.get('from') or '').strip() or (datetime.now(timezone.utc) - timedelta(days=7)).date().isoformat()
+    to = str(cfg.get('to') or '').strip() or datetime.now(timezone.utc).date().isoformat()
+    j = _get(f'{FINNHUB_BASE}/company-news', {'symbol': sym, 'from': frm, 'to': to, 'token': key})
+    rows = [{'symbol': sym, 'headline': n.get('headline'), 'source': n.get('source'), 'url': n.get('url'),
+             'published': datetime.utcfromtimestamp(n['datetime']).isoformat() if n.get('datetime') else None}
+            for n in (j or [])]
+    return _rows(cfg, rows, 'articles')
+
+
+def run_finnhub_earnings(cfg):
+    """{"from": "2026-09-08" (blank = today), "to": "" (blank = 30 days out)} - upcoming earnings,
+    one row per company: date, hour, eps_estimate, eps_actual, revenue_estimate.
+
+    field mapping written from finnhub's documented shape 2026-09-08, NOT verified against a
+    live response - report a mismatch rather than working around it. /calendar/earnings answers
+    {"earningsCalendar": [{symbol, date, hour, epsEstimate, epsActual, revenueEstimate, ...}]}."""
+    from datetime import datetime, timedelta, timezone
+    key = _need(cfg, 'Finnhub', 'api_key', 'secret')
+    frm = str(cfg.get('from') or '').strip() or datetime.now(timezone.utc).date().isoformat()
+    to = str(cfg.get('to') or '').strip() or (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat()
+    j = _get(f'{FINNHUB_BASE}/calendar/earnings', {'from': frm, 'to': to, 'token': key})
+    rows = [{'symbol': e.get('symbol'), 'date': e.get('date'), 'hour': e.get('hour'),
+             'eps_estimate': _flt(e.get('epsEstimate')), 'eps_actual': _flt(e.get('epsActual')),
+             'revenue_estimate': _flt(e.get('revenueEstimate'))}
+            for e in (j.get('earningsCalendar') or [])]
+    return _rows(cfg, rows, 'earnings')
+
+
+def run_finnhub_insiders(cfg):
+    """{"symbol": "AAPL"} - insider transactions, newest first: name, date, shares, change, price.
+
+    field mapping written from finnhub's documented shape 2026-09-08, NOT verified against a
+    live response - report a mismatch rather than working around it. /stock/insider-transactions
+    answers {"data": [{name, share, change, transactionDate, transactionPrice, ...}]} - "share"
+    singular, and transactionPrice is the trade's own price, not a market quote."""
+    key = _need(cfg, 'Finnhub', 'api_key', 'secret')
+    sym = (_syms(cfg, 'symbol', 'symbols') or ['AAPL'])[0]
+    j = _get(f'{FINNHUB_BASE}/stock/insider-transactions', {'symbol': sym, 'token': key})
+    rows = [{'symbol': sym, 'name': d.get('name'), 'date': d.get('transactionDate'),
+             'shares': _int(d.get('share')), 'change': _int(d.get('change')), 'price': _flt(d.get('transactionPrice'))}
+            for d in (j.get('data') or [])]
+    rows.sort(key=lambda r: str(r.get('date') or ''), reverse=True)
+    return _rows(cfg, rows, 'transactions')
+
+
+
 
 
 # ---- frankfurter: FX, keyless. api.frankfurter.app 301s now; .dev/v1 is the live host --------

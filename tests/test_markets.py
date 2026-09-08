@@ -67,8 +67,6 @@ class TheErrorExtraction(unittest.TestCase):
             with self.assertRaises(markets.MarketError) as ctx:
                 markets._get('https://example.test/x')
         self.assertTrue(str(ctx.exception).endswith('flat boom'), str(ctx.exception))
-
-
 # captured live 2026-09-08 from api.frankfurter.dev/v1/latest
 FX = {'amount': 1.0, 'base': 'USD', 'date': '2026-09-08', 'rates': {'EUR': 0.86103, 'GBP': 0.73825}}
 
@@ -518,3 +516,76 @@ class TheNewProvidersWiring(unittest.TestCase):
                                                      'conditions': [['rsi', '<', 30]]})
         rows = [json.loads(l) for l in body.splitlines() if l.strip()]
         self.assertEqual([r['date'] for r in rows], ['2026-09-08'])
+
+
+# ============================================================================================
+# Five more providers, added 2026-09-08 with no signup available for any of them. Every success
+# fixture below is written from the provider's DOCUMENTED shape, never a live response - marked
+# "documented shape, NOT a live capture" and never "captured live", which stays the mark of an
+# actual capture elsewhere in this file. Every ERROR fixture IS a real capture, taken verbatim
+# from .superpowers/sdd/2026-09-08-markets-connectors/captured-shapes.md.
+# ============================================================================================
+
+# documented shape, NOT a live capture - finnhub /quote's bare-letter fields
+FINNHUB_QUOTE = {"c": 315.02, "d": -4.95, "dp": -1.54702, "o": 317.18, "h": 320.71, "l": 314.98, "pc": 319.97, "t": 1788874200}
+# documented shape, NOT a live capture - finnhub /company-news is a bare array
+FINNHUB_NEWS = [{"headline": "Apple announces buyback", "source": "Reuters", "url": "https://example.test/a",
+                "datetime": 1788874200, "summary": "..."}]
+# documented shape, NOT a live capture - finnhub /calendar/earnings
+FINNHUB_EARNINGS = {"earningsCalendar": [{"symbol": "AAPL", "date": "2026-09-10", "hour": "amc",
+                                          "epsEstimate": 1.5, "epsActual": None, "revenueEstimate": 90000000000}]}
+# documented shape, NOT a live capture - finnhub /stock/insider-transactions
+FINNHUB_INSIDERS = {"data": [{"name": "Cook Timothy", "share": 1000, "change": -500,
+                              "transactionDate": "2026-09-01", "transactionPrice": 312.5}]}
+# real error, captured live 2026-09-08 (captured-shapes.md)
+FINNHUB_ERROR = {"error": "Invalid API key."}
+
+
+class TheFinnhub(unittest.TestCase):
+    def test_a_quote_row_maps_the_bare_letter_fields(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, FINNHUB_QUOTE)) as g:
+            head, body = markets.run_finnhub_quotes({'symbols': 'AAPL', 'api_key': 'k'})
+        row = json.loads(body.splitlines()[0])
+        self.assertEqual(row, {'symbol': 'AAPL', 'price': 315.02, 'change': -4.95, 'change_pct': -1.54702,
+                              'open': 317.18, 'high': 320.71, 'low': 314.98, 'previous_close': 319.97})
+        self.assertEqual(g.call_args.kwargs['params']['token'], 'k')
+
+    def test_a_missing_key_names_the_card(self):
+        with self.assertRaisesRegex(markets.MarketError, 'Finnhub'):
+            markets.run_finnhub_insiders({'symbol': 'AAPL'})
+
+    def test_news_converts_the_epoch_to_an_iso_date(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, FINNHUB_NEWS)):
+            head, body = markets.run_finnhub_news({'symbol': 'AAPL', 'api_key': 'k'})
+        row = json.loads(body.splitlines()[0])
+        self.assertEqual(row['headline'], 'Apple announces buyback')
+        self.assertEqual(row['source'], 'Reuters')
+        self.assertTrue(row['published'].startswith('2026-09-08'), row['published'])
+
+    def test_news_defaults_the_window_to_the_last_7_days(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, [])) as g:
+            markets.run_finnhub_news({'symbol': 'AAPL', 'api_key': 'k'})
+        p = g.call_args.kwargs['params']
+        self.assertIn('from', p); self.assertIn('to', p)
+        self.assertNotEqual(p['from'], p['to'])
+
+    def test_earnings_maps_the_calendar_envelope(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, FINNHUB_EARNINGS)):
+            head, body = markets.run_finnhub_earnings({'api_key': 'k'})
+        row = json.loads(body.splitlines()[0])
+        self.assertEqual(row, {'symbol': 'AAPL', 'date': '2026-09-10', 'hour': 'amc',
+                              'eps_estimate': 1.5, 'eps_actual': None, 'revenue_estimate': 90000000000.0})
+
+    def test_insiders_maps_share_singular_to_shares_and_sorts_newest_first(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, FINNHUB_INSIDERS)):
+            head, body = markets.run_finnhub_insiders({'symbol': 'AAPL', 'api_key': 'k'})
+        row = json.loads(body.splitlines()[0])
+        self.assertEqual(row, {'symbol': 'AAPL', 'name': 'Cook Timothy', 'date': '2026-09-01',
+                              'shares': 1000, 'change': -500, 'price': 312.5})
+
+    def test_the_real_error_shape_reaches_the_owner(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(401, FINNHUB_ERROR)):
+            with self.assertRaisesRegex(markets.MarketError, 'Invalid API key'):
+                markets.run_finnhub_quotes({'symbols': 'AAPL', 'api_key': 'bad'})
+
+

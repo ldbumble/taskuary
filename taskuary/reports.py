@@ -620,6 +620,10 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             # twelvedata and alphavantage: quotes and (twelvedata only) technical indicators, keyed
             'td_quotes': _lazy('markets', 'run_td_quotes'), 'td_indicator': _lazy('markets', 'run_td_indicator'),
             'av_quotes': _lazy('markets', 'run_av_quotes'),
+            # five more providers (2026-09-08), no signup available for any of them - every field
+            # mapping is written from documentation, not a live response (see markets.py docstring)
+            'finnhub_quotes': _lazy('markets', 'run_finnhub_quotes'), 'finnhub_news': _lazy('markets', 'run_finnhub_news'),
+            'finnhub_earnings': _lazy('markets', 'run_finnhub_earnings'), 'finnhub_insiders': _lazy('markets', 'run_finnhub_insiders'),
             # the strategy screen: conditions in config, only the matches out (markets.py)
             'markets_screen': _lazy('markets', 'run_markets_screen'),
             # the semantic layer over the ERP: a number that was PROVED, and the check that keeps it proved
@@ -670,6 +674,7 @@ CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 
            'edgar_filings': 'sec_edgar', 'edgar_facts': 'sec_edgar',
            'td_quotes': 'twelvedata', 'td_indicator': 'twelvedata', 'av_quotes': 'alphavantage',
            'fred_series': 'fred',
+           'finnhub_quotes': 'finnhub', 'finnhub_news': 'finnhub', 'finnhub_earnings': 'finnhub', 'finnhub_insiders': 'finnhub',
            'markets_screen': 'screen',
            'kb_search': 'knowledge', 'kb_reindex': 'knowledge',
            'handbook_search': 'handbook', 'handbook_write': 'handbook', 'handbook_vote': 'handbook',
@@ -785,6 +790,8 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  # fred needs no entry here - fredgraph.csv is keyless, unlike its JSON api
                  'td_quotes': _apikey_card('twelvedata'), 'td_indicator': _apikey_card('twelvedata'),
                  'av_quotes': _apikey_card('alphavantage'),
+                 'finnhub_quotes': _apikey_card('finnhub'), 'finnhub_news': _apikey_card('finnhub'),
+                 'finnhub_earnings': _apikey_card('finnhub'), 'finnhub_insiders': _apikey_card('finnhub'),
                  'aws': aws_connection, 's3_object': aws_connection, 'cloudwatch_logs': aws_connection,
                  'azure': azure_connection, 'azure_blob': azure_connection, 'azure_logs': azure_connection,
                  'entra_users': azure_connection, 'entra_groups': azure_connection,

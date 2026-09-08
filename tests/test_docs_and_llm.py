@@ -95,7 +95,7 @@ class DocSyncTests(unittest.TestCase):
         docsync.sync_connections(s)
         soul = s.get_doc('soul')
         self.assertIn('GitHub: you/repo', soul)
-        self.assertIn('Report "Census" (mssql, every 30m)', soul)
+        self.assertIn('Report "Census" (mssql, every 30 minutes)', soul)
         # prose outside the markers untouched
         self.assertIn('John Smith', soul)
 

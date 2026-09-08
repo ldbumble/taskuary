@@ -629,9 +629,9 @@ class WhatItReadsTests(unittest.TestCase):
               'ci / test (ubuntu-latest, 3.12) Failed in 49 seconds\n1\nci / test (windows-latest, 3.10) Failed in 3 minutes\n', days=0, conv='g1', status='ignored', name='Uri')
         txt = assistant._recent(s)
         self.assertIn('x3 [report] Nightly: "Nightly — FAILED"', txt)
-        self.assertIn('[schedule: daily 08:00 + on every app start] -> "Report error: Login timeout expired (0)"', txt)
+        self.assertIn('[schedule: daily at 08:00 + on app start] -> "Report error: Login timeout expired (0)"', txt)
         self.assertIn('-> failed: test (ubuntu-latest, 3.12), test (windows-latest, 3.10)', txt)
-        self.assertEqual(assistant._schedules(s)['Nightly'], 'daily 08:00 + on every app start')
+        self.assertEqual(assistant._schedules(s)['Nightly'], 'daily at 08:00 + on app start')
 
     def test_arrivals_carry_the_email_body_not_just_the_subject(self):
         s = _store()

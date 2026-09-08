@@ -33,6 +33,7 @@ def role_text(store, role):
 
 def sync_connections(store, actor='system'):
     from .store import roles_of
+    from . import reports
     doc = store.get_doc('soul') or ''
     if CONN_START not in doc or CONN_END not in doc: return
     srcs = store.list_sources()
@@ -52,10 +53,7 @@ def sync_connections(store, actor='system'):
     for s in srcs:
         if s['Channel'] != 'report' or not s['Active']: continue
         cfg = json.loads(s.get('ConfigJson') or '{}')
-        sched = ('on startup' if cfg.get('on_startup')
-                 else f"cron {cfg['cron']}" if cfg.get('cron')
-                 else f"every {cfg['every_minutes']}m" if cfg.get('every_minutes')
-                 else f"daily {cfg.get('daily_at', '')}".strip())
+        sched = reports.schedule_words(cfg)
         lines.append(f"- Report \"{cfg.get('title') or s['Address']}\" ({cfg.get('type', 'rest')}, {sched})")
     # the tool role is only real if the agents know how to reach it - spell out the call
     if any('tool' in roles_of(c) for c in store.list_connectors() if c['Active']):

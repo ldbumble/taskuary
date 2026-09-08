@@ -942,6 +942,19 @@ def _ran_this_week(last_polled) -> bool:
     except (TypeError, ValueError): return False
 
 
+def schedule_words(cfg: dict) -> str:
+    """A report's WHOLE clock in one phrase, guard included. Every surface that printed half of it
+    invited the same misreading: "on startup" alone hid the Monday cron behind it, and "on every app
+    start" said `every` while once_per_day was quietly dropping the repeats - so two seeded reports
+    greeting one evening launch read as a scheduler fault, or as an unexplained restart (TQ-0010)."""
+    cap = (' (at most once a day)' if cfg.get('once_per_day') else
+           ' (at most once a week)' if cfg.get('once_per_week') else '')
+    parts = [f"cron {cfg['cron']}" if cfg.get('cron') else '', f"daily at {cfg['daily_at']}" if cfg.get('daily_at') else '',
+             f"every {cfg['every_minutes']} minutes" if cfg.get('every_minutes') else '',
+             str(cfg['every']) if cfg.get('every') and not cfg.get('every_minutes') else '', f'on app start{cap}' if cfg.get('on_startup') else '']
+    return ' + '.join(p for p in parts if p) or 'no schedule - run it by hand'
+
+
 def is_due(cfg: dict, last_polled, startup: bool = False) -> bool:
     # on_startup is local-first scheduling: the app is a window you open, so "when I open
     # it" is a real schedule. Due exactly once per launch - never on the 10-minute auto-sync,

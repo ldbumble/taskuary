@@ -350,16 +350,16 @@ CONTRACT = ('\n\nYou are writing your POST on the owner\'s Timeline - the short 
 
 
 def _schedules(store) -> dict:
-    """{report title: 'daily 08:00 + on every app start'} - a report's arrivals mean nothing without its
-    clock: 25 digests in two days on an on_startup report is 25 launches, not a scheduler bug."""
+    """{report title: 'daily at 08:00 + on app start (at most once a day)'} - a report's arrivals mean
+    nothing without its clock: 25 digests in two days on an on_startup report is 25 launches, not a
+    scheduler bug, and two seeded reports at one timestamp is one launch, not a restart to explain."""
+    from . import reports
     out = {}
     for src in store.list_sources(active_only=False):
         if src.get('Channel') != 'report': continue
         try: c = json.loads(src.get('ConfigJson') or '{}')
         except ValueError: continue
-        parts = ([f"every {c['every_minutes']} min"] if c.get('every_minutes') else []) + ([f"daily {c['daily_at']}"] if c.get('daily_at') else []) \
-              + ([f"cron {c['cron']}"] if c.get('cron') else []) + (['on every app start'] if c.get('on_startup') else [])
-        out[c.get('title') or src.get('Address')] = ' + '.join(parts) or 'no schedule'
+        out[c.get('title') or src.get('Address')] = reports.schedule_words(c)
     return out
 
 _FAILS = re.compile(r'fail|error|denied|timeout|could not|unable', re.I)

@@ -152,7 +152,11 @@ export const cronText = (expr) => {
   return `cron ${expr}`;
 };
 
-const reportSchedule = (c) => [c.on_startup && "on app startup", c.cron && cronText(c.cron),
+// "on app startup" is a lie next to once_per_day/once_per_week - it fires on the FIRST launch of the
+// day (or week) and drops the rest. Saying "every" is what made one evening launch look like a restart.
+const startupText = (c) => "on app startup" + (c.once_per_day ? " (at most once a day)"
+  : c.once_per_week ? " (at most once a week)" : "");
+const reportSchedule = (c) => [c.on_startup && startupText(c), c.cron && cronText(c.cron),
   c.every_minutes && `every ${c.every_minutes} minutes`, c.daily_at && `daily at ${c.daily_at}`]
   .filter(Boolean).join(" + ") || "once a day while Taskuary is open";
 
@@ -359,7 +363,7 @@ export default function ReportsView() {
       {list.map((s) => {
         const c = parse(s.ConfigJson);
         // both halves, not the first one: "on startup" alone hid the Monday cron behind it
-        const sched = [c.on_startup && "on startup", c.cron && cronText(c.cron),
+        const sched = [c.on_startup && startupText(c), c.cron && cronText(c.cron),
           c.every_minutes && `every ${c.every_minutes}m`, c.daily_at && `daily ${c.daily_at}`]
           .filter(Boolean).join(" + ") || "daily";
         return (

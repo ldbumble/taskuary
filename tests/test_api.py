@@ -177,6 +177,33 @@ class ReportScheduleAndBrainTests(unittest.TestCase):
         run_due_reports(s, startup=True)
         self.assertTrue(any('Boot check' in (m['Subject'] or '') for m in s.scan_messages()))
 
+    def test_a_reports_schedule_words_carry_both_halves_and_the_guard(self):
+        """TQ-0010: the seeded digest and Automation ideas both filed at 19:59 - one evening launch,
+        exactly as designed. It read as an unexplained restart because every surface printed HALF the
+        clock: "on startup" hid the Monday cron, and "on every app start" hid once_per_day's guard."""
+        from taskuary.reports import schedule_words
+        self.assertEqual(schedule_words({'daily_at': '08:00', 'on_startup': True, 'once_per_day': True}),
+                         'daily at 08:00 + on app start (at most once a day)')
+        self.assertEqual(schedule_words({'cron': '0 8 * * 1', 'on_startup': True, 'once_per_week': True}),
+                         'cron 0 8 * * 1 + on app start (at most once a week)')
+        self.assertEqual(schedule_words({'on_startup': True}), 'on app start')
+        self.assertEqual(schedule_words({}), 'no schedule - run it by hand')
+
+    def test_two_startup_reports_at_one_timestamp_are_one_launch(self):
+        """The co-firing itself. A launch runs every STALE on_startup report in the same pass, so the
+        seeded digest (once a day) and Automation ideas (once a week) share a minute on the first
+        evening open - and the next open that day runs neither. One launch, not a restart to explain."""
+        from taskuary.store import MemoryStore
+        from taskuary.reports import is_due
+        s = MemoryStore()
+        cfgs = {c['title']: c for c in (json.loads(x.get('ConfigJson') or '{}')
+                                        for x in s.list_sources(active_only=False) if x.get('Channel') == 'report')
+                if c.get('title') in ('Morning digest', 'Automation ideas')}
+        self.assertEqual(len(cfgs), 2)
+        for c in cfgs.values():
+            self.assertTrue(is_due(c, None, startup=True))              # nothing filed yet: both greet the launch
+            self.assertFalse(is_due(c, __import__('datetime').datetime.now().isoformat(sep=' '), startup=True))   # reopened after: neither repeats
+
     def test_cron_schedules_fire_once_per_slot_and_survive_a_closed_app(self):
         """Real 5-field cron: due when a scheduled minute passed since the last run - and a
         slot missed while the app was closed fires ONCE on reopen, not N times."""

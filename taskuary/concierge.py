@@ -1981,11 +1981,8 @@ def _propose_raw(store, dock_tid: int, kind: str, target: int, params: dict, lab
 
 
 def _schedule_words(cfg: dict) -> str:
-    if cfg.get('cron'): return f"cron {cfg['cron']}"
-    if cfg.get('daily_at'): return f"daily at {cfg['daily_at']}"
-    if cfg.get('every_minutes'): return f"every {cfg['every_minutes']} minutes"
-    if cfg.get('every'): return str(cfg['every'])
-    return 'on start-up only' if cfg.get('on_startup') else 'no schedule - run it by hand'
+    from . import reports
+    return reports.schedule_words(cfg)
 
 
 def report_facts(cfg: dict) -> dict:

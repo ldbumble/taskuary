@@ -67,6 +67,17 @@ class TheErrorExtraction(unittest.TestCase):
             with self.assertRaises(markets.MarketError) as ctx:
                 markets._get('https://example.test/x')
         self.assertTrue(str(ctx.exception).endswith('flat boom'), str(ctx.exception))
+
+    def test_a_space_in_the_error_key_is_still_read_flat_not_left_to_the_raw_body(self):
+        # fmp's real error key is "Error Message" (a literal space) - _err_msg's other flat keys
+        # (error/message/Note/Information) all miss it; this is the extension the task called for
+        body = {'Error Message': 'Invalid API KEY.'}
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(401, body)):
+            with self.assertRaises(markets.MarketError) as ctx:
+                markets._get('https://example.test/x')
+        self.assertTrue(str(ctx.exception).endswith('Invalid API KEY.'), str(ctx.exception))
+
+
 # captured live 2026-09-08 from api.frankfurter.dev/v1/latest
 FX = {'amount': 1.0, 'base': 'USD', 'date': '2026-09-08', 'rates': {'EUR': 0.86103, 'GBP': 0.73825}}
 
@@ -666,5 +677,41 @@ class TheTiingo(unittest.TestCase):
         with mock.patch.object(markets.requests, 'get', return_value=_resp(401, TIINGO_ERROR)):
             with self.assertRaisesRegex(markets.MarketError, 'Please supply a token'):
                 markets.run_tiingo_history({'symbol': 'AAPL', 'api_key': 'bad'})
+
+
+# documented shape, NOT a live capture - fmp income-statement is a bare array
+FMP_FUNDAMENTALS = [{"date": "2026-06-30", "period": "Q3", "revenue": 90000000000, "netIncome": 21000000000, "eps": 1.4}]
+# documented shape, NOT a live capture - fmp ratios is a bare array
+FMP_RATIOS = [{"period": "Q3", "priceEarningsRatio": 28.5, "priceToBookRatio": 45.2,
+              "debtEquityRatio": 1.8, "returnOnEquity": 1.5}]
+# real error, captured live 2026-09-08 (captured-shapes.md) - note the SPACE in the key
+FMP_ERROR = {"Error Message": "Invalid API KEY. Feel free to create a Free API Key or visit "
+             "https://site.financialmodelingprep.com/faqs?search=why-is-my-api-key-invalid for more information."}
+
+
+class TheFmp(unittest.TestCase):
+    def test_fundamentals_maps_the_income_statement_row(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, FMP_FUNDAMENTALS)) as g:
+            head, body = markets.run_fmp_fundamentals({'symbol': 'AAPL', 'api_key': 'k'})
+        row = json.loads(body.splitlines()[0])
+        self.assertEqual(row, {'symbol': 'AAPL', 'period': 'Q3', 'date': '2026-06-30',
+                              'revenue': 90000000000.0, 'net_income': 21000000000.0, 'eps': 1.4})
+        self.assertEqual(g.call_args.kwargs['params']['apikey'], 'k')
+
+    def test_a_missing_key_names_the_card(self):
+        with self.assertRaisesRegex(markets.MarketError, 'FMP'):
+            markets.run_fmp_ratios({'symbol': 'AAPL'})
+
+    def test_ratios_maps_the_camelcase_fields(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, FMP_RATIOS)):
+            head, body = markets.run_fmp_ratios({'symbol': 'AAPL', 'api_key': 'k'})
+        row = json.loads(body.splitlines()[0])
+        self.assertEqual(row, {'symbol': 'AAPL', 'period': 'Q3', 'pe': 28.5, 'price_to_book': 45.2,
+                              'debt_to_equity': 1.8, 'return_on_equity': 1.5})
+
+    def test_the_real_error_shape_with_its_spaced_key_reaches_the_owner(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(401, FMP_ERROR)):
+            with self.assertRaisesRegex(markets.MarketError, 'Invalid API KEY'):
+                markets.run_fmp_fundamentals({'symbol': 'AAPL', 'api_key': 'bad'})
 
 

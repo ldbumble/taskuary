@@ -52,6 +52,7 @@ ACTIONS = {
     'finnhub_quotes': 'read', 'finnhub_news': 'read', 'finnhub_earnings': 'read', 'finnhub_insiders': 'read',
     'polygon_bars': 'read', 'polygon_snapshot': 'read',
     'tiingo_history': 'read', 'tiingo_news': 'read',
+    'fmp_fundamentals': 'read', 'fmp_ratios': 'read',
     'markets_screen': 'read',    # the screen only reads through whichever provider it borrows
     # the semantic layer (semantic.py) reaches the ERP only through those same reads. The check
     # DOES write - a metric it cannot reconcile is demoted, a verified one is frozen to a skill -
@@ -98,7 +99,7 @@ DEFAULT_SCOPE = {
     'intacct': 'read', 'quickbooks': 'read', 'teller': 'read',
     'coingecko': 'read', 'frankfurter': 'read', 'yahoo': 'read', 'sec_edgar': 'read',
     'twelvedata': 'read', 'alphavantage': 'read', 'fred': 'read',
-    'finnhub': 'read', 'polygon': 'read', 'tiingo': 'read',
+    'finnhub': 'read', 'polygon': 'read', 'tiingo': 'read', 'fmp': 'read',
     'screen': 'read',
     'zoho_invoice': 'write',
     'aws': 'read', 'azure': 'read',

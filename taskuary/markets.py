@@ -62,7 +62,8 @@ def _err_msg(j, raw_text):
     a shape like yahoo's {"chart": {"error": {"description": ...}}}. Eight keyed providers copy
     this seam, so it stays this small: two passes, then the raw body as a last resort."""
     flat = (j.get('status', {}).get('error_message') if isinstance(j.get('status'), dict) else None) \
-           or j.get('error') or j.get('message') or j.get('Note') or j.get('Information')
+           or j.get('error') or j.get('message') or j.get('Note') or j.get('Information') \
+           or j.get('Error Message')     # fmp's own key, space and all - the ninth provider to copy this seam
     if isinstance(flat, str) and flat.strip(): return flat
     for v in (j.values() if isinstance(j, dict) else ()):
         if not isinstance(v, dict): continue
@@ -286,6 +287,50 @@ def run_tiingo_news(cfg):
              'source': n.get('source'), 'url': n.get('url'), 'published': n.get('publishedDate')}
             for n in (j or [])]
     return _rows(cfg, rows, 'articles')
+
+
+# ---- fmp: income-statement fundamentals and valuation ratios, one key as `apikey` ------------
+# FMP has moved endpoints between /api/v3/ and a newer /stable/ base, and third-party guides
+# disagree by publish date on which is current as of 2026-09-08. /api/v3/ is pinned here
+# UNCONFIRMED - if a live call 404s, this one constant is where to swap in /stable/.
+FMP_BASE = 'https://financialmodelingprep.com/api/v3'
+
+
+def run_fmp_fundamentals(cfg):
+    """{"symbol": "AAPL", "limit": 4, "period": "annual|quarter" (blank = fmp's default)} -
+    income-statement rows, newest first: period, date, revenue, net_income, eps.
+
+    field mapping written from fmp's documented shape 2026-09-08, NOT verified against a live
+    response - report a mismatch rather than working around it. /income-statement/<SYM> is a
+    bare ARRAY of {date, period, revenue, netIncome, eps, ...}."""
+    key = _need(cfg, 'FMP', 'api_key', 'secret')
+    sym = (_syms(cfg, 'symbol', 'symbols') or ['AAPL'])[0]
+    params = {'apikey': key, 'limit': int(cfg.get('limit') or 4)}
+    if str(cfg.get('period') or '').strip(): params['period'] = str(cfg['period']).strip()
+    j = _get(f'{FMP_BASE}/income-statement/{sym}', params)
+    rows = [{'symbol': sym, 'period': r.get('period'), 'date': r.get('date'), 'revenue': _flt(r.get('revenue')),
+             'net_income': _flt(r.get('netIncome')), 'eps': _flt(r.get('eps'))}
+            for r in (j or [])]
+    return _rows(cfg, rows, 'statements')
+
+
+def run_fmp_ratios(cfg):
+    """{"symbol": "AAPL", "period": "annual|quarter" (blank = fmp's default)} - valuation ratios,
+    newest first: period, pe, price_to_book, debt_to_equity, return_on_equity.
+
+    field mapping written from fmp's documented shape 2026-09-08, NOT verified against a live
+    response - report a mismatch rather than working around it. /ratios/<SYM> is a bare ARRAY of
+    {period, priceEarningsRatio, priceToBookRatio, debtEquityRatio, returnOnEquity, ...}."""
+    key = _need(cfg, 'FMP', 'api_key', 'secret')
+    sym = (_syms(cfg, 'symbol', 'symbols') or ['AAPL'])[0]
+    params = {'apikey': key}
+    if str(cfg.get('period') or '').strip(): params['period'] = str(cfg['period']).strip()
+    j = _get(f'{FMP_BASE}/ratios/{sym}', params)
+    rows = [{'symbol': sym, 'period': r.get('period'), 'pe': _flt(r.get('priceEarningsRatio')),
+             'price_to_book': _flt(r.get('priceToBookRatio')), 'debt_to_equity': _flt(r.get('debtEquityRatio')),
+             'return_on_equity': _flt(r.get('returnOnEquity'))}
+            for r in (j or [])]
+    return _rows(cfg, rows, 'ratios')
 
 
 

@@ -609,10 +609,27 @@ class TheFinnhub(unittest.TestCase):
 
     def test_earnings_maps_the_calendar_envelope(self):
         with mock.patch.object(markets.requests, 'get', return_value=_resp(200, FINNHUB_EARNINGS)):
-            head, body = markets.run_finnhub_earnings({'api_key': 'k'})
+            head, body = markets.run_finnhub_earnings({'symbol': 'AAPL', 'api_key': 'k'})
         row = json.loads(body.splitlines()[0])
         self.assertEqual(row, {'symbol': 'AAPL', 'date': '2026-09-10', 'hour': 'amc',
                               'eps_estimate': 1.5, 'eps_actual': None, 'revenue_estimate': 90000000000.0})
+
+    def test_earnings_sends_the_symbol_never_the_whole_markets_calendar(self):
+        # bare, this endpoint answers the WHOLE market's calendar - a symbol must always reach it
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, FINNHUB_EARNINGS)) as g:
+            markets.run_finnhub_earnings({'symbol': 'AAPL', 'api_key': 'k'})
+        self.assertEqual(g.call_args.kwargs['params']['symbol'], 'AAPL')
+
+    def test_several_symbols_are_several_calls_like_every_other_multi_symbol_executor(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, FINNHUB_EARNINGS)) as g:
+            head, body = markets.run_finnhub_earnings({'symbols': 'AAPL,MSFT', 'api_key': 'k'})
+        self.assertEqual(g.call_count, 2)
+        self.assertEqual([c.kwargs['params']['symbol'] for c in g.call_args_list], ['AAPL', 'MSFT'])
+
+    def test_no_symbol_given_defaults_to_aapl_like_every_other_finnhub_executor(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, FINNHUB_EARNINGS)) as g:
+            markets.run_finnhub_earnings({'api_key': 'k'})
+        self.assertEqual(g.call_args.kwargs['params']['symbol'], 'AAPL')
 
     def test_insiders_maps_share_singular_to_shares_and_sorts_newest_first(self):
         with mock.patch.object(markets.requests, 'get', return_value=_resp(200, FINNHUB_INSIDERS)):

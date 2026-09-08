@@ -171,8 +171,12 @@ def run_finnhub_news(cfg):
 
 
 def run_finnhub_earnings(cfg):
-    """{"from": "2026-09-08" (blank = today), "to": "" (blank = 30 days out)} - upcoming earnings,
-    one row per company: date, hour, eps_estimate, eps_actual, revenue_estimate.
+    """{"symbol": "AAPL" or "symbols": "AAPL,MSFT" (blank = AAPL, like every other finnhub
+    executor's default), "from": "2026-09-08" (blank = today), "to": "" (blank = 30 days out)} -
+    upcoming earnings, one row per company: date, hour, eps_estimate, eps_actual, revenue_estimate.
+    /calendar/earnings answers the WHOLE MARKET's calendar unless a symbol is passed - a symbol is
+    always sent, one call per symbol like run_finnhub_quotes above it, never invented as a
+    comma-joined param finnhub does not document.
 
     field mapping written from finnhub's documented shape 2026-09-08, NOT verified against a
     live response - report a mismatch rather than working around it. /calendar/earnings answers
@@ -181,11 +185,13 @@ def run_finnhub_earnings(cfg):
     key = _need(cfg, 'Finnhub', 'api_key', 'secret')
     frm = str(cfg.get('from') or '').strip() or datetime.now(timezone.utc).date().isoformat()
     to = str(cfg.get('to') or '').strip() or (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat()
-    j = _get(f'{FINNHUB_BASE}/calendar/earnings', {'from': frm, 'to': to, 'token': key})
-    rows = [{'symbol': e.get('symbol'), 'date': e.get('date'), 'hour': e.get('hour'),
-             'eps_estimate': _flt(e.get('epsEstimate')), 'eps_actual': _flt(e.get('epsActual')),
-             'revenue_estimate': _flt(e.get('revenueEstimate'))}
-            for e in (j.get('earningsCalendar') or [])]
+    rows = []
+    for s in _syms(cfg, 'symbol', 'symbols') or ['AAPL']:
+        j = _get(f'{FINNHUB_BASE}/calendar/earnings', {'from': frm, 'to': to, 'symbol': s, 'token': key})
+        rows += [{'symbol': e.get('symbol') or s, 'date': e.get('date'), 'hour': e.get('hour'),
+                  'eps_estimate': _flt(e.get('epsEstimate')), 'eps_actual': _flt(e.get('epsActual')),
+                  'revenue_estimate': _flt(e.get('revenueEstimate'))}
+                 for e in (j.get('earningsCalendar') or [])]
     return _rows(cfg, rows, 'earnings')
 
 

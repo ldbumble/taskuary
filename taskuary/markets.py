@@ -91,3 +91,14 @@ def run_finnhub_quotes(cfg):
     """{"symbols": "AAPL,MSFT"} - last, change and day range per symbol. Filled in at Task 6."""
     _need(cfg, 'Finnhub', 'api_key', 'secret')
     raise MarketError('finnhub quotes not implemented yet')
+
+
+# ---- frankfurter: FX, keyless. api.frankfurter.app 301s now; .dev/v1 is the live host --------
+def run_fx_rates(cfg):
+    """{"base": "USD", "symbols": "EUR,GBP" (blank = every currency)} - reference rates, no key."""
+    p = {'base': str(cfg.get('base') or 'USD').strip().upper()}
+    if str(cfg.get('symbols') or '').strip(): p['symbols'] = str(cfg['symbols']).replace(' ', '')
+    j = _get('https://api.frankfurter.dev/v1/latest', p)
+    rows = [{'base': j.get('base'), 'currency': k, 'rate': v, 'date': j.get('date')}
+            for k, v in sorted((j.get('rates') or {}).items())]
+    return _rows(cfg, rows, 'rates')

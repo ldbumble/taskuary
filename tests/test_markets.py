@@ -48,3 +48,17 @@ class TheCrypto(unittest.TestCase):
         with mock.patch.object(markets.requests, 'get', return_value=_resp(429, {'status': {'error_message': 'rate limited'}})):
             with self.assertRaisesRegex(markets.MarketError, 'rate limited'):
                 markets.run_coingecko_prices({'ids': 'bitcoin'})
+
+
+# captured live 2026-09-08 from api.frankfurter.dev/v1/latest
+FX = {'amount': 1.0, 'base': 'USD', 'date': '2026-09-08', 'rates': {'EUR': 0.86103, 'GBP': 0.73825}}
+
+
+class TheFx(unittest.TestCase):
+    def test_one_row_per_currency_with_the_base_and_the_date(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, FX)) as g:
+            head, body = markets.run_fx_rates({'base': 'USD', 'symbols': 'EUR,GBP'})
+        rows = [json.loads(l) for l in body.splitlines() if l.strip()]
+        self.assertEqual(rows, [{'base': 'USD', 'currency': 'EUR', 'rate': 0.86103, 'date': '2026-09-08'},
+                                {'base': 'USD', 'currency': 'GBP', 'rate': 0.73825, 'date': '2026-09-08'}])
+        self.assertEqual(g.call_args.args[0], 'https://api.frankfurter.dev/v1/latest')

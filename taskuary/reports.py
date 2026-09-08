@@ -617,6 +617,8 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'coingecko_prices': _lazy('markets', 'run_coingecko_prices'), 'fx_rates': _lazy('markets', 'run_fx_rates'),
             'yahoo_quotes': _lazy('markets', 'run_yahoo_quotes'), 'yahoo_history': _lazy('markets', 'run_yahoo_history'),
             'edgar_filings': _lazy('markets', 'run_edgar_filings'), 'edgar_facts': _lazy('markets', 'run_edgar_facts'),
+            # the strategy screen: conditions in config, only the matches out (markets.py)
+            'markets_screen': _lazy('markets', 'run_markets_screen'),
             # the semantic layer over the ERP: a number that was PROVED, and the check that keeps it proved
             'metric': run_metric, 'metric_check': run_metric_check,
             'rss': run_rss, 'digest': run_digest, 'evening_inbox': run_evening_inbox,
@@ -663,6 +665,7 @@ CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 
            'coingecko_prices': 'coingecko', 'fx_rates': 'frankfurter',
            'yahoo_quotes': 'yahoo', 'yahoo_history': 'yahoo',
            'edgar_filings': 'sec_edgar', 'edgar_facts': 'sec_edgar',
+           'markets_screen': 'screen',
            'kb_search': 'knowledge', 'kb_reindex': 'knowledge',
            'handbook_search': 'handbook', 'handbook_write': 'handbook', 'handbook_vote': 'handbook',
            'hub_search': 'handbook', 'hub_write': 'handbook', 'hub_vote': 'handbook', 'hub_comment': 'handbook'}
@@ -766,6 +769,11 @@ def _apikey_card(typ):
     return lambda store, connector_id=None: _card(store, typ, 'api_key', connector_id)
 
 
+# markets.screen_connection is referenced directly (not wrapped, unlike _teller_connection) so
+# that CONNECTION_OF holds the very function markets.py defines - the screen borrows a card by
+# connector_id alone, with no per-provider branching for this module to own.
+from .markets import screen_connection as _screen_connection
+
 CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database': database_connection,
                  'exa': _apikey_card('exa'), 'tavily': _apikey_card('tavily'),
                  'firecrawl': _apikey_card('firecrawl'), 'reader': _apikey_card('reader'),
@@ -780,7 +788,8 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  **{t: _teller_connection for t in ('teller_accounts', 'teller_transactions', 'teller_balances', 'teller_spend')},
                  # both borrow: SharePoint the Outlook tenant app, Sheets the Gmail card's Google client
                  'sharepoint_list': _sharepoint_connection, 'sharepoint_file': _sharepoint_connection,
-                 'google_sheets': _sheets_connection}
+                 'google_sheets': _sheets_connection,
+                 'markets_screen': _screen_connection}
 
 
 # Report types whose data IS the store - they reach no further than the local database, so they

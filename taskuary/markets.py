@@ -221,3 +221,52 @@ def run_edgar_facts(cfg):
             for f in units.get(unit) or []]
     rows.sort(key=lambda r: str(r.get('end') or ''), reverse=True)
     return _rows(cfg, rows, 'facts')
+
+
+# ---- the screen: conditions in CONFIG, matches out ------------------------------------------
+# The threshold lives here and not in a playbook. A playbook is prose flattened onto a command
+# line; a number living in prose is a number re-judged by a model every run, and it will drift.
+OPS = {'<': lambda a, b: a < b, '<=': lambda a, b: a <= b, '>': lambda a, b: a > b,
+       '>=': lambda a, b: a >= b, '==': lambda a, b: a == b, '!=': lambda a, b: a != b}
+# Only the quote-shaped providers - screening wants comparable numbers on every row, which is what
+# a quote (price/change_pct/...) gives and a filing or an FX table does not. A provider must be
+# ADDED HERE when it is built: naming one that does not exist yet would raise KeyError, not an
+# error an owner can read (see run_markets_screen below).
+SCREENABLE = ('yahoo_quotes', 'coingecko_prices')
+
+
+def screen_connection(store, connector_id=None) -> dict:
+    """The screen has no credentials of its own. CONNECTION_OF only ever hands this function
+    (store, connector_id) - never the screen's own config - so connector_id IS the borrow: the
+    owner points a markets_screen report at whichever provider's card it should read through
+    (their coingecko card, say, if it carries a saved key), and that card's id is what
+    connector_id names. There is no reverse lookup to do because the id already picks the card."""
+    if not connector_id: return {}
+    c = store.get_connector(int(connector_id), with_secret=True)
+    if not c: return {}
+    cfg = json.loads(c.get('ConfigJson') or '{}')
+    if c.get('Secret'): cfg.setdefault('api_key', c['Secret'])
+    return {k: v for k, v in cfg.items() if v}
+
+
+def run_markets_screen(cfg):
+    """{"provider": "yahoo_quotes", "symbols": "AAPL,NVDA", "conditions": [["change_pct", "<=", -5]]}
+    - the provider's rows, filtered to the ones where EVERY condition holds, and nothing else.
+
+    Silence is the normal outcome, which is what makes alert "something came back" the right rule:
+    a report that files a row every run is a report that stops being read."""
+    prov = str(cfg.get('provider') or '').strip()
+    if prov not in SCREENABLE:
+        raise MarketError(f'{prov!r} is not a market source a screen can read - one of: {", ".join(SCREENABLE)}')
+    conds = [c for c in (cfg.get('conditions') or []) if isinstance(c, (list, tuple)) and len(c) == 3]
+    for f, op, _ in conds:
+        if op not in OPS: raise MarketError(f'{op!r} is not a comparison operator - one of: {", ".join(OPS)}')
+    _, body = globals()[f'run_{prov}']({k: v for k, v in cfg.items() if k not in ('provider', 'conditions')})
+    rows, out = [json.loads(l) for l in str(body or '').splitlines() if l.strip()], []
+    for r in rows:
+        for f, op, want in conds:
+            if f not in r: raise MarketError(f'{prov} returns no field {f!r} to screen on - it has: {", ".join(sorted(r))}')
+            v = r.get(f)
+            if v is None or not OPS[op](v, want): break
+        else: out.append(r)
+    return _rows(cfg, out, 'matches')

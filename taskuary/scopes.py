@@ -45,6 +45,7 @@ ACTIONS = {
     # market data: every one of these is a window on a public market. Nothing upstream moves.
     'coingecko_prices': 'read', 'fx_rates': 'read', 'yahoo_quotes': 'read', 'yahoo_history': 'read',
     'edgar_filings': 'read', 'edgar_facts': 'read',
+    'markets_screen': 'read',    # the screen only reads through whichever provider it borrows
     # the semantic layer (semantic.py) reaches the ERP only through those same reads. The check
     # DOES write - a metric it cannot reconcile is demoted, a verified one is frozen to a skill -
     # but every one of those writes lands in Taskuary's own store, never upstream, which is what
@@ -89,6 +90,7 @@ DEFAULT_SCOPE = {
     'mssql': 'read', 'database': 'read', 'prometheus': 'read', 'datadog': 'read',
     'intacct': 'read', 'quickbooks': 'read', 'teller': 'read',
     'coingecko': 'read', 'frankfurter': 'read', 'yahoo': 'read', 'sec_edgar': 'read',
+    'screen': 'read',
     'zoho_invoice': 'write',
     'aws': 'read', 'azure': 'read',
     'jira': 'read', 'asana': 'read', 'monday': 'read', 'gitlab': 'read', 'azdo': 'read',

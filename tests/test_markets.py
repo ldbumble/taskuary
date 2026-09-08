@@ -239,3 +239,36 @@ class TheWiring(unittest.TestCase):
         from taskuary.store import MemoryStore
         types = {c['Type'] for c in MemoryStore().list_connectors()}
         for card in ('coingecko', 'frankfurter', 'yahoo', 'sec_edgar'): self.assertIn(card, types, card)
+
+
+class TheScreen(unittest.TestCase):
+    def test_only_the_rows_where_every_condition_holds_come_back(self):
+        with mock.patch.object(markets, 'run_yahoo_quotes', return_value=('2 quotes', '\n'.join([
+                json.dumps({'symbol': 'AAPL', 'price': 316.19, 'change_pct': -1.18}),
+                json.dumps({'symbol': 'NVDA', 'price': 118.0, 'change_pct': -6.4})]))):
+            head, body = markets.run_markets_screen({'provider': 'yahoo_quotes', 'symbols': 'AAPL,NVDA',
+                                                     'conditions': [['change_pct', '<=', -5]]})
+        rows = [json.loads(l) for l in body.splitlines() if l.strip()]
+        self.assertEqual([r['symbol'] for r in rows], ['NVDA'])
+        self.assertIn('1 match', head)
+
+    def test_nothing_matching_is_quiet_and_an_alert_stays_silent(self):
+        from taskuary.reports import alert_fires
+        with mock.patch.object(markets, 'run_yahoo_quotes', return_value=('1 quotes', json.dumps({'symbol': 'AAPL', 'change_pct': -1.0}))):
+            head, body = markets.run_markets_screen({'provider': 'yahoo_quotes', 'conditions': [['change_pct', '<=', -5]]})
+        self.assertEqual(alert_fires({'alert': {'when': 'something_came_back', 'to': 'x'}}, head, body), '')
+
+    def test_an_unknown_provider_or_operator_is_refused_before_any_call(self):
+        with self.assertRaisesRegex(markets.MarketError, 'not a market source'):
+            markets.run_markets_screen({'provider': 'sqlite', 'conditions': []})
+        with self.assertRaisesRegex(markets.MarketError, 'operator'):
+            markets.run_markets_screen({'provider': 'yahoo_quotes', 'conditions': [['price', 'DROP TABLE', 1]]})
+
+    def test_a_condition_on_a_field_the_provider_does_not_return_says_so(self):
+        with mock.patch.object(markets, 'run_yahoo_quotes', return_value=('1 quotes', json.dumps({'symbol': 'AAPL'}))):
+            with self.assertRaisesRegex(markets.MarketError, 'rsi'):
+                markets.run_markets_screen({'provider': 'yahoo_quotes', 'conditions': [['rsi', '<', 30]]})
+
+    def test_the_screen_borrows_the_named_providers_card(self):
+        from taskuary import reports
+        self.assertIs(reports.CONNECTION_OF['markets_screen'], markets.screen_connection)

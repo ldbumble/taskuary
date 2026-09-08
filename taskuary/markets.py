@@ -194,6 +194,59 @@ def run_finnhub_insiders(cfg):
     return _rows(cfg, rows, 'transactions')
 
 
+# ---- polygon: prev-day bar and a live snapshot, one key as an `apiKey` query param -----------
+POLYGON_BASE = 'https://api.polygon.io'
+
+
+def _polygon(url, params):
+    """polygon can answer {"status": "ERROR", "error": ...} at HTTP 200 - _get's status-code
+    check never sees that case, only the 4xx one, so a 200 carrying an error must be caught here
+    or it would return zero rows instead of raising, the same trap twelvedata sets."""
+    j = _get(url, params)
+    if isinstance(j, dict) and j.get('status') == 'ERROR':
+        raise MarketError(str(j.get('error') or 'polygon error'))
+    return j
+
+
+def run_polygon_bars(cfg):
+    """{"symbol": "AAPL"} - the previous trading day's bar, one row: open, high, low, close, volume.
+
+    field mapping written from polygon's documented shape 2026-09-08, NOT verified against a
+    live response - report a mismatch rather than working around it. /v2/aggs/ticker/<SYM>/prev
+    answers {"results": [{T,o,h,l,c,v,t}]}; t is epoch MILLISECONDS - divided by 1000 here before
+    conversion, or the date would land in 1970."""
+    from datetime import datetime
+    key = _need(cfg, 'Polygon', 'api_key', 'secret')
+    sym = (_syms(cfg, 'symbol', 'symbols') or ['AAPL'])[0]
+    j = _polygon(f'{POLYGON_BASE}/v2/aggs/ticker/{sym}/prev', {'apiKey': key})
+    rows = [{'symbol': r.get('T') or sym, 'date': datetime.utcfromtimestamp(r['t'] / 1000).date().isoformat(),
+             'open': _flt(r.get('o')), 'high': _flt(r.get('h')), 'low': _flt(r.get('l')),
+             'close': _flt(r.get('c')), 'volume': _int(r.get('v'))}
+            for r in (j.get('results') or []) if r.get('t') is not None]
+    rows.sort(key=lambda r: r['date'])
+    return _rows(cfg, rows, 'bars')
+
+
+def run_polygon_snapshot(cfg):
+    """{"symbol": "AAPL"} - one row: last price, day change %, volume, updated.
+
+    field mapping written from polygon's documented shape 2026-09-08, NOT verified against a
+    live response - report a mismatch rather than working around it. /v2/snapshot/locale/us/
+    markets/stocks/tickers/<SYM> answers {"ticker": {"day": {c,v}, "todaysChangePerc", "updated"}}
+    - "updated" is documented as epoch NANOSECONDS on this endpoint, unlike the millisecond `t`
+    the aggs endpoint above uses; unverified either way."""
+    from datetime import datetime
+    key = _need(cfg, 'Polygon', 'api_key', 'secret')
+    sym = (_syms(cfg, 'symbol', 'symbols') or ['AAPL'])[0]
+    j = _polygon(f'{POLYGON_BASE}/v2/snapshot/locale/us/markets/stocks/tickers/{sym}', {'apiKey': key})
+    t = j.get('ticker') or {}
+    day = t.get('day') or {}
+    upd = t.get('updated')
+    rows = [{'symbol': t.get('ticker') or sym, 'price': _flt(day.get('c')), 'change_pct': _pct(t.get('todaysChangePerc')),
+             'volume': _int(day.get('v')), 'updated': datetime.utcfromtimestamp(upd / 1e9).isoformat() if upd else None}]
+    return _rows(cfg, rows, 'quotes')
+
+
 
 
 

@@ -589,3 +589,45 @@ class TheFinnhub(unittest.TestCase):
                 markets.run_finnhub_quotes({'symbols': 'AAPL', 'api_key': 'bad'})
 
 
+# documented shape, NOT a live capture - polygon aggs' t is epoch MILLISECONDS
+POLYGON_BARS = {"results": [{"T": "AAPL", "o": 317.18, "h": 320.71, "l": 314.98, "c": 315.02,
+                            "v": 886145, "t": 1788825600000}], "status": "OK"}
+# documented shape, NOT a live capture - polygon snapshot's updated is epoch NANOSECONDS
+POLYGON_SNAPSHOT = {"ticker": {"ticker": "AAPL", "todaysChangePerc": -1.25,
+                               "day": {"c": 315.02, "v": 886145}, "updated": 1788874200000000000}}
+# real error, captured live 2026-09-08 (captured-shapes.md) - polygon can answer this at HTTP 200
+POLYGON_ERROR = {"status": "ERROR", "request_id": "add147026c12a572fc1d6a6455ec2b2a", "error": "Unknown API Key"}
+
+
+class ThePolygon(unittest.TestCase):
+    def test_bars_convert_epoch_milliseconds_not_seconds(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, POLYGON_BARS)) as g:
+            head, body = markets.run_polygon_bars({'symbol': 'AAPL', 'api_key': 'k'})
+        row = json.loads(body.splitlines()[0])
+        self.assertEqual(row, {'symbol': 'AAPL', 'date': '2026-09-08', 'open': 317.18, 'high': 320.71,
+                              'low': 314.98, 'close': 315.02, 'volume': 886145})
+        self.assertEqual(g.call_args.kwargs['params']['apiKey'], 'k')
+
+    def test_a_missing_key_names_the_card(self):
+        with self.assertRaisesRegex(markets.MarketError, 'Polygon'):
+            markets.run_polygon_bars({'symbol': 'AAPL'})
+
+    def test_snapshot_carries_price_change_and_volume(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, POLYGON_SNAPSHOT)):
+            head, body = markets.run_polygon_snapshot({'symbol': 'AAPL', 'api_key': 'k'})
+        row = json.loads(body.splitlines()[0])
+        self.assertEqual((row['symbol'], row['price'], row['change_pct'], row['volume']), ('AAPL', 315.02, -1.25, 886145))
+
+    def test_a_status_of_error_at_http_200_raises_rather_than_returning_zero_rows(self):
+        # the guard the task called out explicitly: polygon can answer ERROR at 200, and _get's
+        # status-code check alone would let this one through as an empty, silent result
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, POLYGON_ERROR)):
+            with self.assertRaisesRegex(markets.MarketError, 'Unknown API Key'):
+                markets.run_polygon_bars({'symbol': 'AAPL', 'api_key': 'bad'})
+
+    def test_the_real_error_shape_also_reaches_the_owner_at_a_4xx(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(401, POLYGON_ERROR)):
+            with self.assertRaisesRegex(markets.MarketError, 'Unknown API Key'):
+                markets.run_polygon_snapshot({'symbol': 'AAPL', 'api_key': 'bad'})
+
+

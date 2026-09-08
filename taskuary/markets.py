@@ -55,14 +55,29 @@ def _need(cfg, card: str, *names) -> str:
     return k
 
 
+def _err_msg(j, raw_text):
+    """The provider's own words, dug out of whichever envelope shape it used. Flat first - the
+    common {"error": ...} / {"message": ...} shapes most providers use - then one level down, for
+    a shape like yahoo's {"chart": {"error": {"description": ...}}}. Eight keyed providers copy
+    this seam, so it stays this small: two passes, then the raw body as a last resort."""
+    flat = (j.get('status', {}).get('error_message') if isinstance(j.get('status'), dict) else None) \
+           or j.get('error') or j.get('message') or j.get('Note') or j.get('Information')
+    if isinstance(flat, str) and flat.strip(): return flat
+    for v in (j.values() if isinstance(j, dict) else ()):
+        if not isinstance(v, dict): continue
+        err = v.get('error') if isinstance(v.get('error'), dict) else v.get('Error')
+        if isinstance(err, dict):
+            nested = err.get('description') or err.get('message') or err.get('error_message')
+            if nested: return str(nested)
+    return raw_text[:200]
+
+
 def _get(url, params=None, headers=None):
     r = requests.get(url, params=params or None, headers={'User-Agent': UA, **(headers or {})}, timeout=TIMEOUT)
     if r.status_code >= 300:
         try: j = r.json()
         except ValueError: j = {}
-        msg = (j.get('status', {}).get('error_message') if isinstance(j.get('status'), dict) else None) \
-              or j.get('error') or j.get('message') or j.get('Note') or j.get('Information') or r.text[:200]
-        raise MarketError(f'{r.status_code}: {str(msg)[:300]}')
+        raise MarketError(f'{r.status_code}: {_err_msg(j, r.text)[:300]}')
     try: return r.json()
     except ValueError: raise MarketError(f'{url} did not return JSON: {r.text[:200]}')
 
@@ -186,12 +201,23 @@ def run_edgar_facts(cfg):
     facts = (j.get('facts') or {})
     for taxonomy in ('us-gaap', 'ifrs-full', 'dei'):
         got = (facts.get(taxonomy) or {}).get(tag)
-        if got: break
+        # a tag present but reporting zero observations must not shadow a populated taxonomy below it
+        if got and any((got.get('units') or {}).values()): break
     else:
-        raise MarketError(f'{j.get("entityName") or "this company"} reports no XBRL tag {tag!r}')
-    unit = str(cfg.get('unit') or '').strip() or next(iter(got.get('units') or {}), 'USD')
+        raise MarketError(f'{j.get("entityName") or "this company"} reports no observations for XBRL tag {tag!r}')
+    units = got.get('units') or {}
+    want = str(cfg.get('unit') or '').strip()
+    if want:
+        if want not in units:
+            raise MarketError(f'{tag} has no unit {want!r} on {j.get("entityName") or "this company"} '
+                               f'- it reports {", ".join(sorted(units))}')
+        unit = want
+    else:
+        # USD when the company reports it; otherwise the unit with the most observations, tied
+        # alphabetically - dict order is a serialization artifact, never the thing that picks a series
+        unit = 'USD' if 'USD' in units else sorted(units, key=lambda u: (-len(units[u]), u))[0]
     rows = [{'company': j.get('entityName'), 'tag': tag, 'unit': unit, 'end': f.get('end'),
              'value': f.get('val'), 'fy': f.get('fy'), 'fp': f.get('fp'), 'form': f.get('form')}
-            for f in (got.get('units') or {}).get(unit) or []]
+            for f in units.get(unit) or []]
     rows.sort(key=lambda r: str(r.get('end') or ''), reverse=True)
     return _rows(cfg, rows, 'facts')

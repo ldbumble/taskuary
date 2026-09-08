@@ -50,6 +50,25 @@ class TheCrypto(unittest.TestCase):
                 markets.run_coingecko_prices({'ids': 'bitcoin'})
 
 
+class TheErrorExtraction(unittest.TestCase):
+    """_get's error message is a seam every keyed provider will copy, so it is pinned on its own,
+    independent of any one provider's shape."""
+    def test_a_nested_error_envelope_is_read_one_level_down(self):
+        body = {'wrapper': {'error': {'description': 'nested boom'}}}
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(400, body)):
+            with self.assertRaises(markets.MarketError) as ctx:
+                markets._get('https://example.test/x')
+        self.assertTrue(str(ctx.exception).endswith('nested boom'), str(ctx.exception))
+        self.assertNotIn('wrapper', str(ctx.exception))     # the raw envelope must not leak into the message
+
+    def test_a_flat_error_still_wins_over_a_nested_one(self):
+        body = {'message': 'flat boom', 'wrapper': {'error': {'description': 'should not be seen'}}}
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(400, body)):
+            with self.assertRaises(markets.MarketError) as ctx:
+                markets._get('https://example.test/x')
+        self.assertTrue(str(ctx.exception).endswith('flat boom'), str(ctx.exception))
+
+
 # captured live 2026-09-08 from api.frankfurter.dev/v1/latest
 FX = {'amount': 1.0, 'base': 'USD', 'date': '2026-09-08', 'rates': {'EUR': 0.86103, 'GBP': 0.73825}}
 
@@ -101,7 +120,8 @@ class TheYahoo(unittest.TestCase):
         rows = [json.loads(l) for l in body.splitlines() if l.strip()]
         self.assertEqual(len(rows), 2)
         self.assertEqual(rows[1]['symbol'], 'NOPE')
-        self.assertIn('delisted', rows[1]['error'])
+        self.assertTrue(rows[1]['error'].endswith('No data found, symbol may be delisted'), rows[1]['error'])
+        self.assertNotIn('chart', rows[1]['error'])    # the raw {"chart": {"error": ...}} envelope, not just its message
 
     def test_history_is_one_row_per_bar_newest_last(self):
         with mock.patch.object(markets.requests, 'get', return_value=_resp(200, YQ)):
@@ -137,3 +157,56 @@ class TheEdgar(unittest.TestCase):
             _, body = markets.run_edgar_filings({'cik': '320193', 'forms': '8-K'})
         rows = [json.loads(l) for l in body.splitlines() if l.strip()]
         self.assertEqual([r['form'] for r in rows], ['8-K'])
+
+
+# shape of data.sec.gov/api/xbrl/companyfacts/CIK...json - trimmed to the parts run_edgar_facts reads
+def _facts(us_gaap=None, ifrs_full=None, name='Test Co'):
+    facts = {}
+    if us_gaap is not None: facts['us-gaap'] = {'Revenues': us_gaap}
+    if ifrs_full is not None: facts['ifrs-full'] = {'Revenues': ifrs_full}
+    return {'entityName': name, 'facts': facts}
+
+
+class TheEdgarFacts(unittest.TestCase):
+    def test_an_empty_units_tag_in_one_taxonomy_does_not_shadow_a_populated_one_below_it(self):
+        # us-gaap carries the tag but with no observations at all - it must not win the fallback
+        # just because a truthy dict exists there, which is what let a company's ifrs-full series
+        # go dark behind an empty us-gaap entry
+        body = _facts(us_gaap={'label': 'Revenues', 'units': {}},
+                      ifrs_full={'label': 'Revenues', 'units': {'USD': [
+                          {'end': '2026-06-30', 'val': 100, 'fy': 2026, 'fp': 'Q2', 'form': '10-Q'},
+                          {'end': '2025-06-30', 'val': 90, 'fy': 2025, 'fp': 'Q2', 'form': '10-Q'}]}})
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, body)):
+            head, out = markets.run_edgar_facts({'cik': '1'})
+        rows = [json.loads(l) for l in out.splitlines() if l.strip()]
+        self.assertEqual([r['end'] for r in rows], ['2026-06-30', '2025-06-30'])   # newest first
+        self.assertEqual(rows[0]['value'], 100)
+
+    def test_usd_is_preferred_over_a_unit_with_more_observations(self):
+        # EUR is listed first in the dict AND has more observations - dict order and observation
+        # count must both lose to USD when USD is one of the units this company reports
+        body = _facts(us_gaap={'label': 'Revenues', 'units': {
+            'EUR': [{'end': '2026-06-30', 'val': 1}, {'end': '2025-06-30', 'val': 2}, {'end': '2024-06-30', 'val': 3}],
+            'USD': [{'end': '2026-06-30', 'val': 111}]}})
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, body)):
+            head, out = markets.run_edgar_facts({'cik': '1'})
+        rows = [json.loads(l) for l in out.splitlines() if l.strip()]
+        self.assertEqual(rows, [{'company': 'Test Co', 'tag': 'Revenues', 'unit': 'USD',
+                                'end': '2026-06-30', 'value': 111, 'fy': None, 'fp': None, 'form': None}])
+
+    def test_no_usd_picks_the_unit_with_the_most_observations_not_whichever_sorts_first(self):
+        body = _facts(us_gaap={'label': 'Revenues', 'units': {
+            'EUR': [{'end': '2026-06-30', 'val': 1}],
+            'GBP': [{'end': '2026-06-30', 'val': 2}, {'end': '2025-06-30', 'val': 3}]}})
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, body)):
+            head, out = markets.run_edgar_facts({'cik': '1'})
+        rows = [json.loads(l) for l in out.splitlines() if l.strip()]
+        self.assertTrue(all(r['unit'] == 'GBP' for r in rows), rows)
+
+    def test_a_unit_asked_for_that_the_tag_does_not_carry_is_refused_and_names_what_it_does_carry(self):
+        body = _facts(us_gaap={'label': 'Revenues', 'units': {'USD': [{'end': '2026-06-30', 'val': 1}]}})
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, body)):
+            with self.assertRaises(markets.MarketError) as ctx:
+                markets.run_edgar_facts({'cik': '1', 'unit': 'GBP'})
+        self.assertIn('GBP', str(ctx.exception))
+        self.assertIn('USD', str(ctx.exception))

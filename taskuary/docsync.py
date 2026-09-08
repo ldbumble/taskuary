@@ -69,7 +69,7 @@ def sync_connections(store, actor='system'):
                      'intacct|intacct_fields|quickbooks|quickbooks_vendors|quickbooks_accounts|teller_accounts|teller_transactions|teller_balances|teller_spend'
                      '|yahoo_quotes|yahoo_history|edgar_filings|edgar_facts|coingecko_prices|fx_rates|'
                      'td_quotes|td_indicator|av_quotes|fred_series|markets_screen|'
-                     'finnhub_quotes|finnhub_news|finnhub_earnings|finnhub_insiders|polygon_bars|polygon_snapshot", ...} — '
+                     'finnhub_quotes|finnhub_news|finnhub_earnings|finnhub_insiders|polygon_bars|polygon_snapshot|tiingo_history|tiingo_news", ...} — '
                      'saved credentials are filled in for you; if several cards have that type, pass '
                      '"connector_id": <the id named above>; the raw output comes back. '
                      # the writes exist and are named, and the road to them is the proposal - an agent

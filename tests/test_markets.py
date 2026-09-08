@@ -631,3 +631,40 @@ class ThePolygon(unittest.TestCase):
                 markets.run_polygon_snapshot({'symbol': 'AAPL', 'api_key': 'bad'})
 
 
+# documented shape, NOT a live capture - tiingo /tiingo/daily/<sym>/prices is a bare array
+TIINGO_HISTORY = [{"date": "2026-09-04T00:00:00.000Z", "close": 316.2, "adjClose": 316.2, "volume": 41000000},
+                  {"date": "2026-09-07T00:00:00.000Z", "close": 318.1, "adjClose": 318.1, "volume": 38000000}]
+# documented shape, NOT a live capture - tiingo /tiingo/news is a bare array
+TIINGO_NEWS = [{"title": "Apple headline", "url": "https://example.test/n", "source": "Reuters",
+               "publishedDate": "2026-09-08T12:00:00Z", "tickers": ["aapl"]}]
+# real error, captured live 2026-09-08 (captured-shapes.md)
+TIINGO_ERROR = {"detail": "Please supply a token"}
+
+
+class TheTiingo(unittest.TestCase):
+    def test_history_is_oldest_first_with_the_key_as_an_authorization_header(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, TIINGO_HISTORY)) as g:
+            head, body = markets.run_tiingo_history({'symbol': 'AAPL', 'api_key': 'k'})
+        rows = [json.loads(l) for l in body.splitlines() if l.strip()]
+        self.assertEqual([r['close'] for r in rows], [316.2, 318.1])
+        self.assertEqual(rows[0], {'symbol': 'AAPL', 'date': '2026-09-04', 'close': 316.2, 'adj_close': 316.2, 'volume': 41000000})
+        self.assertEqual(g.call_args.kwargs['headers']['Authorization'], 'Token k')
+        self.assertNotIn('token', g.call_args.kwargs.get('params') or {})
+
+    def test_a_missing_key_names_the_card(self):
+        with self.assertRaisesRegex(markets.MarketError, 'Tiingo'):
+            markets.run_tiingo_history({'symbol': 'AAPL'})
+
+    def test_news_joins_every_ticker_the_article_is_tagged_with(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, TIINGO_NEWS)):
+            head, body = markets.run_tiingo_news({'symbols': 'AAPL', 'api_key': 'k'})
+        row = json.loads(body.splitlines()[0])
+        self.assertEqual(row, {'symbol': 'AAPL', 'headline': 'Apple headline', 'source': 'Reuters',
+                              'url': 'https://example.test/n', 'published': '2026-09-08T12:00:00Z'})
+
+    def test_the_real_error_shape_reaches_the_owner(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(401, TIINGO_ERROR)):
+            with self.assertRaisesRegex(markets.MarketError, 'Please supply a token'):
+                markets.run_tiingo_history({'symbol': 'AAPL', 'api_key': 'bad'})
+
+

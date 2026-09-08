@@ -247,6 +247,47 @@ def run_polygon_snapshot(cfg):
     return _rows(cfg, rows, 'quotes')
 
 
+# ---- tiingo: daily history and news - the only provider here keyed by a HEADER, not a param --
+TIINGO_BASE = 'https://api.tiingo.com'
+
+
+def run_tiingo_history(cfg):
+    """{"symbol": "AAPL", "from": "2026-08-01" (blank = 30 days back)} - one row per day, oldest
+    first: close, adj_close, volume.
+
+    field mapping written from tiingo's documented shape 2026-09-08, NOT verified against a
+    live response - report a mismatch rather than working around it. /tiingo/daily/<sym>/prices
+    is a bare ARRAY of {date, close, adjClose, volume, ...}. The key rides as an
+    `Authorization: Token <key>` HEADER, not a query param - _get already accepts headers for
+    exactly this shape."""
+    from datetime import datetime, timedelta, timezone
+    key = _need(cfg, 'Tiingo', 'api_key', 'secret')
+    sym = (_syms(cfg, 'symbol', 'symbols') or ['AAPL'])[0].lower()
+    frm = str(cfg.get('from') or '').strip() or (datetime.now(timezone.utc) - timedelta(days=30)).date().isoformat()
+    j = _get(f'{TIINGO_BASE}/tiingo/daily/{sym}/prices', {'startDate': frm}, {'Authorization': f'Token {key}'})
+    rows = [{'symbol': sym.upper(), 'date': str(r.get('date') or '')[:10], 'close': _flt(r.get('close')),
+             'adj_close': _flt(r.get('adjClose')), 'volume': _int(r.get('volume'))}
+            for r in (j or [])]
+    return _rows(cfg, rows, 'bars')
+
+
+def run_tiingo_news(cfg):
+    """{"symbols": "AAPL,MSFT" (blank = every ticker tiingo has news for)} - headline, source,
+    url, published; symbol carries every ticker the article is tagged with, joined.
+
+    field mapping written from tiingo's documented shape 2026-09-08, NOT verified against a
+    live response - report a mismatch rather than working around it. /tiingo/news is a bare
+    ARRAY of {title, url, source, publishedDate, tickers, ...}."""
+    key = _need(cfg, 'Tiingo', 'api_key', 'secret')
+    syms = _syms(cfg, 'symbols', 'symbol')
+    params = {'tickers': ','.join(s.lower() for s in syms)} if syms else {}
+    j = _get(f'{TIINGO_BASE}/tiingo/news', params, {'Authorization': f'Token {key}'})
+    rows = [{'symbol': ','.join(n.get('tickers') or []).upper(), 'headline': n.get('title'),
+             'source': n.get('source'), 'url': n.get('url'), 'published': n.get('publishedDate')}
+            for n in (j or [])]
+    return _rows(cfg, rows, 'articles')
+
+
 
 
 

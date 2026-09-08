@@ -256,21 +256,33 @@ Until it exists, the mitigations are honest but weaker than a gate: the playbook
 and keeping the Alpaca card on the paper endpoint. **Do not raise the Alpaca card to `write` scope
 while this hole is open.**
 
-## The playbooks — two, and deliberately two shapes
+## The playbook — one, and not the one you would expect
 
-A playbook is not the strategy. It is what tells a non-code task that it *is* a non-code task, and
-that turns out to be mechanical rather than philosophical: `terminal.py:1074` appends
-`CODING RULES (CODER.md)` to every worker seed unconditionally, and the counterweight —
-*"THIS IS NOT A CODE CHANGE: the systems named in USES are the ground … do not go looking for a
-codebase to edit"* — lives inside `seed_block`, which only fires when triage has tagged the task
-`playbook:<slug>` (`playbooks.py:146`). A playbook-less "NVDA is 8% below your cost basis, decide"
-task hands an agent CODER.md's "work only in the repository the task names", and it will go hunting
-for a repo. The playbook is also where `alone:`, `ask first:` and `done when:` live, and `done when:`
-is what a receipt gets checked against.
+**A playbook is not needed to tell an agent that this is not a coding job.** An earlier draft of
+this document claimed it was, on the grounds that `terminal.py:1074` appends
+`CODING RULES (CODER.md)` unconditionally while the "not a code change" counterweight lives only
+inside `playbooks.seed_block`. That was wrong, and the owner caught it (2026-09-08): the seed
+already carries its own counterweight, set by the **router** off the task's repo tag and owing
+nothing to playbooks (`terminal.py:999`):
 
-**`watch-card-spend.md`** — a judgment job with no writes.
-`uses:` teller (read) · `done when:` the odd charge is named on the task with its merchant, card and
-amount. Tests that a non-code task gets worked without an agent going repo-hunting.
+> NO REPOSITORY - this is a general question, not a change to a codebase. Answer it from what you
+> are given and what you can look up; do not go hunting for code to edit.
+
+Its comment records the failure it was written for — "an agent asked to prepare for a meeting went
+reading that codebase for the answer" — which is the same failure a spend-monitoring task would
+have hit. So the coding default is already conditional where it counts, and a playbook written to
+supply that framing would be ceremony.
+
+*Residual, and out of scope:* `CODING RULES (CODER.md)` still rides along even under `NO_REPO`, so
+such a seed carries both the NO-REPOSITORY line and CODER.md's "work only in the repository the task
+names". The specific line comes first and the general one after, which is the right order, but
+`if rules and repo_tag(t) != NO_REPO` would remove the contradiction outright. That is a one-line
+edit to shared logic, so it is a follow-up, not part of this build — and explicitly **not** a reason
+to add a playbook.
+
+What a playbook is still for is the part nothing else holds: `alone:`, `ask first:` and `done when:`
+— the authority lines and the receipt. That reason applies to exactly one job here, so there is
+exactly one playbook.
 
 **`propose-a-trade.md`** — hand-written, and the "hand-written" is the design decision.
 `uses:` alpaca (read, propose: orders) · `alone:` nothing · `ask first:` every order ·

@@ -66,7 +66,11 @@ test("assistant commentary and owner actions are separate surfaces", () => {
   assert.match(source, />Dismiss<\/Button>/);
   assert.match(source, /\/api\/reviews\/\$\{r\.ReviewId\}\/decide/);
   assert.match(source, /\/api\/reviews\/\$\{r\.ReviewId\}\/draft/);
-  assert.match(source, /<div className="tq-aui-role">Taskuary<\/div>/);
+  // The dock's turns are still spoken by Taskuary. The label is now the agent named on the task,
+  // and in the dock that name IS "Taskuary" - a work window names the agent doing the work instead.
+  assert.match(source, /<div className="tq-aui-role">\{React\.useContext\(AgentNameCtx\)\}<\/div>/);
+  assert.match(source, /const name = dock \? "Taskuary" : agentName\(task\)/);
+  assert.match(source, /<AgentNameCtx\.Provider value=\{name\}>/);
   assert.match(source, /newChatBusy \? "Starting…" : "New chat"/);
   assert.match(source, /onDockNewChat/);
   assert.doesNotMatch(source, /window\.confirm/);

@@ -21,6 +21,7 @@ import { streamAssistant, toolTarget } from "./assistantStream.js";
 import { wantsAsk, wantsBrowser, withoutAsk } from "./newTask.js";
 import { paneFor } from "./generalPane.js";
 import { pickFor } from "./assistantProvider.js";
+import { agentName, workOf, doingNow, trailText, turnStart, elapsedText } from "./agentWork.js";
 import { Md } from "./md.jsx";
 import { SessionPane, TerminalPane } from "./TerminalView.jsx";
 import SemanticPanel from "./SemanticPanel.jsx";
@@ -36,7 +37,7 @@ const initial = (messages) => (messages || []).map((m) => ({
   createdAt: m.createdAt ? new Date(String(m.createdAt).replace(" ", "T") + (String(m.createdAt).includes("Z") ? "" : "Z")) : undefined,
 }));
 
-const traceParts = (events) => {
+const traceParts = (events, keepStart = true) => {
   const tools = new Map();
   const progress = [];
   let structured = false;
@@ -53,7 +54,10 @@ const traceParts = (events) => {
       if (old) tools.set(id, { ...old, result: { output: event.detail?.result || "" },
         isError: !!event.detail?.is_error });
     } else if (event.type === "start") {
-      progress.push(`Started ${event.session?.provider || "the selected agent"}`);
+      // "Agent progress: Started Claude Code · coder (your CLI)" is the header's own words in a box
+      // labelled progress, and on a work window the band states who started and when (the owner's
+      // screenshots, 2026-09-08). The dock has no band, so it keeps the line.
+      if (keepStart) progress.push(`Started ${event.session?.provider || "the selected agent"}`);
     } else if (event.type === "progress" && event.detail) {
       structured = true; progress.push(String(event.detail));
     } else if (event.type === "live" && !structured && event.detail) {
@@ -68,9 +72,9 @@ const traceParts = (events) => {
 // assistant-ui owns the response being streamed in the currently mounted pane. The task's
 // session owns it when this pane is not mounted. Rehydrate that same tool/progress trace when a
 // user switches back, and attach it to the filed answer once the run is complete.
-export const messagesWithTrace = (messages, session) => {
+export const messagesWithTrace = (messages, session, keepStart = true) => {
   const out = (messages || []).map((m) => ({ ...m, content: [...(m.content || [])] }));
-  const parts = traceParts(session?.trace);
+  const parts = traceParts(session?.trace, keepStart);
   if (!parts.length) return out;
   if (session?.busy) {
     out.push({ id: `live-${session.sid}-${session.trace_revision || 0}`, role: "assistant", content: parts });
@@ -92,6 +96,56 @@ const Thinking = ({ provider }) => (
     <span>{provider ? `${provider} is working…` : "Working on it…"}</span>
   </div>
 );
+
+// AN AGENT AT WORK, in one band. The machinery was all there - a CLI brain really does emit its
+// tool calls, and the window really did draw them - but it drew eight identical grey rows each
+// ending in the word COMPLETE, a box labelled "Agent progress" holding the start line and a model
+// id, and put the only live signal in the smallest type on the page, underneath everything. It
+// reported mechanism; it never said who was working, how far in, how long, or what it had got
+// (the owner, 2026-09-08: "It doesn't look like an agent that got you").
+//
+// Four facts, said once, above the trail. Nothing here is new information - the trace and the task
+// already carried all of it (agentWork.js).
+const AgentBand = ({ name, provider, work, since }) => {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  const doing = doingNow(work), trail = trailText(work);
+  return (
+    <div className="tq-aui-band" role="status" aria-live="polite">
+      <div className="tq-aui-band-head">
+        <span className="tq-aui-band-dot" />
+        <b>{name}</b><span>is working</span>
+        <em>{since ? elapsedText(now - since) : provider || ""}</em>
+      </div>
+      <div className="tq-aui-band-now">
+        {doing || (provider ? `${provider} is thinking…` : "Thinking…")}
+        {work.steps.length > 1 && <span className="tq-aui-band-step"> — step {work.steps.length}</span>}
+      </div>
+      {/* one segment per step it has actually taken. No total: the agent never declares a plan, and
+          a made-up denominator is a confident number that is wrong. */}
+      {work.steps.length > 0 && (
+        <div className="tq-aui-band-meter">
+          {work.steps.map((st) => <span key={st.id} className={st.done ? "" : "on"} />)}
+        </div>
+      )}
+      {trail && <div className="tq-aui-band-trail">✓ {trail}</div>}
+      {/* ...and the one that answers "has it got hold of this?": not that it called eight tools,
+          but that it is holding real sources on the right subject, before it has finished. */}
+      {!!work.sources.length && (
+        <div className="tq-aui-band-so">
+          <span>what it has so far</span>
+          <div>{work.sources.length} source{work.sources.length === 1 ? "" : "s"} —{" "}
+            {work.sources.map((src) => <em key={src}>{src}</em>)}</div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// The speaker of the agent's turns. In the dock this IS Taskuary's assistant; on a work window it
+// is the agent named on the task, and calling it "Taskuary" there was the fourth place one window
+// wore the concierge's name.
+const AgentNameCtx = React.createContext("Taskuary");
 
 const AssistantText = ({ text }) => <Md text={text} />;
 const AssistantReasoning = ({ text }) => text ? (
@@ -118,7 +172,7 @@ const UserMessage = () => (
 );
 const AssistantMessage = () => (
   <MessagePrimitive.Root className="tq-aui-message tq-aui-agent">
-    <div className="tq-aui-role">Taskuary</div>
+    <div className="tq-aui-role">{React.useContext(AgentNameCtx)}</div>
     <div className="tq-aui-agent-body">
       <MessagePrimitive.Parts components={{ Text: AssistantText, Reasoning: AssistantReasoning,
         tools: { Fallback: AssistantTool } }} />
@@ -290,7 +344,11 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
 
 function AssistantThread({ task, messages, onAsked, onStop, selectionRef, attachmentsRef, onSent, onClearAttachments, onAttach, onReport, reportBusy,
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
-  serverBusy = false, provider }) {
+  serverBusy = false, provider, name = "Taskuary", work, since }) {
+  // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
+  // dock is the assistant that helps you run Taskuary, not an agent doing a job (the owner,
+  // 2026-09-08: "make sure the ux doesnt change or the general assistants").
+  const working = !dock && !!serverBusy;
   const modelAdapter = useMemo(() => ({
     async *run({ messages: runMessages, abortSignal }) {
       onBusyChange?.(true);
@@ -399,14 +457,18 @@ function AssistantThread({ task, messages, onAsked, onStop, selectionRef, attach
             </div>
           )}
           <ThreadPrimitive.Messages components={{ UserMessage, AssistantMessage }} />
-          <ThreadPrimitive.If running><Thinking provider={provider} /></ThreadPrimitive.If>
+          <ThreadPrimitive.If running>
+            {dock ? <Thinking provider={provider} />
+                  : <AgentBand name={name} provider={provider} work={work} since={since} />}
+          </ThreadPrimitive.If>
           {/* Only once it has stopped typing. An offer to "run this again, daily" hanging under a
               half-written answer is an offer to schedule something nobody has read yet - and it
               sat there through every tool call, which is where the eye goes while waiting. */}
           <ThreadPrimitive.If running={false}>
           {/* the answer is being written somewhere else - another tab, or this pane before it was
               reopened - and the poll is what tells us so */}
-          {serverBusy && <Thinking provider={provider} />}
+          {serverBusy && (dock ? <Thinking provider={provider} />
+                                : <AgentBand name={name} provider={provider} work={work} since={since} />)}
           {dock && <DockActions messages={messages} expanded={dockExpanded} onNavigate={onDockNavigate} onChanged={onDockChanged} />}
           {!dock && !serverBusy && messages?.some((m) => m.role === "assistant") && (
             <div className="tq-aui-report-action">
@@ -432,7 +494,8 @@ function AssistantThread({ task, messages, onAsked, onStop, selectionRef, attach
               </IconButton>
               <ComposerPrimitive.Input
                 className="tq-aui-input"
-                placeholder={dock ? "Tell Taskuary what to do next…" : "Tell the assistant what to do next…"}
+                placeholder={working ? "Add something for it to pick up…"
+                  : dock ? "Tell Taskuary what to do next…" : "Tell the assistant what to do next…"}
               />
               {/* stopping is an ACT: closing this page is not one. The button tells the server
                   to stop the run; abandoning the tab just detaches from it (server.py). */}
@@ -574,7 +637,14 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
 
   if (!data && !error) return <Box sx={{ height: 520, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>;
   const session = data?.session;
-  const shownMessages = messagesWithTrace(data?.messages, session);
+  const shownMessages = messagesWithTrace(data?.messages, session, dock);
+  // WHO is on this task, what its turn has done so far, and when the turn began - all three read
+  // off what this pane already has (agentWork.js). The dock is exempt: it IS the assistant.
+  // Plain calls, NOT useMemo: this sits after the early return for "no data yet", so a hook here
+  // runs on some renders and not others - which is React #310, and it blanked the whole view.
+  const name = dock ? "Taskuary" : agentName(task);
+  const work = workOf(session?.trace);
+  const since = turnStart(shownMessages);
   // name the backend that is thinking. The session's own provider is the truth once it has one; on
   // a first turn there is no session yet, so fall back to the one the picker is showing.
   const pickedLabel = (data?.providers || []).find((p) => String(p.id) === String(connectorId))?.label;
@@ -582,13 +652,15 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
   // there is a terminal to show beside it
   const pane = paneFor(view, !!session);
   const thread = (
-    <AssistantThread key={`${task.TaskId}-${threadKey}`} task={task} messages={shownMessages}
-      onAsked={dropAsk} onStop={stopRun} selectionRef={selectionRef}
-      attachmentsRef={attachmentsRef} onSent={sent} onClearAttachments={clearAttachments}
-      onAttach={() => fileRef.current?.click()} onReport={makeReport} reportBusy={reportBusy}
-      dock={dock} dockExpanded={dockExpanded} prompt={prompt} onPromptUsed={onPromptUsed}
-      onBusyChange={onBusyChange} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
-      serverBusy={busy} provider={session?.provider || pickedLabel} />
+    <AgentNameCtx.Provider value={name}>
+      <AssistantThread key={`${task.TaskId}-${threadKey}`} task={task} messages={shownMessages}
+        onAsked={dropAsk} onStop={stopRun} selectionRef={selectionRef}
+        attachmentsRef={attachmentsRef} onSent={sent} onClearAttachments={clearAttachments}
+        onAttach={() => fileRef.current?.click()} onReport={makeReport} reportBusy={reportBusy}
+        dock={dock} dockExpanded={dockExpanded} prompt={prompt} onPromptUsed={onPromptUsed}
+        onBusyChange={onBusyChange} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
+        serverBusy={busy} provider={session?.provider || pickedLabel} name={name} work={work} since={since} />
+    </AgentNameCtx.Provider>
   );
   return (
     <Box className={dock ? `tq-aui-dock${dockExpanded ? " tq-aui-dock-expanded" : ""}` : undefined} onPaste={pasted} sx={{ border: dock ? 0 : `1px solid ${BORDER}`, borderRadius: dock ? 0 : 1.75, overflow: "hidden", bgcolor: PANEL2,
@@ -598,7 +670,8 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
       {!dock && <Box sx={{ minHeight: 39, px: 1.25, py: { xs: 0.5, md: 0 }, display: "flex", alignItems: "center", gap: 0.8, borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL,
         flexWrap: "wrap", flexShrink: 0 }}>
         <Box sx={{ width: 7, height: 7, borderRadius: 99, bgcolor: session?.alive ? "#78a17b" : "#c7a258" }} />
-        <Typography noWrap sx={{ ...mono, fontSize: 10.5, letterSpacing: ".13em", textTransform: "uppercase", color: DIM, flexShrink: 0 }}>assistant workspace</Typography>
+        {/* the strip named the window after the concierge; it belongs to the agent working in it */}
+        <Typography noWrap sx={{ ...mono, fontSize: 10.5, letterSpacing: ".13em", textTransform: "uppercase", color: DIM, flexShrink: 0 }}>{name}</Typography>
         <Box sx={{ flex: 1, minWidth: 8 }} />
         <Select size="small" value={connectorId} displayEmpty onChange={(e) => {
           const provider = data?.providers?.find((p) => String(p.id) === String(e.target.value));
@@ -661,7 +734,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
       )}
       {error && <Alert severity="error" sx={{ borderRadius: 0, py: 0 }}>{error}</Alert>}
       {notice && <Alert severity="success" onClose={() => setNotice("")} sx={{ borderRadius: 0, py: 0 }}>{notice}</Alert>}
-      {busy && (
+      {dock && busy && (
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.25, py: 0.5, bgcolor: PANEL2,
           borderBottom: `1px solid ${BORDER}` }}>
           <CircularProgress size={11} />

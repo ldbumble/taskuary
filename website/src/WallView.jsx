@@ -17,6 +17,7 @@ import { TerminalPane } from "./TerminalView.jsx";
 
 const GeneralWorkspace = React.lazy(() => import("./GeneralWorkspace.jsx"));
 import { Confirm, TellAgent, WorkLine, isWaiting } from "./ui.jsx";
+import { agentName } from "./agentWork.js";
 import { cliName } from "./BoardView.jsx";
 import { defaultPaneHeight, holdWrappingSessions, movePane, resizedPaneHeight, wallPaneAtPoint, withoutWallSession } from "./wallLayout.js";
 
@@ -212,7 +213,9 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
             const wallRun = l || s, statusWork = l?.work || s.work;
             const waiting = isWaiting(wallRun);
             const wrapBusy = !!wrapping[s.sid], wrapError = wrapErrors[s.sid];
-            const who = s.agent || cliName(s.cli || "agent");
+            // a chat session reports its agent as the literal string "assistant" - the name of the
+            // thing that helps you run Taskuary, not of the agent doing this task's work
+            const who = s.mode === "assistant" ? agentName(t) : (s.agent || cliName(s.cli || "agent"));
             return (
               <Box key={s.sid} data-wall-pane={s.sid}
                 sx={{ ...pane0, display: "flex", flexDirection: "column", height: paneH, minHeight: MIN_H,

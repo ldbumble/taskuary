@@ -13,6 +13,7 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
 import { runOperation } from "./taskOps.js";
+import { agentName } from "./agentWork.js";
 import { lazyGeneral } from "./lazyGeneral.js";
 import { taskMatchesQuery } from "./taskSearch.js";
 import { outcomeOf } from "./dispatchOutcome.js";
@@ -968,7 +969,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   display: liveCodingSession ? "flex" : "block", alignItems: "center",
                   gap: liveCodingSession ? 1 : 0, flexWrap: "wrap" }}>
                   <Box sx={{ minWidth: 0, flex: liveCodingSession ? "0 1 auto" : "initial" }}>
-                    <WorkflowHeading number="2" title={`${term?.alive ? "Agent running" : "Agent work"}${term?.alive ? ` · ${term.provider || term.agent || "agent"}` : ""}`}
+                    {/* the agent by NAME, not by which binary is running: "Agent running · Claude Code
+                        · coder (your CLI)" named a product and a profile (the owner, 2026-09-08) */}
+                    <WorkflowHeading number="2" title={term?.alive ? `${agentName(t)} is working` : "Agent work"}
                     description={term?.alive
                       ? ""
                       : "Run, pause, stop, or restart an agent. None of these actions completes the task."}

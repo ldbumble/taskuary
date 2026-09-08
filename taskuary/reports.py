@@ -609,6 +609,7 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             # the bank and card feed (teller.py): where a transaction comes from before it becomes a bill
             'teller_accounts': _lazy('teller', 'run_teller_accounts'), 'teller_transactions': _lazy('teller', 'run_teller_transactions'),
             'teller_balances': _lazy('teller', 'run_teller_balances'),
+            'teller_spend': _lazy('teller', 'run_teller_spend'),      # the rollup: how much, per card and in total
             # the semantic layer over the ERP: a number that was PROVED, and the check that keeps it proved
             'metric': run_metric, 'metric_check': run_metric_check,
             'rss': run_rss, 'digest': run_digest, 'evening_inbox': run_evening_inbox,
@@ -651,7 +652,7 @@ CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 
            'sharepoint_list': 'sharepoint', 'sharepoint_file': 'sharepoint',
            'quickbooks_vendors': 'quickbooks', 'quickbooks_accounts': 'quickbooks', 'quickbooks_bill': 'quickbooks', 'quickbooks_expense': 'quickbooks',
            'zoho_monthly_invoices': 'zoho_invoice',
-           'teller_accounts': 'teller', 'teller_transactions': 'teller', 'teller_balances': 'teller',
+           'teller_accounts': 'teller', 'teller_transactions': 'teller', 'teller_balances': 'teller', 'teller_spend': 'teller',
            'kb_search': 'knowledge', 'kb_reindex': 'knowledge',
            'handbook_search': 'handbook', 'handbook_write': 'handbook', 'handbook_vote': 'handbook',
            'hub_search': 'handbook', 'hub_write': 'handbook', 'hub_vote': 'handbook', 'hub_comment': 'handbook'}
@@ -766,7 +767,7 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  'intacct': intacct_connection, 'intacct_fields': intacct_connection,
                  'intacct_create': intacct_connection, 'intacct_update': intacct_connection,
                  **{t: _quickbooks_connection for t in ('quickbooks', 'quickbooks_vendors', 'quickbooks_accounts', 'quickbooks_bill', 'quickbooks_expense')},
-                 **{t: _teller_connection for t in ('teller_accounts', 'teller_transactions', 'teller_balances')},
+                 **{t: _teller_connection for t in ('teller_accounts', 'teller_transactions', 'teller_balances', 'teller_spend')},
                  # both borrow: SharePoint the Outlook tenant app, Sheets the Gmail card's Google client
                  'sharepoint_list': _sharepoint_connection, 'sharepoint_file': _sharepoint_connection,
                  'google_sheets': _sheets_connection}

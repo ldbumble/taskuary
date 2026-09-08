@@ -41,7 +41,7 @@ ACTIONS = {
     # bill, adding a vendor and correcting a memo. The card ships at 'read' like QuickBooks', which
     # is what makes a bill an agent's PROPOSAL rather than an agent's decision.
     'intacct_create': 'write', 'intacct_update': 'write',
-    'teller_accounts': 'read', 'teller_transactions': 'read', 'teller_balances': 'read',    # a feed cannot move money
+    'teller_accounts': 'read', 'teller_transactions': 'read', 'teller_balances': 'read', 'teller_spend': 'read',    # a feed cannot move money
     # the semantic layer (semantic.py) reaches the ERP only through those same reads. The check
     # DOES write - a metric it cannot reconcile is demoted, a verified one is frozen to a skill -
     # but every one of those writes lands in Taskuary's own store, never upstream, which is what

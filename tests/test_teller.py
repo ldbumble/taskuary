@@ -52,6 +52,21 @@ class TheCard(unittest.TestCase):
         s.save_connector({'ConnectorId': card['ConnectorId'], 'ConfigJson': json.dumps({'application_id': 'app_x'})}, 'owner')
         with self.assertRaisesRegex(teller.TellerError, 'Connect a bank'): teller.accounts(teller.connection(s))
 
+    def test_spend_is_a_read_on_the_teller_card_and_resolves_its_token(self):
+        from taskuary import reports
+        s = MemoryStore(); _card(s)
+        self.assertEqual(reports.card_of('teller_spend'), 'teller')
+        self.assertEqual(scopes.needs('teller_spend'), 'read')       # a rollup of a feed still moves nothing
+        self.assertTrue(scopes.allows(s.get_connector_by_type('teller'), 'teller_spend'))
+        self.assertIs(reports.executor_for('teller_spend'), reports.REGISTRY['teller_spend'])
+        cfg = reports.resolve_cfg(s, {'type': 'teller_spend', 'days': 0})
+        self.assertEqual(cfg['access_token'], 'test_token_abc')      # the card's secret, not the report's
+        self.assertEqual(cfg['days'], 0)
+
+    def test_the_agent_type_list_names_spend(self):
+        from taskuary import docsync
+        self.assertIn('teller_spend', ''.join(docsync.SYSTEMS_HINT) if hasattr(docsync, 'SYSTEMS_HINT') else open('taskuary/docsync.py', encoding='utf-8').read())
+
 
 class TheRows(unittest.TestCase):
     def setUp(self):

@@ -32,7 +32,15 @@ used unchanged:
 So the whole build is **new connector modules plus additive registry entries**. Nothing in the
 shared path is edited.
 
-## Part 1 — `taskuary/markets.py`
+## Part 1 — `taskuary/markets.py` — *built 2026-09-08*
+
+**What landed and what didn't.** The four keyless cards below (`sec_edgar`, `coingecko`,
+`frankfurter`, `yahoo`) are live, plus `screen` (Part 3, Layer 1 below — same module, built for two
+providers so far). Every card in "Free tier with a key" — `alpaca`, `finnhub`, `alphavantage`,
+`twelvedata`, `tiingo`, `fmp`, `polygon`, `fred` — is **not built**: each needs an API key nobody has
+supplied, and Phase B tasks stop and report rather than guess at one. They sit in `reports.PLANNED`
+(`stooq` beside them, for its own reason below) or the Connections catalog as a static roadmap entry,
+not a live card.
 
 One module, not one per provider, following `research.py`: every executor here is plain REST with a
 key on a card, no SDK, nothing new frozen into the single-exe build. `research.py` holds four
@@ -145,7 +153,7 @@ Purely additive, no shared logic touched:
   list above. `website/src/logos.jsx` — one tile each.
 - `docs/integrations.md`, `tests/test_markets.py`.
 
-## Part 2 — Card spend: `teller_spend`
+## Part 2 — Card spend: `teller_spend` — *built 2026-09-08*
 
 Teller is already the credit-card and bank feed, built 2026-09-01, chosen over Plaid because this is
 a local install and the owner does their own enrolment (`taskuary/teller.py`). Its rows already carry
@@ -154,8 +162,10 @@ a local install and the owner does their own enrolment (`taskuary/teller.py`). I
 "how much did I spend today across my cards" answered by an LLM adding up a table is arithmetic done
 by the wrong tool.
 
-`teller_spend` is a new **type** on the existing Teller **card** — the pattern `quickbooks_accounts`
-and `intacct_fields` already use. It lives in the new module so `teller.py` is not edited:
+`teller_spend` is a new type on the existing Teller card — the pattern `quickbooks_accounts` and
+`intacct_fields` already use. It lives in `teller.py` beside the three reads: an earlier draft put
+it in `markets.py` to avoid editing `teller.py` at all, which put a bank rollup in a market-data
+module for no benefit. Adding an executor to its own connector's module *is* connector code.
 
 - `CARD_OF['teller_spend'] = 'teller'`
 - `CONNECTION_OF['teller_spend'] = _teller_connection`
@@ -192,10 +202,15 @@ carefully.
 
 ## Part 3 — The strategy monitor: three layers, cheapest first
 
-**Layer 1 — `markets_screen`, deterministic.** Symbols plus conditions (`pct_change <= -5`,
-`rsi < 30`, `price < sma200`), returning **only the matches**. Quiet when nothing matches, which is
-what makes `alert: {"when": "something_came_back"}` the correct rule rather than a rule that fires
-every run and stops being read.
+**Layer 1 — `markets_screen`, deterministic — *built 2026-09-08*.** Symbols plus conditions
+(`pct_change <= -5`, `rsi < 30`, `price < sma200`), returning **only the matches**. Quiet when
+nothing matches, which is what makes `alert: {"when": "something_came_back"}` the correct rule
+rather than a rule that fires every run and stops being read.
+
+Built for two providers today — `yahoo_quotes` and `coingecko_prices` (`SCREENABLE` in
+`markets.py`) — the only ones shaped like a quote (price/change_pct on every row); a filing or an FX
+table is not addable here until one is built with that shape. `rsi`/`sma200`-style indicator
+conditions wait on the keyed indicator cards in "Free tier with a key" above, which are not built.
 
 The threshold belongs here, in config, and not in a playbook. A playbook is prose flattened onto the
 command line (`playbooks.py:137`); a number living in prose is a number re-judged by a model on every

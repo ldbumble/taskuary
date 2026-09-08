@@ -616,8 +616,9 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'coingecko_prices': _lazy('markets', 'run_coingecko_prices'), 'fx_rates': _lazy('markets', 'run_fx_rates'),
             'yahoo_quotes': _lazy('markets', 'run_yahoo_quotes'), 'yahoo_history': _lazy('markets', 'run_yahoo_history'),
             'edgar_filings': _lazy('markets', 'run_edgar_filings'), 'edgar_facts': _lazy('markets', 'run_edgar_facts'),
-            # twelvedata: quotes and technical indicators, keyed
+            # twelvedata and alphavantage: quotes and (twelvedata only) technical indicators, keyed
             'td_quotes': _lazy('markets', 'run_td_quotes'), 'td_indicator': _lazy('markets', 'run_td_indicator'),
+            'av_quotes': _lazy('markets', 'run_av_quotes'),
             # the strategy screen: conditions in config, only the matches out (markets.py)
             'markets_screen': _lazy('markets', 'run_markets_screen'),
             # the semantic layer over the ERP: a number that was PROVED, and the check that keeps it proved
@@ -666,7 +667,6 @@ CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 
            'coingecko_prices': 'coingecko', 'fx_rates': 'frankfurter',
            'yahoo_quotes': 'yahoo', 'yahoo_history': 'yahoo',
            'edgar_filings': 'sec_edgar', 'edgar_facts': 'sec_edgar',
-           'td_quotes': 'twelvedata', 'td_indicator': 'twelvedata',
            'markets_screen': 'screen',
            'kb_search': 'knowledge', 'kb_reindex': 'knowledge',
            'handbook_search': 'handbook', 'handbook_write': 'handbook', 'handbook_vote': 'handbook',
@@ -779,7 +779,6 @@ def _screen_connection(store, connector_id=None) -> dict:
 CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database': database_connection,
                  'exa': _apikey_card('exa'), 'tavily': _apikey_card('tavily'),
                  'firecrawl': _apikey_card('firecrawl'), 'reader': _apikey_card('reader'),
-                 'td_quotes': _apikey_card('twelvedata'), 'td_indicator': _apikey_card('twelvedata'),
                  'aws': aws_connection, 's3_object': aws_connection, 'cloudwatch_logs': aws_connection,
                  'azure': azure_connection, 'azure_blob': azure_connection, 'azure_logs': azure_connection,
                  'entra_users': azure_connection, 'entra_groups': azure_connection,

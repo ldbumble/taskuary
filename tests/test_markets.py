@@ -380,3 +380,41 @@ class TheTwelveData(unittest.TestCase):
     def test_an_indicator_this_card_does_not_know_is_refused_before_any_call(self):
         with self.assertRaisesRegex(markets.MarketError, 'stoch'):
             markets.run_td_indicator({'symbol': 'AAPL', 'indicator': 'stoch', 'api_key': 'demo'})
+
+
+# captured live 2026-09-08 from alphavantage.co/query?function=GLOBAL_QUOTE&symbol=IBM&apikey=demo
+AV_QUOTE = {"Global Quote": {"01. symbol": "IBM", "02. open": "233.3300", "03. high": "236.1700",
+                            "04. low": "231.6800", "05. price": "234.8900", "06. volume": "3722860",
+                            "07. latest trading day": "2026-09-04", "08. previous close": "234.7100",
+                            "09. change": "0.1800", "10. change percent": "0.0767%"}}
+
+# captured live 2026-09-08 from alphavantage.co/query?function=RSI&apikey=demo - a 200 with NO data
+AV_BLOCKED = {"Information": "The **demo** API key is for demo purposes only. Please claim your free API key at "
+              "(https://www.alphavantage.co/support/#api-key) to explore our full API offerings. It takes fewer "
+              "than 20 seconds."}
+
+
+class TheAlphaVantage(unittest.TestCase):
+    def test_a_quote_row_strips_the_percent_sign_off_change_percent(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, AV_QUOTE)):
+            head, body = markets.run_av_quotes({'symbol': 'IBM', 'api_key': 'demo'})
+        row = json.loads(body.splitlines()[0])
+        self.assertEqual(row, {'symbol': 'IBM', 'price': 234.89, 'change_pct': 0.0767, 'volume': 3722860,
+                              'previous_close': 234.71, 'open': 233.33, 'high': 236.17, 'low': 231.68,
+                              'latest_day': '2026-09-04'})
+        self.assertIsInstance(row['change_pct'], float)
+
+    def test_a_missing_key_names_the_card(self):
+        with self.assertRaisesRegex(markets.MarketError, 'Alpha Vantage'):
+            markets.run_av_quotes({'symbol': 'IBM'})
+
+    def test_a_200_carrying_information_and_no_data_is_the_real_demo_key_trap(self):
+        # this is the exact captured response a demo key gets back from a blocked endpoint - a
+        # rate limit or a refusal answered at HTTP 200, with no Global Quote key at all
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, AV_BLOCKED)):
+            with self.assertRaises(markets.MarketError) as ctx:
+                markets.run_av_quotes({'symbol': 'IBM', 'api_key': 'demo'})
+        self.assertIn('for demo purposes only', str(ctx.exception))
+
+    def test_av_indicator_is_not_built(self):
+        self.assertFalse(hasattr(markets, 'run_av_indicator'))

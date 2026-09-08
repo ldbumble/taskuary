@@ -284,6 +284,40 @@ def run_td_indicator(cfg):
     return _rows(cfg, rows, 'values')
 
 
+# ---- alphavantage: one quote, GLOBAL_QUOTE only - the demo key blocks every indicator ---------
+AV_BASE = 'https://www.alphavantage.co/query'
+
+
+def _av_err(j):
+    """A rate limit or a refused call answers at HTTP 200 with Note/Information/Error Message
+    and NO data - _get's status-code check never sees this either. Captured live: a demo key
+    hitting RSI comes back exactly this way."""
+    m = j.get('Note') or j.get('Information') or j.get('Error Message')
+    if m: raise MarketError(str(m))
+
+
+def run_av_quotes(cfg):
+    """{"symbol": "IBM"} - one quote row: price, day range, volume and change % since the previous
+    close. GLOBAL_QUOTE's fields live under a "Global Quote" key, every one a string, and change
+    percent carries a literal "%" - both stripped before a chart or a screen sees them.
+
+    av_indicator is deliberately not built: the demo key blocks every technical-indicator
+    endpoint, so its shape is unverified - guessing it would be exactly the fail-open pattern
+    this module has already fixed four times."""
+    key = _need(cfg, 'Alpha Vantage', 'api_key', 'secret')
+    sym = (_syms(cfg, 'symbol', 'symbols') or ['IBM'])[0]
+    j = _get(AV_BASE, {'function': 'GLOBAL_QUOTE', 'symbol': sym, 'apikey': key})
+    _av_err(j)
+    gq = j.get('Global Quote') or {}
+    if not gq: raise MarketError(f'alphavantage has no quote for {sym!r}')
+    rows = [{'symbol': gq.get('01. symbol') or sym, 'price': _flt(gq.get('05. price')),
+             'change_pct': _flt(gq.get('10. change percent')), 'volume': _int(gq.get('06. volume')),
+             'previous_close': _flt(gq.get('08. previous close')), 'open': _flt(gq.get('02. open')),
+             'high': _flt(gq.get('03. high')), 'low': _flt(gq.get('04. low')),
+             'latest_day': gq.get('07. latest trading day')}]
+    return _rows(cfg, rows, 'quotes')
+
+
 # ---- the screen: conditions in CONFIG, matches out ------------------------------------------
 # The threshold lives here and not in a playbook. A playbook is prose flattened onto a command
 # line; a number living in prose is a number re-judged by a model every run, and it will drift.
@@ -295,7 +329,7 @@ OPS = {'<': lambda a, b: a < b, '<=': lambda a, b: a <= b, '>': lambda a, b: a >
 # error an owner can read (see run_markets_screen below). td_indicator belongs here too, even
 # though it is not a quote: it is what lets a screen match a real strategy (["rsi", "<", 30])
 # instead of only price moves.
-SCREENABLE = ('yahoo_quotes', 'coingecko_prices', 'td_quotes', 'td_indicator')
+SCREENABLE = ('yahoo_quotes', 'coingecko_prices', 'td_quotes', 'td_indicator', 'av_quotes')
 
 
 def screen_connection(store, connector_id=None) -> dict:

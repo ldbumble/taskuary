@@ -261,6 +261,19 @@ def test_connector(store, cid: int) -> dict:
         elif c['Type'] == 'teller':
             from .teller import probe, connection
             detail = probe(connection(store, cid))
+        elif c['Type'] in ('coingecko', 'frankfurter', 'yahoo', 'sec_edgar', 'fred', 'screen',
+                           'twelvedata', 'alphavantage', 'finnhub', 'polygon', 'tiingo', 'fmp'):
+            # every market card probes the same way: one cheap real call, through markets.py's
+            # probe_<type> - a keyless card (coingecko/frankfurter/yahoo/sec_edgar/fred/screen)
+            # runs with whatever ConfigJson carries; a keyed one resolves its saved api_key first,
+            # and a missing one surfaces _need's own "no <Card> API key saved" MarketError as-is
+            from . import markets
+            from .reports import _card
+            detail = getattr(markets, f'probe_{c["Type"]}')(_card(store, c['Type'], 'api_key', cid))
+        elif c['Type'] == 'alpaca':
+            from . import markets
+            from .reports import _card
+            detail = markets.probe_alpaca(_card(store, 'alpaca', 'secret_key', cid))
         elif c['Type'] == 'prometheus':
             from .reports import run_prometheus, prometheus_connection
             head, _ = run_prometheus({**prometheus_connection(store), 'query': 'vector(1)', 'max_rows': 1})

@@ -713,3 +713,44 @@ def run_markets_screen(cfg):
     return _rows(cfg, out, 'matches')
 
 
+# ---- Test-button probes: one cheap REAL call per card, one line back for channels.probe ------
+# Keyless cards run without a key; a keyed card with none saved simply lets _need's own
+# MarketError surface - "no <Card> API key saved - Connections -> <Card>" already IS the clear
+# message the Test button needs, not something to catch and reword.
+def _probe(head, body) -> str:
+    line = (body or '').splitlines()[0] if body else ''
+    return f'{head} — {line}'[:300] if line else head
+
+
+def probe_coingecko(cfg) -> str: return _probe(*run_coingecko_prices({**cfg, 'ids': 'bitcoin', 'vs': 'usd', 'max_rows': 1}))
+def probe_frankfurter(cfg) -> str: return _probe(*run_fx_rates({**cfg, 'base': 'USD', 'symbols': 'EUR', 'max_rows': 1}))
+def probe_yahoo(cfg) -> str: return _probe(*run_yahoo_quotes({**cfg, 'symbols': 'AAPL', 'max_rows': 1}))
+def probe_sec_edgar(cfg) -> str: return _probe(*run_edgar_filings({**cfg, 'cik': cfg.get('cik') or '320193', 'max_rows': 1}))
+
+
+def probe_fred(cfg) -> str:
+    from datetime import datetime, timedelta, timezone
+    frm = (datetime.now(timezone.utc) - timedelta(days=14)).date().isoformat()
+    return _probe(*run_fred_series({**cfg, 'series': cfg.get('series') or 'DGS10', 'from': frm, 'max_rows': 1}))
+
+
+def probe_screen(cfg) -> str:
+    # the screen has no credentials of its own (see screen_connection above) - there is nothing
+    # this card itself could Test; the owner tests whichever provider card a screen report borrows
+    return 'a screen has no connection of its own - Test the provider card it borrows (coingecko, yahoo, twelvedata, ...) instead'
+
+
+def probe_twelvedata(cfg) -> str: return _probe(*run_td_quotes({**cfg, 'symbol': 'AAPL', 'max_rows': 1}))
+def probe_alphavantage(cfg) -> str: return _probe(*run_av_quotes({**cfg, 'symbol': 'IBM', 'max_rows': 1}))
+def probe_finnhub(cfg) -> str: return _probe(*run_finnhub_quotes({**cfg, 'symbols': 'AAPL', 'max_rows': 1}))
+def probe_polygon(cfg) -> str: return _probe(*run_polygon_snapshot({**cfg, 'symbol': 'AAPL', 'max_rows': 1}))
+
+
+def probe_tiingo(cfg) -> str:
+    from datetime import datetime, timedelta, timezone
+    frm = (datetime.now(timezone.utc) - timedelta(days=7)).date().isoformat()
+    return _probe(*run_tiingo_history({**cfg, 'symbol': 'AAPL', 'from': frm, 'max_rows': 1}))
+
+
+def probe_fmp(cfg) -> str: return _probe(*run_fmp_fundamentals({**cfg, 'symbol': 'AAPL', 'limit': 1, 'max_rows': 1}))
+def probe_alpaca(cfg) -> str: return _probe(*run_alpaca_quotes({**cfg, 'symbols': 'AAPL', 'max_rows': 1}))

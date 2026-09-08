@@ -49,11 +49,22 @@ public page."
 
 | Card | Executor types | Endpoint | Notes |
 |---|---|---|---|
-| `stooq` | `stooq_history` | `stooq.com/q/d/l/?s=<sym>.us&i=d` (CSV) | Officially free, no signup, no key. EOD and some intraday. The honest free-no-key card. |
+All four **verified live 2026-09-08** — the shapes are pinned as test literals in `tests/test_markets.py`.
+
+| Card | Executor types | Endpoint | Notes |
+|---|---|---|---|
 | `sec_edgar` | `edgar_filings`, `edgar_facts` | `data.sec.gov/submissions/CIK<10>.json`, `data.sec.gov/api/xbrl/companyfacts/CIK<10>.json` | Official and free; requires a `User-Agent` naming a contact, and honours a fair-access rate. The only source here that hands back the actual 8-K. |
 | `coingecko` | `coingecko_prices` | `api.coingecko.com/api/v3/simple/price` | Free tier; a demo key raises the limit and rides as `x-cg-demo-api-key`. |
-| `frankfurter` | `fx_rates` | `api.frankfurter.app/latest` | FX, no key. Roughly eight lines. |
+| `frankfurter` | `fx_rates` | `api.frankfurter.dev/v1/latest` | FX, no key. Roughly eight lines. **The `.app` host 301s** — `.dev/v1` is the live one. |
 | `yahoo` | `yahoo_quotes`, `yahoo_history` | `query1.finance.yahoo.com/v8/finance/chart/<sym>` | **Best-effort, and labelled so on the card.** See below. |
+
+**`stooq` was cut, and it took an argument with it.** An earlier draft had it as the honest
+free-no-key card — "officially free, no signup" — and used that to argue Yahoo could be skipped.
+Checked 2026-09-08: its CSV endpoint now serves a **JavaScript proof-of-work challenge**, and a
+browser `User-Agent` does not defeat it. It is not reachable from a REST client at all, so it moves
+to `reports.PLANNED` **with that reason recorded there**, or someone will re-implement it from this
+document's original claim. The consequence is worth stating plainly: the officially-free card is the
+one that does not work, and Yahoo — the unsupported one — is the working keyless quote source.
 
 **On Yahoo.** Yahoo retired its official API in 2017 and never replaced it; what everyone uses are
 undocumented internal endpoints that now generally want a cookie and a `crumb`, and whose JSON
@@ -61,13 +72,17 @@ shape changes without notice. The owner chose to include it anyway (2026-09-08) 
 most useful keyless quote source in practice. Two consequences the card copy must state plainly,
 in the same voice the Robinhood note below uses:
 
-- It is the only card in this module that is **not stateless** — a cookie/crumb handshake is session
-  state, which is a different shape from every other executor here.
-- It is the card most likely to break, and breaking is not a bug to be fixed under pressure. If it
-  breaks, `stooq` covers the same free-no-key need officially.
+- It is the card most likely to break, and breaking is not a bug to be fixed under pressure. There is
+  **no official fallback** — see the `stooq` note above; that was supposed to be the fallback.
+- Its JSON shape can change without notice, which is why the captured response is pinned as a test
+  literal: a shape change shows up as a test failure rather than as silently empty rows.
 
-Scope the implementation to the `v8/finance/chart` path, which has historically served keyless, with
-the crumb handshake as a fallback rather than the primary road.
+**Verified 2026-09-08: `v8/finance/chart` serves keyless — no cookie, no crumb.** `regularMarketPrice`,
+`regularMarketChangePercent`, the day range and `previousClose` are all present in `meta`. So the
+implementation is scoped to that one path and the crumb handshake is **not built**: the cookie/crumb
+requirement is real for `v7/finance/quote` and the fundamentals endpoints, which are deliberately
+unused. That keeps this card the same stateless shape as every other executor in the module — an
+earlier draft of this document assumed the opposite and called it the one non-stateless card.
 
 ### Free tier with a key
 
@@ -101,7 +116,10 @@ Into `reports.PLANNED`, which exists precisely so a misconfig is visible on the 
 silently absent, and so an empty category does not answer "does this reach my provider" worse than a
 list does:
 
-`plaid`, `ibkr`, `schwab`, `tradier`, `robinhood`, `eodhd`, `marketstack`, `intrinio`, `benzinga`.
+`plaid`, `ibkr`, `schwab`, `tradier`, `robinhood`, `eodhd`, `marketstack`, `intrinio`, `benzinga`, and
+`stooq` — the last one carrying its reason in the `PLANNED` entry itself ("its CSV endpoint serves a
+JS proof-of-work challenge now, not reachable from REST"), because a bare name in that list invites
+someone to just implement it.
 
 **On Robinhood.** It is in the planned list rather than the built one for a specific reason worth
 writing down. Robinhood has no official equities API; their only public developer product is the
@@ -117,7 +135,7 @@ Purely additive, no shared logic touched:
 - `reports.REGISTRY` — one `_lazy('markets', 'run_<type>')` entry per executor type.
 - `reports.CARD_OF` — every executor type mapped to its card (`'finnhub_news': 'finnhub'`, …).
 - `reports.CONNECTION_OF` — `_apikey_card('<card>')` per keyed card, `_card(store, 'alpaca',
-  'secret_key')` for Alpaca. `stooq`, `sec_edgar`, `frankfurter` and `yahoo` need no entry at all.
+  'secret_key')` for Alpaca. `sec_edgar`, `frankfurter` and `yahoo` need no entry at all.
   `coingecko` takes one anyway: it works with no key and a key raises the limit, which is exactly
   `run_reader`'s precedent — "a key raises the rate limit; without one it still works, which is the
   point" (`research.py`).

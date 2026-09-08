@@ -147,12 +147,14 @@ EDGAR = {'cik': '0000320193', 'entityType': 'operating', 'sic': '3571', 'sicDesc
                                 'filingDate': ['2026-08-01', '2026-07-15'], 'form': ['10-Q', '8-K'],
                                 'primaryDocument': ['aapl-20260627.htm', 'ex991.htm'],
                                 'primaryDocDescription': ['10-Q', 'EX-99.1']}}}
+# a placeholder for tests only - never the owner's real address, which is typed on the card
+EDGAR_CONTACT = 'filings@example.com'
 
 
 class TheEdgar(unittest.TestCase):
     def test_filings_are_rows_newest_first_with_a_link_to_the_document(self):
         with mock.patch.object(markets.requests, 'get', return_value=_resp(200, EDGAR)) as g:
-            head, body = markets.run_edgar_filings({'cik': '320193'})
+            head, body = markets.run_edgar_filings({'cik': '320193', 'contact': EDGAR_CONTACT})
         rows = [json.loads(l) for l in body.splitlines() if l.strip()]
         self.assertEqual(rows[0]['form'], '10-Q')
         self.assertEqual(rows[0]['filed'], '2026-08-01')
@@ -163,9 +165,28 @@ class TheEdgar(unittest.TestCase):
 
     def test_only_the_forms_asked_for_come_back(self):
         with mock.patch.object(markets.requests, 'get', return_value=_resp(200, EDGAR)):
-            _, body = markets.run_edgar_filings({'cik': '320193', 'forms': '8-K'})
+            _, body = markets.run_edgar_filings({'cik': '320193', 'forms': '8-K', 'contact': EDGAR_CONTACT})
         rows = [json.loads(l) for l in body.splitlines() if l.strip()]
         self.assertEqual([r['form'] for r in rows], ['8-K'])
+
+    def test_the_contact_email_reaches_the_real_user_agent_header(self):
+        # SEC's fair-access policy requires a CONTACT in the User-Agent, not just a URL - measured
+        # live 2026-09-08: the module's own UA constant alone draws a 403, UA+email draws a 200
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, EDGAR)) as g:
+            markets.run_edgar_filings({'cik': '320193', 'contact': EDGAR_CONTACT})
+        self.assertIn(EDGAR_CONTACT, g.call_args.kwargs['headers']['User-Agent'])
+
+    def test_a_missing_contact_refuses_before_any_http_call(self):
+        with mock.patch.object(markets.requests, 'get') as g:
+            with self.assertRaisesRegex(markets.MarketError, 'contact email'):
+                markets.run_edgar_filings({'cik': '320193'})
+        g.assert_not_called()
+
+    def test_the_probe_reports_a_clean_message_when_no_contact_is_saved_not_a_403(self):
+        with mock.patch.object(markets.requests, 'get') as g:
+            with self.assertRaisesRegex(markets.MarketError, 'contact email'):
+                markets.probe_sec_edgar({})
+        g.assert_not_called()
 
 
 # shape of data.sec.gov/api/xbrl/companyfacts/CIK...json - trimmed to the parts run_edgar_facts reads
@@ -186,7 +207,7 @@ class TheEdgarFacts(unittest.TestCase):
                           {'end': '2026-06-30', 'val': 100, 'fy': 2026, 'fp': 'Q2', 'form': '10-Q'},
                           {'end': '2025-06-30', 'val': 90, 'fy': 2025, 'fp': 'Q2', 'form': '10-Q'}]}})
         with mock.patch.object(markets.requests, 'get', return_value=_resp(200, body)):
-            head, out = markets.run_edgar_facts({'cik': '1'})
+            head, out = markets.run_edgar_facts({'cik': '1', 'contact': EDGAR_CONTACT})
         rows = [json.loads(l) for l in out.splitlines() if l.strip()]
         self.assertEqual([r['end'] for r in rows], ['2026-06-30', '2025-06-30'])   # newest first
         self.assertEqual(rows[0]['value'], 100)
@@ -198,7 +219,7 @@ class TheEdgarFacts(unittest.TestCase):
             'EUR': [{'end': '2026-06-30', 'val': 1}, {'end': '2025-06-30', 'val': 2}, {'end': '2024-06-30', 'val': 3}],
             'USD': [{'end': '2026-06-30', 'val': 111}]}})
         with mock.patch.object(markets.requests, 'get', return_value=_resp(200, body)):
-            head, out = markets.run_edgar_facts({'cik': '1'})
+            head, out = markets.run_edgar_facts({'cik': '1', 'contact': EDGAR_CONTACT})
         rows = [json.loads(l) for l in out.splitlines() if l.strip()]
         self.assertEqual(rows, [{'company': 'Test Co', 'tag': 'Revenues', 'unit': 'USD',
                                 'end': '2026-06-30', 'value': 111, 'fy': None, 'fp': None, 'form': None}])
@@ -208,7 +229,7 @@ class TheEdgarFacts(unittest.TestCase):
             'EUR': [{'end': '2026-06-30', 'val': 1}],
             'GBP': [{'end': '2026-06-30', 'val': 2}, {'end': '2025-06-30', 'val': 3}]}})
         with mock.patch.object(markets.requests, 'get', return_value=_resp(200, body)):
-            head, out = markets.run_edgar_facts({'cik': '1'})
+            head, out = markets.run_edgar_facts({'cik': '1', 'contact': EDGAR_CONTACT})
         rows = [json.loads(l) for l in out.splitlines() if l.strip()]
         self.assertTrue(all(r['unit'] == 'GBP' for r in rows), rows)
 
@@ -216,9 +237,15 @@ class TheEdgarFacts(unittest.TestCase):
         body = _facts(us_gaap={'label': 'Revenues', 'units': {'USD': [{'end': '2026-06-30', 'val': 1}]}})
         with mock.patch.object(markets.requests, 'get', return_value=_resp(200, body)):
             with self.assertRaises(markets.MarketError) as ctx:
-                markets.run_edgar_facts({'cik': '1', 'unit': 'GBP'})
+                markets.run_edgar_facts({'cik': '1', 'unit': 'GBP', 'contact': EDGAR_CONTACT})
         self.assertIn('GBP', str(ctx.exception))
         self.assertIn('USD', str(ctx.exception))
+
+    def test_a_missing_contact_refuses_before_any_http_call(self):
+        with mock.patch.object(markets.requests, 'get') as g:
+            with self.assertRaisesRegex(markets.MarketError, 'contact email'):
+                markets.run_edgar_facts({'cik': '1'})
+        g.assert_not_called()
 
 
 class TheWiring(unittest.TestCase):

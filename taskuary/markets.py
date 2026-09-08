@@ -15,9 +15,11 @@ TWO RULES hold across the module and are not per-provider taste:
 
 Five cards need no credentials at all (coingecko, frankfurter, yahoo, sec_edgar, fred - the last
 via its keyless graph CSV, not its keyed JSON api), which is what makes them the ones the test
-suite can exercise honestly. Stooq is deliberately absent: its CSV endpoint now serves a
-JavaScript proof-of-work challenge that a REST client cannot pass (checked 2026-09-08), so it is
-PLANNED rather than quietly broken.
+suite can exercise honestly. sec_edgar needs no API KEY, but it does need one more config field -
+`contact`, a reachable email - because SEC's fair-access policy refuses a User-Agent with no
+contact in it with a 403 (measured live 2026-09-08); see _edgar_contact. Stooq is deliberately
+absent: its CSV endpoint now serves a JavaScript proof-of-work challenge that a REST client
+cannot pass (checked 2026-09-08), so it is PLANNED rather than quietly broken.
 
 Five more providers (finnhub, polygon, tiingo, fmp, alpaca) were added 2026-09-08 with no signup
 available for any of them: every field mapping below is written from the provider's own published
@@ -452,18 +454,35 @@ def run_yahoo_history(cfg):
 
 
 # ---- SEC EDGAR: official, free, keyless - and the only source here that hands back the 8-K ----
+# "Keyless" is not "anonymous": SEC's fair-access policy requires the User-Agent to carry a
+# CONTACT EMAIL, not just a URL - measured live 2026-09-08: UA "Taskuary/1.0 (+github url)" (the
+# module's own UA constant) draws a 403; UA "Taskuary/1.0 <email>" draws a 200. So this card takes
+# one more field, `contact`, and refuses to call at all without it - see _edgar_contact.
 def _cik(cfg) -> str:
     c = str(cfg.get('cik') or '').strip().lstrip('Cc').lstrip('IiKk').strip()
     if not c.isdigit(): raise MarketError(f'{cfg.get("cik")!r} is not a CIK - use the number from sec.gov (Apple is 320193)')
     return c.zfill(10)
 
 
+def _edgar_contact(cfg) -> str:
+    """SEC will not answer without a reachable contact in the User-Agent (see the module comment
+    above) - fail closed here rather than fall back to the URL-only UA that is now known to draw
+    a 403. Nobody's email is hardcoded anywhere in this file: the owner types theirs on the card."""
+    contact = str(cfg.get('contact') or '').strip()
+    if not contact:
+        raise MarketError('no contact email saved for SEC EDGAR - add one under Connections -> SEC filings '
+                           '(EDGAR) -> contact; SEC requires a reachable contact in every request and refuses '
+                           'ones without it with a 403')
+    return contact
+
+
 def run_edgar_filings(cfg):
-    """{"cik": "320193", "forms": "8-K,10-Q" (blank = every form)} - what this company has filed,
-    newest first, each row linking to the document itself. Schedule it with "can become work" and
-    a new 8-K is a message triage judges."""
+    """{"cik": "320193", "forms": "8-K,10-Q" (blank = every form), "contact": "you@yourcompany.com"} -
+    what this company has filed, newest first, each row linking to the document itself. Schedule it
+    with "can become work" and a new 8-K is a message triage judges. `contact` is not optional: SEC
+    refuses every request with a 403 unless the User-Agent carries a reachable email - see _edgar_contact."""
     cik = _cik(cfg)
-    j = _get(f'https://data.sec.gov/submissions/CIK{cik}.json')
+    j = _get(f'https://data.sec.gov/submissions/CIK{cik}.json', headers={'User-Agent': f'Taskuary/1.0 {_edgar_contact(cfg)}'})
     r = ((j.get('filings') or {}).get('recent') or {})
     want = {f.strip().upper() for f in str(cfg.get('forms') or '').replace(';', ',').split(',') if f.strip()}
     bare, rows = cik.lstrip('0'), []
@@ -478,9 +497,11 @@ def run_edgar_filings(cfg):
 
 
 def run_edgar_facts(cfg):
-    """{"cik": "320193", "tag": "Revenues", "unit": "USD"} - one reported XBRL fact over time,
-    newest first: the number as the company itself filed it, with the form it came from."""
-    j = _get(f'https://data.sec.gov/api/xbrl/companyfacts/CIK{_cik(cfg)}.json')
+    """{"cik": "320193", "tag": "Revenues", "unit": "USD", "contact": "you@yourcompany.com"} - one
+    reported XBRL fact over time, newest first: the number as the company itself filed it, with
+    the form it came from. `contact` is not optional here either - see run_edgar_filings."""
+    j = _get(f'https://data.sec.gov/api/xbrl/companyfacts/CIK{_cik(cfg)}.json',
+             headers={'User-Agent': f'Taskuary/1.0 {_edgar_contact(cfg)}'})
     tag = str(cfg.get('tag') or 'Revenues').strip()
     facts = (j.get('facts') or {})
     for taxonomy in ('us-gaap', 'ifrs-full', 'dei'):

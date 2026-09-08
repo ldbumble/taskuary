@@ -26,20 +26,29 @@ TEST_LINES = [
     (r'^(ok|FAIL)\s+\S+\s+[\d.]+s', 'go'),
     # dotnet: "Passed! - Failed: 0, Passed: 12"
     (r'(?:Passed|Failed)!\s*-\s*Failed:\s*(\d+),\s*Passed:\s*(\d+)', 'dotnet'),
-    # cargo: "test result: ok. 42 passed; 0 failed; 1 ignored"
+    # cargo: "test result: ok. 42 passed; 0 failed; 1 ignored". One `cargo test` prints
+    # one of these per binary AND a doc-tests one last, usually "0 passed; 0 failed", so
+    # last-match-wins reported a green suite as 0/0. Summed across the final invocation
+    # below instead.
     (r'test result: (?:ok|FAILED)\. (\d+) passed; (\d+) failed', 'cargo'),
     # maven/gradle surefire: "Tests run: 42, Failures: 0, Errors: 0, Skipped: 1" - errors
     # count as failures the way pytest's do, because both mean the suite is not green
     (r'Tests run: (\d+), Failures: (\d+), Errors: (\d+)', 'maven'),
-    # rspec: "42 examples, 0 failures" (and "1 example, 1 failure")
-    (r'(\d+) examples?, (\d+) failures?', 'rspec'),
-    # phpunit, both endings: "OK (42 tests, 108 assertions)" and
-    # "FAILURES! Tests: 42, Assertions: 108, Failures: 3"
+    # rspec: "42 examples, 0 failures" (and "1 example, 1 failure"). Anchored, like go's,
+    # because unanchored it read "we have 3 examples, 0 failures were seen in prod" as a
+    # green run - rspec's own summary always starts at column 0.
+    (r'^(\d+) examples?, (\d+) failures?', 'rspec'),
+    # phpunit, every ending it has: "OK (42 tests, 108 assertions)", the risky/skipped
+    # variant which is still a pass, and both red words. ERRORS! matched nothing before,
+    # so a suite that errored looked like no test run at all - the false gap this is for.
     (r'OK \((\d+) tests?, \d+ assertions?\)', 'phpunit'),
-    (r'FAILURES!\s*Tests: (\d+),.*?Failures: (\d+)', 'phpunit-red'),
+    (r'OK, but [^\n]*!\s*Tests: (\d+),', 'phpunit'),
+    (r'(?:FAILURES|ERRORS)!\s*Tests: (\d+),[^\n]*', 'phpunit-red'),
     # plain unittest: the count and the verdict are on separate lines, and the count alone
-    # is not a result - "Ran 42 tests" with no OK/FAILED after it is a run still going
-    (r'Ran (\d+) tests? in [\d.]+s\s+(OK|FAILED \([^)]*\))', 'unittest'),
+    # is not a result - "Ran 42 tests" with no OK/FAILED after it is a run still going.
+    # The verdict's parenthetical carries the counts, and reading them is the difference
+    # between "3 failed" and "42 failed" on a card somebody trusts.
+    (r'Ran (\d+) tests? in [\d.]+s\s+(OK[^\n]*|FAILED \([^)]*\))', 'unittest'),
 ]
 FAIL_WORDS = re.compile(r'\b(FAILED|FAIL|failed|error:|Error:|Traceback)\b')
 
@@ -62,7 +71,37 @@ def tests_from(text: str) -> dict:
         elif runner == 'dotnet':
             failed, passed = (nums[0], nums[1]) if len(nums) > 1 else (0, 0)
         elif runner == 'cargo':
-            passed, failed = nums[0], nums[1]
+            # One `cargo test` prints a result per binary and a doc-tests result last,
+            # normally 0/0, so the last line alone reported a green suite as 0 passed.
+            # Sum backwards from the last result while the only thing between two of
+            # them is cargo's own scaffolding - that keeps a whole invocation together
+            # without swallowing an earlier, separate run, which would break the rule
+            # that the last run is the truth.
+            found = list(re.finditer(
+                r'test result: (?:ok|FAILED)\. (\d+) passed; (\d+) failed', text))
+            # Cargo's own noise between two results, each of which carries a tail:
+            # "Doc-tests mycrate", "Running unittests src/lib.rs". Anything else
+            # between them means a different invocation, and the later one wins.
+            same = re.compile(
+                r'\s*(?:$|Running\b|Doc-tests\b|Compiling\b|Finished\b'
+                r'|running \d+ tests?\b|test \S+ \.\.\.|warning:)')
+            def gap(before, after):
+                # From the end of the line `before` sits on to the start of the
+                # line `after` sits on: the matched text stops at "failed", and
+                # the rest of its own line is not scaffolding.
+                start = text.find(chr(10), before.end())
+                start = len(text) if start < 0 else start + 1
+                end = text.rfind(chr(10), 0, after.start())
+                return text[start:end + 1] if end >= start else ''
+
+            keep = [found[-1]]
+            for n in range(len(found) - 1, 0, -1):
+                lines = gap(found[n - 1], found[n]).splitlines()
+                if not all(same.match(line) for line in lines):
+                    break
+                keep.insert(0, found[n - 1])
+            passed = sum(int(mm.group(1)) for mm in keep)
+            failed = sum(int(mm.group(2)) for mm in keep)
         elif runner == 'maven':
             # surefire's "Tests run" is the total, not the passes
             passed, failed = nums[0] - nums[1] - nums[2], nums[1] + nums[2]
@@ -71,11 +110,18 @@ def tests_from(text: str) -> dict:
         elif runner == 'phpunit':
             passed, failed = nums[0], 0
         elif runner == 'phpunit-red':
-            runner, passed, failed = 'phpunit', nums[0] - nums[1], nums[1]
+            # Errors and failures both mean not green, and a run can print either or both.
+            hurt = sum(int(n) for n in re.findall(r'(?:Failures|Errors): (\d+)', m.group(0)))
+            runner, passed, failed = 'phpunit', nums[0] - hurt, hurt
         elif runner == 'unittest':
-            # the verdict line carries no total, so the count is the whole run and
-            # FAILED(...) only says it was not green
-            passed, failed = (nums[0], 0) if m.group(2) == 'OK' else (0, nums[0])
+            # "FAILED (failures=1, errors=1, skipped=1)" over 5 tests is 3 passed and 2
+            # failed, not 5 failed. Skips are neither, the way they are everywhere else
+            # here. A card that says 42 failed when 3 did is the same trust problem as
+            # the false gap this all exists to remove.
+            total, verdict = nums[0], m.group(2)
+            hurt = sum(int(n) for n in re.findall(r'(?:failures|errors)=(\d+)', verdict))
+            passed, failed = (total - hurt, hurt) if hurt else (
+                (total, 0) if verdict.startswith('OK') else (0, total))
         else:
             passed, failed = (0, 0) if m.group(1) == 'ok' else (0, 1)
         return {'ran': True, 'runner': runner, 'passed': passed, 'failed': failed,

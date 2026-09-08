@@ -3,6 +3,8 @@ the CI loop (draft PR + red build handed back to the agent), and typed proposals
 asks, deterministic code validates, you approve). HTTP and pty faked.
 """
 import json, unittest
+
+CHR_NL = chr(10)      # a newline, spelled out
 from unittest import mock
 
 from taskuary import ci, github, proof, proposals, terminal, verdicts
@@ -58,10 +60,66 @@ class ProofTests(unittest.TestCase):
         self.assertEqual((r['runner'], r['passed'], r['failed']), ('phpunit', 42, 0))
         r = proof.tests_from('FAILURES!\nTests: 42, Assertions: 108, Failures: 3.')
         self.assertEqual((r['runner'], r['passed'], r['failed']), ('phpunit', 39, 3))
+        # ERRORS! matched nothing before, so an errored suite read as no run at all
+        r = proof.tests_from('ERRORS!\nTests: 42, Assertions: 108, Errors: 1.')
+        self.assertEqual((r['runner'], r['passed'], r['failed']), ('phpunit', 41, 1))
+        r = proof.tests_from('FAILURES!\nTests: 42, Assertions: 108, Errors: 1, Failures: 2.')
+        self.assertEqual((r['passed'], r['failed']), (39, 3))
+        # risky/incomplete is still a pass
+        r = proof.tests_from('OK, but incomplete, skipped, or risky tests!\nTests: 42, Assertions: 108, Skipped: 1.')
+        self.assertEqual((r['runner'], r['passed'], r['failed']), ('phpunit', 42, 0))
         r = proof.tests_from('Ran 42 tests in 1.234s\n\nOK')
         self.assertEqual((r['runner'], r['passed'], r['failed']), ('unittest', 42, 0))
         r = proof.tests_from('Ran 42 tests in 1.234s\n\nFAILED (failures=3)')
-        self.assertEqual((r['passed'], r['failed']), (0, 42))
+        self.assertEqual((r['passed'], r['failed']), (39, 3))
+        # failures and errors both count, and skips are neither
+        r = proof.tests_from('Ran 5 tests in 0.1s\n\nFAILED (failures=1, errors=1, skipped=1)')
+        self.assertEqual((r['passed'], r['failed']), (3, 2))
+        # the OK line can carry a tail of its own
+        r = proof.tests_from('Ran 42 tests in 1.2s\n\nOK (skipped=2)')
+        self.assertEqual((r['passed'], r['failed']), (42, 0))
+
+
+    def test_the_review_cases_that_used_to_read_wrong(self):
+        """Three shapes a real run prints that the first pass got wrong.
+
+        Each of these was a number a card would have shown somebody, which is
+        the whole point of the gaps line: a figure that is confidently wrong
+        costs more than an admitted gap.
+        """
+        # cargo prints doc-tests LAST, and it is 0/0 on most crates, so
+        # last-match-wins turned a green suite into 0 passed.
+        cargo = (
+            "   Compiling mycrate v0.1.0" + CHR_NL +
+            "    Finished test [unoptimized] target(s)" + CHR_NL +
+            "     Running unittests src/lib.rs" + CHR_NL +
+            "test result: ok. 42 passed; 0 failed; 1 ignored" + CHR_NL +
+            "   Doc-tests mycrate" + CHR_NL +
+            "test result: ok. 0 passed; 0 failed; 0 ignored" + CHR_NL
+        )
+        r = proof.tests_from(cargo)
+        self.assertEqual((r["runner"], r["passed"], r["failed"]), ("cargo", 42, 0))
+
+        # A red cargo run keeps both numbers across the binaries.
+        red = (
+            "    Finished test [unoptimized] target(s)" + CHR_NL +
+            "test result: FAILED. 39 passed; 3 failed; 0 ignored" + CHR_NL +
+            "   Doc-tests mycrate" + CHR_NL +
+            "test result: ok. 0 passed; 0 failed; 0 ignored" + CHR_NL
+        )
+        r = proof.tests_from(red)
+        self.assertEqual((r["passed"], r["failed"]), (39, 3))
+
+        # rspec's pattern was unanchored, so prose about a suite read as a run.
+        self.assertFalse(
+            proof.tests_from(
+                "we have 3 examples, 0 failures were seen in prod"
+            )["ran"],
+            "prose mentioning examples and failures is not a test result",
+        )
+        # and the real summary, which starts at column 0, still is one.
+        r = proof.tests_from("Finished in 0.1s" + CHR_NL + "42 examples, 0 failures")
+        self.assertEqual((r["runner"], r["passed"], r["failed"]), ("rspec", 42, 0))
 
     def test_a_new_runner_named_without_numbers_is_not_a_result(self):
         """The rule that keeps the gaps line trustworthy, held for the new runners."""

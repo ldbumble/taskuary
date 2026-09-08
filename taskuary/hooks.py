@@ -117,7 +117,11 @@ def receive(payload: dict) -> dict:
     from . import terminal as term, witness
     cwd = os.path.normcase(os.path.normpath(str(payload.get('cwd') or '')))
     sid = str(payload.get('session_id') or '')
-    mine = [t for t in list(term.SESSIONS.values()) if t.alive and t.task_id and 'claude' in os.path.basename(str(t.argv[0])).lower()
+    # `t.argv` first: the assistant's conversation is registered as a session too and it is not a
+    # process - no argv, no checkout - so reading argv[0] to judge it raised IndexError and took the
+    # whole hook with it, costing the coding agent beside it its said-and-did (2026-09-07).
+    mine = [t for t in list(term.SESSIONS.values()) if t.alive and t.task_id and getattr(t, 'argv', None)
+            and 'claude' in os.path.basename(str(t.argv[0])).lower()
             and os.path.normcase(os.path.normpath(t.cwd)) == cwd]
     if not mine: return {'bound': False}
     t = next((x for x in mine if getattr(x, 'ext_id', '') == sid), None)

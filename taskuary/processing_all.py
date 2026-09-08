@@ -488,6 +488,9 @@ async def membership_lifecycle(store):
             raise
 
 
+CHAT_WINDOW = 5    # how much conversation opens with an ask before the reader has to ask for more
+
+
 def item_detail(store, item_id, *, kind=None, local_id=None, view_revision=None, live_state=None):
     """Hydrate exactly the selected member under one read transaction.
 
@@ -554,9 +557,34 @@ def item_detail(store, item_id, *, kind=None, local_id=None, view_revision=None,
                 detail['transcript'] = ({key: value for key, value in transcript.items() if key != 'TaskId'}
                                         if transcript else None)
             else:
-                detail = {'task': None, 'messages': thread, 'comments': [], 'runs': [],
+                # THE ROOM IS NOT THE ASK. A chat's conversation id names a ROOM - whatsapp:<jid>
+                # is a relationship, not a topic - so handing the whole thread over put 131 lines
+                # of a group chat behind one "Budgeting" message (owner, 2026-09-07: "there are
+                # not 130 messages related to one topic"). Triage already ruled on which lines are
+                # THIS ask (ingest.py: "a chat room is not a task"), and the item's own members
+                # are that ruling written down, so they are what the panel opens on. The rest of
+                # the room is still one request away on /api/messages/{id}/thread.
+                scoped = sorted(copy.deepcopy(view.get('messages') or [message]),
+                                key=lambda m: (m.get('SentAt') or '', m['MessageId']))
+                # ...but a one-line ask is still part of a conversation. Scoping alone left
+                # "Budgeting" as a single bubble with nothing said around it - the owner,
+                # 2026-09-07: "now you just cut it off?" - so the lines said immediately BEFORE it
+                # come along as context. They are named, not merged: `ask_ids` says which of these
+                # this item is about, and the panel recedes the rest rather than passing them off
+                # as the ask. (A task's detail is left exactly as it was: it must stay equal to
+                # store.task_detail(), and its own messages already are the exchange.)
+                own = {m['MessageId'] for m in scoped}
+                edge = min((m.get('SentAt') or '', m['MessageId']) for m in scoped)
+                lead = ([m for m in thread if m['MessageId'] not in own
+                         and (m.get('SentAt') or '', m['MessageId']) < edge][len(own) - CHAT_WINDOW:]
+                        if len(own) < CHAT_WINDOW else [])
+                detail = {'task': None, 'messages': [dict(m) for m in lead] + scoped,
+                          'ask_ids': sorted(own), 'comments': [], 'runs': [],
                           'attachments': view.get('attachments', []),
                           'routes': [r for r in view.get('routes', []) if r.get('MessageId') == local_id]}
+            # ...and how much of the conversation is STILL not on screen, so the panel can offer it
+            # rather than pretending the ask is all there ever was.
+            detail['thread_total'] = len(thread)
             # ReviewCanvas's first pending draft is an action target. Bind it to this message,
             # especially when a source filter selects an older member of a shared task.
             detail['reviews'] = sorted((r for r in view.get('reviews', []) if r.get('MessageId') == local_id),

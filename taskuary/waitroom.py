@@ -6,9 +6,9 @@ its thread; "LLMs Get Lost in Multi-Turn Conversation" puts the turn-splitting t
 almost all of it unreliability), or hold them in your head and retype them when it finally
 stops. So they queue HERE, on the task, and are typed into the session as ONE batch at the next
 boundary: the agent parked at its prompt (terminal silent for IDLE_WAITING seconds - the same
-fact the Board reads as "waiting on you"). Except when it parked because it ASKED something:
-then the question is the owner's to answer and the notes wait behind it - feeding new work to an
-agent that is waiting on an answer buries the question under it.
+fact the Board reads as "waiting on you"). When it parked because it ASKED something, the words the
+owner writes next are its ANSWER and go in at once, plainly: waiting behind the question meant
+they never arrived, and the agent sat on a question the owner had already answered on screen.
 
 A session that has ENDED with notes still waiting (headless run finished, TUI closed) reopens
 one on the same task with the notes as the ask - same task, fresh agent, never a chained session.
@@ -115,6 +115,20 @@ def deliver(store, tid: int) -> dict:
     # the drip: one note per stop, the rest keep their place in line
     notes = pending[:1] if drip(store) else pending
     left = len(pending) - len(notes)
+    if st == 'asking':
+        # An agent parked on a QUESTION is asking the OWNER, so the words they write next are the
+        # ANSWER to it: bound to its open request where the worker reported one, typed in plainly
+        # where it did not. They used to queue behind the question and never arrive at all - the card
+        # said "Told the agent" over a session still parked on its own words (2026-09-07 live check).
+        from . import workerstate as ws
+        text = notes[0]['Note'] if len(notes) == 1 else batch(notes, remaining=left)
+        who = notes[0].get('CreatedBy') or 'owner'
+        if not ws.answer_open(store, tid, text, who).get('delivered'):
+            term.type_into(t, text)
+            store.add_comment(tid, who, 'human', f'Answered the agent: {text[:500]}')
+        store.deliver_waiting([x['WId'] for x in notes], 'answered')
+        store.audit('task', tid, 'waitroom_deliver', 'router', 'agent', {'n': len(notes), 'how': 'answered', 'left': left})
+        return {'delivered': len(notes), 'state': 'answered', 'left': left}
     if st == 'parked':
         term.type_into(t, batch(notes, remaining=left))
         store.deliver_waiting([x['WId'] for x in notes], 'typed')

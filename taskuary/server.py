@@ -1460,6 +1460,12 @@ def open_reply(mid: int, body: OpenReplyBody = None):
     # a FILED message stays filed: answering it is a reply, not a project, and promoting it to a
     # task just to hold the review put a TQ badge on chatter. The review rides task-less.
     tid = m.get('TaskId')
+    # ...and a thread its own last reply CLOSED comes back when the owner opens another one. The
+    # draft was created on the done task, where the queue's visibility rule hides it, so the card
+    # asking for the yes said "already handled" over the message instead of showing the draft, and
+    # every click stacked one more invisible review (TQ-0426, 2026-09-07). Answering again is work.
+    if tid and (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'):
+        store.update_task(tid, {'Status': 'waiting'}, ACTOR)
     rv = store.pending_review(tid) if tid else None
     rid = rv['ReviewId'] if rv else store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft',
                                                       'Status': 'pending', 'Reason': 'you opened a reply on this message'})
@@ -2958,7 +2964,7 @@ def waitroom_list(tid: int):
 @app.post('/api/tasks/{tid}/waitroom')
 def waitroom_add(tid: int, body: dict):
     """Queue a note for this task's agent. It is typed in the moment the agent parks at its
-    prompt - unless it parked on a question for you, which comes first."""
+    prompt - and at once, as the answer, when it is already parked on a question for you."""
     try: return waitroom.add(store, tid, str((body or {}).get('text') or ''), ACTOR)
     except ValueError as e: raise HTTPException(422, str(e))
 
@@ -5095,14 +5101,16 @@ def _pause_task(tid: int, sid: str = None):
     from . import general
     task = store.get_task(tid) or {}
     assistant = general.session_for(tid) if general.handles(task) else None
-    if assistant:
+    # ...and it is the handover whether or not a provider session is still live: an API turn keeps
+    # none once it has answered, and this used to fall through and refuse (owner, 2026-09-07).
+    if assistant or (general.handles(task) and general.chat_rows(store, tid)):
         history = general.history(store, tid)
         note = next((m['content'][0]['text'] for m in reversed(history)
                      if m.get('role') == 'assistant' and m.get('content')), '')
-        hub_term.close(assistant.sid)
+        if assistant: hub_term.close(assistant.sid)
         store.add_comment(tid, ACTOR, 'human', 'Paused the assistant session - the conversation is saved here for later.')
         store.audit('terminal', tid, 'pause', ACTOR,
-                    detail={'sid': sid or assistant.sid, 'mode': 'assistant'})
+                    detail={'sid': sid or getattr(assistant, 'sid', None), 'mode': 'assistant'})
         return {'pause': 'done', 'taskId': tid,
                 'note': note or 'Conversation saved. Continue here when you are ready.'}
     text, agent, found = hub_term.transcript_for(store, tid)

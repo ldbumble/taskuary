@@ -270,13 +270,17 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     # General work already has a durable, turn-by-turn record in task comments. It does not need a
     # coding-transcript summarizer or a synthetic CODER REPORT; close the shared session and the
     # task, leaving that conversation intact.
+    # The CONVERSATION is the record, not the provider session: an API turn's session is over the
+    # moment it answers, and wrapping up then fell through to the coding path below and refused
+    # with "no session transcript" while the whole answer sat on screen (owner, 2026-09-07).
     session = general.session_for(tid)
-    if general.handles(task) and session:
-        term.close(session.sid)
+    if general.handles(task) and (session or general.chat_rows(store, tid)):
+        if session: term.close(session.sid)
         if close and task.get('Status') not in ('done', 'dropped'):
             store.update_task(tid, {'Status': 'done'}, actor)
-        store.add_comment(tid, actor, 'human', 'Closed the general-work session.' + (' Marked the task done.' if close else ''))
-        store.audit('terminal', tid, 'wrap', actor, detail={'sid': sid or session.sid, 'close': close, 'mode': 'assistant'})
+        store.add_comment(tid, actor, 'human', ('Closed the general-work session.' if session else 'Closed out the assistant conversation.')
+                          + (' Marked the task done.' if close else ''))
+        store.audit('terminal', tid, 'wrap', actor, detail={'sid': sid or getattr(session, 'sid', None), 'close': close, 'mode': 'assistant'})
         last = next((m['content'][0]['text'] for m in reversed(general.history(store, tid)) if m['role'] == 'assistant'), '')
         return {'wrap': 'done', 'taskId': tid, 'report': last, 'proposed': [], 'drafting': False}
     live = term.session_for(tid)

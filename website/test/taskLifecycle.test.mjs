@@ -75,3 +75,23 @@ test("the task page opens exactly one stage and lets you open the others by hand
     assert.ok(source.includes(`stage === "${name}" &&`), `stage ${name} body must be gated`);
   }
 });
+
+test("a general chat that has answered is agent state, not \"not started\"", () => {
+  assert.equal(agentPhase({ conversation: true }), "in conversation");
+  assert.equal(agentPhase({ conversation: true, report: { Body: "x" } }), "result ready");
+  assert.equal(agentPhase({}), "not started");
+  assert.equal(focusStage({ kind: "general", task: "open", agent: "in conversation", reply: "not drafted" }), "agent");
+});
+
+test("closing the task never hides behind a fold, and a finished chat can be closed out", () => {
+  const source = readFileSync(fileURLToPath(new URL("../src/TasksView.jsx", import.meta.url)), "utf8");
+  // the completion control rides on the heading, so it is there whether the card is open or folded
+  assert.ok(source.includes('action={!["done", "dropped"].includes(t.Status) && stage !== "task"'), "the Task heading must carry the done control");
+  assert.match(source, /const WorkflowHeading = \(\{ number, title, description, chip, tone, folded, onToggle, action \}\)/);
+  // ...and a general conversation is wrappable once its provider session is gone (server.py/coder.py, 2026-09-07)
+  assert.match(source, /const canWrap = !!term \|\| !!detail\?\.transcript \|\| hasGeneralHistory/);
+  assert.match(source, /conversation: generalStarted/);
+  assert.ok(source.includes("Save this conversation's result"), "the finished chat needs its own close-out");
+  // interrupted work says so on the task page, not only in the list row
+  assert.match(source, /interruptedTask && <Chip/);
+});

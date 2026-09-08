@@ -443,6 +443,30 @@ class GeneralApiTests(unittest.TestCase):
         self.assertEqual(store.get_task(tid)['Status'], 'done')
         self.assertFalse(any(str(c['Body']).startswith('CODER REPORT') for c in store.list_comments(tid)))
 
+    def test_the_conversation_is_the_record_once_its_session_is_gone(self):
+        """A turn's session ends the moment it answers, whichever backend answered. Wrapping up then
+        fell through to the coding path and refused with "no session transcript" while the whole
+        conversation sat on screen (owner, 2026-09-07)."""
+        def with_api(store):
+            connect_openai(store); return None
+        def with_cli(store):
+            store.upsert_agent('my-claude', 'coding', 'cli', json.dumps({'cmd': 'claude', 'args': ['-p']}))
+            return 'cli:my-claude'
+        for backend, connect in (('api', with_api), ('cli', with_cli)):
+            with self.subTest(backend=backend):
+                store = MemoryStore(); tid = general_task(store); pick = connect(store)
+                with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True),                      mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: 'The finished plan'):
+                    general.start_session(store, tid, pick=pick).send_prompt('Finish the plan')
+                    terminal.SESSIONS.clear()              # ...and the app reaped the finished session
+                    client = TestClient(server.app)
+                    paused = client.post(f'/api/tasks/{tid}/pause', json={})
+                    wrapped = client.post(f'/api/tasks/{tid}/wrap', json={'close': True})
+                self.assertEqual((paused.status_code, wrapped.status_code), (200, 200))
+                self.assertEqual((wrapped.json()['wrap'], wrapped.json()['report']), ('done', 'The finished plan'))
+                self.assertEqual(paused.json()['note'], 'The finished plan')
+                self.assertEqual(store.get_task(tid)['Status'], 'done')
+                self.assertFalse(any(str(c['Body']).startswith('CODER REPORT') for c in store.list_comments(tid)))
+
     def test_pause_closes_a_general_session_and_keeps_its_conversation(self):
         store = MemoryStore(); tid = general_task(store); connect_openai(store)
         with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \

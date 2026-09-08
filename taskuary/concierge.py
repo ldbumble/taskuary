@@ -156,7 +156,7 @@ RECEIPTS = {'reply': "I'll draft that - it lands below for your yes.", 'approve'
             'mine': "On your list. Moving on.", 'close': 'Closing the task. Moving on.', 'rerun': "Queued the rerun - it lands back in the pipe when it's done. Moving on.",
             'setup': "I'll walk you through it - opening it as a conversation with the assistant, no code, nothing built. "
                      "Say send it to the coding agent if it turns out something has to be built.",
-            'answer_agent': "Passing that to the agent - it reads it when it next stops.",
+            'answer_agent': "Passing that to the agent - now if it is waiting on you, otherwise when it next stops.",
             'redraft': "Writing it again with that - the new draft lands below for your yes.",
             'archive': 'Archived - off the pipe and closed, nothing deleted. Moving on.',
             'done': 'Done. Moving on.', 'later': "Pushed back a few hours.", 'skip': 'Tomorrow, then.', 'next': 'Next.'}

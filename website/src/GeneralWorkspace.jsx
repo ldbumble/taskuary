@@ -82,6 +82,17 @@ export const messagesWithTrace = (messages, session) => {
   return out;
 };
 
+// SOMETHING IS HAPPENING. An API brain can think for a minute with nothing to stream, so a
+// progress card reading "Started Azure OpenAI (API)" and then sitting still looks frozen (owner,
+// 2026-09-07). The same dots whichever backend answers - an API connector or a CLI agent - and
+// they show for a turn this pane is streaming as well as one that is running without it.
+const Thinking = ({ provider }) => (
+  <div className="tq-aui-thinking" role="status" aria-live="polite">
+    <i /><i /><i />
+    <span>{provider ? `${provider} is working…` : "Working on it…"}</span>
+  </div>
+);
+
 const AssistantText = ({ text }) => <Md text={text} />;
 const AssistantReasoning = ({ text }) => text ? (
   <details className="tq-aui-progress" open>
@@ -278,7 +289,8 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
 }
 
 function AssistantThread({ task, messages, onAsked, onStop, selectionRef, attachmentsRef, onSent, onClearAttachments, onAttach, onReport, reportBusy,
-  dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged }) {
+  dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
+  serverBusy = false, provider }) {
   const modelAdapter = useMemo(() => ({
     async *run({ messages: runMessages, abortSignal }) {
       onBusyChange?.(true);
@@ -387,12 +399,16 @@ function AssistantThread({ task, messages, onAsked, onStop, selectionRef, attach
             </div>
           )}
           <ThreadPrimitive.Messages components={{ UserMessage, AssistantMessage }} />
+          <ThreadPrimitive.If running><Thinking provider={provider} /></ThreadPrimitive.If>
           {/* Only once it has stopped typing. An offer to "run this again, daily" hanging under a
               half-written answer is an offer to schedule something nobody has read yet - and it
               sat there through every tool call, which is where the eye goes while waiting. */}
           <ThreadPrimitive.If running={false}>
+          {/* the answer is being written somewhere else - another tab, or this pane before it was
+              reopened - and the poll is what tells us so */}
+          {serverBusy && <Thinking provider={provider} />}
           {dock && <DockActions messages={messages} expanded={dockExpanded} onNavigate={onDockNavigate} onChanged={onDockChanged} />}
-          {!dock && messages?.some((m) => m.role === "assistant") && (
+          {!dock && !serverBusy && messages?.some((m) => m.role === "assistant") && (
             <div className="tq-aui-report-action">
               <div><b>Worth running again?</b><span>Creates a daily report from this workflow; adjust its cadence in Reports.</span></div>
               <Button size="small" variant="outlined" startIcon={<EventRepeatIcon sx={{ fontSize: 15 }} />}
@@ -559,6 +575,9 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
   if (!data && !error) return <Box sx={{ height: 520, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>;
   const session = data?.session;
   const shownMessages = messagesWithTrace(data?.messages, session);
+  // name the backend that is thinking. The session's own provider is the truth once it has one; on
+  // a first turn there is no session yet, so fall back to the one the picker is showing.
+  const pickedLabel = (data?.providers || []).find((p) => String(p.id) === String(connectorId))?.label;
   // the chat IS the workspace, running or not (generalPane.js) - a session only decides whether
   // there is a terminal to show beside it
   const pane = paneFor(view, !!session);
@@ -568,7 +587,8 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
       attachmentsRef={attachmentsRef} onSent={sent} onClearAttachments={clearAttachments}
       onAttach={() => fileRef.current?.click()} onReport={makeReport} reportBusy={reportBusy}
       dock={dock} dockExpanded={dockExpanded} prompt={prompt} onPromptUsed={onPromptUsed}
-      onBusyChange={onBusyChange} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged} />
+      onBusyChange={onBusyChange} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
+      serverBusy={busy} provider={session?.provider || pickedLabel} />
   );
   return (
     <Box className={dock ? `tq-aui-dock${dockExpanded ? " tq-aui-dock-expanded" : ""}` : undefined} onPaste={pasted} sx={{ border: dock ? 0 : `1px solid ${BORDER}`, borderRadius: dock ? 0 : 1.75, overflow: "hidden", bgcolor: PANEL2,

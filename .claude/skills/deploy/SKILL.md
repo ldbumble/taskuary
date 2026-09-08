@@ -1,7 +1,7 @@
 ---
 name: deploy
 description: >
-  Cut and publish a Taskuary release: bump the version in all four places, run the three
+  Cut and publish a Taskuary release: bump the version in all five places, run the three
   gates, rebuild the committed UI, push, wait for CI on that exact commit, then tag so the
   publish workflow uploads to PyPI. Use when asked to deploy, release, ship, publish, "push
   to PyPI", cut a version, or bump the tag. Encodes the ordering that keeps a permanent PyPI
@@ -50,11 +50,11 @@ git reset -q                                # ALWAYS: refreshes the shared index
 Skipping that last `git reset -q` leaves the shared index showing your own files as modified and
 your new test file as deleted. It is confusing, not harmful — but fix it, do not commit over it.
 
-## 2. Bump the version in all four places
+## 2. Bump the version in all five places
 
-`pyproject.toml` is the one source of truth (`taskuary/__init__._version()` reads it), but three
-documents *announce* the number and drift if you forget them. `docs/roadmap.md` sat three releases
-behind this way.
+`pyproject.toml` is the one source of truth (`taskuary/__init__._version()` reads it), but four
+other places *announce* the number and drift if you forget them. `docs/roadmap.md` sat three
+releases behind this way, and the public demo sat on v0.3.3.2 through four.
 
 | File | What to change |
 |---|---|
@@ -62,10 +62,19 @@ behind this way.
 | `README.md` | `currently **vX.Y.Z.W**` |
 | `README.md` | the badge's `release=X.Y.Z.W` cache-buster |
 | `docs/roadmap.md` | `currently vX.Y.Z.W` |
+| `website/src/demoFixtures.json` | `/api/version.version`, `/api/build.version`, `/api/build.disk_version` |
 
-`tests/test_promptmap_and_catalog.py::test_no_shipped_doc_advertises_an_older_version` fails if
-README or roadmap disagree with `pyproject`. The badge buster is not covered by a test: shields
-caches per-URL, so without bumping it the README shows the previous number for up to an hour.
+The fifth is the one that hides. taskuary.com/demo has **no server**, so its header reads
+`/api/version` out of a recording — `website/demo_fixtures.mjs` freezes a live `--demo` instance
+into `demoFixtures.json`, and the recording is only re-dumped when the fixtures themselves change.
+Patch exactly those three fields and leave the rest byte-identical: it is a real instance's output,
+not a document. Three occurrences of the old number, no more.
+
+Two tests guard this, both in `tests/test_promptmap_and_catalog.py`:
+`test_no_shipped_doc_advertises_an_older_version` (README and roadmap against `pyproject`) and
+`test_the_demo_does_not_advertise_an_older_version` (the recording). The badge buster is covered by
+neither: shields caches per-URL, so without bumping it the README shows the previous number for up
+to an hour.
 
 Leave the `?v=0.3.3.2` suffixes on **screenshot** URLs alone unless the picture actually changed —
 and never re-shoot `docs/hero.gif` for a UI change (it is the agents-at-work animation on purpose).
@@ -81,6 +90,13 @@ cd website && npm run build && cd ..
 This rewrites `taskuary/web/assets/*` with new content hashes, so the release commit contains the
 old files as deletions and the new ones as additions. That is expected.
 
+`demoApi.js` imports `demoFixtures.json`, so step 2 edited a **compiled-in** file. Rebuild the
+public demo too, or taskuary.com keeps serving the old number even though the JSON is right:
+
+```bash
+cd website && npm run build:demo && cd ..     # writes site/demo, also committed
+```
+
 ## 4. Run all three gates
 
 ```bash
@@ -94,6 +110,21 @@ node --test taskuary/whatsapp/*.test.mjs
 - **`npm test` is not optional.** It asserts on JSX *source text* that pytest never loads, so it
   is the only thing that catches a changed `AssistantView.jsx` line breaking
   `website/test/funnelPile.test.mjs`.
+- **The Node on PATH is 20 and cannot run these.** `npm test`'s `test/**/*.test.mjs` glob and
+  eslint 10 both need 22, and on 20 the glob failure reads like a missing suite rather than a
+  wrong runtime. There is no `node_modules/.bin/eslint` either. Borrow a runtime per command:
+
+```bash
+cd website
+npm exec --yes --package=node@22 -- npm run build      # and build:demo
+npm exec --yes --package=node@22 -- node --test "test/**/*.test.mjs"
+npm exec --yes --package=node@22 --package=eslint@10.10.0 -- eslint -c eslint.undef.mjs -f json src
+npx --no-install esbuild --loader:.jsx=jsx --jsx=automatic --outfile=/dev/null src/FeedView.jsx
+```
+
+  The eslint run reports ~11 `react-hooks/exhaustive-deps` lines reading "Definition for rule ...
+  was not found" — the plugin is not installed, that is pre-existing noise. What matters is
+  **0 `no-undef`**. The esbuild line is the fastest syntax check on a single JSX file.
 - Pass the whatsapp tests as a GLOB. `node --test taskuary/whatsapp/` resolves the directory as a
   *module* on Node 22 and dies with MODULE_NOT_FOUND, which reads exactly like a failing suite.
 - The whatsapp tests are **not run by CI** (the workflow only runs `npm test` in `website/`), so

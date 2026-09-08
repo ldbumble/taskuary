@@ -841,6 +841,21 @@ class ApiTests(unittest.TestCase):
                     if r['MessageId'] == push2['message_id'])
         self.assertTrue(row2['CanSend'])                       # email always has a road
 
+    def test_opening_a_reply_on_a_closed_thread_shows_the_draft_where_the_yes_happens(self):
+        """TQ-0426: the last reply closed the task, the owner opened another on the same message -
+        and the card asking for the yes said "already handled", because a pending review whose task
+        is done is hidden from the queue. Answering again IS work: the task comes back, so one draft
+        is visible to every surface, and a second click reuses it instead of stacking a new one."""
+        tid = server.store.create_task({'Title': "Gabi's question", 'Kind': 'reply', 'Status': 'done'}, 'test')
+        mid = server.store.add_message({'TaskId': tid, 'ExternalId': 'closed-thread-reply', 'Channel': 'whatsapp',
+                                        'Subject': '', 'BodyText': "So what's their move if it's free?",
+                                        'FromName': 'Gabi', 'FromEmail': 'gabi@example.com', 'Status': 'routed'})
+        rid = c.post(f'/api/messages/{mid}/reply', json={'draft': False}).json()['reviewId']
+        rows = c.get('/api/reviews', params={'status': 'pending'}).json()['data']
+        self.assertIn(rid, [r['ReviewId'] for r in rows])
+        self.assertEqual(server.store.get_task(tid)['Status'], 'waiting')
+        self.assertEqual(c.post(f'/api/messages/{mid}/reply', json={'draft': False}).json()['reviewId'], rid)
+
     def test_a_waiting_agent_can_ask_the_sender_and_leave_the_task_waiting(self):
         """Clarification is a separate reviewed reply, not the coder's final response. Sending
         it must leave the coding task open and any other pending review alone."""

@@ -2396,7 +2396,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
                   </Typography>
                 </Box>
               </Box>
-              <MessageBlock messages={detail?.messages} focusId={sel.MessageId} fallback={sel.Preview} />
+              <MessageBlock messages={detail?.messages} focusId={sel.MessageId} fallback={sel.Preview} threadTotal={detail?.thread_total} askIds={detail?.ask_ids} />
             </Box>
           ) : (
             <>
@@ -2437,7 +2437,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
                   {sel.Channel === "assistant" && <AssistantPost sel={sel} onOpenTask={onOpenTask} onChanged={() => onRefresh?.()} />}
                   {sel.Channel === "report" && /morning digest/i.test(`${sel.SourceName || ""} ${sel.Subject || ""}`) && <TodayStrip />}
                   {sel.Channel !== "assistant" && (
-                    <MessageBlock key={sel.MessageId} messages={detail?.messages} focusId={sel.MessageId} fallback={sel.Preview} />
+                    <MessageBlock key={sel.MessageId} messages={detail?.messages} focusId={sel.MessageId} fallback={sel.Preview} threadTotal={detail?.thread_total} askIds={detail?.ask_ids} />
                   )}
                   {history.length > 0 && (
                     <>
@@ -3068,140 +3068,154 @@ const VoiceNoteRow = ({ sel, body, onRefresh, onMessageChanged }) => {
   );
 };
 
-// A chain can hold several emails (the inbound thread + your replies). One clean strip
-// of pills above the body flips between them - the clicked timeline row is preselected,
-// "↩ you" marks your own replies. Keyed by focusId so a new selection resets the pick.
+// A chain can hold several messages (the inbound thread plus your replies), and a chat room hands
+// over its whole history. So it reads AS a chat: the last few in order, newest at the bottom, your
+// own lines on the right, and one click walks back through what came before. A strip of picker
+// pills came first and it flipped the panel between messages one at a time - at 131 lines in a
+// WhatsApp group that was a row of dates, and a conversation you have to click through is not a
+// conversation. (The room is the thread there: whatsapp:<jid> is a relationship, not a topic, so
+// "131 messages" is the whole group chat, not 131 messages about one thing.)
 const isOwnMessage = (m) => m?.Status === "context" || m?.Direction === "out";
 
-const MessageBlock = ({ messages, focusId, fallback }) => {
-  const msgs = messages || [];
-  const [mid, setMid] = useState(null);
+const Bubble = ({ m, fallback, context }) => {
   const [showQuoted, setShowQuoted] = useState(false);
-  const cur = msgs.find((m) => m.MessageId === mid) || msgs.find((m) => m.MessageId === focusId) || msgs[msgs.length - 1];
+  const [showRaw, setShowRaw] = useState(false);
+  const [full, setFull] = useState(false);
   // what just arrived, separated from the thread quoted underneath it
-  const { latest, quoted } = splitQuoted(cleanText(cur?.BodyText) || fallback || "…");
+  const { latest, quoted } = splitQuoted(cleanText(m?.BodyText) || fallback || "…");
   const whole = latest || quoted;
   // a report's raw rows are receipts, not reading: the summary is the message, the rows fold
   // away behind one click - same treatment the quoted thread below a reply gets
   const RAW = "\n--- raw data ---";
-  const [showRaw, setShowRaw] = useState(false);
   const cut = whole.indexOf(RAW);
   const text = cut >= 0 ? whole.slice(0, cut).trimEnd() : whole;
   const raw = cut >= 0 ? whole.slice(cut + RAW.length).trim() : "";
-  const you = isOwnMessage(cur);
-  const own = !you && cur?.Channel === "own";        // a note you left yourself: nothing arrived
+  const you = isOwnMessage(m);
+  const own = !you && m?.Channel === "own";        // a note you left yourself: nothing arrived
   // an excerpt first. A PR body or a forwarded chain ran the panel into its own scrollbar
   // and pushed the choices under the fold; the first screen of a message is what the
   // decision needs, and the rest is one click, not a scroll, away
-  const [full, setFull] = useState(false);
-  useEffect(() => setFull(false), [cur?.MessageId]);
   const LINES = 8, CHARS = 700;
   const rows = text.split("\n");
   const long = rows.length > LINES || text.length > CHARS;
   const excerpt = long ? rows.slice(0, LINES).join("\n").slice(0, CHARS).trimEnd() + " …" : text;
   const shown = full || !long ? text : excerpt;
-  const today = new Date().toLocaleDateString("sv-SE");
-  const pt = (s) => (localDay(s) === today ? fmtTime12(s) : `${(localDay(s) || "").slice(5)} · ${fmtTime12(s)}`);
-  // The strip is for PICKING a message. It drew one chip per message in the thread, which was
-  // fine while a task-less row fetched only itself - then /thread started handing over the whole
-  // conversation and a WhatsApp group chat filled six rows with a month of "Sam · 08-30". The
-  // recent ones, and a way back to the rest.
-  const CHIPS = 10;
-  const [allChips, setAllChips] = useState(false);
-  useEffect(() => setAllChips(false), [focusId]);
-  const earlier = Math.max(0, msgs.length - CHIPS);
-  let chips = allChips || !earlier ? msgs : msgs.slice(-CHIPS);
-  // ...and never hide the one being read: an old message opened from the rail must show as picked
-  if (cur && !chips.some((m) => m.MessageId === cur.MessageId)) chips = [cur, ...chips];
   return (
-    <>
-      {msgs.length > 1 && (
-        <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mb: 0.75 }}>
-          {!!earlier && !allChips && (
-            <Box onClick={() => setAllChips(true)}
-              title={`show the other ${earlier} on this thread`}
-              sx={{ px: 1.1, py: 0.35, borderRadius: 99, cursor: "pointer", fontSize: 11, fontWeight: 600,
-                border: `1px dashed ${BORDER}`, color: FAINT, bgcolor: "transparent", whiteSpace: "nowrap",
-                "&:hover": { borderColor: "#d8cfbe", color: "#55697a" } }}>
-              +{earlier} earlier
-            </Box>
-          )}
-          {chips.map((m) => {
-            const on = cur && m.MessageId === cur.MessageId;
-            const you = isOwnMessage(m);
-            return (
-              <Box key={m.MessageId} onClick={() => setMid(m.MessageId)}
-                sx={{ px: 1.1, py: 0.35, borderRadius: 99, cursor: "pointer", fontSize: 11, fontWeight: 600,
-                  border: `1px solid ${on ? "#d8cfbe" : BORDER}`, color: on ? "#55697a" : you ? FAINT : DIM,
-                  bgcolor: on ? "#eae4d8" : "#fff", whiteSpace: "nowrap", transition: "all .15s",
-                  "&:hover": { borderColor: "#d8cfbe", color: "#55697a" } }}>
-                {you ? "↩ you" : (m.FromName || m.FromEmail || "?").split(" ")[0]} · {pt(m.SentAt)}
-              </Box>
-            );
-          })}
+    <Box sx={{ bgcolor: you || own ? "#e9e3d8" : PANEL2, border: `1px solid ${you || own ? "#d8d0c4" : BORDER}`,
+      borderRadius: you || own ? "14px 14px 4px 14px" : "14px 14px 14px 4px", p: 1.25,
+      borderLeft: `3px solid ${you ? "#8a7a5c" : "#6f8a6e"}`,
+      // context recedes; it is there to be read past, not acted on
+      opacity: context ? 0.58 : 1,
+      maxWidth: you || own ? "88%" : "100%", ml: you || own ? "auto" : 0 }}>
+      {/* who / which way / when - so "new inbound" is never confused with "your reply" */}
+      {m && (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.6, flexWrap: "wrap" }}>
+          <Chip size="small" label={you ? "↩ your reply" : own ? "your note" : "inbound"}
+            sx={{ height: 17, fontSize: 9.5, fontWeight: 700, letterSpacing: 0.3,
+              bgcolor: you || own ? ROLES.working.tint : ROLES.muted.tint,
+              color: you || own ? ROLES.working.ink : ROLES.muted.ink }} />
+          <Typography variant="caption" sx={{ color: INK, fontWeight: 600 }}>
+            {you ? "you" : m.FromName || m.FromEmail || "unknown"}
+          </Typography>
+          <Typography variant="caption" sx={{ color: FAINT }}>· {fmtDateTime(m.SentAt)}</Typography>
+          {quoted && <Typography variant="caption" sx={{ color: FAINT }}>· replying on this thread</Typography>}
         </Box>
       )}
-      <Box sx={{ bgcolor: you || own ? "#e9e3d8" : PANEL2, border: `1px solid ${you || own ? "#d8d0c4" : BORDER}`,
-        borderRadius: you || own ? "14px 14px 4px 14px" : "14px 14px 14px 4px", p: 1.25,
-        borderLeft: `3px solid ${you ? "#8a7a5c" : "#6f8a6e"}`,
-        maxWidth: you || own ? "88%" : "100%", ml: you || own ? "auto" : 0 }}>
-        {/* who / which way / when - so "new inbound" is never confused with "your reply" */}
-        {cur && (
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.6, flexWrap: "wrap" }}>
-            <Chip size="small" label={you ? "↩ your reply" : own ? "your note" : "inbound"}
-              sx={{ height: 17, fontSize: 9.5, fontWeight: 700, letterSpacing: 0.3,
-                bgcolor: you || own ? ROLES.working.tint : ROLES.muted.tint,
-                color: you || own ? ROLES.working.ink : ROLES.muted.ink }} />
-            <Typography variant="caption" sx={{ color: INK, fontWeight: 600 }}>
-              {you ? "you" : cur.FromName || cur.FromEmail || "unknown"}
-            </Typography>
-            <Typography variant="caption" sx={{ color: FAINT }}>· {fmtDateTime(cur.SentAt)}</Typography>
-            {quoted && <Typography variant="caption" sx={{ color: FAINT }}>· replying on this thread</Typography>}
-          </Box>
-        )}
-        {cur?.Channel === "report" ? (looksMd(text) ? <Md text={text} /> : <SectionedText text={text} />)
-          : own && (!text.trim() || text === "…")
-            ? <Typography variant="body2" sx={{ color: FAINT, fontStyle: "italic" }}>You started this yourself — there is no incoming message behind it.</Typography>
-          : <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, textAlign: "left" }}>
-              {shown}
-            </Typography>}
-        {long && cur?.Channel !== "report" && (
-          <Typography variant="caption" onClick={() => setFull(!full)}
-            sx={{ display: "block", mt: 0.5, color: "#55697a", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
-            {full ? "show less ↑" : `show the whole message — ${rows.length} lines ↓`}
+      {m?.Channel === "report" ? (looksMd(text) ? <Md text={text} /> : <SectionedText text={text} />)
+        : own && (!text.trim() || text === "…")
+          ? <Typography variant="body2" sx={{ color: FAINT, fontStyle: "italic" }}>You started this yourself — there is no incoming message behind it.</Typography>
+        : <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, textAlign: "left" }}>
+            {shown}
+          </Typography>}
+      {long && m?.Channel !== "report" && (
+        <Typography variant="caption" onClick={() => setFull(!full)}
+          sx={{ display: "block", mt: 0.5, color: "#55697a", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
+          {full ? "show less ↑" : `show the whole message — ${rows.length} lines ↓`}
+        </Typography>
+      )}
+      {raw && (
+        <Box sx={{ mt: 1, borderTop: `1px dashed ${BORDER}`, pt: 0.75 }}>
+          <Typography variant="caption" onClick={() => setShowRaw(!showRaw)}
+            sx={{ color: DIM, fontWeight: 600, cursor: "pointer", "&:hover": { color: "#55697a" } }}>
+            {showRaw ? "hide" : "show"} raw data — {raw.length.toLocaleString()} chars {showRaw ? "↑" : "↓"}
           </Typography>
-        )}
-        {raw && (
-          <Box sx={{ mt: 1, borderTop: `1px dashed ${BORDER}`, pt: 0.75 }}>
-            <Typography variant="caption" onClick={() => setShowRaw(!showRaw)}
-              sx={{ color: DIM, fontWeight: 600, cursor: "pointer", "&:hover": { color: "#55697a" } }}>
-              {showRaw ? "hide" : "show"} raw data — {raw.length.toLocaleString()} chars {showRaw ? "↑" : "↓"}
+          {showRaw && (
+            <Typography variant="body2" sx={{ ...mono, whiteSpace: "pre-wrap", color: DIM, mt: 0.5,
+              fontSize: 11, textAlign: "left", wordBreak: "break-word" }}>
+              {raw}
             </Typography>
-            {showRaw && (
-              <Typography variant="body2" sx={{ ...mono, whiteSpace: "pre-wrap", color: DIM, mt: 0.5,
-                fontSize: 11, textAlign: "left", wordBreak: "break-word" }}>
-                {raw}
-              </Typography>
-            )}
-          </Box>
-        )}
-        {/* the thread quoted underneath: folded away by default, one click to read */}
-        {latest && quoted && (
-          <Box sx={{ mt: 1, borderTop: `1px dashed ${BORDER}`, pt: 0.75 }}>
-            <Typography variant="caption" onClick={() => setShowQuoted(!showQuoted)}
-              sx={{ color: DIM, fontWeight: 600, cursor: "pointer", "&:hover": { color: "#55697a" } }}>
-              {showQuoted ? "hide" : "show"} quoted thread below it — {quoted.length.toLocaleString()} chars {showQuoted ? "↑" : "↓"}
+          )}
+        </Box>
+      )}
+      {/* the thread quoted underneath: folded away by default, one click to read */}
+      {latest && quoted && (
+        <Box sx={{ mt: 1, borderTop: `1px dashed ${BORDER}`, pt: 0.75 }}>
+          <Typography variant="caption" onClick={() => setShowQuoted(!showQuoted)}
+            sx={{ color: DIM, fontWeight: 600, cursor: "pointer", "&:hover": { color: "#55697a" } }}>
+            {showQuoted ? "hide" : "show"} quoted thread below it — {quoted.length.toLocaleString()} chars {showQuoted ? "↑" : "↓"}
+          </Typography>
+          {showQuoted && (
+            <Typography variant="caption" sx={{ display: "block", whiteSpace: "pre-wrap", color: FAINT, mt: 0.5,
+              borderLeft: `2px solid ${BORDER}`, pl: 1 }}>
+              {quoted}
             </Typography>
-            {showQuoted && (
-              <Typography variant="caption" sx={{ display: "block", whiteSpace: "pre-wrap", color: FAINT, mt: 0.5,
-                borderLeft: `2px solid ${BORDER}`, pl: 1 }}>
-                {quoted}
-              </Typography>
-            )}
-          </Box>
-        )}
-        {/* "See below." - and below was a screenshot. Drawn here, not listed as a filename. */}
-        {cur && <Attachments messageId={cur.MessageId} canFetch={cur.Channel === "email"} />}
+          )}
+        </Box>
+      )}
+      {/* "See below." - and below was a screenshot. Drawn here, not listed as a filename. */}
+      {m && <Attachments messageId={m.MessageId} canFetch={m.Channel === "email"} />}
+    </Box>
+  );
+};
+
+const SHOWN = 5, STEP = 10;   // the last five read as the conversation; each click walks ten back
+
+// THE ASK IS WHAT OPENS, not the room it was typed in. The panel used to draw every message
+// sharing a ConversationId - and on a chat that id names a ROOM, so one "Budgeting" line came
+// with 131 lines of a WhatsApp group behind it. It now opens on the messages the item actually
+// holds (what triage ruled is THIS ask), and the rest of the room is one click below the fold,
+// fetched only if it is asked for. Order is the conversation's own: oldest at the top, newest
+// at the bottom, so walking back goes UP.
+const MessageBlock = ({ messages, focusId, fallback, threadTotal, askIds }) => {
+  const scoped = messages || [];
+  const [room, setRoom] = useState(null);       // the rest of the conversation, once asked for
+  const [shown, setShown] = useState(SHOWN);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => { setRoom(null); setShown(SHOWN); setLoading(false); }, [focusId]);
+  const msgs = room || scoped;
+  // never cut off the message the clicked row is about, however far back on the thread it is
+  const back = msgs.findIndex((m) => m.MessageId === focusId);
+  const n = Math.min(msgs.length, Math.max(shown, back < 0 ? 0 : msgs.length - back));
+  const list = msgs.slice(-n), earlier = msgs.length - n;
+  const ask = askIds || [];
+  const rest = room || !focusId ? 0 : Math.max(0, (threadTotal || 0) - scoped.length);
+  const loadRoom = () => {
+    setLoading(true);
+    api.get(`/api/messages/${focusId}/thread?limit=500`)
+      .then(({ data }) => { setRoom(data.messages || scoped); setShown(scoped.length + STEP); })
+      .catch(() => setRoom(scoped))
+      .finally(() => setLoading(false));
+  };
+  const label = loading ? "loading the conversation…"
+    : earlier ? `↑ show ${Math.min(STEP, earlier)} older${earlier > STEP ? ` · ${earlier} before this` : ""}`
+    : `↑ the rest of this conversation — ${rest} earlier line${rest === 1 ? "" : "s"} in the same chat`;
+  return (
+    <>
+      {!!(earlier || rest || loading) && (
+        <Box onClick={loading ? undefined : earlier ? () => setShown(n + STEP) : loadRoom}
+          title={earlier ? `${earlier} more already loaded` : "these were said in the same chat, about other things"}
+          sx={{ width: "fit-content", mx: "auto", mb: 0.75, px: 1.2, py: 0.4, borderRadius: 99,
+            cursor: loading ? "default" : "pointer", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap",
+            border: `1px dashed ${BORDER}`, color: FAINT,
+            "&:hover": { borderColor: "#d8cfbe", color: loading ? FAINT : "#55697a" } }}>
+          {label}
+        </Box>
+      )}
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
+        {(list.length ? list : [null]).map((m, i) => (
+          <Bubble key={m?.MessageId ?? "none"} m={m} context={m && ask.length > 0 && !ask.includes(m.MessageId)}
+            fallback={i === (list.length || 1) - 1 ? fallback : undefined} />
+        ))}
       </Box>
     </>
   );

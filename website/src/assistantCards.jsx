@@ -271,7 +271,7 @@ export function AgentCard({ card, onDone, onOpenTask }) {
       {/* the chat above already has a composer, and it talks to the assistant. This box queues into
           the WAITING ROOM, which is a terminal's letterbox - two of them is two different sends. */}
       {!(chat && live) && <TextField fullWidth multiline minRows={1} maxRows={5} value={text} onChange={(e) => setText(e.target.value)}
-        placeholder={card.asking ? "Or answer here — it is typed in when the agent next stops" : "Tell it what to do next"}
+        placeholder={card.asking ? "Or answer here — it goes straight in, it is waiting for it" : "Tell it what to do next"}
         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); answer(); } }}
         sx={{ mt: 1, "& textarea": { fontSize: 12.5 } }} />}
       <div className="tq-card-actions">

@@ -363,7 +363,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // Wrapping up belongs to the TASK, not to the pty. An exited session is dropped after ten
   // minutes, and with it went the only handle these buttons had - so a task whose CLI had
   // finished on its own could never be closed out. The transcript is filed when a session ends.
-  const canWrap = !!term || !!detail?.transcript;
+  // ...and general work has no transcript at all: the chat IS the record, so a conversation that
+  // has answered can be closed out after its provider session is gone (coder.py, 2026-09-07).
+  const hasGeneralHistory = (detail?.comments || []).some((c) =>
+    c.ActorType === "assistant_user" || c.ActorType === "assistant_agent");
+  const canWrap = !!term || !!detail?.transcript || hasGeneralHistory;
   const findTerm = useCallback(async (tid) => {
     if (!tid) { setTerm(null); return; }
     try {
@@ -576,15 +580,15 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const alsoSaid = inbound.filter((m) => m.MessageId !== inbound[0]?.MessageId
                                       && cleanText(m.BodyText) && cleanText(m.BodyText) !== taskAsk);
   const completionIsManual = ownerControlsCompletion(t);
+  const interruptedTask = String(t?.Tags || "").split(/[\s,]+/).includes("interrupted");
   const taskState = taskPhase(t?.Status);
+  const generalStarted = isGeneral && (!!term?.alive || hasGeneralHistory
+    || String(t?.Tags || "").split(/[\s,]+/).includes(ASK_TAG));
   const agentState = agentPhase({
     session: term?.alive ? { ...term, waiting: isWaiting(term) } : null,
     run: liveRun, transcript: detail?.transcript, report,
+    conversation: generalStarted,
   });
-  const hasGeneralHistory = (detail?.comments || []).some((c) =>
-    c.ActorType === "assistant_user" || c.ActorType === "assistant_agent");
-  const generalStarted = isGeneral && (!!term?.alive || hasGeneralHistory
-    || String(t?.Tags || "").split(/[\s,]+/).includes(ASK_TAG));
   const workspaceMode = agentWorkspaceMode({ isGeneral, generalStarted, session: term, wrapping, wrapped });
   const replyState = replyPhase(detail?.reviews || []);
   // ONE question per page. A running session is itself the agent stage, so it is never folded; the
@@ -787,9 +791,15 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     <IconButton size="small" onClick={() => onSelect(null)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
                   </Tooltip>
                 </Box>
-                <Typography variant="caption" sx={{ color: FAINT, display: liveCodingSession ? "none" : "block", mt: 0.75 }}>
-                  from {t.Source || "manual"} · created {timeAgo(t.CreatedAt)} by {t.CreatedBy}
-                </Typography>
+                <Box sx={{ display: liveCodingSession ? "none" : "flex", alignItems: "center", gap: 0.7, mt: 0.75, flexWrap: "wrap" }}>
+                  <Typography variant="caption" sx={{ color: FAINT }}>
+                    from {t.Source || "manual"} · created {timeAgo(t.CreatedAt)} by {t.CreatedBy}
+                  </Typography>
+                  {/* the list row said this and the task page did not, so a held task looked merely open */}
+                  {interruptedTask && <Chip size="small" label="interrupted"
+                    title="Taskuary closed while an agent was working this. Nothing restarts until you choose one."
+                    sx={{ height: 17, fontSize: 9.5, bgcolor: "#eee7d6", color: "#7a5c1e" }} />}
+                </Box>
                 {workContext && <Typography variant="caption" sx={{ color: "#6b5f45", display: "block", mt: 0.35, fontWeight: 650 }}>
                   {workContext}
                 </Typography>}
@@ -809,7 +819,13 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   <Box sx={{ ...card, mb: 1.25, p: stage === "task" ? 1.5 : 1.1, bgcolor: "#fff", flexShrink: 0,
                     borderLeft: "4px solid #55697a" }}>
                     <WorkflowHeading number="1" title="Task" description="The job itself — ownership and completion live here."
-                      chip={<LifecycleChip kind="task" phase={taskState} compact />} tone="#55697a" {...stageProps("task")} />
+                      chip={<LifecycleChip kind="task" phase={taskState} compact />} tone="#55697a" {...stageProps("task")}
+                      action={!["done", "dropped"].includes(t.Status) && stage !== "task"
+                        ? <Button size="small" variant="outlined" startIcon={<DoneAllIcon sx={{ fontSize: 14 }} />}
+                            sx={{ fontSize: 10.5, minHeight: 25, py: 0, px: 0.9 }}
+                            title="Closes the task. Its agent and its reply stay separate decisions."
+                            onClick={() => finish("done")}>Mark done</Button>
+                        : null} />
                     {stage === "task" && <>
                     <Divider sx={{ my: 1.2, borderColor: BORDER }} />
                     <Box sx={{ display: "flex", gap: 1.15, alignItems: "flex-start" }}>
@@ -1060,9 +1076,19 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       </Typography>
                     </Box>
                   )}
-                  {isGeneral && generalStarted && !term?.alive && <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.8 }}>
-                    Send a message in the workspace below to restart its agent.
-                  </Typography>}
+                  {/* the conversation IS the record, so it can be filed as the result once its provider
+                      session is gone - the only road out of a finished chat used to be typing into it again */}
+                  {isGeneral && generalStarted && !term?.alive && (
+                    <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${BORDER}`, display: "flex",
+                      alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
+                      <Button size="small" variant="outlined" disabled={!!wrapping} startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />}
+                        title="Files this conversation's last answer as the task's result and ends its session. The task stays open until you mark it done."
+                        onClick={wrapUp}>Save this conversation's result</Button>
+                      <Typography variant="caption" sx={{ color: FAINT }}>
+                        Or send a message in the workspace below to pick it back up.
+                      </Typography>
+                    </Box>
+                  )}
                   </>}
                 </Box>
                 {repoPick && (
@@ -1507,7 +1533,7 @@ const Fold = ({ title, children }) => (
   </Box>
 );
 
-const WorkflowHeading = ({ number, title, description, chip, tone, folded, onToggle }) => (
+const WorkflowHeading = ({ number, title, description, chip, tone, folded, onToggle, action }) => (
   <Box onClick={onToggle} sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0,
     cursor: onToggle ? "pointer" : "default", opacity: folded ? 0.72 : 1,
     "&:hover": onToggle ? { opacity: 1 } : undefined }}>
@@ -1519,6 +1545,8 @@ const WorkflowHeading = ({ number, title, description, chip, tone, folded, onTog
       <Typography sx={{ color: INK, fontSize: 13.5, fontWeight: 750, lineHeight: 1.25 }}>{title}</Typography>
       {description && !folded && <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.35 }}>{description}</Typography>}
     </Box>
+    {/* the one action a stage cannot afford to hide when it folds. Its click is its own, not the fold's. */}
+    {action && <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", flexShrink: 0 }}>{action}</Box>}
     {chip}
     {onToggle && <ExpandMoreIcon sx={{ fontSize: 18, color: FAINT, flexShrink: 0,
       transform: folded ? "rotate(-90deg)" : "none", transition: "transform .15s" }} />}

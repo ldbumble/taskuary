@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 
 from .store import task_ref
-from .assistant import _ts, _dt, _short, _gist, _agenda, _OOO
+from .assistant import _ts, _dt, _short, _cut, _gist, _agenda, _OOO
 from .funnel_presentation import present as _present
 from .processing_order import attention_band, priority_rank
 
@@ -96,6 +96,21 @@ def muted(rule: dict, i: dict) -> bool:
     words = [w for w in (rule.get('words') or []) if w]
     if not words: return bool(key)
     return like(words, set(tokens(f"{i.get('who') or ''} {i.get('email') or ''} {i.get('title') or ''}"))) >= min(2, len(words))
+
+
+# Chat is not mail: WhatsApp and Slack send no subject at all, and Teams titles a chat after the
+# people the row already names ("Teams chat with Hindy Spiegel"). Both left the pipe and the work
+# list reading "(no subject)" next to a message you had to open to see (owner, 2026-09-07).
+_CHAT_TITLE = re.compile(r'^((teams|slack|whatsapp|telegram) )?(group )?(chat|conversation) with\b', re.I)
+PILL = 90                        # one line in a pill; the rest is an ellipsis, cut on a word
+
+
+def says(r: dict) -> str:
+    """What a row is ABOUT: its subject when it has a real one, else the message's opening line."""
+    subj = _short(r.get('Subject') or r.get('Title') or '', 140)
+    said = f"{r.get('FromName') or ''} in {r.get('SourceName') or ''}"
+    if subj and subj != said and not _CHAT_TITLE.match(subj): return subj
+    return _cut(_gist(r.get('Preview') or r.get('BodyText') or '', 240), PILL) or subj
 
 
 def lane_index(lane: str) -> int: return LANES.index(lane) if lane in LANES else len(LANES)
@@ -193,7 +208,7 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
         base = dict(who=who, when=r.get('SentAt'), mid=r['MessageId'], tid=r.get('TaskId'), channel=r.get('Channel') or '',
                     category=r.get('Category') or '', preview=r.get('Preview'), cid=cid, email=r.get('FromEmail') or '',
                     priority=r.get('Priority'), route=r.get('RouteReason') or '', task_kind=r.get('TaskKind') or '')
-        subj = r.get('Subject') or r.get('Title') or ''
+        subj = says(r)
         if r.get('MsgStatus') == 'triaging':
             out.append(_item(f"msg:{r['MessageId']}", 'triaging', 'fyi', subj, why='just arrived - triage is deciding', settling=True, **base))
             if group and threads.get(group) is None: threads[group] = out[-1]
@@ -215,7 +230,7 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
                             who=latest.get('FromName') or latest.get('FromEmail') or who,
                             preview=latest.get('BodyText') or base.get('preview'),
                             channel=latest.get('Channel') or base.get('channel'))
-                subj = latest.get('Subject') or subj
+                subj = says(latest) or subj
             out.append(_item(f"review:{r['ReviewId']}", 'action' if action else 'review', 'approve', subj, rid=r['ReviewId'],
                              why='an agent proposed an action - it runs only if you say so' if action
                                  else ('a reply is drafted for you to send' if r.get('HasDraft') else 'a reply is owed - draft it with AI or write it'),

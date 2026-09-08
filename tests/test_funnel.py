@@ -147,6 +147,42 @@ class FlapTests(unittest.TestCase):
         self.assertEqual(terminal.phase_of(['Running tests (esc to interrupt)', '? for shortcuts']), 'parked')
 
 
+class ChatHasNoSubjectTests(unittest.TestCase):
+    def test_a_chat_row_is_titled_by_what_was_said(self):
+        """WhatsApp and Slack carry no subject, so every chat row in the pipe and the work list read
+        "(no subject)" beside a message you had to open to see (the owner, 2026-09-07)."""
+        s = store()
+        said = 'Budgeting'
+        m = mail(s, '', who='Gabi', email='', body=said, hours=0, channel='whatsapp', conv='wa:gabi', status='filed')
+        s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
+        self.assertEqual(funnel.build(s)['items'][0]['title'], 'Budgeting')
+        # ...and a long one fits the pill: one line, cut on a word, never mid-word
+        s2 = store()
+        long_said = ("So what's their moves if it's free? So it's a cool thing, but I mean, something like "
+                     "someone you built this a month and a half ago. So now what?")
+        m2 = mail(s2, '', who='Gabi', email='', body=long_said, hours=0, channel='whatsapp', conv='wa:g2', status='filed')
+        s2.add_route(m2, None, 'file', None, 'triage: fyi', [], 'triage')
+        title = funnel.build(s2)['items'][0]['title']
+        self.assertLessEqual(len(title), 91)
+        self.assertTrue(title.endswith('…') and not title.endswith(' …'), repr(title))
+        self.assertTrue(long_said.startswith(title[:-1].rstrip()), f'not what she said: {title!r}')
+
+    def test_a_synthesized_chat_title_gives_way_to_the_message(self):
+        """Teams titles a chat after the people already named in the row."""
+        s = store()
+        m = mail(s, 'Teams chat with Hindy Spiegel', who='Hindy Spiegel', email='h@mfa.test',
+                 body='can you add Nathan to the call he wants to join', hours=0, channel='teams', conv='t:h', status='filed')
+        s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
+        self.assertEqual(funnel.build(s)['items'][0]['title'], 'can you add Nathan to the call he wants to join')
+
+    def test_a_real_subject_is_still_the_title(self):
+        s = store()
+        m = mail(s, 'AI Agents', who='Nathan', email='n@mfa.test', body='Nathan invited Fireflies here',
+                 hours=0, channel='teams', conv='t:ai', status='filed')
+        s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
+        self.assertEqual(funnel.build(s)['items'][0]['title'], 'AI Agents')
+
+
 class OneLinePerThreadTests(unittest.TestCase):
     def test_the_row_says_how_much_of_the_thread_it_stands_for(self):
         """Three lines in one WhatsApp room are one row - and the Timeline showing three of them read

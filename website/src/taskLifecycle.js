@@ -13,11 +13,14 @@ export const taskPhase = (status) => {
   return value;
 };
 
-export const agentPhase = ({ session, run, transcript, report } = {}) => {
+export const agentPhase = ({ session, run, transcript, report, conversation } = {}) => {
   if (session?.alive) return session.waiting ? "needs you" : "working";
   if (run?.Status === "running") return "working";
   if (report) return "result ready";
   if (transcript) return "stopped";
+  // General work keeps its record in the conversation, not in a pty. Its provider session ends
+  // with the answer, and the card then read "not started" over a chat full of work (owner, 2026-09-07).
+  if (conversation) return "in conversation";
   return "not started";
 };
 

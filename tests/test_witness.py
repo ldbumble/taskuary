@@ -101,6 +101,19 @@ class HookWiringTests(unittest.TestCase):
         self.assertTrue(b.witness.done_at); self.assertIsNone(a.witness.done_at)
         self.assertEqual(hooks.receive({'session_id': 'S9', 'cwd': r'C:\elsewhere', 'hook_event_name': 'Stop'}), {'bound': False})
 
+    def test_a_hook_never_trips_over_the_assistant_session_beside_it(self):
+        """A general chat is not a pty: no argv, no checkout, so no hook can ever be its own. Reading
+        argv[0] to decide that crashed the WHOLE hook - the coding agent beside it lost its said-and-did
+        for as long as a chat was open (2026-09-07)."""
+        from taskuary import general
+        tid = c.post('/api/tasks', json={'Title': 'research something', 'Kind': 'general'}).json()['taskId']
+        chat = general.GeneralSession(server.store, tid)
+        term.SESSIONS[chat.sid] = chat
+        coding = self._fake('h1', 4)
+        r = hooks.receive({'session_id': 'S3', 'cwd': CWD, 'hook_event_name': 'Stop', 'last_assistant_message': 'done'})
+        self.assertEqual((r.get('bound'), r.get('sid')), (True, 'h1'))
+        self.assertTrue(coding.witness.done_at)
+
     def test_the_endpoint_feeds_the_board_and_the_task_page(self):
         tid = c.post('/api/tasks', json={'Title': 'said and did'}).json()['taskId']
         self._fake('s1', tid)

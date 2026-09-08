@@ -197,7 +197,9 @@ class TurnTests(unittest.TestCase):
         self.assertIsNone(concierge.lookup(s, 'what about the invoice from Marcus'))
         concierge.surface(s, llm=lambda *a, **k: 'first')               # Dana's is on the table
         out = concierge.say(s, 'what did Lee say?', key=f'review:{r}', llm=lambda *a, **k: 'Lee asked about lunch.')
-        self.assertEqual(out['item']['title'], 'Teams chat with Lee'); self.assertEqual(out['say'], 'Lee asked about lunch.')
+        # the row is titled by what Lee SAID: "Teams chat with Lee" only repeats the sender (funnel.says, 2026-09-07)
+        self.assertEqual((out['item']['who'], out['item']['title']), ('Lee Park', 'lunch?'))
+        self.assertEqual(out['say'], 'Lee asked about lunch.')
         roles = [(h['role'], bool(h['card'])) for h in concierge.history(s, general.dock_task(s)[0]['TaskId'])]
         self.assertEqual(roles[-3:], [('assistant', True), ('user', False), ('assistant', True)])
 

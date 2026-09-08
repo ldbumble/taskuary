@@ -62,3 +62,50 @@ class TheFx(unittest.TestCase):
         self.assertEqual(rows, [{'base': 'USD', 'currency': 'EUR', 'rate': 0.86103, 'date': '2026-09-08'},
                                 {'base': 'USD', 'currency': 'GBP', 'rate': 0.73825, 'date': '2026-09-08'}])
         self.assertEqual(g.call_args.args[0], 'https://api.frankfurter.dev/v1/latest')
+
+
+# captured live 2026-09-08 from query1.finance.yahoo.com/v8/finance/chart/AAPL (meta trimmed)
+YQ = {'chart': {'result': [{'meta': {'currency': 'USD', 'symbol': 'AAPL', 'fullExchangeName': 'NasdaqGS',
+                                     'instrumentType': 'EQUITY', 'regularMarketPrice': 316.195,
+                                     'regularMarketChangePercent': -1.18, 'regularMarketTime': 1788889085,
+                                     'regularMarketDayHigh': 319.4, 'regularMarketDayLow': 314.0,
+                                     'previousClose': 319.97, 'exchangeTimezoneName': 'America/New_York'},
+                            'timestamp': [1788800000, 1788886400],
+                            'indicators': {'quote': [{'close': [318.1, 316.195], 'volume': [41000000, 38000000]}]}}],
+                'error': None}}
+
+
+class TheYahoo(unittest.TestCase):
+    def test_a_quote_row_carries_last_change_and_the_day_range(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, YQ)) as g:
+            head, body = markets.run_yahoo_quotes({'symbols': 'AAPL'})
+        row = json.loads(body.splitlines()[0])
+        self.assertEqual(row['symbol'], 'AAPL')
+        self.assertEqual((row['price'], row['change_pct'], row['currency']), (316.195, -1.18, 'USD'))
+        self.assertEqual((row['day_low'], row['day_high'], row['previous_close']), (314.0, 319.4, 319.97))
+        self.assertEqual(row['exchange'], 'NasdaqGS')
+        self.assertIn('/v8/finance/chart/AAPL', g.call_args.args[0])
+        self.assertNotIn('crumb', json.dumps(g.call_args.kwargs))
+
+    def test_several_symbols_are_several_calls_and_one_table(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, YQ)) as g:
+            head, body = markets.run_yahoo_quotes({'symbols': 'AAPL, MSFT'})
+        self.assertEqual(g.call_count, 2)
+        self.assertEqual(len([l for l in body.splitlines() if l.strip()]), 2)
+
+    def test_a_symbol_yahoo_does_not_know_is_named_and_the_rest_still_come_back(self):
+        def side(url, **kw):
+            return _resp(200, YQ) if '/AAPL' in url else _resp(404, {'chart': {'error': {'description': 'No data found, symbol may be delisted'}}})
+        with mock.patch.object(markets.requests, 'get', side_effect=side):
+            head, body = markets.run_yahoo_quotes({'symbols': 'AAPL,NOPE'})
+        rows = [json.loads(l) for l in body.splitlines() if l.strip()]
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[1]['symbol'], 'NOPE')
+        self.assertIn('delisted', rows[1]['error'])
+
+    def test_history_is_one_row_per_bar_newest_last(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, YQ)):
+            head, body = markets.run_yahoo_history({'symbol': 'AAPL', 'range': '5d', 'interval': '1d'})
+        rows = [json.loads(l) for l in body.splitlines() if l.strip()]
+        self.assertEqual([r['close'] for r in rows], [318.1, 316.195])
+        self.assertEqual(rows[0]['date'], '2026-09-07')

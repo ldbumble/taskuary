@@ -102,3 +102,51 @@ def run_fx_rates(cfg):
     rows = [{'base': j.get('base'), 'currency': k, 'rate': v, 'date': j.get('date')}
             for k, v in sorted((j.get('rates') or {}).items())]
     return _rows(cfg, rows, 'rates')
+
+
+# ---- yahoo: keyless, and the only card here that is not a supported API ---------------------
+# v8/finance/chart serves without a cookie or a crumb (checked 2026-09-08). v7/finance/quote is
+# the endpoint that wants one - it is deliberately not used. Yahoo retired its official API in
+# 2017, so this card is BEST-EFFORT and its copy says so: if it breaks, that is the deal, not a
+# bug to be fixed under pressure.
+CHART = 'https://query1.finance.yahoo.com/v8/finance/chart/'
+
+
+def _yahoo_chart(sym, rng, interval):
+    return _get(f'{CHART}{sym}', {'range': rng, 'interval': interval})
+
+
+def _syms(cfg, *names):
+    raw = _key(cfg, *names) or ''
+    return [s.strip().upper() for s in raw.replace(';', ',').split(',') if s.strip()]
+
+
+def run_yahoo_quotes(cfg):
+    """{"symbols": "AAPL,MSFT"} - last, day change %, day range and previous close per symbol.
+
+    A symbol Yahoo cannot resolve becomes a row carrying its error rather than taking the whole
+    report down: a watchlist with one bad ticker is still a watchlist."""
+    rows = []
+    for s in _syms(cfg, 'symbols', 'symbol') or ['AAPL']:
+        try:
+            m = (((_yahoo_chart(s, '1d', '1d').get('chart') or {}).get('result') or [{}])[0] or {}).get('meta') or {}
+            rows.append({'symbol': m.get('symbol') or s, 'price': m.get('regularMarketPrice'),
+                         'change_pct': _pct(m.get('regularMarketChangePercent')), 'currency': m.get('currency'),
+                         'day_low': m.get('regularMarketDayLow'), 'day_high': m.get('regularMarketDayHigh'),
+                         'previous_close': m.get('previousClose'), 'exchange': m.get('fullExchangeName')})
+        except MarketError as e:
+            rows.append({'symbol': s, 'price': None, 'error': str(e)[:200]})
+    return _rows(cfg, rows, 'quotes')
+
+
+def run_yahoo_history(cfg):
+    """{"symbol": "AAPL", "range": "5d|1mo|1y", "interval": "1d|1h"} - one row per bar, oldest first."""
+    from datetime import datetime
+    s = (_syms(cfg, 'symbol', 'symbols') or ['AAPL'])[0]
+    res = (((_yahoo_chart(s, cfg.get('range') or '1mo', cfg.get('interval') or '1d').get('chart') or {}).get('result') or [{}])[0]) or {}
+    q = ((res.get('indicators') or {}).get('quote') or [{}])[0] or {}
+    closes, vols, ts = q.get('close') or [], q.get('volume') or [], res.get('timestamp') or []
+    rows = [{'symbol': s, 'date': datetime.utcfromtimestamp(t).date().isoformat(),
+             'close': closes[i] if i < len(closes) else None, 'volume': vols[i] if i < len(vols) else None}
+            for i, t in enumerate(ts)]
+    return _rows(cfg, rows, 'bars')

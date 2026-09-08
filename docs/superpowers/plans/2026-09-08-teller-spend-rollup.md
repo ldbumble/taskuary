@@ -19,6 +19,11 @@
 - Tests from the repo root: `python -m pytest <files> -q -p no:cacheprovider`. Never run a test file directly. "no tests ran" is a failure, not a pass.
 - The packaged UI in `taskuary/web/assets/` is committed. A JSX change is not done until the bundle is rebuilt (Task 4).
 - This checkout is shared with other agents, which share one git index. Build every commit **off-index**: `GIT_INDEX_FILE=$(mktemp -u) git read-tree HEAD` → `hash-object -w` → `update-index --cacheinfo` → `write-tree` → `commit-tree -p HEAD` → guarded `update-ref <ref> <new> <old>`. Never `git add` in this checkout.
+- **After every off-index commit, repair the shared index.** With `GIT_INDEX_FILE` unset, run
+  `git update-index --add -- <the files you committed>`. Without this the shared index stays blind to
+  new files, `git status` reports them as staged deletions, and another agent running `git commit -am`
+  commits their removal. Found live on 2026-09-08. Use `--add` on named paths only — never
+  `git read-tree HEAD` against the real index, which would discard another agent's staged work.
 - **Nothing is pushed.** The plan stops at a review gate. Before any later push, the whole suite runs from the repo root.
 - Money words stay plain and unexcited (owner taste: colour identifies, copy does not shout). No emoji in card copy.
 

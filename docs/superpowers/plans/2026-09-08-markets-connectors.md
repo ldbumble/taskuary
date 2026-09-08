@@ -24,6 +24,11 @@
 - **No live network in tests.** `tests/conftest.py` fences I/O boundaries; every executor test mocks `requests` at the edge the way `tests/test_teller.py` does. Captured real responses are pasted in as literals, never fetched during a test run.
 - The packaged UI in `taskuary/web/assets/` is committed. A JSX change is not done until `npm run build` runs (Task 13).
 - Shared checkout, shared git index: build every commit **off-index** (`GIT_INDEX_FILE=$(mktemp -u) git read-tree HEAD` → `hash-object -w` → `update-index --cacheinfo` → `write-tree` → `commit-tree -p HEAD` → guarded `update-ref <ref> <new> <old>`). Never `git add` here.
+- **After every off-index commit, repair the shared index.** With `GIT_INDEX_FILE` unset, run
+  `git update-index --add -- <the files you committed>`. Without this the shared index stays blind to
+  new files, `git status` reports them as staged deletions, and another agent running `git commit -am`
+  commits their removal. Found live on 2026-09-08. Use `--add` on named paths only — never
+  `git read-tree HEAD` against the real index, which would discard another agent's staged work.
 - **Nothing is pushed.** Stops at a review gate; the whole suite runs from the repo root before any later push.
 - Card copy stays plain and unexcited. No emoji. A card that can break says so plainly rather than being quietly optimistic.
 
@@ -89,7 +94,7 @@ class TheCrypto(unittest.TestCase):
             head, body = markets.run_coingecko_prices({'ids': 'bitcoin', 'vs': 'usd'})
         rows = [json.loads(l) for l in body.splitlines() if l.strip()]
         self.assertEqual(rows, [{'id': 'bitcoin', 'currency': 'usd', 'price': 78624, 'change_pct': -0.61}])
-        self.assertEqual(head, '1 price')
+        self.assertEqual(head, '1 prices')   # rows_out substitutes the unit word; it does not singularise
         self.assertNotIn('x-cg-demo-api-key', g.call_args.kwargs.get('headers') or {})
 
     def test_a_demo_key_rides_as_a_header_when_one_is_saved(self):

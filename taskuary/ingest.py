@@ -1138,13 +1138,20 @@ def repo_candidates(store) -> list:
     out = {}
     try:
         for link in store.project_links(kind=REPO_KIND):
-            repo = str(link.get('Value') or '').strip()
-            if repo and repo not in out: out[repo] = str(link.get('ProjectDescription') or link.get('ProjectName') or '')
+            repo, name = str(link.get('Value') or '').strip(), str(link.get('ProjectName') or '').strip()
+            # never a restatement of the name: a DISCOVERED repository's project is named after the
+            # repository itself, so `or ProjectName` described mfaVita/FanApp as "mfaVita/FanApp" -
+            # a routing table of bare names, against which triage can place nothing (TQ-0443). A
+            # project the owner named for the WORK still describes its repo perfectly well.
+            about = str(link.get('ProjectDescription') or '').strip() or ('' if name.lower() == repo.lower() else name)
+            if repo and not out.get(repo): out[repo] = about
     except Exception as e: logger.debug(f'ingest: project repositories unavailable - {e}')
     try:
         from .terminal import repo_map
+        # the SOUL map FILLS what the graph could not say - it used to lose to a blank that had
+        # already claimed the key, so the one line saying what a repo does never reached triage
         for repo, about in repo_map(store).items():
-            if repo not in out: out[repo] = about
+            if not out.get(repo): out[repo] = about
     except Exception as e: logger.debug(f'ingest: SOUL repo map unavailable - {e}')
     return [{'repo': r, 'about': a} for r, a in out.items()]
 

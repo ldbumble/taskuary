@@ -129,6 +129,72 @@ class DocSyncTests(unittest.TestCase):
         self.assertEqual(soul.count('o/one'), 1)             # no duplicate line
         self.assertIn('**o/two**', soul); self.assertIn('archived - do not touch', soul)
 
+    def test_the_tree_digest_keeps_the_small_folders_that_say_what_a_system_does(self):
+        """A README is what somebody meant to build; the tree is what is there. FanApp's 518-file
+        website/ would bury the 50 sql/ scripts and 27 reports/ that actually name its coverage, so
+        the sample strides across the whole sorted tree instead of taking the first N paths."""
+        paths = ([f'website/static/page{i}.html' for i in range(518)]
+                 + ['node_modules/left-pad/index.js', 'assets/logo.png', 'dist/bundle.min.js']
+                 + ['sql/valley_bank_balances.sql', 'scripts/bai_import.py', 'app/routers/ap_invoice.py'])
+        digest = docsync._tree_digest(paths)
+        self.assertIn('website (518)', digest)
+        for real in ('sql/valley_bank_balances.sql', 'scripts/bai_import.py', 'app/routers/ap_invoice.py'):
+            self.assertIn(real, digest)                    # the small folders survived the sample
+        for noise in ('node_modules', 'logo.png', 'bundle.min.js'):
+            self.assertNotIn(noise, digest)                # vendored and generated files say nothing
+        self.assertLess(len(digest), 2100)                 # ...and it still fits in a prompt
+
+    def test_an_over_long_blurb_is_cut_at_a_sentence_not_mid_word(self):
+        """TopE's summary ran past the budget and the map line ended "...Viventium payroll s"."""
+        long = ('This is a travel and expense platform for employee submissions and approvals. ' * 12
+                + 'It also covers receipt OCR, mileage claims and Viventium payroll syncing.')
+        self.assertGreater(len(long), docsync.BLURB_CHARS)
+        fitted = docsync._fit(long, docsync.BLURB_CHARS)
+        self.assertLessEqual(len(fitted), docsync.BLURB_CHARS)
+        self.assertTrue(fitted.endswith('.'), fitted)
+        # A full stop past a quarter of the budget wins - that was TopE's shape, and cutting on the
+        # word left it ending "...approval reminders, and".
+        two = ('A travel and expense platform for employee submissions and payroll export. '
+               + 'It covers receipts, mileage, lodging and approvals. ' * 10)
+        self.assertTrue(docsync._fit(two, 300).endswith('.'))
+        # ...but a lone full stop in the first few words does NOT justify throwing the rest away
+        early = 'A platform. ' + 'It covers receipts, mileage, lodging, approvals, payroll export, ' * 20
+        self.assertGreater(len(docsync._fit(early, 600)), 400)
+        self.assertEqual(docsync._fit('Short and whole.', 400), 'Short and whole.')
+
+    def test_the_blurb_is_written_from_the_tree_as_well_as_the_readme(self):
+        from unittest import mock
+        s = MemoryStore()
+        seen = {}
+        def llm(system, user, **k):
+            seen['system'], seen['user'] = system, user
+            return 'Syncs BAI bank files into the ledger. Covers cash balances, AP/AR and payroll feeds.'
+        with mock.patch('taskuary.github.readme_text', return_value='# FanApp\n\nAn integration platform.'), \
+             mock.patch('taskuary.github.repo_tree', return_value=['scripts/bai_import.py', 'sql/cash_balance.sql']):
+            docsync.update_repo_map(s, [{'full_name': 'o/fan', 'description': None, 'archived': False}],
+                                    tok='t', llm=llm)
+        self.assertIn('bai_import.py', seen['user'])       # the tree reached the model
+        self.assertIn('An integration platform.', seen['user'])
+        self.assertIn('what it COVERS', seen['system'])
+        self.assertIn('- **o/fan**: Syncs BAI bank files into the ledger.', s.get_doc('soul'))
+
+    def test_a_repo_merely_NAMED_elsewhere_in_soul_still_gets_its_description(self):
+        """"Already in the doc" meant anywhere in the doc, so a repo the operator listed in prose -
+        or that Taskuary's OWN project block named, written by this very function's last statement -
+        could never be given the one line that says what it is. Every repo on the owner's install was
+        suppressed that way: triage saw three bare names, could place none of them, and mail about the
+        cash dashboard went to the assistant instead of FanApp (TQ-0443)."""
+        s = MemoryStore()
+        s.save_doc('soul', '## Systems and repositories\n- `o/fan`\n\n## Project relationships\n'
+                           '- **o/fan** \u2014 repositories: `o/fan`; people: someone\n', 'owner')
+        docsync.update_repo_map(s, [{'full_name': 'o/fan', 'description': 'Syncs BAI files from banks.',
+                                     'archived': False}])
+        soul = s.get_doc('soul')
+        self.assertIn('- **o/fan**: Syncs BAI files from banks.', soul)
+        self.assertIn(docsync.REPO_MAP_HEADER, soul)
+        from taskuary.terminal import repo_map
+        self.assertEqual(repo_map(s).get('o/fan'), 'Syncs BAI files from banks.')
+
     def test_repo_map_summarizes_readme_and_heals_placeholders(self):
         from unittest import mock
         s = MemoryStore()

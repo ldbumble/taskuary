@@ -183,6 +183,22 @@ def list_issues(tok, repo, since=None, state='open', limit=25):
     return [i for i in list_items(tok, repo, since, state, limit=100) if 'pull_request' not in i][:limit]
 
 
+def repo_tree(tok, repo, limit=3000) -> list:
+    """Every file path on the default branch, in one call. What a repo COVERS is written in its own
+    file names - app/routers/ap_invoice.py, sql/, reports/ - and a README is only what somebody meant
+    to build on the day they started. [] for an empty or unreachable repo; never raises."""
+    try:
+        r = requests.get(f'{GH}/repos/{repo}', headers=_h(tok), timeout=20)
+        if r.status_code != 200: return []
+        branch = r.json().get('default_branch') or 'main'
+        t = requests.get(f'{GH}/repos/{repo}/git/trees/{branch}', headers=_h(tok),
+                         params={'recursive': '1'}, timeout=30)
+        if t.status_code != 200: return []
+        return [x['path'] for x in (t.json().get('tree') or []) if x.get('type') == 'blob'][:limit]
+    except Exception:
+        return []
+
+
 def readme_text(tok, repo) -> str:
     """The repo's README (decoded), '' when there isn't one."""
     import base64

@@ -269,6 +269,8 @@ def repo_choice_of(j: dict, repos: list) -> dict:
     return {'repository': repo if not bool(j.get('needs_repo_choice')) else None, 'needs_repo_choice': needs, 'repo_reason': reason}
 
 
+REPO_ABOUT = 600        # how much of a repository's description the routing question is given
+
 RELATIONSHIPS = ('new', 'continues', 'answers', 'uncertain')
 
 
@@ -424,7 +426,9 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                                **(thread or {}),
                                **({'project_context': project} if project else {}),
                                **({'same_day_lines': [{k: c.get(k) for k in ('id', 'who', 'when', 'text', 'task_id')} for c in candidates]} if candidates is not None else {}),
-                               **({'known_repositories': [{'repo': r.get('repo'), 'about': (r.get('about') or '')[:160]} for r in repos]} if repos else {}),
+                               # 160 cut every real description mid-clause - taskuary lost "do the work, you approve", FanApp
+                               # lost the noun its whole sentence was about. This is the one line the model routes on.
+                               **({'known_repositories': [{'repo': r.get('repo'), 'about': (r.get('about') or '')[:REPO_ABOUT]} for r in repos]} if repos else {}),
                                **({'body_truncated': True} if len(strip_boilerplate(str(msg.get('body') or ''))) > BODY_BUDGET else {}),
                                'body': strip_boilerplate(str(msg.get('body') or ''))[:BODY_BUDGET]})
             if len(strip_boilerplate(str(msg.get('body') or ''))) > BODY_BUDGET:

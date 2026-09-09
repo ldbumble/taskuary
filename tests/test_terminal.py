@@ -1200,3 +1200,71 @@ class SeedCompletenessTests(unittest.TestCase):
         self.assertNotIn('truncated here', seed)
         self.assertIn('Missing required detail? Change nothing', seed)
         self.assertIn('if the sender must answer', seed)
+
+
+# Phase detection is the hottest read in the app: /api/tasks, /api/runs/live and /api/funnel
+# each ask every live session whether it is working or parked, and BoardView polls one of them
+# every 3 seconds. Deriving that one word by re-emulating a 200k-char scrollback through pyte
+# measured 77% of all server CPU on 2026-09-08 (py-spy, one working claude pane), which is what
+# made a first Board/Tasks load take seconds. These pin the two properties that fix it.
+class PhaseRenderTests(unittest.TestCase):
+    def _dead(self):
+        """A finished session: its pump has stopped, so scrollback is ours to control."""
+        t = terminal.Term(ECHO, os.getcwd(), 'test')
+        terminal.SESSIONS[t.sid] = t
+        self.addCleanup(terminal.close, t.sid)
+        self.assertTrue(_wait(lambda: not t.alive))
+        t.buf.clear(); t.n = 0
+        return t
+
+    def _paint(self, t, footer):
+        """A footer where a TUI actually draws one - the BOTTOM of the screen, which is the only
+        part status_tail reads."""
+        t._append('\r\n' * (t.rows + 8) + footer + '\r\n')
+
+    def _spy(self):
+        seen, real = [], terminal.render
+        def spy(raw, cols=110, rows=32): seen.append(raw); return real(raw, cols, rows)
+        return seen, mock.patch.object(terminal, 'render', spy)
+
+    def test_a_session_with_no_new_output_is_not_rendered_twice(self):
+        """A parked agent's screen cannot have changed, so reading its phase again must cost
+        nothing. The old cache expired on a 0.5s clock while a single request still took ~2s, so
+        every poll re-rendered the whole scrollback to arrive at the same answer."""
+        t = self._dead()
+        self._paint(t, '? for shortcuts')
+        seen, patched = self._spy()
+        with patched:
+            for _ in range(4):
+                t.status_tail(8)
+                time.sleep(.6)          # past the old 0.5s window: the SCREEN is what is unchanged
+        self.assertEqual(len(seen), 1, f'rendered {len(seen)} times for one unchanged screen')
+
+    def test_new_output_is_picked_up_rather_than_served_from_the_cache(self):
+        """The counter must not freeze the answer: real output has to reach the next reader."""
+        t = self._dead()
+        self._paint(t, '? for shortcuts')
+        self.assertEqual(terminal.phase_of(t.status_tail(8)), 'parked')
+        self._paint(t, 'Levitating... (12s - esc to interrupt)')
+        self.assertEqual(terminal.phase_of(t.status_tail(8)), 'working')
+
+    def test_phase_reads_a_bounded_tail_not_the_whole_scrollback(self):
+        """pyte costs 3.0s for a full 200k scrollback and 0.13s for its last few KB, and the
+        answer lives in the last 8 lines either way. The bottom of the screen is all this reads,
+        so feeding it the whole history is work thrown away."""
+        t = self._dead()
+        t._append('filler line - the quick brown fox jumps over the lazy dog\r\n' * 3000)
+        self._paint(t, '? for shortcuts')
+        seen, patched = self._spy()
+        with patched: t.status_tail(8)
+        self.assertLess(len(seen[0]), len(t.scrollback()) // 2,
+                        f'fed {len(seen[0])} chars of a {len(t.scrollback())}-char scrollback')
+
+    def test_a_working_footer_is_still_found_under_a_long_scrollback(self):
+        """The guard on bounding the tail: a TUI repaints its footer constantly, so the last few
+        KB always carry a whole screen - but if that ever stopped being true, a working agent
+        would read as parked and the waiting room would type into a busy pane."""
+        t = self._dead()
+        t._append('line of prior output - the quick brown fox jumps over the lazy dog\r\n' * 4000)
+        self._paint(t, '\x1b[2m? for shortcuts\x1b[0m - esc to interrupt')
+        self.assertEqual(terminal.phase_of(t.status_tail(8)), 'working')

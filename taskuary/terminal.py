@@ -12,6 +12,11 @@ from datetime import datetime
 from loguru import logger
 
 SCROLLBACK = 200_000        # chars kept for late joiners / reconnects
+# What phase detection reads. A 32x110 screen is ~3.5k chars and a TUI repaints its footer
+# constantly, so the last few KB always carry a whole one - while a pyte pass over the FULL
+# scrollback measured 1.9s against 0.10s here, per request, per session (2026-09-08: one working
+# claude pane was 77% of all server CPU, and a first Board load waited on it).
+PHASE_TAIL = 8_000
 SESSIONS = {}               # sid -> Term. Iterate a list(...) copy: readers run on FastAPI worker threads while
                             # close()/reap() pop from it - "dictionary changed size during iteration" mid-wrap-up
 SEED_WAIT, SEED_QUIET = 25, 1.2     # seconds: how long to wait for a TUI, and what 'settled' means
@@ -137,7 +142,7 @@ class Term:
         self.rows, self.cols = rows, cols                 # replaying the stream needs the real geometry
         self.started = datetime.now().isoformat(sep=' ', timespec='seconds')
         self.started_ts = time.time()                     # the same instant a clock can subtract (selfclose's age gate)
-        self.buf, self.n, self.ended, self.last = deque(), 0, None, time.time()
+        self.buf, self.n, self.writes, self.ended, self.last = deque(), 0, 0, None, time.time()
         self.calm_until = 0                               # output until then must not reset idle()
         self.seeded = ''                                  # the prompt we typed: echoed back, not said
         self.accepted = None                              # None: no prompt yet; True: submitted; False: typed but not taken (PW-209)
@@ -152,7 +157,7 @@ class Term:
         # parked for a frame, then working again on the next. The raw observation may move that
         # quickly, but the state people see must hold before it changes.
         self._phase_stable, self._phase_candidate, self._phase_since = 'working', None, time.time()
-        self._phase_screen = (0.0, [])                    # rendered-screen cache; one render per request burst
+        self._phase_screen = (-1, [])                     # rendered screen, keyed on self.writes
         # what was already unclean in the checkout is NOT this session's doing - the snapshot is
         # what lets files() attribute later dirt to this agent (see blackboard.py)
         from . import blackboard as _bb, witness as _w
@@ -171,7 +176,7 @@ class Term:
         threading.Thread(target=self._pump, daemon=True).start()
 
     def _append(self, s):
-        self.buf.append(s); self.n += len(s)
+        self.buf.append(s); self.n += len(s); self.writes += 1     # monotonic: self.n falls back on trim
         while self.n > SCROLLBACK and len(self.buf) > 1: self.n -= len(self.buf.popleft())
 
     def _emit(self, data):
@@ -409,11 +414,13 @@ class Term:
         for lifecycle: Claude's current "esc to interrupt" footer was visible on screen while the
         raw tail contained only fragments such as "Gallivanting…" and reported `unknown`.
         """
-        at, lines = self._phase_screen
-        now = time.time()
-        if now - at >= .5:
-            lines = render(self.scrollback(), self.cols, self.rows).splitlines()
-            self._phase_screen = (now, lines)
+        wrote, lines = self._phase_screen
+        # A screen nothing has printed to cannot have a new answer, so reading it again is free -
+        # a parked agent costs nothing at all. The old 0.5s clock expired while one request was
+        # still running, so every poll re-rendered the whole scrollback to reach the same word.
+        if wrote != self.writes:
+            lines = render(self.scrollback()[-PHASE_TAIL:], self.cols, self.rows).splitlines()
+            self._phase_screen = (self.writes, lines)
         return lines[-max(1, n):]
 
     def phase(self) -> str: return stable_phase_of(self)

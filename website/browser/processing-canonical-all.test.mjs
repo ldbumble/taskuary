@@ -57,9 +57,19 @@ const clickItem = async (page, itemId) => {
 // unmounted by then ("Node is detached from document") or have moved, putting the real mouse
 // click on the row that took its place - both seen in CI. Match and click inside one evaluation,
 // the way the level dock picker does, and there is no window for either.
+// The trigger moves for the same reason the options do. Choosing a category re-slices the feed and
+// re-renders the source picker beside it, and both pickers share one wrapping toolbar row, so the
+// point page.click measured can be stale by the time the mouse event lands: it drops on bare
+// toolbar, no menu opens, and the wait expires (CI, at "Timeline category" -> "all kinds", which is
+// the press right after the "email" one moved the row). Re-press until the listbox is really up -
+// MUI Select opens on mousedown, so this has to stay a real click and cannot be a DOM .click().
 const chooseOption = async (page, ariaLabel, label) => {
-  await page.click(`[aria-label="${ariaLabel}"]`);
-  await page.waitForSelector('[role="option"]', { visible: true, timeout: 5000 });
+  let open = null;
+  for (let attempt = 1; attempt <= 4 && !open; attempt += 1) {
+    await page.click(`[aria-label="${ariaLabel}"]`).catch(() => {});
+    open = await page.waitForSelector('[role="option"]', { visible: true, timeout: 2500 }).catch(() => null);
+  }
+  assert.ok(open, `${ariaLabel} never opened its list`);
   const chosen = await page.$$eval('[role="option"]', (nodes, wanted) => {
     const option = nodes.find((node) => node.textContent.trim() === wanted);
     option?.click(); return Boolean(option);

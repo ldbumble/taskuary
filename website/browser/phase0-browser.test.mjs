@@ -103,8 +103,11 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
     if (waitKind === "selector") await page.waitForSelector(readyMarker, { timeout: limits.navigationMs });
     else await waitForBody(page, readyMarker, limits.navigationMs);
     const elapsed = Math.round(performance.now() - before);
-    const rendered = await bodyText(page);
-    assert.ok(rendered.includes(fixtureText), `${label} did not render fixture content`);
+    // The marker is the tab's own chrome, which paints before its data arrives - Tasks' search box
+    // is there while /api/tasks is still in flight - so reading body text the instant the marker
+    // appears raced the response rather than waiting for it. Navigation keeps its own budget; the
+    // fixture row only has to turn up.
+    await waitForBody(page, fixtureText, limits.firstVisibleMs);
     assert.ok(elapsed <= limits.navigationMs, `${label} took ${elapsed}ms to become visible`);
     timings[`${label.toLowerCase()}VisibleMs`] = elapsed;
   }

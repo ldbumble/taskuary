@@ -32,18 +32,27 @@ TEST_LINES = [
     # below instead.
     (r'test result: (?:ok|FAILED)\. (\d+) passed; (\d+) failed', 'cargo'),
     # maven/gradle surefire: "Tests run: 42, Failures: 0, Errors: 0, Skipped: 1" - errors
-    # count as failures the way pytest's do, because both mean the suite is not green
-    (r'Tests run: (\d+), Failures: (\d+), Errors: (\d+)', 'maven'),
+    # count as failures the way pytest's do, because both mean the suite is not green,
+    # and Skipped is read so it does not land in `passed`: skips are neither, the way
+    # they are everywhere else here. A reactor build prints one of these per module and
+    # no build-wide total, so last-match-wins reports the final module only - with
+    # --fail-at-end a red module 2 behind a green module 5 reads green. That is inherent
+    # to matching the per-module line, and is this label's limit.
+    (r'Tests run: (\d+), Failures: (\d+), Errors: (\d+)(?:, Skipped: (\d+))?', 'maven'),
     # rspec: "42 examples, 0 failures" (and "1 example, 1 failure"). Anchored, like go's,
     # because unanchored it read "we have 3 examples, 0 failures were seen in prod" as a
     # green run - rspec's own summary always starts at column 0.
-    (r'^(\d+) examples?, (\d+) failures?', 'rspec'),
-    # phpunit, every ending it has: "OK (42 tests, 108 assertions)", the risky/skipped
-    # variant which is still a pass, and both red words. ERRORS! matched nothing before,
-    # so a suite that errored looked like no test run at all - the false gap this is for.
-    (r'OK \((\d+) tests?, \d+ assertions?\)', 'phpunit'),
-    (r'OK, but [^\n]*!\s*Tests: (\d+),', 'phpunit'),
-    (r'(?:FAILURES|ERRORS)!\s*Tests: (\d+),[^\n]*', 'phpunit-red'),
+    # pending is rspec's skip and is not a pass either.
+    (r'^(\d+) examples?, (\d+) failures?(?:, (\d+) pending)?', 'rspec'),
+    # phpunit, every ending it has in ONE alternation: "OK (42 tests, 108 assertions)",
+    # the risky/skipped variant which is still a pass, and both red words. ERRORS!
+    # matched nothing at all before, so a suite that errored looked like no test run.
+    # One entry rather than three because tests_from returns on the first PATTERN that
+    # matches anywhere - so split across three, the green ending sat above the red one
+    # and a fixed-then-broken suite reported green. Last match must be the last run,
+    # and that only holds while a runner has a single pattern.
+    (r'(?:OK \(\d+ tests?, \d+ assertions?\)'
+     r'|(?:OK, but [^\n]*|FAILURES|ERRORS)!\s*Tests: \d+,[^\n]*)', 'phpunit'),
     # plain unittest: the count and the verdict are on separate lines, and the count alone
     # is not a result - "Ran 42 tests" with no OK/FAILED after it is a run still going.
     # The verdict's parenthetical carries the counts, and reading them is the difference
@@ -61,6 +70,7 @@ def tests_from(text: str) -> dict:
         m = None
         for m in re.finditer(pat, text, re.M): pass      # the LAST run is the current truth
         if not m: continue
+        line = None                                      # cargo synthesises its own
         g = [x for x in m.groups() if x is not None]
         nums = [int(x) for x in g if str(x).isdigit()]
         if runner == 'pytest':
@@ -82,9 +92,17 @@ def tests_from(text: str) -> dict:
             # Cargo's own noise between two results, each of which carries a tail:
             # "Doc-tests mycrate", "Running unittests src/lib.rs". Anything else
             # between them means a different invocation, and the later one wins.
+            # `Compiling`/`Finished` are start-of-invocation markers - they never appear
+            # BETWEEN the binaries of one `cargo test`, so they cannot help the case this
+            # walk exists for, and they let two separate cargo runs be summed as one.
+            # `test .*\.\.\.` rather than `test \S+ \.\.\.` because a doc-test's own
+            # per-test line has spaces in its name: "test src/lib.rs - add (line 3) ... ok".
+            # The diagnostic continuations are here because a rustc warning before the
+            # doc-tests block would otherwise break the walk mid-invocation.
             same = re.compile(
-                r'\s*(?:$|Running\b|Doc-tests\b|Compiling\b|Finished\b'
-                r'|running \d+ tests?\b|test \S+ \.\.\.|warning:)')
+                r'\s*(?:$|Running\b|Doc-tests\b'
+                r'|running \d+ tests?\b|test .*\.\.\.'
+                r'|warning:|error\[|note:|help:|-->|\d*\s*\||=\s)')
             def gap(before, after):
                 # From the end of the line `before` sits on to the start of the
                 # line `after` sits on: the matched text stops at "failed", and
@@ -102,30 +120,58 @@ def tests_from(text: str) -> dict:
                 keep.insert(0, found[n - 1])
             passed = sum(int(mm.group(1)) for mm in keep)
             failed = sum(int(mm.group(2)) for mm in keep)
+            if not passed and not failed and len(keep) < len(found):
+                # The walk stopped somewhere it could not account for and what is left
+                # is cargo's doc-tests line, normally 0/0. Reporting that is worse than
+                # the gap this module exists to close: `ran` would be True, the card
+                # would not say "no test run detected", and the pill would render a
+                # green "0 tests passed" over a suite whose real result we did not read.
+                return {'ran': False}
+            # `line` is the receipt printed under the pill, so for a summed invocation it
+            # cannot be the last binary's own result - that would read "0 passed; 0
+            # failed" beneath "42 tests passed".
+            line = (m.group(0).strip()[:120] if len(keep) == 1 else
+                    f'{len(keep)} cargo test binaries: {passed} passed; {failed} failed')
         elif runner == 'maven':
-            # surefire's "Tests run" is the total, not the passes
-            passed, failed = nums[0] - nums[1] - nums[2], nums[1] + nums[2]
+            # surefire's "Tests run" is the total, not the passes, and Skipped is part
+            # of that total: "Tests run: 42, Failures: 0, Errors: 0, Skipped: 5" is 37
+            # that ran, not 42 that passed.
+            skipped = nums[3] if len(nums) > 3 else 0
+            passed, failed = nums[0] - nums[1] - nums[2] - skipped, nums[1] + nums[2]
         elif runner == 'rspec':
-            passed, failed = nums[0] - nums[1], nums[1]
+            # pending is rspec's skip: "5 examples, 0 failures, 2 pending" is 3 that ran.
+            pending = nums[2] if len(nums) > 2 else 0
+            passed, failed = nums[0] - nums[1] - pending, nums[1]
         elif runner == 'phpunit':
-            passed, failed = nums[0], 0
-        elif runner == 'phpunit-red':
-            # Errors and failures both mean not green, and a run can print either or both.
-            hurt = sum(int(n) for n in re.findall(r'(?:Failures|Errors): (\d+)', m.group(0)))
-            runner, passed, failed = 'phpunit', nums[0] - hurt, hurt
+            # Read off the matched ending itself rather than by group position, since one
+            # pattern now covers all four of them. Errors and failures both mean not
+            # green, and a run can print either or both.
+            said = m.group(0)
+            total = int((re.search(r'OK \((\d+) tests?', said)
+                         or re.search(r'Tests: (\d+)', said)).group(1))
+            hurt = sum(int(n) for n in re.findall(r'(?:Failures|Errors): (\d+)', said))
+            passed, failed = total - hurt, hurt
         elif runner == 'unittest':
             # "FAILED (failures=1, errors=1, skipped=1)" over 5 tests is 3 passed and 2
             # failed, not 5 failed. Skips are neither, the way they are everywhere else
             # here. A card that says 42 failed when 3 did is the same trust problem as
             # the false gap this all exists to remove.
+            # "expected failures=2" is unittest's xfail count and it prints on runs it
+            # calls OK, so counting it turned a green run red - the sharpest version of
+            # this bug, because an xfail is the one thing a suite marks as EXPECTED.
             total, verdict = nums[0], m.group(2)
-            hurt = sum(int(n) for n in re.findall(r'(?:failures|errors)=(\d+)', verdict))
-            passed, failed = (total - hurt, hurt) if hurt else (
-                (total, 0) if verdict.startswith('OK') else (0, total))
+            hurt = sum(int(n) for n in
+                       re.findall(r'(?<!expected )(?:failures|errors)=(\d+)', verdict))
+            if hurt or verdict.startswith('OK'):
+                passed, failed = total - hurt, hurt
+            else:
+                # A FAILED with no counts in its parenthetical - "FAILED (unexpected
+                # successes=1)" - is at least one failure, not all of them.
+                passed, failed = total - 1, 1
         else:
             passed, failed = (0, 0) if m.group(1) == 'ok' else (0, 1)
         return {'ran': True, 'runner': runner, 'passed': passed, 'failed': failed,
-                'line': m.group(0).strip()[:120]}
+                'line': line if line is not None else m.group(0).strip()[:120]}
     return {'ran': False}
 
 

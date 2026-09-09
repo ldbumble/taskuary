@@ -1109,11 +1109,11 @@ export default function ConnectorsView() {
       ...catalogCards("Cloud & infrastructure"),
     ]},
     { title: "Corporate systems", cards: [
-      ...dataCards(["intacct", "quickbooks", "zoho_invoice", "teller"]),
+      ...dataCards(["intacct", "quickbooks", "zoho_invoice"]),
       ...catalogCards("Corporate systems"),
     ]},
     { title: "Markets & finance", cards: [
-      ...dataCards(["yahoo", "coingecko", "frankfurter", "sec_edgar", "screen"]),
+      ...dataCards(["teller", "yahoo", "coingecko", "frankfurter", "sec_edgar", "screen"]),
       ...plannedCards(["stooq"]),
       ...catalogCards("Markets & finance"),
     ]},

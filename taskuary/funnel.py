@@ -398,7 +398,8 @@ def from_proposals(store, used_rids: set) -> list:
 
 def from_calendar(store, now: datetime) -> list:
     out = []
-    for e in _agenda(store):
+    # block=False: the pile is a read the owner is waiting on, and the calendar is a network call
+    for e in _agenda(store, block=False):
         st, en = _activity_time(e.get('start')), _activity_time(e.get('end')) or _activity_time(e.get('start'))
         # a meeting is unread work until it starts; a few minutes into it there is nothing to walk the owner
         # into (2026-09-07: an hour-old meeting sat at the top of Unread as "next - coming up")

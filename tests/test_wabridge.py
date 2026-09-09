@@ -114,3 +114,34 @@ class BridgeManagerTests(unittest.TestCase):
             r = c_api.get(f"/api/connectors/{wa['ConnectorId']}/wa/status").json()
         self.assertEqual(r['bridge'], False); self.assertIn('phase', r['manager'])                    # the manager's phase rides along
         self.assertIn(r['node'], (True, False))                                                        # step 1 of the pairing box: is Node here
+
+
+class LaunchGraceIsSpentByThePollTests(unittest.TestCase):
+    """uvicorn accepts no connection until the FastAPI lifespan yields, and wait_listening(8)
+    sat inside it: both launches on 2026-09-09 spent the full 8s there, so the desktop window
+    was up saying "can't connect" for 18 seconds. wait_listening only delays its caller, so the
+    grace cannot simply move to a thread - it is spent by whichever poll asks first, which is
+    who the grace was always for."""
+
+    def setUp(self):
+        wabridge._GRACE_SPENT = False
+        self.addCleanup(setattr, wabridge, "_GRACE_SPENT", False)
+
+    def test_the_launch_grace_is_spent_once_and_never_again(self):
+        waits = []
+        def fake_wait(secs): waits.append(secs); return False
+        with mock.patch.object(wabridge, "wait_listening", fake_wait):
+            wabridge.ready(3); wabridge.ready(3); wabridge.ready(3)
+        self.assertEqual(waits, [3], f"the bridge grace was waited {len(waits)} times")
+
+    def test_the_startup_catch_up_waits_for_the_bridge_before_it_polls(self):
+        order = []
+        gate = mock.patch.object(wabridge, "ready", lambda *a, **k: order.append("bridge"))
+        poll = mock.patch.object(server, "_poll_reports", lambda *a, **k: order.append("poll"))
+        days = mock.patch.object(server.store, "get_settings", return_value={"startup_sync_days": "1"})
+        with gate, poll, days:
+            server.catch_up_on_startup()
+            for _ in range(200):
+                if "poll" in order: break
+                time.sleep(.02)
+        self.assertEqual(order[:2], ["bridge", "poll"], f"order was {order}")

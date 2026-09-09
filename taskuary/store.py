@@ -491,6 +491,23 @@ ROLES = ('trigger', 'feed', 'report', 'tool', 'notify')
 def roles_of(c) -> set: return {r for r in (c.get('Roles') or '').split(',') if r}
 
 
+def _snapcopy(o):
+    """A private deep copy of an inventory snapshot, for the copy that guards the display cache.
+
+    A snapshot holds nothing but what SQLite and json give back - dict, list, str, int, float,
+    bool, None - so the generic machinery in copy.deepcopy (memo table, per-type dispatch,
+    __reduce__ probing) is all overhead: 396ms against 153ms on a real 78MB store, and that ran
+    on every cache HIT before the pile could answer. Same result, same isolation.
+    """
+    t = type(o)
+    if t is dict: return {k: _snapcopy(v) for k, v in o.items()}
+    if t is list: return [_snapcopy(v) for v in o]
+    # anything else a snapshot can hold is immutable; a type that is not falls back to the
+    # general copy rather than being aliased into the cache
+    if t in (str, int, float, bool, type(None)): return o
+    return copy.deepcopy(o)
+
+
 class SQLiteStore:
     """The local-first binding. One connection, a lock (sqlite + threads), rows as dicts."""
 
@@ -2044,7 +2061,7 @@ class SQLiteStore:
                                  as_of[:10])
             cached = self._processing_display_cache.get(display_cache_key)
             if cached is not None:
-                snapshot = apply_workers(copy.deepcopy(cached))
+                snapshot = apply_workers(_snapcopy(cached))
                 snapshot['as_of'] = as_of
                 snapshot.pop('snapshot_revision', None)
                 snapshot['snapshot_revision'] = hashlib.sha256(json.dumps(
@@ -2063,7 +2080,7 @@ class SQLiteStore:
                              cur.execute('PRAGMA data_version').fetchone()[0], worker_revision)
                 cached = getattr(self, '_processing_runtime_inventory_cache', None)
                 if cached is not None and cached[0] == cache_key:
-                    snapshot = copy.deepcopy(cached[1])
+                    snapshot = _snapcopy(cached[1])
                     snapshot['as_of'] = as_of
                     snapshot.pop('snapshot_revision', None)
                     snapshot['snapshot_revision'] = hashlib.sha256(json.dumps(
@@ -2169,7 +2186,7 @@ class SQLiteStore:
             if current_key == display_cache_key:
                 # Unread and an explicit named-history lookup alternate in one chat walk.
                 # Keep both current windows warm; substantive writes clear the whole cache.
-                self._processing_display_cache[display_cache_key] = copy.deepcopy(snapshot)
+                self._processing_display_cache[display_cache_key] = _snapcopy(snapshot)
         snapshot = apply_workers(snapshot)
         snapshot['snapshot_revision'] = hashlib.sha256(json.dumps(
             snapshot, ensure_ascii=False, sort_keys=True,

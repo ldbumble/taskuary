@@ -70,7 +70,7 @@ async def _lifespan(_app):
     hub_term.recover_after_restart(store)
     from . import wabridge
     try:
-        if wabridge.start_configured(store).get('started'): wabridge.wait_listening(8)   # else the first poll files a false "bridge not running"
+        wabridge.start_configured(store)      # the launch grace is spent by the first poll (wabridge.ready), never here
     except Exception as e: logger.warning(f'wa bridge startup failed: {e}')
     catch_up_on_startup()          # defined below; resolved when the app actually starts
     try:                           # a relaunch opens a NEW chat rather than resuming the last one
@@ -2229,8 +2229,13 @@ async def claude_hook(request: Request):
     """Claude Code's hook fired in a checkout a session of ours works in (hooks.py wires it): the
     event's JSON comes in on the body. Always 200 and quiet - a hook must never trouble the agent."""
     from . import hooks
+    # Anything unreadable is a non-event, including a hook that HUNG UP: hooks.py posts with
+    # `curl -s -m 3` so it can never hold the agent, and a server stalled for longer than that
+    # outlives the curl - request.body() then raises ClientDisconnect, which is no ValueError and
+    # used to escape as a 500 per stall. The agent moved on three seconds ago either way.
     try: payload = json.loads((await request.body()) or b'{}')
-    except ValueError: return {'bound': False}
+    except Exception as e:
+        logger.debug(f'claude hook body unreadable: {e}'); return {'bound': False}
     try: return hooks.receive(payload if isinstance(payload, dict) else {})
     except Exception as e:
         logger.debug(f'claude hook ignored: {e}'); return {'bound': False}
@@ -4706,6 +4711,9 @@ def quick_forever():
     It also carries the by-the-way push: while the walk is in a phone chat, an interruption has to
     go THERE, and an agent raising its hand is not something a mailbox poll would ever discover.
     That is why it sits outside the sync switch and throttles itself (remote_assistant.push_alerts)."""
+    from . import wabridge
+    try: wabridge.ready(8)          # whichever lane polls first spends the grace; the other is free
+    except Exception as e: logger.debug(f'wa bridge grace skipped: {e}')
     while True:
         try:
             from . import remote_assistant
@@ -4938,6 +4946,10 @@ def catch_up_on_startup():
     days = _catchup_days(days)
     logger.info(f"startup: {'incremental poll (closed under an hour)' if days == 0 else f'catching up on the last {days} day(s)'}")
     def _catch_up():
+        # the bridge's launch grace, spent here instead of in front of the owner's first request
+        from . import wabridge
+        try: wabridge.ready(8)
+        except Exception as e: logger.debug(f'wa bridge grace skipped: {e}')
         _poll_reports(days, what=f'catching up on the last {days} day(s)' if days else 'syncing', startup=True)
         # the Morning digest needs no call of its own anymore: it is a seeded REPORT, run by
         # the poll above like every other one. Consolidate what the verdicts taught next,

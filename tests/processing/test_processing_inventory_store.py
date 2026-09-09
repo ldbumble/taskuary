@@ -359,3 +359,26 @@ def test_inventory_rejects_non_json_worker_input_before_opening_a_read_transacti
         raise AssertionError('non-JSON worker input must be rejected')
     assert entered is False
     store.cx.close()
+
+
+def test_a_mutated_snapshot_never_corrupts_the_display_cache(tmp_path):
+    """The display cache hands every reader a PRIVATE copy: apply_workers overlays workers onto
+    what it gets and callers set fields on it, while the cached inventory behind it has to stay
+    exactly as read. That copy was 396ms of every cache HIT over a real 78MB store, so it is
+    specialised to the plain JSON types a snapshot actually holds - this is the invariant the
+    specialisation has to keep, whatever it is implemented with.
+    """
+    store = SQLiteStore(str(tmp_path / 'copy-isolation.db'))
+    seed_four_entity_kinds(store)
+    store.reconcile_processing_membership()
+    first = store.processing_inventory_snapshot(fixed_now=NOW, live_state=[], display_only=True)
+    assert first['items'], 'the fixture must produce items to mutate'
+    first['items'][0]['_clobbered'] = True
+    first['items'].append({'_invented': True})
+    first['coverage']['_clobbered'] = True
+
+    second = store.processing_inventory_snapshot(fixed_now=NOW, live_state=[], display_only=True)
+    assert '_clobbered' not in second['items'][0]
+    assert all('_invented' not in item for item in second['items'])
+    assert '_clobbered' not in second['coverage']
+    assert len(second['items']) == len(first['items']) - 1

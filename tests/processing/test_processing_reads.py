@@ -328,7 +328,7 @@ def test_active_concierge_done_accepts_its_own_discussion_without_expanding_memb
     from fastapi.testclient import TestClient
     from taskuary import concierge, funnel, general, server, terminal
     monkeypatch.setattr(terminal, 'live_sessions', lambda tail=0: [])
-    monkeypatch.setattr(funnel, '_agenda', lambda store: [])
+    monkeypatch.setattr(funnel, '_agenda', lambda store, **kw: [])
     tid = db.create_task({'Title': 'Synthetic task', 'Kind': 'general'}, 'fixture')
     mid = message(db, task=tid)
     general.dock_task(db, 'fixture')

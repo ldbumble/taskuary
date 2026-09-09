@@ -301,6 +301,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [msgs, setMsgs] = useState([]);
   const [pile, setPile] = useState(null);
   const [busy, setBusy] = useState(false);
+  // the walk validates Current against the pile before it can say anything, and that read was
+  // 5-47s (2026-09-09). busy is the TURN's interlock and surface() refuses to run while it is
+  // set, so opening needs its own flag - without one the button stayed enabled, said nothing,
+  // and looked broken for the whole wait.
+  const [starting, setStarting] = useState(false);
   const [resetting, setResetting] = useState(false);  // replacing a chat is housekeeping, never an AI turn
   const [work, setWork] = useState([]);              // the turn's tool calls and progress, as they stream
   const [err, setErr] = useState("");
@@ -588,9 +593,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const scope = nextSelectionScope(key ? null : only.current, key ? null : currentRef.current?.key || null);
     const capture = key ? null : await ensureNextSelection(scope);
     const activeScope = nextSelectionScope(key ? null : only.current, key ? null : currentRef.current?.key || null);
-    if (epoch !== chatEpoch.current || resettingRef.current || (!key && !sameSelectionScope(scope, activeScope))) {
+    const scopeMoved = !key && !sameSelectionScope(scope, activeScope);
+    if (epoch !== chatEpoch.current || resettingRef.current || scopeMoved) {
       turnFlight.current = false;
       setBusy(false);
+      // a new chat or a reset is the owner's own doing and stays quiet. The rail re-emitting under
+      // a slow pile is NOT: this returned with no error and no message, and between 08:20 and
+      // 08:47 on 2026-09-09 not one press reached the server while the button looked alive.
+      if (scopeMoved) setErr((m) => m || "The list moved while that was loading - press it again.");
       return;
     }
     // A failed modern capture (including selection_unavailable) never becomes an optimistic owner
@@ -626,17 +636,26 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   useEffect(() => { surfaceRef.current = surface; }, [surface]);
   const startFlight = useRef(false);
   const start = async (what) => {
-    if (busy || resetting || handoff || turnFlight.current || startFlight.current) return;
+    if (busy || resetting || handoff || turnFlight.current || startFlight.current || starting) return;
     startFlight.current = true;
     const epoch = chatEpoch.current;
+    const said = what === "mail" ? "Just what came in." : "Walk me through my tasks.";
+    setStarting(true); setErr("");
+    setMsgs((m) => [...m, { id: `u${Date.now()}`, role: "user", text: said }]);
     try {
       only.current = sharedFilter.current && sharedFilter.current !== "{}" ? `view:${sharedFilter.current}` : (pile?.canonical ? null : what);
       selectionRef.current = null;
       await loadPile(true);                   // validate/resume Current under the requested scope
       if (epoch !== chatEpoch.current || resettingRef.current) return;
-      if (!currentRef.current) await surface(null, what === "mail" ? "Just what came in." : "Walk me through my tasks.");
+      // the line is already on screen: surface must not post a second copy of it
+      if (!currentRef.current) await surface(null, null);
+    } catch (e) {
+      // the owner's line is on screen now, so a failure has to be answered on screen too -
+      // an unhandled rejection would leave "Walk me through my tasks." sitting there alone
+      setErr(errText(e));
     } finally {
       startFlight.current = false;
+      setStarting(false);
     }
   };
 
@@ -979,9 +998,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               <span>{items.length ? `How can I help? ${waitingLine(ready)}`
                 : "How can I help? Nothing is waiting on you - ask me anything, or set something up."}</span>
               <div className="tq-modes">
-                <button type="button" className="tq-chip primary" disabled={resetting || !canAdvance} onClick={() => start(null)}
-                  title="Everything in the pipe, most important first - mail, reports, agents, meetings">Walk me through my tasks</button>
-                {!pile?.canonical && <button type="button" className="tq-chip" disabled={resetting || !incoming(ready).length} onClick={() => start("mail")}
+                <button type="button" className="tq-chip primary" disabled={busy || resetting || starting || !canAdvance} onClick={() => start(null)}
+                  title="Everything in the pipe, most important first - mail, reports, agents, meetings">{starting ? "Reading your pipe..." : "Walk me through my tasks"}</button>
+                {!pile?.canonical && <button type="button" className="tq-chip" disabled={busy || resetting || starting || !incoming(ready).length} onClick={() => start("mail")}
                   title="Only what people sent you - mail and chat">Just what came in</button>}
                 <button type="button" className="tq-chip" disabled={resetting} onClick={setup}
                   title="A scheduled check that reads and summarises, or a workflow that writes data">Set up a report or workflow</button>

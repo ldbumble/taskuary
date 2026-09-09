@@ -268,15 +268,47 @@ def cold(store, days: int) -> list:
 
 
 _AGENDA = {}               # one calendar read per check: prep's candidates and the CALENDAR block share it
-def _agenda(store) -> list:
+_AGENDA_FRESH = 60         # seconds a read stays good
+_AGENDA_LOCK = threading.Lock()
+
+def _agenda(store, *, block: bool = True) -> list:
+    """The next two days of meetings, cached for _AGENDA_FRESH seconds.
+
+    Reading this is a LIVE Microsoft Graph call - a token POST plus one calendarView per mailbox,
+    20s timeout each. Whoever found the cache stale used to pay for all of it, and the pile reads
+    it: most /api/funnel/pile calls were ~5s and the one that refreshed was 45s (2026-09-09).
+
+    So a caller the OWNER is waiting on passes block=False and gets what is known right now while
+    the refresh runs on its own thread. A report composing a brief keeps the blocking read - an
+    empty calendar in the morning digest would be a wrong answer, not a slow one.
+    """
     if store.get_settings().get('calendar_enabled', '1') != '1': return []
-    if _AGENDA.get('at', 0) > datetime.now().timestamp() - 60: return _AGENDA['events']
+    if _AGENDA.get('at', 0) > datetime.now().timestamp() - _AGENDA_FRESH: return _AGENDA['events']
+    if block: return _read_agenda(store)
+    _refresh_agenda(store)
+    return _AGENDA.get('events', [])
+
+
+def _read_agenda(store) -> list:
     from . import calendar as cal
     try: ev = [e for e in (cal.agenda(store, days=2).get('events') or []) if not e.get('all_day')]
     except Exception as e:
         logger.debug(f'assistant: calendar skipped - {e}'); ev = []
     _AGENDA.update(at=datetime.now().timestamp(), events=ev)
     return ev
+
+
+def _refresh_agenda(store):
+    """One refresh at a time, whoever asked for it. The stamp is written by _read_agenda even when
+    the read failed, so a calendar nobody can reach is retried on the clock rather than on every
+    read - which is what kept a stalled Graph call in front of the pile."""
+    with _AGENDA_LOCK:
+        if _AGENDA.get('reading'): return
+        _AGENDA['reading'] = True
+    def go():
+        try: _read_agenda(store)
+        finally: _AGENDA['reading'] = False
+    threading.Thread(target=go, name='taskuary-agenda', daemon=True).start()
 
 
 def prep(store) -> list:

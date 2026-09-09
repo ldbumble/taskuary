@@ -126,3 +126,15 @@ class HookWiringTests(unittest.TestCase):
         w = c.get(f'/api/tasks/{tid}/work', params={'diff': False}).json()
         self.assertEqual(w['files'][0]['path'], 'taskuary/server.py'); self.assertEqual(w['prov']['by'], 'coder'); self.assertEqual(w['session']['sid'], 's1')
         self.assertEqual(c.post('/api/hooks/claude', content=b'not json').json(), {'bound': False})   # a hook must never trouble the agent
+
+    def test_a_hook_that_hung_up_is_not_a_server_error(self):
+        """hooks.py posts with `curl -s -m 3` so a hook can never hold the agent up. A server
+        stalled for longer than that (a 47s pile, 2026-09-09) outlives the curl, so reading the
+        body raises ClientDisconnect - which is not a ValueError, escaped the handler, and left a
+        500 traceback per stall in the log. The agent had already moved on; this is only noise."""
+        import asyncio
+        from starlette.requests import Request
+        scope = {'type': 'http', 'method': 'POST', 'path': '/api/hooks/claude', 'headers': [],
+                 'query_string': b'', 'client': ('127.0.0.1', 1)}
+        async def gone(): return {'type': 'http.disconnect'}
+        self.assertEqual(asyncio.run(server.claude_hook(Request(scope, gone))), {'bound': False})

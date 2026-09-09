@@ -56,6 +56,26 @@ def wait_listening(secs: float) -> bool:
     return False
 
 
+_GRACE_SPENT = False
+
+
+def ready(secs: float = 8) -> bool:
+    """Spend the launch grace for a just-started bridge - once per process, and never on the
+    startup path.
+
+    This wait used to sit in the FastAPI lifespan, which uvicorn will not accept a single
+    connection until it yields: both launches on 2026-09-09 burned the full 8 seconds there, so
+    the window was up in front of the owner saying "can't connect" for 18s. wait_listening has no
+    side effect - it only delays whoever calls it - so the grace cannot move to a thread and
+    still mean anything. It belongs to whichever POLL asks first, which is who it was always for:
+    the point was that the first poll must not file a false "bridge not running".
+    """
+    global _GRACE_SPENT
+    if _GRACE_SPENT: return True
+    _GRACE_SPENT = True          # a LAUNCH grace, spent whether or not it answered in time
+    return wait_listening(secs)
+
+
 def filter_policy(store, connector_id: int) -> dict:
     """The same allow-list used by Python ingestion, ready before Baileys receives offline messages.
     Without this launch-time copy, a restarted bridge could acknowledge its pending queue before

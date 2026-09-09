@@ -13,7 +13,7 @@ def store(monkeypatch):
     s = MemoryStore()
     s.set_setting('calendar_enabled', '0', 'test')
     monkeypatch.setattr(terminal, 'live_sessions', lambda tail=0: [])
-    monkeypatch.setattr(funnel, '_agenda', lambda _s: [])
+    monkeypatch.setattr(funnel, '_agenda', lambda _s, **kw: [])
     s.reconcile_processing_membership()
     s.activate_processing_reads(fixed_now=datetime.now().isoformat(), live_state=[])
     funnel.invalidate()

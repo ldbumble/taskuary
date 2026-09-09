@@ -26,7 +26,7 @@ def store(monkeypatch):
         value.set_setting(name, "0", "test")
     value.set_setting("funnel_hours", "240", "test")
     monkeypatch.setattr(terminal, "live_sessions", lambda tail=0: [])
-    monkeypatch.setattr(funnel, "_agenda", lambda _store: [])
+    monkeypatch.setattr(funnel, "_agenda", lambda _store, **kw: [])
     funnel.invalidate()
     funnel.forget_states()
     yield value

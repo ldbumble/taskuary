@@ -1116,12 +1116,22 @@ class SQLiteStore:
 
     def task_has_tag(self, task_id, tag) -> bool:
         return tag in re.split(r'[\s,]+', str((self.get_task(task_id) or {}).get('Tags') or ''))
-    def list_tasks(self, status=None, active_only=False):
-        q = '''SELECT t.*, rv.Status ReviewStatus, rv.Kind ReviewKind,
+    def list_tasks(self, status=None, active_only=False, search=True):
+        """Task rows, each carrying its latest review, run and handover note.
+
+        `search` builds the message-search blobs the Tasks tab filters on locally. They are seven
+        GROUP_CONCAT(DISTINCT) columns over the WHOLE message table - seven temp B-trees and an
+        automatic index over the materialised result - and on a real store (270 tasks, 5,275
+        messages) they were 34ms of a 35ms query. Everything else in this row costs under 7ms, so
+        a caller that is not searching should not pay for them. SearchSources is not optional:
+        Board and Tasks both draw "Report - <source>" from it.
+        """
+        blobs = ('''ms.SearchChannels, ms.SearchSubjects, ms.SearchPeople,
+                       ms.SearchEmails, ms.SearchExternalIds, ms.SearchLinks,''' if search else '')
+        q = f'''SELECT t.*, rv.Status ReviewStatus, rv.Kind ReviewKind,
                        rn.Status RunStatus, rn.AgentName RunAgent,
                        ho.Body HandoverNote,
-                       ms.SearchChannels, ms.SearchSources, ms.SearchSubjects, ms.SearchPeople,
-                       ms.SearchEmails, ms.SearchExternalIds, ms.SearchLinks
+                       {blobs} ms.SearchSources
                 FROM task t
                LEFT JOIN (
                    SELECT TaskId, Status, Kind FROM review
@@ -1137,16 +1147,17 @@ class SQLiteStore:
                        SELECT MAX(CommentId) FROM comment WHERE Body LIKE 'HANDOVER NOTE%' GROUP BY TaskId
                    )
                 ) ho ON ho.TaskId=t.TaskId'''
-        q += '''
-               LEFT JOIN (
-                   SELECT TaskId,
-                          GROUP_CONCAT(DISTINCT Channel) SearchChannels,
-                          GROUP_CONCAT(DISTINCT SourceName) SearchSources,
+        agg = ('''GROUP_CONCAT(DISTINCT Channel) SearchChannels,
                           GROUP_CONCAT(DISTINCT Subject) SearchSubjects,
                           GROUP_CONCAT(DISTINCT FromName) SearchPeople,
                           GROUP_CONCAT(DISTINCT FromEmail) SearchEmails,
                           GROUP_CONCAT(DISTINCT ExternalId) SearchExternalIds,
-                          GROUP_CONCAT(DISTINCT SourceLink) SearchLinks
+                          GROUP_CONCAT(DISTINCT SourceLink) SearchLinks,''' if search else '')
+        q += f'''
+               LEFT JOIN (
+                   SELECT TaskId,
+                          {agg}
+                          GROUP_CONCAT(DISTINCT SourceName) SearchSources
                    FROM message GROUP BY TaskId
                ) ms ON ms.TaskId=t.TaskId'''
         where, p = [], []

@@ -314,6 +314,24 @@ class ListTasksJoinTests(unittest.TestCase):
         self.assertIn('gh:org/app#31', row['SearchExternalIds'])
         self.assertIn('/pull/31', row['SearchLinks'])
 
+    def test_the_search_blobs_are_only_built_when_somebody_is_searching(self):
+        """Those seven GROUP_CONCAT(DISTINCT) columns aggregate the WHOLE message table on every
+        call - seven temp B-trees and an automatic index over the result. On a real store (270
+        tasks, 5,275 messages) that was 34ms of a 35ms query, and the Tasks tab asked for it on
+        every open. SearchSources stays: Board and Tasks both draw "Report - <source>" from it.
+        """
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Fix validation', 'Source': 'github'}, 't')
+        s.add_message({'TaskId': tid, 'ExternalId': 'gh:org/app#31', 'Channel': 'github',
+                       'SourceName': 'org/app', 'Subject': 'org/app#31 Fix validation',
+                       'FromName': 'octocat', 'Status': 'routed'})
+        light = s.list_tasks(search=False)[0]
+        self.assertEqual(light['SearchSources'], 'org/app')      # the label still has its source
+        for gone in ('SearchSubjects', 'SearchPeople', 'SearchEmails', 'SearchChannels',
+                     'SearchExternalIds', 'SearchLinks'):
+            self.assertNotIn(gone, light, f'{gone} was built for a caller that is not searching')
+        self.assertIn('org/app#31', s.list_tasks(search=True)[0]['SearchSubjects'])
+
     def test_latest_review_run_and_handover_land_on_the_row(self):
         fx = Factory()
         p = fx.handover()

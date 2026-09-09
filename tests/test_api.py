@@ -328,6 +328,23 @@ class ApiTests(unittest.TestCase):
         self.assertNotIn(old, active)
         self.assertIn(old, all_ids)
 
+    def test_tasks_ship_the_search_blobs_only_when_asked(self):
+        """The Tasks tab used to open by asking for every task ever plus seven GROUP_CONCAT
+        columns aggregated over the WHOLE message table - 34ms of a 35ms query and 69KB of a
+        319KB payload on a real store, on every open, to let the browser filter locally. The
+        blobs now come when something is actually searching; the report label's source does not.
+        """
+        fx = Factory(server.store)
+        tid = fx.open_task().tid
+        server.store.add_message({'TaskId': tid, 'Channel': 'email', 'SourceName': 'inbox',
+                                  'Subject': 'the searchable subject', 'FromName': 'Rachel',
+                                  'Status': 'routed'})
+        light = next(t for t in c.get('/api/tasks', params={'active': True}).json()['data'] if t['TaskId'] == tid)
+        self.assertIn('SearchSources', light)                 # "Report - <source>" still draws
+        self.assertNotIn('SearchSubjects', light)
+        full = next(t for t in c.get('/api/tasks', params={'search': True}).json()['data'] if t['TaskId'] == tid)
+        self.assertIn('the searchable subject', full['SearchSubjects'])
+
     def test_feed_304s_when_nothing_changed(self):
         r1 = c.get('/api/feed')
         self.assertEqual(r1.status_code, 200)

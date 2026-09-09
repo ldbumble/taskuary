@@ -419,9 +419,13 @@ def _playbook_brief(task, books=None):
             'uses': uses, 'missing': found is None}
 
 @app.get('/api/tasks')
-def tasks(status: str = None, active: bool = False):
+def tasks(status: str = None, active: bool = False, search: bool = False):
     """An interactive session IS an agent working - the UI has to see it, or a task with a
-    live CLI on it reads as 'queued' while the agent sits there asking a question."""
+    live CLI on it reads as 'queued' while the agent sits there asking a question.
+
+    `search` asks for the message-search blobs the Tasks tab filters on locally. They aggregate
+    the whole message table (see store.list_tasks) and were 34ms of a 35ms query plus 69KB of a
+    319KB payload on a real store, so opening a tab no longer pays for a search nobody ran."""
     qs = {q['TaskId']: q for q in store.queued_dispatches()}
     wc = store.waiting_counts()
     agented = store.agented_task_ids()      # the Board's Done lane shows agent work only
@@ -434,7 +438,7 @@ def tasks(status: str = None, active: bool = False):
                       'Session': sessions.get(t['TaskId']),
                       'Queued': _queued_info(qs.get(t['TaskId'])), 'Waiting': wc.get(t['TaskId'], 0),
                       'HadAgent': t['TaskId'] in agented}
-                     for t in store.list_tasks(status, active_only=active)]}
+                     for t in store.list_tasks(status, active_only=active, search=search)]}
 
 @app.post('/api/tasks')
 def create_task(body: TaskBody):

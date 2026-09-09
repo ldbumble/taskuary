@@ -151,7 +151,11 @@ test("Walk validates Current without creating a turn and stale gestures remove t
   const surface = view.slice(view.indexOf("const surface = useCallback"), view.indexOf("useEffect(() => { surfaceRef.current"));
   assert.ok(surface.indexOf("const activeScope") < surface.indexOf("const optimisticId"),
     "an async capture is revalidated before drawing or posting its navigation");
-  assert.match(surface, /epoch !== chatEpoch\.current \|\| resettingRef\.current \|\| \(!key && !sameSelectionScope\(scope, activeScope\)\)/);
+  // All three still gate the guard - the scope check is named now so it can also SAY so:
+  // returning silently is how a press could reach nothing at all (2026-09-09).
+  assert.match(surface, /const scopeMoved = !key && !sameSelectionScope\(scope, activeScope\)/);
+  assert.match(surface, /epoch !== chatEpoch\.current \|\| resettingRef\.current \|\| scopeMoved/);
+  assert.match(surface, /if \(scopeMoved\) setErr/);
   assert.ok(surface.indexOf("selectionContractSeen.current && !capture") < surface.indexOf("setMsgs((m) => [...m"),
     "an unavailable capture is rejected before drawing an optimistic owner turn");
   assert.match(view, /m\.filter\(\(message\) => message\.id !== optimisticId\)/);

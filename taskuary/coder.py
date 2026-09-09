@@ -276,13 +276,27 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     session = general.session_for(tid)
     if general.handles(task) and (session or general.chat_rows(store, tid)):
         if session: term.close(session.sid)
-        if close and task.get('Status') not in ('done', 'dropped'):
-            store.update_task(tid, {'Status': 'done'}, actor)
-        store.add_comment(tid, actor, 'human', ('Closed the general-work session.' if session else 'Closed out the assistant conversation.')
-                          + (' Marked the task done.' if close else ''))
         store.audit('terminal', tid, 'wrap', actor, detail={'sid': sid or getattr(session, 'sid', None), 'close': close, 'mode': 'assistant'})
         last = next((m['content'][0]['text'] for m in reversed(general.history(store, tid)) if m['role'] == 'assistant'), '')
-        return {'wrap': 'done', 'taskId': tid, 'report': last, 'proposed': [], 'drafting': False}
+        # ...and then the SAME ending every other worker gets. This branch used to return
+        # `drafting: False` without ever calling finish(), so a task somebody WROTE IN about closed
+        # with them unanswered - while selfclose.CHAT_LINE promises the assistant that ending it
+        # "drafts the answer the person who asked will get". Told that and given no drafter, the
+        # assistant wrote the reply into the chat itself, in its own voice, where STYLE.md never
+        # touched it and no button could send it (TQ-0443; TQ-0440/0441 closed answering nobody).
+        # The conversation IS this worker's transcript, so it is what the responder drafts from.
+        fin = {}
+        if close and task.get('Status') not in ('done', 'dropped'):
+            fin = finish(store, tid, {'summary': last}, None, 'assistant',
+                         reply_source(general.conversation_text(store, tid), final_message or last),
+                         owner_done=actor == 'owner') or {}
+            from . import selfclose; selfclose.unclaim(store, tid, actor)
+        store.add_comment(tid, actor, 'human', ('Closed the general-work session.' if session else 'Closed out the assistant conversation.')
+                          + (' The reply to whoever asked is drafted for you to approve.' if fin.get('drafting')
+                             else ' Marked the task done.' if close else ''))
+        return {'wrap': 'done', 'taskId': tid, 'report': last, 'proposed': [],
+                'drafting': bool(fin.get('drafting')), 'can_send': bool(fin.get('can_send')),
+                'send_block': fin.get('send_block') or '', 'freshness': fin.get('freshness') or 'unchecked'}
     live = term.session_for(tid)
     # The agent's OWN final answer, matched to the run (PW-230): the explicit `--done` sentence recorded as the
     # run's Finished event first, then the Stop hook's last message the witness kept - never a second AI's

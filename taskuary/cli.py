@@ -1,5 +1,5 @@
 """`taskuary` - start the local server and open the app. Everything lives in ~/.taskuary."""
-import argparse, socket, threading, time, webbrowser
+import argparse, socket, threading, webbrowser
 import uvicorn
 from . import __version__, config
 
@@ -21,6 +21,27 @@ def _is_taskuary(url):
         return requests.get(f'{url}/api/settings', timeout=2).status_code in (200, 401)
     except Exception:
         return False
+
+
+def open_when_ready(url: str, wait, open_it=None):
+    """Open the browser once the port ANSWERS, not on a timer.
+
+    A fixed 1.2s sleep was always a guess and had become a wrong one by 15 seconds: uvicorn.run
+    is handed the app as a STRING, so uvicorn performs the ~8s cold import itself (fastapi and
+    pydantic, ~600 modules) and only then runs the lifespan. The browser therefore opened on a
+    dead port and the owner got their browser's own "site can't be reached" (2026-09-09) - which
+    no splash of ours can replace, because that page is Chrome's, not the app's.
+
+    `wait` arrives already imported and this thread imports NOTHING, because uvicorn is importing
+    taskuary.server on the main thread at the same moment. The first version imported urllib in
+    here and deadlocked against urllib3's six shim over there: the port never opened, and the app
+    the owner had just started sat there dead for as long as they left it (2026-09-09).
+
+    If it never answers the browser still opens: degrade to the old behaviour, which at least
+    shows the owner something, rather than to a window that never appears.
+    """
+    wait(url)
+    (open_it or webbrowser.open)(url)
 
 
 def main():
@@ -253,7 +274,8 @@ def main():
     # QuickBooks redirect URI): server.py reads config, and config reads this
     import os; os.environ['TASKUARY_PORT'] = str(port)
     if not args.no_browser:
-        threading.Thread(target=lambda: (time.sleep(1.2), webbrowser.open(url)), daemon=True).start()
+        from .desktop import serving        # on the MAIN thread, before uvicorn starts importing
+        threading.Thread(target=open_when_ready, args=(url, serving), daemon=True).start()
     uvicorn.run('taskuary.server:app', host=host, port=port, log_level='warning')
 
 

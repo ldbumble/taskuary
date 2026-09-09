@@ -169,11 +169,21 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
 
   // fetch everything once and filter on the derived state - the server only knows raw
   // Status, and the state a person cares about is a combination of three columns
-  const loadTasks = useCallback(async () => {
+  // ?active=1 is open/in_progress/waiting PLUS today's done - exactly what "in progress" and an
+  // un-expanded "done" show. The archive, and the message-search blobs (seven GROUP_CONCAT
+  // aggregates over the WHOLE message table: 34ms of a 35ms query and 69KB of a 319KB payload on
+  // a real store), wait until something actually asks: a search, "show older", or "all".
+  const fullLoaded = useRef(false);
+  const loadTasks = useCallback(async (full = false) => {
+    const want = full || fullLoaded.current;      // once upgraded, never silently downgrade
     const seq = ++taskLoadSeq.current;
     try {
-      const next = (await api.get("/api/tasks")).data.data || [];
-      if (seq === taskLoadSeq.current) setTasks(next);
+      const params = want ? { search: 1 } : { active: 1 };
+      const next = (await api.get("/api/tasks", { params })).data.data || [];
+      if (seq === taskLoadSeq.current) {
+        setTasks(next);
+        if (want) fullLoaded.current = true;
+      }
     } catch (e) {
       if (seq === taskLoadSeq.current) setErr(e?.response?.data?.detail || "Failed to load tasks");
     }
@@ -421,6 +431,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const t = detail?.task?.TaskId === selected ? detail.task : null;
   const isGeneral = isGeneralKind(t?.Kind);
   const search = query.trim();
+  // The three gestures that need more than the live set. "done" on its own does NOT: ?active=1
+  // already carries today's, which is what it shows until "show older". "all" does, because
+  // today's DROPPED tasks only ever appear there and active does not include them.
+  useEffect(() => {
+    if ((search || older || filter === "") && !fullLoaded.current) loadTasks(true);
+  }, [search, older, filter, loadTasks]);
   // Search means the whole archive, regardless of the selected state pill or today's cutoff. That
   // is what makes a completed PR/task discoverable instead of merely searching the visible rows.
   const bucket = (tasks || []).filter((x) => search ? taskMatchesQuery(x, search) : (!filter || inBucket(x, filter)));
@@ -687,29 +703,34 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 : "Nothing here."}</Empty> : shown.map((task) => (
               // the selected row is outlined in its STATE's colour - a working task in the same sage as
               // its chip - not in the brand slate, which read as a fourth state nobody could name
-              <Box key={task.TaskId} onClick={() => onSelect(task.TaskId)}
+              <Box key={task.TaskId} onClick={() => onSelect(task.TaskId)} data-tq-task-row=""
                 sx={{ px: 1.25, py: 1, mb: 0.75, cursor: "pointer", bgcolor: "#fff", borderRadius: 1.75,
                   border: `1px solid ${selected === task.TaskId ? stateOf(task).c.fg : BORDER}`,
                   boxShadow: selected === task.TaskId ? "0 1px 8px rgba(47,107,79,.14)" : "none",
                   transition: "border-color .12s, box-shadow .12s",
                   "&:hover": { borderColor: selected === task.TaskId ? stateOf(task).c.fg : "#d8cfbe" } }}>
-                <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", minWidth: 0 }}>
-                  <Typography variant="caption" sx={{ color: "#55697a",
-                    fontFamily: "'IBM Plex Sans', 'Segoe UI', Arial, sans-serif", fontVariantNumeric: "tabular-nums",
-                    letterSpacing: ".015em", fontWeight: 750, fontSize: 12,
-                    whiteSpace: "nowrap", flexShrink: 0 }}>{task.ref}</Typography>
-                  <LifecycleChip kind="task" phase={taskPhase(task.Status)} compact />
-                  <StateChip task={task} />
-                  {task.Priority === "urgent" && <Chip size="small" label="urgent" sx={{ bgcolor: PILL_COLORS.red.bg, color: PILL_COLORS.red.fg, height: 17, fontSize: 10 }} />}
-                  {String(task.Tags || "").split(/[\s,]+/).includes("interrupted") && <Chip size="small" label="interrupted"
-                    title="Taskuary closed while an agent was working this. Nothing restarts until you choose an agent."
-                    sx={{ height: 17, fontSize: 9.5, bgcolor: "#eee7d6", color: "#7a5c1e" }} />}
-                  {assignedAgent(task.Assignee) && <Chip size="small" icon={<TaskuaryMark size={11} />}
-                    label={assignedAgent(task.Assignee)} title={`${assignedAgent(task.Assignee)} owns this task`}
-                    sx={{ height: 17, fontSize: 9.5, bgcolor: "#e3e6e1", color: "#47654a",
-                      "& .MuiChip-icon": { ml: 0.45 } }} />}
-                  <Box sx={{ flex: 1, minWidth: 0 }} />
-                  <Typography variant="caption" sx={{ color: FAINT, whiteSpace: "nowrap", flexShrink: 0 }}>{timeAgo(task.CreatedAt)}</Typography>
+                {/* the chips wrap, the age does not move: MUI chips cannot shrink (their label is nowrap,
+                    so min-width:auto is the whole word), and four of them on a narrow rail used to push
+                    "18h ago" straight off the card - the owner, 2026-09-09: "hours ago is getting pushed
+                    off the task". A wrapped second line loses nothing; a clipped timestamp lost the age. */}
+                <Box sx={{ display: "flex", gap: 0.75, alignItems: "flex-start", minWidth: 0 }}>
+                  <Box sx={{ display: "flex", gap: 0.75, rowGap: 0.4, alignItems: "center", flexWrap: "wrap", flex: 1, minWidth: 0 }}>
+                    <Typography variant="caption" sx={{ color: "#55697a",
+                      fontFamily: "'IBM Plex Sans', 'Segoe UI', Arial, sans-serif", fontVariantNumeric: "tabular-nums",
+                      letterSpacing: ".015em", fontWeight: 750, fontSize: 12,
+                      whiteSpace: "nowrap", flexShrink: 0 }} data-tq-task-ref="">{task.ref}</Typography>
+                    <LifecycleChip kind="task" phase={taskPhase(task.Status)} compact />
+                    <StateChip task={task} />
+                    {task.Priority === "urgent" && <Chip size="small" label="urgent" sx={{ bgcolor: PILL_COLORS.red.bg, color: PILL_COLORS.red.fg, height: 17, fontSize: 10 }} />}
+                    {String(task.Tags || "").split(/[\s,]+/).includes("interrupted") && <Chip size="small" label="interrupted"
+                      title="Taskuary closed while an agent was working this. Nothing restarts until you choose an agent."
+                      sx={{ height: 17, fontSize: 9.5, bgcolor: "#eee7d6", color: "#7a5c1e" }} />}
+                    {assignedAgent(task.Assignee) && <Chip size="small" icon={<TaskuaryMark size={11} />}
+                      label={assignedAgent(task.Assignee)} title={`${assignedAgent(task.Assignee)} owns this task`}
+                      sx={{ height: 17, fontSize: 9.5, bgcolor: "#e3e6e1", color: "#47654a",
+                        "& .MuiChip-icon": { ml: 0.45 } }} />}
+                  </Box>
+                  <Typography variant="caption" data-tq-task-age="" sx={{ color: FAINT, whiteSpace: "nowrap", flexShrink: 0, mt: 0.15 }}>{timeAgo(task.CreatedAt)}</Typography>
                 </Box>
                 <Typography variant="body2" noWrap sx={{ color: INK, fontWeight: 500, mt: 0.4 }}>{task.Title}</Typography>
                 {task.Playbook && <Typography variant="caption" noWrap sx={{ color: "#6b5f45", display: "block", mt: 0.2 }}>

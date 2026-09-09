@@ -1011,6 +1011,57 @@ def cron_prev(expr: str, now: datetime):
     return None
 
 
+APP_SESSIONS, KEEP_SESSIONS = 'app_sessions', 10   # when Taskuary was actually RUNNING
+
+
+def _span(d: timedelta) -> str:
+    m = max(0, int(d.total_seconds() // 60))
+    return f'{m // 60}h{m % 60:02d}m' if m >= 60 else f'{m}m'
+
+
+def note_app_up(store, start: bool = False) -> None:
+    """Record that the app is up. `start` opens a session; every heartbeat extends the last one.
+
+    Taskuary is a WINDOW, and is_due already knows it: "a local app sleeps... a cron slot missed
+    while closed fires on the next poll after reopening". Nothing WROTE that down, though, so the
+    Assistant - which reads arrivals, not the scheduler - saw a 17-hour hole in a 140-minute
+    report and called the scheduler dead when the app had simply been shut overnight (TQ-0451)."""
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    try: ss = json.loads(store.get_settings().get(APP_SESSIONS) or '[]')
+    except (ValueError, TypeError): ss = []
+    if not isinstance(ss, list): ss = []
+    if start or not ss or not isinstance(ss[-1], dict): ss.append({'start': now, 'seen': now})
+    else: ss[-1]['seen'] = now
+    try: store.set_setting(APP_SESSIONS, json.dumps(ss[-KEEP_SESSIONS:]), 'system')
+    except Exception as e: logger.warning(f'app uptime not recorded: {e}')
+
+
+def _stamp(v):
+    try: return datetime.fromisoformat(str(v)[:19].replace(' ', 'T'))
+    except (TypeError, ValueError): return None
+
+
+def uptime_words(store, days: int = 2, gap_minutes: int = 20) -> str:
+    """When the app was CLOSED inside the window a check is reading, and how long it has been up.
+
+    The fact that turns "silent for 17 hours" into "shut for 15 of them" - and "the 08:00 digest
+    is 23 minutes late" into "the app opened at 08:19, so nothing has had its turn yet"."""
+    try: ss = [s for s in json.loads(store.get_settings().get(APP_SESSIONS) or '[]')
+               if isinstance(s, dict) and _stamp(s.get('start'))]
+    except (ValueError, TypeError): return ''
+    if not ss: return ''
+    now, since, lines = datetime.now(), datetime.now() - timedelta(days=days), []
+    for prev, cur in zip(ss, ss[1:]):
+        shut, back = _stamp(prev.get('seen') or prev.get('start')), _stamp(cur['start'])
+        # a heartbeat is not instant, so a restart is only a CLOSURE once it outlasts one
+        if not (shut and back) or back < since or (back - shut) < timedelta(minutes=gap_minutes): continue
+        lines.append(f'- closed {shut:%a %d %b %H:%M} -> {back:%a %d %b %H:%M} ({_span(back - shut)}): '
+                     'no report could fire and no mail could arrive')
+    up = _stamp(ss[-1]['start'])
+    lines.append(f'- running since {up:%a %d %b %H:%M} ({_span(now - up)} ago)')
+    return '\n'.join(lines)
+
+
 def _ran_today(last_polled) -> bool:
     try: return str(last_polled)[:10] == datetime.now().strftime('%Y-%m-%d')
     except (TypeError, ValueError): return False

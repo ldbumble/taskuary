@@ -14,7 +14,8 @@ from . import config
 from . import store as store_mod
 from .store import SQLiteStore, task_ref
 from .ingest import ingest_message, split_message, task_from_message
-from .reports import PLANNED, REGISTRY, render_report, resolve_cfg, run_due_reports, run_report_source
+from .reports import (PLANNED, REGISTRY, note_app_up, render_report, resolve_cfg, run_due_reports,
+                      run_report_source)
 from . import agents as hub_agents
 from . import blackboard
 from . import guard
@@ -90,6 +91,7 @@ async def _lifespan(_app):
         n = store.upgrade_triage_failures()
         if n: logger.info(f'{n} historical triage failure(s) now show as errors with a retry')
     except Exception as e: logger.warning(f'triage-failure upgrade skipped: {e}')
+    note_app_up(store, start=True)   # this launch, so a shut-overnight gap is not read as a dead scheduler
     threading.Thread(target=poll_forever, daemon=True).start()
     threading.Thread(target=quick_forever, daemon=True).start()   # the chat clock, never behind a slow sync
     waitroom.watch(store)          # notes queued for a working agent land when it stops
@@ -4374,6 +4376,8 @@ def _quick_lock(typ: str) -> threading.Lock:
     with _QUICK_GUARD: return _QUICK_LOCKS.setdefault(typ, threading.Lock())
 def _quick_busy() -> bool: return any(l.locked() for l in list(_QUICK_LOCKS.values()))
 _LAST_POLL = [time.time()]      # startup's own catch-up counts as the first one
+_HEARTBEAT = [0.0]              # ...and when we last wrote down that the app is still up
+HEARTBEAT_TICK = 300
 POLL_TICK = 30                  # how often the full loop wakes to look at the clock
 QUICK_TICK = 5                  # the chat loop looks more often, so "every 30 seconds" means that
 DRAIN_WAIT = 45                 # the context gate's patience for its lines to be judged (the old lock wait)
@@ -4682,6 +4686,11 @@ def poll_forever():
     this loop sits inside a long sync, a branch here could never fire."""
     while True:
         try:
+            # the heartbeat sits OUTSIDE the sync switch on purpose: poll_minutes 0 means
+            # "do not go and look", not "the app is closed", and a check that reads arrivals
+            # rather than the scheduler has to be able to tell those two apart (TQ-0451)
+            if time.time() - _HEARTBEAT[0] >= HEARTBEAT_TICK:
+                _HEARTBEAT[0] = time.time(); note_app_up(store)
             try: mins = int(store.get_settings().get('poll_minutes') or 0)
             except (TypeError, ValueError): mins = 10
             if mins > 0 and time.time() - _LAST_POLL[0] >= mins * 60:

@@ -78,7 +78,9 @@ PROMPT = (
     '6. What the machines are telling me, read not counted: a report marked FAILED says WHY (the error is in the line) - name '
     'the cause; a job that fails the same way N times is one finding, with the cause; a report whose every run says "0 rows" '
     'is a report nobody needs. Reports carry their schedule: "on app start" firing 20 times means the app was started 20 '
-    'times, not that the scheduler is broken.\n'
+    'times, not that the scheduler is broken. The same in reverse: read WHEN TASKUARY WAS RUNNING before calling a report '
+    'late or the scheduler dead - a report cannot fire while the app is shut, an overnight close is not a missed run, and '
+    'minutes after a launch nothing due today has had its turn yet.\n'
     '7. My own work (DONE THIS WEEK, OPEN WORK): the fix that keeps coming back, the task that closed without shipping, the '
     'process change worth proposing. Name the evidence: TQ-ref, count, sender. Never restate what I did.\n'
     'Be useful, not busy: a check with nothing NEW posts nothing, and most checks are that. When you do speak, prefer the '
@@ -750,7 +752,13 @@ def inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=None, 
     # built once: the model reads them, and so does the verdict matcher, which needs the real
     # subjects rather than the model's words about them
     said, recent = _people(store), _recent(store)
-    return (f"NOW: {now.strftime('%A %d %B %Y %H:%M')}\n\n{head}:\n" + ('\n'.join(f"[{c['key']}] {c['facts']}" for c in cands) or '(none)')
+    from . import reports as _r
+    # an EMPTY labelled section is worse than none: it reads as "nothing was running"
+    uptime = _r.uptime_words(store)
+    uptime = (f"WHEN TASKUARY WAS RUNNING (it is a window on this machine: while it is shut nothing polls, no report "
+              f"fires and no mail arrives - so a gap here is not a fault):\n{uptime}\n") if uptime else ''
+    return (f"NOW: {now.strftime('%A %d %B %Y %H:%M')}\n{uptime}"
+            f"\n{head}:\n" + ('\n'.join(f"[{c['key']}] {c['facts']}" for c in cands) or '(none)')
             + knowledge.block(store, facts_text)
             + f"\n\nCONFIGURED SYSTEM CHECKS (pulled live for this check; failures are also worth noticing):\n{system_checks(store, watch_source_ids, watch_sources)}"
             + f"\n\nWHAT PEOPLE SAID (the last two days, by thread, newest first; the last lines of each, oldest first. "

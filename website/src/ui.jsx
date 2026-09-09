@@ -1126,7 +1126,9 @@ export const UnderTabs = ({ tabs, value, onChange }) => (
   </Box>
 );
 
-export const LandingCard = ({ icon, title, desc, onOpen }) => (
+// `foot` is a line UNDER the description that is not part of the card's click (an Install
+// button there must not also open the card's form)
+export const LandingCard = ({ icon, title, desc, onOpen, foot }) => (
   <Box onClick={onOpen} sx={{ display: "flex", gap: 1.5, cursor: "pointer", alignItems: "flex-start",
     "&:hover .thubPgTitle": { textDecoration: "underline" } }}>
     <Box sx={{ width: 38, height: 38, borderRadius: 2, bgcolor: "#fff", border: "1px solid #e1dcd5",
@@ -1137,6 +1139,7 @@ export const LandingCard = ({ icon, title, desc, onOpen }) => (
     <Box sx={{ minWidth: 0 }}>
       <Typography className="thubPgTitle" sx={{ color: "#55697a", fontWeight: 700, fontSize: 14.5, lineHeight: 1.3 }}>{title}</Typography>
       <Typography variant="body2" sx={{ color: DIM, mt: 0.25 }}>{desc}</Typography>
+      {foot && <Box onClick={(e) => e.stopPropagation()}>{foot}</Box>}
     </Box>
   </Box>
 );

@@ -6,6 +6,7 @@ import AddIcon from "@mui/icons-material/Add";
 import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, card, mono } from "./theme.jsx";
 import { Crumb, Empty, LandingCard, ConfirmDelete, TaskuaryMark } from "./ui.jsx";
+import { useCliInstall, InstallLine } from "./cliInstall.jsx";
 import BoltIcon from "@mui/icons-material/Bolt";
 import StarIcon from "@mui/icons-material/Star";
 
@@ -122,6 +123,28 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
       setTests((t) => ({ ...t, [name]: data }));
     } catch (e) { setTests((t) => ({ ...t, [name]: { ok: false, error: e?.response?.data?.detail || "test failed" } })); }
   };
+  // what the server can install, keyed by the COMMAND a row runs - which is how both a preset
+  // and a saved profile name their CLI. First row wins: the known-CLI rows come first and carry
+  // the vendor's label, where a profile row would carry its own nickname.
+  const [canGet, setCanGet] = useState({});
+  useEffect(() => {
+    api.get("/api/cli/detect").then(({ data }) => {
+      const by = {};
+      for (const r of data.data || []) if (!(r.cmd in by)) by[r.cmd] = r;
+      setCanGet(by);
+    }).catch(() => setCanGet({}));
+  }, [agents]);
+  const { install, busy: installing, note: installNote } = useCliInstall();
+  // installing from an EXISTING profile: point that profile at the absolute path afterwards, so
+  // the agent runner can start it without waiting for this process to be restarted
+  const getFor = async (name, cmd) => {
+    const row = canGet[cmd];
+    if (!row) return;
+    const done = await install(row);
+    if (!done) return;
+    if (name && done.path) await api.put(`/api/agents/${encodeURIComponent(name)}`, { cmd: done.path });
+    load();
+  };
   const usePreset = (pr) => {
     let name = pr.name, n = 2;
     while (agents[name]) name = `${pr.name}-${n++}`;
@@ -146,8 +169,12 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "repeat(3, minmax(0, 1fr))" }, gap: 2.5, mb: 3 }}>
         {PRESETS.map((pr) => (
           <LandingCard key={pr.name} title={pr.label} desc={pr.desc}
-            icon={<TaskuaryMark size={19} />} onOpen={() => usePreset(pr)} />
+            icon={<TaskuaryMark size={19} />} onOpen={() => usePreset(pr)}
+            foot={canGet[pr.cmd] && !canGet[pr.cmd].installed
+              ? <InstallLine cli={canGet[pr.cmd]} busy={installing} onInstall={() => getFor("", pr.cmd)} sx={{ mt: 0.5 }} />
+              : null} />
         ))}
+        {installNote && <Alert severity={installNote.bad ? "error" : "success"} sx={{ gridColumn: "1 / -1", fontSize: 12.5 }}>{installNote.text}</Alert>}
       </Box>
       {brains.length > 0 && (
         <Box sx={{ mb: 2, p: 1.5, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 2 }}>
@@ -202,6 +229,13 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
                   <Chip size="small" label="not installed on this machine"
                     title={`Nothing here can start ${a.cmd}. Install it, or point this profile at the CLI you do have.`}
                     sx={{ bgcolor: "#f3e0e2", color: "#8a3646", height: 20, fontSize: 10, fontWeight: 700 }} />
+                )}
+                {here[name] === false && canGet[a.cmd]?.installable && (
+                  <Button size="small" variant="outlined" disabled={!!installing}
+                    title={`Install ${canGet[a.cmd].label} here and point this profile at it`}
+                    onClick={() => getFor(name, a.cmd)} sx={{ fontSize: 10.5, whiteSpace: "nowrap" }}>
+                    {installing === canGet[a.cmd].install ? "installing\u2026" : "Install"}
+                  </Button>
                 )}
                 {defAgent === name && here[name] === false && effective && effective !== name && (
                   <Chip size="small" label={`work goes to ${effective}`}

@@ -3947,6 +3947,37 @@ def cli_detect():
     from . import clis
     return {'data': clis.detect(store), 'tools': clis.tools()}    # tools: optional helpers (agent-browser), never offered as agents
 
+class CliInstallBody(BaseModel): name: str
+
+@app.post('/api/cli/install')
+def cli_install(body: CliInstallBody):
+    """Install a coding CLI on this machine. The owner's button - it is on guard.DENIED, because
+    an agent that can run a vendor installer can be talked into running any installer.
+
+    Returns immediately with the phase: an npm -g of a whole CLI is a minute on a slow line, and
+    the browser polls /api/cli/install/state rather than holding a request open for it."""
+    from . import cliinstall
+    name = str(body.name or '')
+    if name not in cliinstall.RECIPES:
+        raise HTTPException(422, f'{name} is not one of the CLIs Taskuary installs '
+                                 f'({", ".join(sorted(cliinstall.RECIPES))})')
+    # one at a time, and say WHOSE - the phase is global, so a second press would otherwise poll
+    # the first install's state and report its success as its own
+    now = cliinstall.state()
+    if now['phase'] == 'installing' and now['name'] != name:
+        raise HTTPException(409, f'{now["name"]} is installing right now - one at a time')
+    out = cliinstall.start(name)
+    store.audit('connector', 0, 'cli_install_started', ACTOR, detail={'name': name})
+    return out
+
+@app.get('/api/cli/install/state')
+def cli_install_state():
+    """Which phase the install is in, and the absolute path once there is one. The page saves
+    THAT as the agent's cmd - a GUI app keeps the PATH it was launched with, so a profile that
+    depends on PATH is a profile that works tomorrow instead of now."""
+    from . import cliinstall
+    return cliinstall.state()
+
 @app.get('/api/setup')
 def setup_state():
     """What still stands between this install and a working funnel, read off real state - so a

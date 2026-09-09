@@ -22,6 +22,7 @@ import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api";
 import SoulInterview from "./SoulInterview.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL2 } from "./theme.jsx";
+import { useCliInstall, InstallLine } from "./cliInstall.jsx";
 
 // "Three things and Taskuary works" was prose. Steps were added to the wizard and it went on
 // saying three, because a number written as a word is a number nobody updates. Counted now -
@@ -149,9 +150,18 @@ const CliPicker = ({ asBrain, onDone }) => {
   const [list, setList] = useState(null);
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState(null);
-  useEffect(() => {
-    api.get("/api/cli/detect").then(({ data }) => setList(data.data || [])).catch(() => setList([]));
-  }, []);
+  const { install, busy: installing, note } = useCliInstall();
+  const reload = () => api.get("/api/cli/detect").then(({ data }) => setList(data.data || [])).catch(() => setList([]));
+  useEffect(() => { reload(); }, []);
+  // Install, then keep going. Stopping at "installed" would leave the owner to find the second
+  // button, and the cmd handed on is the ABSOLUTE path the installer reported: this server's PATH
+  // predates the install, so a profile saved as bare "claude" would need a restart to run.
+  const getAndUse = async (cli) => {
+    const done = await install(cli);
+    if (!done) return;
+    await reload();
+    await use({ ...cli, cmd: done.path || cli.cmd });
+  };
   const use = async (cli) => {
     setBusy(cli.name); setMsg(null);
     try {
@@ -172,7 +182,7 @@ const CliPicker = ({ asBrain, onDone }) => {
     <Box>
       {list.length === 0 ? (
         <Typography variant="caption" sx={{ color: FAINT }}>
-          No AI CLI found on your PATH. Claude Code, Codex, and Gemini CLI are detected automatically once installed.
+          No AI CLI found on your PATH, and none that Taskuary can install for you here.
         </Typography>
       ) : list.map((cli) => (
         <Box key={cli.name} sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.5 }}>
@@ -182,7 +192,8 @@ const CliPicker = ({ asBrain, onDone }) => {
             </Typography>
             <Typography variant="caption" sx={{ color: cli.configured && !cli.installed ? "#8a3646" : FAINT, overflowWrap: "anywhere" }}>
               {cli.path ? cli.path
-                : cli.configured ? `configured here${cli.cmd ? ` as “${cli.cmd}”` : ""}, but not found on this machine — install it, or fix the command in Connections → AI CLI agents`
+                : cli.configured ? `configured here${cli.cmd ? ` as “${cli.cmd}”` : ""}, but not found on this machine — Install puts it here, or fix the command in Connections → AI CLI agents`
+                : cli.installable ? `${cli.cmd} — not on this machine yet`
                 : cli.cmd}
             </Typography>
             {/* found, runnable by hand, and still refused from a background process - so it is
@@ -194,13 +205,15 @@ const CliPicker = ({ asBrain, onDone }) => {
               </Typography>
             )}
           </Box>
-          <Button size="small" variant="outlined" disabled={!!busy} onClick={() => use(cli)}
-            sx={{ fontSize: 11.5, whiteSpace: "nowrap" }}>
-            {busy === cli.name ? "testing…" : asBrain ? "Use & test" : "Add & test"}
-          </Button>
+          {cli.installed ? (
+            <Button size="small" variant="outlined" disabled={!!busy || !!installing} onClick={() => use(cli)}
+              sx={{ fontSize: 11.5, whiteSpace: "nowrap" }}>
+              {busy === cli.name ? "testing…" : asBrain ? "Use & test" : "Add & test"}
+            </Button>
+          ) : <InstallLine cli={cli} busy={installing} onInstall={() => getAndUse(cli)} />}
         </Box>
       ))}
-      {msg && <Alert severity={msg.bad ? "error" : "success"} sx={{ mt: 1, fontSize: 12.5 }}>{msg.text}</Alert>}
+      {(msg || note) && <Alert severity={(msg || note).bad ? "error" : "success"} sx={{ mt: 1, fontSize: 12.5 }}>{(msg || note).text}</Alert>}
     </Box>
   );
 };

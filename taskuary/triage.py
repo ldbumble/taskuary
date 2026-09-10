@@ -59,7 +59,8 @@ FIELDS = {
 
 INTENT_SYSTEM = (
     'Classify one inbound work message. Answer JSON only: '
-    '{"intent": "task|reply_only|fyi", "kind": "coding|general|task", "why": "<one concrete sentence: what you saw in the message '
+    '{"intent": "task|reply_only|fyi", "kind": "coding|general|task", "profile": "<a name from THE WORKERS, when any are listed>", '
+    '"why": "<one concrete sentence: what you saw in the message '
     'and which rule it hit - the owner reads this to judge the verdict, 25 words max>"}.\n'
     'Almost everything that asks for anything is a task, and almost every task goes to the coding agent '
     'automatically: it does what can be done from a keyboard or says "nothing to do here" and stops - a cheap ending.\n'
@@ -297,7 +298,8 @@ def relationship_of(j: dict, candidates: list) -> dict:
 def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, images=None,
                     learned: str = None, system: str = None, notes_left: int = 0, mine=(),
                     thread: dict = None, watch: str = None, playbooks: str = None,
-                    project: dict = None, candidates: list = None, repos: list = None) -> dict:
+                    project: dict = None, candidates: list = None, repos: list = None,
+                    profiles: str = None) -> dict:
     """`notes` are the owner's past verdicts that may bear on this message - each one dated,
     with the sender and subject it was given on - selected by sender and topic overlap
     (ingest.relevant_notes). They are EVIDENCE: the model judges how alike this message is,
@@ -396,6 +398,13 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                            '"playbook": "<slug>" to your answer; it is then a task for the agent and it works it from that '
                            'playbook. A message that only mentions the same systems is not an instance - the `when` line '
                            'must fit. Otherwise leave the key out.\n' + str(playbooks)[:3000])
+            if profiles:
+                system += ('\n\nTHE WORKERS - the agents this install has, each with what it is for. When an agent will '
+                           'start on this (kind: coding), add "profile": "<exactly one name below>" to say WHICH one. '
+                           'This is a different question from kind: kind decides whether an agent works it at all, '
+                           'profile decides who. Pick on the WORK the message asks for, not on who sent it. Unsure, or '
+                           'none of them fits it better than the others? Leave the key out and the default worker takes '
+                           'it.\n' + str(profiles)[:2000])
             if repos:
                 system += ('\n\nKNOWN REPOSITORIES are listed in known_repositories (owner/name and what each is). For a task an agent '
                            'could work from a keyboard, add "repository": "<exactly one listed owner/name>" or null, '
@@ -456,6 +465,12 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 pb = str(j.get('playbook') or '').strip().lower()
                 if playbooks and pb and out['intent'] == 'task' and re.search(rf'^- {re.escape(pb)}: ', playbooks, re.M):
                     out['playbook'] = pb
+                # WHICH WORKER, when one starts: validated against the roster it was actually shown, the
+                # same way the playbook is. A name nobody offered is dropped, and the task falls to the
+                # default profile - a hallucinated worker must not route work anywhere.
+                pr = str(j.get('profile') or '').strip().lower()
+                if profiles and pr and out['intent'] == 'task' and re.search(rf'^- {re.escape(pr)}: ', profiles, re.M):
+                    out['profile'] = pr
                 if candidates is not None: out.update(relationship_of(j, candidates))
                 if repos and out['intent'] == 'task': out.update(repo_choice_of(j, repos))
                 if out['intent'] == 'task':

@@ -360,6 +360,52 @@ def profiles(store) -> dict:
     return out
 
 
+# The workers Taskuary ships, besides `coder`. A profile IS an agent row and its rules document is
+# the `doc` row of the same name - which is what `coder` already was, so this adds no new storage and
+# no migration. `purpose` is the one line triage is shown when it picks; `kind` is deliberately never
+# 'coding', because that is what the coding-specific paths key on.
+DEFAULT_PROFILES = {
+    'researcher': {'kind': 'research', 'purpose': 'find out and report - reading, sources, comparisons; changes nothing'},
+    'analyst':    {'kind': 'analysis', 'purpose': 'numbers out of our own systems - reconcile, explain, flag what is off'},
+    'coordinator': {'kind': 'coordination', 'purpose': 'meetings, chasing people, scheduling and follow-ups'},
+    'marketer':   {'kind': 'marketing', 'purpose': 'copy, positioning and campaigns - drafts, never sends'},
+    'trader':     {'kind': 'markets', 'purpose': 'markets and positions - proposes, never places an order'},
+}
+
+
+def seed_profiles(store) -> list:
+    """Add any shipped profile this install does not have yet, and never touch one it does.
+
+    The CLI is inherited from the default coding agent rather than left unset: `cmd` falls back to the
+    agent's NAME in several places (`prof.get('cmd') or row['Name']`), so a profile with none would try
+    to run a command called `researcher`. The owner re-points any of them per profile afterwards."""
+    base = ''
+    try: base = str(json.loads((store.get_agent('coder') or {}).get('Config') or '{}').get('cmd') or '')
+    except ValueError: base = ''
+    added = []
+    for name, prof in DEFAULT_PROFILES.items():
+        if store.get_agent(name): continue
+        store.upsert_agent(name, prof['kind'], 'cli', json.dumps({**({'cmd': base} if base else {}),
+                                                                  'purpose': prof['purpose']}))
+        added.append(name)
+    return added
+
+
+def roster(store) -> str:
+    """The workers triage may choose between: one line each, name and purpose. Same shape as the
+    playbook menu (playbooks.menu) because triage validates the answer against these very lines -
+    the roster is DATA the owner controls, never a vocabulary baked into the prompt."""
+    out = []
+    for a in store.list_agents():
+        if not a.get('Active', 1): continue
+        try: prof = json.loads(a.get('Config') or '{}')
+        except ValueError: prof = {}
+        purpose = str(prof.get('purpose') or DEFAULT_PROFILES.get(a['Name'], {}).get('purpose')
+                      or ('writes and changes code, in a repository' if a.get('Kind') == 'coding' else '')).strip()
+        if purpose: out.append(f"- {a['Name']}: {purpose}")
+    return '\n'.join(out)
+
+
 def default_agent(store) -> str:
     """Which agent a task goes to when nobody picked one.
 

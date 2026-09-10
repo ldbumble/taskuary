@@ -449,6 +449,7 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
     said = said_about(store, msg.get('conversation_id'))
     if said: thread = {**thread, 'assistant_said': said}
     from .projects import context_for_message
+    from . import agents as hub_agents
     project = context_for_message(store, msg)
     intent = classify_intent(msg, llm=_guarded, soul=store.doc('soul'), thread=thread,
                              learned=injectable(store.doc('learned') or ''),
@@ -459,7 +460,10 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
                              watch=msg.get('watch_for'),
                              # ...and the playbooks: a message that is an instance of one is
                              # tagged with it, and the agent is seeded from it (playbooks.py)
-                             playbooks=_playbook_menu(), project=project, candidates=candidates, repos=repos or None)
+                             playbooks=_playbook_menu(), project=project, candidates=candidates, repos=repos or None,
+                             # ...and WHICH worker, out of the ones this install actually has: the roster is
+                             # data the owner edits on the Agents page, never a vocabulary in the prompt
+                             profiles=hub_agents.roster(store) or None)
     intent['notes'], intent['notes_left'] = notes, notes_left
     return intent, fail
 
@@ -700,7 +704,11 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         tid = store.create_task({'Title': f['title'], 'Summary': f['summary'], 'Kind': f['kind'],
                                  'Priority': f['priority'], 'Source': msg.get('channel') or 'api',
                                  'SourceRef': msg.get('source_link'),
-                                 **({'Tags': _pb.tag(intent['playbook'])} if intent.get('playbook') else {})}, actor)
+                                 **({'Tags': _pb.tag(intent['playbook'])} if intent.get('playbook') else {}),
+                                 # the worker triage named, on the field that has always carried one. The
+                                 # session is seeded from THIS profile's document (terminal.profile_of), so a
+                                 # researcher is never handed CODER.md's "work only in the repository".
+                                 **({'Assignee': f"agent:{intent['profile']}"} if intent.get('profile') else {})}, actor)
         store.audit('task', tid, 'create', actor, 'agent', {'from': msg.get('from_email'), 'reason': r['reason']})
         if intent.get('checklist'): store.set_task_checklist(tid, intent['checklist'], 'triage')
         # the repository, decided here and written down, so startup uses it instead of guessing again
@@ -1334,7 +1342,10 @@ def _auto_code(store, tid):
     house queues for the next free slot. Both drain automatically as sessions end - the card
     on the board says what it is waiting for."""
     from . import terminal as term, blackboard as bb, rank, agents as hub_agents
-    agent = hub_agents.default_agent(store)
+    # the worker this task was ROUTED to (Assignee), else whoever takes work by default. Without this
+    # the profile triage chose was written on the task and then ignored at the moment it mattered.
+    _who = str((store.get_task(tid) or {}).get('Assignee') or '')
+    agent = _who.split(':', 1)[1].strip() if _who.startswith('agent:') and _who.split(':', 1)[1].strip() else hub_agents.default_agent(store)
     # Rank mode (the connector's bulk setting): the task does not race for a slot, it joins
     # ONE value-ordered queue and the drain picks the most valuable waiting task whenever a
     # slot is free - see rank.py. Clear mode is everything below, unchanged.

@@ -921,11 +921,24 @@ def harvest(t: Term, chars: int = 12000) -> str:
     return (tidy if letters(tidy) >= 160 else degutter(raw).strip())[-chars:]
 
 
-def rules_text(store, chars: int = DOC_CHARS) -> str:
-    """CODER.md, flattened. The doc says it is 'stacked on top of SOUL.md for every coder run'
-    - it never was: these docs live in Taskuary's own database, nowhere the agent can read, so
-    the rules only reach a session if the prompt carries them."""
-    doc = str(store.doc('coder') or '')
+def profile_of(task: dict) -> str:
+    """Which worker this task was handed to - the name on `Assignee` ('agent:researcher'), else the
+    coding profile. `Assignee` has carried 'agent:<name>' since before profiles existed, so nothing
+    new is stored: the routed worker and its rules document are the same name."""
+    who = str((task or {}).get('Assignee') or '')
+    return who.split(':', 1)[1].strip() if who.startswith('agent:') and who.split(':', 1)[1].strip() else 'coder'
+
+
+def rules_text(store, chars: int = DOC_CHARS, profile: str = 'coder') -> str:
+    """One profile's rules document, flattened. CODER.md is the coding profile's - one of several, not
+    the ground under all of them: it used to be appended to EVERY worker session, so a research or
+    meeting-prep task was told "work only in the repository the task names" and the router had to add
+    "NO REPOSITORY" to argue with it (the owner, 2026-09-10).
+
+    The doc says it is 'stacked on top of SOUL.md for every coder run' - it never was: these docs live
+    in Taskuary's own database, nowhere the agent can read, so the rules only reach a session if the
+    prompt carries them."""
+    doc = str(store.doc(profile) or '')
     keep = [l.strip(' #*-').strip() if l.lstrip().startswith('#') else l.strip()
             for l in doc.splitlines() if l.strip()]
     return ' '.join(' '.join(keep).split())[:chars]
@@ -1079,8 +1092,12 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # the coding additions (CODER.md) - one block each, nothing duplicated (PW-185)
     agent_rules = _brief.rules(store, 'agent', AGENT_CHARS)
     if agent_rules: parts.append(f'RULES (AGENT.md - every worker): {no_emails(agent_rules)}')
-    rules = rules_text(store)
-    if rules: parts.append(f'CODING RULES (CODER.md): {no_emails(rules)}')
+    # the ROUTED profile's rules, not the coder's by default: a researcher gets RESEARCHER.md and is
+    # never told to work only in a repository. An empty document sends no block at all - falling back
+    # to CODER.md here would be the bug, not a safety net.
+    prof = profile_of(t)
+    rules = rules_text(store, profile=prof)
+    if rules: parts.append(f"{'CODING RULES' if prof == 'coder' else 'RULES'} ({prof.upper()}.md): {no_emails(rules)}")
     # the playbook for THIS kind of job (playbooks.py): triage tagged the task with it, and it is the
     # operative rule set here - CODER.md's "work only in the repository" is the wrong first rule for a
     # bill, so the playbook says so out loud; the closing-out and wall rules still stand

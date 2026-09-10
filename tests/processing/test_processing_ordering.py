@@ -250,11 +250,13 @@ def test_failed_report_does_not_become_an_urgent_request_only_in_feed(store):
 def test_report_rank_uses_saved_run_outcome_even_when_subject_disagrees(store, monkeypatch, failed, subject, expected_band):
     sid = store.save_source({"Channel": "report", "Address": "ordering@example.test", "Active": 1,
                              "ConfigJson": '{"title":"Ordering report"}'}, "test")
-    store.add_report_run(sid, {"at": stamp(-1), "title": "Ordering report", "failed": failed})
     monkeypatch.setitem(funnel._SOURCES, "at", 0.0)
     monkeypatch.setitem(funnel._SOURCES, "by", {})
     tid = store.create_task({"Title": "Matched report work", "Priority": "urgent", "Status": "open"}, "test")
     mid = message(store, subject, tid=tid, channel="report", status="feed")
+    # the run names the message it produced, as reports.run_report_source records it: the outcome
+    # belongs to THIS row, not to whatever ran most recently for the report (2026-09-10)
+    store.add_report_run(sid, {"at": stamp(-1), "title": "Ordering report", "message_id": mid, "failed": failed})
     feed = next(row for row in store.feed(live_state=[]) if row["MessageId"] == mid)
     produced = funnel.from_feed(store, [feed])[0]
     assert funnel._band(produced) == feed["UnreadRank"] == expected_band

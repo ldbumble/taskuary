@@ -255,7 +255,7 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
             from .reports import NO_BRAIN
             if not canonical and NO_BRAIN in str(r.get('Preview') or ''): continue
             sid = report_source_id(store, r.get('SourceName'))
-            bad = r['ReportFailed'] if 'ReportFailed' in r else report_failed(store, sid, subj)
+            bad = r['ReportFailed'] if 'ReportFailed' in r else report_failed(store, subj, r.get('MessageId'))
             # ...and a run the owner asked to be TOLD about is not news, it is work. When a report
             # carries a "move it up if" sentence, triage judges the run against it and makes a task
             # of a match (triage.classify_intent's `watch`) - but this branch filed every report row
@@ -334,12 +334,21 @@ def todays_brief(item: dict) -> bool:
     return bool(item.get('brief_today'))
 
 
-def report_failed(store, sid, subject: str) -> bool:
-    """Did this run of the report FAIL? The run record says so where we have one; otherwise the
-    subject's own convention ('- FAILED'). Never a word found inside the report's name."""
-    if sid:
-        runs = store.report_runs(sid, 1)
-        if runs: return bool(runs[0].get('failed'))
+def report_failed(store, subject: str, mid=None) -> bool:
+    """Did the run that produced THIS row fail? The run linked to this very message says so
+    (report_run.MessageId); otherwise the subject's own convention ('- FAILED'). Never a word found
+    inside the report's name.
+
+    It used to read the source's LATEST run, so every historical row of a report inherited the newest
+    verdict: two "Process Error Check - FAILED" rows sat in the pipe as landed results because the
+    most recent run had said "0 rows" (the owner, 2026-09-10). It cut both ways - one fresh failure
+    re-marked every older good row as broken and lifted the lot to band 2."""
+    if mid is not None:
+        try: failed = store.report_run_failed(mid)
+        except Exception as e:
+            logger.debug(f'funnel: no run record for message {mid} - {e}')
+            failed = None
+        if failed is not None: return failed
     return bool(_FAILED.search(str(subject or '')))
 
 

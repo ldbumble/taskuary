@@ -206,7 +206,7 @@ def message_row(message, item, threads, now, *, full=False):
                                   team_domains_of(view.get('settings', {})))
     if row.get('Channel') == 'report':
         from .funnel import _FAILED
-        row['ReportFailed'] = view.get('report_outcomes', {}).get(str(row.get('SourceName') or ''),
+        row['ReportFailed'] = view.get('report_outcomes', {}).get(row.get('MessageId'),
                                                                 bool(_FAILED.search(str(row.get('Subject') or ''))))
     if full:
         row.update(BodyText=message.get('BodyText'), Brief=message.get('Brief'))

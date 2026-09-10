@@ -2533,6 +2533,13 @@ class SQLiteStore:
         self._exec('DELETE FROM report_run WHERE SourceId=? AND RunId NOT IN (SELECT RunId FROM report_run WHERE SourceId=? ORDER BY RunId DESC LIMIT ?)',
                    (sid, sid, self.REPORT_RUNS_KEPT))
         return rid
+    def report_run_failed(self, mid) -> bool | None:
+        """Did the run that PRODUCED this report message fail? None when no run is linked to it - the
+        caller falls back to the subject's convention. Keyed on the row, never on the report's newest
+        run, so an old failure stays a failure and a new one does not re-mark the rows before it."""
+        if not mid: return None
+        r = self._one('SELECT Failed FROM report_run WHERE MessageId=? ORDER BY RunId DESC LIMIT 1', (int(mid),))
+        return bool(r['Failed']) if r else None
     def report_runs(self, sid: int, limit: int = 60) -> list:
         """The history, newest first, WITHOUT the inputs (14KB each) - get_report_run fetches one whole."""
         return [self._run_row(r) for r in self._rows('SELECT RunId, SourceId, At, Type, Title, Ms, Subject, MessageId, Failed, Error, Said, LinesJson, ReviewedJson, '
@@ -3565,8 +3572,8 @@ class SQLiteStore:
             # this band to promote what blocks work or needs the owner.
             from .processing_order import feed_band
             if r.get('Channel') == 'report':
-                from .funnel import report_failed, report_source_id
-                r['ReportFailed'] = report_failed(self, report_source_id(self, r.get('SourceName')), r.get('Subject') or '')
+                from .funnel import report_failed
+                r['ReportFailed'] = report_failed(self, r.get('Subject') or '', r.get('MessageId'))
             r['UnreadRank'] = feed_band(r)
         # the SQL filter matched before live sessions were known; a row a working agent just took off
         # you must not sit in "needs me" wearing a chip that says otherwise

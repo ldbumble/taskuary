@@ -241,17 +241,50 @@ class ReportFailedTests(unittest.TestCase):
         s = store()
         sid = s.save_source({'Channel': 'report', 'Address': 'Nightly headcount', 'Owner': 'o', 'Active': 1,
                              'ConfigJson': '{"title": "Nightly headcount"}'}, 'o')
-        s.add_report_run(sid, {'at': ago(0), 'type': 'agent', 'title': 'Nightly headcount',
-                               'subject': 'Nightly headcount — FAILED', 'failed': True, 'error': 'timed out'})
-        funnel._SOURCES.update(at=0.0, by={})
+        funnel._SOURCES.update(at=0.0, by={}, digest=set())
         m = s.add_message({'ExternalId': 'r1', 'Channel': 'report', 'SourceName': 'Nightly headcount',
                            'Subject': 'Nightly headcount', 'FromName': 'report', 'SentAt': ago(0),
                            'BodyText': 'nothing came back', 'Status': 'feed'})
         s.add_route(m, None, 'feed', None, 'a report you set up', [], 'feed')
+        # the run carries the message it produced, as reports.run_report_source records it (`message_id`).
+        # This used to be written with no message_id and relied on the row picking up the source's newest
+        # run - the very coupling that made an old failure inherit a later success (2026-09-10).
+        s.add_report_run(sid, {'at': ago(0), 'type': 'agent', 'title': 'Nightly headcount', 'message_id': m,
+                               'subject': 'Nightly headcount — FAILED', 'failed': True, 'error': 'timed out'})
         item = next(i for i in funnel.build(s)['items'] if i['kind'] == 'report')
         self.assertTrue(item['bad'])                     # the subject says nothing; the run says it failed
         self.assertIn('the check failed', item['why'])
         self.assertEqual(item['lane'], 'broken')         # ...and a check that cannot run is promoted, not filed
+
+    def test_each_run_is_judged_by_its_own_record_not_the_reports_latest(self):
+        """An older FAILED run kept being re-judged by the newest run of the same report, so every
+        historical row inherited the latest verdict (the owner, 2026-09-10: a pipe holding two
+        "Process Error Check - FAILED" rows filed as landed results because the newest run said
+        "0 rows"). It cuts both ways: one fresh failure would flip every older good row to broken."""
+        s = store()
+        sid = s.save_source({'Channel': 'report', 'Address': 'Process Error Check', 'Owner': 'o', 'Active': 1,
+                             'ConfigJson': '{"title": "Process Error Check"}'}, 'o')
+        funnel._SOURCES.update(at=0.0, by={}, digest=set())
+        def run_row(subject, body, hours, failed):
+            # SourceName is what ties the row to its report - without it the lookup never happens
+            # and the stale-verdict path is not even reached (this test passed vacuously without it)
+            mid = s.add_message({'ExternalId': f'r:{subject}', 'Channel': 'report', 'SourceName': 'Process Error Check',
+                                 'Subject': subject, 'FromName': 'report', 'SentAt': ago(hours),
+                                 'BodyText': body, 'Status': 'feed'})
+            s.add_route(mid, None, 'feed', None, 'a report you set up', [], 'feed')
+            s.add_report_run(sid, {'at': ago(hours), 'type': 'sql', 'title': 'Process Error Check',
+                                   'subject': subject, 'message_id': mid, 'failed': failed,
+                                   'error': 'no such host' if failed else None})
+            return mid
+        run_row('Process Error Check - FAILED', 'Named Pipes: no such host', 6, True)
+        run_row('Process Error Check - 0 rows', 'All clear', 1, False)
+        by_title = {i['title']: i for i in funnel.build(s)['items']}
+        older = by_title['Process Error Check - FAILED']
+        newer = by_title['Process Error Check - 0 rows']
+        self.assertTrue(older['bad'], 'the failed run was re-judged by the newest run of the same report')
+        self.assertEqual(older['lane'], 'broken')        # band 2: a check that failed is work
+        self.assertFalse(newer['bad'])
+        self.assertEqual(newer['lane'], 'report')
 
 
 class InHandTests(unittest.TestCase):

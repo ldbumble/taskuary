@@ -49,7 +49,6 @@ const lines = (v) => String(v || "").split(NEWLINE).map((x) => x.trim()).filter(
 
 export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) => {
   const [agents, setAgents] = useState(null);
-  const [rules, setRules] = useState({});          // name -> { open, text, busy, saved } : the profile's document
   const [catalog, setCatalog] = useState({});     // per agent: the CLI's own model list (codex reads it off disk)
   const [draft, setDraft] = useState(null);
   const [err, setErr] = useState("");
@@ -69,30 +68,6 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
     catch (e) { setErr(e?.response?.data?.detail || "Failed to load agents"); }
   }, []);
   useEffect(() => { load(); }, [load]);
-
-  // A profile's rules document, read and written through the same /api/doc/{name} the Docs tab uses -
-  // one row, so editing CODER.md here or there is the same edit. Blanking it restores the shipped
-  // default (server._heal_blank_doc), which is what the templates have always promised.
-  const toggleRules = async (name) => {
-    if (rules[name]?.open) { setRules((r) => ({ ...r, [name]: { ...r[name], open: false } })); return; }
-    setRules((r) => ({ ...r, [name]: { open: true, busy: true, text: "" } }));
-    try {
-      const { data } = await api.get(`/api/doc/${name}`);
-      setRules((r) => ({ ...r, [name]: { open: true, busy: false, text: data.content || "" } }));
-    } catch (e) {
-      setRules((r) => ({ ...r, [name]: { open: true, busy: false, text: "", err: e?.response?.data?.detail || "Could not read it" } }));
-    }
-  };
-  const saveRules = async (name) => {
-    setRules((r) => ({ ...r, [name]: { ...r[name], busy: true, saved: false, err: null } }));
-    try {
-      await api.put(`/api/doc/${name}`, { content: rules[name]?.text ?? "" });
-      const { data } = await api.get(`/api/doc/${name}`);       // blank = the shipped default came back
-      setRules((r) => ({ ...r, [name]: { ...r[name], busy: false, saved: true, text: data.content || "" } }));
-    } catch (e) {
-      setRules((r) => ({ ...r, [name]: { ...r[name], busy: false, err: e?.response?.data?.detail || "Could not save it" } }));
-    }
-  };
 
   const edit = (name) => {
     const a = agents[name] || {};
@@ -288,34 +263,11 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
                 <Button size="small" startIcon={<BoltIcon sx={{ fontSize: 13 }} />} disabled={tests[name]?.busy}
                   onClick={() => runTest(name)}>{tests[name]?.busy ? "Testing…" : "Test"}</Button>
                 <Button size="small" onClick={() => edit(name)}>Edit</Button>
-                {/* the profile's own rules document (doc row of the same name - `coder` is CODER.md).
-                    It lives here rather than in Docs because a profile is a worker: its document
-                    belongs beside its CLI, not two tabs away, and Docs is a fixed set of eight. */}
-                <Button size="small" onClick={() => toggleRules(name)}
-                  title={`The rules every ${name} session is seeded with — ${name.toUpperCase()}.md`}>
-                  {rules[name]?.open ? "Hide rules" : "Rules"}
-                </Button>
+                {/* its rules document (RESEARCHER.md, CODER.md, ...) is edited in Docs -> Profiles:
+                    documents live with documents, and this page is where the CLI is configured (the
+                    owner, 2026-09-10: "the ui for profiles should be in Docs not in settings"). */}
                 <Button size="small" color="error" onClick={() => setConfirmDel(name)}>Delete</Button>
               </Box>
-              {rules[name]?.open && (
-                <Box sx={{ mt: 1, ml: 0.25 }}>
-                  <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
-                    {name.toUpperCase()}.md — seeded into every {name} session, on top of AGENT.md. Blank it
-                    entirely and the shipped default comes back.
-                  </Typography>
-                  {rules[name].busy && !rules[name].text ? <CircularProgress size={16} /> : (
-                    <TextField multiline minRows={8} maxRows={24} fullWidth value={rules[name].text}
-                      onChange={(e) => setRules((r) => ({ ...r, [name]: { ...r[name], text: e.target.value, saved: false } }))}
-                      InputProps={{ sx: { ...mono, fontSize: 12, bgcolor: PANEL2 } }} />
-                  )}
-                  <Box sx={{ display: "flex", gap: 1, alignItems: "center", mt: 0.75 }}>
-                    <Button size="small" variant="outlined" disabled={rules[name].busy}
-                      onClick={() => saveRules(name)}>{rules[name].busy ? "Saving…" : "Save rules"}</Button>
-                    {rules[name].saved && <Typography variant="caption" sx={{ color: DIM }}>Saved — the next {name} session reads this.</Typography>}
-                    {rules[name].err && <Typography variant="caption" sx={{ color: "#8a3646" }}>{rules[name].err}</Typography>}
-                  </Box>
-                </Box>
-              )}
               <Box sx={{ ml: 0.25, mt: 1, display: "flex", gap: 0.75, flexWrap: "wrap", alignItems: "center" }}>
                 {!owned.tasks.length && !owned.reports.length && (
                   <Typography variant="caption" sx={{ color: FAINT }}>

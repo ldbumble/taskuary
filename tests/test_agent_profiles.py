@@ -23,6 +23,15 @@ def store():
     return s
 
 
+def seeded(s):
+    """What server.py's boot does: seed the config, then copy it into the store."""
+    cfg = {'agents': {'coder': {'cmd': 'claude', 'kind': 'coding'}}}
+    hub_agents.seed_profiles(cfg)
+    for name, prof in cfg['agents'].items():
+        s.upsert_agent(name, prof.get('kind', 'coding'), 'cli', json.dumps(prof))
+    return s
+
+
 class TheRosterTests(unittest.TestCase):
     def test_the_shipped_profiles_are_the_five_the_owner_chose(self):
         self.assertEqual(set(hub_agents.DEFAULT_PROFILES),
@@ -58,7 +67,7 @@ class TheRosterTests(unittest.TestCase):
 
     def test_the_roster_is_a_menu_of_name_and_purpose(self):
         s = store()
-        hub_agents.seed_profiles(s)
+        seeded(s)
         menu = hub_agents.roster(s)
         self.assertIn('- researcher: ', menu)
         self.assertIn('- coder: ', menu)                      # the coding profile is on it too
@@ -66,21 +75,33 @@ class TheRosterTests(unittest.TestCase):
             self.assertRegex(line, r'^- [a-z0-9-]+: .+')      # what triage validates against
 
     def test_seeding_never_clobbers_a_profile_the_owner_changed(self):
-        s = store()
-        hub_agents.seed_profiles(s)
-        s.upsert_agent('researcher', 'research', 'cli', json.dumps({'cmd': 'codex', 'purpose': 'mine'}))
-        hub_agents.seed_profiles(s)
-        prof = json.loads(s.get_agent('researcher')['Config'])
-        self.assertEqual(prof['cmd'], 'codex')
-        self.assertEqual(prof['purpose'], 'mine')
+        """It goes in config.toml, which is what the Agents page reads and writes."""
+        cfg = {'agents': {'coder': {'cmd': 'claude', 'args': ['-p'], 'kind': 'coding'}}}
+        self.assertIn('researcher', hub_agents.seed_profiles(cfg))
+        cfg['agents']['researcher'] = {'cmd': 'codex', 'purpose': 'mine', 'kind': 'research'}
+        self.assertEqual(hub_agents.seed_profiles(cfg), [])          # nothing left to add
+        self.assertEqual(cfg['agents']['researcher']['cmd'], 'codex')
+        self.assertEqual(cfg['agents']['researcher']['purpose'], 'mine')
 
-    def test_a_shipped_profile_inherits_a_cli_that_is_actually_installed(self):
-        """`cmd` falls back to the agent's NAME in half the codebase, so a profile with none would
-        try to run a command called `researcher`."""
-        s = MemoryStore()
-        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
-        hub_agents.seed_profiles(s)
-        self.assertEqual(json.loads(s.get_agent('marketer')['Config'])['cmd'], 'codex')
+    def test_a_shipped_profile_inherits_the_whole_cli_setup(self):
+        """`cmd` falls back to the agent's NAME in half the codebase, so a profile with none would try
+        to run a command called `researcher` - and a claude profile without the skip-permissions flag
+        hangs headless, so the FLAGS have to come along too."""
+        cfg = {'agents': {'coder': {'cmd': 'claude', 'args': ['-p', '--dangerously-skip-permissions'],
+                                    'timeout': 1500, 'kind': 'coding'}}}
+        hub_agents.seed_profiles(cfg)
+        got = cfg['agents']['marketer']
+        self.assertEqual(got['cmd'], 'claude')
+        self.assertIn('--dangerously-skip-permissions', got['args'])
+        self.assertEqual(got['timeout'], 1500)
+        self.assertEqual(got['kind'], 'marketing')
+
+    def test_nothing_is_seeded_when_there_is_no_coding_agent_to_inherit_from(self):
+        """A fresh install with no CLI configured yet: leave it to setup rather than write profiles
+        that name a command nobody has."""
+        cfg = {}
+        self.assertEqual(hub_agents.seed_profiles(cfg), [])
+        self.assertEqual(cfg.get('agents'), {})
 
 
 class TriageNamesTheProfileTests(unittest.TestCase):
@@ -118,7 +139,7 @@ class TriageNamesTheProfileTests(unittest.TestCase):
 class TheSessionGetsItsOwnRulesTests(unittest.TestCase):
     def test_a_profile_task_is_seeded_its_own_document_and_not_coder(self):
         s = store()
-        hub_agents.seed_profiles(s)
+        seeded(s)
         s.save_doc('coder', 'CODER RULES: work only in the repository the task names.', 'test')
         s.save_doc('researcher', 'RESEARCH RULES: cite every source; change nothing.', 'test')
         tid = s.create_task({'Title': 'Who are Acme?', 'Kind': 'coding', 'Status': 'open',
@@ -148,7 +169,7 @@ class TheSessionGetsItsOwnRulesTests(unittest.TestCase):
     def test_a_profile_with_an_empty_document_seeds_no_rules_block_rather_than_coders(self):
         """Falling back to CODER.md here is the bug, not a safety net."""
         s = store()
-        hub_agents.seed_profiles(s)
+        seeded(s)
         s.save_doc('coder', 'CODER RULES: work only in the repository the task names.', 'test')
         s.save_doc('marketer', '', 'test')
         tid = s.create_task({'Title': 'Write the launch note', 'Kind': 'coding', 'Status': 'open',
@@ -159,3 +180,49 @@ class TheSessionGetsItsOwnRulesTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class WorkflowsAreNotCodeTests(unittest.TestCase):
+    """"workflows should not be coder always as well. it's not code" (the owner, 2026-09-10).
+
+    run_agent fell back to a hardcoded 'coder', and - because that road never loaded an operator
+    document at all - a workflow pointed at `researcher` got the researcher's CLI and none of the
+    researcher's rules."""
+
+    def test_an_unnamed_workflow_goes_to_the_default_worker_not_the_coder(self):
+        from taskuary import reports
+        s = seeded(store())
+        s.set_setting('default_agent', 'researcher', 'test')
+        seen = {}
+        def fake_cli(store_, name, model=None, **kw):
+            seen['name'] = name
+            return lambda system, user, **k: seen.update(ask=user) or 'done'
+        with mock.patch.object(reports, 'make_cli_llm', fake_cli, create=True), \
+             mock.patch('taskuary.llm.make_cli_llm', fake_cli):
+            reports.run_agent({'store': s, 'prompt': 'summarise the week'})
+        self.assertEqual(seen['name'], 'researcher')
+
+    def test_a_named_workflow_runs_under_that_profiles_rules(self):
+        from taskuary import reports
+        s = seeded(store())
+        s.save_doc('researcher', 'RESEARCH RULES: cite every source.', 'test')
+        seen = {}
+        def fake_cli(store_, name, model=None, **kw):
+            seen['name'] = name
+            return lambda system, user, **k: seen.update(ask=user) or 'done'
+        with mock.patch('taskuary.llm.make_cli_llm', fake_cli):
+            reports.run_agent({'store': s, 'agent': 'researcher', 'prompt': 'who are Acme?'})
+        self.assertEqual(seen['name'], 'researcher')
+        self.assertIn('cite every source', seen['ask'])
+        self.assertIn('RESEARCHER.md', seen['ask'])
+
+    def test_an_unnamed_workflow_gets_no_rules_block_so_nothing_existing_changes(self):
+        from taskuary import reports
+        s = seeded(store())
+        s.save_doc('coder', 'CODER RULES: work only in the repository.', 'test')
+        seen = {}
+        def fake_cli(store_, name, model=None, **kw):
+            return lambda system, user, **k: seen.update(ask=user) or 'done'
+        with mock.patch('taskuary.llm.make_cli_llm', fake_cli):
+            reports.run_agent({'store': s, 'prompt': 'the weekly numbers'})
+        self.assertNotIn('work only in the repository', seen['ask'])

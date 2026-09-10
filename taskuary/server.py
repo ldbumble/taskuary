@@ -32,18 +32,24 @@ from . import processing_all
 deps.use_packages()
 cfg = config.load()
 store = SQLiteStore(config.db_path())
+# The workers Taskuary ships besides the coder, added to the CONFIG before the loop below copies it
+# into the database - so they appear on the Agents page like `coder` does, and a restart never
+# rewrites one the owner has changed (seed_profiles skips any name already there).
+try:
+    from loguru import logger as _log                    # loguru is not bound at module scope yet here
+    _added = hub_agents.seed_profiles(cfg)
+    if _added:
+        config.save(cfg)
+        _log.info(f"added the shipped agent profiles: {', '.join(_added)}")
+except Exception as _e:
+    from loguru import logger as _log
+    _log.warning(f'could not seed the shipped agent profiles: {_e}')
 for name, prof in cfg.get('agents', {}).items():
     # merge, don't clobber: paths DISCOVERED at runtime (find_checkout) live on the agent row,
     # and a boot that rewrites Config from config.toml wholesale would forget them
     _old = json.loads((store.get_agent(name) or {}).get('Config') or '{}')
     prof = {**prof, 'cwd_map': {**(_old.get('cwd_map') or {}), **(prof.get('cwd_map') or {})}}
     store.upsert_agent(name, prof.get('kind', 'coding'), 'cli', json.dumps(prof))
-# ...and the workers Taskuary ships besides the coder, added only where this install has none of that
-# name, so an owner's own edits to one are never rewritten by a restart. Runs after the config.toml
-# loop on purpose: `coder` exists by now, and its CLI is the one these inherit.
-from .agents import seed_profiles as _seed_profiles
-try: _seed_profiles(store)
-except Exception as _e: logger.warning(f'could not seed the shipped agent profiles: {_e}')
 @asynccontextmanager
 async def _lifespan(_app):
     live_bus.bind(asyncio.get_running_loop())

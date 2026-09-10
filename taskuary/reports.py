@@ -249,7 +249,12 @@ def run_agent(cfg):
     if store is None: raise RuntimeError('the agent source needs the store (run it through the reports pipeline)')
     skill, prompt = str(cfg.get('skill') or '').strip().lstrip('/'), str(cfg.get('prompt') or '').strip()
     if not skill and not prompt: raise RuntimeError('give the agent a skill (/name) or a prompt - or both')
-    name = str(cfg.get('agent') or 'coder').strip()
+    # A workflow is not a code change, so the CODING agent is the wrong thing to fall back to (the
+    # owner, 2026-09-10: "workflows should not be coder always as well. it's not code"). An unnamed
+    # workflow goes to whoever takes work by default - a setting the owner controls, and one that
+    # already refuses to name a CLI this machine cannot start.
+    from . import agents as hub_agents
+    name = str(cfg.get('agent') or hub_agents.default_agent(store)).strip()
     # Agent-backed reports are read-only even when their source lives in a repository folder.
     # Only the Workflows door persists this explicit grant; executor type alone grants nothing.
     writes = cfg.get('access') == 'write'
@@ -265,6 +270,17 @@ def run_agent(cfg):
         candidate = config.home() / 'skills' / skill / 'SKILL.md'
         try: owned = candidate.read_text(encoding='utf-8') if candidate.is_file() else None
         except OSError: owned = None
+    # ...and it runs as THAT worker. A workflow pointed at `researcher` was getting the researcher's
+    # CLI and none of the researcher's rules, because this road never loaded an operator document at
+    # all. Only when the workflow NAMES its agent: an unnamed one keeps the behaviour it always had,
+    # so no existing workflow suddenly acquires a rules block it was never written against.
+    if str(cfg.get('agent') or '').strip():
+        from .terminal import rules_text
+        try: rules = rules_text(store, profile=name)
+        except Exception as e:
+            logger.debug(f'reports: no rules document for {name} - {e}')
+            rules = ''
+        if rules: prompt = (f'RULES ({name.upper()}.md): {rules}' + (f'\n\n{prompt}' if prompt else ''))
     ask = (f'TASKUARY SKILL /{skill}\n\n{owned}\n\nRUN INPUT\n{prompt}' if owned is not None
            else (f'/{skill}' + (' ' if prompt else '') if skill else '') + prompt)
     # Two runs twenty minutes apart came back as two different documents - 106 lines with a

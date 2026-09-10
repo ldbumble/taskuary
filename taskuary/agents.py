@@ -378,20 +378,26 @@ DEFAULT_PROFILES = {
 }
 
 
-def seed_profiles(store) -> list:
-    """Add any shipped profile this install does not have yet, and never touch one it does.
+def seed_profiles(cfg: dict) -> list:
+    """Add any shipped profile this install does not have yet to the CONFIG, and never touch one it
+    already has. Returns the names added, so the caller knows whether to save.
 
-    The CLI is inherited from the default coding agent rather than left unset: `cmd` falls back to the
-    agent's NAME in several places (`prof.get('cmd') or row['Name']`), so a profile with none would try
-    to run a command called `researcher`. The owner re-points any of them per profile afterwards."""
-    base = ''
-    try: base = str(json.loads((store.get_agent('coder') or {}).get('Config') or '{}').get('cmd') or '')
-    except ValueError: base = ''
+    It goes in config.toml rather than straight into the database because that is what the Agents page
+    reads and writes (`put_agent` saves both): a profile seeded only into the database routed work and
+    seeded documents while being invisible and un-editable on the page that exists to configure it.
+
+    Each one inherits the coding agent's whole CLI setup - command AND flags - not just its name.
+    `cmd` falls back to the agent's own NAME in several places, so a profile with none would try to run
+    a command called `researcher`; and a claude profile without --dangerously-skip-permissions hangs
+    headless, which is exactly the trap the presets exist to avoid."""
+    have = cfg.setdefault('agents', {})
+    base = have.get('coder') or next((p for p in have.values() if p.get('kind', 'coding') == 'coding'), None)
+    if not (base or {}).get('cmd'): return []               # nothing to inherit from: leave it to setup
+    keep = {k: v for k, v in base.items() if k in ('cmd', 'args', 'resume', 'resume_args', 'timeout')}
     added = []
     for name, prof in DEFAULT_PROFILES.items():
-        if store.get_agent(name): continue
-        store.upsert_agent(name, prof['kind'], 'cli', json.dumps({**({'cmd': base} if base else {}),
-                                                                  'purpose': prof['purpose']}))
+        if name in have: continue
+        have[name] = {**keep, 'kind': prof['kind'], 'purpose': prof['purpose']}
         added.append(name)
     return added
 

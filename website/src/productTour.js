@@ -144,7 +144,7 @@ export const dimRects = (hole, vw, vh) => {
   ].filter((r) => r.width > 0 && r.height > 0);
 };
 
-export const placeCard = ({ target, cardW, cardH, vw, vh, gap = 16, pad = 16 }) => {
+export const placeCard = ({ target, cardW, cardH, vw, vh, gap = 20, pad = 16 }) => {
   const center = () => ({
     top: Math.max(pad, (vh - cardH) / 2),
     left: Math.max(pad, (vw - cardW) / 2),
@@ -155,13 +155,11 @@ export const placeCard = ({ target, cardW, cardH, vw, vh, gap = 16, pad = 16 }) 
   if (below + cardH + pad <= vh) return { top: below, left };
   const above = target.top - gap - cardH;
   if (above >= pad) return { top: above, left };
+  // A tall target (the rail) has no above/below: sit beside it, vertically centred.
+  const sideTop = clamp((vh - cardH) / 2, pad, Math.max(pad, vh - cardH - pad));
   const right = target.right + gap;
-  if (right + cardW + pad <= vw) {
-    return { top: clamp(target.top, pad, Math.max(pad, vh - cardH - pad)), left: right };
-  }
+  if (right + cardW + pad <= vw) return { top: sideTop, left: right };
   const leftSide = target.left - gap - cardW;
-  if (leftSide >= pad) {
-    return { top: clamp(target.top, pad, Math.max(pad, vh - cardH - pad)), left: leftSide };
-  }
+  if (leftSide >= pad) return { top: sideTop, left: leftSide };
   return center();
 };

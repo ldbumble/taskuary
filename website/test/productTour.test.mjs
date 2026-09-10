@@ -80,4 +80,10 @@ test("the card sits below a target when there is room, and centres when there is
   assert.ok(above.top + 180 <= 700, "above when the bottom has no room");
   const none = placeCard({ target: null, cardW: 360, cardH: 180, vw: 1200, vh: 800 });
   assert.ok(Math.abs(none.left - (1200 - 360) / 2) < 1);
+  const beside = placeCard({
+    target: { top: 40, left: 16, width: 500, height: 900, bottom: 940, right: 516 },
+    cardW: 360, cardH: 180, vw: 1200, vh: 800,
+  });
+  assert.ok(beside.left >= 516, "a tall rail puts the card beside it");
+  assert.ok(beside.top > 40, "and vertically in the middle of the window, not glued to the top");
 });

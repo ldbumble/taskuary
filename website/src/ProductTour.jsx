@@ -12,7 +12,7 @@ const CARD_W = 400;
 export default function ProductTour({ open, tab, onNavigate, onClose }) {
   const [i, setI] = useState(0);
   const [hole, setHole] = useState(null);
-  const [pos, setPos] = useState({ top: 80, left: 80 });
+  const [pos, setPos] = useState({ top: 96, left: 96 });
   const cardRef = useRef(null);
   const nextRef = useRef(null);
   const step = TOUR_STEPS[i] || TOUR_STEPS[0];
@@ -38,7 +38,8 @@ export default function ProductTour({ open, tab, onNavigate, onClose }) {
         vw: window.innerWidth, vh: window.innerHeight,
       }));
     };
-    const t = setTimeout(measure, 90);
+    measure();
+    const t = setTimeout(measure, 80);
     window.addEventListener("resize", measure);
     return () => { clearTimeout(t); window.removeEventListener("resize", measure); };
   }, [open, i, tab, step.target]);

@@ -63,6 +63,20 @@ class HandRaiseTests(unittest.TestCase):
             self.assertEqual(handraise.tick(self.s), 0)
         self.assertEqual(len(pings), 1); self.assertIn('Which repository should I use?', pings[0]); self.assertIn('asked you', pings[0])
 
+    def test_a_pty_that_ended_its_turn_raises_a_hand_and_an_api_conversation_does_not(self):
+        pty = FakeTerm(self.tid, 'run1', waiting=True, tail=['bypass permissions on (shift+tab to cycle)'])
+        api = FakeTerm(self.tid, 'run1', waiting=True); api.blocks_on_owner = False      # no prompt to park at
+        for t, expected in ((pty, 1), (api, 0)):
+            s = MemoryStore(); handraise.reset()
+            tid = s.create_task({'Title': 'Fix notifications', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
+            t.task_id = tid
+            with mock.patch.dict(terminal.SESSIONS, {'run1': t}, clear=True), \
+                 mock.patch.object(outbound, 'notify', side_effect=lambda st, text: None):
+                ws.record(s, tid, 'run1', 'working')
+                self.assertEqual(handraise.tick(s), 0)
+                ws.record(s, tid, 'run1', 'turn_end', text='Done with the T12 half.')
+                self.assertEqual(handraise.tick(s), expected)
+
     def test_an_approval_request_is_said_as_an_approval(self):
         term = FakeTerm(self.tid, 'run1', waiting=False)
         pings = []

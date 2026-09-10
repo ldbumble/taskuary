@@ -143,15 +143,22 @@ def answer_open(store, tid: int, text: str, actor: str = 'owner') -> dict:
 
 
 def waiting_of(store, t):
-    """Is this session waiting on the owner, by ITS OWN WORD? True/False when its run has reported through
-    events (an open request is a hand raised; a working run raises none however quiet its screen); None when
-    the run never reported, so the caller may fall back to the screen (PW-228)."""
+    """Is this session waiting on the owner, by ITS OWN WORD? True when a request of its is open, False
+    while it says it is working; None when its word is SILENT on the question, so the caller falls back
+    to the screen (PW-228).
+
+    Silence is not a no. A response that merely ended (`turn_end`) says the run stopped talking and
+    nothing about who the ball is with - and reading that as "definitely not waiting" locked every
+    surface into `working` for as long as a finished pane stayed open (the wall, 2026-09-10). Only a
+    run with work in flight - a prompt submitted, an answer delivered - denies the hand raise.
+    """
     tid, sid = getattr(t, 'task_id', None), str(getattr(t, 'sid', '') or '')
     if not tid or not sid: return None
     evs = events(store, tid, sid)
     if not evs: return None
     answered = {e['RequestId'] for e in evs if e['Kind'] == 'answered'}
-    return any(e['Kind'] in REQUESTS and e['RequestId'] not in answered for e in evs)
+    if any(e['Kind'] in REQUESTS and e['RequestId'] not in answered for e in evs): return True
+    return False if evs[-1]['Kind'] in ('working', 'answered') else None
 
 
 def asking_of(store, t):

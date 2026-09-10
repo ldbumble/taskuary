@@ -493,6 +493,29 @@ class LanesTests(unittest.TestCase):
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             self.assertIn('events', funnel.pile(s, force=True))
 
+    def test_a_working_notice_is_dropped_once_the_agent_is_gone(self):
+        """The phone walk, 2026-09-10: four "coder is working on TQ-xxxx" notices, the newest two days
+        old, replayed on every handoff - their tasks closed and their sessions ended long before."""
+        s = store()
+        t = s.create_task({'Title': 'Pto', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
+        funnel.notify(s, {'tid': t, 'ref': 'TQ-0001', 'kind': 'working', 'agent': 'codex',
+                          'text': 'codex is working on TQ-0001 (Pto) - nothing for you there now.'})
+        live = [{'taskId': t, 'agent': 'codex', 'label': 'codex', 'started': ago(hours=1), 'idle': 2, 'waiting': False, 'tail': ['editing']}]
+        with mock.patch('taskuary.terminal.live_sessions', return_value=live):
+            self.assertEqual([a['kind'] for a in funnel.notices(s)], ['working'], 'the agent really is on it')
+        s.update_task(t, {'Status': 'done'}, 'o')
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            self.assertEqual(funnel.notices(s), [], 'the session ended and the task closed: the claim is dead')
+        self.assertNotIn(f'notice:{t}', s.funnel_states(), 'and the row is cleared, not re-checked for ever')
+
+    def test_a_done_notice_survives_because_it_is_history_not_a_live_claim(self):
+        s = store()
+        t = s.create_task({'Title': 'Pto', 'Kind': 'coding', 'Status': 'done'}, 'o')
+        funnel.notify(s, {'tid': t, 'ref': 'TQ-0001', 'kind': 'done', 'agent': 'codex',
+                          'text': 'codex finished TQ-0001 (Pto). The task is closed.'})
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            self.assertEqual([a['kind'] for a in funnel.notices(s)], ['done'])
+
     def test_a_meeting_inside_two_hours_is_time_sensitive_and_inside_fifteen_minutes_interrupts(self):
         s = store()
         m1 = mail(s, 'Export still broken', hours=5)

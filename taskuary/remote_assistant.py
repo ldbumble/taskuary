@@ -186,7 +186,8 @@ def push_alerts(store, force: bool = False) -> int:
     fresh = [a for a in (p.get('alerts') or [])
              if a.get('key') not in told and a.get('item') != on_the_table][:3]
     if not fresh: return 0
-    named = [f"{a['text']}{' (' + refs[a['item']] + ')' if refs.get(a['item']) and refs[a['item']] not in a['text'] else ''}"
+    named = [' '.join(x for x in (funnel.mark_for(a), f"{a['text']}"
+                                  f"{' (' + refs[a['item']] + ')' if refs.get(a['item']) and refs[a['item']] not in a['text'] else ''}") if x)
              for a in fresh]
     lead = 'By the way — '            # the same words the desktop strip uses, in the place he is reading
     say = lead + named[0] + '.' if len(named) == 1 else lead.rstrip() + '\n' + '\n'.join('· ' + n for n in named)
@@ -244,6 +245,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int):
             # the item on the table is the walk's own, persisted and validated here - a phone has no
             # client state to send, and the key is all say() needs to build the item afresh
             item = concierge.restore_current(store, tid)
+            question = resolve_index(store, channel, chat, question)      # "2" is the words we numbered
             out = concierge.say(store, question, key=concierge.current_key(store, tid) or None, actor='owner')
             text = carry_out(store, out, item)
         send(store, channel, chat, text, connector_id)
@@ -301,11 +303,59 @@ def choices(out: dict) -> list:
     return [str(o) for o in (out.get('options') or [])] or [c['label'] for c in (out.get('chips') or [])]
 
 
+def source_line(item: dict | None) -> str:
+    """Where it came from, on its own line - the chat's version of the sender and channel icon the
+    desktop draws on the row. Nothing when the item has no human source (a report, an agent's own job)."""
+    from . import funnel
+    if not item: return ''
+    who = ' '.join(str(item.get('who') or '').split())
+    ch = str(item.get('channel') or '')
+    bits = ' · '.join(x for x in (who, ch.replace('_', ' ')) if x)
+    return ' '.join(x for x in (funnel.CHANNEL_MARKS.get(ch, ''), bits) if x) if bits else ''
+
+
 def turn_text(out: dict, lead: str = '') -> str:
-    """One turn as one message: what was said, then what can be said back."""
+    """One turn as one message: where it came from, what was said, then what can be said back.
+
+    The options used to ride one line joined by dots, which read as a single run-on sentence on a
+    phone (the owner, 2026-09-10: "reply with should make it more clear they are separate"). Each owns
+    a line now, and carries the number that answers it - see resolve_index for why that number works.
+    """
+    from . import funnel
+    item = out.get('item') or {}
     say = _TASK_LINK.sub(r'\1', str(out.get('say') or '')).strip()
+    mark = funnel.mark_for(item)
+    if say and mark: say = f'{mark} {say}'
+    head = '\n'.join(x for x in (source_line(item), say) if x)
     words = choices(out)
-    return '\n\n'.join(x for x in (lead.strip(), say, ('Reply with: ' + ' · '.join(words)) if words else '') if x)
+    opts = 'Reply with one of:\n' + '\n'.join(f'{i} · {w}' for i, w in enumerate(words, 1)) if words else ''
+    return '\n\n'.join(x for x in (lead.strip(), head, opts) if x)
+
+
+OFFERED_KEY = 'remote_offered'
+_OFFERED = re.compile(r'^\s*(\d+) · (.+?)\s*$', re.M)
+
+
+def remember_offered(store, channel: str, chat: str, text: str) -> list:
+    """The options this message just numbered, kept against the chat that was sent them."""
+    words = [m.group(2) for m in _OFFERED.finditer(str(text or ''))]
+    if words: store.set_setting(f'{OFFERED_KEY}:{channel}:{chat}', json.dumps(words), 'assistant')
+    return words
+
+
+def resolve_index(store, channel: str, chat: str, text: str) -> str:
+    """"2" as an answer - because WE numbered the options a moment ago.
+
+    The code indexes the list it offered; it reads no words and knows no verbs (the intent model still
+    does that, on whatever this returns). Anything that is not one of the numbers we just wrote comes
+    back untouched, as the owner's own words.
+    """
+    t = str(text or '').strip().lstrip('#').rstrip('.').strip()
+    if not t.isdigit(): return text
+    try: words = json.loads(store.get_settings().get(f'{OFFERED_KEY}:{channel}:{chat}') or '[]')
+    except ValueError: words = []
+    i = int(t)
+    return words[i - 1] if 1 <= i <= len(words) else text
 
 
 def _chunks(text: str, limit=3900) -> list[str]:
@@ -324,6 +374,9 @@ def _chunks(text: str, limit=3900) -> list[str]:
 def send(store, channel: str, chat: str, text: str, connector_id: int = None):
     from . import messengers
     out = messengers.tg_send if channel == 'telegram' else messengers.wa_send
+    # every road to this chat passes here, so this is where what we offered is written down
+    try: remember_offered(store, channel, chat, text)
+    except Exception as e: logger.debug(f'could not keep the offered options for {channel}: {e}')
     chunks = _chunks(text)
     for i, chunk in enumerate(chunks):
         prefix = 'Taskuary:\n' if i == 0 else f'Taskuary ({i + 1}/{len(chunks)}):\n'

@@ -1,5 +1,16 @@
 # Agent profiles: CODER.md is one profile, not the ground
 
+> **BUILT 2026-09-10** — the minimal version of this shipped. A profile is an `agent` row and its
+> rules document is the `doc` row of the same name; `coder` already was that, so no table and no
+> migration were needed. Five profiles ship (researcher, analyst, coordinator, marketer, trader),
+> triage names one from a roster it is shown and code validates the answer against that roster, the
+> chosen profile rides on `Assignee`, and `terminal.rules_text` seeds THAT profile's document.
+> Routing keys on **triage naming the profile** — the open question below is answered. Still open and
+> deliberately not built: profile authority ceilings (authority stays in `scopes.py`), profiles
+> accreting from sessions the way playbooks do, and the two compensating patches, which were left in
+> place. The section below is the reasoning as it stood before the work; the answered questions are
+> marked.
+
 *A captured idea, 2026-09-08 — **not a design yet**, and deliberately so. It is recorded now because
 it reframes something the codebase currently hardcodes, and deferred because designing it against no
 real second profile is how you get an abstraction shaped like nothing. The owner's words: "playbooks
@@ -86,11 +97,11 @@ twice.
 
 Open questions, to be answered when this is designed properly and not before:
 
-- Where a profile is stored: a fourth kind of operator document, a connector row, or a folder beside
-  `~/.taskuary/playbooks/`.
+- ~~Where a profile is stored~~ — **answered 2026-09-10: an `agent` row plus the `doc` row of the
+  same name. Neither is new, and the Agents panel edits both in one place.**
 - Whether profiles accrete from sessions the way playbooks do (`playbooks.draft`) or are only ever
   written by the owner. The trading case argues for owner-written; the research case may not.
-- What routing actually keys on — triage's `kind`, the matched playbook, the connectors the task
-  names, or a profile the router picks directly.
+- ~~What routing actually keys on~~ — **answered 2026-09-10: triage names the profile in its own
+  field, validated against the roster it was shown. `kind` keeps its three meanings.**
 - Whether a profile carries its own authority ceiling, or whether that stays entirely in `scopes.py`
   on the connector card. Two places to set authority is one too many.

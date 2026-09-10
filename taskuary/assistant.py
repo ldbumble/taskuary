@@ -955,10 +955,17 @@ def _idea_message(store, i: dict, a: dict, report_title=None) -> tuple:
 def triage_ideas(store, rows: list, llm, report_title: str = None) -> list:
     """The shared verdict for every newly said idea (PW-199/PW-200). Judged once per set of facts (the
     idea's Sig); recorded on the idea as action.triage - intent, kind, why, the task it is linked to - or
-    as error (retried on the next say) or pending (no brain). An actionable idea about NO active task
+    as error (retried on the next say) or pending (no brain). An actionable idea about NO task at all
     opens work through the shared intake with the verdict it already has, so kind defaults and startup
-    rules apply and no second model call is made; one about active work creates nothing. A generated
-    claim never completes anything. Returns the ideas judged this pass."""
+    rules apply and no second model call is made; one that names a task creates nothing. A generated
+    claim never completes anything. Returns the ideas judged this pass.
+
+    "No task at all" is the test, not "no OPEN task" (TQ-0487, 2026-09-10). The verdict used to turn on
+    the linked task's status, and every re-say rewords the idea, so its Sig changes and it is judged
+    again: close the work and the next say read 'linked task not active' as 'about nothing', opening a
+    duplicate on the very mail just closed - with a coder on it. A follow-up noticed after the work
+    closed is real, but it is the OWNER's click (act(verb='task'), which carries the evidence across and
+    names the completed task), never something a check opens by itself."""
     from .ingest import judge, ingest_message, owner_addresses, own_addresses
     now, done = datetime.now().strftime('%Y-%m-%d %H:%M:%S'), []
     for i in rows:
@@ -966,7 +973,7 @@ def triage_ideas(store, rows: list, llm, report_title: str = None) -> list:
         except ValueError: a = {}
         tri = a.get('triage') or {}
         if tri and tri.get('sig') == (i.get('Sig') or '') and not tri.get('error') and not tri.get('pending'): continue
-        msg, tid, active = _idea_message(store, i, a, report_title)
+        msg, tid, _ = _idea_message(store, i, a, report_title)      # the task's status is the model's to weigh, not this branch's
         if llm is None:
             a['triage'] = {'pending': True, 'sig': i.get('Sig') or '', 'at': now}
             store.set_idea_action(i['IdeaId'], a); continue
@@ -978,9 +985,9 @@ def triage_ideas(store, rows: list, llm, report_title: str = None) -> list:
             a['triage'] = {'error': str(e)[:200], 'sig': i.get('Sig') or '', 'at': now}
             store.set_idea_action(i['IdeaId'], a); continue
         a['triage'] = {'intent': intent.get('intent'), 'kind': intent.get('kind'), 'why': str(intent.get('why') or '')[:200],
-                       'sig': i.get('Sig') or '', 'at': now, 'linked_task': tid if active else None, 'error': None}
-        if tid and active: a['tid'] = tid
-        if intent.get('intent') in ('task', 'reply_only') and not active:
+                       'sig': i.get('Sig') or '', 'at': now, 'linked_task': tid, 'error': None}
+        if tid: a['tid'] = tid
+        if intent.get('intent') in ('task', 'reply_only') and not tid:
             try:
                 out = ingest_message(store, {**msg, '_verdict': (intent, {})}, actor='assistant', llm=llm)
                 if out.get('task_id'):

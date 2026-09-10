@@ -3,9 +3,10 @@
 The assistant's post was written to the timeline with a fixed 'feed' route and its ideas surfaced
 through an assistant-only lane, never judged. Now every newly said idea gets the same triage
 verdict as an incoming message - with its evidence, its originating report and the state of any
-task it is about - recorded on the idea. An actionable idea that is not about active work opens a
-task through the shared intake (so kind defaults and startup rules apply); one about an active
-task records the verdict and creates nothing; an informational one is fyi; a failure is an error
+task it is about - recorded on the idea. An actionable idea that names no task at all opens one
+through the shared intake (so kind defaults and startup rules apply); one that names a task -
+open or closed (TQ-0487) - records the verdict and creates nothing, and the follow-up on finished
+work is the owner's click; an informational one is fyi; a failure is an error
 the next run retries. The pile orders ideas by that verdict, not by a second assistant ranking, and
 the assistant never reads its own generated rows back in as new arrivals. Report triage stays the
 opt-in it was.
@@ -15,7 +16,7 @@ from datetime import datetime, timedelta
 from unittest import mock
 
 from taskuary import assistant, funnel, reports, terminal
-from taskuary.store import MemoryStore
+from taskuary.store import MemoryStore, task_ref
 
 # relative, never a clock time: the pile keeps the last twelve hours, so a fixed 09:00 failed CI every evening
 STAMP = (datetime.now() - timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S')
@@ -72,6 +73,50 @@ class SharedVerdictTests(unittest.TestCase):
         self.assertEqual(a['triage']['linked_task'], tid); self.assertEqual(a['tid'], tid)
         self.assertEqual(len(s.list_tasks()), 1)
         self.assertEqual(s.get_task(tid)['Status'], 'in_progress')                # a generated claim completes nothing
+
+    def test_an_idea_about_work_the_owner_just_closed_opens_no_second_task(self):
+        """TQ-0487 (2026-09-10): Dvora's 13:32 spec arrived on the mail behind TQ-0482. The idea about
+        it sat linked to that task for two hours, judged three times, creating nothing. The owner closed
+        TQ-0482 at 15:17; the idea was re-said with fresh wording 38 seconds later, its Sig changed, and
+        the re-judge read 'linked task not active' as 'about no task at all' - opening TQ-0487 on the
+        very mail just closed, with a coder on it. A closed task is still the task this idea is about."""
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Mindy gorelick annual epr- aug 2026', 'Kind': 'coding', 'Status': 'in_progress'}, 'router')
+        mid = s.add_message({'TaskId': tid, 'ExternalId': 'graph:epr', 'ConversationId': 'thread:epr', 'Channel': 'email',
+                             'FromName': 'Dvora E. Cohen', 'FromEmail': 'dcohen@example.com', 'Subject': 'Re: Mindy Gorelick Annual EPR- AUG 2026',
+                             'SentAt': STAMP, 'BodyText': 'I keep track via a spreadsheet: increase amount, effective date, retro flag.'})
+        row = idea(s, 'idea:dvora-spec', "Dvora replied at 13:32 though her auto-reply says she is out - she is reading.", {'mid': mid, 'tid': tid})
+        assistant.triage_ideas(s, [row], brain(kind='coding'))
+        self.assertEqual(len(s.list_tasks()), 1, 'linked to open work, the first judgement opens nothing')
+
+        s.update_task(tid, {'Status': 'done'}, 'owner')                            # the owner closed it from the assistant
+        again = idea(s, 'idea:dvora-spec', "Dvora's 13:32 spec landed after TQ-0001 closed. I'd open the build with those fields.", {'mid': mid})
+        with mock.patch('taskuary.ingest._spawn') as spawn:
+            assistant.triage_ideas(s, [again], brain(kind='coding'))
+        a = json.loads(s.get_idea(row['IdeaId'])['ActionJson'])
+        self.assertEqual(len(s.list_tasks()), 1, 'a closed task is not "no task": the idea opened a duplicate')
+        self.assertEqual(a['triage']['linked_task'], tid, 'the verdict still names the task the idea is about')
+        self.assertEqual(a.get('tid'), tid, 'the re-say kept the link instead of dropping it')
+        spawn.assert_not_called()                                                  # and no coder was sent at the closed work
+
+    def test_the_owners_own_click_still_opens_the_follow_up_the_check_refused_to(self):
+        """The idea stays a live suggestion on a closed task (funnel keeps it: a closed source task does
+        not mean the post was read), and the owner's button is the road to the work - act(verb='task')
+        carries the mail's evidence into a fresh assistant-owned task and names the completed one."""
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Mindy gorelick annual epr- aug 2026', 'Kind': 'coding', 'Status': 'done'}, 'router')
+        mid = s.add_message({'TaskId': tid, 'ExternalId': 'graph:epr2', 'ConversationId': 'thread:epr', 'Channel': 'email',
+                             'FromName': 'Dvora E. Cohen', 'Subject': 'Re: Mindy Gorelick Annual EPR- AUG 2026',
+                             'SentAt': STAMP, 'BodyText': 'increase amount, effective date, retro flag'})
+        row = idea(s, 'idea:dvora-spec', "Dvora's 13:32 spec landed after the build closed.",
+                   {'mid': mid, 'kind': 'coding', 'title': 'Add EPR increase and retro fields'})
+        with mock.patch('taskuary.ingest._spawn'):
+            out = assistant.act(s, row['IdeaId'], 'task', 'owner')
+        new = s.get_task(out['taskId'])
+        self.assertNotEqual(out['taskId'], tid, 'the completed task is never reopened or renamed')
+        self.assertEqual((new['Title'], new['Source']), ('Add EPR increase and retro fields', 'assistant'))
+        self.assertEqual(s.get_task(tid)['Status'], 'done')
+        self.assertIn(task_ref(tid), ' '.join(c['Body'] or '' for c in s.list_comments(out['taskId'])))
 
     def test_an_actionable_idea_ranks_through_the_work_it_opened_not_a_second_lane(self):
         s = MemoryStore()

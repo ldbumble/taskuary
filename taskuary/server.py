@@ -38,6 +38,12 @@ for name, prof in cfg.get('agents', {}).items():
     _old = json.loads((store.get_agent(name) or {}).get('Config') or '{}')
     prof = {**prof, 'cwd_map': {**(_old.get('cwd_map') or {}), **(prof.get('cwd_map') or {})}}
     store.upsert_agent(name, prof.get('kind', 'coding'), 'cli', json.dumps(prof))
+# ...and the workers Taskuary ships besides the coder, added only where this install has none of that
+# name, so an owner's own edits to one are never rewritten by a restart. Runs after the config.toml
+# loop on purpose: `coder` exists by now, and its CLI is the one these inherit.
+from .agents import seed_profiles as _seed_profiles
+try: _seed_profiles(store)
+except Exception as _e: logger.warning(f'could not seed the shipped agent profiles: {_e}')
 @asynccontextmanager
 async def _lifespan(_app):
     live_bus.bind(asyncio.get_running_loop())

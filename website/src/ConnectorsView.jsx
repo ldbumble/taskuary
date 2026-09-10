@@ -1146,6 +1146,7 @@ export default function ConnectorsView() {
   const shown = groups.find((g) => g.title === group) || groups[0];
 
   return (
+    <Box data-tour="connections">
     <SideRail title="Connections" q={q} setQ={setQ}
       placeholder="Search connectors…"
       items={groups.map((g) => ({ key: g.title, label: g.title, n: g.cards.length || null }))}
@@ -1186,6 +1187,7 @@ export default function ConnectorsView() {
         </>
       )}
     </SideRail>
+    </Box>
   );
 }
 

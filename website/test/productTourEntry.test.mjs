@@ -36,3 +36,10 @@ test("each page the walkthrough names has a tab marker on the strip", () => {
   assert.match(page, /data-tour=\{`tab-\$\{t\}`\}/);
   assert.match(page, /data-tour="pages"/);
 });
+
+test("the walkthrough points at the real pages, not a diagram", () => {
+  assert.match(read("FeedView.jsx"), /data-tour="pipe"/);
+  assert.match(read("ReviewView.jsx"), /data-tour="review"/);
+  assert.match(read("BoardView.jsx"), /data-tour="board"/);
+  assert.match(read("ConnectorsView.jsx"), /data-tour="connections"/);
+});

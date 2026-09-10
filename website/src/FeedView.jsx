@@ -1390,7 +1390,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
       }} />
 
       {/* ── the rail ────────────────────────────────────────────────────────────── */}
-      <Box data-tq-keep onMouseEnter={disarmClose} onMouseLeave={armClose}
+      <Box data-tq-keep data-tour="pipe" onMouseEnter={disarmClose} onMouseLeave={armClose}
         sx={{ display: railShown ? "flex" : "none", flexDirection: "column", minHeight: 0, overflow: "hidden", position: "relative",
           bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 2 }}>
 

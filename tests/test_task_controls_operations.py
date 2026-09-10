@@ -3,7 +3,7 @@ assistant's confirmation card - no false success, no duplicate start, a stale cl
 import unittest
 from unittest import mock
 from fastapi.testclient import TestClient
-from taskuary import server, terminal
+from taskuary import concierge, server, terminal
 from taskuary.store import MemoryStore
 
 
@@ -38,6 +38,26 @@ class TaskControls(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(self.s.get_task(tid)['Status'], 'open')
         start.assert_not_called()
+
+    def test_close_reply_without_sending_also_handles_an_already_finished_task(self):
+        for status in ('open', 'done'):
+            with self.subTest(status=status):
+                mid = self.s.add_message({'ExternalId': f'close-unsent-{status}', 'Channel': 'email',
+                                         'FromEmail': 'sender@example.com', 'BodyText': 'Please check this.'})
+                tid = self.s.create_task({'Title': 'Reply ready', 'Tags': 'stay:open'}, 'owner')
+                self.s.attach_message(mid, tid)
+                self.s.update_task(tid, {'Status': status}, 'owner')
+                rid = self.s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft',
+                                         'Status': 'pending', 'DraftText': 'Checked.'})
+                chips = concierge.chips_for(self.s, {'kind': 'review', 'tid': tid, 'mid': mid, 'rid': rid})
+                self.assertTrue(any(x['verb'] == 'close' and x['label'] == 'Close without sending' for x in chips))
+                with mock.patch.object(terminal, 'session_for', return_value=None), \
+                     mock.patch.object(server, 'decide') as send:
+                    _, response = self.run_op('task.complete', tid)
+                self.assertEqual(response.json()['status'], 'done')
+                self.assertEqual(self.s.get_task(tid)['Status'], 'done')
+                self.assertEqual(self.s.get_review(rid)['Status'], 'no_reply')
+                send.assert_not_called()
 
     def test_coding_start_with_an_unknown_agent_is_refused_and_the_task_is_untouched(self):
         tid = self.s.create_task({'Title': 'Work', 'Kind': 'coding'}, 'owner')

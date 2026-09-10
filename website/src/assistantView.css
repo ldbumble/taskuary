@@ -108,6 +108,20 @@
 .tq-card-chat { margin-top: 8px; border-radius: 8px; overflow: hidden; border: 1px solid #ddd6c8; background: #faf7f1; display: flex; flex-direction: column; }
 .tq-card-chat > * { flex: 1; min-height: 0; }
 .tq-card-full { margin-top: 7px; padding: 10px 12px; border-radius: 8px; background: #f6f4f1; border: 1px solid #ebe6de; font-size: 12.5px; line-height: 1.55; color: #262521; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; }
+.tq-task-focus { margin-top: 9px; padding: 12px 14px 13px; border: 1px solid #b9c8bb; border-radius: 9px; background: #fff;
+  box-shadow: 0 2px 8px rgba(63,89,67,.08); color: #252923; }
+.tq-task-focus-label { display: flex; align-items: center; gap: 8px; color: #58705c;
+  font: 750 10px/1.2 'IBM Plex Mono', Consolas, monospace; letter-spacing: .13em; text-transform: uppercase; }
+.tq-task-focus-label em { margin-left: auto; color: #747b73; font-style: normal; font-weight: 600; letter-spacing: 0; text-transform: none; }
+.tq-task-box { width: 17px; height: 17px; flex: 0 0 17px; display: inline-grid; place-items: center; border: 2px solid #718b75;
+  border-radius: 4px; color: #fff; background: #fff; font: 750 12px/1 'IBM Plex Sans', system-ui, sans-serif; }
+.tq-task-focus-text { margin: 8px 0 0 25px; font-size: 16px; line-height: 1.42; font-weight: 700; color: #20231f; overflow-wrap: anywhere; }
+.tq-task-focus-list { margin: 11px 0 0 25px; padding-top: 9px; border-top: 1px solid #e0e7e1; display: grid; gap: 7px; }
+.tq-task-focus-item { display: flex; align-items: flex-start; gap: 9px; font-size: 13px; line-height: 1.4; color: #30332e; }
+.tq-task-focus-item .tq-task-box { margin-top: 1px; width: 16px; height: 16px; flex-basis: 16px; }
+.tq-task-focus-item.done { color: #777c74; text-decoration: line-through; }
+.tq-task-focus-item.done .tq-task-box { background: #718b75; }
+.tq-card-context { margin-top: 8px; }
 .tq-card-kicker em { margin-left: auto; font-style: normal; letter-spacing: .04em; text-transform: none; color: #989188; }
 .tq-card-title { margin-top: 5px; font-size: 13px; font-weight: 700; color: #262521; line-height: 1.35; overflow-wrap: anywhere; }
 .tq-card-sub { font-size: 11px; color: #6e685f; margin-top: 2px; overflow-wrap: anywhere; }

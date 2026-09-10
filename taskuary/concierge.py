@@ -76,7 +76,7 @@ CHIP_HINTS = {'not_ours_sender': 'Their mail keeps arriving and stays readable -
               'mine': "Your own list - no agent starts", 'next': 'Read it and move on'}
 # per kind, in the order they are offered. `next` is last on every one of them: moving on is always available,
 # and it is the one word that is never a decision about the thing itself.
-CHIPS = {'review': ('approve', 'redraft', 'not_ours', 'next'), 'action': ('approve', 'not_ours', 'next'),
+CHIPS = {'review': ('approve', 'close', 'redraft', 'not_ours', 'next'), 'action': ('approve', 'not_ours', 'next'),
          'agent': ('answer_agent', 'stop_agent', 'next'), 'meeting': ('prep', 'regular_agent', 'next'),
          'report': ('rerun', 'regular_agent', 'next'), 'agentdone': ('close', 'reply', 'next'),
          'wrapup': ('close', 'next'), 'idea': ('followup', 'mine', 'done', 'next'), 'task': ('close', 'next'),
@@ -576,7 +576,11 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
         if v == 'prep' and not item.get('event'): continue
         if v == 'followup' and not (item.get('idea') or (item.get('action') or {}).get('mid')): continue
         if v != 'next' and cannot(item, v, store): continue
-        out.append({'verb': v, 'label': CHIP_WORDS[v], **({'hint': CHIP_HINTS[v]} if v in CHIP_HINTS else {})})
+        if v == 'close' and item.get('kind') == 'review':
+            out.append({'verb': v, 'label': 'Close without sending',
+                        'hint': 'Marks the task done, dismisses the draft, and ends any live agent session. No reply is sent.'})
+        else:
+            out.append({'verb': v, 'label': CHIP_WORDS[v], **({'hint': CHIP_HINTS[v]} if v in CHIP_HINTS else {})})
     return out
 
 
@@ -1502,13 +1506,15 @@ def forward_item(store, item: dict, who: str, text: str, actor: str = 'owner') -
 
 def close_task(store, tid: int, actor: str = 'owner') -> bool:
     """Close a task from the chat: the pending draft on it is dismissed first (a closed task must not
-    leave a reply waiting for a yes), then the task itself. False when it was closed already."""
+    leave a reply waiting for a yes), then the task itself. False when already closed with no draft."""
     t = store.get_task(tid) or {}
-    if not t or t.get('Status') in ('done', 'dropped'): return False
-    rv = store.pending_review(tid)
-    if rv:
-        try: store.decide_review(rv['ReviewId'], 'no_reply', None, actor, note='the owner closed the task')
-        except Exception as e: logger.warning(f'concierge: the draft on {task_ref(tid)} stayed pending - {e}')
+    if not t: return False
+    closed = t.get('Status') in ('done', 'dropped')
+    rv = store.pending_review(tid, live_only=False)
+    if closed and not rv: return False
+    while rv:
+        store.decide_review(rv['ReviewId'], 'no_reply', None, actor, note='the owner closed the task')
+        rv = store.pending_review(tid, live_only=False)
     # a closed task has nobody working it: the PATCH road stops the session and this one did not, so
     # "close it" from the chat left the agent running in the checkout (2026-09-03)
     try:
@@ -1518,7 +1524,7 @@ def close_task(store, tid: int, actor: str = 'owner') -> bool:
             terminal.close(s.sid)
             store.add_comment(tid, actor, 'human', 'Stopped the agent - the task was closed from the chat.')
     except Exception as e: logger.warning(f'concierge: the agent on {task_ref(tid)} was not stopped - {e}')
-    store.update_task(tid, {'Status': 'done'}, actor)
+    if not closed: store.update_task(tid, {'Status': 'done'}, actor)
     store.audit('task', tid, 'close_from_assistant', actor)
     # ...and the row goes off Unread with it (the owner, 2026-09-07: "it should just go off the unread
     # timeline"). Closing is the decision, wherever it was made; only the CHAT's close used to post the

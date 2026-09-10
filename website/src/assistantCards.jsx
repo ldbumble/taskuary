@@ -12,12 +12,13 @@ import DoneRoundedIcon from "@mui/icons-material/DoneRounded";
 import EventIcon from "@mui/icons-material/Event";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import api from "./api.js";
+import { runOperation } from "./taskOps.js";
 import { ChannelIcon, TaskuaryMark, cleanText, fmtDateTime } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import { ROLES, ASSISTANT } from "./theme.jsx";
 import { laneMeta, ageText } from "./funnelPile.js";
 import { sendBlockLine, draftState } from "./sendState.js";
-import { checklistMarkdown } from "./checklist.js";
+import { progressLine } from "./checklist.js";
 import { TerminalPane } from "./TerminalView.jsx";
 import { agentCardView } from "./agentCardView.js";
 import { lazyGeneral } from "./lazyGeneral.js";
@@ -87,20 +88,32 @@ function CombinedTaskText({ card }) {
   if (!doc) return <div className="tq-card-full">â€¦</div>;
   if (doc.error) return <div className="tq-card-err">{doc.error}</div>;
   const messages = (doc.messages || []).filter((m) => String(m.Status || "") !== "context");
-  // the same checklist the task page shows (PW-075), read-only here: ticking is done on the task
-  const list = (doc.checklist || []).length ? (
-    <div className="tq-card-note" style={{ marginTop: 7, whiteSpace: "pre-wrap" }}>{checklistMarkdown(doc.checklist)}</div>
+  // The job is the reason this card exists, so it sits above the source thread as a todo rather than
+  // disappearing into the thread's pale metadata. The list is read-only here; ticking stays on the task.
+  const taskText = String(doc.task?.Summary || doc.task?.Title || card.title || "").trim();
+  const progress = progressLine(doc.checklist);
+  const task = (taskText || (doc.checklist || []).length) ? (
+    <div className="tq-task-focus" role="group" aria-label="Task to do">
+      <div className="tq-task-focus-label"><span className="tq-task-box" aria-hidden="true" />Task
+        {progress && <em>{progress}</em>}
+      </div>
+      {taskText && <div className="tq-task-focus-text">{taskText}</div>}
+      {!!(doc.checklist || []).length && <div className="tq-task-focus-list">
+        {doc.checklist.map((item, n) => (
+          <div className={`tq-task-focus-item${item.done ? " done" : ""}`} key={item.id || n}>
+            <span className="tq-task-box" aria-hidden="true">{item.done ? "✓" : ""}</span>
+            <span>{item.text}</span>
+          </div>
+        ))}
+      </div>}
+    </div>
   ) : null;
-  // the task's own summary sits with its full context (PW-152) - not only the truncated preview
-  const summary = doc.task?.Summary && doc.task.Summary.trim() !== String(doc.task.Title || "").trim() ? (
-    <div className="tq-card-note" style={{ marginBottom: 7 }}><b>The task:</b> {doc.task.Summary}</div>
-  ) : null;
-  if (messages.length <= 1) return <>{summary}{<FullText mid={card?.mid} revision={card?.presentation_revision} />}{list}</>;
-  return (
-    <div className="tq-card-full">
-      {summary}
+  if (messages.length <= 1) return <>{task}<FullText mid={card?.mid} revision={card?.presentation_revision} /></>;
+  return <>
+    {task}
+    <div className="tq-card-full tq-card-context">
       <div className="tq-card-note" style={{ marginBottom: 7, fontWeight: 700 }}>
-        {messages.length} messages combined by triage â€” shown together
+        Email context · {messages.length} messages combined by triage
       </div>
       {messages.map((m, n) => {
         const body = cleanText(m.BodyText || "");
@@ -113,9 +126,8 @@ function CombinedTaskText({ card }) {
           </div>
         );
       })}
-      {list}
     </div>
-  );
+  </>;
 }
 
 // what every card shares: the source logo, the lane's word and dot, the title, the sub-line
@@ -173,6 +185,15 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
     catch (e) { setErr(errText(e)); }
     setBusy("");
   };
+  const finish = async () => {
+    if (busy || !card.tid) return;
+    setBusy("finish"); setErr("");
+    try {
+      await runOperation(api, "task.complete", card.tid);
+      onDone?.(`${card.ref || "The task"} marked done. No reply was sent.`);
+    } catch (e) { setErr(errText(e)); }
+    finally { setBusy(""); }
+  };
   if (rv?.gone) return <CardShell card={card} kicker="already handled" title={card.title} sub="This one is no longer waiting on you." />;
   return (
     <CardShell card={card} title={rv?.Subject || card.title} sub={rv ? (action ? "An agent proposed this. It runs only if you say so." : `To ${who}`) : "loading…"} err={err}>
@@ -194,6 +215,10 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
             <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv || !value.trim() || !!stale} startIcon={<SendRoundedIcon />} onClick={() => decide("approve")} sx={primary}>
               {busy === "approve" ? "Sending…" : "Approve & send"}</Button>
           )}
+          {card.tid && <Button size="small" variant="outlined" disabled={!!busy || !rv}
+            startIcon={<DoneRoundedIcon />} onClick={finish} sx={quiet}
+            title="Marks the task done, dismisses the draft, and ends any live agent session. No reply is sent.">
+            {busy === "finish" ? "Closing…" : "Mark done without sending"}</Button>}
           {card.mid && <Button size="small" onClick={() => setFull((v) => !v)} sx={faint}>{full ? "Fold" : "Read what they wrote"}</Button>}
         </>}
         <span className="sp" />

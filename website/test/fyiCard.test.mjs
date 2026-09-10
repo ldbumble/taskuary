@@ -26,9 +26,9 @@ test("each fyi entry shows its own summary and acts alone through the proposal r
 test("the task card carries the whole grouped context, the task summary and the checklist", () => {
   const cards = read("assistantCards.jsx");
   const combined = cards.slice(cards.indexOf("function CombinedTaskText"), cards.indexOf("export function CardShell"));
-  assert.match(combined, /doc\.task\?\.Summary/); assert.match(combined, /<b>The task:<\/b> \{doc\.task\.Summary\}/);
-  assert.match(combined, /checklistMarkdown\(doc\.checklist\)/);
-  assert.match(combined, /messages combined by triage/);
+  assert.match(combined, /doc\.task\?\.Summary/); assert.match(combined, /className="tq-task-focus"/);
+  assert.match(combined, /doc\.checklist\.map/); assert.match(combined, /tq-task-focus-item/);
+  assert.match(combined, /Email context · \{messages\.length\} messages combined by triage/);
   const task = cards.slice(cards.indexOf("export function TaskCard"), cards.indexOf("export function FyisCard"));
   assert.match(task, /\{card\.tid && <CombinedTaskText card=\{card\} \/>\}/);
 });

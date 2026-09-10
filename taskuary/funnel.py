@@ -22,6 +22,24 @@ LANES = ('blocked', 'time', 'approve', 'asked', 'queued', 'broken', 'forgotten',
 LANE_WORDS = {'blocked': ('agent waiting', 'you'), 'broken': ('a check failed', 'bad'), 'time': ('coming up', 'working'), 'approve': ('needs your yes', 'you'),
               'asked': ('asked you', 'working'), 'queued': ('waiting to start', 'working'), 'forgotten': ('slipped', 'info'), 'report': ('landed', 'info'), 'fyi': ('fyi', None),
               'working': ('agent working', 'working')}   # visible in band 5 until the agent stops or asks
+# A chat cannot draw an icon, so it wears the emoji the desktop already uses - these ARE the marks in
+# website/src/funnelPile.js (LANE_META/KIND_META), and the two tables must stay in step. A few KINDS
+# outrank their lane: an agent's own finish and a report you set up share the 'report' lane.
+LANE_MARKS = {'blocked': '👋', 'time': '⏱', 'approve': '✉️', 'broken': '🛠', 'asked': '🙋', 'queued': '⏳',
+              'forgotten': '🧵', 'report': '📄', 'fyi': '👀', 'working': '⚙️'}
+KIND_MARKS = {'agentdone': '✅', 'wrapup': '🗂'}
+# ...and where it came from. The desktop paints a brand logo here; a chat gets one emoji per source,
+# and a source we have no mark for gets NONE - an invented glyph says something untrue about it.
+CHANNEL_MARKS = {'email': '📧', 'teams': '👥', 'slack': '💬', 'telegram': '✈️', 'whatsapp': '📱', 'imessage': '📱',
+                 'discord': '🎮', 'github': '🐙', 'gitlab': '🦊', 'jira': '🐞', 'sentry': '🚨', 'pagerduty': '📟',
+                 'report': '📄', 'own': '📝', 'assistant': '✨', 'ai': '✨', 'idea': '💡', 'meeting': '📅',
+                 'promise': '🤝', 'followup': '📨', 'prep': '📅', 'cold': '🥶'}
+
+
+def mark_for(item: dict) -> str:
+    """The one emoji that identifies a row: its kind's when that says more than its lane's."""
+    if not item: return ''
+    return KIND_MARKS.get(str(item.get('kind') or '')) or LANE_MARKS.get(str(item.get('lane') or ''), '')
 SOON_MIN, ALERT_MIN, STARTED_MIN = 120, 15, 5   # calendar visibility window; attention boundary; grace after the start
 SETUP_GRACE_MIN = 15              # a walk-through the owner is still in does not raise its own hand
 LATER_HOURS = 3                   # "not now" - it comes back this much later
@@ -892,15 +910,34 @@ def notify(store, e: dict, by: str = 'assistant'):
     store.set_funnel_state(f"notice:{e['tid']}", 'notice', by, None, json.dumps({k: v for k, v in e.items() if k != 'card'}))
 
 
+def worked_now(store) -> set:
+    """The tasks an agent is on RIGHT NOW - a live session or a running run."""
+    from . import terminal as term
+    try: live = {t.get('taskId') for t in term.live_sessions(tail=0, details=False)}
+    except Exception: live = set()
+    return {t for t in live if t} | {r['TaskId'] for r in store.running_runs() if r.get('TaskId')}
+
+
 def notices(store, states: dict = None) -> list:
-    """The strip's own notices: the watcher's events, in the shape of an alert, until Open or Later."""
+    """The strip's own notices: the watcher's events, in the shape of an alert, until Open or Later.
+
+    A `working` notice is a CLAIM about live state, so it is checked against live state when it is
+    read. The transition that would retire it (working -> done) is seen only by the in-memory watcher,
+    and a restart makes its first look remember instead of announce - so the row outlived its agent by
+    days and every fresh phone walk re-told it (the owner, 2026-09-10: "there are no agents open??").
+    A `done` notice is history and stands until the owner puts it down.
+    """
     states = states if states is not None else store.funnel_states()
-    out = []
+    out, worked = [], None
     for k, st in states.items():
         if not k.startswith('notice:') or st.get('Status') != 'notice' or not st.get('Note'): continue
         try: e = json.loads(st['Note'])
         except ValueError: continue
         working = e.get('kind') == 'working'
+        if working:
+            if worked is None: worked = worked_now(store)
+            if e.get('tid') not in worked or (store.get_task(e.get('tid')) or {}).get('Status') in ('done', 'dropped'):
+                store.clear_funnel_state(k); continue
         out.append({'key': k, 'item': f"{'agent' if working else 'task'}:{e.get('tid')}", 'kind': e.get('kind'), 'lane': 'working' if working else 'report',
                     'text': e.get('text') or '', 'notice': True, 'order_band': 3, 'at': st.get('At'), 'tid': e.get('tid'), 'ref': e.get('ref')})
     return sorted(out, key=lambda a: str(a.get('at') or ''))

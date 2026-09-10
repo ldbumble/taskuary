@@ -150,7 +150,37 @@ class WordsInsteadOfButtonsTests(unittest.TestCase):
         said = {'say': 'Dana wants the corrected file.',
                 'chips': [{'verb': 'approve', 'label': 'Send the reply'}, {'verb': 'next', 'label': 'Next'}]}
         self.assertEqual(remote_assistant.turn_text(said),
-                         'Dana wants the corrected file.\n\nReply with: Send the reply · Next')
+                         'Dana wants the corrected file.\n\nReply with one of:\n1 · Send the reply\n2 · Next')
+
+    def test_a_line_wears_the_mark_of_its_lane_and_says_where_it_came_from(self):
+        """The desktop identifies a row by an icon; a chat has only emoji, and it uses the SAME ones
+        (website/src/funnelPile.js). The owner, 2026-09-10: "we need emojis ... also on what the task
+        comes from like email or teams"."""
+        said = {'say': 'A reply is drafted and waits for you.', 'options': ['Send it', 'Next'],
+                'item': {'lane': 'approve', 'kind': 'review', 'who': 'Craig Sherman', 'channel': 'email'}}
+        self.assertEqual(remote_assistant.turn_text(said),
+                         '📧 Craig Sherman · email\n✉️ A reply is drafted and waits for you.'
+                         '\n\nReply with one of:\n1 · Send it\n2 · Next')
+
+    def test_a_report_wears_the_report_mark_and_a_finished_agent_its_own(self):
+        report = {'say': 'Process Error Check - 0 rows landed 8 min ago.', 'item': {'lane': 'report', 'kind': 'report'}}
+        self.assertTrue(remote_assistant.turn_text(report).startswith('📄 Process Error Check'))
+        done = {'say': 'coder finished TQ-0491.', 'item': {'lane': 'report', 'kind': 'agentdone'}}
+        self.assertTrue(remote_assistant.turn_text(done).startswith('✅ coder finished'), 'the kind outranks the lane')
+
+    def test_an_unknown_source_gets_no_invented_mark(self):
+        said = {'say': 'Something landed.', 'item': {'lane': 'fyi', 'kind': 'fyi', 'who': 'Someone', 'channel': 'carrier_pigeon'}}
+        self.assertEqual(remote_assistant.turn_text(said), 'Someone · carrier pigeon\n👀 Something landed.')
+
+    def test_a_bare_number_answers_the_options_we_just_numbered(self):
+        """The number is answerable because WE numbered it a moment ago: the code indexes what it
+        offered, it never reads words (no hardcoded verbs)."""
+        s = MemoryStore()
+        remote_assistant.remember_offered(s, 'whatsapp', JID, 'Reply with one of:\n1 · Run it again\n2 · Hand it to an agent\n3 · Next')
+        self.assertEqual(remote_assistant.resolve_index(s, 'whatsapp', JID, '2'), 'Hand it to an agent')
+        self.assertEqual(remote_assistant.resolve_index(s, 'whatsapp', JID, '3.'), 'Next')
+        self.assertEqual(remote_assistant.resolve_index(s, 'whatsapp', JID, '9'), '9', "out of range stays the owner's own words")
+        self.assertEqual(remote_assistant.resolve_index(s, 'whatsapp', JID, 'run it again'), 'run it again')
 
     def test_a_proposal_is_waiting_on_a_yes_and_nothing_else_is_offered(self):
         said = {'say': 'File it: Dana - invoice.', 'chips': [{'verb': 'next', 'label': 'Next'}],

@@ -132,7 +132,7 @@ def detect(store=None) -> list:
     `installed` says it resolves on PATH; `configured` says Taskuary already has a profile for
     it. Neither means it WORKS - only a test run does, which is why the wizard runs one.
     """
-    from . import cliinstall
+    from . import cliinstall, clilogin
     have = {a['Name']: a for a in (store.list_agents() if store else [])}
     out = []
     for k in KNOWN:
@@ -147,8 +147,11 @@ def detect(store=None) -> list:
         installable = bool(cliinstall.plan(recipe))
         if not found and k['name'] not in have and not installable: continue
         runs, blocked = runnable(k['cmd']) if found else ('', False)
+        # `login` is the recipe whose sign-in Taskuary can host, or '' - the same rule as
+        # `installable`: never draw a button over a road that does not exist
         out.append({**k, 'installed': bool(found), 'path': found or '', 'runs': runs, 'store': blocked,
-                    'install': recipe, 'installable': installable, 'configured': k['name'] in have})
+                    'install': recipe, 'installable': installable, 'configured': k['name'] in have,
+                    'login': recipe if recipe in clilogin.RECIPES else ''})
     import json, os
     labels = {k['cmd']: k['label'] for k in KNOWN}
     for name, row in have.items():
@@ -165,5 +168,6 @@ def detect(store=None) -> list:
         out.append({'name': name, 'cmd': cmd, 'label': labels.get(base) or cmd or name, 'profile': name,
                     'args': list(prof.get('args') or []), 'installed': bool(found), 'path': found or '',
                     'runs': runs, 'store': blocked, 'install': recipe,
-                    'installable': bool(cliinstall.plan(recipe)), 'configured': True})
+                    'installable': bool(cliinstall.plan(recipe)), 'configured': True,
+                    'login': recipe if recipe in clilogin.RECIPES else ''})
     return out

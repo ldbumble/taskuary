@@ -53,3 +53,73 @@ class ArgvTests(unittest.TestCase):
         with mock.patch('taskuary.cliinstall.find', return_value=''):
             with self.assertRaises(ValueError) as e: clilogin.argv('claude')
         self.assertIn('install', str(e.exception).lower())
+
+
+class FakeTerm:
+    """A pane that never spawns anything. Records what it was asked to type."""
+
+    def __init__(self, argv, cwd, label, task_id=None, agent=None, rows=32, cols=110, store=None):
+        self.argv, self.cwd, self.label, self.task_id, self.agent = argv, cwd, label, task_id, agent
+        self.sid, self.alive, self.keep_transcript, self.seeded = 'fake123', True, True, None
+
+    def seed(self, text): self.seeded = text
+    def info(self, tail=0, details=True): return {'sid': self.sid, 'alive': True, 'label': self.label}
+
+
+class EndpointTests(unittest.TestCase):
+    def setUp(self):
+        from taskuary import terminal as term
+        self.term = mock.patch('taskuary.terminal.Term', FakeTerm); self.term.start()
+        self.find = mock.patch('taskuary.cliinstall.find', return_value='/x/claude'); self.find.start()
+        self.addCleanup(self.term.stop); self.addCleanup(self.find.stop)
+        self.addCleanup(lambda: term.SESSIONS.pop('fake123', None))
+
+    def test_it_opens_a_setup_task_the_board_will_show(self):
+        r = c.post('/api/cli/login', json={'name': 'claude'})
+        self.assertEqual(r.status_code, 200, r.text)
+        tid = r.json()['taskId']
+        task = server.store.get_task(tid)
+        self.assertEqual(task['Kind'], 'setup')
+        self.assertEqual(task['Status'], 'in_progress')
+        self.assertIn('cli:claude', str(task['Tags']))
+        self.assertIn('Claude Code', task['Title'])          # the label, not the bare recipe name
+
+    def test_the_pane_keeps_no_transcript_and_types_the_login(self):
+        from taskuary import terminal as term
+        c.post('/api/cli/login', json={'name': 'claude'})
+        t = term.SESSIONS['fake123']
+        self.assertFalse(t.keep_transcript)                   # secrets are typed into this one
+        self.assertEqual(t.seeded, '/login')
+        self.assertIsNone(t.agent)                            # off the blackboard, off the roster
+
+    def test_a_subcommand_cli_is_not_typed_into(self):
+        from taskuary import terminal as term
+        c.post('/api/cli/login', json={'name': 'codex'})
+        self.assertIsNone(term.SESSIONS['fake123'].seeded)
+
+    def test_a_second_press_reattaches_instead_of_starting_a_second_oauth(self):
+        first = c.post('/api/cli/login', json={'name': 'claude'}).json()
+        again = c.post('/api/cli/login', json={'name': 'claude'}).json()
+        self.assertTrue(again['existing'])
+        self.assertEqual(again['taskId'], first['taskId'])
+
+    def test_an_unknown_cli_is_refused(self):
+        self.assertEqual(c.post('/api/cli/login', json={'name': 'rm -rf /'}).status_code, 422)
+
+    def test_a_cli_that_is_not_installed_is_refused(self):
+        with mock.patch('taskuary.cliinstall.find', return_value=''):
+            self.assertEqual(c.post('/api/cli/login', json={'name': 'claude'}).status_code, 422)
+
+
+class GuardTests(unittest.TestCase):
+    def test_an_agent_may_not_start_an_oauth_flow(self):
+        """An agent reads untrusted mail. Starting a sign-in on the owner's machine is theirs."""
+        self.assertTrue(guard.denied('POST', '/api/cli/login'), 'POST /api/cli/login must be on guard.DENIED')
+
+    def test_the_page_is_told_which_clis_can_be_signed_in(self):
+        """A button is never drawn over a road that does not exist - `installable`'s own rule."""
+        rows = c.get('/api/cli/detect').json()['data']
+        self.assertTrue(rows)
+        for row in rows:
+            self.assertIn('login', row)
+            if row['login']: self.assertIn(row['login'], clilogin.RECIPES)

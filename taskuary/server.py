@@ -3978,6 +3978,21 @@ def cli_install_state():
     from . import cliinstall
     return cliinstall.state()
 
+class CliLoginBody(BaseModel): name: str
+
+@app.post('/api/cli/login')
+def cli_login(body: CliLoginBody):
+    """Open the CLI's own sign-in in a live pane, as a setup task on the Board.
+
+    On guard.DENIED beside /api/cli/install: an agent reads untrusted mail, and an agent that can
+    start an OAuth flow on this machine can be talked into starting one. A second press reattaches
+    to the open pane rather than running a second flow beside it."""
+    from . import clilogin, clis
+    name = str(body.name or '')
+    label = next((k['label'] for k in clis.KNOWN if k['name'] == name), '')
+    try: return clilogin.start(store, name, ACTOR, label=label)
+    except ValueError as e: raise HTTPException(422, str(e))
+
 @app.get('/api/setup')
 def setup_state():
     """What still stands between this install and a working funnel, read off real state - so a

@@ -3,3 +3,7 @@
 /website/src/** text=auto eol=lf
 /website/index.html text eol=lf
 /taskuary/web/** text=auto eol=lf
+
+# The demo build output is a shipped text asset too - without this, every build leaves it
+# permanently "modified" on Windows (autocrlf would write CRLF; vite writes LF).
+/site/**  text=auto eol=lf

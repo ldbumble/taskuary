@@ -95,3 +95,97 @@ def msg_of(row: dict) -> dict:
             'subject': row.get('Subject'), 'from_name': row.get('FromName'), 'from_email': row.get('FromEmail'),
             'sent_at': row.get('SentAt'), 'body': row.get('BodyText'), 'source_name': row.get('SourceName'),
             'to': rec.get('to'), 'cc': rec.get('cc')}
+
+
+# ── the document itself: one file, sections per role ─────────────────────────────────────────
+# COUNSEL.md is written for the chat. The morning brief, a reply to a suggestion and a worker's
+# prompt each borrow PART of it - the walkthrough rules (Current, Next, the bottom strip) are
+# the chat's alone, and letting them into a report prompt was role leakage (PW-242/243).
+CHAT_HEAD, GOAL_HEAD, VOICE_HEAD, DECIDING_HEAD = 'What I do, and what I never do', 'My goal', 'Voice', 'When the owner decides'
+_COMMENT = re.compile(r'<!--.*?-->', re.S)
+
+def load(store) -> str:
+    """The complete document as the AI reads it. Blank or comment-only restores the shipped default,
+    audited; a missing default is an explicit error - never a hidden fallback prompt (PW-245)."""
+    from pathlib import Path
+    doc = _COMMENT.sub('', store.doc('counsel') or '').strip()
+    if doc: return doc
+    path = Path(__file__).parent / 'templates' / 'counsel.md'
+    try: template = path.read_text(encoding='utf-8')
+    except OSError as e: raise RuntimeError('COUNSEL is missing or blank and its shipped default could not be read. Restore COUNSEL in Docs.') from e
+    if not _COMMENT.sub('', template).strip(): raise RuntimeError('COUNSEL and its shipped default are blank. Restore COUNSEL in Docs.')
+    store.save_doc('counsel', template, 'template')
+    store.audit('doc', 0, 'restored_blank', 'system', detail={'doc': 'counsel'})
+    logger.warning('COUNSEL was missing or blank; restored the shipped default in Docs')
+    return _COMMENT.sub('', store.doc('counsel') or '').strip()
+
+def sections(text: str) -> dict:
+    """{'': the intro, '<h2 text>': its body, ...} in document order."""
+    out, head = {}, ''
+    for line in (text or '').splitlines():
+        if line.startswith('## '): head = line[3:].strip(); out.setdefault(head, '')
+        else: out[head] = out.get(head, '') + line + '\n'
+    return {k: v.strip('\n') for k, v in out.items()}
+
+def pick(store, *heads: str) -> str:
+    """The intro plus the named sections. None of them present (an owner renamed the headings)
+    means the whole document: guidance is never dropped silently (PW-243)."""
+    text = load(store); parts = sections(text)
+    if not any(h in parts for h in heads): return text
+    return '\n\n'.join([parts.get('', '')] + [f'## {h}\n{parts[h]}' for h in parts if h in heads]).strip()
+
+def for_chat(store) -> str: return load(store)
+def for_brief(store) -> str: return pick(store, GOAL_HEAD, VOICE_HEAD)
+def for_discussion(store) -> str: return pick(store, VOICE_HEAD)
+def for_worker(store) -> str: return pick(store, VOICE_HEAD)
+
+BUDGET = 8_000     # a document past this is still read whole - but the owner is told, in the audit log and the server log
+
+def check_budget(store, name: str, text: str) -> str:
+    """Explicit size handling (PW-258): warn and audit, never slice - a silent cut dropped the last 727
+    characters of an approved document once (PW-247)."""
+    if len(text or '') > BUDGET:
+        logger.warning(f'{name}: {len(text)} characters is past the {BUDGET} budget - read whole, but consider shortening it')
+        store.audit('doc', 0, 'over_budget', 'system', detail={'doc': name, 'chars': len(text), 'budget': BUDGET})
+    return text
+
+MARKER = '<!-- counsel:deciding -->'
+
+def _squash(s): return ' '.join(str(s or '').split())
+
+def _goal_line(lines):
+    """Index of the REAL '## My goal' heading - never a line merely identical to it inside a fenced
+    code block, and never a mid-line match: a bare substring .replace() found both, gluing a stray
+    '#' onto '### My goal' and mangling a code sample (PW-256 review)."""
+    in_fence = False
+    for i, l in enumerate(lines):
+        if l.strip().startswith('```'): in_fence = not in_fence; continue
+        if not in_fence and l.strip() == f'## {GOAL_HEAD}': return i
+    return None
+
+def migrate(store) -> str:
+    """The shipped document gained `## When the owner decides` (the prose that left concierge.SYSTEM). A stock
+    document - blank, never edited, or matching any previously shipped template - is replaced outright; an
+    owner's document keeps every word and gets the section inserted before the real My goal heading (or
+    appended at the end), budget-checked and audited (PW-256, PW-258)."""
+    from pathlib import Path
+    tdir = Path(__file__).parent / 'templates'
+    new = tdir.joinpath('counsel.md').read_text(encoding='utf-8')
+    cur = store.get_doc('counsel')
+    if cur and MARKER in cur: return 'unchanged'
+    row = store.get_doc_row('counsel')
+    stock = {_squash(p.read_text(encoding='utf-8')) for p in tdir.glob('history/counsel-*.md')}
+    if not (cur or '').strip() or (row and row.get('UpdatedBy') == 'template') or _squash(cur) in stock:
+        store.save_doc('counsel', new, 'template'); return 'replaced'
+    new_lines = new.splitlines()
+    start = new_lines.index(f'## {DECIDING_HEAD}')
+    end = next((i for i in range(start + 1, len(new_lines)) if new_lines[i].startswith('## ')), len(new_lines))
+    section = new_lines[start:end]
+    while section and not section[-1].strip(): section.pop()
+    lines = cur.rstrip('\n').splitlines()
+    at = _goal_line(lines)
+    lines = lines + [''] + section if at is None else lines[:at] + section + [''] + lines[at:]
+    text = '\n'.join(lines) + '\n'
+    store.save_doc('counsel', check_budget(store, 'counsel', text), 'migration')
+    store.audit('doc', 0, 'migrated', 'system', detail={'doc': 'counsel', 'section': DECIDING_HEAD})
+    return 'appended'

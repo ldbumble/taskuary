@@ -13,7 +13,7 @@ just `general`, because no amount of typing does it.
 import unittest
 from unittest import mock
 
-from taskuary import senders
+from taskuary import general, senders
 from taskuary.ingest import auto_code_ok, ingest_message
 from taskuary.store import MemoryStore
 
@@ -40,23 +40,23 @@ def store():
 
 
 def ingested(s, m, kind):
-    with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to', return_value=True):
+    with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to', return_value=True), \
+         mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude', 'type': 'cli'}]):   # an assistant is configured (PW-071)
         out = ingest_message(s, m, llm=llm_says(kind))
     return out, [getattr(c[0][0], '__name__', '') for c in spawn.call_args_list]
 
 
 class DispatchTests(unittest.TestCase):
-    def test_general_makes_the_task_and_opens_no_session(self):
-        """general is the ASSISTANT'S CHAT now, not "only you can do it" - so nothing is spawned
-        and the route line says where it went, instead of apologising for an agent that was never
-        going to start."""
+    def test_general_makes_the_task_and_opens_the_assistant_not_a_cli(self):
+        """general is the ASSISTANT'S work: since PW-069 (owner, 2026-09-05) it starts its own assistant
+        session by default - never a coding CLI - and the route line says where it went."""
         s = store()
         out, spawned = ingested(s, mail(), 'general')
         t = s.get_task(out['task_id'])
         self.assertEqual((t['Kind'], t['Status']), ('general', 'open'))      # a real task, on the Board
-        self.assertEqual(spawned, [])
+        self.assertEqual(spawned, ['_auto_general'])
         reason = s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason']
-        self.assertIn('talk it through with the assistant', reason)
+        self.assertIn('sent to the assistant', reason)
         self.assertNotIn('sent to the coding agent', reason)                 # it was not
 
     def test_a_plain_task_is_nobodys_but_yours(self):
@@ -82,17 +82,19 @@ class DispatchTests(unittest.TestCase):
         _out, spawned = ingested(s, mail(external_id='r1'), 'coding')
         self.assertEqual(spawned, ['_auto_code'])
 
-    def test_a_person_asking_for_something_no_agent_can_do_also_waits(self):
-        """And it cuts the other way: a colleague asking you to attend a meeting is general."""
+    def test_a_person_asking_for_something_no_agent_can_do_also_gets_no_cli(self):
+        """And it cuts the other way: a colleague asking you to attend a meeting is general - the
+        assistant, not a coder (PW-069)."""
         s = store()
         _out, spawned = ingested(s, mail(external_id='p1', from_email='teammate@northwind.example', from_name='Sam',
                                          subject='board meeting', body='Can you sit in on the board meeting Thursday?'),
                                  'general')
-        self.assertEqual(spawned, [])
+        self.assertEqual(spawned, ['_auto_general'])
 
-    def test_general_skips_the_sent_items_search(self):
-        """A task already staying on the Board should not pay for a mailbox round-trip."""
-        s = store()
+    def test_a_general_task_that_will_not_start_skips_the_sent_items_search(self):
+        """A task already staying on the Board should not pay for a mailbox round-trip: with the
+        assistant's auto-start off (PW-070) the stranger gate is never asked."""
+        s = store(); s.set_setting('general_auto_enabled', '0', 't')
         with mock.patch('taskuary.ingest._spawn'), mock.patch.object(senders, 'wrote_to') as wrote:
             ingest_message(s, mail(external_id='n1'), llm=llm_says('general'))
         wrote.assert_not_called()
@@ -104,7 +106,8 @@ class GateTests(unittest.TestCase):
         return s.add_message({'ExternalId': 'x', 'Channel': 'email', 'Subject': 's', 'FromEmail': from_email,
                               'SentAt': '2026-08-30 09:00', 'BodyText': NOTICE, 'Status': 'routed'})
 
-    def test_general_is_refused_without_asking_anything_else(self):
+    def test_general_is_not_a_coding_job_and_the_coding_gate_says_so_without_asking_anything_else(self):
+        """auto_code_ok is the CODING gate; general has its own worker (ingest.auto_start_ok, PW-069)."""
         s = store()
         with mock.patch.object(senders, 'known') as known:
             ok, why = auto_code_ok(s, {'channel': 'email', 'from_email': 'a@b.c'}, self._mid(s, 'a@b.c'), 'general')
@@ -134,7 +137,7 @@ class ConsistencyTests(unittest.TestCase):
         for text, name in ((doc, 'triage.md'), (INTENT_SYSTEM, 'INTENT_SYSTEM')):
             low = text.lower()
             self.assertIn('from a keyboard', low, name)                   # the one test coding has to pass
-            self.assertIn('say coding', low, name)                        # the tie-break, both ways
+            self.assertIn('say general', low, name)                       # the tie-break, both ways (PW-067)
             # three destinations, named in both - a kind the doc does not describe is a kind the
             # model will not answer, and the router would then route on a value nothing produced
             for k in ('coding', 'general', 'task'):
@@ -166,14 +169,12 @@ class ConsistencyTests(unittest.TestCase):
             self.assertNotIn(leak, src, leak)
 
 
-class SettledVerdictTests(unittest.TestCase):
-    """The owner's three verdict marks do not mean the same thing.
-
-    "Not a coding task" is the button for real work they are KEEPING - server.not_coding writes
-    NOT A CODING TASK and takes the agent off. Two of those on a topic used to settle it as fyi
-    along with NOT OURS and NOT A TASK, which drops a job the owner had just claimed. It is also
-    the mark most likely to pile up now, since general is the exception this all exists for.
-    """
+class VerdictMarksAreEvidenceTests(unittest.TestCase):
+    """The owner's verdict marks - NOT A CODING TASK, NOT OURS, NOT A TASK - reach the classifier
+    as dated evidence and nothing more. Two agreeing marks used to become an order ("SETTLED BY
+    YOUR OWNER ... no exceptions"), which decided a new message unread; PW-025 (2026-09-06)
+    replaces the order with the evidence the model already had. The marks still differ in
+    meaning, and the EVIDENCE lines carry each one verbatim for the model to weigh."""
     def _system_for(self, notes):
         from taskuary.triage import classify_intent
         seen = {}
@@ -186,27 +187,13 @@ class SettledVerdictTests(unittest.TestCase):
     def _notes(self, mark, n=2):
         return [f'2026-08-{20 + i}: "Thing {i}" from a@b.c - {mark}: because' for i in range(n)]
 
-    def test_not_a_coding_task_settles_as_work_you_keep(self):
-        s = self._system_for(self._notes('NOT A CODING TASK'))
-        self.assertIn('Answer task with kind task', s)
-        self.assertIn('never fyi', s)
-
-    def test_the_other_two_still_settle_as_fyi(self):
-        for mark in ('NOT OURS', 'NOT A TASK'):
+    def test_agreeing_marks_are_shown_verbatim_and_order_nothing(self):
+        for mark in ('NOT A CODING TASK', 'NOT OURS', 'NOT A TASK'):
             s = self._system_for(self._notes(mark))
-            self.assertIn('Answer fyi - no exceptions', s, mark)
-            self.assertNotIn('kind general', s, mark)
-
-    def test_marks_that_disagree_settle_nothing(self):
-        from taskuary.triage import _agreement
-        self.assertEqual(_agreement(['x - NOT OURS: a', 'y - NOT A CODING TASK: b']), ())
-        self.assertEqual(_agreement(['x - NOT OURS: a']), ())              # one is not agreement
-        self.assertEqual(_agreement(['just a note the owner typed', 'another one']), ())
-
-    def test_the_longer_mark_wins_the_match(self):
-        """NOT A CODING TASK must not be read as a NOT A TASK with words around it."""
-        from taskuary.triage import _agreement
-        self.assertEqual(_agreement(self._notes('NOT A CODING TASK'))[0], 'NOT A CODING TASK')
+            self.assertIn('EVIDENCE', s, mark)
+            for n in self._notes(mark): self.assertIn(n, s, mark)
+            self.assertNotIn('SETTLED BY YOUR OWNER', s, mark)
+            self.assertNotIn('no exceptions', s, mark)
 
 
 if __name__ == '__main__':

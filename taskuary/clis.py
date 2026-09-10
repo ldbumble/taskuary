@@ -22,6 +22,10 @@ KNOWN = [
      'args': ['-p', '--yolo'], 'timeout': 1500},
     {'name': 'aider', 'cmd': 'aider', 'label': 'Aider',
      'args': ['--yes-always', '--no-auto-commits', '--message'], 'timeout': 1500},
+    {'name': 'cursor', 'cmd': 'cursor-agent', 'label': 'Cursor CLI',
+     'args': ['-p', '--force', '--output-format', 'text'], 'timeout': 1500},
+    {'name': 'copilot', 'cmd': 'copilot', 'label': 'GitHub Copilot CLI',
+     'args': ['-p', '--allow-all-tools'], 'timeout': 1500},
 ]
 
 
@@ -128,16 +132,26 @@ def detect(store=None) -> list:
     `installed` says it resolves on PATH; `configured` says Taskuary already has a profile for
     it. Neither means it WORKS - only a test run does, which is why the wizard runs one.
     """
+    from . import cliinstall, clisetup
     have = {a['Name']: a for a in (store.list_agents() if store else [])}
     out = []
     for k in KNOWN:
         # a fresh PATH is not read here: shutil.which sees the process's own, which is what the
         # agent runner will use too, so the two agree
         found = shutil.which(k['cmd'])
-        if not found and k['name'] not in have: continue
+        # a CLI nobody has installed is exactly who the Install button is for, so it gets a row.
+        # Dropping it is what left the wizard saying "no AI CLI found" with nothing to press.
+        # `install` is the RECIPE the row is an install of - what the button posts. It is not the
+        # row's name: a profile is called `coder`, and there is no recipe called that.
+        recipe = cliinstall.recipe_for(k['cmd'])
+        installable = bool(cliinstall.plan(recipe))
+        if not found and k['name'] not in have and not installable: continue
         runs, blocked = runnable(k['cmd']) if found else ('', False)
+        # `setup` is the recipe whose own first run Taskuary can open, or '' - the same rule as
+        # `installable`: never draw a button over a road that does not exist
         out.append({**k, 'installed': bool(found), 'path': found or '', 'runs': runs, 'store': blocked,
-                    'configured': k['name'] in have})
+                    'install': recipe, 'installable': installable, 'configured': k['name'] in have,
+                    'setup': recipe if recipe in clisetup.SETUP else ''})
     import json, os
     labels = {k['cmd']: k['label'] for k in KNOWN}
     for name, row in have.items():
@@ -150,7 +164,10 @@ def detect(store=None) -> list:
         # the row is about the CLI, not the profile's nickname: 'coder' running claude is Claude
         # Code - and "already configured" said nothing about whether claude is even on this machine
         runs, blocked = runnable(cmd) if found else ('', False)
+        recipe = cliinstall.recipe_for(cmd)
         out.append({'name': name, 'cmd': cmd, 'label': labels.get(base) or cmd or name, 'profile': name,
                     'args': list(prof.get('args') or []), 'installed': bool(found), 'path': found or '',
-                    'runs': runs, 'store': blocked, 'configured': True})
+                    'runs': runs, 'store': blocked, 'install': recipe,
+                    'installable': bool(cliinstall.plan(recipe)), 'configured': True,
+                    'setup': recipe if recipe in clisetup.SETUP else ''})
     return out

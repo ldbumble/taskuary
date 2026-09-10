@@ -150,7 +150,7 @@ class OneConversationNotTwentyTests(unittest.TestCase):
 
     def _run(self, texts, brain):
         made = []
-        def build(store, pick=None, model=None, trace=None, cancel=None, resume=None):
+        def build(store, pick=None, model=None, trace=None, cancel=None, resume=None, **kwargs):
             brain.session_id = resume
             made.append(resume)
             return brain

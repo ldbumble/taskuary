@@ -1,7 +1,7 @@
 """The local HTTP API + built-in minimal web UI. Localhost-only by default; set
 [server].token in config to require an X-Taskuary-Token header (for LAN/self-hosting).
 """
-import asyncio, json, re, secrets, sys, threading, time
+import asyncio, contextlib, json, re, secrets, sys, threading, time, weakref
 import requests
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -14,7 +14,8 @@ from . import config
 from . import store as store_mod
 from .store import SQLiteStore, task_ref
 from .ingest import ingest_message, split_message, task_from_message
-from .reports import PLANNED, REGISTRY, render_report, resolve_cfg, run_due_reports, run_report_source
+from .reports import (PLANNED, REGISTRY, note_app_up, render_report, resolve_cfg, run_due_reports,
+                      run_report_source)
 from . import agents as hub_agents
 from . import blackboard
 from . import guard
@@ -22,8 +23,9 @@ from . import policy as policy_engine
 from . import reshape
 from . import terminal as hub_term
 from .coder import PAUSE_MARKER, pause_note, reply_target as coder_reply_target, wrap as coder_wrap
-from . import aisetup, assistant, demo, deps, learn, learnedgraph, outbound, playbooks, rank, responder, waitroom
+from . import aisetup, assistant, demo, deps, learn, learnedgraph, operations, outbound, playbooks, rank, responder, waitroom
 from . import live as live_bus
+from . import processing_all
 
 # whatever the owner's Install button added lives beside their data, not in the build - and it has
 # to be importable BEFORE any card reaches for it (deps.py)
@@ -39,20 +41,36 @@ for name, prof in cfg.get('agents', {}).items():
 @asynccontextmanager
 async def _lifespan(_app):
     live_bus.bind(asyncio.get_running_loop())
+    is_demo = demo.enabled()
+    if not is_demo:
+        # Capture historical read results before startup catch-up, worker repair,
+        # or New chat can change the inputs. Schema construction alone never cuts over.
+        from .processing_startup import initialize
+        initialize(store, live_state=[])
+        from . import counsel as _counsel
+        try: logger.info(f"COUNSEL migration: {_counsel.migrate(store)}")
+        except Exception as e: logger.warning(f'COUNSEL migration skipped: {e}')
+        # Preserve the owner's existing opt-out before bridges, catch-up, or drain
+        # admission can ingest anything. Failure must not enable unattended work.
+        store.upgrade_auto_start()
+    if not _open_drain_workers(store):
+        raise RuntimeError('previous triage drain still owns this store')
     # the demo builds its world and puts agents on the board BEFORE anything else runs - and
     # never polls, never bridges, never catches up on a mailbox that does not exist
-    if demo.enabled():
+    if is_demo:
         try:
             demo.seed(store)
             demo.start_sessions(store)
         except Exception as e: logger.warning(f'demo seed failed: {e}')
-        yield
+        async with processing_all.membership_lifecycle(store):
+            yield
         return
     # No interactive or headless worker survives into this process. Repair any persisted
     # in-progress/running flags before the Board and funnel get their first read.
     hub_term.recover_after_restart(store)
     from . import wabridge
-    try: wabridge.start_configured(store)
+    try:
+        wabridge.start_configured(store)      # the launch grace is spent by the first poll (wabridge.ready), never here
     except Exception as e: logger.warning(f'wa bridge startup failed: {e}')
     catch_up_on_startup()          # defined below; resolved when the app actually starts
     try:                           # a relaunch opens a NEW chat rather than resuming the last one
@@ -60,16 +78,31 @@ async def _lifespan(_app):
         from .general import retire_dock
         if retire_dock(store, ACTOR) is not None: _f.reset_walk(store)
     except Exception as e: logger.warning(f'assistant dock retire failed: {e}')
+    try:                           # archived chats past their keep-days go on the app's own clock (PW-158), never on a history read
+        from . import retention
+        retention.tick(store)
+    except Exception as e: logger.warning(f'chat retention skipped: {e}')
     _heal_owner_docs()
     _refresh_soul_connections()
     learn.note_verdicts(store)     # the evidence block in LEARNED.md tracks the verdict table
+    try: blackboard.schedule_due(store)   # a retry that was backing off when the app closed is re-armed, not reset (PW-085)
+    except Exception as e: logger.warning(f'retry scheduling skipped: {e}')
+    try:                           # historical triage failures stored as filed become retriable errors, once (PW-040)
+        n = store.upgrade_triage_failures()
+        if n: logger.info(f'{n} historical triage failure(s) now show as errors with a retry')
+    except Exception as e: logger.warning(f'triage-failure upgrade skipped: {e}')
+    note_app_up(store, start=True)   # this launch, so a shut-overnight gap is not read as a dead scheduler
     threading.Thread(target=poll_forever, daemon=True).start()
+    threading.Thread(target=quick_forever, daemon=True).start()   # the chat clock, never behind a slow sync
     waitroom.watch(store)          # notes queued for a working agent land when it stops
     from . import msauth
     msauth.on_rotate = lambda cid, rt: store.save_connector({'ConnectorId': cid, 'Secret': rt}, 'msauth')   # a rotated Microsoft refresh token outlives a restart
     try:
-        yield
+        async with processing_all.membership_lifecycle(store):
+            yield
     finally:
+        if not _close_drain_workers(timeout=DRAIN_WAIT, target_store=store):
+            logger.warning('triage drain still stopping during shutdown')
         # Both watched PTYs and one-shot CLI brains are children of this process. An orderly
         # Taskuary close owns them: leaving them alive creates invisible Claude/Codex sessions
         # that can keep consuming resources after there is no UI capable of reaching them.
@@ -185,7 +218,9 @@ class PolicyBody(BaseModel):
     PolicyId: int | None = None; Name: str | None = None; Kind: str | None = None
     Pattern: str | None = None; Action: str | None = None; Reason: str | None = None
     SortOrder: int | None = None; Active: bool | None = None
-class MemoryBody(BaseModel): note: str; scope: str = 'global'; scope_key: str | None = None
+class MemoryBody(BaseModel):
+    note: str; scope: str = 'global'; scope_key: str | None = None
+    source: str = 'manual'          # 'writing' = an instruction about how to write, read by the drafter only (PW-060)
 class MemoryToggle(BaseModel): active: bool
 class ConnectorBody(BaseModel):
     ConnectorId: int | None = None; Type: str | None = None; Name: str | None = None
@@ -273,12 +308,30 @@ def update_apply():
     if out.get('restarting'): update.exit_soon()
     return out
 
+def _send_block(channel, has_message=True) -> str:
+    """The reason an approved reply could not leave on this channel - outbound.send_block's words,
+    '' when it can. Rides on feed rows and reviews as SendBlock, so every surface shows the same
+    sentence beside a draft it cannot send (PW-044)."""
+    if not has_message: return 'nothing arrived to reply to'
+    return outbound.send_block(store, channel)
+
+
 def _can_send(channel, has_message=True, gh_ok=None) -> bool:
     """Can an approved reply actually LEAVE on this channel? One answer for the whole app -
     outbound.can_reply - so the Approve button, triage and the coder wrap-up cannot
     disagree. The UI turns an unsendable draft's Approve into 'No response required'."""
     if not has_message: return False
     return outbound.can_reply(store, channel)
+
+
+def _send_state(memo: dict, channel, has_message=True) -> tuple:
+    """(CanSend, SendBlock) for one channel, answered once per request. The email probe reads the
+    connector cards (PW-143) and a 500-row Timeline must not read them 500 times."""
+    k = (str(channel or '').lower(), bool(has_message))
+    if k not in memo:
+        ok = _can_send(channel, has_message)
+        memo[k] = (ok, '' if ok else _send_block(channel, has_message))
+    return memo[k]
 
 
 @app.get('/api/feed')
@@ -290,9 +343,54 @@ def feed(limit: int = 100, offset: int = 0, pending_only: bool = False, channel:
     if request is not None and request.headers.get('if-none-match') == tag:
         return Response(status_code=304, headers={'ETag': tag, 'Cache-Control': 'no-cache'})
     rows = store.feed(min(limit, 500), days, pending_only, channel, max(offset, 0), source)
-    gh_ok = store.github_replies_ok()
-    for r in rows: r['CanSend'] = _can_send(r.get('Channel'), True, gh_ok)
+    memo = {}
+    for r in rows:
+        r['CanSend'], r['SendBlock'] = _send_state(memo, r.get('Channel'), True)
     return JSONResponse({'data': rows}, headers={'ETag': tag, 'Cache-Control': 'no-cache'})
+
+
+def _processing_live():
+    try:
+        return hub_term.live_sessions(tail=0)
+    except Exception:
+        return None  # Unavailable observation is distinct from an observed empty roster.
+
+
+@app.exception_handler(processing_all.AllError)
+async def _all_error(_request, error: processing_all.AllError):
+    # every route that reads the inventory can meet this; one answer, the same JSON the explicit catches give
+    return JSONResponse({'detail': error.detail}, status_code=error.status)
+
+@app.get('/api/processing/all')
+def processing_all_page(limit: int = 100, cursor: str = None, channel: str = None, source: str = None):
+    try:
+        days = int(store.get_settings().get('feed_days') or 14)
+    except (TypeError, ValueError):
+        days = 14
+    try:
+        return processing_all.inventory.page(store, limit=limit, cursor=cursor, channel=channel,
+                                             source=source, days=days, live_state=_processing_live())
+    except processing_all.AllError as exc:
+        raise HTTPException(exc.status, exc.detail) from exc
+
+
+@app.get('/api/processing/items/{item_id}/detail')
+def processing_item_detail(item_id: str, kind: str = None, id: int = None, view_revision: str = None):
+    try:
+        result = processing_all.item_detail(store, item_id, kind=kind, local_id=id,
+                                             view_revision=view_revision, live_state=_processing_live())
+        row = result.get('row')
+        detail = result.get('detail') or {}
+        if detail.get('task'):
+            detail['artifacts'] = [_artifact_row(a) for a in detail.get('artifacts') or []]
+        if row is not None:
+            row['CanSend'] = _can_send(row.get('Channel'), True, store.github_replies_ok())
+            row['SendBlock'] = '' if row['CanSend'] else _send_block(row.get('Channel'), True)
+            result['detail_revision'] = processing_all._digest({key: value for key, value in result.items()
+                                                               if key != 'detail_revision'})
+        return result
+    except processing_all.AllError as exc:
+        raise HTTPException(exc.status, exc.detail) from exc
 
 
 def _queued_info(q):
@@ -301,7 +399,9 @@ def _queued_info(q):
     b = q.get('BehindTaskId')
     return {'behind': task_ref(b) if b else None, 'value': q.get('Value'), 'why': q.get('Why'),
             'behindTitle': (store.get_task(b) or {}).get('Title') if b else None,
-            'reason': q.get('Reason'), 'since': q.get('CreatedAt')}
+            'reason': q.get('Reason'), 'since': q.get('CreatedAt'),
+            # the retry budget (PW-085..087): waiting | retrying | failed, how many tries, the last error and the next one
+            'state': q.get('State') or 'waiting', 'attempts': int(q.get('Attempts') or 0), 'lastError': q.get('LastError'), 'nextAt': q.get('NextAt')}
 
 
 def _playbook_brief(task, books=None):
@@ -319,9 +419,13 @@ def _playbook_brief(task, books=None):
             'uses': uses, 'missing': found is None}
 
 @app.get('/api/tasks')
-def tasks(status: str = None, active: bool = False):
+def tasks(status: str = None, active: bool = False, search: bool = False):
     """An interactive session IS an agent working - the UI has to see it, or a task with a
-    live CLI on it reads as 'queued' while the agent sits there asking a question."""
+    live CLI on it reads as 'queued' while the agent sits there asking a question.
+
+    `search` asks for the message-search blobs the Tasks tab filters on locally. They aggregate
+    the whole message table (see store.list_tasks) and were 34ms of a 35ms query plus 69KB of a
+    319KB payload on a real store, so opening a tab no longer pays for a search nobody ran."""
     qs = {q['TaskId']: q for q in store.queued_dispatches()}
     wc = store.waiting_counts()
     agented = store.agented_task_ids()      # the Board's Done lane shows agent work only
@@ -334,7 +438,7 @@ def tasks(status: str = None, active: bool = False):
                       'Session': sessions.get(t['TaskId']),
                       'Queued': _queued_info(qs.get(t['TaskId'])), 'Waiting': wc.get(t['TaskId'], 0),
                       'HadAgent': t['TaskId'] in agented}
-                     for t in store.list_tasks(status, active_only=active)]}
+                     for t in store.list_tasks(status, active_only=active, search=search)]}
 
 @app.post('/api/tasks')
 def create_task(body: TaskBody):
@@ -362,6 +466,12 @@ def assistant_dock():
 
 @app.post('/api/assistant/dock/new')
 def assistant_dock_new(background: BackgroundTasks):
+    from .processing_navigation import chat_change
+    with chat_change(store):
+        return _assistant_dock_new(background)
+
+
+def _assistant_dock_new(background: BackgroundTasks):
     """Archive the current dock conversation and return a genuinely fresh one.
 
     A client-side clear is dishonest here: the model session and the task comments would still
@@ -386,6 +496,246 @@ def assistant_dock_new(background: BackgroundTasks):
     return {'task': task, 'ref': task_ref(task['TaskId']), 'created': created,
             'archivedTaskId': old['TaskId']}
 
+class ChecklistTick(BaseModel):
+    done: bool = True
+
+
+class ChecklistEdit(BaseModel):
+    items: list
+
+
+@app.patch('/api/tasks/{task_id}/checklist/{item_id}')
+def tick_checklist(task_id: int, item_id: str, body: ChecklistTick):
+    """One box. Progress on the list, never task completion (PW-077)."""
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    if not store.tick_checklist_item(task_id, item_id, body.done, ACTOR): raise HTTPException(404, 'no such checklist item')
+    return {'ok': True, 'checklist': store.task_checklist(task_id)}
+
+
+@app.put('/api/tasks/{task_id}/checklist')
+def edit_checklist(task_id: int, body: ChecklistEdit):
+    """The owner's words for the list; a box whose words are unchanged keeps its state (PW-076)."""
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    return {'ok': True, 'checklist': store.set_task_checklist(task_id, body.items, ACTOR)}
+
+
+# ── shared operations (operations.py): propose, edit, confirm once, and the durable record ──────
+class OperationBody(BaseModel): kind: str; target: int; params: dict = {}
+class OperationEdit(BaseModel): params: dict
+class OperationConfirm(BaseModel): version: int
+class DiscussBody(BaseModel): body: str; actor: str = 'owner'
+
+def _run_operation(op: dict, background: BackgroundTasks):
+    """The shared handler for each kind - the same code the task page and the timeline run."""
+    kind, tid, mid, p = op['kind'], op['target'], op['target'], op['params'] or {}
+    if kind == 'task.create_from_message':
+        k = str(p.get('kind') or 'task').lower()
+        if k == 'general': return chat_message(mid, background)
+        if k == 'coding':
+            out = dispatch_message(mid, DispatchBody(kind='coding', agent=p.get('agent'), instruction=p.get('instructions')), background)
+            # a repository still to choose is a decision, not a start: the item stays where it is (PW-135)
+            if out.get('dispatch') == 'needs_repo':
+                raise operations.Halt(f"{out.get('ref') or 'it'} needs a repository first - {out.get('reason') or 'pick one'}", out)
+            return out
+        return mine_message(mid, MineBody(kind='task', title=p.get('title')), background)
+    if kind == 'message.file': return file_message(mid, NotATaskBody(learn=bool(p.get('learn', True))), background)
+    if kind == 'message.reply': return open_reply(mid, None)
+    if kind == 'dispatch.prepare':
+        return _dispatch_task_to_its_agent(tid, DispatchBody(kind=p.get('kind'), agent=p.get('agent'), instruction=p.get('instructions'), model=p.get('model')), background)
+    if kind == 'task.set_kind':
+        if str(p.get('kind')) == 'task': return not_coding(tid, NotATaskBody(learn=bool(p.get('learn', True))), background)
+        store.update_task(tid, {'Kind': str(p.get('kind'))}, ACTOR); return {'kind': p.get('kind')}
+    if kind == 'task.not_a_task': return not_a_task(tid, NotATaskBody(learn=bool(p.get('learn', True))), background)
+    if kind == 'task.complete':
+        # the same close the PATCH road does: the pending draft is dismissed and the agent on it is stopped
+        from . import concierge
+        if not store.get_task(tid): raise HTTPException(404, 'task not found')
+        return {'status': 'done', 'already': not concierge.close_task(store, tid, ACTOR)}
+    if kind == 'task.reopen':
+        if not store.get_task(tid): raise HTTPException(404, 'task not found')
+        store.update_task(tid, {'Status': 'open'}, ACTOR); return {'status': 'open'}
+    # the assistant's proposals (concierge.PROPOSALS): each runs the same code the page's own button runs
+    if kind == 'task.create_from_text':
+        from . import concierge
+        return concierge.handoff_task(store, str(p.get('text') or ''), str(p.get('kind') or 'coding'), ACTOR, title=p.get('title'))
+    if kind == 'task.setup':
+        from . import concierge
+        return concierge.setup_task(store, str(p.get('text') or ''), ACTOR)
+    if kind == 'message.archive': return file_message(mid, NotATaskBody(learn=False, archive=True), background)
+    if kind == 'preference.exclude_sender': return not_mine(mid, NotMineBody(scope=str(p.get('scope') or 'sender')), background)
+    # the bigger hammer, down the SAME road the card's own button took (ignore_sender, how='rule')
+    if kind == 'preference.sender_rule': return ignore_sender(mid, IgnoreSenderBody(how='rule'), background)
+    # the bigger hammer, down the SAME road the card's own button took (ignore_sender, how='rule')
+    if kind == 'preference.sender_rule': return ignore_sender(mid, IgnoreSenderBody(how='rule'), background)
+    if kind == 'item.settle':
+        from . import funnel, verdicts
+        verb = str(p.get('verb') or 'done')
+        out = funnel.settle(store, str(p.get('key')), verb, ACTOR, p.get('hours'),
+                            expected_context=p.get('processing_context'))
+        # done on a task-backed item means the TASK is done: its pending draft is dismissed and it closes
+        if verb == 'done' and p.get('kind') != 'agent':
+            rv = store.get_review(int(p['rid'])) if p.get('rid') else None
+            if rv and rv.get('Status') in ('pending', 'held'): verdicts.decide(store, rv, 'no_reply', None, 'handled - the owner said so', ACTOR)
+            t = store.get_task(int(p['tid'])) if p.get('tid') else None
+            if t and t.get('Status') not in ('done', 'dropped'): store.update_task(int(p['tid']), {'Status': 'done'}, ACTOR); out['closed'] = int(p['tid'])
+        return out
+    if kind == 'review.approve':
+        if not store.get_review(tid): raise HTTPException(404, 'review not found')
+        out = decide(tid, DecideBody(verb='approve'), background)
+        if not out.get('ok'): raise RuntimeError(out.get('send_error') or 'the reply was not sent')
+        return out
+    if kind == 'agent.answer':
+        # the exact outstanding request of the run that asked (PW-138/139); nothing asked = the waiting room (PW-140)
+        from . import workerstate as ws
+        out = ws.answer_open(store, tid, str(p.get('text') or 'yes'), ACTOR)
+        if out['state'] == 'no_request': return waitroom_add(tid, {'text': str(p.get('text') or 'yes')})
+        if not out['delivered']: raise RuntimeError(f"{out['state']}: {out.get('why') or ''}")
+        return out
+    if kind == 'agent.stop': return _wrap_task(tid, True) if p.get('wrap') else stop_task_agent(tid)
+    if kind == 'report.rerun': return report_rerun(tid)
+    if kind == 'memory.remember':
+        from . import concierge
+        return {'memoryId': concierge.remember_fact(store, str(p.get('note') or ''), ACTOR)}
+    if kind == 'task.split':
+        from . import concierge, funnel
+        item = (funnel.next_item(store, p['key']) if p.get('key') else None) or {'tid': tid, 'key': p.get('key')}
+        return concierge.split_item(store, item, str(p.get('text') or ''), ACTOR)
+    if kind == 'report.create':
+        # the same road the Reports tab takes (validate, then save_source) - never an assistant-only path (PW-194)
+        from . import compose
+        cfg = dict(p.get('config') or {})
+        ok, why = compose.validate(store, cfg)
+        if not ok: raise RuntimeError(why)
+        title = str(cfg.get('title') or '').strip()
+        if any(x.get('Channel') == 'report' and str(x.get('Address') or '').casefold() == title.casefold() for x in store.list_sources(active_only=False)):
+            raise RuntimeError(f'a report named {title!r} already exists - open it on the Reports tab')
+        enabled = bool(p.get('enabled', True))
+        out = save_source(SourceBody(Channel='report', Address=title, Active=enabled, ConfigJson=json.dumps(cfg)))
+        return {**out, 'title': title, 'type': cfg.get('type'), 'enabled': enabled, 'link': f"#report={out['sourceId']}"}
+    if kind == 'connection.create':
+        # the same road the Connections tab takes; a secret never rides a proposal, and the card stays off until authorized (PW-196)
+        from . import concierge
+        typ, name = str(p.get('type') or ''), str(p.get('name') or '')
+        cfg = {k: v for k, v in (p.get('config') or {}).items() if not concierge.SECRET_WORDS.search(str(k))}
+        body = (ConnectorBody(ConnectorId=tid, ConfigJson=json.dumps(cfg) if cfg else None, Scope=p.get('scope') or None) if tid
+                else ConnectorBody(Type=typ, Name=name, ConfigJson=json.dumps(cfg) if cfg else None, Scope=p.get('scope') or None, Active=False))
+        out = save_connector(body)
+        c = store.get_connector(out['connectorId'], with_secret=True) or {}
+        state = ('authorization pending' if not c.get('Secret') else 'connected' if c.get('LastSyncAt') and not c.get('LastError')
+                 else 'validation failed' if c.get('LastError') else 'saved, not yet verified')
+        return {'connectorId': out['connectorId'], 'type': c.get('Type') or typ, 'name': c.get('Name') or name, 'state': state,
+                'active': bool(c.get('Active')), 'link': f"#connector={out['connectorId']}"}
+    if kind == 'pipe.clear':
+        from . import concierge
+        # a SELECTOR names a set exactly (category/kind/lane/sender/contains/age); the word-matching
+        # road stays for the sentences that name a subject rather than a class
+        if p.get('select'):
+            out = concierge.clear_selected(store, p['select'], ACTOR)
+            return out
+        out = concierge.clear_matching(store, str(p.get('text') or ''), ACTOR, hint=str(p.get('hint') or ''))
+        # a standing RULE already keeps these out of the pipe; a sender-wide verdict on top of it would reach
+        # everything that person ever sends, which is not what "don't need these" means
+        if out.get('remember') and out.get('mid') and not out.get('rules'):
+            try: not_mine(int(out['mid']), NotMineBody(scope='sender'), background)
+            except Exception as e: logger.warning(f'the sweep happened but the sender was not silenced: {e}')
+        return out
+    raise HTTPException(501, f'{kind} has no shared handler yet')
+
+@app.post('/api/operations/{oid}/preview')
+def preview_operation(oid: str):
+    """A dry run of a proposed report (PW-195): read-only, files nothing, sends nothing, activates nothing, starts nothing."""
+    from . import scopes
+    op = operations.get(store, oid)
+    if not op or op['kind'] != 'report.create': raise HTTPException(404, 'nothing to preview')
+    cfg = dict((op['params'] or {}).get('config') or {})
+    if scopes.needs(cfg.get('type')) != 'read':
+        raise HTTPException(422, f"{cfg.get('type')} writes to a system - a dry run could too; run it from the Reports tab once created")
+    for k in ('deliver', 'alert', 'triage', 'on_startup', 'cron', 'every_minutes', 'daily_at'): cfg.pop(k, None)
+    return report_preview(cfg)
+
+@app.post('/api/operations')
+def propose_operation(body: OperationBody):
+    try: return operations.propose(store, body.kind, body.target, body.params, ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+
+@app.get('/api/operations/{oid}')
+def get_operation(oid: str):
+    op = operations.get(store, oid)
+    if not op: raise HTTPException(404, 'no such proposal')
+    return op
+
+@app.patch('/api/operations/{oid}')
+def edit_operation(oid: str, body: OperationEdit):
+    try: return operations.revise(store, oid, body.params, ACTOR)
+    except ValueError as e: raise HTTPException(404 if 'no such' in str(e) else 422, str(e))
+
+@app.delete('/api/operations/{oid}')
+def cancel_operation(oid: str):
+    try: return operations.cancel(store, oid, ACTOR)
+    except ValueError as e: raise HTTPException(404, str(e))
+
+@app.post('/api/operations/{oid}/execute')
+def execute_operation(oid: str, body: OperationConfirm, background: BackgroundTasks):
+    """The confirmation button: the structured proposal, by id and version - never a phrase sent back
+    through an interpreter. Stale or cancelled is 409 with the reason; a failed handler is reported as
+    such; a repeated click is the first receipt again (PW-124, PW-125)."""
+    op = operations.get(store, oid)
+    if not op: raise HTTPException(404, 'no such proposal')
+    out = operations.execute(store, oid, body.version, lambda: _run_operation(op, background), ACTOR)
+    # the receipt is the fact of what happened, in the chat, after it happened (PW-125)
+    from . import concierge
+    try: concierge.receipt(store, out, ACTOR)
+    except Exception as e: logger.debug(f'no receipt recorded for {oid}: {e}')
+    if out['status'] in ('stale', 'cancelled'): raise HTTPException(409, out.get('error') or out['status'])
+    return out
+
+@app.get('/api/tasks/{task_id}/history')
+def task_history(task_id: int):
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    return {'data': operations.history(store, task_id=task_id)}
+
+@app.get('/api/messages/{mid}/history')
+def message_history(mid: int):
+    if not store.get_message(mid): raise HTTPException(404, 'message not found')
+    return {'data': operations.history(store, message_id=mid)}
+
+@app.post('/api/tasks/{task_id}/discussion')
+def task_discuss(task_id: int, body: DiscussBody):
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    try: return {'id': operations.discuss(store, body.actor, body.body, task_id=task_id)}
+    except ValueError as e: raise HTTPException(422, str(e))
+
+@app.post('/api/messages/{mid}/discussion')
+def message_discuss(mid: int, body: DiscussBody):
+    if not store.get_message(mid): raise HTTPException(404, 'message not found')
+    try: return {'id': operations.discuss(store, body.actor, body.body, message_id=mid)}
+    except ValueError as e: raise HTTPException(422, str(e))
+
+
+# ── the worker's own word on its state (workerstate.py) ────────────────────────────────────────
+class WorkerAnswerBody(BaseModel): request_id: str; text: str
+
+@app.get('/api/tasks/{task_id}/worker')
+def worker_status(task_id: int):
+    """Working, input needed (the question), approval needed (the action), finished (the result), failed,
+    disconnected, stopped - or unknown; derived from explicit events, never from the screen (PW-222/226)."""
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    from . import workerstate as ws
+    return ws.status(store, task_id)
+
+@app.post('/api/tasks/{task_id}/worker/answer')
+def worker_answer(task_id: int, body: WorkerAnswerBody):
+    """Deliver an answer to ONE outstanding request of the run that asked it (PW-139/141): once; 409 when it is
+    resolved already or the run changed; 422 when there is no live worker or delivery failed."""
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    from . import workerstate as ws
+    try: out = ws.answer(store, task_id, body.request_id, body.text, ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+    if not out['delivered']:
+        raise HTTPException(409 if out['state'] in ('resolved', 'stale') else 422, f"{out['state']}: {out.get('why') or ''}")
+    return out
+
+
 @app.get('/api/tasks/{task_id}')
 def task_detail(task_id: int):
     d = store.task_detail(task_id)
@@ -409,6 +759,9 @@ def _assistant_payload(task_id: int, session=None):
         raise HTTPException(422, 'assistant view is available for general, research, marketing, and triage tasks')
     session = session or general.session_for(task_id)
     return {'messages': general.history(store, task_id), 'providers': general.provider_options(store),
+            # what the chat WOULD run on if nobody picks: the picker showed providers[0] instead,
+            # which is always a CLI, so a task with no session nominated a coding agent (TQ-0420)
+            'defaultPick': general.default_pick(store),
             'session': session.info(tail=3) if session else None}
 
 @app.get('/api/tasks/{task_id}/assistant')
@@ -604,6 +957,12 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
         if live and live.alive:
             hub_term.close(live.sid)
             store.add_comment(task_id, ACTOR, 'human', 'Task closed - ended the live agent session with it.')
+        # the same read receipt concierge.close_task writes: a task the owner closed leaves Unread from
+        # whichever button closed it, and a later arrival on it is unread again (the owner, 2026-09-07)
+        if t.get('Status') not in ('done', 'dropped'):
+            from . import funnel as _funnel
+            try: _funnel.settle(store, f'task:{task_id}', 'done', ACTOR, note='the task was closed')
+            except Exception as e: logger.debug(f'the closed task did not settle its item: {e}')
     # "This is not a coding task - it just needs an answer." Changing the kind to reply IS that
     # verdict, so the task enters the Review queue the way a question would have at triage:
     # a draft review appears (auto-drafted when that is on), instead of a repo session.
@@ -613,13 +972,11 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
             rid = store.add_review({'TaskId': task_id, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
                                     'Reason': 'reclassified by you: a question, not work to do - needs a reply'})
             store.add_comment(task_id, ACTOR, 'human', 'Reclassified as a question - it needs an answer, not an agent.')
-            if store.get_settings().get('auto_draft_enabled') == '1' and background is not None:
-                # guarded like ingest's auto-draft: no AI connected means an undrafted review
-                # waiting in the queue, never an exception out of a background task
-                def _draft(tid=task_id, r=rid):
-                    try: responder.write_draft(store, tid, r, actor='auto-draft')
-                    except Exception as e: logger.warning(f'auto-draft failed for task {tid}: {e}')
-                background.add_task(_draft)
+            if background is not None:
+                # always drafted (PW-043) and guarded like ingest's auto-draft: no AI connected means
+                # a review waiting in the queue with the failure written on it, never an exception
+                from .ingest import _auto_draft
+                background.add_task(_auto_draft, store, task_id, rid)
         # a reclassification is a triage verdict the owner had to overturn - worth generalizing
         if background is not None:
             background.add_task(learn.learn_from, store,
@@ -673,10 +1030,21 @@ def comment(task_id: int, body: TextBody):
     store.add_comment(task_id, ACTOR, 'human', body.body)
     return {'ok': True}
 
+NEEDS_REPO = re.compile(r'could not tell which checkout|no local path|does not exist|choose one', re.I)
+
+
 @app.post('/api/tasks/{task_id}/dispatch')
 def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks):
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
-    return _dispatch_task_to_its_agent(task_id, body, background)
+    try:
+        return _dispatch_task_to_its_agent(task_id, body, background)
+    except HTTPException as e:
+        # a repository the agent cannot open - none chosen, several plausible, a path that is gone - is a
+        # DECISION for the owner, shown as a visible choice, never a session in some other checkout (PW-095)
+        if e.status_code == 422 and NEEDS_REPO.search(str(e.detail or '')):
+            return {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'agent': body.agent or hub_agents.default_agent(store), 'taskId': task_id,
+                    'ref': task_ref(task_id), 'reason': str(e.detail or '')}
+        raise
 
 class RepoBody(BaseModel):
     repo: str | None = None          # None clears the tag and lets Taskuary guess again
@@ -792,8 +1160,10 @@ def not_coding(task_id: int, body: NotATaskBody = None, background: BackgroundTa
     if not t: raise HTTPException(404, 'task not found')
     live = hub_term.session_for(task_id)
     if live and live.alive: hub_term.close(live.sid)
+    was_kind, was_route = operations.verdict_of_task(store, task_id)
     store.update_task(task_id, {'Kind': 'task'}, ACTOR)
     store.clear_dispatch(task_id)
+    operations.record_direct(store, 'task.set_kind', task_id, {'kind': 'task'}, ACTOR, {'kind': 'task'}, verdict=was_kind, route_id=was_route)
     msgs = store.list_messages(task_id)
     learned = None
     if msgs and (body is None or body.learn):
@@ -823,6 +1193,8 @@ def not_a_task(task_id: int, body: NotATaskBody = None, background: BackgroundTa
     nothing to conclude - delete the task and teach nothing."""
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     msgs, learned = store.list_messages(task_id), None
+    was_kind, was_route = operations.verdict_of_task(store, task_id)
+    operations.record_direct(store, 'task.not_a_task', task_id, {}, ACTOR, {'deleted': True}, verdict=was_kind, route_id=was_route)
     if msgs and (body is None or body.learn):
         mid = _teach_not_a_task(msgs[0], background)
         if mid: learned = {'memory_id': mid}
@@ -900,7 +1272,10 @@ def work_on_task(tid: int) -> str:
     except Exception: pass
     cs = store.list_comments(tid)
     if any(str(c.get('Body') or '').startswith(('CODER REPORT', 'HANDOVER NOTE')) for c in cs): had.append('it carries an agent report')
-    if any(str(c.get('ActorType') or '') == 'agent' for c in cs) and 'it carries an agent report' not in had: had.append('an agent has worked on it')
+    # the router's own bookkeeping ('not auto-started', 'start failed', 'queued') is not an agent's work: a task
+    # nothing ever ran on stays deletable however loudly the pipeline explained why (PW-073)
+    if any(str(c.get('ActorType') or '') == 'agent' and str(c.get('Actor') or '') != 'router' for c in cs) and 'it carries an agent report' not in had:
+        had.append('an agent has worked on it')
     return ' and '.join(had)
 
 
@@ -1091,6 +1466,12 @@ def open_reply(mid: int, body: OpenReplyBody = None):
     # a FILED message stays filed: answering it is a reply, not a project, and promoting it to a
     # task just to hold the review put a TQ badge on chatter. The review rides task-less.
     tid = m.get('TaskId')
+    # ...and a thread its own last reply CLOSED comes back when the owner opens another one. The
+    # draft was created on the done task, where the queue's visibility rule hides it, so the card
+    # asking for the yes said "already handled" over the message instead of showing the draft, and
+    # every click stacked one more invisible review (TQ-0426, 2026-09-07). Answering again is work.
+    if tid and (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'):
+        store.update_task(tid, {'Status': 'waiting'}, ACTOR)
     rv = store.pending_review(tid) if tid else None
     rid = rv['ReviewId'] if rv else store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft',
                                                       'Status': 'pending', 'Reason': 'you opened a reply on this message'})
@@ -1236,8 +1617,10 @@ def file_message(mid: int, body: NotATaskBody = None, background: BackgroundTask
             store.update_task(tid, {'Status': 'done'}, ACTOR)
             store.add_comment(tid, ACTOR, 'human', 'Archived from the pipe - closed, not deleted.')
     learned = _teach_not_a_task(m, background) if (body is None or body.learn) else None
+    verdict, route_id = operations.verdict_of_message(store, m)
     store.set_message_status(mid, 'ignored')
     store.add_route(mid, None, 'ignore', None, 'nothing to do - filed by the owner', [], ACTOR)
+    operations.record_direct(store, 'message.file', mid, {}, ACTOR, {'taskDeleted': fate == 'deleted', 'taskArchived': fate == 'archived'}, verdict=verdict, route_id=route_id)
     return {'ok': True, 'taskDeleted': fate == 'deleted', 'taskArchived': fate == 'archived',
             'ref': task_ref(tid) if tid else None, 'memoryId': learned}
 
@@ -1315,13 +1698,16 @@ def _dispatch_task_to_its_agent(tid: int, body: DispatchBody, background: Backgr
         if live and live.alive:
             who = getattr(live, 'agent', None) or getattr(live, 'label', None) or 'agent'
             raise HTTPException(409, f'{who} is already working on this task; stop that agent before changing agent type')
+        was_kind, was_route = operations.verdict_of_task(store, tid)
         store.update_task(tid, {'Kind': requested}, ACTOR)
+        operations.record_direct(store, 'dispatch.prepare', tid, {'kind': requested}, ACTOR, {'kind': requested}, verdict=was_kind, route_id=was_route)
         task = store.get_task(tid)
         task_kind = requested
 
     regular = general.handles(task)
 
     if regular:
+        had_session = general.session_for(tid) is not None
         try:
             session = general.start_session(store, tid, model=body.model, actor=ACTOR)
         except (ValueError, RuntimeError) as e:
@@ -1335,13 +1721,16 @@ def _dispatch_task_to_its_agent(tid: int, body: DispatchBody, background: Backgr
             prompt = str(task.get('Summary') or task.get('Title') or '').strip()
         if prompt:
             background.add_task(session.send_prompt, prompt)
-        return {'dispatch': 'assistant', 'agent': session.provider, 'model': session.model,
+        # the same four words every door speaks (PW-209): a reused conversation is not a new start
+        return {'dispatch': 'assistant', 'agent': session.provider, 'model': session.model, 'started': not had_session, 'existing': had_session,
                 'taskId': tid, 'ref': task_ref(tid), 'session': session.info(tail=3)}
 
     agent = body.agent or hub_agents.default_agent(store)
     if not store.get_agent(agent): raise HTTPException(422, f'unknown agent: {agent}')
     ses = start_session(store, tid, agent, body.model, body.instruction)
-    return {'dispatch': 'session', 'agent': agent, 'model': body.model,
+    existing = bool((ses or {}).get('existing'))
+    return {'dispatch': 'session', 'agent': agent, 'model': body.model, 'started': not existing, 'existing': existing,
+            'accepted': (ses or {}).get('accepted'),      # the prompt was submitted, not merely typed (PW-209)
             'taskId': tid, 'ref': task_ref(tid), 'session': ses}
 
 @app.post('/api/messages/{mid}/dispatch')
@@ -1355,16 +1744,20 @@ def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
     if not requested and not body.agent:
         raise HTTPException(422, 'Choose an agent type: general or coding')
     _learn_promotion(m, background)
+    verdict, route_id = operations.verdict_of_message(store, m)
     tid = m.get('TaskId') or task_from_message(
         store, mid, ACTOR, requested if requested in ('general', 'coding') else 'coding')
     try:
-        return _dispatch_task_to_its_agent(tid, body, background)
+        out = _dispatch_task_to_its_agent(tid, body, background)
+        operations.record_direct(store, 'task.create_from_message', mid, {'kind': requested if requested in ('general', 'coding') else 'coding'}, ACTOR,
+                                 {'taskId': tid, 'dispatch': out.get('dispatch')}, verdict=verdict, route_id=route_id)
+        return out
     except HTTPException as e:
         reason = str(e.detail or '')
         # This is a decision, not a failed action. The message may only just have become a task,
         # so return its id and let the card ask which repo before resuming the same dispatch.
-        if e.status_code == 422 and re.search(r'could not tell which checkout|no local path', reason, re.I):
-            return {'dispatch': 'needs_repo', 'agent': body.agent or hub_agents.default_agent(store), 'taskId': tid,
+        if e.status_code == 422 and NEEDS_REPO.search(reason):
+            return {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'agent': body.agent or hub_agents.default_agent(store), 'taskId': tid,
                     'ref': task_ref(tid), 'reason': reason}
         raise
 
@@ -1567,10 +1960,12 @@ def mine_message(mid: int, body: MineBody = None, background: BackgroundTasks = 
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
     _learn_promotion(m, background)
+    verdict, route_id = operations.verdict_of_message(store, m)
     tid = m.get('TaskId') or task_from_message(store, mid, ACTOR, (body.kind if body else None) or 'task', ACTOR)
     from . import selfclose
     selfclose.claim(store, tid, ACTOR)
     if not (store.get_task(tid) or {}).get('Assignee'): store.update_task(tid, {'Assignee': ACTOR}, ACTOR)
+    operations.record_direct(store, 'task.create_from_message', mid, {'kind': (body.kind if body else None) or 'task'}, ACTOR, {'taskId': tid}, verdict=verdict, route_id=route_id)
     if body and (body.title or '').strip(): store.update_task(tid, {'Title': body.title.strip()[:200]}, ACTOR)
     store.audit('task', tid, 'mine', ACTOR, detail={'message_id': mid, 'subject': m.get('Subject')})
     return {'taskId': tid, 'ref': task_ref(tid)}
@@ -1588,7 +1983,9 @@ def chat_message(mid: int, background: BackgroundTasks = None):
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
     _learn_promotion(m, background)
+    verdict, route_id = operations.verdict_of_message(store, m)
     tid = m.get('TaskId') or task_from_message(store, mid, ACTOR, 'general', ACTOR)
+    operations.record_direct(store, 'task.create_from_message', mid, {'kind': 'general'}, ACTOR, {'taskId': tid}, verdict=verdict, route_id=route_id)
     from . import selfclose
     selfclose.claim(store, tid, ACTOR)
     t = store.get_task(tid) or {}
@@ -1624,7 +2021,7 @@ class NoteBody(BaseModel):
 @app.get('/api/board/notes')
 def board_notes(cwd: str = '', limit: int = 60, all: bool = False):
     """Live handoffs by default; durable note history when ``all`` is requested."""
-    rows = (store.notes(blackboard.norm(cwd) or None, limit, rolled=True) if all
+    rows = (blackboard.history(store, cwd or None, limit) if all
             else blackboard.live_wall(store, cwd, limit))
     return {'data': rows,
             'kinds': list(blackboard.KINDS), 'summary_kind': blackboard.SUMMARY}
@@ -1735,16 +2132,18 @@ def get_run(run_id: int):
 
 @app.get('/api/reviews')
 def reviews(status: str = None):
+    from .verdicts import context_moved
     rows = store.list_reviews(status)
-    gh_ok = store.github_replies_ok()
+    memo = {}
     for r in rows:
         try: special = json.loads(r.get('Deliver') or '{}').get('kind') == 'zoho_invoice'
         except (TypeError, ValueError): special = False
-        r['CanSend'] = special or _can_send(r.get('Channel'), bool(r.get('MessageId')), gh_ok)
-        latest = _latest_context_message(r.get('TaskId'), r.get('MessageId'))
-        r['Stale'] = bool(r.get('Kind') != 'action' and latest
-                          and latest.get('MessageId') != r.get('MessageId'))
-        if r['Stale']:
+        ok, why = _send_state(memo, r.get('Channel'), bool(r.get('MessageId')))
+        r['CanSend'] = special or ok
+        r['SendBlock'] = '' if r['CanSend'] else why
+        moved, latest = context_moved(store, r)          # material change only (PW-240), never a polling timestamp
+        r['Stale'] = bool(moved)
+        if r['Stale'] and latest:
             r['LatestMessageId'] = latest.get('MessageId')
             r['LatestPreview'] = str(latest.get('BodyText') or '')[:1500]
             r['LatestSentAt'] = latest.get('SentAt')
@@ -1756,24 +2155,37 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
     (a 'approve' typed in the notify chat lands the same way this button does)."""
     rv = store.get_review(rid)
     if not rv: raise HTTPException(404, 'review not found')
-    from .verdicts import VERB2STATUS, decide as land
+    from .verdicts import VERB2STATUS, context_moved, decide as land
     if body.verb not in VERB2STATUS: raise HTTPException(422, 'bad verb')
+    if body.verb == 'close_unsent' and rv.get('Kind') == 'action': raise HTTPException(422, 'a proposal is rejected, not closed without sending')
     if body.verb in ('approve', 'edit') and rv.get('Kind') != 'action':
         try: _refresh_chat_context(task_id=rv.get('TaskId'), message_id=rv.get('MessageId'))
         except RuntimeError as e: raise HTTPException(503, str(e))
         rv = store.get_review(rid) or rv
-        latest = _latest_context_message(rv.get('TaskId'), rv.get('MessageId'))
-        if latest and latest.get('MessageId') != rv.get('MessageId'):
-            # Never let a click send wording composed before the newest chat line.  Refresh the
-            # draft automatically when a brain is available, but still require a new human yes.
+        moved, latest = context_moved(store, rv)
+        if moved:
+            # The click does not send (PW-239): the context materially changed - a new inbound line, a triage
+            # update - so the owner is interrupted with what arrived. Their own edit is kept for comparison, the
+            # draft is refreshed from the current context, and the refreshed draft needs its own yes.
+            yours = str(body.final_text or '').strip()
+            if yours and yours != str(rv.get('DraftText') or '').strip() and rv.get('TaskId'):
+                store.add_comment(rv['TaskId'], ACTOR, 'human', f'Your edited reply, kept for comparison - the thread moved before it was sent:\n{yours[:4000]}')
             draft = None
             try:
                 draft = (responder.write_draft(store, rv['TaskId'], rid, actor=ACTOR)
                          if rv.get('TaskId') else responder.draft_for_message(store, latest, rid))
             except Exception as e:
                 logger.warning(f'could not refresh stale review {rid}: {e}')
+            triage = ''
+            if rv.get('TaskId'):
+                notes = [c for c in store.list_comments(rv['TaskId']) if str(c.get('Actor') or '').lower() == 'triage']
+                triage = str(notes[-1].get('Body') or '')[:600] if notes else ''
             return {'ok': False, 'status': 'pending', 'sent': None, 'stale': True,
                     'draft': draft,
+                    'interrupt': {'title': 'A new message arrived. Review it before sending.',
+                                  'latest': ({'MessageId': latest.get('MessageId'), 'FromName': latest.get('FromName'), 'FromEmail': latest.get('FromEmail'),
+                                              'SentAt': latest.get('SentAt'), 'preview': str(latest.get('BodyText') or '')[:1500]} if latest else None),
+                                  'triage': triage, 'yours': yours or None, 'refreshed': draft},
                     'send_error': ('New messages arrived after this draft. '
                                    + ('I refreshed it with the latest context; review it and approve again.' if draft
                                       else 'Nothing was sent. Redraft it with the latest context before approving.'))}
@@ -1821,8 +2233,13 @@ async def claude_hook(request: Request):
     """Claude Code's hook fired in a checkout a session of ours works in (hooks.py wires it): the
     event's JSON comes in on the body. Always 200 and quiet - a hook must never trouble the agent."""
     from . import hooks
+    # Anything unreadable is a non-event, including a hook that HUNG UP: hooks.py posts with
+    # `curl -s -m 3` so it can never hold the agent, and a server stalled for longer than that
+    # outlives the curl - request.body() then raises ClientDisconnect, which is no ValueError and
+    # used to escape as a 500 per stall. The agent moved on three seconds ago either way.
     try: payload = json.loads((await request.body()) or b'{}')
-    except ValueError: return {'bound': False}
+    except Exception as e:
+        logger.debug(f'claude hook body unreadable: {e}'); return {'bound': False}
     try: return hooks.receive(payload if isinstance(payload, dict) else {})
     except Exception as e:
         logger.debug(f'claude hook ignored: {e}'); return {'bound': False}
@@ -1986,6 +2403,10 @@ def release_task(task_id: int, body: ReleaseBody, background: BackgroundTasks):
     store.tag_task(task_id, HOLD_TAG, on=False, actor=ACTOR)
     store.add_comment(task_id, ACTOR, 'human', 'Released to the agent - you vouched for this sender.')
     store.audit('task', task_id, 'release', ACTOR)
+    from . import general, ingest as _ing
+    if general.handles(store.get_task(task_id)):
+        _ing._spawn(_ing._auto_general, store, task_id)     # the assistant's session, not a CLI (PW-069)
+        return {'released': True, 'assistant': True}
     ses = start_session(store, task_id, body.agent, body.model)
     return {'released': True, 'session': ses}
 
@@ -2163,6 +2584,26 @@ def funnel_later(tid: int):
     store.audit('task', tid, 'funnel_later', ACTOR)
     return {'ok': True}
 
+@app.post('/api/tasks/{tid}/dispatch/retry')
+def dispatch_retry(tid: int):
+    """The owner's Retry after a start failed or ran out of attempts: a new bounded cycle, tried now (PW-087)."""
+    if not store.get_task(tid): raise HTTPException(404, 'task not found')
+    if not store.dispatch_retry(tid): raise HTTPException(404, 'that task has no queued start')
+    store.add_comment(tid, ACTOR, 'human', 'Retrying the start - a fresh set of attempts.')
+    store.audit('task', tid, 'dispatch_retry', ACTOR)
+    blackboard.drain(store)
+    return {'ok': True, 'queued': _queued_info(store.get_dispatch(tid))}
+
+@app.delete('/api/tasks/{tid}/dispatch')
+def dispatch_cancel(tid: int):
+    """Cancel queued start: the pending dispatch goes; the task is neither deleted nor completed (PW-087)."""
+    if not store.get_task(tid): raise HTTPException(404, 'task not found')
+    if not store.get_dispatch(tid): raise HTTPException(404, 'that task has no queued start')
+    store.clear_dispatch(tid)
+    store.add_comment(tid, ACTOR, 'human', 'Cancelled the queued start - the task stays on your list.')
+    store.audit('task', tid, 'dispatch_cancel', ACTOR)
+    return {'ok': True}
+
 @app.post('/api/funnel/rerank')
 def funnel_rerank(): return {'updated': rank.rerank(store, force=True)}
 
@@ -2173,27 +2614,54 @@ class SurfaceBody(BaseModel):
     only: str | None = None
     include_surfaced: bool = False
     exclude: str | None = None
+    selection_revision: str | None = None
+    expected_next_key: str | None = None
+    leaving: str | None = None          # the item Next is walking away from: read on the way out (concierge.move_on)
+    expected_next_members: list[str] | None = None
 class ConciergeSayBody(BaseModel): text: str; key: str | None = None; context_mid: int | None = None
 class ConciergeActBody(BaseModel): key: str; verb: str; hours: float | None = None
 
 @app.get('/api/funnel/pile')
-def funnel_pile(force: bool = False, current: str = None):
+def funnel_pile(force: bool = False, current: str = None, only: str = None,
+                include_surfaced: bool = False, exclude: str = None):
     """The ranked pile the Assistant page draws: next-first, every item with the words it rests
     on, plus the alerts that interrupt. Cached a few seconds - it is polled while the page is open."""
     from . import funnel
-    p = funnel.pile(store, force)
-    # ...and what the page is HOLDING: an item whose review was decided (or whose task closed)
-    # leaves the pile, and nothing told the page - so a sent reply sat on the table as
-    # "reply pending" for as long as the tab stayed open (the owner, 2026-09-03: "why is it
-    # showing back up if the ai agent replied, i edited it and sent??").
-    if current: p = {**p, 'current': funnel.next_item(store, current)}
-    return p
+    from .funnel_selection import capture_selection, SelectionUnavailable
+    from .processing_navigation import fields
+    try:
+        # funnel.pile owns invalidation and single-flight across open tabs. Capture navigation
+        # from that exact cached pile; capture_selection accepts it specifically so this endpoint
+        # does not rebuild canonical membership a second time.
+        cached = funnel.pile(store, force=force) if only is None else None
+        events = (cached.get('events') or []) if cached is not None else funnel.announce(store)
+        capture = capture_selection(store, only=only, include_surfaced=include_surfaced,
+                                    exclude=exclude, pile=cached)
+        p = {**capture.pile, **fields(store, capture),
+             'alerts': funnel.alerts(store, capture.pile['items']), 'events': events}
+        # ...and what the page is HOLDING: an item whose review was decided (or whose task closed)
+        # leaves the pile, and nothing told the page - so a sent reply sat on the table as
+        # "reply pending" for as long as the tab stayed open (the owner, 2026-09-03: "why is it
+        # showing back up if the ai agent replied, i edited it and sent??"). Looked up in the build
+        # the pile came from, not a second one.
+        if current: p = {**p, 'current': funnel.next_item(store, current, items=funnel.full_items(store) if cached is not None else None)}
+    except SelectionUnavailable as error:
+        raise HTTPException(503, error.detail) from error
+    except processing_all.AllError as error:
+        raise HTTPException(error.status, error.detail) from error
+    # Current is query-specific and may be absent from the ordinary pile. Include
+    # its complete presentation in the revision after attaching it to the response.
+    return funnel.present(store, p)
 
 @app.post('/api/funnel/settle')
 def funnel_settle(body: SettleBody):
-    from . import funnel
-    try: return funnel.settle(store, body.key, body.verb, ACTOR, body.hours)
+    from . import concierge, funnel, general
+    try: out = funnel.settle(store, body.key, body.verb, ACTOR, body.hours)
     except ValueError as e: raise HTTPException(422, str(e))
+    if body.verb in ('done', 'later', 'skip'):                              # settled: off the table, and nothing chosen in its place
+        dock = general.dock_task(store, ACTOR)[0]['TaskId']
+        if concierge.current_key(store, dock) == body.key: concierge.set_current(store, dock, None, ACTOR)
+    return out
 
 @app.get('/api/concierge')
 def concierge_state():
@@ -2206,8 +2674,36 @@ def concierge_state():
     model = str(store.get_settings().get(concierge.MODEL_KEY) or '').strip() or (chosen or {}).get('model') or ''
     if pick.startswith('cli:') and not str(store.get_settings().get(concierge.MODEL_KEY) or '').strip():
         model = concierge.LIGHT_DEFAULT.get(re.split(r'[\\/]', str((chosen or {}).get('label') or pick[4:])).pop().split(' ')[0].lower(), model) or model
+    from . import remote_assistant
     return {'task': task, 'ref': task_ref(task['TaskId']), 'messages': concierge.history(store, task['TaskId']),
-            'providers': options, 'pick': pick, 'provider': (chosen or {}).get('label') or pick, 'model': model}
+            # the persisted Current, validated against the pile - never the last card of the history (PW-162)
+            'current': concierge.restore_current(store, task['TaskId']),
+            'providers': options, 'pick': pick, 'provider': (chosen or {}).get('label') or pick, 'model': model,
+            # the chats this walk can be handed to, and the one it is in right now
+            'doorways': remote_assistant.doorways(store), 'handoff': remote_assistant.handoff(store)}
+
+class HandoffBody(BaseModel): channel: str
+
+def _hands_off():
+    """Refuse a desktop turn while the walk is in a chat. Two screens answering the same item is how
+    the same mail gets replied to twice - the tab locks itself, and this is the same rule in the API."""
+    from . import remote_assistant
+    h = remote_assistant.handoff(store)
+    if h: raise HTTPException(409, f"the walk is in {remote_assistant.LABELS[h['channel']]} - take it back here first")
+
+@app.post('/api/concierge/handoff')
+def concierge_handoff(body: HandoffBody):
+    """Send the walk to a chat the owner already has connected: it says hello there, and the tab locks."""
+    from . import remote_assistant
+    try: return remote_assistant.start_handoff(store, body.channel, ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+    except RuntimeError as e: raise HTTPException(502, str(e))       # the bridge or the bot could not be reached
+
+@app.post('/api/concierge/handoff/end')
+def concierge_handoff_end():
+    """Take it back: the chat is told the walk is over there, and the desktop is its own again."""
+    from . import remote_assistant
+    return remote_assistant.end_handoff(store, ACTOR)
 
 class ConciergeAiBody(BaseModel): pick: str | None = None; model: str | None = None
 
@@ -2241,9 +2737,13 @@ def funnel_unmute(idx: int):
     return {'ok': True, 'data': rules}
 
 @app.get('/api/concierge/chats')
-def concierge_chats():
+def concierge_chats(limit: int = 25, before: int = None):
+    """Past chats, newest first, a page at a time; `next` is the cursor for the page before this one. Reading
+    the list writes nothing (PW-157)."""
     from . import concierge
-    return {'data': concierge.chats(store, ACTOR)}
+    limit = max(1, min(int(limit or 25), 100))
+    rows = concierge.chats(store, ACTOR, limit=limit, before=before)
+    return {'data': rows, 'next': rows[-1]['taskId'] if len(rows) >= limit else None}
 
 @app.get('/api/concierge/chats/{tid}')
 def concierge_chat(tid: int):
@@ -2257,9 +2757,33 @@ def concierge_next(body: SurfaceBody = None):
     """Pull the next thing out of the pipe - or the one named, or the next piece of mail - and say it."""
     from . import concierge
     body = body or SurfaceBody()
+    reservation = _navigation_reservation(body)
+    if reservation:
+        from .processing_navigation import NavigationStale
+        from .funnel_selection import SelectionUnavailable
+        try:
+            def _surface(selected, guard, dock):
+                # the captured pick is validated against its source before it is spoken (PW-050); a pile that
+                # moved under it is a stale navigation, and the client re-captures
+                picked = selected.selected or {}
+                if picked:
+                    members = picked.get('items') if picked.get('kind') == 'fyis' else [picked]
+                    if _refresh_items(members or []).get('newer'):
+                        from . import funnel as _f
+                        _f.invalidate()
+                        raise NavigationStale({'reason': 'new_activity', 'detail': 'new messages arrived on the item; refresh and go again'})
+                return concierge.surface(store, actor=ACTOR, only=body.only, include_surfaced=body.include_surfaced,
+                                         exclude=body.exclude, selection=selected, commit_guard=guard, bound_dock=dock,
+                                         leaving=body.leaving)
+            return reservation.run(_surface, ACTOR)
+        except NavigationStale as error:
+            raise HTTPException(409, error.detail) from error
+        except SelectionUnavailable as error:
+            raise HTTPException(503, error.detail) from error
     if body.key: _refresh_chat_key(body.key)
+    else: _refresh_next_selection(body)          # select first, then validate the source (PW-050)
     return concierge.surface(store, body.key, actor=ACTOR, only=body.only,
-                             include_surfaced=body.include_surfaced, exclude=body.exclude)
+                             include_surfaced=body.include_surfaced, exclude=body.exclude, leaving=body.leaving)
 
 @app.post('/api/concierge/open')
 def concierge_open():
@@ -2269,7 +2793,33 @@ def concierge_open():
 
 class ConciergeStreamBody(BaseModel):
     mode: str = 'say'; text: str | None = None; key: str | None = None; only: str | None = None; context_mid: int | None = None
-    include_surfaced: bool = False; exclude: str | None = None
+    include_surfaced: bool = False; exclude: str | None = None; leaving: str | None = None
+    selection_revision: str | None = None
+    expected_next_key: str | None = None
+    expected_next_members: list[str] | None = None
+
+
+def _navigation_reservation(body):
+    """Validate modern selection fields before dock, model, refresh or stream work."""
+    from .processing_navigation import reserve, NavigationStale
+    from .funnel_selection import SelectionUnavailable
+    names = {'selection_revision', 'expected_next_key', 'expected_next_members'}
+    supplied = names.intersection(body.model_fields_set)
+    if not supplied:
+        return None  # Compatibility for older callers during the staged cutover.
+    if (supplied != names or body.key or getattr(body, 'mode', 'next') != 'next'
+            or not re.fullmatch(r'[0-9a-f]{64}', body.selection_revision or '')
+            or body.expected_next_members is None):
+        raise HTTPException(422, 'automatic navigation requires the complete selection binding')
+    try:
+        return reserve(store, selection_revision=body.selection_revision,
+                       expected_next_key=body.expected_next_key,
+                       expected_next_members=body.expected_next_members,
+                       only=body.only, include_surfaced=body.include_surfaced, exclude=body.exclude)
+    except NavigationStale as error:
+        raise HTTPException(409, error.detail) from error
+    except SelectionUnavailable as error:
+        raise HTTPException(503, error.detail) from error
 
 @app.post('/api/concierge/stream')
 async def concierge_stream(body: ConciergeStreamBody):
@@ -2277,6 +2827,21 @@ async def concierge_stream(body: ConciergeStreamBody):
     `done` with the same payload the plain endpoints return. Same shape as the task assistant's
     stream; the browser walking away detaches, the stop button (cancel) is not wired here yet."""
     from . import concierge
+    from .processing_navigation import NavigationStale
+    from .funnel_selection import SelectionUnavailable
+    _hands_off()                        # the walk is in a chat: the tab is locked and so is its road
+    admission = asyncio.create_task(asyncio.to_thread(_navigation_reservation, body))
+    try:
+        reservation = await asyncio.shield(admission)
+    except asyncio.CancelledError:
+        def release_admission(done):
+            try:
+                held = done.result()
+                if held: held.close()
+            except Exception:
+                pass
+        admission.add_done_callback(release_admission)
+        raise
     loop, events, cancel = asyncio.get_running_loop(), asyncio.Queue(), threading.Event()
     def put(e):
         try: loop.call_soon_threadsafe(events.put_nowait, e)
@@ -2286,21 +2851,57 @@ async def concierge_stream(body: ConciergeStreamBody):
         put({'type': kind, 'name': name, 'detail': detail if isinstance(detail, (dict, str)) else str(detail)})
     def work():
         try:
-            freshness = _refresh_chat_key(body.key, body.context_mid) if body.key else {}
+            # the item first, then its source (PW-050): a named item refreshes itself; Next without a key refreshes
+            # what it is about to surface, every channel of an FYI batch once, and re-picks if the pile moved
+            started = []
+            def fetched(n):                      # once per turn, as the new lines land - the result line follows
+                if not started: started.append(n); put({'type': 'context_update', 'say': RETRIAGE_STARTED, 'stage': 'started', 'new': n})
+            # A typed question polls NOTHING up front: the words are read first, and the item is
+            # brought in below only if the answer turns out to be about it. Surfacing still refreshes,
+            # because there the item IS the subject (PW-050).
+            if body.key and body.mode != 'say': freshness = _refresh_chat_key(body.key, body.context_mid, on_fetched=fetched)
+            elif body.mode == 'next' and not reservation: freshness = _refresh_next_selection(body, on_fetched=fetched)
+            else: freshness = {}
             if freshness.get('polled'):
                 put({'type': 'tool_call', 'name': 'sync_messages',
                      'detail': {'new': freshness.get('added', 0)}})
+            # said BEFORE the answer, once per new revision (PW-052/057): the owner reads that the thread moved
+            # and went through triage, then the assistant's read of it
+            # Surfacing an item IS about that item, so the owner reads that it moved before its
+            # introduction. A typed question is not: it is triaged first, and the item is brought in
+            # only when the answer turns out to be about it (see concierge_say).
+            notice = _notice_once(freshness) if body.mode != 'say' else ''
+            if notice: put({'type': 'context_update', 'say': notice})
             if body.mode == 'open': out = concierge.open_day(store, actor=ACTOR, trace=trace, cancel=cancel)
-            elif body.mode == 'next': out = concierge.surface(store, body.key, actor=ACTOR, only=body.only, trace=trace, cancel=cancel,
-                                                               include_surfaced=body.include_surfaced, exclude=body.exclude)
-            else: out = concierge.say(store, body.text or '', body.key, actor=ACTOR, trace=trace, cancel=cancel)
-            if freshness.get('newer'):
-                out['context_update'] = _context_update_line(freshness)
+            elif body.mode == 'next':
+                if reservation:
+                    out = reservation.run(lambda selected, guard, dock: concierge.surface(
+                        store, actor=ACTOR, only=body.only, trace=trace, cancel=cancel,
+                        include_surfaced=body.include_surfaced, exclude=body.exclude,
+                        selection=selected, commit_guard=guard, bound_dock=dock, leaving=body.leaving), ACTOR)
+                else:
+                    out = concierge.surface(store, body.key, actor=ACTOR, only=body.only, trace=trace, cancel=cancel,
+                                            include_surfaced=body.include_surfaced, exclude=body.exclude,
+                                            leaving=body.leaving)
+            else: out = concierge.say(store, body.text or '', body.key, actor=ACTOR, trace=trace, cancel=cancel, item=freshness.get('item'))
+            if notice: out['context_update'] = notice
             put({'type': 'done', **out})
+        except NavigationStale as error:
+            put({'type': 'error', 'code': 'selection_stale', 'detail': error.detail, 'error': str(error)})
+        except SelectionUnavailable as error:
+            put({'type': 'error', 'code': 'selection_unavailable', 'detail': error.detail, 'error': str(error)})
+        except processing_all.AllError as error:      # the page retries on this code once membership settles
+            put({'type': 'error', 'code': error.detail['code'], 'detail': error.detail, 'error': str(error)})
         except Exception as e:
             logger.warning(f'concierge stream failed: {e}')
             put({'type': 'error', 'error': str(e)})
-    threading.Thread(target=work, daemon=True).start()
+        finally:
+            if reservation: reservation.close()
+    try:
+        threading.Thread(target=work, daemon=True).start()
+    except BaseException:
+        if reservation: reservation.close()
+        raise
     async def generate():
         while True:
             e = await events.get()
@@ -2316,7 +2917,7 @@ def report_rerun(sid: int):
     src = store.get_source(sid)
     if not src or src.get('Channel') != 'report': raise HTTPException(404, 'no such report')
     def work():
-        try: run_report_source(store, src, _llm()); store.touch_source(sid)
+        try: run_report_source(store, src, _llm(), trigger='manual'); store.touch_source(sid)
         except Exception as e: logger.warning(f'rerun of report {sid} failed: {e}')
     # queued, not awaited: the report lands on the Timeline like a scheduled run, and the pipe picks it up
     threading.Thread(target=work, daemon=True).start()
@@ -2328,10 +2929,26 @@ def report_rerun(sid: int):
 def concierge_say(body: ConciergeSayBody):
     from . import concierge
     try:
-        freshness = _refresh_chat_key(body.key, body.context_mid) if body.key else {}
-        out = concierge.say(store, body.text, body.key, actor=ACTOR)
-        if freshness.get('newer'): out['context_update'] = _context_update_line(freshness)
-        return out
+        # A TYPED TURN POLLS NOTHING. The freshness check belongs where the item is LOADED into the
+        # chat - surfaced or pulled - and that is where it still runs. Doing it again on every prompt
+        # re-triaged the same item it had just checked, and announced it: asking "can you remove all
+        # the reports in the funnel?" answered "New message from Process Error Check arrived... I sent
+        # it through triage before continuing" (the owner, 2026-09-07: "that is the retriage, not a
+        # actual triage of the same item again? what's the point of that").
+        #
+        # Nothing is lost. The act boundary guards itself: operations.propose pins ContextRevision and
+        # execute refuses a moved one (409), and verdicts.decide re-checks before a reply can leave.
+        _hands_off()
+        return concierge.say(store, body.text, body.key, actor=ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+
+class ConciergeProposeBody(BaseModel): verb: str; key: str; text: str | None = None; table: bool = False
+
+@app.post('/api/concierge/propose')
+def concierge_propose(body: ConciergeProposeBody):
+    """A card's own button on one entry: the same proposal the words would make (PW-151), confirmed the same way."""
+    from . import concierge
+    try: return concierge.propose_direct(store, body.verb, body.key, body.text or '', ACTOR, table=body.table)
     except ValueError as e: raise HTTPException(422, str(e))
 
 class SetupBody2(BaseModel): text: str
@@ -2358,7 +2975,7 @@ def waitroom_list(tid: int):
 @app.post('/api/tasks/{tid}/waitroom')
 def waitroom_add(tid: int, body: dict):
     """Queue a note for this task's agent. It is typed in the moment the agent parks at its
-    prompt - unless it parked on a question for you, which comes first."""
+    prompt - and at once, as the answer, when it is already parked on a question for you."""
     try: return waitroom.add(store, tid, str((body or {}).get('text') or ''), ACTOR)
     except ValueError as e: raise HTTPException(422, str(e))
 
@@ -2447,26 +3064,57 @@ def draft_review(rid: int):
             message = _latest_context_message(None, message['MessageId']) or message
             draft = responder.draft_for_message(store, message, rid)
     except Exception as e:
+        store.set_review_draft_error(rid, str(e)[:300])     # visible beside the draft box, with Retry (PW-046)
         raise HTTPException(422, str(e)[:300])
     store.audit('review', rid, 'redraft', ACTOR)
     return {'ok': True, 'draft': draft}
 
+class EnvelopeBody(BaseModel): mode: str | None = None; to: list[str] | None = None; cc: list[str] | None = None
+
+@app.put('/api/reviews/{rid}/envelope')
+def set_review_envelope(rid: int, body: EnvelopeBody):
+    """Reply all / Reply to, and editable To/CC, kept with the draft so approval sends exactly this (PW-063/064)."""
+    rv = store.get_review(rid)
+    if not rv: raise HTTPException(404, 'review not found')
+    if rv.get('Status') not in ('pending', 'held'): raise HTTPException(409, 'this reply has already been decided')
+    m = store.get_message(rv.get('MessageId')) if rv.get('MessageId') else None
+    if not m or str(m.get('Channel') or '').lower() != 'email': raise HTTPException(422, 'only an email reply has a recipient envelope')
+    env = store.review_envelope(rid) or outbound.reply_envelope(store, m) or {}
+    if body.mode: env = outbound.reply_envelope(store, m, mode=body.mode) or env
+    def clean(seq):
+        out = []
+        for a in seq or []:
+            a = str(a or '').strip().lower()
+            if a and '@' in a and a not in out: out.append(a)
+        return out
+    if body.to is not None: env['to'] = clean(body.to)
+    if body.cc is not None: env['cc'] = [a for a in clean(body.cc) if a not in env.get('to', [])]
+    if not env.get('to'): raise HTTPException(422, 'a reply needs at least one recipient')
+    store.set_review_envelope(rid, env)
+    store.audit('review', rid, 'envelope', ACTOR, detail={'mode': env.get('mode'), 'to': env.get('to'), 'cc': env.get('cc')})
+    return env
+
 @app.patch('/api/reviews/{rid}')
 def save_review_text(rid: int, body: TextBody):
-    """Save what is in the reply box without deciding or sending it."""
+    """Save what is in the reply box without deciding or sending it - with the owner's signature applied once
+    on an email draft (PW-065); an edit that already carries it is kept as written."""
     rv = store.get_review(rid)
     if not rv: raise HTTPException(404, 'review not found')
     if rv.get('Status') not in ('pending', 'held'):
         raise HTTPException(409, 'this reply has already been decided')
     text = str(body.body or '')[:50_000]
+    m = store.get_message(rv.get('MessageId')) if rv.get('MessageId') else None
+    if m and str(m.get('Channel') or '').lower() == 'email' and text.strip():
+        text = responder.with_signature(text, responder.signature_for(store))
     store.save_review_draft(rid, text)
     store.audit('review', rid, 'edit_draft', ACTOR, detail={'characters': len(text)})
     return {'ok': True, 'draft': text}
 
-def _llm():
+def _llm(target_store=None):
+    target_store = target_store or store
     try:
         from .llm import build_llm
-        return build_llm(store)
+        return build_llm(target_store)
     except Exception:
         return None
 
@@ -2487,12 +3135,15 @@ def retriage_message(mid: int):
     """
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
-    if m.get('TaskId') is not None:
-        raise HTTPException(409, 'this message already belongs to a task')
-    routes = store.message_routes(mid)
-    last = routes[-1] if routes else {}
-    if not re.search(r'\btriage\b.*(?:failed|could not read)', str(last.get('Reason') or ''), re.I):
-        raise HTTPException(409, 'retry is only available after triage failed')
+    # the error state is retriable whether or not the failed follow-up is linked to a task; a
+    # legacy failure still stored as a taskless filed row is recognised by its diagnostic
+    if m.get('Status') != 'error':
+        if m.get('TaskId') is not None:
+            raise HTTPException(409, 'this message already belongs to a task')
+        routes = store.message_routes(mid)
+        last = routes[-1] if routes else {}
+        if not re.search(r'\btriage\b.*(?:failed|could not read)', str(last.get('Reason') or ''), re.I):
+            raise HTTPException(409, 'retry is only available after triage failed')
     brain = _llm()
     if not brain:
         raise HTTPException(422, 'no triage AI is available - check Connections and Settings')
@@ -2503,14 +3154,13 @@ def retriage_message(mid: int):
         out = ingest_message(store, {**ingest_mod._from_row(m, store), '_mid': mid},
                              actor=ACTOR, llm=brain)
     except Exception as e:
-        # Most AI failures are deliberately filed by ingest_message. This catches only an
-        # unexpected pipeline failure so Retry never leaves the row spinning forever.
+        # Most AI failures are deliberately recorded as errors by ingest_message. This catches only
+        # an unexpected pipeline failure so Retry never leaves the row spinning forever.
         now = store.get_message(mid) or {}
-        if now.get('TaskId') is None:
-            store.place_message(mid, None, 'filed')
-            store.add_route(mid, None, 'file', None,
-                            f'triage retry failed ({str(e)[:200]}) - filed safely', [], 'triage',
-                            parse_error=str(e)[:1000])
+        store.place_message(mid, now.get('TaskId'), 'error')
+        store.add_route(mid, now.get('TaskId'), 'file', None,
+                        f'triage retry failed ({str(e)[:200]}) - unclassified; retry available', [], 'triage',
+                        parse_error=str(e)[:1000])
         raise HTTPException(422, str(e)[:300])
     return {**out, 'ref': task_ref(out['task_id']) if out.get('task_id') else None}
 
@@ -2884,8 +3534,13 @@ def wa_chats(cid: int):
     from .messengers import wa_chats as _chats
     c = store.get_connector(cid, with_secret=True)
     if not c or c['Type'] != 'whatsapp': raise HTTPException(404, 'not a WhatsApp connector')
-    try: return {'data': _chats(c)}
+    from . import remote_assistant
+    try: rows = _chats(c)
     except RuntimeError as e: raise HTTPException(409, str(e))
+    # the owner's own "Message yourself" thread wears a legacy GROUP jid, so the card cannot tell it
+    # from a real group by its shape alone - the paired number can (remote_assistant.is_private)
+    for r in rows: r['self'] = bool(r.get('group')) and remote_assistant.is_private(store, c, r.get('jid'))
+    return {'data': rows}
 
 # ── Get AI to set it up (taskuary/aisetup.py): the card's guide as the agent's prompt, live on the card ──
 @app.post('/api/connectors/{cid}/ai-setup')
@@ -2941,7 +3596,8 @@ def ms_poll(cid: int, body: dict):
     if not t.get('refresh_token'):
         return {'status': 'error', 'detail': 'Microsoft returned no refresh token - the offline_access scope was not granted'}
     who = msauth.me(t['access_token'])
-    cfg = {**f['cfg'], 'auth': 'user', 'account': who['account'], 'name': who['name']}
+    cfg = {**f['cfg'], 'auth': 'user', 'account': who['account'], 'name': who['name'],
+           **({'granted_scope': t['scope']} if t.get('scope') else {})}      # what was granted, for the send probe (PW-143)
     store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps(cfg), 'Secret': t['refresh_token'], 'Active': 1}, ACTOR)
     if who['account'] and not any(s['Channel'] == 'email' and (s['Address'] or '').lower() == who['account'].lower()
                                   for s in store.list_sources(active_only=False)):
@@ -3062,6 +3718,13 @@ def report_compose(body: dict):
                                                            'confidence': out.get('confidence')})
     return out
 
+
+@app.get('/api/workflows')
+def workflows_catalog():
+    """Configured workflows and request procedures, read apart (PW-203/207): a job the owner scheduled is not
+    a playbook, and a playbook is not a scheduled job."""
+    from . import workflows
+    return workflows.catalog(store)
 
 @app.post('/api/workflows/compose')
 def workflow_compose(body: dict):
@@ -3213,6 +3876,40 @@ def teller_enroll(cid: int, body: TellerEnrollBody):
     store.audit('connector', cid, 'teller_enrolled', ACTOR, detail={'institution': body.institution or ''})
     return {'ok': True}
 
+# ── SimpleFIN (simplefin.py): the owner pastes a setup token; the server spends it, once ──
+class SimpleFinClaimBody(BaseModel): setup_token: str
+
+@app.get('/api/connectors/{cid}/simplefin/status')
+def simplefin_status(cid: int):
+    """Nothing has to be saved before connecting - there is no application to register and no
+    certificate, so `has_app` is true from the start. `connected` is whether the access URL is on
+    the card."""
+    from .simplefin import BRIDGE, budget
+    c = store.get_connector(cid, with_secret=True)
+    if not c or c['Type'] != 'simplefin': raise HTTPException(404, 'not a SimpleFIN connector')
+    conf = json.loads(c.get('ConfigJson') or '{}')
+    return {'has_app': True, 'connected': bool(c.get('Secret')), 'bridge': BRIDGE,
+            'institution': conf.get('institution') or '', 'reads_today': budget()}
+
+@app.post('/api/connectors/{cid}/simplefin/claim')
+def simplefin_claim(cid: int, body: SimpleFinClaimBody):
+    """Trade the setup token for the access URL and keep only the URL (write-only).
+
+    The token is SPENT by this call - SimpleFIN answers a second claim with "Forbidden" - so the
+    422s below matter: a mistyped token must fail before it is thrown away, and a token that was
+    already claimed must say so in those words rather than looking like a network fault. The
+    access URL carries its own basic-auth credentials, which is why it never comes back out."""
+    from .simplefin import SimpleFinError, claim, claim_url
+    c = store.get_connector(cid)
+    if not c or c['Type'] != 'simplefin': raise HTTPException(404, 'not a SimpleFIN connector')
+    try: claim_url(body.setup_token)                       # decodes, or 422 with the reason
+    except ValueError as e: raise HTTPException(422, str(e)) from e
+    try: access = claim(body.setup_token)
+    except SimpleFinError as e: raise HTTPException(422, str(e)) from e
+    store.save_connector({'ConnectorId': cid, 'Secret': access, 'Active': True}, ACTOR)
+    store.audit('connector', cid, 'simplefin_claimed', ACTOR, detail={'host': access.split('@')[-1].split('/')[0]})
+    return {'ok': True}
+
 @app.get('/api/intacct/fields')
 def intacct_object_fields(obj: str, connector_id: int = None):
     """What this company's copy of an Intacct object actually carries, custom fields and all.
@@ -3283,6 +3980,53 @@ def cli_detect():
     so the wizard offers what they have before it asks for a key."""
     from . import clis
     return {'data': clis.detect(store), 'tools': clis.tools()}    # tools: optional helpers (agent-browser), never offered as agents
+
+class CliInstallBody(BaseModel): name: str
+
+@app.post('/api/cli/install')
+def cli_install(body: CliInstallBody):
+    """Install a coding CLI on this machine. The owner's button - it is on guard.DENIED, because
+    an agent that can run a vendor installer can be talked into running any installer.
+
+    Returns immediately with the phase: an npm -g of a whole CLI is a minute on a slow line, and
+    the browser polls /api/cli/install/state rather than holding a request open for it."""
+    from . import cliinstall
+    name = str(body.name or '')
+    if name not in cliinstall.RECIPES:
+        raise HTTPException(422, f'{name} is not one of the CLIs Taskuary installs '
+                                 f'({", ".join(sorted(cliinstall.RECIPES))})')
+    # one at a time, and say WHOSE - the phase is global, so a second press would otherwise poll
+    # the first install's state and report its success as its own
+    now = cliinstall.state()
+    if now['phase'] == 'installing' and now['name'] != name:
+        raise HTTPException(409, f'{now["name"]} is installing right now - one at a time')
+    out = cliinstall.start(name)
+    store.audit('connector', 0, 'cli_install_started', ACTOR, detail={'name': name})
+    return out
+
+@app.get('/api/cli/install/state')
+def cli_install_state():
+    """Which phase the install is in, and the absolute path once there is one. The page saves
+    THAT as the agent's cmd - a GUI app keeps the PATH it was launched with, so a profile that
+    depends on PATH is a profile that works tomorrow instead of now."""
+    from . import cliinstall
+    return cliinstall.state()
+
+class CliSetupBody(BaseModel): name: str
+
+@app.post('/api/cli/setup')
+def cli_setup(body: CliSetupBody):
+    """Open the CLI itself in a live pane, as a setup task on the Board, and let it run its own
+    onboarding - settings, then the sign-in.
+
+    On guard.DENIED beside /api/cli/install: an agent reads untrusted mail, and an agent that can
+    run a CLI's setup on this machine can be talked into running one. A second press reattaches to
+    the open pane rather than starting a second one beside it."""
+    from . import clis, clisetup
+    name = str(body.name or '')
+    label = next((k['label'] for k in clis.KNOWN if k['name'] == name), '')
+    try: return clisetup.start(store, name, ACTOR, label=label)
+    except ValueError as e: raise HTTPException(422, str(e))
 
 @app.get('/api/setup')
 def setup_state():
@@ -3494,6 +4238,8 @@ def put_doc(name: str, body: DocBody):
     if not str(body.content or '').strip() and _template_text(name).strip():
         store.save_doc(name, _template_text(name), 'template')
         return {'ok': True, 'restored': True}
+    from . import counsel as _counsel
+    if name == 'counsel': _counsel.check_budget(store, name, body.content)
     store.save_doc(name, body.content, ACTOR)
     return {'ok': True}
 
@@ -3693,8 +4439,9 @@ def add_memory(body: MemoryBody):
     if body.scope != 'global' and not (body.scope_key or '').strip():
         raise HTTPException(422, f'a {body.scope} note needs a scope_key to match on')
     if not body.note.strip(): raise HTTPException(422, 'note is required')
+    source = body.source if body.source in ('manual', 'writing') else 'manual'
     mid = store.add_memory({'Scope': body.scope, 'ScopeKey': body.scope_key, 'Note': body.note.strip()[:1000],
-                            'Source': 'manual', 'Active': 1, 'CreatedBy': ACTOR})
+                            'Source': source, 'Active': 1, 'CreatedBy': ACTOR})
     store.audit('memory', mid, 'create', ACTOR)
     return {'ok': True, 'memoryId': mid}
 
@@ -3707,11 +4454,159 @@ def toggle_memory(mid: int, body: MemoryToggle):
 @app.get('/api/audit/recent')
 def audit_recent(limit: int = 100): return {'data': store.list_audit(limit=min(limit, 500))}
 
-_POLL_BUSY = threading.Lock()   # whether a poll runs IN THIS PROCESS; the DB flag is only for the UI
+# Two lanes. The FULL lane reads every connector, judges the queue, watches CI and runs reports,
+# one at a time in this process (the DB flag is only for the UI). The CHAT lane reads chat
+# connectors on their own fast clock and has their lines judged ahead of the backlog - it used to
+# share the full lane's lock, so an AI triage over a 3-day catch-up or a slow report kept Teams
+# and WhatsApp from arriving for as long as it ran (PW-001). A connector type is read by ONE lane
+# at a time, so dedupe never races two fetches of the same message.
+_POLL_BUSY = threading.Lock()
+_QUICK_LOCKS, _QUICK_GUARD = {}, threading.Lock()     # one lock per chat type: a hung WhatsApp fetch keeps only its own
+def _quick_lock(typ: str) -> threading.Lock:
+    with _QUICK_GUARD: return _QUICK_LOCKS.setdefault(typ, threading.Lock())
+def _quick_busy() -> bool: return any(l.locked() for l in list(_QUICK_LOCKS.values()))
 _LAST_POLL = [time.time()]      # startup's own catch-up counts as the first one
-POLL_TICK = 30                  # how often the loop wakes to look at the clock
+_HEARTBEAT = [0.0]              # ...and when we last wrote down that the app is still up
+HEARTBEAT_TICK = 300
+POLL_TICK = 30                  # how often the full loop wakes to look at the clock
+QUICK_TICK = 5                  # the chat loop looks more often, so "every 30 seconds" means that
+DRAIN_WAIT = 45                 # the context gate's patience for its lines to be judged (the old lock wait)
 CHAT_CONNECTORS = {'teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'discord'}
 CHAT_POLL_SECONDS = 30
+CONTEXT_FRESH_SECONDS = 60
+_FETCHING = {}                  # connector type -> lane reading it right now
+_FETCH_CV = threading.Condition()
+_STATUS_LOCK = threading.Lock()
+_STATUS_OWNERS = {}             # store id -> {token: {lane, what, at, store}}
+_STATUS_SEQ = [0]
+_DRAIN_WORKERS = {}             # store id -> DrainWorker which captured that exact store
+_DRAIN_WORKERS_LOCK = threading.Lock()
+_DRAIN_CLOSED = weakref.WeakSet()  # stores shutting down reject a late poll's drain submission
+
+
+@contextlib.contextmanager
+def _claim_fetch(types, lane, wait=False, timeout=None):
+    """Atomically reserve the connector types this lane may fetch.
+
+    The old check-then-register pair let two lanes both observe a free connector.  A unique owner
+    token also prevents one lane's cleanup from releasing a newer claim after an exception race.
+    A waiting correctness gate requires its complete requested set; background lanes take the
+    currently available subset and retry skipped connectors on their next clock tick.
+    """
+    requested = list(dict.fromkeys(types))
+    owner = object()
+    with _FETCH_CV:
+        if wait:
+            ready = _FETCH_CV.wait_for(lambda: not any(t in _FETCHING for t in requested),
+                                       timeout=timeout if timeout is not None else DRAIN_WAIT)
+            claimed = requested if ready else []
+        else:
+            claimed = [t for t in requested if t not in _FETCHING]
+        for t in claimed: _FETCHING[t] = (lane, owner)
+    try:
+        yield claimed
+    finally:
+        with _FETCH_CV:
+            for t in claimed:
+                if _FETCHING.get(t) == (lane, owner): _FETCHING.pop(t, None)
+            _FETCH_CV.notify_all()
+
+
+def _visible_status(owners):
+    if not owners: return {'state': 'idle'}
+    full = [x for x in owners.values() if x['lane'] == 'full']
+    chosen = max(full or list(owners.values()), key=lambda x: x['seq'])
+    return {'state': 'running', 'what': chosen['what'], 'at': chosen['at'],
+            'phase': chosen['phase'], 'lane': chosen['lane']}
+
+
+def _status_write(target_store, owners):
+    target_store.set_setting('ingest_status', json.dumps(_visible_status(owners)), 'system')
+
+
+def _status_begin(target_store, lane, what):
+    token = object()
+    with _STATUS_LOCK:
+        _STATUS_SEQ[0] += 1
+        owners = _STATUS_OWNERS.setdefault(id(target_store), {})
+        owners[token] = {'store': target_store, 'lane': lane, 'what': what, 'phase': 'fetching',
+                         'at': datetime.now().isoformat(sep=' ', timespec='seconds'),
+                         'seq': _STATUS_SEQ[0]}
+        _status_write(target_store, owners)
+    return token
+
+
+def _status_progress(target_store, token, what, *, phase=None):
+    with _STATUS_LOCK:
+        owners = _STATUS_OWNERS.get(id(target_store), {})
+        if token not in owners: return
+        owners[token]['what'] = what
+        if phase is not None: owners[token]['phase'] = phase
+        owners[token]['at'] = datetime.now().isoformat(sep=' ', timespec='seconds')
+        _status_write(target_store, owners)
+
+
+def _status_end(target_store, token):
+    with _STATUS_LOCK:
+        owners = _STATUS_OWNERS.get(id(target_store), {})
+        owners.pop(token, None)
+        _status_write(target_store, owners)
+        if not owners: _STATUS_OWNERS.pop(id(target_store), None)
+
+
+def _drain_worker(target_store):
+    from . import ingest as ingest_mod
+    key = id(target_store)
+    with _DRAIN_WORKERS_LOCK:
+        if target_store in _DRAIN_CLOSED:
+            raise RuntimeError('triage drain is closed for this store')
+        worker = _DRAIN_WORKERS.get(key)
+        if worker is None:
+            worker = ingest_mod.DrainWorker(target_store, lambda: _llm(target_store))
+            _DRAIN_WORKERS[key] = worker
+        return worker
+
+
+def join_drains(target_store=None, timeout=None) -> bool:
+    """Wait for the exact store's queued triage; used by shutdown and isolated fixtures."""
+    target = target_store or store
+    with _DRAIN_WORKERS_LOCK: worker = _DRAIN_WORKERS.get(id(target))
+    return True if worker is None else worker.join(timeout)
+
+
+def _open_drain_workers(target_store=None) -> bool:
+    """Admit drains for a new lifecycle only after an older worker has fully stopped."""
+    target = target_store or store
+    key = id(target)
+    with _DRAIN_WORKERS_LOCK:
+        worker = _DRAIN_WORKERS.get(key)
+        if worker and worker.active: return False
+        if worker: _DRAIN_WORKERS.pop(key, None)
+        _DRAIN_CLOSED.discard(target)
+    return True
+
+
+def _close_drain_workers(timeout=None, target_store=None) -> bool:
+    with _DRAIN_WORKERS_LOCK:
+        targets = [target_store] if target_store is not None else [w.store for w in _DRAIN_WORKERS.values()]
+        keys = [id(target) for target in targets]
+        _DRAIN_CLOSED.update(targets)
+        workers = [(key, _DRAIN_WORKERS.get(key)) for key in keys if _DRAIN_WORKERS.get(key)]
+    end = None if timeout is None else time.monotonic() + timeout
+    ok = True
+    for key, worker in workers:
+        left = None if end is None else max(0, end - time.monotonic())
+        stopped = worker.close(left)
+        if stopped:
+            with _DRAIN_WORKERS_LOCK:
+                if _DRAIN_WORKERS.get(key) is worker: _DRAIN_WORKERS.pop(key, None)
+        ok = stopped and ok
+    return ok
+
+
+def _ingest_status(what: str = None):
+    st = {'state': 'running', 'what': what, 'at': datetime.now().isoformat(sep=' ', timespec='seconds')} if what else {'state': 'idle'}
+    store.set_setting('ingest_status', json.dumps(st), 'system')
 
 
 def _latest_context_message(task_id: int = None, message_id: int = None):
@@ -3724,7 +4619,14 @@ def _latest_context_message(task_id: int = None, message_id: int = None):
     return store.last_inbound_in(cid) if cid else m
 
 
-def _refresh_chat_context(task_id: int = None, message_id: int = None) -> dict:
+def _refresh_for_finish(_store, task_id: int, message_id: int) -> dict:
+    """coder.finish's refresh (PW-235): the conversation is read from its provider before the result becomes a reply."""
+    if _store is not store:
+        raise RuntimeError('completion refresh belongs to a different store')
+    return _refresh_chat_context(task_id=task_id, message_id=message_id)
+
+
+def _refresh_chat_context(task_id: int = None, message_id: int = None, grace: bool = False, on_fetched=None) -> dict:
     """Synchronize a live chat before its stored text is used to answer or act.
 
     The background clock keeps the screen lively; this is the correctness gate.  If an Assistant
@@ -3733,14 +4635,26 @@ def _refresh_chat_context(task_id: int = None, message_id: int = None) -> dict:
     """
     before = _latest_context_message(task_id, message_id)
     channel = str((before or {}).get('Channel') or '').lower()
-    if channel not in CHAT_CONNECTORS:
-        return {'polled': False, 'newer': False, 'before': before, 'after': before, 'added': 0}
+    # email is refreshed too (PW-049): through the connector behind the mailbox the message arrived in,
+    # incrementally - the poll is a watermark read, and the chain is completed by chains.py, never re-downloaded
+    if channel == 'email':
+        mailbox = str((before or {}).get('SourceName') or '').lower()
+        src = next((x for x in store.list_sources(active_only=False) if x.get('Channel') == 'email' and str(x.get('Address') or '').lower() == mailbox), None)
+        conn = store.get_connector(src['ConnectorId']) if src and src.get('ConnectorId') else None
+        types = [str(conn.get('Type') or '').lower()] if conn and conn.get('Active') else []
+    elif channel in CHAT_CONNECTORS: types = [channel]
+    else: return {'polled': False, 'newer': False, 'before': before, 'after': before, 'added': 0}
     connectors = [c for c in store.list_connectors()
-                  if c.get('Active') and str(c.get('Type') or '').lower() == channel]
-    active = {str(c.get('Type') or '').lower() for c in connectors}
-    if channel not in active:
-        return {'polled': False, 'newer': False, 'before': before, 'after': before, 'added': 0}
-    added = _poll_reports(0, what=f'refreshing {channel} context', only=[channel], wait=True)
+                  if c.get('Active') and str(c.get('Type') or '').lower() in types]
+    if not types or not connectors:
+        return {'polled': False, 'newer': False, 'before': before, 'after': before, 'added': 0, 'channel': channel}
+    # `grace`: the chat INTRODUCING an item may lean on a fetch from the last minute - a walk through ten
+    # items was ten provider round trips (2026-09-06). An action on it (a reply, an approval, an agent
+    # launch) always reads the provider first: that is the correctness gate this function exists for.
+    if grace and _recently_fetched(types, store):
+        return {'polled': False, 'newer': False, 'before': before, 'after': before,
+                'added': 0, 'channel': channel, 'fresh': True}
+    added = _poll_reports(0, what=f'refreshing {channel} context', only=types, wait=True, on_fetched=on_fetched)
     if added is False:
         raise RuntimeError('messages are still syncing; I did not use stale chat context - try again in a moment')
     failed = [store.get_connector(c['ConnectorId']) for c in connectors]
@@ -3756,14 +4670,71 @@ def _refresh_chat_context(task_id: int = None, message_id: int = None) -> dict:
             'added': int(added or 0), 'channel': channel}
 
 
-def _refresh_chat_key(key: str = None, seen_mid: int = None) -> dict:
+from . import coder as _coder_mod
+_coder_mod.REFRESH = _refresh_for_finish
+
+
+_NOTICED = {}      # funnel key -> the message-set revision the owner was last told about (PW-052: once per revision)
+# said the moment new lines land on the item under discussion, before their triage result (PW-052/057)
+RETRIAGE_STARTED = "New messages came in on this conversation. I'm sending it through triage again before we continue."
+
+
+def _refresh_items(items: list, on_fetched=None) -> dict:
+    """Refresh the sources behind these items - once per channel, not once per item (an FYI batch of
+    four Teams lines is one Teams read). Returns the merged freshness."""
+    out, done = {'polled': False, 'newer': False, 'added': 0}, set()
+    for it in items:
+        m = store.get_message(it.get('mid')) if it.get('mid') else None
+        ch = str((m or {}).get('Channel') or it.get('channel') or '').lower()
+        if not ch or ch in done: continue
+        done.add(ch)
+        f = _refresh_chat_context(it.get('tid'), it.get('mid'), grace=True, on_fetched=on_fetched)
+        out['polled'] = out['polled'] or bool(f.get('polled')); out['newer'] = out['newer'] or bool(f.get('newer'))
+        out['added'] += int(f.get('added') or 0)
+    return out
+
+
+def _refresh_next_selection(body, on_fetched=None) -> dict:
+    """Next without a key (PW-050): pick what the walk would surface, refresh THAT item's source (every
+    channel of an FYI batch, once), and re-pick when the refresh moved the pile - so the assistant and
+    Current/Next speak about the same, current item. Rebuilding the pile from the database alone is not a
+    source refresh; this asks the provider."""
+    from . import funnel
+    item = funnel.next_item(store, None, body.only, body.include_surfaced, body.exclude)
+    if not item: return {'polled': False, 'newer': False, 'item': None}
+    members = funnel.fyi_batch(store, item) if item.get('lane') == 'fyi' else [item]
+    f = _refresh_items(members, on_fetched)
+    if f.get('newer'):
+        from . import funnel as _f
+        _f.invalidate()
+        item = funnel.next_item(store, None, body.only, body.include_surfaced, body.exclude) or item
+    f['item'] = item
+    f['after'] = _latest_context_message(item.get('tid'), item.get('mid'))
+    return f
+
+
+def _notice_once(freshness: dict) -> str | None:
+    """The context-update line, once per new revision of the item (PW-052/057): a poll or a re-render
+    that finds nothing new says nothing; the same new line is never announced twice."""
+    item = (freshness or {}).get('item') or {}
+    if not freshness or not freshness.get('newer') or not item.get('key'): return None
+    after = freshness.get('after') or {}
+    rev = f"{after.get('MessageId')}:{(store.get_review(item['rid']) or {}).get('Status') if item.get('rid') else ''}"
+    if _NOTICED.get(item['key']) == rev: return None
+    _NOTICED[item['key']] = rev
+    while len(_NOTICED) > 500: _NOTICED.pop(next(iter(_NOTICED)))
+    return _context_update_line(freshness)
+
+
+def _refresh_chat_key(key: str = None, seen_mid: int = None, on_fetched=None) -> dict:
     """Refresh the item held by the Assistant and compare it with what the browser saw."""
     if not key: return {}
     from . import funnel
     item = funnel.next_item(store, key) or funnel.item_for_key(store, key)
     if not item: return {}
-    out = _refresh_chat_context(item.get('tid'), item.get('mid'))
-    fresh = funnel.next_item(store, key) or funnel.item_for_key(store, key) or item
+    out = _refresh_chat_context(item.get('tid'), item.get('mid'), grace=True, on_fetched=on_fetched)
+    # the poll may have landed lines; only then is a second build worth its cost
+    fresh = (funnel.next_item(store, key) or funnel.item_for_key(store, key) or item) if out.get('newer') or out.get('added') else item
     after = _latest_context_message(fresh.get('tid'), fresh.get('mid'))
     # `stale` catches a background sync that landed before this request; seen_mid catches the
     # narrower race where it landed after the browser's last five-second pile refresh.
@@ -3781,8 +4752,14 @@ def _context_update_line(freshness: dict) -> str:
     ref = item.get('ref') or item.get('title') or 'this thread'
     body = ' '.join(str(m.get('BodyText') or '').split())[:180]
     tail = f': “{body}”' if body else ''
-    draft = ' The earlier draft is now out of date; redraft it before sending.' if item.get('rid') else ''
-    return f'New message from {who} arrived on {ref}{tail}. I refreshed the context.{draft}'
+    rv = store.get_review(item['rid']) if item.get('rid') else None
+    # the owner answered outside Taskuary (PW-053): the draft was retired by the sync, so say that - not
+    # 'redraft it' - and leave any newer ask to triage, which already read it
+    if rv and rv.get('Status') == 'superseded':
+        return (f'You already answered {ref} outside Taskuary, so the pending draft was retired - nothing to send. '
+                'Anything asked since went through triage.')
+    draft = ' The earlier draft is now out of date; redraft it before sending.' if rv and rv.get('Status') == 'pending' else ''
+    return f'New message from {who} arrived on {ref}{tail}. I sent it through triage before continuing.{draft}'
 
 
 def poll_forever():
@@ -3793,26 +4770,81 @@ def poll_forever():
     countdown every time a filter changed the effect's dependencies; and with no window open
     nothing polled at all - which also meant a report scheduled for 8am Monday only ran if
     somebody happened to have the Timeline on screen at 8am on Monday. The mailbox does not care
-    which tab is open, so the clock does not live there any more."""
+    which tab is open, so the clock does not live there any more.
+
+    This is the FULL lane's clock only. The chat clock is quick_forever, on its own thread: while
+    this loop sits inside a long sync, a branch here could never fire."""
     while True:
         try:
+            # the heartbeat sits OUTSIDE the sync switch on purpose: poll_minutes 0 means
+            # "do not go and look", not "the app is closed", and a check that reads arrivals
+            # rather than the scheduler has to be able to tell those two apart (TQ-0451)
+            if time.time() - _HEARTBEAT[0] >= HEARTBEAT_TICK:
+                _HEARTBEAT[0] = time.time(); note_app_up(store)
             try: mins = int(store.get_settings().get('poll_minutes') or 0)
             except (TypeError, ValueError): mins = 10
             if mins > 0 and time.time() - _LAST_POLL[0] >= mins * 60:
                 _poll_reports(0, what='syncing')
-            elif mins > 0:
-                # poll_minutes 0 is "background sync off", and that includes the fast clock
-                quick = _quick_due()
-                if quick: _poll_reports(0, what='syncing', only=quick)
         except Exception as e:
             logger.warning(f'scheduled poll failed: {e}')      # a bad cycle must not end the loop
         time.sleep(POLL_TICK)
+
+
+def quick_forever():
+    """The chat clock. poll_minutes 0 is "background sync off", and that includes this clock.
+
+    It also carries the by-the-way push: while the walk is in a phone chat, an interruption has to
+    go THERE, and an agent raising its hand is not something a mailbox poll would ever discover.
+    That is why it sits outside the sync switch and throttles itself (remote_assistant.push_alerts)."""
+    from . import wabridge
+    try: wabridge.ready(8)          # whichever lane polls first spends the grace; the other is free
+    except Exception as e: logger.debug(f'wa bridge grace skipped: {e}')
+    while True:
+        try:
+            from . import remote_assistant
+            try: remote_assistant.push_alerts(store)
+            except Exception as e: logger.warning(f'could not send an interruption to the chat: {e}')
+            try: mins = int(store.get_settings().get('poll_minutes') or 0)
+            except (TypeError, ValueError): mins = 10
+            if mins > 0:
+                quick = _quick_due()
+                if quick: _poll_on_quick_clock(quick)
+        except Exception as e:
+            logger.warning(f'chat poll failed: {e}')
+        time.sleep(QUICK_TICK)
 
 
 # A chat channel on the ten-minute mailbox clock is a slow conversation. Chat connectors default
 # to the 30-second clock; poll_seconds can make one slower (or explicitly zero to leave it only on
 # the global clock). The quick pass polls ONLY those connectors and runs no reports or CI.
 _QUICK_LAST = {}
+_QUICK_LAST_STORE = {}
+_QUICK_TIMER = threading.local()
+
+
+def _recently_fetched(types, target_store=None) -> bool:
+    """Whether every requested provider completed a fetch within the context grace period."""
+    now = time.time()
+    providers = [str(provider).lower() for provider in types]
+    return bool(providers) and all(
+        now - _QUICK_LAST.get(provider, 0) <= CONTEXT_FRESH_SECONDS
+        and (target_store is None or _QUICK_LAST_STORE.get(provider) == id(target_store))
+        for provider in providers)
+
+
+def _poll_on_quick_clock(types):
+    """Each due chat type on its own thread, marked for the due recheck. One shared chat lane meant a
+    bridge that hung for forty seconds skipped every Teams, Slack and Telegram tick in between; now a
+    slow type holds only its own lock (_poll_quick) and this tick waits for it no longer than the clock."""
+    def one(typ):
+        _QUICK_TIMER.active = True
+        try: _poll_reports(0, what='syncing', only=[typ])
+        except Exception as e: logger.warning(f'chat poll failed ({typ}): {e}')
+        finally: _QUICK_TIMER.active = False
+    threads = [threading.Thread(target=one, args=(t,), name=f'quick-{t}', daemon=True) for t in dict.fromkeys(types)]
+    for th in threads: th.start()
+    deadline = time.monotonic() + QUICK_TICK
+    for th in threads: th.join(max(0.0, deadline - time.monotonic()))
 
 def _quick_due() -> list:
     due = []
@@ -3820,69 +4852,160 @@ def _quick_due() -> list:
         if not c['Active']: continue
         try:
             cfg = json.loads(c.get('ConfigJson') or '{}')
-            raw = cfg.get('poll_seconds', CHAT_POLL_SECONDS if c.get('Type') in CHAT_CONNECTORS else 0) if isinstance(cfg, dict) else 0
-            secs = int(raw or 0)
+            raw = cfg.get('poll_seconds') if isinstance(cfg, dict) else 0
+            # blank is "the default", as the card says - a cleared field saved as '' is not an explicit 0
+            if raw is None or str(raw).strip() == '': raw = CHAT_POLL_SECONDS if c.get('Type') in CHAT_CONNECTORS else 0
+            secs = int(str(raw).strip())
         except (TypeError, ValueError): secs = 0
         if secs > 0 and time.time() - _QUICK_LAST.get(c['Type'], 0) >= secs:
             due.append(c['Type'])
     return due
 
-def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool = False, only=None, wait: bool = False):
-    # one poll at a time, enforced by a lock instead of the old 10-minute timestamp guard: a
+def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool = False,
+                  only=None, wait: bool = False, on_fetched=None):
+    """The full lane; `only` hands the call to the chat lane (_poll_quick) instead."""
+    if only is not None:
+        return _poll_quick(only, what, wait, timer=bool(getattr(_QUICK_TIMER, 'active', False)), on_fetched=on_fetched)
+    target_store = store                 # a test or shutdown cannot retarget work already started
+    # one full poll at a time, enforced by a lock instead of the old 10-minute timestamp guard: a
     # slow catch-up (CLI triage over a 3-day backfill) legitimately outlives 10 minutes, so
     # the timeline's auto-sync kept starting SECOND polls over the same watermarks - each one
     # rewriting 'running', and the "catching up" banner never ended.
-    acquired = _POLL_BUSY.acquire(timeout=45) if wait else _POLL_BUSY.acquire(blocking=False)
+    acquired = _POLL_BUSY.acquire(timeout=DRAIN_WAIT) if wait else _POLL_BUSY.acquire(blocking=False)
     if not acquired:
         logger.info('poll already running - skipped'); return False
-    if only is None:
-        _LAST_POLL[0] = time.time()  # a manual Sync now resets the clock too, so the timer
-                                     # does not fire again moments later over the same watermarks
-    else:
-        for t in only: _QUICK_LAST[t] = time.time()
-    store.set_setting('ingest_status', json.dumps(
-        {'state': 'running', 'what': what, 'at': datetime.now().isoformat(sep=' ', timespec='seconds')}), 'system')
+    _LAST_POLL[0] = time.time()  # a manual Sync now resets the clock too, so the timer
+                                 # does not fire again moments later over the same watermarks
+    status = _status_begin(target_store, 'full', what)
     try:
         # channels FIRST: the Morning digest is a report over Taskuary's own data, and run
         # before the catch-up it would summarize yesterday while today sat in the mailbox
-        from .channels import poll_channels
-        def _say(kind, so_far):
-            # the ORIGINAL what is kept and appended to: "catching up on the last 3 day(s)" is
-            # the context, "reading outlook · 12 in so far" is the progress, and replacing the
-            # first with the second loses why the poll is running at all
-            store.set_setting('ingest_status', json.dumps(
-                {'state': 'running', 'at': datetime.now().isoformat(sep=' ', timespec='seconds'),
-                 'what': f'{what} · reading {kind}' + (f' · {so_far} in so far' if so_far else '')}), 'system')
+        from .channels import poll_channels, _poll_jobs
+        # the ORIGINAL what is kept and appended to: "catching up on the last 3 day(s)" is
+        # the context, "reading outlook · 12 in so far" is the progress, and replacing the
+        # first with the second loses why the poll is running at all
+        def _say(kind, so_far): _status_progress(target_store, status, f'{what} · reading {kind}' + (f' · {so_far} in so far' if so_far else ''))
         # show first, judge next: the poll stores every message as it reads it (the timeline
         # shows them at once, wearing 'triaging'), and the AI calls come afterwards, in order
         from . import ingest as ingest_mod
-        with ingest_mod.deferred():
-            added = poll_channels(store, backfill_days, progress=_say, **({'only': only} if only is not None else {}))
-        def _left(n):
-            store.set_setting('ingest_status', json.dumps(
-                {'state': 'running', 'at': datetime.now().isoformat(sep=' ', timespec='seconds'),
-                 'what': f'{what} · triaging' + (f' · {n} left' if n else '')}), 'system')
-        try: ingest_mod.drain(store, _llm(), progress=_left)
-        except Exception as e: logger.warning(f'deferred triage drain failed: {e}')
-        if only is not None: return added      # a quick pass reads its channels and stops
+        # a type the chat lane is reading this very second is left to it (one lane per type)
+        mine = list(dict.fromkeys(c['Type'] for c, _ in _poll_jobs(target_store)))
+        with _claim_fetch(mine, 'full') as types:
+            try:
+                with ingest_mod.deferred():
+                    added = poll_channels(target_store, backfill_days, progress=_say, only=types) if types else 0
+                # "checked" means every source was read: a type the chat lane held this cycle was not,
+                # so the stamp waits for a cycle that read them all. Connector errors stay intact.
+                if types and set(types) == set(mine):
+                    target_store.set_setting('ingest_last_fetch_completed_at', str(time.time()), 'system')
+            finally:
+                # A full pass IS a chat attempt (PW-002). Stamp before releasing its connector
+                # claims, so the quick clock cannot enter the release-to-stamp gap and duplicate it.
+                now = time.time()
+                for t in types:
+                    if t in CHAT_CONNECTORS:
+                        _QUICK_LAST[t] = now
+                        _QUICK_LAST_STORE[t] = id(target_store)
+        def _left(n): _status_progress(target_store, status, f'{what} · processing messages' + (f' · {n} left' if n else ''), phase='triaging')
+        # Drain progress runs after a judgement finishes. Publish the phase before
+        # submitting so even the first slow judgement cannot still say "reading".
+        _left(0)
+        try:
+            ticket = _drain_worker(target_store).submit(progress=_left)
+            ticket.wait()                   # full sync/reports retain their established sequencing
+            if ticket.error: logger.warning(f'deferred triage drain failed: {ticket.error}')
+        except Exception as e:
+            logger.warning(f'deferred triage drain failed: {e}')
         # the git loop: a task's PR is watched here, and a red build goes back to the agent
         # that wrote the code (ci.py) - off unless the owner turned ci_watch on
+        _status_progress(target_store, status, what, phase='checking')
         try:
             from . import ci
-            ci.poll(store)
+            ci.poll(target_store)
         except Exception as e:
             logger.warning(f'CI poll failed: {e}')
         # the agent wall composts once a day: yesterday's notes become one summary per checkout,
         # so what an agent reads tomorrow is what still matters (blackboard.roll_up)
         try:
-            blackboard.roll_daily(store)
+            blackboard.roll_daily(target_store)
         except Exception as e:
             logger.warning(f'the wall roll-up failed: {e}')
-        run_due_reports(store, startup)          # ...the seeded 'Assistant' report among them (assistant.py)
+        _status_progress(target_store, status, what, phase='running_reports')
+        try:                                            # ...and archived chats past their keep-days go, once a day (retention.py)
+            from . import retention
+            retention.tick(target_store)
+        except Exception as e:
+            logger.warning(f'chat retention skipped: {e}')
+        run_due_reports(target_store, startup)          # ...the seeded 'Assistant' report among them (assistant.py)
         return added
     finally:
-        try: store.set_setting('ingest_status', json.dumps({'state': 'idle'}), 'system')
+        try: _status_end(target_store, status)
         finally: _POLL_BUSY.release()
+
+
+def _poll_quick(only, what: str = 'syncing', wait: bool = False, timer: bool = False, on_fetched=None):
+    """The chat lane: read ONLY these connector types, put their lines first on the one ordered
+    drain worker, and release the fetch clock - no CI, no reports.
+
+    Returns what it added, or False when nothing was read: the lane was busy, every type was in
+    the full lane's hands, or the fetch failed - and with wait=True (the context gate before an
+    answer about a chat) also waits until its lines' complete routes finish within DRAIN_WAIT. The fast
+    clock is stamped when an ATTEMPT ENDS, success or failure: a broken connector retries one
+    interval later, while an attempt that never ran is not stamped and is due again next tick.
+    A full lane owns the visible banner while both are active; either lane remains truthful when
+    the other finishes first."""
+    target_store = store                 # every asynchronous drain keeps this exact store
+    deadline = time.monotonic() + DRAIN_WAIT if wait else None
+    held = [t for t in dict.fromkeys(only)
+            if (_quick_lock(t).acquire(timeout=DRAIN_WAIT) if wait else _quick_lock(t).acquire(blocking=False))]
+    if not held:
+        logger.info('chat poll already running - skipped'); return False
+    only = held                          # a type another tick still holds is left to it; it is due again next tick
+    ticket, added, fresh_channels = None, False, []
+    try:
+        remaining = max(0, deadline - time.monotonic()) if wait else None
+        with _claim_fetch(list(dict.fromkeys(only)), 'quick', wait=wait, timeout=remaining) as types:
+            # The timer computed its due list before admission. A full fetch may have completed
+            # and stamped one of these connectors meanwhile; recheck while our claim closes that
+            # stale-decision race. Explicit context refreshes intentionally bypass the cadence.
+            if timer:
+                still_due = set(_quick_due())
+                types = [typ for typ in types if typ in still_due]
+            if types:
+                status = _status_begin(target_store, 'quick', what)
+                try:
+                    from .channels import CH2SRC, poll_channels
+                    from . import ingest as ingest_mod
+                    fresh_channels = list(dict.fromkeys(CH2SRC[t] for t in types if t in CH2SRC))
+                    def _say(kind, so_far):
+                        _status_progress(target_store, status, f'{what} · reading {kind}' + (f' · {so_far} in so far' if so_far else ''))
+                    with ingest_mod.deferred():
+                        added = poll_channels(target_store, 0, progress=_say, only=types)
+                    # new lines are announced the moment they LAND (PW-052): the caller says retriage started,
+                    # then waits below for the result - the owner is never shown the result as the first word
+                    if on_fetched and added:
+                        try: on_fetched(int(added))
+                        except Exception as e: logger.warning(f'retriage notice failed: {e}')
+                    ticket = _drain_worker(target_store).submit(fresh=fresh_channels, only_fresh=True)
+                except Exception as e:
+                    logger.warning(f"chat poll failed ({', '.join(types)}): {e}")
+                finally:
+                    now = time.time()
+                    for t in types:
+                        _QUICK_LAST[t] = now
+                        _QUICK_LAST_STORE[t] = id(target_store)
+                    _status_end(target_store, status)
+    finally:
+        for t in held: _quick_lock(t).release()
+    # Waiting belongs to the explicit action's correctness gate, not the connector fetch lane.
+    # Background ticks can claim and fetch this connector while its earlier rows are triaged.
+    if ticket is None: return False
+    if wait:
+        remaining = max(0, deadline - time.monotonic())
+        if not ticket.wait(remaining) or ticket.error: return False
+        remaining = max(0, deadline - time.monotonic())
+        if not ingest_mod.await_quiet(target_store, fresh_channels, timeout=remaining): return False
+    return added
 
 
 def _catchup_days(ceiling: int) -> int:
@@ -3908,6 +5031,10 @@ def catch_up_on_startup():
     days = _catchup_days(days)
     logger.info(f"startup: {'incremental poll (closed under an hour)' if days == 0 else f'catching up on the last {days} day(s)'}")
     def _catch_up():
+        # the bridge's launch grace, spent here instead of in front of the owner's first request
+        from . import wabridge
+        try: wabridge.ready(8)
+        except Exception as e: logger.debug(f'wa bridge grace skipped: {e}')
         _poll_reports(days, what=f'catching up on the last {days} day(s)' if days else 'syncing', startup=True)
         # the Morning digest needs no call of its own anymore: it is a seeded REPORT, run by
         # the poll above like every other one. Consolidate what the verdicts taught next,
@@ -3963,6 +5090,7 @@ def _refresh_soul_connections():
 
 @app.post('/api/ingest/poll')
 def ingest_poll(background: BackgroundTasks):
+    if _POLL_BUSY.locked(): return {'report': 'busy'}      # a pass is running; a second would be skipped anyway
     background.add_task(_poll_reports)
     return {'report': 'running'}
 
@@ -3973,16 +5101,23 @@ def ingest_status():
     # a poll that died with the app leaves 'running' behind with nobody holding the lock - a
     # ghost the timeline banner would show forever (the poll sets the flag only AFTER taking
     # the lock, so running-but-unlocked is always a ghost). Heal it on read.
-    if st.get('state') == 'running' and not _POLL_BUSY.locked():
+    if st.get('state') == 'running' and not (_POLL_BUSY.locked() or _quick_busy()):
         st = {'state': 'idle'}
         store.set_setting('ingest_status', json.dumps(st), 'system')
     # the cadence rides along so the timeline's caption can state the truth instead of a
     # hardcoded "every 10 min" that stayed on screen after somebody set the interval to 0
     try: every = int(store.get_settings().get('poll_minutes') or 0)
     except (TypeError, ValueError): every = 10
+    try:
+        fetched_at = float(store.get_settings().get('ingest_last_fetch_completed_at'))
+        if not 0 < fetched_at < float('inf'): fetched_at = None
+    except (TypeError, ValueError): fetched_at = None
     # and the clock itself: when the last full poll ran and when the next is due, so the caption
     # can count down instead of asserting a cadence nobody could check
     return {'status': st, 'everyMinutes': every, 'lastPollAt': _LAST_POLL[0],
+            'lastFetchCompletedAt': fetched_at,
+            # a source whose last read failed, so "checked 7:09" never covers for it (its card has the why)
+            'failed': sorted({c['Type'] for c in store.list_connectors() if c.get('Active') and c.get('LastError')}),
             'nextPollAt': (_LAST_POLL[0] + every * 60) if every > 0 else None, 'now': time.time(),
             # the brain's last failure, until it answers again - shown in the caption, not buried in rows
             'triageError': store.get_settings().get('triage_last_error') or '',
@@ -4072,14 +5207,16 @@ def _pause_task(tid: int, sid: str = None):
     from . import general
     task = store.get_task(tid) or {}
     assistant = general.session_for(tid) if general.handles(task) else None
-    if assistant:
+    # ...and it is the handover whether or not a provider session is still live: an API turn keeps
+    # none once it has answered, and this used to fall through and refuse (owner, 2026-09-07).
+    if assistant or (general.handles(task) and general.chat_rows(store, tid)):
         history = general.history(store, tid)
         note = next((m['content'][0]['text'] for m in reversed(history)
                      if m.get('role') == 'assistant' and m.get('content')), '')
-        hub_term.close(assistant.sid)
+        if assistant: hub_term.close(assistant.sid)
         store.add_comment(tid, ACTOR, 'human', 'Paused the assistant session - the conversation is saved here for later.')
         store.audit('terminal', tid, 'pause', ACTOR,
-                    detail={'sid': sid or assistant.sid, 'mode': 'assistant'})
+                    detail={'sid': sid or getattr(assistant, 'sid', None), 'mode': 'assistant'})
         return {'pause': 'done', 'taskId': tid,
                 'note': note or 'Conversation saved. Continue here when you are ready.'}
     text, agent, found = hub_term.transcript_for(store, tid)
@@ -4149,6 +5286,8 @@ def stop_task_agent(task_id: int):
     label = getattr(live, 'label', None) or getattr(live, 'agent', None) or 'agent'
     stopped = bool(hub_term.close(sid))
     if stopped:
+        from . import workerstate as ws
+        ws.record(store, task_id, sid, 'stopped', text='stopped by the owner', source='owner')   # never a completion (PW-222)
         # ...and the task is no longer being worked. Nothing moved it out of 'in_progress' and the
         # run row stayed 'running', so the pipe showed "agent working" on a task with no session and
         # nothing for the owner to do, for ever (the 2026-09-03 break test).

@@ -118,18 +118,18 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
 
 
 def build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None,
-              cli_tools: bool = False, extra_env: dict = None):
+              cli_tools: bool = False, extra_env: dict = None, research: bool = False):
     """The brain, or the demo's script. Everything in the app asks for its brain here, which is
     the one place a demo can be told to answer without a key, a CLI, or a request that leaves
     the machine (demo.py)."""
     from . import demo
     # the demo answers from a script: no key, no CLI, no request leaving the machine
     if demo.enabled(): return demo.brain()
-    return _build_llm(store, pick, model, trace, cancel, resume, cli_tools, extra_env)
+    return _build_llm(store, pick, model, trace, cancel, resume, cli_tools, extra_env, research)
 
 
 def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None,
-               cli_tools: bool = False, extra_env: dict = None):
+               cli_tools: bool = False, extra_env: dict = None, research: bool = False):
     """The brain named by `pick` ('' = first active AI connector, 'connector:<id>',
     'cli:<agent>'), defaulting to the triage_ai setting - callers like reports may name
     their OWN brain and model per job instead of riding the triage tier. The owner's ordered
@@ -146,7 +146,8 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
         chosen_model, chosen_resume = (model, resume) if first else (None, None)
         if candidate.startswith('cli:'):
             return make_cli_llm(store, candidate[4:], chosen_model, trace=trace, cancel=cancel,
-                                resume=chosen_resume, cli_tools=cli_tools, extra_env=extra_env)
+                                resume=chosen_resume, cli_tools=cli_tools, extra_env=extra_env,
+                                research=research)
         want = candidate[10:] if candidate.startswith('connector:') else None
         want_id = int(want) if want and want.isdigit() else None
         for c in store.list_connectors():

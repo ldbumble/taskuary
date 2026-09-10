@@ -37,8 +37,9 @@ test("the Tasks completion path pins the rail to in progress before patching", a
   const finish = source.slice(start, source.indexOf("const firstShownId", start));
   assert.match(finish, /filter\(\(x\) => inBucket\(x, "live"\)\)/);
   assert.match(finish, /completionTransition\(liveIds, selected, status\)/);
-  assert.ok(finish.indexOf("setFilter(transition.filter)") < finish.indexOf("await api.patch"));
-  assert.ok(finish.indexOf("onSelect(transition.next)") > finish.indexOf("await api.patch"));
+  // completion runs the shared operations road now (PW-215); the pin is the ordering around that call
+  assert.ok(finish.indexOf("setFilter(transition.filter)") < finish.indexOf('await runOperation(api, "task.complete"'));
+  assert.ok(finish.indexOf("onSelect(transition.next)") > finish.indexOf('await runOperation(api, "task.complete"'));
 });
 
 test("a closed task opened directly cannot remain under the in-progress pill", async () => {

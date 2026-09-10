@@ -17,6 +17,8 @@ import AttachFileIcon from "@mui/icons-material/AttachFile";
 import api from "./api";
 import AgentWall from "./AgentWall.jsx";
 import { NO_REPO, planTask } from "./newTask.js";
+import { agentName, saidFromTail } from "./agentWork.js";
+import { isGeneralKind } from "./autostart.js";
 import { onLive } from "./live.js";
 import { ALERT, GRADIENT, PANEL, PANEL2, BORDER, CATPPUCCIN, DIM, FAINT, INK, ROLES, card, hoverable, mono } from "./theme.jsx";
 import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty, IDLE_WAITING, isWaiting, PromptThumbs, TellAgent, WorkPane, usePromptImages, TaskuaryMark, assignedAgent } from "./ui.jsx";
@@ -76,8 +78,29 @@ export const FileChips = ({ files }) => (files || []).length === 0 ? null : (
   </Box>
 );
 
-const LiveTail = ({ run }) => {
+// A CHAT on the board was drawn as a console: a black pane of "assistant> ... you>" with the
+// question truncated mid-word, under a shell prompt nobody types into, on a card whose whole news
+// IS what it asked (the owner, 2026-09-08: "assistant still looks like coding cli?"). A
+// conversation's peephole is its words.
+const ChatTail = ({ run, name }) => {
   const waiting = run.kind === "session" && isWaiting(run);
+  const said = saidFromTail(run.tail);
+  return (
+    <Box sx={{ mt: 0.7 }}>
+      <Typography sx={{ ...mono, fontSize: 9, letterSpacing: ".11em", textTransform: "uppercase", color: FAINT }}>
+        {waiting ? "asked you" : `${name} is working`}
+      </Typography>
+      {said && <Typography sx={{ color: INK, fontSize: 11.5, lineHeight: 1.45, mt: 0.2,
+        display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{said}</Typography>}
+      {!said && <Typography sx={{ color: FAINT, fontSize: 11.5, mt: 0.2 }}>
+        {waiting ? "It is waiting on your answer." : "Working on it."}</Typography>}
+    </Box>
+  );
+};
+
+const LiveTail = ({ run, chat, name }) => {
+  const waiting = run.kind === "session" && isWaiting(run);
+  if (chat) return <ChatTail run={run} name={name} />;
   // a session reports what the agent HOLDS (ui.WorkPane); the raw-tail pane below stays only for
   // a run with no witness at all
   if (run.work) return <WorkPane run={run} />;
@@ -432,7 +455,11 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
               </Typography>}
               {!cards.length && <Empty>Nothing here.</Empty>}
               {cards.map((t) => {
-                const badge = agentBadge(live[t.TaskId]?.AgentName || t.RunAgent, t.RunStatus, !!live[t.TaskId], cmds);
+                // a chat session reports its agent as the literal string "assistant" - the name of
+                // the thing that helps you run Taskuary, not of the agent working this task
+                const chat = isGeneralKind(t.Kind);
+                const badge = agentBadge(chat ? agentName(t) : (live[t.TaskId]?.AgentName || t.RunAgent),
+                  t.RunStatus, !!live[t.TaskId], cmds);
                 return (
                 <Box key={t.TaskId} draggable onDragStart={() => setDragId(t.TaskId)} onDragEnd={() => setDragId(null)}
                   onClick={() => onOpenTask(t.TaskId)}
@@ -499,7 +526,7 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                       </Typography>
                     </Box>
                   )}
-                  {live[t.TaskId] && <LiveTail run={live[t.TaskId]} />}
+                  {live[t.TaskId] && <LiveTail run={live[t.TaskId]} chat={chat} name={agentName(t)} />}
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.6, mt: 0.6 }}>
                     <Chip size="small" label={t.Kind} sx={{ height: 15, fontSize: 8.5, bgcolor: PANEL2,
                       border: `1px solid ${BORDER}`, color: DIM, "& .MuiChip-label": { px: 0.7 } }} />

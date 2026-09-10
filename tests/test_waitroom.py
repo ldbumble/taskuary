@@ -1,5 +1,5 @@
 """The waiting room (waitroom.py): notes the owner queues on a task while its agent works, typed
-in as one batch when the agent parks - held while it is working, held while it is ASKING, and
+in as one batch when the agent parks - held while it is working, delivered as the ANSWER when it is asking, and
 reopening a session when the old one ended. All faked: no pty, no CLI.
 """
 import time, unittest
@@ -133,17 +133,19 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual((out['delivered'], out['state']), (1, 'parked'))
         self.assertIn('export path', t.typed())
 
-    def test_held_behind_a_question_for_the_owner(self):
+    def test_a_question_for_the_owner_is_answered_by_what_they_write_next(self):
+        """An agent parked on a question is asking the OWNER: their next words are the answer and go
+        in at once, plainly - no "while you were working" preamble. They used to queue behind the
+        question and never arrive, while the card said "Told the agent" (2026-09-07 live check)."""
         s = MemoryStore(); tid = task(s)
         t = FakeTerm(tid, idle=terminal.IDLE_WAITING + 5, tail=['Two repos match. Which one should I use?'])
         with mock.patch.dict(terminal.SESSIONS, {'a': t}, clear=True):
             out = waitroom.add(s, tid, 'use the 8/17 file')
-            self.assertEqual((out['delivered'], out['state']), (0, 'asking'))
-            self.assertEqual(t.writes, [])
-            t._tail = ['Using Census. Done.']                          # the owner answered, it finished
-            self.assertEqual(waitroom.tick(s), 1)
+            self.assertEqual((out['delivered'], out['state']), (1, 'answered'))
             time.sleep(0.5)
-        self.assertIn('8/17 file', t.typed())
+        self.assertEqual(t.typed(), 'use the 8/17 file')               # the answer itself, nothing wrapped round it
+        self.assertEqual(s.waiting_notes(tid), [])
+        self.assertIn('Answered the agent', ' '.join(c['Body'] for c in s.list_comments(tid)))
 
     def test_no_session_reopens_one_with_the_notes_as_the_ask(self):
         s = MemoryStore(); tid = task(s)

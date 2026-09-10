@@ -22,6 +22,8 @@ import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api";
 import SoulInterview from "./SoulInterview.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL2 } from "./theme.jsx";
+import { useCliInstall, InstallLine } from "./cliInstall.jsx";
+import { useCliSetup, SetupButton, CliPane, canSetup } from "./cliSetup.jsx";
 
 // "Three things and Taskuary works" was prose. Steps were added to the wizard and it went on
 // saying three, because a number written as a word is a number nobody updates. Counted now -
@@ -149,9 +151,25 @@ const CliPicker = ({ asBrain, onDone }) => {
   const [list, setList] = useState(null);
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState(null);
-  useEffect(() => {
-    api.get("/api/cli/detect").then(({ data }) => setList(data.data || [])).catch(() => setList([]));
-  }, []);
+  const { install, busy: installing, note } = useCliInstall();
+  const { openSetup, opening, pane, note: setupNote } = useCliSetup();
+  const reload = () => api.get("/api/cli/detect").then(({ data }) => setList(data.data || [])).catch(() => setList([]));
+  useEffect(() => { reload(); }, []);
+  // Install, then keep going. Stopping at "installed" would leave the owner to find the second
+  // button, and the cmd handed on is the ABSOLUTE path the installer reported: this server's PATH
+  // predates the install, so a profile saved as bare "claude" would need a restart to run.
+  //
+  // ...but a CLI installed ten seconds ago has NO CREDENTIALS, and running the test on it landed
+  // the owner on "signed out - open a terminal" at the exact step this wizard exists to remove.
+  // So a CLI whose sign-in Taskuary can host hands off to the pane instead, and the test waits.
+  const getAndUse = async (cli) => {
+    const done = await install(cli);
+    if (!done) return;
+    await reload();
+    const fresh = { ...cli, cmd: done.path || cli.cmd, installed: true };
+    if (canSetup(fresh)) { await openSetup(fresh); return; }
+    await use(fresh);
+  };
   const use = async (cli) => {
     setBusy(cli.name); setMsg(null);
     try {
@@ -172,7 +190,7 @@ const CliPicker = ({ asBrain, onDone }) => {
     <Box>
       {list.length === 0 ? (
         <Typography variant="caption" sx={{ color: FAINT }}>
-          No AI CLI found on your PATH. Claude Code, Codex, and Gemini CLI are detected automatically once installed.
+          No AI CLI found on your PATH, and none that Taskuary can install for you here.
         </Typography>
       ) : list.map((cli) => (
         <Box key={cli.name} sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.5 }}>
@@ -182,7 +200,8 @@ const CliPicker = ({ asBrain, onDone }) => {
             </Typography>
             <Typography variant="caption" sx={{ color: cli.configured && !cli.installed ? "#8a3646" : FAINT, overflowWrap: "anywhere" }}>
               {cli.path ? cli.path
-                : cli.configured ? `configured here${cli.cmd ? ` as “${cli.cmd}”` : ""}, but not found on this machine — install it, or fix the command in Connections → AI CLI agents`
+                : cli.configured ? `configured here${cli.cmd ? ` as “${cli.cmd}”` : ""}, but not found on this machine — Install puts it here, or fix the command in Connections → AI CLI agents`
+                : cli.installable ? `${cli.cmd} — not on this machine yet`
                 : cli.cmd}
             </Typography>
             {/* found, runnable by hand, and still refused from a background process - so it is
@@ -194,13 +213,34 @@ const CliPicker = ({ asBrain, onDone }) => {
               </Typography>
             )}
           </Box>
-          <Button size="small" variant="outlined" disabled={!!busy} onClick={() => use(cli)}
-            sx={{ fontSize: 11.5, whiteSpace: "nowrap" }}>
-            {busy === cli.name ? "testing…" : asBrain ? "Use & test" : "Add & test"}
-          </Button>
+          {cli.installed ? (<>
+            {/* installed and signed out look identical from here, so Sign in is offered rather
+                than guessed at - the CLI itself is what says whether it was needed */}
+            <SetupButton cli={cli} opening={opening} onOpen={openSetup} />
+            <Button size="small" variant="outlined" disabled={!!busy || !!installing} onClick={() => use(cli)}
+              sx={{ fontSize: 11.5, whiteSpace: "nowrap" }}>
+              {busy === cli.name ? "testing…" : asBrain ? "Use & test" : "Add & test"}
+            </Button>
+          </>) : <InstallLine cli={cli} busy={installing} onInstall={() => getAndUse(cli)} />}
         </Box>
       ))}
-      {msg && <Alert severity={msg.bad ? "error" : "success"} sx={{ mt: 1, fontSize: 12.5 }}>{msg.text}</Alert>}
+      {/* The sign-in itself, in the same session the Board is showing. Nothing here closes it:
+          a pane must not vanish while its owner is mid-OAuth, and Done is theirs on the task. */}
+      {pane && (
+        <Box sx={{ mt: 1 }}>
+          <CliPane pane={pane} />
+          {/* `path` over `cmd` on the way into the test: detect's row for a CLI that has no profile
+              yet carries the BARE bin name, and the profile is meant to hold the absolute path so
+              nothing the app does depends on PATH (cliinstall's second of three). This route saved
+              "claude" and leaned on the environ patch the install had just done. */}
+          <Button size="small" variant="outlined" sx={{ mt: 0.75, fontSize: 11.5 }} disabled={!!busy}
+            title="Check whether the sign-in landed. The pane stays open either way — closing it is yours."
+            onClick={() => { const cli = (list || []).find((o) => o.setup === pane.name); if (cli) use({ ...cli, cmd: cli.path || cli.cmd }); }}>
+            {busy ? "testing…" : "I have signed in — test it"}
+          </Button>
+        </Box>
+      )}
+      {(msg || note || setupNote) && <Alert severity={(msg || note || setupNote).bad ? "error" : "success"} sx={{ mt: 1, fontSize: 12.5 }}>{(msg || note || setupNote).text}</Alert>}
     </Box>
   );
 };

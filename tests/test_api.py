@@ -84,12 +84,13 @@ class GithubIngestTests(unittest.TestCase):
             s.save_connector({'ConnectorId': gh['ConnectorId'], 'ConfigJson': '{"reply_comments": true}'}, 'o')
         return s
 
-    def test_finished_github_work_closes_clean_unless_replies_are_on(self):
-        """Answering a GitHub author means posting a PUBLIC comment - the owner's call (the
-        card's 'Reply to issue/PR authors'). Off: finished work closes with its report and no
-        dead-end draft sits in Review. On: the draft is raised, as for any other channel."""
+    def test_finished_github_work_drafts_its_reply_whether_or_not_replies_are_on(self):
+        """Answering a GitHub author means posting a PUBLIC comment - the owner's call (the card's
+        'Reply to issue/PR authors'). The always-draft rule (PW-237): the draft is raised either way;
+        with the switch off it cannot be SENT from here - Send is hidden, the reason said, and the
+        owner's exit is Close without sending - but the answer itself is never suppressed."""
         from taskuary import coder
-        for on, status, reviews in ((False, 'done', 0), (True, 'waiting', 1)):
+        for on, status, reviews in ((False, 'waiting', 1), (True, 'waiting', 1)):
             s = self._store(on)
             tid = s.create_task({'Title': 'pr work', 'Kind': 'coding'}, 'o')
             s.add_message({'TaskId': tid, 'ExternalId': 'gh:o/app#5', 'Channel': 'github',
@@ -99,14 +100,19 @@ class GithubIngestTests(unittest.TestCase):
             self.assertEqual(s.get_task(tid)['Status'], status)
             self.assertEqual(len([r for r in s.list_reviews('pending') if r['TaskId'] == tid]), reviews)
 
-    def test_github_questions_file_when_replies_off_and_the_verdict_is_on_the_route(self):
+    def test_github_questions_are_drafted_even_with_replies_off_and_the_verdict_is_on_the_route(self):
+        # PW-042/PW-044: a question is reply-needed whatever the channel can carry; with GitHub
+        # replies off the task and draft still open, and the route says why it cannot be sent
         from taskuary.ingest import ingest_message
         ask = {'external_id': 'q1', 'channel': 'github', 'subject': 'o/app#7 question',
                'body': '[issue by kai - association: NONE]\nhow do I configure the importer here?',
                'from_email': 'kai@users.noreply.github.com', 'no_auto': True}
         reply_llm = lambda *a, **k: '{"intent": "reply_only", "why": "asks a question"}'
         s = self._store(False)
-        self.assertEqual(ingest_message(s, dict(ask), llm=reply_llm)['status'], 'filed')
+        with mock.patch('taskuary.ingest._spawn'):
+            out = ingest_message(s, dict(ask), llm=reply_llm)
+        self.assertEqual(out['status'], 'created')
+        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'reply'); self.assertIsNotNone(s.pending_review(out['task_id']))
         self.assertIn('GitHub replies are off', s.feed()[0]['RouteReason'])
         s2 = self._store(True)
         self.assertEqual(ingest_message(s2, dict(ask), llm=reply_llm)['status'], 'created')
@@ -141,7 +147,7 @@ class GithubIngestTests(unittest.TestCase):
         s.set_setting('coder_auto_enabled', '1', 't')
         s.set_setting('owner_email', 'me@work.example', 't')      # the mail below is from a colleague: a KNOWN sender (senders.py gates strangers)
         spawned = []
-        task_llm = lambda *a, **k: '{"intent": "task", "why": "work"}'
+        task_llm = lambda *a, **k: '{"intent": "task", "kind": "coding", "why": "work"}'   # explicit: an unnamed kind is general (PW-067)
         with mock.patch('taskuary.ingest._spawn', side_effect=lambda fn, *a: spawned.append(fn.__name__)):
             ingest_message(s, {'external_id': 'gh1', 'channel': 'github', 'subject': 'org/app#9 docs 404',
                                'body': '[issue by x - association: NONE]\nthe docs page 404s for new users',
@@ -170,6 +176,33 @@ class ReportScheduleAndBrainTests(unittest.TestCase):
         self.assertFalse(any('Boot check' in (m['Subject'] or '') for m in s.scan_messages()))
         run_due_reports(s, startup=True)
         self.assertTrue(any('Boot check' in (m['Subject'] or '') for m in s.scan_messages()))
+
+    def test_a_reports_schedule_words_carry_both_halves_and_the_guard(self):
+        """TQ-0010: the seeded digest and Automation ideas both filed at 19:59 - one evening launch,
+        exactly as designed. It read as an unexplained restart because every surface printed HALF the
+        clock: "on startup" hid the Monday cron, and "on every app start" hid once_per_day's guard."""
+        from taskuary.reports import schedule_words
+        self.assertEqual(schedule_words({'daily_at': '08:00', 'on_startup': True, 'once_per_day': True}),
+                         'daily at 08:00 + on app start (at most once a day)')
+        self.assertEqual(schedule_words({'cron': '0 8 * * 1', 'on_startup': True, 'once_per_week': True}),
+                         'cron 0 8 * * 1 + on app start (at most once a week)')
+        self.assertEqual(schedule_words({'on_startup': True}), 'on app start')
+        self.assertEqual(schedule_words({}), 'no schedule - run it by hand')
+
+    def test_two_startup_reports_at_one_timestamp_are_one_launch(self):
+        """The co-firing itself. A launch runs every STALE on_startup report in the same pass, so the
+        seeded digest (once a day) and Automation ideas (once a week) share a minute on the first
+        evening open - and the next open that day runs neither. One launch, not a restart to explain."""
+        from taskuary.store import MemoryStore
+        from taskuary.reports import is_due
+        s = MemoryStore()
+        cfgs = {c['title']: c for c in (json.loads(x.get('ConfigJson') or '{}')
+                                        for x in s.list_sources(active_only=False) if x.get('Channel') == 'report')
+                if c.get('title') in ('Morning digest', 'Automation ideas')}
+        self.assertEqual(len(cfgs), 2)
+        for c in cfgs.values():
+            self.assertTrue(is_due(c, None, startup=True))              # nothing filed yet: both greet the launch
+            self.assertFalse(is_due(c, __import__('datetime').datetime.now().isoformat(sep=' '), startup=True))   # reopened after: neither repeats
 
     def test_cron_schedules_fire_once_per_slot_and_survive_a_closed_app(self):
         """Real 5-field cron: due when a scheduled minute passed since the last run - and a
@@ -294,6 +327,23 @@ class ApiTests(unittest.TestCase):
         self.assertIn(live, active)
         self.assertNotIn(old, active)
         self.assertIn(old, all_ids)
+
+    def test_tasks_ship_the_search_blobs_only_when_asked(self):
+        """The Tasks tab used to open by asking for every task ever plus seven GROUP_CONCAT
+        columns aggregated over the WHOLE message table - 34ms of a 35ms query and 69KB of a
+        319KB payload on a real store, on every open, to let the browser filter locally. The
+        blobs now come when something is actually searching; the report label's source does not.
+        """
+        fx = Factory(server.store)
+        tid = fx.open_task().tid
+        server.store.add_message({'TaskId': tid, 'Channel': 'email', 'SourceName': 'inbox',
+                                  'Subject': 'the searchable subject', 'FromName': 'Rachel',
+                                  'Status': 'routed'})
+        light = next(t for t in c.get('/api/tasks', params={'active': True}).json()['data'] if t['TaskId'] == tid)
+        self.assertIn('SearchSources', light)                 # "Report - <source>" still draws
+        self.assertNotIn('SearchSubjects', light)
+        full = next(t for t in c.get('/api/tasks', params={'search': True}).json()['data'] if t['TaskId'] == tid)
+        self.assertIn('the searchable subject', full['SearchSubjects'])
 
     def test_feed_304s_when_nothing_changed(self):
         r1 = c.get('/api/feed')
@@ -657,7 +707,8 @@ class ApiTests(unittest.TestCase):
     def test_push_without_ai_files(self):
         out = c.post('/api/ingest/push', json={'subject': 'automated provisioning notice 77', 'body': 'please add the new user',
                                                'from_email': 'apinotify@vendor.com', 'channel': 'api'}).json()
-        self.assertEqual((out['status'], out['task_id']), ('filed', None))
+        # no brain is an explicit awaiting-triage error with a retry, not a filed 'nothing to do' (PW-040)
+        self.assertEqual((out['status'], out['task_id']), ('error', None))
 
     def test_dispatch_validates(self):
         tid = c.post('/api/tasks', json={'Title': 'd'}).json()['taskId']
@@ -739,7 +790,7 @@ class ApiTests(unittest.TestCase):
             r = c.post(f'/api/reviews/{rid}/decide', json={'verb': 'approve', 'final_text': 'On it.'})
         self.assertEqual(r.json()['status'], 'edited')            # the diff, not the verb, says edited
         self.assertIn('DRAFT:', seen['usr']); self.assertIn('On it.', seen['usr'])   # the edit IS the lesson
-        self.assertIn(bullet, server.store.get_doc('learned'))
+        self.assertIn(bullet[:-1] + ' | k: owner first drops formal openers]', server.store.get_doc('learned'))   # keyed on the way in
         # and a plain approve teaches nothing hot-path: it is aggregate confirmation, counted at reflection
         server.store.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'r', 'DraftText': 'ok'})
         rid2 = next(r2['ReviewId'] for r2 in c.get('/api/reviews', params={'status': 'pending'}).json()['data']
@@ -833,6 +884,21 @@ class ApiTests(unittest.TestCase):
         row2 = next(r for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data']
                     if r['MessageId'] == push2['message_id'])
         self.assertTrue(row2['CanSend'])                       # email always has a road
+
+    def test_opening_a_reply_on_a_closed_thread_shows_the_draft_where_the_yes_happens(self):
+        """TQ-0426: the last reply closed the task, the owner opened another on the same message -
+        and the card asking for the yes said "already handled", because a pending review whose task
+        is done is hidden from the queue. Answering again IS work: the task comes back, so one draft
+        is visible to every surface, and a second click reuses it instead of stacking a new one."""
+        tid = server.store.create_task({'Title': "Gabi's question", 'Kind': 'reply', 'Status': 'done'}, 'test')
+        mid = server.store.add_message({'TaskId': tid, 'ExternalId': 'closed-thread-reply', 'Channel': 'whatsapp',
+                                        'Subject': '', 'BodyText': "So what's their move if it's free?",
+                                        'FromName': 'Gabi', 'FromEmail': 'gabi@example.com', 'Status': 'routed'})
+        rid = c.post(f'/api/messages/{mid}/reply', json={'draft': False}).json()['reviewId']
+        rows = c.get('/api/reviews', params={'status': 'pending'}).json()['data']
+        self.assertIn(rid, [r['ReviewId'] for r in rows])
+        self.assertEqual(server.store.get_task(tid)['Status'], 'waiting')
+        self.assertEqual(c.post(f'/api/messages/{mid}/reply', json={'draft': False}).json()['reviewId'], rid)
 
     def test_a_waiting_agent_can_ask_the_sender_and_leave_the_task_waiting(self):
         """Clarification is a separate reviewed reply, not the coder's final response. Sending

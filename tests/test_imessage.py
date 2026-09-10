@@ -525,6 +525,8 @@ class QuickPollTests(unittest.TestCase):
             server.store.save_connector({'ConnectorId': cid, 'Active': 0, 'ConfigJson': '{}'}, 'o')
 
     def test_poll_minutes_zero_silences_the_fast_clock_too(self):
+        # the fast clock moved to its own loop (server.quick_forever, PW-001) so a slow full sync
+        # cannot hold it; the off switch and the call it makes are unchanged
         from taskuary import server
         cid = server.store.get_connector_by_type('imessage')['ConnectorId']
         server.store.save_connector({'ConnectorId': cid, 'Active': 1, 'ConfigJson': json.dumps({'poll_seconds': 60})}, 'o')
@@ -536,13 +538,12 @@ class QuickPollTests(unittest.TestCase):
             with mock.patch.object(server.store, 'get_settings', return_value={'poll_minutes': 0}), \
                  mock.patch.object(server, '_poll_reports', side_effect=lambda *a, **k: calls.append(k)), \
                  mock.patch.object(server.time, 'sleep', tick):
-                with self.assertRaises(Stop): server.poll_forever()
+                with self.assertRaises(Stop): server.quick_forever()
             self.assertEqual(calls, [])
             with mock.patch.object(server.store, 'get_settings', return_value={'poll_minutes': 10}), \
                  mock.patch.object(server, '_poll_reports', side_effect=lambda *a, **k: calls.append(k)), \
                  mock.patch.object(server.time, 'sleep', tick):
-                server._LAST_POLL[0] = __import__('time').time()      # global clock not due
-                with self.assertRaises(Stop): server.poll_forever()
+                with self.assertRaises(Stop): server.quick_forever()
             self.assertEqual(calls, [{'what': 'syncing', 'only': ['imessage']}])
         finally:
             server.store.save_connector({'ConnectorId': cid, 'Active': 0, 'ConfigJson': '{}'}, 'o')

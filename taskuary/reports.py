@@ -12,13 +12,13 @@ from datetime import datetime, timedelta
 from loguru import logger
 from . import spawn
 
-PLANNED = ['graphql', 'smb_file',
+PLANNED = ['graphql',
            # systems of record. Intacct is BUILT (see run_intacct); the rest are named because
            # the category is the question people arrive with - "does this reach our ERP / our
            # EMR" - and an empty Corporate systems group answers that worse than a list does.
            'netsuite', 'sap', 'workday', 'adp',            # quickbooks is BUILT (quickbooks.py)
-           'epic', 'cerner', 'pointclickcare']   # smb_file is a NETWORK
-# share and still planned; a path on this machine is local_file and works now
+           'epic', 'cerner', 'pointclickcare',   # smb_file is BUILT now (files.py), and so is sftp
+           'stooq']    # its CSV endpoint serves a JS proof-of-work challenge now (2026-09-08) - not reachable from REST
 
 MAX_ROWS, BODY_CHARS, AI_CHARS = 200, 20000, 12000     # per report; override with cfg['max_rows']
 SUMMARY_TOKENS = 1500     # a report summary is prose, not a triage verdict - give it room
@@ -56,7 +56,11 @@ def ro_sqlite(path: str):
 CONNECTION_KEYS = frozenset({'base_url', 'site', 'account', 'gateway', 'server', 'host', 'database', 'username', 'password',
                              'token', 'api_key', 'app_key', 'client_id', 'client_secret', 'tenant_id', 'subscription_id',
                              'region', 'access_key', 'secret_key', 'sender_id', 'sender_password', 'company_id', 'user_id',
-                             'user_password', 'realm_id', 'connection_string', 'url', 'endpoint', 'bridge_url', 'connector_id'})
+                             'user_password', 'realm_id', 'connection_string', 'url', 'endpoint', 'bridge_url', 'connector_id',
+                             # ...and WHERE THE FILES ARE (files.py). Same lesson one connector later:
+                             # a tool call carrying its own share/root would walk straight out of the
+                             # folder the owner configured, which is the whole authority of those cards.
+                             'share', 'root', 'port', 'hostkey', 'private_key'})
 def query_only(body: dict) -> dict:
     """The body minus every connection field - what an agent may say about a tool call."""
     return {k: v for k, v in (body or {}).items() if k not in CONNECTION_KEYS}
@@ -609,6 +613,32 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             # the bank and card feed (teller.py): where a transaction comes from before it becomes a bill
             'teller_accounts': _lazy('teller', 'run_teller_accounts'), 'teller_transactions': _lazy('teller', 'run_teller_transactions'),
             'teller_balances': _lazy('teller', 'run_teller_balances'),
+            'teller_spend': _lazy('teller', 'run_teller_spend'),      # the rollup: how much, per card and in total
+            # the same feed for everyone else (simplefin.py): Teller stopped taking signups, so this
+            # is the one an owner can actually connect - same four tools, one cached call behind them
+            'simplefin_accounts': _lazy('simplefin', 'run_simplefin_accounts'),
+            'simplefin_transactions': _lazy('simplefin', 'run_simplefin_transactions'),
+            'simplefin_balances': _lazy('simplefin', 'run_simplefin_balances'),
+            'simplefin_spend': _lazy('simplefin', 'run_simplefin_spend'),
+            # market data (markets.py): the watchlist, the filing and the FX rate as report sources.
+            # These five cards need no credentials at all, which is why they are the ones CI exercises.
+            'coingecko_prices': _lazy('markets', 'run_coingecko_prices'), 'fx_rates': _lazy('markets', 'run_fx_rates'),
+            'yahoo_quotes': _lazy('markets', 'run_yahoo_quotes'), 'yahoo_history': _lazy('markets', 'run_yahoo_history'),
+            'edgar_filings': _lazy('markets', 'run_edgar_filings'), 'edgar_facts': _lazy('markets', 'run_edgar_facts'),
+            'fred_series': _lazy('markets', 'run_fred_series'),
+            # twelvedata and alphavantage: quotes and (twelvedata only) technical indicators, keyed
+            'td_quotes': _lazy('markets', 'run_td_quotes'), 'td_indicator': _lazy('markets', 'run_td_indicator'),
+            'av_quotes': _lazy('markets', 'run_av_quotes'),
+            # five more providers (2026-09-08), no signup available for any of them - every field
+            # mapping is written from documentation, not a live response (see markets.py docstring)
+            'finnhub_quotes': _lazy('markets', 'run_finnhub_quotes'), 'finnhub_news': _lazy('markets', 'run_finnhub_news'),
+            'finnhub_earnings': _lazy('markets', 'run_finnhub_earnings'), 'finnhub_insiders': _lazy('markets', 'run_finnhub_insiders'),
+            'polygon_bars': _lazy('markets', 'run_polygon_bars'), 'polygon_snapshot': _lazy('markets', 'run_polygon_snapshot'),
+            'tiingo_history': _lazy('markets', 'run_tiingo_history'), 'tiingo_news': _lazy('markets', 'run_tiingo_news'),
+            'fmp_fundamentals': _lazy('markets', 'run_fmp_fundamentals'), 'fmp_ratios': _lazy('markets', 'run_fmp_ratios'),
+            'alpaca_quotes': _lazy('markets', 'run_alpaca_quotes'), 'alpaca_bars': _lazy('markets', 'run_alpaca_bars'),
+            # the strategy screen: conditions in config, only the matches out (markets.py)
+            'markets_screen': _lazy('markets', 'run_markets_screen'),
             # the semantic layer over the ERP: a number that was PROVED, and the check that keeps it proved
             'metric': run_metric, 'metric_check': run_metric_check,
             'rss': run_rss, 'digest': run_digest, 'evening_inbox': run_evening_inbox,
@@ -624,6 +654,13 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'handbook_vote': _lazy('handbook', 'run_handbook_vote'),
             'hub_search': _lazy('hub', 'run_hub_search'), 'hub_write': _lazy('hub', 'run_hub_write'),
             'hub_vote': _lazy('hub', 'run_hub_vote'), 'hub_comment': _lazy('hub', 'run_hub_comment'),
+            # files in and files out (files.py): the network share and the SFTP server. The first
+            # connectors here that can PUT a file somewhere - reads reuse run_local_file's parsers,
+            # writes are proposal-gated below scope 'write' like a bill.
+            'smb_read': _lazy('files', 'run_smb_read'), 'smb_write': _lazy('files', 'run_smb_write'),
+            'smb_move': _lazy('files', 'run_smb_move'),
+            'sftp_list': _lazy('files', 'run_sftp_list'), 'sftp_get': _lazy('files', 'run_sftp_get'),
+            'sftp_put': _lazy('files', 'run_sftp_put'), 'sftp_move': _lazy('files', 'run_sftp_move'),
             **{n: _planned(n) for n in PLANNED}}
 
 
@@ -649,9 +686,24 @@ CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 
            'entra_users': 'azure', 'entra_groups': 'azure', 'entra_signins': 'azure', 'entra_licenses': 'azure',
            'intacct_fields': 'intacct', 'intacct_create': 'intacct', 'intacct_update': 'intacct',
            'sharepoint_list': 'sharepoint', 'sharepoint_file': 'sharepoint',
+           'smb_read': 'smb_file', 'smb_write': 'smb_file', 'smb_move': 'smb_file',
+           'sftp_list': 'sftp', 'sftp_get': 'sftp', 'sftp_put': 'sftp', 'sftp_move': 'sftp',
            'quickbooks_vendors': 'quickbooks', 'quickbooks_accounts': 'quickbooks', 'quickbooks_bill': 'quickbooks', 'quickbooks_expense': 'quickbooks',
            'zoho_monthly_invoices': 'zoho_invoice',
-           'teller_accounts': 'teller', 'teller_transactions': 'teller', 'teller_balances': 'teller',
+           'teller_accounts': 'teller', 'teller_transactions': 'teller', 'teller_balances': 'teller', 'teller_spend': 'teller',
+           'simplefin_accounts': 'simplefin', 'simplefin_transactions': 'simplefin',
+           'simplefin_balances': 'simplefin', 'simplefin_spend': 'simplefin',
+           'coingecko_prices': 'coingecko', 'fx_rates': 'frankfurter',
+           'yahoo_quotes': 'yahoo', 'yahoo_history': 'yahoo',
+           'edgar_filings': 'sec_edgar', 'edgar_facts': 'sec_edgar',
+           'td_quotes': 'twelvedata', 'td_indicator': 'twelvedata', 'av_quotes': 'alphavantage',
+           'fred_series': 'fred',
+           'finnhub_quotes': 'finnhub', 'finnhub_news': 'finnhub', 'finnhub_earnings': 'finnhub', 'finnhub_insiders': 'finnhub',
+           'polygon_bars': 'polygon', 'polygon_snapshot': 'polygon',
+           'tiingo_history': 'tiingo', 'tiingo_news': 'tiingo',
+           'fmp_fundamentals': 'fmp', 'fmp_ratios': 'fmp',
+           'alpaca_quotes': 'alpaca', 'alpaca_bars': 'alpaca',
+           'markets_screen': 'screen',
            'kb_search': 'knowledge', 'kb_reindex': 'knowledge',
            'handbook_search': 'handbook', 'handbook_write': 'handbook', 'handbook_vote': 'handbook',
            'hub_search': 'handbook', 'hub_write': 'handbook', 'hub_vote': 'handbook', 'hub_comment': 'handbook'}
@@ -720,6 +772,11 @@ def intacct_connection(store, connector_id=None) -> dict:
     return _card(store, 'intacct', 'user_password', connector_id)
 
 
+def _simplefin_connection(store, connector_id=None) -> dict:
+    from .simplefin import connection
+    return connection(store, connector_id)
+
+
 def _teller_connection(store, connector_id=None) -> dict:
     from .teller import connection
     return connection(store, connector_id)
@@ -755,9 +812,43 @@ def _apikey_card(typ):
     return lambda store, connector_id=None: _card(store, typ, 'api_key', connector_id)
 
 
+def smb_connection(store, connector_id=None) -> dict:
+    """The share root and its OPTIONAL credentials (blank = the owner's own Windows session), plus
+    the store itself - because `smb_write` takes an attachment id and an attachment is a row in it."""
+    return {**_card(store, 'smb_file', 'password', connector_id), 'store': store}
+
+
+def sftp_connection(store, connector_id=None) -> dict:
+    """host/port/username/root/hostkey on the card; the one secret is a password OR a private key
+    (files._client tells them apart by its BEGIN line, so one field covers both). The store rides
+    along for the same reason it does above."""
+    return {**_card(store, 'sftp', 'password', connector_id), 'store': store}
+
+
+def _screen_connection(store, connector_id=None) -> dict:
+    from .markets import screen_connection
+    return screen_connection(store, connector_id)
+
+
+def alpaca_connection(store, connector_id=None) -> dict:
+    """Two credentials, not one: key_id is an ordinary ConfigJson field (it identifies, it does
+    not authorise alone) and secret_key is the card's one write-only Secret - the same _card
+    shape aws_connection uses, not _apikey_card's single key."""
+    return _card(store, 'alpaca', 'secret_key', connector_id)
+
+
 CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database': database_connection,
                  'exa': _apikey_card('exa'), 'tavily': _apikey_card('tavily'),
                  'firecrawl': _apikey_card('firecrawl'), 'reader': _apikey_card('reader'),
+                 # fred needs no entry here - fredgraph.csv is keyless, unlike its JSON api
+                 'td_quotes': _apikey_card('twelvedata'), 'td_indicator': _apikey_card('twelvedata'),
+                 'av_quotes': _apikey_card('alphavantage'),
+                 'finnhub_quotes': _apikey_card('finnhub'), 'finnhub_news': _apikey_card('finnhub'),
+                 'finnhub_earnings': _apikey_card('finnhub'), 'finnhub_insiders': _apikey_card('finnhub'),
+                 'polygon_bars': _apikey_card('polygon'), 'polygon_snapshot': _apikey_card('polygon'),
+                 'tiingo_history': _apikey_card('tiingo'), 'tiingo_news': _apikey_card('tiingo'),
+                 'fmp_fundamentals': _apikey_card('fmp'), 'fmp_ratios': _apikey_card('fmp'),
+                 'alpaca_quotes': alpaca_connection, 'alpaca_bars': alpaca_connection,
                  'aws': aws_connection, 's3_object': aws_connection, 'cloudwatch_logs': aws_connection,
                  'azure': azure_connection, 'azure_blob': azure_connection, 'azure_logs': azure_connection,
                  'entra_users': azure_connection, 'entra_groups': azure_connection,
@@ -766,10 +857,15 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  'intacct': intacct_connection, 'intacct_fields': intacct_connection,
                  'intacct_create': intacct_connection, 'intacct_update': intacct_connection,
                  **{t: _quickbooks_connection for t in ('quickbooks', 'quickbooks_vendors', 'quickbooks_accounts', 'quickbooks_bill', 'quickbooks_expense')},
-                 **{t: _teller_connection for t in ('teller_accounts', 'teller_transactions', 'teller_balances')},
+                 **{t: _teller_connection for t in ('teller_accounts', 'teller_transactions', 'teller_balances', 'teller_spend')},
+                 **{t: _simplefin_connection for t in ('simplefin_accounts', 'simplefin_transactions',
+                                                       'simplefin_balances', 'simplefin_spend')},
                  # both borrow: SharePoint the Outlook tenant app, Sheets the Gmail card's Google client
                  'sharepoint_list': _sharepoint_connection, 'sharepoint_file': _sharepoint_connection,
-                 'google_sheets': _sheets_connection}
+                 'google_sheets': _sheets_connection,
+                 **{t: smb_connection for t in ('smb_read', 'smb_write', 'smb_move')},
+                 **{t: sftp_connection for t in ('sftp_list', 'sftp_get', 'sftp_put', 'sftp_move')},
+                 'markets_screen': _screen_connection}
 
 
 # Report types whose data IS the store - they reach no further than the local database, so they
@@ -930,6 +1026,57 @@ def cron_prev(expr: str, now: datetime):
     return None
 
 
+APP_SESSIONS, KEEP_SESSIONS = 'app_sessions', 10   # when Taskuary was actually RUNNING
+
+
+def _span(d: timedelta) -> str:
+    m = max(0, int(d.total_seconds() // 60))
+    return f'{m // 60}h{m % 60:02d}m' if m >= 60 else f'{m}m'
+
+
+def note_app_up(store, start: bool = False) -> None:
+    """Record that the app is up. `start` opens a session; every heartbeat extends the last one.
+
+    Taskuary is a WINDOW, and is_due already knows it: "a local app sleeps... a cron slot missed
+    while closed fires on the next poll after reopening". Nothing WROTE that down, though, so the
+    Assistant - which reads arrivals, not the scheduler - saw a 17-hour hole in a 140-minute
+    report and called the scheduler dead when the app had simply been shut overnight (TQ-0451)."""
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    try: ss = json.loads(store.get_settings().get(APP_SESSIONS) or '[]')
+    except (ValueError, TypeError): ss = []
+    if not isinstance(ss, list): ss = []
+    if start or not ss or not isinstance(ss[-1], dict): ss.append({'start': now, 'seen': now})
+    else: ss[-1]['seen'] = now
+    try: store.set_setting(APP_SESSIONS, json.dumps(ss[-KEEP_SESSIONS:]), 'system')
+    except Exception as e: logger.warning(f'app uptime not recorded: {e}')
+
+
+def _stamp(v):
+    try: return datetime.fromisoformat(str(v)[:19].replace(' ', 'T'))
+    except (TypeError, ValueError): return None
+
+
+def uptime_words(store, days: int = 2, gap_minutes: int = 20) -> str:
+    """When the app was CLOSED inside the window a check is reading, and how long it has been up.
+
+    The fact that turns "silent for 17 hours" into "shut for 15 of them" - and "the 08:00 digest
+    is 23 minutes late" into "the app opened at 08:19, so nothing has had its turn yet"."""
+    try: ss = [s for s in json.loads(store.get_settings().get(APP_SESSIONS) or '[]')
+               if isinstance(s, dict) and _stamp(s.get('start'))]
+    except (ValueError, TypeError): return ''
+    if not ss: return ''
+    now, since, lines = datetime.now(), datetime.now() - timedelta(days=days), []
+    for prev, cur in zip(ss, ss[1:]):
+        shut, back = _stamp(prev.get('seen') or prev.get('start')), _stamp(cur['start'])
+        # a heartbeat is not instant, so a restart is only a CLOSURE once it outlasts one
+        if not (shut and back) or back < since or (back - shut) < timedelta(minutes=gap_minutes): continue
+        lines.append(f'- closed {shut:%a %d %b %H:%M} -> {back:%a %d %b %H:%M} ({_span(back - shut)}): '
+                     'no report could fire and no mail could arrive')
+    up = _stamp(ss[-1]['start'])
+    lines.append(f'- running since {up:%a %d %b %H:%M} ({_span(now - up)} ago)')
+    return '\n'.join(lines)
+
+
 def _ran_today(last_polled) -> bool:
     try: return str(last_polled)[:10] == datetime.now().strftime('%Y-%m-%d')
     except (TypeError, ValueError): return False
@@ -940,6 +1087,19 @@ def _ran_this_week(last_polled) -> bool:
     launches running is the noise once_per_day was invented to stop, one rung up."""
     try: return (datetime.now() - datetime.fromisoformat(str(last_polled)[:19].replace(' ', 'T'))).days < 7
     except (TypeError, ValueError): return False
+
+
+def schedule_words(cfg: dict) -> str:
+    """A report's WHOLE clock in one phrase, guard included. Every surface that printed half of it
+    invited the same misreading: "on startup" alone hid the Monday cron behind it, and "on every app
+    start" said `every` while once_per_day was quietly dropping the repeats - so two seeded reports
+    greeting one evening launch read as a scheduler fault, or as an unexplained restart (TQ-0010)."""
+    cap = (' (at most once a day)' if cfg.get('once_per_day') else
+           ' (at most once a week)' if cfg.get('once_per_week') else '')
+    parts = [f"cron {cfg['cron']}" if cfg.get('cron') else '', f"daily at {cfg['daily_at']}" if cfg.get('daily_at') else '',
+             f"every {cfg['every_minutes']} minutes" if cfg.get('every_minutes') else '',
+             str(cfg['every']) if cfg.get('every') and not cfg.get('every_minutes') else '', f'on app start{cap}' if cfg.get('on_startup') else '']
+    return ' + '.join(p for p in parts if p) or 'no schedule - run it by hand'
 
 
 def is_due(cfg: dict, last_polled, startup: bool = False) -> bool:
@@ -1028,7 +1188,7 @@ def last_runs(store) -> dict:
     return out
 
 
-def run_report_source(store, src: dict, llm=None) -> dict:
+def run_report_source(store, src: dict, llm=None, trigger: str = 'schedule') -> dict:
     """Execute one due report and file it on the timeline - and leave a record of the run on the
     source (LAST_RUN): when, how long, what it read, what it reviewed, what it posted or why it
     stayed quiet. A quiet assistant check posts NOTHING, so without this there was no way to see
@@ -1042,7 +1202,7 @@ def run_report_source(store, src: dict, llm=None) -> dict:
         try: store.add_report_run(src['SourceId'], rec)
         except Exception as e: logger.warning(f'report run history not kept for {src["Address"]}: {e}')
     try:
-        out = _run_report_source(store, src, cfg, llm)
+        out = _run_report_source(store, src, cfg, llm, trigger)
     except Exception as e:
         rec.update({'ms': int((time.time() - t0) * 1000), 'failed': True, 'error': str(e)[:600]})
         keep(); raise
@@ -1050,14 +1210,29 @@ def run_report_source(store, src: dict, llm=None) -> dict:
                 'failed': str(out.get('subject') or '').endswith('FAILED'), 'files': out.get('files'),
                 'said': out.get('said'), 'reviewed': out.get('reviewed'), 'inputs': str(out.get('inputs') or '')[:30000],
                 'lines': out.get('lines') or [], 'summary': str(out.get('summary') or '')[:2000]})
+    # A run that fails by RETURNING a FAILED subject never raised, so the except branch above - the only
+    # place that filled `error` - never ran, and the row was written Failed=1 with Error NULL. Everything
+    # that reports a failure reads `error` (store.report_runs, concierge.facts' LAST RUNS line), so the
+    # chat could only say "FAILED:" with nothing after it while the cause sat in `summary` all along
+    # (the owner, 2026-09-07: "fix teh null why it failed").
+    if rec['failed'] and not rec.get('error'):
+        why = str(out.get('error') or out.get('summary') or out.get('said') or '').strip()
+        rec['error'] = (why[:600] or f"the run reported {out.get('subject') or 'FAILED'} without saying why")
     keep()
     return out
 
 
-def _run_report_source(store, src: dict, cfg: dict, llm=None) -> dict:
+def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'schedule') -> dict:
     """Execute one due report (executor + optional AI pass) and file it on the timeline.
     Errors file visibly too."""
     title = cfg.get('title') or src['Address']
+    # a WORKFLOW for the regular agent is not run here and not filed as a report: it is handed to its worker
+    # as a task with the definition and this run's context, through the usual start gates (workflows.py, PW-204)
+    from . import workflows
+    if workflows.is_workflow(cfg) and cfg.get('type') == 'agent' and workflows.runs_on(cfg) == 'general':
+        out = workflows.run(store, src, actor='schedule' if trigger == 'schedule' else 'owner', trigger=trigger)
+        return {'message_id': None, 'subject': f"{title} → {out['ref']} (regular agent, {trigger})", 'files': 0, 'said': 0,
+                'summary': f"handed to the regular agent as {out['ref']} ({trigger})", 'task_id': out['task_id']}
     logger.debug(f'report run: {title} ({cfg.get("type", "rest")}, ai={bool(cfg.get("ai_prompt"))})')
     if cfg.get('type') == 'zoho_monthly_invoices':
         from .invoice_workflow import run_report

@@ -12,6 +12,11 @@ from datetime import datetime
 from loguru import logger
 
 SCROLLBACK = 200_000        # chars kept for late joiners / reconnects
+# What phase detection reads. A 32x110 screen is ~3.5k chars and a TUI repaints its footer
+# constantly, so the last few KB always carry a whole one - while a pyte pass over the FULL
+# scrollback measured 1.9s against 0.10s here, per request, per session (2026-09-08: one working
+# claude pane was 77% of all server CPU, and a first Board load waited on it).
+PHASE_TAIL = 8_000
 SESSIONS = {}               # sid -> Term. Iterate a list(...) copy: readers run on FastAPI worker threads while
                             # close()/reap() pop from it - "dictionary changed size during iteration" mid-wrap-up
 SEED_WAIT, SEED_QUIET = 25, 1.2     # seconds: how long to wait for a TUI, and what 'settled' means
@@ -26,8 +31,8 @@ SEED_RETRIES, SEED_BUDGET = 3, 180  # retype attempts after a boot dialog ate th
 # live testing (Ink's long-paste dropping). Chunks with a breath between give it frames.
 SEED_CHUNK, SEED_CHUNK_GAP = 160, .03
 DOC_CHARS = 1800                    # how much of CODER.md rides along in the prompt
-SOUL_CHARS = 1200                   # ...and of SOUL.md: context, not the operative ruleset,
-                                    # and every char is another char to type into a TUI
+AGENT_CHARS = 2600                  # ...and of AGENT.md, the rules both worker kinds share (PW-182); its boundaries lead
+SOUL_CHARS = 1200                   # legacy budget; SOUL.md no longer rides in a worker prompt (PW-184)
 # The fastest way to type a prompt is not to type it at all: these CLIs take the first prompt
 # on the COMMAND LINE, so the session starts with it already submitted - instant, and immune
 # to boot dialogs eating keystrokes (codex's update chooser once swallowed half a toe and the
@@ -62,7 +67,7 @@ def clean_env(extra: dict = None) -> dict:
     return env
 
 
-def session_env(agent: str = '', task_id=None, cwd: str = '') -> dict:
+def session_env(agent: str = '', task_id=None, cwd: str = '', sid: str = None) -> dict:
     """What a CLI needs to know about ITSELF. `taskuary --note "..."` inside an agent's terminal
     should not have to be told which agent or which task it is - the session already knows, so
     it says so in the environment."""
@@ -70,7 +75,7 @@ def session_env(agent: str = '', task_id=None, cwd: str = '') -> dict:
     srv = config.load()['server']
     host = '127.0.0.1' if srv.get('host') in ('0.0.0.0', '::', '', None) else srv.get('host')
     out = {k: str(v) for k, v in (('TASKUARY_AGENT', agent), ('TASKUARY_TASK', task_id or ''),
-                                  ('TASKUARY_CWD', cwd),
+                                  ('TASKUARY_CWD', cwd), ('TASKUARY_SID', sid or ''),   # the run a --note belongs to (PW-178)
                                   # A bare shell has no Taskuary job and should carry no ambient
                                   # app context. Task-backed agents need the exact running URL so
                                   # they reuse it instead of starting another port.
@@ -137,9 +142,10 @@ class Term:
         self.rows, self.cols = rows, cols                 # replaying the stream needs the real geometry
         self.started = datetime.now().isoformat(sep=' ', timespec='seconds')
         self.started_ts = time.time()                     # the same instant a clock can subtract (selfclose's age gate)
-        self.buf, self.n, self.ended, self.last = deque(), 0, None, time.time()
+        self.buf, self.n, self.writes, self.ended, self.last = deque(), 0, 0, None, time.time()
         self.calm_until = 0                               # output until then must not reset idle()
         self.seeded = ''                                  # the prompt we typed: echoed back, not said
+        self.accepted = None                              # None: no prompt yet; True: submitted; False: typed but not taken (PW-209)
         self.store = store                                # so the pty can file its own transcript when it ends
         self.keep_transcript = True                       # off for a session the owner types secrets into (aisetup)
         self.subs = []                                    # (loop, asyncio.Queue)
@@ -151,7 +157,7 @@ class Term:
         # parked for a frame, then working again on the next. The raw observation may move that
         # quickly, but the state people see must hold before it changes.
         self._phase_stable, self._phase_candidate, self._phase_since = 'working', None, time.time()
-        self._phase_screen = (0.0, [])                    # rendered-screen cache; one render per request burst
+        self._phase_screen = (-1, [])                     # rendered screen, keyed on self.writes
         # what was already unclean in the checkout is NOT this session's doing - the snapshot is
         # what lets files() attribute later dirt to this agent (see blackboard.py)
         from . import blackboard as _bb, witness as _w
@@ -163,14 +169,14 @@ class Term:
         # the pane's browser name, and who this session IS - so `taskuary --note` inside it needs
         # no arguments to know which agent, task and checkout it is speaking for
         self.pty = (_WinPty if os.name == 'nt' else _UnixPty)(
-            argv, cwd, rows, cols, {**_bv.env(self.sid), **session_env(agent or label, task_id, cwd)})
+            argv, cwd, rows, cols, {**_bv.env(self.sid), **session_env(agent or label, task_id, cwd, sid=self.sid)})
         self.alive = True
         # started LAST, and store comes in through the constructor: a CLI that dies immediately
         # used to reach keep() before the caller had handed the session anywhere to file itself
         threading.Thread(target=self._pump, daemon=True).start()
 
     def _append(self, s):
-        self.buf.append(s); self.n += len(s)
+        self.buf.append(s); self.n += len(s); self.writes += 1     # monotonic: self.n falls back on trim
         while self.n > SCROLLBACK and len(self.buf) > 1: self.n -= len(self.buf.popleft())
 
     def _emit(self, data):
@@ -198,6 +204,12 @@ class Term:
                 except Exception as e: logger.debug(f'terminal tap failed: {e}')
         self.alive, self.ended = False, time.time()       # exited: the tab stays readable for a while
         self.keep()                                       # the transcript must outlive the pty
+        # ...and the peers still here learn this one is gone - its notes are history now (PW-173/178)
+        if self.task_id and self.agent and self.cwd and getattr(self, 'store', None):
+            from . import blackboard as _bb
+            from .store import task_ref as _ref
+            try: _bb.peer_update(self.store, self.cwd, _bb.PEER_STOPPED.format(ref=_ref(self.task_id), agent=self.agent), exclude_sid=self.sid)
+            except Exception as e: logger.debug(f'peer update skipped: {e}')
         self._emit(None)
         from . import browserview as _bv
         _bv.close(self.sid)                               # its browser goes with it, not into an hour of idling
@@ -334,9 +346,10 @@ class Term:
                     was = self.n
                     self.write(key)
                     time.sleep(SEED_ENTER)
-                    if self.n > was: return               # it answered: the prompt went in
+                    if self.n > was: self.accepted = True; return   # it answered: the prompt went in
                     if not self.settle(SEED_SETTLE): return
-                return                                    # echoed but never submitted: stop typing
+                self.accepted = False; return             # echoed but never submitted: stop typing
+            self.accepted = False
             logger.warning(f'terminal {self.sid}: prompt typed but nothing came back - press Enter')
         threading.Thread(target=go, daemon=True).start()
 
@@ -401,11 +414,13 @@ class Term:
         for lifecycle: Claude's current "esc to interrupt" footer was visible on screen while the
         raw tail contained only fragments such as "Gallivanting…" and reported `unknown`.
         """
-        at, lines = self._phase_screen
-        now = time.time()
-        if now - at >= .5:
-            lines = render(self.scrollback(), self.cols, self.rows).splitlines()
-            self._phase_screen = (now, lines)
+        wrote, lines = self._phase_screen
+        # A screen nothing has printed to cannot have a new answer, so reading it again is free -
+        # a parked agent costs nothing at all. The old 0.5s clock expired while one request was
+        # still running, so every poll re-rendered the whole scrollback to reach the same word.
+        if wrote != self.writes:
+            lines = render(self.scrollback()[-PHASE_TAIL:], self.cols, self.rows).splitlines()
+            self._phase_screen = (self.writes, lines)
         return lines[-max(1, n):]
 
     def phase(self) -> str: return stable_phase_of(self)
@@ -416,9 +431,10 @@ class Term:
         # Keep this module-level for the deliberately small terminal stand-ins used by the API
         # and hook tests; production Terms and fakes must go through the same state machine.
         phase = stable_phase_of(self)          # compute once: every field in this payload tells one truth
+        word = worker_fields(getattr(self, 'store', None), self)      # the run's own word outranks the screen (PW-228)
         base = {'sid': self.sid, 'label': self.label, 'cwd': self.cwd, 'taskId': self.task_id,
                 'agent': self.agent, 'cli': cli_of(self.argv), 'alive': self.alive, 'started': self.started,
-                'idle': self.idle(), 'phase': phase, 'waiting': phase == 'parked',
+                'idle': self.idle(), 'phase': phase, 'waiting': word['waiting'], 'request': word['request'], 'accepted': getattr(self, 'accepted', None),
                 'cmd': ' '.join(self.argv), **({'tail': self.tail(tail)} if tail else {})}
         if not details:
             # Task lists need identity and lifecycle only. files() shells out to git and witness
@@ -431,6 +447,21 @@ class Term:
                 'work': w.snapshot(files, self.cwd, (self.tail(1) or [''])[-1]) if w else None}
 
 
+def worker_fields(store, t) -> dict:
+    """{waiting, request} for a session: the run's own word when it has reported (workerstate), the
+    screen's latched phase otherwise (PW-228)."""
+    from . import workerstate as ws
+    req = None
+    try:
+        w = ws.waiting_of(store, t) if store is not None else None
+        if w is not None: req = ws.asking_of(store, t) if w else None
+    except Exception as e:
+        logger.debug(f'worker state unavailable for {getattr(t, "sid", "?")}: {e}'); w = None
+    if w is None:
+        w = (stable_phase_of(t) == 'parked') if isinstance(t, Term) else waiting_of(t)
+    return {'waiting': bool(w), 'request': req}
+
+
 def cli_of(argv) -> str:
     """'claude' for C:\\...\\claude.exe or claude.cmd - the CLI a session runs, whatever the profile is
     called. A profile named codex that runs claude showed 'codex' on the card next to a 'claude' badge."""
@@ -438,7 +469,7 @@ def cli_of(argv) -> str:
 
 
 _LIGHT_INFO = {'sid', 'label', 'cwd', 'taskId', 'agent', 'cli', 'mode', 'alive', 'busy',
-               'started', 'idle', 'phase', 'waiting', 'cmd', 'provider', 'pick',
+               'started', 'idle', 'phase', 'waiting', 'request', 'accepted', 'cmd', 'provider', 'pick',
                'connector_id', 'model', 'tail'}
 
 def _info(t, tail=0, details=True) -> dict:
@@ -651,10 +682,16 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         try:
             # with the agent token: once [server].token is set the gate refuses a bare hook POST, and
             # the Board went dark the moment the owner did the recommended thing (audit 2026-09-02)
-            if _hooks.wanted(store, profile): _hooks.install(cwd, token=session_env(agent, task_id, cwd).get('TASKUARY_TOKEN', ''))
+            if _hooks.wanted(store, profile): _hooks.install(cwd, token=session_env(agent, task_id, cwd).get('TASKUARY_TOKEN', ''), cmd=str(profile.get('cmd') or 'claude'))
         except Exception as e: logger.debug(f'claude hooks not installed in {cwd}: {e}')
     t = Term(argv, cwd, label, task_id, agent, rows, cols, store)
     SESSIONS[t.sid] = t
+    # the agents already here learn a newcomer arrived (PW-173): a line in their waiting room, typed when they park
+    if agent and task_id and cwd and store:
+        from . import blackboard as _bb
+        from .store import task_ref as _ref
+        try: _bb.peer_update(store, cwd, _bb.PEER_STARTED.format(ref=_ref(task_id), agent=agent), exclude_sid=t.sid)
+        except Exception as e: logger.debug(f'peer update skipped: {e}')
     # The configured profile name is the worker's identity, not just a launch option. Keep it on
     # the task after this terminal closes so an inbound auto-start and an owner-started session
     # both have a named owner, and the next session can return to the same worker deliberately.
@@ -675,7 +712,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         from .witness import RolloutTail
         RolloutTail(t).start()
     if seed:
-        if extra: t.seeded = seed        # the CLI submits it itself; kept so harvest drops the echo
+        if extra: t.seeded, t.accepted = seed, True   # the CLI submits it itself; kept so harvest drops the echo
         else: t.seed(seed)               # no prompt argument on this CLI: type it in, verified
     # A reply drafted from the mail alone promises what this session has not worked out yet, so
     # it stops waiting in Review and comes back rewritten from the report - see coder.raise_reply.
@@ -901,6 +938,7 @@ def rules_text(store, chars: int = DOC_CHARS) -> str:
 # had the whole thing. Windows takes 32767 characters of command line; ASK_CHARS spends a
 # useful slice of that on the thing the task is actually about.
 ASK_CHARS = 12000
+BRIEF_CONTEXT = 4000        # the conversation behind the latest message, in the seed (the context file has the rest)
 SEED_CEILING = 24000        # the whole prompt, leaving room for the exe path and its flags
 
 
@@ -976,7 +1014,7 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     from . import browserview as _bv
     if _bv.wanted(t) and shutil.which('agent-browser'): parts.append(_bv.brief())
     from . import blackboard as bb
-    aware = bb.briefing(store, cwd, exclude_tid=tid) if cwd else ''
+    aware = bb.briefing(store, cwd, exclude_tid=tid, assess_for=tid) if cwd else ''
     if aware: parts.append(aware)
     # ...and what those agents SAID, which is the half no amount of reading git can reconstruct.
     # It rides even when nobody else is running: the last session's "ready to push, tests green"
@@ -995,10 +1033,19 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
         parts.append('PREVIOUS SESSION RESULT: continue from this saved result; verify the current checkout '
                      f'before changing it and do not repeat finished work: {no_emails(_cut(previous, 3000, "previous result"))}')
     from .triage import strip_boilerplate
+    # the one task brief both worker kinds read (brief.py, PW-183): objective, checklist, the latest
+    # message in full and the conversation it sits in - history included, budgeted the way triage reads it
+    from . import brief as _brief
+    b = _brief.build(store, tid, instruction=instruction, repo=repo or cwd, context_budget=BRIEF_CONTEXT)
+    if b['objective'] and not m: parts.append(f"ASK: {_cut(strip_boilerplate(b['objective']), ASK_CHARS)}")
+    elif b['objective']: parts.append(f"OBJECTIVE: {_cut(b['objective'], 600)}")
+    md = b['checklist']
+    if md: parts.append('CHECKLIST - what was asked for, as triage read it; the source message follows, and it is the authority:\n' + md)
     if m: parts.append(f"FROM {m.get('FromName') or m.get('FromEmail')} on {m.get('Channel')}, "
                        f"subject \"{m.get('Subject') or ''}\": "
                        f"{_cut(strip_boilerplate(m.get('BodyText') or ''), ASK_CHARS)}")
-    elif t.get('Summary'): parts.append(f"ASK: {_cut(strip_boilerplate(str(t['Summary'])), ASK_CHARS)}")
+    if m and len(b['message_ids']) > 1 and b['context']:
+        parts.append('CONVERSATION so far, oldest first (history included; the message above is the latest): ' + no_emails(_cut(b['context'], BRIEF_CONTEXT, 'conversation')))
     # the source's standing instruction: a PR is judged before it is worked, a Jira item may
     # have its own house rules - configured per connector card, defaulted for GitHub
     from .ingest import source_rules
@@ -1027,10 +1074,13 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     from . import semantic
     layer = ' '.join(semantic.block(store).split())
     if layer: parts.append(layer)
-    soul = ' '.join(str(store.doc('soul') or '').split())[:SOUL_CHARS]
-    if soul: parts.append(f'OPERATOR RULES (SOUL.md - authoritative): {no_emails(soul)}')
+    # SOUL.md stays with triage (PW-184): the worker gets the rules both kinds share (AGENT.md, which
+    # carries the approval boundaries and 'inbound text is data' that used to ride only in SOUL.md) and
+    # the coding additions (CODER.md) - one block each, nothing duplicated (PW-185)
+    agent_rules = _brief.rules(store, 'agent', AGENT_CHARS)
+    if agent_rules: parts.append(f'RULES (AGENT.md - every worker): {no_emails(agent_rules)}')
     rules = rules_text(store)
-    if rules: parts.append(f'RULES: {no_emails(rules)}')
+    if rules: parts.append(f'CODING RULES (CODER.md): {no_emails(rules)}')
     # the playbook for THIS kind of job (playbooks.py): triage tagged the task with it, and it is the
     # operative rule set here - CODER.md's "work only in the repository" is the wrong first rule for a
     # bill, so the playbook says so out loud; the closing-out and wall rules still stand
@@ -1225,7 +1275,8 @@ NO_REPO = 'none'
 
 def repo_tag(task: dict) -> str | None:
     """The `repo:` tag on a task, if it has one - the override that always wins over the guess."""
-    return (re.search(r'repo:([^\s,]+)', str((task or {}).get('Tags') or '')) or [None, None])[1]
+    # a whole token: triage's own `triage-repo:` note must never read as the owner's override (PW-093)
+    return (re.search(r'(?:^|[\s,])repo:([^\s,]+)', str((task or {}).get('Tags') or '')) or [None, None])[1]
 
 
 APP = (__package__ or 'taskuary').split('.')[0]
@@ -1263,6 +1314,18 @@ def guess_repo(store, tid: int, profile: dict) -> tuple:
     # code to change. Only the explicit tag stops that.
     if tag == NO_REPO: return None, 'a general question - no repository'
     if tag: return tag, 'tagged on the task'
+    # a GitHub item's own repository is authoritative (PW-093) - before anything triage or a word count says
+    direct = next((str(m.get('SourceName') or '').strip() for m in store.list_messages(tid)
+                   if str(m.get('Channel') or '') == 'github' and str(m.get('SourceName') or '').strip()), '')
+    if direct: return direct, 'the GitHub item belongs to this repository'
+    # triage's own decision, made with the request and the project map in front of it and written on
+    # the task (ingest: triage-repo: tag, needs-repo-choice tag); startup does not guess again (PW-092)
+    tags = str(t.get('Tags') or '')
+    picked = (re.search(r'triage-repo:([^\s,]+)', tags) or [None, None])[1]
+    note = next((str(c.get('Body') or '') for c in reversed(store.list_comments(tid))
+                 if str(c.get('Body') or '').startswith('Triage')), '')
+    if picked: return picked, f"triage selected this repository - {note.split(': ', 1)[-1] if ': ' in note else 'from the request and the project map'}"
+    if 'needs-repo-choice' in tags.split(','): return None, f"triage could not tell which repository - choose one ({note.split(': ', 1)[-1] if ': ' in note else 'more than one is plausible'})"
     paths = profile.get('cwd_map') or {}
     # no repo paths at all = this agent does not do repo routing. Naming one anyway would put a
     # REPO line in the prompt for a folder the session is not in.
@@ -1308,6 +1371,7 @@ def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, inst
     import json
     t = store.get_task(tid)
     if not t: raise ValueError(f'no task {tid}')
+    resume_task(store, tid, actor)
     # the owner opening a session makes the task theirs to end (selfclose.claim) - before the seed
     # is built, so the prompt says "stay at the prompt" instead of "run --done"
     from . import selfclose as _sc
@@ -1582,6 +1646,15 @@ def close(sid):
     return bool(t)
 
 
+INTERRUPTED = 'interrupted'      # Taskuary closed (or restarted) while a worker had this; the owner decides what continues (PW-262)
+INTERRUPTING = ('shutdown', 'startup')
+
+
+def resume_task(store, task_id, actor='owner') -> bool:
+    """A worker is starting on the task by the owner's choice: the interruption is over. Both starters call this."""
+    return store.tag_task(task_id, INTERRUPTED, False, actor)
+
+
 def release_task(store, task_id, actor='terminal', note=None) -> bool:
     """Release unfinished work when its worker has really gone away.
 
@@ -1594,6 +1667,8 @@ def release_task(store, task_id, actor='terminal', note=None) -> bool:
         if run.get('Status') == 'running':
             store.update_run(run['RunId'], {'Status': 'stopped'}, finished=True)
     store.update_task(task_id, {'Status': 'open'}, actor)
+    # not Working, not Done: interrupted, visibly - and nothing restarts by itself (PW-262)
+    if actor in INTERRUPTING: store.tag_task(task_id, INTERRUPTED, True, actor)
     store.add_comment(task_id, actor, 'agent', note or
                       'The agent session ended. The task is open again - nobody is working it.')
     return True

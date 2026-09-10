@@ -2,10 +2,12 @@
 default) and in-memory (tests/demo). Every mutation is meant to be paired with .audit();
 the audit log is a Buzz-style tamper-evident hash chain (each row hashes the previous).
 """
-import contextlib, hashlib, json, re, sqlite3, threading
+import contextlib, copy, hashlib, json, re, sqlite3, threading, uuid
 from datetime import datetime, timedelta
 from loguru import logger
 
+_LIVE_UNSET = object()
+_POLL_UNSET = object()
 GENESIS = '0' * 64
 TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Source', 'SourceRef', 'Tags')
 MSG_COLS = ('TaskId', 'ExternalId', 'ConversationId', 'Channel', 'SourceName', 'Subject',
@@ -186,6 +188,55 @@ CREATE TABLE IF NOT EXISTS idea (IdeaId INTEGER PRIMARY KEY, Key TEXT UNIQUE, Ki
 -- behind an item are never stored here, they are recomputed - a reply approved or a task closed
 -- leaves the pile on its own.
 CREATE TABLE IF NOT EXISTS funnel_state (Key TEXT PRIMARY KEY, Status TEXT, Until TEXT, Note TEXT, By TEXT, At TEXT);
+-- Phase 1 inventory foundation.  These tables are additive and deliberately stay empty until
+-- backfill_processing is called explicitly after a consistent legacy snapshot is available.
+CREATE TABLE IF NOT EXISTS processing_item (ItemId TEXT PRIMARY KEY, Kind TEXT NOT NULL,
+  ContextRevision TEXT, ViewRevision TEXT, RedirectItemId TEXT, CreatedAt TEXT NOT NULL, UpdatedAt TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS processing_member (MemberId INTEGER PRIMARY KEY, ItemId TEXT NOT NULL,
+  EntityKind TEXT NOT NULL, LocalId TEXT NOT NULL, Role TEXT NOT NULL DEFAULT 'member',
+  JoinedAt TEXT NOT NULL, RetiredAt TEXT);
+CREATE TABLE IF NOT EXISTS processing_alias (AliasId INTEGER PRIMARY KEY, Namespace TEXT NOT NULL,
+  Scope TEXT NOT NULL, Value TEXT NOT NULL, EntityKind TEXT NOT NULL, LocalId TEXT NOT NULL,
+  Provenance TEXT NOT NULL, CreatedAt TEXT NOT NULL, RetiredAt TEXT);
+CREATE TABLE IF NOT EXISTS processing_relation (RelationId INTEGER PRIMARY KEY,
+  FromEntityKind TEXT NOT NULL, FromLocalId TEXT NOT NULL, ToEntityKind TEXT NOT NULL,
+  ToLocalId TEXT NOT NULL, Kind TEXT NOT NULL, Provenance TEXT NOT NULL, CreatedAt TEXT NOT NULL,
+  RetiredAt TEXT);
+CREATE TABLE IF NOT EXISTS processing_legacy_evidence (EvidenceId INTEGER PRIMARY KEY,
+  MigrationVersion TEXT NOT NULL, ItemId TEXT, EntityKind TEXT NOT NULL, LocalId TEXT NOT NULL,
+  SelectedLegacyKey TEXT, ObservedUnread INTEGER, PermanentRead INTEGER, ReasonsJson TEXT NOT NULL,
+  TemporaryDeferJson TEXT, ContextFingerprint TEXT NOT NULL, OriginalJson TEXT NOT NULL, CapturedAt TEXT NOT NULL,
+  UNIQUE(MigrationVersion, EntityKind, LocalId));
+CREATE TABLE IF NOT EXISTS processing_migration (Version TEXT PRIMARY KEY, CapturedAt TEXT NOT NULL,
+  InputWatermark TEXT NOT NULL, SettingsJson TEXT NOT NULL, Completion TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS processing_context_snapshot (
+  MigrationVersion TEXT NOT NULL, ItemId TEXT NOT NULL, ContextRevision TEXT NOT NULL,
+  ViewRevision TEXT NOT NULL, ContextJson TEXT NOT NULL, ViewJson TEXT NOT NULL,
+  PRIMARY KEY (MigrationVersion, ItemId));
+CREATE TABLE IF NOT EXISTS processing_read_activation (
+  Singleton INTEGER PRIMARY KEY CHECK (Singleton=1), Version TEXT NOT NULL, ActivatedAt TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS processing_read_receipt (
+  EntityKind TEXT NOT NULL, LocalId TEXT NOT NULL, Fingerprint TEXT NOT NULL,
+  Version TEXT NOT NULL, ReadAt TEXT NOT NULL, ReadBy TEXT, Origin TEXT NOT NULL,
+  PRIMARY KEY (EntityKind,LocalId,Fingerprint));
+CREATE TABLE IF NOT EXISTS processing_read_defer (
+  Key TEXT PRIMARY KEY, TargetItemId TEXT NOT NULL, TargetEntityKind TEXT, TargetLocalId TEXT,
+  Status TEXT NOT NULL, Until TEXT, At TEXT NOT NULL, By TEXT);
+CREATE INDEX IF NOT EXISTS idx_processing_read_defer_entity
+  ON processing_read_defer(TargetEntityKind,TargetLocalId);
+CREATE TABLE IF NOT EXISTS processing_display_summary (
+  Key TEXT PRIMARY KEY, ContextRevision TEXT NOT NULL, Summary TEXT NOT NULL);
+-- Raw writes and canonical identity reconciliation advance independently.  A newly
+-- widened database starts pending even when its old rows predate the triggers.
+CREATE TABLE IF NOT EXISTS processing_reconcile_state (
+  Singleton INTEGER PRIMARY KEY CHECK (Singleton=1),
+  DirtyGeneration INTEGER NOT NULL DEFAULT 1,
+  AttemptedGeneration INTEGER NOT NULL DEFAULT 0,
+  ReconciledGeneration INTEGER NOT NULL DEFAULT 0,
+  LastAttemptAt TEXT,
+  ConflictsJson TEXT NOT NULL DEFAULT '[]',
+  DiagnosticsJson TEXT NOT NULL DEFAULT '[]');
+INSERT OR IGNORE INTO processing_reconcile_state (Singleton) VALUES (1);
 CREATE TABLE IF NOT EXISTS report_run (RunId INTEGER PRIMARY KEY, SourceId INTEGER, At TEXT, Type TEXT, Title TEXT, Ms INTEGER, Subject TEXT,
   MessageId INTEGER, Failed INTEGER DEFAULT 0, Error TEXT, Said INTEGER, LinesJson TEXT, ReviewedJson TEXT, Inputs TEXT, Summary TEXT);
 -- Stateful report workflows: a scheduled run opens one monthly batch, then each customer
@@ -255,10 +306,32 @@ INDEXES = (
     'CREATE INDEX IF NOT EXISTS idx_dispatchq_task ON dispatchq(TaskId)',
     'CREATE INDEX IF NOT EXISTS idx_waitroom_task ON waitroom(TaskId, DeliveredAt)',
     'CREATE INDEX IF NOT EXISTS idx_idea_status ON idea(Status, MessageId)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_processing_primary ON processing_member(ItemId) WHERE RetiredAt IS NULL AND Role="primary"',
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_processing_entity ON processing_member(EntityKind, LocalId) WHERE RetiredAt IS NULL',
+    'CREATE INDEX IF NOT EXISTS idx_processing_member_item ON processing_member(ItemId, RetiredAt)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_processing_alias_active ON processing_alias(Namespace, Scope, Value) WHERE RetiredAt IS NULL',
+    'CREATE INDEX IF NOT EXISTS idx_processing_alias_entity ON processing_alias(EntityKind, LocalId, RetiredAt)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_processing_relation_active ON processing_relation(FromEntityKind, FromLocalId, ToEntityKind, ToLocalId, Kind) WHERE RetiredAt IS NULL',
+    'CREATE INDEX IF NOT EXISTS idx_processing_redirect ON processing_item(RedirectItemId)',
+    'CREATE INDEX IF NOT EXISTS idx_processing_evidence_item ON processing_legacy_evidence(ItemId, EvidenceId)',
+    'CREATE INDEX IF NOT EXISTS idx_processing_evidence_entity ON processing_legacy_evidence(EntityKind, LocalId, EvidenceId)',
+    'CREATE INDEX IF NOT EXISTS idx_processing_context_item ON processing_context_snapshot(ItemId, MigrationVersion)',
     'CREATE INDEX IF NOT EXISTS idx_connector_type ON connector(Type, ConnectorId)',
     'CREATE INDEX IF NOT EXISTS idx_invoice_batch_source ON invoice_batch(SourceId, Period)',
     'CREATE INDEX IF NOT EXISTS idx_invoice_item_batch ON invoice_item(BatchId, Status)',
     'CREATE INDEX IF NOT EXISTS idx_invoice_item_review ON invoice_item(ReviewId)',
+)
+
+# These are the persisted inputs to canonical identity or its complete presentation
+# projection.  Triggers, rather than Python write hooks, also cover migrations, test
+# fixtures and other direct SQL writers.  Reconciliation writes only processing_*
+# tables, so it never dirties itself.
+PROCESSING_DIRTY_TABLES = (
+    'task', 'message', 'review', 'idea', 'attachment', 'run', 'route',
+    'funnel_state', 'comment', 'task_artifact', 'transcript',
+)
+PROCESSING_DIRTY_SETTINGS = (
+    'feed_days', 'funnel_hours', 'funnel_mutes', 'owner_email', 'team_domains', 'processing_membership_rules',
 )
 
 # Out of the box Taskuary WORKS the mail: a job goes to the coding agent, a question gets a
@@ -266,6 +339,12 @@ INDEXES = (
 # and a session is one you watch - so ON is a safe default and OFF was just a slower start.
 DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attach_threshold': '0.42',
                     'feed_days': '14', 'intent_classify_enabled': '1', 'coder_auto_enabled': '1',
+                    'chat_keep_days': '15',        # archived assistant chats expire after this many days (retention.py, PW-158)
+                    'general_auto_enabled': '1',    # general tasks open their assistant session by themselves (PW-069)
+                    # who may start a worker UNATTENDED (senders.known, PW-079..081): the owner's own domains, verified
+                    # Sent Items evidence that the receiving mailbox wrote to the exact address, chat channels inside a
+                    # workspace the owner controls. Prior incoming mail is never a rule here.
+                    'trust_own_domain': '1', 'trust_sent_history': '1', 'trust_non_email': '1',
                     'auto_sessions': '4',           # unattended agent sessions at once; the rest queue
                     'triage_ai': '',      # '' = first active AI connector | connector:<id> | cli:<agent>
                     'startup_sync_days': '3',       # backfill window when the app starts: catch what arrived while it was shut
@@ -374,6 +453,17 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  'quickbooks': 'report,tool',
                  'zoho_invoice': 'report,tool',
                  'teller': 'report,tool',          # the bank feed: transactions as a report (and "can become work"), balances as a tool
+                 'simplefin': 'report,tool',       # the same feed, from the bridge anyone can sign up to
+                 # market data (markets.py): four keyless cards, each a report source and an agent tool
+                 'coingecko': 'report,tool', 'frankfurter': 'report,tool',
+                 'yahoo': 'report,tool', 'sec_edgar': 'report,tool',
+                 # twelvedata/alphavantage need a key; fred does not (fredgraph.csv is keyless)
+                 'twelvedata': 'report,tool', 'alphavantage': 'report,tool', 'fred': 'report,tool',
+                 # five more (2026-09-08): finnhub/polygon/tiingo/fmp key like twelvedata; alpaca
+                 # needs two credentials (key_id, secret_key) and ships market DATA only, no orders
+                 'finnhub': 'report,tool', 'polygon': 'report,tool', 'tiingo': 'report,tool',
+                 'fmp': 'report,tool', 'alpaca': 'report,tool',
+                 'screen': 'report,tool',       # the strategy screen: conditions in config, matches out (markets.py)
                  # research reads the public web - a report source, and a tool an agent may use
                  'exa': 'report,tool', 'tavily': 'report,tool',
                  'firecrawl': 'report,tool', 'reader': 'report,tool',
@@ -381,6 +471,10 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  # which polls nothing) - the card itself is just a connection and a tool
                  'aws': 'report,tool', 'azure': 'report,tool',
                  'sharepoint': 'report,tool', 'google_sheets': 'report,tool',
+                 # the first two cards that can WRITE a file (files.py): report and tool, never
+                 # trigger - neither pushes, and a folder is polled by a report when that is wanted.
+                 # The writes are gated by scope like QuickBooks', not by role.
+                 'smb_file': 'report,tool', 'sftp': 'report,tool',
                  'knowledge': 'report,tool',       # indexed documents: a kb_search report, and a tool for agents and the drafter
                  # the handbook the agents write themselves (handbook.py). tool, because the only
                  # things that read and write it are agents; no trigger, because it never arrives.
@@ -396,6 +490,23 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
 ROLES = ('trigger', 'feed', 'report', 'tool', 'notify')
 
 def roles_of(c) -> set: return {r for r in (c.get('Roles') or '').split(',') if r}
+
+
+def _snapcopy(o):
+    """A private deep copy of an inventory snapshot, for the copy that guards the display cache.
+
+    A snapshot holds nothing but what SQLite and json give back - dict, list, str, int, float,
+    bool, None - so the generic machinery in copy.deepcopy (memo table, per-type dispatch,
+    __reduce__ probing) is all overhead: 396ms against 153ms on a real 78MB store, and that ran
+    on every cache HIT before the pile could answer. Same result, same isolation.
+    """
+    t = type(o)
+    if t is dict: return {k: _snapcopy(v) for k, v in o.items()}
+    if t is list: return [_snapcopy(v) for v in o]
+    # anything else a snapshot can hold is immutable; a type that is not falls back to the
+    # general copy rather than being aliased into the cache
+    if t in (str, int, float, bool, type(None)): return o
+    return copy.deepcopy(o)
 
 
 class SQLiteStore:
@@ -418,6 +529,8 @@ class SQLiteStore:
         self.cx.execute('PRAGMA busy_timeout=5000')
         self._snap_hold = 0
         self._snap_cache = None
+        self._processing_display_cache = {}
+        self._processing_ignored_writes = 0
         self._writes = 0
         with self.lock:
             self.cx.executescript(SCHEMA)
@@ -447,6 +560,49 @@ class SQLiteStore:
                 self.cx.execute('ALTER TABLE route ADD COLUMN RawOutput TEXT')
             if 'ParseError' not in routecols:
                 self.cx.execute('ALTER TABLE route ADD COLUMN ParseError TEXT')
+            # why a reply draft could not be written (PW-046): the review stays pending and
+            # reply-needed, the reason is shown beside it with a retry, never mistaken for a draft
+            rvcols = {r[1] for r in self.cx.execute('PRAGMA table_info(review)')}
+            if 'DraftError' not in rvcols:
+                self.cx.execute('ALTER TABLE review ADD COLUMN DraftError TEXT')
+            # what the draft was written against (PW-048): the inbound message set's revision, and whether the
+            # thread has moved since - a verdict rechecks it wherever it lands (PW-055)
+            if 'ContextRevision' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN ContextRevision TEXT')
+            if 'Stale' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN Stale INTEGER DEFAULT 0')
+            # the triage-generated checklist (PW-075): JSON items with stable ids, separate from Status
+            tcols = {r[1] for r in self.cx.execute('PRAGMA table_info(task)')}
+            if 'Checklist' not in tcols:
+                self.cx.execute('ALTER TABLE task ADD COLUMN Checklist TEXT')
+            # how complete each email conversation is (chains.py, PW-010): listed at the provider, added
+            # here, and the error when it could not be completed - never guessed from what is stored
+            self.cx.execute('CREATE TABLE IF NOT EXISTS chain (Mailbox TEXT NOT NULL DEFAULT "", ConversationId TEXT NOT NULL, Channel TEXT, '
+                            'CheckedAt TEXT, Complete INTEGER, Listed INTEGER, Added INTEGER, Error TEXT, PRIMARY KEY (Mailbox, ConversationId))')
+            # coverage belongs to the mailbox that checked it (PW-011): a table keyed by the bare conversation id let
+            # two accounts sharing one share one row; an older database is re-keyed once, rows kept
+            chain_sql = str((self.cx.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='chain'").fetchone() or [''])[0] or '')
+            if 'ConversationId TEXT PRIMARY KEY' in chain_sql:
+                self.cx.execute('ALTER TABLE chain RENAME TO chain_v1')
+                self.cx.execute('CREATE TABLE chain (Mailbox TEXT NOT NULL DEFAULT "", ConversationId TEXT NOT NULL, Channel TEXT, '
+                                'CheckedAt TEXT, Complete INTEGER, Listed INTEGER, Added INTEGER, Error TEXT, PRIMARY KEY (Mailbox, ConversationId))')
+                self.cx.execute("INSERT OR IGNORE INTO chain (Mailbox, ConversationId, Channel, CheckedAt, Complete, Listed, Added, Error) "
+                                "SELECT LOWER(IFNULL(Mailbox,'')), ConversationId, Channel, CheckedAt, Complete, Listed, Added, Error FROM chain_v1")
+                self.cx.execute('DROP TABLE chain_v1')
+            # shared operations (operations.py, PW-129..134): a proposal with its confirmation version and the
+            # context it was judged on, its one execution and real outcome; correction EVIDENCE keyed to the
+            # operation (never a memory note or a rule); discussion kept against the source item and its task
+            self.cx.execute('CREATE TABLE IF NOT EXISTS operation (OpId TEXT PRIMARY KEY, Kind TEXT, TargetKind TEXT, TargetId INTEGER, '
+                            'ParamsJson TEXT, Actor TEXT, ContextRevision TEXT, Version INTEGER, Status TEXT, OutcomeJson TEXT, Error TEXT, '
+                            'Evidence TEXT, Verdict TEXT, VerdictRouteId INTEGER, CreatedAt TEXT, UpdatedAt TEXT, ExecutedAt TEXT)')
+            self.cx.execute('CREATE TABLE IF NOT EXISTS correction (Id INTEGER PRIMARY KEY, OpId TEXT UNIQUE, MessageId INTEGER, TaskId INTEGER, '
+                            'Sender TEXT, Topic TEXT, Verdict TEXT, VerdictRouteId INTEGER, Change TEXT, ContextJson TEXT, CreatedAt TEXT)')
+            self.cx.execute('CREATE TABLE IF NOT EXISTS discussion (Id INTEGER PRIMARY KEY, MessageId INTEGER, TaskId INTEGER, Actor TEXT, '
+                            'Body TEXT, OpId TEXT, CreatedAt TEXT)')
+            # a verified 'this mailbox wrote to them' hit, remembered so the mail server is asked once per address (PW-080)
+            self.cx.execute('CREATE TABLE IF NOT EXISTS sender_trust (Mailbox TEXT, Address TEXT, Reason TEXT, CheckedAt TEXT, '
+                            'PRIMARY KEY (Mailbox, Address))')
+            # explicit worker events (workerstate.py, PW-222/227): what a run said about itself, by task, run and request
+            self.cx.execute('CREATE TABLE IF NOT EXISTS worker_event (Id INTEGER PRIMARY KEY, TaskId INTEGER, Sid TEXT, Kind TEXT, RequestId TEXT, '
+                            'Text TEXT, ChoicesJson TEXT, Source TEXT, EventId TEXT UNIQUE, CreatedAt TEXT)')
             # the assistant's private read on the message (counsel.py) - JSON, shown on the panel
             if 'Brief' not in mcols:
                 self.cx.execute('ALTER TABLE message ADD COLUMN Brief TEXT')
@@ -463,8 +619,10 @@ class SQLiteStore:
             # they were rolled up, so the live wall stays short without anything being deleted
             ncols = {r[1] for r in self.cx.execute('PRAGMA table_info(boardnote)')}
             if 'Rolled' not in ncols: self.cx.execute('ALTER TABLE boardnote ADD COLUMN Rolled TEXT')
+            if 'Sid' not in ncols: self.cx.execute('ALTER TABLE boardnote ADD COLUMN Sid TEXT')   # the run that wrote it (PW-178)
             qcols = {r[1] for r in self.cx.execute('PRAGMA table_info(dispatchq)')}
-            for col, typ in (('Value', 'REAL'), ('Floor', 'REAL'), ('Why', 'TEXT')):    # rank.py: value-ordered queue
+            for col, typ in (('Value', 'REAL'), ('Floor', 'REAL'), ('Why', 'TEXT'),    # rank.py: value-ordered queue
+                             ('Attempts', 'INTEGER DEFAULT 0'), ('LastError', 'TEXT'), ('NextAt', 'TEXT'), ('State', 'TEXT')):   # PW-085: the retry budget
                 if col not in qcols: self.cx.execute(f'ALTER TABLE dispatchq ADD COLUMN {col} {typ}')
             have = {r[1] for r in self.cx.execute('PRAGMA table_info(connector)')}
             if 'Roles' not in have: self.cx.execute('ALTER TABLE connector ADD COLUMN Roles TEXT')
@@ -500,6 +658,26 @@ class SQLiteStore:
                     raise
             for ix in INDEXES:
                 self.cx.execute(ix)
+            for table in PROCESSING_DIRTY_TABLES:
+                for action in ('INSERT', 'UPDATE', 'DELETE'):
+                    self.cx.execute(f'''CREATE TRIGGER IF NOT EXISTS processing_dirty_{table}_{action.lower()}
+                        AFTER {action} ON {table} BEGIN
+                          UPDATE processing_reconcile_state
+                          SET DirtyGeneration=DirtyGeneration+1 WHERE Singleton=1;
+                        END''')
+            setting_names = ','.join("'" + name + "'" for name in PROCESSING_DIRTY_SETTINGS)
+            self.cx.execute(f'''CREATE TRIGGER IF NOT EXISTS processing_dirty_setting_insert
+                AFTER INSERT ON setting WHEN NEW.Name IN ({setting_names}) BEGIN
+                  UPDATE processing_reconcile_state SET DirtyGeneration=DirtyGeneration+1 WHERE Singleton=1;
+                END''')
+            self.cx.execute(f'''CREATE TRIGGER IF NOT EXISTS processing_dirty_setting_update
+                AFTER UPDATE ON setting WHEN OLD.Name IN ({setting_names}) OR NEW.Name IN ({setting_names}) BEGIN
+                  UPDATE processing_reconcile_state SET DirtyGeneration=DirtyGeneration+1 WHERE Singleton=1;
+                END''')
+            self.cx.execute(f'''CREATE TRIGGER IF NOT EXISTS processing_dirty_setting_delete
+                AFTER DELETE ON setting WHEN OLD.Name IN ({setting_names}) BEGIN
+                  UPDATE processing_reconcile_state SET DirtyGeneration=DirtyGeneration+1 WHERE Singleton=1;
+                END''')
             try: self.cx.execute(KB_FTS); self.kb_fts = True
             except sqlite3.OperationalError as e:
                 self.kb_fts = False; logger.warning(f'no FTS5 in this sqlite build - knowledge search falls back to LIKE: {e}')
@@ -517,6 +695,7 @@ class SQLiteStore:
                          ('database', 'Any database (connection string)'),
                          ('aws', 'Amazon Web Services'), ('azure', 'Microsoft Azure'),
                          ('sharepoint', 'SharePoint'), ('google_sheets', 'Google Sheets'),
+                         ('smb_file', 'Network file share'), ('sftp', 'SFTP'),
                          ('knowledge', 'Knowledge base'), ('handbook', 'Company Hub'),
                          ('jira', 'Jira'), ('asana', 'Asana'), ('monday', 'Monday.com'),
                          ('clickup', 'ClickUp'), ('todoist', 'Todoist'),
@@ -525,6 +704,13 @@ class SQLiteStore:
                          ('sentry', 'Sentry'), ('pagerduty', 'PagerDuty'),
                          ('prometheus', 'Prometheus'), ('datadog', 'Datadog'),
                          ('intacct', 'Sage Intacct'), ('quickbooks', 'QuickBooks Online'), ('teller', 'Bank & card feed (Teller)'),
+                         ('simplefin', 'Bank & card feed (SimpleFIN)'),
+                         ('coingecko', 'Crypto prices (CoinGecko)'), ('frankfurter', 'FX rates'),
+                         ('yahoo', 'Yahoo Finance (best-effort)'), ('sec_edgar', 'SEC filings (EDGAR)'),
+                         ('twelvedata', 'Twelve Data'), ('alphavantage', 'Alpha Vantage'), ('fred', 'FRED (keyless)'),
+                         ('finnhub', 'Finnhub'), ('polygon', 'Polygon.io'), ('tiingo', 'Tiingo'),
+                         ('fmp', 'Financial Modeling Prep'), ('alpaca', 'Alpaca (market data)'),
+                         ('screen', 'Strategy screen'),
                          ('zoho_invoice', 'Zoho Invoice'),
                          ('exa', 'Exa search'), ('tavily', 'Tavily search'),
                          ('firecrawl', 'Firecrawl'), ('reader', 'Jina Reader'),
@@ -578,7 +764,7 @@ class SQLiteStore:
                          else ' - whoever sends it' if 'whoever sends it' in r['Note'] else '')
                 line = f'{when}: "{subj or topic or ""}"' + (f' from {who}' if who else '') + f'{about} - {verdict}'
                 self.cx.execute('UPDATE memory SET Note=? WHERE MemoryId=?', (line, r['MemoryId']))
-            for name in ('soul', 'coder', 'digest', 'learned', 'triage', 'style', 'counsel'):
+            for name in ('soul', 'agent', 'coder', 'digest', 'learned', 'triage', 'style', 'counsel'):
                 f = Path(__file__).parent / 'templates' / f'{name}.md'
                 if f.exists():
                     txt = f.read_text(encoding='utf-8')
@@ -712,6 +898,62 @@ class SQLiteStore:
     def _exec(self, q, p=()):
         with self.lock:
             cur = self.cx.execute(q, p); self.cx.commit(); self._writes += 1; return cur.lastrowid
+    def _patch_poll_state(self, table, row_id, *, config_set=None, config_remove=(),
+                          expect_fields=None, expect_config=None, last_polled_at=_POLL_UNSET):
+        """Merge poll metadata into the latest config under a SQLite write transaction.
+
+        Expectations compare only supplied keys; expected config None accepts either a
+        missing key or JSON null. An omitted last_polled_at leaves it alone, while explicit
+        None clears it. Missing rows and stale expectations return False without writes.
+        Invalid/non-object JSON raises, preserving the owner's original configuration.
+        """
+        key = {'source': 'SourceId', 'connector': 'ConnectorId'}[table]
+        updates = copy.deepcopy({} if config_set is None else config_set)
+        removed = tuple(config_remove)
+        fields = copy.deepcopy({} if expect_fields is None else expect_fields)
+        expected = copy.deepcopy({} if expect_config is None else expect_config)
+        if not isinstance(updates, dict) or not isinstance(fields, dict) or not isinstance(expected, dict):
+            raise TypeError('poll checkpoint patches and expectations must be dictionaries')
+        if any(not isinstance(k, str) for k in (*updates, *removed, *fields, *expected)):
+            raise TypeError('poll checkpoint keys must be strings')
+        if set(updates).intersection(removed):
+            raise ValueError('a poll checkpoint cannot set and remove the same config key')
+        with self.lock:
+            self.cx.execute('BEGIN IMMEDIATE')
+            try:
+                found = self.cx.execute(f'SELECT * FROM {table} WHERE {key}=?', (row_id,)).fetchone()
+                if found is None:
+                    self.cx.rollback()
+                    return False
+                row = dict(found)
+                if any(k not in row for k in fields):
+                    raise ValueError('unknown poll checkpoint row expectation')
+                current = json.loads(row['ConfigJson']) if row.get('ConfigJson') else {}
+                if not isinstance(current, dict):
+                    raise ValueError('poll checkpoint requires an object ConfigJson')
+                if (any(row[k] != value for k, value in fields.items()) or
+                        any(current.get(k) != value for k, value in expected.items())):
+                    self.cx.rollback()
+                    return False
+                current.update(updates)
+                for name in removed: current.pop(name, None)
+                values, assignments = [json.dumps(current)], ['ConfigJson=?']
+                if last_polled_at is not _POLL_UNSET:
+                    if table != 'source': raise ValueError('only sources have LastPolledAt')
+                    values.append(last_polled_at)
+                    assignments.append('LastPolledAt=?')
+                self.cx.execute(f"UPDATE {table} SET {','.join(assignments)} WHERE {key}=?",
+                                [*values, row_id])
+                self.cx.commit()
+                self._writes += 1
+                # Watermarks and poll checkpoints do not participate in a processing item.
+                # A successful no-op sync can update many of them; counting those writes as
+                # Timeline content changes makes the next read rebuild the entire projection.
+                self._processing_ignored_writes += 1
+                return True
+            except BaseException:
+                self.cx.rollback()
+                raise
     def _insert(self, table, fields, allowed, extra=None):
         d = {k: fields[k] for k in allowed if k in fields and fields[k] is not None} | (extra or {})
         cols = list(d)
@@ -724,6 +966,7 @@ class SQLiteStore:
             # Any durable feed/task change invalidates that cache before the websocket wakes the
             # views: new provider messages stay immediate without every open tab rebuilding it.
             if any(k in ('feed-changed', 'task-changed') for k in kinds):
+                self._processing_display_cache = {}
                 from . import funnel
                 funnel.invalidate()
             from . import live
@@ -780,6 +1023,88 @@ class SQLiteStore:
         # Timeline rows carry task/review state too, so a task transition changes both views.
         self._poke('feed-changed', 'task-changed', task_id=task_id)
     def get_task(self, task_id): return self._one('SELECT * FROM task WHERE TaskId=?', (task_id,))
+    # ── the checklist: what the message actually asked for, as boxes (PW-074..077) ───────────
+    # Items carry a stable id derived from their words, so a re-triage or an owner edit that
+    # keeps an item's text keeps its box; progress is never task completion.
+    CHECKLIST_MAX = 12
+    @staticmethod
+    def checklist_id(text: str) -> str:
+        # Case, punctuation, comparison operators and internal spacing can change the work.
+        # Hash the stored words exactly (apart from their harmless outer whitespace) so
+        # "x <= 3" never aliases "x >= 3" and an owner-authored distinction stays distinct.
+        return hashlib.sha1(str(text or '').strip().encode()).hexdigest()[:8]
+    @classmethod
+    def clean_checklist(cls, items, *, cap=True) -> list:
+        """Strings only, outer whitespace trimmed, exact repeats removed.
+
+        Triage verdicts stay bounded by CHECKLIST_MAX. The owner can edit an accumulated
+        checklist beyond that per-verdict limit without silently dropping existing boxes.
+        """
+        if not isinstance(items, (list, tuple)): return []
+        out, seen = [], set()
+        for x in items:
+            if not isinstance(x, str): continue
+            text = x.strip()[:300]
+            if not text: continue
+            # Case can be substantive in paths, identifiers, and commands. Only the exact
+            # stored text is safe to treat as a duplicate.
+            if text in seen: continue
+            seen.add(text); out.append(text)
+            if cap and len(out) >= cls.CHECKLIST_MAX: break
+        return out
+    def task_checklist(self, task_id) -> list:
+        t = self.get_task(task_id)
+        try: items = json.loads((t or {}).get('Checklist') or '[]')
+        except (TypeError, ValueError): items = []
+        return [i for i in items if isinstance(i, dict) and i.get('text')] if isinstance(items, list) else []
+    def _write_checklist(self, task_id, items: list, actor: str):
+        self._exec('UPDATE task SET Checklist=?, UpdatedBy=?, UpdatedAt=? WHERE TaskId=?', (json.dumps(items), actor, _now(), task_id))
+        self._bump_snapshots(); self._poke('task-changed', task_id=task_id)
+    def set_task_checklist(self, task_id, texts, actor: str) -> list:
+        """Replace the list with these words; a box whose words are unchanged keeps its state."""
+        old = {i['text']: i for i in self.task_checklist(task_id)}
+        clean = self.clean_checklist(texts, cap=actor != 'owner')
+        # Reserve every retained box before allocating IDs to new boxes. A new earlier row's
+        # digest prefix must not steal a later unchanged box's legacy ID and its UI target.
+        retained_id_owner = {}
+        for text in clean:
+            item_id = (old.get(text) or {}).get('id')
+            if item_id and item_id not in retained_id_owner:
+                retained_id_owner[item_id] = text
+        items, used_ids = [], set(retained_id_owner)
+        for text in clean:
+            prior = old.get(text) or {}
+            item_id = prior.get('id')
+            digest = hashlib.sha1(text.encode()).hexdigest()
+            if not item_id or retained_id_owner.get(item_id) != text:
+                item_id = next((digest[:n] for n in range(8, len(digest) + 1)
+                                if digest[:n] not in used_ids), digest)
+            used_ids.add(item_id)
+            items.append({'id': item_id, 'text': text, 'done': bool(prior.get('done'))})
+        self._write_checklist(task_id, items, actor)
+        return items
+    def merge_task_checklist(self, task_id, texts, actor: str) -> list:
+        """Add the items a later message brings; nothing existing moves or unticks. Returns the new ones."""
+        items = self.task_checklist(task_id)
+        have, used_ids, new = {i['text'] for i in items}, {i.get('id') for i in items}, []
+        for text in self.clean_checklist(texts):
+            if text in have: continue
+            digest = hashlib.sha1(text.encode()).hexdigest()
+            item_id = next((digest[:n] for n in range(8, len(digest) + 1)
+                            if digest[:n] not in used_ids), digest)
+            new.append({'id': item_id, 'text': text, 'done': False})
+            have.add(text); used_ids.add(item_id)
+        if new: self._write_checklist(task_id, items + new, actor)
+        return new
+    def tick_checklist_item(self, task_id, item_id: str, done: bool, actor: str) -> bool:
+        items = self.task_checklist(task_id)
+        hit = [i for i in items if i['id'] == item_id]
+        if not hit: return False
+        hit[0]['done'] = bool(done)
+        self._write_checklist(task_id, items, actor)
+        return True
+    def checklist_markdown(self, task_id) -> str:
+        return '\n'.join(f"- [{'x' if i.get('done') else ' '}] {i['text']}" for i in self.task_checklist(task_id))
 
     def tag_task(self, task_id, tag, on=True, actor='router'):
         """Add or remove ONE tag, leaving the others alone. Tags is a csv the UI and the router
@@ -793,12 +1118,22 @@ class SQLiteStore:
 
     def task_has_tag(self, task_id, tag) -> bool:
         return tag in re.split(r'[\s,]+', str((self.get_task(task_id) or {}).get('Tags') or ''))
-    def list_tasks(self, status=None, active_only=False):
-        q = '''SELECT t.*, rv.Status ReviewStatus, rv.Kind ReviewKind,
+    def list_tasks(self, status=None, active_only=False, search=True):
+        """Task rows, each carrying its latest review, run and handover note.
+
+        `search` builds the message-search blobs the Tasks tab filters on locally. They are seven
+        GROUP_CONCAT(DISTINCT) columns over the WHOLE message table - seven temp B-trees and an
+        automatic index over the materialised result - and on a real store (270 tasks, 5,275
+        messages) they were 34ms of a 35ms query. Everything else in this row costs under 7ms, so
+        a caller that is not searching should not pay for them. SearchSources is not optional:
+        Board and Tasks both draw "Report - <source>" from it.
+        """
+        blobs = ('''ms.SearchChannels, ms.SearchSubjects, ms.SearchPeople,
+                       ms.SearchEmails, ms.SearchExternalIds, ms.SearchLinks,''' if search else '')
+        q = f'''SELECT t.*, rv.Status ReviewStatus, rv.Kind ReviewKind,
                        rn.Status RunStatus, rn.AgentName RunAgent,
                        ho.Body HandoverNote,
-                       ms.SearchChannels, ms.SearchSources, ms.SearchSubjects, ms.SearchPeople,
-                       ms.SearchEmails, ms.SearchExternalIds, ms.SearchLinks
+                       {blobs} ms.SearchSources
                 FROM task t
                LEFT JOIN (
                    SELECT TaskId, Status, Kind FROM review
@@ -814,16 +1149,17 @@ class SQLiteStore:
                        SELECT MAX(CommentId) FROM comment WHERE Body LIKE 'HANDOVER NOTE%' GROUP BY TaskId
                    )
                 ) ho ON ho.TaskId=t.TaskId'''
-        q += '''
-               LEFT JOIN (
-                   SELECT TaskId,
-                          GROUP_CONCAT(DISTINCT Channel) SearchChannels,
-                          GROUP_CONCAT(DISTINCT SourceName) SearchSources,
+        agg = ('''GROUP_CONCAT(DISTINCT Channel) SearchChannels,
                           GROUP_CONCAT(DISTINCT Subject) SearchSubjects,
                           GROUP_CONCAT(DISTINCT FromName) SearchPeople,
                           GROUP_CONCAT(DISTINCT FromEmail) SearchEmails,
                           GROUP_CONCAT(DISTINCT ExternalId) SearchExternalIds,
-                          GROUP_CONCAT(DISTINCT SourceLink) SearchLinks
+                          GROUP_CONCAT(DISTINCT SourceLink) SearchLinks,''' if search else '')
+        q += f'''
+               LEFT JOIN (
+                   SELECT TaskId,
+                          {agg}
+                          GROUP_CONCAT(DISTINCT SourceName) SearchSources
                    FROM message GROUP BY TaskId
                ) ms ON ms.TaskId=t.TaskId'''
         where, p = [], []
@@ -924,6 +1260,64 @@ class SQLiteStore:
         self.audit('message', row['MessageId'], 'withdrawn', actor, 'agent', {'external_id': external_id})
         return True
 
+    def set_chain_coverage(self, conversation_id: str, channel: str, mailbox: str, cov: dict):
+        self._exec('INSERT INTO chain (Mailbox, ConversationId, Channel, CheckedAt, Complete, Listed, Added, Error) VALUES (?,?,?,?,?,?,?,?) '
+                   'ON CONFLICT(Mailbox, ConversationId) DO UPDATE SET Channel=excluded.Channel, CheckedAt=excluded.CheckedAt, '
+                   'Complete=excluded.Complete, Listed=excluded.Listed, Added=excluded.Added, Error=excluded.Error',
+                   (str(mailbox or '').lower(), conversation_id, channel, _now(), 1 if cov.get('complete') else 0, int(cov.get('listed') or 0), int(cov.get('added') or 0), cov.get('error')))
+    def chain_coverage(self, conversation_id: str, mailbox: str = None):
+        """One mailbox's coverage of the conversation; a caller with no mailbox reads the latest row (PW-011)."""
+        r = (self._one('SELECT * FROM chain WHERE Mailbox=? AND ConversationId=?', (str(mailbox).lower(), conversation_id)) if mailbox is not None
+             else self._one('SELECT * FROM chain WHERE ConversationId=? ORDER BY CheckedAt DESC, rowid DESC LIMIT 1', (conversation_id,)))
+        if not r: return None
+        return {'complete': bool(r['Complete']), 'listed': r['Listed'], 'added': r['Added'], 'error': r['Error'], 'checked_at': r['CheckedAt']}
+    # operations, correction evidence and discussion (operations.py)
+    OP_COLS = ('OpId', 'Kind', 'TargetKind', 'TargetId', 'ParamsJson', 'Actor', 'ContextRevision', 'Version', 'Status', 'OutcomeJson',
+               'Error', 'Evidence', 'Verdict', 'VerdictRouteId', 'ExecutedAt')
+    def add_operation(self, fields: dict) -> str:
+        self._insert('operation', fields, self.OP_COLS, {'CreatedAt': _now(), 'UpdatedAt': _now()}); return fields['OpId']
+    def get_operation(self, op_id: str): return self._one('SELECT * FROM operation WHERE OpId=?', (op_id,))
+    def claim_operation(self, op_id: str, version: int) -> bool:
+        """The compare-and-set two simultaneous confirms race on (PW-129): exactly one turns the row `running`."""
+        with self.lock:
+            cur = self.cx.execute("UPDATE operation SET Status='running', UpdatedAt=? WHERE OpId=? AND Version=? AND Status IN ('proposed','error')",
+                                  (_now(), op_id, int(version)))
+            self.cx.commit(); self._writes += 1
+            return cur.rowcount == 1
+    def update_operation(self, op_id: str, fields: dict):
+        d = {k: v for k, v in fields.items() if k in self.OP_COLS and k != 'OpId'} | {'UpdatedAt': _now()}
+        self._exec(f"UPDATE operation SET {', '.join(k + '=?' for k in d)} WHERE OpId=?", [*d.values(), op_id])
+    def operations_for(self, task_id: int = None, message_ids: list = ()) -> list:
+        conds, args = [], []
+        if task_id: conds.append("(TargetKind='task' AND TargetId=?)"); args.append(task_id)
+        if message_ids: conds.append(f"(TargetKind='message' AND TargetId IN ({','.join('?' * len(message_ids))}))"); args += list(message_ids)
+        if not conds: return []
+        return self._rows(f"SELECT * FROM operation WHERE {' OR '.join(conds)} ORDER BY CreatedAt, rowid", args)
+    def operations_pending_evidence(self) -> list: return self._rows("SELECT * FROM operation WHERE Status='done' AND Evidence='pending' ORDER BY rowid")
+    def add_correction(self, fields: dict) -> int:
+        return self._insert('correction', fields, ('OpId', 'MessageId', 'TaskId', 'Sender', 'Topic', 'Verdict', 'VerdictRouteId', 'Change', 'ContextJson'),
+                            {'CreatedAt': _now()})
+    def corrections(self, message_id: int = None, task_id: int = None, sender: str = None, topic: str = None, limit: int = 200) -> list:
+        conds, args = [], []
+        if message_id: conds.append('MessageId=?'); args.append(message_id)
+        if task_id: conds.append('TaskId=?'); args.append(task_id)
+        if sender: conds.append('lower(Sender)=?'); args.append(str(sender).lower())
+        if topic: conds.append('Topic=?'); args.append(topic)
+        where = ('WHERE ' + ' OR '.join(conds)) if conds else ''
+        return self._rows(f'SELECT * FROM correction {where} ORDER BY Id DESC LIMIT ?', [*args, limit])[::-1]
+    def add_discussion(self, fields: dict) -> int:
+        return self._insert('discussion', fields, ('MessageId', 'TaskId', 'Actor', 'Body', 'OpId'), {'CreatedAt': _now()})
+    def discussion(self, task_id: int = None, message_id: int = None) -> list:
+        conds, args = [], []
+        if task_id: conds.append('TaskId=?'); args.append(task_id)
+        if message_id: conds.append('MessageId=?'); args.append(message_id)
+        if not conds: return []
+        return self._rows(f"SELECT * FROM discussion WHERE {' OR '.join(conds)} ORDER BY Id", args)
+    def link_discussion(self, task_id: int, message_ids: list) -> int:
+        if not message_ids: return 0
+        with self.lock:
+            cur = self.cx.execute(f"UPDATE discussion SET TaskId=? WHERE TaskId IS NULL AND MessageId IN ({','.join('?' * len(message_ids))})", [task_id, *message_ids])
+            self.cx.commit(); return cur.rowcount
     def message_exists(self, external_id):
         return self._one('SELECT 1 x FROM message WHERE ExternalId=?', (external_id,)) is not None
     def add_message(self, fields):
@@ -942,7 +1336,7 @@ class SQLiteStore:
         return self._one('SELECT * FROM message WHERE ExternalId=? ORDER BY MessageId DESC LIMIT 1', (external_id,))
     # ── what the hub knows about a sender / a topic (counsel.dossier, responder) ─────────────
     def messages_from(self, email, since, limit=8):
-        return self._rows("SELECT * FROM message WHERE lower(FromEmail)=? AND Status NOT IN ('context','skipped') AND SentAt>=? "
+        return self._rows("SELECT * FROM message WHERE lower(FromEmail)=? AND Status NOT IN ('context','history','skipped') AND SentAt>=? "
                           'ORDER BY SentAt DESC LIMIT ?', (email.lower(), since, limit))
     def own_replies_to(self, email, since, limit=5):
         """The owner's own words on this sender's threads - 'context' rows ride inside the chains."""
@@ -951,7 +1345,7 @@ class SQLiteStore:
                           'ORDER BY SentAt DESC LIMIT ?', (since, email.lower(), limit))
     def recent_messages(self, since, limit=300):
         return self._rows("SELECT MessageId, ConversationId, Channel, Direction, Subject, FromName, FromEmail, SentAt, Status, TaskId, substr(BodyText, 1, 400) BodyText "
-                          "FROM message WHERE Status NOT IN ('context','skipped') AND SentAt>=? ORDER BY SentAt DESC LIMIT ?", (since, limit))
+                          "FROM message WHERE Status NOT IN ('context','history','skipped') AND SentAt>=? ORDER BY SentAt DESC LIMIT ?", (since, limit))
     def set_brief(self, mid, brief): self._exec('UPDATE message SET Brief=? WHERE MessageId=?', (brief, mid))
     # ── what the assistant's post reads (assistant.py) ────────────────────────────────────────
     def owner_last_words(self, since, before, limit=40):
@@ -976,11 +1370,17 @@ class SQLiteStore:
         """The newest message on this task that somebody SENT us - never our own reply, never a
         report row. It is who a reply from this task goes to, which an item with no message of its
         own (an agent that finished, a wrap-up) had no way to name."""
-        return self._one("SELECT * FROM message WHERE TaskId=? AND Status NOT IN ('context','skipped') "
+        return self._one("SELECT * FROM message WHERE TaskId=? AND Status NOT IN ('context','history','skipped') "
+                         "AND IFNULL(Direction,'in')<>'out' AND IFNULL(Channel,'')<>'report' "
+                         'ORDER BY SentAt DESC, MessageId DESC LIMIT 1', (task_id,))
+    def last_material_inbound_on_task(self, task_id):
+        """last_inbound_on_task minus the FYIs triage filed with nothing to do (PW-240): the line that can make a
+        drafted reply stale is one somebody sent that changed the ask."""
+        return self._one("SELECT * FROM message WHERE TaskId=? AND Status NOT IN ('context','history','skipped','filed') "
                          "AND IFNULL(Direction,'in')<>'out' AND IFNULL(Channel,'')<>'report' "
                          'ORDER BY SentAt DESC, MessageId DESC LIMIT 1', (task_id,))
     def last_inbound_in(self, conversation_id):
-        return self._one("SELECT * FROM message WHERE ConversationId=? AND Status NOT IN ('context','skipped') AND IFNULL(Direction,'in')<>'out' "
+        return self._one("SELECT * FROM message WHERE ConversationId=? AND Status NOT IN ('context','history','skipped') AND IFNULL(Direction,'in')<>'out' "
                          'ORDER BY SentAt DESC LIMIT 1', (conversation_id,))
     def task_for_conversation(self, conversation_id, subject=None):
         """The task this thread already belongs to - OPEN OR CLOSED. The router matches a reply
@@ -1021,6 +1421,8 @@ class SQLiteStore:
             # Talking back is part of this suggestion's history. New facts may reopen and
             # rewrite the action, but must not erase the owner's correction or our answer.
             if prior.get('chat'): action['chat'] = prior['chat']
+            # the shared verdict is history too: it stays until the facts (Sig) change, when triage_ideas re-judges
+            if prior.get('triage') and 'triage' not in action: action['triage'] = prior['triage']
         act = json.dumps(action)
         if old:
             self._exec("UPDATE idea SET Kind=?, Text=?, ActionJson=?, Sig=?, Status='open', SnoozeUntil=NULL, LastSaid=?, SaidCount=SaidCount+1 WHERE Key=?",
@@ -1038,24 +1440,1085 @@ class SQLiteStore:
     # ── the pipe (funnel.py): surfaced / done / later, per item key ─────────────────────────
     def funnel_states(self) -> dict:
         return {r['Key']: r for r in self._rows('SELECT * FROM funnel_state')}
-    def set_funnel_state(self, key, status, by='owner', until=None, note=None):
-        self._exec('INSERT INTO funnel_state (Key,Status,Until,Note,By,At) VALUES (?,?,?,?,?,?) '
-                   'ON CONFLICT(Key) DO UPDATE SET Status=excluded.Status, Until=excluded.Until, Note=excluded.Note, By=excluded.By, At=excluded.At',
-                   (key, status, until, note, by, _now()))
+    def set_funnel_state(self, key, status, by='owner', until=None, note=None, *, expected_context=None, read=False):
+        from . import processing_reads
+        stamp = _now()
+        with self.lock:
+            cur = self.cx.cursor()
+            cur.execute('BEGIN IMMEDIATE')
+            try:
+                version = processing_reads.active_version(cur)
+                clean = bool(version) and not self._processing_reconcile_status_cursor(cur)['pending']
+                if version and status in ('done', 'later', 'skip'):
+                    calendar = str(key).startswith('meeting:')
+                    target = ('', 'calendar', key) if calendar else self._processing_read_target(cur, key)
+                    if target is None and str(key).split(':', 1)[0] in (
+                            'processing', 'msg', 'report', 'review', 'idea', 'agent', 'wrap', 'task'):
+                        raise ValueError('processing target is unavailable')
+                    if target is not None:
+                        if not calendar and not clean:
+                            self._processing_validate_settlement_census(cur, stamp)
+                            clean = True
+                        iid, kind, local_id = target
+                        verified_picture = None
+                        if not calendar and expected_context is not None:
+                            from .processing_projection import processing_projection
+                            verified_picture = processing_projection(cur, iid)
+                            if (not isinstance(expected_context, dict)
+                                    or expected_context.get(iid) != verified_picture['context_revision']):
+                                raise ValueError('processing context changed since confirmation was proposed')
+                        if status == 'done':
+                            if calendar:
+                                current_units = [dict(entity_kind='calendar', local_id=key, fingerprint='identity-v1')]
+                                deferred_keys = [key]
+                            else:
+                                from .processing_projection import processing_projection
+                                picture = verified_picture or processing_projection(cur, iid)
+                                current_units = processing_reads.units(picture['view'])
+                                deferred_keys = [d['key'] for d in picture['view']['processing_read']['deferrals']]
+                            processing_reads.record(cur, current_units,
+                                version=version, at=stamp, by=by, origin='explicit_done')
+                            for deferred_key in deferred_keys:
+                                cur.execute('DELETE FROM processing_read_defer WHERE Key=?', (deferred_key,))
+                        else:
+                            self._processing_write_defer(cur, key, target, status, until, stamp, by)
+                if version and status == 'surfaced' and read:
+                    # shown in the chat IS read (the owner, 2026-09-06): the receipt is the same one an
+                    # explicit done writes, minus lifting a deferral - later/skip still hold it back
+                    target = self._processing_read_target(cur, key)
+                    if target:
+                        from .processing_projection import processing_projection
+                        processing_reads.record(cur, processing_reads.units(processing_projection(cur, target[0])['view']),
+                                                version=version, at=stamp, by=by, origin='surfaced')
+                if version and status == 'surfaced' and note:
+                    target = self._processing_read_target(cur, key)
+                    if target:
+                        from .processing_projection import processing_projection
+                        picture = processing_projection(cur, target[0])
+                        cur.execute('''INSERT INTO processing_display_summary (Key,ContextRevision,Summary)
+                            VALUES (?,?,?) ON CONFLICT(Key) DO UPDATE SET
+                            ContextRevision=excluded.ContextRevision,Summary=excluded.Summary''',
+                            (key, picture['context_revision'], str(note)))
+                cur.execute('INSERT INTO funnel_state (Key,Status,Until,Note,By,At) VALUES (?,?,?,?,?,?) '
+                    'ON CONFLICT(Key) DO UPDATE SET Status=excluded.Status, Until=excluded.Until, Note=excluded.Note, By=excluded.By, At=excluded.At',
+                    (key, status, until, note, by, stamp))
+                self._processing_finish_funnel_write(cur, clean)
+                self.cx.commit()
+                self._writes += 1
+            except BaseException:
+                self.cx.rollback()
+                raise
+            finally:
+                cur.close()
         self._poke('feed-changed')                 # Unread is a feed filter; remove/read it immediately
+    @contextlib.contextmanager
+    def processing_own_words(self, tid, by='owner'):
+        """Wrap a comment that mirrors the chat onto a task. Words said ABOUT an item are not news
+        about it: a task Next had just marked read came straight back as unread because the assistant's
+        own introduction changed its fingerprint one second later (the owner, 2026-09-06)."""
+        from . import processing_reads
+        from .processing_projection import processing_projection
+        def picture(cur):
+            row = cur.execute('''SELECT ItemId FROM processing_member WHERE EntityKind='task' AND LocalId=?
+                AND RetiredAt IS NULL''', (str(tid),)).fetchone()
+            return processing_projection(cur, self._processing_follow(cur, row['ItemId'])) if row else None
+        with self._processing_read() as cur:
+            version = processing_reads.active_version(cur)
+            before = picture(cur) if version else None
+            units_before = before['view']['processing_read']['units'] if before else []
+            was_read = bool(units_before) and all(u['read'] for u in units_before)
+        yield
+        if not was_read: return
+        with self.lock:
+            cur = self.cx.cursor(); cur.execute('BEGIN IMMEDIATE')
+            try:
+                after = picture(cur)
+                if after: processing_reads.record(cur, processing_reads.units(after['view']), version=version, at=_now(), by=by, origin='own_words')
+                self.cx.commit(); self._writes += 1
+            except BaseException: self.cx.rollback(); raise
+            finally: cur.close()
     def clear_funnel_state(self, key):
         """Forget one row's state entirely - it is new again. A new chat does this to an agent
         that is still waiting on you: shown once yesterday is not an answer."""
-        self._exec('DELETE FROM funnel_state WHERE Key=?', (key,))
+        self._clear_funnel_compat('Key=?', (key,))
         self._poke('feed-changed')
     def clear_funnel_states(self, statuses=('surfaced',)):
         """A new chat walks the pile afresh: what was merely SHOWN comes back; what the owner
         decided (done, later) stands."""
         if statuses:
-            self._exec(f"DELETE FROM funnel_state WHERE Status IN ({','.join('?' * len(statuses))})", list(statuses))
+            self._clear_funnel_compat(f"Status IN ({','.join('?' * len(statuses))})", list(statuses))
             self._poke('feed-changed')
-    def dock_tasks(self, tag, limit=60):
-        """Every conversation the guide has had, newest first - the chats list."""
+
+    @staticmethod
+    def _processing_finish_funnel_write(cur, clean):
+        # Only this transaction's funnel_state trigger changed the census. No
+        # entity/FK can move under BEGIN IMMEDIATE. Never clear earlier raw dirt.
+        if clean:
+            cur.execute('''UPDATE processing_reconcile_state
+                SET AttemptedGeneration=DirtyGeneration, ReconciledGeneration=DirtyGeneration
+                WHERE Singleton=1''')
+
+    def _processing_validate_settlement_census(self, cur, stamp):
+        """Accept pending writes only when a fresh census changes no identity structure.
+
+        This is an explicit writer, never a GET. A savepoint prevents a failed
+        validation from accidentally accepting newly arrived/moved members. Done
+        still covers current substantive versions; this is not a content-CAS API.
+        """
+        from .processing_membership import reconcile_membership
+        cur.execute('SAVEPOINT processing_settlement_census')
+        before_changes = self.cx.total_changes
+        try:
+            result = reconcile_membership(cur, stamp=stamp, new_item_id=self._processing_item_id,
+                                          follow_item=self._processing_follow)
+            structural = self.cx.total_changes != before_changes
+            if structural or result['conflicts']:
+                raise ValueError('processing membership must be reconciled before settlement')
+            cur.execute('''UPDATE processing_reconcile_state
+                SET AttemptedGeneration=DirtyGeneration,ReconciledGeneration=DirtyGeneration,
+                    LastAttemptAt=?,ConflictsJson=?,DiagnosticsJson=? WHERE Singleton=1''',
+                (stamp, json.dumps(result['conflicts'], sort_keys=True),
+                 json.dumps(result['diagnostics'], sort_keys=True)))
+            cur.execute('RELEASE processing_settlement_census')
+        except BaseException:
+            cur.execute('ROLLBACK TO processing_settlement_census')
+            cur.execute('RELEASE processing_settlement_census')
+            raise
+
+    def _clear_funnel_compat(self, where, params):
+        from .processing_reads import active_version
+        with self.lock:
+            cur = self.cx.cursor()
+            cur.execute('BEGIN IMMEDIATE')
+            try:
+                clean = bool(active_version(cur)) and not self._processing_reconcile_status_cursor(cur)['pending']
+                cur.execute('DELETE FROM funnel_state WHERE ' + where, params)
+                self._processing_finish_funnel_write(cur, clean)
+                self.cx.commit()
+                self._writes += 1
+            except BaseException:
+                self.cx.rollback()
+                raise
+            finally:
+                cur.close()
+    # ── canonical processing inventory (Phase 1 additive foundation) ────────────
+    def processing_reads_active(self):
+        from .processing_reads import active_version
+        with self._processing_read() as cur:
+            return bool(active_version(cur))
+
+    def processing_calendar_states(self):
+        """The explicit legacy-calendar exception; no canonical calendar allocation."""
+        with self._processing_read() as cur:
+            result = {row['LocalId']: {'read': True} for row in cur.execute('''
+                SELECT LocalId FROM processing_read_receipt
+                WHERE EntityKind='calendar' AND Fingerprint='identity-v1' ''').fetchall()}
+            for row in cur.execute('''SELECT * FROM processing_read_defer
+                WHERE TargetEntityKind='calendar' ''').fetchall():
+                result.setdefault(row['TargetLocalId'], {'read': False}).update(
+                    status=row['Status'], until=row['Until'], at=row['At'], by=row['By'])
+            return result
+
+    def activate_processing_reads(self, *, fixed_now, live_state=None):
+        """Explicit, fresh legacy capture and activation in one writer transaction.
+
+        The caller owns the consistent backup and startup admission barrier. A
+        dirty census fails closed; constructors and getters never activate reads.
+        """
+        return self.backfill_processing('canonical-reads-' + uuid.uuid4().hex,
+            fixed_now=fixed_now, live_state=live_state, _activate_reads=True)
+
+    def _processing_read_target(self, cur, key):
+        if str(key).startswith('processing:'):
+            iid = self._processing_follow(cur, str(key).split(':', 1)[1])
+            return (iid, None, None) if iid else None
+        row = cur.execute('''SELECT a.EntityKind,a.LocalId,m.ItemId FROM processing_alias a
+            JOIN processing_member m ON m.EntityKind=a.EntityKind AND m.LocalId=a.LocalId
+            WHERE a.Namespace='legacy_funnel' AND a.Scope='local' AND a.Value=?
+              AND a.RetiredAt IS NULL AND m.RetiredAt IS NULL''', (key,)).fetchone()
+        return ((self._processing_follow(cur, row['ItemId']), row['EntityKind'], row['LocalId'])
+                if row else None)
+
+    @staticmethod
+    def _processing_write_defer(cur, key, target, status, until, at, by):
+        iid, kind, local_id = target
+        cur.execute('''INSERT INTO processing_read_defer
+            (Key,TargetItemId,TargetEntityKind,TargetLocalId,Status,Until,At,By)
+            VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(Key) DO UPDATE SET
+            TargetItemId=excluded.TargetItemId,TargetEntityKind=excluded.TargetEntityKind,
+            TargetLocalId=excluded.TargetLocalId,Status=excluded.Status,Until=excluded.Until,
+            At=excluded.At,By=excluded.By''', (key, iid, kind, local_id, status, until, at, by))
+
+    @staticmethod
+    def _processing_reconcile_status_cursor(cur):
+        row = cur.execute('''SELECT * FROM processing_reconcile_state
+            WHERE Singleton=1''').fetchone()
+        if row is None:
+            raise RuntimeError('processing reconciliation state is missing')
+        dirty = int(row['DirtyGeneration'])
+        attempted = int(row['AttemptedGeneration'])
+        reconciled = int(row['ReconciledGeneration'])
+        conflicts = json.loads(row['ConflictsJson'] or '[]')
+        diagnostics = json.loads(row['DiagnosticsJson'] or '[]')
+        if dirty == reconciled:
+            status = 'complete'
+        elif attempted == dirty and conflicts:
+            status = 'conflicted'
+        else:
+            status = 'pending'
+        return {
+            'dirty_generation': dirty,
+            'attempted_generation': attempted,
+            'reconciled_generation': reconciled,
+            'pending': dirty != reconciled,
+            'status': status,
+            'conflicts': conflicts,
+            'diagnostics': diagnostics,
+            'last_attempt_at': row['LastAttemptAt'],
+        }
+
+    def processing_reconcile_status(self):
+        """Return generation/diagnostic state without allocating canonical identity."""
+        with self._processing_read() as cur:
+            return self._processing_reconcile_status_cursor(cur)
+
+    def reconcile_processing_membership(self, *, fixed_now=None):
+        """Reconcile exact raw entity relationships in one uncapped write transaction.
+
+        This is an explicit startup/background operation. Inventory and API getters
+        never call it, and it does not infer read, defer, action, or provider identity.
+        """
+        stamp = fixed_now or _now()
+        if not isinstance(stamp, str) or not stamp:
+            raise ValueError('fixed_now must be a non-empty string')
+        from .processing_membership import reconcile_membership
+        with self.lock:
+            cur = self.cx.cursor()
+            cur.execute('BEGIN IMMEDIATE')
+            try:
+                before = self._processing_reconcile_status_cursor(cur)
+                if before['dirty_generation'] == before['reconciled_generation']:
+                    self.cx.commit()
+                    return {
+                        **before,
+                        'created_items': 0, 'created_members': 0, 'moved_members': 0,
+                        'retired_members': 0, 'redirected_items': 0,
+                        'created_aliases': 0, 'created_relations': 0,
+                        'retired_relations': 0,
+                        'status': 'already_current',
+                    }
+                result = reconcile_membership(
+                    cur, stamp=stamp, new_item_id=self._processing_item_id,
+                    follow_item=self._processing_follow)
+                dirty = before['dirty_generation']
+                complete = not result['conflicts']
+                cur.execute('''UPDATE processing_reconcile_state
+                    SET AttemptedGeneration=?, ReconciledGeneration=?, LastAttemptAt=?,
+                        ConflictsJson=?, DiagnosticsJson=? WHERE Singleton=1''',
+                    (dirty, dirty if complete else before['reconciled_generation'], stamp,
+                     json.dumps(result['conflicts'], sort_keys=True),
+                     json.dumps(result['diagnostics'], sort_keys=True)))
+                after = self._processing_reconcile_status_cursor(cur)
+                self.cx.commit()
+                self._writes += 1
+                return {**after, **result, 'status': 'complete' if complete else 'conflicted'}
+            except BaseException:
+                self.cx.rollback()
+                raise
+            finally:
+                cur.close()
+
+    @staticmethod
+    def _processing_item_id():
+        """Opaque identity: source ids and changing funnel keys never become the primary key."""
+        return 'pi_' + uuid.uuid4().hex
+
+    @staticmethod
+    def _processing_follow(cur, item_id):
+        seen, current = set(), item_id
+        while current and current not in seen:
+            seen.add(current)
+            row = cur.execute('SELECT RedirectItemId FROM processing_item WHERE ItemId=?', (current,)).fetchone()
+            if not row: return None
+            if not row[0]: return current
+            current = row[0]
+        raise ValueError(f'processing item redirect cycle at {item_id}')
+
+    @classmethod
+    def _processing_lineage(cls, cur, resolved):
+        return [r['ItemId'] for r in cur.execute('SELECT ItemId FROM processing_item').fetchall()
+                if cls._processing_follow(cur, r['ItemId']) == resolved]
+
+    def reconcile_processing_entities(self, *, kind, members, aliases=(), item_id=None,
+                                      context_revision=None, view_revision=None, fixed_now=None):
+        """Attach newly persisted exact entities without activating the new read model.
+
+        Existing membership wins, so an FYI can later become a task without changing its item id.
+        Entities already owned by different items require ``merge_processing_items``; conversation
+        ids, external ids and display names never merge items implicitly.
+        """
+        stamp = fixed_now or _now()
+        clean = []
+        for member in members or ():
+            entity_kind, local_id = str(member.get('entity_kind') or ''), str(member.get('local_id') or '')
+            if not entity_kind or not local_id: raise ValueError('processing members require entity_kind and local_id')
+            clean.append({'entity_kind': entity_kind, 'local_id': local_id,
+                          'role': str(member.get('role') or 'member')})
+        if not clean: raise ValueError('a processing item requires at least one member')
+        exact = {(m['entity_kind'], m['local_id']) for m in clean}
+        clean_aliases = []
+        for alias in aliases or ():
+            a = {k: str(alias.get(k) or '') for k in
+                 ('namespace', 'scope', 'value', 'entity_kind', 'local_id', 'provenance')}
+            if not all(a.values()): raise ValueError('processing aliases require namespace, scope, value, exact entity and provenance')
+            if (a['entity_kind'], a['local_id']) not in exact:
+                raise ValueError('processing alias target must be one of the reconciled exact entities')
+            clean_aliases.append(a)
+        with self.lock:
+            cur = self.cx.cursor(); cur.execute('BEGIN IMMEDIATE')
+            try:
+                existing = set()
+                for member in clean:
+                    row = cur.execute('''SELECT ItemId FROM processing_member
+                                         WHERE EntityKind=? AND LocalId=? AND RetiredAt IS NULL''',
+                                      (member['entity_kind'], member['local_id'])).fetchone()
+                    if row: existing.add(self._processing_follow(cur, row[0]))
+                if item_id:
+                    chosen = self._processing_follow(cur, str(item_id))
+                    if not chosen: raise KeyError(f'unknown processing item {item_id}')
+                    if existing and existing != {chosen}: raise ValueError('entities belong to another item; merge explicitly')
+                elif len(existing) > 1: raise ValueError('entities belong to multiple items; merge explicitly')
+                elif existing: chosen = next(iter(existing))
+                else:
+                    chosen = self._processing_item_id()
+                    cur.execute('''INSERT INTO processing_item
+                        (ItemId,Kind,ContextRevision,ViewRevision,CreatedAt,UpdatedAt) VALUES (?,?,?,?,?,?)''',
+                        (chosen, str(kind), context_revision, view_revision, stamp, stamp))
+                primary = cur.execute("SELECT 1 FROM processing_member WHERE ItemId=? AND Role='primary' AND RetiredAt IS NULL", (chosen,)).fetchone()
+                for i, member in enumerate(clean):
+                    old = cur.execute('''SELECT ItemId FROM processing_member
+                                         WHERE EntityKind=? AND LocalId=? AND RetiredAt IS NULL''',
+                                      (member['entity_kind'], member['local_id'])).fetchone()
+                    if old:
+                        if self._processing_follow(cur, old['ItemId']) != chosen:
+                            raise ValueError('entity belongs to another item; merge explicitly')
+                        continue
+                    role = member['role']
+                    if role == 'primary' and primary: role = 'member'
+                    if not primary and (role == 'primary' or i == 0): role, primary = 'primary', True
+                    cur.execute('''INSERT INTO processing_member
+                        (ItemId,EntityKind,LocalId,Role,JoinedAt) VALUES (?,?,?,?,?)''',
+                        (chosen, member['entity_kind'], member['local_id'], role, stamp))
+                for alias in clean_aliases:
+                    old = cur.execute('''SELECT EntityKind,LocalId FROM processing_alias
+                        WHERE Namespace=? AND Scope=? AND Value=? AND RetiredAt IS NULL''',
+                        (alias['namespace'], alias['scope'], alias['value'])).fetchone()
+                    if old and (old['EntityKind'], old['LocalId']) != (alias['entity_kind'], alias['local_id']):
+                        raise ValueError('processing alias already identifies another exact entity')
+                    if not old:
+                        cur.execute('''INSERT INTO processing_alias
+                            (Namespace,Scope,Value,EntityKind,LocalId,Provenance,CreatedAt)
+                            VALUES (?,?,?,?,?,?,?)''',
+                            (alias['namespace'], alias['scope'], alias['value'], alias['entity_kind'],
+                             alias['local_id'], alias['provenance'], stamp))
+                # Reconciliation changes the item's inputs. A caller may supply freshly computed
+                # revisions; otherwise invalidate them rather than retaining a stale fingerprint.
+                cur.execute('''UPDATE processing_item SET Kind=?, ContextRevision=?,
+                    ViewRevision=?, UpdatedAt=? WHERE ItemId=?''',
+                    (str(kind), context_revision, view_revision, stamp, chosen))
+                self.cx.commit(); self._writes += 1
+                return chosen
+            except BaseException:
+                self.cx.rollback(); raise
+
+    def merge_processing_items(self, source_item_id, target_item_id, *, fixed_now=None):
+        """Explicitly redirect one item while retaining old memberships and alias receipts."""
+        stamp = fixed_now or _now()
+        with self.lock:
+            cur = self.cx.cursor(); cur.execute('BEGIN IMMEDIATE')
+            try:
+                source = self._processing_follow(cur, str(source_item_id))
+                target = self._processing_follow(cur, str(target_item_id))
+                if not source or not target: raise KeyError('unknown processing item')
+                if source == target: self.cx.commit(); return target
+                target_primary = cur.execute("SELECT 1 FROM processing_member WHERE ItemId=? AND Role='primary' AND RetiredAt IS NULL", (target,)).fetchone()
+                for row in cur.execute('SELECT * FROM processing_member WHERE ItemId=? AND RetiredAt IS NULL', (source,)).fetchall():
+                    cur.execute('UPDATE processing_member SET RetiredAt=? WHERE MemberId=?', (stamp, row['MemberId']))
+                    duplicate = cur.execute('''SELECT 1 FROM processing_member WHERE EntityKind=? AND LocalId=?
+                                               AND RetiredAt IS NULL''', (row['EntityKind'], row['LocalId'])).fetchone()
+                    if duplicate: continue
+                    role = row['Role'] if row['Role'] != 'primary' or not target_primary else 'member'
+                    cur.execute('''INSERT INTO processing_member
+                        (ItemId,EntityKind,LocalId,Role,JoinedAt) VALUES (?,?,?,?,?)''',
+                        (target, row['EntityKind'], row['LocalId'], role, stamp))
+                    if role == 'primary': target_primary = True
+                cur.execute('UPDATE processing_item SET RedirectItemId=?,UpdatedAt=? WHERE ItemId=?', (target, stamp, source))
+                cur.execute('UPDATE processing_item SET ContextRevision=NULL,ViewRevision=NULL,UpdatedAt=? WHERE ItemId=?',
+                            (stamp, target))
+                self.cx.commit(); self._writes += 1; return target
+            except BaseException:
+                self.cx.rollback(); raise
+
+    @contextlib.contextmanager
+    def _processing_read(self):
+        """Hold one SQLite snapshot across related reads, including external merges."""
+        with self.lock:
+            cur = self.cx.cursor()
+            cur.execute('BEGIN')
+            try:
+                yield cur
+            except BaseException:
+                self.cx.rollback()
+                raise
+            else:
+                self.cx.commit()
+            finally:
+                cur.close()
+
+    def resolve_processing_target(self, namespace, value, scope='local'):
+        """Resolve an alias to both its durable item and the exact entity it names."""
+        if not namespace or not value or not scope: raise ValueError('namespace, scope and value are required')
+        with self._processing_read() as cur:
+            alias = cur.execute('''SELECT * FROM processing_alias WHERE Namespace=? AND Scope=? AND Value=?
+                                   AND RetiredAt IS NULL ORDER BY AliasId DESC LIMIT 1''',
+                                (str(namespace), str(scope), str(value))).fetchone()
+            if not alias: return None
+            member = cur.execute('''SELECT ItemId FROM processing_member WHERE EntityKind=? AND LocalId=?
+                                    AND RetiredAt IS NULL ORDER BY MemberId DESC LIMIT 1''',
+                                 (alias['EntityKind'], alias['LocalId'])).fetchone()
+            if not member: return None
+            resolved = self._processing_follow(cur, member['ItemId'])
+            return {'item_id': resolved, 'entity_kind': alias['EntityKind'], 'local_id': alias['LocalId'],
+                    'namespace': alias['Namespace'], 'scope': alias['Scope'], 'value': alias['Value'],
+                    'provenance': alias['Provenance'],
+                    'redirected_from': member['ItemId'] if member['ItemId'] != resolved else None}
+
+    def processing_members(self, item_id, *, include_retired=False):
+        with self._processing_read() as cur:
+            resolved = self._processing_follow(cur, str(item_id))
+            if not resolved: return []
+            if not include_retired:
+                return [dict(r) for r in cur.execute('''SELECT * FROM processing_member WHERE ItemId=?
+                                                        AND RetiredAt IS NULL ORDER BY MemberId''', (resolved,)).fetchall()]
+            item_ids = self._processing_lineage(cur, resolved)
+            return [dict(r) for r in cur.execute(
+                f"SELECT * FROM processing_member WHERE ItemId IN ({','.join('?' * len(item_ids))}) ORDER BY MemberId",
+                item_ids).fetchall()]
+
+    @staticmethod
+    def _processing_evidence_row(row):
+        out = dict(row)
+        for old, new in (('EvidenceId', 'evidence_id'), ('MigrationVersion', 'migration_version'),
+                         ('ItemId', 'item_id'), ('EntityKind', 'entity_kind'), ('LocalId', 'local_id'),
+                         ('SelectedLegacyKey', 'selected_key'), ('ContextFingerprint', 'context_fingerprint'),
+                         ('CapturedAt', 'captured_at')):
+            out[new] = out.pop(old)
+        value = out.pop('ObservedUnread'); out['observed_unread'] = None if value is None else bool(value)
+        value = out.pop('PermanentRead'); out['permanent_read'] = None if value is None else bool(value)
+        out['reasons'] = json.loads(out.pop('ReasonsJson') or '[]')
+        raw = out.pop('TemporaryDeferJson'); out['temporary_defer'] = json.loads(raw) if raw else None
+        out['original'] = json.loads(out.pop('OriginalJson') or '{}')
+        return out
+
+    def processing_legacy_evidence(self, version=None, *, entity_kind=None, local_id=None):
+        q, p = 'SELECT * FROM processing_legacy_evidence WHERE 1=1', []
+        if version is not None: q += ' AND MigrationVersion=?'; p.append(str(version))
+        if entity_kind is not None: q += ' AND EntityKind=?'; p.append(str(entity_kind))
+        if local_id is not None: q += ' AND LocalId=?'; p.append(str(local_id))
+        return [self._processing_evidence_row(r) for r in self._rows(q + ' ORDER BY EvidenceId', p)]
+
+    def _processing_snapshot_cursor(self, cur, resolved, *, live_state=None, lineage=None, item=None,
+                                    include_history=True, display_only=False):
+        """Build the public item picture inside a caller-owned read transaction."""
+        from .processing_projection import processing_projection
+        if item is None:
+            row = cur.execute('SELECT * FROM processing_item WHERE ItemId=?', (resolved,)).fetchone()
+            if not row: return None
+            item = dict(row)
+        else:
+            item = dict(item)
+        lineage = list(lineage) if lineage is not None else self._processing_lineage(cur, resolved)
+        # All and Unread need the current projection plus the old root ids that remain valid
+        # aliases. They do not consume the captured migration evidence/context history. Loading
+        # those large JSON records for every root made a five-row Timeline request materialize
+        # and hash tens of megabytes before it could draw anything. Keep the complete snapshot as
+        # the default contract; display inventory opts into this deliberately smaller envelope.
+        if display_only:
+            projection = processing_projection(cur, resolved, live_state=live_state)
+            return {
+                'item': item,
+                'item_history': [{'ItemId': item_id} for item_id in lineage],
+                'members': [],
+                'member_history': [],
+                'aliases': list(projection.get('view', {}).get('aliases', [])),
+                'relations': [],
+                'legacy_evidence': [],
+                'context_history': [],
+                **projection,
+            }
+        item_history = [dict(r) for r in cur.execute(
+            f"SELECT * FROM processing_item WHERE ItemId IN ({','.join('?' * len(lineage))}) ORDER BY CreatedAt,ItemId",
+            lineage).fetchall()]
+        members = [dict(r) for r in cur.execute('''SELECT * FROM processing_member
+                                                   WHERE ItemId=? AND RetiredAt IS NULL ORDER BY MemberId''', (resolved,))]
+        member_history = [dict(r) for r in cur.execute(
+            f"SELECT * FROM processing_member WHERE ItemId IN ({','.join('?' * len(lineage))}) ORDER BY MemberId",
+            lineage).fetchall()]
+        aliases_by_id = {}
+        for member in member_history:
+            for row in cur.execute('''SELECT * FROM processing_alias
+                WHERE EntityKind=? AND LocalId=? AND RetiredAt IS NULL ORDER BY AliasId''',
+                (member['EntityKind'], member['LocalId'])).fetchall():
+                aliases_by_id[row['AliasId']] = dict(row)
+        aliases = [aliases_by_id[key] for key in sorted(aliases_by_id)]
+        if not include_history:
+            return {'item': item, 'item_history': item_history, 'members': members,
+                    'aliases': aliases, **processing_projection(cur, resolved, live_state=live_state)}
+        evidence_by_id = {r['EvidenceId']: r for r in cur.execute(
+            f"SELECT * FROM processing_legacy_evidence WHERE ItemId IN ({','.join('?' * len(lineage))}) ORDER BY EvidenceId",
+            lineage).fetchall()}
+        # A split moves one exact entity without redirecting the old root, because
+        # that root still owns another current component. Carry the entity's frozen
+        # read evidence into its new snapshot while retaining the original ItemId.
+        for member in members:
+            for row in cur.execute('''SELECT * FROM processing_legacy_evidence
+                WHERE EntityKind=? AND LocalId=? ORDER BY EvidenceId''',
+                (member['EntityKind'], member['LocalId'])).fetchall():
+                evidence_by_id[row['EvidenceId']] = row
+        evidence = [self._processing_evidence_row(evidence_by_id[key])
+                    for key in sorted(evidence_by_id)]
+        context_history = [dict(r) for r in cur.execute(
+            f"SELECT * FROM processing_context_snapshot WHERE ItemId IN ({','.join('?' * len(lineage))}) ORDER BY MigrationVersion,ItemId",
+            lineage).fetchall()]
+        exact = {(m['EntityKind'], m['LocalId']) for m in member_history}
+        related = [dict(r) for r in cur.execute(
+            'SELECT * FROM processing_relation WHERE RetiredAt IS NULL ORDER BY RelationId').fetchall()
+                   if (r['FromEntityKind'], r['FromLocalId']) in exact
+                   or (r['ToEntityKind'], r['ToLocalId']) in exact]
+        return {'item': item, 'item_history': item_history, 'members': members,
+                'member_history': member_history, 'aliases': aliases,
+                'relations': related, 'legacy_evidence': evidence, 'context_history': context_history,
+                **processing_projection(cur, resolved, live_state=live_state)}
+
+    def processing_snapshot(self, item_id, *, live_state=None):
+        """Read current fingerprints and preserved history without creating read receipts.
+
+        Top-level revisions are computed from current persisted inputs; nullable
+        revisions in ``item`` are historical capture/cache metadata, not freshness
+        certification. Native worker attention is an explicit caller snapshot.
+        """
+        live_state = None if live_state is None else copy.deepcopy(tuple(live_state))
+        with self._processing_read() as cur:
+            resolved = self._processing_follow(cur, str(item_id))
+            if not resolved: return None
+            return self._processing_snapshot_cursor(cur, resolved, live_state=live_state)
+
+    def processing_inventory_snapshot(self, *, fixed_now, live_state=None, display_only=False,
+                                      history_days=None, include_history=True):
+        """Read the complete, non-activating canonical inventory from one SQLite snapshot.
+
+        This reports gaps in explicit membership but never allocates identity, infers read or
+        action state, calls a worker, or changes which runtime views consume legacy storage.
+        """
+        if not isinstance(fixed_now, str) or not fixed_now:
+            raise ValueError('fixed_now must be a non-empty string')
+        if history_days is not None and (isinstance(history_days, bool) or not isinstance(history_days, int)
+                                         or not 0 <= history_days <= 36500):
+            raise ValueError('history_days must be between 0 and 36500')
+        as_of = fixed_now
+        frozen_live = None if live_state is None else copy.deepcopy(tuple(live_state))
+        from .processing_projection import _worker_attention
+        worker_rows = [] if frozen_live is None else sorted(
+            (_worker_attention(row) for row in frozen_live),
+            key=lambda row: json.dumps(row, ensure_ascii=False, sort_keys=True,
+                                       separators=(',', ':'), allow_nan=False))
+        worker_payload = {'available': frozen_live is not None, 'rows': worker_rows}
+        worker_revision = hashlib.sha256(json.dumps(
+            worker_payload, ensure_ascii=False, sort_keys=True,
+            separators=(',', ':'), allow_nan=False).encode()).hexdigest()
+        if display_only and frozen_live is not None:
+            frozen_live = tuple(copy.deepcopy(worker_rows))
+
+        def apply_workers(snapshot):
+            """Overlay volatile worker facts without re-reading every canonical DB root."""
+            if not display_only:
+                return snapshot
+            from .processing import processing_view_revision
+            available = frozen_live is not None
+            for item in snapshot['items']:
+                view = item['view']
+                tids = {str(task['TaskId']) for task in view.get('tasks', [])}
+                attention = sorted((copy.deepcopy(row) for row in worker_rows
+                                    if str(row.get('taskId', row.get('task_id'))) in tids),
+                                   key=lambda row: json.dumps(row, sort_keys=True))
+                if (view.get('worker_attention_available') != available
+                        or view.get('worker_attention', []) != attention):
+                    view['worker_attention_available'] = available
+                    view['worker_attention'] = attention
+                    item['view_revision'] = processing_view_revision(item['context_revision'], view)
+            snapshot['worker_attention_available'] = available
+            snapshot['worker_input_revision'] = worker_revision
+            return snapshot
+
+        # Current projections are pure functions of database content, the history window and the
+        # supplied native-worker observation. Reuse that work across Unread and All until a local
+        # write changes the database. Do not consult PRAGMA data_version on the shared writer
+        # connection here: that made a cache HIT wait behind a running sync's SQLite lock. The
+        # membership reconciler turns supported external inserts into a local generation change;
+        # rebuilding merely because a timer ticked would recreate the periodic loading bug.
+        # Include the date because the history cutoff moves at midnight even if nothing was written.
+        display_cache_key = None
+        if display_only:
+            display_cache_key = (history_days, frozen_live is not None,
+                                 self._writes - self._processing_ignored_writes,
+                                 as_of[:10])
+            cached = self._processing_display_cache.get(display_cache_key)
+            if cached is not None:
+                snapshot = apply_workers(_snapcopy(cached))
+                snapshot['as_of'] = as_of
+                snapshot.pop('snapshot_revision', None)
+                snapshot['snapshot_revision'] = hashlib.sha256(json.dumps(
+                    snapshot, ensure_ascii=False, sort_keys=True,
+                    separators=(',', ':'), allow_nan=False).encode()).hexdigest()
+                return snapshot
+
+        # The expensive relational projection is database-only. Worker telemetry is overlaid
+        # afterwards, so a changing terminal tail re-hashes its one owned item instead of issuing
+        # the queries for every item in the Timeline again.
+        projection_live = ([] if frozen_live is not None else None) if display_only else frozen_live
+        with self._processing_read() as cur:
+            cache_key = None
+            if not display_only and not include_history:
+                cache_key = (self.cx.total_changes,
+                             cur.execute('PRAGMA data_version').fetchone()[0], worker_revision)
+                cached = getattr(self, '_processing_runtime_inventory_cache', None)
+                if cached is not None and cached[0] == cache_key:
+                    snapshot = _snapcopy(cached[1])
+                    snapshot['as_of'] = as_of
+                    snapshot.pop('snapshot_revision', None)
+                    snapshot['snapshot_revision'] = hashlib.sha256(json.dumps(
+                        snapshot, ensure_ascii=False, sort_keys=True,
+                        separators=(',', ':'), allow_nan=False).encode()).hexdigest()
+                    return snapshot
+            item_rows = [dict(r) for r in cur.execute(
+                'SELECT * FROM processing_item ORDER BY ItemId').fetchall()]
+            roots = {row['ItemId']: row for row in item_rows if row['RedirectItemId'] is None}
+            lineage_by_root = {item_id: [] for item_id in roots}
+            for row in item_rows:
+                resolved = self._processing_follow(cur, row['ItemId'])
+                if resolved in lineage_by_root: lineage_by_root[resolved].append(row['ItemId'])
+            selected_roots = set(roots)
+            if display_only and history_days is not None:
+                # The HTTP history window must constrain the expensive projection, not merely
+                # slice its result. Previously a 14-day, 100-row All page projected every one of
+                # 4,590 roots before pagination, which blanked the rail for seconds. A root with
+                # any message can only be represented by an in-window, non-history message;
+                # message-less roots use the same task/idea/review timestamps as compact_inventory.
+                try:
+                    cutoff = datetime.fromisoformat(fixed_now.replace('Z', '+00:00')) - timedelta(days=history_days)
+                    if cutoff.tzinfo is not None: cutoff = cutoff.astimezone().replace(tzinfo=None)
+                except ValueError:
+                    raise ValueError('fixed_now must be an ISO timestamp') from None
+
+                def in_window(value):
+                    if not value: return True       # compact_inventory deliberately retains unknown dates
+                    try:
+                        stamp = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+                        if stamp.tzinfo is not None: stamp = stamp.astimezone().replace(tzinfo=None)
+                        return stamp >= cutoff
+                    except ValueError:
+                        return True
+
+                message_roots = {self._processing_follow(cur, row[0]) for row in cur.execute(
+                    '''SELECT DISTINCT ItemId FROM processing_member
+                       WHERE RetiredAt IS NULL AND EntityKind='message' ''')}
+                selected_roots = set()
+                sources = (
+                    ('message', 'message', 'MessageId', 'source.CreatedAt',
+                     "AND (source.Status IS NULL OR source.Status NOT IN ('context','history','skipped'))"),
+                    ('task', 'task', 'TaskId', 'source.CreatedAt', ''),
+                    ('review', 'review', 'ReviewId', 'source.CreatedAt', ''),
+                    ('idea', 'idea', 'IdeaId', 'COALESCE(source.LastSaid,source.FirstSeen)', ''),
+                )
+                for kind, table, column, stamp_expr, extra in sources:
+                    for row in cur.execute(f'''SELECT DISTINCT pm.ItemId,{stamp_expr} ActivityAt
+                        FROM processing_member pm JOIN {table} source
+                          ON pm.EntityKind=? AND pm.LocalId=CAST(source.{column} AS TEXT)
+                        WHERE pm.RetiredAt IS NULL {extra}''', (kind,)).fetchall():
+                        root = self._processing_follow(cur, row['ItemId'])
+                        if root not in roots or (kind != 'message' and root in message_roots):
+                            continue
+                        if in_window(row['ActivityAt']): selected_roots.add(root)
+            items = [self._processing_snapshot_cursor(
+                cur, item_id, live_state=projection_live,
+                lineage=lineage_by_root[item_id], item=roots[item_id],
+                include_history=include_history, display_only=display_only)
+                for item_id in sorted(selected_roots)]
+
+            member_count = cur.execute('''SELECT COUNT(*) FROM processing_member pm
+                JOIN processing_item pi ON pi.ItemId=pm.ItemId
+                WHERE pm.RetiredAt IS NULL AND pi.RedirectItemId IS NULL''').fetchone()[0]
+            uncatalogued = {}
+            for entity_kind, table, column in (
+                    ('message', 'message', 'MessageId'), ('task', 'task', 'TaskId'),
+                    ('review', 'review', 'ReviewId'), ('idea', 'idea', 'IdeaId')):
+                uncatalogued[entity_kind] = cur.execute(f'''SELECT COUNT(*) FROM {table} source
+                    WHERE NOT EXISTS (SELECT 1 FROM processing_member pm
+                        JOIN processing_item pi ON pi.ItemId=pm.ItemId
+                        WHERE pm.EntityKind=? AND pm.LocalId=CAST(source.{column} AS TEXT)
+                          AND pm.RetiredAt IS NULL AND pi.RedirectItemId IS NULL)''',
+                    (entity_kind,)).fetchone()[0]
+            completed = [r[0] for r in cur.execute('''SELECT Version FROM processing_migration
+                WHERE Completion='complete' ORDER BY Version''').fetchall()]
+            coverage = {
+                'canonical_item_count': len(roots),
+                'visible_item_count': sum(bool(item['member_ids']) for item in items),
+                'tombstone_item_count': sum(not item['member_ids'] for item in items),
+                'member_count': member_count,
+                'uncatalogued': uncatalogued,
+                'completed_baselines': completed,
+                # Comments/artifacts are included as task-associated detail, not roots.
+                'unsupported': ['attachment_only_items', 'calendar', 'comment_only_items', 'task_artifact_only_items',
+                                'waitroom', 'worker_questions'],
+                'processing_reconciliation': self._processing_reconcile_status_cursor(cur),
+            }
+
+        snapshot = {
+            'schema_version': 'taskuary.processing.inventory.v1',
+            'as_of': as_of,
+            'items': items,
+            'coverage': coverage,
+            'worker_attention_available': projection_live is not None,
+            'worker_input_revision': worker_revision,
+        }
+        if history_days is not None: snapshot['history_days'] = history_days
+        if display_cache_key is not None:
+            current_key = (history_days, frozen_live is not None,
+                           self._writes - self._processing_ignored_writes,
+                           as_of[:10])
+            if current_key == display_cache_key:
+                # Unread and an explicit named-history lookup alternate in one chat walk.
+                # Keep both current windows warm; substantive writes clear the whole cache.
+                self._processing_display_cache[display_cache_key] = _snapcopy(snapshot)
+        snapshot = apply_workers(snapshot)
+        snapshot['snapshot_revision'] = hashlib.sha256(json.dumps(
+            snapshot, ensure_ascii=False, sort_keys=True,
+            separators=(',', ':'), allow_nan=False).encode()).hexdigest()
+        if not display_only and not include_history:
+            # The payload is independent of the query clock; consumers apply history,
+            # deferrals and calendar eligibility using as_of on every read. Any local
+            # write, external SQLite commit or substantive worker change invalidates.
+            with self.lock:
+                self._processing_runtime_inventory_cache = (cache_key, copy.deepcopy(snapshot))
+        return snapshot
+
+    @staticmethod
+    def _processing_backfill_summary(cur, version, status):
+        migration = cur.execute('SELECT * FROM processing_migration WHERE Version=?', (version,)).fetchone()
+        if not migration: return None
+        counts = {}
+        for name, table in (('items', 'processing_item'), ('members', 'processing_member'),
+                            ('aliases', 'processing_alias'), ('relations', 'processing_relation')):
+            counts[name] = cur.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0]
+        counts['evidence'] = cur.execute('SELECT COUNT(*) FROM processing_legacy_evidence WHERE MigrationVersion=?',
+                                         (version,)).fetchone()[0]
+        unresolved = [r[0] for r in cur.execute('''SELECT LocalId FROM processing_legacy_evidence
+            WHERE MigrationVersion=? AND EntityKind='legacy_key' ORDER BY LocalId''', (version,)).fetchall()]
+        return {'version': version, 'status': status, 'input_watermark': json.loads(migration['InputWatermark']),
+                **counts, 'unresolved_keys': unresolved}
+
+    def backfill_processing(self, version, *, fixed_now, live_state=None, evaluator=None,
+                            _activate_reads=False):
+        """Capture an idempotent legacy baseline; this does not switch reads to the new tables.
+
+        The transaction reads every legacy row without feed windows/caps, writes canonical identity
+        and verbatim evidence, and commits the journal marker last. ``live_state`` is an explicit
+        caller snapshot; None means "not supplied", while an empty collection explicitly
+        records that the caller observed no native workers.
+        """
+        if not version or not fixed_now: raise ValueError('version and fixed_now are required')
+        if evaluator is None:
+            from .processing import legacy_read_evidence as evaluator
+        live_state = None if live_state is None else copy.deepcopy(tuple(live_state))
+        live_by_task = {}
+        for raw in live_state or ():
+            tid = raw.get('taskId', raw.get('task_id'))
+            if tid is None: continue
+            live_by_task[int(tid)] = {'working': raw.get('Working') or raw.get('agent') or raw.get('label') or 'agent',
+                                      'waiting': bool(raw.get('AgentWaiting', raw.get('waiting', False)))}
+        with self.lock:
+            cur = self.cx.cursor()
+            prior = cur.execute("SELECT Completion FROM processing_migration WHERE Version=?", (str(version),)).fetchone()
+            if prior and prior[0] == 'complete':
+                return self._processing_backfill_summary(cur, str(version), 'already_complete')
+            cur.execute('BEGIN IMMEDIATE')
+            try:
+                if _activate_reads:
+                    from . import processing_reads
+                    active = processing_reads.active_version(cur)
+                    if active:
+                        self.cx.commit()
+                        return self._processing_backfill_summary(cur, active, 'already_active')
+                    if self._processing_reconcile_status_cursor(cur)['pending']:
+                        raise ValueError('processing membership must be reconciled before activation')
+                prior = cur.execute("SELECT Completion FROM processing_migration WHERE Version=?", (str(version),)).fetchone()
+                if prior and prior[0] == 'complete':
+                    self.cx.commit()
+                    return self._processing_backfill_summary(cur, str(version), 'already_complete')
+                settings = {r['Name']: r['Value'] for r in cur.execute('SELECT Name,Value FROM setting').fetchall()}
+                tables = {'message': 'MessageId', 'task': 'TaskId', 'review': 'ReviewId',
+                          'idea': 'IdeaId', 'run': 'RunId', 'attachment': 'AttachmentId'}
+                watermark = {}
+                for table, key in tables.items():
+                    count, maximum = cur.execute(f'SELECT COUNT(*),MAX({key}) FROM {table}').fetchone()
+                    watermark[table] = {'count': count, 'max_id': maximum}
+                watermark['funnel_state'] = {'count': cur.execute('SELECT COUNT(*) FROM funnel_state').fetchone()[0]}
+                watermark['live_state'] = ('not_supplied' if live_state is None else
+                                           'caller_supplied' if live_by_task else 'caller_supplied_empty')
+                cur.execute('''INSERT OR REPLACE INTO processing_migration
+                    (Version,CapturedAt,InputWatermark,SettingsJson,Completion) VALUES (?,?,?,?,?)''',
+                    (str(version), str(fixed_now), json.dumps(watermark, sort_keys=True),
+                     json.dumps(settings, sort_keys=True), 'capturing'))
+
+                def existing_item(entity_kind, local_id):
+                    row = cur.execute('''SELECT ItemId FROM processing_member WHERE EntityKind=? AND LocalId=?
+                                         AND RetiredAt IS NULL''', (entity_kind, str(local_id))).fetchone()
+                    return self._processing_follow(cur, row[0]) if row else None
+
+                def new_item(kind):
+                    iid = self._processing_item_id()
+                    cur.execute('''INSERT INTO processing_item (ItemId,Kind,CreatedAt,UpdatedAt)
+                                   VALUES (?,?,?,?)''', (iid, kind, str(fixed_now), str(fixed_now)))
+                    return iid
+
+                def member(iid, entity_kind, local_id, role='member'):
+                    local_id = str(local_id)
+                    old = existing_item(entity_kind, local_id)
+                    if old:
+                        if old != iid: raise ValueError(f'{entity_kind}:{local_id} belongs to another processing item')
+                        return
+                    if role == 'primary' and cur.execute("SELECT 1 FROM processing_member WHERE ItemId=? AND Role='primary' AND RetiredAt IS NULL", (iid,)).fetchone():
+                        role = 'member'
+                    cur.execute('''INSERT INTO processing_member
+                        (ItemId,EntityKind,LocalId,Role,JoinedAt) VALUES (?,?,?,?,?)''',
+                        (iid, entity_kind, local_id, role, str(fixed_now)))
+
+                legacy_values = set()
+                def alias(namespace, scope, value, entity_kind, local_id, provenance='legacy-backfill'):
+                    if not namespace or not scope or not value: raise ValueError('aliases require explicit namespace, scope and value')
+                    old = cur.execute('''SELECT EntityKind,LocalId FROM processing_alias
+                        WHERE Namespace=? AND Scope=? AND Value=? AND RetiredAt IS NULL''',
+                        (namespace, scope, str(value))).fetchone()
+                    if old and (old['EntityKind'], old['LocalId']) != (entity_kind, str(local_id)):
+                        raise ValueError(f'alias collision for {namespace}/{scope}/{value}')
+                    if not old:
+                        cur.execute('''INSERT INTO processing_alias
+                            (Namespace,Scope,Value,EntityKind,LocalId,Provenance,CreatedAt)
+                            VALUES (?,?,?,?,?,?,?)''',
+                            (namespace, scope, str(value), entity_kind, str(local_id), provenance, str(fixed_now)))
+                    if namespace == 'legacy_funnel': legacy_values.add(str(value))
+
+                tasks = [dict(r) for r in cur.execute('SELECT * FROM task ORDER BY TaskId').fetchall()]
+                messages = [dict(r) for r in cur.execute('SELECT * FROM message ORDER BY MessageId').fetchall()]
+                messages_by_id = {r['MessageId']: r for r in messages}
+                reviews = [dict(r) for r in cur.execute('SELECT * FROM review ORDER BY ReviewId').fetchall()]
+                ideas = [dict(r) for r in cur.execute('SELECT * FROM idea ORDER BY IdeaId').fetchall()]
+                attachments = [dict(r) for r in cur.execute('SELECT * FROM attachment ORDER BY AttachmentId').fetchall()]
+                runs = [dict(r) for r in cur.execute('SELECT * FROM run ORDER BY RunId').fetchall()]
+                item_by_task, item_by_message = {}, {}
+                for task in tasks:
+                    tid = task['TaskId']
+                    task_item = existing_item('task', tid)
+                    message_items = {existing_item('message', m['MessageId']) for m in messages
+                                     if m.get('TaskId') == tid and existing_item('message', m['MessageId'])}
+                    anchors = ({task_item} if task_item else set()) | message_items
+                    if len(anchors) > 1:
+                        raise ValueError(f'task:{tid} joins multiple established items; merge explicitly')
+                    iid = next(iter(anchors), None) or new_item('task')
+                    member(iid, 'task', tid, 'primary'); item_by_task[tid] = iid
+                    for key in (f'task:{tid}', f'agent:{tid}', f'wrap:{tid}'):
+                        alias('legacy_funnel', 'local', key, 'task', tid); legacy_values.add(key)
+                for message_row in messages:
+                    mid, tid = message_row['MessageId'], message_row.get('TaskId')
+                    iid = item_by_task.get(tid) or existing_item('message', mid) or new_item('message')
+                    member(iid, 'message', mid, 'member' if tid else 'primary'); item_by_message[mid] = iid
+                    alias('legacy_funnel', 'local', f'msg:{mid}', 'message', mid)
+                    if message_row.get('Channel') == 'report':
+                        alias('legacy_funnel', 'local', f'report:{mid}', 'message', mid)
+                for review in reviews:
+                    rid = review['ReviewId']
+                    iid = item_by_message.get(review.get('MessageId')) or item_by_task.get(review.get('TaskId')) or existing_item('review', rid) or new_item('review')
+                    member(iid, 'review', rid, 'member' if (review.get('MessageId') or review.get('TaskId')) else 'primary')
+                    alias('legacy_funnel', 'local', f'review:{rid}', 'review', rid)
+                for idea in ideas:
+                    iid = existing_item('idea', idea['IdeaId']) or new_item('idea')
+                    member(iid, 'idea', idea['IdeaId'], 'primary')
+                    alias('legacy_funnel', 'local', f"idea:{idea['IdeaId']}", 'idea', idea['IdeaId'])
+                    if idea.get('MessageId'):
+                        cur.execute('''INSERT OR IGNORE INTO processing_relation
+                            (FromEntityKind,FromLocalId,ToEntityKind,ToLocalId,Kind,Provenance,CreatedAt)
+                            VALUES ('message',?,'idea',?,'mentions','legacy-assistant-wrapper',?)''',
+                            (str(idea['MessageId']), str(idea['IdeaId']), str(fixed_now)))
+                known_ideas = {i['IdeaId'] for i in ideas}
+                for message_row in messages:
+                    try: brief_ideas = (json.loads(message_row.get('Brief') or '{}').get('ideas') or [])
+                    except (TypeError, ValueError, json.JSONDecodeError): brief_ideas = []
+                    for entry in brief_ideas:
+                        idea_id = entry.get('id') if isinstance(entry, dict) else None
+                        if idea_id not in known_ideas: continue
+                        cur.execute('''INSERT OR IGNORE INTO processing_relation
+                            (FromEntityKind,FromLocalId,ToEntityKind,ToLocalId,Kind,Provenance,CreatedAt)
+                            VALUES ('message',?,'idea',?,'mentions','legacy-assistant-brief',?)''',
+                            (str(message_row['MessageId']), str(idea_id), str(fixed_now)))
+                for attachment in attachments:
+                    iid = item_by_message.get(attachment.get('MessageId'))
+                    if iid: member(iid, 'attachment', attachment['AttachmentId'], 'attachment')
+                for run in runs:
+                    iid = item_by_task.get(run.get('TaskId'))
+                    if iid: member(iid, 'run', run['RunId'], 'work')
+
+                states = {r['Key']: dict(r) for r in cur.execute('SELECT * FROM funnel_state').fetchall()}
+                latest_running = {}
+                for run in reversed(runs):
+                    if run.get('Status') == 'running' and run.get('TaskId'):
+                        latest_running[run['TaskId']] = run.get('AgentName') or 'agent'
+                linked = {}
+                for idea in ideas:
+                    if idea.get('MessageId'): linked.setdefault(idea['MessageId'], []).append(idea)
+                for idea_rows in linked.values(): idea_rows.sort(key=lambda x: x['IdeaId'], reverse=True)
+                q = f'''SELECT m.MessageId,m.Channel,m.SourceName,m.Subject,m.FromName,m.FromEmail,
+                    m.SentAt,m.CreatedAt IngestedAt,m.ConversationId,substr(m.BodyText,1,4000) Preview,
+                    m.Status MsgStatus,m.SourceLink,m.TaskId,m.Direction,m.Brief,
+                    t.Title,t.Status TaskStatus,t.Priority,t.Kind TaskKind,t.Tags TaskTags,
+                    IFNULL(ch.n,0) ChainSize,rt.Decision,rt.Reason RouteReason,
+                    rv.ReviewId,rv.Status ReviewStatus,rv.Kind ReviewKind,
+                    CASE WHEN IFNULL(rv.DraftText,'')<>'' THEN 1 ELSE 0 END HasDraft,
+                    IFNULL(att.n,0) Attachments,{self.ANSWERED_AT} AnsweredAt,{self.THEIR_TURN} TheirTurn
+                    FROM message m LEFT JOIN task t ON t.TaskId=m.TaskId
+                    LEFT JOIN (SELECT MessageId,Decision,Reason FROM route WHERE RouteId IN
+                      (SELECT MAX(RouteId) FROM route GROUP BY MessageId)) rt ON rt.MessageId=m.MessageId
+                    LEFT JOIN (SELECT * FROM review WHERE ReviewId IN
+                      (SELECT MAX(ReviewId) FROM review GROUP BY MessageId)) rv ON rv.MessageId=m.MessageId
+                    LEFT JOIN (SELECT MessageId,COUNT(*) n FROM attachment GROUP BY MessageId) att ON att.MessageId=m.MessageId
+                    LEFT JOIN (SELECT TaskId,COUNT(*) n FROM message WHERE Status NOT IN ('context','history') GROUP BY TaskId) ch ON ch.TaskId=m.TaskId
+                    WHERE m.Status NOT IN ('context','history','skipped') ORDER BY m.MessageId'''
+                feed_rows = [dict(r) for r in cur.execute(q).fetchall()]
+                from .categories import category_of, team_domains_of
+                team = team_domains_of(settings)
+                try: funnel_hours = max(1, int(settings.get('funnel_hours') or 12))
+                except (TypeError, ValueError): funnel_hours = 12
+                evaluated_mids, selected_state_keys = set(), set()
+                for row in feed_rows:
+                    tid = row.get('TaskId'); live = live_by_task.get(tid)
+                    active_task = tid is not None and row.get('TaskStatus') not in ('done', 'dropped')
+                    working = ((live or {}).get('working') or latest_running.get(tid)) if active_task else None
+                    waiting = bool((live or {}).get('waiting', False)) if active_task else False
+                    needs = bool(row.get('ReviewStatus') == 'pending' or
+                                 (active_task and not latest_running.get(tid)
+                                  and (row.get('TaskKind') != 'note' or str(row.get('SentAt') or '') <= str(fixed_now))
+                                  and row.get('MsgStatus') != 'withdrawn' and not row.get('AnsweredAt')
+                                  and not row.get('TheirTurn')))
+                    if working and active_task and row.get('ReviewStatus') != 'pending': needs = waiting
+                    row.update(Category=category_of(row, team), Working=working,
+                               AgentWaiting=waiting, NeedsYou=1 if needs else 0,
+                               LinkedIdeas=[dict(i) for i in linked.get(row['MessageId'], [])])
+                    result = evaluator(row, states, now=str(fixed_now), funnel_hours=funnel_hours)
+                    required = {'selected_key', 'observed_unread', 'permanent_read', 'reasons', 'deferral', 'raw_evidence'}
+                    missing = required - set(result)
+                    if missing: raise ValueError(f'legacy evaluator omitted {sorted(missing)}')
+                    evaluated_mids.add(row['MessageId'])
+                    if result['selected_key'] in states: selected_state_keys.add(result['selected_key'])
+                    payload = {'row': row, 'source_message': messages_by_id[row['MessageId']],
+                               'raw_evidence': result['raw_evidence']}
+                    fingerprint = hashlib.sha256(json.dumps(row, sort_keys=True, default=str,
+                                                            separators=(',', ':')).encode()).hexdigest()
+                    cur.execute('''INSERT INTO processing_legacy_evidence
+                        (MigrationVersion,ItemId,EntityKind,LocalId,SelectedLegacyKey,ObservedUnread,
+                         PermanentRead,ReasonsJson,TemporaryDeferJson,ContextFingerprint,OriginalJson,CapturedAt)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''',
+                        (str(version), item_by_message[row['MessageId']], 'message', str(row['MessageId']),
+                         result['selected_key'], int(bool(result['observed_unread'])), int(bool(result['permanent_read'])),
+                         json.dumps(result['reasons'], sort_keys=True, default=str),
+                         json.dumps(result['deferral'], sort_keys=True, default=str) if result['deferral'] else None,
+                         fingerprint, json.dumps(payload, sort_keys=True, default=str), str(fixed_now)))
+                # Context/skipped rows were outside the legacy feed, but remain part of the uncapped
+                # source inventory. Record that exclusion without inventing an unread result.
+                for row in messages:
+                    if row['MessageId'] in evaluated_mids: continue
+                    original = {'row': row, 'legacy_exclusion': 'message_status_outside_feed'}
+                    fingerprint = hashlib.sha256(json.dumps(original, sort_keys=True, default=str).encode()).hexdigest()
+                    cur.execute('''INSERT INTO processing_legacy_evidence
+                        (MigrationVersion,ItemId,EntityKind,LocalId,SelectedLegacyKey,ObservedUnread,
+                         PermanentRead,ReasonsJson,TemporaryDeferJson,ContextFingerprint,OriginalJson,CapturedAt)
+                        VALUES (?,?,?,?,?,NULL,NULL,?,NULL,?,?,?)''',
+                        (str(version), item_by_message[row['MessageId']], 'message', str(row['MessageId']),
+                         f"msg:{row['MessageId']}", json.dumps(['excluded_from_legacy_feed']), fingerprint,
+                         json.dumps(original, sort_keys=True, default=str), str(fixed_now)))
+                # Every raw funnel receipt is versioned. A receipt not selected by a message may
+                # still belong to a task, idea, wrap-up, or an old key no current entity resolves.
+                for key in sorted(set(states) - selected_state_keys):
+                    target = cur.execute('''SELECT EntityKind,LocalId FROM processing_alias
+                        WHERE Namespace='legacy_funnel' AND Scope='local' AND Value=? AND RetiredAt IS NULL''',
+                        (key,)).fetchone()
+                    item_id = existing_item(target['EntityKind'], target['LocalId']) if target else None
+                    entity_kind = 'legacy_state' if target else 'legacy_key'
+                    original = {'legacy_key': key, 'state': states[key],
+                                'target': dict(target) if target else None}
+                    fingerprint = hashlib.sha256(json.dumps(original, sort_keys=True, default=str).encode()).hexdigest()
+                    cur.execute('''INSERT INTO processing_legacy_evidence
+                        (MigrationVersion,ItemId,EntityKind,LocalId,SelectedLegacyKey,ObservedUnread,
+                         PermanentRead,ReasonsJson,TemporaryDeferJson,ContextFingerprint,OriginalJson,CapturedAt)
+                        VALUES (?,?,?,?,?,NULL,NULL,?,NULL,?,?,?)''',
+                        (str(version), item_id, entity_kind, key, key,
+                         json.dumps(['legacy_state_receipt' if target else 'unresolved_legacy_key']), fingerprint,
+                         json.dumps(original, sort_keys=True, default=str), str(fixed_now)))
+                # Store each full context once per item/version, rather than duplicating
+                # a large chain in every message receipt. The completion marker covers
+                # identity, receipts and these exact context/view inputs atomically.
+                from .processing_projection import processing_projection
+                item_ids = [r[0] for r in cur.execute(
+                    'SELECT ItemId FROM processing_item WHERE RedirectItemId IS NULL ORDER BY ItemId').fetchall()]
+                for item_id in item_ids:
+                    picture = processing_projection(cur, item_id, live_state=live_state)
+                    if _activate_reads:
+                        processing_reads.capture_legacy(cur, str(version), picture, at=str(fixed_now))
+                    cur.execute('''INSERT INTO processing_context_snapshot
+                        (MigrationVersion,ItemId,ContextRevision,ViewRevision,ContextJson,ViewJson)
+                        VALUES (?,?,?,?,?,?)''',
+                        (str(version), item_id, picture['context_revision'], picture['view_revision'],
+                         json.dumps(picture['context'], sort_keys=True, ensure_ascii=False),
+                         json.dumps(picture['view'], sort_keys=True, ensure_ascii=False)))
+                    cur.execute('UPDATE processing_item SET ContextRevision=?,ViewRevision=? WHERE ItemId=?',
+                                (picture['context_revision'], picture['view_revision'], item_id))
+                    cur.execute('''UPDATE processing_legacy_evidence SET ContextFingerprint=?
+                                   WHERE MigrationVersion=? AND ItemId=?''',
+                                (picture['context_revision'], str(version), item_id))
+                if _activate_reads:
+                    for key, legacy_state in states.items():
+                        calendar = key.startswith('meeting:')
+                        if calendar and legacy_state.get('Status') in ('surfaced', 'done'):
+                            processing_reads.record(cur, [dict(entity_kind='calendar', local_id=key,
+                                fingerprint='identity-v1')], version=str(version), at=str(fixed_now),
+                                by='legacy', origin='legacy_preserved')
+                        if legacy_state.get('Status') not in ('later', 'skip'):
+                            continue
+                        target = ('', 'calendar', key) if calendar else self._processing_read_target(cur, key)
+                        if target:
+                            self._processing_write_defer(cur, key, target, legacy_state['Status'],
+                                legacy_state.get('Until'), legacy_state.get('At') or str(fixed_now),
+                                legacy_state.get('By'))
+                    cur.execute('''INSERT INTO processing_read_activation
+                        (Singleton,Version,ActivatedAt) VALUES (1,?,?)''', (str(version), str(fixed_now)))
+                cur.execute("UPDATE processing_migration SET Completion='complete' WHERE Version=?", (str(version),))
+                self.cx.commit(); self._writes += 1
+                return self._processing_backfill_summary(cur, str(version), 'complete')
+            except BaseException:
+                self.cx.rollback(); raise
+
+    def dock_tasks(self, tag, limit=60, before=None):
+        """Every conversation the guide has had, newest first - the chats list, a page at a time (`before` is
+        the last task id of the previous page)."""
+        if before: return self._rows('SELECT * FROM task WHERE SourceRef=? AND TaskId<? ORDER BY TaskId DESC LIMIT ?', (tag, int(before), int(limit)))
         return self._rows('SELECT * FROM task WHERE SourceRef=? ORDER BY TaskId DESC LIMIT ?', (tag, int(limit)))
     # ── a report's run history (reports.run_report_source; the Reports tab's History) ────────
     REPORT_RUNS_KEPT = 60          # per report - a month of half-hourly assistant checks is 1400, and nobody reads past the last few dozen
@@ -1070,6 +2533,13 @@ class SQLiteStore:
         self._exec('DELETE FROM report_run WHERE SourceId=? AND RunId NOT IN (SELECT RunId FROM report_run WHERE SourceId=? ORDER BY RunId DESC LIMIT ?)',
                    (sid, sid, self.REPORT_RUNS_KEPT))
         return rid
+    def report_run_failed(self, mid) -> bool | None:
+        """Did the run that PRODUCED this report message fail? None when no run is linked to it - the
+        caller falls back to the subject's convention. Keyed on the row, never on the report's newest
+        run, so an old failure stays a failure and a new one does not re-mark the rows before it."""
+        if not mid: return None
+        r = self._one('SELECT Failed FROM report_run WHERE MessageId=? ORDER BY RunId DESC LIMIT 1', (int(mid),))
+        return bool(r['Failed']) if r else None
     def report_runs(self, sid: int, limit: int = 60) -> list:
         """The history, newest first, WITHOUT the inputs (14KB each) - get_report_run fetches one whole."""
         return [self._run_row(r) for r in self._rows('SELECT RunId, SourceId, At, Type, Title, Ms, Subject, MessageId, Failed, Error, Said, LinesJson, ReviewedJson, '
@@ -1163,19 +2633,55 @@ class SQLiteStore:
         else:
             self._poke('feed-changed', message_id=mid)
     def claim_retriage(self, mid: int) -> bool:
-        """Atomically move one failed, taskless row back into triage.
+        """Atomically move one failed row back into triage: a message in the `error` state (linked
+        to a task or not), or a legacy failure still stored as a taskless `filed` row.
 
         The endpoint checks the prior verdict for a useful error message; this compare-and-set is
         the concurrency guard. Two clicks (or browser retries) must never create two tasks.
         """
         with self.lock:
+            # a legacy filed row qualifies only when its LAST route is a failure diagnostic - a
+            # genuine fyi is not retriable (same rule as upgrade_triage_failures, in SQL)
             cur = self.cx.execute("""UPDATE message SET Status='triaging'
-                                   WHERE MessageId=? AND TaskId IS NULL AND Status='filed'""", (mid,))
+                                   WHERE MessageId=? AND (Status='error' OR (Status='filed' AND TaskId IS NULL AND EXISTS (
+                                       SELECT 1 FROM route r WHERE r.RouteId=(SELECT MAX(RouteId) FROM route WHERE MessageId=message.MessageId)
+                                       AND (r.Reason LIKE 'AI triage failed (%' OR r.Reason LIKE 'AI triage returned an answer it could not read%'
+                                            OR r.Reason LIKE 'triage failed (%' OR r.Reason LIKE 'triage retry failed (%'))))""", (mid,))
             self.cx.commit(); self._writes += 1
             ok = cur.rowcount == 1
         if ok:
             self._poke('feed-changed', message_id=mid)
         return ok
+    # The route reasons triage writes when it FAILED - distinct from a verdict it reached. A
+    # no-AI install's "awaiting AI triage" is deliberately not here: flipping years of that
+    # history at once would be the bulk conversion PW-040 forbids; new arrivals wear the state.
+    TRIAGE_FAILURE = r"^(AI triage failed \(|AI triage returned an answer it could not read|triage failed \(|triage retry failed \()"
+    def upgrade_auto_start(self) -> bool:
+        """An install that had switched the coding agent's auto-start OFF said 'no unattended sessions'
+        before the assistant had a switch of its own: the new switch starts off for it too (PW-070).
+        Runs once; an owner's explicit choice for the new switch is never overwritten."""
+        cfg = self.get_settings()
+        if cfg.get('auto_start_upgraded') == '1': return False
+        row = self._one("SELECT * FROM setting WHERE Name='general_auto_enabled'")
+        seeded = row is None or not row.get('UpdatedBy')
+        changed = False
+        if seeded and cfg.get('coder_auto_enabled') == '0':
+            self.set_setting('general_auto_enabled', '0', 'upgrade'); changed = True
+        elif row is None: self.set_setting('general_auto_enabled', '1', 'upgrade')
+        self.set_setting('auto_start_upgraded', '1', 'upgrade')
+        return changed
+    def upgrade_triage_failures(self) -> int:
+        """Historical triage failures stored as `filed` become `error` once (PW-040) - identified
+        by their LAST route being a failure diagnostic, so a row the owner later ruled on, a genuine
+        fyi and a no-AI install's history all stay as they are. Read state is untouched: the funnel
+        keeps its own rows, and an error row is quiet there like a filed one."""
+        rows = self._rows("""SELECT m.MessageId, r.Reason FROM message m
+                             JOIN route r ON r.RouteId = (SELECT MAX(RouteId) FROM route WHERE MessageId=m.MessageId)
+                             WHERE m.Status='filed' AND m.TaskId IS NULL""")
+        ids = [r['MessageId'] for r in rows if re.match(self.TRIAGE_FAILURE, r['Reason'] or '')]
+        for mid in ids: self._exec("UPDATE message SET Status='error' WHERE MessageId=? AND Status='filed'", (mid,))
+        if ids: self._poke('feed-changed')
+        return len(ids)
     def pending_triage(self, limit=500):
         return self._rows("SELECT * FROM message WHERE Status='triaging' ORDER BY MessageId LIMIT ?", (limit,))
     def attach_message(self, mid, task_id):
@@ -1332,6 +2838,27 @@ class SQLiteStore:
     def set_dispatch_value(self, task_id, value, why=None, floor_=None):
         self._exec('UPDATE dispatchq SET Value=?, Why=COALESCE(?, Why), Floor=COALESCE(?, Floor) WHERE TaskId=?', (value, why, floor_, task_id))
     def clear_dispatch(self, task_id): self._exec('DELETE FROM dispatchq WHERE TaskId=?', (task_id,))
+    def get_dispatch(self, task_id): return self._one('SELECT * FROM dispatchq WHERE TaskId=?', (task_id,))
+    def dispatch_failed(self, task_id, error: str, permanent: bool = False, backoff=(30, 120), max_attempts: int = 3) -> dict:
+        """One failed start attempt on the queue row (PW-085/086): the count, the error and the next try are
+        persisted, so a restart cannot reset the budget. A permanent failure, or the last allowed attempt,
+        leaves the row 'failed' with no next try - the owner's Retry starts a new cycle."""
+        row = self.get_dispatch(task_id)
+        if not row: return None
+        n = int(row.get('Attempts') or 0) + 1
+        done = permanent or n >= max_attempts
+        wait = None if done else backoff[min(n - 1, len(backoff) - 1)]
+        nxt = None if done else (datetime.now() + timedelta(seconds=wait)).isoformat(sep=' ', timespec='seconds')
+        self._exec('UPDATE dispatchq SET Attempts=?, LastError=?, NextAt=?, State=? WHERE TaskId=?',
+                   (n, str(error)[:500], nxt, 'failed' if done else 'retrying', task_id))
+        self._poke('task-changed', task_id=task_id)
+        return {**self.get_dispatch(task_id), 'wait': wait}
+    def dispatch_retry(self, task_id) -> bool:
+        """The owner's Retry: a fresh bounded cycle on the same row (PW-087)."""
+        if not self.get_dispatch(task_id): return False
+        self._exec("UPDATE dispatchq SET Attempts=0, NextAt=NULL, State='waiting' WHERE TaskId=?", (task_id,))
+        self._poke('task-changed', task_id=task_id)
+        return True
 
     # LEARNED.md's history (learnedgraph.py): every point a line gained or lost, and every line that died
     def add_learned_event(self, key, text, status, score, ev, action, actor):
@@ -1454,7 +2981,33 @@ class SQLiteStore:
         self._exec('UPDATE review SET Reason=?, RunId=COALESCE(?, RunId) WHERE ReviewId=?', (reason, run_id, rid))
         self._review_changed(rid)
     def update_review_draft(self, rid, draft, run_id):
-        self._exec('UPDATE review SET DraftText=?, RunId=? WHERE ReviewId=?', (draft, run_id, rid))
+        self._exec('UPDATE review SET DraftText=?, RunId=?, DraftError=NULL WHERE ReviewId=?', (draft, run_id, rid))
+        self._review_changed(rid)
+    def set_review_draft_error(self, rid, error: str):
+        """The draft could not be written: keep the review pending and say why (PW-046)."""
+        self._exec('UPDATE review SET DraftError=? WHERE ReviewId=?', ((error or '')[:300] or None, rid))
+        self._review_changed(rid)
+    def review_envelope(self, rid) -> dict:
+        try: d = json.loads((self.get_review(rid) or {}).get('Deliver') or '{}') or {}
+        except (TypeError, ValueError): d = {}
+        return d if d.get('kind') == 'reply' else {}
+    def set_review_envelope(self, rid, env: dict):
+        """The recipients this draft will go to, kept with it so approval sends exactly what was reviewed (PW-064).
+        An outbound review's own delivery envelope is never overwritten."""
+        cur = (self.get_review(rid) or {}).get('Deliver')
+        try: existing = json.loads(cur or '{}') or {}
+        except (TypeError, ValueError): existing = {}
+        if existing and existing.get('kind') != 'reply': return False
+        self._exec('UPDATE review SET Deliver=? WHERE ReviewId=?', (json.dumps(env), rid))
+        self._review_changed(rid)
+        return True
+    def pin_review_context(self, rid, mid, revision: str):
+        """The exact inbound message and message-set revision this draft answered - captured BEFORE the
+        model ran, so a line landing during generation is not called seen (PW-048)."""
+        self._exec('UPDATE review SET MessageId=?, ContextRevision=?, Stale=0 WHERE ReviewId=?', (mid, revision, rid))
+        self._review_changed(rid)
+    def mark_review_stale(self, rid, on: bool = True):
+        self._exec('UPDATE review SET Stale=? WHERE ReviewId=?', (1 if on else 0, rid))
         self._review_changed(rid)
     def update_review_message(self, rid, mid):
         """Pin a reply draft to the newest inbound message it was written against.
@@ -1484,7 +3037,7 @@ class SQLiteStore:
     # ── the agent wall (blackboard.py) ──────────────────────────────────────────────────
     def add_note(self, fields) -> int:
         return self._insert('boardnote', {**fields, 'CreatedAt': _now()},
-                            ('TaskId', 'Agent', 'Cwd', 'Kind', 'Body', 'Files', 'CreatedAt', 'ReadBy'))
+                            ('TaskId', 'Agent', 'Cwd', 'Kind', 'Body', 'Files', 'CreatedAt', 'ReadBy', 'Sid'))
     def roll_notes(self, ids: list, day: str) -> int:
         """Mark these as composted into a summary. Nothing is deleted - the Board can still show
         the whole wall, and an agent that wants the detail can still read it."""
@@ -1526,7 +3079,15 @@ class SQLiteStore:
             self._exec(f"UPDATE source SET {','.join(f'{c}=?' for c in cols)} WHERE SourceId=?", [fields[c] for c in cols] + [sid])
             return sid
         return self._insert('source', fields, SOURCE_COLS)
-    def touch_source(self, sid): self._exec('UPDATE source SET LastPolledAt=? WHERE SourceId=?', (_now(), sid))
+    def touch_source(self, sid):
+        self._exec('UPDATE source SET LastPolledAt=? WHERE SourceId=?', (_now(), sid))
+        self._processing_ignored_writes += 1
+    def patch_source_poll_state(self, source_id, *, config_set=None, config_remove=(),
+                                last_polled_at=_POLL_UNSET, expect_fields=None, expect_config=None):
+        """Atomically checkpoint source progress; False means the captured source changed."""
+        return self._patch_poll_state('source', source_id, config_set=config_set,
+                                     config_remove=config_remove, last_polled_at=last_polled_at,
+                                     expect_fields=expect_fields, expect_config=expect_config)
     def rewind_source(self, sid):
         """Forget this source's watermark, so the next poll reaches back over history instead
         of only forward. What a source that was OFF needs the moment it is switched on: the
@@ -1618,18 +3179,36 @@ class SQLiteStore:
         """Just the config JSON - how the pollers keep their watermark (Telegram's update
         offset, the WhatsApp bridge's sequence) without touching secrets or roles."""
         self._exec('UPDATE connector SET ConfigJson=? WHERE ConnectorId=?', (json.dumps(cfg), cid))
+        self._processing_ignored_writes += 1
+    def patch_connector_poll_state(self, connector_id, *, config_set=None, config_remove=(),
+                                   expect_fields=None, expect_config=None):
+        """Atomically merge only poll-owned config keys while checking mailbox identity."""
+        return self._patch_poll_state('connector', connector_id, config_set=config_set,
+                                     config_remove=config_remove, expect_fields=expect_fields,
+                                     expect_config=expect_config)
     def touch_connector(self, cid, error=None):
         if error: self._exec('UPDATE connector SET LastError=? WHERE ConnectorId=?', (error[:500], cid))
         else: self._exec('UPDATE connector SET LastSyncAt=?, LastError=NULL WHERE ConnectorId=?', (_now(), cid))
+        self._processing_ignored_writes += 1
     def get_settings(self): return {r['Name']: r['Value'] for r in self._rows('SELECT * FROM setting')}
     def list_settings(self): return self._rows('SELECT * FROM setting ORDER BY Name')
     def set_setting(self, name, value, actor):
         self._exec('INSERT INTO setting (Name, Value, UpdatedBy) VALUES (?,?,?) ON CONFLICT(Name) DO UPDATE SET Value=?, UpdatedBy=?',
                    (name, value, actor, value, actor))
         if name == 'ingest_status':
+            # This setting is an ephemeral progress clock. It is intentionally absent from every
+            # processing projection, so do not make it invalidate otherwise reusable DB work.
+            self._processing_ignored_writes += 1
+        else:
+            self._processing_display_cache = {}
+        if name == 'ingest_status':
             try: extra = json.loads(value) if isinstance(value, str) else {}
             except (TypeError, ValueError): extra = {}
-            self._poke('feed-changed', ingest=extra if isinstance(extra, dict) else {})
+            # Progress is a clock/status change, not a new Timeline item. Treating every
+            # "reading Outlook" / "triaging" update as feed-changed made each open Assistant
+            # rebuild the complete canonical inventory over and over for one sync. Message and
+            # task writes already emit their own feed-changed events.
+            self._poke('ingest-status', ingest=extra if isinstance(extra, dict) else {})
     def last_report(self, title):
         """The previous filed run of a report, by title - its shape anchors the next run (reports.run_agent).
         Failed runs and outbound copies do not count: a table of refusals is not a structure to keep."""
@@ -1647,6 +3226,30 @@ class SQLiteStore:
                                        AND o.MessageId<>m.MessageId AND (o.Status='context' OR o.Direction='out'))
                             OR EXISTS (SELECT 1 FROM review r WHERE r.MessageId=m.MessageId AND r.Status IN ('approved','edited','sent')))
                             LIMIT 1""", (email, exclude_mid or 0)) is not None
+    def add_worker_event(self, fields: dict) -> int:
+        return self._insert('worker_event', fields, ('TaskId', 'Sid', 'Kind', 'RequestId', 'Text', 'ChoicesJson', 'Source', 'EventId'), {'CreatedAt': _now()})
+    def worker_events(self, task_id: int) -> list: return self._rows('SELECT * FROM worker_event WHERE TaskId=? ORDER BY Id', (task_id,))
+    def worker_event_exists(self, event_id: str) -> bool: return self._one('SELECT 1 x FROM worker_event WHERE EventId=?', (event_id,)) is not None
+    def wrote_to_locally(self, mailbox: str, email: str, exclude_mid=None) -> bool:
+        """Verified SENT evidence this store already holds, scoped to the receiving mailbox: the mailbox's own
+        words on a thread with this address (a 'context' row or an outbound one from the mailbox), or a reply
+        to them the owner approved or sent. Incoming rows alone never count (PW-079)."""
+        if not (email and mailbox): return False
+        return self._one("""SELECT 1 x FROM message m
+                             WHERE m.Channel='email' AND LOWER(m.SourceName)=LOWER(?)
+                               AND LOWER(m.FromEmail)=LOWER(?) AND m.MessageId<>? AND (
+                               EXISTS (SELECT 1 FROM message o WHERE o.ConversationId=m.ConversationId AND o.ConversationId IS NOT NULL
+                                       AND o.MessageId<>m.MessageId AND o.Channel='email'
+                                       AND LOWER(o.SourceName)=LOWER(?) AND LOWER(o.FromEmail)=LOWER(?)
+                                       AND (o.Status='context' OR o.Direction='out'))
+                             OR EXISTS (SELECT 1 FROM review r WHERE r.MessageId=m.MessageId AND r.Status IN ('approved','edited','sent')))
+                             LIMIT 1""", (mailbox, email, exclude_mid or 0, mailbox, mailbox)) is not None
+    def trusted_sender(self, mailbox: str, email: str):
+        r = self._one('SELECT * FROM sender_trust WHERE LOWER(Mailbox)=LOWER(?) AND LOWER(Address)=LOWER(?)', (mailbox or '', email or ''))
+        return r['Reason'] if r else None
+    def remember_trust(self, mailbox: str, email: str, reason: str):
+        self._exec('INSERT OR REPLACE INTO sender_trust (Mailbox, Address, Reason, CheckedAt) VALUES (?,?,?,?)',
+                   ((mailbox or '').lower(), (email or '').lower(), reason, _now()))
     def add_memory(self, fields): return self._insert('memory', fields, MEMORY_COLS, {'CreatedAt': _now()})
     def list_memories(self, active_only=True):
         return self._rows('SELECT * FROM memory' + (' WHERE Active=1' if active_only else '') + ' ORDER BY MemoryId DESC')
@@ -1747,6 +3350,7 @@ class SQLiteStore:
         be typed into six places across SOUL.md and three more in CODER.md, so changing it changed
         one of them - a doc that half calls you by name and half calls you John Smith."""
         return render_doc(self.get_doc(name) or '', self.owner())
+    def get_doc_row(self, name): return self._one('SELECT Name, Content, UpdatedBy, UpdatedAt FROM doc WHERE Name=?', (name,))
     def github_permissions(self) -> tuple:
         """(use_github_as_tracker, agents_may_push) - read from the GitHub CONNECTOR, where the
         GitHub decisions belong, falling back to the legacy settings so nothing regresses.
@@ -1814,7 +3418,7 @@ class SQLiteStore:
     SENT_UNANSWERED = """(rv.Status IN ('approved','edited','sent') AND rv.Kind <> 'action'
                          AND NOT EXISTS (SELECT 1 FROM message x
                                          WHERE x.ConversationId = m.ConversationId AND IFNULL(m.ConversationId,'') <> ''
-                                           AND x.Status NOT IN ('context','skipped') AND IFNULL(x.Direction,'in') <> 'out'
+                                           AND x.Status NOT IN ('context','history','skipped') AND IFNULL(x.Direction,'in') <> 'out'
                                            AND x.SentAt > IFNULL(rv.DecidedAt, rv.CreatedAt)))"""
     THEIR_TURN = ("(CASE WHEN m.TaskId IS NOT NULL AND IFNULL(t.Status,'') NOT IN ('done', 'dropped') "
                   f"AND (IFNULL({LAST_WORD_YOURS}, 0) = 1 OR {SENT_UNANSWERED}) THEN 1 ELSE 0 END)")
@@ -1828,14 +3432,15 @@ class SQLiteStore:
                     THEN 1 ELSE 0 END)"""
     NEEDS_YOU = NEEDS_YOU_T.replace('{answered}', ANSWERED_AT).replace('{theirs}', THEIR_TURN)
 
-    def feed(self, limit=100, days=14, pending_only=False, channel=None, offset=0, source=None):
+    def feed(self, limit=100, days=14, pending_only=False, channel=None, offset=0, source=None,
+             live_state=_LIVE_UNSET):
         q = f'''SELECT m.MessageId, m.Channel, m.SourceName, m.Subject, m.FromName, m.FromEmail, m.SentAt, m.CreatedAt IngestedAt,
                        m.ConversationId,
                        substr(m.BodyText, 1, 4000) Preview, m.Status MsgStatus, m.SourceLink, m.TaskId, m.Direction, m.Brief,
                        t.Title, t.Status TaskStatus, t.Priority, t.Kind TaskKind, t.Tags TaskTags, {self.NEEDS_YOU} NeedsYou,
                        IFNULL(ch.n, 0) ChainSize,
                        rt.Decision, rt.Reason RouteReason,
-                       rv.ReviewId, rv.Status ReviewStatus, rv.Kind ReviewKind, rv.HasDraft,
+                       rv.ReviewId, rv.Status ReviewStatus, rv.Kind ReviewKind, rv.HasDraft, rv.DraftError,
                        IFNULL(att.n, 0) Attachments,
                        {self.ANSWERED_AT} AnsweredAt,
                        {self.THEIR_TURN} TheirTurn
@@ -1846,7 +3451,7 @@ class SQLiteStore:
                     WHERE RouteId IN (SELECT MAX(RouteId) FROM route GROUP BY MessageId)
                 ) rt ON rt.MessageId=m.MessageId
                 LEFT JOIN (
-                    SELECT MessageId, ReviewId, Status, Kind, DecidedAt, CreatedAt,
+                    SELECT MessageId, ReviewId, Status, Kind, DecidedAt, CreatedAt, DraftError,
                            CASE WHEN IFNULL(DraftText,'')<>'' THEN 1 ELSE 0 END HasDraft FROM review
                     WHERE ReviewId IN (SELECT MAX(ReviewId) FROM review GROUP BY MessageId)
                 ) rv ON rv.MessageId=m.MessageId
@@ -1854,12 +3459,12 @@ class SQLiteStore:
                     SELECT MessageId, COUNT(*) n FROM attachment GROUP BY MessageId
                 ) att ON att.MessageId=m.MessageId
                 LEFT JOIN (
-                    SELECT TaskId, COUNT(*) n FROM message WHERE Status<>'context' GROUP BY TaskId
+                    SELECT TaskId, COUNT(*) n FROM message WHERE Status NOT IN ('context','history') GROUP BY TaskId
                 ) ch ON ch.TaskId=m.TaskId
                 LEFT JOIN (
                     SELECT DISTINCT TaskId FROM run WHERE Status='running'
                 ) rn ON rn.TaskId=m.TaskId
-                WHERE m.CreatedAt >= datetime('now', 'localtime', ?) AND m.Status NOT IN ('context', 'skipped') '''
+                WHERE m.CreatedAt >= datetime('now', 'localtime', ?) AND m.Status NOT IN ('context', 'history', 'skipped') '''
         p = [f'-{int(days)} days']
         if pending_only: q += f' AND {self.NEEDS_YOU}=1'
         # channel accepts a csv so the UI can filter by a CATEGORY (messages = email,
@@ -1882,7 +3487,8 @@ class SQLiteStore:
         live, parked = {r['TaskId']: r.get('AgentName') or 'agent' for r in self.running_runs()}, set()
         try:
             from . import terminal as hub_term
-            for t in hub_term.live_sessions(tail=0):
+            observed_live = hub_term.live_sessions(tail=0) if live_state is _LIVE_UNSET else live_state
+            for t in observed_live:
                 if not t.get('taskId'): continue
                 live[t['taskId']] = t.get('agent') or t.get('label') or 'coder'
                 # "an agent has it" and "an agent stopped and is waiting on you" are opposite
@@ -1964,23 +3570,11 @@ class SQLiteStore:
             # Sorting Unread is not a second triage. These are only the durable fields written by
             # the one route decision, plus live agent state. All remains chronological; Unread uses
             # this band to promote what blocks work or needs the owner.
-            if r.get('AgentWaiting'):
-                rank = 0
-            elif (r.get('Priority') or '').lower() == 'urgent':
-                rank = 1
-            elif r.get('ReviewStatus') == 'pending':
-                rank = 2
-            elif r.get('Channel') == 'report' and str(r.get('Subject') or '').rstrip().endswith('FAILED'):
-                rank = 3
-            elif r.get('NeedsYou'):
-                rank = 4
-            elif r.get('Channel') == 'report':
-                rank = 6
-            elif r.get('Working'):
-                rank = 8
-            else:
-                rank = 7
-            r['UnreadRank'] = rank
+            from .processing_order import feed_band
+            if r.get('Channel') == 'report':
+                from .funnel import report_failed
+                r['ReportFailed'] = report_failed(self, r.get('Subject') or '', r.get('MessageId'))
+            r['UnreadRank'] = feed_band(r)
         # the SQL filter matched before live sessions were known; a row a working agent just took off
         # you must not sit in "needs me" wearing a chip that says otherwise
         if pending_only: rows = [r for r in rows if r.get('NeedsYou')]
@@ -2031,7 +3625,8 @@ class SQLiteStore:
         t = self.get_task(task_id)
         if not t: return None
         msgs = self.list_messages(task_id)
-        return {'task': t, 'ref': task_ref(task_id), 'messages': msgs,
+        return {'task': {**t, 'ChecklistMd': self.checklist_markdown(task_id)}, 'ref': task_ref(task_id), 'messages': msgs,
+                'checklist': self.task_checklist(task_id),
                 'attachments': [a for m in msgs for a in self.list_attachments(m['MessageId'])],
                 'artifacts': self.list_task_artifacts(task_id),
                 'routes': self.list_routes(task_id), 'comments': self.list_comments(task_id),

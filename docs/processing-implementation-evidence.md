@@ -1,0 +1,2799 @@
+# Processing implementation evidence
+
+## Phase 0 / section 0.1: baseline and test infrastructure
+
+Status: section 0.1 CI-verified at 9bef568. Phase 0 baseline infrastructure is accepted. Base `2689679dd87227ff9102bb7d7feb8920e3c47ca6`.
+No Phase 1 state migration or browser-control redesign has started.
+
+### Baseline and ownership
+
+- Original checkout: master at base, matching origin/master on 2026-09-06.
+  Only README.md was dirty; Git reported no content diff (line-ending/index state).
+  Preserved untouched. No stash/reset/clean or user-data edits.
+- Checkpoint CI: [run 34010359323](https://github.com/ldbumble/taskuary/actions/runs/34010359323)
+  completed successfully for the exact base SHA: six Python OS/version jobs,
+  frontend, Docker smoke and Windows executable.
+- Existing approved queued-start and complete COUNSEL fixes already belong to base.
+  No second implementation or live document update is needed.
+- Integration: root in isolated processing/phase0-integration checkout; sole owner
+  of docs/ledger, CI, packaged UI, integration commits and pushes.
+- Implementation: phase0_fixtures (Sol High), tests/conftest.py and new synthetic
+  fixtures/preservation tests in processing/phase0-fixtures.
+- Implementation: phase0_browser (Sol High), isolated rendered-browser harness
+  in processing/phase0-browser. No browser-control product changes.
+- Independent integration/review: phase0_review (Astra Extra High), read-only audit
+  of safety, contracts and final diff. Agents do not push or merge.
+
+### Acceptance and contracts
+
+Owner policy response, 2026-09-06: preserve historical read results, including old
+display-only handling, and apply the new display-does-not-read semantics going forward.
+This resolves the historical migration ambiguity without authorizing a blanket unread reset.
+Owner ordering response, 2026-09-06: approved the five proposed bands and chose
+oldest activity first within each band, after triage priority. Band 1 covers urgent
+requests and current/starting-within-15-minutes calendar items; bands 2 through 5
+are agent waits, other actionable tasks/finished results, FYIs, and working agents.
+
+| Phase 0 ID | Requirement | Evidence/status |
+| --- | --- | --- |
+| P0-INVENTORY | Preserve/classify dirty tree and verify checkpoint CI | Complete inspection above; README untouched |
+| P0-LEDGER | Every TODO checkbox has stable phase/test/commit tracking | 267 permanent PW IDs; JSON/Markdown ledger; coverage validator |
+| P0-CONTRACT | State contracts and superseded language documented | processing-state-contracts.md; unresolved policy questions pending |
+| P0-ISOLATION | Disposable test homes and external-effect prevention | Implemented and independently reviewed; executed evidence below |
+| P0-FIXTURE | Synthetic Unread/group/wait/duplicate/replay and legacy preservation | Implemented and independently reviewed; executed evidence below |
+| P0-BROWSER | Real rendered-browser harness, loading/replay timing | Implemented and independently reviewed; executed evidence below |
+| P0-REGRESSION | Full cumulative suites/build/native PTY and baseline failures | Backend 2187 + 66 subtests; frontend 262; browser 2; build parity passed |
+| P0-REVIEW | Independent final diff and isolation review | Astra Extra High independent code, isolation and final staged evidence review approved |
+| P0-REMOTE | Scoped push to origin/master and exact-SHA CI | 9bef568; CI run 34012833267: all 10 jobs successful |
+
+See processing-existing-failures.md for observed deficiencies separately from test
+failures. Every unchecked PW requirement remains pending implementation. Previously
+checked document-only changes retain their original scope; no expanded claims.
+
+### Commands and results
+
+OS: Windows; Python 3.10; baseline Node 20.10.0, final Node 22.23.2; npm 10.2.3. All commands run in the isolated
+integration checkout, never the directory serving the owner's app. Runner durations
+are listed separately from dependency installation and orchestration time.
+
+| Command | Base/input | Result | Duration |
+| --- | --- | --- | --- |
+| gh run list --commit 2689679dd87227ff9102bb7d7feb8920e3c47ca6; gh run view 34010359323 | Remote base | All 9 jobs successful | Existing run |
+| npm ci (website) | Locked baseline dependencies | Installed; Node engine warnings recorded as OBS-007 | 51 s |
+| npm test (website) | Unchanged baseline frontend | 262 passed; 0 failed/skipped | 2.113 s |
+| npm run build (website) | Unchanged baseline source | Passed; generated assets differ from committed baseline; initial parity discrepancy resolved below | 52.89 s |
+| npm run build (website), then git diff --exit-code -- taskuary/web and untracked-asset check | LF-normalized baseline inputs | Passed; exact committed asset content/names restored. Difference was CRLF encoding, not stale source | 12.80 s |
+| python -m pytest -q tests/test_processing_ledger.py tests/test_processing_demo_replay.py | Integration plus bounded Replay compatibility fix | 4 passed | 2.82 s |
+| python -m pytest -q | 2689679 + isolation a0ce5c2 + Replay fix + ledger tests | 2157 passed, 12 failed, 1 existing skip, 66 subtests; isolation guards blocked legitimate synthetic CLI/MCP children and platform probe, and a browser mock masked direct tests. Initial failed gate, repaired in final run below | 160.61 s |
+| python -m pytest -q -ra | Integrated isolation/preservation 6dd42b4, Replay fix and ledger tests | **2186 passed, 66 subtests passed, 1 existing clock-dependent skip**, 149 warnings. All 12 initial failures resolved without changing earlier assertions | 157.55 s |
+
+The existing skip is `tests/test_digest_brief.py:138` before the 08:00 daily slot.
+Existing `FakeScreencast.stop()` teardown warnings in tests/test_browserview.py stop
+an asyncio loop before coroutine cleanup; they are recorded separately and are not
+proof of successful shutdown. Full regression includes native Windows ConPTY tests
+using reviewed synthetic Python children; it does not establish real provider approval.
+
+The rendered fixture exposed missing `demo.Replay.quiet_for`, which disconnected
+the real terminal websocket during attachment. Local commit `6a50579` supplies the
+no-op recording contract and tests two real websocket reattachments, ready/replay,
+subscription cleanup, preserved idle state and ignored input. Independent Astra review
+approved this bounded Phase 0 loading fix. No real terminal or browser-control redesign.
+
+### Final frontend/browser gate
+
+The original Puppeteer 25.8.0 dependency lock is retained byte-for-byte from 2689679.
+Use Node 22 for all frontend gates. On this machine the disposable runtime came from
+`npm exec --yes --package=node@22 -- node -p "process.execPath"`; its directory was
+prepended to PATH only in each test shell. No global runtime installation was changed.
+CI web/browser jobs now use Node 22. The npm test script explicitly selects all
+`test/**/*.test.mjs` files because Node 22 no longer accepts the old directory argument;
+all 52 existing files and 262 cases remain covered, with no earlier assertion edits.
+
+| Command (website, disposable Node 22.23.2) | Result | Duration |
+| --- | --- | --- |
+| npm ci | Baseline lock installed; no introduced dependency advisories | Dependency installation |
+| npm test | **262 passed; 0 failed/skipped** | 1.467 s |
+| npm run build | Passed; original asset filenames/content retained | 24.67 s |
+| npm run test:browser | **2 passed; 0 failed/skipped** | 43.454 s |
+| git diff --exit-code -- taskuary/web; git ls-files --others --exclude-standard -- taskuary/web (repository root) | Both empty: source/shipped UI parity | After final build |
+
+Real Edge/Chromium on a fixed 37-item invented demo SQLite fixture, with isolated
+homes/ports and blocked outbound HTTP/WebSockets/TCP. Current/Next, double Walk,
+explicit Next, tab return/reload, no duplicate/unsolicited turn, Tasks/Board/Reports,
+terminal output/ready, input emission during replay and reconnect were exercised.
+
+| Measurement | Integrated Windows result | Provisional enforced ceiling |
+| --- | --- | --- |
+| Assistant first visible | 5259 ms | 8000 ms |
+| Composer input | 862 ms | 1500 ms |
+| Tasks / Board / Reports visible | 196 / 225 / 238 ms | 3000 ms each |
+| Terminal replay visible | 4031 ms | 10000 ms |
+| Terminal input emission | 65 ms | 1500 ms |
+| Terminal reconnect | 870 ms | 10000 ms |
+
+The recording intentionally ignores input: browser emission is not provider acceptance.
+The backend suite separately tests native ConPTY with synthetic Python children.
+Performance budgets are repeatable smoke/regression ceilings, not a general load-test
+or provider-response guarantee. Keep the recorded fixture size and ceilings in later gates.
+
+### Remote checkpoint repair
+
+First push: `75a7604b374e8eb7f5cc1543eb9e1b38413d730c`,
+[CI run 34012476316](https://github.com/ldbumble/taskuary/actions/runs/34012476316).
+Web tests/build/parity, rendered browser and Docker passed. The Python matrix
+failed collecting the new fixture package: `pytest` does not add the repository
+root to imports in the same way as `python -m pytest`. The sibling import was
+changed from `tests.processing.fixtures` to `.fixtures`; no test assertions changed.
+Independent Astra review approved the correction. The exact console entrypoint
+`pytest -q -ra` then revealed the local editable install selected the original
+checkout rather than this worktree: 2184 passed and the two new Replay tests failed
+in 158.42 s, with traceback paths proving the wrong source. Test data remained in
+the isolated home. The bootstrap now prepends its own checkout before application
+imports and rejects a previously loaded wrong-root package; a new test verifies
+package/config/server provenance. This correction also received independent Astra
+review. The corrected console entrypoint is rerun locally, followed by another
+scoped push and exact-SHA CI.
+This first remote checkpoint is not accepted; no Phase 1 code has started.
+
+Corrected console-entrypoint gate: `pytest -q -ra` on the integration worktree
+passed **2187 tests and 66 subtests**, with the same one existing time-dependent
+skip and 150 warnings, in **155.86 s**. Application import paths now resolve to the
+tested checkout. Frontend/browser/runtime source and dependency lock did not change
+during this collection/bootstrap repair; their passing results above remain applicable.
+
+### Migration, rollback and limitations
+
+Phase 0 makes no database schema or live data migration. Synthetic reopen evidence
+and the additive migration/backup/rollback contract are prerequisites to later state
+changes. Preserve all original read evidence, attachments, task history and custom
+documents. No app restart, production connector use, outbound delivery or real model
+run is part of this section. Browser-control ownership/UI remains pending owner review.
+
+Section 0.1 delivery gates are complete. No later phase may be accepted on these
+baseline results alone; each must rerun cumulative gates.
+
+### Accepted remote checkpoint
+
+Implementation checkpoint: `9bef568093b6085821e384b3cc66974fde6d2351` on
+origin/master. [CI run 34012833267](https://github.com/ldbumble/taskuary/actions/runs/34012833267)
+completed successfully for that exact SHA: six Python jobs (Windows/Linux/macOS,
+3.10/3.12), frontend tests/build/packaged parity, rendered browser, Docker smoke,
+and Windows executable. The earlier failed checkpoint is superseded, not concealed.
+
+The original README.md remains unmodified, SHA256
+`EDF56683E29A34789B2EBEF73E131FBD7B318AE498BC761668BCB70854D91BAB`.
+Raw local logs are preserved under the integration worktree's ignored
+`.codex-tmp/phase0-evidence/`; only scoped source/tests/docs entered the commits.
+
+Next: Phase 1 canonical identity/context and historical-read preservation foundation.
+Later grouping/action/deferral policy transitions remain separate pending decisions.
+
+## Section 1.1 — canonical identity and historical-evidence foundation
+
+Status: section 1.1 is CI-verified at `85c2e1b`. This accepts the foundation only,
+not the entire Phase 1 redesign.
+Base `8be0b769b411346b2a380e0037a54426703c5af5` passed all ten jobs in
+[CI run 34013108300](https://github.com/ldbumble/taskuary/actions/runs/34013108300).
+PW-101 and PW-104 are partial targets; no Phase 1 feature checkbox is completed by
+additive storage alone. Shared feed/UI adoption, final read cutover, ordering and
+Current/Next remain subsequent sections.
+
+### Ownership and boundaries
+
+- Sol High storage agent: isolated `processing/phase1-store`, sole owner of
+  `taskuary/store.py` and storage/migration tests.
+- Sol High model agent: isolated `processing/phase1-model`, pure
+  `taskuary/processing.py` and fingerprint/legacy-evidence tests.
+- Lead: isolated `processing/phase1-integration`, seam tests, integration,
+  cumulative gates, documentation and delivery.
+- Astra Extra High reviewer: independent architecture and final-diff review.
+
+User decisions carried forward: preserve old effective read results with their
+provenance; use display-does-not-read after the later semantics switch. Sort within
+the five approved bands by triage priority, oldest activity, then stable identity.
+New activity during deferral and grouped Done remain pending policy decisions.
+
+### Implemented scope and review
+
+Durable alias/member continuity, independent digest ideas, provider scope isolation,
+full-body/attachment context fingerprints, view-only changes, uncapped legacy
+capture of 507 messages, atomic rollback/retry, concurrent initialization, repeated reopen and
+unchanged original records/documents. Independent seam tests compare captured
+legacy evidence against both explicit expected outcomes and the unchanged feed.
+
+Startup adds storage only. Explicit synthetic baseline capture does not activate
+new read semantics. The eventual cutover must capture/reconcile final historical
+evidence atomically; later arrivals must not receive repeated legacy inference.
+No live app restart or migration is included. Browser control/UI redesign remains
+pending review.
+
+The canonical tables retain exact entity targets, active and retired memberships,
+explicit aliases, item redirects, independent wrapper relations and versioned legacy
+evidence. Unscoped provider IDs are not inferred from display names. Each baseline
+stores full context/view inputs once per item/version under the same completion
+transaction, while preserving raw legacy records. Replaying a completed baseline
+does not recapture later owner writes or new arrivals. A subsequent explicit capture
+can retain an FYI identity when it gains a task anchor.
+
+Current snapshot getters use one SQLite read transaction even across an external
+connection's merge. Their computed revisions cover complete message bodies (tested
+beyond the old 4000-character preview), task summary/context, attachment metadata,
+idea substance and explicit relations. Drafts, route verdict/errors, task status,
+priority, legacy read/defer, category settings and supplied worker attention affect
+the view revision. Missing worker observations are distinct from observed empty
+ones; copied nested payloads cannot change after a revision has been returned.
+
+Astra independently compared the legacy predicate against 1,500 synthetic cases;
+selected key and observed unread agreed in every case. It also AST-compared all
+pre-existing store methods with the accepted base: none changed. Reviews corrected
+provider display-name inference, due-note and closed-worker enrichment, idea ordering,
+omitted raw/excluded evidence, merge-history visibility, concurrent captures, mutable
+worker snapshots and an insufficient resolver-race assertion before final approval.
+No previous assertion or skip was weakened.
+
+### Local gates
+
+| Gate | Result | Duration |
+| --- | --- | --- |
+| `python -m pytest -q tests/processing` | 98 passed, including all Phase 0 fixture/isolation gates | 6.30 s |
+| First full `python -m pytest -q -ra` | 2262 passed, 66 subtests, one existing pre-08:00 skip; before final projection/worker additions | 168.73 s |
+| Final full `python -m pytest -q -ra` | 2267 passed, 66 subtests, one existing pre-08:00 skip, 150 existing warnings | 159.43 s |
+| Node 22 `npm test` | 262 passed; no failures or skips | 1.342 s |
+| Node 22 `npm run build` | Passed; packaged assets match committed source output exactly | 27.00 s |
+| Node 22 `npm run test:browser` | 2 real-browser scenarios passed | 44.364 s |
+
+The unchanged 37-item synthetic demo/browser harness measured first visibility
+5875 ms, input 738 ms, Tasks/Board/Reports 146/231/187 ms, terminal replay 3877 ms,
+input emission 122 ms and reconnect 1089 ms. All existing ceilings passed without
+changes. The demo recording still proves input emission, not provider acceptance.
+The final worker-copy repair only affects explicit foundation APIs unused by the
+current demo/production consumers; frontend source, packaged assets and browser flows
+did not change after this browser run.
+
+Local logs are retained under the isolated integration worktree's ignored
+`.codex-tmp/phase1-evidence/`. Existing FakeScreencast teardown and Pydantic warnings
+remain recorded; they are not evidence of a new shutdown fix.
+
+### Delivery checkpoint
+
+Source integration commit: `81981b8`. Agent source commits are `13d4aab` (pure
+model), `f5ac813` (storage) and `7ce76bf` (projection tests), integrated as `917123a`,
+`9a1636b` and `2e458de` before the lead's seam corrections. All local gates and
+independent review above cover the final integrated source. Delivery checkpoint
+`85c2e1b104059e906fbfcca46809db9b0a2a7d4c` passed all ten jobs in
+[CI run 34014667609](https://github.com/ldbumble/taskuary/actions/runs/34014667609):
+the six Python matrix jobs, frontend/build parity, real browser, Docker and Windows
+executable. The original checkout was fast-forwarded after that result; README SHA256
+remains `EDF56683E29A34789B2EBEF73E131FBD7B318AE498BC761668BCB70854D91BAB`.
+
+Rollback compatibility: additive tables and APIs leave existing consumers unchanged.
+An older app can ignore the new tables but cannot consume canonical evidence. No
+automatic backup restoration is performed; corrective migration must preserve writes
+after any baseline. The eventual live cutover still requires the consistent-backup
+and final-evidence gate in the state contract. No live migration or restart occurred.
+
+## Section 1.2 — All and Unread view controls
+
+Status: CI-verified at `2557c94`, from accepted base `85c2e1b`.
+Scope: PW-107's approved two-view UI. Remove every Needs me navigation/filter entry
+and enforce All as a detail-only surface while preserving the Unread funnel,
+Current/Next and deliberate task/detail actions. Canonical inventory adoption, new
+read semantics, ordering and unresolved grouped/defer/exclusion transitions remain
+separate work; this section does not activate them.
+
+Sol High UI agent owns `FeedView.jsx` and frontend contract tests in isolated
+`processing/phase1-views-ui`. A second Sol High agent owns rendered-browser acceptance
+in `processing/phase1-views-browser`. The lead integrates on `processing/phase1-views`,
+builds packaged assets, runs cumulative gates and delivers. Astra Extra High provides
+independent review. Existing assertions are retained unless a Needs me expectation is
+explicitly superseded by PW-107, with replacement behavioral evidence recorded here.
+
+The feed no longer constructs `pending_only` or exposes Needs me navigation and
+statistics. Action-needed status remains available. All retains deliberate detail
+actions; entering, hovering, pinning and returning to it cannot start Walk, settle
+an item or create an assistant turn. Unread retains Current/Next and chat/task mode.
+All/Unread changes reuse their identical underlying feed query rather than fetching
+it again solely because the view changed. Existing refresh and mutation paths still
+refresh data. Switching views clears detail and invalidates pending hover responses;
+it does not clear or advance Current.
+
+The two old source-location assertions in `funnelPile.test.mjs` now verify wiring
+to the extracted `feedInteraction` helper. Its behavioral truth table covers All,
+Unread, chat/task mode and callback availability. All other prior assertions remain;
+the new real-browser tests additionally verify rendered controls and durable state.
+PW-107 stays partial because live-state-before-selection is not activated here.
+
+Local cumulative backend gate: `python -m pytest -q -ra`, 2267 passed plus 66
+subtests, one existing pre-08:00 skip and 150 existing warnings, 159.72 seconds.
+Final Node 22 frontend gate: 264 passed, no failures/skips, 1.325 seconds.
+Final packaged build: passed in 11.43 seconds, including the pending-detail fix.
+Logs remain in ignored `.codex-tmp/phase1-views-evidence/` in the isolated integration
+worktree. Final browser race coverage, review and remote checkpoint follow below.
+
+Independent Astra Extra High review approved the final UI, tests and scope. Its
+pending-hover finding is fixed in `ac5f192`. The real browser regression in
+`d60e2ab` uses a fresh page and CDP latency on an actual fixture detail GET, switches
+to Unread while that request is pending, and waits for the full body and rendering.
+It then verifies visible Unread chat, unchanged Current/Next and exact durable turns.
+Negative control against the exact pre-fix UI `3a5fc4a` fails because stale detail
+replaces chat; the exact fixed UI passes (15.710 seconds for the focused scenario).
+No harness network guards or previously accepted tests/ceilings were relaxed.
+Agent commits: UI `3a5fc4a`, browser `c535f4e` and race follow-up `830094b`;
+integrated as `0435ce9`, `2977162` and `d60e2ab`, with the lead's `ac5f192` fix.
+
+Final integrated Node 22 `npm run test:browser`: 3/3 passed, no failures/skips,
+35.762 seconds. First visibility/input: 2348/472 ms; Tasks/Board/Reports:
+136/160/136 ms. Terminal replay/input/reconnect: 3459/52/698 ms. Existing ceilings
+and network isolation passed unchanged. Desktop, narrow-screen and delayed-response
+tests cover the final source; packaged assets were generated from that exact UI.
+Delivery `2557c946d23903ea28662b05e343c6f19776cc0a` passed all ten jobs in
+[CI run 34016219556](https://github.com/ldbumble/taskuary/actions/runs/34016219556),
+including packaged parity and the new browser regression. The original workspace
+was then fast-forwarded; its README hash is unchanged. No live app restart, data migration or
+production connector was used. Browser-control redesign remains pending.
+
+## Section 1.3 — frozen inventory, ordering and pagination foundation
+
+Status: CI-verified at `162afbc`, from accepted base `2557c94`.
+Partial acceptance targets: PW-101/102/103/106/109/110/111/112. This section adds
+internal read-only enumeration and pure ordering/pagination mechanics. No server
+endpoint, feed/assistant consumer, live migration or read-policy transition is
+activated. Canonical roots are read in one SQLite transaction without age/category
+caps. Coverage reports uncatalogued records and unsupported adapters explicitly;
+an empty canonical table is not proof of an empty inbox.
+
+The store agent owns `store.py` and focused inventory-store tests in isolated
+`processing/phase1-inventory-store`. The pure-model agent owns
+`processing_inventory.py` and its tests in `processing/phase1-inventory-model`.
+Both use Sol High. The lead owns integration tests/docs/gates on
+`processing/phase1-inventory`; independent review uses Astra Extra High.
+Source activity and recognized priority can support raw chronological ordering;
+priority bands require explicit revision-bound ranking facts where persisted state
+cannot establish live attention. Unknown facts stay diagnostic, never guessed read,
+exclusion or automatic-selection decisions. Calendar enumeration remains unsupported.
+
+### Implementation and review
+
+Store agent source `eac48c7` integrates as `b1ea30d`. It factors the existing
+single-item snapshot body into a private cursor helper, preserving the public
+getter's output, and adds `processing_inventory_snapshot(fixed_now=..., live_state=...)`.
+All roots, memberships, projections, exact legacy evidence and coverage share one
+SQLite read transaction. Full snapshot content and the frozen complete worker input
+contribute to revisions. Worker unavailability differs from an observed empty set;
+non-JSON input is rejected before opening a transaction. No schema or runtime
+consumer changed, and no getter allocates identity or writes receipts.
+
+Pure-model source `9b0281a` integrates as `d696114`.
+`processing_inventory_page` supports raw All/priority order with transport pages of
+1–500 items; 507-item tests prove there is no inventory cap. Cursor tokens bind
+snapshot, order, normalized ranking facts, query version, position and anchor.
+Changed or malformed inputs require an explicit restart/error. Counts remain raw
+canonical/member/returned/remaining counts, never eligible or unread totals.
+Returned data is detached from caller snapshots, which remain immutable across pages.
+
+Ranking facts require the exact current item view revision. Urgent/current-or-soon
+calendar facts rank first, owner input/approval second; working remains band 5 even
+with generic FYI/actionable/old-result signals. Without working, actionable/finished
+and FYI facts use bands 3 and 4. Priority then oldest activity and stable identity
+break ties; All uses newest comparable activity. Calendar is current on a half-open
+start/end interval or starts within an inclusive 15 minutes of the frozen clock.
+Missing/naive activity remains unknown and sorts last within its applicable band
+and priority. Source timestamps retain exact-entity provenance. Task creation cannot
+replace a message's older activity, and a related idea cannot lend activity to a
+different canonical wrapper. Read, defer, exclusion and actionability stay unknown.
+
+Astra Extra High independently approved storage, model and the initial integration
+test design. Review corrected working precedence and cross-item idea activity before
+acceptance. Lead review also corrected timestamp formatting, calendar endpoints,
+task-only activity fallback and malformed cursor/count validation. No earlier test
+assertion or skip was weakened. All 144 integrated processing tests pass (8.66 s),
+including 507-item storage/page coverage, owner-table preservation, concurrent WAL
+merge isolation, six in-place revision changes, stale facts/cursors, failed projection
+cleanup/retry, old uncatalogued arrivals and independent wrapper/idea identities.
+
+### Cumulative gate findings
+
+The first cumulative backend run had 2312 passes plus 66 subtests, one existing
+pre-08:00 skip and one failure: `test_index_serves_ui` observed HTTP 503 while the
+lead ran Vite's output replacement concurrently. The unchanged serving code returns
+that status when `index.html` is temporarily missing. The focused test passes after
+the build (0.79 s); a full rerun with stable assets is required below. The plan now
+explicitly sequences these dependent gates. No test expectation was changed.
+
+Frontend: 264 passed (1.394 s). Build: passed (13.65 s), with packaged assets
+identical to the accepted source output. The first browser run passed two scenarios
+but failed PW-107's narrow-screen Next equality; Current stayed unchanged. This is
+being investigated before delivery, without relaxing the accepted assertion.
+
+The final backend rerun with stable packaged assets passed: 2313 tests plus 66
+subtests, one existing pre-08:00 skip and 150 existing warnings, 167.08 seconds.
+The existing fake-screencast teardown/Pydantic warnings remain unchanged.
+
+The browser investigation reproduced the exact Next change in real fixture API
+state: immediately after Walk all three recorded demo sessions were working and
+Next was the Q3 review; 7.751 seconds later they were parked/waiting and Next was
+the Northwind census agent. That is a legitimate background promotion, not a view
+navigation mutation. PW-107's setup now waits for those actual sessions to reach
+their final waiting state before the first page opens. It requires a nonempty set
+and the census session. A deliberately slow run then exposed the watcher's separate
+12-second dwell: it subsequently recorded three legitimate waiting notifications.
+Setup therefore also waits until those exact session task IDs are durably announced
+and a subsequent forced pile has no events, then starts a fresh synthetic conversation
+before any page opens. Every Current/Next, history, gesture and isolation assertion
+is retained; no runtime or harness behavior is suppressed. The normal run passed
+and an added 8.5-second post-Walk diagnostic delay passed (44.49 s). That temporary
+delay was removed; the final focused run passed (38.72 s including setup/teardown).
+The terminal replay scenario still uses its separate live recording and original
+timing gates. This fixture correction does not claim unsolicited watcher behavior
+is redesigned; that remains a later acceptance item.
+
+### Final local gates and delivery
+
+| Gate | Result | Duration |
+| --- | --- | --- |
+| Integrated processing tests | 144 passed | 8.66 s |
+| Final full backend | 2313 passed, 66 subtests; one existing skip | 167.08 s |
+| Node 22 frontend tests | 264 passed, no failures/skips | 1.394 s |
+| Packaged build | Passed; output unchanged from accepted UI | 13.65 s |
+| Final cumulative real browser | 3 passed, no failures/skips | 58.780 s |
+
+Final browser timings: first visibility/input 2433/468 ms; Tasks/Board/Reports
+150/145/130 ms; terminal replay/input/reconnect 3455/81/785 ms. Every original
+ceiling passed. Setup stabilization source `afc3a10` integrates as `3334680`;
+lead integration tests are `5b8044b`. Independent review approved final source,
+schema preservation, tests, fixture correction and partial acceptance scope.
+Logs remain in ignored `.codex-tmp/phase1-inventory-evidence/` in the isolated
+integration checkout. README SHA256 remains
+`EDF56683E29A34789B2EBEF73E131FBD7B318AE498BC761668BCB70854D91BAB`.
+No live data, read states or documents were migrated; no live app was restarted.
+Delivery `162afbc7760192bdb0ef039f663c522e88ca8cb7` passed all ten jobs in
+[CI run 34017816426](https://github.com/ldbumble/taskuary/actions/runs/34017816426).
+The original workspace was then fast-forwarded with its README change preserved.
+
+## Section 1.4 — complete display freshness
+
+Status: CI-verified at `3ef0bdc`. PW-106 is a partial target: this section refreshes the existing runtime
+presentation without activating canonical identities/read policy or shared Next.
+
+Sol High backend work in `processing/phase1-freshness-backend` owns funnel presentation
+fingerprints and focused tests. Sol High UI work in `processing/phase1-freshness-ui`
+owns Assistant presentation replacement, lazy content refresh and frontend tests.
+The lead owns the completed HTTP response seam, API/browser evidence, packaged build,
+integration and delivery. Astra Extra High independently reviews the changes.
+
+Backend `8b634b9` integrates as `334642a`; UI `ef324b8` as `5109c9d`.
+Per-item `presentation_revision` covers complete backing rows, including full source
+bodies, exact task members, drafts, attachments, comments, runs, waitroom and reply
+capability inputs. Taskless conversation context is tracked separately from the exact
+task membership boundary. Nested FYI presentations are stamped recursively. The
+completed response's `display_revision` includes ordered items, displayed counts,
+rules, lanes, alerts and query-specific Current, including explicit null. Transient
+events and revision fields do not create a self-changing hash; legacy `rev` remains.
+
+The UI prefers the complete display revision and replaces fresh Current data rather
+than merging removed fields back into it. Lazy source/draft/report readers refetch on
+presentation changes and discard obsolete responses. Unsaved local draft edits stay
+intact. Current refs are synchronized before asynchronous responses arrive; a response
+for an earlier Current cannot overwrite a later selection. Explicit null clears stale
+data, with the existing narrow same-task working handoff retained. Next selection,
+event scheduling, read semantics and actions are not redesigned in this section.
+
+An accepted repeat-Next test caught display metadata defeating durable duplicate
+suppression. Only transient `presentation_revision` is omitted from serialized durable
+cards, including actual nested FYI children; live responses retain it. Atomic store
+deduplication and semantic card fields are unchanged. No earlier assertion was weakened.
+
+Initial integrated display/API tests pass. The browser fixture's existing startup
+stabilization was extracted unchanged into `processing-fixtures.mjs`. New private
+fixture edits simulate source/member/draft updates in the disposable database, with
+bounded parameters and actual feed-change delivery. They are installed only by the
+fixture server after outbound guards; every production route retains its original
+demo refusal. A unit test checks those refusals and rejects malformed edits.
+
+### Final local gates and delivery
+
+The real browser scenario uses actual saved drafts, a two-message task and websocket
+source updates. It verifies same-ID draft edits/clearing, source edits/clearing,
+and preservation of unsaved owner text after observing the newer saved draft response.
+The delayed-response case captures the old body and waits for that exact network
+request to finish after release before checking that newer rendered context survives.
+Current, durable conversation history and assistant/settle request counts stay fixed.
+The focused scenario passed (32.058 s; 53.178 s including process setup/teardown).
+
+| Gate | Result | Duration |
+| --- | --- | --- |
+| Integrated processing tests | 162 passed | 13.05 s |
+| Full backend (`python -m pytest -q -ra`) | 2332 passed plus 66 subtests; no skips | 203.13 s |
+| Node 22 frontend (`npm test`) | 271 passed; no failures/skips | 1.676 s |
+| Packaged build (`npm run build`) | Passed; generated assets included | 37.40 s |
+| Cumulative real browser (`npm run test:browser`) | 4 passed; no failures/skips | 121.037 s |
+
+The prior clock-dependent digest test ran after 08:00 in this suite. Backend emitted
+151 warnings; details are retained in the full log. Browser first visibility/input
+were 2515/957 ms, Tasks/Board/Reports 234/383/250 ms, and terminal replay/input/reconnect
+2520/107/1045 ms, all within the existing ceilings. No earlier assertion was weakened.
+Independent Astra Extra High review cleared backend/UI source, root API and fixture
+seams, the delivered-old-response proof, and generated asset integrity. Logs are in
+ignored `.codex-tmp/phase1-freshness-evidence/` in the integration checkout.
+
+README SHA256 remains
+`EDF56683E29A34789B2EBEF73E131FBD7B318AE498BC761668BCB70854D91BAB`.
+No live app restart, live data migration, read-state reset or owner-document edit.
+Delivery `3ef0bdc4e999d3b4ca268b56ca01e90e8f6789e9` passed all ten jobs in
+[CI run 34033187439](https://github.com/ldbumble/taskuary/actions/runs/34033187439).
+The first normal push encountered an intervening download-statistics bot commit;
+rebasing preserved that docs-only update. The tested application and test files
+were unchanged. Final backend/UI source commits are `34d4d65` and `87a69e4`.
+The original workspace was fast-forwarded with its README edit preserved.
+PW-106 remains partial because shared selection and canonical runtime adoption
+are later work.
+
+## Section 1.5 — shared captured Next and stable Current
+
+Status: CI-verified at `7589b38`, implemented from CI-verified `3ef0bdc`.
+Sol High backend owns funnel selection, the captured concierge surface path and
+focused backend tests. Sol High UI owns server-derived Next, exact request scope,
+Walk resume, stale-response handling and passive-event Current preservation.
+The lead owns API admission/concurrency, New chat coordination, real browser
+evidence, integration and delivery; Astra Extra High independently reviews.
+Claude separately owns Phase 2 intake; this section does not edit intake files.
+
+This slice retains legacy eligibility and read policy. It adds a read-only capture,
+an explicit revision/key/FYI-members binding and a guarded modern automatic Next
+path. Named-key pulls and old clients remain compatible and outside that guard.
+The process-local reservation coordinates navigation and New chat, including a
+post-model check and short commit lock. It does not provide a transaction against
+external SQLite writers or durable/restart/multi-process operation idempotency.
+An accepted request may create an empty dock before model work; initially stale
+requests must not create a dock or make any selection-dependent writes.
+
+The backend's single native observation required one authorized additive store
+seam: `feed(..., live_state=...)` can consume the captured list; its default keeps
+legacy behavior. Captured questions retain their rendered text. Failed native
+observations raise `selection_unavailable`, never a known-empty selection.
+Only the selected item/FYI members bind full presentation revisions; unrelated
+working-tail churn cannot repeatedly invalidate an otherwise unchanged Next.
+Calendar selection hashes its eligibility boundary rather than elapsed minutes.
+Background cards receive explicit provenance going forward; historical untagged
+cards are preserved and are not guessed or rewritten.
+
+The original backend source is `83ddd3c8263a57fcda0da0f3fe212c1fb33f5352`, integrated
+as `c640586`; its consistency follow-up `d878d7e3805b776689a0c62f8a0d81480adbbbbd`
+integrates as `9f82ee4`. Integrated API/display/fixture seams passed
+31 tests (3.45 s); cumulative processing tests passed 197 tests (20.36 s).
+
+UI source `170de0b`, `8dd0baa`, `995944c` integrates as `f4669a2`, `98c7505`,
+`c43ef5f`. Modern Next uses the exact scope/revision/key/member binding. Structured
+initial or late stale/unavailable responses never fall back to a second request;
+sparse late errors invalidate the token, and server outcome messages remain truthful.
+Walk validates/resumes its current subject and aborts across a chat epoch change.
+The existing rendered Walk control is welcome-only, so valid-Current Walk resume
+is not claimed as a newly exposed UI control. Scoped-empty mail navigation remains
+reachable to clear mail scope without inventing a Next badge. Passive cards remain
+readable but cannot choose Current or become its interactive action card.
+
+The real-browser stale-Next case pauses the actual POST, changes the selected task's
+context, and observes HTTP 409 with no plain fallback, no Current change and no
+durable assistant turn. A new owner click consumes the displayed next item exactly.
+A bounded synthetic passive card then tests live ingestion/reload while preserving
+both Current and its original interactive card title/buttons; native watcher
+production of the provenance flag is covered by backend tests.
+
+Two negative controls demonstrate the browser checks detect the prior behavior:
+the old UI sends no selection revision; the pre-fix async Walk, after its held pile
+response is released following a completed New chat, sends an obsolete navigation
+request. The final Walk test waits for that exact old response to finish delivery,
+then verifies no navigation request, Current or durable turn enters the new chat.
+The first positive navigation run passed its behavioral assertions but used the
+wrong object for the isolation assertion; it was corrected to `page.fixtureEscapes`.
+An intermediate cumulative run passed four scenarios and failed only launching
+Chrome for the terminal fixture's unique profile. No owned browser remained after
+cleanup; the final unchanged terminal scenario passed, without weakening its gates.
+
+Final frontend tests: 278 passed (1.385 s). Final packaged build: exit 0 (13.09 s).
+Final cumulative rendered browser: six passed (186.280 s), no skips. First
+visibility/input were 933/502 ms; Tasks/Board/Reports 170/166/150 ms; terminal
+replay/input/reconnect 2089/81/952 ms, within every existing ceiling. Independent
+Astra Extra High review cleared final backend, UI, root API/fixture/browser seams,
+and generated assets. Final backend rerun and remote delivery are recorded below.
+
+Final backend (`python -m pytest -q -ra --tb=short`): 2367 passed plus 66 subtests,
+151 warnings, no skips, 197.21 seconds. The warnings retain the existing Pydantic
+and fake-screencast cleanup observations. All local gates passed. No live restart,
+connector test, read migration or owner-document change was performed.
+Logs are ignored `.codex-tmp/selection-*.log` in the isolated integration checkout.
+Delivery `7589b386f166e70450f3baa6481e6da1d937e5f0` passed all ten jobs in
+[CI run 34035165692](https://github.com/ldbumble/taskuary/actions/runs/34035165692).
+The original workspace was fast-forwarded; its README hash remains the preserved
+`EDF56683E29A34789B2EBEF73E131FBD7B318AE498BC761668BCB70854D91BAB`.
+
+## Section 2.1 — independent poll scheduling and settings
+
+Status: integration in progress from CI-verified `7589b38`. This section does not
+depend on the still-pending Phase 1 read-policy answers or activate the canonical
+inventory. The owner assigned Phase 2 intake to Claude in parallel; its isolated
+handoff is in `processing/phase2-intake-poll`. Initially, only the polling/settings
+commits were integrated: `4591fcd` as `e7c47dc`, and `12c1a4e` as `2daacc6`.
+Outlook/IMAP catch-up and full-chain work remain separate sections.
+
+The handoff introduces separate full/quick polling clocks, fresh-channel ordered
+drain priority, full-fetch interval bookkeeping and shared polling labels for all
+six chat connector cards. The six earlier rendered-browser scenarios remain gates.
+Astra Extra High review found four issues before acceptance: non-atomic connector
+admission, a synchronous quick-owned judge still blocking intake, stale banner
+ownership on quick-first overlap, and connector types incorrectly used as message
+channels for email overrides. Sol High owns bounded poll/ingest fixes and regression
+tests; another Sol High agent owns rendered settings coverage. The lead owns API
+responsiveness/preservation tests, integration, assets, evidence and pushes.
+
+Worker `bff3e89e63805f03b479c8f91b9a182f01b51e22` integrates as `e7354f4`.
+Connector admission is now atomic with owned release; the full lane stamps each
+claimed chat attempt before releasing its claim, including failures. A skipped
+attempt remains due. Fetch clocks submit to one ordered drain worker and release
+their fetch locks before an explicit action waits for routing. Fresh-channel
+tickets wait through route/review writes, but empty channels and finished fresh
+routes need not wait for unrelated mail. Connector types map to stored channels.
+Banner ownership is coordinated for either overlap order. Workers capture their
+store/model factory; shutdown closes admission, retains timed-out workers, and
+tests join owned drains before closing disposable stores.
+
+Corrected label/browser source `4534104f3d5162c6dd2d6540921dd3e7d5c03370` integrates
+as `841e085`. Copy distinguishes both recurring clocks from explicit/action/startup
+fetches and separates inbound notification-chat replies from event-driven sends.
+The unused handoff-only JavaScript parser and its duplicate-oracle tests were
+replaced with tests of the actual Python parser; no previously accepted assertion
+was removed or weakened. All six connector cards and Settings are checked in a
+real read-only browser scenario with unchanged fixture state and zero writes.
+
+Integrated focused gate: 68 tests passed (3.85 s), including the 33 polling-worker
+tests and 35 root API/parser cases. The real feed API exposes two arrivals before
+a held judge finishes, then verifies arrival-order routing and preserved historical
+funnel state/custom documents. Another case fetches Teams in the full pass, holds
+its report, then confirms a second Teams fetch and API visibility before that
+report ends. Frontend: 281 passed (1.800 s); packaged build exit 0 (13.36 s).
+Follow-up `de837503922a5efcb4a0ec73cb651378378777b6` integrates as `a4fdb5f`.
+Scheduled polls recheck their due list while holding connector ownership, so a
+timer decision made before a full fetch cannot immediately refetch after it.
+Explicit context refreshes bypass cadence. Astra Extra High cleared the final
+source, labels/browser and root API tests with no remaining source blockers.
+
+An intermediate cumulative backend run passed 2434 tests plus 66 subtests and
+failed the new fresh-route/unrelated-backlog test because its held mail was
+released before the quick request was actually submitted. The follow-up waits
+for the real ticket submission before releasing mail, preserving the same
+completion assertion. Final focused integration passed 69 tests (3.67 s).
+The intermediate browser run passed all seven scenarios (205.141 s). Full backend
+and browser gates are being rerun on the final integrated source.
+
+During those gates, another agent pushed its original polling and Outlook/IMAP
+handoff to `origin/master` at `f244803beeee21f6079b4749e1df6c6e7ed4de8d`.
+The polling source matches the handoff already reviewed here. Integration will
+preserve that remote history and apply the reviewed polling corrections on top.
+The email catch-up code's presence on master is not acceptance: repeated-page
+completion, UIDVALIDITY identity, retry failures and concurrent settings updates
+remain review findings for the following email catch-up section. No live app
+restart or connector invocation was performed by this integration.
+
+Reconciliation preserved remote `f244803` and replayed the reviewed corrections
+as `9425824`, `6dec327`, `e837543` and `a0629e4`. Only generated-asset renames
+conflicted; those were resolved to the reviewed source build and regenerated.
+The source/test difference from the pre-rebase tree is exactly the four concurrent
+email files (`channels.py`, `imapmail.py`, and their two catch-up test files).
+Those four files match origin/master byte-for-byte. Before reconciliation, the
+final polling tree passed 2436 backend tests plus 66 subtests (205.43 s, no skips)
+and all seven browser scenarios. Cumulative gates on the combined remote base
+follow; the email requirements remain unchecked until their review fixes land.
+
+Final combined-base gates passed: 2452 backend tests plus 66 subtests, 151 existing
+warnings, no skips (216.28 s); 281 frontend tests (1.533 s); packaged build exit 0
+(14.29 s), with no asset drift; all seven rendered-browser scenarios (209.356 s).
+First visibility/input were 2016/1500 ms; Tasks/Board/Reports 308/403/358 ms;
+terminal replay/input/reconnect 2312/97/887 ms, inside every existing ceiling.
+Astra verified the rebased polling source/tests/UI/assets are unchanged from the
+reviewed tree and retained the separate, pending email-catch-up review boundary.
+PW-001 through PW-005 are implemented; remote delivery/CI verification follows.
+Logs: ignored `.codex-tmp/poll-remote-base-*.log` in the integration checkout.
+Gates on the rebased tree: full backend 2403 passed plus 66 subtests (186.76 s); Node 22
+frontend 283 passed; no-undef lint clean (nine pre-existing rule-definition notices in files not
+touched); packaged build 15.11 s. One existing assertion moved with explanation (the chat clock
+left `poll_forever` for `quick_forever`); none weakened. No live restart, connector, database or
+owner-document change; browser-control redesign untouched.
+
+## Section 3.1 — fresh evaluation for each new message
+
+Status: implemented and tested locally at `c8769f6`; remote CI pending on the pushed
+checkpoint. Acceptance PW-020, PW-022, PW-023, PW-024, PW-025 implemented; PW-021 partial
+(evaluation runs in the stored conversation's context via `exchange_lines`; the full-chain
+merge is PW-009 to PW-015, not yet built). The thread-dismissal veto (`ruled_on_thread`) and
+the "SETTLED BY YOUR OWNER" prompt order are removed; the owner's ruling on the conversation
+leads the EVIDENCE list (`ingest.thread_ruling`) and past verdicts stay in it verbatim.
+
+Tests changed with explanation, none weakened: `test_verdict_sticks.py` (three veto cases
+rewritten to evidence semantics, one added), `test_verdict_paths.py` (ruled-for-life case
+rewritten), `test_assistant_reactions.py` (one case), `test_cc_triage.py` and
+`test_learnedgraph.py` (settled-prompt cases inverted), `test_kind_dispatch.py`
+(`_agreement` helper tests replaced by an evidence test). New: `tests/test_fresh_evaluation.py`
+(15 cases). Full backend on this tree: 2415 passed plus 66 subtests, 151 warnings,
+224.74 s. No frontend change; packaged assets unchanged. No live restart, connector, database
+or owner-document change.
+
+## Section 3.2 — explicit triage errors and retry
+
+Status: implemented and tested locally at `ed2bb98`; remote CI pending on the pushed
+checkpoint. Acceptance PW-036 to PW-040 implemented; PW-041 partial (no rendered-browser
+click of the Retry control yet; backend, API and pure-UI state tests cover the rest).
+
+Failed triage - a model exception, an answer that is not a verdict, a queue-drain failure, a
+missing AI connector, and a failed follow-up judgement on an existing task - now lands the
+message as `Status='error'` with the reason on its route, keeping content, attachments and any
+task link; it was `filed`, the face of "nothing to do". `claim_retriage` claims error -> triaging
+atomically (a legacy taskless `filed` row qualifies only when its last route is a failure
+diagnostic); the retriage endpoint accepts linked error rows and returns a row to error with the
+new reason when the retry fails again. `store.upgrade_triage_failures()` runs once at startup
+and converts historical failures identified by their last route (never genuine fyi, never a row
+the owner later ruled on, never a no-AI install's "awaiting" history), leaving funnel read state
+untouched. In the pile an error row is unread information (fyi lane) as the Phase 1 inventory
+tests already required; the All view and detail panel show "triage failed" with Retry.
+
+Decision recorded for the owner: a no-AI install now shows new arrivals as "awaiting AI triage"
+errors (with Retry explaining that no brain is configured) instead of filed fyi; historical
+no-AI rows are left as they were. Tests changed with explanation, none weakened:
+`test_api.py` (push without AI), `test_async_triage.py`, `test_assistant_reactions.py` (two
+cases), `test_verdict_sticks.py` (unusable answer). New: `tests/test_triage_errors.py` (16 cases)
+and two frontend state cases. Frontend 283 passed; no-undef lint clean (nine pre-existing
+rule-definition notices). Full backend and packaged build results are in the commit message
+and the CI record below.
+
+## Section 3.3 — reply-needed items always get drafts; uncertain kind is general
+
+Status: implemented and tested locally at `8b89e26`; remote CI pending on the pushed
+checkpoint. Section 3.2 is CI-verified at `ed2bb98` (run 34038415374, all ten jobs).
+Acceptance PW-042 to PW-046 and PW-067/PW-068 implemented; PW-047 partial (no rendered-browser
+check of the hidden send button; API, backend and pure-UI state tests cover the rest).
+
+`reply_only` on a channel with replies off used to be filed - a question wearing "nothing to do".
+Every reply-needed message now opens (or reuses) its task and pending review and asks for a draft
+at once, on both the create and attach paths; `auto_draft_enabled` no longer gates drafting and is
+retired from Settings (value left untouched). `outbound.send_block()` states why sending is
+unavailable; it rides on reviews and feed rows as `SendBlock`, and `website/src/sendState.js` shows
+the same sentence beside the draft on Review and the assistant card while the send button is
+omitted; the server's `can_reply` refusals are unchanged. A draft that could not be written is
+recorded on the review (`DraftError`, additive column), the item stays reply-needed, and a
+successful redraft clears it. A task whose kind the classifier did not name is `general`
+(`routing.draft_task_fields`, `INTENT_SYSTEM`, shipped TRIAGE.md); the keyword coding guess is gone,
+so no coding session starts without an explicit `coding` verdict.
+
+Tests changed with explanation, none weakened: `test_not_coding.py` (keyword-kind and dispatch-gate
+classes rewritten to the general default), `test_urgent_and_handoff.py` (one kind expectation),
+`test_kind_dispatch.py` (prompt tie-break wording). New: `tests/test_reply_always_drafts.py` (14 cases), `sendState.test.mjs` (3).
+Frontend and packaged-build results are in the commit message; full backend and CI below.
+Earlier Section 2.1 polling delivery `3dc3a5ea53d4b1701314cc5df0699fff4f5f8f39` passed all ten jobs in
+[CI run 34037292146](https://github.com/ldbumble/taskuary/actions/runs/34037292146).
+The original workspace was fast-forwarded from the concurrently delivered `f244803`;
+its only user change remains README.md with preserved SHA-256
+`EDF56683E29A34789B2EBEF73E131FBD7B318AE498BC761668BCB70854D91BAB`.
+
+## Section 2.2 — email catch-up without skipped backlog
+
+Status: accepted. Reviewed source `32d014b` was delivered as `8247d81`; all ten
+remote CI jobs passed (run 34044710317), as recorded below. Work began from CI-verified `3dc3a5e`. PW-006 through
+PW-008 form one TODO section with independent Outlook and IMAP assignments and
+one integration/review/regression/delivery gate. Claude's original Outlook/IMAP
+commits are already on master; this section resolves their independent review
+findings before marking those requirements accepted.
+
+Sol High owns Outlook `channels.py` and catch-up tests in the isolated
+`processing/email-outlook-fixes` branch. Another Sol High agent owns `imapmail.py`
+and its tests in `processing/email-imap-fixes`. The lead owns atomic checkpoint
+storage, integrated preservation tests, evidence and delivery; Astra Extra High
+reviews independently. No live connector or app restart is part of these tests.
+
+Root helper `580afb67f9f8156ca347e375e6c6f405b7c0304d` adds atomic source/connector
+poll-state merges. SQLite BEGIN IMMEDIATE precedes reading current ConfigJson;
+only specified poll keys change, conditional source/mailbox expectations reject
+stale work with no writes, and source cursor cleanup/cutoff changes commit together.
+Malformed owner configuration is preserved and reported rather than overwritten.
+The 17 focused tests passed (1.89 s), including an actual concurrent connection
+write, detached caller data, failed-CAS zero writes and rollback/reuse. Astra
+cleared this helper; connector integration and cumulative gates remain pending.
+
+The root API characterization passes on the existing implementation: a real
+`POST /api/ingest/poll` runs the Graph HTTP paging adapter against synthetic
+responses, exposes a later-page failure after the first 500 durable messages,
+and recovers all 600 IDs on retry with no duplicates. The test checks connector
+error visibility, source watermark, final feed visibility, exact historical
+message/read/document preservation, and an owner configuration edit during fetch.
+It will run again against the corrected connector implementations.
+
+Provider-contract review found that inferred message-count offsets are not a
+valid replacement for Graph continuation URLs: Microsoft documents that its
+skip position can count scanned items beyond the returned message rows.
+The Outlook correction must use complete provider continuation URLs and retain
+requests-level failure/continuity regressions. Source:
+[Microsoft Graph list messages](https://learn.microsoft.com/en-us/graph/api/user-list-messages?view=graph-rest-1.0).
+
+### Final source review and concurrent-base integration
+
+The final email source checkpoint is `36a1edf`, rebased onto Claude's concurrent
+triage checkpoint `162d33e`. Astra Extra High verified all eleven email commits
+remain equivalent to the pre-rebase source and cleared compatibility with the new
+triage error handling. This review covers email integration, not blanket Phase 3
+acceptance. Both authors' evidence entries were retained during the append conflict.
+
+Outlook now follows complete opaque Graph continuation URLs, preserves complete
+provider pages, detects continuation loops across batches, and freezes a cutoff
+until every selected folder completes. Restart replays the saved timestamp
+inclusively instead of trusting a mutable provider offset. Checkpoint provenance
+and atomic conditional merges preserve owner configuration changes and rewinds.
+
+IMAP uses mailbox-scope/UIDVALIDITY identities and durable retry holes. Failed
+FETCH, parse, SELECT, SEARCH and Sent operations remain visible failures; later
+successes cannot erase a skipped UID. Empty epoch resets, missing UIDVALIDITY,
+unknown-to-known epochs, and attributable legacy rows from an interrupted first
+import are covered. Ambiguous historical account ownership is not guessed.
+The original unreadable-UID test retains its delivered-row and high-cursor checks;
+it now additionally requires a visible partial failure and an exact-once healthy
+retry, replacing the previous silent-success return expectation.
+
+Root API tests exercise real Sync-now routing with synthetic Graph HTTP pages and
+an IMAP server fixture, including failure visibility, durable retry after reopening
+the disposable database, watermark safety, final feed visibility, and exact old
+message/read/document preservation. Store tests cover actual concurrent SQLite
+writers, failed compare-and-set zero writes, detached input and atomic rollback.
+No live data, app restart, or production connector is used.
+
+Frontend on the combined base: 283 passed (1.509 s); packaged build exited 0
+(16.27 s) with no generated-asset drift. The first cumulative browser attempt
+missed the unchanged 1,500 ms input limit at 1,737 ms while full backend regression
+ran concurrently. Final backend/browser results and delivery follow below; this
+source-review entry alone is not the final gate.
+
+Combined-base backend gate completed: `python -m pytest -q -ra --tb=short`
+passed 2,535 tests plus 71 subtests (150 warnings, no skips) in 231.75 s.
+The first browser run finished 5/7 in 239.888 s; its second failure was a launch/
+connect failure for its unique disposable Edge profile. Inspection found no
+remaining process using that profile; no process cleanup was necessary. Resource
+contention is the working explanation, not a proven product regression. Both
+failures passed early in the full browser-only rerun (input 780 ms); final result
+is still pending below. Logs are in `.codex-tmp/mail-remote-base-*.log`.
+
+Final browser-only cumulative gate passed all seven scenarios in 198.575 s with
+no skips and unchanged assertions/limits. First-visible/input timings were
+1,176/780 ms; Tasks/Board/Reports navigation was 267/300/272 ms. Terminal replay,
+input emission and reconnect were 2,048/105/1,091 ms. No source changes were needed
+between failed concurrent and successful isolated runs. The final packaged assets
+match upstream, and the original workspace's only dirty file remains README.md
+with the previously recorded SHA-256. PW-006 through PW-008 now have matching
+TODO and Markdown/JSON ledger evidence. Exact delivery CI will be recorded after push.
+
+### Second concurrent-base reconciliation
+
+Before push, origin/master advanced to `85267a0` with Claude's always-draft and
+general-default section (`8b89e26`). Email commits were replayed again; only the
+append-only evidence conflicted, and both sections were preserved. Integrated
+source is now `221a506` (documentation `5c5253f`); prior `36a1edf` gate results above
+remain explicitly associated with the earlier triage base. New-base frontend
+passed 286 tests (1.406 s), and packaged build exited 0 (14.84 s) without asset
+drift. Backend and browser cumulative gates are being repeated before delivery.
+
+The `85267a0`-based integration passed 2,548 backend tests plus 71 subtests
+(150 warnings, no skips) in 213.23 s, and all seven browser scenarios in 197.227 s.
+Before delivery, master advanced again to `b03445b` with Claude's same-day chat
+relationship changes (`78c6dd1`). These passed results remain tied to the draft
+base; the next integration gate must include the newer chat change.
+
+## Section 3.4 — chat relationships in the one triage verdict
+
+Status: implemented and tested locally at `78c6dd1`; remote CI pending on the pushed
+checkpoint. Section 3.3 is CI-verified (8b89e26, CI run 34039576824 (all ten jobs passed)).
+Acceptance PW-031 to PW-034 implemented; PW-035 partial (the configured-timezone boundary is
+exercised only through `norm_stamp` local time; no tracker-item cross-day case yet).
+
+A chat room shares one conversation id, and the router joined a new line to the room's task on
+that id before a second classifier (`triage.same_ask`) was asked whether it belonged. Both are
+gone: `ingest.chat_route` decides a chat line before routing - two facts join without a model
+(a line typed within the burst window of the room's last inbound line, an answer while an agent
+is live on the room's task), everything else is the single verdict's `relationship`
+(new/continues/answers/uncertain) with `related_message_ids` and `existing_task_id`, chosen
+among `ingest.chat_candidates` - the room's lines from the same local calendar date as the
+message's own stamp, never later lines - and validated by `triage.relationship_of` (ids outside
+the room or the day dropped, a task id must be one of theirs, nothing valid left = uncertain).
+`uncertain` and `new` open their own work; related lines without a task join the task the new
+line opens. With the classifier off or no brain, nothing but the facts joins: the room id alone
+never decides (PW-018). Mail and tracker routing is untouched. The shipped TRIAGE.md describes
+`same_day_lines`.
+
+Tests changed with explanation, none weakened: `test_chat_is_not_one_task.py` (single-verdict
+brain; triage-off and no-brain cases now open their own work per PW-033), `test_assistant_reactions.py`
+(one chat-burst case). New: `tests/test_chat_relationship.py` (17 cases). No frontend change; packaged assets unchanged.
+
+## Section 3.5 — clean, complete context for triage
+
+Status: implemented and tested locally at `0dea527`; remote CI pending on the pushed
+checkpoint. Section 3.4 is CI-verified (78c6dd1, CI run 34039988682 (all ten jobs passed)).
+Acceptance PW-027, PW-028, PW-029 implemented; PW-026 and PW-030 partial - the exchange now
+carries every message's cleaned, de-quoted words whole under `triage.EXCHANGE_BUDGET` (12,000
+characters) and says how many older messages it dropped, and the current body reaches the model
+whole up to `triage.BODY_BUDGET` (6,000) with a disclosed `body_truncated`; the merge of fetched
+history into one stored chain is PW-009 to PW-015 and still pending.
+
+`triage.strip_boilerplate` (the one cleaner every connector and surface already used) now also
+removes the external-sender banner and "you don't often get email" hint (pattern moved from
+assistant.py), mail-client stamps and unsubscribe/preferences strips, while a request that mentions
+a notice, security or a signature stays. `triage.dedupe_quoted` drops a quoted copy ('> ' runs,
+"On ... wrote:", "Original Message", "Forwarded message" blocks) only when its lines are already in
+the chain; unique forwarded material and inline answers survive. Stored messages are never edited.
+
+Tests: `tests/test_clean_context.py` (14 cases). One pinned wording in `test_follow_up_verdict.py` is unchanged (the exchange
+explanation keeps its opening words). No frontend change; packaged assets unchanged.
+
+### Chat/context merge and independently found preservation regression
+
+Merge `7420a0d` retains exact upstream `2c298ce` (chat relationships and context
+cleaning) and all reviewed email patches. Only evidence append text conflicted;
+both records were preserved. Astra verified source equivalence. Combined gates:
+2,578 backend tests plus 71 subtests (151 warnings, no skips, 214.14 s), 286 frontend
+tests, and all seven browser scenarios (203.142 s). Website source and packaged
+assets are byte-identical to the successful `85267a0`-based build.
+
+Independent review nevertheless reproduced an incoming cleaner regression:
+`dedupe_quoted` discarded an entire forwarded block when approximately 60 percent
+of its lines matched prior text, losing unique new instructions in a mixed block.
+The existing tests did not cover that case. A bounded isolated correction must
+preserve the mixed block and add the missing regression before final acceptance;
+no change to mail checkpoints or historical stored bodies is needed.
+
+Final correction source `ff6acc4` includes the independently cleared mixed-block
+fix and conservative comparison. Only quote decoration and surrounding whitespace
+are ignored; case, operators, punctuation and internal spacing remain meaningful.
+Regressions include headed and bare-quote mixed blocks, changed operators, and
+case-sensitive paths; existing exact-repeat and inline-answer checks are retained.
+Sol's focused context/triage gate passed 74 tests plus 37 subtests. Astra reviewed
+the exact final source and independently reproduced the preservation cases.
+
+The preceding mixed-block-only checkpoint `14f6525` passed 2,580 backend tests plus
+71 subtests (150 warnings, 219.82 s). Its concurrent browser run passed 6/7 in
+204.314 s, missing only the unchanged input timing limit at 1,615 ms. That is not
+the final gate. The final source is being checked with backend then browser run
+separately; no timing threshold or prior assertion has been weakened.
+
+Final cleaner checkpoint `ff6acc4` passed 2,582 backend tests plus 71 subtests
+(150 warnings, no skips) in 204.13 s. During that gate, concurrent delivery
+`cd32827` added task summaries/checklists. Preserve that work and integrate it
+before final delivery. To reduce repeated timing interference without relaxing
+any assertion, run the existing input-latency browser scenario separately first,
+then run the remaining six browser scenarios alongside backend regression.
+## Section 3.6 — triage-generated task summary and checklist
+
+Status: implemented and tested locally at `82a56a3`; remote CI pending on the pushed
+checkpoint. Section 3.5 is CI-verified (0dea527, CI run 34040312825 (all ten jobs passed)).
+Acceptance PW-074 to PW-077 implemented; PW-078 partial (no rendered-browser click yet).
+
+The one triage verdict now carries `title`, `summary` and `checklist` for `intent=task`; the
+classifier is told to draw them only from what the message and exchange ask for, never to invent
+a requirement or list anything as done. The task takes the verdict's title and summary (the
+router's subject/body cut remains the fallback); the checklist is persisted on the task
+(`Checklist`, additive JSON column) as items with ids derived from their words, validated (strings,
+trimmed, no repeats, at most twelve), rendered as GitHub task-list Markdown (`ChecklistMd` on the
+task detail), shared by the task page (interactive boxes), the assistant card (read-only) and the
+worker brief (`terminal.seed_text`, beside the source message which stays the authority). A later
+message on the task merges distinct new items without duplicating or unticking anything and says
+so in a task comment; an owner edit through the API keeps a box's state wherever its words stayed.
+Ticking every box completes nothing, and closing a task ticks nothing.
+
+Tests: `tests/test_task_checklist.py` (9 cases), `website/test/checklist.test.mjs` (4). No existing assertion changed.
+Packaged UI rebuilt from this source in the isolated worktree (Node 22).
+
+Checklist-base integration `0d16bde` passed 2,591 backend tests plus 71 subtests
+(149 warnings, no skips, 215.61 s), 290 frontend tests (1.446 s), and packaged
+build (12.25 s, no asset drift). All seven unchanged browser scenarios passed:
+input scenario alone in 12.435 s (first visible 1,199 ms, input 729 ms), then the
+other six in 192.827 s alongside backend regression. Terminal visible/input/
+reconnect measured 2,035/104/1,107 ms.
+
+Independent merge review also reproduced two incoming checklist preservation
+bugs: punctuation/case-blind IDs collapse distinct requirements, and the merge
+reports a thirteenth addition while truncating it out of persistence. A bounded
+store/test correction is being prepared separately, preserving old IDs/ticks and
+making reported additions match durable rows. Subsequent concurrent `fb43c92`
+adds identity-based email routing; retain and review that merge before delivery.
+## Section 3.7 — email joins by conversation identity, never by resemblance
+
+Status: implemented and tested locally at `b03fa29`; remote CI pending on the pushed
+checkpoint. Section 3.6 is CI-verified (82a56a3, CI run 34040813007 (all ten jobs passed)).
+Acceptance PW-017, PW-018 (through Section 3.4) and PW-019 implemented; PW-016 partial - joining
+is identity-only now, while merging fetched history into one stored chain is PW-009 to PW-015.
+
+`ingest.identity_route` replaces `routing.route` for mail and tracker items: a message joins the
+open task its own conversation already belongs to (Graph's conversationId, IMAP's
+References/Message-ID, a tracker item's own id) and nothing else; without an identity it is new
+work whatever it resembles, and the route says so. A closed task's thread does not reopen it: the
+reply is stored on the conversation and evaluated afresh, and new work opens only if triage says
+so. `routing.route`'s similarity scoring remains as a unit-tested helper and is no longer consulted
+at intake; `own_thread_only` remains for its callers and tests.
+
+Tests: `tests/test_email_identity_routing.py` (5 cases). No existing assertion changed. No frontend change; packaged assets unchanged.
+
+## Section 3.8 — project and repository selection in the one triage verdict
+
+Status: implemented and tested locally at `f327a8b`; remote CI pending on the pushed
+checkpoint. Section 3.7 is CI-verified (b03fa29, CI run 34041128872 (all ten jobs passed)).
+Acceptance PW-092 to PW-095 implemented; PW-096 partial (no rendered-browser run of the picker).
+
+Coding startup guessed the checkout from word overlap after the fact. The triage verdict now sees
+`known_repositories` (`ingest.repo_candidates`: the learned project graph's repository edges with
+what each project is, plus the SOUL.md repo map) beside the sender's project context, and answers
+`repository`, `needs_repo_choice` and `repo_reason`; `triage.repo_choice_of` validates against those
+candidates - an unknown name is dropped and becomes the owner's choice, as does anything the model
+calls ambiguous. The decision is written on the task (`triage-repo:` or `needs-repo-choice` tag and a
+task comment with the reason) and `terminal.guess_repo` uses it instead of guessing again, after the
+owner's `repo:` tag and a GitHub item's own repository, which stay authoritative; the owner-tag
+pattern now matches a whole token so triage's note can never read as the override. Both dispatch
+endpoints turn "no repository decided", "several plausible", "no local path" and "path does not
+exist" into a visible repository choice instead of a session in some other checkout.
+
+Tests: `tests/test_repo_choice_triage.py` (8 cases). No existing assertion changed. No frontend change; packaged assets unchanged.
+
+### Final preservation corrections and repository-selection integration
+
+The exact `fb43c92` email-identity routing and `bc55b0c` repository-selection changes
+are retained in integration `9ab2553`. Independent review cleared compatibility
+with mail deduplication, checkpoints and retries; this is not blanket Phase 3
+acceptance. Raw ConversationId account scoping remains a full-chain limitation,
+not a claim completed by the catch-up fix. UI source/assets remain byte-identical
+to the successful checklist-base build.
+
+Final source `3188473` adds independently cleared checklist preservation from
+Sol commits `d3ff034` and `8834b84`. Exact trimmed text defines duplicates; operators,
+case and internal spacing remain meaningful. Existing stored IDs and ticks are
+retained by exact text, and all retained IDs are reserved before new allocation
+so reordering cannot give an old checked item's ID to a different new item.
+Accumulated additions are not truncated to the per-verdict cap; reported additions
+are durable and retries add/announce them once. Owner edits and toggles retain
+accumulated lists beyond twelve. The existing mixed-case test input remains and
+now asserts both distinct variants survive; an added truly identical whitespace
+variant still collapses. This replaces the demonstrated lossy casefold assumption
+while preserving type/trim/cap/exact-duplicate coverage.
+
+Sol's focused and neighboring tests passed 130 cases. Astra reviewed the exact
+final diff and independently reproduced old-ID/tick preservation after reorder,
+case-sensitive paths in one verdict, and the durable thirteenth addition. Root
+cumulative gates are in progress on `3188473`; its unchanged input browser scenario
+already passed in 15.829 s (first-visible/input 2,386/1,045 ms; navigation
+314/348/221 ms). No live data, app restart, or production connector was used.
+
+Source `3188473` completed its cumulative gate: 2,608 backend tests plus 71 subtests
+(151 warnings, no skips, 213.57 s), and all seven browser scenarios (15.829 s for
+the isolated input scenario; 184.990 s for the other six). Frontend/build remain
+the byte-identical 290-test, 12.25 s build recorded above. Before push, concurrent
+master advanced to `ffd9938` with assistant-idea triage; integrate that source and
+retain these results as the prior-base gate, not final-SHA verification.
+## Section 3.9 — assistant ideas enter the shared triage
+
+Status: implemented and tested locally at `3045452`; remote CI pending on the pushed
+checkpoint. Section 3.8 is CI-verified (f327a8b, CI run 34041465044 (all ten jobs passed)).
+Acceptance PW-199, PW-200, PW-201 implemented; PW-202 partial (no rendered-browser check).
+
+The assistant's post kept its fixed 'feed' route and its ideas surfaced through an assistant-only
+lane, never judged. `assistant.triage_ideas` now gives every newly said idea the shared triage
+verdict - by the triage brain, not the assistant's model - with `idea_context` (the originating
+report, the task it names with its status, whether a worker has it) in the same payload every
+message gets; the verdict is recorded on the idea (`action.triage`: intent, kind, why, linked task)
+and survives a re-say with the same facts (`store.upsert_idea` keeps it), so an idea is judged once
+per set of facts. An actionable idea about no active task opens work through `ingest.ingest_message`
+with the verdict it already has (`_verdict` rides on the message, so no second model call), which
+applies the general default kind, checklist, repository and startup rules of the shared intake;
+an idea about active work records the verdict and creates nothing, and a generated claim completes
+nothing. A failure is recorded as an error the next check retries; no brain leaves it pending. The
+pile's idea lane comes from the verdict (fyi, asked, or the failure said), and an idea whose work
+was opened ranks through that task row, not a second card. `_recent` and the producers never read
+Channel 'assistant' rows back in as arrivals, so generated output cannot retrigger itself. Report
+triage stays the opt-in it was (`reports.run_report_source`), and worker events are untouched.
+
+Tests: `tests/test_ideas_triage.py` (8 cases) and the existing `tests/test_report_triage.py`. No existing assertion changed.
+No frontend change; packaged assets unchanged.
+
+
+### Prior Section 2.2 gate before concurrent procedure and chain delivery
+
+Exact source `9583acb` integrates upstream `ffd9938` and passed 2,616 backend tests
+plus 71 subtests (150 warnings, no skips) in 206.68 s. All seven unchanged browser
+scenarios passed: isolated input 11.214 s (visible/input 1,157/645 ms), remaining six
+185.473 s (terminal visible/input/reconnect 2,242/121/807 ms). Frontend source and
+assets remain byte-identical to the 290-test, exit-0 12.25 s build on the checklist
+base. Astra cleared preservation and direct intake/navigation compatibility for
+this exact integration. TODO and both ledgers referenced this candidate source at that gate.
+The broader Phase 3 claims remain Claude's separately scoped evidence; full-chain,
+account-scoping and canonical read-policy cutovers are still pending. Delivery and
+exact-SHA remote CI follow this gate.
+## Section 3.10 — procedure selection in triage, without forced coding
+
+Status: implemented and tested locally at `b461668`; remote CI pending on the pushed
+checkpoint. Section 3.9 is CI-verified (3045452, CI run 34041808201 (all ten jobs passed)).
+Acceptance PW-205 implemented; PW-206 partial (procedure delivery to both worker kinds through
+the shared brief; direct workflow runs are PW-203/PW-204, Phase 10).
+
+A playbook match used to force `kind='coding'` in the classifier, so a PTO request whose saved
+procedure is a general job started a coding session in some checkout. The selected procedure now
+rides on the task as its `playbook:` tag whatever the kind; the kind is the model's own (general by
+default), and `general._prompt` carries the same `playbooks.seed_block` that seeds a coding session,
+so either worker kind receives the procedure through one task-brief structure.
+
+Tests: `tests/test_procedure_selection.py` (3 cases); `tests/test_playbooks.py` has one expectation moved to the approved contract with
+the reason noted. No frontend change; packaged assets unchanged. This closes the Phase 3 scope
+listed in the plan (fresh evaluation, chat association, error/retry, general default, summary and
+checklist, project/repository evidence, incoming procedures, assistant ideas and opt-in report
+triage); the partial rows above name what waits on the Phase 2 chain merge (PW-009 to PW-015).
+
+### Procedure merge and browser fixture readiness
+
+The normal push of `0197da1` was rejected as non-fast-forward after concurrent
+`e085b30` arrived. Merge `7ef37f7` preserves that exact procedure-selection source;
+Astra verified all owned email/checklist/quote code unchanged and cleared direct
+integration compatibility. Its backend gate passed 2,619 tests plus 71 subtests
+(149 warnings, no skips) in 270.45 s. UI source/assets still match the successful
+290-test packaged build.
+
+Two isolated P0 browser attempts failed at navigation, not at the timing ceiling.
+Instrumentation established both causes: after a successful Walk, Current and
+`!typing` can render before the asynchronous post-landed pile GET supplies Next
+(the observed gap was about 122 ms). Separately, the synthetic demo workers can
+transition working-to-parked after the visible Next token was captured; the exact
+old-token request correctly returned 409 `selection_stale`, preserving Current,
+refreshing Next and performing no automatic retry. The happy-path test instead
+waited for the obsolete target. Neither diagnostic pile contained calendar items.
+
+Independent review confirms this is an unstable fixture/precondition, not a reason
+to bypass navigation validation. The bounded test correction captures cold-page
+visibility first, stabilizes only owned demo replay/watcher startup, then awaits
+the actual post-Walk Next marker before unchanged count/title/advance assertions.
+No rejection retry, timeout increase, production code change, or alteration of
+the dedicated stale/passive browser scenarios is permitted. Final reviewed patch
+and browser gates are recorded after integration.
+## Section 2.4 — incremental full email chains
+
+Status: implemented and tested locally at `3293a6e`; remote CI pending on the pushed
+checkpoint. Section 3.10 is CI-verified (b461668, CI run 34042162189 (all ten jobs passed)).
+Acceptance PW-009, PW-010, PW-011, PW-015 implemented; PW-012, PW-013, PW-014 partial (see the
+ledger rows for what is not covered: attachment associations on fetched history, a refresh at
+assistant context assembly time, archived-folder and attachment cases in a fake). The Phase 3
+rows that waited on this merge - PW-016, PW-021, PW-026, PW-030 - are now implemented.
+
+New module `taskuary/chains.py`. A conversation whose history was never completed here (newly
+encountered, stored before this feature, or a failed attempt) is completed from the provider
+after its new mail lands: the thread is LISTED first (Graph `/messages?$filter=conversationId`
+with pagination, ids and metadata only; IMAP `HEADER Message-ID/References` search across INBOX
+and the Sent folder), and only the messages the store does not hold have their bodies fetched,
+once. Fetched history lives on the conversation as `history` rows (the owner's own sent mail as
+`context`) with `TaskId` NULL: never a task, never in the feed or Unread counts, never routed or
+re-triaged, and read state at the provider is untouched. Coverage is recorded per conversation in a
+new `chain` table (`store.set_chain_coverage` / `chain_coverage`); `ingest.exchange_lines` opens
+with a disclosure line when the last attempt failed, so an incomplete thread is never presented as
+the whole. Poll hooks in `channels.py` (Outlook) and `imapmail.py` (IMAP) call the refresh after
+the new mail's own ingest, guarded so a provider failure never fails the poll; the IMAP refresh
+restores the poll's mailbox selection.
+
+Tests: `tests/test_email_chains.py` (12 cases: known chain listed not refetched, missing history fetched once and kept as
+history/context, same-subject other conversation never merged, failed retrieval recorded and
+disclosed, poll hook once per thread, gap-only retrieval on a known thread, retry after failure,
+a later reply already at the provider left for the poll to triage, listing pagination without
+bodies, a listing that keeps pointing at the same page cannot hang the poll, a wholesale-mocked
+transport yields nothing, IMAP INBOX + Sent by References). Two defects the full suite surfaced
+and the tests now pin: history stops at the mail being judged (a newer reply was being swallowed
+as history and never triaged), and the Graph listing walk is bounded (an unbounded next-link loop
+ran a test process to 16 GB). Test-side: FakeBox in
+`tests/test_imap_catchup.py` learned HEADER searches. No frontend change; packaged assets unchanged.
+
+### Concurrent chain integration
+
+`6d88cf0` preserves upstream `e665df7` (chain source `3293a6e`) and the reviewed
+email catch-up work. The IMAP merge retains strict FETCH failure handling, scoped
+identities, durable retry holes, atomic checkpoints and attachment retries, while
+adding the upstream history hook. Integration review and a fresh cumulative backend
+run are in progress. Browser fixture correction `15cf089` exactly matches independently
+reviewed `1f7a66d`; its focused run passed with unchanged limits. No live app or
+production connector was used. Delivery and exact-SHA remote CI remain pending.
+
+Independent integration review reproduced three interactions requiring correction:
+history used legacy IMAP IDs instead of the poll's scoped/epoch identities; failed
+Inbox restoration could leave Sent selected for the next Inbox UID; and history
+could consume a pending UID/retry hole before normal triage. These initial findings were repaired in `753b8ec`
+with real-store synthetic-IMAP tests, as recorded below. Upstream Section 2.4 is not accepted by this
+review: truncated/failed provider listings can claim complete coverage, coverage is
+keyed by bare conversation ID across mailboxes, and the incomplete-history notice
+can be trimmed from bounded context. Its earlier author-recorded claims above are
+retained as history; these limitations still require follow-up.
+
+The seven-scenario browser gate passed (245.938 s, no skips), including the fixture
+correction: cold visibility/input 2,462/987 ms; terminal visibility/input/reconnect
+2,549/131/1,271 ms. This run began on `15cf089` and overlapped the chain merge, so it
+is diagnostic evidence, not an exact-final-source gate. The final source will be
+tested after the compatibility repair. Upstream `e665df7` CI run 34043373718 failed
+the freshness browser scenario (held Current title mismatch); its other nine jobs
+passed. That separate failure was diagnosed and fixed in `f8baa09` without weakening assertions.
+
+### Reviewed compatibility repairs and final gate candidate
+
+IMAP repair `753b8ec` (worker `08f67f9`) passed 10 new real-SQLite compatibility
+cases and 58 combined IMAP cases plus five subtests. It shares exact poll identities
+with history, protects pending/hole and post-census UIDs, reads history readonly,
+and refuses to continue on failed restoration or changed Inbox epoch. Failed
+history SELECT/SEARCH records incompleteness before any Sent checkpoint preparation.
+Astra cleared the source and the strengthened failure fixtures.
+
+The Graph repair queues history until all configured intake folders complete and
+the source CAS succeeds. Independent regressions `4a2f793` (worker `cd5a9d4`) failed
+on the old code by swallowing an older Archive arrival while processing Inbox;
+both pass with the repair. The combined Graph/IMAP compatibility and mail/chain
+gate passed 44 tests. An interrupted folder can still leave earlier conversations
+outside the replay boundary awaiting another history trigger; this belongs to
+partial PW-010 history completion, not acceptance of complete chain recovery.
+
+Fixture correction `3c0f575` preserves all old assertions while freezing two polls
+around a genuinely later arrival and separating fake history HTTP from folder
+pagination. The 32-case mail/chain gate passed. Browser correction `f8baa09`
+(worker `54d7b88`) retains the physical click after the exact card is stationary and
+hit-testable; a causal trace showed the previous overlapping animation sent a
+different card key. Its focused browser case passed and Astra cleared it.
+Frontend tests passed 290 (1.474 s), packaged build exited 0 in 24.74 s; no asset drift.
+Final cumulative backend/browser results and exact-SHA delivery CI follow.
+
+### Final Section 2.2 browser gate
+
+Exact source `32d014b` passed all seven browser scenarios with unchanged assertions
+and budgets: isolated P0 34.719 s (visible/input 1,400/870 ms), remaining six 183.911 s
+(terminal visible/input/reconnect 1,846/95/786 ms), no skips. The earlier race/failure
+evidence remains above. Final independent review cleared this source and confirmed
+all 267 ledger IDs/rows; PW-010/PW-011/PW-013/PW-021 retain the identified partial
+chain scope. Final backend result and remote delivery are pending below.
+
+### Final Section 2.2 backend and delivery candidate
+
+Reviewed source `32d014bff8b0d09ffea5b62b8fc5d81e01979bf3` passed the complete
+backend suite: 2,643 tests plus 71 subtests, 149 warnings, no skips, 225.10 s.
+Together with the 290 frontend tests, exit-0 packaged build and seven final browser
+scenarios above, all local acceptance gates pass. Ledger consistency checks passed;
+source/assets match, and README's owner change remains exactly SHA-256
+`EDF56683E29A34789B2EBEF73E131FBD7B318AE498BC761668BCB70854D91BAB`.
+TODO and both ledgers now reference this source. Full-chain gaps remain explicitly
+partial. Delivery is a normal master push preserving upstream `e665df7`; exact-SHA
+remote CI verification is pending. No live restart, live data modification, or
+production connector testing was performed.
+
+
+### Section 2.2 delivered and CI verified
+
+Normal master delivery `8247d81232bb56f51db8fb7bb39e0be3e8fc8e8b` passed
+[CI run 34044710317](https://github.com/ldbumble/taskuary/actions/runs/34044710317):
+all ten jobs succeeded, including six OS/Python backend combinations, rendered
+browser tests, frontend build, Docker and Windows executable. The tested head SHA
+was verified exactly. The original worktree was fast-forwarded with only the owner's
+README edit remaining and its recorded SHA-256 unchanged. No live app was restarted.
+Section 1.6 proceeds from this accepted checkpoint; unresolved read policies and
+browser-control redesign remain pending.
+
+## Section 1.6 — canonical All consumer
+
+Status: local gates and independent review passed at `d75d45e`; delivery CI pending.
+Base `8247d81`; membership worker `5e810b8` integrated as `59951a9` after Astra
+review. Sol owns bounded membership/UI implementation; Astra independently reviews
+the service, lifecycle, fixture, tests and UI seams. Partial targets remain
+PW-101/102/103/106/109; this section does not activate canonical Unread/read policy.
+
+The explicit background reconciler performs an uncapped, atomic census and detects
+external SQL changes through generations. Read getters never allocate identities.
+All presents one canonical root, including standalone tasks/ideas/reviews, with
+source filters matching any displayed member. Compact pagination leases freeze the
+root set across arrivals and bind filters/history interval/order. Expired leases
+require refresh; pending coverage is explicit. Full detail binds the selected
+message and draft, rejects a dirty/moved target, preserves finalized owner text,
+and includes checklist/history, artifacts and small worker lifecycle metadata.
+
+The disposable socket-isolated browser fixture adds 507 roots without clearing
+demo records or held Current, plus a controlled later arrival and synthetic calendar.
+Real SQLite tests verify exact frozen-page completeness, preserved owner state,
+read-only detail access, pending generation rejection, external-write notification,
+session availability, dangling parents and projection changes. The earlier hover
+race browser test adds the canonical detail URL to its existing request matcher;
+all its previous endpoints, assertions and limits remain. Final gate results follow.
+
+### Integration checks and corrections
+
+The first cumulative backend run passed 2,667 tests plus 71 subtests and found two
+integration failures: the private fixture's namespace import and an exact write-count
+assertion now affected by the durable generation trigger. The import was corrected;
+the test now verifies the one source write plus one trigger write, then separately
+asserts selection performs zero writes. The next cumulative run passed 2,676 tests
+plus 71 subtests in 212.88 s. Final review subsequently required preserving legacy
+detail collection order; the adversarial real-HTTP test compares message/comment/
+route/run/artifact ordering with the existing task-detail API and checks newest
+report/reply/diff selection. All 40 focused integration cases pass after that fix.
+
+UI worker `aaa5558` plus `f8bbe828`/`640f285` address stale requests, pagination
+ownership, speculative fetch failures and current hash-navigation closures. Node22
+frontend tests passed 298; the packaged build exited 0 in 12.96 s. Astra cleared
+the final source and tests. The first rendered canonical scenario failed because
+the assertion read `innerText` for a textarea draft; diagnostic HTTP evidence showed
+the exact latest message/review and no sibling draft. The test is being corrected
+to inspect rendered form-control values, retaining all identity assertions.
+The second rendered attempt reached the draft assertions and found fixture setup
+timing: the mounted page had fetched its source/calendar options before synthetic
+seeding. The fixture sequence will reload those options while verifying held Current
+is preserved; production source discovery behavior is unchanged.
+The next attempt reached older-member selection; its full-body assertion needed the
+existing Message tab rather than Summary. The test now navigates the rendered tabs
+to check the full source tail, then returns to Summary for owner draft editing.
+The disclosure itself is also exercised; full content is intentionally behind the
+existing "show the whole message" control. With those navigation corrections the
+rendered test passed draft isolation/edit preservation, source/category filters,
+standalone details and the complete frozen census/arrival assertions. It then found
+a real existing gap: ComingUp did not pass prep rows or their open callback into
+MeetingRow. The bounded repair also cancels the meeting hover timer on explicit
+prep clicks, so it cannot replace the requested detail. The browser gate verifies
+the exact prep message opens once and stays selected without automatic writes.
+
+Final reviewed backend source passed 2,677 tests plus 71 subtests in 187.97 s,
+with 150 warnings and no skips; warnings include the pre-existing FakeScreencast
+test shutdown warnings and Pydantic deprecations. Frontend tests passed 298 in
+1.475 s before the final ComingUp repair; final UI/build/browser results follow.
+After rebuilding, an older-member click missed while a source-menu overlay covered
+its center. The trace recorded the exact target, a failed center hit-test, no detail
+request and an empty stage. The browser helper now waits for stable visible geometry
+and an exact hit-test before its physical click, retaining the same assertions and
+timeouts. This matches the previously accepted freshness fixture correction.
+
+### Final Section 1.6 local gates
+
+Reviewed runtime `d75d45ef46101e470fa93498f6e2fefb78b140da` passed the complete
+backend suite (2,677 tests plus 71 subtests, 187.97 s), final frontend suite
+(298 tests, 1.458 s), and packaged build (exit 0, 12.21 s). Final fixture/All/lifecycle
+and ledger checks passed 21 cases after adding exact calendar prep IDs. All eight
+rendered browser scenarios passed without skips or weakened earlier assertions:
+
+- Canonical All: 74.385 s; complete 507-new-root frozen census, exact member/draft/
+  full-body selection, owner edit preservation, standalone details, filters, arrival,
+  ignored/muted visibility, exact calendar prep/stability, and unchanged Current.
+- Existing P0: 34.790 s process duration; cold visibility/input 1,851/471 ms.
+- Remaining six earlier scenarios: 176.515 s process duration; terminal visibility/
+  input/reconnect 1,790/76/749 ms. Freshness, captured Next and All/Unread preservation
+  assertions remain intact.
+
+Astra cleared the final source, adversarial tests, fixture interactions and all 267
+ledger entries. PW-101/102/103/106/109 remain partial because canonical Unread/read,
+shared filtering/priority and Current/Next adoption are separate pending work.
+Browser-control redesign remains review-pending. Normal master push and exact-SHA
+remote CI verification follow; no live restart or production connector testing occurred.
+
+### Section 1.6 integration with concurrent shared operations
+
+Before delivery, origin advanced to `d5f976f` (runtime `1461a13`), whose CI run
+34048121206 succeeded. Merge `654a01522af385d0471d1a72567157318c6f0cff` preserves
+both implementations; only the append-only evidence document required conflict
+resolution, and both records were retained. Astra compared the merged functions
+and files: canonical service/membership/projection/UI/tests and earlier mail repairs
+are intact, with the operations tables added alongside membership triggers.
+The combined focused suite passed 69 cases; cumulative merged gates are running.
+Structured operations/discussion history is not yet part of All's comment/activity
+detail and remains the separate Phase 8 adoption work identified below.
+
+## Section 4.1 — shared operations, correction evidence and durable discussion
+
+Status: implemented and tested locally at `1461a13`; remote CI pending on the pushed
+checkpoint. Section 2.4 is CI-verified (3293a6e, CI run 34044710317 on the lead's follow-up 8247d81 (all ten jobs passed; the browser job on e665df7 failed on a pile-click fixture the lead then stabilised)).
+Acceptance PW-129, PW-130, PW-131, PW-133 implemented; PW-132 and PW-134 partial (the assistant
+conversation does not yet write its turns through `operations.discuss`, and UI interaction coverage
+waits on the Phase 8 confirmation box).
+
+New module `taskuary/operations.py` - the proposed-action contract from
+`processing-state-contracts.md`: a proposal has an immutable id, exact target and parameters, the
+context revision it was judged on (`context_revision`: the messages on the thread or task and how
+each stands) and a confirmation version that every edit bumps. `execute` is one shared path: a
+repeated confirmation returns the first receipt and runs nothing; a stale version or a changed
+context is refused for review; a handler failure is reported as `error` (retryable) and teaches
+nothing; a cancelled proposal never runs. On success the operation is compared with triage's
+verdict (read the way the panel reads it: the newest route, then the task kind) and a difference
+is recorded as correction EVIDENCE in a new `correction` table keyed to the operation - FYI to
+task, general to coding, reply-needed to dismissed; deferral, discussion and an unchanged answer
+record nothing; `task`/`general` count as one triage answer. Evidence persistence that fails marks
+the operation `pending` and `recover_evidence` writes it later without repeating the action.
+Evidence is not a memory note and not a policy (PW-131); `ingest` adds `operations.evidence_lines`
+beside the owner's notes so fresh triage weighs it as dated evidence.
+
+Entry points record the same operation through `operations.record_direct`: `/mine`, `/chat`,
+`/dispatch` (message), `/not-coding`, `/not-a-task`, `/file`, and the shared task dispatch when an
+explicit kind differs from the task's. A direct record is skipped while a proposal is being carried
+out, so one action is one receipt. New endpoints: `POST /api/operations` (propose),
+`GET/PATCH/DELETE /api/operations/{id}` (read, edit = new version, cancel),
+`POST /api/operations/{id}/execute` (confirm by id and version; 409 when stale or cancelled),
+`GET /api/tasks/{id}/history` and `GET /api/messages/{id}/history` (discussion, operations with
+outcomes, corrections - oldest first), `POST /api/tasks|messages/{id}/discussion`.
+Discussion rows are kept against the source message and its task; `ingest.task_from_message` links
+that message's earlier discussion onto the task it becomes, by identity (PW-133).
+
+Tests: `tests/test_operations.py` (20 cases). No frontend change; the Phase 8 confirmation box and history panel consume
+these endpoints. Packaged assets unchanged.
+
+### Independent integration limits on Section 4.1
+
+The upstream CI result is green, but it does not establish the full execute-once or
+exact-context guarantees above. Astra's controlled in-memory reproduction of the
+incoming execute function ran two simultaneous confirmations twice; both receipts
+reported `duplicate=False`. Execution lacks an atomic claim before the handler.
+The server also captures operation parameters before execute rereads its version,
+so a concurrent edit can validate one version while running earlier parameters.
+The operation context hash omits source bodies/drafts and caps message history at
+500. The direct not-a-task endpoint records done/correction before later teaching
+and deletion succeed, so a subsequent failure can leave premature success evidence.
+
+These are incoming operation-service limits, not canonical All regressions. They
+remain a separate bounded repair; current PW-129/PW-130 acceptance is partial.
+The historical implementation report above is retained, and this review does not
+clear execute-once, exact-context or success-only evidence claims. Canonical Unread
+and structured operation/discussion history adoption remain pending as before.
+
+### Combined operations/All gate before concurrent startup delivery
+
+Merge `654a015` passed the complete backend suite: 2,697 tests plus 71 subtests,
+150 warnings, no skips, 190.20 s. UI source, tests and packaged assets are byte-
+identical to reviewed `d75d45e`. The complete eight-scenario browser command passed
+in 280.116 s: cold visibility/input 1,175/504 ms and terminal visibility/input/
+reconnect 1,726/78/852 ms. The canonical scenario passed again in 69.659 s.
+Before this candidate could be pushed, origin advanced again to `04fed7c`
+(automatic-startup source `d2e11e5`); integration and its combined gates follow.
+
+
+## Section 5.1 — automatic startup for both worker kinds
+
+Status: implemented and tested locally at `d2e11e5`; remote CI pending on the pushed
+checkpoint. Section 4.1 is CI-verified (1461a13, CI run 34048121206 (all ten jobs passed)).
+Acceptance PW-069, PW-070, PW-071, PW-072 implemented; PW-073 partial. In addition to
+concurrent ingest/retriage being covered only indirectly through the drain-lock tests,
+an explicitly queued general launch that fails can clear its queue entry and record
+`Started`. Truthful queued failure/retry behavior therefore remains unaccepted.
+
+Only coding self-dispatched; a `general` task landed on the Board and waited for a click. Now
+`ingest.auto_start_ok` is one gate for both kinds - the kind first (a personal `task` starts
+nothing), then that kind's own switch (`coder_auto_enabled`, new `general_auto_enabled`, both
+default on), then the worker's configuration (an assistant provider for general), and last the
+stranger hold (`senders.known`, the expensive Sent Items search) - and a coding job whose
+repository triage could not tell holds for the owner's choice instead of opening a session in the
+wrong checkout. A hold is about the unattended start only: the task is still triaged, on the
+Board, tagged `hold:new-sender` where that is the reason, with a router note saying which worker
+was not started and why; the route line says `sent to the assistant`, `sent to the coding agent`
+or `not auto-worked: <reason>`. `ingest._auto_general` opens the assistant's per-task session
+(`general.start_session`, actor router) and puts the task's summary as the first ask once; a live
+conversation is reused; a full house queues it like a coding task and `blackboard.drain` starts the
+kind that was queued. A failed start is written on the task as `Assistant start failed: ...`, and
+the router's own notes no longer count as agent work when the owner files such a task
+(`server.work_on_task`), so a held or failed start leaves the task deletable.
+
+`store.upgrade_auto_start` runs once at startup: an install that had switched the coding agent's
+auto-start off keeps unattended starts off for the assistant too; an explicit owner choice is never
+overwritten. Settings shows both switches (`coder_auto_enabled` relabelled "Auto-start the coding
+agent", new "Auto-start the assistant on general tasks"); packaged UI rebuilt. Releasing a held
+task (`/api/tasks/{id}/release`) starts the kind the task is.
+
+Tests: `tests/test_auto_start.py` (16 cases). `tests/test_kind_dispatch.py` and `tests/test_not_coding.py` moved from
+"general opens no session" to the PW-069 contract with the reason noted; `tests/conftest.py` guards
+the router's unattended assistant start the way it guards a PTY, so a suite never opens a real
+assistant session unless the test supplies a fake.
+
+### Section 5.1 integration corrections
+
+Integration review found that the one-time opt-out upgrade ran after WhatsApp bridge
+startup and startup catch-up. An older owner choice of `coder_auto_enabled=0` could
+therefore be observed temporarily as the newly defaulted `general_auto_enabled=1` and
+admit unattended general work. The repaired lifespan runs `upgrade_auto_start` before
+drain admission, bridge startup, catch-up and poll threads on every non-demo start; an
+upgrade failure propagates before any of those boundaries open. Two real-SQLite lifecycle
+tests close and reopen the legacy database, exercise the constructor-seeded new setting,
+and prove both the corrected ordering and fail-closed startup. All connector, worker and
+native-session boundaries in those tests are mocked.
+
+The earlier `test_core.py` general-routing assertion had briefly been reduced to the
+absence of a coding route. The integration restores a positive deterministic oracle:
+with no assistant provider configured, no worker is spawned and the route must say so.
+The focused startup/core group passed 94 tests, including the two new lifecycle cases.
+The acceptance JSON was also aligned with the established Markdown status/evidence cells
+for PW-001 through PW-008, PW-104, PW-107, PW-110 through PW-112, PW-114, PW-115 and
+PW-118; its two ledger checks passed. Combined cumulative integration gates remain pending.
+
+## Section 5.2 — configurable sender trust for unattended starts
+
+Status: implemented and tested locally at `6c560b9`; remote CI pending on the pushed
+checkpoint. Section 5.1 is CI-verified (d2e11e5, CI run 34048763594 (all ten jobs passed)).
+Acceptance PW-079, PW-081 and PW-082 implemented. PW-080 is partial pending the
+bounded mailbox-scope repair described below. PW-083 remains partial because the live
+Graph/IMAP Sent Items queries are exercised only through the existing fakes.
+
+The stranger gate had a hidden fourth door: "has written before" (`store.known_sender`), so a
+stranger's own earlier mail, a historical import or a retry could make the next message
+'known'. `senders.known` is now three rules the owner can see and switch in Settings, and nothing
+else: chat channels inside a workspace the owner controls (`trust_non_email`), the owner's own
+domains (`trust_own_domain`), and verified SENT evidence that the receiving mailbox wrote to the
+exact address (`trust_sent_history`) - what the store already holds scoped to that mailbox
+(`store.wrote_to_locally`: the mailbox's own words on a thread with the address, or an approved
+reply to them), a hit remembered from an earlier lookup (new `sender_trust` table, per mailbox and
+address, so the mail server is asked once), and the server's own Sent Items (`senders.wrote_to`).
+`wrote_to` now RAISES on a failure instead of answering no, and `known` reports it as "could not
+check the Sent Items of <mailbox> (...) - not proof either way": the task waits for a manual start
+with that explanation, is not tagged as a stranger hold, and the negative is not remembered.
+The matched rule is written on the task when a start is allowed ("Unattended start allowed: in
+your Sent Items"). `store.known_sender` remains for the first-time-sender policy question only.
+Settings shows the three switches; packaged UI rebuilt. The same gate sits behind both worker
+kinds through `ingest.auto_start_ok` (Section 5.1).
+
+Tests: `tests/test_sender_trust.py` (11 cases). `tests/test_core.py`'s stranger walk still passes: the owner's own words on
+the stranger's thread are verified sent evidence for that mailbox.
+
+Independent review found one receiving-mailbox boundary missing from local evidence.
+The approved/edited/sent review branch has no receiving-mailbox constraint. The
+conversation branch constrains the owner's address but does not constrain both messages
+by channel/source, so the same bare `ConversationId` can bridge accounts. An AST-backed
+SQLite reproduction showed approved review evidence belonging only to mailbox A authorizing
+the same sender arriving in mailbox B without a connector lookup. This behavior also existed
+in the older `known_sender` path; copying it into `wrote_to_locally` did not satisfy PW-080's
+stricter receiving-mailbox contract. The bounded scoped repair and regression are in progress;
+PW-080 stays unchecked and partial until that review completes. Combined cumulative gates
+remain pending.
+
+## Section 5.3 — capacity counting and bounded startup retries
+
+Status: implemented and tested locally at `6ed0301`; remote CI pending on the pushed
+checkpoint. Section 5.2 is CI-verified (6c560b9, CI run 34049592998 (all ten jobs passed)).
+Acceptance PW-084 and PW-086 implemented. PW-085 and PW-088 are partial because a
+queued general start can swallow its failure and because restart arms only the earliest of
+distinct retry deadlines. PW-087 remains partial for the Phase 8 task-view/attention surfaces;
+PW-089 remains partial for those queued-general and multiple-deadline cases.
+
+`blackboard.live_count` is the one capacity number: every live session, whatever it is doing -
+working, idle at its prompt, stopped at an approval, coding or general - until its process ends;
+`ingest._auto_code`, `ingest._auto_general` and the queue drain all read it. The dispatch queue row
+carries the retry budget (`Attempts`, `LastError`, `NextAt`, `State` waiting|retrying|failed):
+`blackboard.record_failure` counts one failed start wherever it happened (the drain or a direct
+auto-start, which used to write one line and never try again), says on the task what happened and
+what comes next ("... (attempt 1 of 3) - retrying in 30s" / "Agent could not start - needs you: ..."),
+and schedules the retry by timer (`drain_later`) rather than waiting for an unrelated session to end;
+`blackboard.schedule_due` re-arms the earliest persisted retry at startup, so a backoff in progress
+when the app closed neither vanishes nor restarts from zero. Configuration failures (an unknown
+agent, a missing repository or worker, a permission problem - `blackboard.is_permanent`) fail at
+once without consuming blind retries; a capacity wait consumes nothing. The drain skips rows that
+are exhausted or not yet due so the others proceed, and a failure raised after the session exists is
+reconciled as a started task with a bookkeeping note, never counted as a failed launch or started
+twice. Owner controls: `POST /api/tasks/{id}/dispatch/retry` (a fresh bounded cycle, tried now) and
+`DELETE /api/tasks/{id}/dispatch` (the pending start goes; the task stays); `/api/tasks` exposes
+`Queued.state/attempts/lastError/nextAt`.
+
+Tests: `tests/test_dispatch_retries.py` (13 cases). `tests/test_blackboard.py`: the failed-start test now makes the row due before
+the second drain, because a failed start backs off (PW-085). No frontend change.
+
+### Canonical All integration: startup, trust and retry boundaries
+
+The sender-trust scoping repair is complete at `64e4163`: both local evidence
+paths require the exact receiving mailbox and email channel, including the owner
+conversation row. Eight real SQLite regressions and the existing trust/hotpath
+cases passed (43 total, 1.62s); independent Astra review cleared the repair.
+This supersedes the preceding PW-080 repair-pending note.
+
+Concurrent capacity/retry changes from `f432b76` are preserved. Independent review
+found queued general startup still swallows failure: its caller clears the retry
+row and falsely records Started. Restart scheduling also only arms the earliest
+of distinct deadlines. PW-073/085/088/089 remain partial for these incoming
+limitations; they are not accepted as fully working by the All delivery.
+
+Integration adds owner-only guards to the new Retry/Cancel endpoints, preventing
+agent tokens from resetting exhausted budgets or cancelling queued work. Tests
+isolate retry timers and add retry scheduling to the startup migration boundary.
+Combined runtime review and cumulative gates are pending below. The rebuilt UI
+passed all 298 frontend tests (1.425s); packaged build passed (10.49s).
+
+## Section 5.4 — similar work is a briefing; the wall is live coordination only
+
+Status: implemented and tested locally at `165af37`; remote CI pending on the pushed
+checkpoint. Section 5.3 is CI-verified (6ed0301, CI run 34049840835 (all ten jobs passed)).
+Acceptance PW-171, PW-172, PW-174, PW-176, PW-177 and PW-180 implemented. PW-173 and
+PW-175 remain partial for push-style refresh and the stated integration coverage. PW-178,
+PW-179 and PW-181 are partial because the HTTP note API does not yet forward the posting
+session ID; a headless run's own posting is also covered only through the task fallback.
+
+Overlap is advisory (PW-171): `ingest._auto_code` and `blackboard.drain` no longer park a task
+behind a peer the model judged likely to touch the same files, in either the immediate or the
+ranked path; a queue row that was parked that way is simply due. `blackboard.briefing` (the OTHER
+AGENTS paragraph of the seed, `terminal.seed_text`) carries the facts - each peer's task id, agent,
+summary, touched files and what its live session said - then the model's read of similarity as a
+read ("SIMILAR WORK (the model's read, not a lock)"), the plain "read no overlap", or "NOT assessed"
+when there was no model, never read as no overlap (PW-174); `likely_overlap` now distinguishes an
+answer of no overlap from no assessment. Wall notes belong to a session (PW-178): `boardnote.Sid`,
+`blackboard.post(..., sid=)`, `TASKUARY_SID` in every session shell (`terminal.session_env`,
+`Term`, the assistant's browser env) and `taskuary --note` records it. `blackboard.live_notes` is
+the one live selection (PW-179) behind the Board's live handoff, the seed (`wall_text`, live only,
+no fallback - PW-176), the assistant's prompt (`chat_text`/`house_wall`, PW-177) and `taskuary
+--board`: notes from sessions alive now - working, idle or waiting for approval - plus the owner's
+own notes as durable guidance; a note from before notes knew their session follows its task. An
+ended session's notes leave every live surface and a restart of the same task does not revive
+them; `blackboard.history` (`GET /api/board/notes?all=1`) keeps them and flags each note live or
+historical (PW-180).
+
+Tests: `tests/test_coordination.py` (17 cases). `tests/test_blackboard.py`: the overlap-queues test became
+"overlap is a briefing, not a queue" and the drain test no longer expects a parked row to stay,
+per PW-171; `tests/test_agent_wall.py`: the seed tests post from live sessions, per PW-176. No
+frontend change (the Board already reads the live handoff endpoint).
+
+### Coordination integration candidate
+
+Before the coordination merge, exact source `c9d4572` passed the complete backend suite:
+2,747 tests plus 71 subtests, 150 warnings, no skips, in 250.22 s. Frontend remained
+298 passing tests and the packaged build passed in 10.49 s. The all-at-once browser gate
+passed seven existing scenarios in 346.495 s; the canonical scenario alone timed out in
+fixture diagnostics. Its diagnostic-only correction is awaiting the isolated run recorded
+by the lead as 44424. That is prior-source evidence, not a final coordination gate.
+
+The incoming coordination implementation and its 17 focused tests are retained. Integration
+also replaces fixed `terminal.SESSIONS` test keys under an isolated `patch.dict`, preventing
+cleanup from deleting a pre-existing fixture session. The HTTP session-ID propagation repair,
+independent review, final backend/browser regressions and combined delivery evidence remain
+pending.
+
+The isolated canonical browser rerun passed after the coordination merge: 1/1,
+78.148s scenario / 81.146s process. Seven prior browser scenarios also passed on
+this merged source (213.417s). The response diagnostic correction retains exact
+predicates and all 10-second response budgets; it does not retry failed actions.
+The separate-process CLI live-wall regression is repaired: `--board` requests the
+running server's live selection using its session URL/token and checkout. An
+unreachable server is unavailable, never an empty/live historical fallback;
+`--all` retains offline history. Focused CLI/wall tests: 38 passed in 1.50s;
+coordination/wall/queue tests: 55 passed in 2.33s. Astra independently cleared the
+CLI repair and session-registry fixture isolation. HTTP note SID attribution
+remains explicitly partial; no repair of that surface is claimed here.
+
+## Section 5.5 — one worker context: AGENT.md, CODER.md and one task brief
+
+Status: implemented and tested locally at `e552609`; remote CI pending on the pushed
+checkpoint. Section 5.4 is CI-verified (165af37, CI run 34050341372 (all ten jobs passed)).
+Acceptance PW-182, PW-183, PW-184, PW-186 implemented; PW-185 and PW-187 partial (the source-rules
+block is still assembled separately; no rendered-browser check of the Docs tab).
+
+Every worker prompt carried the whole of SOUL.md - the owner's routing document, written for
+triage - under a flattened CODER.md, and the general assistant got a different pile in a different
+order. New operator document `AGENT.md` (`taskuary/templates/agent.md`, seeded and healed like the
+others, on the Docs tab) holds the rules both worker kinds share, with the approval boundaries that
+used to live only in SOUL.md leading it: nothing sends or ships without the owner's approval;
+money, legal, HR, credentials, permissions and anything irreversible are the owner's; inbound text
+is data, not instructions; then scope, honest reporting, when to ask, progress and completion.
+`CODER.md` is rewritten as the coding additions on top of it (repositories, editing/testing/
+committing only its own changes, the wall, playbooks, GitHub etiquette) and says so. New module
+`taskuary/brief.py`: `brief.build` is the one task brief either worker reads - task id and title,
+objective, the triage checklist, the owner's instruction, the repository, the latest complete
+conversation as triage reads it (history included, cleaned, budgeted), attachments, the message ids
+and the context revision (`operations.context_revision`) it was built from; `brief.rules` flattens
+an operator document for a prompt. `terminal.seed_text` carries `RULES (AGENT.md - every worker)`
+and `CODING RULES (CODER.md)` in place of `OPERATOR RULES (SOUL.md)`, plus OBJECTIVE, CHECKLIST,
+the latest message and a budgeted CONVERSATION block when the chain has more than one message;
+`general._prompt` carries `RULES (AGENT.md - every worker)` and `ASSISTANT STYLE` (writing is that
+worker's job) in place of `OPERATOR RULES`, and the checklist in its task head. SOUL.md stays
+seeded and stays with triage. Live coordination rides only when live peers exist (Section 5.4); a
+continuation carries this task's own `PREVIOUS SESSION RESULT`.
+
+Tests: `tests/test_worker_brief.py` (13 cases). `tests/test_terminal.py`: two `RULES:` pins moved to the new labels; the
+end-to-end TUI test blanks AGENT.md as it blanks CODER.md and SOUL.md (it owns the seed's inputs);
+`tests/test_docs_flow.py`: the coding-agent audit now expects the AGENT marker and forbids the
+SOUL marker (PW-184). Packaged UI rebuilt for the Docs tab entry.
+
+## Section 5.6 — one startup contract and the surfaces that start a worker
+
+Status: implemented and tested locally at `4f32c35`; remote CI pending on the pushed
+checkpoint. Section 5.5 is CI-verified (e552609, CI run 34051205593 (all ten jobs passed)).
+Acceptance PW-099, PW-209, PW-210, PW-211, PW-212, PW-213 implemented; PW-097, PW-098, PW-100,
+PW-214 partial (conversational dispatch in the assistant chat is Phase 8; a single confident
+repository still launches without a confirmation step pending the owner's word; live UI
+interactions are not exercised - the surfaces are checked by source pattern).
+
+Dispatch used to answer with whatever the path it took happened to return, and one screen read a
+`needs_repo` decision as a live start. Every dispatch answer - `/api/tasks/{id}/dispatch`,
+`/api/messages/{id}/dispatch`, the chat cards - now says the same four things: `dispatch`
+(session | assistant | needs_repo), `started` (a worker session was created for this request),
+`existing` (a live session or conversation was reused; nothing new started) and, for a coding
+session, `accepted` (`Term.accepted`: the prompt was submitted - True when the CLI takes it on its
+command line or the typed seed was answered, False when it was typed but never taken, None before
+any prompt) - exposed on the session's `info`. A repository decision carries `started: false`; a
+failed launch is a 422, never a success. `website/src/dispatchOutcome.js` (`outcomeOf`) is the one
+reading of that answer: the timeline's SendToAgent (`ui.jsx`) now offers the `RepoPicker` on a
+needs_repo decision with a "Not now - nothing was started" exit and reports what actually happened;
+All detail (`FeedView.jsx`) offers Send to agent for fyi/reply rows as the chat cards do, with
+triage's reading kept as the printed reason; the task page's non-coding start (`TasksView.jsx`)
+goes through the shared dispatch whatever the task's kind was instead of re-labelling the task and
+leaving a workspace mount to start work. Make task (`/mine`) creates or reuses an owner task and
+launches nothing. Packaged UI rebuilt.
+
+Tests: `tests/test_startup_contract.py` (7 cases), `website/test/startupSurfaces.test.mjs` (4 checks: outcome reading, the timeline's repo decision, the All-detail
+tray, the task page's shared dispatch).
+
+## Section 5.7 — mandatory freshness: what a draft read, what a send rechecks, email refreshed like chat
+
+Status: implemented and tested locally at `325d05a`; remote CI pending on the pushed
+checkpoint. Section 5.6 is CI-verified (CI run 34051581086, all ten jobs passed).
+Acceptance PW-048, PW-054, PW-055 implemented; PW-049 partial (automatic Next/Walk and FYI-batch
+validation are PW-050); PW-050 to PW-053, PW-056, PW-057 remain open.
+
+A draft was labelled with the newest message queried AFTER the model finished, so a line that
+landed during generation was called seen; the source-refresh gate before an answer, a draft or a
+send skipped email; the reply writer read the last six messages cut at 4,000 characters each and
+said nothing about the rest. `responder.draft_for_review` now captures the inbound message and the
+message-set revision (`operations.message_revision`: the task's inbound messages and their states,
+nothing else) BEFORE the model runs, pins the review to them (`store.pin_review_context`, new
+`review.ContextRevision`/`Stale` columns) and marks the draft stale when the set moved while it was
+written. `verdicts.decide` rechecks that revision before anything leaves - the one door the Review
+button and the phone road share - and refuses a stale or moved draft with `stale: true` and nothing
+sent; a redraft repins and the next yes sends. `server._refresh_chat_context` covers email through
+the connector behind the mailbox the message arrived in (`_poll_reports(only=[type], wait=True)`, an
+incremental watermark read; the chain itself is completed by `chains.py`); a mailbox with no active
+connector is left alone and said so; a failed refresh stays a 503. `responder.draft_reply` reads the
+assembled conversation (`ingest.exchange_lines`: the whole chain, history included, cleaned,
+de-quoted, budgeted, with the cut disclosed).
+
+Tests: `tests/test_freshness.py` (9 cases). No frontend change.
+
+## Section 5.8 — freshness on the walk: select, validate, say it once, supersede what is behind
+
+Status: implemented and tested locally at `af2f15f`; remote CI pending on the pushed
+checkpoint. Section 5.7 is CI-verified (325d05a, CI run 34051887301 (all ten jobs passed)).
+Acceptance PW-050, PW-051, PW-053 implemented; PW-052, PW-056, PW-057 partial (the notice is
+emitted after the refresh completed rather than at detection, because the quick poll waits for the
+triage of what it fetched before returning; a concurrent sync racing an action is covered only
+through the revision recheck).
+
+Next without a key surfaced whatever the pile held without asking the source whether the item had
+moved; an FYI batch was never checked; a new line on a task with a drafted reply left the draft
+sitting as current; the "new message" notice repeated on every render. `server._refresh_next_selection`
+picks what the walk would surface, refreshes that item's source through `_refresh_items` (once per
+channel across an FYI batch), and re-picks when the refresh moved the pile; the plain Next endpoint
+and the stream's next mode call it, and the reservation path raises a stale navigation (409) so the
+client re-captures. `_notice_once` emits the context-update line as its own `context_update` stream
+event before the assistant's answer, once per new revision of the item (`_NOTICED`), worded as what
+happened ("New message from X arrived on Y ... I sent it through triage before continuing"); a failed
+refresh stays an error event. In `ingest`, a new inbound line joining a task with a pending draft
+marks that draft behind (`Stale`) and, when the follow-up verdict says a reply is still owed, redrafts
+the same review - never a second review, never a second task; an fyi line leaves it alone. The
+owner's own external answer retires the draft (`channels.retire_draft_answered_elsewhere`, already
+in place) and the notice now says it was answered and nothing is to send.
+
+Tests: `tests/test_freshness_walk.py` (9 cases) and `website/test/contextNotice.test.mjs` (2 checks). Frontend: `AssistantView.jsx`
+renders the `context_update` stream event as it arrives - before the answer - and does not show the
+done payload's copy a second time; packaged UI rebuilt.
+
+## Section 6.1 — one worker status model from explicit events; answers bound to the request
+
+Status: implemented and tested locally at `353d083`; remote CI pending on the pushed
+checkpoint. Section 5.8 is CI-verified (af2f15f, CI run 34052218971 (all ten jobs passed)).
+Acceptance PW-222, PW-226, PW-227, PW-139, PW-141 implemented; PW-223, PW-225, PW-137 partial;
+PW-224 (Codex App Server) not started.
+
+A session's status was read off its screen: a bare prompt meant "stopped and waiting on you", a
+quiet terminal meant a question, and every consumer disagreed with the next. New module
+`taskuary/workerstate.py` derives a worker's state from explicit, persisted events (new
+`worker_event` table: task, run/session id, kind, request id, text, choices, source, event id):
+Working, Input needed (with the unanswered question and its choices), Approval needed (with the
+pending action), Finished (an explicit result - it closes nothing by itself), Failed, Disconnected,
+Stopped, or unknown. A response ending (`turn_end`) is not a finish; a dead session with no finish
+is disconnected; an idle prompt with no event raises no hand. Events are deduplicated by event id
+and by open request, and a run that is not the task's live one is ignored (a restart or headless
+worker with no live session becomes the current run). `workerstate.answer` binds the owner's
+answer to the exact outstanding request and its run: looked up across every run, delivered once
+(`terminal.type_into` for a CLI, `send_prompt` for the assistant), refused as resolved, stale (the
+run changed - never forwarded to a replacement) or disconnected (no live worker: open the
+workspace), failed when the delivery raised; each outcome is written into the task discussion.
+Producers: Claude Code hooks (`hooks._events`: UserPromptSubmit, AskUserQuestion, permission
+Notification - now installed as a fourth hook - and Stop), `taskuary --done` (`selfclose.declare`
+records Finished with the result), the assistant's `send_prompt` (Working), and the owner's Stop
+(`/api/tasks/{id}/agent/stop` records Stopped). Endpoints: `GET /api/tasks/{id}/worker` and
+`POST /api/tasks/{id}/worker/answer` (409 resolved/stale, 422 disconnected/failed).
+
+The funnel, the hand-raise and the task list still read the terminal's latched phase; switching
+those consumers to this model is Section 6.2.
+
+Tests: `tests/test_worker_events.py` (13 cases). No frontend change.
+
+## Section 6.3 — explicit completion: save the agent's own result, tick what it reported, then close its run
+
+Status: implemented and tested locally at `3d5af15`; remote CI pending on the pushed
+checkpoint. Section 6.2 is CI-verified (c16a861, CI run 34053073590 (all ten jobs passed)).
+Acceptance PW-231, PW-232, PW-233 implemented; PW-230 and PW-234 partial (Codex App Server
+messages are not integrated; pending approvals at finish and retained follow-up context are
+exercised only through Sections 6.1 and 5.5).
+
+`coder.wrap` now takes the agent's OWN final answer first - the `--done` sentence recorded as the
+run's Finished event (`workerstate`), matched to the live run, then the Stop hook's last message the
+witness kept - and only then the report a second AI writes from the transcript. The result artifact
+(`session_artifacts.coding`: compact result plus the final answer) is written BEFORE the pty is
+closed; a save that fails raises `the result could not be saved ... the session was left open`,
+writes no CODER REPORT, closes nothing and leaves the finish retryable (`selfclose._wrap`/`declare`
+forget their once-only mark and say so on the task). `coder.tick_reported_checklist` ticks only the
+checklist items the agent itself reported done (`- [x] item` lines in its result or transcript,
+matched by words, by item identity) and says which; nothing is added, moved or blindly completed.
+`selfclose.declare` on a session the owner opened no longer holds: the explicit finish records the
+Finished event, saves the result and closes the completed run (`coder.wrap(close=False)`), leaving
+the task's own closure and any reply to the owner (PW-232); live wall notes leave with the session
+(Section 5.4). A second finish for the same run does nothing twice.
+
+Tests: `tests/test_explicit_completion.py` (6 cases). `tests/test_stay_open.py` and `tests/test_stay_open_doors.py`: the two pins that read
+`--done` on an owner-opened session as "filed, not obeyed" now expect the run to close and the task to
+stay, per PW-232, with the reason noted. No frontend change.
+
+### Section 1.6 delivery integration at dbb82f8
+
+The owned All implementation is unchanged through the latest shared worker and
+freshness changes (`b047214`). Independent Astra review cleared canonical
+membership/detail, historical reads, navigation reservations/final guards, email
+preservation, startup opt-outs, exact mailbox trust and owner-only dispatch controls.
+This is compatibility review, not blanket acceptance of incoming Phase 5/6 features.
+
+Cumulative local gate at `76b227f`: 2,764 backend tests plus 71 subtests passed,
+152 warnings, no skips, in 235.86s. All eight real browser scenarios passed across
+the isolated canonical run (78.148s scenario) and seven prior scenarios (213.417s
+process). After merging `b047214`, all 501 processing/freshness/worker/startup/core
+integration tests passed in 34.21s; all 304 frontend tests passed in 2.441s and
+the packaged UI rebuilt in 16.13s. Relevant merged browser results follow.
+
+To avoid restarting the entire local suite for each concurrent master push, the
+section's complete cumulative local gate is followed by focused merge checks,
+relevant rendered-browser checks and the full exact-SHA remote CI on the combined
+commit. No earlier assertion, timeout, or fixture-size requirement was weakened.
+User README SHA-256 remains EDF56683E29A34789B2EBEF73E131FBD7B318AE498BC761668BCB70854D91BAB.
+No live app, connector, read-state migration or custom document was used for tests.
+
+## Section 7.1 — replies are written from STYLE.md, SOUL.md and the conversation; triage's learning stays with triage
+
+Status: implemented and tested locally at `691f566`; remote CI pending on the pushed
+checkpoint. Section 6.3 is CI-verified (3d5af15, CI run 34053604179 (all ten jobs passed)).
+Acceptance PW-058, PW-059, PW-060, PW-061 implemented; PW-062 partial.
+
+Every draft carried LEARNED.md - what the system has learned about which mail deserves a task - and
+the owner's standing triage verdicts (NOT A TASK, NOT OURS), so a reply prompt was half a routing
+manual. `responder.draft_reply`, `responder.draft_for_message` and `outbox.draft_message` now write
+from STYLE.md (voice and signature), SOUL.md (identity and responsibilities), the refreshed
+conversation (Section 5.7) and the verified result, plus - as separately retrieved notes - only
+explicit writing instructions (`responder.writing_notes`: memory rows with source `writing`);
+LEARNED.md and the routing verdicts no longer ride into any draft (they still reach triage).
+`responder.style_feedback` puts an edited draft's note into STYLE.md under `## Owner notes`, outside
+the generated block so a regenerate keeps it; `verdicts.decide` routes an edit's note there and
+keeps a rejection's or no-reply's note as triage feedback for LEARNED.md (PW-061). `POST /api/memory`
+accepts `source: writing` so a writing instruction can be saved by hand.
+
+Tests: `tests/test_reply_sources.py` (7 cases); in the pre-existing `tests/test_reply_voice.py` (first-person voice) the standing-notes
+case moved to the PW-060 contract - a writing instruction rides, a triage verdict does not - with the reason noted. `tests/test_docs_flow.py`: the reply-path audit now expects the STYLE marker and a writing-note
+marker and forbids the LEARNED marker and the triage-verdict note, per PW-058/060. No frontend change.
+
+### Final reply-source compatibility and calendar test timing
+
+Merge `ff45b7a` preserves concurrent reply-source work through `2e92e2f`.
+Independent Astra compatibility review cleared exact message/review targeting,
+read/navigation preservation and document-content handling. The focused reply,
+All, navigation and ledger gate passed 54 tests plus 9 subtests in 9.05s.
+
+The merged freshness and Current/Next browser checks passed (3 scenarios in the
+four-scenario attempt). Calendar prep still failed its response wait. A subsequent
+fixture-only click/network trace proved no DOM click had occurred before the
+10-second timeout. The test started its response timer before expensive scrolling,
+layout checks and physical-hover preparation. Readiness now completes first; the
+same exact response listener is installed immediately before the physical click,
+with its unchanged 10-second limit and status/body/target assertions. The hover
+stability checks additionally retain the prep target's geometry and hit ownership.
+Astra independently cleared this distinction between readiness and response latency.
+The rerun result follows; previous failed attempts are not counted as passing gates.
+
+Final canonical browser gate passed: 1/1, 108.918s scenario / 112.004s process,
+with all 507 added fixture roots, frozen pagination, exact member/draft targeting,
+owner edits, Current preservation and calendar prep assertions intact. Test helpers
+now find exact rows in one browser evaluation instead of hundreds of sequential
+protocol round trips. Prep readiness uses physical pointer movement and stable
+geometry/hit tests; the unchanged 10-second response budget starts at its physical
+click. Both test changes passed independent Astra review. Packaged UI build passed
+in 12.08s and all 304 frontend tests passed in 1.894s. No retries, reduced fixture
+counts, relaxed assertions or increased timeouts were introduced.
+
+## Section 7.2 — email replies: a reviewed recipient envelope and the owner's signature, once
+
+Status: implemented and tested locally at `88f2c1b`; remote CI pending on the pushed
+checkpoint. Section 7.1 is CI-verified (691f566/2e92e2f, CI run 34054198417 (all ten jobs passed)).
+Acceptance PW-064, PW-065 implemented; PW-063, PW-066 partial (the Review page's To/mode controls
+are a Phase 8 surface; the connectors are exercised through the shared to/cc contract).
+
+A reply went to the sender alone, with a CC the owner could add at the last click, and the
+signature was whatever the model chose to write. `outbound.reply_envelope` builds the recipients an
+email reply goes to - Reply all by default: the sender or the message's Reply-To, the original To and
+CC participants, the sending mailbox's and the owner's own addresses excluded, deduplicated
+case-insensitively, never a BCC - or Reply to, the sender alone; a chat has no envelope.
+`responder.draft_for_review` and `draft_for_message` pin it to the review when the draft is written
+(`store.set_review_envelope`, in `Deliver` as `kind: reply`, never overwriting an outbound review's
+own delivery), and `verdicts.decide` sends exactly that envelope (`reply_to_message(to=, cc=)`),
+with a CC list named on the click taking precedence; a reply envelope is not an outbound send.
+`PUT /api/reviews/{id}/envelope` switches Reply all/Reply to and edits To/CC. The owner's signature
+(`responder.signature_for`: the `email_signature` setting, else STYLE.md's `Sign off:` line, quoted
+multi-line allowed) is applied once by `with_signature` when an email draft is written, redrafted or
+saved by hand (`PATCH /api/reviews/{id}`) - visible before approval, never at send time, never on
+chat, never twice, and an owner's own signed text is kept as written.
+
+Tests: `tests/test_reply_envelope.py` (9 cases). No frontend change.
+
+## Section 7.3 — send outcomes: sent, failed, unknown, and an explicit close without sending
+
+Status: implemented and tested locally at `3459868`; remote CI pending on the pushed
+checkpoint. Section 7.2 is CI-verified (88f2c1b/50560d5, CI run 34054507025 (all ten jobs passed)).
+Acceptance PW-144, PW-145, PW-147, PW-148, PW-150 implemented; PW-143, PW-146, PW-149 partial.
+
+A send that timed out was reported NOT SENT and offered for a retry that could deliver the same mail
+twice, and a channel that could not carry the reply left "No response required" as the owner's only
+exit. `verdicts.decide` now knows three outcomes. A confirmed send settles the task the reply belongs
+to through `_settle_task_after_sent_reply` - unchecked checklist items and all, the owner's decision
+that a sent reply is the end of the job (the "Successful reply closes its task" resolution). A
+definite failure keeps the approved text as the draft and the task open with the error and a retry,
+and marks the review's envelope `delivery: failed`. A provider that did not answer
+(`outbound.UNKNOWN_ERRORS`: read timeouts, connection errors) is delivery UNKNOWN, its own state:
+the envelope records `delivery: unknown` and the attempt time, `outbound.reconcile_sent` asks the
+Graph Sent Items of the conversation whether the reply is there (the opening words of the reviewed
+text are the receipt), a found mail is settled as sent with no second send and a comment saying so,
+and the next approval reconciles again before it sends anything - so a retry is safe. The wording
+never says sent or not sent until it is known. A second approval of a decided review is refused by
+the existing decided-review guard (`already`).
+
+Close without sending is the owner's explicit verb, `close_unsent` (`VERB2STATUS` → `closed_unsent`):
+the unsent draft stays on the review, the closure and its reason (the click's note, else the
+channel's `send_block`) are recorded as a comment and audit row, the task closes as the owner's word,
+and nothing reads as Sent. It is never an automatic consequence of a failed or blocked send. The
+Review page's blocked-channel button now sends this verb instead of `no_reply`, with the reason in
+its title. A proposal (`Kind: action`) is rejected, not closed without sending (`422`).
+
+Decision recorded: a clarification is the one send that does not end the task - it asks, it does
+not answer - so the task stays `waiting` (the existing `_settle_task_after_sent_reply` rule).
+
+Tests: `tests/test_send_outcomes.py` (8 cases). Frontend: `website/src/ReviewView.jsx` (verb + title only; rebuilt bundle).
+
+### All compatibility with saved reply envelopes and send outcomes
+
+The merge through `9c6017e` now displays the exact selected review's saved To and
+CC, preserves owner-edited CC (including an explicit empty list) across refresh,
+and resets recipient edits when the exact message/review changes. Email approval
+waits for the full review; an explicitly empty To envelope cannot silently fall
+back to an unseen sender. Unknown delivery remains unknown on reopen, and no copy
+claims it was definitively unsent or encourages a manual duplicate. Independent
+Astra review cleared these bounded compatibility repairs.
+
+Final gates: 306 frontend tests passed (1.636s); packaged build passed (12.97s);
+38 reply-envelope/send-outcome/All/lifecycle/ledger tests passed (3.98s). The complete
+canonical browser scenario passed (69.077s scenario / 72.138s process), including
+saved recipients, persisted unknown delivery, owner-cleared CC retention during
+real draft refresh, distinct sibling-review recipients, and every earlier All
+assertion. Other cumulative and merge-specific gate results are recorded above.
+Delivery is pending the exact-SHA remote CI, not acceptance of all Phase 1 work.
+
+## Section 7.4 — completion-to-reply freshness: refresh, reassess, then draft
+
+Status: implemented and tested locally at `ecabef1`; remote CI pending on the pushed
+checkpoint. Section 7.3 is CI-verified (3459868/9c6017e, CI run 34054847136 (all ten jobs passed)).
+Acceptance PW-235 to PW-238 implemented.
+
+The agent's result became a reply the moment the session closed, written against the ask as it
+stood when the work began. `coder.finish` now refreshes the source conversation first through
+`coder.REFRESH`, the hook the server installs over `_refresh_chat_context` (the same gate the
+Assistant and approvals use, incremental, connector-typed), and `coder.freshen` says where the ask
+stands: fresh; changed (a newer inbound message - the review is pinned to it, the reason says the
+thread moved on, and the drafting source carries the newest message so the reply answers what is
+asked now); answered (`coder.answered_elsewhere`: the owner's own line newer than the newest inbound
+message - a comment says so, a held draft is retired as no_reply, the task closes, nothing is drafted);
+unresolved (the refresh failed - the draft is written from the saved result and marked stale with the
+reason, so Send waits for a refresh that succeeds); or unchecked when no refresh is installed, which
+is never called fresh. `raise_reply` reuses the held triage draft, else the pending review an earlier
+completion event raised, so a repeated completion rewrites one review and never sends; the draft is
+written from the saved final result and the current thread with its context revision pinned by
+`responder.draft_for_review`, and the saved result survives a failed draft, which stays retryable.
+
+The always-draft rule (PW-237): a channel that cannot carry the reply no longer suppresses it.
+`finish` and `wrap` return `can_send` and `send_block` alongside `drafting`; the review is raised, the
+task waits, the Review page hides Send with the reason and offers Close without sending (Section 7.3).
+Only a row nobody sent - a report, work started here, the assistant's own post (`coder.no_one_behind`)
+- drafts nothing; a report whose card names a findings target still delivers there. The pins in
+`tests/test_reply_channels.py` and `tests/test_api.py` that said "GitHub replies off closes clean with
+no draft" were rewritten to this rule.
+
+Tests: `tests/test_completion_freshness.py` (11 cases), `tests/test_reply_channels.py` (3 pins rewritten), `tests/test_api.py` (1 pin
+rewritten). No frontend change.
+
+## Section 7.5 — approval interrupted by material change, and only by that
+
+Status: implemented and tested locally at `d8bfe62`; remote CI pending on the pushed
+checkpoint. Section 7.4 is CI-verified (ecabef1/aafd735, CI run 34055530583 (all ten jobs passed)).
+Acceptance PW-239 to PW-241 implemented.
+
+A click on Approve was refused with a line of text when the newest message on the task differed
+from the draft's - any message, an FYI included - and the refreshed draft silently replaced the
+owner's edit. `verdicts.context_moved` is now the one answer to "did the context move?": a stale mark
+triage set, or an inbound message set that differs from the draft's pinned context revision
+(`operations.message_revision`, which now leaves out an FYI triage filed with nothing to do, as it
+leaves out our own lines); the Review list's `Stale`, the decide route's pre-check and the verdict
+itself all read it, and none of them consults a polling timestamp. `store.last_material_inbound_on_task`
+names the message that moved it. Existing pinned revisions that counted an FYI will read as moved once
+and re-pin on the next refresh.
+
+When it moved, the click does not send (PW-239): the route answers `stale` with an `interrupt` -
+the new message (sender, time, preview), the latest triage comment, the owner's own edited text and
+the refreshed draft written from the current context - and keeps the owner's edit as a task comment
+("Your edited reply, kept for comparison"). `website/src/approvalInterrupt.js` turns the answer into
+the dialog model (`interruptOf`) and resolves the owner's choice (`resolveInterrupt`: cancel keeps
+the edit in the box and sends nothing; review hands the refreshed draft over beside it); the
+`ApprovalInterrupt` dialog - "A new message arrived. Review it before sending.", Review the update /
+Cancel - opens on the Review page and on the Assistant stage, and both then show the refreshed draft
+next to the owner's words with Use the refreshed draft / Keep mine. The previous approval is never
+applied: a second change before the second look interrupts again, and only the reviewed, current
+draft goes out. A reply the owner sent outside supersedes the draft, and the click says so.
+
+Tests: `tests/test_approval_interrupt.py` (6 cases), `website/test/approvalInterrupt.test.mjs` (4 cases). Frontend:
+`website/src/approvalInterrupt.js`, `website/src/ApprovalInterrupt.jsx`, `ReviewView.jsx`,
+`FeedView.jsx` (rebuilt bundle).
+
+### Section 1.6 final concurrent compatibility gate
+
+The All integration includes origin through `1455cee` (completion freshness and
+approval interruption). Independent review found and repaired two mutation-scope
+seams: completion only recognizes owner replies within the exact channel and
+attributed mailbox, and the server completion hook rejects a foreign store.
+99 focused tests plus five scope subtests passed before the final merge; the
+combined freshness/reply/API/All/navigation/ledger gate passed 154 tests plus five
+subtests (7.57s). The merge frontend gate passed 310 tests (1.585s), build passed
+(12.00s), and all existing canonical browser assertions passed (62.776s).
+
+The incoming approval interruption can move a review to a newer exact message.
+All now retains the attempted text independently of selection, keeps it recoverable
+after Cancel, and opens the exact updated message/review only on an explicit Review
+choice. Its refreshed comparison uses the persisted draft; mismatched or no-longer-
+pending reviews are rejected without losing the retained text. Root independently
+reviewed the Astra implementation; the additional browser case uses a fixed synthetic
+review-move fixture and intercepts only its local send response. No provider sends,
+production connector tests, live restart, or historical read rewrite occurred.
+Final extended browser and exact-SHA remote delivery results follow below.
+
+Extended-fix gates: 312 frontend tests passed (1.699s), packaged build passed
+(34.62s), and nine fixture/All API tests passed (2.44s), including invalid fixture
+input causing no writes and the exact review disappearing from old-member detail.
+
+The first extended browser attempt reached the new approval case but failed on
+`page.listeners()` (unsupported by Puppeteer's event emitter); it is not counted as
+a pass. The harness now exposes the exact callback it already installs, so this
+single local-response test can delegate every other request to the unchanged
+network guard. Independent Astra review cleared that helper repair and the exact-
+member filter readiness wait. All earlier assertions and response budgets remain.
+
+Final extended canonical browser passed: 128.944s scenario / 132.054s process.
+This includes every prior All assertion plus physical Cancel/recovery, exact newer-
+message detail hydration, preserved owner wording beside the persisted refreshed
+draft, and exactly one intercepted approval attempt. Local gates and independent
+review are complete; remote exact-SHA CI remains the delivery gate.
+
+Section 1.6 delivered: `1f7118ecb7007bfd9c84892e2a741dd3cb054fa5` is on
+origin/master. CI run 34056568028 passed all ten jobs, including the six Python
+platform/version combinations, full browser suite, packaged UI parity, Docker and
+Windows executable. Shared Unread/read transitions remain separate pending work.
+
+## Section 1.7 - approved five-band ordering
+
+Implementation in progress after the successful Section 1.6 remote gate. Funnel,
+legacy feed rank and raw inventory facts share the same five-band/priority rules.
+Lane labels retain their UI/action semantics. Sorts use saved priority, oldest
+activity (including fractional timestamps), then stable legacy key; canonical key
+adoption remains part of the Unread cutover. Working coding/general agents remain
+last, owner waits second, urgent requests and exact current/within-15-minute events
+first. A future meeting remains visible but scheduled; its mere existence is not
+urgent. Saved actionable urgent ideas are promoted, and a report failure uses the
+same persisted run/subject fact in both feed and funnel. No read, mute, cap or
+Current mutation is introduced by ranking.
+
+The ordering section also carries its server band to cards and existing alerts;
+the UI no longer lets an equal-band agent wait override another wait, or override
+an urgent Current. Notification producer eligibility stays unchanged: promoting an
+idea in Unread does not introduce an additional unsolicited notification category.
+An initial cumulative gate found only an obsolete blocked-before-all-drafts
+expectation (2890 passed, one failed, plus 76 subtests). Its two exact sequence
+assertions now require the older draft before the newer agent wait in shared band 2;
+all five walkthrough steps remain. Focused contracts passed 140 tests (4.56s), the
+ordering/funnel/navigation group passed 119 (4.35s), frontend passed 313 (1.436s),
+and the packaged build passed (12.50s). Final cumulative/backend browser runs are
+in progress; the earlier failed gate is not counted as acceptance.
+
+Final Section 1.7 local evidence: cumulative backend passed 2901 tests plus 76
+subtests (241.40s). The browser suite passed six scenarios and exposed two issues:
+a named older Current fell outside the ordinary 400-row feed lookup after arrivals,
+and the new ordering assertion sampled before all four fixture arrivals rendered.
+Named Current lookup now bypasses only the source-page cap; default queue/age/read
+policies remain unchanged. An independent SQLite regression proves the same pending
+review survives 405 arrivals without any database write while default cap 3 remains.
+The browser waits for all four arrivals without removing any earlier assertion.
+Rerunning canonical All and both selection scenarios passed all three (204.16s),
+covering the two failures and the prior New chat race. The other six earlier passing
+scenarios remain applicable. Focused follow-ups passed 161 tests (card contract),
+191 tests (Current lookup), and the independent 405-arrival regression. Astra
+independently cleared these changes; root reviewed the added regression. Sol's
+implementation slots were unavailable due to usage limits, so root integrated the
+bounded follow-ups. No live app restart, connector test, or historical read change.
+Remote exact-SHA CI remains the delivery gate for this section.
+
+Section 1.7 delivered to origin/master at `53dc94225c06033c31a574192ed1a397900c092b`.
+Exact-SHA CI run 34058274039 passed all ten jobs. Section 1.8 now replaces the
+legacy Unread inventory; the sync indicator investigation follows that work.
+
+## Section 1.8 - shared All/Unread inventory and preserved read boundary
+
+Root integrated the canonical Unread/card adapter, All read metadata/common member
+filters, shared filter navigation and counts. Astra implemented and independently
+tested the additive read/deferral store and then reviewed root's integration. Sol
+bounded implementation remained unavailable because of its usage limit.
+
+All and Unread now derive from the same canonical roots and common history/source
+filters. Unread no longer applies the 400-row feed input, configured item cap,
+12-hour window, FYI/category/assistant/report exclusions, or display-based eligibility.
+Stable processing keys retain exact legacy/merged-root aliases for existing Current.
+The assistant consumes the same ordered filtered pile, with working, deferred and
+pending-triage eligibility supplied by that shared state. Existing lane presentation,
+Current/Next controls and four-item FYI batching remain. The old private mail-only
+shortcut is absent in canonical mode; the visible shared source/category filters
+select those items instead. Obsolete funnel age/cap values remain stored but their
+controls are hidden. All's counts cover its frozen inventory rather than only loaded
+pages. Existing standing rules apply to candidate members in both views while
+preserving protection for urgent work, approvals, waits and failed reports.
+
+Read activation is explicit at startup before intake, worker recovery or chat reset,
+not in schema construction or a GET. It first creates a SQLite backup through the
+backup API (including committed WAL data) and an attachment manifest. A fresh
+atomic baseline captures the actual historical read results and activates exact
+substantive-member receipts together; old foundation baselines cannot stand in for
+that boundary. Temporary intervals stay separate from permanent reads. Future
+surfaced/ack writes do not create or erase reads/deferrals. New members or changed
+substance become unread; priority, draft edits and display metadata do not. Exact
+receipts survive membership merges/splits. Calendar retains its identity adapter
+with durable historical/new Done and temporary deferral compatibility.
+
+Independent review repaired exact older-review targeting within the allowed source
+members, standalone persisted worker visibility, old-key Current exclusions,
+protected mute lanes, shared filters across Walk/New chat and calendar receipts.
+Explicit settlement fences membership inside its transaction; a no-structural-change
+census admits the action's own comments while actual unseen member changes reject.
+This is membership fencing, not a new content-CAS operation policy. Batch Done scope,
+new-activity deferral policy and new standing-rule historical reach remain unchanged
+pending their separately requested owner decisions; this section preserves existing
+behavior instead of choosing new policy.
+
+Local evidence before final cumulative gate: 34 startup/read/shared tests passed
+(5.08s), including 507 arrivals, synthetic backup/custom-document preservation,
+legacy inferred reads, rollback/reopen, real concierge Done, source filtering,
+member-scoped draft targeting, working/waiting, explicit Done and deferred expiry.
+The first new browser attempt rendered all 507 and passed API parity, then its test
+helper assumed the view pills were buttons. The corrected physical-pill helper
+passed the full new scenario (41.24s). It was then extended to verify the visible
+source filter survives actual Walk and New chat. Frontend passed 314 tests (1.54s);
+packaged build passed (13.86s). Final cumulative/backend and full browser results
+follow below. An initial backend run was interrupted because a test's global thread
+mock prevented the proposed threaded startup migration from running; synchronous
+startup initialization preserves the admission barrier and the existing startup
+regressions pass without weakening their assertions.
+
+No live app restart, live migration, production connector test, owner-document
+rewrite, or user checkout cleanup was performed. The unification will activate on
+the next normal start of the updated application. Sync-status work follows this
+section as the owner explicitly requested.
+
+Final cumulative backend passed 2934 tests plus 76 subtests (259.92s). The
+subsequent legacy FYI Current alias regression and shared/funnel/read group passed
+83 tests (11.71s); no prior assertion was removed. Full browser is still running.
+
+All nine final browser scenarios passed (456.35s), including the extended shared
+507-root/filter/Walk/New chat case (64.37s). Packaged terminal replay remained
+responsive (visible 2000ms, input 101ms, reconnect 828ms). Concurrent origin a80f039
+adds Phase 8.1 confirmed actions; integration compatibility gates follow before push.
+## Section 8.1 — the assistant interprets, proposes, and acts only on a confirmed proposal
+
+Status: implemented and tested locally at `945c666`; remote CI pending on the pushed
+checkpoint. Section 7.5 is CI-verified (d8bfe62/1455cee, CI run 34055784019 (all ten jobs passed)).
+Acceptance PW-121 to PW-128 implemented.
+
+A phrase table (`concierge.decide_words`, its `_SAYS` regexes, the assent/hold/asking guards and
+the subject guard `named_elsewhere`) read the owner's sentence and the page carried the verb out on
+the spot; "not ours" about the wrong card deleted a finished task. All of it is gone. The model
+interprets the words with the item on the table, the pile and the conversation in front of it
+(PW-121): a question is answered, a subject named is pulled in, an uncertain target or agent kind
+is a clarifying OPTIONS line, and a decision is a DECIDE line - with `ON:` and the words that name
+it when the decision is about a different item. Without an AI connector nothing is decided and the
+chat says so. The bottom suggestions (Next, Done, Create task, Create agent, Reply) are text sent
+through the same `send()` as typing (PW-122); the Done/Later/Tomorrow chips that settled directly
+are gone.
+
+A consequential decision is a PROPOSAL (PW-123): `concierge.propose_for` writes one
+`operations.propose` row - kind, exact target, parameters, a label for its button - and the chat
+says what WILL happen ("Nothing has been started - confirm below, or tell me what to change"). A
+correction before the click revises the same proposal (a new confirmation version); a different
+decision cancels the one on the table. `ProposalCard.jsx` shows action, target and parameters with
+one specifically labelled button and Cancel. Nothing runs on the words (PW-124): the button posts
+the structured proposal by id and version to `POST /api/operations/{id}/execute`, and the eleven
+new kinds (`task.create_from_text`, `task.setup`, `message.archive`, `item.settle`,
+`review.approve`, `agent.answer`, `agent.stop`, `report.rerun`, `memory.remember`, `task.split`,
+`pipe.clear`) each run through `server._run_operation` - the same handlers the page's own buttons
+run (PW-125). A stale version or moved context answers 409, a repeated click is the first receipt
+with no second effect, a failing handler is reported as `error` and settles nothing, and the receipt
+(`concierge.receipt`) is written into the chat after execution with what the handler reported: the
+sweep's count and rules, the split's halves, the new task's ref. `task.complete` now runs the same
+close the PATCH road does (draft dismissed, agent stopped), and "done" on a parked agent proposes
+it. Failed and cancelled proposals leave the item on the table; the walk moves only on a success
+that settles it.
+
+Two exceptions the owner approved: a reply request drafts at once through the reply writer, no
+dispatch, nothing sent, the item not marked (PW-126) - sending still needs the approve proposal;
+and Next moves the walk without a read mark, a close, a deferral or a memory (PW-128). "Is the
+agent done?" is a question and is answered. Naming one FYI of the handful targets that entry and
+its siblings stay unread (PW-126).
+
+Tests: `tests/test_chat_proposals.py` (17 cases), `tests/test_concierge.py` and `tests/test_assistant_reactions.py` (103
+cases, re-pinned from "the words decide" to "the model names it, the click carries it out, the
+effect is asserted"), `tests/test_report_order_and_research.py`, `tests/test_lifecycle.py`,
+`website/test/proposalCard.test.mjs` (5 cases). Frontend: `website/src/ProposalCard.jsx`,
+`website/src/proposalCard.js`, `AssistantView.jsx` (the client-side verb switch is gone; rebuilt
+bundle). Backend evidence: `.codex-tmp/phase3-evidence/backend-8.1.log`.
+
+## Section 8.2 — a summary for each fyi, the whole context for a task, and COUNSEL's introduction
+
+Status: implemented and tested locally at `1fb5469`; remote CI pending on the pushed
+checkpoint. Section 8.1 is CI-verified (945c666/a80f039, CI run 34059392966 (all ten jobs passed)).
+Acceptance PW-151 to PW-155 implemented.
+
+The fyi handful (up to four, Unread order) used to get one model sentence for the lot and a
+truncated gist per row. Now the model answers with one numbered line per entry - the shape is
+code's, the words are COUNSEL's - and each entry carries its own summary (PW-151); the summary
+rides on the entry's `surfaced` funnel state, so the pile's own batch presentation keeps it across
+every refresh, and without a model each entry keeps its gist. Each entry offers Reply, Make task,
+Coding agent and Regular agent: Reply drafts at once through the reply writer (the PW-126
+exception) and marks nothing; the other three call `POST /api/concierge/propose` with the entry's
+own key, which makes exactly the proposal the words would (`concierge.propose_direct` →
+`propose_for`, `settles` false) and lands the same ProposalCard in the chat - confirmed, executed
+and receipted through the shared road of Section 8.1. Executing it reaches that message alone: its
+siblings stay filed, shown-not-read, and in Unread.
+
+A single task item's card now carries the whole grouped context (the non-context messages triage
+combined), the task's own summary and the approved checklist (PW-152): `CombinedTaskText` renders
+the task Summary beside the messages and the checklist, and the task card draws it too, not only
+the agent's finding. The model is handed the same bundle (`concierge.facts`).
+
+The introduction is the model's per COUNSEL (PW-153): `INTRO_AI` is on, the "three beats, two or
+three sentences, name the button" instruction is gone, and code states only what the card holds (a
+draft waiting for a yes, an agent parked on its question, a report read with the button). The
+facts line remains the fallback - no AI connector, a failed pass, an answer off the subject or out
+of character - which is factual error handling, not the normal path. Presenting either card marks
+nothing (PW-154): the state is `surfaced`, the item stays in Unread and on the table, the task and
+message are untouched, nothing is proposed or run, and the walk does not move.
+
+Tests: `tests/test_assistant_presentation.py` (8 cases), `website/test/fyiCard.test.mjs` (2 cases); `tests/test_concierge.py`,
+`tests/test_lifecycle.py` and `website/test/funnelPile.test.mjs` re-pinned. Frontend:
+`assistantCards.jsx` (FyisCard, CombinedTaskText, TaskCard), `AssistantView.jsx` (`proposeDirect`),
+rebuilt bundle. Backend evidence: `.codex-tmp/phase3-evidence/backend-8.2.log`.
+
+## Section 8.3 — background updates go to one strip and never advance the conversation
+
+Status: implemented and tested locally at `42d0d16`; remote CI pending on the pushed
+checkpoint. Section 8.2 is CI-verified (1fb5469/4f58096, CI run 34060354066 (browser, build-exe, docker passed; the Windows pytest jobs failed only on tests/test_ideas_triage.py's fixed 09:00 stamp once the runner's clock passed 21:00 UTC - made relative in 13c93de)).
+Acceptance PW-165 to PW-170 implemented.
+
+The watcher (`funnel.announce`) used to write every agent transition into the chat as an assistant
+line, an asking agent with a card, and the page narrated a newer message on Current as a line of its
+own. Now an unsolicited update is a NOTICE on the one bottom strip (PW-165): a working or finished
+agent is kept as a `notice:<tid>` funnel-state row (`funnel.notify` / `funnel.notices`) folded into
+the pile's `alerts`, and nothing is written into the chat by the watcher; a parked or asking agent is
+the pile's own alert and is never kept twice; a newer message on Current raises a page-side notice
+and refreshes the presentation passively, the subject unchanged. The strip's queue
+(`pendingAlerts`) keeps every notice pending whatever is on the table, shows "+N more", and keeps the
+pile's own outranking rule for its alerts; the strip stays until Open or Later (PW-166): Open is the
+owner's own navigation to the item (`surface`), Later marks only the notice `ack` - no item state, the
+task untouched - a newer fact about the same task replaces the older notice, and `reset_walk` drops
+put-down notices so a new chat does not raise them again.
+
+`loadPile` holds no scheduled `surface()`, no `deferInChat` and writes no turn (PW-168/169): polling,
+live events and tab activation refresh the pile only; a Current the server says is gone is cleared
+without a replacement being discussed; the working event no longer nudges "let's go to the next
+thing". The approval-time material-change dialog of Section 7.5 is an action-blocking validation
+and is untouched.
+
+Tests: `tests/test_assistant_notifications.py` (5 cases), `website/test/notificationStrip.test.mjs` (3 cases); `tests/test_funnel.py`,
+`tests/test_lifecycle.py`, `tests/processing/test_processing_selection.py` and the live-chat line
+pin re-pinned. Frontend: `funnelPile.js` (`pendingAlerts`), `AssistantView.jsx` (notices, strip,
+`ack`), rebuilt bundle. Backend evidence: `.codex-tmp/phase3-evidence/backend-8.3.log`.
+
+### Section 1.8 integration with concurrent Sections 8.1–8.3
+
+Local integration retains Claude's confirmed proposals, per-FYI summaries, full task
+context, and notification strip through `cb63bf7`. Canonical summaries are bound to
+the substantive context revision and dropped from presentation when that context
+changes. Confirmed Done freezes the canonical context and checks it again inside
+each root's receipt transaction, preventing unseen arrivals from being read by an
+old confirmation. FYI batches still settle separate roots in separate transactions;
+batch-wide atomicity is not claimed. Typed Next retains Current until guarded
+selection captures its exclusion, so display-only unread semantics cannot reselect
+that same Current immediately.
+
+The full pre-merge Section 1.8 gate above remains the cumulative baseline. Focused
+compatibility checks for concurrent changes passed: 554 backend tests (41.65 s),
+13 shared-Unread tests including stale-summary presentation (4.59 s), then 453
+processing/notification/funnel/lifecycle/idea tests (31.65 s). Frontend: 324 tests
+(3.41 s); packaged build: 12.64 s. Current/Next rendered safety: 2 passed (76.31 s).
+Astra independently reviewed the integration seams and implemented the isolated
+physical typed-Next browser regression; the integration lead reviewed its fixture
+and assertions. The original checkout retains only the owner's README change,
+with its previously recorded SHA256 unchanged. No live app restart or production
+connector was used. Final rendered and exact remote CI results follow separately.
+
+The first post-8.3 rendered attempt failed in shared fixture setup because it waited
+for the superseded background chat cards. The setup now checks each seeded waiting
+agent's exact pile/alert identity, a drained event queue, and unchanged complete chat
+history. Existing interaction assertions were preserved. This is an explicit fixture
+contract update for the accepted notification-strip behavior, not a skipped test.
+
+The physical typed-Next check also exposed volatile native `idle` seconds entering
+canonical presentation revisions. The regression requires clock-only advancement
+to preserve a waiting-agent selection, while changed waiting state, question,
+output, session, and crossing the legacy idle threshold still invalidate it. This
+fix preserves the stale-selection guard rather than retrying a rejected navigation.
+
+Final local integration acceptance: 556 focused backend tests passed (40.44 s),
+including the new clock-versus-worker-facts regression. Rendered freshness passed
+(22.20 s); the 507-root unified All/Unread scenario with physical typed Next passed
+(63.47 s; 66.56 s including harness). It verifies one guarded advance, exact prior
+Current exclusion, retained email filter, and previous members remaining unread.
+Remote CI is pending on the delivery commit; it runs the cumulative suite and all
+nine browser scenarios. Sync progress work remains next, after this delivery gate.
+
+## Sync progress and large-inventory loading follow-up
+
+Section 1.8 was delivered at `2a58cdd54200b8b9705c96be32008cd8ccf1c72c`.
+CI `34061662272` passed all ten jobs. The first browser attempt had one source-picker
+exact-target timeout; the unchanged complete canonical-All case passed locally in
+101.18 s, and the browser-only exact-SHA retry passed. Diagnostics now record the
+selected source, rendered target and recent requests if that timeout recurs.
+
+The owner subsequently requested stopping specialist agents; the remaining agent
+was interrupted and the lead continued directly. Sync now publishes fetching,
+triaging (before the first slow judgement), checking and running_reports without
+changing lock ownership or quick-poll sequencing. The UI keeps rows and errors
+visible, uses a bounded cancellable status reader, and never treats three elapsed
+minutes or a failed status request as completion. The last completed full fetch
+attempt is a separate timestamp; it is not a promise every connector succeeded.
+The prior attempt-start clock and next-sync schedule remain available.
+
+Live startup diagnosis used read-only HTTP and SQL: health/static assets responded,
+but canonical All exceeded both 8 s and 30 s request timeouts. Roughly 4,500 roots
+were repeatedly reading complete migration archives. Query plans confirmed full
+scans of legacy evidence and archived context. Three lookup indexes were applied
+as bounded online maintenance: 0 application rows changed, 0.094 s, no restart.
+No messages, receipts, deferrals or documents were edited. An isolated temporary
+SQLite backup was profiled with socket/subprocess access denied and removed on exit;
+no source contents or secrets were printed. Full-history profiling took 24.58 s
+(including profiler overhead). Current-only runtime snapshots took 4.188 s initially
+and 2.046 s unchanged for 4,586 roots. Runtime cache invalidates on local writes,
+external SQLite commits and worker changes; query time and deferrals remain fresh.
+Full audit snapshots/details remain available unchanged. Missing data while loading
+is explicitly loading, never "All done"; count and sync controls remain present.
+
+Local checks to date: 329 frontend tests; 391 processing regressions before the added
+cache-specific case; two index/cache regressions verify identical compact inventory,
+no full history scan, defensive copies, time refresh and local/external invalidation.
+The full backend run had 2,972 passes plus 76 subtests and one existing banner assertion
+failure; the caption was made compatible without changing that assertion, then the
+exact failure plus projection/read regressions passed (31 tests). The new real-browser
+sync scenario passed in 27.98 s after fixing the fixture's guarded WebSocket inheritance.
+It now also exercises a deliberately delayed initial list, history and next-sync values.
+Final combined regression, rendered, push and CI results remain pending.
+## Section 8.4 — a confirmed hand-off advances once; the delegated task stays in Unread as Working
+
+Status: implemented and tested locally at `672e904`; remote CI pending on the pushed
+checkpoint. Section 8.3 is CI-verified (42d0d16/cb63bf7, CI run 34061032086 (the three pytest jobs and build-exe passed; the browser job failed only in its settle helper, which counted the watcher chat cards PW-165 removed - re-pinned by the lead's follow-up 2a58cdd)).
+Acceptance PW-135 and PW-136 implemented.
+
+Confirming a hand-off proposal used to run the same road as any settling proposal: the page posted
+`done` on the message key to move on, and a dispatch that stopped to ask for a repository came back
+as a completed operation. Now a dispatch that starts is receipted "<agent> is on it - moving on" and
+the page advances without any settle post (PW-135): the message key is never marked done and the
+task shows in Unread as its `agent:<tid>` Working row. A `needs_repo` dispatch raises
+`operations.Halt` - a decision, not a failure - so the proposal stays `error` with that outcome, the
+item stays on the table, the ProposalCard asks with the shared RepoPicker, and the same confirmation
+(same id, same version) runs the dispatch again once the repository is chosen; a repeated click after
+that is the first receipt. A failed start and a cancelled confirmation keep the item where it was.
+Agent workspace inline presentation is untouched.
+
+Tests: `tests/test_chat_proposals.py`::HandoffTests (3 cases), `website/test/handoff.test.mjs` (2 cases). Frontend: `proposalCard.js`
+(`isHandoff`, `afterExecute.handoff` / `.repo`), `ProposalCard.jsx`, `AssistantView.jsx`, rebuilt
+bundle. Backend evidence: `.codex-tmp/phase3-evidence/backend-8.4.log`.
+
+## Section 9.1 — blank New chat, read-only paginated history, retention on its own clock
+
+Status: implemented and tested locally at `2463532`; remote CI pending on the pushed
+checkpoint. Section 8.4 is CI-verified (672e904/5ad1d03, CI run 34062011407 (all jobs passed)).
+Acceptance PW-156 to PW-161 implemented.
+
+`concierge.chats()` used to be the cleanup: listing past chats marked anything older than a
+hardcoded twenty days `dropped` on the way past. The list is now read-only and paged (PW-157):
+`GET /api/concierge/chats?limit&before` returns newest-first with a `next` cursor, opening a chat
+writes nothing, and the Past chats panel offers "Earlier chats". New chat (PW-156) archives the
+guide task as done with its rows intact, opens a blank conversation that waits for the owner, and
+touches neither read state nor any source or task.
+
+Retention is one scheduled lifecycle operation (`taskuary/retention.py`, PW-158): a
+`chat_keep_days` setting (fifteen by default, Settings → Assistant → "Keep past chats (days)"),
+`retention.tick` once a day from start-up and from the sync timer beside the wall roll-up - never
+from a history read - and `retention.cleanup` removes only ARCHIVED guide chats whose last row is
+older than the cutoff: the open chat is never archived and so never eligible, and real tasks are not
+guide tasks. What a chat said about a task was mirrored onto that task as it was said
+(`concierge.record_related`), a promoted FYI's discussion travelled onto its task, operation
+receipts and correction evidence are keyed to their targets, the agent's report and the approved
+review live on the task, and memories and rules are their own rows - none of it lives on the archive
+(PW-159/160).
+
+Tests: `tests/test_chat_retention.py` (5 cases), `website/test/chatRetention.test.mjs` (2 cases). Frontend:
+`AssistantView.jsx` (cursor paging), `SettingsView.jsx` (the knob), rebuilt bundle. Backend
+evidence: `.codex-tmp/phase3-evidence/backend-9.1.log`.
+
+## Section 9.2 — opening Assistant restores; it does not start
+
+Status: implemented and tested locally at `a87ea90`; remote CI pending on the pushed
+checkpoint. Section 9.1 is CI-verified (2463532/7064b7d, CI run 34063026549 (all jobs passed)).
+Acceptance PW-162 to PW-164 implemented.
+
+Current was inferred on the page from the last card in the transcript, so a handled item came back
+as live work after a reload. Now the server writes the item down as it is put on the table
+(`concierge.set_current`, per chat, as `surface()` lands an item or the fyi handful, and cleared when
+the walk runs out), validates it against the pile when the conversation is read back
+(`restore_current` on `GET /api/concierge`: the item as it is now, still unread and still there), and
+clears it - choosing nothing in its place - when it was settled or deferred (`/api/funnel/settle`),
+closed underneath, or is gone (PW-162). The transcript keeps the handled card as readable history.
+`loadState` takes the server's `current`; `restorableCurrent` is no longer wired. Nothing on mount,
+tab activation, remount or reconnect calls Next or starts a walk (PW-163): every effect only loads
+state or the pile, and a new chat is blank until the owner speaks.
+
+Tests: `tests/test_current_restore.py` (5 cases), `website/test/currentRestore.test.mjs` (2 cases); the closed-task and
+selection pins re-pinned to the server's Current. Frontend: `AssistantView.jsx`, rebuilt bundle.
+Backend evidence: `.codex-tmp/phase3-evidence/backend-9.2.log`.
+
+### Final loading/sync integration verification
+
+Merged through Section 9.2 (`b5d486b`) while preserving the owner's README edits.
+The combined build passed; 335 frontend tests and the complete backend suite
+(2,988 tests plus 76 subtests, 327.25 s) passed. Direct review retained full audit
+snapshots for history, limited caching to runtime reads, and checked local writes,
+external commits, worker changes, and query-time refresh invalidate or refresh
+the cached view. No earlier assertion or timeout was weakened.
+
+Real-browser canonical All passed (168.32 s). The delayed-initial-load/sync
+scenario passed (25.61 s), including visible history, count labels and next-sync
+countdown, no premature All done, usable rows during triage/reports, and recovery
+without live completion events. The parallel Unread case timed out at an existing
+20-second wait; the isolated unchanged rerun passed (98.69 s). The timeout did not
+reproduce; resource contention is possible but not established. Remote CI is pending. Failure-only
+diagnostics capture fixture request history and rendered Current on recurrence.
+The live app has not been restarted by this work.
+
+## Section 10.1 — workflows are configured jobs, procedures are how a request is handled
+
+Status: implemented and tested locally at `0b79f40`; remote CI pending on the pushed
+checkpoint. Section 9.2 is CI-verified (a87ea90/b5d486b, CI run 34063553989 (all jobs passed)).
+Acceptance PW-203, PW-204, PW-206, PW-207 and PW-208 implemented (PW-205 was already in).
+
+A scheduled agent workflow used to run inside the report loop through a coding CLI and file its
+answer as a report that triage read back as a fresh arrival. `taskuary/workflows.py` now reads a
+configured job apart from a request procedure (PW-203): `definition` gives the workflow's objective,
+inputs, connections, steps (its saved skill), allowed actions, ask-first, done-when, schedule and
+worker kind, and `catalog` / `GET /api/workflows` lists workflows and playbooks on separate shelves.
+Existing definitions stay on their report sources and playbooks are left exactly as they are
+(PW-207). A triggered workflow for the regular agent - scheduled, or Run now - is dispatched straight
+to its worker (PW-204): a task with the definition and this run's context, opened through
+`ingest._auto_general` so the capacity gate and startup retry apply, with no message triage, no
+coding CLI and nothing filed as a report; the run history records which task it became. A workflow
+with a checkout (or `runs_on: coding`) keeps the coding road, and a read-only agent report keeps its
+executor. The worker's brief is the workflow's own (PW-206): objective, inputs, connections, steps,
+allowed actions, ask-first, done-when, and the trigger - no procedure selection is needed, while a
+triage-selected procedure still rides in either worker's brief.
+
+Tests: `tests/test_workflows.py` (6 cases). Backend evidence: `.codex-tmp/phase3-evidence/backend-10.1.log`.
+
+## Section 10.2 — a set-up asked for in the chat is gathered, confirmed, and created through the tabs' own roads
+
+Status: implemented and tested locally at `a03a539`; remote CI pending on the pushed
+checkpoint. Section 10.1 is CI-verified (0b79f40/fa797fc, CI run 34064170080 (the pytest jobs and build-exe passed; the browser job failed once on a 546-vs-545 rail count in the lead's canonical-All scenario, which passes locally twice and does not touch workflows)).
+Acceptance PW-194 to PW-198 implemented.
+
+"Set up a report of open AR every Monday" opened a walk-through task on the words. Now
+`concierge.setup_turn` (PW-194) has the model sort the request - a report, a connection, or one
+that needs digging - gathers a report through the shared composer (`compose.compose`: its questions
+come back as questions carrying a `setup_questions` card, and the owner's next words are read as the
+answers), and puts the exact configuration in front of the owner as a `report.create` proposal whose
+box says source, inputs, summary instructions, schedule, enabled state, triage behaviour and
+delivery (PW-195). The click runs `save_source`, the Reports tab's own road, and the outcome carries
+the real source id and its `#report=` link; a duplicate title is a failure, a second click the first
+receipt. `POST /api/operations/{id}/preview` dry-runs a proposed report read-only - schedule and
+delivery stripped, nothing filed, sent, activated or started - and refuses an executor that writes.
+
+A connection (PW-196) is a `connection.create` proposal naming the provider, its authority and what
+that unlocks; the click runs `save_connector`, the Connections tab's road, re-targeting the type's
+own card when it is unconfigured and never creating a second, with the card left OFF and without a
+secret, and the outcome states `authorization pending`, `connected`, `validation failed` or `saved,
+not yet verified` from the row. The chat never asks for a token, and `concierge.redact` strips one
+typed in before any chat row, task mirror or memory is written. A set-up the sort calls digging, or
+a configuration the composer cannot stand behind, becomes the `task.setup` walk-through proposal with
+its reason (PW-197); a simple configuration never opens a task. The proposal card shows the facts,
+offers Preview for a report, and links "Open it" after the click.
+
+Tests: `tests/test_chat_setup.py` (8 cases), `website/test/chatSetup.test.mjs` (2 cases); the concierge set-up pin re-pinned.
+Frontend: `proposalCard.js`, `ProposalCard.jsx`, `AssistantView.jsx`, rebuilt bundle. Backend
+evidence: `.codex-tmp/phase3-evidence/backend-10.2.log`.
+
+## Section: Assistant instructions — the document owns the prompt, code owns the machine contract
+
+Status: implemented and tested locally on `worktree-assistant-prompt-ownership` (base 550d582,
+commits ed3bdd2..044ec97); not yet merged or pushed - the owner asked to review the branch before
+anything lands (2026-09-06). Full pytest 3032 passed/76 subtests, website `node --test` 338 passed,
+`taskuary/whatsapp` `node --test` 7 passed, all locally, none 0 failed.
+Acceptance PW-242, PW-243, PW-244, PW-248, PW-256, PW-257, PW-258, PW-259, PW-260 implemented.
+
+COUNSEL.md used to be cut three ways: concierge.SYSTEM carried its own hardcoded behavioral/routing
+prose that competed with the document, a scheduled report's prompt (assistant.think) pulled in the
+whole chat document including walkthrough rules that make no sense outside a chat, and general.py
+sliced the document at 3,000 characters. `taskuary/counsel.py` now owns the document as sections
+(`sections()`, `pick()`) and hands each role only what it needs - `for_chat` the whole thing,
+`for_brief`/`for_discussion`/`for_worker` the Voice (and Goal for briefs) - falling back to the whole
+document if the owner renames a heading, never dropping guidance silently (PW-243). Scheduled report
+prompts no longer call into COUNSEL at all (PW-242): each report keeps its own configured
+instruction, data scope, output contract and safety constraints, proven independent of live chat
+COUNSEL edits (PW-244). `check_budget` (PW-258) replaces the silent slice: past 8,000 characters it
+warns and audits but always returns the text whole, called both when a worker prompt is built and
+when a migrated document is saved.
+
+`concierge.CONTRACT` (PW-248, PW-257) is now the only hardcoded prompt text: the two machine line
+shapes (`DECIDE:`/`OPTIONS:`) and the verb vocabulary behind the card's buttons - no behavioral
+prose. `concierge._system` is the document plus CONTRACT and nothing else; `parse_decision` still
+refuses any verb outside VERBS regardless of what the document says, and target/freshness/execution
+checks stay in `operations.py`, untouched. The deciding rules that left concierge.SYSTEM (coder vs.
+setup, correction handling, stop_agent discipline, password handling) now live in COUNSEL's `## When
+the owner decides` section (PW-256); `counsel.migrate` gives a shipped-stock document the new section
+outright, and gives an owner-edited document the section by insertion - fence-aware (a bare substring
+match on `## My goal` would mangle a `### My goal` subheading or fenced sample), before the real goal
+heading, budget-checked - keeping every word the owner wrote. A blank or whitespace-only document
+takes the stock path rather than being "migrated" into duplicate content.
+
+PW-259 audits every remaining inline heuristic in concierge.py against the owner's no-hardcoded-words
+rule (2026-09-06): RECEIPTS, fallback(), cannot()/NEEDS/ASSENT_VERB, parse_decision/_DECIDE/_OPTIONS/
+VERBS and _BROKE_CHARACTER/in_character/off_subject keep - they are machine contract or output
+validation, not competing instruction. _POLITE, _CORRECTION, and the keyword routes in trouble(),
+switch_ask() and _sweep_words() are contradictions - regexes deciding intent before the model reads
+the words - and are left open as PW-268 (the OPENING instruction), PW-269 (the keyword routes) and
+PW-270 (remove _POLITE/_CORRECTION), each needing its own walkthrough rather than an unreviewed
+blanket rewrite.
+
+Tests: `tests/test_counsel_consumers.py`, `tests/test_counsel_migration.py`,
+`tests/test_report_prompt_isolation.py`, `tests/test_concierge_counsel.py`; unapproved operations
+covered by the existing `tests/test_operations.py::test_an_unknown_kind_or_missing_parameter_is_refused_before_anything_is_written`
+and `::test_a_stale_confirmation_is_refused_by_the_api`. Frontend/browser: none - this section is
+backend prompt assembly only, no UI changed.
+
+## Stream D — quitting waits, interrupted work says so, every task-view button names its effect
+
+Status: implemented and tested locally at `c0fe948` on `worktree-agent-a34bcb49a83c9bb15`; nothing
+pushed or merged, remote CI pending. Section 10.2 is the last CI-verified section
+(a03a539). Acceptance PW-189, PW-190, PW-202, PW-215 to PW-221, PW-261 to PW-264.
+
+Quitting the desktop used to flip `should_exit` on a daemon thread and return, so the process died
+before the server's lifespan ran and an orphaned Claude or Codex was the result. `desktop.start_server`
+now keeps that thread and `desktop.stop_server` joins it (PW-261): the cleanup - workers stopped, CLI
+children killed, task and run state written - actually finishes before the process exits. The wait is
+bounded by `SHUTDOWN_WAIT` (30s), logs progress every five seconds, and past it says a worker or CLI
+child may still be running rather than claiming cleanup, with `main()` returning non-zero (PW-263).
+The browser fallback loop ends the moment the server is told to exit instead of sleeping for ever.
+
+Work Taskuary interrupted is now visible as interrupted (PW-262). `terminal.release_task` tags the task
+`interrupted` when the actor is `shutdown` or `startup`; the task is open, not Working and not Done, and
+nothing restarts by itself. `terminal.resume_task` clears the tag only where a worker actually starts -
+both starters call it - so Reopen task alone leaves the mark standing, and a browser tab navigating away
+from a terminal still releases nothing at all.
+
+Every task-view control now runs one road and says what it does. `website/src/taskOps.js` `runOperation`
+proposes to `POST /api/operations` and executes by id and version - the same two endpoints the assistant's
+confirmation card uses - and complete, reopen, coding start and agent stop all go through it, with the kind
+taken from the button and no phrase read anywhere (PW-215). Coding start is `dispatch.prepare
+{kind:'coding'}` taking its session from the result: the Kind PATCH and `openTerm` are gone, an unknown
+agent is a 422 that changes nothing, a live worker is a 409 with no second start, and one proposal executed
+twice has one effect (PW-216). The captions are the owner's approved words: Mark task done closes the task
+and ends the live session with it, Reopen task reopens the task only (PW-217); Finish agent run reads "Save
+result & end session" and says the task stays open (PW-218); Pause & save reads "End session & save
+handover" with Stop session kept distinct (PW-219); Write/Generate reply, Ask sender and Review changes each
+say that nothing is sent, approved or committed (PW-220).
+
+Assistant ideas got the rest of their matrix (PW-202): urgent ordering proved through the owner's escalate
+policy - the model calling its own idea urgent escalates nothing - informational versus actionable ranking,
+a duplicate report run that judges and opens nothing twice, pending to error to judged, report triage off
+filing its run untriaged while a workflow trigger never asks triage at all, and worker-status events that
+reach no verdict.
+
+The setup walkthrough reads a shipped skill instead of branching in code (PW-190):
+`taskuary/skills/taskuary-setup/SKILL.md` carries the prerequisites, how to read `/api/setup` before saying
+anything, the tabs' own roads, verification, that secrets never pass through chat, and the resume rules, and
+it rides into a setup task's worker prompt as PROCEDURE FOR THIS JOB - the same slot a playbook uses. The
+entry is on the Assistant header (PW-189): a "Set up Taskuary" control calling the chat's own `setup()`,
+which appends to the running conversation rather than navigating anywhere.
+
+PW-188, PW-191, PW-192 and PW-193 stay open with a note under each: they cut SetupWizard.jsx (599 lines)
+back to name and CLI readiness and move draft-style generation into the assistant with preview and confirm,
+which needs the owner's decision on which wizard steps move. PW-265 to PW-267 stay open too and now carry
+the browser-control review the owner asked for - ownership and the three ways a browser opens (two of them
+automatic), what the pane shows and what it does not, the absent line between navigation and a consequential
+action, the single global cookie-restore profile, no cancellation for an action in flight - with one proposed
+decision each and nothing treated as accepted.
+
+Tests: `tests/test_desktop.py`, `tests/test_interrupted_work.py`, `tests/test_task_controls_operations.py`
+(6 cases), `tests/test_ideas_triage.py` (14 cases), `tests/test_setup_skill.py` (3 cases);
+`website/test/taskControls.test.mjs` (5 cases), `website/test/setupEntry.test.mjs` (2 cases).
+Gates on this branch: `python -m pytest -q -p no:cacheprovider` - 3035 passed, 76 subtests passed;
+`node --test "test/**/*.test.mjs"` in `website/` - 345 passed; `node --test taskuary/whatsapp/` - 7 passed;
+`npm run build` rebuilt the committed bundle because JSX changed. Limit, stated: the browser harness runs in
+demo mode where mutating requests are denied, so no rendered-click test exercises the task-view controls
+(PW-221) - the TestClient tests and the JSX source assertions stand in for it.
+
+## Section: worker lifecycle (Stream B)
+
+Status: implemented and tested locally in worktree `agent-a7c2b2918a78c7d37`
+(branch `worktree-agent-a7c2b2918a78c7d37`, base `550d582`), commits
+`0818b34..d7d002a`; no push, no CI run - this stream stops at the review gate.
+Acceptance PW-137, 138, 140, 142, 173, 175, 178, 179, 181, 185, 187, 223, 225,
+228, 229, 230, 234 implemented. PW-224 and PW-214 left OPEN by owner-approved
+decision (below).
+
+Close the open worker-lifecycle items enumerated in Sections 6/6.1 and 5.x: an
+agent's question is answered against the exact outstanding request of the run
+that asked it, never the task's newest session by default (`workerstate.answer_open`,
+PW-138/140) - the pre-existing `answer_agent` confirmation-box operation (945c666)
+already showed the exact answer and destination before Send to agent; Task 1 fixed
+the backend binding it was missing. Regular (API) workers now emit their own
+lifecycle signals directly from the execution loop instead of a judge reading
+prose after the fact (`selfclose.ASK_MARKER`/`ask_marker`, `GeneralSession.send_prompt`
+recording `turn_end` and `input_needed`, PW-225). An explicit finish
+(`taskuary --done`) now saves the run's own last spoken message - the Stop hook's
+`turn_end` - as the Finished result, falling back to the `--done` sentence only
+when the run said nothing (`selfclose.declare`, PW-230). Peers hear about each
+other as they start and stop through the waiting room, a briefing typed in on
+the next natural pause rather than a push into a running turn
+(`blackboard.peer_update`, `terminal.open_session`, `Term._pump`, PW-173).
+Claude Code hooks are now validated against the installed CLI version
+(`hooks.cli_version`/`supported`, PW-223).
+
+Every scenario the walkthrough enumerates for the shared status model, the wall's
+live selection and the worker prompt now has a test against the real modules -
+not a description of intended behaviour: the question relay (two agents each
+answered independently, a duplicate click delivers once, a stale run is refused,
+restart recovery keeps the open request and reports `disconnected`, the accepted
+answer is visible in the discussion - PW-142), every provider ending named by the
+spec (long silence, repaint noise, approval allow/deny, a bare turn end, an
+explicit finish, failed/disconnected/stopped, an empty workspace, duplicate/stale
+events, reconnection replay, one hand raise per request - PW-229), Working staying
+in Unread without becoming a chat turn while a finished result is excluded from
+blocked work (PW-228), and explicit completion end to end - automatic and manual
+starts, save-before-close ordering, an incomplete checklist kept as reported,
+duplicate finishes producing one event, the owner stopping a run reporting
+`stopped` not `finished`, and follow-up context riding into a continuation's seed
+(PW-234). Similar coding work is exercised as advisory-only dispatch: two similar
+tasks both launch when capacity permits, the advisory reaches the seed as
+`SIMILAR WORK`, and an old dispatch-queue row parked behind a peer starts once,
+not twice, once its blocker is gone (PW-175). The wall's one live selection is
+exercised directly: an approval-waiting run counts as live, a stopped run's note
+leaves every surface together, a same-task restart does not revive the old run's
+notes, a headless general run is live by its running-run row, and the Board
+route/seed/command read the identical selection (PW-181) - the note API's only
+session-carrying path is the CLI (`taskuary --note`, via `TASKUARY_SID`), and the
+one HTTP route without it is owner-only and always live regardless of session, so
+PW-178/179's association and shared-selection requirements hold without a repair
+to that route (recorded as a Ruling rather than assumed).
+
+PW-185's audit built the coding seed and the general prompt together with a
+playbook AND a saved global preference competing for space on the same task: no
+instruction-block header (`RULES`, `CODING RULES`, `PROCEDURE FOR THIS JOB`,
+`ASSISTANT STYLE`, `OTHER AGENTS`, `THE WALL`, `ASKING THE OWNER`) repeats in
+either prompt, and the writing voice reaches only the general prompt, never the
+coding seed. No defect was found there. One real defect WAS found and fixed while
+writing the PW-234 scenario tests: `selfclose.blocked()` did not consult
+`workerstate` for an open approval request, so a pending approval could not
+actually stop the automatic self-close road it was supposed to gate - it now asks
+`workerstate.asking_of()` first.
+
+PW-224 (Codex App Server structured turn lifecycle/approval/user-input
+integration) and PW-214 (a live, rendered-browser exercise of the All-detail
+buttons against a demo server) are left OPEN by owner-approved decision: PW-224 is
+a provider-protocol change that needs the installed protocol validated with the
+owner present, not a passive subscription to the existing terminal; PW-214 needs
+the puppeteer harness against a demo server and the owner's presence for a live
+run. Neither was faked to close out this section.
+
+Tests: `tests/test_worker_scenarios.py` (37 cases: Relay, Providers, Unread,
+Completion, Routes), extending `tests/test_blackboard.py` (+3), `tests/test_agent_wall.py`
+(+5, class `LiveSelectionTests`) and `tests/test_worker_brief.py` (+3, incl. class
+`PromptAuditTests`); `tests/test_peer_updates.py`, `tests/test_hooks_version.py`,
+`tests/test_api_worker_signals.py`, `tests/test_final_answer_capture.py`,
+`tests/test_agent_answer_route.py` from Tasks 1-5. Full suite:
+`python -m pytest -q -p no:cacheprovider` from the worktree root, 3068 passed.
+`node --test taskuary/whatsapp/` unaffected (no whatsapp files touched); website
+tests not required (no JSX changed). Full detail in
+`.superpowers/sdd/worker-lifecycle/stream-b-final-report.md`.
+
+## Triage, context and delivery gaps — the named partials closed
+
+Status: implemented and tested locally at `f35c1b1`..`a062635` on
+`worktree-agent-a7c47fe1acd407bd3` (base 550d582); nothing pushed, no CI run on this work.
+Gates from the worktree root: `python -m pytest -q -p no:cacheprovider` — 3041 passed, 76
+subtests, 0 failed; `node --test taskuary/whatsapp/` — 7 tests, 7 pass. No JSX was touched,
+so the committed bundle is unchanged.
+Acceptance PW-010 to PW-014, PW-021, PW-035, PW-049, PW-052, PW-056, PW-057, PW-062, PW-066,
+PW-073, PW-083, PW-085, PW-088, PW-089, PW-129, PW-130, PW-132, PW-143, PW-146 and PW-149
+implemented.
+
+Each of these rows already had an implementation and one named gap. Chain coverage now tells the
+truth and belongs to a mailbox: `chains.list_ids_graph` returns why a listing STOPPED (an empty or
+repeated continued page, the page budget) and `refresh_outlook` records that as `complete: False`
+with the reason; `refresh_imap` counts failed FETCHes the same way; the `chain` table is keyed
+`(Mailbox, ConversationId)` through a one-time copy, so one account's coverage can never satisfy
+another's on the same conversation id (PW-010, PW-011). Fetched history keeps its attachments,
+bound to the history `MessageId`, on both providers and never twice (PW-012, PW-014) - and stays
+`history`/`context`, on no task, creating nothing. The incomplete-history warning is inserted AFTER
+budget trimming, so the one sentence that says the context is partial can no longer be the line the
+budget drops (PW-013). The refresh before assistant/agent context is the poll `_refresh_chat_context`
+runs, which re-lists any chain `chains.needs_history` still reports incomplete.
+
+The owner now hears that retriage STARTED when the lines land, not its result first: `_poll_reports`
+takes an `on_fetched` callback fired the moment the fetch returns with new lines, before the drain is
+waited on, and `concierge_stream` says `RETRIAGE_STARTED` once per turn ahead of the existing result
+line (PW-052, PW-057). A queued general launch that fails is a counted retry - `_start_general`
+returns its failure instead of swallowing it, so the dispatch row stays `retrying` with its attempt
+and nothing claims it Started - and `drain` re-arms after every pass, so two distinct restored
+deadlines both fire rather than only the earliest (PW-073, PW-085, PW-088, PW-089). A proposal
+executes once under concurrent confirms: `store.claim_operation(op_id, version)` is a versioned
+status transition, so the second confirm is a `duplicate`, and an outcome that says `ok: False`
+records `Evidence: 'none'` and teaches nothing (PW-129, PW-130). What is said about an item in the
+chat is kept against the ITEM through `operations.discuss`, attributed by actor, with the dock
+conversation's own history unchanged (PW-132).
+
+A reply that cannot leave says why before the first send is tried (PW-143, PW-146).
+`outbound.send_probe` answers from what is already on the connector cards - an IMAP mailbox with no
+SMTP host, a Microsoft sign-in whose `granted_scope` does not include `Mail.Send` - and `send_block`
+and `can_reply` both consult it, so every surface hides Send with that sentence on it instead of
+discovering the missing permission from a bounce. `msauth._tokens` carries the granted `scope`
+through, and `ms_poll` persists it as `granted_scope` on the Outlook card; a sign-in that recorded no
+scopes is left alone, because unknown is not missing. Because the probe reads the cards,
+`server._send_state` memoizes the answer per channel for the life of one feed or reviews response -
+500 Timeline rows must not read the connector table 500 times.
+
+PW-149 was not the test-only closure the plan assumed. Canonical Unread empties on read receipts, and
+approving a reply from the Review page writes none, so an answered thread stayed in the pile as "a
+person asked you for something" with its task already closed and its reply obligation over.
+`verdicts._settle_task_after_sent_reply` now settles the item on the same branch that closes the
+task; All keeps the whole thread.
+
+Tests: `tests/test_email_chains.py` (CoverageHonestyTests, HistoryAttachmentTests,
+IncompleteHistoryWarningTests), `tests/test_chat_freshness.py` (the retriage notice;
+ConcurrentSyncTests), `tests/test_dispatch_retries.py` (queued general failure; every restored
+deadline armed), `tests/test_operations.py` (execute-once; a failed outcome teaches nothing),
+`tests/test_concierge.py`::ThreadTests, `tests/test_send_outcomes.py`::SendProbeTests,
+`tests/processing/test_processing_unread.py`::test_a_confirmed_send_leaves_unread_and_stays_in_all,
+`tests/test_fresh_evaluation.py`::ChainBeforeEvaluationTests,
+`tests/test_chat_relationship.py` (the local-day boundary; a tracker item across midnight),
+`tests/test_reply_voice.py`::WritingFeedbackTests,
+`tests/test_reply_envelope.py`::PerConnectorEnvelopeTests.
+`tests/test_assistant_presentation.py` and `tests/test_send_targets.py` were re-pinned, not
+weakened: the first now names the row types it means by "nothing proposed, nothing run" (PW-132's
+kept turn is a discussion), and the second's IMAP fixtures gained the `imap_host` every working IMAP
+card has, since a card with no host at all now correctly fails the send probe.
+
+What stays open, and the surface each needs — none of it is faked here:
+
+- PW-041, PW-047, PW-078, PW-096, PW-100 and PW-134's UI half need rendered-browser runs (Retry, the
+  hidden Send, the checkbox, the repository picker, the confirmation box). A test that needs a
+  rendered browser stays open until that run exists; PW-134's backend half is in.
+- PW-063 needs the To/mode controls on the Review page.
+- PW-087 needs the task-view Retry/Cancel buttons and the attention-pipeline row.
+- PW-097 needs the conversational repository picker.
+- PW-098 is an owner decision, not code: does a single configured repository still need the
+  confirmation step?

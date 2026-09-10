@@ -35,7 +35,11 @@ MAX_PEEKS = 3         # schema look-ups per compose: a table, its columns, and o
 # form the owner has to finish - which is the thing the composer exists to spare them.
 REQUIRED = {'agent': ('prompt|skill',), 'intacct': ('object',), 'intacct_fields': ('object',), 'mssql': ('query',), 'database': ('query',), 'sqlite': ('db', 'query'),
             'rest': ('url',), 'local_file': ('path',), 'winrm': ('script',), 's3_object': ('bucket',), 'cloudwatch_logs': ('log_group',),
-            'metric': ('name',)}       # metric_check with no name is valid: it checks every one
+            'metric': ('name',),       # metric_check with no name is valid: it checks every one
+            # files (files.py). smb_read takes no required path - the card's root IS a folder, and
+            # "what is in the share" is a valid report; every write needs to be told where.
+            'smb_write': ('path',), 'smb_move': ('path', 'to'),
+            'sftp_get': ('path',), 'sftp_put': ('path',), 'sftp_move': ('path', 'to')}
 
 # A source card is not a report: whatever the model says about scheduling, titling or summarising
 # belongs to the report around the card, and is dropped rather than written into a card that

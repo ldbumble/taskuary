@@ -1,7 +1,7 @@
 // Tasks: dense two-pane - list rows on the left, the selected task's full story right.
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress,
+  Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress,
   Drawer, IconButton, InputAdornment, Link, MenuItem, Select, TextField, Tooltip, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
@@ -12,8 +12,12 @@ import DifferenceIcon from "@mui/icons-material/Difference";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
+import { runOperation } from "./taskOps.js";
+import { agentName } from "./agentWork.js";
 import { lazyGeneral } from "./lazyGeneral.js";
 import { taskMatchesQuery } from "./taskSearch.js";
+import { outcomeOf } from "./dispatchOutcome.js";
+import { progressLine } from "./checklist.js";
 import { completionTransition, filterForSelectedState } from "./taskFilter.js";
 import { onLive } from "./live.js";
 import { pollWhileActive } from "./visible.js";
@@ -25,6 +29,7 @@ import { Attachments } from "./Attachments.jsx";
 import { ChannelIcon, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, CoderReport, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, ConfirmDelete, TellAgent, WorkStrip, isWaiting, TaskuaryMark, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
 import PauseCircleIcon from "@mui/icons-material/PauseCircleOutline";
 import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
@@ -44,7 +49,7 @@ import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { agentWorkspaceMode } from "./taskWorkspace.js";
 import { ASK_TAG } from "./newTask.js";
 import {
-  agentPhase, ownerControlsCompletion, pendingReplyReview, replyPhase, sentReplyReview, taskPhase,
+  agentPhase, focusStage, ownerControlsCompletion, pendingReplyReview, replyPhase, sentReplyReview, taskPhase,
 } from "./taskLifecycle.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
@@ -157,17 +162,28 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const [senderQuestion, setSenderQuestion] = useState("");
   const [askingSender, setAskingSender] = useState(false);
   const [openingReply, setOpeningReply] = useState(false);
+  const [openStage, setOpenStage] = useState(null);   // a stage you opened by hand, overriding the computed focus
   const waitingN = (tasks || []).find((x) => x.TaskId === selected)?.Waiting || 0;   // prompts in this task's funnel
   const [diff, setDiff] = useState(null);
   const [diffScope, setDiffScope] = useState("task");   // this task's footprint, or the whole checkout
 
   // fetch everything once and filter on the derived state - the server only knows raw
   // Status, and the state a person cares about is a combination of three columns
-  const loadTasks = useCallback(async () => {
+  // ?active=1 is open/in_progress/waiting PLUS today's done - exactly what "in progress" and an
+  // un-expanded "done" show. The archive, and the message-search blobs (seven GROUP_CONCAT
+  // aggregates over the WHOLE message table: 34ms of a 35ms query and 69KB of a 319KB payload on
+  // a real store), wait until something actually asks: a search, "show older", or "all".
+  const fullLoaded = useRef(false);
+  const loadTasks = useCallback(async (full = false) => {
+    const want = full || fullLoaded.current;      // once upgraded, never silently downgrade
     const seq = ++taskLoadSeq.current;
     try {
-      const next = (await api.get("/api/tasks")).data.data || [];
-      if (seq === taskLoadSeq.current) setTasks(next);
+      const params = want ? { search: 1 } : { active: 1 };
+      const next = (await api.get("/api/tasks", { params })).data.data || [];
+      if (seq === taskLoadSeq.current) {
+        setTasks(next);
+        if (want) fullLoaded.current = true;
+      }
     } catch (e) {
       if (seq === taskLoadSeq.current) setErr(e?.response?.data?.detail || "Failed to load tasks");
     }
@@ -241,6 +257,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   }, [active, detailTaskStatus, hasCoderReport, hasRunningRun, hasTranscript, loadDetail, selected, sessionAlive, wrapping]);
 
   const patch = async (fields) => { await api.patch(`/api/tasks/${selected}`, fields); loadDetail(selected); loadTasks(); onChanged?.(); };
+  // Reopen changes the task's status and nothing else: no worker starts until the owner chooses one (PW-217)
+  const reopen = async () => {
+    try { await runOperation(api, "task.reopen", selected); } catch (e) { setErr(e?.message || "Could not reopen the task"); return; }
+    loadDetail(selected); loadTasks(); onChanged?.();
+  };
   const create = async () => {
     // A general task made HERE is the same thing the Board makes: a question with an answer
     // wanted. It gets the same ask tag, so the chat opens with the question already asked
@@ -304,7 +325,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     const id = selected;
     setWrapping("stop"); setErr("");
     try {
-      await api.post(`/api/tasks/${id}/agent/stop`);
+      await runOperation(api, "agent.stop", id);          // the shared road (PW-215)
       if (stale(id)) return;
       setTerm(null);
       await Promise.all([loadDetail(id), loadTasks()]);
@@ -315,6 +336,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   useEffect(() => {
     setWrapping(false); setWrapped(null);
     setAskSenderOpen(false); setSenderQuestion(""); setAskingSender(false); setOpeningReply(false);
+    setOpenStage(null);
   }, [selected]);
 
   const [handoff, setHandoff] = useState(false);
@@ -352,7 +374,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // Wrapping up belongs to the TASK, not to the pty. An exited session is dropped after ten
   // minutes, and with it went the only handle these buttons had - so a task whose CLI had
   // finished on its own could never be closed out. The transcript is filed when a session ends.
-  const canWrap = !!term || !!detail?.transcript;
+  // ...and general work has no transcript at all: the chat IS the record, so a conversation that
+  // has answered can be closed out after its provider session is gone (coder.py, 2026-09-07).
+  const hasGeneralHistory = (detail?.comments || []).some((c) =>
+    c.ActorType === "assistant_user" || c.ActorType === "assistant_agent");
+  const canWrap = !!term || !!detail?.transcript || hasGeneralHistory;
   const findTerm = useCallback(async (tid) => {
     if (!tid) { setTerm(null); return; }
     try {
@@ -405,12 +431,25 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const t = detail?.task?.TaskId === selected ? detail.task : null;
   const isGeneral = isGeneralKind(t?.Kind);
   const search = query.trim();
+  // The three gestures that need more than the live set. "done" on its own does NOT: ?active=1
+  // already carries today's, which is what it shows until "show older". "all" does, because
+  // today's DROPPED tasks only ever appear there and active does not include them.
+  useEffect(() => {
+    if ((search || older || filter === "") && !fullLoaded.current) loadTasks(true);
+  }, [search, older, filter, loadTasks]);
   // Search means the whole archive, regardless of the selected state pill or today's cutoff. That
   // is what makes a completed PR/task discoverable instead of merely searching the visible rows.
   const bucket = (tasks || []).filter((x) => search ? taskMatchesQuery(x, search) : (!filter || inBucket(x, filter)));
   const cut = !search && filter !== "live" && !older;
   const shown = cut ? bucket.filter(touchedToday) : bucket;
   const nOlder = bucket.length - shown.length;
+  // A count that outruns the rows beneath it reads as a bug: "done 175" over fifteen rows says
+  // the list is broken, not cut. Each pill counts what clicking it would SHOW - today's, while
+  // the cut holds - and the rest stay behind "show N more from before today".
+  const countIn = (key) => {
+    const rows = (tasks || []).filter((x) => !key || inBucket(x, key));
+    return !search && key !== "live" && !older ? rows.filter(touchedToday).length : rows.length;
+  };
   // A task may finish while its detail stays open (especially an assistant conversation). Move
   // the selected bucket with it so Done never sits under an In progress filter. Search and All
   // are deliberate cross-status views, so neither is changed.
@@ -451,10 +490,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     seenState.current = transition.seen;
     setFilter(transition.filter); setOlder(false); setQuery("");
     try {
-      await api.patch(`/api/tasks/${selected}`, { Status: status });
+      // the shared road (PW-215): the same close the assistant's card runs - draft dismissed, agent stopped
+      await runOperation(api, "task.complete", selected);
     } catch (e) {
       seenState.current = before;
-      setErr(e?.response?.data?.detail || "Failed to finish task");
+      setErr(e?.response?.data?.detail || e?.message || "Failed to finish task");
       loadTasks();
       return;
     }
@@ -557,32 +597,43 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const alsoSaid = inbound.filter((m) => m.MessageId !== inbound[0]?.MessageId
                                       && cleanText(m.BodyText) && cleanText(m.BodyText) !== taskAsk);
   const completionIsManual = ownerControlsCompletion(t);
+  const interruptedTask = String(t?.Tags || "").split(/[\s,]+/).includes("interrupted");
   const taskState = taskPhase(t?.Status);
+  const generalStarted = isGeneral && (!!term?.alive || hasGeneralHistory
+    || String(t?.Tags || "").split(/[\s,]+/).includes(ASK_TAG));
   const agentState = agentPhase({
     session: term?.alive ? { ...term, waiting: isWaiting(term) } : null,
     run: liveRun, transcript: detail?.transcript, report,
+    conversation: generalStarted,
   });
-  const hasGeneralHistory = (detail?.comments || []).some((c) =>
-    c.ActorType === "assistant_user" || c.ActorType === "assistant_agent");
-  const generalStarted = isGeneral && (!!term?.alive || hasGeneralHistory
-    || String(t?.Tags || "").split(/[\s,]+/).includes(ASK_TAG));
   const workspaceMode = agentWorkspaceMode({ isGeneral, generalStarted, session: term, wrapping, wrapped });
   const replyState = replyPhase(detail?.reviews || []);
+  // ONE question per page. A running session is itself the agent stage, so it is never folded; the
+  // hand-picked stage wins over the computed one until you leave the task (start an agent on a task
+  // whose draft is waiting, or answer a sender the agent is still working for).
+  const stage = term?.alive ? "agent" : (openStage || focusStage({
+    kind: t?.Kind, task: taskState, agent: agentState, reply: replyState, hasSender: !!sourceMessage,
+  }));
+  // only a folded heading is a control: exactly one stage is open, so clicking the open one has
+  // nothing to do and must not offer a chevron that does nothing.
+  const stageProps = (name) => ({ folded: stage !== name, onToggle: stage === name ? null : () => setOpenStage(name) });
   const startCodingAgent = async () => {
     if (!selected || startingAgent) return;
     const id = selected;
     setStartingAgent("coding"); setErr("");
     try {
-      if (t.Kind !== "coding") await api.patch(`/api/tasks/${id}`, { Kind: "coding" });
-      if (!stale(id)) await openTerm({ agent: run.agent, model: run.model || null,
-        instruction: run.instruction.trim() || null, task_id: id, repo: repoOf(t),
-        cwd: detail?.transcript?.cwd || null, seed: true });
+      // one shared dispatch for coding too (PW-216): the kind switch, the live-worker check (409), the unknown
+      // agent (422) and the repository come from the same road the general button and the assistant use -
+      // no Kind PATCH before a terminal, so a failed start never leaves a relabelled, unstarted task
+      const data = await runOperation(api, "dispatch.prepare", id, { kind: "coding", agent: run.agent,
+        model: run.model || null, instructions: run.instruction.trim() || null });
+      if (!stale(id)) setTerm(data?.session || null);
       if (!stale(id)) {
         setRun((current) => ({ ...current, instruction: "" }));
         setRestartOpen(false);
       }
     } catch (e) {
-      if (!stale(id)) setErr(e?.response?.data?.detail || "Could not start the coding agent");
+      if (!stale(id)) setErr(e?.response?.data?.detail || e?.message || "Could not start the coding agent");
     } finally { if (!stale(id)) setStartingAgent(""); }
   };
   const startGeneralAgent = async () => {
@@ -590,14 +641,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     const id = selected;
     setStartingAgent("general"); setErr("");
     try {
-      if (isGeneral) {
-        const { data } = await api.post(`/api/tasks/${id}/dispatch`, { kind: "general" });
-        if (!stale(id)) setTerm(data.session || null);
-      } else {
-        const tags = String(t.Tags || "").split(/[\s,]+/).filter(Boolean);
-        if (!tags.includes(ASK_TAG)) tags.push(ASK_TAG);
-        await api.patch(`/api/tasks/${id}`, { Kind: "general", Tags: tags.join(",") });
-      }
+      // one shared dispatch whatever the task's kind was: it switches the kind, starts (or reuses) the
+      // assistant session and records the live worker - a relabelled task is not a started one (PW-213)
+      const { data } = await api.post(`/api/tasks/${id}/dispatch`, { kind: "general" });
+      const outcome = outcomeOf(data);
+      if (!stale(id)) setTerm(outcome.state === "started" || outcome.state === "existing" ? (data.session || null) : null);
       if (!stale(id)) setRestartOpen(false);
       await Promise.all([loadDetail(id), loadTasks()]);
       onChanged?.();
@@ -621,14 +669,14 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           height: "calc(100vh - 118px)", minHeight: 420 }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.25, py: 0.75,
             borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL2, flexShrink: 0 }}>
-            {/* each pill says how many live behind it - a filter you cannot size up is a guess.
+            {/* each pill says how many rows it would put on screen (countIn) - a filter you cannot
+                size up is a guess, and one that counts rows it does not show is worse.
                 The pills give way, never the New button: four-digit counts must not be able to
                 push it off the edge of a 340px panel again. */}
             <Box sx={{ flex: 1, minWidth: 0, overflowX: "auto", "&::-webkit-scrollbar": { display: "none" },
               scrollbarWidth: "none" }}>
               <FilterPills value={search ? "" : filter} onChange={changeFilter}
-                options={STATE_FILTERS.map((f) => ({ ...f,
-                  n: !tasks ? null : f.key ? tasks.filter((x) => inBucket(x, f.key)).length : tasks.length }))} />
+                options={STATE_FILTERS.map((f) => ({ ...f, n: !tasks ? null : countIn(f.key) }))} />
             </Box>
             {/* flexShrink: the pills would otherwise squeeze this until only half the + was
                 left on screen, and a clipped button reads as a rendering fault */}
@@ -655,26 +703,34 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 : "Nothing here."}</Empty> : shown.map((task) => (
               // the selected row is outlined in its STATE's colour - a working task in the same sage as
               // its chip - not in the brand slate, which read as a fourth state nobody could name
-              <Box key={task.TaskId} onClick={() => onSelect(task.TaskId)}
+              <Box key={task.TaskId} onClick={() => onSelect(task.TaskId)} data-tq-task-row=""
                 sx={{ px: 1.25, py: 1, mb: 0.75, cursor: "pointer", bgcolor: "#fff", borderRadius: 1.75,
                   border: `1px solid ${selected === task.TaskId ? stateOf(task).c.fg : BORDER}`,
                   boxShadow: selected === task.TaskId ? "0 1px 8px rgba(47,107,79,.14)" : "none",
                   transition: "border-color .12s, box-shadow .12s",
                   "&:hover": { borderColor: selected === task.TaskId ? stateOf(task).c.fg : "#d8cfbe" } }}>
-                <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", minWidth: 0 }}>
-                  <Typography variant="caption" sx={{ color: "#55697a",
-                    fontFamily: "'IBM Plex Sans', 'Segoe UI', Arial, sans-serif", fontVariantNumeric: "tabular-nums",
-                    letterSpacing: ".015em", fontWeight: 750, fontSize: 12,
-                    whiteSpace: "nowrap", flexShrink: 0 }}>{task.ref}</Typography>
-                  <LifecycleChip kind="task" phase={taskPhase(task.Status)} compact />
-                  <StateChip task={task} />
-                  {task.Priority === "urgent" && <Chip size="small" label="urgent" sx={{ bgcolor: PILL_COLORS.red.bg, color: PILL_COLORS.red.fg, height: 17, fontSize: 10 }} />}
-                  {assignedAgent(task.Assignee) && <Chip size="small" icon={<TaskuaryMark size={11} />}
-                    label={assignedAgent(task.Assignee)} title={`${assignedAgent(task.Assignee)} owns this task`}
-                    sx={{ height: 17, fontSize: 9.5, bgcolor: "#e3e6e1", color: "#47654a",
-                      "& .MuiChip-icon": { ml: 0.45 } }} />}
-                  <Box sx={{ flex: 1, minWidth: 0 }} />
-                  <Typography variant="caption" sx={{ color: FAINT, whiteSpace: "nowrap", flexShrink: 0 }}>{timeAgo(task.CreatedAt)}</Typography>
+                {/* the chips wrap, the age does not move: MUI chips cannot shrink (their label is nowrap,
+                    so min-width:auto is the whole word), and four of them on a narrow rail used to push
+                    "18h ago" straight off the card - the owner, 2026-09-09: "hours ago is getting pushed
+                    off the task". A wrapped second line loses nothing; a clipped timestamp lost the age. */}
+                <Box sx={{ display: "flex", gap: 0.75, alignItems: "flex-start", minWidth: 0 }}>
+                  <Box sx={{ display: "flex", gap: 0.75, rowGap: 0.4, alignItems: "center", flexWrap: "wrap", flex: 1, minWidth: 0 }}>
+                    <Typography variant="caption" sx={{ color: "#55697a",
+                      fontFamily: "'IBM Plex Sans', 'Segoe UI', Arial, sans-serif", fontVariantNumeric: "tabular-nums",
+                      letterSpacing: ".015em", fontWeight: 750, fontSize: 12,
+                      whiteSpace: "nowrap", flexShrink: 0 }} data-tq-task-ref="">{task.ref}</Typography>
+                    <LifecycleChip kind="task" phase={taskPhase(task.Status)} compact />
+                    <StateChip task={task} />
+                    {task.Priority === "urgent" && <Chip size="small" label="urgent" sx={{ bgcolor: PILL_COLORS.red.bg, color: PILL_COLORS.red.fg, height: 17, fontSize: 10 }} />}
+                    {String(task.Tags || "").split(/[\s,]+/).includes("interrupted") && <Chip size="small" label="interrupted"
+                      title="Taskuary closed while an agent was working this. Nothing restarts until you choose an agent."
+                      sx={{ height: 17, fontSize: 9.5, bgcolor: "#eee7d6", color: "#7a5c1e" }} />}
+                    {assignedAgent(task.Assignee) && <Chip size="small" icon={<TaskuaryMark size={11} />}
+                      label={assignedAgent(task.Assignee)} title={`${assignedAgent(task.Assignee)} owns this task`}
+                      sx={{ height: 17, fontSize: 9.5, bgcolor: "#e3e6e1", color: "#47654a",
+                        "& .MuiChip-icon": { ml: 0.45 } }} />}
+                  </Box>
+                  <Typography variant="caption" data-tq-task-age="" sx={{ color: FAINT, whiteSpace: "nowrap", flexShrink: 0, mt: 0.15 }}>{timeAgo(task.CreatedAt)}</Typography>
                 </Box>
                 <Typography variant="body2" noWrap sx={{ color: INK, fontWeight: 500, mt: 0.4 }}>{task.Title}</Typography>
                 {task.Playbook && <Typography variant="caption" noWrap sx={{ color: "#6b5f45", display: "block", mt: 0.2 }}>
@@ -757,9 +813,15 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     <IconButton size="small" onClick={() => onSelect(null)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
                   </Tooltip>
                 </Box>
-                <Typography variant="caption" sx={{ color: FAINT, display: liveCodingSession ? "none" : "block", mt: 0.75 }}>
-                  from {t.Source || "manual"} · created {timeAgo(t.CreatedAt)} by {t.CreatedBy}
-                </Typography>
+                <Box sx={{ display: liveCodingSession ? "none" : "flex", alignItems: "center", gap: 0.7, mt: 0.75, flexWrap: "wrap" }}>
+                  <Typography variant="caption" sx={{ color: FAINT }}>
+                    from {t.Source || "manual"} · created {timeAgo(t.CreatedAt)} by {t.CreatedBy}
+                  </Typography>
+                  {/* the list row said this and the task page did not, so a held task looked merely open */}
+                  {interruptedTask && <Chip size="small" label="interrupted"
+                    title="Taskuary closed while an agent was working this. Nothing restarts until you choose one."
+                    sx={{ height: 17, fontSize: 9.5, bgcolor: "#eee7d6", color: "#7a5c1e" }} />}
+                </Box>
                 {workContext && <Typography variant="caption" sx={{ color: "#6b5f45", display: "block", mt: 0.35, fontWeight: 650 }}>
                   {workContext}
                 </Typography>}
@@ -776,10 +838,17 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 {/* The checkout, and why. A wrong guess means an agent editing the wrong tree in
                     good faith, so it is stated on the page rather than buried in the prompt. */}
                 {!term?.alive && (
-                  <Box sx={{ ...card, mb: 1.25, p: 1.5, bgcolor: "#fff", flexShrink: 0,
+                  <Box sx={{ ...card, mb: 1.25, p: stage === "task" ? 1.5 : 1.1, bgcolor: "#fff", flexShrink: 0,
                     borderLeft: "4px solid #55697a" }}>
                     <WorkflowHeading number="1" title="Task" description="The job itself — ownership and completion live here."
-                      chip={<LifecycleChip kind="task" phase={taskState} compact />} tone="#55697a" />
+                      chip={<LifecycleChip kind="task" phase={taskState} compact />} tone="#55697a" {...stageProps("task")}
+                      action={!["done", "dropped"].includes(t.Status) && stage !== "task"
+                        ? <Button size="small" variant="outlined" startIcon={<DoneAllIcon sx={{ fontSize: 14 }} />}
+                            sx={{ fontSize: 10.5, minHeight: 25, py: 0, px: 0.9 }}
+                            title="Closes the task. Its agent and its reply stay separate decisions."
+                            onClick={() => finish("done")}>Mark done</Button>
+                        : null} />
+                    {stage === "task" && <>
                     <Divider sx={{ my: 1.2, borderColor: BORDER }} />
                     <Box sx={{ display: "flex", gap: 1.15, alignItems: "flex-start" }}>
                       <Tooltip title={t.Status === "done" ? "Completed" : "Mark this task done"}>
@@ -804,6 +873,25 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                             display: "-webkit-box", WebkitLineClamp: 5, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                             {taskAsk}
                           </Typography>
+                        )}
+                        {/* the checklist triage drew from the ask (PW-075): boxes are progress on the list,
+                            never task completion - closing the task stays the owner's separate decision */}
+                        {(detail?.checklist || []).length > 0 && (
+                          <Box sx={{ mt: 0.75, maxWidth: 900 }}>
+                            {detail.checklist.map((i) => (
+                              <Box key={i.id} sx={{ display: "flex", alignItems: "flex-start", gap: 0.5 }}>
+                                <Checkbox size="small" checked={!!i.done} sx={{ p: 0.25 }}
+                                  onChange={async (e) => {
+                                    try { await api.patch(`/api/tasks/${t.TaskId}/checklist/${i.id}`, { done: e.target.checked }); loadDetail(t.TaskId); }
+                                    catch { /* the list reloads on the next refresh */ }
+                                  }} />
+                                <Typography variant="body2" sx={{ color: i.done ? FAINT : INK, textDecoration: i.done ? "line-through" : "none", lineHeight: 1.7 }}>
+                                  {i.text}
+                                </Typography>
+                              </Box>
+                            ))}
+                            <Typography variant="caption" sx={{ color: FAINT, pl: 0.5 }}>{progressLine(detail.checklist)}</Typography>
+                          </Box>
                         )}
                         {/* the rest of what they said, in order - indented so it reads as the same
                             person continuing rather than as separate business */}
@@ -877,13 +965,15 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         </LabeledControl>
                         <Box sx={{ flex: 1 }} />
                         <Button size="small" variant="contained" disableElevation startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />}
+                          title="Closes the task and ends the live agent session with it."
                           onClick={() => finish("done")}>Mark task done</Button>
                       </Box>
                     )}
                     {["done", "dropped"].includes(t.Status) && (
                       <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
                         <Button size="small" variant="outlined" startIcon={<RefreshIcon sx={{ fontSize: 15 }} />}
-                          onClick={() => patch({ Status: "open" })}>Reopen task</Button>
+                          title="Reopens the task only. No agent starts until you choose one."
+                          onClick={reopen}>Reopen task</Button>
                       </Box>
                     )}
                     <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.65 }}>
@@ -891,20 +981,24 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         ? "You control completion. Ending an agent run or sending a reply leaves this task open."
                         : "Automatic task. When its triaged work finishes, Taskuary may close it and prepare the reply."}
                     </Typography>
+                    </>}
                   </Box>
                 )}
                 <Box sx={{ ...card, mb: liveCodingSession ? 0.55 : 1.25,
-                  px: liveCodingSession ? 1 : 1.5, py: liveCodingSession ? 0.55 : 1.5,
+                  px: liveCodingSession ? 1 : 1.5, py: liveCodingSession ? 0.55 : stage === "agent" ? 1.5 : 1.1,
                   bgcolor: "#fff", flexShrink: 0, borderLeft: "4px solid #6f8a6e",
                   display: liveCodingSession ? "flex" : "block", alignItems: "center",
                   gap: liveCodingSession ? 1 : 0, flexWrap: "wrap" }}>
                   <Box sx={{ minWidth: 0, flex: liveCodingSession ? "0 1 auto" : "initial" }}>
-                    <WorkflowHeading number="2" title={`${term?.alive ? "Agent running" : "Agent work"}${term?.alive ? ` · ${term.provider || term.agent || "agent"}` : ""}`}
+                    {/* the agent by NAME, not by which binary is running: "Agent running · Claude Code
+                        · coder (your CLI)" named a product and a profile (the owner, 2026-09-08) */}
+                    <WorkflowHeading number="2" title={term?.alive ? `${agentName(t)} is working` : "Agent work"}
                     description={term?.alive
                       ? ""
                       : "Run, pause, stop, or restart an agent. None of these actions completes the task."}
-                    chip={<LifecycleChip kind="agent" phase={agentState} compact />} tone="#6f8a6e" />
+                    chip={<LifecycleChip kind="agent" phase={agentState} compact />} tone="#6f8a6e" {...stageProps("agent")} />
                   </Box>
+                  {stage === "agent" && <>
                   {term?.alive && (
                     <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end",
                       gap: 0.35, flexWrap: "wrap", flex: 1, minWidth: 0, mt: liveCodingSession ? 0 : 1 }}>
@@ -914,12 +1008,18 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         {agentWaiting ? "Answer agent" : "Give new prompt"}{waitingN ? ` · ${waitingN} queued` : ""}
                       </Button>}
                       {liveCodingSession && <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.7 }} startIcon={<DifferenceIcon sx={{ fontSize: 14 }} />}
+                        title="A viewer of the agent's diff. Nothing is approved or committed here."
                         onClick={() => setDiffOpen(true)}>Review changes</Button>}
+                      {/* task completion and agent completion are two things (PW-217/218): saving a result ends the
+                          session and keeps the task open; Mark task done is the step that completes and drafts */}
                       <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.7 }} disabled={!!wrapping} startIcon={<DoneAllIcon sx={{ fontSize: 14 }} />}
-                        onClick={wrapUp}>Finish agent run</Button>
+                        title="Saves the agent's result and report and ends the session. The task stays open: Mark task done completes it and drafts the reply."
+                        onClick={wrapUp}>Save result & end session</Button>
                       <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.7 }} disabled={!!wrapping} startIcon={<PauseCircleIcon sx={{ fontSize: 14 }} />}
-                        onClick={pause}>Pause & save</Button>
+                        title="Ends the session and saves a handover note for the next one. Nothing keeps running."
+                        onClick={pause}>End session & save handover</Button>
                       <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.7 }} color="error" disabled={!!wrapping}
+                        title="Ends the session without a report or handover. The task keeps its state."
                         startIcon={<BlockIcon sx={{ fontSize: 14 }} />} onClick={stopAgent}>Stop session</Button>
                     </Box>
                   )}
@@ -947,6 +1047,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       <Button size="small" variant="outlined" startIcon={<RefreshIcon sx={{ fontSize: 15 }} />}
                         onClick={() => setRestartOpen(true)}>Run another agent</Button>
                       {!report && <Button size="small" variant="text" disabled={!!wrapping}
+                        title="Saves the stopped session's result and report. The task stays open."
                         startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>Save stopped run result</Button>}
                       <Typography variant="caption" sx={{ color: FAINT }}>
                         Choose a different harness, model, or prompt on the next run.
@@ -977,6 +1078,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           {startingAgent === "coding" ? "Starting…" : detail?.transcript ? "Start new coding session" : "Start coding session"}
                         </Button>
                         {detail?.transcript && !report && <Button size="small" variant="outlined" disabled={!!wrapping}
+                          title="Saves the stopped session's result and report. The task stays open."
                           startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>Save stopped run result</Button>}
                         <Button size="small" variant="outlined" disabled={!!startingAgent}
                           startIcon={<TaskuaryMark size={13} />} onClick={startGeneralAgent}>Use non-coding agent</Button>
@@ -998,9 +1100,20 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       </Typography>
                     </Box>
                   )}
-                  {isGeneral && generalStarted && !term?.alive && <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.8 }}>
-                    Send a message in the workspace below to restart its agent.
-                  </Typography>}
+                  {/* the conversation IS the record, so it can be filed as the result once its provider
+                      session is gone - the only road out of a finished chat used to be typing into it again */}
+                  {isGeneral && generalStarted && !term?.alive && (
+                    <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${BORDER}`, display: "flex",
+                      alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
+                      <Button size="small" variant="outlined" disabled={!!wrapping} startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />}
+                        title="Files this conversation's last answer as the task's result and ends its session. The task stays open until you mark it done."
+                        onClick={wrapUp}>Save this conversation's result</Button>
+                      <Typography variant="caption" sx={{ color: FAINT }}>
+                        Or send a message in the workspace below to pick it back up.
+                      </Typography>
+                    </Box>
+                  )}
+                  </>}
                 </Box>
                 {repoPick && (
                   <Box sx={{ ...card, mb: 1, bgcolor: PANEL2 }}>
@@ -1024,9 +1137,14 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   </Box>
                 )}
                 {workspaceMode === "general" ? (
-                  <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
-                    <GeneralWorkspace task={t} onSession={generalSession} onOpenReports={onGoReports} />
-                  </React.Suspense>
+                  /* the chat is this task's session: it gets the room a terminal gets, not the
+                     height of its own content squeezed between the cards above and below it */
+                  <Box sx={{ flex: "1 1 0", minHeight: { xs: 360, md: 420 },
+                    display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
+                    <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
+                      <GeneralWorkspace task={t} compact onSession={generalSession} onOpenReports={onGoReports} />
+                    </React.Suspense>
+                  </Box>
                 ) : workspaceMode === "wrapping" ? (
                   <Box sx={{ ...card, bgcolor: "#e3e6e1", border: "1px solid #d2d6cf" }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -1101,7 +1219,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   </>
                 ) : null}
 
-                {!term?.alive && <Box sx={{ ...card, mt: 1.25, p: 1.5,
+                {!term?.alive && <Box sx={{ ...card, mt: 1.25, p: stage === "reply" ? 1.5 : 1.1,
                   bgcolor: "#fff", flexShrink: 0,
                   borderLeft: "4px solid #9a7444" }}>
                   <WorkflowHeading number="3" title="Reply"
@@ -1111,8 +1229,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         ? "What goes back to the sender. Sending and task completion are separate decisions."
                         : "External communication, when this task has a sender."}
                     chip={<LifecycleChip kind="reply" phase={sourceMessage ? replyState : "not available"} compact />}
-                    tone="#9a7444" />
-                  {!term?.alive && (sourceMessage ? (
+                    tone="#9a7444" {...stageProps("reply")} />
+                  {stage === "reply" && (sourceMessage ? (
                     <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
                       {pendingReview?.DraftText && (
                         <Box sx={{ bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.25,
@@ -1132,11 +1250,14 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           <>
                             <Button size="small" variant="contained" disableElevation disabled={!!openingReply}
                               startIcon={openingReply === "write" ? <CircularProgress size={12} /> : <ForwardToInboxIcon sx={{ fontSize: 15 }} />}
+                              title="Opens a draft in Review. Nothing is sent until you approve it."
                               onClick={() => openReply(false)}>Write reply</Button>
                             <Button size="small" variant="outlined" disabled={!!openingReply}
                               startIcon={openingReply === "generate" ? <CircularProgress size={12} /> : <TaskuaryMark size={13} />}
+                              title="Opens a draft in Review. Nothing is sent until you approve it."
                               onClick={() => openReply(true)}>Generate reply</Button>
-                            <Button size="small" variant="text" onClick={() => setAskSenderOpen(true)}>Ask sender</Button>
+                            <Button size="small" variant="text" title="Drafts a question to the sender. It waits in Review for your approval; nothing is sent now."
+                              onClick={() => setAskSenderOpen(true)}>Ask sender</Button>
                           </>
                         )}
                       </Box>
@@ -1436,17 +1557,23 @@ const Fold = ({ title, children }) => (
   </Box>
 );
 
-const WorkflowHeading = ({ number, title, description, chip, tone }) => (
-  <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
+const WorkflowHeading = ({ number, title, description, chip, tone, folded, onToggle, action }) => (
+  <Box onClick={onToggle} sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0,
+    cursor: onToggle ? "pointer" : "default", opacity: folded ? 0.72 : 1,
+    "&:hover": onToggle ? { opacity: 1 } : undefined }}>
     <Box sx={{ width: 24, height: 24, borderRadius: "50%", bgcolor: tone, color: "#fff",
       display: "grid", placeItems: "center", flexShrink: 0, fontSize: 11.5, fontWeight: 800 }}>
       {number}
     </Box>
     <Box sx={{ minWidth: 0, flex: 1 }}>
       <Typography sx={{ color: INK, fontSize: 13.5, fontWeight: 750, lineHeight: 1.25 }}>{title}</Typography>
-      {description && <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.35 }}>{description}</Typography>}
+      {description && !folded && <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.35 }}>{description}</Typography>}
     </Box>
+    {/* the one action a stage cannot afford to hide when it folds. Its click is its own, not the fold's. */}
+    {action && <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", flexShrink: 0 }}>{action}</Box>}
     {chip}
+    {onToggle && <ExpandMoreIcon sx={{ fontSize: 18, color: FAINT, flexShrink: 0,
+      transform: folded ? "rotate(-90deg)" : "none", transition: "transform .15s" }} />}
   </Box>
 );
 

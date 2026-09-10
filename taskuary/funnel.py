@@ -1,49 +1,28 @@
-"""The pipe: everything that could need the owner, as ONE ranked pile the assistant walks them through.
+"""The shared displayed funnel and captured assistant selection.
 
-Triage judges each message as it arrives; the Timeline shows them in the order they came. Neither
-says what to look at NEXT. This does. It reads what the hub already knows - the feed with triage's
-verdicts on it, the pending reviews, the live agents parked on a question, the calendar, the
-assistant's own open lines and the follow-ups nobody chased - and sorts it into lanes, in the
-order a sharp assistant would raise them:
+Five attention bands promote urgent requests/current or imminent calendar events,
+then owner input/approval, other actionable work/results, FYIs, and working agents.
+Saved triage priority and oldest activity order each band; stable keys break ties.
+Presentation lanes remain available for their existing controls and status copy.
 
-    blocked    an agent stopped and is waiting on you - it is blocking work, so it comes out first
-    time       a meeting inside two hours, an urgent sender
-    approve    a reply or an action drafted and waiting for your yes
-    asked      a person asked you for something and nobody is on it
-    forgotten  the ask that slipped, the promise you made, the thread that went quiet
-    report     a report you set up landed; an open task needs its final close decision
-    fyi        a person told you something; read it or don't
-
-The queue itself is a TIMELINE, oldest first - the longer a thing has waited, the closer it is to
-the mouth - with the promoted lanes (an agent waiting, a meeting, a draft for your yes) jumping to the
-front and fyi (nothing to do) demoted to the back. New arrivals land on top and slide to their slot.
-This ranked pile is the feed's Unread view and the concierge walks the same items in the same order;
-All remains chronological history. A row leaves Unread once it is read or otherwise resolved.
-Anything an agent is working on remains visible at the bottom but is skipped by the concierge until
-the agent stops or asks. FYI and
-reports age out after a day; a draft waiting for a yes never does. No model is involved -
-the words on every item are the facts they came from, so what it says can always be checked -
-and the whole pile is recomputed on every look: a reply approved, a task closed or a meeting
-passed leaves the pile by itself. The only memory is funnel_state: what this walk has already
-surfaced, what the owner marked done, what they pushed back and until when.
-
-The concierge (concierge.py) pulls from the mouth. Alerts are the same facts with a clock on
-them - a meeting in fifteen minutes, an agent that just asked - and interrupt whatever the
-conversation is on.
+This ordering activation preserves the existing read, age, mute and capacity rules
+until the separate canonical Unread/read-state cutover. All remains chronological.
 """
 import hashlib, json, re, threading, time
 from datetime import datetime, timedelta
 from loguru import logger
 
 from .store import task_ref
-from .assistant import _ts, _dt, _short, _gist, _agenda, _OOO
+from .assistant import _ts, _dt, _short, _cut, _gist, _agenda, _OOO
+from .funnel_presentation import present as _present
+from .processing_order import attention_band, priority_rank
 
-LANES = ('blocked', 'time', 'approve', 'broken', 'asked', 'forgotten', 'report', 'fyi', 'working')
+LANES = ('blocked', 'time', 'approve', 'asked', 'queued', 'broken', 'forgotten', 'report', 'fyi', 'working')
 # the lane's one word on the card, and which role colours its dot (theme.jsx ROLES)
 LANE_WORDS = {'blocked': ('agent waiting', 'you'), 'broken': ('a check failed', 'bad'), 'time': ('coming up', 'working'), 'approve': ('needs your yes', 'you'),
-              'asked': ('asked you', 'working'), 'forgotten': ('slipped', 'info'), 'report': ('landed', 'info'), 'fyi': ('fyi', None),
-              'working': ('agent working', 'working')}   # in hand: at the very top, nothing to do until the agent stops or asks
-SOON_MIN, ALERT_MIN = 120, 15     # a meeting inside two hours is time-sensitive; inside fifteen it interrupts
+              'asked': ('asked you', 'working'), 'queued': ('waiting to start', 'working'), 'forgotten': ('slipped', 'info'), 'report': ('landed', 'info'), 'fyi': ('fyi', None),
+              'working': ('agent working', 'working')}   # visible in band 5 until the agent stops or asks
+SOON_MIN, ALERT_MIN, STARTED_MIN = 120, 15, 5   # calendar visibility window; attention boundary; grace after the start
 SETUP_GRACE_MIN = 15              # a walk-through the owner is still in does not raise its own hand
 LATER_HOURS = 3                   # "not now" - it comes back this much later
 FEED_DAYS = 7
@@ -69,14 +48,15 @@ _FAILED = re.compile(r'FAILED\s*$')                # reports.py writes '<title> 
 # Triage's category is not a read receipt. An incoming newsletter, system notice, feed row, or
 # Assistant post may be low-value, but it still enters the unread inventory; this small set remains
 # only for converting a manually named historical row into a generic FYI card.
-_QUIET = {'filed', 'ignored', 'yours'}
+_QUIET = {'filed', 'ignored', 'yours', 'error'}   # error: triage failed - unread information with a retry, never work
 PILE_EVERY = 30                   # websocket writes invalidate it; this is only a disconnected-client safety net
-_CACHE = {'at': 0.0, 'pile': None, 'store': None, 'generation': 0}
+_CACHE = {'at': 0.0, 'pile': None, 'store': None, 'generation': 0, 'full': None}   # full: the same build with read items kept
 _STATE = {}                        # tid -> 'working' | 'parked' | 'asking' | 'done' | 'idle', as last seen by the watcher
 _SEEN = {}                         # tid -> (state, first seen at) - a change must HOLD before it is news
 _WATCHED = [False]                 # first LOOK, even when there were no sessions; _STATE empty is not the same thing
 DWELL = 12.0                       # seconds a new state must survive before the watcher announces it
 _REPORT_SUMMARY = re.compile(r'(?im)^summary:\s*(.+)$')
+_LIVE_UNSET = object()
 _LOCK = threading.Lock()
 
 
@@ -118,13 +98,28 @@ def muted(rule: dict, i: dict) -> bool:
     return like(words, set(tokens(f"{i.get('who') or ''} {i.get('email') or ''} {i.get('title') or ''}"))) >= min(2, len(words))
 
 
+# Chat is not mail: WhatsApp and Slack send no subject at all, and Teams titles a chat after the
+# people the row already names ("Teams chat with Hindy Spiegel"). Both left the pipe and the work
+# list reading "(no subject)" next to a message you had to open to see (owner, 2026-09-07).
+_CHAT_TITLE = re.compile(r'^((teams|slack|whatsapp|telegram) )?(group )?(chat|conversation) with\b', re.I)
+PILL = 90                        # one line in a pill; the rest is an ellipsis, cut on a word
+
+
+def says(r: dict) -> str:
+    """What a row is ABOUT: its subject when it has a real one, else the message's opening line."""
+    subj = _short(r.get('Subject') or r.get('Title') or '', 140)
+    said = f"{r.get('FromName') or ''} in {r.get('SourceName') or ''}"
+    if subj and subj != said and not _CHAT_TITLE.match(subj): return subj
+    return _cut(_gist(r.get('Preview') or r.get('BodyText') or '', 240), PILL) or subj
+
+
 def lane_index(lane: str) -> int: return LANES.index(lane) if lane in LANES else len(LANES)
 
 
 def _item(key, kind, lane, title, *, who='', when='', since='', why='', mid=None, tid=None, rid=None,
           channel='', category='', preview='', **extra) -> dict:
     return {'key': key, 'kind': kind, 'lane': lane, 'title': _short(title, 140) or '(no subject)', 'who': _short(who, 60),
-            'when': _ts(when), 'since': _ts(since or when), 'why': _short(why, 220), 'mid': mid, 'tid': tid,
+            'when': _ts(when), 'since': _ts(since or when), 'sort_at': str(since or when or ''), 'why': _short(why, 220), 'mid': mid, 'tid': tid,
             'ref': task_ref(tid) if tid else None, 'rid': rid, 'channel': channel, 'category': category,
             'preview': _gist(preview, 240), **extra}
 
@@ -139,12 +134,21 @@ def _feed_skip(r: dict) -> bool:
 
 
 def _assistant_wrapper(r: dict) -> bool:
-    """True for a generated Assistant digest whose durable ideas are surfaced separately.
+    """True for an Assistant message that is only a VEHICLE for an idea shown in its own right.
 
-    Plain Assistant messages are real unread arrivals. A generated wrapper is only a container for
-    its ``ideas`` rows; showing both is the duplicate-Assistant regression from 2026-09-04.
+    Plain Assistant messages are real unread arrivals. Two kinds are not:
+
+    - a generated digest post, which is a container for the ``ideas`` in its Brief;
+    - the message an idea is carried into triage on (assistant._idea_message writes one per idea,
+      external id ``idea:<n>``, so the verdict has a message to hang off).
+
+    Showing either beside the idea it belongs to is the duplicate-Assistant regression of
+    2026-09-04, and the second kind was still doing it on both roads (the owner, 2026-09-07: "still
+    duplicating this in timeline??" - one thought, two rows, the vehicle saying nothing when opened).
     """
-    if r.get('Channel') != 'assistant' or not r.get('Brief'): return False
+    if r.get('Channel') != 'assistant': return False
+    if re.fullmatch(r'idea:\d+', str(r.get('ExternalId') or '')): return True
+    if not r.get('Brief'): return False
     try: return bool(json.loads(r['Brief']).get('ideas'))
     except (TypeError, ValueError, json.JSONDecodeError): return False
 
@@ -178,28 +182,33 @@ def thread_speaker(rows: list) -> dict:
     return {group: mid for group, (_rank, mid) in best.items()}
 
 
-def from_feed(store, rows: list) -> list:
+def from_feed(store, rows: list, *, canonical=False) -> list:
     out, agents, reviews, threads = [], set(), set(), {}
     speaks, more = thread_speaker(rows), {}
     for r in rows:
-        if _feed_skip(r): continue
+        if not canonical and _feed_skip(r): continue
         # Generated Assistant reports carry durable ideas. Those ideas are produced below as the
         # actionable unread cards, one latest copy per idea; admitting the wrapper as a second FYI
         # is what made the same Assistant line appear over and over. A plain Assistant message with
         # no idea payload is still an ordinary unread arrival.
-        if _assistant_wrapper(r): continue
+        if not canonical and _assistant_wrapper(r): continue
         # ONE line per triaged task. Before triage makes a task, the conversation is the boundary.
         # This lets seven messages combined onto TQ-0367 come out as one task with +7, without also
         # swallowing every other job discussed later in the same WhatsApp room.
         cid = r.get('ConversationId')
         group = _feed_group(r)
-        if group and speaks.get(group) != r['MessageId']:
+        if not canonical and group and speaks.get(group) != r['MessageId']:
             more[group] = more.get(group, 0) + 1
             continue
         who = r.get('FromName') or r.get('FromEmail') or r.get('SourceName') or r.get('Channel') or ''
+        # ...and the two fields the ROAD is read from, so the rail's pill can say what triage said
+        # rather than what is waiting now - the same rule the Timeline row and its Triage tab use
+        # (timelineState.roadOf; the owner, 2026-09-07: "once the ai decides it should show what the
+        # ai decided. Same in work and timeline tabs")
         base = dict(who=who, when=r.get('SentAt'), mid=r['MessageId'], tid=r.get('TaskId'), channel=r.get('Channel') or '',
-                    category=r.get('Category') or '', preview=r.get('Preview'), cid=cid, email=r.get('FromEmail') or '')
-        subj = r.get('Subject') or r.get('Title') or ''
+                    category=r.get('Category') or '', preview=r.get('Preview'), cid=cid, email=r.get('FromEmail') or '',
+                    priority=r.get('Priority'), route=r.get('RouteReason') or '', task_kind=r.get('TaskKind') or '')
+        subj = says(r)
         if r.get('MsgStatus') == 'triaging':
             out.append(_item(f"msg:{r['MessageId']}", 'triaging', 'fyi', subj, why='just arrived - triage is deciding', settling=True, **base))
             if group and threads.get(group) is None: threads[group] = out[-1]
@@ -213,7 +222,7 @@ def from_feed(store, rows: list) -> list:
             # at the front of its thread, but let its card speak with the newest inbound line on
             # the task.  Otherwise the Assistant can truthfully have six newer Teams messages in
             # SQLite and still show only the old "yes" that opened the draft.
-            latest = (store.last_inbound_on_task(r.get('TaskId')) if r.get('TaskId') else
+            latest = None if canonical else (store.last_inbound_on_task(r.get('TaskId')) if r.get('TaskId') else
                       store.last_inbound_in(cid) if cid else None)
             stale = bool(latest and latest.get('MessageId') != rv.get('MessageId'))
             if latest:
@@ -221,7 +230,7 @@ def from_feed(store, rows: list) -> list:
                             who=latest.get('FromName') or latest.get('FromEmail') or who,
                             preview=latest.get('BodyText') or base.get('preview'),
                             channel=latest.get('Channel') or base.get('channel'))
-                subj = latest.get('Subject') or subj
+                subj = says(latest) or subj
             out.append(_item(f"review:{r['ReviewId']}", 'action' if action else 'review', 'approve', subj, rid=r['ReviewId'],
                              why='an agent proposed an action - it runs only if you say so' if action
                                  else ('a reply is drafted for you to send' if r.get('HasDraft') else 'a reply is owed - draft it with AI or write it'),
@@ -244,9 +253,9 @@ def from_feed(store, rows: list) -> list:
             # Timeline and nowhere else - three of them came out of the pipe, one per turn, on a
             # fresh install's first day (the 2026-09-03 break test)
             from .reports import NO_BRAIN
-            if NO_BRAIN in str(r.get('Preview') or ''): continue
+            if not canonical and NO_BRAIN in str(r.get('Preview') or ''): continue
             sid = report_source_id(store, r.get('SourceName'))
-            bad = report_failed(store, sid, subj)
+            bad = r['ReportFailed'] if 'ReportFailed' in r else report_failed(store, subj, r.get('MessageId'))
             # ...and a run the owner asked to be TOLD about is not news, it is work. When a report
             # carries a "move it up if" sentence, triage judges the run against it and makes a task
             # of a match (triage.classify_intent's `watch`) - but this branch filed every report row
@@ -256,15 +265,19 @@ def from_feed(store, rows: list) -> list:
             if not bad and r.get('TaskId') and (r.get('NeedsYou') or r.get('Category') in ('coding', 'todo', 'action')):
                 base['source_id'] = sid
             else:
+                ran = _activity_time(base.get('since') or base.get('when'))
+                brief = not bad and is_digest_source(store, sid) and ran is not None and ran.date() == datetime.now().date()
                 out.append(_item(f"report:{r['MessageId']}", 'report', 'broken' if bad else 'report', subj, bad=bad, source_id=sid,
-                                 why='the check failed - the cause is in it' if bad else 'a report you set up landed', **base))
+                                 brief_today=brief,
+                                 why='your brief for today - what is going on, and what is pressing' if brief
+                                     else ('the check failed - the cause is in it' if bad else 'a report you set up landed'), **base))
                 if group and threads.get(group) is None: threads[group] = out[-1]
                 continue
         cat = r.get('Category') or ''
         # A triage category is not a read receipt.  Filed/ignored/automated/promotional rows are
         # still incoming rows; the owner's explicit funnel state is what later removes them.
-        if r.get('TheirTurn') or r.get('AnsweredAt'): continue
-        urgent = (r.get('Priority') or '') == 'urgent'
+        if not canonical and (r.get('TheirTurn') or r.get('AnsweredAt')): continue
+        urgent = priority_rank(r.get('Priority')) == 0
         if cat in ('coding', 'todo') and (r.get('NeedsYou') or r.get('Working')):   # a worked row is kept, tagged, and let go in build()
             out.append(_item(f"msg:{r['MessageId']}", 'todo', 'time' if urgent else 'asked', subj, coding=cat == 'coding',
                              why=('an urgent sender - ' if urgent else '') + (r.get('RouteReason') or ('a coding task with no agent on it' if cat == 'coding' else 'real work with nobody on it')), **base))
@@ -286,27 +299,56 @@ def from_feed(store, rows: list) -> list:
     return out
 
 
-_SOURCES = {'at': 0.0, 'by': {}}
+_SOURCES = {'at': 0.0, 'by': {}, 'digest': set()}
 def report_source_id(store, name: str) -> int | None:
     """The report source behind a report message (its SourceName is the report's title) - cached a minute."""
     if time.time() - _SOURCES['at'] > 60:
-        by = {}
+        by, digest = {}, set()
         for src in store.list_sources(active_only=False):
             if src.get('Channel') != 'report': continue
-            try: title = json.loads(src.get('ConfigJson') or '{}').get('title')
-            except ValueError: title = None
+            try: cfg = json.loads(src.get('ConfigJson') or '{}')
+            except ValueError: cfg = {}
+            title = cfg.get('title')
+            # the SAME test reports.py uses to decide a run is the digest, so a renamed report is
+            # still the brief and a report merely CALLED "digest" is not
+            if 'digest' in {cfg.get('type'), *(s.get('type') for s in cfg.get('sources') or [])}:
+                digest.add(src['SourceId'])
             for k in (src.get('Address'), title):
                 if k: by[str(k)] = src['SourceId']
-        _SOURCES.update(at=time.time(), by=by)
+        _SOURCES.update(at=time.time(), by=by, digest=digest)
     return _SOURCES['by'].get(str(name or ''))
 
 
-def report_failed(store, sid, subject: str) -> bool:
-    """Did this run of the report FAIL? The run record says so where we have one; otherwise the
-    subject's own convention ('- FAILED'). Never a word found inside the report's name."""
-    if sid:
-        runs = store.report_runs(sid, 1)
-        if runs: return bool(runs[0].get('failed'))
+def is_digest_source(store, sid) -> bool:
+    """Is this report source the Morning digest? Read from its CONFIGURATION, never its title - the
+    owner may rename it, and matching the word would also catch a report that is merely about digests."""
+    if not sid: return False
+    report_source_id(store, '')                     # warms the same one-minute cache
+    return sid in _SOURCES['digest']
+
+
+def todays_brief(item: dict) -> bool:
+    """TODAY's morning digest - the one row that leads the work rail (the owner, 2026-09-10: "just
+    surface the morning digest report to the top of the work and then we are good"). Yesterday's is an
+    ordinary landed report: a stale brief sitting at the top of the day is worse than no brief at all."""
+    return bool(item.get('brief_today'))
+
+
+def report_failed(store, subject: str, mid=None) -> bool:
+    """Did the run that produced THIS row fail? The run linked to this very message says so
+    (report_run.MessageId); otherwise the subject's own convention ('- FAILED'). Never a word found
+    inside the report's name.
+
+    It used to read the source's LATEST run, so every historical row of a report inherited the newest
+    verdict: two "Process Error Check - FAILED" rows sat in the pipe as landed results because the
+    most recent run had said "0 rows" (the owner, 2026-09-10). It cut both ways - one fresh failure
+    re-marked every older good row as broken and lifted the lot to band 2."""
+    if mid is not None:
+        try: failed = store.report_run_failed(mid)
+        except Exception as e:
+            logger.debug(f'funnel: no run record for message {mid} - {e}')
+            failed = None
+        if failed is not None: return failed
     return bool(_FAILED.search(str(subject or '')))
 
 
@@ -328,13 +370,16 @@ def agent_found(store, tid) -> str:
     return _short(m.group(1) if m else rep['Body'].split('\n', 1)[-1], 300)
 
 
-def from_agents(store) -> list:
+def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
     """Live sessions parked on a question - whatever the feed window, an agent waiting is waiting."""
     from . import terminal as term, waitroom
     out = []
-    fresh_setup = (datetime.now() - timedelta(minutes=SETUP_GRACE_MIN)).strftime('%Y-%m-%d %H:%M:%S')
-    try: live = term.live_sessions(tail=6)
-    except Exception: return out
+    fresh_setup = ((now or datetime.now()) - timedelta(minutes=SETUP_GRACE_MIN)).strftime('%Y-%m-%d %H:%M:%S')
+    if live_state is _LIVE_UNSET:
+        try: live = term.live_sessions(tail=6)
+        except Exception: return out
+    else:
+        live = live_state
     for t in live:
         tid = t.get('taskId')
         if not tid: continue
@@ -350,13 +395,23 @@ def from_agents(store) -> list:
         tail = [str(x).strip() for x in (t.get('tail') or []) if str(x).strip()]
         # ...read off the RENDERED screen when there is one, with the TUI's chrome dropped: the
         # card showed a theme toolbar where the agent's question belonged (2026-09-03)
-        if t.get('sid'):
+        if t.get('sid') and live_state is _LIVE_UNSET:
             try: tail = [x for x in term.asking_lines(t['sid'], 4)] or tail
             except Exception as e: logger.debug(f'funnel: no rendered screen for {t.get("sid")} - {e}')
-        asking = waitroom.looks_like_question(tail)
         agent = t.get('agent') or t.get('label') or 'agent'
+        req = t.get('request') or None
+        if req:
+            # the worker said what it needs (workerstate.py, PW-228): the exact question or action, its kind and
+            # choices - the card shows that, not four lines of screen
+            from .workerstate import request_line
+            out.append(_item(f"agent:{tid}", 'agent', 'blocked', task.get('Title') or f'task {tid}', who=agent, when=t.get('started'),
+                             tid=tid, agent=agent, priority=task.get('Priority'), since=req.get('at') or t.get('started'), asking=req.get('kind') == 'input_needed', tail=[str(req.get('text') or '')[:300]], sid=t.get('sid'),
+                             mode=t.get('mode') or 'terminal', request_id=req.get('request_id'), request_kind=req.get('kind'), choices=list(req.get('choices') or []),
+                             why=request_line(agent, req)))
+            continue
+        asking = waitroom.looks_like_question(tail)
         out.append(_item(f"agent:{tid}", 'agent', 'blocked', task.get('Title') or f'task {tid}', who=agent, when=t.get('started'),
-                         tid=tid, agent=agent, asking=asking, tail=tail[-4:], sid=t.get('sid'), mode=t.get('mode') or 'terminal',
+                         tid=tid, agent=agent, priority=task.get('Priority'), asking=asking, tail=tail[-4:], sid=t.get('sid'), mode=t.get('mode') or 'terminal',
                          why=f'{agent} asked you something' if asking else f'{agent} stopped and is waiting on you'))
     return out
 
@@ -376,20 +431,24 @@ def from_proposals(store, used_rids: set) -> list:
 
 def from_calendar(store, now: datetime) -> list:
     out = []
-    for e in _agenda(store):
-        st, en = _dt(e.get('start')), _dt(e.get('end')) or _dt(e.get('start'))
-        if not st or (en and en < now): continue
+    # block=False: the pile is a read the owner is waiting on, and the calendar is a network call
+    for e in _agenda(store, block=False):
+        st, en = _activity_time(e.get('start')), _activity_time(e.get('end')) or _activity_time(e.get('start'))
+        # a meeting is unread work until it starts; a few minutes into it there is nothing to walk the owner
+        # into (2026-09-07: an hour-old meeting sat at the top of Unread as "next - coming up")
+        if not st or (en and en <= now) or st <= now - timedelta(minutes=STARTED_MIN): continue
         mins = int((st - now).total_seconds() // 60)
-        if mins > SOON_MIN: continue
+        if mins > SOON_MIN and st.date() != now.date(): continue   # the rest of today is visible; the walk still waits for ALERT_MIN
         who = [w for w in (e.get('who') or []) if w]
         key = f"meeting:{str(e.get('start') or '')[:16]}:{_short(e.get('subject'), 40)}"
         out.append(_item(key, 'meeting', 'time', e.get('subject') or 'the meeting', who=', '.join(who[:3]), when=e.get('start'),
-                         mins=mins, event={k: e.get(k) for k in ('start', 'end', 'subject', 'who', 'where', 'about', 'join', 'organizer')},
+                         mins=mins, calendar_ready=(st - now).total_seconds() <= ALERT_MIN * 60, event={k: e.get(k) for k in ('start', 'end', 'subject', 'who', 'where', 'about', 'join', 'organizer')},
                          why=('starting now' if mins <= 0 else f'in {mins} min') + (f" with {', '.join(w.split()[0] for w in who[:3])}" if who else '')))
     return out
 
 
-def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = frozenset()) -> list:
+def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = frozenset(),
+                   reconcile: bool = True) -> list:
     """The assistant's own open lines (assistant.py posts them on its half-hourly check: the ask that
     slipped, the promise, the thread gone quiet). They enter the pipe when SAID - LastSaid, not the
     age of the thread they are about - so a four-day-old silence raised this morning is this morning's."""
@@ -412,9 +471,22 @@ def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = froze
         from .assistant import sent_reply_for
         sent = sent_reply_for(store, {'action': a})
         if sent and _ts(sent.get('DecidedAt') or sent.get('CreatedAt')) >= _ts(i.get('LastSaid') or i.get('FirstSeen')):
-            store.set_idea_status(i['IdeaId'], 'done', 'funnel'); continue
+            if reconcile: store.set_idea_status(i['IdeaId'], 'done', 'funnel')
+            continue
         if a.get('mid') in used_mids or (a.get('tid') and a['tid'] in used_tids): continue
-        lane = 'report' if a.get('section') == 'systems' else 'forgotten'
+        # nothing to do until TRIAGE says otherwise (the owner, 2026-09-07: "assistant ideas and
+        # slipped stuff should be fyi unless triage turns it into task"). It used to open as 'slipped'
+        # - or 'report' for a systems section - so an idea whose verdict failed, or that was still
+        # waiting for an AI connector to reach one, was shown as work nobody had called work.
+        lane = 'fyi'
+        # the shared verdict decides the lane (PW-200): fyi is fyi, an ask is an ask, a failed verdict says so;
+        # an idea whose work was opened leaves this lane for the task row it opened (used_tids below)
+        tri = a.get('triage') or {}
+        why = a.get('why') or 'the assistant raised this'
+        if tri.get('error'): why = f"triage failed ({tri['error']}) - the next check retries; {why}"
+        elif tri.get('pending'): why = f'awaiting triage (no AI connector); {why}'
+        elif tri.get('intent') == 'fyi': lane = 'fyi'
+        elif tri.get('intent') in ('task', 'reply_only'): lane = 'asked'
         m = (store.get_message(a['mid']) or {}) if a.get('mid') else {}
         cid = m.get('ConversationId')
         if cid and (cid in used_cids or cid in seen_cids): continue     # one line per conversation
@@ -427,7 +499,8 @@ def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = froze
             if ref and store.get_task(int(ref.group(1))): tid = a['tid'] = int(ref.group(1))
         out.append(_item(f"idea:{i['IdeaId']}", 'idea', lane, i['Text'], when=i.get('LastSaid') or i.get('FirstSeen'), mid=a.get('mid'), tid=a.get('tid'),
                          who=m.get('FromName') or m.get('FromEmail') or '', channel=m.get('Channel') or '',
-                         idea=i['IdeaId'], idea_kind=i.get('Kind'), action=a, why=a.get('why') or 'the assistant raised this'))
+                         idea=i['IdeaId'], idea_kind=i.get('Kind'), action=a, why=why, priority=tri.get('priority'),
+                         urgent_request=tri.get('intent') in ('task', 'reply_only') and priority_rank(tri.get('priority')) == 0))
     return out
 
 
@@ -450,27 +523,49 @@ def from_wrapped(store, now: datetime, busy: set) -> list:
         found = agent_found(store, tid)
         when = (sent.get('DecidedAt') or sent.get('CreatedAt')) if sent else own.get('SentAt')
         out.append(_item(f"wrap:{tid}", 'wrapup', 'report', t.get('Title'), who='you', when=when, tid=tid, summary=found,
-                         mid=reply_to(store, tid),
+                         mid=reply_to(store, tid), priority=t.get('Priority'),
                          sent=_short(sent.get('FinalText') or sent.get('DraftText') if sent else own.get('BodyText'), 200),
                          why='the reply went out' + (' and the agent finished' if found else '') + ' - the task is still open'))
     return out
 
 
 # ── the pile ─────────────────────────────────────────────────────────────────────────────────
-# the queue is a TIMELINE, oldest first inside each band - but what blocks work or has a clock on it
-# is promoted to the front, a PERSON asking you comes before the assistant's own follow-up lines,
-# those before reports, and fyi (nothing to do) is demoted to the back.
-# a failed check is promoted from 'report' (was 5, behind everything) to just under a drafted
-# reply: one click sends that reply, while a dead SQL host is real work - but both come before
-# a person's ask, because the check is a SYSTEM the owner asked to be told about
-_BAND = {'blocked': 0, 'time': 1, 'approve': 2, 'broken': 3, 'asked': 4, 'forgotten': 5, 'report': 6, 'fyi': 7, 'working': 9}
+# Lanes retain presentation/state semantics; the shared five bands own ordering across the pile and
+# the feed. INSIDE the actionable band the lane ranks (the owner, 2026-09-07: "asked you" sat under
+# reports because both were one band): what asks you, then what waits for an agent, then what broke, then what landed.
+def _band(item):
+    lane = item.get('lane')
+    # today's brief is WORK, not a landed result: it is the thing the owner reads before anything else
+    if todays_brief(item): return attention_band(actionable=True)
+    if item.get('kind') == 'meeting':
+        return attention_band(urgent=not _not_yet(item), actionable=True)
+    # a landed result is its own level; 'slipped' is an idea nobody judged, which is an fyi, not work
+    return attention_band(urgent=lane == 'time' or (lane == 'asked' and bool(item.get('urgent_request'))),
+                          owner_wait=lane in ('blocked', 'approve'),
+                          working=lane == 'working', actionable=lane in ('broken', 'asked', 'queued'),
+                          result=lane == 'report')
+
+
+def _activity_time(value):
+    """Stored-local compatibility, retaining subseconds and explicit offsets."""
+    try:
+        stamp = datetime.fromisoformat(str(value or '').replace('Z', '+00:00'))
+        return stamp.astimezone().replace(tzinfo=None) if stamp.tzinfo else stamp
+    except ValueError:
+        return None
 
 
 def _order(items: list) -> list:
-    """Next-first: the promoted bands, then everything else oldest first, fyi last. A meeting sorts
-    by when it starts, soonest first."""
-    def k(i): return (_BAND.get(i['lane'], 3), i.get('when') if i['kind'] == 'meeting' else (i.get('since') or i.get('when') or ''))
-    return sorted(items, key=k)
+    """The five levels, then the oldest first inside one, then a stable key - and nothing else (the
+    owner, 2026-09-07: "within one level oldest wins first"). A lane sub-rank and the saved priority
+    used to sit in between, which put a reply drafted ten minutes ago ahead of an ask from Tuesday:
+    "no reason why open task is before a reply drafted". Urgency has a level of its own."""
+    def key(item):
+        activity = _activity_time(item.get('sort_at') or item.get('since') or item.get('when'))
+        # ...and today's brief leads its band, whatever the clock says: it is written this morning, so
+        # oldest-first would otherwise put every older piece of work in front of the day's own summary
+        return (_band(item), not todays_brief(item), activity is None, activity or datetime.max, str(item.get('key') or ''))
+    return sorted(items, key=key)
 
 
 def _apply_states(items: list, states: dict, now: datetime, keep_surfaced: bool = False) -> list:
@@ -495,6 +590,8 @@ def _apply_states(items: list, states: dict, now: datetime, keep_surfaced: bool 
                 # owner (a draft/approval or an agent question) remains addressable and marked.
                 if not keep_surfaced and i['lane'] not in ('blocked', 'approve', 'working'): continue
                 i = i | {'surfaced': True, 'surfaced_at': st.get('At')}
+                # an fyi's shown-state note is the summary the assistant wrote for it (PW-151); a sig'd item's note is its sig
+                if i.get('lane') == 'fyi' and not i.get('sig') and st.get('Note'): i = i | {'summary': st['Note']}
         out.append(i)
     return out
 
@@ -518,7 +615,7 @@ def _aged_out(i: dict, now: datetime, hours: int) -> bool:
 
 RUN_STALE_MIN = 20        # a 'running' run row nobody has touched for this long is not working anything
 
-def working_tids(store) -> set:
+def working_tids(store, live_state=_LIVE_UNSET, now: datetime = None) -> set:
     """Tasks an agent has right now - a live session, or a headless run that is actually running.
     Nothing about them is the owner's to do until the agent stops.
 
@@ -527,11 +624,12 @@ def working_tids(store) -> set:
     altogether - not read, not offered, not findable (the 2026-09-03 break test). A row nobody has
     touched for RUN_STALE_MIN is a corpse, not a worker."""
     from . import terminal as term
-    fresh = (datetime.now() - timedelta(minutes=RUN_STALE_MIN)).strftime('%Y-%m-%d %H:%M:%S')
+    fresh = ((now or datetime.now()) - timedelta(minutes=RUN_STALE_MIN)).strftime('%Y-%m-%d %H:%M:%S')
     out = {r['TaskId'] for r in store.running_runs()
            if r.get('TaskId') and str(r.get('UpdatedAt') or r.get('StartedAt') or '') >= fresh}
     try:
-        for t in term.live_sessions(tail=0):
+        live = term.live_sessions(tail=0) if live_state is _LIVE_UNSET else live_state
+        for t in live:
             if not t.get('taskId'): continue
             waiting = t.get('waiting') if t.get('waiting') is not None else (t.get('idle') or 0) >= term.IDLE_WAITING
             if not waiting: out.add(t['taskId'])
@@ -539,13 +637,24 @@ def working_tids(store) -> set:
     return out
 
 
-def build(store, now: datetime = None, keep_surfaced: bool = False) -> dict:
+def build(store, now: datetime = None, keep_surfaced: bool = False,
+          reconcile: bool = True, live_state=_LIVE_UNSET,
+          full_history: bool = False) -> dict:
     now = now or datetime.now()
-    rows = store.feed(limit=400, days=FEED_DAYS)
+    if getattr(store, 'processing_reads_active', lambda: False)():
+        from .processing_unread import build as shared_build
+        return shared_build(store, now=now, include_read=keep_surfaced,
+                            live_state=None if live_state is _LIVE_UNSET else live_state,
+                            full_history=full_history)
+    # Explicit Current/named-item lookup must not lose its subject behind the
+    # ordinary transport cap. Its existing history/read/grouping rules still apply.
+    feed_limit = -1 if keep_surfaced else 400
+    rows = (store.feed(limit=feed_limit, days=FEED_DAYS) if live_state is _LIVE_UNSET
+            else store.feed(limit=feed_limit, days=FEED_DAYS, live_state=live_state))
     items = from_feed(store, rows)
     # the live session knows more about a parked agent than its feed row does (its last lines,
     # whether it asked) - so its item replaces the row's
-    agents = {a['key']: a for a in from_agents(store)}
+    agents = {a['key']: a for a in from_agents(store, live_state=live_state, now=now)}
     items = [agents.pop(i['key']) | {'mid': i.get('mid')} if i['key'] in agents else i for i in items] + list(agents.values())
     # ...and the mail that STARTED a task whose agent is now waiting is not a second item: the
     # agent's question is the thing to answer, and answering it is answering the mail
@@ -567,20 +676,21 @@ def build(store, now: datetime = None, keep_surfaced: bool = False) -> dict:
     used_mids = {i['mid'] for i in current if i.get('mid')}
     used_tids = {i['tid'] for i in current if i.get('tid')}
     used_cids = {i['cid'] for i in current if i.get('cid')}
-    items += from_forgotten(store, used_mids, used_tids, used_cids)
+    items += from_forgotten(store, used_mids, used_tids, used_cids, reconcile=reconcile)
     # Closed is authoritative. The final report remains on the task, but a task the owner or agent
     # has closed is no longer work to walk through and must never be reintroduced into the funnel.
     # an agent mid-job: nothing to do here yet, whatever the mail or the idea says about the task - so it
     # rides at the TOP of the pipe as 'in hand', and drops to the front when the agent stops or asks
-    busy = working_tids(store)
+    busy = working_tids(store, live_state=live_state, now=now)
     from . import terminal as term
     # Keep the live session's identity on the working row. The message row used to change only its
     # key/lane, so the Assistant knew something was in hand but its card still had no sid, tail or
     # agent and rendered as "coding - nobody on it" after the coder was started from Tasks/Board.
-    try:
-        live_by_tid = {t['taskId']: t for t in term.live_sessions(tail=6) if t.get('taskId')}
-    except Exception:
-        live_by_tid = {}
+    if live_state is _LIVE_UNSET:
+        try: live_by_tid = {t['taskId']: t for t in term.live_sessions(tail=6) if t.get('taskId')}
+        except Exception: live_by_tid = {}
+    else:
+        live_by_tid = {t['taskId']: t for t in live_state if t.get('taskId')}
     live_tids = busy | {i['tid'] for i in items if i['kind'] == 'agent' and i.get('tid')}   # working, parked or asking: an agent is on it
     stale_before = (now - timedelta(minutes=RUN_STALE_MIN)).strftime('%Y-%m-%d %H:%M:%S')
     # ...and a task whose STATUS says in_progress is in the middle of being worked, whether or not a
@@ -636,11 +746,12 @@ def build(store, now: datetime = None, keep_surfaced: bool = False) -> dict:
     queue, shelf = [i for i in items if i['lane'] != 'working'], [i for i in items if i['lane'] == 'working']
     hidden = max(0, len(queue) - cap) if not keep_surfaced else 0
     if hidden: queue = queue[:cap]
-    items = queue + shelf                                        # what an agent has rides above the cap, always visible
+    items = [i | {'order_band': _band(i)} for i in queue + shelf]  # same band for rendered cards and alerts
     rev = hashlib.sha1('|'.join(f"{i['key']}:{i['lane']}:{int(bool(i.get('settling')))}" for i in items).encode()).hexdigest()[:12] + f':{hidden}:{len(quiet)}'
     return {'rev': rev, 'items': items, 'hidden': hidden, 'muted': len(quiet),
-            'rules': [str(r.get('why') or ' '.join(r.get('words') or []))[:120] for r in rules], 'lanes': [{'lane': l, 'word': LANE_WORDS[l][0], 'role': LANE_WORDS[l][1],
-                                                                       'n': sum(1 for i in items if i['lane'] == l)} for l in LANES]}
+            'rules': [str(r.get('why') or ' '.join(r.get('words') or []))[:120] for r in rules],
+            'lanes': [{'lane': l, 'word': LANE_WORDS[l][0], 'role': LANE_WORDS[l][1],
+                       'n': sum(1 for i in items if i['lane'] == l)} for l in LANES]}
 
 
 def pile(store, force: bool = False) -> dict:
@@ -663,16 +774,46 @@ def pile(store, force: bool = False) -> dict:
         if same_store and _CACHE['pile'] and (refreshed_while_waiting or (not force and time.time() - _CACHE['at'] < PILE_EVERY)):
             return _CACHE['pile']
         events = announce(store)                       # the watcher speaks first: a transition changes the pile too
-        p = build(store)
+        # ONE build serves the pile and the item the page is holding: the shared builder computes
+        # every card's read state anyway, and the pile is its unread subset (processing_unread.build)
+        shared = getattr(store, 'processing_reads_active', lambda: False)()
+        full = build(store, keep_surfaced=True) if shared else None
+        if shared:
+            items = [i for i in full['items'] if i['unread']]
+            p = {**full, 'items': items, 'lanes': [{**l, 'n': sum(i['lane'] == l['lane'] for i in items)} for l in full['lanes']],
+                 'counts': {**full['counts'], 'unread': len(items), 'actionable': sum(i['actionable'] for i in items)}}
+        else: p = build(store)
         p['alerts'] = alerts(store, p['items'])
         p['events'] = events
-        _CACHE.update(at=time.time(), pile=p, store=store,
+        _CACHE.update(at=time.time(), pile=p, store=store, full=full['items'] if shared else None,
                       generation=_CACHE.get('generation', 0) + 1)
         return p
 
 
-def invalidate(): _CACHE.update(at=0.0, pile=None, store=None); _SOURCES.update(at=0.0, by={})
+def full_items(store) -> list | None:
+    """The cached build with read items kept, for a same-request lookup of the item on the table."""
+    return _CACHE['full'] if _CACHE.get('store') is store and _CACHE['pile'] else None
+
+
+def invalidate(): _CACHE.update(at=0.0, pile=None, store=None, full=None); _SOURCES.update(at=0.0, by={})
 def forget_states(): _STATE.clear(); _SEEN.clear(); _WATCHED[0] = False
+
+
+def present(store, payload: dict) -> dict:
+    """Detach and fingerprint a selected funnel payload without changing its selection."""
+    return _present(store, payload)
+
+
+def capture_selection(store, *, only: str = None, include_surfaced: bool = False,
+                      exclude: str = None, now: datetime = None):
+    """A side-effect-free automatic selection for HTTP optimistic concurrency."""
+    from .funnel_selection import capture_selection as capture
+    return capture(store, only=only, include_surfaced=include_surfaced,
+                   exclude=exclude, now=now)
+
+
+def _present_one(store, item: dict | None) -> dict | None:
+    return present(store, {'items': [item]})['items'][0] if item is not None else None
 
 
 def agent_states(store) -> dict:
@@ -723,7 +864,7 @@ def announce(store, actor: str = 'assistant') -> list:
         ref, title = task_ref(tid), _short(t.get('Title'), 80)
         if state == 'working' and was in (None, 'idle', 'parked', 'asking'):
             events.append({'tid': tid, 'ref': ref, 'kind': 'working', 'agent': agent,
-                           'text': f"{agent} is working on {ref} ({title}) - nothing for you there now. Let's go to the next thing."})
+                           'text': f"{agent} is working on {ref} ({title}) - nothing for you there now."})
         elif state in ('parked', 'asking') and was in ('working', 'idle', None):   # stopped - or found already parked
             events.append({'tid': tid, 'ref': ref, 'kind': state, 'agent': agent,
                            'text': f"{agent} {'asked you something' if state == 'asking' else 'stopped and is waiting on you'} on {ref} ({title})."})
@@ -734,15 +875,35 @@ def announce(store, actor: str = 'assistant') -> list:
     if state_dropped := [tid for tid in _STATE if _STATE[tid][0] == 'done']:
         for tid in state_dropped: _STATE.pop(tid, None), _SEEN.pop(tid, None)   # said once; a closed task is not watched again
     if events:
-        from . import concierge
+        # an unsolicited update is a NOTICE for the bottom strip (PW-165) - never a line or a card the watcher
+        # writes into the chat by itself. It stays until the owner opens it or puts it down (PW-166). A parked or
+        # asking agent is already an alert of the pile's own, so it is not kept twice; a newer fact about the
+        # same task replaces the older notice, so nothing repeats unless the facts changed.
         for e in events:
-            card = None
-            if e['kind'] in ('parked', 'asking'):
-                card = next((concierge.card_for(i) for i in build(store, keep_surfaced=True)['items'] if i['key'] == f"agent:{e['tid']}"), None)
-            concierge.record(store, concierge.general.dock_task(store)[0]['TaskId'], 'assistant', e['text'], card)
-            e['card'] = card
+            e['card'] = None
+            store.clear_funnel_state(f"notice:{e['tid']}")
+            if e['kind'] in ('working', 'done'): notify(store, e, actor)
         invalidate()
     return events
+
+
+def notify(store, e: dict, by: str = 'assistant'):
+    """One notice per task, kept on the funnel state (PW-166): Later marks it `ack`, a new fact rewrites it."""
+    store.set_funnel_state(f"notice:{e['tid']}", 'notice', by, None, json.dumps({k: v for k, v in e.items() if k != 'card'}))
+
+
+def notices(store, states: dict = None) -> list:
+    """The strip's own notices: the watcher's events, in the shape of an alert, until Open or Later."""
+    states = states if states is not None else store.funnel_states()
+    out = []
+    for k, st in states.items():
+        if not k.startswith('notice:') or st.get('Status') != 'notice' or not st.get('Note'): continue
+        try: e = json.loads(st['Note'])
+        except ValueError: continue
+        working = e.get('kind') == 'working'
+        out.append({'key': k, 'item': f"{'agent' if working else 'task'}:{e.get('tid')}", 'kind': e.get('kind'), 'lane': 'working' if working else 'report',
+                    'text': e.get('text') or '', 'notice': True, 'order_band': 3, 'at': st.get('At'), 'tid': e.get('tid'), 'ref': e.get('ref')})
+    return sorted(out, key=lambda a: str(a.get('at') or ''))
 
 
 MAIL_KINDS = ('review', 'action', 'asked', 'todo', 'fyi')
@@ -769,26 +930,50 @@ def _not_yet(i: dict) -> bool:
     before like a agent in middel of working"). alerts() already drew this line at ALERT_MIN; the
     walk did not.
     """
-    return i['kind'] == 'meeting' and i.get('mins') is not None and i['mins'] > ALERT_MIN
+    if i['kind'] != 'meeting': return False
+    if 'calendar_ready' in i: return not i['calendar_ready']
+    return i.get('mins') is not None and i['mins'] > ALERT_MIN
+
+
+ON_YOU = ('blocked', 'approve')     # the two lanes attention_band calls owner_wait: an agent asked, or a reply waits
+
+def on_you(item: dict) -> bool:
+    """Is this item WAITING ON THE OWNER - an agent parked on a question, a reply wanting their yes?
+
+    These outrank a merely-unread row in the walk. "New arrivals still lead" was the rule for every
+    lane, and with a pipe holding fifty unread fyi it meant the one thing actually on the owner was
+    shown once and then never came up again until the fyi were drained (the owner, 2026-09-10:
+    "coding task is not surfacing at all, it's stuck on the work timeline?"). Being shown is not a
+    decision, so it cannot retire the item; only settling it, or later/skip, takes it off the walk -
+    and _eligible's 30-minute cooldown is what keeps it from coming straight back."""
+    return item.get('lane') in ON_YOU
 
 
 def next_item(store, key: str = None, only: str = None, include_surfaced: bool = False,
-              exclude: str = None) -> dict | None:
+              exclude: str = None, items: list | None = None) -> dict | None:
     """What comes out of the mouth: the named item (read or not - the chat may return to it), or
     the first unread one - of the mail alone when `only` is 'mail'. Something still being triaged is
     not ready to be talked about."""
     # by key, whatever its state: read already, or with an agent on it now - the concierge decides what to say
-    if key: return next((i for i in build(store, keep_surfaced=True)['items'] if i['key'] == key), None) or batch_item(store, key)
+    if key:
+        pool = items if items is not None else build(store, keep_surfaced=True)['items']
+        item = next((i for i in pool if i['key'] == key or key in i.get('aliases', [])), None)
+        if item is None and getattr(store, 'processing_reads_active', lambda: False)():
+            item = next((i for i in build(store, keep_surfaced=True, full_history=True)['items']
+                         if i['key'] == key or key in i.get('aliases', [])), None)
+        return _present_one(store, item) or batch_item(store, key)
+    if getattr(store, 'processing_reads_active', lambda: False)():
+        return capture_selection(store, only=only, exclude=exclude).selected
     again = (datetime.now() - timedelta(minutes=30)).strftime('%Y-%m-%d %H:%M:%S')
     ready = [i for i in pile(store, force=True)['items'] if not i.get('settling') and i['lane'] != 'working'
              and not _not_yet(i) and i.get('key') != exclude
              and (include_surfaced or not i.get('surfaced')
                   or (i['lane'] in ('blocked', 'approve') and _ts(i.get('surfaced_at')) <= again))]
     if only == 'mail': ready = [i for i in ready if came_in(i) or i['kind'] in INTERRUPTS]
-    # New arrivals still lead.  Once those are exhausted, a merely-shown row is walked normally:
-    # being put in the conversation never counted as the owner's decision, so it cannot make an
-    # unread row unreachable.
-    return next((i for i in ready if not i.get('surfaced')), ready[0] if ready else None)
+    # What is ON THE OWNER leads; after that, new arrivals; after those, a merely-shown row is walked
+    # normally. Being put in the conversation never counted as the owner's decision, so it cannot make
+    # an unread row unreachable - nor bury the one item that is actually waiting on them under fifty fyi.
+    return _present_one(store, next((i for i in ready if on_you(i) or not i.get('surfaced')), ready[0] if ready else None))
 
 
 def batch_item(store, key: str) -> dict | None:
@@ -797,12 +982,15 @@ def batch_item(store, key: str) -> dict | None:
     until a button was clicked (the 2026-09-03 break test)."""
     if not key or not key.startswith('fyis:'): return None
     want = [k for k in key[5:].split(',') if k]
-    have = {i['key']: i for i in build(store, keep_surfaced=True)['items']}
-    got = [have[k] for k in want if k in have]
+    have = {alias: i for i in build(store, keep_surfaced=True)['items']
+            for alias in [i['key'], *i.get('aliases', [])]}
+    seen = set()
+    got = [have[k] for k in want if k in have
+           and not (have[k]['key'] in seen or seen.add(have[k]['key']))]
     if not got: return None
-    return _item(key, 'fyis', 'fyi', f"{len(got)} fyi", who='', when=got[0].get('when'), since=got[0].get('since'),
-                 channel=got[0].get('channel'), why='people told you things; nothing to do',
-                 items=[dict(i) for i in got], members=[i['key'] for i in got])
+    return _present_one(store, _item(key, 'fyis', 'fyi', f"{len(got)} fyi", who='', when=got[0].get('when'), since=got[0].get('since'),
+                                     channel=got[0].get('channel'), why='people told you things; nothing to do',
+                                     items=[dict(i) for i in got], members=[i['key'] for i in got]))
 
 
 def fyi_batch(store, first: dict) -> list:
@@ -824,9 +1012,9 @@ def item_for_key(store, key: str) -> dict | None:
         row = next((r for r in store.feed(limit=500, days=FEED_DAYS) if r.get('TaskId') == tid), None)
         if row:
             got = from_feed(store, [row | {'Category': 'info' if row.get('Category') in _QUIET else row.get('Category')}])
-            if got: return got[0] | {'lane': got[0]['lane'] if got[0]['lane'] != 'fyi' else 'asked'}
-        return _item(f'task:{tid}', 'task', 'asked', task.get('Title'), when=task.get('UpdatedAt') or task.get('CreatedAt'), tid=tid,
-                     summary=agent_found(store, tid), why=f"{task.get('Status')} {task.get('Kind')} task you asked about")
+            if got: return _present_one(store, got[0] | {'lane': got[0]['lane'] if got[0]['lane'] != 'fyi' else 'asked'})
+        return _present_one(store, _item(f'task:{tid}', 'task', 'asked', task.get('Title'), when=task.get('UpdatedAt') or task.get('CreatedAt'), tid=tid,
+                                               summary=agent_found(store, tid), why=f"{task.get('Status')} {task.get('Kind')} task you asked about"))
     m = re.match(r'^(msg|report):(\d+)$', key or '')
     if not m: return None
     mid = int(m.group(2))
@@ -834,24 +1022,38 @@ def item_for_key(store, key: str) -> dict | None:
     if not row: return None
     items = from_feed(store, [row | {'Category': 'info' if row.get('Category') in _QUIET else row.get('Category')}])
     it = next((i for i in items if i.get('mid') == mid), None)
-    return it | {'lane': 'fyi', 'why': row.get('RouteReason') or it['why']} if it and it['kind'] == 'fyi' else it
+    if it and it['kind'] == 'fyi': it = it | {'lane': 'fyi', 'why': row.get('RouteReason') or it['why']}
+    return _present_one(store, it)
 
 
 VERBS = ('surfaced', 'done', 'later', 'skip', 'ack')
 
-def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, note: str = None) -> dict:
+def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, note: str = None, *, expected_context=None, read: bool = False) -> dict:
     """The owner's word on one item. done: gone for good. later: back in `hours` (LATER_HOURS by
-    default). skip: back tomorrow morning. surfaced: shown in this walk. ack: an alert was seen."""
+    default). skip: back tomorrow morning. surfaced: shown in this walk - and, with `read`, READ: once
+    it has been put in the chat it leaves Unread (the owner, 2026-09-06). ack: an alert was seen."""
     if verb not in VERBS: raise ValueError(f'unknown verb: {verb}')
     if key.startswith('fyis:'):                                   # a batch: the verb lands on every member
-        out = [settle(store, k, verb, by, hours, note) for k in key[5:].split(',') if k]
+        out = [settle(store, k, verb, by, hours, note, expected_context=expected_context, read=read) for k in key[5:].split(',') if k]
         return {'key': key, 'verb': verb, 'until': (out[0] if out else {}).get('until')}
     until = None
     if verb == 'later': until = (datetime.now() + timedelta(hours=hours or LATER_HOURS)).strftime('%Y-%m-%d %H:%M:%S')
     if verb == 'skip':
         tomorrow = (datetime.now() + timedelta(days=1)).replace(hour=7, minute=0, second=0)
         until = tomorrow.strftime('%Y-%m-%d %H:%M:%S')
-    store.set_funnel_state(key, verb, by, until, note)
+    kw = {'read': read} if expected_context is None else {'read': read, 'expected_context': expected_context}
+    try:
+        store.set_funnel_state(key, verb, by, until, note, **kw)
+    except ValueError as e:
+        # Mail landing mid-settle moves the membership census, and the owner was handed that sentence
+        # verbatim while nothing moved - 27 items stayed in the pipe (the owner, 2026-09-07: "what does
+        # this mean as well when I got it to clear the rest of what was left?"). It is the worker's lag,
+        # not a refusal: do the very thing the message asks for, once, and settle again.
+        if 'reconciled before settlement' not in str(e): raise
+        from . import processing_all
+        processing_all.wait_settled(store)
+        store.reconcile_processing_membership()
+        store.set_funnel_state(key, verb, by, until, note, **kw)
     invalidate()
     return {'key': key, 'verb': verb, 'until': until}
 
@@ -864,6 +1066,9 @@ def reset_walk(store):
     work, and having been shown it once in yesterday's chat is not an answer. A new chat surfaced
     two fyi about lunch while a coder sat parked on a question (the 2026-09-03 break test), because
     a blocked row must come back with the new chat."""
+    # ...but a notice the owner put down stays down: a new chat does not raise a finished agent again (PW-166)
+    for k, st in store.funnel_states().items():
+        if k.startswith('notice:') and st.get('Status') == 'ack': store.clear_funnel_state(k)
     store.clear_funnel_states(('ack',))
     for k, st in store.funnel_states().items():
         if k.startswith('agent:') and st.get('Status') == 'surfaced': store.clear_funnel_state(k)
@@ -878,7 +1083,7 @@ def alerts(store, items: list = None) -> list:
     out = []
     for i in items:
         if i.get('surfaced'): continue                                 # already on, or past, the table
-        if i['kind'] == 'meeting' and i.get('mins', 999) <= ALERT_MIN:
+        if i['kind'] == 'meeting' and not _not_yet(i):
             when = 'is starting now' if i['mins'] <= 0 else f"starts in {i['mins']} min"
             out.append({'key': f"alert:{i['key']}", 'item': i['key'], 'kind': 'meeting', 'lane': i['lane'],
                         'text': f"{i['title']} {when}" + (f" with {i['who']}" if i.get('who') else '')})
@@ -894,15 +1099,19 @@ def alerts(store, items: list = None) -> list:
             what = ('reply is waiting for your yes' if i['kind'] == 'review' else 'proposed action is waiting for your yes' if i['kind'] == 'action'
                     else f"urgent: {i['title']}")
             out.append({'key': f"alert:{i['key']}", 'item': i['key'], 'kind': i['kind'], 'lane': i['lane'], 'text': f"{who}{what}"})
-    return [a for a in out if (states.get(a['key']) or {}).get('Status') != 'ack']
+    bands = {i['key']: _band(i) for i in items}
+    return ([a | {'order_band': bands.get(a['item'], 3)} for a in out
+             if (states.get(a['key']) or {}).get('Status') != 'ack']
+            + notices(store, states))                                  # the watcher's own, kept until Open or Later
 
 
 def more_urgent(items: list, current_key: str = None) -> list:
     """What waits in a promoted lane while the owner is on something lesser - for the assistant to
     mention in a clause, and for the page to raise as a by-the-way."""
     cur = next((i for i in items if i['key'] == current_key), None)
-    band = _BAND.get(cur['lane'], 3) if cur else 3
-    return [i for i in items if not i.get('surfaced') and not i.get('settling') and _BAND.get(i['lane'], 3) < band and i['key'] != current_key]
+    band = _band(cur) if cur else 3
+    return [i for i in items if not i.get('surfaced') and not i.get('settling')
+            and not _not_yet(i) and _band(i) < band and i['key'] != current_key]
 
 
 def summary(items: list, coming: bool = True) -> str:

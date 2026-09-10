@@ -11,13 +11,14 @@ import unittest
 from taskuary import agents, ingest, outbound, responder, terminal
 from taskuary.store import MemoryStore
 
-MARK = {d: f'ZZMARK{d.upper()}ZZ' for d in ('soul', 'coder', 'triage', 'learned', 'style')}
-NOTE, OFF = 'ZZMARKNOTEZZ', 'ZZMARKOFFZZ'
+MARK = {d: f'ZZMARK{d.upper()}ZZ' for d in ('soul', 'agent', 'coder', 'triage', 'learned', 'style')}
+NOTE, OFF, WNOTE = 'ZZMARKNOTEZZ', 'ZZMARKOFFZZ', 'ZZMARKWRITEZZ'   # a triage verdict, a switched-off note, a writing instruction
 
 
 def seeded():
     s = MemoryStore()
     s.save_doc('soul', f'You work for **Test Owner**.\n{MARK["soul"]}\nrepo map here.', 'owner')
+    s.save_doc('agent', f'# Agent rules\n- {MARK["agent"]}', 'owner')
     s.save_doc('coder', f'# Coder rules\n- {MARK["coder"]}', 'owner')
     s.save_doc('triage', f'Classify one inbound work message. Answer JSON only. {MARK["triage"]}', 'owner')
     # LEARNED.md injects its ACTIVE sections only, so the marker has to live inside one
@@ -26,6 +27,8 @@ def seeded():
     s.save_doc('style', f'### Tone & length\n- {MARK["style"]}: two sentences, answer first, no preamble.', 'owner')
     s.add_memory({'Scope': 'global', 'ScopeKey': None, 'Note': f'{NOTE} always defer to the finance team',
                   'Source': 'verdict', 'Active': 1, 'CreatedBy': 'owner'})
+    s.add_memory({'Scope': 'global', 'ScopeKey': None, 'Note': f'{WNOTE} never open with a pleasantry',
+                  'Source': 'writing', 'Active': 1, 'CreatedBy': 'owner'})
     s.add_memory({'Scope': 'global', 'ScopeKey': None, 'Note': f'{OFF} a switched-off note',
                   'Source': 'verdict', 'Active': 0, 'CreatedBy': 'owner'})
     return s
@@ -52,25 +55,27 @@ class DocsReachThePromptTests(unittest.TestCase):
         self.assertFlows(seen['p'], [MARK['triage'], MARK['soul'], MARK['learned'], NOTE],
                          forbid=[MARK['coder'], MARK['style']])
 
-    def test_both_reply_paths_get_soul_style_learned_and_the_notes(self):
+    def test_both_reply_paths_get_soul_style_and_writing_notes_but_not_learned_or_verdicts(self):
+        """PW-058/060: a reply is written from SOUL (identity), STYLE (voice) and explicit writing instructions;
+        LEARNED.md and the owner's routing verdicts are triage's and stay out of the draft."""
         s = seeded()
         tid = _task(s, 'reply', 'Can you confirm the date?')
         seen = {}
         responder.draft_reply(s, tid, llm=lambda sysm, usr, **k: (seen.update(p=sysm + usr), 'ok')[1])
-        self.assertFlows(seen['p'], [MARK['soul'], MARK['style'], MARK['learned'], NOTE], forbid=[MARK['coder']])
+        self.assertFlows(seen['p'], [MARK['soul'], MARK['style'], WNOTE], forbid=[MARK['coder'], MARK['learned'], NOTE])
         mid = s.add_message({'ExternalId': 'r2', 'Channel': 'email', 'Subject': 'quick question',
                              'FromEmail': 'a@b.com', 'BodyText': 'Can you confirm the date?', 'Status': 'filed'})
         rid = s.add_review({'MessageId': mid, 'Kind': 'draft', 'Status': 'pending'})
         seen2 = {}
         responder.draft_for_message(s, s.get_message(mid), rid,
                                     llm=lambda sysm, usr, **k: (seen2.update(p=sysm + usr), 'ok')[1])
-        self.assertFlows(seen2['p'], [MARK['soul'], MARK['style'], MARK['learned'], NOTE], forbid=[MARK['coder']])
+        self.assertFlows(seen2['p'], [MARK['soul'], MARK['style'], WNOTE], forbid=[MARK['coder'], MARK['learned'], NOTE])
 
-    def test_the_coding_agent_gets_soul_coder_and_the_notes(self):
+    def test_the_coding_agent_gets_agent_coder_and_the_notes_but_not_soul(self):
         """The notes are the part that was missing: an agent was handed the operator rules and
         the coder rules, and none of the verdicts the owner had actually given."""
         s = seeded()
-        self.assertFlows(terminal.seed_text(s, _task(s)), [MARK['soul'], MARK['coder'], NOTE])
+        self.assertFlows(terminal.seed_text(s, _task(s)), [MARK['agent'], MARK['coder'], NOTE], forbid=[MARK['soul']])   # PW-184: SOUL stays with triage
 
     def test_task_context_and_the_handoff_writer_carry_them_too(self):
         s = seeded()

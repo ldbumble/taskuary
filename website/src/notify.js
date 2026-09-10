@@ -20,7 +20,8 @@ export function notifyState(connectors, level = "needs_me", phoneApprovals = fal
   const able = all.filter((c) => CAN_NOTIFY.has(c.Type));
   const named = able.filter((c) => c.Active && notifyChat(c));
   const phoneNamed = named.filter((c) => c.Type === "telegram" || c.Type === "whatsapp");
-  const guideAble = (connectors || []).filter((c) => c.Type === "whatsapp");
+  // the assistant answers in WhatsApp and in Telegram - both carry the same walk (remote_assistant.CHANNELS)
+  const guideAble = (connectors || []).filter((c) => c.Type === "whatsapp" || c.Type === "telegram");
   const guideNamed = guideAble.filter((c) => c.Active && assistantChat(c));
   const guideAsleep = guideAble.filter((c) => !c.Active && assistantChat(c));
   const asleep = able.filter((c) => !c.Active && notifyChat(c));
@@ -30,18 +31,18 @@ export function notifyState(connectors, level = "needs_me", phoneApprovals = fal
   const note = stale.length ? ` ${names(stale)} still carries the role but cannot send — clear it on its card.` : "";
   const one = (cs) => cs.length === 1;
   if (level === "off" && phoneAssistant && guideNamed.length) return { kind: "pinging", targets: guideNamed, stale,
-    text: `Push alerts are off; the WhatsApp guide is listening in ${guideNamed.map((c) => `${c.Name} · ${assistantChat(c)}`).join(" · ")}.` + note };
+    text: `Push alerts are off; the assistant is listening in ${guideNamed.map((c) => `${c.Name} · ${assistantChat(c)}`).join(" · ")}.` + note };
   if (level === "off") return { kind: "off", targets: [], stale,
     text: "Pushes are off — nothing is sent, even if a chat is named."
-      + (phoneAssistant ? " The WhatsApp guide still needs an active, private WhatsApp self-chat." : "") + note };
+      + (phoneAssistant ? " The assistant still needs an active, private WhatsApp or Telegram chat." : "") + note };
   if (named.length) return { kind: "pinging", targets: named, stale,
     text: `Pinging ${named.map((c) => `${c.Name} · ${notifyChat(c)}`).join(" · ")}`
       + (phoneApprovals && phoneNamed.length ? " — reply there to answer agents or approve drafts" : "")
       + (phoneApprovals && !phoneNamed.length ? " — phone replies need a Telegram or WhatsApp notify chat" : "")
-      + (phoneAssistant && guideNamed.length ? " — ask the Taskuary guide from that WhatsApp chat" : "")
-      + (phoneAssistant && !guideNamed.length ? " — assistant chat needs a private WhatsApp self-chat" : "") + note };
+      + (phoneAssistant && guideNamed.length ? " — the assistant walks you through your work in that chat too" : "")
+      + (phoneAssistant && !guideNamed.length ? " — the assistant needs a private WhatsApp or Telegram chat of its own" : "") + note };
   if (phoneAssistant && guideNamed.length) return { kind: "pinging", targets: guideNamed, stale,
-    text: `Ordinary push alerts are not configured; the WhatsApp guide is listening in ${guideNamed.map((c) => `${c.Name} · ${assistantChat(c)}`).join(" · ")}.` + note };
+    text: `Ordinary push alerts are not configured; the assistant is listening in ${guideNamed.map((c) => `${c.Name} · ${assistantChat(c)}`).join(" · ")}.` + note };
   if (phoneAssistant && guideAsleep.length) return { kind: "inactive", targets: guideAsleep, stale,
     text: `${names(guideAsleep)} ${one(guideAsleep) ? "has an Assistant chat but is" : "have Assistant chats but are"} switched off — enable ${one(guideAsleep) ? "it" : "them"} on the connector card.` + note };
   if (asleep.length) return { kind: "inactive", targets: asleep, stale,
@@ -53,5 +54,5 @@ export function notifyState(connectors, level = "needs_me", phoneApprovals = fal
   return { kind: "none", targets: [], stale,
     text: "No notify chat yet — on a Telegram, WhatsApp or Teams card, add the Notifications role"
       + " and name the chat in Credentials."
-      + (phoneAssistant ? " The Assistant separately needs a private WhatsApp self-chat." : "") + note };
+      + (phoneAssistant ? " The assistant separately needs a private WhatsApp or Telegram chat." : "") + note };
 }

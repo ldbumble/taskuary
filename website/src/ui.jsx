@@ -7,6 +7,8 @@ import BlockIcon from "@mui/icons-material/Block";
 import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import api from "./api";
 import { onLive } from "./live.js";
+import { outcomeOf } from "./dispatchOutcome.js";
+import { RepoPicker } from "./RepoPicker.jsx";
 import { Md } from "./md.jsx";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import GroupsIcon from "@mui/icons-material/Groups";
@@ -819,6 +821,7 @@ export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, r
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(null);
+  const [repoAsk, setRepoAsk] = useState(null);     // a repository DECISION, never reported as a start (PW-212)
   const [err, setErr] = useState("");
   useEffect(() => { if (agents.length && !agents.includes(agent)) setAgent(agents[0]); }, [agents, agent]);
   const send = async () => {
@@ -828,16 +831,28 @@ export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, r
       const { data } = await api.post(`/api/messages/${messageId}/dispatch`,
         { kind: agentKind, agent: coding ? agent : null,
           model: model || null, instruction: prompt.trim() || null });
-      setSent(data); setPrompt("");
-      onOpenTask?.(data.taskId);          // the session IS the page - go watch it
+      const outcome = outcomeOf(data);
+      if (outcome.state === "needs_repo") { setRepoAsk({ taskId: data.taskId, agent: data.agent || agent }); }
+      else {
+        setRepoAsk(null); setSent({ ...data, outcome }); setPrompt("");
+        onOpenTask?.(data.taskId);          // the session IS the page - go watch it
+      }
     } catch (e) { setErr(e?.response?.data?.detail || "Could not reach the agent"); }
     setBusy(false);
   };
+  if (repoAsk) return (
+    <Box sx={{ mt: 1, p: 1.25, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
+      <Typography variant="caption" sx={{ color: DIM, fontWeight: 700, display: "block", mb: 0.5 }}>Which repository should the coding agent use?</Typography>
+      <RepoPicker taskId={repoAsk.taskId} agent={repoAsk.agent}
+        onDone={(data) => { if (data?.repo) { setRepoAsk(null); send(); } }} />
+      <Button size="small" sx={{ fontSize: 11, color: DIM }} onClick={() => setRepoAsk(null)}>Not now - nothing was started</Button>
+    </Box>
+  );
   if (sent) return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: dense ? 0.5 : 1 }}>
       <TaskuaryMark size={16} />
       <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>
-        {sent.agent || "The agent"} is on it in a live session — {sent.ref}
+        {sent.outcome?.text || `${sent.agent || "The agent"} is on it in a live session — ${sent.ref}`}
       </Typography>
       <Button size="small" sx={{ fontSize: 11 }} onClick={() => onOpenTask?.(sent.taskId)}>watch it live →</Button>
       <Button size="small" sx={{ fontSize: 11, color: DIM }} onClick={() => setSent(null)}>send another</Button>
@@ -1111,7 +1126,9 @@ export const UnderTabs = ({ tabs, value, onChange }) => (
   </Box>
 );
 
-export const LandingCard = ({ icon, title, desc, onOpen }) => (
+// `foot` is a line UNDER the description that is not part of the card's click (an Install
+// button there must not also open the card's form)
+export const LandingCard = ({ icon, title, desc, onOpen, foot }) => (
   <Box onClick={onOpen} sx={{ display: "flex", gap: 1.5, cursor: "pointer", alignItems: "flex-start",
     "&:hover .thubPgTitle": { textDecoration: "underline" } }}>
     <Box sx={{ width: 38, height: 38, borderRadius: 2, bgcolor: "#fff", border: "1px solid #e1dcd5",
@@ -1122,6 +1139,7 @@ export const LandingCard = ({ icon, title, desc, onOpen }) => (
     <Box sx={{ minWidth: 0 }}>
       <Typography className="thubPgTitle" sx={{ color: "#55697a", fontWeight: 700, fontSize: 14.5, lineHeight: 1.3 }}>{title}</Typography>
       <Typography variant="body2" sx={{ color: DIM, mt: 0.25 }}>{desc}</Typography>
+      {foot && <Box onClick={(e) => e.stopPropagation()}>{foot}</Box>}
     </Box>
   </Box>
 );

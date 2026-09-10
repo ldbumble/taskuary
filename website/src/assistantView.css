@@ -16,7 +16,10 @@
 .tq-pile-row { position: absolute; left: 0; right: 0; height: 30px; display: grid; grid-template-columns: 70px 14px minmax(0, 1fr); align-items: stretch;
   transition: top .55s cubic-bezier(.2,.8,.2,1), opacity .3s ease, transform .3s ease; }
 .tq-pile-row.landing { opacity: 0; transform: translateY(-6px) scale(.98); }
-.tq-pile-row .when { font: 500 10px 'IBM Plex Mono', Consolas, monospace; color: #a09b92; text-align: right; padding: 6px 12px 0 8px; white-space: nowrap; letter-spacing: -.2px; font-variant-numeric: tabular-nums; }
+.tq-pile-row .when { font: 500 10px 'IBM Plex Mono', Consolas, monospace; color: #a09b92; text-align: right; padding: 5px 12px 0 8px; white-space: nowrap; letter-spacing: -.2px; font-variant-numeric: tabular-nums; line-height: 1.25; }
+/* the day under the clock, for a row that is not from today - quieter than the time, and it
+   takes no width from the title: the gutter is already 70px wide for "11:53 AM" */
+.tq-pile-row .when i.day { display: block; font-style: normal; font-size: 9px; color: #b8b2a8; letter-spacing: 0; }
 .tq-pile-row .rail { position: relative; }
 .tq-pile-row .rail::before { content: ""; position: absolute; left: 6px; top: -5px; bottom: -5px; width: 1px; background: #e1dcd5; }
 .tq-pile-row .rail i { position: absolute; left: 2.5px; top: 9px; width: 8px; height: 8px; border-radius: 50%; background: #d3ccc1; box-shadow: 0 0 0 3px #fffdfb; }
@@ -77,7 +80,16 @@
 .tq-chip:hover { border-color: #55697a; background: #f4f6f8; }
 .tq-chip:disabled { opacity: .5; cursor: default; }
 .tq-chip.primary { background: linear-gradient(90deg, #55697a, #7d9a7c); color: #fff; border-color: transparent; }
-.tq-options { display: flex; gap: 6px; flex-wrap: wrap; margin: 2px 0 14px 38px; }
+/* the proposal card's own Confirm/Cancel row (ProposalCard.jsx) - not the chat's verbs */
+.tq-options { display: flex; gap: 6px; flex-wrap: wrap; }
+.tq-verbs { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; margin: 9px 0 1px; }
+.tq-verb { border: 1px solid #ddd8cf; background: transparent; color: #55697a; border-radius: 99px;
+  padding: 3px 10px; font: 600 11px 'IBM Plex Sans', system-ui, sans-serif; cursor: pointer; transition: all .13s; }
+.tq-verb:hover { border-color: #55697a; background: #f2f5f7; color: #33424d; }
+.tq-verb:focus-visible { outline: 2px solid #7d9a7c; outline-offset: 2px; }
+.tq-verb:disabled { opacity: .45; cursor: default; }
+.tq-verb.primary { border-color: #8fa38f; background: #f1f5f1; color: #3f5943; }
+.tq-verb.primary:hover { background: #e6ede6; }
 
 /* the card under a line: paper, a hairline, the lane's colour on the left edge only */
 .tq-card { margin: 8px 0 4px; border: 1px solid #ddd8cf; border-left-width: 4px; border-radius: 11px; background: #fffdf9; padding: 10px 12px; box-shadow: 0 4px 16px rgba(51,45,35,.06); }
@@ -92,7 +104,24 @@
 .tq-fyi-row button { text-transform: none; font-size: 10.5px; min-width: 0; padding: 1px 6px; }
 .tq-fyi-gist { margin: 2px 0 0 20px; font-size: 11px; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-card-term { margin-top: 8px; border-radius: 8px; overflow: hidden; border: 1px solid #2a2b33; background: #1e1e2e; }
+/* the assistant's own chat in the card: the page's ground, not a terminal's */
+.tq-card-chat { margin-top: 8px; border-radius: 8px; overflow: hidden; border: 1px solid #ddd6c8; background: #faf7f1; display: flex; flex-direction: column; }
+.tq-card-chat > * { flex: 1; min-height: 0; }
 .tq-card-full { margin-top: 7px; padding: 10px 12px; border-radius: 8px; background: #f6f4f1; border: 1px solid #ebe6de; font-size: 12.5px; line-height: 1.55; color: #262521; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; }
+.tq-task-focus { margin-top: 9px; padding: 12px 14px 13px; border: 1px solid #b9c8bb; border-radius: 9px; background: #fff;
+  box-shadow: 0 2px 8px rgba(63,89,67,.08); color: #252923; }
+.tq-task-focus-label { display: flex; align-items: center; gap: 8px; color: #58705c;
+  font: 750 10px/1.2 'IBM Plex Mono', Consolas, monospace; letter-spacing: .13em; text-transform: uppercase; }
+.tq-task-focus-label em { margin-left: auto; color: #747b73; font-style: normal; font-weight: 600; letter-spacing: 0; text-transform: none; }
+.tq-task-box { width: 17px; height: 17px; flex: 0 0 17px; display: inline-grid; place-items: center; border: 2px solid #718b75;
+  border-radius: 4px; color: #fff; background: #fff; font: 750 12px/1 'IBM Plex Sans', system-ui, sans-serif; }
+.tq-task-focus-text { margin: 8px 0 0 25px; font-size: 16px; line-height: 1.42; font-weight: 700; color: #20231f; overflow-wrap: anywhere; }
+.tq-task-focus-list { margin: 11px 0 0 25px; padding-top: 9px; border-top: 1px solid #e0e7e1; display: grid; gap: 7px; }
+.tq-task-focus-item { display: flex; align-items: flex-start; gap: 9px; font-size: 13px; line-height: 1.4; color: #30332e; }
+.tq-task-focus-item .tq-task-box { margin-top: 1px; width: 16px; height: 16px; flex-basis: 16px; }
+.tq-task-focus-item.done { color: #777c74; text-decoration: line-through; }
+.tq-task-focus-item.done .tq-task-box { background: #718b75; }
+.tq-card-context { margin-top: 8px; }
 .tq-card-kicker em { margin-left: auto; font-style: normal; letter-spacing: .04em; text-transform: none; color: #989188; }
 .tq-card-title { margin-top: 5px; font-size: 13px; font-weight: 700; color: #262521; line-height: 1.35; overflow-wrap: anywhere; }
 .tq-card-sub { font-size: 11px; color: #6e685f; margin-top: 2px; overflow-wrap: anywhere; }
@@ -114,8 +143,6 @@
 
 /* the composer */
 .tq-compose { padding: 6px 20px 10px; border-top: 1px solid #e4e0d9; background: #fffdfb; }
-.tq-quick { display: flex; gap: 6px; flex-wrap: wrap; width: min(900px, 100%); margin: 0 auto 8px; }
-.tq-quick .tq-chip { padding: 3px 10px; font-size: 10.5px; }
 .tq-compose-box { width: min(900px, 100%); margin: 0 auto; display: flex; align-items: center; gap: 5px; padding: 6px 7px; border: 1px solid #d5d0c7; background: #fff; border-radius: 13px; box-shadow: 0 2px 8px #39352d0b; }
 .tq-compose-box textarea { flex: 1; min-width: 0; min-height: 34px; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; color: #292824; font: inherit; font-size: 13px; line-height: 1.45; padding: 7px 5px; max-height: 150px; }
 .tq-compose-box textarea::placeholder { color: #8f8b84; }
@@ -125,9 +152,12 @@
 .tq-send { width: 34px; height: 34px; flex: 0 0 34px; border: 0; border-radius: 9px; display: grid; place-items: center; cursor: pointer; color: white; background: #738275; }
 .tq-send:disabled { opacity: .4; cursor: default; }
 .tq-compose-hint { margin: 5px auto 0; text-align: center; color: #a09b92; font: 9px/1.2 'IBM Plex Mono', Consolas, monospace; }
-.tq-whatsapp-connect { margin: 7px auto 0; padding: 3px 8px; border: 0; background: transparent; color: #58705e; display: flex; align-items: center; gap: 5px; font: inherit; font-size: 10.5px; font-weight: 600; line-height: 1.2; cursor: pointer; border-radius: 7px; }
-.tq-whatsapp-connect:hover { color: #36533e; background: #edf4ee; }
-.tq-whatsapp-connect:focus-visible { outline: 2px solid #7d9a7c; outline-offset: 2px; }
+/* the walk is on the phone: the composer is replaced by the way back, never sat beside it */
+.tq-handed { margin: 0 20px 10px; padding: 10px 12px; border: 1px solid #d5d0c7; border-top-width: 1px; border-radius: 12px; background: #fffdfb; display: flex; align-items: center; gap: 10px; color: #4a5d4f; }
+.tq-handed .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tq-handed .txt b { font-size: 12.5px; color: #262521; }
+.tq-handed .txt span { font-size: 11px; color: #77726a; }
+.tq-chip-chat { display: inline-flex; align-items: center; gap: 5px; }
 
 /* past chats, slid over the thread */
 .tq-chats { position: absolute; inset: 0; background: #fffdfbf2; backdrop-filter: blur(2px); z-index: 5; display: flex; flex-direction: column; }
@@ -144,5 +174,5 @@
   .tq-phone-hide { display: none !important; }   /* the voice and AI knobs: room for the name and the mode toggle */
   .tq-msg.you .body { max-width: 92%; }
   .tq-chat-body { padding: 12px 12px 6px; }
-  .tq-compose, .tq-btw { padding-left: 12px; padding-right: 12px; margin-left: 12px; margin-right: 12px; }
+  .tq-compose, .tq-btw, .tq-handed { padding-left: 12px; padding-right: 12px; margin-left: 12px; margin-right: 12px; }
 }

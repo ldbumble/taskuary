@@ -22,73 +22,77 @@ JOB_SCOPE = ("Not really velocity. I think the bigger change is what the job has
 
 
 class KindTests(unittest.TestCase):
-    """The keyword scan's "I cannot tell" answer is `task` - the owner's own list. It used to be
-    `general`, which meant the same thing until general came to mean the assistant's chat; a scan
-    that could not read the message has no business opening a conversation about it."""
+    """The keyword scan's "I cannot tell" answer is `general` (the owner, 2026-09-05, PW-067): a
+    general agent can read and think about anything, and no coding session starts on a keyword
+    guess. It used to be `task`, and before that a keyword hit for "deploy" or a traceback opened
+    a coding session on its own - the classifier's explicit `coding` is what does that now."""
     def test_prose_that_merely_mentions_deployment_is_not_coding(self):
-        self.assertEqual(draft_task_fields({'subject': 'Teams chat with Priya', 'body': JOB_SCOPE})['kind'], 'task')
+        self.assertEqual(draft_task_fields({'subject': 'Teams chat with Priya', 'body': JOB_SCOPE})['kind'], 'general')
 
     def test_one_soft_word_is_somebody_talking_about_their_week(self):
         for body in ("We had an error in judgement on the vendor call.",
                      "The deploy team is hiring two people this quarter.",
                      "My endpoint of the process is the monthly close."):
-            self.assertEqual(draft_task_fields({'subject': 'chat', 'body': body})['kind'], 'task', body)
+            self.assertEqual(draft_task_fields({'subject': 'chat', 'body': body})['kind'], 'general', body)
 
-    def test_two_soft_words_together_are_a_report(self):
-        f = draft_task_fields({'subject': 'export', 'body': 'The nightly export is broken and the deploy failed.'})
-        self.assertEqual(f['kind'], 'coding')
-
-    def test_one_hard_signal_is_enough_on_its_own(self):
-        for body in ('Traceback (most recent call last):\n  File "app/run.py", line 3',
+    def test_code_words_alone_no_longer_buy_a_coding_session(self):
+        for body in ('The nightly export is broken and the deploy failed.',
+                     'Traceback (most recent call last):\n  File "app/run.py", line 3',
                      'see https://github.com/o/r/pull/18 when you can',
-                     'the importer returns a 500 error every night',
                      'please look at services/export.py'):
-            self.assertEqual(draft_task_fields({'subject': 'x', 'body': body})['kind'], 'coding', body)
+            self.assertEqual(draft_task_fields({'subject': 'x', 'body': body})['kind'], 'general', body)
+
+    def test_the_classifiers_explicit_kind_is_kept(self):
+        self.assertEqual(draft_task_fields({'subject': 'x', 'body': 'x'}, kind='coding')['kind'], 'coding')
+        self.assertEqual(draft_task_fields({'subject': 'x', 'body': 'x'}, kind='task')['kind'], 'task')
+        self.assertEqual(draft_task_fields({'subject': 'x', 'body': 'x'}, kind='robot')['kind'], 'general')
 
     def test_a_question_is_still_a_reply(self):
         self.assertEqual(draft_task_fields({'subject': 'T&E', 'body': 'Can you send me the numbers?'})['kind'], 'reply')
 
-    def test_real_work_with_no_code_in_it_is_a_task_not_coding(self):
-        """Chasing a vendor IS a task - it just has no repository, so no agent is dispatched."""
+    def test_real_work_with_no_code_in_it_is_general_not_coding(self):
+        """Chasing a vendor is work with no repository: the assistant can help think it through; no agent is dispatched."""
         f = draft_task_fields({'subject': 'March invoice', 'body': 'The vendor never sent it. Someone needs to chase them.'})
-        self.assertEqual(f['kind'], 'task')
+        self.assertEqual(f['kind'], 'general')
 
 
 class DispatchGateTests(unittest.TestCase):
     """The gate used to be "not a reply", so EVERY other kind - including the ones the task
-    pickers never even offered - opened a coding session."""
-    def _ingest(self, subject, body):
-        """intent_classify_enabled=0 is the app's own "everything is a task" path - no AI
-        needed, and it puts the KIND heuristic and the dispatch gate under the microscope,
-        which is the pair that failed."""
+    pickers never even offered - opened a coding session. Now only the classifier's explicit
+    `coding` does (PW-067/PW-068): with triage switched off nothing names a kind, the task is
+    general, and no session is bought on a keyword guess."""
+    def _ingest(self, subject, body, llm=None, classify='0'):
         s = MemoryStore()
         s.set_setting('coder_auto_enabled', '1', 'o')
-        s.set_setting('intent_classify_enabled', '0', 'o')
-        with mock.patch('taskuary.ingest._spawn') as spawn:
+        s.set_setting('intent_classify_enabled', classify, 'o')
+        from taskuary import general
+        with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude'}]):
             out = ingest_message(s, {'external_id': 'x1', 'channel': 'teams', 'subject': subject,
-                                     'body': body, 'from_name': 'Someone', 'from_email': 'a@b.c'})
+                                     'body': body, 'from_name': 'Someone', 'from_email': 'a@b.c'}, llm=llm)
         started = [c for c in spawn.call_args_list if getattr(c[0][0], '__name__', '') == '_auto_code']
         return s, out, started
 
-    def test_a_task_with_no_code_in_it_waits_on_your_list(self):
-        """The owner's rule as it now stands (2026-08-30): almost everything goes to the agent,
-        and the one exception is work that is clearly not a coding job. `kind` carries that
-        verdict - here from the keyword scan, because this path has triage switched off."""
+    def test_a_task_with_no_code_in_it_is_general_and_buys_no_session(self):
         s, out, started = self._ingest('Teams chat with Priya', JOB_SCOPE)
         self.assertEqual(started, [])                                    # no session bought
-        # `task`, not `general`: general is the assistant's chat now, and a keyword scan that
-        # could not tell what this is should not open one
-        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'task')     # and labelled honestly
+        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')  # labelled with the default, honestly
 
-    def test_a_real_bug_report_still_reaches_the_coder(self):
+    def test_code_words_without_a_classifier_no_longer_reach_the_coder(self):
         s, out, started = self._ingest('export down', 'The export is broken and the deploy failed.')
+        self.assertEqual(started, [])
+        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')
+
+    def test_the_classifiers_explicit_coding_still_reaches_the_coder(self):
+        s, out, started = self._ingest('export down', 'The export is broken and the deploy failed.',
+                                       llm=lambda *a, **k: '{"intent": "task", "kind": "coding", "why": "a broken job"}', classify='1')
         self.assertEqual(len(started), 1)
         self.assertEqual(s.get_task(out['task_id'])['Kind'], 'coding')
 
     def test_the_route_line_says_which_way_it_went(self):
         s, _out, _ = self._ingest('Teams chat with Priya', JOB_SCOPE)
-        self.assertIn('yours to do', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
-        s2, _out2, _ = self._ingest('export down', 'The export is broken and the deploy failed.')
+        self.assertIn('sent to the assistant', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])   # PW-069: general starts its assistant
+        s2, _out2, _ = self._ingest('export down', 'The export is broken and the deploy failed.',
+                                    llm=lambda *a, **k: '{"intent": "task", "kind": "coding", "why": "a broken job"}', classify='1')
         self.assertIn('sent to the coding agent', s2._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
 
 

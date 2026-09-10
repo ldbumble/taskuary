@@ -3,18 +3,19 @@
 // Pure and dependency-free so it runs under bare node (test/funnelPile.test.mjs); colour is named
 // by ROLE (theme.jsx ROLES) so this file cannot drift from the palette.
 
-// the lanes, most urgent first - the order the server ranks the pile in
-export const LANES = ["blocked", "time", "approve", "broken", "asked", "forgotten", "report", "fyi", "working"];
+// Presentation lanes; the server supplies the five attention bands and item order.
+export const LANES = ["blocked", "time", "approve", "asked", "queued", "broken", "forgotten", "report", "fyi", "working"];
 export const LANE_META = {
   blocked:   { word: "agent waiting", role: "you",     mark: "👋", hint: "an agent stopped and is waiting on you — it is blocking work" },
   time:      { word: "coming up",     role: "working", mark: "⏱",  hint: "a meeting inside two hours, or an urgent sender" },
-  approve:   { word: "reply pending", role: "you",     mark: "✉️", hint: "a reply or an action is drafted and waits for you" },
+  approve:   { word: "needs your yes", role: "you",    mark: "✉️", hint: "a reply or an action is drafted and waits for you" },
   broken:    { word: "a check failed", role: "bad",     mark: "🛠",  hint: "a report or workflow you set up could not run - the cause is in it" },
   asked:     { word: "asked you",     role: "working", mark: "🙋", hint: "a person asked you for something and nobody is on it" },
+  queued:    { word: "waiting to start", role: "working", mark: "⏳", hint: "handed to an agent and not started yet" },
   forgotten: { word: "slipped",       role: "info",    mark: "🧵", hint: "the ask that slipped, the promise you made, the thread gone quiet" },
   report:    { word: "report",        role: "info",    mark: "📄", hint: "a report you set up landed, or an agent finished a job" },
   fyi:       { word: "fyi",           role: null,      mark: "👀", hint: "a person told you something — read it or don't" },
-  working:   { word: "agent working", role: "working", mark: "⚙️", hint: "an agent has it — nothing for you until it stops or asks; it drops to the front then" },
+  working:   { word: "agent working", role: "working", mark: "⚙️", hint: "an agent has it — nothing for you until it stops or asks; it moves up when it needs your input" },
 };
 export const laneMeta = (lane) => LANE_META[lane] || LANE_META.fyi;
 
@@ -47,18 +48,167 @@ export const arrivals = (prevKeys, items) => {
 };
 export const keysOf = (items) => new Set((items || []).map((i) => i.key));
 
+// ``rev`` is retained by the server for older clients, but it only described membership/lane.
+// New responses carry a full display revision, including complete cards and backing content.
+// Keeping this fallback lets the static demo and an older server continue to paint normally.
+export const displayRevision = (pile) => pile?.display_revision || pile?.rev || null;
+export const refreshPilePresentation = (current, fresh) => {
+  const revision = displayRevision(fresh);
+  if (!(current && revision && displayRevision(current) === revision)) return fresh;
+  // Selection capture is intentionally separate from the completed display revision. A transient
+  // unavailable result can therefore recover with the same rows/revision, and a newly captured
+  // token must still replace the disabled or older marker.
+  const membersMatch = Array.isArray(current.expected_next_members)
+    && Array.isArray(fresh.expected_next_members)
+    && current.expected_next_members.length === fresh.expected_next_members.length
+    && current.expected_next_members.every((member, index) => member === fresh.expected_next_members[index]);
+  const selectionMatches = current.selection_unavailable === fresh.selection_unavailable
+    && current.selection_invalidated === fresh.selection_invalidated
+    && current.selection_revision === fresh.selection_revision
+    && current.expected_next_key === fresh.expected_next_key
+    && (current.expected_next_members === undefined && fresh.expected_next_members === undefined || membersMatch);
+  return selectionMatches ? current : fresh;
+};
+
+// A completed pile response captures the server's exact automatic selection.  Keep the scope
+// beside the token in the browser: a token for "all except A" cannot authorize a mail-only walk,
+// nor can it authorize moving on after Current has changed to B.
+export const nextSelectionScope = (only = null, exclude = null, includeSurfaced = false) => ({
+  only: only || null,
+  include_surfaced: !!includeSurfaced,
+  exclude: exclude || null,
+});
+export const sameSelectionScope = (left, right) => !!left && !!right
+  && left.only === right.only
+  && left.include_surfaced === right.include_surfaced
+  && left.exclude === right.exclude;
+export const hasNextSelection = (pile) => !!pile
+  && (pile.selection_unavailable === true || pile.selection_invalidated === true
+    || (typeof pile.selection_revision === "string"
+    && Object.prototype.hasOwnProperty.call(pile, "expected_next_key")
+    && Array.isArray(pile.expected_next_members)));
+export const captureNextSelection = (pile, scope) => hasNextSelection(pile)
+  && !pile.selection_unavailable && !pile.selection_invalidated ? {
+  selection_revision: pile.selection_revision,
+  expected_next_key: pile.expected_next_key ?? null,
+  expected_next_members: [...pile.expected_next_members],
+  selection_pending: pile.selection_pending ?? null,
+  scope: nextSelectionScope(scope?.only, scope?.exclude, scope?.include_surfaced),
+} : null;
+export const nextSelectionBody = (capture) => ({
+  selection_revision: capture.selection_revision,
+  expected_next_key: capture.expected_next_key,
+  expected_next_members: [...capture.expected_next_members],
+  only: capture.scope.only,
+  include_surfaced: capture.scope.include_surfaced,
+  exclude: capture.scope.exclude,
+});
+export const nextMarkerKey = (pile, items, current) => {
+  if (hasNextSelection(pile))
+    return pile.expected_next_members[0] || pile.expected_next_key || null;
+  const eligible = (item) => !item.settling && item.lane !== "working" && item.key !== current?.key;
+  return ((items || []).find((item) => eligible(item) && !item.surfaced)
+    || (items || []).find(eligible))?.key || null;
+};
+export const canAdvanceSelection = (pile, ready, only = null) => {
+  if (!hasNextSelection(pile)) return (ready || []).length > 0;
+  if (pile.selection_unavailable || pile.selection_invalidated) return false;
+  if (pile.expected_next_key) return true;
+  // An empty mail capture is still a guarded operation: the server returns exhausted:"mail", the
+  // client drops that scope, and the following Next continues with non-mail work already in view.
+  return only === "mail" && (ready || []).length > 0;
+};
+
+// Both an initial HTTP conflict and a late streamed conflict carry this shape.  Keeping parsing
+// here lets the UI share one no-retry path and avoids rendering a structured `detail` object.
+export const selectionGuardDetail = (error) => {
+  const detail = error?.detail || error?.response?.data?.detail;
+  if (detail?.code === "selection_unavailable") return detail;
+  return detail?.code === "selection_stale" ? detail : null;
+};
+export const replaceSelectionToken = (pile, detail) => pile ? (detail.code === "selection_unavailable" ? {
+  ...pile, selection_unavailable: true, selection_invalidated: false,
+  expected_next_key: null, expected_next_members: [],
+  selection_pending: detail.selection_pending ?? null,
+} : typeof detail.selection_revision !== "string" || !Array.isArray(detail.expected_next_members) ? {
+  // The post-model commit guard can detect staleness after streaming began, when it cannot safely
+  // promise a replacement capture. Invalidate the old marker until the authoritative GET returns.
+  ...pile, selection_unavailable: false, selection_invalidated: true,
+  expected_next_key: null, expected_next_members: [],
+  selection_pending: detail.selection_pending ?? null,
+} : {
+  ...pile, selection_unavailable: false, selection_invalidated: false,
+  selection_revision: detail.selection_revision,
+  expected_next_key: detail.expected_next_key ?? null,
+  expected_next_members: [...detail.expected_next_members],
+  selection_pending: detail.selection_pending ?? null,
+}) : pile;
+
+// Until durable Current lands, reload restores the latest explicitly surfaced card. Passive
+// watcher cards stay readable in history but cannot silently become the conversation subject.
+export const restorableCurrent = (messages) => [...(messages || [])].reverse().find((message) =>
+  message?.card && !message.card.background_event
+  && !["brief", "setup", "agentdone"].includes(message.card.kind))?.card || null;
+// Which line carries the action words. It is the LAST thing Taskuary said, card or no card: an answer
+// to a typed question offers the same verbs as the line that introduced the item, and a receipt is not a
+// place to act. interactiveCardIndex is about the card inside the bubble and stays separate.
+export const lastSaidIndex = (messages) => {
+  for (let index = (messages || []).length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role !== "assistant") continue;
+    // A passive notice is something that HAPPENED, not somewhere to act - it is not about the thing on
+    // the table, and letting it take the words moved them off the item the owner was working on the
+    // moment a background update landed. interactiveCardIndex skips these for the same reason.
+    if (message.card?.background_event) continue;
+    return index;
+  }
+  return -1;
+};
+// The words offered under one line: the item's own verbs, or a clarifying choice the assistant asked
+// with (OPTIONS) - which goes back as words, not as a verb. Never both: one row, one place to look.
+export const chipsOf = (message) => {
+  const options = (message?.options || []).map((o) => ({ ask: o, label: o }));
+  if (options.length) return options;
+  return message?.chips || message?.card?.chips || [];
+};
+export const interactiveCardIndex = (messages) => {
+  for (let index = (messages || []).length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.card && !messages[index].card.background_event) return index;
+  }
+  return -1;
+};
+
 // A live task changes keys as ownership changes: msg:<mid> before dispatch, agent:<tid> while a
 // coder has it. The task id is the stable identity across that hand-off.
 export const followsItem = (card, fresh) => !!(card && fresh && (fresh.key === card.key
+  || (fresh.processing_id && fresh.aliases?.includes(card.key))
   || (fresh.tid && fresh.tid === card.tid && fresh.lane === "working")));
 export const currentItemFromPile = (current, pile) => {
   if (!current) return null;
   const items = pile?.items || [];
-  return (pile?.current?.key === current.key ? pile.current : null)
-    || items.find((i) => i.key === current.key)
+  // A server response scoped to Current is authoritative even when it says null. The one existing
+  // compatibility transition is a dispatched message becoming its task's working-agent row; that
+  // same-tid row is the accepted stable identity until shared canonical selection replaces it.
+  if (pile && Object.prototype.hasOwnProperty.call(pile, "current")) {
+    if (followsItem(current, pile.current)) return pile.current;
+    return current.tid ? items.find((i) => i.tid === current.tid && i.lane === "working") || null : null;
+  }
+  return items.find((i) => i.key === current.key)
     || (current.tid ? items.find((i) => i.tid === current.tid && i.lane === "working") : null)
     || null;
 };
+
+// A presentation revision covers the complete card and every backing input its lazy detail reads.
+// When it changes, use the server's complete replacement. Spreading over the old card would retain
+// fields that were deliberately removed, such as a cleared draft, preview, or agent tail.
+export const currentPresentationChanged = (current, fresh) => {
+  if (!current || !fresh) return current !== fresh;
+  if (current.presentation_revision && fresh.presentation_revision)
+    return current.presentation_revision !== fresh.presentation_revision;
+  return JSON.stringify(current) !== JSON.stringify(fresh);
+};
+export const refreshCurrentPresentation = (current, fresh) =>
+  currentPresentationChanged(current, fresh) ? fresh : current;
 
 // The card under a line is decided by the item's KIND, never by the model. Every kind maps to
 // exactly one card so a reload draws the same conversation.
@@ -107,13 +257,44 @@ export const statusLine = (items, busy) => {
   return `${n} in the pipe${you ? ` · ${you} on you` : ""}`;
 };
 
-// the pinned "by the way" bar: the first unacknowledged alert that OUTRANKS what is on the table -
-// a meeting or an agent always does; a draft for your yes only while you are on something lesser
-const BAND = { blocked: 0, time: 1, approve: 2, asked: 3, forgotten: 4, report: 5, fyi: 6, working: 9 };
-export const topAlert = (alerts, acked, current = null, shown = null) => {
-  const band = current ? (BAND[current.lane] ?? 3) : 5;
-  // ...and never about something already drawn in the conversation: its own card is on screen, with
-  // its own buttons, so a bar under it saying the same thing is noise (2026-09-03)
-  return (alerts || []).find((a) => !acked.has(a.key) && a.item !== current?.key && !shown?.has(a.item)
-    && (a.kind === "meeting" || a.kind === "agent" || (BAND[a.lane] ?? 3) < band)) || null;
+// New cards and alerts carry the server's band. Old persisted cards use the same
+// five-band fallback until their current presentation is refreshed.
+const BAND = { blocked: 2, time: 1, approve: 2, broken: 2, asked: 2, queued: 2, forgotten: 4, report: 3, fyi: 4, working: 5 };
+export const attentionBand = (item) => {
+  if (Number.isInteger(item?.order_band) && item.order_band >= 1 && item.order_band <= 5) return item.order_band;
+  // a meeting that is not imminent, and any row whose lane this build does not know, are the
+  // owner's to deal with - never a landed result, which is what band 3 now means
+  if (item?.kind === "meeting" && (item.calendar_ready === false || item.mins > 15)) return 2;
+  return BAND[item?.lane] ?? 2;
 };
+// Unread is ranked by attention, not by the clock, so a DATE over the rail said nothing about what
+// you were looking at - "Saturday, Sep 5" sat over rows from three different days (the owner,
+// 2026-09-07: "the date on top makes no sense on the unread tab since we don't sort by date"). The
+// dock names the LEVEL the rail is currently crossing instead, and its menu jumps between them.
+//
+// One level per thing triage decided, and no level it did not: work is one run whoever is waiting
+// on it, a landed result is not work, and an idea nobody has judged is an fyi. The words are the
+// levels - processing_order.attention_band is the same list on the server.
+export const LEVEL_META = {
+  urgent: { word: "urgent", hint: "a meeting inside fifteen minutes, or a sender on your escalate list" },
+  task: { word: "your task", hint: "an open task with no agent, a reply waiting for your yes, an agent waiting on your answer, a hand-off that has not started, a check that failed" },
+  reports: { word: "reports", hint: "a report you set up landed, or an agent finished a job" },
+  fyi: { word: "fyi", hint: "people told you things, and ideas nobody has turned into work - read them or don't" },
+  agents: { word: "agents working", hint: "an agent has these; nothing for you until one stops or asks" },
+};
+export const LEVEL_ORDER = ["urgent", "task", "reports", "fyi", "agents"];
+const LEVEL_OF_BAND = { 1: "urgent", 2: "task", 3: "reports", 4: "fyi", 5: "agents" };
+export const levelOf = (item) => LEVEL_OF_BAND[attentionBand(item)] || "fyi";
+export const levelLabel = (level) => LEVEL_META[level]?.word || "";
+// the levels actually present, in the order the rail draws them - the jump menu's entries
+export const levelsOf = (items) => LEVEL_ORDER.filter((level) => (items || []).some((i) => levelOf(i) === level));
+
+// The strip's queue (PW-165/166): a NOTICE (the watcher's word about an agent, a newer message on Current) is
+// always pending until Open or Later, whatever is on the table; an alert the pile derives from its own rows
+// shows only while it outranks the table and is not the very card in front of the owner.
+export const pendingAlerts = (alerts, acked, current = null, shown = null) => {
+  const band = current ? attentionBand(current) : 5;
+  return (alerts || []).filter((a) => !acked.has(a.key)
+    && (a.notice || (a.item !== current?.key && !shown?.has(a.item) && attentionBand(a) < band)));
+};
+export const topAlert = (alerts, acked, current = null, shown = null) => pendingAlerts(alerts, acked, current, shown)[0] || null;

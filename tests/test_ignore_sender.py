@@ -59,13 +59,16 @@ class IgnoreSenderTests(unittest.TestCase):
 
 class IgnoreScopeInstructionTests(unittest.TestCase):
     def test_the_chat_is_told_to_ask_which_ignore_was_meant(self):
-        """A bare "ignore it" names the act and not the scope, and scope is the part that lasts."""
+        """A bare "ignore it" names the act and not the scope, and scope is the part that lasts.
+        The rule to ask lives in COUNSEL now (PW-248/256); the code keeps only the three verbs."""
         from taskuary import concierge
         blob = ' '.join(str(getattr(concierge, n)) for n in dir(concierge)
                         if n.isupper() and isinstance(getattr(concierge, n), str))
-        self.assertIn('OPTIONS: just this once | this kind from now on | everything from this sender', blob)
         for verb in ('not_ours', 'not_ours_remember', 'not_ours_sender'):
             self.assertIn(verb, blob, verb)
+        # a blank store loads the shipped template - prove the rule REACHES the model, not just the file
+        system = ' '.join(concierge._system(MemoryStore()).split())
+        self.assertIn('OPTIONS: just this once | this kind from now on | everything from this sender', system)
 
     def test_an_fyi_says_why_triage_filed_it_and_what_can_be_done(self):
         """"nothing - read it if you like" is not an offer, and the verdict without its reason is

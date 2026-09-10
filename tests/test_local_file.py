@@ -1,7 +1,7 @@
 """A file on the owner's own computer as a report source. Taskuary already runs on that machine,
 so the spreadsheet somebody drops in a folder every morning should be a source like any other -
-and until now the choices were a WinRM script or nothing. smb_file (a NETWORK share) stays
-planned; this is a plain local path.
+and until now the choices were a WinRM script or nothing. This is a plain local path; a NETWORK
+share is the smb_file card (files.py, tests/test_files.py), which reuses the parsers below.
 """
 import json
 import os
@@ -104,7 +104,11 @@ class WiredInTests(unittest.TestCase):
     def test_it_is_offered_as_a_built_in_type_not_a_planned_one(self):
         types = {t['type']: t['status'] for t in c.get('/api/report-types').json()['data']}
         self.assertEqual(types.get('local_file'), 'builtin')
-        self.assertEqual(types.get('smb_file'), 'planned')      # a network share is still planned
+        # the network share is BUILT now (files.py, 2026-09-08) and its read is a report type like
+        # this one. 'smb_file' itself is no longer advertised at all: it is the CARD the three
+        # smb_* types run on, and a card is not something you can put on the Reports tab.
+        self.assertEqual(types.get('smb_read'), 'builtin')
+        self.assertIsNone(types.get('smb_file'))
 
     def test_reading_a_path_is_a_read_like_the_sqlite_beside_it(self):
         from taskuary.scopes import ACTIONS

@@ -6,16 +6,17 @@ const view = fs.readFileSync(new URL("../src/AssistantView.jsx", import.meta.url
 const card = fs.readFileSync(new URL("../src/assistantCards.jsx", import.meta.url), "utf8");
 const reviews = fs.readFileSync(new URL("../src/ReviewView.jsx", import.meta.url), "utf8");
 
-test("Assistant sends the message revision it saw and announces a newer live-chat line", () => {
+test("Assistant sends the message revision it saw and raises a newer live-chat line as a strip notice", () => {
   assert.match(view, /context_mid: currentItem\?\.mid/);
   assert.match(view, /New message from/);
-  assert.match(view, /I refreshed the context/);
+  assert.match(view, /The context is refreshed/);
+  assert.match(view, /const key = `notice:msg:\$\{fresh\.mid\}`;/);   // a notice on the strip, never a chat line (PW-165)
 });
 
 test("an open Assistant always pulls durable provider corrections", () => {
   assert.match(view, /Provider messages can arrive while this conversation is already open/);
   assert.match(view, /const \{ data: st \} = await api\.get\("\/api\/concierge"\)/);
-  assert.match(view, /onLive\(\["feed-changed", "task-changed"\], \(\) => loadPile\(true\)\)/);
+  assert.match(view, /onLive\(\["feed-changed", "task-changed"\], \(\) => \{ clearTimeout\(t\); t = setTimeout\(\(\) => loadPile\(true\), 1500\); \}\)/);
   assert.match(view, /pollWhileActive\(active, \(\) => loadPile\(false\), 30000\)/);
   assert.match(view, /if \(pileFlight\.current\)/);
   assert.match(view, /pileForcePending\.current = true/);
@@ -40,7 +41,7 @@ test("delayed next-card actions cannot cross a New chat boundary", () => {
 
 test("same-tick composer submits are synchronously locked", () => {
   assert.match(view, /const turnFlight = useRef\(false\)/);
-  assert.match(view, /if \(!t \|\| busy \|\| resetting \|\| turnFlight\.current\) return/);
+  assert.match(view, /if \(!t \|\| busy \|\| resetting \|\| handoff \|\| turnFlight\.current\) return/);
 });
 
 test("stale reply drafts cannot be approved until they are refreshed", () => {

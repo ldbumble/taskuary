@@ -19,6 +19,8 @@
 export const STATES = {
   triaging: { mark: "spinner", word: "triaging", role: "working",
               hint: "the message has arrived — triage is deciding where it belongs" },
+  error:   { mark: "⚠️", word: "triage failed", role: "muted",
+             hint: "triage could not classify this — nothing was started; open it and retry, or choose what it is" },
   waving:  { mark: "👋", word: "agent waving",  role: "you",     loud: true,
              hint: "the agent stopped and asked you something — open it and answer" },
   working: { mark: "taskuary", word: "agent working", role: "working",
@@ -46,6 +48,36 @@ export const STATES = {
 // the categories that mean "somebody told you something and there is nothing to do"
 const QUIET = new Set(["info", "automated", "promo", "filed", "ignored", "report", "feed", "yours", "triaging", "assistant"]);
 
+// The ROAD triage sent it down - and the word on the row, so the row and its Triage tab cannot
+// disagree (the owner, 2026-09-07: "the tag on the row should match what the triage shows nothing
+// else"). Pure and dependency-free, like the states above, so bare node can test it.
+// FIVE roads, because there are five places a message can go and there were only ever four
+// words for them. `general` used to read "only you can do it" - triage's old meaning - while the
+// Board, + New and GeneralWorkspace all treated the same Kind as the assistant's chat. One value,
+// two meanings, and the road nobody could act on. general IS chat now, everywhere, and the work
+// a person genuinely has to do in the world is its own road.
+export const ROADS = [
+  { key: "fyi", label: "fyi", hint: "nothing to do" },
+  { key: "reply", label: "reply", hint: "a sentence settles it" },
+  { key: "coding", label: "coding", hint: "an agent on a keyboard" },
+  { key: "general", label: "chat", hint: "talk it through with the assistant" },
+  { key: "task", label: "task", hint: "yours - nothing works it" },
+];
+// which road the route line says it took. `kind` decides coding vs general and rides on the
+// task, so the two are read from different places on purpose.
+export const roadOf = (sel) => {
+  const r = String(sel.RouteReason || "");
+  if (/triage:\s*fyi/.test(r)) return "fyi";
+  if (/triage:\s*reply_only/.test(r) || sel.TaskKind === "reply") return "reply";
+  if (sel.TaskKind === "coding") return "coding";
+  if (sel.TaskKind === "note") return null;                 // you wrote it; nothing judged it
+  if (sel.TaskKind === "task") return "task";               // a person has to do it in the world
+  return sel.TaskId ? "general" : null;
+};
+
+// the same rule for a PILE card, which carries the two fields under its own names (funnel._item)
+export const roadOfCard = (card) => roadOf({ RouteReason: card?.route, TaskKind: card?.task_kind, TaskId: card?.tid });
+
 export const HOLD_TAG = "hold:new-sender";
 export const hasTag = (row, tag) => String(row?.TaskTags || "").split(/[\s,]+/).includes(tag);
 
@@ -60,6 +92,9 @@ export function stateOf(row) {
   // you act on, whatever it was classified as while it did.
   if (row.MsgStatus === "withdrawn") return "withdrawn";
   if (row.MsgStatus === "triaging") return "triaging";
+  // failed triage is an error with a retry, never an fyi face - even when the failed follow-up
+  // is linked to a task (PW-036/037)
+  if (row.MsgStatus === "error") return "error";
   const pending = row.ReviewStatus === "pending";
   if (row.TaskStatus === "done" || row.TaskStatus === "dropped") return pending ? "reply" : "done";
   if (pending) return "reply";                          // a draft on the table is always the headline
@@ -97,6 +132,7 @@ export function subline(row, ref = (id) => `TQ-${String(id).padStart(4, "0")}`) 
   if (row.TaskId) bits.push(ref(row.TaskId));
   switch (stateOf(row)) {
     case "triaging": bits.push("triage is deciding what this is"); break;
+    case "error":   bits.push("triage failed — retry, or choose what it is"); break;
     case "waving":  bits.push(row.Working ? `${row.Working} asked you something` : "waiting on you — nothing is moving it"); break;
     case "working": bits.push(row.Working ? `${row.Working} has this open` : "an agent has this"); break;
     case "reply":   bits.push(undrafted(row) ? "waiting for your answer — nothing drafted yet" : "a reply is drafted — read it and send"); break;

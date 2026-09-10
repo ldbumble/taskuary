@@ -13,11 +13,14 @@ export const taskPhase = (status) => {
   return value;
 };
 
-export const agentPhase = ({ session, run, transcript, report } = {}) => {
+export const agentPhase = ({ session, run, transcript, report, conversation } = {}) => {
   if (session?.alive) return session.waiting ? "needs you" : "working";
   if (run?.Status === "running") return "working";
   if (report) return "result ready";
   if (transcript) return "stopped";
+  // General work keeps its record in the conversation, not in a pty. Its provider session ends
+  // with the answer, and the card then read "not started" over a chat full of work (owner, 2026-09-07).
+  if (conversation) return "in conversation";
   return "not started";
 };
 
@@ -38,6 +41,17 @@ export const replyPhase = (reviews = []) => {
   if (sentReplyReview(replyReviews)) return "sent";
   if (latest?.Status === "no_reply") return "not needed";
   return "not drafted";
+};
+
+// Three cards open at once never say which one is asking you for something. Exactly one stage is
+// the focus and the other two fold to their heading: a pending draft outranks everything (sending
+// it is the step that closes the task), then the agent, then the task itself.
+export const focusStage = ({ kind, task, agent, reply, hasSender } = {}) => {
+  if (reply === "draft ready") return "reply";
+  if (hasSender && kind === "reply" && !["sent", "not needed"].includes(reply)) return "reply";
+  if (["done", "dropped"].includes(task)) return "task";
+  if (["coding", "general"].includes(kind) || (agent && agent !== "not started")) return "agent";
+  return "task";
 };
 
 export const timelinePhases = (row) => ({

@@ -22,6 +22,9 @@ ASSISTANT_TYPE = 'assistant_agent'
 # Assistant workspace without a data migration.
 GENERAL_KINDS = {'general', 'research', 'marketing', 'triage', 'assistant'}
 DOCK_TAG = 'assistant:dock'
+SETUP_REF = 'assistant:setup'          # a walkthrough opened from the Assistant (concierge.setup_task)
+SETUP_SKILL = Path(__file__).parent / 'skills' / 'taskuary-setup' / 'SKILL.md'
+SETUP_SKILL_CHARS = 8_000
 SCROLLBACK = 200_000
 MAX_CONTEXT = 24_000
 MAX_REPLY_TOKENS = 2_000
@@ -99,6 +102,15 @@ def provider_options(store) -> list:
                     'pick': f"connector:{row['ConnectorId']}", 'type': row['Type'],
                     'label': f"{row.get('Name') or row['Type']} (API)", 'model': model})
     return out
+
+
+def default_pick(store) -> str:
+    """Which provider the chat would use if nobody chose one - the SAME reading start_session makes.
+
+    The workspace used to default its picker to providers[0], and provider_options lists CLIs first,
+    so a general task with no session nominated a CODING agent and posted that as its pick. The
+    server's own answer prefers an API brain and only falls back to a CLI when there is none."""
+    return _selected(store)[0]
 
 
 def _selected(store, connector_id=None, model=None, pick=None) -> tuple[str, str, str]:
@@ -297,12 +309,25 @@ def _turn_only(store, tid: int, text: str) -> str:
     return f'{task_ref(tid)} - the owner says:\n\n{_cut(text, 8_000)}'
 
 
+def setup_skill() -> str:
+    """The product's own setup procedure, shipped as a document so it can be corrected without a release of
+    new branching code (skills/taskuary-setup/SKILL.md, the soul-interview pattern)."""
+    try: return SETUP_SKILL.read_text(encoding='utf-8')
+    except OSError as e:
+        logger.warning(f'the setup skill could not be read: {e}')
+        return ''
+
+
 def _prompt(store, tid: int) -> tuple[str, str]:
     detail = store.task_detail(tid) or {}
     task = detail.get('task') or {}
     dock = is_dock(task)
-    soul = _cut(store.doc('soul') or '', 4_000)
-    counsel = _cut(store.doc('counsel') or '', 3_000)
+    # SOUL.md stays with triage (PW-184); the worker reads AGENT.md - the rules both kinds share, with the
+    # approval boundaries SOUL.md used to carry - and, because this work is writing, the assistant's voice
+    from . import brief as _brief
+    agent_rules = _cut(_brief.rules(store, 'agent', 4_000), 4_000)
+    from . import counsel as _counsel
+    counsel = _counsel.check_budget(store, 'counsel', _counsel.for_worker(store))   # the voice, whole (PW-258)
     # What is CERTIFIED about the company's own systems. Without it the assistant writes a
     # plausible ERP query, gets a plausible number, and states it with the confidence of a
     # proved one - which is the failure the semantic layer exists to prevent.
@@ -313,10 +338,28 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         "marketing, operational, and other non-coding work. The task and source material below are "
         "authoritative. Be direct and useful. Never claim you searched the web, opened a system, sent "
         "something, or changed a record unless a tool actually did it. Ask when a necessary fact is "
-        "missing. Do not turn this into a coding task or instruct a coding CLI.\n\n"
+        "missing. Do not turn this into a coding task or instruct a coding CLI.\n"
+        # Work that no repository can carry now lands here rather than stalling as a held coding task
+        # (ingest: no_repo). Some of it needs a tool nobody has wired - adding somebody to a Teams invite
+        # wants calendar WRITE, and Taskuary's calendar is read-only. Saying so in one line is the answer;
+        # a job that quietly does nothing is the failure (the owner, 2026-09-07: "if it's not capable of
+        # doing it, then it will say so").
+        "When the job needs an action you have no tool for, say exactly that in one line - name the "
+        "action, say it cannot be done from here, and say what you did instead (drafted it, gathered "
+        "what is needed, or found who can). Never leave the job looking attempted when it was not.\n\n"
         + (f'{layer}\n\n{TEACH_ME}\n\n' if layer else f'{TEACH_ME}\n\n')
-        + f"OPERATOR RULES\n{_cut(soul, 4_000)}\n\nASSISTANT STYLE\n{_cut(counsel, 3_000)}"
+        + f"RULES (AGENT.md - every worker)\n{agent_rules}\n\nASSISTANT STYLE\n{counsel}"
     )
+    # the procedure triage selected for this job rides here exactly as it rides in a coding brief
+    # (playbooks.seed_block) - one task-brief structure for either worker kind (PW-206)
+    from . import playbooks as _pbk
+    pbk = _pbk.seed_block(task)
+    if pbk: system += '\n\nPROCEDURE FOR THIS JOB\n' + _cut(pbk, 3_000)
+    # A setup walkthrough's procedure is a shipped SKILL the worker reads and adapts, never dialogue
+    # branching in here or a second assistant system prompt competing with this one (PW-190). It rides
+    # in the same slot a playbook does, so one task-brief structure serves both.
+    if str(task.get('SourceRef') or '') == SETUP_REF:
+        system += '\n\nPROCEDURE FOR THIS JOB\n' + _cut(setup_skill(), SETUP_SKILL_CHARS)
     if dock:
         system += (
             "\n\nHOVERING GUIDE\nThis conversation is the owner's always-available Taskuary guide. "
@@ -374,8 +417,10 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # about has an answer owed, and closing it drafts that answer. A task the owner opened to
     # think out loud in has nobody waiting, so it stays open until they say otherwise.
     if sources and selfclose.mode(store) != 'off': system = system + '\n\n' + selfclose.CHAT_LINE
+    md = store.checklist_markdown(tid) if hasattr(store, 'checklist_markdown') else ''
     head = (f"TASK {detail.get('ref') or tid}\nTITLE: {task.get('Title') or ''}\n"
-            f"SUMMARY: {task.get('Summary') or ''}\nSTATUS: {task.get('Status') or ''}\n\n"
+            f"SUMMARY: {task.get('Summary') or ''}\nSTATUS: {task.get('Status') or ''}\n"
+            + (f"CHECKLIST - what was asked for, as triage read it:\n{md}\n" if md else '') + "\n"
             + (dock_snapshot(store) + '\n\n' if dock else '')
             + (wall + '\n\n' if wall else '')
             + (hub_context.strip() + '\n\n' if hub_context else ''))
@@ -631,6 +676,10 @@ class GeneralSession:
             raise RuntimeError(f'the assistant has been answering the previous question for over '
                                f'{int(WAIT_TURN)}s - something is stuck. Press stop, or reload the page.')
         self.busy, self.last = True, time.time()
+        try:
+            from . import workerstate as ws
+            ws.record(self.store, self.task_id, self.sid, 'working', source='api')
+        except Exception: pass
         self._cancel = cancel if cancel is not None else threading.Event()
         cancel = self._cancel
         self.trace = [{'type': 'start', 'session': {'provider': self.provider, 'model': self.model}}]
@@ -654,7 +703,7 @@ class GeneralSession:
                 from . import browserview, terminal
                 if browserview.start(self.sid):
                     browser_tools = True
-                    browser_env = {**terminal.session_env('assistant', self.task_id), **browserview.env(self.sid)}
+                    browser_env = {**terminal.session_env('assistant', self.task_id, sid=self.sid), **browserview.env(self.sid)}
                     system = f'{system}\n\n{browserview.brief()}'
             # only a CLI-backed chat can post to the wall: an API provider has no shell to
             # run the command in, and telling it about a command it cannot run is a lie
@@ -665,6 +714,8 @@ class GeneralSession:
             else:
                 from . import handbook as hub
                 if hub.enabled(self.store): system = f'{system}\n\n{hub.ASSISTANT_LINE}'
+            from . import selfclose as _sc
+            system = f'{system}\n\n{_sc.ASK_LINE}'                     # a question is an event, not prose (PW-225)
             source_paths = [a.get('Path') for a in _task_files(self.store, self.task_id) if a.get('Path')]
             paths = list(dict.fromkeys(source_paths + list(attachments or [])
                                        + [m.group('path') for m in _IMAGE_PATH.finditer(text)]))
@@ -681,8 +732,15 @@ class GeneralSession:
             # whole chat again - slower, dearer, and silently forgetful once the conversation
             # outgrew MAX_CONTEXT. Resumed, the CLI still has what it read and did last turn,
             # so the turn itself is all that has to be said.
+            # ...and it may LOOK THINGS UP. A CLI brain with no cwd and no browser fell through to
+            # make_cli_llm's classifier profile - `--tools ''`, the permission bypass stripped -
+            # because that function reads "no hands" as "reads untrusted mail, gets nothing". The
+            # chat is the OWNER talking: asked to research a company it answered "I don't have a web
+            # search tool in this session" (TQ-0420). `research` is the grant reports already use -
+            # Read/Glob/Grep/WebFetch/WebSearch, granted so a headless run need not click, and no
+            # command, edit, write, or MCP tool. Looking is not acting.
             build_args = dict(pick=self.pick, model=self.model or None, trace=visible,
-                              cancel=cancel, resume=self.cli_sid or None)
+                              cancel=cancel, resume=self.cli_sid or None, research=True)
             if browser_tools:
                 build_args.update(cli_tools=True, extra_env=browser_env)
             brain = llm_mod.build_llm(self.store, **build_args)
@@ -718,6 +776,7 @@ class GeneralSession:
                 if browser_tools:
                     from . import browserview
                     system = f'{system}\n\n{browserview.brief()}'
+                system = f'{system}\n\n{_sc.ASK_LINE}'
                 build_args = dict(pick=self.pick, model=self.model or None,
                                   trace=visible, cancel=cancel)
                 if browser_tools:
@@ -744,7 +803,14 @@ class GeneralSession:
             # what gets shown - the sentence after it becomes the closing comment.
             from . import selfclose
             reply, closing = selfclose.chat_marker(reply)
-            reply = reply or (closing or '')
+            reply, asked, choices = selfclose.ask_marker(reply)
+            reply = reply or (closing or '') or (asked or '')
+            # the worker's own lifecycle, as events (PW-225): the turn ended; and if it asked, the exact question
+            try:
+                from . import workerstate as ws
+                ws.record(self.store, self.task_id, self.sid, 'turn_end', text=reply[:4000], source='api')
+                if asked: ws.record(self.store, self.task_id, self.sid, 'input_needed', request_id=ws.request_id_for(asked), text=asked, choices=choices, source='api')
+            except Exception as e: logger.debug(f'api worker event skipped: {e}')
             self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
             self.store.audit('task', self.task_id, 'assistant_reply', 'assistant', 'agent',
                              {'provider': self.provider, 'model': self.model, 'chars': len(reply)})
@@ -858,10 +924,11 @@ def start_session(store, tid: int, connector_id=None, model=None, actor='owner',
     task = store.get_task(tid)
     if not task: raise ValueError(f'no task {tid}')
     if not handles(task): raise ValueError('assistant view is for general, research, marketing, and triage tasks')
+    terminal.resume_task(store, tid, actor)
     # A setup walkthrough needs an operator, not a coder in a checkout. If the dock is normally
     # backed by an API-only chat model, choose the first configured CLI for this task so it can
     # actually drive the embedded browser. An explicit provider choice still wins.
-    if task.get('SourceRef') == 'assistant:setup' and connector_id is None and not model and not pick:
+    if task.get('SourceRef') == SETUP_REF and connector_id is None and not model and not pick:
         tool_cli = next((o for o in provider_options(store) if o.get('type') == 'cli'), None)
         if tool_cli: pick = tool_cli['pick']
     existing = session_for(tid)

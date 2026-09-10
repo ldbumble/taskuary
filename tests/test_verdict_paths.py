@@ -52,19 +52,20 @@ ASK = {'northwind': ('VPN Helpdesk', "Can someone reset John's MFA? He is locked
 def stamp(**kw): return (datetime.now() + timedelta(**kw)).isoformat(sep=' ', timespec='seconds')
 
 
-def llm_saying(intent, calls=None):
-    """A classifier that always answers `intent`, counting how often it was asked."""
+def llm_saying(intent, calls=None, kind=None):
+    """A classifier that always answers `intent` (and `kind` when given - an unnamed kind is
+    general since PW-067), counting how often it was asked."""
     def f(sys_, usr_, **kw):
         if calls is not None: calls.append(usr_)
-        return '{"intent": "%s", "why": "test"}' % intent
+        return '{"intent": "%s", "why": "test"%s}' % (intent, ', "kind": "%s"' % kind if kind else '')
     return f
 
 
-def push(i, conv=CHAT, sent_at=None, intent='task', calls=None, about='northwind', **over):
+def push(i, conv=CHAT, sent_at=None, intent='task', calls=None, about='northwind', kind=None, **over):
     subject, text = ASK[about]
     body = {'external_id': f'vp-{conv}-{i}', 'channel': 'teams', 'conversation_id': conv, 'from_name': 'Sam Okafor',
             'subject': subject, 'body': text, 'sent_at': sent_at or stamp(), **over}
-    with mock.patch('taskuary.server._llm', return_value=llm_saying(intent, calls)):
+    with mock.patch('taskuary.server._llm', return_value=llm_saying(intent, calls, kind)):
         return c.post('/api/ingest/push', json=body).json()
 
 
@@ -108,15 +109,18 @@ class NotATaskTests(unittest.TestCase):
             # unread because of something the owner said about an earlier line
             self.assertNotEqual(later['status'], 'filed', f'{hours}h later')
 
-    def test_an_email_thread_stays_ruled_for_life(self):
+    def test_an_email_threads_ruling_is_evidence_the_classifier_reads(self):
+        """Until PW-020 (2026-09-06) an email thread stayed ruled for life: every later reply was
+        filed unread. Now the reply is read, with the ruling in the prompt, and the model decides."""
         conv = 'AAQkADNj-email-thread-1'
         first = push(1, conv=conv, about='pct', channel='email', from_email='dwhitfield@client.example')
         c.post(f"/api/messages/{first['message_id']}/file")
         asked = []
         later = push(2, conv=conv, about='pct', channel='email', from_email='dwhitfield@client.example', subject='Re: Collection %',
-                     sent_at=stamp(days=10), calls=asked)
+                     sent_at=stamp(days=10), calls=asked, intent='fyi')
         self.assertEqual((later['status'], later['task_id']), ('filed', None))
-        self.assertEqual(asked, [])
+        self.assertEqual(len(asked), 1)                              # judged, not decided by the old ruling
+        self.assertIn('triage: fyi', feed_row(later['message_id'])['RouteReason'])
 
     def test_the_task_level_not_a_task_still_writes_the_verdict_down(self):
         """It records the ruling (and used to write nothing at all for a chat) - it just no
@@ -144,7 +148,7 @@ class TaskWithoutAgentTests(unittest.TestCase):
     def test_reclassified_to_reply_the_follow_up_joins_the_task_and_no_coder_starts(self):
         conv = 'AAQkADNj-payroll-thread'
         with mock.patch.object(server.hub_term, 'start_on_task') as coder:
-            first = push(1, conv=conv, channel='email', from_email='gw@corp.com', subject='Payroll file imports',
+            first = push(1, conv=conv, channel='email', from_email='gw@corp.com', subject='Payroll file imports', kind='coding',
                          body='The payroll import crashes with KeyError: EmployeeId on every file, please fix it.')
             self.assertEqual(first['status'], 'created')
             tid = first['task_id']

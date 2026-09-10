@@ -1,0 +1,5 @@
+# Vite preserves newlines in JSX string attributes. Keep build inputs and shipped
+# text assets identical on Windows and Unix so chunk hashes are reproducible.
+/website/src/** text=auto eol=lf
+/website/index.html text eol=lf
+/taskuary/web/** text=auto eol=lf

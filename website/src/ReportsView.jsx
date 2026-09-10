@@ -101,6 +101,11 @@ const FIELDS = {
     ["days back", "days", "text", "30"], AI_FIELD],
   teller_accounts: [AI_FIELD],
   teller_balances: [["account (blank = every account)", "account", "text", "Operating"], AI_FIELD],
+  // the same feed from SimpleFIN: no last four in that protocol, so an account is named
+  simplefin_transactions: [["account \u2014 a word of its name or its bank, or blank for every account", "account", "text", "Operating"],
+    ["days back (90 at most \u2014 the bridge's own window)", "days", "text", "30"], AI_FIELD],
+  simplefin_accounts: [AI_FIELD],
+  simplefin_balances: [["account (blank = every account)", "account", "text", "Operating"], AI_FIELD],
   // the semantic layer (Assistant \u2192 Numbers): a number that was PROVED against numbers the owner
   // already knew, and the scheduled check that demotes it the day it stops reconciling
   metric: [["metric name", "name", "text", "the certified metric to read"],
@@ -152,7 +157,11 @@ export const cronText = (expr) => {
   return `cron ${expr}`;
 };
 
-const reportSchedule = (c) => [c.on_startup && "on app startup", c.cron && cronText(c.cron),
+// "on app startup" is a lie next to once_per_day/once_per_week - it fires on the FIRST launch of the
+// day (or week) and drops the rest. Saying "every" is what made one evening launch look like a restart.
+const startupText = (c) => "on app startup" + (c.once_per_day ? " (at most once a day)"
+  : c.once_per_week ? " (at most once a week)" : "");
+const reportSchedule = (c) => [c.on_startup && startupText(c), c.cron && cronText(c.cron),
   c.every_minutes && `every ${c.every_minutes} minutes`, c.daily_at && `daily at ${c.daily_at}`]
   .filter(Boolean).join(" + ") || "once a day while Taskuary is open";
 
@@ -167,6 +176,17 @@ const TYPE_LABELS = {
   intacct: "Sage Intacct", intacct_fields: "Intacct \u2014 what fields exist",
   quickbooks: "QuickBooks Online", quickbooks_vendors: "QuickBooks \u2014 vendors", quickbooks_accounts: "QuickBooks \u2014 chart of accounts",
   teller_transactions: "Bank & card \u2014 transactions", teller_accounts: "Bank & card \u2014 accounts", teller_balances: "Bank & card \u2014 balances",
+  teller_spend: "Bank & card — spend, per card and in total",
+  simplefin_transactions: "Bank & card (SimpleFIN) \u2014 transactions", simplefin_accounts: "Bank & card (SimpleFIN) \u2014 accounts",
+  simplefin_balances: "Bank & card (SimpleFIN) \u2014 balances", simplefin_spend: "Bank & card (SimpleFIN) \u2014 spend, per account and in total",
+  yahoo_quotes: "Yahoo Finance — quotes", yahoo_history: "Yahoo Finance — price history",
+  coingecko_prices: "Crypto prices (CoinGecko)", fx_rates: "FX rates", fred_series: "FRED — macro series",
+  edgar_filings: "SEC EDGAR — filings", edgar_facts: "SEC EDGAR — one reported number over time",
+  td_quotes: "Twelve Data — quotes", td_indicator: "Twelve Data — technical indicator", av_quotes: "Alpha Vantage — quotes",
+  finnhub_quotes: "Finnhub — quotes", finnhub_news: "Finnhub — company news", finnhub_earnings: "Finnhub — earnings", finnhub_insiders: "Finnhub — insider transactions",
+  polygon_bars: "Polygon.io — bars", polygon_snapshot: "Polygon.io — snapshot", tiingo_history: "Tiingo — price history", tiingo_news: "Tiingo — news",
+  fmp_fundamentals: "FMP — fundamentals", fmp_ratios: "FMP — ratios", alpaca_quotes: "Alpaca — quotes", alpaca_bars: "Alpaca — bars",
+  markets_screen: "Strategy screen — only the rows that match",
   metric: "A certified number (Assistant \u2192 Numbers)", metric_check: "Re-prove the certified numbers",
   digest: "Taskuary digest", evening_inbox: "End-of-day Inbox brief", automate: "Automation ideas (own data)", assistant: "Assistant — its post on the Timeline (its voice: COUNSEL.md, Docs tab)",
   agent: "AI agent — run a skill or a prompt",
@@ -209,7 +229,14 @@ const TYPE_GROUPS = [
   ["Azure", ["azure", "azure_blob", "azure_logs"]],
   ["Microsoft 365 — Entra ID", ["entra_users", "entra_groups", "entra_signins", "entra_licenses"]],
   ["Monitoring", ["prometheus", "datadog"]],
-  ["Corporate systems", ["intacct", "intacct_fields", "quickbooks", "quickbooks_vendors", "quickbooks_accounts", "teller_transactions", "teller_accounts", "teller_balances", "metric", "metric_check"]],
+  ["Corporate systems", ["intacct", "intacct_fields", "quickbooks", "quickbooks_vendors", "quickbooks_accounts", "metric", "metric_check"]],
+  // the bank/card feed is money, not a corporate system: it belongs beside the market sources
+  ["Markets & finance", ["simplefin_transactions", "simplefin_accounts", "simplefin_balances", "simplefin_spend",
+    "teller_transactions", "teller_accounts", "teller_balances", "teller_spend",
+    "yahoo_quotes", "yahoo_history", "coingecko_prices", "fx_rates", "edgar_filings", "edgar_facts", "fred_series",
+    "td_quotes", "td_indicator", "av_quotes", "finnhub_quotes", "finnhub_news", "finnhub_earnings", "finnhub_insiders",
+    "polygon_bars", "polygon_snapshot", "tiingo_history", "tiingo_news", "fmp_fundamentals", "fmp_ratios",
+    "alpaca_quotes", "alpaca_bars", "markets_screen"]],
   ["The AI itself", ["agent"]],
   ["Research the web", ["tavily", "exa", "reader", "firecrawl"]],
   ["The web", ["rest", "rss"]],
@@ -359,7 +386,7 @@ export default function ReportsView() {
       {list.map((s) => {
         const c = parse(s.ConfigJson);
         // both halves, not the first one: "on startup" alone hid the Monday cron behind it
-        const sched = [c.on_startup && "on startup", c.cron && cronText(c.cron),
+        const sched = [c.on_startup && startupText(c), c.cron && cronText(c.cron),
           c.every_minutes && `every ${c.every_minutes}m`, c.daily_at && `daily ${c.daily_at}`]
           .filter(Boolean).join(" + ") || "daily";
         return (

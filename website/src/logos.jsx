@@ -87,6 +87,19 @@ export const LOGOS = {
   netsuite: (p) => <T p={p} bg="#125580" text="NS" size={9.5} />,
   quickbooks: (p) => <T p={p} bg="#2CA01C" text="qb" size={10.5} />,
   teller: (p) => <T p={p} bg="#1a1a1a" text="T" size={12} />,
+  simplefin: (p) => <T p={p} bg="#2f6f5f" text="SF" size={10} />,
+  yahoo: (p) => <T p={p} bg="#6001D2" text="Y!" size={9.5} />,
+  coingecko: (p) => <T p={p} bg="#8BC53F" text="CG" size={9} />,
+  frankfurter: (p) => <T p={p} bg="#2B5A8C" text="FX" size={10} />,
+  sec_edgar: (p) => <T p={p} bg="#0A2E5C" text="SEC" size={7.5} />,
+  // not a brand - the screen borrows another card's connection, so it wears a neutral filter
+  // glyph (same tone family as `database`) rather than a monogram that would imply a vendor
+  screen: (p) => (
+    <S {...p}>
+      <path fill="#6b6459" d="M3.2 4.2h17.6l-6.9 8.3v6.3l-3.8 1.9v-8.2z" />
+      <path fill="#b3aa9a" d="M3.2 4.2h17.6l-1.6 1.9H4.8z" />
+    </S>
+  ),
   sap: (p) => <T p={p} bg="#0FAAFF" text="SAP" size={8.5} />,
   workday: (p) => <T p={p} bg="#F38B00" text="W" size={12} />,
   adp: (p) => <T p={p} bg="#D0271D" text="ADP" size={8} />,

@@ -27,6 +27,7 @@ import { hasLogo } from "./logos.jsx";
 import { AgentsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
 import { plannedFor } from "./connectorCatalog.js";
+import { pollSecondsField } from "./pollFields.js";
 
 /* ── Get AI to set it up: the card's Guide becomes the coding agent's prompt, in a live terminal ON
    the card (taskuary/aisetup.py). The agent asks here for what only a human can fetch, saves it onto
@@ -103,7 +104,8 @@ const META = {
       "Run Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on (POST {base}/api/connectors{hdr} with {\"ConnectorId\": {cid}, \"Active\": true}) and say SETUP DONE."] },
   teams: { group: "Messaging", channel: "teams", srcLabel: "Users / chat ids", srcPh: "user UPN, e.g. jsmith@yourcompany.com",
     fields: [["tenant_id", "tenant_id"], ["client_id", "client_id"],
-      ["Notify chat id", "notify_chat", "19:…@thread.v2", "Only for the Notifications role — the chat id from a Teams URL"]],
+      ["Notify chat id", "notify_chat", "19:…@thread.v2", "Only for the Notifications role — the chat id from a Teams URL"],
+      pollSecondsField("teams")],
     secretLabel: "client secret",
     desc: "Ingest Teams chats via Graph. Leave credentials blank to reuse the Outlook connector's app.",
     howto: ["Credentials: leave everything blank and Teams automatically reuses the Outlook connector's saved Graph app (or the server's AZURE_* env vars). Only fill these to use a different app registration.",
@@ -115,7 +117,7 @@ const META = {
       "Find the owner's UPN yourself when you can: on a domain-joined Windows machine run `whoami /upn`; otherwise ask - it is usually their work email. Add it with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"teams\", \"Address\": \"<upn>\", \"ConnectorId\": {cid}, \"Active\": true}.",
       "Run Test (POST {base}/api/connectors/{cid}/test{hdr}). A 403 naming Chat.Read.All means the tenant has not been granted the protected API - report that as the blocker, it is not something to retry. Otherwise turn the connector on and say SETUP DONE."] },
   slack: { group: "Messaging", channel: "slack", srcLabel: "Channel IDs", srcPh: "C0123456789",
-    fields: [], secretLabel: "bot token (xoxb-…)",
+    fields: [pollSecondsField("slack")], secretLabel: "bot token (xoxb-…)",
     desc: "Ingest Slack channels with a bot token - messages land on the Timeline through triage.",
     howto: ["Create a Slack app (api.slack.com/apps) → OAuth & Permissions → bot token scopes: channels:history, channels:read.",
       "Install the app to your workspace and invite the bot to the channels to ingest (/invite @yourbot).",
@@ -126,7 +128,10 @@ const META = {
       "List the channels yourself instead of asking for IDs: GET https://slack.com/api/conversations.list?types=public_channel,private_channel&limit=200 with header Authorization: Bearer <token>. Show the owner names, ask which to watch, and add each chosen id with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"slack\", \"Address\": \"<channel id>\", \"ConnectorId\": {cid}, \"Active\": true}.",
       "Remind the owner the bot must be invited into each of those channels (/invite @bot) or the read will fail; then Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on, SETUP DONE."] },
   telegram: { group: "Messaging", channel: "telegram", srcLabel: "Chat IDs — only chats flipped ON become work", srcPh: "-1001234567890",
-    fields: [["Notify chat id", "notify_chat", "", "Only for the Notifications role — same id the chat's Source card shows"]],
+    fields: [["Assistant chat id", "assistant_chat", "",
+      "Your own private chat with the bot — the assistant walks you through your work there, and the Assistant tab can hand its walk to it"],
+      ["Notify chat id", "notify_chat", "", "Only for the Notifications role — same id the chat's Source card shows"],
+      pollSecondsField("telegram")],
     secretLabel: "bot token (from @BotFather)",
     desc: "A Telegram bot as an inbound channel - approved chats flow through triage; approved replies go back into the same chat. Unknown chats never become work: a bot is public.",
     howto: ["Message @BotFather in Telegram → /newbot → copy the token.",
@@ -144,8 +149,7 @@ const META = {
        "Your private Message yourself chat; this does not turn on ordinary Taskuary notifications"],
       ["Notify chat JID", "notify_chat", "15551234567@s.whatsapp.net",
        "Only for the Notifications role — alerts and approval requests are separate from Assistant chat"],
-      ["Check assistant chat every N seconds", "poll_seconds", "30",
-       "Only WhatsApp polls faster; mail and the other connectors keep the global sync interval"]],
+      pollSecondsField("whatsapp")],
     secretLabel: null,
     desc: "Your own WhatsApp, via a small bridge that runs beside Taskuary (Baileys, installed separately) - chats flow through triage, approved replies go back into the chat.",
     howto: ["Three steps, all in the Pair with your phone box above. 1 - Node 18+ on this machine (Windows: `winget install OpenJS.NodeJS.LTS`, or nodejs.org). The box checks for it and tells you if it is missing; nothing else to install.",
@@ -163,7 +167,7 @@ const META = {
       "Turn the connector on (POST {base}/api/connectors{hdr} with {\"ConnectorId\": {cid}, \"Active\": true}), remind the owner the bridge must stay running, and say SETUP DONE."] },
   imessage: { group: "Messaging", channel: "imessage", srcLabel: "Chat ids (optional — blank takes every chat)", srcPh: "iMessage;-;+15551234567",
     fields: [["Look back this many days on first sync (blank = from now on)", "lookback_days", "", "Only read on the FIRST sync — years of private history never import by accident"],
-      ["Check for new messages every N seconds (blank = the global sync interval)", "poll_seconds", "60", "A chat is slower on the ten-minute mailbox clock; 60 is a good number. Only this connector polls faster"]],
+      pollSecondsField("imessage")],
     secretLabel: null,
     desc: "The Mac's own Messages — iMessage, SMS and RCS that reach this machine. Chats flow through triage, approved replies go back into the same chat through Messages.app. macOS only.",
     howto: ["No token: Messages.app is the account. Taskuary reads the history macOS already keeps on this Mac (~/Library/Messages/chat.db) and asks Messages.app to send.",
@@ -324,7 +328,7 @@ const META = {
       "Paste the secret under Credentials (write-only). Test authenticates the integration.",
       "Every sync surfaces pages edited since the last poll. It ships as a feed; flip the trigger role on if edits should become work."] },
   discord: { group: "Messaging", channel: "discord", srcLabel: "Channel IDs", srcPh: "1234567890123456789",
-    fields: [],
+    fields: [pollSecondsField("discord")],
     secretLabel: "bot token",
     desc: "Watch Discord channels with a bot — messages land on the Timeline through triage, and approved replies post back to the channel.",
     howto: ["Create an app at discord.com/developers → Bot → Reset Token, and turn ON the Message Content intent.",
@@ -530,7 +534,7 @@ const DATA_META = {
       "Confirm amounts, Prepare drafts, and approve customer emails in Review. The customer/month reference prevents duplicate invoices on retries."],
     agent: ["The owner connects Zoho in the browser. Do not ask for or print refresh tokens.",
       "Invoice sends are owner-gated Review actions. Never bypass Review or create a second invoice for the same workflow/customer/period."] },
-  teller: { title: "Bank & card feed (Teller)", types: ["teller_accounts", "teller_transactions", "teller_balances"],
+  teller: { title: "Bank & card feed (Teller)", types: ["teller_accounts", "teller_transactions", "teller_balances", "teller_spend"],
     fields: [["Teller application id (teller.io → your application)", "application_id"],
       ["environment — sandbox, development (free, real banks, 100 logins) or production", "environment", "sandbox"],
       ["client certificate path (.pem) — development and production only", "cert_path", "C:/taskuary/teller/certificate.pem"],
@@ -542,9 +546,59 @@ const DATA_META = {
     howto: ["teller.io → sign up → create an application. The dashboard hands you an application id and, for development and production, a certificate.pem and private_key.pem — save both somewhere on this machine and put their paths on the card. Sandbox needs no certificate and accepts any login at its fake banks, which is how to try the loop first.",
       "Paste the application id, pick the environment, Save, then Connect a bank: the bank's sign-in opens in a modal, you sign in, and the access token for that login lands on this card. One card is one bank login - Add another for a second bank.",
       "Test lists the accounts under the login. Build the reports on the REPORTS tab: 'Bank & card — transactions' for one account (its last four digits) or all of them, so many days back; switch on 'can become work (triage decides)' and every new transaction arrives as a message - the front door of the card-to-books playbook (docs/beyond-code.md).",
-      "The development environment is free up to 100 bank logins; production is the same code with production keys and Teller's pricing."],
+      "The development environment is free up to 100 bank logins; production is the same code with production keys and Teller's pricing.",
+      "Spend as a number, not a list: the 'teller_spend' report totals what left each card over a window (days 0 = today) and adds a TOTAL row. Its headline starts with the total on purpose — an alert of 'more than 500' on this report therefore compares DOLLARS, not the number of rows, which is how you get 'tell me if I spend over 500 today'. Cents are ignored by that comparison."],
     agent: ["GET {base}/api/connectors/{cid}/teller/status{hdr}: has_app says whether the application id is saved, connected whether a token is. Neither is yours to make - the owner signs up at teller.io and signs in at their bank through Connect a bank on the card. Ask for the application id and the certificate paths, save them in ConfigJson, then ask them to press Connect a bank.",
-      "Once connected, POST {base}/api/connectors/{cid}/test{hdr}. A 403 means the certificate does not match the application or the token belongs to another environment. Turn the card on, SETUP DONE."] },
+      "Once connected, POST {base}/api/connectors/{cid}/test{hdr}. A 403 means the certificate does not match the application or the token belongs to another environment. Turn the card on, SETUP DONE.",
+      "Do not add up transactions yourself to answer 'how much did we spend' - run_tool with type teller_spend does it, per account and in total, and its numbers are the ones the owner's alerts are set against."] },
+  simplefin: { title: "Bank & card feed (SimpleFIN)", types: ["simplefin_accounts", "simplefin_transactions", "simplefin_balances", "simplefin_spend"],
+    fields: [["what to call this connection on the card (optional)", "institution", "our bank"]],
+    secretLabel: "access URL (write-only) \u2014 Connect with a setup token fills it in",
+    desc: "The same bank and card feed as the Teller card, from the bridge anyone can sign up to: every account one SimpleFIN token carries, its transactions newest first, its balances, and a spend rollup. Read-only by construction \u2014 the SimpleFIN protocol has no write verbs at all. The feed refreshes about once a day, so a balance says the date it is as of.",
+    connect: { widget: "token", label: "Connect with a setup token", status: (cid) => `/api/connectors/${cid}/simplefin/status`, claim: (cid) => `/api/connectors/${cid}/simplefin/claim`,
+      text: "Paste the setup token from your SimpleFIN account. Taskuary trades it for an access URL, once \u2014 the token cannot be reused." },
+    howto: ["bridge.simplefin.org \u2192 create an account (it is $1.50/month or $15/year, billed to you, and it is the only cost here) \u2192 link your banks under Financial Institutions. There is no application to register, no approval to wait for and no client certificate.",
+      "On your SimpleFIN account, My Accounts \u2192 Apps \u2192 Get a setup token. Paste it here and press Connect with a setup token. It is spent by that press: a re-connect needs a fresh one.",
+      "Test lists the accounts the token carries. One token can carry SEVERAL banks, so unlike the Teller card this is usually one card for everything \u2014 pick an account per report by a word of its name.",
+      "Build the reports on the REPORTS tab: 'Bank & card \u2014 transactions (SimpleFIN)' for one account or all of them, so many days back; switch on 'can become work (triage decides)' and every new transaction arrives as a message \u2014 the front door of the card-to-books playbook (docs/beyond-code.md).",
+      "Spend as a number, not a list: the 'simplefin_spend' report totals what left each account over a window (days 0 = today) and adds a TOTAL row. Its headline starts with the total on purpose \u2014 an alert of 'more than 500' on this report therefore compares DOLLARS, not the number of rows. Cents are ignored by that comparison.",
+      "Two limits worth knowing before you schedule anything: the bridge refreshes about once a day (so 'today' means as of the last sync), and it allows 24 reads a day \u2014 this card caches one response behind all four reports and refuses past 20 rather than letting your token be disabled."],
+    agent: ["GET {base}/api/connectors/{cid}/simplefin/status{hdr}: connected says whether the access URL is on the card. The setup token is NOT yours to make or to ask for casually \u2014 the owner gets it from their own SimpleFIN account and pastes it into the card. Nothing else needs saving first.",
+      "Once connected, POST {base}/api/connectors/{cid}/test{hdr}. A 403 means the access URL is stale (a fresh setup token fixes it); a 402 means their bridge subscription lapsed. Turn the card on, SETUP DONE.",
+      "Do not add up transactions yourself to answer 'how much did we spend' \u2014 run_tool with type simplefin_spend does it, per account and in total, and its numbers are the ones the owner's alerts are set against.",
+      "Read-only, and not merely by policy: there is no write endpoint in the protocol to reach for."] },
+  yahoo: { title: "Yahoo Finance (best-effort)", types: ["yahoo_quotes", "yahoo_history"], fields: [], noSecret: true,
+    desc: "Yahoo retired its official market-data API in 2017. This card reads an undocumented endpoint (v8/finance/chart) that happens to still work with no login — it may change or break without notice, so treat it as best-effort, not a supported integration.",
+    howto: ["No key, no sign-up: nothing to paste. Test calls the same endpoint Yahoo Finance's own charts use, for AAPL by default.",
+      "Build the reports on the REPORTS tab: 'yahoo_quotes' for a watchlist (symbols, comma separated) — last price, day change % and range per symbol; 'yahoo_history' for one symbol's bars over a range and interval.",
+      "Because this is not a supported API, a broken report here likely means Yahoo changed the page, not a config mistake here - check whether other tools that watch Yahoo are also failing before assuming this card needs fixing."],
+    agent: ["Nothing to configure and nothing to ask the owner for - Test yourself (POST {base}/api/connectors/{cid}/test{hdr}) and turn it on if it succeeds.",
+      "If Yahoo starts failing here, say so plainly rather than retrying: this card reads an endpoint Yahoo never documented, and it can go away with no warning."] },
+  coingecko: { title: "Crypto prices (CoinGecko)", types: ["coingecko_prices"], fields: [],
+    secretLabel: "demo API key (optional, write-only) — raises the free rate limit",
+    desc: "Spot price and 24-hour change for any coin CoinGecko lists, keyed by its own id (bitcoin, ethereum, …) rather than its ticker.",
+    howto: ["No key needed at a low request rate. For more headroom, coingecko.com → sign up → a free Demo API key, paste it here (write-only).",
+      "Test fetches bitcoin's price in USD.",
+      "Build the report on the REPORTS tab: ids (CoinGecko's own ids - 'bitcoin,ethereum', not 'BTC,ETH') and the currency to price in (vs)."],
+    agent: ["CoinGecko ids are not tickers - bitcoin, not BTC. api.coingecko.com/api/v3/coins/list gives the full mapping if the owner is unsure.",
+      "A demo key is optional; ask for one only if the owner is hitting the free rate limit."] },
+  frankfurter: { title: "FX rates (Frankfurter)", types: ["fx_rates"], fields: [], noSecret: true,
+    desc: "Reference exchange rates from the European Central Bank, served through the free Frankfurter API — no key, no account.",
+    howto: ["Nothing to configure. Test fetches the latest USD rates.",
+      "Build the report on the REPORTS tab: a base currency and, optionally, which currencies to include (symbols) - blank returns every currency the ECB publishes."],
+    agent: ["Nothing to ask the owner for. Test yourself and turn it on."] },
+  sec_edgar: { title: "SEC filings (EDGAR)", types: ["edgar_filings", "edgar_facts"], fields: [], noSecret: true,
+    desc: "US public-company filings and the XBRL facts inside them, straight from SEC EDGAR — no key, though SEC asks every caller to identify itself, which this card does for you.",
+    howto: ["Nothing to configure. Test looks up Apple's filings (CIK 320193).",
+      "Build the reports on the REPORTS tab: 'edgar_filings' for a company's recent filings by CIK (find one at sec.gov/cgi-bin/browse-edgar), optionally filtered to certain forms (8-K,10-Q); 'edgar_facts' for one reported XBRL number over time (a tag like Revenues) as the company itself filed it.",
+      "Schedule 'edgar_filings' with 'can become work' and a new 8-K is a message triage judges."],
+    agent: ["A CIK is a number, not a ticker - sec.gov/cgi-bin/browse-edgar looks one up by company name. Nothing else to ask the owner for."] },
+  screen: { title: "Strategy screen", types: ["markets_screen"], fields: [], noSecret: true,
+    desc: "Not a data source of its own: a screen BORROWS another card's connection to filter its rows down to the ones that match a condition. Its connector_id — set on the 'markets_screen' report, not here — names the provider card to read through; this card holds no credentials of its own.",
+    howto: ["Nothing to save on this card. Build the actual screen on the REPORTS tab as a 'markets_screen' report: provider (today, 'yahoo_quotes' or 'coingecko_prices'), the connector_id of THAT provider's own card (its id on this Connections page), symbols/ids, and conditions - each [field, operator, value], every one of which must hold for a row to pass.",
+      "Silence is the normal outcome: a screen only files a row when something matches, which is what makes 'something came back' the right alert to set - not a schedule you expect to fire every run."],
+    agent: ["This card's own id is never the connector_id an agent saves credentials on - find the PROVIDER's own card (yahoo or coingecko) and use ITS id as connector_id in the markets_screen report config. This card borrows a connection; it has none to lend.",
+      "conditions is a list of [field, operator, value] triples, ALL of which must hold; an empty list is refused on purpose, not a wildcard."] },
   prometheus: { title: "Prometheus", types: ["prometheus"],
     fields: [["base URL", "base_url", "http://prometheus.yourcompany.local:9090"]],
     secretLabel: "bearer token (optional — most Prometheus servers need none)",
@@ -629,6 +683,36 @@ const DATA_META = {
       text: "The Gmail card already carries a Google OAuth client id and secret (its calendar fields). Leave those blank here and they are reused — you still mint a refresh token with the Sheets scope, because the calendar one does not cover spreadsheets.",
       clear: ["google_client_id", "google_client_secret"],
       ok: (c) => { const k = parse(c?.ConfigJson); return !!(c && k.google_client_id && k.google_client_secret); } } },
+  /* Files OUT as well as in (files.py) — the first two cards that can put a document somewhere.
+     Both ship at authority 'read', so the first save is a proposal in Review; the Authority
+     dropdown on the card, or a routing policy for the narrow case, is what stops it asking. */
+  smb_file: { title: "Network file share", types: ["smb_read", "smb_write", "smb_move"],
+    fields: [["share root — e.g. \\\\fileserv\\Ops\\Documents", "share"],
+      ["username (optional — blank uses your own Windows session)", "username"]],
+    secretLabel: "password (write-only; blank uses your own Windows session)",
+    desc: "Documents on a Windows or SMB share: read a folder, a csv or an xlsx, and FILE one — save a mail's attachment, rename it on the way in, or move it once it is dealt with.",
+    howto: ["Enter the share root — the folder everything this card does stays inside. A path outside it is refused, not adjusted, so make the root the narrowest folder that covers the job.",
+      "Leave username and password blank on a domain-joined machine: Taskuary runs as you, and it reaches whatever you can open in Explorer. Fill them in only for a share your own account cannot reach — Test says which of the two happened.",
+      "Test reaches the root and counts what is in it. \"not reachable as a folder\" means the path or the credentials, and the error says which.",
+      "REPORTS tab: 'Network share' reads a file, a folder listing (newest first — \"did today's export arrive?\") or a glob like exports/sales-*.csv, which reads the newest match.",
+      "Writing is an AGENT tool, not a report. At authority 'read' an agent proposes the save and you approve it in Review with the destination and size in front of you; raise Authority to 'write' once you are happy for it to file documents unattended."],
+    agent: ["Ask for the share root and save it as `share` in ConfigJson. Ask whether their own Windows login reaches it (usually yes on a work machine) - if so leave username and Secret empty and say why.",
+      "Test (POST {base}/api/connectors/{cid}/test{hdr}). A failure naming the folder is the path; one naming the account is the credentials. Do not retry the same values.",
+      "Turn the connector on. Leave Authority at read unless the owner ASKS for unattended filing - explain that at read they approve each save in Review, which is how the first few should go anyway. SETUP DONE."] },
+  sftp: { title: "SFTP", types: ["sftp_list", "sftp_get", "sftp_put", "sftp_move"],
+    fields: [["host", "host"], ["port (blank = 22)", "port"], ["username", "username"],
+      ["base folder (optional — blank = wherever the login lands)", "root"],
+      ["expected host key fingerprint — e.g. SHA256:abc… (Test tells you it)", "hostkey"]],
+    secretLabel: "password OR the whole private key (write-only)",
+    desc: "A vendor's or bank's SFTP server: list what arrived, fetch it, put a file back, and rename the remote copy once it is handled.",
+    howto: ["Enter host, username and the base folder the jobs work in. One secret field covers both ways in: a password, or an entire private key pasted with its BEGIN/END lines (an encrypted key is not supported).",
+      "The host key must match this card, and is never learned automatically. Press Test with the fingerprint field blank: it refuses and shows you the fingerprint the server offered. Check that against your server, paste it in, and Test again.",
+      "Test connects, verifies the host key and lists the base folder.",
+      "REPORTS tab: 'SFTP listing' answers \"did the file arrive?\" on a schedule, newest first, and can raise it as work when it did — or did not.",
+      "Fetching stages the file under ~/.taskuary and answers with its local path, which the Network file share card accepts as a source: that is pull-from-SFTP, rename, save-to-the-share, with a receipt at every step. Uploads and remote renames are writes and follow the same approve-then-raise path as the share."],
+    agent: ["Ask for host, username, port if not 22, and the folder the work happens in (`root`). Ask whether they authenticate with a password or a key; either goes in Secret and you never echo it back.",
+      "Test with `hostkey` empty ON PURPOSE (POST {base}/api/connectors/{cid}/test{hdr}): it fails with the fingerprint the server presented. Show the owner that fingerprint, ask them to confirm it against their own records or the vendor's, save it as `hostkey`, and Test again. Never invent or auto-accept a fingerprint.",
+      "Turn the connector on, leave Authority at read, SETUP DONE."] },
   azure: { title: "Microsoft Azure", types: ["azure", "azure_blob", "azure_logs"], discovers: true,
     fields: [["tenant_id", "tenant_id"], ["client_id", "client_id"]],
     secretLabel: "client secret (write-only; blank = reuse the Outlook connector's app)",
@@ -793,19 +877,19 @@ const ConnCard = ({ c }) => (
 // The catalog's sections, named once: the rail reads them before `groups` is built (groups
 // needs the loaded connectors), and they must stay in step.
 const GROUP_TITLES = ["AI — agents & models", "AI — voice", "Email", "Messaging", "Developer", "Project management",
-  "Databases", "Cloud & infrastructure", "Corporate systems", "Observability", "Agentic web", "Files & sheets", "Everything else"];
+  "Databases", "Cloud & infrastructure", "Corporate systems", "Markets & finance", "Observability", "Agentic web", "Files & sheets", "Everything else"];
 // planned types read as raw identifiers on a card ("sharepoint_list"), which looks unfinished
 // in a way the feature is not. Named here; anything unnamed falls back to a de-underscored key.
 const PLANNED_TITLES = { google_sheets: "Google Sheets", sharepoint_list: "SharePoint list",
-  smb_file: "Network file share", local_file: "File on this computer", graphql: "GraphQL",
+  local_file: "File on this computer", graphql: "GraphQL",
   sqlite: "SQLite", gcp: "Google Cloud", kubernetes: "Kubernetes", grafana: "Grafana",
   elastic: "Elasticsearch", perplexity: "Perplexity", serpapi: "SerpAPI", browserbase: "Browserbase",
   netsuite: "NetSuite", sap: "SAP", workday: "Workday", adp: "ADP",
   epic: "Epic (EMR)", cerner: "Oracle Cerner (EMR)", pointclickcare: "PointClickCare (EMR)" };
 const KNOWN_PLANNED = [];
 const PLACED = new Set(["graphql", "sqlite", "gcp", "kubernetes", "grafana", "elastic",
-  "perplexity", "serpapi", "browserbase", "google_sheets", "sharepoint_list", "smb_file", "local_file",
-  "netsuite", "sap", "workday", "adp", "epic", "cerner", "pointclickcare"]);
+  "perplexity", "serpapi", "browserbase", "google_sheets", "sharepoint_list", "local_file",
+  "netsuite", "sap", "workday", "adp", "epic", "cerner", "pointclickcare", "stooq"]);
 
 const VoiceVocabulary = ({ onBack }) => {
   const [text, setText] = useState("");
@@ -1041,14 +1125,19 @@ export default function ConnectorsView() {
       ...catalogCards("Cloud & infrastructure"),
     ]},
     { title: "Corporate systems", cards: [
-      ...dataCards(["intacct", "quickbooks", "zoho_invoice", "teller"]),
+      ...dataCards(["intacct", "quickbooks", "zoho_invoice"]),
       ...catalogCards("Corporate systems"),
+    ]},
+    { title: "Markets & finance", cards: [
+      ...dataCards(["simplefin", "teller", "yahoo", "coingecko", "frankfurter", "sec_edgar", "screen"]),
+      ...plannedCards(["stooq"]),
+      ...catalogCards("Markets & finance"),
     ]},
     { title: "Observability", cards: [...dataCards(["prometheus", "datadog"]), ...catalogCards("Observability")] },
     // the web as a source: one REST call and a key each. What is deliberately NOT here is
     // anything that drives a browser - logging in, clicking - which needs CDP, not an API.
     { title: "Agentic web", cards: [...dataCards(["exa", "tavily", "firecrawl", "reader"]), ...catalogCards("Agentic web")] },
-    { title: "Files & sheets", cards: [...dataCards(["knowledge", "sharepoint", "google_sheets"]), ...catalogCards("Files & sheets")] },
+    { title: "Files & sheets", cards: [...dataCards(["knowledge", "sharepoint", "google_sheets", "smb_file", "sftp"]), ...catalogCards("Files & sheets")] },
     { title: "Everything else", cards: [...catalogCards("Everything else"), ...plannedCards(KNOWN_PLANNED, true)] },
   ];
   const hits = q ? groups.flatMap((g) => g.cards.filter((c) => c.haystack.toLowerCase().includes(q.toLowerCase()))
@@ -1843,6 +1932,7 @@ function OAuthConnect({ conn, meta, reload }) {
   const [st, setSt] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [token, setToken] = useState("");
   const load = useCallback(async () => { try { setSt((await api.get(meta.connect.status(conn.ConnectorId))).data); } catch { /* the card still works */ } }, [conn.ConnectorId, meta]);
   useEffect(() => { load(); }, [load]);
   // the sign-in happens in another tab; poll while it is likely underway so the box flips to
@@ -1869,9 +1959,22 @@ function OAuthConnect({ conn, meta, reload }) {
     });
     tc.open();
   };
+  // SimpleFIN has no widget and no redirect: the owner links their banks at their own bridge
+  // account and brings back a setup token. It is ONE-SHOT - the server spends it claiming the
+  // access URL - so the field is cleared only on success, and the reason for a failure is shown
+  // rather than swallowed: a token thrown away by a typo cannot be pasted again.
+  const pasteToken = async () => {
+    setBusy(true);
+    try {
+      await api.post(meta.connect.claim(conn.ConnectorId), { setup_token: token.trim() });
+      setToken(""); await load(); reload();
+    } catch (e) { setErr(e?.response?.data?.detail || "that token did not claim"); }
+    setBusy(false);
+  };
   const go = async () => {
     setErr("");
     try {
+      if (meta.connect.widget === "token") return await pasteToken();
       if (meta.connect.widget === "teller") return await teller();
       const { data } = await api.get(meta.connect.start(conn.ConnectorId)); window.open(data.url, "_blank", "noopener"); setBusy(true);
     } catch (e) { setErr(e?.response?.data?.detail || e?.message || "could not start the sign-in"); }
@@ -1879,14 +1982,25 @@ function OAuthConnect({ conn, meta, reload }) {
   return (
     <Box sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-        <Button variant="contained" disableElevation disabled={!st?.has_app || busy} onClick={go}
+        {meta.connect.widget === "token" && (
+          <TextField size="small" value={token} onChange={(e) => setToken(e.target.value)} disabled={busy}
+            placeholder="setup token from your SimpleFIN account" sx={{ bgcolor: "#fff", minWidth: 260, flex: 1 }}
+            inputProps={{ spellCheck: false, autoComplete: "off", style: { fontSize: 12.5 } }} />
+        )}
+        <Button variant="contained" disableElevation onClick={go}
+          disabled={busy || !st?.has_app || (meta.connect.widget === "token" && !token.trim())}
           title={st?.has_app ? meta.connect.text : "save the app's client id and secret first"}>
-          {busy ? <><CircularProgress size={12} sx={{ color: "#fff", mr: 1 }} /> waiting for the sign-in…</> : st?.connected ? "Reconnect" : meta.connect.label}
+          {busy ? <><CircularProgress size={12} sx={{ color: "#fff", mr: 1 }} /> {meta.connect.widget === "token" ? "claiming…" : "waiting for the sign-in…"}</> : st?.connected ? "Reconnect" : meta.connect.label}
         </Button>
         {st?.connected
           ? <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Connected{st.realm_id ? ` · company ${st.realm_id}` : ""}{st.institution ? ` · ${st.institution}` : ""}{(st.env || st.environment) === "sandbox" ? " · sandbox" : ""}</Typography>
           : <Typography variant="body2" sx={{ color: DIM }}>{st?.has_app ? "keys saved — not connected yet" : "paste the application's keys below and Save first"}</Typography>}
       </Box>
+      {st?.bridge && !st?.connected && (
+        <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75, lineHeight: 1.6 }}>
+          Link your banks and get the token at <Box component="a" href={st.bridge} target="_blank" rel="noopener" sx={{ color: INK }}>{st.bridge.replace(/^https:\/\//, "")}</Box> \u2014 My Accounts \u2192 Apps \u2192 Get a setup token.
+        </Typography>
+      )}
       {st?.redirect_uri && (
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75, lineHeight: 1.6 }}>
           The Intuit app must list this redirect URI, exactly: <Box component="code" sx={{ ...mono, fontSize: 11, color: INK, bgcolor: "#fff", px: 0.6, borderRadius: 0.75, border: `1px solid ${BORDER}` }}>{st.redirect_uri}</Box>
@@ -2389,8 +2503,9 @@ const WaChats = ({ conn, mine, reload }) => {
         <Button size="small" onClick={load} sx={{ ml: 1, fontSize: 11, textTransform: "none", py: 0 }}>refresh</Button>
       </Typography>
       <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 0.75, p: 0.8, bgcolor: PANEL2, borderRadius: 1 }}>
-        For remote help, choose your private <b>Message yourself</b> chat below. Messages you send there ask the same Taskuary guide
-        that floats on the desktop; its walkthrough may include private mail, tasks, reviews, and agent output. Groups cannot be used.
+        For remote help, choose your private <b>Message yourself</b> chat below — it is the row marked <b>Myself</b>, and WhatsApp
+        gives that thread a group-shaped id, which is fine: the bridge checks it is your own number. Messages you send there run the
+        same walk the Assistant tab runs; it may include private mail, tasks, reviews, and agent output. Real groups cannot be used.
       </Typography>
       {err && <Typography variant="caption" sx={{ color: "#6b2733", display: "block" }}>✗ {err}</Typography>}
       {rows && !rows.length && !err && <Typography variant="caption" sx={{ color: FAINT }}>no reachable chats loaded yet — refresh, or send a message in a direct chat</Typography>}
@@ -2401,7 +2516,9 @@ const WaChats = ({ conn, mine, reload }) => {
             <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>{r.name || r.jid}</Typography>
             <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10.5 }} noWrap>{r.jid} · {r.n} msg · {r.last}{r.snippet ? ` · “${r.snippet}”` : ""}</Typography>
           </Box>
-          {!r.group && (guideJid === r.jid
+          {/* your own "Message yourself" thread is a GROUP jid on WhatsApp (r.self says the bridge
+              proved it is your own number), and it is exactly the chat this is for */}
+          {(!r.group || r.self) && (guideJid === r.jid
             ? <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 700 }}>✓ assistant chat</Typography>
             : <Button size="small" variant="contained" disableElevation disabled={!!guideBusy}
                 onClick={() => useForGuide(r.jid)} sx={{ fontSize: 11.5, whiteSpace: "nowrap" }}>

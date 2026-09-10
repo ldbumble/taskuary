@@ -147,6 +147,42 @@ class FlapTests(unittest.TestCase):
         self.assertEqual(terminal.phase_of(['Running tests (esc to interrupt)', '? for shortcuts']), 'parked')
 
 
+class ChatHasNoSubjectTests(unittest.TestCase):
+    def test_a_chat_row_is_titled_by_what_was_said(self):
+        """WhatsApp and Slack carry no subject, so every chat row in the pipe and the work list read
+        "(no subject)" beside a message you had to open to see (the owner, 2026-09-07)."""
+        s = store()
+        said = 'Budgeting'
+        m = mail(s, '', who='Gabi', email='', body=said, hours=0, channel='whatsapp', conv='wa:gabi', status='filed')
+        s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
+        self.assertEqual(funnel.build(s)['items'][0]['title'], 'Budgeting')
+        # ...and a long one fits the pill: one line, cut on a word, never mid-word
+        s2 = store()
+        long_said = ("So what's their moves if it's free? So it's a cool thing, but I mean, something like "
+                     "someone you built this a month and a half ago. So now what?")
+        m2 = mail(s2, '', who='Gabi', email='', body=long_said, hours=0, channel='whatsapp', conv='wa:g2', status='filed')
+        s2.add_route(m2, None, 'file', None, 'triage: fyi', [], 'triage')
+        title = funnel.build(s2)['items'][0]['title']
+        self.assertLessEqual(len(title), 91)
+        self.assertTrue(title.endswith('…') and not title.endswith(' …'), repr(title))
+        self.assertTrue(long_said.startswith(title[:-1].rstrip()), f'not what she said: {title!r}')
+
+    def test_a_synthesized_chat_title_gives_way_to_the_message(self):
+        """Teams titles a chat after the people already named in the row."""
+        s = store()
+        m = mail(s, 'Teams chat with Hindy Spiegel', who='Hindy Spiegel', email='h@mfa.test',
+                 body='can you add Nathan to the call he wants to join', hours=0, channel='teams', conv='t:h', status='filed')
+        s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
+        self.assertEqual(funnel.build(s)['items'][0]['title'], 'can you add Nathan to the call he wants to join')
+
+    def test_a_real_subject_is_still_the_title(self):
+        s = store()
+        m = mail(s, 'AI Agents', who='Nathan', email='n@mfa.test', body='Nathan invited Fireflies here',
+                 hours=0, channel='teams', conv='t:ai', status='filed')
+        s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
+        self.assertEqual(funnel.build(s)['items'][0]['title'], 'AI Agents')
+
+
 class OneLinePerThreadTests(unittest.TestCase):
     def test_the_row_says_how_much_of_the_thread_it_stands_for(self):
         """Three lines in one WhatsApp room are one row - and the Timeline showing three of them read
@@ -205,17 +241,50 @@ class ReportFailedTests(unittest.TestCase):
         s = store()
         sid = s.save_source({'Channel': 'report', 'Address': 'Nightly headcount', 'Owner': 'o', 'Active': 1,
                              'ConfigJson': '{"title": "Nightly headcount"}'}, 'o')
-        s.add_report_run(sid, {'at': ago(0), 'type': 'agent', 'title': 'Nightly headcount',
-                               'subject': 'Nightly headcount — FAILED', 'failed': True, 'error': 'timed out'})
-        funnel._SOURCES.update(at=0.0, by={})
+        funnel._SOURCES.update(at=0.0, by={}, digest=set())
         m = s.add_message({'ExternalId': 'r1', 'Channel': 'report', 'SourceName': 'Nightly headcount',
                            'Subject': 'Nightly headcount', 'FromName': 'report', 'SentAt': ago(0),
                            'BodyText': 'nothing came back', 'Status': 'feed'})
         s.add_route(m, None, 'feed', None, 'a report you set up', [], 'feed')
+        # the run carries the message it produced, as reports.run_report_source records it (`message_id`).
+        # This used to be written with no message_id and relied on the row picking up the source's newest
+        # run - the very coupling that made an old failure inherit a later success (2026-09-10).
+        s.add_report_run(sid, {'at': ago(0), 'type': 'agent', 'title': 'Nightly headcount', 'message_id': m,
+                               'subject': 'Nightly headcount — FAILED', 'failed': True, 'error': 'timed out'})
         item = next(i for i in funnel.build(s)['items'] if i['kind'] == 'report')
         self.assertTrue(item['bad'])                     # the subject says nothing; the run says it failed
         self.assertIn('the check failed', item['why'])
         self.assertEqual(item['lane'], 'broken')         # ...and a check that cannot run is promoted, not filed
+
+    def test_each_run_is_judged_by_its_own_record_not_the_reports_latest(self):
+        """An older FAILED run kept being re-judged by the newest run of the same report, so every
+        historical row inherited the latest verdict (the owner, 2026-09-10: a pipe holding two
+        "Process Error Check - FAILED" rows filed as landed results because the newest run said
+        "0 rows"). It cuts both ways: one fresh failure would flip every older good row to broken."""
+        s = store()
+        sid = s.save_source({'Channel': 'report', 'Address': 'Process Error Check', 'Owner': 'o', 'Active': 1,
+                             'ConfigJson': '{"title": "Process Error Check"}'}, 'o')
+        funnel._SOURCES.update(at=0.0, by={}, digest=set())
+        def run_row(subject, body, hours, failed):
+            # SourceName is what ties the row to its report - without it the lookup never happens
+            # and the stale-verdict path is not even reached (this test passed vacuously without it)
+            mid = s.add_message({'ExternalId': f'r:{subject}', 'Channel': 'report', 'SourceName': 'Process Error Check',
+                                 'Subject': subject, 'FromName': 'report', 'SentAt': ago(hours),
+                                 'BodyText': body, 'Status': 'feed'})
+            s.add_route(mid, None, 'feed', None, 'a report you set up', [], 'feed')
+            s.add_report_run(sid, {'at': ago(hours), 'type': 'sql', 'title': 'Process Error Check',
+                                   'subject': subject, 'message_id': mid, 'failed': failed,
+                                   'error': 'no such host' if failed else None})
+            return mid
+        run_row('Process Error Check - FAILED', 'Named Pipes: no such host', 6, True)
+        run_row('Process Error Check - 0 rows', 'All clear', 1, False)
+        by_title = {i['title']: i for i in funnel.build(s)['items']}
+        older = by_title['Process Error Check - FAILED']
+        newer = by_title['Process Error Check - 0 rows']
+        self.assertTrue(older['bad'], 'the failed run was re-judged by the newest run of the same report')
+        self.assertEqual(older['lane'], 'broken')        # band 2: a check that failed is work
+        self.assertFalse(newer['bad'])
+        self.assertEqual(newer['lane'], 'report')
 
 
 class InHandTests(unittest.TestCase):
@@ -238,13 +307,16 @@ class InHandTests(unittest.TestCase):
         self.assertEqual([(i['lane'], i['key'], i['ref']) for i in items], [('working', f'agent:{t}', f'TQ-{t:04d}')])
         self.assertIn('nothing for you until it stops or asks', items[0]['why'])
 
-    def test_the_same_line_is_slipped_once_the_agent_is_no_longer_on_it(self):
+    def test_the_same_line_is_an_fyi_once_the_agent_is_no_longer_on_it(self):
         s = store()
         t = s.create_task({'Title': 'July 2026 financials', 'Kind': 'coding', 'Status': 'waiting'}, 'o')
         self._line_about(s, t, f"TQ-{t:04d} July financials hasn't moved in three hours")
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             items = funnel.build(s)['items']
-        self.assertEqual([(i['lane'], i['kind'], i['ref']) for i in items], [('forgotten', 'idea', f'TQ-{t:04d}')])
+        # the assistant's own line about a task nobody is on is an fyi until TRIAGE calls it work
+        # (the owner, 2026-09-07: "assistant ideas and slipped stuff should be fyi unless triage
+        # turns it into task") - it used to open in a lane of its own inside the actionable band
+        self.assertEqual([(i['lane'], i['kind'], i['ref']) for i in items], [('fyi', 'idea', f'TQ-{t:04d}')])
 
     def test_no_wrap_up_is_asked_for_while_an_agent_still_has_the_task(self):
         s = store()
@@ -321,8 +393,10 @@ class LanesTests(unittest.TestCase):
         self.assertEqual(by['Process Error Check FAILED']['lane'], 'broken')
         self.assertEqual(by['Headcount - 5 rows']['lane'], 'report')            # a run that worked is still just news
         # 30 hours old and still in the pipe, while the ordinary report beside it obeys the window
-        self.assertLess(funnel._BAND['broken'], funnel._BAND['report'])
-        self.assertLess(funnel._BAND['approve'], funnel._BAND['broken'])        # a drafted reply still outranks it
+        # a check that could not run is the owner's task; the run that worked is a result below it
+        self.assertLess(funnel._band(by['Process Error Check FAILED']), funnel._band(by['Headcount - 5 rows']))
+        # a drafted reply and a failed check are both the owner's task now - one level, oldest first
+        self.assertEqual(funnel._band({'lane': 'approve'}), funnel._band(by['Process Error Check FAILED']))
         self.assertFalse(funnel._aged_out(by['Process Error Check FAILED'], datetime.now(), 12))
         self.assertNotIn('broken', funnel.MUTED_LANES)   # a rule that quiets a report cannot quiet it FAILING
 
@@ -399,12 +473,13 @@ class LanesTests(unittest.TestCase):
         with mock.patch('taskuary.terminal.live_sessions', return_value=working):
             ev = funnel.announce(s)
         self.assertEqual([(e['kind'], e['tid']) for e in ev], [('working', t)])
-        self.assertIn("codex is working on TQ-0001 (Pto) - nothing for you there now. Let's go to the next thing.", ev[0]['text'])
+        self.assertIn("codex is working on TQ-0001 (Pto) - nothing for you there now.", ev[0]['text'])
+        self.assertNotIn('next thing', ev[0]['text'])                                    # a worker starting is not a nudge to advance (PW-168)
         with mock.patch('taskuary.terminal.live_sessions', return_value=working):
             self.assertEqual(funnel.announce(s), [])                                  # said once
         with mock.patch('taskuary.terminal.live_sessions', return_value=parked):
             ev = funnel.announce(s)
-        self.assertEqual(ev[0]['kind'], 'asking'); self.assertIn('asked you something on TQ-0001', ev[0]['text']); self.assertEqual(ev[0]['card']['kind'], 'agent')
+        self.assertEqual(ev[0]['kind'], 'asking'); self.assertIn('asked you something on TQ-0001', ev[0]['text']); self.assertIsNone(ev[0]['card'])
         s.add_comment(t, 'codex', 'agent', 'CODER REPORT' + chr(10) + 'Summary: imported all 80 PTO files; results mailed.')
         s.update_task(t, {'Status': 'done'}, 'o')
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
@@ -412,9 +487,9 @@ class LanesTests(unittest.TestCase):
             self.assertEqual(ev[0]['kind'], 'done'); self.assertIn('imported all 80 PTO files', ev[0]['text']); self.assertIn('task is closed', ev[0]['text'])
             self.assertIsNone(ev[0]['card'])
             self.assertEqual(funnel.announce(s), [])                                  # a closed task is not watched again
-        # Status lines remain in the transcript, but a closed task never leaves a live card behind.
-        hist = concierge.history(s, general.dock_task(s)[0]['TaskId'])
-        self.assertEqual([(h['role'], (h['card'] or {}).get('kind')) for h in hist], [('assistant', None), ('assistant', 'agent'), ('assistant', None)])
+        # The watcher writes nothing into the chat (PW-165): its word is a notice on the strip, kept until Open or Later
+        self.assertEqual(concierge.history(s, general.dock_task(s)[0]['TaskId']), [])
+        self.assertEqual([(a['kind'], a['item']) for a in funnel.notices(s)], [('done', f'task:{t}')])
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             self.assertIn('events', funnel.pile(s, force=True))
 
@@ -424,7 +499,7 @@ class LanesTests(unittest.TestCase):
         s.add_route(m1, None, 'file', None, 'triage: fyi - a person told you something', [], 'triage')
         ev = [{'start': ahead(10), 'end': ahead(40), 'subject': 'Standup', 'who': ['Priya Shah', 'Marcus Lee'], 'about': 'weekly', 'all_day': False},
               {'start': ahead(90), 'end': ahead(120), 'subject': 'Budget review', 'who': [], 'all_day': False},
-              {'start': ahead(600), 'end': ahead(660), 'subject': 'Far away', 'who': [], 'all_day': False}]
+              {'start': ahead(60 * 26), 'end': ahead(60 * 27), 'subject': 'Far away', 'who': [], 'all_day': False}]   # tomorrow: today's are all visible (2026-09-07)
         with mock.patch.object(funnel, '_agenda', return_value=ev):
             p = funnel.build(s)
             al = funnel.alerts(s, p['items'])
@@ -522,12 +597,12 @@ class LanesTests(unittest.TestCase):
         self.assertEqual(funnel.build(s)['items'], [])
         self.assertIsNone(funnel.next_item(s, f'done:{t}'))
 
-    def test_the_assistants_open_lines_are_the_forgotten_lane(self):
+    def test_the_assistants_open_lines_are_fyi_until_triage_calls_them_work(self):
         s = store()
         s.upsert_idea({'key': 'followup:c9', 'kind': 'followup', 'text': 'No answer from Dana in 4 days - follow up?', 'sig': 'x',
                        'action': {'type': 'followup', 'mid': 5, 'why': 'you asked on Monday'}}, ago(1))
         items = funnel.build(s)['items']
-        self.assertEqual([(i['lane'], i['kind'], i['idea_kind']) for i in items], [('forgotten', 'idea', 'followup')])
+        self.assertEqual([(i['lane'], i['kind'], i['idea_kind']) for i in items], [('fyi', 'idea', 'followup')])
         self.assertEqual(items[0]['why'], 'you asked on Monday')
         # Being spoken in the Assistant marks an ordinary follow-up read and removes it.
         funnel.settle(s, items[0]['key'], 'surfaced')
@@ -555,7 +630,7 @@ class LanesTests(unittest.TestCase):
         s.upsert_idea({'key': 'cold:TQ-0009', 'kind': 'cold', 'text': 'TQ-0009 has sat quiet', 'sig': 'y', 'action': {'tid': 9}}, ago(days=3))
         self.assertEqual(funnel.build(s)['items'], [])
 
-    def test_a_persons_ask_comes_before_follow_up_lines_and_reports_and_fyi_is_last(self):
+    def test_one_level_for_the_owners_work_oldest_first_then_results_then_fyi(self):
         s = store()
         s.set_setting('team_domains', 'ours.com', 't')
         m = mail(s, 'Team note', who='Lee', email='lee@ours.com', body='FYI all good.', hours=9, status='filed', conv='n1')
@@ -568,7 +643,11 @@ class LanesTests(unittest.TestCase):
         t2 = s.create_task({'Title': 'Draft', 'Kind': 'coding', 'Status': 'waiting'}, 'o')
         m2 = mail(s, 'Newest ask', hours=1, tid=t2)
         s.add_review({'TaskId': t2, 'MessageId': m2, 'Kind': 'reply', 'DraftText': 'ok', 'Status': 'pending'})   # newest, but promoted
-        self.assertEqual([i['kind'] for i in funnel.build(s)['items']], ['review', 'todo', 'idea', 'report', 'fyi'])   # a person's ask before the assistant's line before a report
+        # The five levels are triage's verdict, and inside one the oldest leads - so the ask from two
+        # hours ago comes out before the draft from one (the owner, 2026-09-07: "no reason why open
+        # task is before a reply drafted"), the landed report is a result below both, and the fyi and
+        # the unjudged idea share the last level oldest-first.
+        self.assertEqual([i['kind'] for i in funnel.build(s)['items']], ['todo', 'review', 'report', 'fyi', 'idea'])
 
     def test_marketing_mail_is_still_unread_until_the_owner_handles_it(self):
         s = store()
@@ -636,7 +715,7 @@ class FeedUnreadTests(unittest.TestCase):
         urgent = mail(s, 'Production is down', tid=task)
         by_id = {r['MessageId']: r for r in s.feed()}
         self.assertEqual(by_id[urgent]['UnreadRank'], 1)
-        self.assertEqual(by_id[fyi]['UnreadRank'], 7)
+        self.assertEqual(by_id[fyi]['UnreadRank'], 4)
 
     def test_repeated_assistant_posts_follow_the_latest_idea_and_read_state(self):
         s = store()
@@ -665,13 +744,13 @@ class FeedUnreadTests(unittest.TestCase):
                  'idle': 2, 'waiting': False, 'tail': ['working']}]
         with mock.patch('taskuary.terminal.live_sessions', return_value=live):
             row = next(r for r in s.feed() if r['MessageId'] == mid)
-            self.assertEqual((row['Unread'], row['UnreadRank'], row['Working']), (1, 8, 'codex'))
+            self.assertEqual((row['Unread'], row['UnreadRank'], row['Working']), (1, 5, 'codex'))
             self.assertEqual(row['FunnelKey'], f'agent:{task}')
             self.assertIsNone(funnel.next_item(s))
         waving = [dict(live[0], idle=200, waiting=True, tail=['Which region should I use?'])]
         with mock.patch('taskuary.terminal.live_sessions', return_value=waving):
             row = next(r for r in s.feed() if r['MessageId'] == mid)
-            self.assertEqual((row['Unread'], row['UnreadRank']), (1, 0))
+            self.assertEqual((row['Unread'], row['UnreadRank']), (1, 2))
             self.assertEqual(funnel.next_item(s)['key'], f'agent:{task}')
 
 

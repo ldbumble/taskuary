@@ -2,10 +2,14 @@
 
 _Taskuary writes this document itself, from your verdicts: every draft you edit before
 sending, every reply you reject, every task you reclassify or promote by hand teaches it
-something general about how you work. Machine-written lines carry a `[s:N | ev: … | seen: …]`
-tag — strength (how often the pattern held), the evidence behind it, and when it last held —
-so any wrong inference is traceable and one delete removes it. Lines without a tag are yours
-and are never touched. Edit anything; **SOUL.md always outranks this file.**_
+something general about how you work. Machine-written lines carry a `[s:N | ev: … | seen: … | k: …]`
+tag — strength (how often the pattern held), the evidence behind it, when it last held, and the
+key that keeps it the same line as it gets reworded — so any wrong inference is traceable and one
+delete removes it. A line still under test loses a point every tenth time Taskuary reviews your
+verdicts and finds nothing that confirms it, and is dropped when that runs out — so a quiet spell
+costs it nothing, only real evidence that failed to arrive does. A rule that has gone live is left
+alone. Lines without a tag are yours and are never touched. Edit anything; **SOUL.md always
+outranks this file.**_
 
 ## Role & responsibilities
 _(what you turn out to be responsible for, who you answer to, what you care about — nothing

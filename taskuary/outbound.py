@@ -139,6 +139,37 @@ def reply_channels(store) -> set:
     return {c.strip() for c in str(raw).split(',') if c.strip()}
 
 
+def send_probe(store, channel, mailbox: str = None) -> str:
+    """Why a reply could NOT leave even with replies switched on - answered from what is already on the
+    cards, before any send is tried (PW-143): an IMAP mailbox with no SMTP host, a Microsoft sign-in that
+    never granted Mail.Send. '' when at least one sending card is not known to be blocked, which includes
+    having no card at all - "nothing is connected" is a different sentence, said elsewhere.
+
+    A missing permission is cheap to see and expensive to discover from a bounced send, so the surfaces
+    hide Send with this reason. Drafting and reading never consult it."""
+    if (channel or '').lower() != 'email': return ''
+    from .imapmail import HOSTS, _hosts
+    def _cfg(c):
+        try: return json.loads(c.get('ConfigJson') or '{}')
+        except ValueError: return {}
+    kind = lambda c: str(c.get('Type') or '').lower()
+    cards = [c for c in store.list_connectors() if c.get('Active') and kind(c) in ('outlook', 'imap', *HOSTS)]
+    if mailbox:
+        mine = [c for c in cards if str(_cfg(c).get('address') or _cfg(c).get('account') or '').lower() == str(mailbox).lower()]
+        cards = mine or cards
+    why = []
+    for c in cards:
+        cfg = _cfg(c); who = cfg.get('address') or cfg.get('account') or c.get('Name') or kind(c)
+        granted = str(cfg.get('granted_scope') or '')
+        # an older sign-in recorded no scopes: unknown is not "missing", so it is left alone
+        if kind(c) == 'outlook' and granted and 'Mail.Send' not in granted:
+            why.append(f'the Microsoft sign-in for {who} did not grant Mail.Send - sign in again on the Outlook card')
+        elif kind(c) != 'outlook' and not _hosts(c)[1]:
+            why.append(f'no SMTP host is configured for {who} (its card)')
+        else: return ''                          # one card that can send is enough
+    return '; '.join(why)
+
+
 def can_reply(store, channel) -> bool:
     """May a reply be drafted and sent on this channel at all?
 
@@ -150,7 +181,21 @@ def can_reply(store, channel) -> bool:
     if not ch or ch in NEVER: return False
     if ch in SENDABLE and ch not in reply_channels(store): return False
     if ch == 'github': return store.github_replies_ok()
+    if ch == 'email' and send_probe(store, ch): return False
     return True
+
+
+def send_block(store, channel) -> str:
+    """WHY a reply cannot leave on this channel, in the owner's words - '' when it can. The one
+    sentence every surface shows beside a draft instead of a send button (PW-044); can_reply
+    stays the decision, this is only its explanation."""
+    ch = (channel or '').lower()
+    if not ch: return 'this message has no channel to reply on'
+    if ch in NEVER: return f'{ch} items cannot be replied to from here'
+    if ch == 'github': return '' if store.github_replies_ok() else 'GitHub replies are off (GitHub card)'
+    if ch in SENDABLE and ch not in reply_channels(store): return f'replies are off for {ch} (Settings → Replies)'
+    if ch == 'email': return send_probe(store, ch)
+    return ''
 
 
 def send_out(store, channel: str, to, subject: str, body: str, cc: list = None) -> dict:
@@ -284,6 +329,64 @@ def send_targets(store) -> list:
         {k: v for k, v in r.items() if not k.startswith('_')}
         for r in sorted(tos.values(), key=lambda x: (x['_last'], x['name'].lower()), reverse=True)
     ]} for ch, tos in seen.items()]
+
+
+def reply_envelope(store, msg: dict, mode: str = 'reply_all'):
+    """Who an email reply goes to (PW-063): Reply all by default - the sender (or the message's Reply-To),
+    the original To and CC participants, the sending mailbox's own addresses excluded, deduplicated case-
+    insensitively, never a BCC - or Reply to: the sender alone. None for anything that is not email."""
+    if str((msg or {}).get('Channel') or '').lower() != 'email': return None
+    from .ingest import owner_addresses, own_addresses
+    try: rec = json.loads(msg.get('RecipientsJson') or '{}') or {}
+    except (TypeError, ValueError): rec = {}
+    try: meta = json.loads(msg.get('MailMetaJson') or '{}') or {}
+    except (TypeError, ValueError): meta = {}
+    own = {str(msg.get('SourceName') or '').lower()} | {a.lower() for a in owner_addresses(store)} | {a.lower() for a in own_addresses(store)}
+    own.discard('')
+    sender = str(meta.get('reply_to') or msg.get('FromEmail') or '').strip().lower()
+    def clean(seq, skip):
+        out = []
+        for a in seq or []:
+            a = str(a or '').strip().lower()
+            if a and '@' in a and a not in own and a not in skip and a not in out: out.append(a)
+        return out
+    to = [sender] if sender else []
+    if mode == 'reply_all':
+        to += clean(rec.get('to'), set(to))
+        cc = clean(rec.get('cc'), set(to))
+    else: cc = []
+    return {'kind': 'reply', 'mode': 'reply_all' if mode == 'reply_all' else 'reply_to', 'to': to, 'cc': cc}
+
+
+UNKNOWN_ERRORS = (requests.exceptions.ReadTimeout, requests.exceptions.ConnectionError, TimeoutError)
+
+
+def _rcpts(rows) -> list: return [str((r.get('emailAddress') or {}).get('address') or '').lower() for r in (rows or []) if isinstance(r, dict)]
+
+
+def reconcile_sent(store, msg: dict, body: str, since: str = None):
+    """Did an uncertain send actually go out? Asked of the provider (PW-144): for a Graph mailbox, the Sent Items of
+    the conversation since the attempt; the first mail whose text carries the reply's opening words is the receipt.
+    None when nothing is found or the provider cannot be asked - which is NOT proof of not sent."""
+    if str((msg or {}).get('Channel') or '').lower() != 'email': return None
+    ext = str(msg.get('ExternalId') or '')
+    if not ext.startswith('graph:'): return None
+    try:
+        box = msg.get('SourceName') or _mailbox(store)
+        tok = _graph_token(store, connector_id=_source_connector_id(store, 'email', box))
+        conv = msg.get('ConversationId')
+        params = {'$top': 10, '$orderby': 'sentDateTime desc', '$select': 'id,sentDateTime,bodyPreview,toRecipients,ccRecipients'}
+        if conv: params['$filter'] = f"conversationId eq '{conv}'"
+        r = requests.get(f'{GRAPH}/users/{box}/mailFolders/sentitems/messages', headers={'Authorization': f'Bearer {tok}'}, timeout=20, params=params)
+        if r.status_code >= 300: return None
+        head = ' '.join(str(body or '').split())[:60].lower()
+        for m in (r.json() or {}).get('value') or []:
+            if since and str(m.get('sentDateTime') or '') < since: continue
+            if head and head[:40] in ' '.join(str(m.get('bodyPreview') or '').split()).lower():
+                return {'channel': 'email', 'id': m.get('id'), 'to': _rcpts(m.get('toRecipients')), 'cc': _rcpts(m.get('ccRecipients')), 'reconciled': True}
+    except Exception as e:
+        logger.warning(f'could not reconcile an uncertain send: {e}')
+    return None
 
 
 def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = None) -> dict:

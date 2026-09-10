@@ -1,7 +1,7 @@
 # taskuary.com
 
-The landing page. Static — one `index.html` with its CSS inline, the Studio screenshot as the
-hero, the icon, and a social card. No build step, no framework, nothing to install.
+The landing page. Static — `index.html`, the interactive Three.js Studio hero under `workspace/`,
+the icon, and a social card. No build step, no framework, nothing to install.
 
 The interactive demo is built to `site/demo/` with `npm --prefix website run build:demo`
 and is served at `https://taskuary.com/demo/`.
@@ -23,10 +23,10 @@ Every push to `master` redeploys. A one-off deployment is simply `npx wrangler d
 
 - `index.html` — the whole page. The palette is the app's own ("Beacon": `website/src/theme.jsx`),
   type is IBM Plex from Google Fonts.
-- `floor.js` — the hero: the Studio's own isometric renderer (ported from `website/src/StudioView.jsx`)
-  on a canvas, driven by `STORY` — mail arrives on the rail, triage rules, agents walk in through
-  the door and sit. The door is clickable and scrolls into the site. Respects `prefers-reduced-motion`
-  (one composed frame). Edit the story in `STORY`; the loop length is `LOOP` seconds.
+- `workspace/` — the interactive Three.js hero. Work arrives beside the room, agents collect it,
+  desks assemble as needed, and Nora raises her hand with a draft. It supports mouse, touch,
+  keyboard navigation, and `prefers-reduced-motion`.
+- `floor.js` — the previous canvas hero, retained for reference but no longer loaded by the page.
 - `og.png` — the 1200×630 social card, cropped from `docs/screenshot-floor.png`.
 - The Download button points at `releases/latest`; `publish.yml` attaches `Taskuary.exe` to
   every tagged release, so the direct link

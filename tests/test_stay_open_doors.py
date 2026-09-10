@@ -88,15 +88,18 @@ class TheMarkIsSetByTheDoor(unittest.TestCase):
 class NeitherRoadEndsIt(unittest.TestCase):
     def setUp(self): selfclose._DONE.clear()
 
-    def test_the_agents_done_is_filed_not_obeyed(self):
+    def test_the_agents_done_closes_its_run_and_leaves_the_task(self):
+        """PW-232: the explicit word closes the completed run and saves its result; the task the owner
+        opened stays theirs to end, and the judge's closing road (_wrap) is never taken."""
         s = MemoryStore(); tid = _task(s, status='in_progress'); selfclose.claim(s, tid, 'owner')
         with mock.patch('taskuary.terminal.session_for', return_value=None), \
              mock.patch.object(selfclose, 'blocked', return_value=''), \
+             mock.patch('taskuary.coder.wrap', return_value={'wrap': 'done', 'artifacts': []}), \
              mock.patch.object(selfclose, '_wrap') as wrap:
             out = selfclose.declare(s, tid, 'PR 33 is not ready to merge', 'coder')
-        self.assertTrue(out['held']); self.assertFalse(out['closed']); wrap.assert_not_called()
+        self.assertTrue(out['closed_run']); self.assertFalse(out['closed']); wrap.assert_not_called()
         self.assertEqual(s.get_task(tid)['Status'], 'in_progress')
-        self.assertIn('The agent says it is finished: PR 33', s.list_comments(tid)[-1]['Body'])
+        self.assertIn('The agent says it is finished: PR 33', ' '.join(c['Body'] for c in s.list_comments(tid)))
 
     def test_the_judge_is_not_consulted(self):
         s = MemoryStore(); tid = _task(s, status='in_progress'); selfclose.claim(s, tid, 'owner')

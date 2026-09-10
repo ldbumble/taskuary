@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Taskuary — a little world of work</title>
+  <link rel="icon" href="../../../site/icon.png">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="interactions.css">
+  <link rel="stylesheet" href="hero.css">
+  <script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
+</head>
+<body>
+  <main>
+    <header class="hero-heading">
+      <a class="hero-brand" href="../../../site/index.html"><img src="../../../site/icon.png" alt="">Taskuary</a>
+      <h1>Your inbox, staffed by <span>AI agents.</span></h1>
+    </header>
+    <div id="activity-text" class="sr-only" aria-live="polite">Milo is bringing in a new task.</div>
+    <section id="world" aria-label="Interactive 3D office with agents working at desks">
+      <div id="loading">Opening the workspace<span>Building a little room for your work…</span></div>
+      <div class="scene-label" id="working-label"><span class="dot"></span><span id="working-count">2 agents working</span></div>
+      <div class="scene-label arrival" id="arrival-label"><span>↳</span> New task, on its way</div>
+      <div class="scene-label waiting-cue" id="approval" hidden>Nora needs you <span>↗</span></div>
+      <div id="hover-hint" class="hover-hint" hidden><strong></strong><span></span></div>
+      <div id="desk-detail" class="desk-detail" hidden><small></small><strong></strong><p></p></div>
+      <div class="scene-label complete" id="complete" hidden>✓ Draft approved. Back to work.</div>
+      <div class="construction-cue" id="construction-cue" role="status" hidden>A workspace, coming together.</div>
+      <div class="room-caption">THE TASKUARY STUDIO <span>CLICK THE FLOOR TO REBUILD</span></div>
+    </section>
+    <aside class="incoming-rail" aria-labelledby="incoming-title">
+      <h2 id="incoming-title"><span class="dot"></span> Arriving <span class="rail-live">INBOX → STUDIO</span></h2>
+      <div class="incoming-list">
+        <button type="button" class="incoming-card" id="incoming-task" data-agent="3">
+          <span class="card-meta"><span class="channel" id="task-channel">GITHUB</span><span id="task-from">priya-dev · pull request</span></span>
+          <strong id="task-subject">Fix rounding in the weekly report</strong>
+          <span class="card-routing"><span class="route-pill" id="task-route">task → an agent</span><span id="task-explanation">Milo is bringing it into the studio.</span></span>
+        </button>
+        <button type="button" class="incoming-card" id="incoming-draft" data-agent="2">
+          <span class="card-meta"><span class="channel">EMAIL</span><span>Dana · Finance</span></span>
+          <strong>Can you send the weekly update?</strong>
+          <span class="card-routing"><span class="route-pill" id="draft-route">drafting</span><span id="draft-explanation">Nora is putting an answer together.</span></span>
+        </button>
+        <article class="incoming-card fyi-card" id="incoming-fyi">
+          <span class="card-meta"><span class="channel">TEAMS</span><span>Sam · IT Helpdesk</span></span>
+          <strong>Anyone able to reset my VPN token?</strong>
+          <span class="card-routing"><span class="route-pill fyi">just an FYI</span><span>A teammate already picked this up.</span></span>
+        </article>
+        <button type="button" class="incoming-card" data-agent="1">
+          <span class="card-meta"><span class="channel">GITHUB</span><span>Payroll · issue #38</span></span>
+          <strong>Timesheet import fails on EmployeeId</strong>
+          <span class="card-routing"><span class="route-pill">task → an agent</span><span>Leo is tracing the issue and checking a fix.</span></span>
+        </button>
+        <button type="button" class="incoming-card" data-agent="0">
+          <span class="card-meta"><span class="channel">REPORT</span><span>Weekly overview · scheduled</span></span>
+          <strong>Reconcile this week's figures</strong>
+          <span class="card-routing"><span class="route-pill">in progress</span><span>Ada is checking the numbers and highlighting changes.</span></span>
+        </button>
+      </div>
+      <p class="rail-note">A little less in your inbox.<br>A little more taken care of.</p>
+      <span class="rail-example">Example messages · click a task to find its agent</span>
+    </aside>
+    <div class="handoff-slip" id="handoff-slip" aria-hidden="true" hidden>↳ New task</div>
+    <div class="scene-tools"><span>Drag to explore · Scroll to lean in · Click the floor for a little magic</span><span class="keyboard-note">Tab to explore · Home to reset</span></div>
+  </main>
+  <footer><div><span>01</span><strong>Work comes in.</strong><small>From your inbox to the doorway.</small></div><div><span>02</span><strong>Agents get to work.</strong><small>A little team, moving things along.</small></div><div><span>03</span><strong>You give the go-ahead.</strong><small>A raised hand when you're needed.</small></div><span class="mockup-note">Interactive mockup · example tasks</span></footer>
+  <dialog id="draft-dialog" aria-labelledby="draft-title">
+    <form method="dialog"><button class="close" aria-label="Close draft">×</button></form>
+    <div class="eyebrow">NORA / READY FOR YOUR REVIEW</div><h2 id="draft-title">One less thing on your list.</h2>
+    <div class="draft"><small>DRAFT EMAIL · WEEKLY UPDATE</small><h3>This week's report is ready</h3><p>Hi team,</p><p>I've reconciled the weekly figures and prepared the summary. Everything is ready for your review, with the changes highlighted.</p><p>Thanks!</p></div>
+    <p class="dialog-note">This is an example. Approving only changes the mockup.</p><button id="approve" class="primary">Approve draft <span>✓</span></button>
+  </dialog>
+  <script type="module" src="scene.js"></script>
+</body>
+</html>

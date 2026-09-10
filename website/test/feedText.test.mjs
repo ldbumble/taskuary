@@ -40,3 +40,26 @@ test("the source chip hides when it only echoes the sender", () => {
   assert.equal(sourceOf(row({ SourceName: "eng-chat", FromName: "Ayush" })), "eng-chat");
   assert.equal(sourceOf(row({ SourceName: "a@b.com", FromEmail: "a@b.com" })), "");
 });
+
+// Chat is not mail: WhatsApp and Slack carry no subject at all, and Teams synthesizes one that
+// only repeats the sender. Both used to leave the row blank, or the work pill reading "(no
+// subject)", next to a message nobody could see without opening it (owner, 2026-09-07).
+test("chat has no subject, so the row says what was actually said", () => {
+  const said = "So what's their moves if it's free?";
+  assert.equal(subjectOf(row({ FromName: "Gabi", SourceName: "group chat", Preview: said })), said);
+  assert.equal(subjectOf(row({ FromName: "Hindy Spiegel", Subject: "Teams chat with Hindy Spiegel",
+    Preview: "can you add Nathan to the call" })), "can you add Nathan to the call");
+  assert.equal(subjectOf(row({ FromName: "Gabi", SourceName: "group chat", Subject: "Gabi in group chat",
+    Preview: "Budgeting" })), "Budgeting");
+  // a chat WITH a real subject still has one
+  assert.equal(subjectOf(row({ FromName: "Fireflies", Subject: "AI Agents", Preview: "Nathan invited" })), "AI Agents");
+});
+
+test("what it says has to fit the pill: one line, cut on a word", () => {
+  const long = "Budgeting for the next quarter needs the new headcount plan from Nathan before anyone can sign it off";
+  const out = subjectOf(row({ FromName: "Gabi", Preview: long }));
+  assert.ok(out.length <= 91, `too long for the pill: ${out.length}`);
+  assert.ok(out.endsWith("…") && !out.endsWith(" …"), `cut mid-word: ${out}`);
+  assert.equal(subjectOf(row({ FromName: "Gabi", Preview: "first line\nsecond line" })), "first line");
+  assert.equal(subjectOf(row({ FromName: "Gabi", Preview: "   " })), "");
+});

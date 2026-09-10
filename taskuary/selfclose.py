@@ -111,7 +111,7 @@ def blocked(store, tid: int, term=None) -> str:
     """'' when this task may close itself, else the reason it may not - which is written onto the
     task, because a self-close that silently declines is indistinguishable from one that is
     broken."""
-    from . import waitroom
+    from . import waitroom, workerstate as ws
     if not tid: return 'no task'
     with _LOCK:
         if tid in _DONE: return 'a self-close already ran for this task'
@@ -119,6 +119,10 @@ def blocked(store, tid: int, term=None) -> str:
     if not t: return 'no task'
     if t.get('Status') in ('done', 'dropped'): return 'the task is already closed'
     if term is not None:
+        # a pending approval is the owner's decision to make, not the judge's (PW-234): the automatic
+        # road must not close a run that is still waiting to be let through
+        req = ws.asking_of(store, term)
+        if req and req['kind'] == 'approval_needed': return f'a pending approval is open: {req["text"][:160]}'
         age = time.time() - (getattr(term, 'started_ts', 0) or 0)
         if getattr(term, 'started_ts', 0) and age < MIN_AGE: return f'the session is younger than {int(MIN_AGE)}s'
         if getattr(term, 'n', 0) < MIN_CHARS: return 'the session has barely printed anything'
@@ -127,6 +131,15 @@ def blocked(store, tid: int, term=None) -> str:
         if waitroom.looks_like_question(term.tail(waitroom.TAIL_LINES)):
             return 'the last lines read as a question for you'
     return ''
+
+
+def unclaim(store, tid: int, actor: str = 'owner') -> None:
+    """The owner closed the task they had opened a session on: the mark comes off, so a later close by
+    a draft's verdict or by an agent is not refused for it."""
+    t = store.get_task(tid)
+    if not t or not stays_open(store, tid): return
+    tags = [x.strip() for x in str(t.get('Tags') or '').replace(' ', ',').split(',') if x.strip() and x.strip() != STAY_TAG]
+    store.update_task(tid, {'Tags': ','.join(tags)}, actor)
 
 
 def claim(store, tid: int, actor: str = 'owner') -> bool:
@@ -180,15 +193,40 @@ def declare(store, tid: int, summary: str = '', agent: str = 'agent') -> dict:
     # "either way", the box said - and TQ-0297 (2026-09-01) closed under the owner mid-review
     # because the agent decided it was finished. The agent's verdict is filed where the owner
     # reads it; the session stays at its prompt, which raises its hand; the owner presses Done.
-    if stays_open(store, tid):
-        store.add_comment(tid, agent, 'agent', f'The agent says it is finished: {line}' if line else 'The agent says it is finished.')
-        store.audit('task', tid, 'agent_done_held', agent, detail={'why': 'opened to work in'})
-        return {'closed': False, 'held': True,
-                'why': 'the owner opened this session to work in, so only they end it - your summary is on the task; stay at the prompt'}
     if not _mark(tid): return {'closed': False, 'why': 'a self-close already ran for this task'}
+    result = _finished(store, tid, term.session_for(tid), line)
+    if stays_open(store, tid):
+        # an EXPLICIT finish closes the completed run and saves its result even when the owner opened the
+        # session (PW-232): the veto was for the judge, not for the agent's own word. The task's closure and
+        # any reply stay the owner's decisions, so close=False.
+        store.add_comment(tid, agent, 'agent', f'The agent says it is finished: {line}' if line else 'The agent says it is finished.')
+        try:
+            out = coder.wrap(store, tid, close=False, actor=agent or 'coder', final_message=result)
+        except Exception as e:
+            forget(tid)
+            store.add_comment(tid, 'router', 'agent', f'The agent finished but its result could not be saved ({str(e)[:200]}) - the session is still open; try again.')
+            return {'closed': False, 'why': str(e)[:200]}
+        store.audit('task', tid, 'agent_done_run_closed', agent, detail={'why': 'opened to work in - the run closed, the task stays'})
+        return {'closed': False, 'closed_run': True, 'why': 'the run closed and its result is on the task; you opened this task, so its closure is yours', **out}
     store.add_comment(tid, agent, 'agent',
                       f'The agent closed this itself: {line}' if line else 'The agent closed this itself.')
-    return _wrap(store, tid, agent, 'the agent said it was finished' + (f' - {line}' if line else ''))
+    return _wrap(store, tid, agent, 'the agent said it was finished' + (f' - {line}' if line else ''), result)
+
+
+def _finished(store, tid: int, s, line: str) -> str:
+    """The explicit result as an event (workerstate.py, PW-222/230). The RESULT is the agent's own last message -
+    the Stop hook kept this run's last_assistant_message as its newest turn_end - and the `--done` sentence is
+    the summary; only with nothing spoken does the sentence stand in. Finished does not close the task by
+    itself: the wrap does that, on its own terms."""
+    try:
+        from . import workerstate as ws
+        sid = getattr(s, 'sid', None) or ws.current_sid(store, tid) or 'cli'
+        spoken = next((e['Text'] for e in reversed(ws.events(store, tid, sid)) if e['Kind'] == 'turn_end' and e['Text']), '')
+        result = spoken or line
+        ws.record(store, tid, sid, 'finished', text=result, source='cli')
+        return result
+    except Exception as e:
+        logger.debug(f'finished event skipped: {e}'); return line
 
 
 def on_stop(store, term, said: str = '') -> dict:
@@ -276,3 +314,22 @@ def chat_marker(text: str) -> tuple:
     m = _MARK_RE.search(text or '')
     if not m: return text, None
     return (text[:m.start()].rstrip(), ' '.join((m.group(1) or '').split())[:600])
+
+
+# ── ...and its question (PW-225) ────────────────────────────────────────────────────────
+# A regular worker has no AskUserQuestion tool and no hook: when it cannot go on without the owner it says
+# so with a marker, and Taskuary records the exact question as an Input-needed request - the one the
+# owner's answer is bound to (workerstate.answer). A marker, again, not a judge reading prose for a '?'.
+ASK_MARKER = '[[TASKUARY-ASK]]'
+_ASK_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?ASK\s*\]\]\s*:?\s*(.*)', re.I | re.S)
+ASK_LINE = (f'ASKING THE OWNER: when you cannot continue without their answer, end your reply with a final line: '
+            f'{ASK_MARKER} <the exact question> | <choice> | <choice> (choices optional). Taskuary shows it as a question '
+            f'waiting for them and brings their answer back to you. Only for a real blocker, never for a rhetorical question.')
+
+
+def ask_marker(text: str) -> tuple:
+    """(cleaned reply, question, choices) - or (text, None, []) when the reply asks nothing structurally."""
+    m = _ASK_RE.search(text or '')
+    if not m: return text, None, []
+    parts = [' '.join(p.split()) for p in m.group(1).split('|')]
+    return text[:m.start()].rstrip(), (parts[0][:600] or None), [p[:120] for p in parts[1:] if p]

@@ -1,5 +1,5 @@
 """`taskuary` - start the local server and open the app. Everything lives in ~/.taskuary."""
-import argparse, socket, threading, time, webbrowser
+import argparse, socket, threading, webbrowser
 import uvicorn
 from . import __version__, config
 
@@ -23,6 +23,27 @@ def _is_taskuary(url):
         return False
 
 
+def open_when_ready(url: str, wait, open_it=None):
+    """Open the browser once the port ANSWERS, not on a timer.
+
+    A fixed 1.2s sleep was always a guess and had become a wrong one by 15 seconds: uvicorn.run
+    is handed the app as a STRING, so uvicorn performs the ~8s cold import itself (fastapi and
+    pydantic, ~600 modules) and only then runs the lifespan. The browser therefore opened on a
+    dead port and the owner got their browser's own "site can't be reached" (2026-09-09) - which
+    no splash of ours can replace, because that page is Chrome's, not the app's.
+
+    `wait` arrives already imported and this thread imports NOTHING, because uvicorn is importing
+    taskuary.server on the main thread at the same moment. The first version imported urllib in
+    here and deadlocked against urllib3's six shim over there: the port never opened, and the app
+    the owner had just started sat there dead for as long as they left it (2026-09-09).
+
+    If it never answers the browser still opens: degrade to the old behaviour, which at least
+    shows the owner something, rather than to a window that never appears.
+    """
+    wait(url)
+    (open_it or webbrowser.open)(url)
+
+
 def main():
     ap = argparse.ArgumentParser(prog='taskuary', description='Your work AI assistant - the local-first agent work hub.')
     ap.add_argument('--host', help='override [server].host (0.0.0.0 to listen on all interfaces)')
@@ -39,6 +60,12 @@ def main():
     # "is the triage right?" is a rate, and nothing measured it: build the labelled cases out of
     # the owner's own verdicts, score the configured classifier over them, or export a set that
     # can leave the machine (people and prose removed) - see evalset.py
+    # coding tasks triage could not name a repository for cannot start at all: the agent wants a
+    # checkout and there is none to give it. They are the assistant's work now (ingest: no_repo), but
+    # rows that arrived before that rule are still sitting on the board unstartable.
+    ap.add_argument('--reroute-held', action='store_true',
+                    help='move open coding tasks that have no nameable repository to the agent that '
+                         'needs none, and start them; prints what moved, then exits')
     ap.add_argument('--evalset', choices=['build', 'share', 'evaluate', 'ablate'], metavar='ACTION',
                     help='triage dataset: build (labelled cases from your verdicts -> ~/.taskuary/eval), '
                          'evaluate (score the configured AI over them), ablate (score with and without memory), '
@@ -163,16 +190,50 @@ def main():
             else: print(f"filed in the Hub under {p['Topic']} as #{p['LoreId']}: {p['Title']}")
             return
         if args.note:
-            try: n = bb.post(store, args.note, args.kind, who, cwd, int(tid) if str(tid).isdigit() else None)
+            try: n = bb.post(store, args.note, args.kind, who, cwd, int(tid) if str(tid).isdigit() else None, sid=os.environ.get('TASKUARY_SID'))
             except ValueError as e: print(f'not posted: {e}'); return
             print(f"posted to the wall as {n['Agent']} [{n['Kind']}]")
             return
-        rows = store.notes(bb.norm(cwd), 40 if args.all else 20, rolled=args.all)
+        if args.all:
+            rows = store.notes(bb.norm(cwd), 40, rolled=True)
+        else:
+            # Liveness belongs to the running server's terminal registry. A fresh CLI process has
+            # an empty registry of its own, so reading SQLite here would mislabel active SID notes
+            # as dead. Ask the same endpoint as the Board, with this session's scoped token.
+            import requests
+            srv = config.load()['server']
+            base = os.environ.get('TASKUARY_API') or os.environ.get('TASKUARY_URL')
+            if not base:
+                host = '127.0.0.1' if srv.get('host') in ('0.0.0.0', '::', '', None) else srv['host']
+                base = f"http://{host}:{srv.get('port') or 7787}"
+            token = os.environ.get('TASKUARY_TOKEN') or srv.get('token') or ''
+            try:
+                response = requests.get(f'{base.rstrip("/")}/api/board/notes', timeout=5,
+                                        headers={'X-Taskuary-Token': token} if token else {},
+                                        params={'cwd': cwd, 'limit': 20})
+                response.raise_for_status()
+                payload = response.json()
+                if not isinstance(payload, dict) or not isinstance(payload.get('data'), list):
+                    raise ValueError('the server returned an invalid wall response')
+                rows = payload['data']
+            except Exception as e:
+                print(f'the live wall is unavailable for {cwd}: could not reach Taskuary at {base}: {e}')
+                return
         print(f'the wall - {cwd}' if rows else f'the wall is empty for {cwd} - you are first')
         if not args.all and rows: print('  (older days are folded into [summary] lines; --board --all for every note)')
         for r in reversed(rows):
             ref = f" {task_ref(r['TaskId'])}" if r.get('TaskId') else ''
             print(f"  [{r['Kind']}] {r['Agent']}{ref} {bb._ago(r['CreatedAt'])}: {r['Body']}")
+        return
+    if args.reroute_held:
+        import sys
+        from . import ingest
+        from .store import SQLiteStore, task_ref
+        try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except (AttributeError, OSError): pass
+        moved = ingest.reroute_held_no_repo(SQLiteStore(config.db_path()))
+        for t in moved: print(f"{task_ref(t['TaskId'])} -> general: {t['Title']}")
+        print(f"{len(moved)} task{'s' if len(moved) != 1 else ''} moved.")
         return
     if args.evalset:
         import sys
@@ -213,7 +274,8 @@ def main():
     # QuickBooks redirect URI): server.py reads config, and config reads this
     import os; os.environ['TASKUARY_PORT'] = str(port)
     if not args.no_browser:
-        threading.Thread(target=lambda: (time.sleep(1.2), webbrowser.open(url)), daemon=True).start()
+        from .desktop import serving        # on the MAIN thread, before uvicorn starts importing
+        threading.Thread(target=open_when_ready, args=(url, serving), daemon=True).start()
     uvicorn.run('taskuary.server:app', host=host, port=port, log_level='warning')
 
 

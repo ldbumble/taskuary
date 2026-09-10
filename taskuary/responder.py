@@ -90,6 +90,72 @@ _SIGNOFF = re.compile(r'^(best|thanks|thank you|regards|cheers|kind regards|best
 _COMMENT = re.compile(r'<!--.*?-->', re.S)
 _TEMPLATE_LINES = re.compile(r'^.*(not generated yet|Write your own rules here).*$', re.M)
 
+WRITING_SOURCE = 'writing'     # a memory note that is an explicit instruction about HOW to write (PW-060)
+OWNER_NOTES = '## Owner notes'
+
+
+def writing_notes(store, budget: int = 1500) -> list:
+    """The standing notes a reply may read: explicit writing instructions and nothing else (PW-060). Triage's
+    verdicts - not a task, not ours, who to defer to - are how mail is ROUTED; they used to ride into every
+    draft as if they were style."""
+    out, used = [], 0
+    for n in store.list_memories():
+        if str(n.get('Source') or '') != WRITING_SOURCE: continue
+        note = ' '.join(str(n.get('Note') or '').split())
+        if not note or used + len(note) > budget: continue
+        out.append(note); used += len(note)
+    return out
+
+
+def style_feedback(store, note: str, actor: str = 'owner') -> bool:
+    """An edited draft's note is a writing instruction: it goes into STYLE.md under Owner notes (outside the
+    generated block, so a regenerate keeps it), not into triage's LEARNED.md (PW-061)."""
+    line = ' '.join(str(note or '').split())
+    if not line: return False
+    from datetime import datetime
+    doc = store.get_doc('style') or ''
+    entry = f'- {datetime.now().strftime("%Y-%m-%d")}: {line[:400]}'
+    if OWNER_NOTES in doc:
+        head, rest = doc.split(OWNER_NOTES, 1)
+        # the section runs to the next heading; the new line joins its end
+        parts = rest.split('\n## ', 1)
+        body = parts[0].rstrip('\n') + '\n' + entry + '\n'
+        doc = head + OWNER_NOTES + body + ('\n## ' + parts[1] if len(parts) > 1 else '')
+    else:
+        doc = doc.rstrip('\n') + f'\n\n{OWNER_NOTES}\n<!-- what you told the drafter after editing its replies; yours to prune -->\n{entry}\n'
+    store.save_doc('style', doc, actor)
+    store.audit('doc', 0, 'style_feedback', actor, detail={'note': line[:200]})
+    return True
+
+
+# a quoted sign-off may span lines (Best, / name / company); an unquoted one is the rest of its line
+_SIGN_QUOTED = re.compile(r'(?:sign[- ]?off|signature)\s*:\s*"([^"]+)"', re.I | re.S)
+_SIGN_LINE = re.compile(r'^\s*-?\s*(?:sign[- ]?off|signature)\s*:\s*(.+?)\s*$', re.I | re.M)
+
+
+def signature_for(store) -> str:
+    """The owner's email signature: the `email_signature` setting when set, else the `Sign off:` / `Signature:`
+    line in STYLE.md (quotes stripped, literal newlines honoured). '' when neither says anything (PW-065)."""
+    sig = str(store.get_settings().get('email_signature') or '').strip()
+    if sig: return sig.replace('\\n', '\n')
+    doc = store.doc('style') or ''
+    q = _SIGN_QUOTED.search(doc)
+    if q: return q.group(1).strip().replace('\\n', '\n')
+    m = _SIGN_LINE.search(doc)
+    if not m: return ''
+    return m.group(1).strip().strip('"\'').replace('\\n', '\n').strip()
+
+
+def with_signature(text: str, sig: str) -> str:
+    """Append the signature once - not when the text already ends with it (the model signed, or the owner did)."""
+    text = str(text or '').rstrip()
+    if not sig or not text: return text
+    first = sig.strip().splitlines()[0].strip().lower()
+    tail = text[-max(400, len(sig) + 40):].lower()
+    if sig.strip().lower() in tail or (first and first in tail and sig.strip().splitlines()[-1].strip().lower() in tail): return text
+    return text + '\n\n' + sig.strip()
+
+
 def style_doc(store) -> str:
     """STYLE.md as prompts read it: comments and template placeholders stripped, owner tokens
     rendered - and empty until the doc says something REAL (headers alone are not a style),
@@ -146,11 +212,9 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     owner = (soul.split('You work for **')[1].split('**')[0] if 'You work for **' in soul else 'the owner')
     # the mail's own words rank the notes, so pass them: a note quoting this subject is the
     # one most likely to change how the reply should read
-    notes = notes_for(store, {'from_email': last.get('FromEmail'), 'subject': last.get('Subject'),
-                              'body': last.get('BodyText')}, budget=1500)
+    # only explicit writing instructions ride into a reply (PW-060); the routing verdicts stay with triage
+    notes = writing_notes(store)
     chat = str(last.get('Channel') or '').lower() in CHAT_CHANNELS
-    from .learn import injectable
-    lrn = injectable(store.doc('learned') or '')
     sty = style_doc(store)
     # The 60-word rule is useful for ordinary mail, but destructive for a completed eight-part
     # request. DONE supplies its own completeness/shape rules, so do not put BREVITY in conflict.
@@ -164,19 +228,16 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
                  f"says you work for {owner}, it is addressing an agent on other tasks; on this "
                  f"one it is describing you:\n{soul[:4000]}" if soul else '')
               + (f'\n\nYour own style, distilled from mail you have actually sent - write like '
-                 f'this:\n{sty[:2500]}' if sty else '')
-              + (f'\n\nYour learned profile - how you write and work, distilled from your own '
-                 f'verdicts on past drafts:\n{lrn[:2000]}' if lrn else ''))
-    if notes:
-        # ranked and budgeted by notes_for. The old notes[:20] then [:1500] took them in row
-        # order and cut the last one mid-sentence, so a verdict past the character line was
-        # both absent and unmentioned
-        system += '\n\nYour own standing notes:\n' + '\n'.join(f'- {n}' for n in notes)
+                 f'this:\n{sty[:2500]}' if sty else ''))
+    # LEARNED.md is triage's document (PW-058): what deserves a task is not how to write a reply
+    if notes: system += '\n\nYour own writing instructions:\n' + '\n'.join(f'- {n}' for n in notes)
     from .triage import strip_boilerplate
-    thread = '\n\n'.join(
-        f"--- {'YOU' if m.get('Status') == 'context' else (m.get('FromName') or m.get('FromEmail'))}"
-        f" · {m.get('SentAt')} · {m.get('Channel')}\n{strip_boilerplate(str(m.get('BodyText') or ''))[:4000]}"
-        for m in store.list_messages(task_id)[-6:])
+    # the writer reads the same assembled conversation triage reads (PW-054): the whole chain, history
+    # included, cleaned and de-quoted under one budget, with the cut said out loud - not the last six
+    # messages chopped at 4,000 characters each and nothing said about the rest
+    from .ingest import exchange_lines
+    lines = exchange_lines(store, {'conversation_id': last.get('ConversationId'), 'subject': last.get('Subject'), 'sent_at': None})
+    thread = '\n\n'.join(lines) if lines else f"--- {last.get('FromName') or last.get('FromEmail')} · {last.get('SentAt')} · {last.get('Channel')}\n{strip_boilerplate(str(last.get('BodyText') or ''))[:4000]}"
     user = f"Subject: {last.get('Subject') or t.get('Title') or ''}\nFrom: {last.get('FromName')} <{last.get('FromEmail')}>\n\n{thread}"
     if resolution: user += f'\n\n--- WHAT WAS DONE (your source of truth; the sender has not seen it)\n{resolution}'
     if nudge: user += f'\n\n--- WHY YOU ARE WRITING AGAIN (the assistant\'s note to you, not for the reader)\n{nudge}'
@@ -194,12 +255,25 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
 
 def draft_for_review(store, task_id: int, review_id: int, llm=None, resolution: str = None, nudge: str = None) -> str:
     """Write the draft and park it on its review, ready for approve / edit / no-reply."""
+    # what this wording is ABOUT is fixed before the model runs (PW-048): a line that lands during
+    # generation was not in its input, so it is never labelled as seen - the draft is marked behind instead
+    from . import operations
+    saw = store.last_inbound_on_task(task_id)
+    revision = operations.message_revision(store, task_id)
     text = draft_reply(store, task_id, llm, resolution, nudge)
+    if saw and str(saw.get('Channel') or '').lower() == 'email':
+        # the signature rides in the draft the owner reviews, once (PW-065); the recipients it will go to are pinned
+        # with it, Reply all by default (PW-063/064) - an envelope the owner already set is kept
+        text = with_signature(text, signature_for(store))
+        from . import outbound as _ob
+        if not store.review_envelope(review_id):
+            env = _ob.reply_envelope(store, saw)
+            if env: store.set_review_envelope(review_id, env)
     store.update_review_draft(review_id, text, None)
-    # The review now says exactly which inbound line this wording saw.  A later chat line makes
-    # that marker stale and approval stops rather than sending an answer to yesterday's context.
-    latest = store.last_inbound_on_task(task_id)
-    if latest: store.update_review_message(review_id, latest['MessageId'])
+    if saw: store.pin_review_context(review_id, saw['MessageId'], revision)
+    if operations.message_revision(store, task_id) != revision:
+        store.mark_review_stale(review_id)
+        logger.info(f'draft for task {task_id} is behind the thread already - a line landed while it was written')
     logger.info(f'drafted reply for task {task_id} ({len(text)} chars)')
     return text
 
@@ -260,8 +334,6 @@ def draft_for_message(store, m: dict, review_id: int, llm=None) -> str:
     soul = store.doc('soul') or ''
     owner = (soul.split('You work for **')[1].split('**')[0] if 'You work for **' in soul else 'the owner')
     chat = str(m.get('Channel') or '').lower() in CHAT_CHANNELS
-    from .learn import injectable
-    lrn = injectable(store.doc('learned') or '')
     sty = style_doc(store)
     system = (SYSTEM.format(owner=owner) + BREVITY + (CHAT if chat else EMAIL) + '\n' + NOT_YET
               # every block below describes YOU. They are written in the third person because
@@ -271,16 +343,9 @@ def draft_for_message(store, m: dict, review_id: int, llm=None) -> str:
                  f"says you work for {owner}, it is addressing an agent on other tasks; on this "
                  f"one it is describing you:\n{soul[:4000]}" if soul else '')
               + (f'\n\nYour own style, distilled from mail you have actually sent - write like '
-                 f'this:\n{sty[:2500]}' if sty else '')
-              + (f'\n\nYour learned profile - how you write and work, distilled from your own '
-                 f'verdicts on past drafts:\n{lrn[:2000]}' if lrn else ''))
-    notes = notes_for(store, {'from_email': m.get('FromEmail'), 'subject': m.get('Subject'),
-                              'body': m.get('BodyText')}, budget=1500)
-    if notes:
-        # ranked and budgeted by notes_for. The old notes[:20] then [:1500] took them in row
-        # order and cut the last one mid-sentence, so a verdict past the character line was
-        # both absent and unmentioned
-        system += '\n\nYour own standing notes:\n' + '\n'.join(f'- {n}' for n in notes)
+                 f'this:\n{sty[:2500]}' if sty else ''))
+    notes = writing_notes(store)                                     # explicit writing instructions only (PW-060)
+    if notes: system += '\n\nYour own writing instructions:\n' + '\n'.join(f'- {n}' for n in notes)
     user = (f"Subject: {m.get('Subject') or ''}\nFrom: {m.get('FromName')} <{m.get('FromEmail')}>\n\n"
             f"{strip_boilerplate(str(m.get('BodyText') or ''))[:4000]}")
     from . import calendar as cal
@@ -289,7 +354,11 @@ def draft_for_message(store, m: dict, review_id: int, llm=None) -> str:
     system += calendar + history_block(store, m) + knowledge.block(store, f"{m.get('Subject') or ''} {m.get('BodyText') or ''}")
     out = (llm(system, user, max_tokens=REPLY_TOKENS) or '').strip()
     if not out: raise RuntimeError('the AI returned an empty reply')
-    out = (strip_signoff(out) or out) if chat else out
+    out = (strip_signoff(out) or out) if chat else with_signature(out, signature_for(store))
+    if not chat and not store.review_envelope(review_id):
+        from . import outbound as _ob
+        env = _ob.reply_envelope(store, m)
+        if env: store.set_review_envelope(review_id, env)
     store.update_review_draft(review_id, out, None)
     store.update_review_message(review_id, m['MessageId'])
     return out

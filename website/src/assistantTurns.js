@@ -23,7 +23,9 @@ export function mergeDurableTurns(local = [], durable = []) {
       // 2026-09-04: "appears, flickers and reapears"). The durable id rides along instead, so the
       // next read still recognises the turn and skips it.
       const bubble = messages[at];
-      messages[at] = { ...turn, id: bubble.id, commentId: turn.id };
+      // ...and its proposal: the durable turn has none, and without it the card lost its buttons and
+      // was redrawn as the item (the owner, 2026-09-07: "shows it then reshows it")
+      messages[at] = { ...turn, id: bubble.id, commentId: turn.id, ...(bubble.proposal ? { proposal: bubble.proposal, card: bubble.card } : {}) };
       claimed.add(at);
     } else {
       messages.push(turn);

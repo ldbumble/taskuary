@@ -76,6 +76,91 @@ class ParseTests(unittest.TestCase):
         with self.assertRaises(ValueError): learn.adopt(s, key)                           # already live
 
 
+class SettleTests(unittest.TestCase):
+    """The bookkeeping learn.settle does in code instead of asking the model for it: a stable k:
+    key, one line per key, and a point off every untested line enough reflections have passed by."""
+    def doc(self, *bullets, section='## Hypotheses - still being tested'):
+        return '# LEARNED.md\n\n' + section + '\n' + '\n'.join(bullets) + '\n'
+
+    def store(self, reflections=0, since='2026-06-02'):
+        """A store whose reflection log holds `reflections` runs, all after `since` - the clock
+        decay is measured on. Dates need not be distinct: what counts is how many ran."""
+        s = MemoryStore()
+        if reflections: s.set_setting(learnedgraph.LOG, ','.join([since] * reflections), 't')
+        return s
+
+    def test_an_explicit_key_is_the_identity_and_a_line_without_one_still_parses(self):
+        d = self.doc('- Uri answers vendors himself. [s:3 | ev: mem1 | seen: 2026-09-01 | k: vendor-mail]',
+                     '- Uri avoids tasks other people own. [s:3 | ev: mem2 | seen: 2026-09-01]')
+        ls = learnedgraph.lines(d)
+        self.assertEqual(ls[0]['key'], 'vendor-mail')
+        self.assertEqual(ls[1]['key'], learnedgraph._key('Uri avoids tasks other people own.'))
+
+    def test_settle_assigns_a_key_once_and_it_survives_a_rephrase(self):
+        s, d = self.store(), self.doc('- Uri answers vendors himself. [s:3 | ev: mem1 | seen: 2026-09-01]')
+        keyed = learn.settle(s, d, d, today='2026-09-05')
+        k = learnedgraph.lines(keyed)[0]['key']
+        self.assertIn(f'| k: {k}]', keyed)
+        rephrased = keyed.replace('Uri answers vendors himself.', 'Vendor mail is answered by Uri, not filed.')
+        self.assertEqual(learnedgraph.lines(learn.settle(s, keyed, rephrased, today='2026-09-05'))[0]['key'], k)
+
+    def test_two_bullets_on_one_key_merge_into_the_stronger_line(self):
+        d = self.doc('- Uri answers vendors himself. [s:3 | ev: mem1 | seen: 2026-09-01 | k: vendor-mail]',
+                     '- Uri replies to vendors personally. [s:5 | ev: mem2, mem3 | seen: 2026-09-04 | k: vendor-mail]')
+        ls = learnedgraph.lines(learn.settle(self.store(), d, d, today='2026-09-05'))
+        self.assertEqual(len(ls), 1)
+        self.assertEqual(ls[0]['score'], 5)
+        self.assertEqual(ls[0]['ev'], ['mem1', 'mem2', 'mem3'])
+        self.assertIn('answers vendors himself', ls[0]['text'])          # the first line keeps its place and wording
+
+    def test_new_evidence_restarts_the_clock(self):
+        old = self.doc('- Uri answers vendors himself. [s:3 | ev: mem1 | seen: 2026-06-01 | k: vendor-mail]')
+        new = self.doc('- Uri answers vendors himself. [s:4 | ev: mem1, mem9 | seen: 2026-06-01 | k: vendor-mail]')
+        out = learn.settle(self.store(30), old, new, today='2026-09-05')
+        self.assertEqual(learnedgraph.lines(out)[0]['seen'], '2026-09-05')   # and 30 reflections no longer count against it
+
+    def test_reflections_spend_a_quiet_hypothesis_and_a_silent_funnel_spends_nothing(self):
+        d = self.doc('- Uri answers vendors himself. [s:5 | ev: mem1 | seen: 2026-06-01 | k: vendor-mail]')
+        l = learnedgraph.lines(d)[0]
+        self.assertEqual(learnedgraph.effective(l, []), 5)                        # no reflections ran: nothing is owed
+        self.assertEqual(learnedgraph.effective(l, ['2026-06-02'] * 30), 2)       # 30 reflections passed it by = 3 points
+        self.assertEqual(learnedgraph.effective(l, ['2026-05-01'] * 90), 5)       # all of them BEFORE the evidence: free
+        # the tag itself is never rewritten by decay - only the line's death is written down
+        self.assertEqual(learnedgraph.lines(learn.settle(self.store(30), d, d, today='2026-09-05'))[0]['score'], 5)
+        spent = learn.settle(self.store(50), d, d, today='2026-09-05')
+        self.assertEqual(learnedgraph.lines(spent), [])
+        self.assertIn('# LEARNED.md', spent)                                      # only the line goes
+
+    def test_years_of_silence_cost_a_live_rule_and_an_owner_line_nothing(self):
+        d = self.doc('- Uri answers vendors himself. [s:5 | ev: mem1 | seen: 2026-01-01 | k: vendor-mail]',
+                     '- Never open a task for payroll.',
+                     section='## What becomes a task')
+        out = learn.settle(self.store(200), d, d, today='2027-06-01')
+        self.assertEqual(learnedgraph.effective(learnedgraph.lines(d)[0], ['2026-06-02'] * 200), 5)
+        self.assertIn('answers vendors himself', out)
+        self.assertIn('- Never open a task for payroll.', out)          # untagged: byte-for-byte, no key added
+
+    def test_a_reflection_records_its_own_tick_and_stale_lines_stop_being_promotable(self):
+        """Same evidence, same s:5 - only the reflections that passed it by differ."""
+        s = MemoryStore()
+        for who in ('alice@x.com', 'bob@y.com', 'alice@x.com'):
+            s.add_memory({'Scope': 'sender', 'ScopeKey': who, 'Source': 'verdict', 'Active': 1, 'CreatedBy': 'owner', 'Note': 'NOT OURS'})
+        hyp = ('# LEARNED.md\n\n## Hypotheses - still being tested\n<!-- hypotheses:start -->\n'
+               '- Uri leaves matters with an assigned owner alone. [s:5 | ev: mem1, mem2, mem3 | seen: 2026-04-01 | k: assigned-owner]\n'
+               '<!-- hypotheses:end -->\n')
+        s.save_doc('learned', hyp, 'reflect')
+        fresh = learnedgraph.graph(s)['lines'][0]
+        self.assertEqual((fresh['score'], fresh['effective']), (5, 5)); self.assertTrue(fresh['eligible'])
+        for _ in range(20): learnedgraph.reflect_log(s, '2026-05-01')    # twenty reflections read the window, none touched it
+        stale = learnedgraph.graph(s)['lines'][0]
+        self.assertEqual((stale['score'], stale['effective']), (5, 3)); self.assertFalse(stale['eligible'])
+
+    def test_the_log_is_capped_and_a_line_older_than_it_is_fully_quiet(self):
+        s = MemoryStore()
+        for i in range(learnedgraph.LOG_KEEP + 25): learnedgraph.reflect_log(s, '2026-%02d-01' % (1 + i % 9))
+        self.assertEqual(len(learnedgraph.reflect_log(s)), learnedgraph.LOG_KEEP)
+
+
 class OwnerSaidItTests(unittest.TestCase):
     def test_a_proposed_hide_rule_backed_by_the_owners_own_verdicts_goes_live_by_itself(self):
         s = seeded()                                   # the refund rule's ev mem1..mem3 are NOT OURS verdict notes
@@ -90,20 +175,17 @@ class OwnerSaidItTests(unittest.TestCase):
         self.assertEqual([l['status'] for l in learnedgraph.lines(s.get_doc('learned')) if 'refund' in l['text']], ['proposed'])
 
 
-class SettledEvidenceTests(unittest.TestCase):
-    def test_unanimous_verdicts_are_declared_settled(self):
-        notes = ['2026-08-26: "Re: Refund - A" - NOT OURS: other people\'s work', '2026-08-25: "Refund approved" - NOT OURS: no task']
-        self.assertEqual(triage._agreement(notes), ('NOT OURS', 2))
-        self.assertEqual(triage._agreement(notes[:1]), ())                                # one is not a pattern
-        self.assertEqual(triage._agreement(notes + ['2026-08-27: "x" - NOT A TASK: filed']), ())   # they disagree
-        self.assertEqual(triage._agreement(['Priya handles AR stuff.']), ())                # free text is advice
-
-    def test_the_prompt_says_settled(self):
+class VerdictEvidenceTests(unittest.TestCase):
+    """Unanimous verdicts used to be declared SETTLED (triage._agreement) and ordered the model's
+    answer. PW-025 (2026-09-06) removed the order: the verdicts stay in the prompt as dated
+    evidence, and the model weighs them against what the new message actually asks."""
+    def test_the_prompt_shows_the_verdicts_and_orders_nothing(self):
         seen = {}
-        def llm(sys_, usr_, **k): seen['sys'] = sys_; return '{"intent": "fyi", "why": "settled"}'
-        triage.classify_intent({'from_email': 'a@b.c', 'subject': 'Re: Refund', 'body': 'thanks'}, llm=llm,
-                               notes=['2026-08-26: "Refund" - NOT OURS: x', '2026-08-25: "Refund" - NOT OURS: y'])
-        self.assertIn('SETTLED BY YOUR OWNER: all 2 past verdicts', seen['sys'])
+        def llm(sys_, usr_, **k): seen['sys'] = sys_; return '{"intent": "fyi", "why": "same refund thread"}'
+        notes = ['2026-08-26: "Refund" - NOT OURS: x', '2026-08-25: "Refund" - NOT OURS: y']
+        triage.classify_intent({'from_email': 'a@b.c', 'subject': 'Re: Refund', 'body': 'thanks'}, llm=llm, notes=notes)
+        self.assertNotIn('SETTLED BY YOUR OWNER', seen['sys'])
+        for n in notes: self.assertIn(n, seen['sys'])
 
 
 class NotCodingTests(unittest.TestCase):

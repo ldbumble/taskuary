@@ -1,6 +1,7 @@
 """The blackboard: agents aware of each other, and the affinity dispatch queue."""
 import json, os, unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from taskuary import blackboard as bb, terminal as term
 from taskuary.ingest import _auto_code, AUTO_SESSIONS
@@ -87,16 +88,17 @@ class BlackboardTests(unittest.TestCase):
         q = self.s.queued_dispatches()
         self.assertEqual([(q[0]['TaskId'], q[0]['BehindTaskId'])], [(new, None)])
 
-    def test_likely_overlap_queues_behind_the_peer(self):
+    def test_likely_overlap_is_a_briefing_not_a_queue(self):
+        """PW-171 (owner): similar work informs the new agent; it never parks the task behind the peer."""
         t1, t2 = self.task('First in'), self.task('Would collide')
         self.s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd': r'C:\code\repo'}))
         term.SESSIONS['a'] = fake_session(t1, r'C:\code\repo', files=['reports.py'])
+        started = []
         real, bb.likely_overlap = bb.likely_overlap, lambda s, tid, ps: (ps[0], 'same files')
+        real_s, term.start_on_task = term.start_on_task, lambda *a, **k: started.append(a[1])
         try: _auto_code(self.s, t2)
-        finally: bb.likely_overlap = real
-        q = self.s.queued_dispatches()
-        self.assertEqual([(q[0]['TaskId'], q[0]['BehindTaskId'])], [(t2, t1)])
-        self.assertIn(task_ref(t1), self.s.list_comments(t2)[-1]['Body'])
+        finally: bb.likely_overlap, term.start_on_task = real, real_s
+        self.assertEqual((started, self.s.queued_dispatches()), ([t2], []))
 
     def test_no_overlap_starts_with_awareness(self):
         t1, t2 = self.task('First in'), self.task('Disjoint')
@@ -115,19 +117,72 @@ class BlackboardTests(unittest.TestCase):
         t1, t2, t3, t4 = self.task('Done'), self.task('Freed'), self.task('Still blocked'), self.task('Blocker')
         term.SESSIONS['b'] = fake_session(t4, r'C:\code\repo')          # t4 still working
         self.s.enqueue_dispatch(t2, t1, 'coder', 'overlap')             # t1 has no session: freed
-        self.s.enqueue_dispatch(t3, t4, 'coder', 'overlap')             # t4 live: stays put
+        self.s.enqueue_dispatch(t3, t4, 'coder', 'overlap')             # t4 live - but overlap no longer parks work (PW-171)
         started = []
         real, term.start_on_task = term.start_on_task, lambda s, tid, *a, **k: started.append(tid)
         try: bb.drain(self.s)
         finally: term.start_on_task = real
-        self.assertEqual(started, [t2])
-        self.assertEqual([q['TaskId'] for q in self.s.queued_dispatches()], [t3])
+        self.assertEqual(started, [t2, t3])
+        self.assertEqual([q['TaskId'] for q in self.s.queued_dispatches()], [])
+
+    def test_failed_start_stays_queued_until_successful_retry(self):
+        tid = self.task('Retry startup')
+        self.s.enqueue_dispatch(tid, None, 'coder', 'slot')
+        with patch.object(term, 'start_on_task', side_effect=RuntimeError('startup failed')):
+            bb.drain(self.s)
+        self.assertEqual([q['TaskId'] for q in self.s.queued_dispatches()], [tid])
+        self.assertTrue(any('Queued start failed: startup failed' in c['Body']
+                            for c in self.s.list_comments(tid)))
+
+        def start(store, task_id, *args, **kwargs):
+            self.assertEqual([q['TaskId'] for q in store.queued_dispatches()], [task_id])
+
+        self.s._exec('UPDATE dispatchq SET NextAt=NULL')   # PW-085: a failed start backs off before the next try; make it due
+        with patch.object(term, 'start_on_task', side_effect=start) as launch:
+            bb.drain(self.s)
+            launch.assert_called_once()
+        self.assertEqual(self.s.queued_dispatches(), [])
 
     def test_drain_clears_a_task_that_moved_on(self):
         t1 = self.task('Closed while queued')
         self.s.enqueue_dispatch(t1, None, 'coder', 'slot')
         self.s.update_task(t1, {'Status': 'done'}, 't')
         bb.drain(self.s)
+        self.assertEqual(self.s.queued_dispatches(), [])
+
+    # ── PW-175: overlap is advisory, never a second queue ──────────────────────
+    def test_two_similar_tasks_both_launch_when_capacity_permits(self):
+        """The model reads an overlap; the new task still starts alongside the peer it overlaps (PW-171)."""
+        t1, t2 = self.task('First in'), self.task('Would collide')
+        self.s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd': r'C:\code\repo'}))
+        term.SESSIONS['a'] = fake_session(t1, r'C:\code\repo', files=['reports.py'])
+        started = []
+        real, bb.likely_overlap = bb.likely_overlap, lambda s, tid, ps: (ps[0], 'same files')
+        real_s, term.start_on_task = term.start_on_task, lambda *a, **k: started.append(a[1])
+        try: _auto_code(self.s, t2)
+        finally: bb.likely_overlap, term.start_on_task = real, real_s
+        # t1 is already live (its session exists) and t2 just started: both are running, neither queued
+        self.assertIn(t1, [p['tid'] for p in bb.peers(self.s, r'C:\code\repo')])
+        self.assertEqual((started, self.s.queued_dispatches()), ([t2], []))
+
+    def test_the_advisory_reaches_the_seed(self):
+        t1, t2 = self.task('First in'), self.task('Would collide')
+        term.SESSIONS['a'] = fake_session(t1, r'C:\code\repo', files=['reports.py'])
+        real, bb.likely_overlap = bb.likely_overlap, lambda s, tid, ps: (ps[0], 'both touch reports.py')
+        try: seed = term.seed_text(self.s, t2, 'do it', 'org/repo', r'C:\code\repo')
+        finally: bb.likely_overlap = real
+        self.assertIn('SIMILAR WORK', seed); self.assertIn('reports.py', seed)
+
+    def test_an_obsolete_overlap_blocker_does_not_double_start(self):
+        """A row still parked behind a (now-ended) peer is simply due (PW-171): drain starts it once."""
+        t1, t2 = self.task('Ended blocker'), self.task('Freed by an old queue row')
+        self.s.enqueue_dispatch(t2, t1, 'coder', 'overlap')          # t1's session is long gone
+        started = []
+        real, term.start_on_task = term.start_on_task, lambda s, tid, *a, **k: started.append(tid)
+        try:
+            bb.drain(self.s); bb.drain(self.s)                       # a second drain finds nothing left to start
+        finally: term.start_on_task = real
+        self.assertEqual(started, [t2])
         self.assertEqual(self.s.queued_dispatches(), [])
 
 

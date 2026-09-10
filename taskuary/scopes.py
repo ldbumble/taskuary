@@ -41,7 +41,22 @@ ACTIONS = {
     # bill, adding a vendor and correcting a memo. The card ships at 'read' like QuickBooks', which
     # is what makes a bill an agent's PROPOSAL rather than an agent's decision.
     'intacct_create': 'write', 'intacct_update': 'write',
-    'teller_accounts': 'read', 'teller_transactions': 'read', 'teller_balances': 'read',    # a feed cannot move money
+    'teller_accounts': 'read', 'teller_transactions': 'read', 'teller_balances': 'read', 'teller_spend': 'read',    # a feed cannot move money
+    # SimpleFIN cannot be anything but read: its protocol has no write verbs to expose
+    'simplefin_accounts': 'read', 'simplefin_transactions': 'read', 'simplefin_balances': 'read', 'simplefin_spend': 'read',
+    # market data: every one of these is a window on a public market. Nothing upstream moves.
+    'coingecko_prices': 'read', 'fx_rates': 'read', 'yahoo_quotes': 'read', 'yahoo_history': 'read',
+    'edgar_filings': 'read', 'edgar_facts': 'read', 'fred_series': 'read',
+    'td_quotes': 'read', 'td_indicator': 'read', 'av_quotes': 'read',
+    # five more providers (2026-09-08), field mapping written from documentation, not a live
+    # response - still a read: nothing upstream moves for any of them, including alpaca, which
+    # ships market DATA only, no order/trading executor at all
+    'finnhub_quotes': 'read', 'finnhub_news': 'read', 'finnhub_earnings': 'read', 'finnhub_insiders': 'read',
+    'polygon_bars': 'read', 'polygon_snapshot': 'read',
+    'tiingo_history': 'read', 'tiingo_news': 'read',
+    'fmp_fundamentals': 'read', 'fmp_ratios': 'read',
+    'alpaca_quotes': 'read', 'alpaca_bars': 'read',
+    'markets_screen': 'read',    # the screen only reads through whichever provider it borrows
     # the semantic layer (semantic.py) reaches the ERP only through those same reads. The check
     # DOES write - a metric it cannot reconcile is demoted, a verified one is frozen to a skill -
     # but every one of those writes lands in Taskuary's own store, never upstream, which is what
@@ -50,6 +65,11 @@ ACTIONS = {
     # /api/tools/run, and every one of those calls would have been refused.
     'metric': 'read', 'metric_check': 'read',
     'local_file': 'read',    # a path on this machine, opened read-only - like the sqlite above it
+    # files (files.py): the network share and the SFTP server. sftp_get WRITES a file and is still a
+    # read, for the reason this whole table measures - it reaches nothing upstream, and the only
+    # place it can land is ~/.taskuary/sftp. The four that change something on the far side are writes.
+    'smb_read': 'read', 'sftp_list': 'read', 'sftp_get': 'read',
+    'smb_write': 'write', 'smb_move': 'write', 'sftp_put': 'write', 'sftp_move': 'write',
     'kb_search': 'read',     # the knowledge base is Taskuary's own index; searching it moves nothing (kb_reindex writes it: default)
     # the handbook is Taskuary's own store and the whole point is that agents fill it, so reading
     # it is free. WRITING it is a write - not because it can reach anything (it cannot leave the
@@ -84,9 +104,18 @@ DEFAULT_SCOPE = {
     'telegram': 'write', 'whatsapp': 'write', 'imessage': 'write', 'discord': 'write',
     'gmail': 'write', 'imap': 'write',
     'mssql': 'read', 'database': 'read', 'prometheus': 'read', 'datadog': 'read',
-    'intacct': 'read', 'quickbooks': 'read', 'teller': 'read',
+    'intacct': 'read', 'quickbooks': 'read', 'teller': 'read', 'simplefin': 'read',
+    'coingecko': 'read', 'frankfurter': 'read', 'yahoo': 'read', 'sec_edgar': 'read',
+    'twelvedata': 'read', 'alphavantage': 'read', 'fred': 'read',
+    'finnhub': 'read', 'polygon': 'read', 'tiingo': 'read', 'fmp': 'read', 'alpaca': 'read',
+    'screen': 'read',
     'zoho_invoice': 'write',
     'aws': 'read', 'azure': 'read',
+    # Both file cards ship at read, so the first save is a PROPOSAL the owner approves - the road a
+    # QuickBooks bill takes, and for the same asymmetry: read-first costs a click, write-first can
+    # cost a document mis-filed onto a share other people read, and only one of those is recoverable.
+    # Raising the card, or a routing policy for the narrow case, is how it stops asking.
+    'smb_file': 'read', 'sftp': 'read',
     'jira': 'read', 'asana': 'read', 'monday': 'read', 'gitlab': 'read', 'azdo': 'read',
     'linear': 'read', 'trello': 'read', 'notion': 'read', 'sentry': 'read', 'pagerduty': 'read',
     'clickup': 'read', 'todoist': 'read', 'dropbox': 'read',

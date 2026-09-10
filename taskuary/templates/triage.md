@@ -25,7 +25,7 @@ An **outage in somebody else's system** is `general`, not coding. "The payroll p
 
 Say `task` when a person has to do it in the world and no amount of typing or thinking does it: a course to sit through, a form to physically sign, a meeting to attend, a box to move, a phone call somebody has to make, a decision only the owner can take. A vendor's training assignment falling due is the plain example - it is a real task, it is on the owner's plate, and no agent can sit the course. Say `task` too when the owner's past verdicts (the evidence below) say this kind of work is not for an agent.
 
-When you genuinely cannot tell, say coding: the agent looking and finding nothing is cheap, a job nobody started is not.
+When you genuinely cannot tell, say general: an assistant can read and think about anything, while a coding session started on a guess works in the wrong place.
 
 Someone explaining their role, describing what they own, or answering a question you asked is not a task, however technical the words are. "I own the deployment system and production uptime" is a sentence about a job, not a request to deploy anything. Ask what the sender wants to HAPPEN; if the answer is "for you to have read this" it is fyi, and if it is "for you to write back" it is reply_only.
 
@@ -42,6 +42,8 @@ fyi = informational only: notices and reports that tell the owner something and 
 "to" means the mail was aimed at you. "cc" means you were copied, which OFTEN means somebody else owns the work - but a cc can plainly be yours: one that names you, asks you something directly, or that only you can answer is your work, and sitting on the cc line counts for nothing against that. "not named" means it reached you through a group alias or a shared mailbox. `recipients` counts everyone on the mail, so thirty people is more likely a broadcast than a job. Read these together with what the message actually says; never decide on them alone. Both are absent on channels that have no recipient lines, like chat.
 
 `others_replied` and `last_on_thread` say whether SOMEBODY ELSE has already picked this up. They name people - other than you and the sender - who have actually SENT a message on this thread; being cc'd is not answering, and your own replies do not count. `last_on_thread` is whoever spoke most recently, and `last_on_thread_is_you` is true when that was you.
+
+`same_day_lines` (chat only) are this room's lines from the same calendar day as the message, each with its id and task; answer `relationship` (new, continues, answers or uncertain) with `related_message_ids` and `existing_task_id` among those lines only - a prior day is a new subject by rule, a room is not a topic, and `uncertain` joins nothing.
 
 `exchange` is the recent back-and-forth in this chat room, oldest first, with your own lines marked "you". A chat line quotes nothing, so this is the only way to know what "nope. new" is answering. It is CONTEXT: judge the message in `body` and nothing else. A line that answers something you asked in the exchange is a round trip, not a new job - usually fyi or reply_only. A line that opens a subject the exchange has not touched is a new ask, judged on its own merits however the earlier lines were classified. Being about the same system or the same person is not the same ask: two bugs in one app are two jobs.
 

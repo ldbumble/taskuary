@@ -39,3 +39,8 @@ test("taskless messages still load, then visibly wait while triage decides", () 
   assert.equal(detailPhase(row, { messages: [] }), "triaging");
   assert.equal(detailPhase({ ...row, MsgStatus: "routed", TaskId: 9 }, { task: { TaskId: 9 } }), "ready");
 });
+
+test("the detail panel has an error phase for a message whose triage failed", () => {
+  const row = { MessageId: 8, TaskId: null, MsgStatus: "error" };
+  assert.equal(detailPhase(row, { messages: [] }), "error");
+});

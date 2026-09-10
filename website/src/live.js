@@ -1,5 +1,5 @@
 // One socket for the Timeline, Board and Studio. The terminal already speaks WebSocket;
-// this one pushes feed-changed / task-changed / run-tail so those views refetch only
+// this one pushes feed-changed / ingest-status / task-changed / run-tail so those views refetch only
 // when something actually moved. Hand-raise notifications keep their own timer: they
 // fire BECAUSE you are on another tab.
 //

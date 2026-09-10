@@ -15,8 +15,25 @@ from email.header import decode_header, make_header
 from email.mime.text import MIMEText
 from loguru import logger
 
-BATCH = 25                  # messages per poll, like every other channel
+BATCH = 25                  # messages per batch: the watermark is saved after each, the poll goes on until the gap is drained
+TRANSPORT = (imaplib.IMAP4.abort, OSError)   # the CONNECTION went, not one message: stop, keep the watermark, retry next poll
 HOSTS = {'gmail': ('imap.gmail.com', 'smtp.gmail.com')}
+
+
+class IMAPCommandError(RuntimeError):
+    """The server did not complete a mailbox command; treating that as empty loses mail."""
+
+
+class IMAPPartialFailure(RuntimeError):
+    """Some UIDs landed and others remain durable retry holes."""
+    def __init__(self, failures, ingested=0):
+        self.failures = tuple(str(x) for x in failures)
+        self.ingested = int(ingested)
+        super().__init__('; '.join(self.failures))
+
+
+class _UIDFetchFailure(RuntimeError):
+    pass
 
 
 def _cfg(c): return json.loads(c.get('ConfigJson') or '{}')
@@ -221,11 +238,24 @@ def _list_line(raw) -> tuple:
     return m.group('flags') or '', (m.group('name') or '').strip().strip('"')
 
 
-def sent_folder(M) -> str:
-    """The mailbox's Sent folder, as this server spells it. '' when there is none to be found."""
+def sent_folder(M, strict=False) -> str:
+    """The mailbox's Sent folder, as this server spells it. '' when it genuinely has none.
+
+    The history sampler is deliberately best-effort.  Polling passes ``strict=True`` because a
+    failed LIST is not evidence that Sent is empty; calling it empty would advance the connector
+    as though the owner's replies had been read.
+    """
+    # Small protocol fakes used by the established inbound-only tests intentionally expose no
+    # LIST operation at all. Real imaplib connections always do; absence here means that bounded
+    # fake has no Sent capability, while an implemented LIST that fails remains a poll failure.
+    if not hasattr(M, 'list'): return ''
     try: typ, data = M.list()
-    except Exception: return ''
-    if typ != 'OK': return ''
+    except Exception:
+        if strict: raise
+        return ''
+    if typ != 'OK':
+        if strict: raise IMAPCommandError(f'LIST folders returned {typ}')
+        return ''
     named = []
     for raw in data or []:
         flags, name = _list_line(raw)
@@ -293,7 +323,211 @@ def sent_history(store, days: int, cap: int = 300, progress=None) -> list:
     return sorted(out, key=lambda m: m.get('sent_at') or '')
 
 
-def poll_sent(store, M, user: str, last_uid: int, days: int) -> tuple:
+def _validity(M):
+    """The selected mailbox's UIDVALIDITY, or None when the server (or a fake) does not say."""
+    try:
+        _typ, data = M.response('UIDVALIDITY')
+        return int(data[0]) if data and data[0] else None
+    except Exception: return None
+
+
+def _uids(M, last_uid: int, days: int) -> list:
+    """Which UIDs to read, OLDEST first. With a cursor: everything above it - the whole gap,
+    whatever the date. A window sized from the startup catch-up (3 days) excluded the mail of a
+    two-week absence even though its UIDs were above the cursor (PW-008). Without a cursor, the
+    first import, the date window stands: years of history never import by accident."""
+    if last_uid > 0: typ, data = M.uid('search', None, f'(UID {last_uid + 1}:*)')
+    else:
+        since = (datetime.now() - timedelta(days=max(1, days))).strftime('%d-%b-%Y')
+        typ, data = M.uid('search', None, f'(SINCE {since})')
+    if typ != 'OK': raise IMAPCommandError(f'UID SEARCH returned {typ}')
+    # RFC 3501: `n:*` never comes back empty - it returns the highest UID even below n, hence the filter
+    return sorted(u for u in (int(x) for x in (data[0] or b'').split()) if u > last_uid)
+
+
+def _rewound(user: str, box: str, saved, seen) -> bool:
+    """A changed UIDVALIDITY renumbered the mailbox: the saved cursor points at nothing. Say so, import afresh."""
+    if seen is None or saved in (None, ''): return False
+    try: changed = int(saved) != seen
+    except (TypeError, ValueError): changed = True
+    if changed: logger.warning(f'imap {user} {box}: UIDVALIDITY changed {saved} -> {seen}; the saved cursor means nothing now, importing afresh')
+    return changed
+
+
+def _fetch_message(M, uid: int):
+    """Fetch and decode one message, distinguishing a retryable UID hole from local persistence."""
+    typ, parts = M.uid('fetch', str(uid), '(RFC822)')
+    if typ != 'OK' or not parts or parts[0] is None:
+        raise _UIDFetchFailure(f'uid {uid} FETCH returned {typ}')
+    try:
+        part = parts[0]
+        if not isinstance(part, (tuple, list)) or len(part) < 2 or not isinstance(part[1], (bytes, bytearray)):
+            raise ValueError('missing RFC822 bytes')
+        msg = email.message_from_bytes(bytes(part[1]))
+        body, atts = _body_and_attachments(msg)
+        return msg, body, atts
+    except Exception as e:
+        raise _UIDFetchFailure(f'uid {uid} could not be decoded: {e}') from e
+
+
+def _drain(uids: list, read, progress, *, cursor=0, holes=()) -> tuple:
+    """Drain new UIDs and older retry holes without letting either hide the other.
+
+    FETCH/decoding failures become durable holes and the later UIDs still progress. Transport,
+    ingest and checkpoint failures abort: those failures must never be mistaken for poison mail.
+    ``progress`` receives the high-water cursor and the full pending-hole set atomically.
+    """
+    pending = {int(u) for u in holes if int(u) > 0}
+    candidates = sorted(pending | {int(u) for u in uids if int(u) > 0})
+    n, done, failures, dirty = 0, int(cursor or 0), [], False
+    for i in range(0, len(candidates), BATCH):
+        for uid in candidates[i:i + BATCH]:
+            try:
+                n += read(uid)
+            except _UIDFetchFailure as e:
+                pending.add(uid)
+                failures.append(str(e))
+                logger.warning(f'imap {e}; retained for retry')
+            except Exception:
+                if dirty: progress(done, pending)
+                raise
+            else:
+                pending.discard(uid)
+            done = max(done, uid)
+            dirty = True
+        if dirty:
+            progress(done, pending)
+            dirty = False
+    return n, done, pending, failures
+
+
+_POLL_IDENTITY_FIELDS = ('address', 'imap_host', 'imap_port')
+
+
+def _scope(host: str, port: int, user: str, box: str) -> str:
+    """Stable opaque mailbox/folder identity; UIDVALIDITY is the epoch within this scope."""
+    raw = '\0'.join((str(host or '').strip().casefold(), str(port),
+                     str(user or '').strip().casefold(), str(box or '')))
+    return hashlib.sha256(raw.encode('utf-8')).hexdigest()[:24]
+
+
+def _keys(sent=False) -> dict:
+    stem = 'imap_sent' if sent else 'imap'
+    return {'uid': f'{stem}_uid', 'validity': f'{stem}_uidvalidity',
+            'scope': f'{stem}_uid_scope', 'mode': f'{stem}_uid_identity',
+            'holes': f'{stem}_retry_uids'}
+
+
+def _number(value):
+    if value in (None, ''): return None
+    try: return int(value)
+    except (TypeError, ValueError): raise RuntimeError(f'invalid saved IMAP UID value {value!r}')
+
+
+def _hole_state(raw, *, scope, validity, mode, allow_validity_rebind=False) -> set:
+    if raw in (None, '', {}): return set()
+    if not isinstance(raw, dict) or not isinstance(raw.get('uids'), list):
+        raise RuntimeError('invalid saved IMAP retry UID state')
+    same_validity = raw.get('uidvalidity') == validity
+    if allow_validity_rebind and raw.get('uidvalidity') is None:
+        same_validity = True
+    if raw.get('scope') != scope or not same_validity or raw.get('identity') != mode:
+        return set()
+    try:
+        values = {int(u) for u in raw['uids'] if int(u) > 0}
+    except (TypeError, ValueError):
+        raise RuntimeError('invalid saved IMAP retry UID')
+    return values
+
+
+def _hole_json(scope, validity, mode, holes) -> dict:
+    return {'scope': scope, 'uidvalidity': validity, 'identity': mode,
+            'uids': sorted(int(u) for u in holes)}
+
+
+def _external_id(sent: bool, user: str, uid: int, *, scope: str, validity, mode: str) -> str:
+    prefix = 'imap-sent' if sent else 'imap'
+    # An upgraded, unchanged mailbox keeps the exact old identity. This is deliberately
+    # conservative: rows may have landed just before an old checkpoint write failed. Only a
+    # confirmed UID epoch/scope change switches away from legacy IDs.
+    if mode == 'legacy':
+        return f'{prefix}:{user}:{uid}'
+    # UIDVALIDITY may appear after a server previously omitted it. Learning the number does not
+    # prove a new epoch, so keep the already-persisted unknown namespace until a later confirmed
+    # validity or scope change resets the folder.
+    epoch = 'unknown' if mode == 'scoped-unknown-v1' else validity
+    if epoch is None: epoch = 'unknown'
+    return f'{prefix}:{scope}:v{epoch}:{uid}'
+
+
+def _unmarked_folder(cfg: dict, sent: bool) -> bool:
+    return not any(name in cfg for name in _keys(sent).values())
+
+
+def _legacy_evidence(store, connector_id: int, user: str, sent: bool, uids) -> bool:
+    """Whether exact replay candidates belong to this connector's pre-checkpoint mailbox.
+
+    Legacy message rows name the mailbox but not ConnectorId. Adopt their namespace only when
+    source ownership makes that mailbox unambiguous; two connectors using the same address must
+    not suppress one another's fresh mail.
+    """
+    matching = [s for s in store.list_sources(active_only=False)
+                if s.get('Channel') == 'email'
+                and str(s.get('Address') or '').strip().casefold() == user.casefold()]
+    if not matching or any(s.get('ConnectorId') != connector_id for s in matching):
+        return False
+    prefix = 'imap-sent' if sent else 'imap'
+    for uid in uids:
+        row = store.message_by_external(f'{prefix}:{user}:{uid}')
+        if not row or row.get('Channel') != 'email': continue
+        if str(row.get('SourceName') or '').strip().casefold() != user.casefold(): continue
+        return True
+    return False
+
+
+def _prepare_folder(checkpoint, cfg: dict, *, sent: bool, scope: str, seen_validity,
+                    legacy_evidence=False):
+    """Adopt or reset a folder checkpoint and persist the basis before any message lands."""
+    k = _keys(sent)
+    cursor = _number(cfg.get(k['uid'])) or 0
+    saved_validity = _number(cfg.get(k['validity']))
+    stored_scope = cfg.get(k['scope'])
+    mode = cfg.get(k['mode'])
+    if mode not in (None, 'legacy', 'scoped-v1', 'scoped-unknown-v1'):
+        raise RuntimeError(f'invalid saved IMAP identity mode {mode!r}')
+
+    # An established checkpoint without a marker is an upgraded legacy epoch. Keeping its exact
+    # old identity avoids re-importing a row written before an old cursor save. A genuinely fresh
+    # folder starts with scoped IDs, so its first future UIDVALIDITY reset is safe too.
+    mode = mode or ('legacy' if legacy_evidence or k['uid'] in cfg or k['validity'] in cfg
+                    else 'scoped-v1' if seen_validity is not None else 'scoped-unknown-v1')
+    scope_changed = stored_scope not in (None, scope)
+    validity_changed = (seen_validity is not None and saved_validity is not None
+                        and int(seen_validity) != saved_validity)
+    reset = scope_changed or validity_changed
+    if reset:
+        logger.warning(f'imap folder identity changed; resetting cursor for scope {scope}')
+        cursor, mode, holes = (0, 'scoped-v1' if seen_validity is not None
+                               else 'scoped-unknown-v1', set())
+        saved_validity = seen_validity
+    else:
+        effective_validity = seen_validity if seen_validity is not None else saved_validity
+        holes = _hole_state(cfg.get(k['holes']), scope=scope,
+                            validity=effective_validity, mode=mode,
+                            allow_validity_rebind=(saved_validity is None and seen_validity is not None))
+        saved_validity = effective_validity
+
+    values = {k['uid']: cursor, k['scope']: scope, k['mode']: mode,
+              k['holes']: _hole_json(scope, saved_validity, mode, holes)}
+    if saved_validity is not None: values[k['validity']] = saved_validity
+    remove = (k['validity'],) if reset and saved_validity is None else ()
+    if any(cfg.get(name) != value for name, value in values.items()) or any(name in cfg for name in remove):
+        checkpoint(values, remove)
+    return {'keys': k, 'cursor': cursor, 'validity': saved_validity,
+            'scope': scope, 'mode': mode, 'holes': holes}
+
+
+def poll_sent(store, M, user: str, last_uid: int, days: int, state: dict = None) -> tuple:
     """The replies the owner wrote in Outlook, Gmail's web UI, their phone - anywhere but here.
 
     Graph's mailbox has read them since the beginning (channels.ingest_outbound_mail); an IMAP
@@ -302,34 +536,47 @@ def poll_sent(store, M, user: str, last_uid: int, days: int) -> tuple:
     thread, never work, never a timeline row of its own. Its own watermark - the Sent folder is
     a separate UID space from INBOX, and sharing one would skip whole days of either.
 
+    `state` (optional) carries the folder checkpoint adapter, retry holes and observed validity;
+    each bounded batch saves its high-water UID and holes together, so a poll that dies keeps
+    both its progress and every UID still owed.
     Returns (ingested, new watermark)."""
     from .channels import ingest_own_message
-    box = sent_folder(M)
+    state = state if state is not None else {}
+    box = sent_folder(M, strict=bool(state.get('strict')))
     if not box: return 0, last_uid
     typ, _d = M.select(_quoted(box), readonly=True)
-    if typ != 'OK': return 0, last_uid
-    since = (datetime.now() - timedelta(days=max(1, days))).strftime('%d-%b-%Y')
-    typ, data = M.uid('search', None, f'(SINCE {since})')
-    if typ != 'OK': return 0, last_uid
-    uids = [u for u in sorted(int(x) for x in (data[0] or b'').split()) if u > last_uid][-BATCH:]
-    n = 0
-    for uid in uids:
-        try:
-            typ, parts = M.uid('fetch', str(uid), '(RFC822)')
-            if typ != 'OK' or not parts or parts[0] is None: continue
-            msg = email.message_from_bytes(parts[0][1])
-            body, _atts = _body_and_attachments(msg)
-            try: when = email.utils.parsedate_to_datetime(msg.get('Date')).astimezone().strftime('%Y-%m-%d %H:%M:%S')
-            except Exception: when = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            n += ingest_own_message(store, {
-                'external_id': f'imap-sent:{user}:{uid}', 'channel': 'email', 'source_name': user,
-                'subject': _dec(msg.get('Subject')), 'body': body[:20000], 'from_email': user, 'sent_at': when,
-                # the SAME thread key the inbound side derives, or the reply lands on nothing
-                'conversation_id': (msg.get('References') or msg.get('Message-ID') or '').split()[0][:200] or None},
-                'your reply on this thread - kept for context')
-        except Exception as e:
-            logger.warning(f'imap {user} sent uid {uid} skipped: {e}')
-    return n, (max(uids) if uids else last_uid)
+    if typ != 'OK': raise IMAPCommandError(f'SELECT {box} returned {typ}')
+    state['box'] = box
+    state['validity'] = _validity(M)
+    selected_uids = _uids(M, last_uid, days)
+    if state.get('prepare'):
+        folder = state['prepare'](box, state['validity'], selected_uids)
+        if folder['cursor'] != last_uid:
+            selected_uids = _uids(M, folder['cursor'], days)
+        last_uid = folder['cursor']
+        state.update(folder)
+    elif _rewound(user, box, state.get('saved_validity'), state['validity']):
+        last_uid = 0
+        selected_uids = _uids(M, last_uid, days)
+    def read(uid) -> int:
+        msg, body, _atts = _fetch_message(M, uid)
+        try: when = email.utils.parsedate_to_datetime(msg.get('Date')).astimezone().strftime('%Y-%m-%d %H:%M:%S')
+        except Exception: when = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        return ingest_own_message(store, {
+            'external_id': _external_id(True, user, uid, scope=state.get('scope', ''),
+                                        validity=state.get('validity'), mode=state.get('mode', 'legacy')),
+            'channel': 'email', 'source_name': user,
+            'subject': _dec(msg.get('Subject')), 'body': body[:20000], 'from_email': user, 'sent_at': when,
+            # the SAME thread key the inbound side derives, or the reply lands on nothing
+            'conversation_id': (msg.get('References') or msg.get('Message-ID') or '').split()[0][:200] or None},
+            'your reply on this thread - kept for context')
+    def progress(uid, holes):
+        state['uid'], state['holes'] = uid, set(holes)
+        if state.get('save'): state['save'](uid, holes)
+    n, done, holes, failures = _drain(selected_uids, read, progress,
+                                      cursor=last_uid, holes=state.get('holes', ()))
+    state['uid'], state['holes'], state['failures'] = done, holes, failures
+    return n, (done if done is not None else last_uid)
 
 
 def ensure_source(store, c) -> bool:
@@ -347,66 +594,135 @@ def ensure_source(store, c) -> bool:
 
 def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days: int = 0) -> int:
     """UIDs are IMAP's own cursor: strictly increasing per mailbox, so the watermark on the
-    connector never re-ingests - and a backfill just lowers the SINCE date, with dedupe
-    catching anything already seen."""
+    connector never re-ingests. With a cursor the poll asks for everything above it and drains
+    it oldest-first in batches, saving the watermark plus retry holes as each batch lands
+    (PW-007/PW-008); the SINCE window applies to the first import only. The 25-highest-then-jump
+    of before skipped the lower pending UIDs for good, and the date window hid a long absence."""
     from .channels import images_for_triage, save_attachments, wants_read
     from .ingest import ingest_message
     M, user = _login(c)
     n = 0
+    imap_h, _smtp_h, cfg = _hosts(c)
+    try: imap_port = int(cfg.get('imap_port') or 993)
+    except (TypeError, ValueError): raise RuntimeError('invalid IMAP port')
+    poll_keys = set(_keys(False).values()) | set(_keys(True).values())
+    expected_config = {name: cfg.get(name) for name in (*_POLL_IDENTITY_FIELDS, *sorted(poll_keys))}
+    expected_fields = {name: c.get(name) for name in ('Type', 'Active', 'Secret')}
+
+    def checkpoint(values, remove=()):
+        values = dict(values or {})
+        ok = store.patch_connector_poll_state(
+            c['ConnectorId'], config_set=values, config_remove=remove,
+            expect_fields=expected_fields, expect_config=expected_config)
+        if not ok:
+            raise RuntimeError('mailbox changed while IMAP was polling; its stale checkpoint was not saved')
+        cfg.update(values)
+        for name, value in values.items():
+            expected_config[name] = value
+        for name in remove:
+            cfg.pop(name, None)
+            expected_config[name] = None
+
+    def prepare(sent, box, validity, selected_uids):
+        legacy = (_unmarked_folder(cfg, sent)
+                  and _legacy_evidence(store, c['ConnectorId'], user, sent, selected_uids))
+        return _prepare_folder(checkpoint, cfg, sent=sent,
+                               scope=_scope(imap_h, imap_port, user, box),
+                               seen_validity=validity, legacy_evidence=legacy)
     try:
         # readonly is what has always kept the funnel invisible in the mailbox: an ordinary
         # RFC822 fetch sets \Seen by itself. Only the mark-read switch opens the box for
         # writing, and then the flag is set explicitly, per message, after it is safely in.
         read_it = wants_read(store)
-        M.select('INBOX', readonly=not read_it)
-        _imap_h, _smtp_h, cfg = _hosts(c)
-        last_uid = int(cfg.get('imap_uid') or 0)
-        since = (datetime.now() - timedelta(days=max(backfill_days, 1))).strftime('%d-%b-%Y')
-        typ, data = M.uid('search', None, f'(SINCE {since})')
-        uids = [int(u) for u in (data[0] or b'').split()]
-        new = [u for u in uids if u > last_uid][-BATCH:]
-        for uid in new:
+        typ, _data = M.select('INBOX', readonly=not read_it)
+        if typ != 'OK': raise IMAPCommandError(f'SELECT INBOX returned {typ}')
+        initial_cursor = _number(cfg.get('imap_uid')) or 0
+        selected_uids = _uids(M, initial_cursor, max(backfill_days, 1))
+        folder = prepare(False, 'INBOX', _validity(M), selected_uids)
+        if folder['cursor'] != initial_cursor:
+            selected_uids = _uids(M, folder['cursor'], max(backfill_days, 1))
+        last_uid = folder['cursor']
+        protected_inbox = set(selected_uids) | set(folder['holes'])
+        inbox_frontier = max({last_uid, *protected_inbox})
+        def chain_folder_identity(sent, box, validity, _chain_uids):
+            if not sent:
+                # The active drain closure owns this exact epoch. Re-preparing it after a
+                # mid-drain UIDVALIDITY change would leave that closure stale.
+                if (validity is not None and folder['validity'] is not None
+                        and int(validity) != int(folder['validity'])):
+                    raise RuntimeError('INBOX UIDVALIDITY changed during chain retrieval')
+                return folder
+            # Prepare Sent from the same complete pending set poll_sent will use. Restricting
+            # legacy attribution to this chain's matching UIDs could switch a legacy folder to
+            # scoped IDs merely because its existing evidence belongs to another conversation.
+            sent_uids = _uids(M, _number(cfg.get('imap_sent_uid')) or 0,
+                              max(backfill_days, 1))
+            return prepare(True, box, validity, sent_uids)
+        def read(uid) -> int:
+            msg, body, atts = _fetch_message(M, uid)
             try:
-                typ, parts = M.uid('fetch', str(uid), '(RFC822)')
-                if typ != 'OK' or not parts or parts[0] is None: continue
-                msg = email.message_from_bytes(parts[0][1])
                 frm_name, frm_addr = email.utils.parseaddr(_dec(msg.get('From')))
-                if frm_addr.lower() == user.lower(): continue           # my own mail is not inbound work
-                body, atts = _body_and_attachments(msg)
-                try: sent = email.utils.parsedate_to_datetime(msg.get('Date')).astimezone().strftime('%Y-%m-%d %H:%M:%S')
-                except Exception: sent = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                out = ingest_message(store, file_only=file_only, msg={
-                    'external_id': f'imap:{user}:{uid}', 'channel': 'email',
+                if frm_addr.lower() == user.lower(): return 0       # my own mail is not inbound work
+                try: sent_at = email.utils.parsedate_to_datetime(msg.get('Date')).astimezone().strftime('%Y-%m-%d %H:%M:%S')
+                except Exception: sent_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                ext_id = _external_id(False, user, uid, scope=folder['scope'],
+                                      validity=folder['validity'], mode=folder['mode'])
+                incoming = {
+                    'external_id': ext_id, 'channel': 'email',
                     'subject': _dec(msg.get('Subject')), 'body': body[:20000],
                     'from_name': frm_name or frm_addr, 'from_email': frm_addr,
                     'to': _hdr_addrs(msg, 'To'), 'cc': _hdr_addrs(msg, 'Cc'),
                     # References threads replies the way Graph's conversationId does
                     'conversation_id': (msg.get('References') or msg.get('Message-ID') or '').split()[0][:200] or None,
-                    'sent_at': sent, 'source_name': user,
-                    'images': images_for_triage(store, atts)}, llm=llm)
-                n += out['status'] != 'duplicate'
-                if atts and out.get('message_id') and out['status'] != 'duplicate':
-                    try: save_attachments(store, out['message_id'], atts, f'imap:{user}:{uid}')
-                    except Exception as e: logger.warning(f'imap attachments failed: {e}')
-                if read_it:
-                    try: M.uid('store', str(uid), '+FLAGS', r'(\Seen)')
-                    except Exception as e: logger.warning(f'marking {user} uid {uid} seen failed: {e}')
+                    'sent_at': sent_at, 'source_name': user}
             except Exception as e:
-                # one bad message (a date the parser rejects, a part that will not decode) raised out of
-                # the loop and left the watermark behind it, so the same message failed every poll and
-                # nothing after it was ever read. Step over it, say so, and let the watermark move
-                logger.warning(f'imap {user} uid {uid} skipped: {e}')
-        # ...and the other half of the conversation: what the owner sent from the mailbox itself
-        sent_uid = int(cfg.get('imap_sent_uid') or 0)
-        try: got, sent_uid = poll_sent(store, M, user, sent_uid, max(backfill_days, 1))
-        except Exception as e:
-            got = 0
-            logger.warning(f'imap: could not read {user} sent mail - {e}')
+                raise _UIDFetchFailure(f'uid {uid} headers could not be decoded: {e}') from e
+            conv = incoming['conversation_id']
+            from . import chains
+            fresh_thread = bool(conv) and chains.needs_history(store, conv, user)
+            incoming['images'] = images_for_triage(store, atts)
+            out = ingest_message(store, file_only=file_only, msg=incoming, llm=llm)
+            existing = store.message_by_external(ext_id) if not out.get('message_id') else None
+            message_id = out.get('message_id') or (existing or {}).get('MessageId')
+            if atts and message_id:
+                save_attachments(store, message_id, atts, ext_id)
+            if read_it:
+                try: M.uid('store', str(uid), '+FLAGS', r'(\Seen)')
+                except Exception as e: logger.warning(f'marking {user} uid {uid} seen failed: {e}')
+            if fresh_thread and out['status'] != 'duplicate':
+                # the thread's history, completed once from INBOX and Sent (chains.py, PW-011); the poll's
+                # own mailbox selection is restored afterwards
+                chains.refresh_imap(
+                    store, M, user, conv, restore='INBOX', readonly=not read_it, before=sent_at,
+                    folder_identity=chain_folder_identity,
+                    protected={'INBOX': protected_inbox},
+                    protected_after={'INBOX': inbox_frontier})
+            return int(out['status'] != 'duplicate')
+        def progress(uid, holes):
+            checkpoint({folder['keys']['uid']: uid,
+                        folder['keys']['holes']: _hole_json(folder['scope'], folder['validity'],
+                                                            folder['mode'], holes)})
+        got, _done, holes, failures = _drain(
+            selected_uids, read, progress,
+            cursor=last_uid, holes=folder['holes'])
         n += got
-        moved = {k: v for k, v in (('imap_uid', max(new) if new else None), ('imap_sent_uid', sent_uid or None)) if v}
-        if moved: store.set_connector_config(c['ConnectorId'], {**cfg, **moved})
+        # ...and the other half of the conversation: what the owner sent from the mailbox itself
+        state = {'strict': True,
+                 'prepare': lambda box, validity, uids: prepare(True, box, validity, uids)}
+        def save_sent(uid, sent_holes):
+            checkpoint({state['keys']['uid']: uid,
+                        state['keys']['holes']: _hole_json(state['scope'], state['validity'],
+                                                          state['mode'], sent_holes)})
+        state['save'] = save_sent
+        got, _sent_uid = poll_sent(store, M, user, _number(cfg.get('imap_sent_uid')) or 0,
+                                   max(backfill_days, 1), state)
+        n += got
+        failures += [f'{state.get("box", "Sent")}: {e}' for e in state.get('failures', [])]
+        if failures:
+            raise IMAPPartialFailure(failures, n)
     finally:
-        M.logout()
+        try: M.logout()
+        except Exception: pass
     return n
 
 

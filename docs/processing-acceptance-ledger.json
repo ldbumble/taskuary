@@ -1,0 +1,2436 @@
+{
+  "schema": 1,
+  "baseline": "2689679dd87227ff9102bb7d7feb8920e3c47ca6",
+  "items": [
+    {
+      "id": "PW-001",
+      "section": "Poll scheduling and configuration",
+      "phase": "2",
+      "requirement": "Prevent slow AI triage and full-sync report execution from blocking fresh",
+      "status": "implemented",
+      "test": "Ordered worker/claim regressions; real feed API during held triage and reports; cumulative gates",
+      "commit": "Section 2.1; delivery/CI in evidence"
+    },
+    {
+      "id": "PW-002",
+      "section": "Poll scheduling and configuration",
+      "phase": "2",
+      "requirement": "Account for chat fetches performed during a full sync in the fast-poll",
+      "status": "implemented",
+      "test": "Stamp before claim release; failure/skipped attempts; stale timer admission regression",
+      "commit": "Section 2.1; delivery/CI in evidence"
+    },
+    {
+      "id": "PW-003",
+      "section": "Poll scheduling and configuration",
+      "phase": "2",
+      "requirement": "Expose the supported fast-poll interval consistently for Teams, Slack,",
+      "status": "implemented",
+      "test": "All six rendered cards; actual backend default/zero/override parser coverage",
+      "commit": "Section 2.1; delivery/CI in evidence"
+    },
+    {
+      "id": "PW-004",
+      "section": "Poll scheduling and configuration",
+      "phase": "2",
+      "requirement": "Correct polling labels/help text: WhatsApp's interval covers connector",
+      "status": "implemented",
+      "test": "Read-only rendered card/Settings help; recurring versus explicit/startup semantics",
+      "commit": "Section 2.1; delivery/CI in evidence"
+    },
+    {
+      "id": "PW-005",
+      "section": "Poll scheduling and configuration",
+      "phase": "2",
+      "requirement": "Add regression tests for slow triage/report execution versus chat intake,",
+      "status": "implemented",
+      "test": "69 focused tests; 2452 backend + 66 subtests, 281 frontend, build, seven browser scenarios",
+      "commit": "Section 2.1; delivery/CI in evidence"
+    },
+    {
+      "id": "PW-006",
+      "section": "Email catch-up must not skip backlog",
+      "phase": "2",
+      "requirement": "Outlook: `_mail_msgs()` reads newest-first and stops at its default 500",
+      "status": "implemented",
+      "test": "`tests/test_mail_catchup.py`; atomic checkpoint and Sync-now API preservation tests; opaque Graph pages, replay, cutoffs, owner edits and loops",
+      "commit": "32d014b; final Section 2.2 gates/delivery in evidence"
+    },
+    {
+      "id": "PW-007",
+      "section": "Email catch-up must not skip backlog",
+      "phase": "2",
+      "requirement": "Gmail/IMAP: Inbox and Sent polling select the last 25 qualifying UIDs and",
+      "status": "implemented",
+      "test": "`tests/test_imap_catchup.py`; atomic checkpoint and Sync-now API reopen tests; oldest-first drain, durable failed-UID retries, epochs and exact historical identities",
+      "commit": "32d014b; final Section 2.2 gates/delivery in evidence"
+    },
+    {
+      "id": "PW-008",
+      "section": "Email catch-up must not skip backlog",
+      "phase": "2",
+      "requirement": "Gmail/IMAP: the date search window can exclude mail received during a long",
+      "status": "implemented",
+      "test": "`tests/test_imap_catchup.py`; long Inbox/Sent gaps, bounded bootstrap, empty resets, missing/changed UIDVALIDITY and interrupted legacy first import",
+      "commit": "32d014b; final Section 2.2 gates/delivery in evidence"
+    },
+    {
+      "id": "PW-009",
+      "section": "Full email conversation context",
+      "phase": "2",
+      "requirement": "Keep incremental polling for discovering new mail. Store each new message",
+      "status": "implemented",
+      "test": "`tests/test_email_chains.py` (a known chain is listed, not refetched; D joins stored A/B/C; polls stay incremental)",
+      "commit": "3293a6e; 3293a6e, CI run 34044710317 on the lead's follow-up 8247d81 (all ten jobs passed; the browser job on e665df7 failed on a pile-click fixture the lead then stabilised)"
+    },
+    {
+      "id": "PW-010",
+      "section": "Full email conversation context",
+      "phase": "2",
+      "requirement": "Track thread-history coverage and unresolved message references. Retrieve",
+      "status": "partial: stored history and coverage exist; empty/duplicate continued pages and failed IMAP FETCH/LIST commands can still claim complete coverage",
+      "test": "`tests/test_email_chains.py` (coverage per conversation; listing is ids/metadata only and follows pagination; missing history fetched once; a failed attempt is retried on the next mail); independent integration review found remaining gaps (implementation evidence: concurrent chain integration)",
+      "commit": "3293a6e; 3293a6e, CI run 34044710317 on the lead's follow-up 8247d81 (all ten jobs passed; the browser job on e665df7 failed on a pile-click fixture the lead then stabilised)"
+    },
+    {
+      "id": "PW-011",
+      "section": "Full email conversation context",
+      "phase": "2",
+      "requirement": "Apply the same contract to Outlook/Graph and Gmail/IMAP. Scope provider",
+      "status": "partial: provider retrieval is mailbox-targeted; bare conversation coverage is not account/epoch scoped",
+      "test": "`tests/test_email_chains.py` (Graph by conversationId scoped to the mailbox; IMAP by root Message-ID through References across INBOX and Sent; same-subject mail on another conversation is never merged); independent integration review found remaining gaps (implementation evidence: concurrent chain integration)",
+      "commit": "3293a6e; 3293a6e, CI run 34044710317 on the lead's follow-up 8247d81 (all ten jobs passed; the browser job on e665df7 failed on a pile-click fixture the lead then stabilised)"
+    },
+    {
+      "id": "PW-012",
+      "section": "Full email conversation context",
+      "phase": "2",
+      "requirement": "Preserve individual messages, chronology, sender/recipient metadata, and",
+      "status": "partial: chronology, sender/recipients and the owner-vs-others identity are kept on history rows; attachment associations for fetched history are not kept yet",
+      "test": "`tests/test_email_chains.py` (history opens no task, is not an arrival, is never Unread)",
+      "commit": "3293a6e; 3293a6e, CI run 34044710317 on the lead's follow-up 8247d81 (all ten jobs passed; the browser job on e665df7 failed on a pile-click fixture the lead then stabilised)"
+    },
+    {
+      "id": "PW-013",
+      "section": "Full email conversation context",
+      "phase": "2",
+      "requirement": "Refresh the selected thread before assistant/agent context is assembled,",
+      "status": "partial: intake history hook exists; refresh before assistant/agent context is not wired and budget trimming can remove the incomplete-history warning",
+      "test": "`tests/test_email_chains.py` (failed retrieval recorded and disclosed, never presented as complete); independent integration review found remaining gaps (implementation evidence: concurrent chain integration)",
+      "commit": "3293a6e; 3293a6e, CI run 34044710317 on the lead's follow-up 8247d81 (all ten jobs passed; the browser job on e665df7 failed on a pile-click fixture the lead then stabilised)"
+    },
+    {
+      "id": "PW-014",
+      "section": "Full email conversation context",
+      "phase": "2",
+      "requirement": "Test across email connectors: old roots outside the watermark, sent replies,",
+      "status": "partial: old roots, sent replies, multi-page listing, duplicate fetches, unrelated subjects, later replies and configured Archive intake covered; fetched-history attachment associations remain untested",
+      "test": "`tests/test_email_chains.py`; `tests/processing/test_graph_chain_catchup_compat.py`; `tests/processing/test_chain_catchup_compat.py`",
+      "commit": "3293a6e; 32d014b integration compatibility; final gates in evidence"
+    },
+    {
+      "id": "PW-015",
+      "section": "Full email conversation context",
+      "phase": "2",
+      "requirement": "Test incremental merging explicitly: D joins stored A/B/C without repeated",
+      "status": "implemented",
+      "test": "`tests/test_email_chains.py` (D joins A/B/C without body downloads; D on a thread with absent C retrieves only C; repeated polls list once and add nothing)",
+      "commit": "3293a6e; 3293a6e, CI run 34044710317 on the lead's follow-up 8247d81 (all ten jobs passed; the browser job on e665df7 failed on a pile-click fixture the lead then stabilised)"
+    },
+    {
+      "id": "PW-016",
+      "section": "Routing: email identity versus chat intent",
+      "phase": "2/3",
+      "requirement": "Email: link new messages by actual conversation identity, merge missing",
+      "status": "implemented",
+      "test": "`tests/test_email_identity_routing.py` (identity joining) plus `tests/test_email_chains.py` (missing chain records merged from the provider)",
+      "commit": "3293a6e; 3293a6e, CI run 34044710317 on the lead's follow-up 8247d81 (all ten jobs passed; the browser job on e665df7 failed on a pile-click fixture the lead then stabilised)"
+    },
+    {
+      "id": "PW-017",
+      "section": "Routing: email identity versus chat intent",
+      "phase": "2/3",
+      "requirement": "Keep chain storage separate from task lifecycle. A reply on a closed task's",
+      "status": "implemented",
+      "test": "`tests/test_email_identity_routing.py` (a reply on a closed task's thread is kept on the conversation, judged afresh, and the task stays closed)",
+      "commit": "b03fa29; b03fa29, CI run 34041128872 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-018",
+      "section": "Routing: email identity versus chat intent",
+      "phase": "2/3",
+      "requirement": "WhatsApp/Teams/Slack: use AI to determine whether a new message continues an",
+      "status": "implemented",
+      "test": "`tests/test_chat_relationship.py` (Section 3.4: room id never decides; one verdict relates a line to same-day asks)",
+      "commit": "78c6dd1; CI run 34039988682"
+    },
+    {
+      "id": "PW-019",
+      "section": "Routing: email identity versus chat intent",
+      "phase": "2/3",
+      "requirement": "Add regression tests: unrelated emails with identical subjects remain",
+      "status": "implemented",
+      "test": "`tests/test_email_identity_routing.py` (5 cases) and `tests/test_chat_relationship.py` (one chat, several asks; follow-ups join the right ask)",
+      "commit": "b03fa29; b03fa29, CI run 34041128872 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-020",
+      "section": "Fresh evaluation for each new message",
+      "phase": "3",
+      "requirement": "Remove the automatic thread-dismissal veto through `ruled_on_thread()` /",
+      "status": "implemented",
+      "test": "`tests/test_fresh_evaluation.py`, `tests/test_verdict_sticks.py`, `tests/test_verdict_paths.py` (ruling is evidence on attach and create paths)",
+      "commit": "c8769f6; d3482e8, CI run 34037794765 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-021",
+      "section": "Fresh evaluation for each new message",
+      "phase": "3",
+      "requirement": "Merge the new message into its chain before evaluation. Evaluate the latest",
+      "status": "partial: fresh triage evaluation exists; complete chain before an active context-dependent triage worker is not verified",
+      "test": "`tests/test_fresh_evaluation.py` (ruling leads the evidence, model decides) plus `tests/test_email_chains.py` (the chain is completed before the new mail is judged in stored context); feed-mode chain tests do not establish ordering against active triage workers (independent integration review)",
+      "commit": "3293a6e; 3293a6e, CI run 34044710317 on the lead's follow-up 8247d81 (all ten jobs passed; the browser job on e665df7 failed on a pile-click fixture the lead then stabilised)"
+    },
+    {
+      "id": "PW-022",
+      "section": "Fresh evaluation for each new message",
+      "phase": "3",
+      "requirement": "Preserve the separately approved explicit feed-only and standing-policy",
+      "status": "implemented",
+      "test": "`tests/test_fresh_evaluation.py::BypassesStayTests` (policy, feed, duplicate, no standing policy from a dismissal)",
+      "commit": "c8769f6; d3482e8, CI run 34037794765 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-023",
+      "section": "Fresh evaluation for each new message",
+      "phase": "3",
+      "requirement": "Preserve old read/dismissed state: reevaluation of new activity must not",
+      "status": "implemented",
+      "test": "`tests/test_fresh_evaluation.py::HistoryIsPreservedTests` (judged messages untouched, closed task not reopened)",
+      "commit": "c8769f6; d3482e8, CI run 34037794765 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-024",
+      "section": "Fresh evaluation for each new message",
+      "phase": "3",
+      "requirement": "Test a previously ignored/FYI chain receiving a new actionable request and",
+      "status": "implemented",
+      "test": "`tests/test_fresh_evaluation.py` (actionable and non-actionable follow-ups, open and closed tasks, duplicate fetch); agent-run case in `test_verdict_sticks.py`",
+      "commit": "c8769f6; d3482e8, CI run 34037794765 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-025",
+      "section": "Clean, complete context for AI triage",
+      "phase": "3",
+      "requirement": "Remove the historical-verdict prompt override in",
+      "status": "implemented",
+      "test": "`tests/test_fresh_evaluation.py::NoForcedVerdictTests`, `tests/test_cc_triage.py`, `tests/test_learnedgraph.py`, `tests/test_kind_dispatch.py`",
+      "commit": "c8769f6; d3482e8, CI run 34037794765 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-026",
+      "section": "Clean, complete context for AI triage",
+      "phase": "3",
+      "requirement": "Replace `exchange_lines()`'s 12-message/300-character excerpt dependency",
+      "status": "implemented",
+      "test": "`tests/test_clean_context.py`::ExchangeBudgetTests, ::PayloadTests plus `tests/test_email_chains.py` (exchange assembled from individual chain records; incomplete history disclosed)",
+      "commit": "3293a6e; 3293a6e, CI run 34044710317 on the lead's follow-up 8247d81 (all ten jobs passed; the browser job on e665df7 failed on a pile-click fixture the lead then stabilised)"
+    },
+    {
+      "id": "PW-027",
+      "section": "Clean, complete context for AI triage",
+      "phase": "3",
+      "requirement": "Before sending email content to triage, remove signatures, automatic",
+      "status": "implemented",
+      "test": "`tests/test_clean_context.py`::CleanerTests (banner, sender hint, client stamps, unsubscribe strip, signature, legal footer; requests about notices kept)",
+      "commit": "0dea527; 0dea527, CI run 34040312825 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-028",
+      "section": "Clean, complete context for AI triage",
+      "phase": "3",
+      "requirement": "Represent each message's substantive content once. Remove repeated quoted",
+      "status": "implemented",
+      "test": "`tests/test_clean_context.py`::QuotedTests (quoted copy dropped when retained; Outlook history; unique forwarded material kept; inline answers kept; quote of unknown text kept; stored body untouched)",
+      "commit": "0dea527; 0dea527, CI run 34040312825 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-029",
+      "section": "Clean, complete context for AI triage",
+      "phase": "3",
+      "requirement": "Apply the same cleaning/context contract across email connectors. Extend",
+      "status": "implemented",
+      "test": "one cleaner (`triage.strip_boilerplate`, `triage.dedupe_quoted`) for every connector and surface; assistant banner pattern moved into triage",
+      "commit": "0dea527; 0dea527, CI run 34040312825 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-030",
+      "section": "Clean, complete context for AI triage",
+      "phase": "3",
+      "requirement": "Add regression tests for historical-verdict unanimity versus a new request,",
+      "status": "implemented",
+      "test": "`tests/test_clean_context.py` (14 cases), `test_fresh_evaluation.py::NoForcedVerdictTests` plus `tests/test_email_chains.py` (chain-merge cases)",
+      "commit": "3293a6e; 3293a6e, CI run 34044710317 on the lead's follow-up 8247d81 (all ten jobs passed; the browser job on e665df7 failed on a pile-click fixture the lead then stabilised)"
+    },
+    {
+      "id": "PW-031",
+      "section": "Chat relationships in the same triage evaluation",
+      "phase": "3",
+      "requirement": "Extend the single triage verdict for WhatsApp, Teams, Slack, and similar",
+      "status": "implemented",
+      "test": "`tests/test_chat_relationship.py`::OneVerdictTests (one call carries intent, kind and relationship; related lines need no task; separate classifier removed)",
+      "commit": "78c6dd1; 78c6dd1, CI run 34039988682 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-032",
+      "section": "Chat relationships in the same triage evaluation",
+      "phase": "3",
+      "requirement": "Restrict automatic relationship candidates to the same chat/conversation",
+      "status": "implemented",
+      "test": "`tests/test_chat_relationship.py`::SameDayTests (same room, same local calendar date by message stamp; midnight boundary; delayed sync; old task not joined on the room id)",
+      "commit": "78c6dd1; 78c6dd1, CI run 34039988682 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-033",
+      "section": "Chat relationships in the same triage evaluation",
+      "phase": "3",
+      "requirement": "Validate returned message/task IDs against the eligible candidate context.",
+      "status": "implemented",
+      "test": "`tests/test_chat_relationship.py` (uncertain never joins; invalid and cross-room ids and task ids are dropped)",
+      "commit": "78c6dd1; 78c6dd1, CI run 34039988682 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-034",
+      "section": "Chat relationships in the same triage evaluation",
+      "phase": "3",
+      "requirement": "Keep this date restriction chat-only: email chains and structural identities",
+      "status": "implemented",
+      "test": "`tests/test_chat_relationship.py`::MailAndTrackersAreNotResetAtMidnight (an email reply the next day still joins its thread; router unchanged for non-chat)",
+      "commit": "78c6dd1; 78c6dd1, CI run 34039988682 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-035",
+      "section": "Chat relationships in the same triage evaluation",
+      "phase": "3",
+      "requirement": "Add tests for same-day continuations, answers before a task exists, multiple",
+      "status": "partial: timezone-configured boundary relies on norm_stamp local time; no tracker-item cross-day case yet",
+      "test": "`tests/test_chat_relationship.py` (17 cases) plus updated `test_chat_is_not_one_task.py` and `test_assistant_reactions.py`",
+      "commit": "78c6dd1; 78c6dd1, CI run 34039988682 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-036",
+      "section": "Explicit triage errors and retry",
+      "phase": "3",
+      "requirement": "Store failed triage as a distinct message `Status='error'`, including model",
+      "status": "implemented",
+      "test": "`tests/test_triage_errors.py` (model exception, unusable verdict, drain failure, no-AI awaiting state, linked follow-up keeps its task)",
+      "commit": "ed2bb98; ed2bb98, CI run 34038415374 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-037",
+      "section": "Explicit triage errors and retry",
+      "phase": "3",
+      "requirement": "Show a clear \"Triage failed\" state with a useful failure reason and a",
+      "status": "implemented",
+      "test": "`website/test/timelineState.test.mjs`, `website/test/feedLoad.test.mjs` (error state, subline, detail phase); FeedView blurb/Retry wiring",
+      "commit": "ed2bb98; ed2bb98, CI run 34038415374 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-038",
+      "section": "Explicit triage errors and retry",
+      "phase": "3",
+      "requirement": "Adapt the existing retriage endpoint and `claim_retriage()` to the error",
+      "status": "implemented",
+      "test": "`tests/test_triage_errors.py`::RetryTests (error claim, linked message retry, legacy filed failure, concurrent clicks -> one task)",
+      "commit": "ed2bb98; ed2bb98, CI run 34038415374 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-039",
+      "section": "Explicit triage errors and retry",
+      "phase": "3",
+      "requirement": "On successful retry, apply the new verdict and clear the error indication;",
+      "status": "implemented",
+      "test": "`tests/test_triage_errors.py` (successful retry lands the verdict; another failure returns to error with the new reason)",
+      "commit": "ed2bb98; ed2bb98, CI run 34038415374 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-040",
+      "section": "Explicit triage errors and retry",
+      "phase": "3",
+      "requirement": "Define a safe upgrade for identifiable historical triage-failure records",
+      "status": "implemented",
+      "test": "`tests/test_triage_errors.py`::LegacyUpgradeTests (identifiable failures only; genuine fyi, owner-ruled and no-AI history untouched; read state kept; once at startup)",
+      "commit": "ed2bb98; ed2bb98, CI run 34038415374 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-041",
+      "section": "Explicit triage errors and retry",
+      "phase": "3",
+      "requirement": "Test model exceptions, malformed verdicts, drain failures, linked-message",
+      "status": "partial: no rendered-browser click test of the Retry control yet",
+      "test": "`tests/test_triage_errors.py` (16 cases) plus updated `test_api.py`, `test_async_triage.py`, `test_assistant_reactions.py`, `test_verdict_sticks.py`",
+      "commit": "ed2bb98; ed2bb98, CI run 34038415374 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-042",
+      "section": "Reply-needed items always get drafts",
+      "phase": "7",
+      "requirement": "Remove the `reply_only` early filing path when `can_reply()` is false.",
+      "status": "implemented",
+      "test": "`tests/test_reply_always_drafts.py`::AlwaysDraftTests (replies off still opens the reply task and review)",
+      "commit": "8b89e26; 8b89e26, CI run 34039576824 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-043",
+      "section": "Reply-needed items always get drafts",
+      "phase": "7",
+      "requirement": "Always request draft generation for `reply_only`; do not gate this path on",
+      "status": "implemented",
+      "test": "`tests/test_reply_always_drafts.py` (draft requested with auto_draft off; fresh question on an existing task reuses it with one review); reclassify path shares _auto_draft",
+      "commit": "8b89e26; 8b89e26, CI run 34039576824 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-044",
+      "section": "Reply-needed items always get drafts",
+      "phase": "7",
+      "requirement": "When sending is unavailable, omit the send/approve-and-send button and",
+      "status": "implemented",
+      "test": "`tests/test_reply_always_drafts.py`::SendBlockedTests (SendBlock reason on reviews and feed rows); `website/test/sendState.test.mjs` (shared reason and draft state on Review and assistant surfaces)",
+      "commit": "8b89e26; 8b89e26, CI run 34039576824 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-045",
+      "section": "Reply-needed items always get drafts",
+      "phase": "7",
+      "requirement": "Preserve server-side send checks; hiding a UI button is not authorization.",
+      "status": "implemented",
+      "test": "`tests/test_reply_always_drafts.py` (approve on a blocked channel is refused, nothing sent, draft kept)",
+      "commit": "8b89e26; 8b89e26, CI run 34039576824 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-046",
+      "section": "Reply-needed items always get drafts",
+      "phase": "7",
+      "requirement": "Make draft-generation failures or missing AI configuration visible with a",
+      "status": "implemented",
+      "test": "`tests/test_reply_always_drafts.py`::DraftFailureTests (DraftError recorded, item stays reply-needed, successful redraft clears it); `sendState.test.mjs` draft state with retry",
+      "commit": "8b89e26; 8b89e26, CI run 34039576824 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-047",
+      "section": "Reply-needed items always get drafts",
+      "phase": "7",
+      "requirement": "Test sending-disabled/read-only/missing-permission cases, enabled sending,",
+      "status": "partial: no rendered-browser check of the hidden send button yet",
+      "test": "`tests/test_reply_always_drafts.py` (14 cases) plus updated `test_not_coding.py`, `test_urgent_and_handoff.py`, `test_kind_dispatch.py`",
+      "commit": "8b89e26; 8b89e26, CI run 34039576824 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-048",
+      "section": "Mandatory freshness before surfacing or acting",
+      "phase": "2/4/7",
+      "requirement": "Capture the exact input message IDs/context revision at task evaluation",
+      "status": "implemented",
+      "test": "`tests/test_freshness.py`::DraftPinsWhatItReadTests (the review is pinned to the inbound message and message-set revision captured before the model ran; a line landing during generation marks the draft stale instead of being called seen)",
+      "commit": "325d05a; 325d05a, CI run 34051887301 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-049",
+      "section": "Mandatory freshness before surfacing or acting",
+      "phase": "2/4/7",
+      "requirement": "Apply a shared source-freshness check before assistant surfacing, discussion,",
+      "status": "partial: the shared refresh gate now covers email through the mailbox's connector (incremental watermark poll; the chain is completed by chains.py, never re-downloaded) before an answer, draft, approval or dispatch about it; automatic Next/Walk and FYI-batch validation are PW-050",
+      "test": "`tests/test_freshness.py`::EmailRefreshTests plus `tests/test_chat_freshness.py`",
+      "commit": "325d05a; 325d05a, CI run 34051887301 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-050",
+      "section": "Mandatory freshness before surfacing or acting",
+      "phase": "2/4/7",
+      "requirement": "Select an item first, then validate its freshness, including automatic",
+      "status": "implemented",
+      "test": "`tests/test_freshness_walk.py`::SelectThenValidateTests (Next without a key picks, refreshes that item's source - every channel of an FYI batch once - and re-picks when the pile moved; the reservation path raises a stale navigation so the client re-captures; a quiet source is a no-op)",
+      "commit": "af2f15f; af2f15f, CI run 34052218971 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-051",
+      "section": "Mandatory freshness before surfacing or acting",
+      "phase": "2/4/7",
+      "requirement": "On newly relevant inbound or owner-sent activity, reevaluate the updated",
+      "status": "implemented",
+      "test": "`tests/test_freshness_walk.py`::SupersedeTests (a new ask on a task with a pending draft marks it behind and redrafts that same review when triage says a reply is still owed - never a second review, never a second task; an fyi line leaves it alone) plus `tests/test_freshness.py`",
+      "commit": "af2f15f; af2f15f, CI run 34052218971 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-052",
+      "section": "Mandatory freshness before surfacing or acting",
+      "phase": "2/4/7",
+      "requirement": "When new messages are detected on the item being discussed/surfaced, notify",
+      "status": "partial: the notice is its own stream event before the assistant's answer, once per new revision, says the new lines went through triage, and never repeats on a quiet poll or re-render; it is emitted after the refresh completed rather than at detection, because the poll waits for the triage of what it fetched",
+      "test": "`tests/test_freshness_walk.py`::NoticeTests",
+      "commit": "af2f15f; af2f15f, CI run 34052218971 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-053",
+      "section": "Mandatory freshness before surfacing or acting",
+      "phase": "2/4/7",
+      "requirement": "Tell the owner when new activity changes the item being discussed. If the",
+      "status": "implemented",
+      "test": "`tests/test_freshness_walk.py`::SupersedeTests::test_the_owners_external_answer_retires_the_draft_and_the_notice_says_so (the sync retires the draft as superseded; the notice says it was answered and nothing is to send; a newer ask still goes through triage)",
+      "commit": "af2f15f; af2f15f, CI run 34052218971 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-054",
+      "section": "Mandatory freshness before surfacing or acting",
+      "phase": "2/4/7",
+      "requirement": "Use the assembled substantive chain for drafting as well as triage; remove",
+      "status": "implemented",
+      "test": "`tests/test_freshness.py`::WriterReadsTheChainTests (the reply writer reads the assembled, de-quoted, budgeted conversation - history included - and the cut is disclosed; the last-six/4,000-character boundary is gone)",
+      "commit": "325d05a; 325d05a, CI run 34051887301 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-055",
+      "section": "Mandatory freshness before surfacing or acting",
+      "phase": "2/4/7",
+      "requirement": "Recheck the evaluated version before committing an action. Require renewed",
+      "status": "implemented",
+      "test": "`tests/test_freshness.py`::SendRechecksTests (a verdict rechecks the message-set revision wherever it lands - the Review button and the phone road - and refuses a stale or moved draft without sending; a redraft repins and the next yes sends; a failed source refresh is a 503, never \"current\")",
+      "commit": "325d05a; 325d05a, CI run 34051887301 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-056",
+      "section": "Mandatory freshness before surfacing or acting",
+      "phase": "2/4/7",
+      "requirement": "Add regression tests for email/chat refresh, Next without a key, FYI batches,",
+      "status": "partial: email/chat refresh, Next without a key, FYI batches, new activity before surfacing and during generation, external owner replies, subsequent asks, refresh failures, unchanged-context no-op, stale approval, draft version markers and no duplicate work are covered; a concurrent sync racing an action is covered only through the revision recheck",
+      "test": "`tests/test_freshness_walk.py` (9 cases) plus `tests/test_freshness.py` (9) and `tests/test_chat_freshness.py`",
+      "commit": "af2f15f; af2f15f, CI run 34052218971 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-057",
+      "section": "Mandatory freshness before surfacing or acting",
+      "phase": "2/4/7",
+      "requirement": "Test that the new-message/retriage notice arrives before the triage result,",
+      "status": "partial: the notice precedes the assistant's answer, is not duplicated on polling or re-render, and a failed refresh is an error event rather than a fresh answer; the notice does not precede the triage result itself (see PW-052)",
+      "test": "`tests/test_freshness_walk.py`::NoticeTests",
+      "commit": "af2f15f; af2f15f, CI run 34052218971 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-058",
+      "section": "Separate triage learning from reply-writing preferences",
+      "phase": "7",
+      "requirement": "Remove general `LEARNED.md` prompt injection from reply drafting and",
+      "status": "implemented",
+      "test": "`tests/test_reply_sources.py`::VoiceTests (no LEARNED.md in a task draft, its redraft, a message-only draft or a new outbound message; LEARNED.md still reaches triage - `tests/test_docs_flow.py`)",
+      "commit": "691f566; 691f566/2e92e2f, CI run 34054198417 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-059",
+      "section": "Separate triage learning from reply-writing preferences",
+      "phase": "7",
+      "requirement": "Build replies using STYLE.md for voice, phrasing, greetings, and signatures;",
+      "status": "implemented",
+      "test": "`tests/test_reply_sources.py`::VoiceTests (STYLE.md voice and signature, SOUL identity, the refreshed conversation and the verified result are what a reply is written from)",
+      "commit": "691f566; 691f566/2e92e2f, CI run 34054198417 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-060",
+      "section": "Separate triage learning from reply-writing preferences",
+      "phase": "7",
+      "requirement": "Restrict separately retrieved standing memory notes to explicit,",
+      "status": "implemented",
+      "test": "`tests/test_reply_sources.py` (separately retrieved notes are only explicit writing instructions - memory source `writing`; triage verdicts never ride into a draft)",
+      "commit": "691f566; 691f566/2e92e2f, CI run 34054198417 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-061",
+      "section": "Separate triage learning from reply-writing preferences",
+      "phase": "7",
+      "requirement": "Route explicit writing-style feedback to STYLE.md rather than general",
+      "status": "implemented",
+      "test": "`tests/test_reply_sources.py`::FeedbackRoutingTests (an edited draft's note becomes an Owner notes line in STYLE.md outside the generated block; a rejection's note stays triage feedback for LEARNED.md; a writing note can be saved by hand)",
+      "commit": "691f566; 691f566/2e92e2f, CI run 34054198417 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-062",
+      "section": "Separate triage learning from reply-writing preferences",
+      "phase": "7",
+      "requirement": "Add model-payload tests for initial drafts, redrafts, and message-only",
+      "status": "partial: model-payload tests for initial drafts, redrafts, message-only drafts and outbound messages, plus feedback routing, are in place; a reply's voice after a writing-feedback change is covered through STYLE.md's owner notes rather than a before/after payload diff",
+      "test": "`tests/test_reply_sources.py` (7 cases); `tests/test_docs_flow.py` reply audit moved to the PW-058 contract",
+      "commit": "691f566; 691f566/2e92e2f, CI run 34054198417 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-063",
+      "section": "Email reply recipients and signatures",
+      "phase": "7",
+      "requirement": "Default email drafts to Reply all; offer Reply to (sender/reply address)",
+      "status": "partial: Reply all is the default envelope (sender or Reply-To, original To/CC, the mailbox's own addresses excluded, deduplicated, no BCC), Reply to is one call away and To/CC are editable through `PUT /api/reviews/{id}/envelope`; the Review page still shows only the CC row - the To/mode controls are a Phase 8 surface",
+      "test": "`tests/test_reply_envelope.py`::EnvelopeTests, ::PinnedAndSentTests",
+      "commit": "88f2c1b; 88f2c1b/50560d5, CI run 34054507025 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-064",
+      "section": "Email reply recipients and signatures",
+      "phase": "7",
+      "requirement": "Persist and display the selected recipient envelope with the draft so",
+      "status": "implemented",
+      "test": "`tests/test_reply_envelope.py`::PinnedAndSentTests (the envelope is pinned to the draft when it is written and approval sends exactly the reviewed To/CC; an edited envelope is what goes out; the approved text leaves as reviewed)",
+      "commit": "88f2c1b; 88f2c1b/50560d5, CI run 34054507025 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-065",
+      "section": "Email reply recipients and signatures",
+      "phase": "7",
+      "requirement": "Apply the appropriate owner's email signature once in the draft, visible",
+      "status": "implemented",
+      "test": "`tests/test_reply_envelope.py`::SignatureTests (the signature from STYLE.md or the `email_signature` setting is applied once when a draft, a redraft or a manual draft is written - visible before approval, never at send time, never on chat, never twice)",
+      "commit": "88f2c1b; 88f2c1b/50560d5, CI run 34054507025 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-066",
+      "section": "Email reply recipients and signatures",
+      "phase": "7",
+      "requirement": "Test default Reply all, Reply to selection, Reply-To headers, editable To/CC,",
+      "status": "partial: default Reply all, Reply to, Reply-To headers, editable To/CC, owner exclusion, deduplication, the exact approved envelope and signature-once across drafts/redrafts/manual drafts are covered; the IMAP and Graph send fakes are exercised through `reply_to_message`'s to/cc contract rather than each connector",
+      "test": "`tests/test_reply_envelope.py` (9 cases)",
+      "commit": "88f2c1b; 88f2c1b/50560d5, CI run 34054507025 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-067",
+      "section": "Default task kind",
+      "phase": "3",
+      "requirement": "Owner-approved on 2026-09-05: a task with missing/uncertain agent kind",
+      "status": "implemented",
+      "test": "`tests/test_reply_always_drafts.py`::GeneralDefaultTests, `tests/test_not_coding.py` (fallback and classifier instructions default to general; explicit coding/task kept)",
+      "commit": "8b89e26; 8b89e26, CI run 34039576824 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-068",
+      "section": "Default task kind",
+      "phase": "3",
+      "requirement": "Test missing/invalid kind and uncertain classification across the supported",
+      "status": "implemented",
+      "test": "`tests/test_reply_always_drafts.py`::GeneralDefaultTests and `tests/test_not_coding.py::DispatchGateTests` (missing/invalid kind -> general, no coding session on a guess)",
+      "commit": "8b89e26; 8b89e26, CI run 34039576824 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-069",
+      "section": "Automatic agent startup for both work kinds",
+      "phase": "5",
+      "requirement": "Extend automatic dispatch to general agents, using a per-task worker",
+      "status": "implemented",
+      "test": "`tests/test_auto_start.py` (default general routing opens its assistant session; coding opens its CLI; a personal task starts nothing; queued-launch failure semantics remain tracked by PW-073)",
+      "commit": "d2e11e5; d2e11e5, CI run 34048763594 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-070",
+      "section": "Automatic agent startup for both work kinds",
+      "phase": "5",
+      "requirement": "Expose clear auto-start controls for coding and general agents in Settings,",
+      "status": "implemented",
+      "test": "`tests/test_auto_start.py`::SettingsTests plus `tests/processing/test_auto_start_preservation.py` (two real-SQLite lifecycle cases prove an old owner opt-out is applied before intake and upgrade failure opens no worker/connector boundary); restored positive core routing oracle; 94 focused tests passed",
+      "commit": "d2e11e5; d2e11e5, CI run 34048763594 (all ten jobs passed); startup-order integration repair, combined gates pending"
+    },
+    {
+      "id": "PW-071",
+      "section": "Automatic agent startup for both work kinds",
+      "phase": "5",
+      "requirement": "Apply appropriate shared safety/permission checks to both worker kinds,",
+      "status": "implemented",
+      "test": "`tests/test_auto_start.py` (the stranger hold applies to both kinds with the reason on the task; no configured assistant provider and an unresolved repository choice are visible holds, not crashes or wrong-checkout sessions)",
+      "commit": "d2e11e5; d2e11e5, CI run 34048763594 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-072",
+      "section": "Automatic agent startup for both work kinds",
+      "phase": "5",
+      "requirement": "Dispatch once per eligible work item, not per refresh or historical chain",
+      "status": "implemented",
+      "test": "`tests/test_auto_start.py` (one start per work item: a second message on the task starts nothing; a live conversation is reused and the ask is put once)",
+      "commit": "d2e11e5; d2e11e5, CI run 34048763594 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-073",
+      "section": "Automatic agent startup for both work kinds",
+      "phase": "5",
+      "requirement": "Test both default auto-start paths, each settings opt-out, manual fallback,",
+      "status": "partial: default paths, opt-outs, personal work, configuration holds and direct failed launch are covered; an explicitly queued general launch can clear its queue entry and record Started when launch fails",
+      "test": "`tests/test_auto_start.py` plus startup-preservation/core focused gate (94 passed); concurrent ingest/retriage remains indirect and truthful queued failure/retry is pending",
+      "commit": "d2e11e5; d2e11e5, CI run 34048763594 (all ten jobs passed); combined integration gates pending"
+    },
+    {
+      "id": "PW-074",
+      "section": "Triage-generated task summary and checkable list",
+      "phase": "3",
+      "requirement": "Extend the same triage verdict with a meaningful task title/summary and",
+      "status": "implemented",
+      "test": "`tests/test_task_checklist.py`::VerdictNamesTheWorkTests (title, summary and checklist from the verdict; validated; router fallback kept)",
+      "commit": "82a56a3; 82a56a3, CI run 34040813007 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-075",
+      "section": "Triage-generated task summary and checkable list",
+      "phase": "3",
+      "requirement": "Persist the checklist with the task and render interactive, saved checkboxes",
+      "status": "implemented",
+      "test": "`tests/test_task_checklist.py`::ProgressTests, ::SharedContextTests (persisted items with ids, task-list Markdown, task detail, worker brief); `website/test/checklist.test.mjs` (task page and assistant card wired)",
+      "commit": "82a56a3; 82a56a3, CI run 34040813007 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-076",
+      "section": "Triage-generated task summary and checkable list",
+      "phase": "3",
+      "requirement": "Give checklist items stable identity so edits, progress, and fresh-triage",
+      "status": "implemented",
+      "test": "`tests/test_task_checklist.py` (stable ids; owner edit keeps progress where the words stayed; a later message adds distinct items, no duplicates, no resets, change surfaced on the task)",
+      "commit": "82a56a3; 82a56a3, CI run 34040813007 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-077",
+      "section": "Triage-generated task summary and checkable list",
+      "phase": "3",
+      "requirement": "Keep checklist progress separate from agent/session state and task completion;",
+      "status": "implemented",
+      "test": "`tests/test_task_checklist.py`::ProgressTests (ticking every box completes nothing; closing ticks nothing); `checklist.test.mjs` progress wording",
+      "commit": "82a56a3; 82a56a3, CI run 34040813007 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-078",
+      "section": "Triage-generated task summary and checkable list",
+      "phase": "3",
+      "requirement": "Add tests for multi-request chains, coding/general/personal tasks, meaningful",
+      "status": "partial: coding/general/personal kinds and multi-request chains covered; no rendered-browser click of a checkbox yet",
+      "test": "`tests/test_task_checklist.py` (9 cases) and `checklist.test.mjs` (4)",
+      "commit": "82a56a3; 82a56a3, CI run 34040813007 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-079",
+      "section": "Configurable sender trust for automatic agent startup",
+      "phase": "5",
+      "requirement": "Remove `store.known_sender()` / \"has written before\" as an authorization",
+      "status": "implemented",
+      "test": "`tests/test_sender_trust.py`::RulesTests (prior incoming mail is not trust even when the table knows the address; `store.known_sender` stays for the first-time-sender policy only and is out of `senders.known`)",
+      "commit": "6c560b9; 6c560b9, CI run 34049592998 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-080",
+      "section": "Configurable sender trust for automatic agent startup",
+      "phase": "5",
+      "requirement": "Retain verified Sent Items evidence that the receiving mailbox previously",
+      "status": "implemented",
+      "test": "`tests/test_sender_trust.py` plus `tests/processing/test_sender_trust_scope.py` (8 real-SQLite cases): exact receiving-mailbox/email-channel scope for approved/edited/sent review and conversation evidence; independent Astra review cleared; focused trust/hotpaths 43 passed",
+      "commit": "6c560b9, CI run 34049592998 (all ten jobs passed); 64e4163 scoped repair; combined gates pending"
+    },
+    {
+      "id": "PW-081",
+      "section": "Configurable sender trust for automatic agent startup",
+      "phase": "5",
+      "requirement": "Expose same-domain trust and non-email-channel trust behavior explicitly in",
+      "status": "implemented",
+      "test": "`tests/test_sender_trust.py`::RulesTests::test_each_rule_has_a_switch, ::SettingsTests (own-domain, Sent Items and chat-channel trust are three visible switches with defaults; no incoming-history option exists)",
+      "commit": "6c560b9; 6c560b9, CI run 34049592998 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-082",
+      "section": "Configurable sender trust for automatic agent startup",
+      "phase": "5",
+      "requirement": "Apply the configured sender-trust contract consistently to coding and",
+      "status": "implemented",
+      "test": "`tests/test_sender_trust.py`::BothKindsTests (the configured trust gates coding and general alike; a hold affects the unattended start only - intake, triage and the task are untouched)",
+      "commit": "6c560b9; 6c560b9, CI run 34049592998 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-083",
+      "section": "Configurable sender trust for automatic agent startup",
+      "phase": "5",
+      "requirement": "Add tests for prior incoming-only history remaining untrusted, verified sent",
+      "status": "partial: incoming-only history, verified sent history, each disabled rule, same-domain and chat settings, failed lookups, mailbox scoping and both worker kinds covered; the live Graph/IMAP Sent Items queries are exercised only through the existing fakes",
+      "test": "`tests/test_sender_trust.py` (11 cases)",
+      "commit": "6c560b9; 6c560b9, CI run 34049592998 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-084",
+      "section": "Agent capacity counting",
+      "phase": "5",
+      "requirement": "Owner-approved: count all live coding/general agent sessions toward the",
+      "status": "implemented",
+      "test": "`tests/test_dispatch_retries.py`::CapacityTests (every live session counts - working, idle at its prompt, a general session; an ended one does not; a capacity wait is not an attempt)",
+      "commit": "6ed0301; CI run 34049840835 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-085",
+      "section": "Dispatch queue startup failure",
+      "phase": "5",
+      "requirement": "Owner-approved: allow at most two automatic retries after the initial",
+      "status": "partial: persisted coding and direct-general retry budgets are implemented; a queued general failure can still lose its retry row when the helper swallows failure",
+      "test": "`tests/test_dispatch_retries.py`; independent review found the general queue drain can clear the recorded failure and report Started",
+      "commit": "6ed0301, CI run 34049840835 (all ten jobs passed); incoming limitation, combined gates pending"
+    },
+    {
+      "id": "PW-086",
+      "section": "Dispatch queue startup failure",
+      "phase": "5",
+      "requirement": "Configuration, missing repository/worker, and permission failures should",
+      "status": "implemented",
+      "test": "`tests/test_dispatch_retries.py` (configuration, missing repository/worker and permission failures are \"needs you\" at once; capacity waits consume nothing)",
+      "commit": "6ed0301; CI run 34049840835 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-087",
+      "section": "Dispatch queue startup failure",
+      "phase": "5",
+      "requirement": "After retry exhaustion, retain the task and dispatch error visibly but stop",
+      "status": "partial: after exhaustion the task and its error stay, automatic attempts stop, and `POST /api/tasks/{id}/dispatch/retry` and `DELETE /api/tasks/{id}/dispatch` exist with the state on the task list; the task-view buttons and the attention pipeline entry are Phase 8 surfaces",
+      "test": "`tests/test_dispatch_retries.py`::OwnerControlsTests",
+      "commit": "6ed0301; CI run 34049840835 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-088",
+      "section": "Dispatch queue startup failure",
+      "phase": "5",
+      "requirement": "Schedule due retries without depending solely on an unrelated session ending;",
+      "status": "partial: timers and persisted deadlines are implemented; queued general failure is swallowed and restart arms only the earliest of distinct retry deadlines",
+      "test": "`tests/test_dispatch_retries.py`; independent review found later restored deadlines can depend on unrelated session completion",
+      "commit": "6ed0301, CI run 34049840835 (all ten jobs passed); incoming limitations, combined gates pending"
+    },
+    {
+      "id": "PW-089",
+      "section": "Dispatch queue startup failure",
+      "phase": "5",
+      "requirement": "Test transient recovery, exactly three failed attempts, persisted backoff",
+      "status": "partial: coding and direct-general retry cases are covered; queued general failures and multiple restored deadlines remain unaccepted",
+      "test": "`tests/test_dispatch_retries.py`; `tests/processing/test_dispatch_owner_guard.py` covers owner-only Retry/Cancel; cumulative gates pending",
+      "commit": "6ed0301, CI run 34049840835 (all ten jobs passed); integration-review limitations retained"
+    },
+    {
+      "id": "PW-090",
+      "section": "Dispatch queue startup failure",
+      "phase": "5",
+      "requirement": "Move `clear_dispatch()` inside the startup `try`, after `start_on_task()`",
+      "status": "historically-checked",
+      "test": "Historical evidence in TODO; revalidate before dependent changes",
+      "commit": "2689679 (baseline contains historical record)"
+    },
+    {
+      "id": "PW-091",
+      "section": "Dispatch queue startup failure",
+      "phase": "5",
+      "requirement": "Add a regression test proving a failed start remains queued and a later",
+      "status": "historically-checked",
+      "test": "Historical evidence in TODO; revalidate before dependent changes",
+      "commit": "2689679 (baseline contains historical record)"
+    },
+    {
+      "id": "PW-092",
+      "section": "Project and repository selection in unified triage",
+      "phase": "3",
+      "requirement": "Supply relevant known projects, repositories, and people associations with",
+      "status": "implemented",
+      "test": "`tests/test_repo_choice_triage.py`::TriagePicksTests (known repositories and the sender's project context in the payload; validated pick persisted on the task; startup uses it)",
+      "commit": "f327a8b; f327a8b, CI run 34041465044 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-093",
+      "section": "Project and repository selection in unified triage",
+      "phase": "3",
+      "requirement": "An explicit owner-selected task repository wins. Treat sender/project",
+      "status": "implemented",
+      "test": "`tests/test_repo_choice_triage.py`::PrecedenceTests (owner repo: tag wins; GitHub item's own repository is authoritative; sender evidence supports, never decides)",
+      "commit": "f327a8b; f327a8b, CI run 34041465044 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-094",
+      "section": "Project and repository selection in unified triage",
+      "phase": "3",
+      "requirement": "Validate returned project/repository IDs against the supplied known",
+      "status": "implemented",
+      "test": "`tests/test_repo_choice_triage.py` (unknown name dropped and turned into a choice; ambiguity asks the owner; no forced match)",
+      "commit": "f327a8b; f327a8b, CI run 34041465044 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-095",
+      "section": "Project and repository selection in unified triage",
+      "phase": "3",
+      "requirement": "Before coding startup, validate/resolve the selected local checkout. Missing",
+      "status": "implemented",
+      "test": "`tests/test_repo_choice_triage.py`::CheckoutPathTests (a missing checkout path is a visible repository choice on dispatch, never a fallback folder)",
+      "commit": "f327a8b; f327a8b, CI run 34041465044 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-096",
+      "section": "Project and repository selection in unified triage",
+      "phase": "3",
+      "requirement": "Test explicit override precedence, mapped person with a matching request,",
+      "status": "partial: no rendered-browser run of the repository picker yet",
+      "test": "`tests/test_repo_choice_triage.py` (8 cases)",
+      "commit": "f327a8b; f327a8b, CI run 34041465044 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-097",
+      "section": "Repository confirmation when manually sending to coding",
+      "phase": "5",
+      "requirement": "Use a consistent pre-launch repository picker on the task page, timeline",
+      "status": "partial: the pre-launch repository picker now exists on the task page, the chat cards and the timeline row, preselecting the suggestion with its reason (`/api/tasks/{id}/repos`); conversational dispatch in the assistant chat is Phase 8",
+      "test": "`website/test/startupSurfaces.test.mjs` (the timeline offers the picker on a needs_repo decision) plus `website/test/repoChoice.test.mjs`",
+      "commit": "4f32c35, CI run 34051581086 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-098",
+      "section": "Repository confirmation when manually sending to coding",
+      "phase": "5",
+      "requirement": "Cover personal-task/general-to-coding corrections and manual coding dispatch;",
+      "status": "partial: a manual coding dispatch or a general-to-coding correction that cannot name its checkout is a visible choice on every surface, never a session elsewhere; a confident single configured repository still launches without the step (owner decision pending on the confirmation step for that case)",
+      "test": "`tests/test_startup_contract.py`::TaskDispatchTests, ::MessageDispatchTests",
+      "commit": "4f32c35, CI run 34051581086 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-099",
+      "section": "Repository confirmation when manually sending to coding",
+      "phase": "5",
+      "requirement": "Preserve the selected item, agent/model, and instructions while choosing;",
+      "status": "implemented",
+      "test": "`tests/test_repo_choice_triage.py` (persisted selection reaches startup), `tests/test_startup_contract.py` (a live session is reported existing, never duplicated; cancel starts nothing - the picker's Not now)",
+      "commit": "4f32c35, CI run 34051581086 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-100",
+      "section": "Repository confirmation when manually sending to coding",
+      "phase": "5",
+      "requirement": "Add tests for all three UI entry points, conversational coding requests,",
+      "status": "partial: dispatch contract and repository decision covered on the API for the task page, timeline and chat paths; source-pattern checks for the three surfaces; live UI interaction not exercised",
+      "test": "`tests/test_startup_contract.py` (7 cases), `website/test/startupSurfaces.test.mjs` (4 checks)",
+      "commit": "4f32c35, CI run 34051581086 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-101",
+      "section": "All and Unread: one item set, different filter and order",
+      "phase": "1",
+      "requirement": "Use one canonical item/identity/context representation for All, Unread,",
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
+    },
+    {
+      "id": "PW-102",
+      "section": "All and Unread: one item set, different filter and order",
+      "phase": "1",
+      "requirement": "All sorts by time (newest first). Unread selects the unread subset and",
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
+    },
+    {
+      "id": "PW-103",
+      "section": "All and Unread: one item set, different filter and order",
+      "phase": "1",
+      "requirement": "Remove Unread-only age windows, category exclusions, and silent caps that",
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
+    },
+    {
+      "id": "PW-104",
+      "section": "All and Unread: one item set, different filter and order",
+      "phase": "1",
+      "requirement": "Do not treat an FYI classification or merely surfacing an item as permission",
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
+    },
+    {
+      "id": "PW-105",
+      "section": "All and Unread: one item set, different filter and order",
+      "phase": "1",
+      "requirement": "Show newly persisted arrivals in both views immediately when eligible,",
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
+    },
+    {
+      "id": "PW-106",
+      "section": "All and Unread: one item set, different filter and order",
+      "phase": "1",
+      "requirement": "Replace the incomplete pipeline revision/update comparison: changes to",
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
+    },
+    {
+      "id": "PW-107",
+      "section": "All and Unread: one item set, different filter and order",
+      "phase": "1",
+      "requirement": "Superseding the earlier separate-filter proposal: remove the Needs me tab.",
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
+    },
+    {
+      "id": "PW-108",
+      "section": "All and Unread: one item set, different filter and order",
+      "phase": "1",
+      "requirement": "Apply all common source/category/mute exclusions identically to All and",
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
+    },
+    {
+      "id": "PW-109",
+      "section": "All and Unread: one item set, different filter and order",
+      "phase": "1",
+      "requirement": "Test All/Unread item parity (after read filtering), time versus status order,",
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
+    },
+    {
+      "id": "PW-110",
+      "section": "Assistant selection: top eligible Unread item",
+      "phase": "1",
+      "requirement": "Put genuinely immediate/time-critical items first (a current calendar",
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
+    },
+    {
+      "id": "PW-111",
+      "section": "Assistant selection: top eligible Unread item",
+      "phase": "1",
+      "requirement": "Put tasks actively worked by either coding or general agents in band 5,",
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
+    },
+    {
+      "id": "PW-112",
+      "section": "Assistant selection: top eligible Unread item",
+      "phase": "1",
+      "requirement": "Test coding/general working placement, transitions to owner-waiting, and",
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
+    },
+    {
+      "id": "PW-113",
+      "section": "Assistant selection: top eligible Unread item",
+      "phase": "1",
+      "requirement": "Preserve the existing funnel UI during this selection refactor: keep its",
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
+    },
+    {
+      "id": "PW-114",
+      "section": "Assistant selection: top eligible Unread item",
+      "phase": "1",
+      "requirement": "Remove assistant-local filtering, ranking, and eligibility recalculation:",
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
+    },
+    {
+      "id": "PW-115",
+      "section": "Assistant selection: top eligible Unread item",
+      "phase": "1",
+      "requirement": "Clicking \"Walk me through my tasks\" resumes a valid Current item; only",
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
+    },
+    {
+      "id": "PW-116",
+      "section": "Assistant selection: top eligible Unread item",
+      "phase": "1",
+      "requirement": "Replace next_item()'s surfaced-based exclusion and preference for unshown",
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
+    },
+    {
+      "id": "PW-117",
+      "section": "Assistant selection: top eligible Unread item",
+      "phase": "1",
+      "requirement": "Skip working agents, deferred items, and pending-triage items for automatic",
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
+    },
+    {
+      "id": "PW-118",
+      "section": "Assistant selection: top eligible Unread item",
+      "phase": "1",
+      "requirement": "Track Current explicitly: once selected, keep that item as the conversation",
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
+    },
+    {
+      "id": "PW-119",
+      "section": "Assistant selection: top eligible Unread item",
+      "phase": "1",
+      "requirement": "Preserve the approved four-at-a-time FYI presentation for automatic walks;",
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
+    },
+    {
+      "id": "PW-120",
+      "section": "Assistant selection: top eligible Unread item",
+      "phase": "1",
+      "requirement": "Test displayed Unread versus assistant selection, already-shown but unread",
+      "status": "implemented",
+      "test": "Section 1.8: 2934 backend +76 subtests; 83 focused follow-ups; 314 frontend; all nine rendered browser scenarios including shared 507-root/read/filter/Current coverage; independent review passed",
+      "commit": "Section 1.8; local gates passed; integration and exact-SHA CI in evidence"
+    },
+    {
+      "id": "PW-121",
+      "section": "Assistant actions: AI interpretation, then explicit confirmation",
+      "phase": "8",
+      "requirement": "Remove decide_words() and other phrase/regex-based intent dispatch from",
+      "status": "implemented",
+      "test": "`tests/test_chat_proposals.py`::InterpretationTests, `tests/test_concierge.py`::DecisionTests (`concierge.decide_words` and its phrase tables are gone - `hasattr` pinned; the model interprets the words with the item, the pile and the conversation in front of it and answers with a DECIDE line or a clarifying OPTIONS line; without an AI connector nothing is decided and the chat says so)",
+      "commit": "945c666; 945c666/a80f039, CI run 34059392966 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-122",
+      "section": "Assistant actions: AI interpretation, then explicit confirmation",
+      "phase": "8",
+      "requirement": "Give every message the same conversational action interface. Replace the",
+      "status": "implemented",
+      "test": "`website/test/proposalCard.test.mjs` (the bottom suggestions Next / Done / Create task / Create agent / Reply are text sent through the same `send()` as typing; `website/test/funnelPile.test.mjs` pins that no chip settles or dispatches directly)",
+      "commit": "945c666; 945c666/a80f039, CI run 34059392966 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-123",
+      "section": "Assistant actions: AI interpretation, then explicit confirmation",
+      "phase": "8",
+      "requirement": "Before executing a requested action (except draft preparation and Next navigation below), show a confirmation box describing",
+      "status": "implemented",
+      "test": "`tests/test_chat_proposals.py`::ProposalTests (a decision becomes an `operations.propose` row - kind, exact target, parameters, label - and the chat says what WILL happen; a correction before the click revises the same proposal to a new version), `website/src/ProposalCard.jsx` (action, target, parameters, a specifically labelled button and Cancel)",
+      "commit": "945c666; 945c666/a80f039, CI run 34059392966 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-124",
+      "section": "Assistant actions: AI interpretation, then explicit confirmation",
+      "phase": "8",
+      "requirement": "Except for the explicitly approved draft-preparation and Next-navigation exceptions below, no",
+      "status": "implemented",
+      "test": "`tests/test_chat_proposals.py`::test_a_decision_is_a_proposal_the_owner_confirms_not_an_action_the_words_took, ::test_words_alone_decide_nothing_the_model_does, `tests/test_assistant_reactions.py` (every consequential response asserts nothing moved before the click; the button posts `/api/operations/{id}/execute` with the id and version, never a phrase)",
+      "commit": "945c666; 945c666/a80f039, CI run 34059392966 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-125",
+      "section": "Assistant actions: AI interpretation, then explicit confirmation",
+      "phase": "8",
+      "requirement": "Use one validated action execution path shared with other app entry points.",
+      "status": "implemented",
+      "test": "`tests/test_chat_proposals.py`::ProposalTests (one shared `server._run_operation` handler per kind - the same code the page's buttons run; stale version and changed context answer 409; a repeated click returns the first receipt without a second effect; a failing handler is reported as `error` and settles nothing; the receipt is written after execution), `website/test/proposalCard.test.mjs` (the walk moves only on a done that settles)",
+      "commit": "945c666; 945c666/a80f039, CI run 34059392966 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-126",
+      "section": "Assistant actions: AI interpretation, then explicit confirmation",
+      "phase": "8",
+      "requirement": "Preserve draft review/editing and explicit send approval within this model.",
+      "status": "implemented",
+      "test": "`tests/test_chat_proposals.py`::test_a_reply_request_drafts_at_once_and_sends_nothing, ::test_approve_is_confirmed_then_sent, ::test_a_decision_that_names_one_fyi_targets_that_entry_not_the_handful (a reply request is an immediate draft through the reply writer, no dispatch, nothing sent; sending still needs the approve proposal; naming one FYI of the handful targets that entry and its siblings stay unread)",
+      "commit": "945c666; 945c666/a80f039, CI run 34059392966 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-127",
+      "section": "Assistant actions: AI interpretation, then explicit confirmation",
+      "phase": "8",
+      "requirement": "Test typed/suggested-prompt parity, no phrase-dispatch bypass, clarification,",
+      "status": "implemented",
+      "test": "`tests/test_chat_proposals.py` (17 cases), `tests/test_concierge.py`, `tests/test_assistant_reactions.py` (103 cases re-pinned to the proposal model), `tests/test_lifecycle.py`, `website/test/proposalCard.test.mjs` (5 cases: parity, card facts, receipts, cancel)",
+      "commit": "945c666; 945c666/a80f039, CI run 34059392966 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-128",
+      "section": "Assistant actions: AI interpretation, then explicit confirmation",
+      "phase": "8",
+      "requirement": "Owner-approved navigation exception: an unambiguous request to move Next",
+      "status": "implemented",
+      "test": "`tests/test_chat_proposals.py`::test_next_moves_on_without_marking_closing_or_deferring (Next moves the walk and writes no read mark, close, deferral or memory; \"is the agent done?\" is answered, not acted on), `tests/test_assistant_reactions.py`::WalkFromWordsTests",
+      "commit": "945c666; 945c666/a80f039, CI run 34059392966 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-129",
+      "section": "Action-driven triage correction memory and task discussion history",
+      "phase": "4",
+      "requirement": "After a confirmed owner action succeeds, compare its outcome with the",
+      "status": "partial: shared records exist; concurrent execution and premature not-a-task success evidence remain unresolved",
+      "test": "`tests/test_operations.py`::EntryPointTests (mine, not-coding, file and the proposal API record the same operation and evidence; no second memory confirmation); independent integration review reproduced duplicate concurrent execution and identified stale parameter/context and premature-success paths (implementation evidence)",
+      "commit": "1461a13; CI run 34048121206 on d5f976f passed; identified guarantees remain partial"
+    },
+    {
+      "id": "PW-130",
+      "section": "Action-driven triage correction memory and task discussion history",
+      "phase": "4",
+      "requirement": "Record source/message or grouped-item identity, triage verdict/revision,",
+      "status": "partial: correction fields exist; exact context/parameter binding and concurrent execute-once guarantees remain unresolved",
+      "test": "`tests/test_operations.py`::CorrectionTests (source identity, verdict and its route id, the change and the operation id; FYI->task, general->coding, reply->dismissed; deferral and discussion teach nothing; cancelled/failed write nothing; retries do not duplicate; evidence recovered without repeating the action); independent integration review reproduced duplicate concurrent execution and identified stale parameter/context and premature-success paths (implementation evidence)",
+      "commit": "1461a13; CI run 34048121206 on d5f976f passed; identified guarantees remain partial"
+    },
+    {
+      "id": "PW-131",
+      "section": "Action-driven triage correction memory and task discussion history",
+      "phase": "4",
+      "requirement": "Preserve the distinction between correction evidence, explicit learned",
+      "status": "implemented",
+      "test": "`tests/test_operations.py` (evidence is not a memory note or a policy; it reaches fresh triage as dated lines beside the notes, worded as one correction, not a rule)",
+      "commit": "1461a13; 1461a13, CI run 34048121206 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-132",
+      "section": "Action-driven triage correction memory and task discussion history",
+      "phase": "4",
+      "requirement": "Record evidence against source items even when an FYI has no task. Persist",
+      "status": "partial: durable discussion, proposals and outcomes per source item and task through operations.py and its endpoints; the assistant conversation does not yet write its turns through discuss() (Phase 8 wiring)",
+      "test": "`tests/test_operations.py`::DiscussionTests, ::EntryPointTests (history endpoint)",
+      "commit": "1461a13; 1461a13, CI run 34048121206 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-133",
+      "section": "Action-driven triage correction memory and task discussion history",
+      "phase": "4",
+      "requirement": "When an FYI later becomes a task, link its earlier relevant discussion and",
+      "status": "implemented",
+      "test": "`tests/test_operations.py`::DiscussionTests (discussion on a taskless FYI travels onto the task it becomes, by message identity; a batch sibling keeps its own)",
+      "commit": "1461a13; 1461a13, CI run 34048121206 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-134",
+      "section": "Action-driven triage correction memory and task discussion history",
+      "phase": "4",
+      "requirement": "Test successful corrections from every entry point, unchanged verdicts,",
+      "status": "partial: every listed backend case covered; actual UI interaction coverage waits on the Phase 8 confirmation box",
+      "test": "`tests/test_operations.py` (20 cases)",
+      "commit": "1461a13; 1461a13, CI run 34048121206 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-135",
+      "section": "Successful agent handoff: acknowledge and move on",
+      "phase": "5/8",
+      "requirement": "Keep the delegated task visible in Unread as Working; do not settle it as",
+      "status": "implemented",
+      "test": "`tests/test_chat_proposals.py`::HandoffTests (a started dispatch is receipted \"is on it - moving on\" and the page advances without a settle post - the message key is never marked done and the task shows as the `agent:<tid>` Working row; a `needs_repo` dispatch raises `operations.Halt`, the proposal stays `error` with that outcome, the item stays in the pile and the same confirmation runs again after the choice; a failed start and a cancel keep the item), `website/test/handoff.test.mjs` (`afterExecute.handoff` / `.repo`, the card's RepoPicker)",
+      "commit": "672e904; 672e904/5ad1d03, CI run 34062011407 (all jobs passed)"
+    },
+    {
+      "id": "PW-136",
+      "section": "Successful agent handoff: acknowledge and move on",
+      "phase": "5/8",
+      "requirement": "Test successful handoff advances once, retains the working task in Unread,",
+      "status": "implemented",
+      "test": "`tests/test_chat_proposals.py`::HandoffTests (3 cases: started hand-off advances once and the working task stays in Unread; repository choice keeps the item and the resumed confirmation runs the dispatch once; failed start and cancel keep the item), `website/test/handoff.test.mjs` (2 cases). Agent workspace inline presentation is untouched",
+      "commit": "672e904; 672e904/5ad1d03, CI run 34062011407 (all jobs passed)"
+    },
+    {
+      "id": "PW-137",
+      "section": "Agent questions answered through the assistant",
+      "phase": "6",
+      "requirement": "Receive structured input/approval-needed events from worker integrations,",
+      "status": "partial: structured input/approval events carry task, run, request id, question and choices and are served by `GET /api/tasks/{id}/worker`; the attention-item presentation and the bottom-strip notification are Phase 8 surfaces",
+      "test": "`tests/test_worker_events.py`::ApiTests",
+      "commit": "353d083; 353d083, CI run 34052731720 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-138",
+      "section": "Agent questions answered through the assistant",
+      "phase": "6",
+      "requirement": "Let the owner answer conversationally in the assistant. Clarify ambiguous",
+      "status": "pending",
+      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-139",
+      "section": "Agent questions answered through the assistant",
+      "phase": "6",
+      "requirement": "Bind delivery to the specific outstanding request and run, never merely the",
+      "status": "implemented",
+      "test": "`tests/test_worker_events.py`::AnswerBindingTests (an answer is bound to the request and its run; delivered once; a second click is resolved; a changed run is stale and never forwarded; a dead run is disconnected)",
+      "commit": "353d083; 353d083, CI run 34052731720 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-140",
+      "section": "Agent questions answered through the assistant",
+      "phase": "6",
+      "requirement": "Use a supported reply/control path per worker integration; lifecycle hooks",
+      "status": "pending",
+      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-141",
+      "section": "Agent questions answered through the assistant",
+      "phase": "6",
+      "requirement": "Distinguish queued, delivered, and resumed/working states. Do not report",
+      "status": "implemented",
+      "test": "`tests/test_worker_events.py`::AnswerBindingTests (queued/delivered/failed outcomes recorded in the task discussion; \"delivered\" is never claimed from HTTP success alone - the delivery call must succeed)",
+      "commit": "353d083; 353d083, CI run 34052731720 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-142",
+      "section": "Agent questions answered through the assistant",
+      "phase": "6",
+      "requirement": "Test general/coding question relay, multiple waiting agents, request/run",
+      "status": "partial: general/coding relay through the request binding, request/run identity, duplicate clicks, stale runs, disconnected workers and delivery failure are covered by `tests/test_worker_events.py`; restart recovery and visible confirmation of worker acceptance in the UI are open",
+      "test": "`tests/test_worker_events.py`, `tests/test_worker_surfaces.py`",
+      "commit": "c16a861; c16a861, CI run 34053073590 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-143",
+      "section": "Send outcomes and explicit closure when sending is unavailable",
+      "phase": "7",
+      "requirement": "Check connector sending capability/permissions before offering send. Keep",
+      "status": "partial: the Review page already omits Send when `sendState` says the channel cannot carry the reply (`CanSend`/`SendBlock` from `outbound.can_reply`/`send_block`) and now offers Close without sending in its place; a connector-permission probe ahead of the first send (read-only Graph scope, missing SMTP) is not attempted - the definite-failure path carries that word",
+      "test": "`tests/test_send_outcomes.py`::CloseWithoutSendingTests",
+      "commit": "3459868; 3459868/9c6017e, CI run 34054847136 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-144",
+      "section": "Send outcomes and explicit closure when sending is unavailable",
+      "phase": "7",
+      "requirement": "Confirmed send closes the task; definite failure preserves the draft and",
+      "status": "implemented",
+      "test": "`tests/test_send_outcomes.py`::OutcomeTests (a confirmed send closes the task; a definite failure keeps the draft and the task open with the error and a retry; a provider that did not answer is delivery UNKNOWN - `outbound.reconcile_sent` against the Sent folder before anything is retried, found = settled as sent with no second send; duplicate approvals are refused by the decided-review guard)",
+      "commit": "3459868; 3459868/9c6017e, CI run 34054847136 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-145",
+      "section": "Send outcomes and explicit closure when sending is unavailable",
+      "phase": "7",
+      "requirement": "When sending is unavailable, offer a separate confirmed Close without",
+      "status": "implemented",
+      "test": "`tests/test_send_outcomes.py`::CloseWithoutSendingTests (verb `close_unsent`: the unsent draft is kept on the review, the closure and its reason are recorded as a comment and audit row, the task closes as the owner's word, nothing reads as Sent, and a failed send never closes anything by itself)",
+      "commit": "3459868; 3459868/9c6017e, CI run 34054847136 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-146",
+      "section": "Send outcomes and explicit closure when sending is unavailable",
+      "phase": "7",
+      "requirement": "Test read-only/missing permissions, explicit close-without-send and cancel,",
+      "status": "partial: explicit close-without-send, confirmed success, definite failure, ambiguous timeout, provider reconciliation, retry-after-unknown and no success-style advancement after failure are covered; read-only/missing-permission probing and an explicit cancel are not exercised beyond the existing reject verb",
+      "test": "`tests/test_send_outcomes.py` (8 cases)",
+      "commit": "3459868; 3459868/9c6017e, CI run 34054847136 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-147",
+      "section": "Successful reply closes its task",
+      "phase": "7",
+      "requirement": "Apply successful reply -> task done consistently across assistant approval,",
+      "status": "implemented",
+      "test": "`tests/test_send_outcomes.py`::OutcomeTests, `tests/test_freshness_walk.py` (every door - assistant approval, Review send, an externally sent reply matched by `channels.retire_draft_answered_elsewhere` - settles through `verdicts._settle_task_after_sent_reply`; only the task the reply belongs to closes)",
+      "commit": "3459868; 3459868/9c6017e, CI run 34054847136 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-148",
+      "section": "Successful reply closes its task",
+      "phase": "7",
+      "requirement": "Drafting, editing, approving without confirmed send success, failed/blocked",
+      "status": "implemented",
+      "test": "`tests/test_send_outcomes.py`::OutcomeTests, ::CloseWithoutSendingTests (drafting, a failed or unknown send and close-without-sending never fire the completion rule; a clarification leaves the task waiting)",
+      "commit": "3459868; 3459868/9c6017e, CI run 34054847136 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-149",
+      "section": "Successful reply closes its task",
+      "phase": "7",
+      "requirement": "Refresh task, review, and canonical Unread state after confirmed send and",
+      "status": "partial: the settled review leaves the pending set and the task leaves the actionable feed on a confirmed send or an explicit close (`_settle_task_after_sent_reply`, `store._VISIBLE_PENDING`); the Unread refresh on the live page rides the existing review/task change events rather than a dedicated assertion",
+      "test": "`tests/test_send_outcomes.py`",
+      "commit": "3459868; 3459868/9c6017e, CI run 34054847136 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-150",
+      "section": "Successful reply closes its task",
+      "phase": "7",
+      "requirement": "Test successful send closes even with unchecked task TODOs, failed sends",
+      "status": "implemented",
+      "test": "`tests/test_send_outcomes.py`::OutcomeTests::test_a_confirmed_send_closes_the_task_whatever_its_checklist_says, ::test_a_definite_failure_keeps_the_draft_and_the_task_open_with_a_retry, ::test_a_retry_while_unknown_reconciles_first_and_sends_only_when_the_provider_has_nothing",
+      "commit": "3459868; 3459868/9c6017e, CI run 34054847136 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-151",
+      "section": "Assistant presentation: actionable FYI summaries and full task context",
+      "phase": "8",
+      "requirement": "Present up to four FYIs together with a summary for each. Each entry is",
+      "status": "implemented",
+      "test": "`tests/test_assistant_presentation.py`::FyiHandfulTests (four fyi come out together, each with its own model-written summary kept on the entry's shown-state so the pile's batch carries it; `POST /api/concierge/propose` on one entry makes the same `task.create_from_message` proposal the words would - kind task / coding / general, `settles` false - and executing it reaches that message only: its siblings stay `filed`, `surfaced`, and in Unread; Reply on an entry drafts at once and marks nothing), `website/test/fyiCard.test.mjs`",
+      "commit": "1fb5469; 1fb5469/4f58096, CI run 34060354066 (browser, build-exe, docker passed; the Windows pytest jobs failed only on tests/test_ideas_triage.py's fixed 09:00 stamp once the runner's clock passed 21:00 UTC - made relative in 13c93de)"
+    },
+    {
+      "id": "PW-152",
+      "section": "Assistant presentation: actionable FYI summaries and full task context",
+      "phase": "8",
+      "requirement": "For a single task item, show the full message/context and the task summary",
+      "status": "implemented",
+      "test": "`tests/test_assistant_presentation.py`::SingleItemTests (the surfaced card carries tid/mid; `/api/tasks/{id}` gives the grouped non-context messages, the task Summary and the checklist; `concierge.facts` hands the model the combined bundle), `website/test/fyiCard.test.mjs` (CombinedTaskText renders the task summary with the checklist; the task card draws it too)",
+      "commit": "1fb5469; 1fb5469/4f58096, CI run 34060354066 (browser, build-exe, docker passed; the Windows pytest jobs failed only on tests/test_ideas_triage.py's fixed 09:00 stamp once the runner's clock passed 21:00 UTC - made relative in 13c93de)"
+    },
+    {
+      "id": "PW-153",
+      "section": "Assistant presentation: actionable FYI summaries and full task context",
+      "phase": "8",
+      "requirement": "Generate the assistant's explanation according to COUNSEL, removing the",
+      "status": "implemented",
+      "test": "`tests/test_assistant_presentation.py`::CounselIntroductionTests (`INTRO_AI` on: the introduction is the model's with COUNSEL as the system voice; the \"three beats / name the button\" instruction is gone - code states only what the card holds; the facts line is the fallback for no AI, an out-of-character or off-subject answer), `tests/test_concierge.py`::BrainTests/FastLaneTests/ApiTests re-pinned",
+      "commit": "1fb5469; 1fb5469/4f58096, CI run 34060354066 (browser, build-exe, docker passed; the Windows pytest jobs failed only on tests/test_ideas_triage.py's fixed 09:00 stamp once the runner's clock passed 21:00 UTC - made relative in 13c93de)"
+    },
+    {
+      "id": "PW-154",
+      "section": "Assistant presentation: actionable FYI summaries and full task context",
+      "phase": "8",
+      "requirement": "Presenting either kind of card does not mark it read or handled and does",
+      "status": "implemented",
+      "test": "`tests/test_assistant_presentation.py`::PresentingMarksNothingTests (a shown single item and a shown handful are `surfaced` only - still in Unread, task open, message untouched, no operation proposed or run, no receipt, no move)",
+      "commit": "1fb5469; 1fb5469/4f58096, CI run 34060354066 (browser, build-exe, docker passed; the Windows pytest jobs failed only on tests/test_ideas_triage.py's fixed 09:00 stamp once the runner's clock passed 21:00 UTC - made relative in 13c93de)"
+    },
+    {
+      "id": "PW-155",
+      "section": "Assistant presentation: actionable FYI summaries and full task context",
+      "phase": "8",
+      "requirement": "Test four-item FYI presentation, per-item action targeting, untouched sibling",
+      "status": "implemented",
+      "test": "`tests/test_assistant_presentation.py` (8 cases), `website/test/fyiCard.test.mjs` (2 cases), `tests/test_concierge.py` and `tests/test_lifecycle.py` re-pinned to the COUNSEL introduction",
+      "commit": "1fb5469; 1fb5469/4f58096, CI run 34060354066 (browser, build-exe, docker passed; the Windows pytest jobs failed only on tests/test_ideas_triage.py's fixed 09:00 stamp once the runner's clock passed 21:00 UTC - made relative in 13c93de)"
+    },
+    {
+      "id": "PW-156",
+      "section": "Chat archive and independent retention cleanup",
+      "phase": "9",
+      "requirement": "New chat archives the current conversation, resets chat/Current, and opens",
+      "status": "implemented",
+      "test": "`tests/test_chat_retention.py`::NewChatTests (`POST /api/assistant/dock/new` archives the guide task as done with its rows intact, opens a blank one with no turn of its own, leaves every read state and the source/task untouched, and never runs retention), `website/test/chatRetention.test.mjs` (New chat posts the archive and calls no surface/turn)",
+      "commit": "2463532; 2463532/7064b7d, CI run 34063026549 (all jobs passed)"
+    },
+    {
+      "id": "PW-157",
+      "section": "Chat archive and independent retention cleanup",
+      "phase": "9",
+      "requirement": "Listing/opening earlier chats is read-only and paginated. Remove the",
+      "status": "implemented",
+      "test": "`tests/test_chat_retention.py`::HistoryIsReadOnlyTests (`concierge.chats` has no cutoff and writes nothing - a forty-day-old chat still lists; `GET /api/concierge/chats?limit&before` pages newest-first with a `next` cursor; opening one writes nothing; `CHATS_KEPT_DAYS` is gone), `website/test/chatRetention.test.mjs` (the panel pages with the cursor and offers \"Earlier chats\")",
+      "commit": "2463532; 2463532/7064b7d, CI run 34063026549 (all jobs passed)"
+    },
+    {
+      "id": "PW-158",
+      "section": "Chat archive and independent retention cleanup",
+      "phase": "9",
+      "requirement": "Implement automatic retention cleanup as a separate scheduled lifecycle",
+      "status": "implemented",
+      "test": "`tests/test_chat_retention.py`::RetentionTests (`retention.py`: `chat_keep_days` setting, default 15, owner override, nonsense falls back; `retention.tick` runs once a day from start-up and the sync timer, never from a history read; the boundary is the last chat row against the cutoff), Settings → Assistant → \"Keep past chats (days)\"",
+      "commit": "2463532; 2463532/7064b7d, CI run 34063026549 (all jobs passed)"
+    },
+    {
+      "id": "PW-159",
+      "section": "Chat archive and independent retention cleanup",
+      "phase": "9",
+      "requirement": "Preserve task-linked discussion, confirmed actions, agent results, and send",
+      "status": "implemented",
+      "test": "`tests/test_chat_retention.py`::test_what_a_chat_said_about_a_task_and_every_independent_record_outlive_the_archive (mirrored task discussion, a promoted FYI's linked discussion, the operation receipt, the agent's report and the approved review all remain readable on the task after the archive is removed)",
+      "commit": "2463532; 2463532/7064b7d, CI run 34063026549 (all jobs passed)"
+    },
+    {
+      "id": "PW-160",
+      "section": "Chat archive and independent retention cleanup",
+      "phase": "9",
+      "requirement": "Keep correction memory and saved rules on independent lifecycles. Chat",
+      "status": "implemented",
+      "test": "`tests/test_chat_retention.py`::test_what_a_chat_said_about_a_task_and_every_independent_record_outlive_the_archive (memories, mutes and correction evidence untouched by cleanup - retention removes the guide task and its rows only)",
+      "commit": "2463532; 2463532/7064b7d, CI run 34063026549 (all jobs passed)"
+    },
+    {
+      "id": "PW-161",
+      "section": "Chat archive and independent retention cleanup",
+      "phase": "9",
+      "requirement": "Test New chat archives without deletion or auto-walk, history reads do not",
+      "status": "implemented",
+      "test": "`tests/test_chat_retention.py` (5 cases: archive without deletion or auto-walk; read-only paginated history; 15-day default, override, exact boundary; open chat and real tasks never touched, once-a-day tick; preserved task history, promoted FYI discussion, agent results, send outcomes, evidence and rules), `website/test/chatRetention.test.mjs` (2 cases)",
+      "commit": "2463532; 2463532/7064b7d, CI run 34063026549 (all jobs passed)"
+    },
+    {
+      "id": "PW-162",
+      "section": "Opening Assistant: restore without starting a walkthrough",
+      "phase": "9",
+      "requirement": "Persist Current explicitly and validate it against current canonical item",
+      "status": "implemented",
+      "test": "`tests/test_current_restore.py`::RestoreTests (`concierge.set_current` writes the item down as surface() puts it on the table, per chat; `restore_current` validates it against the pile on `GET /api/concierge` and clears it - choosing nothing - when it was settled, deferred, closed underneath or gone; a handled card stays readable in the transcript), `website/test/currentRestore.test.mjs` (`loadState` takes `data.current`; `restorableCurrent` is no longer wired)",
+      "commit": "a87ea90; a87ea90/b5d486b, CI run 34063553989 (all jobs passed)"
+    },
+    {
+      "id": "PW-163",
+      "section": "Opening Assistant: restore without starting a walkthrough",
+      "phase": "9",
+      "requirement": "Keep history/pipeline loading separate from initiating an assistant turn.",
+      "status": "implemented",
+      "test": "`website/test/currentRestore.test.mjs` (every effect only loads state or the pile; nothing on mount, activation, remount or reconnect calls Next or starts a walk), `tests/test_chat_retention.py`::NewChatTests (a new chat is blank and starts nothing)",
+      "commit": "a87ea90; a87ea90/b5d486b, CI run 34063553989 (all jobs passed)"
+    },
+    {
+      "id": "PW-164",
+      "section": "Opening Assistant: restore without starting a walkthrough",
+      "phase": "9",
+      "requirement": "Test first visit, returning from another tab, page reload/remount, stale",
+      "status": "implemented",
+      "test": "`tests/test_current_restore.py` (5 cases: first visit, reload/tab return with no new turn, handled/deferred/closed Current cleared without replacement, a named item and the fyi handful restored, a new chat empty), `website/test/currentRestore.test.mjs` (2 cases)",
+      "commit": "a87ea90; a87ea90/b5d486b, CI run 34063553989 (all jobs passed)"
+    },
+    {
+      "id": "PW-165",
+      "section": "Assistant background updates must not advance the conversation",
+      "phase": "8",
+      "requirement": "Owner-approved notification placement: unsolicited updates use a single",
+      "status": "implemented",
+      "test": "`tests/test_assistant_notifications.py`::WatcherTests (`funnel.announce` writes no chat line or card; a working/finished agent is a `notice:<tid>` funnel-state row `funnel.notices` folds into the pile's `alerts`; a parked/asking agent is the pile's own alert and is never kept twice), `website/test/notificationStrip.test.mjs` (a newer message on Current is a page-side notice, not a chat line; one `tq-btw` strip)",
+      "commit": "42d0d16; 42d0d16/cb63bf7, CI run 34061032086 (the three pytest jobs and build-exe passed; the browser job failed only in its settle helper, which counted the watcher chat cards PW-165 removed - re-pinned by the lead's follow-up 2a58cdd)"
+    },
+    {
+      "id": "PW-166",
+      "section": "Assistant background updates must not advance the conversation",
+      "phase": "8",
+      "requirement": "Keep the strip until Open, Later, or resolution; do not rely on a timed",
+      "status": "implemented",
+      "test": "`tests/test_assistant_notifications.py`::test_a_finished_agent_is_a_notice..., ::test_later_puts_the_notice_down_and_nothing_else (the notice survives every later look until `ack`; Later acks the notice only - no item state, task untouched; `reset_walk` drops put-down notices so a new chat does not raise them; a newer fact replaces the older notice), `website/test/notificationStrip.test.mjs` (`pendingAlerts`: notices pending whatever is on the table, \"+N more\", Open is the owner's own `surface`)",
+      "commit": "42d0d16; 42d0d16/cb63bf7, CI run 34061032086 (the three pytest jobs and build-exe passed; the browser job failed only in its settle helper, which counted the watcher chat cards PW-165 removed - re-pinned by the lead's follow-up 2a58cdd)"
+    },
+    {
+      "id": "PW-167",
+      "section": "Assistant background updates must not advance the conversation",
+      "phase": "8",
+      "requirement": "Test no automatic chat insertion for Current and non-Current updates,",
+      "status": "implemented",
+      "test": "`tests/test_assistant_notifications.py` (5 cases), `website/test/notificationStrip.test.mjs` (3 cases); `tests/test_funnel.py`, `tests/test_lifecycle.py`, `tests/processing/test_processing_selection.py` re-pinned; the approval-time material-change dialog (Section 7.5) is untouched",
+      "commit": "42d0d16; 42d0d16/cb63bf7, CI run 34061032086 (the three pytest jobs and build-exe passed; the browser job failed only in its settle helper, which counted the watcher chat cards PW-165 removed - re-pinned by the lead's follow-up 2a58cdd)"
+    },
+    {
+      "id": "PW-168",
+      "section": "Assistant background updates must not advance the conversation",
+      "phase": "8",
+      "requirement": "Remove event-driven clearing/replacement of Current and scheduled surface()",
+      "status": "implemented",
+      "test": "`website/test/notificationStrip.test.mjs` (`loadPile` holds no `surfaceRef`, `deferInChat`, `turn(` or assistant turn; the events block only speaks; the working event no longer says \"let's go to the next thing\" - `tests/test_funnel.py`)",
+      "commit": "42d0d16; 42d0d16/cb63bf7, CI run 34061032086 (the three pytest jobs and build-exe passed; the browser job failed only in its settle helper, which counted the watcher chat cards PW-165 removed - re-pinned by the lead's follow-up 2a58cdd)"
+    },
+    {
+      "id": "PW-169",
+      "section": "Assistant background updates must not advance the conversation",
+      "phase": "8",
+      "requirement": "Only explicit owner navigation/actions may advance under their agreed",
+      "status": "implemented",
+      "test": "`tests/test_assistant_notifications.py`::test_a_walk_on_is_the_owners_move_never_the_watchers (a finished agent adds no assistant turn and the item on the table stays there, `surfaced`), `website/test/notificationStrip.test.mjs` (a gone Current is cleared without a replacement; polling and live events only refresh the pile)",
+      "commit": "42d0d16; 42d0d16/cb63bf7, CI run 34061032086 (the three pytest jobs and build-exe passed; the browser job failed only in its settle helper, which counted the watcher chat cards PW-165 removed - re-pinned by the lead's follow-up 2a58cdd)"
+    },
+    {
+      "id": "PW-170",
+      "section": "Assistant background updates must not advance the conversation",
+      "phase": "8",
+      "requirement": "Test updates on Current, unrelated urgent arrivals, delayed event delivery,",
+      "status": "implemented",
+      "test": "`tests/test_assistant_notifications.py` (Current update, unrelated finished agent, delayed second look, duplicate events, new chat) + `website/test/notificationStrip.test.mjs` (poll / reconnect / tab activation call `loadPile` only; no Next, no subject replacement, no turn)",
+      "commit": "42d0d16; 42d0d16/cb63bf7, CI run 34061032086 (the three pytest jobs and build-exe passed; the browser job failed only in its settle helper, which counted the watcher chat cards PW-165 removed - re-pinned by the lead's follow-up 2a58cdd)"
+    },
+    {
+      "id": "PW-171",
+      "section": "Similar coding work: inform agents, do not queue for overlap",
+      "phase": "5",
+      "requirement": "Remove automatic deferral behind another task solely because of likely file",
+      "status": "implemented",
+      "test": "`tests/test_coordination.py`::AdvisoryOverlapTests (likely overlap starts the task with a briefing in both the immediate and the ranked/queued path; an old overlap dependency no longer blocks; capacity still queues)",
+      "commit": "165af37; 165af37, CI run 34050341372 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-172",
+      "section": "Similar coding work: inform agents, do not queue for overlap",
+      "phase": "5",
+      "requirement": "Before startup, give the agent current same-checkout peer task IDs, agent",
+      "status": "implemented",
+      "test": "`tests/test_coordination.py`::BriefingTests (peer ids, agent identities, task summaries, touched files, what the live session said, the coordination rule and own-changes-only staging)",
+      "commit": "165af37; 165af37, CI run 34050341372 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-173",
+      "section": "Similar coding work: inform agents, do not queue for overlap",
+      "phase": "5",
+      "requirement": "Refresh coordination context as peers start, change work, or stop. Closed",
+      "status": "partial: the briefing and every wall surface read the live selection at the moment they are built, and closed sessions never masquerade as ownership; a push-style refresh into a running agent is not wired (an agent re-reads with `taskuary --board`)",
+      "test": "`tests/test_coordination.py`::BriefingTests::test_a_closed_sessions_note_is_not_current_ownership, ::LiveWallTests",
+      "commit": "165af37; 165af37, CI run 34050341372 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-174",
+      "section": "Similar coding work: inform agents, do not queue for overlap",
+      "phase": "5",
+      "requirement": "If AI overlap assessment is absent, uncertain, or fails, still provide the",
+      "status": "implemented",
+      "test": "`tests/test_coordination.py`::BriefingTests::test_no_assessment_is_not_no_overlap (the factual briefing rides without a model; \"not assessed\" is said, never read as no overlap)",
+      "commit": "165af37; 165af37, CI run 34050341372 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-175",
+      "section": "Similar coding work: inform agents, do not queue for overlap",
+      "phase": "5",
+      "requirement": "Test similar tasks launching when capacity permits, both dispatch modes,",
+      "status": "partial: both dispatch modes, advisory reaching the seed, retained capacity queuing and removal of obsolete blockers without duplicate starts are covered; the retry limit interplay is covered by `tests/test_dispatch_retries.py`",
+      "test": "`tests/test_coordination.py` (17 cases); `tests/test_blackboard.py` two tests moved to the PW-171 contract with the reason noted",
+      "commit": "165af37; 165af37, CI run 34050341372 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-176",
+      "section": "Wall notes: live coordination only",
+      "phase": "5",
+      "requirement": "Explicitly remove the deliberate closed-session wall-note injection from",
+      "status": "implemented",
+      "test": "`tests/test_coordination.py`::LiveWallTests::test_every_surface_reads_the_same_live_selection (the seed carries live notes only, none when none are live); `tests/test_agent_wall.py` seed tests moved to live sessions with the reason noted",
+      "commit": "165af37; 165af37, CI run 34050341372 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-177",
+      "section": "Wall notes: live coordination only",
+      "phase": "5",
+      "requirement": "Apply the same removal explicitly to general-assistant context:",
+      "status": "implemented",
+      "test": "`tests/test_coordination.py`::LiveWallTests::test_the_general_prompt_carries_live_house_notes_only (a closed chat's house note is out; the owner's guidance stays)",
+      "commit": "165af37; 165af37, CI run 34050341372 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-178",
+      "section": "Wall notes: live coordination only",
+      "phase": "5",
+      "requirement": "Associate coordination notes with a specific agent session/run, not merely",
+      "status": "partial: terminal/CLI notes carry session identity and follow live-session lifetime; the HTTP note API does not yet forward the session ID",
+      "test": "`tests/test_coordination.py` covers terminal session ownership, waiting, end and same-task restart; HTTP SID propagation regression/repair pending review",
+      "commit": "165af37; incoming implementation, combined gates pending"
+    },
+    {
+      "id": "PW-179",
+      "section": "Wall notes: live coordination only",
+      "phase": "5",
+      "requirement": "Use the same live-note selection for the board UI, agent startup context,",
+      "status": "partial: live_notes is shared by Board, seed, assistant prompt and CLI reads; HTTP-created notes lack session identity until the API repair lands",
+      "test": "`tests/test_coordination.py` covers the shared selection; HTTP note-post identity propagation remains pending",
+      "commit": "165af37; incoming implementation, combined gates pending"
+    },
+    {
+      "id": "PW-180",
+      "section": "Wall notes: live coordination only",
+      "phase": "5",
+      "requirement": "Retain ended-run notes in task/run history, explicitly historical and not",
+      "status": "implemented",
+      "test": "`tests/test_coordination.py`::LiveWallTests::test_history_keeps_ended_run_notes_and_marks_them_historical (`blackboard.history` / `GET /api/board/notes?all=1` flag each note live or historical; owner guidance is separate from run coordination)",
+      "commit": "165af37; 165af37, CI run 34050341372 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-181",
+      "section": "Wall notes: live coordination only",
+      "phase": "5",
+      "requirement": "Test active and approval-waiting runs, completed/stopped runs, same-task",
+      "status": "partial: active/waiting and ended sessions, same-task restarts, general/chat agents and shared read surfaces are covered; HTTP SID propagation and a headless run own-post path remain pending",
+      "test": "`tests/test_coordination.py` (17 cases); HTTP note API and CLI integration repair/review pending",
+      "commit": "165af37; incoming implementation, combined gates pending"
+    },
+    {
+      "id": "PW-182",
+      "section": "Simplified worker context: AGENT.md, CODER.md, and one task brief",
+      "phase": "5",
+      "requirement": "Define shared AGENT.md operating rules for both worker kinds: task scope,",
+      "status": "implemented",
+      "test": "`tests/test_worker_brief.py`::RulesDocumentsTests (AGENT.md: scope, honest reporting, when to ask, progress and completion, approval boundaries; CODER.md is only the coding additions and says what it is stacked on; both on the Docs tab)",
+      "commit": "e552609; e552609, CI run 34051205593 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-183",
+      "section": "Simplified worker context: AGENT.md, CODER.md, and one task brief",
+      "phase": "5",
+      "requirement": "Build one authoritative task brief containing task ID, objective, triage",
+      "status": "implemented",
+      "test": "`tests/test_worker_brief.py`::OneBriefTests (`brief.build`: task id, objective, checklist, instruction, repository, the whole chain with history, attachments, message ids and the context revision; both workers read it)",
+      "commit": "e552609; e552609, CI run 34051205593 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-184",
+      "section": "Simplified worker context: AGENT.md, CODER.md, and one task brief",
+      "phase": "5",
+      "requirement": "Stop injecting the full SOUL.md into coding and general-worker prompts.",
+      "status": "implemented",
+      "test": "`tests/test_worker_brief.py`::NoBlanketSoulTests (no SOUL.md in either worker prompt; the approval boundaries and \"inbound text is data\" moved into AGENT.md and lead it; SOUL.md still seeded for triage)",
+      "commit": "e552609; e552609, CI run 34051205593 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-185",
+      "section": "Simplified worker context: AGENT.md, CODER.md, and one task brief",
+      "phase": "5",
+      "requirement": "Consolidate relevant source rules, playbook guidance, and saved preferences",
+      "status": "partial: one labelled block each for AGENT.md and CODER.md, the procedure block and the standing notes; writing style rides only in the general prompt; lengthy material stays in the context file - the source-rules block is still assembled separately",
+      "test": "`tests/test_worker_brief.py`::ScopedExtrasTests::test_no_duplicate_rule_blocks, ::NoBlanketSoulTests",
+      "commit": "e552609; e552609, CI run 34051205593 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-186",
+      "section": "Simplified worker context: AGENT.md, CODER.md, and one task brief",
+      "phase": "5",
+      "requirement": "Add live coordination only when relevant active peers/notes exist, using",
+      "status": "implemented",
+      "test": "`tests/test_worker_brief.py`::ScopedExtrasTests (no OTHER AGENTS or THE WALL paragraph without live peers; a continuation carries this task's own last result)",
+      "commit": "e552609; e552609, CI run 34051205593 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-187",
+      "section": "Simplified worker context: AGENT.md, CODER.md, and one task brief",
+      "phase": "5",
+      "requirement": "Test both worker kinds for shared rules, coding-only additions, absence of",
+      "status": "partial: shared rules, coding-only additions, absence of blanket SOUL injection, retained approval constraints, complete fresh context and scoped live/continuation information are covered for both kinds; a rendered-browser check of the Docs tab is not",
+      "test": "`tests/test_worker_brief.py` (13 cases); `tests/test_terminal.py` (2 labels) and `tests/test_docs_flow.py` (SOUL marker now forbidden in the seed) moved to the PW-184/185 contract with the reason noted",
+      "commit": "e552609; e552609, CI run 34051205593 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-188",
+      "section": "Minimal onboarding and assistant-led Taskuary setup",
+      "phase": "11",
+      "requirement": "Simplify initial onboarding to name, then AI coding CLI selection/setup",
+      "status": "pending",
+      "test": "Required: Phase 11 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-189",
+      "section": "Minimal onboarding and assistant-led Taskuary setup",
+      "phase": "11",
+      "requirement": "Add a discoverable system-setup walkthrough entry point at the top Assistant",
+      "status": "pending",
+      "test": "Required: Phase 11 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-190",
+      "section": "Minimal onboarding and assistant-led Taskuary setup",
+      "phase": "11",
+      "requirement": "Ship a Taskuary setup skill containing the product-specific setup procedure,",
+      "status": "pending",
+      "test": "Required: Phase 11 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-191",
+      "section": "Minimal onboarding and assistant-led Taskuary setup",
+      "phase": "11",
+      "requirement": "Reuse direct report/connection setup and shared confirmed configuration",
+      "status": "pending",
+      "test": "Required: Phase 11 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-192",
+      "section": "Minimal onboarding and assistant-led Taskuary setup",
+      "phase": "11",
+      "requirement": "Support resuming incomplete setup and revisiting individual setup areas",
+      "status": "pending",
+      "test": "Required: Phase 11 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-193",
+      "section": "Minimal onboarding and assistant-led Taskuary setup",
+      "phase": "11",
+      "requirement": "Test first-run name/CLI handoff, missing CLI readiness, top-level setup entry,",
+      "status": "pending",
+      "test": "Required: Phase 11 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-194",
+      "section": "Direct report and connection setup through the assistant",
+      "phase": "10",
+      "requirement": "Interpret setup requests through AI, gather missing configuration, and show",
+      "status": "implemented",
+      "test": "`tests/test_chat_setup.py`::ReportSetupTests (a set-up said in the chat is sorted by the model - report, connection, or digging - gathered by `compose.compose` with its questions answered on the next turn, and confirmed as a `report.create` / `connection.create` proposal; the click runs `save_source` / `save_connector`, the tabs' own roads, and the outcome carries the real id and its `#report=` / `#connector=` link)",
+      "commit": "a03a539; local gates passed, CI pending"
+    },
+    {
+      "id": "PW-195",
+      "section": "Direct report and connection setup through the assistant",
+      "phase": "10",
+      "requirement": "For reports, gather source/connection, query or inputs, summary instructions,",
+      "status": "implemented",
+      "test": "`tests/test_chat_setup.py`::test_a_report_is_gathered_confirmed_and_created_through_the_reports_road (`concierge.report_facts`: source, inputs, summary instructions, schedule, enabled state, triage behaviour, delivery in the box), ::test_a_preview_is_a_dry_run... (`POST /api/operations/{id}/preview` strips schedule and delivery, creates nothing, and refuses an executor that writes)",
+      "commit": "a03a539; local gates passed, CI pending"
+    },
+    {
+      "id": "PW-196",
+      "section": "Direct report and connection setup through the assistant",
+      "phase": "10",
+      "requirement": "For connections, gather provider and non-secret configuration, show requested",
+      "status": "implemented",
+      "test": "`tests/test_chat_setup.py`::ConnectionSetupTests (provider, authority and what it unlocks in the box; the card is created off and without a secret, state `authorization pending` / `connected` / `validation failed` from the row; the same card is re-targeted, never duplicated; the chat never asks for a token and `concierge.redact` strips one typed in before any chat row, mirror or memory is written)",
+      "commit": "a03a539; local gates passed, CI pending"
+    },
+    {
+      "id": "PW-197",
+      "section": "Direct report and connection setup through the assistant",
+      "phase": "10",
+      "requirement": "If setup requires substantial investigation, propose a general-agent setup",
+      "status": "implemented",
+      "test": "`tests/test_chat_setup.py`::test_digging_is_a_walk_through_proposal_and_no_ai_says_so, ::test_a_failing_configuration... (a set-up the sort calls digging, or one the composer cannot stand behind, is a `task.setup` proposal with the reason; a simple configuration never opens a task)",
+      "commit": "a03a539; local gates passed, CI pending"
+    },
+    {
+      "id": "PW-198",
+      "section": "Direct report and connection setup through the assistant",
+      "phase": "10",
+      "requirement": "Test conversational clarification/correction/cancel, exact configuration",
+      "status": "implemented",
+      "test": "`tests/test_chat_setup.py` (8 cases: gather/confirm/create through the shared road with the real link, clarification and answers, correction and cancel, invalid config and duplicate title, read-only preview and a writing executor refused, connection with authority and no secret, unnamed system asked and secret redaction, digging and no-AI), `website/test/chatSetup.test.mjs` (2 cases)",
+      "commit": "a03a539; local gates passed, CI pending"
+    },
+    {
+      "id": "PW-199",
+      "section": "Assistant ideas enter shared triage",
+      "phase": "3",
+      "requirement": "Replace assistant idea direct feed-route classification with shared triage",
+      "status": "implemented",
+      "test": "`tests/test_ideas_triage.py`::SharedVerdictTests (shared verdict with evidence, report and linked-task/worker context; identity by idea key; pending and error states; retry on the next say)",
+      "commit": "3045452; 3045452, CI run 34041808201 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-200",
+      "section": "Assistant ideas enter shared triage",
+      "phase": "3",
+      "requirement": "Use the resulting classification and importance for canonical Unread order,",
+      "status": "implemented",
+      "test": "`tests/test_ideas_triage.py` (verdict drives the pile lane; actionable ideas open work through the shared intake with kind defaults; ideas about active work create nothing; generated claims complete nothing; no second ranking)",
+      "commit": "3045452; 3045452, CI run 34041808201 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-201",
+      "section": "Assistant ideas enter shared triage",
+      "phase": "3",
+      "requirement": "Preserve the existing opt-in report triage capability: configured reports",
+      "status": "implemented",
+      "test": "`tests/test_report_triage.py` (opt-in report triage unchanged: off = informational, on = the brain decides, a failed run is never triaged); workflow triggers and worker events untouched",
+      "commit": "3045452; 3045452, CI run 34041808201 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-202",
+      "section": "Assistant ideas enter shared triage",
+      "phase": "3",
+      "requirement": "Test informational/actionable/urgent ideas, linked active work, duplicate",
+      "status": "partial: duplicate report runs and urgent ideas covered by re-say identity and lane tests; no rendered-browser check",
+      "test": "`tests/test_ideas_triage.py` (8 cases) with `tests/test_report_triage.py`",
+      "commit": "3045452; 3045452, CI run 34041808201 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-203",
+      "section": "Separate configured workflows from incoming-request procedures",
+      "phase": "10",
+      "requirement": "Separate scheduled/configured workflow definitions from reusable procedures",
+      "status": "implemented",
+      "test": "`tests/test_workflows.py`::DefinitionTests (`workflows.definition` reads a configured job as objective, inputs, connections, steps, allowed actions, approvals, done-when, schedule and worker kind; `workflows.catalog` / `GET /api/workflows` lists workflows and request procedures apart)",
+      "commit": "0b79f40; 0b79f40/fa797fc, CI run 34064170080 (the pytest jobs and build-exe passed; the browser job failed once on a 546-vs-545 rail count in the lead's canonical-All scenario, which passes locally twice and does not touch workflows)"
+    },
+    {
+      "id": "PW-204",
+      "section": "Separate configured workflows from incoming-request procedures",
+      "phase": "10",
+      "requirement": "Dispatch a triggered workflow directly to a general agent with the workflow",
+      "status": "implemented",
+      "test": "`tests/test_workflows.py`::DispatchTests (a scheduled or hand-run agent workflow is a task with the definition and this run's context handed straight to the regular agent through `ingest._auto_general` - no `ingest_message`, no `classify_intent`, no coding CLI, nothing filed as a report; a full house queues it on the dispatch queue; the run history records the task)",
+      "commit": "0b79f40; 0b79f40/fa797fc, CI run 34064170080 (the pytest jobs and build-exe passed; the browser job failed once on a 546-vs-545 rail count in the lead's canonical-All scenario, which passes locally twice and does not touch workflows)"
+    },
+    {
+      "id": "PW-205",
+      "section": "Separate configured workflows from incoming-request procedures",
+      "phase": "10",
+      "requirement": "Keep incoming-request procedure matching in unified triage (for example,",
+      "status": "implemented",
+      "test": "`tests/test_procedure_selection.py` (procedure selected in the one verdict; kind stays the model's own; a PTO request is a general task with its procedure and no coder); `test_playbooks.py` updated",
+      "commit": "b461668; b461668, CI run 34042162189 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-206",
+      "section": "Separate configured workflows from incoming-request procedures",
+      "phase": "10",
+      "requirement": "Deliver the selected procedure to either worker kind through the shared",
+      "status": "implemented",
+      "test": "`tests/test_workflows.py`::test_a_scheduled_run_goes_straight_to_the_regular_agent_with_the_definition (the worker's brief is the workflow's own - objective, inputs, connections, steps, allowed actions, ask-first, done-when - with no procedure selection), ::ProcedureTests (a triage-selected procedure rides in the general agent's brief as it does in a coding brief)",
+      "commit": "0b79f40; 0b79f40/fa797fc, CI run 34064170080 (the pytest jobs and build-exe passed; the browser job failed once on a 546-vs-545 rail count in the lead's canonical-All scenario, which passes locally twice and does not touch workflows)"
+    },
+    {
+      "id": "PW-207",
+      "section": "Separate configured workflows from incoming-request procedures",
+      "phase": "10",
+      "requirement": "Preserve existing definitions when separating these concepts; explicitly",
+      "status": "implemented",
+      "test": "`tests/test_workflows.py`::DefinitionTests (existing definitions stay on their sources; playbooks are listed as procedures and left as they are; a read-only agent report keeps its executor and a coding workflow with a checkout keeps its CLI road)",
+      "commit": "0b79f40; 0b79f40/fa797fc, CI run 34064170080 (the pytest jobs and build-exe passed; the browser job failed once on a 546-vs-545 rail count in the lead's canonical-All scenario, which passes locally twice and does not touch workflows)"
+    },
+    {
+      "id": "PW-208",
+      "section": "Separate configured workflows from incoming-request procedures",
+      "phase": "10",
+      "requirement": "Test scheduled and manual workflow runs bypassing message triage and",
+      "status": "implemented",
+      "test": "`tests/test_workflows.py` (6 cases: definition and catalog, scheduled dispatch, Run now on the same road, capacity queueing, preserved report and coding roads, a PTO-style request selecting its procedure without forced coding and with one agent start)",
+      "commit": "0b79f40; 0b79f40/fa797fc, CI run 34064170080 (the pytest jobs and build-exe passed; the browser job failed once on a 546-vs-545 rail count in the lead's canonical-All scenario, which passes locally twice and does not touch workflows)"
+    },
+    {
+      "id": "PW-209",
+      "section": "Consistent worker startup and manual action surfaces",
+      "phase": "5",
+      "requirement": "Apply that startup contract to coding and general workers: distinguish",
+      "status": "implemented",
+      "test": "`tests/test_startup_contract.py` (dispatch answers say dispatch/started/existing/accepted on every door; a reused session is existing not started; a repository decision is never a start; a failed launch is 422; `Term.accepted` records prompt submission)",
+      "commit": "4f32c35, CI run 34051581086 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-210",
+      "section": "Consistent worker startup and manual action surfaces",
+      "phase": "5",
+      "requirement": "Verify equivalent Make task and Send to agent behavior across All timeline",
+      "status": "implemented",
+      "test": "`tests/test_startup_contract.py`::MessageDispatchTests::test_make_task_creates_or_reuses_an_owner_task_and_launches_nothing plus the shared dispatch contract for Send to agent",
+      "commit": "4f32c35, CI run 34051581086 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-211",
+      "section": "Consistent worker startup and manual action surfaces",
+      "phase": "5",
+      "requirement": "Audit finding: All detail's SendToAgent is hidden for unconverted",
+      "status": "implemented",
+      "test": "`website/test/startupSurfaces.test.mjs` (All detail offers Send to agent for fyi/reply rows; triage's reading stays as the printed reason)",
+      "commit": "4f32c35, CI run 34051581086 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-212",
+      "section": "Consistent worker startup and manual action surfaces",
+      "phase": "5",
+      "requirement": "Audit finding: ui.jsx SendToAgent treats a successful HTTP response with",
+      "status": "implemented",
+      "test": "`website/test/startupSurfaces.test.mjs` (ui.jsx SendToAgent reads `outcomeOf(data)`, offers the RepoPicker on needs_repo and never reports it as a start)",
+      "commit": "4f32c35, CI run 34051581086 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-213",
+      "section": "Consistent worker startup and manual action surfaces",
+      "phase": "5",
+      "requirement": "Audit finding: TasksView.startGeneralAgent dispatches existing general",
+      "status": "implemented",
+      "test": "`website/test/startupSurfaces.test.mjs` (TasksView non-coding start goes through `/api/tasks/{id}/dispatch` whatever the kind; no Kind/ask-tag patch)",
+      "commit": "4f32c35, CI run 34051581086 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-214",
+      "section": "Consistent worker startup and manual action surfaces",
+      "phase": "5",
+      "requirement": "Test the actual All-detail buttons and matching chat/Tasks actions: owner",
+      "status": "partial: API behaviour for owner task creation without startup, coding/general launch, missing-repo handling, already-live sessions and errors is covered; the surfaces are checked by source pattern and the packaged UI is rebuilt; live UI interactions are not exercised",
+      "test": "`tests/test_startup_contract.py`, `website/test/startupSurfaces.test.mjs`",
+      "commit": "4f32c35, CI run 34051581086 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-215",
+      "section": "Task-view buttons: accurate labels and shared execution",
+      "phase": "4/6/8",
+      "requirement": "Route task-view controls and assistant confirmation boxes through the same",
+      "status": "pending",
+      "test": "Required: Phase 4/6/8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-216",
+      "section": "Task-view buttons: accurate labels and shared execution",
+      "phase": "4/6/8",
+      "requirement": "Unify coding startup (currently Kind PATCH plus openTerm) and general",
+      "status": "pending",
+      "test": "Required: Phase 4/6/8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-217",
+      "section": "Task-view buttons: accurate labels and shared execution",
+      "phase": "4/6/8",
+      "requirement": "Make task completion versus agent completion explicit in labels/help and",
+      "status": "pending",
+      "test": "Required: Phase 4/6/8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-218",
+      "section": "Task-view buttons: accurate labels and shared execution",
+      "phase": "4/6/8",
+      "requirement": "Reconcile Finish agent run and Save stopped run result with the approved",
+      "status": "pending",
+      "test": "Required: Phase 4/6/8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-219",
+      "section": "Task-view buttons: accurate labels and shared execution",
+      "phase": "4/6/8",
+      "requirement": "Clarify Pause & save means end the session with saved continuation context,",
+      "status": "pending",
+      "test": "Required: Phase 4/6/8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-220",
+      "section": "Task-view buttons: accurate labels and shared execution",
+      "phase": "4/6/8",
+      "requirement": "Verify Write reply, Generate reply, and Ask sender create/open the intended",
+      "status": "pending",
+      "test": "Required: Phase 4/6/8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-221",
+      "section": "Task-view buttons: accurate labels and shared execution",
+      "phase": "4/6/8",
+      "requirement": "Add handler/backend tests plus actual UI interaction coverage for these",
+      "status": "pending",
+      "test": "Required: Phase 4/6/8 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-222",
+      "section": "Event-driven worker status instead of terminal heuristics",
+      "phase": "6",
+      "requirement": "Model Working, Input needed (with the unanswered question), Approval needed",
+      "status": "implemented",
+      "test": "`tests/test_worker_events.py`::EventModelTests (Working, Input needed with the question, Approval needed with the action, Finished with the result - which closes nothing - Failed, Disconnected and Stopped, each derived from explicit events; an idle prompt is unknown and raises no hand)",
+      "commit": "353d083; 353d083, CI run 34052731720 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-223",
+      "section": "Event-driven worker status instead of terminal heuristics",
+      "phase": "6",
+      "requirement": "Integrate Claude Code lifecycle/tool hooks for prompt submission, permission",
+      "status": "partial: Claude Code hooks are wired for UserPromptSubmit (Working), AskUserQuestion (Input needed with the exact question and choices), Notification permission prompts (Approval needed, observed not granted) and Stop (the response ended, never a finish); the installed hook set is not yet validated against the CLI version",
+      "test": "`tests/test_worker_events.py`::ProducersTests",
+      "commit": "353d083; 353d083, CI run 34052731720 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-224",
+      "section": "Event-driven worker status instead of terminal heuristics",
+      "phase": "6",
+      "requirement": "Integrate Codex App Server structured turn lifecycle, approval, and user-input",
+      "status": "pending: Codex App Server integration not started; Codex sessions still report through the rollout witness and the terminal",
+      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-225",
+      "section": "Event-driven worker status instead of terminal heuristics",
+      "phase": "6",
+      "requirement": "Emit regular API-agent lifecycle events directly from the execution loop.",
+      "status": "partial: the assistant's turns record Working; explicit request_input/finish_work signals for API workers are not yet provided",
+      "test": "`tests/test_worker_events.py` (general sessions record working through `GeneralSession.send_prompt`)",
+      "commit": "353d083; 353d083, CI run 34052731720 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-226",
+      "section": "Event-driven worker status instead of terminal heuristics",
+      "phase": "6",
+      "requirement": "Separate response/turn completion from work completion. Require an explicit",
+      "status": "implemented",
+      "test": "`tests/test_worker_events.py`::EventModelTests::test_a_response_ending_is_not_a_finish, ::test_a_dead_session_with_no_finish_is_disconnected_not_finished_and_an_idle_one_raises_no_hand",
+      "commit": "353d083; 353d083, CI run 34052731720 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-227",
+      "section": "Event-driven worker status instead of terminal heuristics",
+      "phase": "6",
+      "requirement": "Persist and reconcile events by task/run/turn and request IDs. Deduplicate",
+      "status": "implemented",
+      "test": "`tests/test_worker_events.py` (events persisted by task, run and request id; replays and duplicate open requests rejected; a run that is not the task's live one is ignored; answering one request leaves the others open)",
+      "commit": "353d083; 353d083, CI run 34052731720 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-228",
+      "section": "Event-driven worker status instead of terminal heuristics",
+      "phase": "6",
+      "requirement": "Keep Working visible in Unread without injecting it into chat. Promote",
+      "status": "partial: the funnel, the hand-raise, a session's info and the task list read the worker's own word first - an open request is the hand with its exact question or action and choices, a working run raises none however quiet its screen, the same event is never announced twice; a run that never reported keeps the screen heuristic; finished results as a result row (rather than blocked work) wait on Section 6.3",
+      "test": "`tests/test_worker_surfaces.py` (7 cases)",
+      "commit": "c16a861; c16a861, CI run 34053073590 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-229",
+      "section": "Event-driven worker status instead of terminal heuristics",
+      "phase": "6",
+      "requirement": "Test all providers: long silent work, terminal repaint noise, questions,",
+      "status": "pending",
+      "test": "Required: Phase 6 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-230",
+      "section": "Explicit completion: save the agent result, then close its run",
+      "phase": "6",
+      "requirement": "Capture the agent's actual final answer directly, rather than requiring a",
+      "status": "partial: the agent's own final answer is captured directly - the `--done` sentence recorded as the run's Finished event, then the Stop hook's last message - and matched to the run; Codex App Server agentMessage items are not integrated (PW-224)",
+      "test": "`tests/test_explicit_completion.py`::SaveBeforeCloseTests::test_the_final_answer_is_the_agents_own_and_matched_to_the_run",
+      "commit": "3d5af15; 3d5af15, CI run 34053604179 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-231",
+      "section": "Explicit completion: save the agent result, then close its run",
+      "phase": "6",
+      "requirement": "Persist the final Markdown result, evidence/artifact references, and reported",
+      "status": "implemented",
+      "test": "`tests/test_explicit_completion.py`::SaveBeforeCloseTests (the Markdown result with the final answer and the report land before the run closes; only checklist items the agent reported done are ticked, by identity; nothing blindly completed)",
+      "commit": "3d5af15; 3d5af15, CI run 34053604179 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-232",
+      "section": "Explicit completion: save the agent result, then close its run",
+      "phase": "6",
+      "requirement": "Replace the manual-start stay-open veto for explicit successful completion.",
+      "status": "implemented",
+      "test": "`tests/test_explicit_completion.py`::ExplicitFinishTests (an explicit finish closes the completed run even when the owner opened it, saves the result, publishes one Finished event and leaves the task's closure to the owner; live wall notes leave with the session)",
+      "commit": "3d5af15; 3d5af15, CI run 34053604179 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-233",
+      "section": "Explicit completion: save the agent result, then close its run",
+      "phase": "6",
+      "requirement": "If result persistence fails, do not discard the session or claim successful",
+      "status": "implemented",
+      "test": "`tests/test_explicit_completion.py` (a save that fails raises before the session is closed, writes no report, claims nothing and is retryable; a second finish for the same run does nothing twice)",
+      "commit": "3d5af15; 3d5af15, CI run 34053604179 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-234",
+      "section": "Explicit completion: save the agent result, then close its run",
+      "phase": "6",
+      "requirement": "Test automatic and manually started workers, matching final-answer capture,",
+      "status": "partial: automatic and owner-opened workers, final-answer capture, save-before-close ordering, incomplete checklist entries, duplicate finishes and persistence failures are covered; pending approvals at finish and retained follow-up context are exercised only through Sections 6.1/5.5",
+      "test": "`tests/test_explicit_completion.py` (6 cases)",
+      "commit": "3d5af15; 3d5af15, CI run 34053604179 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-235",
+      "section": "Completion-to-reply freshness and approval",
+      "phase": "7",
+      "requirement": "Apply the approved freshness and unified reevaluation rules after work",
+      "status": "implemented",
+      "test": "`tests/test_completion_freshness.py`::FreshnessTests (the conversation is refreshed through `coder.REFRESH` - the server's `_refresh_chat_context` - before the result becomes a reply; an answer the owner already sent from the mail client means no draft; a newer ask is the one the reply answers; a failed refresh leaves the draft visibly stale with the reason; no hook = unchecked, never called fresh)",
+      "commit": "ecabef1; ecabef1/aafd735, CI run 34055530583 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-236",
+      "section": "Completion-to-reply freshness and approval",
+      "phase": "7",
+      "requirement": "Reuse the applicable held review rather than duplicating it. Generate the",
+      "status": "implemented",
+      "test": "`tests/test_completion_freshness.py`::ResultAndReviewTests (the held triage draft, else the pending review an earlier completion raised, is reused - a repeated completion rewrites it and never sends; the draft is written from the saved result and the current thread with its context revision pinned by `draft_for_review`; the saved result survives a failed draft, which stays retryable as an empty pending review)",
+      "commit": "ecabef1; ecabef1/aafd735, CI run 34055530583 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-237",
+      "section": "Completion-to-reply freshness and approval",
+      "phase": "7",
+      "requirement": "Bring coder.finish() into line with the approved always-draft rule: when",
+      "status": "implemented",
+      "test": "`tests/test_completion_freshness.py`::UnsupportedSendTests, `tests/test_reply_channels.py::FinishTests` (a channel that cannot carry the reply still gets its draft - `finish` returns `can_send: False` with `send_block`'s reason, the Review page hides Send and offers Close without sending; only a row nobody sent - report, own, assistant - drafts nothing; sending stays behind owner approval)",
+      "commit": "ecabef1; ecabef1/aafd735, CI run 34055530583 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-238",
+      "section": "Completion-to-reply freshness and approval",
+      "phase": "7",
+      "requirement": "Test changed requests, already-sent external replies, unchanged chains,",
+      "status": "implemented",
+      "test": "`tests/test_completion_freshness.py` (11 cases: changed request, externally sent reply, unchanged chain, refresh failure, drafting failure, held-review reuse, unsupported and switched-off send channels, a report row, repeated completion events without duplicate drafts or sending)",
+      "commit": "ecabef1; ecabef1/aafd735, CI run 34055530583 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-239",
+      "section": "Completion-to-reply freshness and approval",
+      "phase": "7",
+      "requirement": "Owner clarification: when new context materially changes the task/draft and",
+      "status": "implemented",
+      "test": "`tests/test_approval_interrupt.py`::InterruptTests, `website/test/approvalInterrupt.test.mjs` (a material new message stops the click: `POST /api/reviews/{id}/decide` answers `stale` with an `interrupt` - the new message, the latest triage change, the owner's edit kept as a task comment and in the reply box, the refreshed draft - and both the Review page and the Assistant stage open \"A new message arrived. Review it before sending.\" with Review the update / Cancel; nothing is sent on the original click, the refreshed draft is shown beside the owner's words and needs its own yes)",
+      "commit": "d8bfe62; d8bfe62/1455cee, CI run 34055784019 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-240",
+      "section": "Completion-to-reply freshness and approval",
+      "phase": "7",
+      "requirement": "Base approval invalidation on the draft's context/triage revision and",
+      "status": "implemented",
+      "test": "`tests/test_approval_interrupt.py`::test_an_fyi_filed_with_nothing_to_do_does_not_interrupt, ::test_a_change_while_approval_is_open_is_caught_by_the_pinned_revision_not_a_flag, ::test_the_review_list_marks_stale_by_material_change_only (`verdicts.context_moved`: the pinned context revision against the material inbound set - an FYI filed with nothing to do is excluded from `operations.message_revision` - shared by the list, the click and the verdict; no polling timestamp is consulted)",
+      "commit": "d8bfe62; d8bfe62/1455cee, CI run 34055784019 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-241",
+      "section": "Completion-to-reply freshness and approval",
+      "phase": "7",
+      "requirement": "Test material inbound changes, externally sent replies, relevant triage",
+      "status": "implemented",
+      "test": "`tests/test_approval_interrupt.py` (6 cases: material inbound change, externally sent reply, relevant triage update, non-material FYI, a change while approval is open and a second change before the second look, the list's stale mark) + `website/test/approvalInterrupt.test.mjs` (4 cases: the interruption model, non-interruptions, an older answer without the payload, cancel keeps the edit and review hands the refreshed draft over)",
+      "commit": "d8bfe62; d8bfe62/1455cee, CI run 34055784019 (all ten jobs passed)"
+    },
+    {
+      "id": "PW-242",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Remove shared COUNSEL injection from assistant.think() report-generation",
+      "status": "implemented",
+      "test": "tests/test_report_prompt_isolation.py",
+      "commit": "worktree-assistant-prompt-ownership 7abc29b (not yet merged, owner review pending)"
+    },
+    {
+      "id": "PW-243",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Audit other COUNSEL consumers, including suggestion discussions and general",
+      "status": "implemented",
+      "test": "tests/test_counsel_consumers.py",
+      "commit": "worktree-assistant-prompt-ownership ed3bdd2 (not yet merged, owner review pending)"
+    },
+    {
+      "id": "PW-244",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Test that changing chat COUNSEL does not alter the scheduled report prompt,",
+      "status": "implemented",
+      "test": "tests/test_report_prompt_isolation.py",
+      "commit": "worktree-assistant-prompt-ownership 7abc29b (not yet merged, owner review pending)"
+    },
+    {
+      "id": "PW-245",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Implemented the owner-approved COUNSEL loader change in concierge._counsel:",
+      "status": "historically-checked",
+      "test": "Historical evidence in TODO; revalidate before dependent changes",
+      "commit": "2689679 (baseline contains historical record)"
+    },
+    {
+      "id": "PW-246",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Added loader regressions for complete long instructions reaching _system,",
+      "status": "historically-checked",
+      "test": "Historical evidence in TODO; revalidate before dependent changes",
+      "commit": "2689679 (baseline contains historical record)"
+    },
+    {
+      "id": "PW-247",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Applied approved consistency pass to shipped/live COUNSEL: shared Unread",
+      "status": "historically-checked",
+      "test": "Historical evidence in TODO; revalidate before dependent changes",
+      "commit": "2689679 (baseline contains historical record)"
+    },
+    {
+      "id": "PW-248",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Owner confirmed the boundary: retain the minimal machine action contract",
+      "status": "implemented",
+      "test": "tests/test_concierge_counsel.py",
+      "commit": "worktree-assistant-prompt-ownership f3c0a49/ef8a114 (not yet merged, owner review pending)"
+    },
+    {
+      "id": "PW-249",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Applied approved Voice section to shipped and live saved COUNSEL: concise",
+      "status": "historically-checked",
+      "test": "Historical evidence in TODO; revalidate before dependent changes",
+      "commit": "2689679 (baseline contains historical record)"
+    },
+    {
+      "id": "PW-250",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Replaced \"The post\" in shipped and live saved COUNSEL with the approved",
+      "status": "historically-checked",
+      "test": "Historical evidence in TODO; revalidate before dependent changes",
+      "commit": "2689679 (baseline contains historical record)"
+    },
+    {
+      "id": "PW-251",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Applied approved urgent-update wording to shipped and live saved COUNSEL:",
+      "status": "historically-checked",
+      "test": "Historical evidence in TODO; revalidate before dependent changes",
+      "commit": "2689679 (baseline contains historical record)"
+    },
+    {
+      "id": "PW-252",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Applied the approved named-item rule to the shipped and live saved COUNSEL:",
+      "status": "historically-checked",
+      "test": "Historical evidence in TODO; revalidate before dependent changes",
+      "commit": "2689679 (baseline contains historical record)"
+    },
+    {
+      "id": "PW-253",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Owner requested immediate implementation of the first responsibility in",
+      "status": "historically-checked",
+      "test": "Historical evidence in TODO; revalidate before dependent changes",
+      "commit": "2689679 (baseline contains historical record)"
+    },
+    {
+      "id": "PW-254",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Owner approved the walkthrough/FYI/overview rule: discuss Current and wait",
+      "status": "historically-checked",
+      "test": "Historical evidence in TODO; revalidate before dependent changes",
+      "commit": "2689679 (baseline contains historical record)"
+    },
+    {
+      "id": "PW-255",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "At the owner's explicit request, applied both approved COUNSEL edits to the",
+      "status": "historically-checked",
+      "test": "Historical evidence in TODO; revalidate before dependent changes",
+      "commit": "2689679 (baseline contains historical record)"
+    },
+    {
+      "id": "PW-256",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Remove concierge.SYSTEM's competing behavioral/routing instructions and",
+      "status": "implemented",
+      "test": "tests/test_counsel_migration.py",
+      "commit": "worktree-assistant-prompt-ownership f3c0a49/ef8a114/1b60533/900691d (not yet merged, owner review pending)"
+    },
+    {
+      "id": "PW-257",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Keep authorization, valid action/argument checks, target validation,",
+      "status": "implemented",
+      "test": "tests/test_concierge_counsel.py",
+      "commit": "worktree-assistant-prompt-ownership f3c0a49/ef8a114 (not yet merged, owner review pending)"
+    },
+    {
+      "id": "PW-258",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Remove silent 3,200-character truncation of COUNSEL; apply explicit size",
+      "status": "implemented",
+      "test": "tests/test_counsel_consumers.py, tests/test_counsel_migration.py",
+      "commit": "worktree-assistant-prompt-ownership 81995bb/900691d (not yet merged, owner review pending)"
+    },
+    {
+      "id": "PW-259",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Audit remaining inline prompts/action heuristics and canned receipts for",
+      "status": "implemented",
+      "test": "Audit table in processing-walkthrough-todos.md under PW-259; tests/test_concierge_counsel.py",
+      "commit": "worktree-assistant-prompt-ownership 38151ac/044ec97 (not yet merged, owner review pending)"
+    },
+    {
+      "id": "PW-260",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Test that editing the assistant document affects the actual loaded prompt,",
+      "status": "implemented",
+      "test": "tests/test_concierge_counsel.py::test_editing_the_document_changes_the_loaded_prompt_and_the_backend_still_refuses_bad_actions; tests/test_operations.py::test_an_unknown_kind_or_missing_parameter_is_refused_before_anything_is_written, ::test_a_stale_confirmation_is_refused_by_the_api",
+      "commit": "worktree-assistant-prompt-ownership 044ec97 (not yet merged, owner review pending)"
+    },
+    {
+      "id": "PW-268",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Decide whether OPENING (the day's first-line instruction, concierge.py) moves",
+      "status": "review-pending",
+      "test": "Required: Phase 8/10 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-269",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "List each keyword route in trouble(), switch_ask() and _sweep_words()",
+      "status": "pending",
+      "test": "Required: Phase 8/10 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-270",
+      "section": "Assistant instructions: remove the hardcoded behavioral prompt",
+      "phase": "8/10",
+      "requirement": "Remove _POLITE and _CORRECTION: the model reads the owner's words and",
+      "status": "pending",
+      "test": "Required: Phase 8/10 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-261",
+      "section": "Orderly app shutdown: stop workers and wait for cleanup",
+      "phase": "12",
+      "requirement": "Fix desktop shutdown's daemon-thread race: signal backend shutdown and wait",
+      "status": "pending",
+      "test": "Required: Phase 12 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-262",
+      "section": "Orderly app shutdown: stop workers and wait for cleanup",
+      "phase": "12",
+      "requirement": "Leave unfinished work open and visibly interrupted, not Working or Done.",
+      "status": "pending",
+      "test": "Required: Phase 12 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-263",
+      "section": "Orderly app shutdown: stop workers and wait for cleanup",
+      "phase": "12",
+      "requirement": "Handle stuck cleanup with visible progress/error and a bounded escalation",
+      "status": "pending",
+      "test": "Required: Phase 12 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-264",
+      "section": "Orderly app shutdown: stop workers and wait for cleanup",
+      "phase": "12",
+      "requirement": "Test native desktop quit waits for server cleanup, transcript/history",
+      "status": "pending",
+      "test": "Required: Phase 12 focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-265",
+      "section": "Assistant browser control and its UI: review required",
+      "phase": "pending",
+      "requirement": "Trace browser ownership/control and actual UI with the owner: which agent",
+      "status": "review-pending",
+      "test": "Required: Phase pending focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-266",
+      "section": "Assistant browser control and its UI: review required",
+      "phase": "pending",
+      "requirement": "Review navigation versus consequential website actions, confirmation,",
+      "status": "review-pending",
+      "test": "Required: Phase pending focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    },
+    {
+      "id": "PW-267",
+      "section": "Assistant browser control and its UI: review required",
+      "phase": "pending",
+      "requirement": "Agree the UI/interaction contract before redesigning browser control; then",
+      "status": "review-pending",
+      "test": "Required: Phase pending focused behavior/failure tests plus cumulative gates",
+      "commit": "pending"
+    }
+  ]
+}

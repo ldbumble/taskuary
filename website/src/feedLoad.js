@@ -26,4 +26,5 @@ export const threadDetail = (data = {}) => ({
 // has to load in that taskless interval; using TaskId as the loading flag made the panel render
 // an incomplete workflow and look blank precisely while the funnel was busiest.
 export const detailPhase = (row, detail) => !detail ? "loading"
-  : row?.MsgStatus === "triaging" ? "triaging" : "ready";
+  : row?.MsgStatus === "triaging" ? "triaging"
+  : row?.MsgStatus === "error" ? "error" : "ready";

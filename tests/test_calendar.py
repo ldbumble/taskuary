@@ -93,4 +93,106 @@ class ResponderTests(unittest.TestCase):
         self.assertTrue(any('Checked your calendar' in c['Body'] for c in s.list_comments(tid)))
 
 
+class AgendaNeverBlocksThePileTests(unittest.TestCase):
+    """The pile reads the calendar (funnel.from_calendar -> assistant._agenda -> calendar.agenda
+    -> channels.graph_token), and that is a LIVE Microsoft call: a token POST plus one
+    calendarView per mailbox, 20s timeout each. The 60s cache meant most /api/funnel/pile calls
+    were ~5s and whichever one refreshed was 45s (2026-09-09)."""
+
+    # "did the refresh thread run at all" is a LIVENESS check, so it gets a generous budget. The
+    # one real timing assertion in this class is `waited < 2` below, and that one stays tight.
+    STARTED = 30
+
+    def setUp(self):
+        self._quiesce()                      # a refresh from the previous test can still be running
+        self.addCleanup(self._quiesce)
+
+    @classmethod
+    def _quiesce(cls):
+        """Let any refresh thread finish BEFORE clearing the cache, then clear it.
+
+        Clearing it from under a running refresh is what made this class flaky. _read_agenda writes
+        the `at` stamp back AFTER the clear, so the next test's `block=False` read finds a cache
+        that looks fresh (line 286 of assistant.py returns early), no refresh is started at all,
+        and its `started.wait(...)` times out with "False is not true". It failed exactly that way
+        on macos-latest/3.10 three times (7205ed5, b1b613f), always at
+        test_the_refresh_lands_for_the_next_reader, and never on a box fast enough to close the
+        window between the clear and the leftover thread's write.
+        """
+        import threading
+        from taskuary import assistant
+        for t in threading.enumerate():
+            if t.name == 'taskuary-agenda': t.join(cls.STARTED)
+        assistant._AGENDA.clear()
+
+    @staticmethod
+    def _store():
+        s = MemoryStore()
+        s.set_setting('calendar_enabled', '1', 'test')
+        return s
+
+    @staticmethod
+    def _slow(started, release, subject='Budget review'):
+        def slow_agenda(store, days=2, start=None):
+            started.set()
+            release.wait(10)                     # a Graph call that is taking its time
+            return {'events': [{'subject': subject, 'start': '2026-09-09T13:00:00', 'all_day': False}]}
+        return slow_agenda
+
+    def test_the_pile_does_not_wait_on_a_stale_calendar(self):
+        import threading, time
+        from taskuary import assistant, funnel
+        s, started, release = self._store(), threading.Event(), threading.Event()
+        with mock.patch('taskuary.calendar.agenda', self._slow(started, release)):
+            t0 = time.perf_counter()
+            funnel.from_calendar(s, datetime.now())          # the pile's calendar leg
+            waited = time.perf_counter() - t0
+            self.assertTrue(started.wait(self.STARTED), 'the refresh never ran')
+            release.set()
+        self.assertLess(waited, 2, f'the pile waited {waited:.1f}s on the calendar')
+
+    def test_the_refresh_lands_for_the_next_reader(self):
+        import threading, time
+        from taskuary import assistant
+        s, started, release = self._store(), threading.Event(), threading.Event()
+        with mock.patch('taskuary.calendar.agenda', self._slow(started, release)):
+            assistant._agenda(s, block=False)
+            self.assertTrue(started.wait(self.STARTED), 'the refresh never ran')
+            release.set()
+            for _ in range(200):
+                if assistant._AGENDA.get('events'): break
+                time.sleep(.05)
+        self.assertEqual([e['subject'] for e in assistant._agenda(s)], ['Budget review'])
+
+    def test_a_brief_still_gets_the_meetings_it_is_composing_about(self):
+        """prep() and the CALENDAR block feed a report, not a click. An empty calendar there is a
+        WRONG brief, not a slow one, so those keep the blocking read."""
+        import threading
+        from taskuary import assistant
+        s, started, release = self._store(), threading.Event(), threading.Event()
+        release.set()                                        # the read completes normally
+        with mock.patch('taskuary.calendar.agenda', self._slow(started, release, 'Board meeting')):
+            self.assertEqual([e['subject'] for e in assistant._agenda(s)], ['Board meeting'])
+
+    def test_only_one_refresh_runs_however_many_readers_ask(self):
+        import threading
+        from taskuary import assistant
+        s, started, release, calls = self._store(), threading.Event(), threading.Event(), []
+        def slow_agenda(store, days=2, start=None):
+            calls.append(1); started.set(); release.wait(10)
+            return {'events': []}
+        with mock.patch('taskuary.calendar.agenda', slow_agenda):
+            for _ in range(5): assistant._agenda(s, block=False)
+            self.assertTrue(started.wait(self.STARTED), 'the refresh never ran')
+            release.set()
+        self.assertEqual(len(calls), 1, f'{len(calls)} concurrent Graph reads')
+
+    def test_a_calendar_nobody_enabled_is_not_read_at_all(self):
+        from taskuary import assistant
+        s = MemoryStore()
+        s.set_setting('calendar_enabled', '0', 'test')
+        with mock.patch('taskuary.calendar.agenda', side_effect=AssertionError('must not be read')):
+            self.assertEqual(assistant._agenda(s), [])
+
+
 if __name__ == '__main__': unittest.main()

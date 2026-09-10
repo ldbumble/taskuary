@@ -7,12 +7,29 @@ reads "Edit taskuary/server.py · 4s" instead of guessing from the screen. Addit
 file is the project-LOCAL settings Claude itself gitignores, existing hooks are kept, and only our
 entries (marked by the endpoint path) are replaced. Off with the agent_hooks setting.
 """
-import json, os
+import json, os, re, subprocess
 from pathlib import Path
 from loguru import logger
 
 MARK = '/api/hooks/claude'
-EVENTS = ('PostToolUse', 'Stop', 'UserPromptSubmit')
+EVENTS = ('PostToolUse', 'Stop', 'UserPromptSubmit', 'Notification')   # Notification carries permission prompts (PW-223)
+# the CLI version these four events, AskUserQuestion's tool_input and Stop's last_assistant_message were validated
+# against (PW-223). Below it the status may be incomplete: installed anyway, said out loud.
+MIN_VERSION = (2, 0, 0)
+
+
+def cli_version(cmd: str = 'claude') -> str | None:
+    """`claude --version` -> '2.1.3'; None when the CLI is not there or will not say."""
+    try: out = subprocess.run([cmd, '--version'], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError, ValueError): return None
+    m = re.search(r'(\d+)\.(\d+)\.(\d+)', str(out or ''))
+    return m.group(0) if m else None
+
+
+def supported(version) -> bool:
+    if not version: return False
+    try: return tuple(int(x) for x in str(version).split('.')[:3]) >= MIN_VERSION
+    except ValueError: return False
 
 
 def base_url() -> str:
@@ -32,9 +49,10 @@ def command(base: str, token: str = '') -> str:
     return f'{curl} -s -m 3 -o {null} -X POST {base}{MARK} -H "Content-Type: application/json"{tok} --data-binary @-'
 
 
-def install(cwd: str, base: str = None, token: str = '') -> bool:
-    """Write (or refresh) our three hook entries in cwd/.claude/settings.local.json. True = the file
-    changed. Everything not ours is left exactly as it was."""
+def install(cwd: str, base: str = None, token: str = '', cmd: str = None) -> bool:
+    """Write (or refresh) our hook entries in cwd/.claude/settings.local.json. True = the file
+    changed. Everything not ours is left exactly as it was. `cmd` names the CLI to validate the
+    installed version against (PW-223); without it no version is read."""
     base = base or base_url()
     p = Path(cwd) / '.claude' / 'settings.local.json'
     try: cur = json.loads(p.read_text(encoding='utf-8')) if p.exists() else {}
@@ -53,7 +71,11 @@ def install(cwd: str, base: str = None, token: str = '') -> bool:
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(cur, indent=2) + '\n', encoding='utf-8')
-        logger.info(f'claude hooks -> {p}')
+        if cmd is None: logger.info(f'claude hooks -> {p}'); return True
+        v = cli_version(cmd)
+        if supported(v): logger.info(f'claude hooks -> {p} (claude {v})')
+        else: logger.warning(f'claude hooks -> {p} for claude {v or "unknown version"} - the events were validated for '
+                             f'>= {".".join(map(str, MIN_VERSION))}; worker status from this session may be incomplete')
         return True
     except OSError as e:
         logger.warning(f'could not write claude hooks to {p}: {e}'); return False
@@ -66,13 +88,40 @@ def wanted(store, profile: dict) -> bool:
     return 'claude' in cmd and (store.get_settings().get('agent_hooks', '1') == '1')
 
 
+def _events(t, p: dict) -> None:
+    """The hook as a worker event (workerstate.py): a prompt submitted is Working; AskUserQuestion is Input
+    needed with the exact question and choices; a permission notification is Approval needed with the action;
+    Stop is the response ending - never a finish (PW-226). Nothing here is inferred from the screen."""
+    from . import workerstate as ws
+    st = getattr(t, 'store', None)
+    if not st or not getattr(t, 'task_id', None): return
+    ev, tid, sid = str(p.get('hook_event_name') or ''), t.task_id, t.sid
+    try:
+        if ev == 'UserPromptSubmit': ws.record(st, tid, sid, 'working', source='hook')
+        elif ev == 'PostToolUse' and str(p.get('tool_name') or '') == 'AskUserQuestion':
+            for q in (p.get('tool_input') or {}).get('questions') or []:
+                text = str(q.get('question') or '').strip()
+                if not text: continue
+                choices = [str(o.get('label') or o) for o in (q.get('options') or []) if str(o.get('label') if isinstance(o, dict) else o).strip()]
+                ws.record(st, tid, sid, 'input_needed', request_id=ws.request_id_for(text), text=text, choices=choices, source='hook')
+        elif ev == 'Notification' and 'permission' in str(p.get('notification_type') or p.get('message') or '').lower():
+            text = str(p.get('message') or 'Claude needs your permission').strip()
+            ws.record(st, tid, sid, 'approval_needed', request_id=ws.request_id_for(text), text=text, source='hook')
+        elif ev == 'Stop': ws.record(st, tid, sid, 'turn_end', text=str(p.get('last_assistant_message') or '')[:4000], source='hook')
+    except Exception as e: logger.debug(f'worker event from hook skipped: {e}')
+
+
 def receive(payload: dict) -> dict:
     """A hook fired: find the session it belongs to (same checkout, Claude, most recently active
     unless already bound to this claude session id) and hand its observations to the witness."""
     from . import terminal as term, witness
     cwd = os.path.normcase(os.path.normpath(str(payload.get('cwd') or '')))
     sid = str(payload.get('session_id') or '')
-    mine = [t for t in list(term.SESSIONS.values()) if t.alive and t.task_id and 'claude' in os.path.basename(str(t.argv[0])).lower()
+    # `t.argv` first: the assistant's conversation is registered as a session too and it is not a
+    # process - no argv, no checkout - so reading argv[0] to judge it raised IndexError and took the
+    # whole hook with it, costing the coding agent beside it its said-and-did (2026-09-07).
+    mine = [t for t in list(term.SESSIONS.values()) if t.alive and t.task_id and getattr(t, 'argv', None)
+            and 'claude' in os.path.basename(str(t.argv[0])).lower()
             and os.path.normcase(os.path.normpath(t.cwd)) == cwd]
     if not mine: return {'bound': False}
     t = next((x for x in mine if getattr(x, 'ext_id', '') == sid), None)
@@ -84,6 +133,7 @@ def receive(payload: dict) -> dict:
         if not free: return {'bound': False}
         t = max(free, key=lambda x: x.last); t.ext_id = sid
     for n in witness.claude_notes(payload): t.witness.note(n)
+    _events(t, payload)
     # ...and the one hook that is not just an observation: Stop means the agent has finished
     # TALKING, which is the closest thing a pty ever gives us to "the run is over". Whether it
     # actually is over is selfclose's judgement, on its own thread - a hook has three seconds

@@ -9,7 +9,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import browserview, general, handbook, llm, server, terminal, waitroom
+from taskuary import browserview, coder, general, handbook, llm, responder, server, terminal, waitroom
 from taskuary.store import MemoryStore
 
 
@@ -442,6 +442,49 @@ class GeneralApiTests(unittest.TestCase):
         self.assertEqual((result['wrap'], result['report']), ('done', 'The finished plan'))
         self.assertEqual(store.get_task(tid)['Status'], 'done')
         self.assertFalse(any(str(c['Body']).startswith('CODER REPORT') for c in store.list_comments(tid)))
+
+    def test_a_general_task_that_ends_drafts_the_reply_the_sender_gets(self):
+        """The assistant is TOLD that ending the task drafts the answer the person who asked will get
+        (selfclose.CHAT_LINE). It was not true: the general branch of wrap returned before finish()
+        ever ran, so a task somebody wrote in about closed with them unanswered - and the assistant
+        compensated by writing the reply into the chat, where STYLE.md never touches it and nothing
+        can send it (TQ-0440/0441 closed unanswered; TQ-0443 sat open with an unsendable draft)."""
+        store = MemoryStore(); tid = general_task(store)
+        mid = store.add_message({'ExternalId': 'cash-dashboard', 'Channel': 'email', 'FromEmail': 'rachel@example.com',
+                                 'Subject': 'Cash dashboard', 'BodyText': 'The balances still pull from the old accounts.'})
+        store.attach_message(mid, tid)
+        store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The dashboard still points at the legacy accounts.')
+        with mock.patch.object(responder, 'write_draft') as write_draft:
+            out = coder.wrap(store, tid, close=True, actor='assistant')
+        review = store.pending_review(tid, 'draft_reply')
+        self.assertTrue(out['drafting'])
+        self.assertEqual(review['MessageId'], mid)
+        self.assertEqual(store.get_task(tid)['Status'], 'waiting')
+        write_draft.assert_called_once()
+
+    def test_the_conversation_is_the_record_once_its_session_is_gone(self):
+        """A turn's session ends the moment it answers, whichever backend answered. Wrapping up then
+        fell through to the coding path and refused with "no session transcript" while the whole
+        conversation sat on screen (owner, 2026-09-07)."""
+        def with_api(store):
+            connect_openai(store); return None
+        def with_cli(store):
+            store.upsert_agent('my-claude', 'coding', 'cli', json.dumps({'cmd': 'claude', 'args': ['-p']}))
+            return 'cli:my-claude'
+        for backend, connect in (('api', with_api), ('cli', with_cli)):
+            with self.subTest(backend=backend):
+                store = MemoryStore(); tid = general_task(store); pick = connect(store)
+                with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True),                      mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: 'The finished plan'):
+                    general.start_session(store, tid, pick=pick).send_prompt('Finish the plan')
+                    terminal.SESSIONS.clear()              # ...and the app reaped the finished session
+                    client = TestClient(server.app)
+                    paused = client.post(f'/api/tasks/{tid}/pause', json={})
+                    wrapped = client.post(f'/api/tasks/{tid}/wrap', json={'close': True})
+                self.assertEqual((paused.status_code, wrapped.status_code), (200, 200))
+                self.assertEqual((wrapped.json()['wrap'], wrapped.json()['report']), ('done', 'The finished plan'))
+                self.assertEqual(paused.json()['note'], 'The finished plan')
+                self.assertEqual(store.get_task(tid)['Status'], 'done')
+                self.assertFalse(any(str(c['Body']).startswith('CODER REPORT') for c in store.list_comments(tid)))
 
     def test_pause_closes_a_general_session_and_keeps_its_conversation(self):
         store = MemoryStore(); tid = general_task(store); connect_openai(store)

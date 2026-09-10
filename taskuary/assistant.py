@@ -78,7 +78,9 @@ PROMPT = (
     '6. What the machines are telling me, read not counted: a report marked FAILED says WHY (the error is in the line) - name '
     'the cause; a job that fails the same way N times is one finding, with the cause; a report whose every run says "0 rows" '
     'is a report nobody needs. Reports carry their schedule: "on app start" firing 20 times means the app was started 20 '
-    'times, not that the scheduler is broken.\n'
+    'times, not that the scheduler is broken. The same in reverse: read WHEN TASKUARY WAS RUNNING before calling a report '
+    'late or the scheduler dead - a report cannot fire while the app is shut, an overnight close is not a missed run, and '
+    'minutes after a launch nothing due today has had its turn yet.\n'
     '7. My own work (DONE THIS WEEK, OPEN WORK): the fix that keeps coming back, the task that closed without shipping, the '
     'process change worth proposing. Name the evidence: TQ-ref, count, sender. Never restate what I did.\n'
     'Be useful, not busy: a check with nothing NEW posts nothing, and most checks are that. When you do speak, prefer the '
@@ -133,14 +135,17 @@ def source(store) -> dict | None:
 def _ts(s): return str(s or '')[:19].replace('T', ' ')
 def _since(days): return (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
 def _short(s, n=90): return ' '.join(str(s or '').split())[:n]
+def _cut(s, n=100):
+    t = ' '.join(str(s or '').split())
+    return t if len(t) <= n else t[:n].rsplit(' ', 1)[0] + '…'   # a subject is cut on a word, never at "I'd"
 def _dt(s):
     try: return datetime.fromisoformat(_ts(s))
     except ValueError: return None
 def _when(s) -> str:
     """'Thu 28 Aug 11:21' - a day name the model can hold against a calendar, no year."""
     d = _dt(s); return d.strftime('%a %d %b %H:%M') if d else str(s or '')[:16]
-# the corporate wrapper around a body, not the sender's words: the external-mail banner and the "you don't often get email" hint
-_BANNER = re.compile(r"(this email was sent from outside of[^*\n]*(\*\*[^*]*\*\*)?\s*|\[?\s*you don'?t often get email from \S+\.?( learn why this is important( at \S+)?)?\s*\]?)", re.I)
+# the corporate wrapper around a body: one pattern for every surface, kept in triage.py (PW-029)
+from .triage import _BANNER
 def _gist(body, n=180) -> str:
     """The sender's own words, one line: banner, legal footer and signature gone (triage.strip_boilerplate)."""
     from .triage import strip_boilerplate
@@ -263,15 +268,47 @@ def cold(store, days: int) -> list:
 
 
 _AGENDA = {}               # one calendar read per check: prep's candidates and the CALENDAR block share it
-def _agenda(store) -> list:
+_AGENDA_FRESH = 60         # seconds a read stays good
+_AGENDA_LOCK = threading.Lock()
+
+def _agenda(store, *, block: bool = True) -> list:
+    """The next two days of meetings, cached for _AGENDA_FRESH seconds.
+
+    Reading this is a LIVE Microsoft Graph call - a token POST plus one calendarView per mailbox,
+    20s timeout each. Whoever found the cache stale used to pay for all of it, and the pile reads
+    it: most /api/funnel/pile calls were ~5s and the one that refreshed was 45s (2026-09-09).
+
+    So a caller the OWNER is waiting on passes block=False and gets what is known right now while
+    the refresh runs on its own thread. A report composing a brief keeps the blocking read - an
+    empty calendar in the morning digest would be a wrong answer, not a slow one.
+    """
     if store.get_settings().get('calendar_enabled', '1') != '1': return []
-    if _AGENDA.get('at', 0) > datetime.now().timestamp() - 60: return _AGENDA['events']
+    if _AGENDA.get('at', 0) > datetime.now().timestamp() - _AGENDA_FRESH: return _AGENDA['events']
+    if block: return _read_agenda(store)
+    _refresh_agenda(store)
+    return _AGENDA.get('events', [])
+
+
+def _read_agenda(store) -> list:
     from . import calendar as cal
     try: ev = [e for e in (cal.agenda(store, days=2).get('events') or []) if not e.get('all_day')]
     except Exception as e:
         logger.debug(f'assistant: calendar skipped - {e}'); ev = []
     _AGENDA.update(at=datetime.now().timestamp(), events=ev)
     return ev
+
+
+def _refresh_agenda(store):
+    """One refresh at a time, whoever asked for it. The stamp is written by _read_agenda even when
+    the read failed, so a calendar nobody can reach is retried on the clock rather than on every
+    read - which is what kept a stalled Graph call in front of the pile."""
+    with _AGENDA_LOCK:
+        if _AGENDA.get('reading'): return
+        _AGENDA['reading'] = True
+    def go():
+        try: _read_agenda(store)
+        finally: _AGENDA['reading'] = False
+    threading.Thread(target=go, name='taskuary-agenda', daemon=True).start()
 
 
 def prep(store) -> list:
@@ -333,7 +370,13 @@ CONTRACT = ('\n\nYou are writing your POST on the owner\'s Timeline - the short 
             'the date or silence length at which something becomes worth raising, a fact you settled so it need not be worked out again. '
             'Never a standing rule about what to ignore or what is noise: the instruction decides that, and a note that says '
             '\'ignore X\' would silence you for good. Rewrite it whole each time; empty if nothing>"}.\n'
-            'At most {max_lines} entries. Skip a candidate that is not worth the owner\'s eye (a standing standup needs no prep; a '
+            'At most {max_lines} entries. A line about ONE message must tell the owner something the message does not: the mail '
+            'is already on their Timeline with triage\'s own verdict on it, so "X forwarded this with no message, I would ask '
+            'what they want" is a second copy of the mail and not a line. Say the thing they could not see - who else is in it, '
+            'what it answers, what it costs them on Monday - or say nothing (the owner, 2026-09-07: "Why did assistant triagger '
+            'on bare email meaning saying the same thing?"). This rule is the contract\'s, not the instruction\'s, so it holds '
+            'whatever prompt the owner writes.\n'
+            'Skip a candidate that is not worth the owner\'s eye (a standing standup needs no prep; a '
             'one-day silence from someone who always takes a week is not news) - skipping is free, repeating is not: never say '
             'again, reworded or not, anything under ALREADY SAID. Your own ideas are the point: a thread going in circles, a '
             'promise buried in a mail, two people asking the same thing, the thing to do now so the next ask never comes. '
@@ -341,16 +384,16 @@ CONTRACT = ('\n\nYou are writing your POST on the owner\'s Timeline - the short 
 
 
 def _schedules(store) -> dict:
-    """{report title: 'daily 08:00 + on every app start'} - a report's arrivals mean nothing without its
-    clock: 25 digests in two days on an on_startup report is 25 launches, not a scheduler bug."""
+    """{report title: 'daily at 08:00 + on app start (at most once a day)'} - a report's arrivals mean
+    nothing without its clock: 25 digests in two days on an on_startup report is 25 launches, not a
+    scheduler bug, and two seeded reports at one timestamp is one launch, not a restart to explain."""
+    from . import reports
     out = {}
     for src in store.list_sources(active_only=False):
         if src.get('Channel') != 'report': continue
         try: c = json.loads(src.get('ConfigJson') or '{}')
         except ValueError: continue
-        parts = ([f"every {c['every_minutes']} min"] if c.get('every_minutes') else []) + ([f"daily {c['daily_at']}"] if c.get('daily_at') else []) \
-              + ([f"cron {c['cron']}"] if c.get('cron') else []) + (['on every app start'] if c.get('on_startup') else [])
-        out[c.get('title') or src.get('Address')] = ' + '.join(parts) or 'no schedule'
+        out[c.get('title') or src.get('Address')] = reports.schedule_words(c)
     return out
 
 _FAILS = re.compile(r'fail|error|denied|timeout|could not|unable', re.I)
@@ -547,6 +590,14 @@ def parse(store, text: str, cands: list, max_lines: int = MAX_LINES) -> list:
     try: j = json.loads(re.sub(r'^```(json)?|```$', '', (text or '').strip(), flags=re.M))
     except ValueError: return []
     by = {c['key']: c for c in cands}
+    # an open idea already about this message or task keeps its key: the model invents a slug per run, and
+    # one situation came back as idea:hindy-sample-file, idea:hindy-sample-file-compass, idea:hindy-in-...
+    aimed = {}
+    for i in store.list_ideas('open'):
+        try: a = json.loads(i.get('ActionJson') or '{}')
+        except (ValueError, TypeError): a = {}
+        for f in ('tid', 'mid'):
+            if a.get(f): aimed.setdefault((f, a[f]), i['Key'])
     out, seen = [], set()
     for s in (j.get('say') or []) if isinstance(j, dict) else []:
         if not isinstance(s, dict): continue
@@ -571,6 +622,10 @@ def parse(store, text: str, cands: list, max_lines: int = MAX_LINES) -> list:
             # where in the post it goes. Only an idea gets to choose: a candidate the hub found is
             # placed by the producer that found it, and no model answer overrides that.
             act['section'] = section_of({'section': s.get('section'), 'kind': 'idea'})
+            key = aimed.get(('tid', act.get('tid'))) or aimed.get(('mid', act.get('mid'))) or key
+            if key in seen: continue
+            for f in ('tid', 'mid'):
+                if act.get(f): aimed.setdefault((f, act[f]), key)      # two lines in one answer about one thing: one idea
             out.append({'key': key[:120], 'kind': 'idea', 'sig': txt[:60], 'text': txt, 'action': act,
                         'why': why or 'the model gave no reason - treat it as a hunch' + (f' (about mid {mid})' if mid else '')})
         else: continue
@@ -729,7 +784,13 @@ def inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=None, 
     # built once: the model reads them, and so does the verdict matcher, which needs the real
     # subjects rather than the model's words about them
     said, recent = _people(store), _recent(store)
-    return (f"NOW: {now.strftime('%A %d %B %Y %H:%M')}\n\n{head}:\n" + ('\n'.join(f"[{c['key']}] {c['facts']}" for c in cands) or '(none)')
+    from . import reports as _r
+    # an EMPTY labelled section is worse than none: it reads as "nothing was running"
+    uptime = _r.uptime_words(store)
+    uptime = (f"WHEN TASKUARY WAS RUNNING (it is a window on this machine: while it is shut nothing polls, no report "
+              f"fires and no mail arrives - so a gap here is not a fault):\n{uptime}\n") if uptime else ''
+    return (f"NOW: {now.strftime('%A %d %B %Y %H:%M')}\n{uptime}"
+            f"\n{head}:\n" + ('\n'.join(f"[{c['key']}] {c['facts']}" for c in cands) or '(none)')
             + knowledge.block(store, facts_text)
             + f"\n\nCONFIGURED SYSTEM CHECKS (pulled live for this check; failures are also worth noticing):\n{system_checks(store, watch_source_ids, watch_sources)}"
             + f"\n\nWHAT PEOPLE SAID (the last two days, by thread, newest first; the last lines of each, oldest first. "
@@ -754,14 +815,14 @@ def systems_inputs(store, watch_source_ids=None, watch_sources=None) -> str:
 
 def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX_LINES,
           watch_source_ids=None, watch_sources=None, systems_only: bool = False) -> list:
-    """One call: COUNSEL.md's voice, the owner's instruction (the Reports tab), the candidates, the
-    day, what was already said."""
-    doc = re.sub(r'<!--.*?-->', '', store.doc('counsel') or '', flags=re.S).strip()
+    """One call: the owner's instruction (the Reports tab), the candidates, the day, what was already said."""
     soul = store.doc('soul') or ''
     direction = ((SYSTEMS_PROMPT + (f"\n\nTHE OWNER'S RULE FOR THIS MONITOR:\n{instruction.strip()}" if instruction else ''))
                  if systems_only else (instruction or PROMPT).strip())
     contract = SYSTEMS_CONTRACT if systems_only else CONTRACT
-    system = (doc + f"\n\nYOUR INSTRUCTION (the owner's, from the Reports tab):\n{direction}" + contract.replace('{max_lines}', str(max_lines))
+    # the report's prompt is the report's own: instruction, data scope, output contract, owner (PW-242).
+    # COUNSEL is the chat's document; its walkthrough rules governed idea generation until 2026-09-06.
+    system = (f"YOUR INSTRUCTION (the owner's, from the Reports tab):\n{direction}" + contract.replace('{max_lines}', str(max_lines))
               + (f"\n\nWho the owner is (their own document; its reply rules are for text sent to OTHERS):\n{soul[:1500]}" if soul else ''))
     user = (systems_inputs(store, watch_source_ids, watch_sources) if systems_only
             else inputs(store, cands, watch_source_ids=watch_source_ids, watch_sources=watch_sources))
@@ -871,6 +932,66 @@ def day_stats(store) -> list:
             {'n': sum(1 for t in tasks if t.get('ReviewStatus') == 'pending'), 'label': 'waiting on you', 'hot': True}]
 
 
+def _idea_message(store, i: dict, a: dict, report_title=None) -> tuple:
+    """An idea as the message triage reads: its words, its why, and idea_context - the report it came
+    from, the task it names (with status) and whether a worker has it. Returns (msg, linked task id, active)."""
+    m0 = (store.get_message(a['mid']) or {}) if a.get('mid') else {}
+    tid = a.get('tid') or m0.get('TaskId')
+    task = store.get_task(tid) if tid else None
+    active = bool(task and task.get('Status') in ('open', 'in_progress', 'waiting'))
+    working = bool(active and any(r.get('Status') == 'running' for r in store.list_runs(tid)))
+    stamp = i.get('LastSaid') or i.get('FirstSeen') or datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    who = report_title or 'Assistant'
+    # one arrival per idea: the stamp in the id made every re-say a fresh message, and a fresh task once the first closed
+    msg = {'external_id': f"idea:{i['IdeaId']}", 'channel': CHANNEL, 'from_name': who, 'source_name': who,
+           'conversation_id': str(i.get('Key') or f"idea:{i['IdeaId']}"), 'subject': f"Assistant idea: {_cut(i.get('Text'), 100)}",
+           'sent_at': stamp, 'body': str(i.get('Text') or '') + (f"\n\nwhy: {a.get('why')}" if a.get('why') else ''),
+           'idea_context': {'report': report_title, 'kind': i.get('Kind'),
+                            'linked_task': f"{task_ref(tid)} [{task.get('Status')}] {_short(task.get('Title'), 80)}" if task else None,
+                            'worker': 'an agent is working that task now' if working else ('nobody has that task' if task else None)}}
+    return msg, (tid if task else None), active
+
+
+def triage_ideas(store, rows: list, llm, report_title: str = None) -> list:
+    """The shared verdict for every newly said idea (PW-199/PW-200). Judged once per set of facts (the
+    idea's Sig); recorded on the idea as action.triage - intent, kind, why, the task it is linked to - or
+    as error (retried on the next say) or pending (no brain). An actionable idea about NO active task
+    opens work through the shared intake with the verdict it already has, so kind defaults and startup
+    rules apply and no second model call is made; one about active work creates nothing. A generated
+    claim never completes anything. Returns the ideas judged this pass."""
+    from .ingest import judge, ingest_message, owner_addresses, own_addresses
+    now, done = datetime.now().strftime('%Y-%m-%d %H:%M:%S'), []
+    for i in rows:
+        try: a = json.loads(i.get('ActionJson') or '{}')
+        except ValueError: a = {}
+        tri = a.get('triage') or {}
+        if tri and tri.get('sig') == (i.get('Sig') or '') and not tri.get('error') and not tri.get('pending'): continue
+        msg, tid, active = _idea_message(store, i, a, report_title)
+        if llm is None:
+            a['triage'] = {'pending': True, 'sig': i.get('Sig') or '', 'at': now}
+            store.set_idea_action(i['IdeaId'], a); continue
+        try:
+            intent, fail = judge(store, msg, llm, owner_addresses(store), own_addresses(store))
+            if fail: raise RuntimeError(fail.get('err') or 'the model failed')
+            if intent.get('degraded'): raise RuntimeError(intent.get('parse_error') or 'the answer was not a verdict')
+        except Exception as e:
+            a['triage'] = {'error': str(e)[:200], 'sig': i.get('Sig') or '', 'at': now}
+            store.set_idea_action(i['IdeaId'], a); continue
+        a['triage'] = {'intent': intent.get('intent'), 'kind': intent.get('kind'), 'why': str(intent.get('why') or '')[:200],
+                       'sig': i.get('Sig') or '', 'at': now, 'linked_task': tid if active else None, 'error': None}
+        if tid and active: a['tid'] = tid
+        if intent.get('intent') in ('task', 'reply_only') and not active:
+            try:
+                out = ingest_message(store, {**msg, '_verdict': (intent, {})}, actor='assistant', llm=llm)
+                if out.get('task_id'):
+                    a['tid'] = out['task_id']
+                    store.update_task(out['task_id'], {'SourceRef': f"assistant:idea:{i['IdeaId']}"}, 'assistant')
+            except Exception as e:
+                a['triage'] = {'error': f'opening the work failed: {str(e)[:160]}', 'sig': i.get('Sig') or '', 'at': now}
+        store.set_idea_action(i['IdeaId'], a); done.append(i['IdeaId'])
+    return done
+
+
 def _public(i: dict) -> dict:
     try: a = json.loads(i.get('ActionJson') or '{}')
     except ValueError: a = {}
@@ -896,7 +1017,8 @@ def talk(store, idea_id: int, text: str, actor: str = 'owner', llm=None) -> dict
         from .llm import build_llm
         llm = build_llm(store)
     if not llm: raise ValueError('the assistant needs an active AI connector to answer')
-    counsel = re.sub(r'<!--.*?-->', '', store.doc('counsel') or '', flags=re.S).strip()
+    from . import counsel as _counsel
+    counsel = _counsel.for_discussion(store)
     system = ((counsel + '\n\n') if counsel else '') + (
         'The owner is talking back to one of your assistant suggestions. Answer as their assistant, '
         'not as customer support. If they correct you, acknowledge the mistake plainly and update your '
@@ -1068,6 +1190,14 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
                                      'stats': [] if systems_only else day_stats(store)}))
     store.set_ideas_message([i['IdeaId'] for i in rows], mid)
     store.audit('message', mid, 'assistant_post', 'assistant', 'agent', {'ideas': len(rows)})
+    # the ideas are ARRIVALS: each newly said one goes through the same triage as a mail (PW-199) - by
+    # the TRIAGE brain, the one every message is judged by, not the assistant's own model
+    try:
+        from .llm import build_llm
+        try: brain = build_llm(store)
+        except Exception: brain = None
+        triage_ideas(store, rows, brain, report_title=name if systems_only else None)
+    except Exception as e: logger.warning(f'assistant: idea triage skipped - {e}')
     logger.info(f'assistant: posted {len(rows)} idea(s) as message {mid}')
     return {'ran': True, 'said': len(rows), 'message_id': mid, 'reviewed': rv, 'inputs': read, 'lines': [_public(i) for i in rows]}
 

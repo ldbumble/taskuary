@@ -19,183 +19,127 @@ Cards are chosen by CODE from the item's kind, never by the model. The model may
 multiple choice at the end of a line (OPTIONS: a | b | c) when a decision has clear choices and
 no button covers it; the choice comes back as the owner's next words.
 """
-import json, re, threading
+import contextvars, json, re, threading
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timedelta
 from loguru import logger
 
-from . import funnel, general, llm as llm_mod
+from . import funnel, general, llm as llm_mod, store as store_mod, toolcatalog
 from .assistant import _ts
+from . import operations
 from .store import task_ref
 
 MAX_TOKENS, TURNS, FACT_CHARS = 380, 10, 1_600
+READ_ROUNDS = 2          # a look-up may lead to one more; never an open-ended crawl
+NEWLINE = chr(10)
 # Introducing an item is a FACT - who wrote, what was done, what you need to do - and the pipe knows all
 # three. So 'next' asks no model: it is instant, and it can never describe the wrong item (the owner,
 # 2026-09-03: "should not even be an AI call, just go to next task"). The model speaks only when the
 # owner types something that is not already a decision. Flip this for a model-written introduction.
+# The introduction of the item on the table is the FACTS, and it is instant. Making it the model's
+# (PW-153) put a model call in front of every Next: measured 2026-09-07 at 1419ms for a trivial 20-token
+# call on this owner's fast lane, and the real one carries the item's facts, the pile summary and the
+# conversation at max_tokens=380 - which is the five seconds the owner timed ("next still take 5
+# seconds?"). It is the same thing they asked for on 2026-09-03: "should not even be an AI call, just go
+# to next task". Flip this back only behind a non-blocking intro - facts first, the written sentence
+# streamed in after - never as a blocking call on the walk.
 INTRO_AI = False
 MARK = '<!-- tq:card '
 _MARK = re.compile(r'\s*<!-- tq:card (\{.*?\}) -->\s*$', re.S)
 _OPTIONS = re.compile(r'\n?\s*OPTIONS:\s*(.+?)\s*$', re.I | re.S)
-_DECIDE = re.compile(r'\n?\s*DECIDE:\s*([a-z_]+)(?::\s*(.*?))?\s*$', re.I | re.S)
+_DECIDE = re.compile(r'\n?\s*DECIDE:\s*([a-z_]+)(?::\s*(.*?))?(?:\s+ON:\s*(.+?))?\s*$', re.I | re.S)
+# A CALL names an operation out of the registry itself (toolcatalog) instead of a verb out of prose.
+# It exists for the targets a verb cannot say: a SET, described rather than listed.
+_CALL = re.compile(r'\n?\s*CALL:\s*(\{.*\})\s*$', re.I | re.S)
 # what the owner can decide about the thing on the table - each is a button the card already has
-VERBS = ('reply', 'approve', 'setting', 'not_ours', 'not_ours_remember', 'not_ours_sender', 'remember', 'coder', 'regular_agent', 'mine', 'close', 'stop_agent',
-         'rerun', 'setup', 'clear', 'split', 'done', 'later', 'skip', 'next', 'answer_agent', 'redraft', 'forward', 'archive', 'none')
-class _SwitchRx:
-    """_SAYS holds (regex, verb) pairs; the switch table is several regexes, so this stands in for
-    them and answers the same .search()."""
-    def search(self, text):
-        changes, _ = switch_ask(text)
-        return changes and re.match(r'.*', text or '', re.S) or None
-
-
-SWITCH_RX = _SwitchRx()
-
-_SAYS = (
-    # a switch the owner named in words: proposed, never applied here (proposals.SETTING_ALLOW)
-    (SWITCH_RX, 'setting'),
-    # the sender is the problem: a SENDER-scoped verdict, so everything from them files itself from now on
-    (re.compile(r"\b((this |that |the )?sender (is|are) (garbage|junk|spam|noise|a waste)|block (this |that |the )?sender|never (again )?from (him|her|them|this sender)|(remember|note) (that )?(this |that )?sender)\b", re.I), 'not_ours_sender'),
-    # approving IS a word too: the drafted reply goes, as drafted
-    (re.compile(r"^\s*(approve|approved|send it(?!\s+to)|send the (reply|draft)|go ahead and send|yes,? send|looks good,? send|ship it)\b", re.I), 'approve'),
-    # a fact for memory, in the owner's words
-    (re.compile(r"^\s*(remember|memorize|note)( that|:)?\s+(?P<note>.+)$", re.I | re.S), 'remember'),
-    # ANSWERING the agent is not replying to the sender: "tell the agent yes" used to draft an EMAIL
-    # carrying "the agent: yes" (2026-09-03). It reads before `reply`, whose first word is `answer`.
-    (re.compile(r"\b(?:answer|tell|reply to|respond to|say to)\s+(?:the\s+)?(?:agent|coder|codex|claude|session|terminal)\b\s*[:,]?\s*(?P<ans>.*)$", re.I | re.S), 'answer_agent'),
-    # the draft is there but wrong: the model used to CLAIM it had rewritten it and the next approve
-    # sent the untouched one (2026-09-03). A redraft is a real road - the drafter writes it again.
-    (re.compile(r"\b(re-?write|redraft|reword|rephrase|shorten|tighten|lengthen|soften) (it|this|that|the (reply|draft|answer))?\b"
-                r"|\bmake (it|the (reply|draft|answer)) (shorter|longer|warmer|friendlier|firmer|softer|nicer|blunter|more \w+|less \w+)\b"
-                r"|\b(add|mention|include)\b[^.?!]{0,60}\b(to|in) the (draft|reply)\b", re.I), 'redraft'),
-    # somebody ELSE should have this: it goes to them, and the owner is out of it
-    (re.compile(r"\b(forward|pass|hand) (it|this|that) (on )?to (?!the (coder|coding|agent|codex|claude|assistant))(?P<who>[\w.@'-]+)"
-                r"|\b(assign|give|hand) (it|this|that) to (?!the (coder|coding|agent|codex|claude|assistant))(?P<who2>[\w.@'-]+)"
-                r"|\bask (?!the |an |them |him |her |me |assistant|agent|coder|codex|claude|ai )(?P<who3>[\w.@'-]+) to (handle|take|deal|sort|own)\b"
-                r"|\bloop in (?P<who4>[\w.@'-]+)", re.I), 'forward'),
-    # A REPLY comes before not-ours: "let them know we will fix it by Friday", "tell them to ignore
-    # it", "reply: not ours, sorry" all used to match not_ours first - filed, task deleted (2026-09-03).
-    # ...and never about the AGENT: "ask assistant to look into that server" is a hand-off, and the
-    # coder rule below owns it - the target here is a PERSON (2026-09-03)
-    (re.compile(r"^\s*(reply|respond|answer|tell (them|him|her|(?!assistant|agent|coder|codex|claude|ai)[\w'-]+)|say|write back|draft)\b"
-                r"|\b(tell|let|remind|ask) (them|him|her|(?!assistant|agent|coder|codex|claude|ai)[\w'-]+) (know|that|to|we|i|it|about)\b", re.I), 'reply'),
-    # A bare "skip it" does not say whether this is a read-once dismissal or a durable triage
-    # rule. Ask instead of silently translating it to "tomorrow" or teaching permanent memory.
-    (re.compile(r"^\s*(skip|dismiss)\s*(it|this|that|one)?\s*[.!]*$", re.I), 'skip_choice'),
-    (re.compile(r"^\s*(just\s+)?(this|that|it)?\s*(one|time)?\s*once\s*[.!]*$|^\s*just this (one|time)\s*[.!]*$", re.I), 'not_ours'),
-    (re.compile(r"^\s*(forever( for this kind)?|always|every time|for this kind|remember (it|this|that))\s*[.!]*$", re.I), 'not_ours_remember'),
-    (re.compile(r"\b(not (my|our) (issue|problem|job|task|thing)|not (ours|mine)|nothing to do with (me|us)|let them (handle|deal|sort|do)"
-                r"|ignore (it|this)|leave it (alone|be)|drop it|no need to (respond|reply|answer))\b", re.I), 'not_ours'),
-    (re.compile(r"\b(never|always) (again|file|ignore)|remember (this|that)|from now on\b", re.I), 'not_ours_remember'),
-    # "research" came out of this list: the other verbs here read as DIAGNOSING something that
-    # exists ("look into that server", "find out why the export drops rows"), but research is the
-    # word for reading about the WORLD - "can you research the Factor Elara gravel bike" opened a
-    # coding agent on a checkout (the owner, 2026-09-04). Left off the list it reaches the brain,
-    # which has the sentence and can tell a product from a production database.
-    # "Send to agent" does not say WHICH agent. Triage's kind is a suggestion, not permission to
-    # silently choose Azure/OpenAI or a checkout. The two explicit answers below are real verbs;
-    # the unqualified phrase becomes a short two-choice question in say().
-    # Reading/research/analysis is real work for the regular agent. A polite request to do it is
-    # a hand-off, not an invitation for the lightweight router to say that it COULD do it.
-    (re.compile(r"^\s*(do\s+)?(a\s+)?(deep[- ]?dive|research|analy[sz]e|review|compare|summari[sz]e)\b", re.I), 'regular_agent'),
-    (re.compile(r"\b((send|hand|give|pass)\s+(it|this|that|them)?\s*(off|over|along)?\s*(to)?\s*(the\s+)?|have\s+(the\s+)?|let\s+(the\s+)?|start\s+(the\s+)?|ask\s+(the\s+)?)(regular|general|non[- ]?coding)\s+agent\b"
-                r"|^\s*(regular|general|non[- ]?coding)\s+agent\s*$", re.I), 'regular_agent'),
-    (re.compile(r"\b((send|hand|give|pass)\s+(it|this|that|them)?\s*(off|over|along)?\s*(to)?\s*(the\s+)?agent|have\s+the\s+agent|let\s+the\s+agent|start\s+the\s+agent|ask\s+(the\s+|an\s+)?agent\s+to)\b", re.I), 'agent_choice'),
-    (re.compile(r"^\s*coding\s+agent\s*$|\b(send (it |this |that )?to (the )?(coding agent|coder|codex|claude|gemini)|have the (coder|coding agent|codex|claude|gemini)|let the (coder|coding agent|codex|claude|gemini)|start the (coder|coding agent|codex|claude|gemini)|code it|(coder|codex|claude) (should|can) (review|look|fix|handle)"
-                r"|look into|investigate|dig into|find out|figure out|check (on |out )?(that|the|this|what|why|if)|ask (the |an )?(coding agent|coder|codex|claude|gemini) to)\b", re.I), 'coder'),
-    (re.compile(r"\b(i'?ll (do|take|handle) (it|this|that)|i will (do|take|handle) (it|this|that)|mine|leave it (to|with) me|(just )?make it a task|create a task|(add|put) (it|this) (on|to) my list)\b", re.I), 'mine'),
-    # ENDING AN AGENT is not closing a task: "close the agent working" closed the item on the table
-    # instead - a task the owner had not even asked about (2026-09-03). It comes first, so the words
-    # that name the agent can never be read as the words that name the task.
-    (re.compile(r"\b((close|stop|kill|end|shut) (it |the |this |that )?(agent|coder|codex|claude|session|terminal)"
-                r"|(close|shut) (it |the |that )?down|stop (it |the |that )?working|(agent|coder) is (done|finished)"
-                r"|wrap (it |this |that )?up)\b", re.I), 'stop_agent'),
-    (re.compile(r"\b(close (the |this |that )?task|close it|mark (it |this )?(as )?(done|closed|complete)|task is done)\b", re.I), 'close'),
-    (re.compile(r"\b(re-?run|run (it |this |that )?again|try (it )?again|kick it off again)\b", re.I), 'rerun'),
-    # two jobs in one arrival - the drawer could split them, the chat could not (2026-09-03)
-    (re.compile(r"\b(split (it|this|that|them|the task)?|these are (two|2|separate|different)|"
-                r"(that'?s|thats|it'?s) (two|2) (things|jobs|asks|tasks)|(two|2) (different|separate) (things|jobs|asks|tasks))\b", re.I), 'split'),
-    # a sweep: "remove all the Nechama Ozur reports", "skip all the mfa financial reports", "remove them
-    # from the pipeline", "same for all resident refunds" - marked read, never deleted. The target may be
-    # a pronoun: what "them" means is the last thing the owner named (the owner, 2026-09-03: two tries,
-    # both answered with a promise and no sweep).
-    # ONE of them, out of the way: read and off the pipe, the task archived, never deleted. It comes
-    # before the sweep because "delete it"/"archive it" are about the thing on the table, not a rule.
-    (re.compile(r"^\s*(delete|archive|bin|trash|file|get rid of|throw away) (it|this|that|the (message|mail|email|thing))\b", re.I), 'archive'),
-    (re.compile(r"^(?=.*\b(remove|clear|dismiss|get rid of|hide|skip|ignore|archive|filter|mark (all )?(as )?read)\b)"
-                # a short verb needs a PLURAL target: "skip it" is one item, and sweeping the pipe on
-                # it swept nothing and moved nothing (2026-09-03) - 'it' belongs to skip/archive
-                r"(?=.*\b(all|every|these|those|any|them)\b)"
-                r"|\b((stop|no more) (showing|surfacing|sending)|don'?t (show|surface|need|want)|no need for)\b"  # these say it on their own
-                # ...and the way an owner actually says it: "should not show up anymore", "never show me those"
-                r"|\b((should ?n'?t|should not|do ?n'?t|never|stop) (show|showing|surface|surfacing|see|seeing|appear|appearing)|not show up)\b"
-                r"|^\s*(same for|no more)\b", re.I | re.S), 'clear'),
-    # something new to configure. A workflow is included explicitly so "set up monthly invoices"
-    # opens the Assistant walkthrough instead of being treated as loose conversation.
-    (re.compile(r"^\s*(please )?(set ?up|create|build|make|add|configure|automate)\b.*\b(report|workflow|connection|connector|dashboard|automation|schedule|integration|pipeline|alert|invoice)s?\b", re.I | re.S), 'setup'),
-    (re.compile(r"^\s*(done|handled|dealt with|finished|ok done)\b|\b(it was|already|i|we) (responded|replied|answered|handled|took care|dealt)\b"
-                r"|\b(i|we) did (it|this|that)\b|\b(it'?s|that'?s|thats) (handled|done|sorted|dealt with|taken care of)\b", re.I), 'done'),
-    # tomorrow comes first: "remind me tomorrow" meant 07:00 to the owner and three hours to the
-    # `later` rule, which read "remind me" and stopped there (2026-09-03)
-    (re.compile(r"^\s*(tomorrow|skip)\b|\btomorrow( morning)?\b|\bfirst thing\b", re.I), 'skip'),
-    (re.compile(r"^\s*(later|not now|remind me|snooze( it| this| that)?|come back to (it|this))\b|\bsnooze\b", re.I), 'later'),
-    (re.compile(r"^\s*(next|move on|go on|continue|ok next)\b|\bnext\s*[.!]?\s*$", re.I), 'next'),
-)
-
-SYSTEM = (
-    "{counsel}\n\n"
+VERBS = ('reply', 'approve', 'setting', 'not_ours', 'not_ours_remember', 'not_ours_sender', 'block_sender', 'remember', 'coder', 'regular_agent', 'mine', 'close', 'stop_agent',
+         'rerun', 'setup', 'clear', 'split', 'done', 'later', 'skip', 'next', 'answer_agent', 'redraft', 'forward', 'archive',
+         'confirm', 'cancel', 'none')
+# The action words offered INSIDE the assistant's own line, and what each one reads as. The vocabulary is
+# CODE's and it is fixed (the owner, 2026-09-07: "make it hardcoded, meaning add inline in the chat words
+# that map to actions"); only which of them fits the thing on the table is decided per item, from its kind.
+# The model still reads free text - it just never invents a button. Every word here maps to a verb the cards
+# and the typed sentence already run, so a chip, a button and a sentence are one road.
+CHIP_WORDS = {'approve': 'Send the reply', 'redraft': 'Redraft it', 'reply': 'Reply', 'coder': 'Hand it to a coding agent',
+              'regular_agent': 'Hand it to an agent', 'mine': 'Put it on my list', 'not_ours': 'Not ours',
+              'not_ours_sender': 'Ignore this sender', 'block_sender': 'Block them in Settings',
+              'archive': 'Archive it', 'close': 'Close the task',
+              'done': 'Handled', 'later': 'Later', 'skip': 'Tomorrow', 'next': 'Next', 'answer_agent': 'Answer it',
+              'stop_agent': 'Stop the agent', 'rerun': 'Run it again', 'split': 'Split it in two',
+              'prep': 'Prep me', 'followup': 'Draft a follow-up'}
+# What the word will actually DO, on hover - written where the difference matters. "Ignore this
+# sender" and "Block them in Settings" are one line apart and not remotely the same act.
+CHIP_HINTS = {'not_ours_sender': 'Their mail keeps arriving and stays readable - triage learns to file it',
+              'block_sender': 'An exclusion rule in Settings: their mail never reaches triage again, and what already arrived leaves the Timeline. Reversible.',
+              'not_ours': 'File just this one - nothing is remembered',
+              'coder': 'A coding agent, in a repository', 'regular_agent': 'A non-coding agent - reading, checking, drafting',
+              'mine': "Your own list - no agent starts", 'next': 'Read it and move on'}
+# per kind, in the order they are offered. `next` is last on every one of them: moving on is always available,
+# and it is the one word that is never a decision about the thing itself.
+CHIPS = {'review': ('approve', 'close', 'redraft', 'not_ours', 'next'), 'action': ('approve', 'not_ours', 'next'),
+         'agent': ('answer_agent', 'stop_agent', 'next'), 'meeting': ('prep', 'regular_agent', 'next'),
+         'report': ('rerun', 'regular_agent', 'next'), 'agentdone': ('close', 'reply', 'next'),
+         'wrapup': ('close', 'next'), 'idea': ('followup', 'mine', 'done', 'next'), 'task': ('close', 'next'),
+         'asked': ('reply', 'regular_agent', 'coder', 'mine', 'not_ours', 'not_ours_sender', 'next'),
+         'todo': ('reply', 'regular_agent', 'coder', 'mine', 'not_ours', 'not_ours_sender', 'next'),
+         'fyi': ('not_ours', 'not_ours_sender', 'block_sender', 'mine', 'next'),
+         'fyis': ('done', 'not_ours_sender', 'block_sender', 'next')}
+# THE CONTRACT is the part code reads: two line shapes and the verb vocabulary behind the card's buttons.
+# How to behave is COUNSEL's - the owner's document, not this file (PW-248/256). Removing prose here
+# removed no safeguard: verbs are validated in parse_decision, targets and freshness in operations.
+CONTRACT_HEAD = (
     "THE CONTRACT (code reads your answer)\n"
-    "You are speaking to {owner} in the chat on the Assistant tab. ONE item per turn: say who, what they want, and "
-    "what you would do - under 60 words, first person, plain. The card under your message holds the draft, the "
-    "agent's question or the meeting, and its buttons do the acting; point at them, never claim an action "
-    "happened. When a decision has two to four clear choices and no button covers them, end with one final line "
-    "exactly like: OPTIONS: first choice | second choice. Otherwise no options line.\n"
-    "When the owner's words are a DECISION about the item on the table, do not advise - carry it out: answer in one "
-    "short sentence saying what happens now, then end with one final line exactly like DECIDE: <verb> where verb is "
-    "one of reply (they want a reply written - add the gist after a colon: DECIDE: reply: tell Kishan it is not owned "
-    "here), not_ours (not their problem, file it this once), not_ours_remember (never again for this kind), coder "
-    "(hand it to the coding agent - put EVERYTHING the owner wants done after a colon, in their words: DECIDE: coder: find out "
-    "why the bulk-approve fix from before did not stick, and create an admin login for X), regular_agent (hand it to a non-coding "
-    "agent for reading, analysis, or general work), mine (they will do it themselves), "
-    "approve (send the drafted reply as it stands), not_ours_sender (the SENDER is noise - file everything from them from now on), "
-    "setup (reading, thinking or research with NO system to type at - Taskuary opens it as a conversation with the assistant: nothing is built, no repository is touched, and it can be handed to the coding agent later if it turns out something has to be), "
-    "split (this arrival is TWO jobs - Taskuary breaks it in two, each with its own ref), "
-    "setting (what they want is a SWITCH - Taskuary puts it in front of them to approve and never changes it itself), "
-    "stop_agent (end the AGENT that is running - stopping a session is not closing a task, and never guess which: "
-    "only the task they named, the one on the table if an agent is on it, or the only agent running), "
-    "remember (a fact to keep - the fact after a colon), close (close the task itself), rerun (run a report again - Taskuary queues it), done (handled - also when they say it was already "
-    "answered or dealt with), later, skip (tomorrow), next (move on). Never ask which of these they mean when the words say it; never "
-    "ask a question instead of deciding. You have NO tools and run nothing yourself - ever: you load, you orchestrate, Taskuary does. "
-    "When the owner says a fact of yours is WRONG, take the correction: say what it actually is, and what "
-    "that changes. Never answer a correction by moving on (no next, skip, later or done) - being told you "
-    "have it wrong is the one thing you must not shrug off.\n"
-    "A question or a remark is not a decision: answer it and write no DECIDE line. A polite request is "
-    "not a question: \"can you look into that server\" is a hand-off, so decide it. But an unqualified \"send to agent\" does "
-    "not choose between coder and regular_agent: ask which one, and offer OPTIONS: Coding agent | Regular agent.\n"
-    # "can you research the Factor Elara gravel bike" opened a coding agent on a checkout (the
-    # owner, 2026-09-04), and before that a set-up did the same ("it doesn't need coding agent
-    # just a regular agent that will walk me through it"). The example above primes coder; this
-    # is the line that stops it generalising to everything phrased as a favour.
-    '...but coder and setup are not the same road, and the test is whether there is a SYSTEM to '
-    'type at. A repository, a server, a database, a query, a file, an error, a failing report: '
-    'coder. Reading about the world, comparing products, weighing an option, working out what to '
-    'ask, anything whose answer is a judgement rather than a change: setup. Never send reading '
-    'work to the coding agent because the sentence was polite - "can you research X" is a '
-    'walk-through, not a hand-off.\n'
-    # "ignore" names the act and leaves out the part that lasts. Filing one mail and silencing a
-    # sender for ever are different acts, and the owner asked to be consulted on which (2026-09-04:
-    # "even without the button when you say ignore unless you say specific just for today it
-    # should ask what it should do with it in terms of memory").
-    '"Ignore it" and "not ours" name the act but not its SCOPE, and scope is the part that lasts. '
-    'Unless they already said which - "just this once", "just for today", "never again", "always", '
-    '"from this sender" - do not pick one: say in one line that you can file this one, remember the '
-    'kind, or silence the sender, and end with exactly OPTIONS: just this once | this kind from now '
-    'on | everything from this sender. This is the one ambiguity worth a question, because the wide '
-    'answers are the ones that quietly hide mail later. When they HAVE said which, decide it and '
-    'write no options line: this once is not_ours, the kind is not_ours_remember, the sender is '
-    'not_ours_sender.\n'
-    "The thread you are given is the whole thread, the owner's own sent mail included. When it shows they "
-    "already answered, say so as a fact. Only when the thread has no answer from them may you say the mail "
-    "has not been read back yet - and then name the Sync button, never blame yourself for not seeing it.")
+    "You are speaking to {owner} in the chat on the Assistant tab. When a decision has two to four clear "
+    "choices and no button covers them, end with one final line exactly like: OPTIONS: first choice | second choice. "
+    "Otherwise no options line.\n"
+    "The action words under your line are the owner's buttons and they are already chosen for this item - never "
+    "list them, and never end a line with an offer to do something. When you cannot tell which of them the owner's "
+    "words mean, say which two you are choosing between and ask - one short question, no DECIDE line. Guessing is "
+    "worse than asking.\n")
+# The verb vocabulary is the machine half and it is the SAME wherever the turn is read: an item settled
+# from the phone is settled on the desk, because both go through parse_decision and the same operations.
+DECIDE_RULE = (
+    "When the owner has DECIDED about an item, end with one final line exactly like DECIDE: <verb> where verb is one of: "
+    "reply (a reply to write - the gist after a colon: DECIDE: reply: tell Kishan it is not owned here), approve (send the "
+    "drafted reply as it stands), redraft (write the draft again - the change after a colon), coder (hand it to the coding "
+    "agent - everything wanted after a colon, in the owner's words), regular_agent (hand it to a non-coding agent), mine "
+    "(they will do it themselves), not_ours (file this one), not_ours_remember (file this kind from now on), "
+    "not_ours_sender (triage files everything from this sender from now on; their mail still arrives), block_sender (an exclusion rule in Settings - their mail never reaches triage again and what already arrived leaves the Timeline; the bigger hammer, only when they ask for a RULE), archive, close (close the task), done (handled), later, skip "
+    "(tomorrow), next (move on), remember (a fact to keep - after a colon), setup (a walk-through with the assistant - the "
+    "request after a colon), setting (a switch for the owner to approve), split (two jobs in one arrival), stop_agent (end "
+    "the running agent), answer_agent (the answer for the parked agent - after a colon), rerun (run the report again), "
+    "forward (send it on - to whom after a colon), clear (clear these from the pipe), confirm (their yes to the card "
+    "already waiting on it - only when one is), cancel (their no to it). A decision about a DIFFERENT item than "
+    "the one on the table ends the DECIDE line with ON: and the words that name it: DECIDE: not_ours ON: payroll portal outage.")
+CONTRACT = CONTRACT_HEAD + DECIDE_RULE
+SYSTEM = CONTRACT      # the old name, for one release
+
+# The same walk, read in a phone chat. There are no cards there and no action words under the line, so
+# the choices have to BE the message - remote_assistant appends them, and this tells the voice to write
+# for a screen that has nothing else on it. Only the delivery changes: the pipe, the verbs and the
+# proposals are the desk's, so an item settled from the phone is settled everywhere.
+PHONE_CONTRACT = (
+    "THE CONTRACT (code reads your answer)\n"
+    "You are speaking to {owner} in their private chat on their phone, not at the Taskuary desktop. They "
+    "cannot see a card, a button, a draft or a link here - never tell them to click, open, tap or read one "
+    "as if it were in front of them. Say the sender, the subject, why it matters and what you would do, in "
+    "no more than four short sentences, and never more than one item at a time.\n"
+    "The choices are added under your line by code from the item itself. Do not list them, do not invent "
+    "one, and never end a line with an offer to do something. When you cannot tell which of them the "
+    "owner's words mean, say which two you are choosing between and ask - one short question, no DECIDE "
+    "line. Guessing is worse than asking.\n" + DECIDE_RULE)
+
+DESK, PHONE = 'desk', 'phone'
+# Where this turn will be READ. Ambient, not an argument: every path into the voice (surface, say, the
+# opening line) would otherwise carry a parameter that decides nothing except how the words are shaped.
+DELIVERY = contextvars.ContextVar('taskuary_delivery', default=DESK)
+
+
+@contextmanager
+def delivering(where: str):
+    token = DELIVERY.set(where if where in (DESK, PHONE) else DESK)
+    try: yield
+    finally: DELIVERY.reset(token)
 
 OPENING = (
     "Open the conversation for the day. Say 'let's go through what we have today' in your own words, then in two or three "
@@ -212,7 +156,7 @@ RECEIPTS = {'reply': "I'll draft that - it lands below for your yes.", 'approve'
             'mine': "On your list. Moving on.", 'close': 'Closing the task. Moving on.', 'rerun': "Queued the rerun - it lands back in the pipe when it's done. Moving on.",
             'setup': "I'll walk you through it - opening it as a conversation with the assistant, no code, nothing built. "
                      "Say send it to the coding agent if it turns out something has to be built.",
-            'answer_agent': "Passing that to the agent - it reads it when it next stops.",
+            'answer_agent': "Passing that to the agent - now if it is waiting on you, otherwise when it next stops.",
             'redraft': "Writing it again with that - the new draft lands below for your yes.",
             'archive': 'Archived - off the pipe and closed, nothing deleted. Moving on.',
             'done': 'Done. Moving on.', 'later': "Pushed back a few hours.", 'skip': 'Tomorrow, then.', 'next': 'Next.'}
@@ -225,6 +169,7 @@ ALL_DONE = ("That's everything for now. The pipe is empty - nothing is waiting o
 # sentences, and the coding model is the wrong tool for them (Connections > AI CLI agents sets it)
 LIGHT_DEFAULT = {'claude': 'haiku', 'codex': 'effort:low', 'gemini': 'gemini-2.5-flash'}
 SID_KEY = 'concierge_cli_sid'          # the CLI's own conversation, resumed turn to turn (per dock task)
+CURRENT_KEY = 'assistant_current'      # what is on the table, per dock task - persisted, validated on restore (PW-162)
 
 
 AI_KEY, MODEL_KEY = 'concierge_ai', 'concierge_model'   # this page's own choice - the old dock's assistant_ai stays the dock's and WhatsApp's
@@ -289,6 +234,36 @@ def brain(store, trace=None, cancel=None, resume=None, fast=False):
 
 
 def _sid(store, tid: int) -> str: return str(store.get_settings().get(f'{SID_KEY}:{tid}') or '')
+
+
+def current_key(store, tid: int) -> str: return str(store.get_settings().get(f'{CURRENT_KEY}:{tid}') or '')
+
+
+def set_current(store, tid: int, key: str | None, actor: str = 'assistant'):
+    """The thing on the table, written down as it is put there (or taken away) - not inferred later."""
+    if current_key(store, tid) != (key or ''): store.set_setting(f'{CURRENT_KEY}:{tid}', key or '', actor)
+
+
+def restore_current(store, tid: int) -> dict | None:
+    """The persisted Current, validated against the pile as it stands (PW-162): the item as it is now when it
+    is still unread and still there; otherwise the key is cleared and nothing is chosen in its place."""
+    key = current_key(store, tid)
+    if not key: return None
+    try: item = funnel.batch_item(store, key) if key.startswith('fyis:') else funnel.next_item(store, key, include_surfaced=True)
+    except Exception as e:
+        logger.warning(f'concierge: could not validate the current item {key} - {e}'); item = None
+    # ...and "still there" is not enough. A mail row on a closed task leaves the pile (funnel._feed_skip),
+    # but own work reaches it through the processing inventory, which keeps a finished task as a READ
+    # fyi row - so Current went on holding a task done twenty minutes ago and the assistant kept
+    # offering to hand it to an agent (TQ-0420). The test is OVER, never "read": an item the assistant
+    # puts in the chat is read, and clearing on that would empty the table as soon as it was set.
+    over = item and item.get('tid') and (store.get_task(item['tid']) or {}).get('Status') in ('done', 'dropped')
+    if not item or item.get('settling') or (over and item.get('lane') != 'approve'):
+        set_current(store, tid, None)
+        return None
+    card = card_for(item) | {'presentation_revision': item.get('presentation_revision')}
+    if item.get('kind') == 'fyis': card['items'] = [card_for(i) for i in item.get('items') or []]   # the handful, entry by entry
+    return card
 def _remember_sid(store, tid: int, llm):
     sid = getattr(llm, 'session_id', '') or ''
     if sid and sid != _sid(store, tid): store.set_setting(f'{SID_KEY}:{tid}', sid, 'assistant')
@@ -316,10 +291,9 @@ def tools_block(store) -> str:
 
 
 def _counsel(store) -> str:
-    """COUNSEL.md - who the assistant is and how it speaks (Docs tab, the owner's to edit)."""
-    doc = re.sub(r'<!--.*?-->', '', store.doc('counsel') or '', flags=re.S).strip()
-    return doc[:3200] or ('You are Taskuary, the assistant. You walk the owner through their inbox one thing at a time '
-                          'and do no work yourself. Plain, direct, first person. Take a position.')
+    """The chat reads the whole document (counsel.load restores a blank one, audited)."""
+    from . import counsel
+    return counsel.for_chat(store)
 
 
 def _owner(store) -> str:
@@ -447,13 +421,33 @@ def facts(store, item: dict) -> str:
     return '\n'.join(lines)
 
 
+def parse_call(text: str) -> tuple[str, dict | None]:
+    """The model's CALL line, off the end of its answer: {'kind', 'params'} or None. Validated against
+    operations.KINDS here, so an invented kind never reaches a handler - it is simply not a call."""
+    m = _CALL.search(text or '')
+    if not m: return (text or '').strip(), None
+    from . import toolcatalog
+    try: got = json.loads(m.group(1))
+    except ValueError:
+        logger.info('concierge: a CALL line was not JSON - ignoring it'); return text[:m.start()].strip(), None
+    kind, params = str(got.get('kind') or ''), got.get('params') or {}
+    if not isinstance(params, dict): params = {}
+    why = toolcatalog.valid(kind, params)
+    if why:
+        logger.info(f'concierge: refusing that CALL - {why}')
+        return text[:m.start()].strip(), None
+    return text[:m.start()].strip(), {'kind': kind, 'params': params}
+
+
 def parse_decision(text: str) -> tuple[str, dict | None]:
     """The model's DECIDE line, off the end of its answer: {'verb', 'text'} or None."""
     m = _DECIDE.search(text or '')
     if not m: return (text or '').strip(), None
     verb = m.group(1).lower()
     if verb not in VERBS or verb == 'none': return text[:m.start()].strip(), None
-    return text[:m.start()].strip(), {'verb': verb, 'text': (m.group(2) or '').strip()}
+    d = {'verb': verb, 'text': (m.group(2) or '').strip()}
+    if m.group(3): d['on'] = m.group(3).strip()          # the decision is about ANOTHER item, named (PW-121)
+    return text[:m.start()].strip(), d
 
 
 # "can you ask the assistant to look into that server?" is an ORDER wearing a question mark. The
@@ -472,24 +466,6 @@ _CORRECTION = re.compile(r"\b(that'?s (wrong|not right|incorrect|not true)|(that
                          r"(i|we) (already|just) (told|said)|(i|you) (got|have) (that|it) wrong|which is wrong|is not wrong)\b", re.I)
 
 
-# the owner is HOLDING something open - the opposite of the verb the sentence is built from.
-# "don't ignore this one", "leave it open", "leave it with the agent" all matched not_ours, which
-# files the message and deletes its task (2026-09-03). Read before anything else, decide nothing.
-_HOLD = re.compile(r"\b(leave|keep) (it|this|that|them|him|her) (open|running|as is|alone with|where it is|with (the )?(agent|coder|codex|claude))\b"
-                   r"|\b(leave|keep) it (to|with) (the )?(agent|coder|codex|claude)\b"
-                   r"|\bdo ?n'?t (ignore|file|close|drop|delete|archive|skip|remove|clear|touch|send)\b"
-                   r"|\b(this|that|it) one (does|is) matter\b", re.I)
-# a question about STATE wearing a polite opener: "can you check if the report ran?" is a question,
-# not a hand-off - it started a coding agent on the mail (2026-09-03)
-_ASKING = re.compile(r"\b(check|see|find out|know|tell me|confirm|remember) (if|whether)\b[^?]*\?\s*$", re.I | re.S)
-# saying yes: what it means is whatever the card's own button does, so the verb is resolved
-# against the item on the table (assent_verb) and never guessed here
-_ASSENT = re.compile(r"^\s*(yes|yeah|yep|yup|ok|okay|sure|fine|alright|go ahead|do it|please do|sounds good|👍)\b[\s,.!:-]*(?P<tail>.*)$", re.I | re.S)
-# starting the walk in words, not on a button: with nothing on the table these did nothing at all
-_START = re.compile(r"\b(walk me through|take me through|go through (my|the|them|it all)|start with|start on|let'?s go|let'?s start"
-                    r"|get (me )?started|what'?s next|next one|first one|show me what'?s (waiting|left|there)|carry on)\b", re.I)
-_REMEMBER_TOO = re.compile(r"[,;]?\s+and (also )?remember (that |to )?(?P<note>.+)$", re.I | re.S)
-_REMEMBER_TO = re.compile(r"^\s*(remember|note|remind me) to\s+(?P<rest>.+)$", re.I | re.S)
 # what the card's primary button does, said as a word. Anything not here has no yes-able action.
 ASSENT_VERB = {'review': 'approve', 'action': 'approve', 'agent': 'answer_agent', 'idea': 'followup'}
 
@@ -501,71 +477,6 @@ def assent_verb(item: dict | None) -> str | None:
     return ASSENT_VERB.get(item.get('kind'))
 
 
-def _subject_left(ask: str) -> str:
-    """What is left of the sentence once EVERY verb phrase Taskuary knows is taken out of it: the
-    subject the owner named, if they named one. Taking out only the winning phrase left the other
-    half of "let them sort it out" looking like a named subject (2026-09-03)."""
-    out = ask
-    for rx, _ in _SAYS:
-        if rx is SWITCH_RX: continue
-        for m in rx.finditer(out):
-            if m.end() > m.start(): out = out[:m.start()] + ' ' * (m.end() - m.start()) + out[m.end():]
-    return out.strip()
-
-
-def decide_words(text: str) -> dict | None:
-    """No model, or a model that missed it: the plain phrases an owner uses at their desk."""
-    s = str(text or '').strip()
-    if _CORRECTION.search(s): return None                        # they are correcting us - answer it, decide nothing
-    if _HOLD.search(s) or _ASKING.search(s): return None         # they are holding it open, or asking - not deciding
-    ask = _POLITE.sub('', s)                                     # the instruction under the politeness
-    if '?' in s and ask == s: return None                        # a real question, anywhere in the words - the model answers it, nothing is decided
-    # "remember to reply to him" is not a fact to keep, it is the reply - it used to become a memory row
-    to = _REMEMBER_TO.match(ask)
-    if to: return decide_words(to.group('rest'))
-    # "approve and remember that Kishan handles refunds": both, not one - the memory used to be dropped
-    also = _REMEMBER_TOO.search(ask)
-    if also:
-        head = decide_words(ask[:also.start()])
-        if head and head['verb'] != 'remember': return {**head, 'remember': also.group('note').strip(' :,-.')}
-    yes = _ASSENT.match(ask)
-    if yes:
-        tail = (yes.group('tail') or '').strip(' ,.!')
-        inner = decide_words(tail) if tail else None
-        # a sweep is never what "yes" meant: "yes remove them" is an ANSWER to the agent that asked
-        if inner and inner['verb'] != 'clear': return inner
-        return {'verb': 'assent', 'text': s}
-    for rx, verb in _SAYS:
-        m = rx.search(ask)
-        if m:
-            # a reply carries what to say; a hand-off to the coder carries the WHOLE ask; a memory carries the fact
-            if verb == 'remember': return {'verb': verb, 'text': m.group('note').strip(' :,-.')}
-            if verb in ('setup', 'clear'): return {'verb': verb, 'text': s}
-            if verb == 'answer_agent': return {'verb': verb, 'text': (m.group('ans') or '').strip(' :,-.') or s}
-            if verb == 'forward': return {'verb': verb, 'text': s, 'who': next((v for k, v in m.groupdict().items() if k.startswith('who') and v), '')}
-            if verb in ('coder', 'regular_agent'):
-                # The option buttons say only "Coding agent" / "Regular agent". Those words choose
-                # the road; they are not the job brief. With no added instruction, dispatch seeds
-                # the selected agent from the task and its complete message context.
-                choice_only = re.fullmatch(r'(?:the\s+)?(?:coding|regular|general|non[- ]?coding)\s+agent', ask, re.I)
-                return {'verb': verb, 'text': '' if choice_only else s, 'said': s, 'rest': _subject_left(ask)}
-            # the instruction is the tail when they opened with the verb ("reply: say Tuesday works"),
-            # and the whole sentence when the verb is inside it ("let them know we ship Friday")
-            rest = ask[m.end():].strip(' :,-.') if m.start() == 0 else ''
-            if len(rest.split()) < 3: rest = ''                  # "reply to him" is not an instruction; the sentence is
-            return {'verb': verb, 'text': (rest or s) if verb == 'reply' else s if verb == 'redraft' else '',
-                    'said': s, 'rest': _subject_left(ask)}
-    return None
-
-
-# A decision acts on the thing on the table. When the sentence NAMES another subject it must not:
-# "not ours, facilities handles the portal" (meaning the Teams outage) filed Chana's export reply
-# and deleted TQ-0002 with its coder report, its commit and its drafted answer (2026-09-03).
-GUARDED = ('not_ours', 'not_ours_remember', 'not_ours_sender', 'close', 'done', 'archive', 'approve', 'mine', 'rerun', 'redraft', 'coder', 'regular_agent')
-# ...and of those, the ones that cannot be taken back: a mail sent, a message filed, a task closed.
-# One stray word they cannot place is enough to stop and ask - "approve the invoice one" must never
-# send the draft that happens to be on the table.
-COSTLY = ('not_ours', 'not_ours_remember', 'not_ours_sender', 'close', 'done', 'archive', 'approve')
 # courtesy and filler carry no subject: "done, thanks" names nothing
 _FILLER = {'thanks', 'thank', 'cheers', 'great', 'good', 'fine', 'perfect', 'please', 'sorry', 'nice',
            'right', 'sure', 'really', 'actually', 'maybe', 'probably', 'definitely', 'anyway', 'though',
@@ -574,12 +485,6 @@ _FILLER = {'thanks', 'thank', 'cheers', 'great', 'good', 'fine', 'perfect', 'ple
            'kind', 'kinds', 'sort', 'sorts', 'type', 'types', 'thing', 'things', 'stuff', 'item', 'items',
            'way', 'ways', 'case', 'cases', 'matter', 'work', 'job', 'jobs', 'note', 'notes', 'task', 'tasks',
            'message', 'messages', 'mail', 'email', 'emails', 'reply', 'replies', 'issue', 'issues', 'problem', 'problems'}
-
-# pointing at something else on purpose: "the invoice one", "that other thread", "the payroll mail"
-_OTHER_ONE = re.compile(r"\bthe [\w-]+ one\b|\bthat other\b|\bthe other (one|thread|mail)\b"
-                        r"|\b(the|that) [\w-]+ (thread|mail|email|message|ticket|report|outage|invoice)\b", re.I)
-# a thing, named: a determiner and the words after it ("the badge printer contract", "that refund")
-_NAMED_THING = re.compile(r"\b(?:the|that|this|those|their)\s+[\w-]{3,}(?:\s+[\w-]{3,})?", re.I)
 
 def _pile_hit(store, extra: list, item: dict) -> str | None:
     """The item in the PIPE those words are about. lookup() scores over the whole timeline and wants
@@ -597,62 +502,18 @@ def _pile_hit(store, extra: list, item: dict) -> str | None:
     return best['key'] if hits >= 2 else None
 
 
-def _world_words(store, item: dict) -> set:
-    """Every word the REST of the world is called by - the pile and the recent timeline, minus what
-    this item is called. A leftover word that appears in it is a subject; one that appears nowhere
-    is the owner talking ("so let them respond if they still need it")."""
-    from .routing import tokens
-    out = set()
-    try:
-        for i in funnel.pile(store)['items']:
-            if i.get('key') == item.get('key'): continue
-            out |= set(tokens(f"{i.get('who') or ''} {i.get('title') or ''}"))
-    except Exception: pass
-    try:
-        for r in store.feed(limit=120, days=14):
-            if r.get('MessageId') and r.get('MessageId') == item.get('mid'): continue
-            out |= set(tokens(f"{r.get('FromName') or ''} {r.get('Subject') or ''} {r.get('SourceName') or ''}"))
-    except Exception: pass
-    from .routing import tokens as tk
-    return out - set(tk(f"{item.get('who') or ''} {item.get('title') or ''}"))
-
-
-def named_elsewhere(store, words: dict, item: dict | None, costly: bool = False) -> str | None:
-    """The subject the owner's words name when it is NOT the one on the table: the pile key it
-    resolves to, '?' when they name something that cannot be found, None when they name nothing else."""
-    if not item or not words: return None
-    said, rest = str(words.get('said') or ''), str(words.get('rest') or '')
-    ref = re.search(r'\bTQ-?0*(\d+)\b', said, re.I)
-    if ref and item.get('tid') and int(ref.group(1)) != int(item['tid']):
-        return f"task:{int(ref.group(1))}" if store.get_task(int(ref.group(1))) else '?'
-    from .routing import tokens
-    own = set(tokens(f"{item.get('who') or ''} {item.get('title') or ''} {item.get('preview') or ''} {item.get('summary') or ''}"))
-    extra = [w for w in tokens(rest) if w not in _CUES and w not in _FILLER and w not in own and len(w) > 2]
-    if not extra: return None                          # the sentence is the verb and nothing else: it means this one
-    # ONE stray word is not enough to stop on - but it is enough to look with: "approve the invoice
-    # one" must not approve the playbook proposal that happens to be open. Two or more and we ask
-    # rather than guess, because by then the sentence is plainly about something else.
-    hit = lookup(store, ' '.join(extra)) or _pile_hit(store, extra, item)
-    if hit: return hit if hit != item.get('key') else None
-    # nothing resolved. "the invoice one" points at another thing on purpose, so stop and ask; a
-    # word the rest of the world is also called by is a subject; anything else is just talk.
-    if _OTHER_ONE.search(said): return '?'
-    if not costly: return None
-    if any(w in _world_words(store, item) for w in extra): return '?'     # a word the rest of the world answers to
-    # ...or a thing NAMED and not held here at all: "the badge printer contract is legal's". A
-    # determiner in front of it is what makes it a thing rather than more of the sentence.
-    named = {w for m in _NAMED_THING.finditer(rest) for w in tokens(m.group(0))}
-    return '?' if named & set(extra) else None
-
-
 # What a card must HAVE for a verb to be carried out on it - the same map the page checks. The
 # receipt used to go out before anyone knew, so "Sending it as drafted. Moving on." and "I could
 # not do that from here" landed in the chat one after the other (2026-09-03).
+# A HAND-OFF is not in here: an agent needs a BRIEF, not a message. Requiring a `mid` refused "create an
+# agent to research these three tools" on a meeting - the one item kind that never has one - with "there is
+# nothing to hand to a regular agent on this one" (the owner, 2026-09-07). propose_for already builds those
+# through task.create_from_text from the item's facts and the owner's words.
 NEEDS = {'reply': 'mid', 'approve': 'rid', 'redraft': 'rid', 'not_ours': 'mid', 'not_ours_remember': 'mid',
-         'not_ours_sender': 'mid', 'coder': 'mid', 'regular_agent': 'mid', 'mine': 'mid', 'forward': 'mid', 'archive': 'mid',
+         'not_ours_sender': 'mid', 'block_sender': 'mid', 'mine': 'mid', 'forward': 'mid', 'archive': 'mid',
          'rerun': 'source_id', 'close': 'tid', 'answer_agent': 'tid', 'split': 'key'}
 SAYS_VERB = {'approve': 'approve', 'redraft': 'redraft', 'not_ours': 'file', 'not_ours_remember': 'file',
-             'not_ours_sender': 'file', 'coder': 'hand to a coding agent', 'regular_agent': 'hand to a regular agent', 'mine': 'put on your list', 'forward': 'forward',
+             'not_ours_sender': 'file', 'block_sender': 'write an exclusion rule for', 'coder': 'hand to a coding agent', 'regular_agent': 'hand to a regular agent', 'mine': 'put on your list', 'forward': 'forward',
              'archive': 'archive', 'rerun': 'rerun', 'close': 'close', 'answer_agent': 'answer', 'reply': 'reply to',
              'split': 'split'}
 
@@ -686,6 +547,41 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
         return (f"There is nothing to {SAYS_VERB.get(verb, verb)} on this one - {what} is "
                 f"{item.get('why') or funnel.LANE_WORDS.get(item.get('lane'), ('waiting',))[0]}. Open it if you want its own buttons.")
     return ''
+
+
+def walk_chips(left) -> list:
+    """With nothing on the table there is nothing to DECIDE about - only the walk. Offered on the opening
+    line and on every "nothing here" answer while the pipe still holds something, so Next is always
+    somewhere in the conversation: the strip over the composer that used to carry it is gone, and the
+    welcome block that offers the walk disappears the moment the first line is written."""
+    return [{'verb': 'next', 'label': CHIP_WORDS['next']}] if left else []
+
+
+def chips_for(store, item: dict | None, first: str = None) -> list:
+    """The action words to put under the assistant's line: this kind's vocabulary, minus anything this
+    particular item cannot actually carry. An offered chip is a chip that works - which is the whole
+    point of gating them through cannot() rather than letting the model name them.
+
+    `first` promotes one verb to the front: what the model said it would do becomes the button that
+    does it, instead of a sentence that promised something nothing carried out (the owner, 2026-09-07:
+    "It says x, does something else")."""
+    if not item: return []
+    verbs = list(CHIPS.get(item.get('kind')) or ('next',))
+    if first and first in CHIP_WORDS and first != 'next':
+        verbs = [first] + [v for v in verbs if v != first]
+    out = []
+    for v in verbs:
+        # the two that are the page's own actions rather than proposals, so NEEDS does not describe them:
+        # prep wants the invite it is preparing for, a follow-up wants something to follow up ON
+        if v == 'prep' and not item.get('event'): continue
+        if v == 'followup' and not (item.get('idea') or (item.get('action') or {}).get('mid')): continue
+        if v != 'next' and cannot(item, v, store): continue
+        if v == 'close' and item.get('kind') == 'review':
+            out.append({'verb': v, 'label': 'Close without sending',
+                        'hint': 'Marks the task done, dismisses the draft, and ends any live agent session. No reply is sent.'})
+        else:
+            out.append({'verb': v, 'label': CHIP_WORDS[v], **({'hint': CHIP_HINTS[v]} if v in CHIP_HINTS else {})})
+    return out
 
 
 def parse_options(text: str) -> tuple[str, list]:
@@ -792,33 +688,15 @@ def _last_owner_words(store, tid: int, text: str) -> str:
     return ''
 
 
-def _accepted_regular_offer(store, tid: int) -> str:
-    """Return the job behind “okay, send it” after an explicit non-coding-work offer."""
-    rows = general.chat_rows(store, tid)
-    # say() has already stored the acceptance, so the offered work is immediately before it.
-    for pos in range(len(rows) - 2, max(-1, len(rows) - 6), -1):
-        row = rows[pos]
-        if row.get('ActorType') != general.ASSISTANT_TYPE: continue
-        body = _MARK.sub('', row.get('Body') or '').strip()
-        if not (re.search(r"\bI can\b", body, re.I)
-                and re.search(r"\b(read|research|analysis|analy[sz]e|deep[- ]?dive|dig into|review|compare|summari[sz]e|not a code change|not coding)\b", body, re.I)):
-            return ''
-        for prior in reversed(rows[:pos]):
-            if prior.get('ActorType') == general.USER_TYPE:
-                return _cut(_MARK.sub('', prior.get('Body') or '').strip(), 1200)
-        return ''
-    return ''
-
-
 def _turns(store, tid: int) -> str:
     rows = general.chat_rows(store, tid)[-TURNS:]
     return '\n'.join(f"{'YOU' if c.get('ActorType') == general.ASSISTANT_TYPE else 'OWNER'}: {_cut(_MARK.sub('', c.get('Body') or ''), 500)}" for c in rows)
 
 
 def _system(store, llm=None) -> str:
-    # never the tools block: the assistant runs nothing (the owner, 2026-09-03: "should never run anything ever -
-    # just load and orchestrate"). A rerun, a hand-off, a close are decisions Taskuary carries out.
-    return SYSTEM.format(owner=_owner(store), counsel=_counsel(store))
+    # the document first, the machine contract last; never the tools block - the assistant runs nothing
+    contract = PHONE_CONTRACT if DELIVERY.get() == PHONE else CONTRACT
+    return f"{_counsel(store)}\n\n{contract.format(owner=_owner(store))}"
 
 
 def _urgent_line(pile_items: list, item: dict | None) -> str:
@@ -860,25 +738,43 @@ def in_character(say: str) -> bool:
     return not _BROKE_CHARACTER.search(say or '')
 
 
-def _ask(store, llm, tid: int, item: dict | None, instruction: str, pile_items: list) -> tuple[str, list]:
+def _ask(store, llm, tid: int, item: dict | None, instruction: str, pile_items: list) -> tuple[str, list, str]:
     # the item comes FIRST and is named as the only subject; the pile is counts only while one is on the table
     user = ((f"THE ITEM ON THE TABLE - speak only about this one:\n{facts(store, item)}\n\n" if item else '')
             + f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(pile_items, coming=item is None)}{_urgent_line(pile_items, item)}\n\n"
             + (f"CONVERSATION SO FAR:\n{_turns(store, tid)}\n\n" if _turns(store, tid) else '')
             + (f"{facts(store, item)}\n\n" if not item else '') + instruction)
     text = str(llm(_system(store, llm), user, max_tokens=MAX_TOKENS) or '').strip()
+    # An INTRODUCTION is not a decision, but the model ends one with a DECIDE line anyway - and this pass
+    # used to parse only OPTIONS, so the marker printed verbatim and the thing it announced was dropped on
+    # the floor: "I'd hand this to a regular agent... DECIDE: regular_agent" and then nothing happened (the
+    # owner, 2026-09-07). The line never reaches the screen; the verb it named becomes the primary chip.
+    text, decision = parse_decision(text)
     say, options = parse_options(text)
     if off_subject(say, item):
         logger.info(f"concierge: the model spoke about another task than {item.get('ref')} - using the facts instead")
-        return '', []
+        return '', [], ''
     if not in_character(say):
         logger.info('concierge: the voice broke character - using the facts instead')
-        return '', []
-    return say, options
+        return '', [], ''
+    return say, options, (decision or {}).get('verb') or ''
 
 
 def record(store, tid: int, role: str, text: str, card: dict = None):
-    body = text.strip() + (f"\n\n{MARK}{json.dumps(card, default=str)} -->" if card else '')
+    # A presentation revision is transport freshness, not conversation meaning.  Persisting it
+    # made the same adjacent card into a second durable turn when surfacing changed only its read
+    # state.  Keep every semantic field, including nested FYI cards, and let the current HTTP
+    # response carry the newest revision.
+    def durable(value):
+        if not isinstance(value, dict): return value
+        out = dict(value); out.pop('presentation_revision', None)
+        children = out.get('items')
+        if isinstance(children, list):
+            out['items'] = [durable(child) if isinstance(child, dict)
+                            and all(k in child for k in ('key', 'kind', 'lane')) else child for child in children]
+        return out
+    saved_card = durable(card) if card else None
+    body = redact(text).strip() + (f"\n\n{MARK}{json.dumps(saved_card, default=str)} -->" if saved_card else '')
     actor = 'owner' if role == 'user' else 'assistant'
     actor_type = general.USER_TYPE if role == 'user' else general.ASSISTANT_TYPE
     # A double click must not duplicate the owner's words: those two calls may reach the backend
@@ -905,7 +801,22 @@ def record_related(store, dock_tid: int, item: dict | None, role: str, text: str
     actor_type = DISCUSSION_USER_TYPE if role == 'user' else DISCUSSION_ASSISTANT_TYPE
     add = getattr(store, 'add_comment_once', store.add_comment)
     for task_tid in tids:
-        if store.get_task(task_tid): add(task_tid, actor, actor_type, str(text or '').strip())
+        if not store.get_task(task_tid): continue
+        # our words about it are not news about it: the task keeps the read it had (store.processing_own_words)
+        own = getattr(store, 'processing_own_words', None)
+        with (own(task_tid, actor) if own else nullcontext()):
+            add(task_tid, actor, actor_type, redact(str(text or '')).strip())
+    # ...and durably against the ITEM (PW-132): the dock conversation is retained on its own clock and the
+    # browser's receipts were the only other record. One item's turn is kept on that item; a handful of fyi
+    # share one line, so a batch turn is attributed to none of them rather than to all four.
+    if (item or {}).get('kind') != 'fyis' and (item or {}).get('mid') or (item or {}).get('tid') and int(item['tid']) != int(dock_tid):
+        body = redact(str(text or '')).strip()
+        tid = int(item['tid']) if item.get('tid') and int(item['tid']) != int(dock_tid) else None
+        try:
+            recent = (operations.discussion(store, message_id=item.get('mid')) if item.get('mid') else operations.discussion(store, task_id=tid))[-2:]
+            if body and not any(x.get('Actor') == actor and x.get('Body') == body for x in recent):   # a double send (owner line + answer) is one turn
+                operations.discuss(store, actor, body, message_id=item.get('mid'), task_id=tid)
+        except Exception as e: logger.warning(f'concierge: the discussion was not kept against the item - {e}')
     return result
 
 
@@ -930,25 +841,20 @@ def history(store, tid: int) -> list:
     return out
 
 
-CHATS_KEPT_DAYS = 20          # a transcript older than this is nobody's memory - the list stays readable
-
-def chats(store, actor: str = 'owner') -> list:
+def chats(store, actor: str = 'owner', limit: int = 25, before: int = None) -> list:
     """Every conversation the guide has had, newest first: what it was about, when it ran, how long it
     lasted, how much of the pipe it got through, and which is open.
 
     A walk with nothing typed into it used to read "Walkthrough · 2026-09-03" three times over, with
     nothing to tell them apart (the owner, 2026-09-03: "Past chats don't really make sense... we need
     to add time to it, and how many emails processed so you can see past transacript"). So an untyped
-    walk is named by its clock and counted by the items it actually put on the table, and anything
-    past CHATS_KEPT_DAYS is dropped on the way past."""
-    cut = (datetime.now() - timedelta(days=CHATS_KEPT_DAYS)).strftime('%Y-%m-%d %H:%M:%S')
+    walk is named by its clock and counted by the items it actually put on the table. A page at a time,
+    and READ-ONLY (PW-157): what expires is retention's job on its own clock (retention.py), never a side
+    effect of looking at the list."""
     out = []
-    for t in store.dock_tasks(general.DOCK_TAG):
+    for t in store.dock_tasks(general.DOCK_TAG, limit=limit, before=before):
         rows = general.chat_rows(store, t['TaskId'])
         last = str((rows[-1]['CreatedAt'] if rows else t.get('CreatedAt')) or '')
-        if last and last < cut:
-            store.update_task(t['TaskId'], {'Status': 'dropped'}, actor)      # off the list; the task itself is history
-            continue
         first = next((c for c in rows if c.get('ActorType') == general.USER_TYPE), None)
         started = str(rows[0]['CreatedAt'] if rows else t.get('CreatedAt') or '')
         # what it got THROUGH: every card the assistant put on the table, mail counted apart
@@ -991,11 +897,27 @@ _CUES = {'show', 'me', 'tell', 'about', 'what', 'did', 'does', 'send', 'sent', '
          'when', 'where', 'who', 'is', 'are', 'be', 'been', 'not', 'no', 'yes', 'ok', 'okay', 'sure', 'but', 'so', 'just', 'all'}
 
 
-def lookup(store, text: str, days: int = 14) -> str | None:
+def lookup_days(text: str) -> int:
+    """How far back the owner's own words reach. A fixed fortnight meant anything older simply did not
+    exist to the assistant (the owner, 2026-09-07: "widen the lookup to intent of user - if he asked 6
+    months ago, search that"). The model can also say `days` outright on timeline.search."""
+    t = (text or '').lower()
+    m = re.search(r'(\d+)\s*(day|week|month|year)s?', t)
+    if m:
+        n, unit = int(m.group(1)), m.group(2)
+        return min(3650, n * {'day': 1, 'week': 7, 'month': 31, 'year': 365}[unit] + 7)
+    for phrase, d in (('last year', 400), ('this year', 365), ('year', 365), ('months', 190),
+                      ('month', 62), ('last week', 21), ('week', 14), ('yesterday', 3), ('today', 2)):
+        if phrase in t: return d
+    return 90                                   # the default reach, not a fortnight
+
+
+def lookup(store, text: str, days: int = None) -> str | None:
     """The pile item, or Timeline row, the owner's words point at - "what did Dana send", "the invoice
     thread". Sender and subject words only (a body matches everything), most of the meaningful words
     must hit, and the newest wins a tie. None when nothing is clearly meant."""
     from .routing import tokens
+    if days is None: days = lookup_days(text)
     ref = re.search(r'\bTQ-?0*(\d+)\b|#task=(\d+)', text or '', re.I)
     if ref:
         tid = int(ref.group(1) or ref.group(2))
@@ -1034,7 +956,18 @@ def _brain_for(store, tid: int, llm, trace=None, cancel=None, fast=True):
     """The caller's brain, or ours - always the fast lane: an API connector when there is one, else the CLI
     with its tools off. The assistant never runs anything, so no turn needs the slow gear."""
     if llm is not None: return llm
-    return brain(store, trace=trace, cancel=cancel, resume=_sid(store, tid) or None, fast=True)
+    try: return brain(store, trace=trace, cancel=cancel, resume=_sid(store, tid) or None, fast=True)
+    except Exception as e:
+        logger.warning(f'concierge: no brain for this turn - {e}')
+        return None
+
+
+_NUMBERED = re.compile(r'^\s*(\d+)[.)]\s*(.+?)\s*$', re.M)
+
+def _numbered(text: str, n: int) -> dict:
+    """{1: line, ..., n: line} from a numbered answer - all n of them, or nothing."""
+    got = {int(k): v for k, v in _NUMBERED.findall(text or '') if 1 <= int(k) <= n}
+    return got if len(got) == n else {}
 
 
 def open_day(store, llm=None, actor: str = 'owner', trace=None, cancel=None) -> dict:
@@ -1055,10 +988,11 @@ def open_day(store, llm=None, actor: str = 'owner', trace=None, cancel=None) -> 
     if not say:
         n = len(p['items'])
         say = ("Let's go through what we have today. " + (f"{n} thing{'s' if n != 1 else ''} waiting - {funnel.summary(p['items']).split(' - ', 1)[-1].split('.')[0]}." if n else 'Nothing is waiting on you yet.'))
+    chips = walk_chips(len(p['items']))
     card = {'key': 'brief', 'kind': 'brief', 'lane': 'report', 'title': 'Today', 'n': len(p['items']),
-            'mail': sum(1 for i in p['items'] if i['kind'] in funnel.MAIL_KINDS)}
+            'mail': sum(1 for i in p['items'] if i['kind'] in funnel.MAIL_KINDS), 'chips': chips}
     record(store, tid, 'assistant', say, card)
-    return {'say': say, 'card': card, 'opened': True}
+    return {'say': say, 'card': card, 'chips': chips, 'opened': True}
 
 
 def _live(store) -> list:
@@ -1200,18 +1134,86 @@ def _sweep(store, words: list, actor: str) -> tuple[int, list, list, list]:
     sender and the words that actually hit, which is what a standing rule is made of."""
     from .routing import tokens
     if not words: return 0, [], [], []
-    hit, titles, mids, swept = 0, [], [], []
+    hit, titles, mids, swept, cleared = 0, [], [], [], []
     for i in funnel.build(store, keep_surfaced=True)['items']:
         if i['lane'] in ('blocked', 'working'): continue                                   # an agent's question is never swept
         hay = set(tokens(f"{i.get('who') or ''} {i.get('email') or ''} {i.get('title') or ''}"))
         who = set(tokens(f"{i.get('who') or ''} {i.get('email') or ''}"))
         n = funnel.like(words, hay)
         if not n or (n < 2 and not funnel.like(words, who)): continue                      # the sender alone, or two words of the subject
-        funnel.settle(store, i['key'], 'done', actor, note='swept by the owner'); hit += 1
+        if not _clear_one(store, i['key'], actor, 'swept by the owner'): continue
+        hit += 1; cleared.append(i)
         titles.append(i['title']); mids.append(i.get('mid'))
         swept.append({'email': (i.get('email') or '').lower(), 'who': i.get('who') or '',
                       'words': [w for w in words if funnel.like([w], hay)]})
+    _off_the_table(store, cleared, actor)
     return hit, titles, mids, swept
+
+
+def select_items(store, sel: dict) -> list:
+    """The items a SELECTOR describes. Every field is optional and they AND together; an empty selector
+    matches nothing, deliberately - "clear everything" must be asked for by naming a field, never by
+    leaving them all blank."""
+    from .routing import tokens
+    sel = {k: v for k, v in (sel or {}).items() if v not in (None, '', [])}
+    if not sel: return []
+    want = lambda f: str(sel.get(f) or '').strip().lower()
+    cat, kind, lane = want('category'), want('kind'), want('lane')
+    who = want('sender')
+    words = [w for w in tokens(str(sel.get('contains') or ''))]
+    older = sel.get('older_than_hours')
+    out = []
+    # THE PIPE IS WHAT IS UNREAD. keep_surfaced=True is the whole timeline, all-time: it offered to
+    # "clear 72" when seven reports were actually waiting, because 65 of them had been read days ago
+    # (the owner, 2026-09-07: "there isn't 72 in the pipeline. There are 8 open report category in
+    # unread. 72 is all time but we don't care about those").
+    for i in funnel.build(store)['items']:
+        if i['lane'] in ('blocked', 'working'): continue                  # an agent's question is never swept
+        if cat and str(i.get('category') or '').lower() != cat: continue
+        if kind and str(i.get('kind') or '').lower() != kind: continue
+        if lane and str(i.get('lane') or '').lower() != lane: continue
+        if who:
+            hay = f"{i.get('who') or ''} {i.get('email') or ''}".lower()
+            if who not in hay: continue
+        if words and not funnel.like(words, set(tokens(i.get('title') or ''))): continue
+        if older:
+            age = funnel._dt(i.get('since') or i.get('when'))
+            if not age or (datetime.now() - age).total_seconds() < float(older) * 3600: continue
+        out.append(i)
+    return out
+
+
+def _clear_one(store, key: str, actor: str, note: str) -> bool:
+    """One item off the pipe, and say whether it actually went. A sweep that dies on its third item
+    left the first two read and told the owner nothing had moved."""
+    try:
+        funnel.settle(store, key, 'done', actor, note=note)
+        return True
+    except (ValueError, RuntimeError) as e:
+        logger.warning(f'concierge: {key} stayed in the pipe - {e}')
+        return False
+
+
+def _off_the_table(store, cleared: list, actor: str):
+    """What a sweep clears cannot stay in front of the owner. Settling ONE item drops Current with it
+    (the /api/funnel/settle road does), and the sweep did not - so "clear the reports" cleared seven
+    and left the report it was holding on the table (the owner, 2026-09-07: "did not clear current one
+    when i said clear the reports")."""
+    keys = {i['key'] for i in cleared}
+    if not keys: return
+    tid = general.dock_task(store, actor)[0]['TaskId']
+    if current_key(store, tid) in keys: set_current(store, tid, None, actor)
+
+
+def clear_selected(store, sel: dict, actor: str = 'owner') -> dict:
+    """Mark every item a selector names read. Read, never deleted - they stay on the Timeline."""
+    items = select_items(store, sel)
+    cleared = [i for i in items if _clear_one(store, i['key'], actor, 'cleared by the owner')]
+    _off_the_table(store, cleared, actor)
+    return {'cleared': len(cleared), 'stuck': len(items) - len(cleared),
+            'titles': [i['title'] for i in cleared][:8],
+            'mid': next((i.get('mid') for i in cleared if i.get('mid')), None), 'remember': False,
+            'note': '', 'words': [], 'rules': [], 'select': sel}
 
 
 def clear_matching(store, text: str, actor: str = 'owner', hint: str = '') -> dict:
@@ -1268,26 +1270,119 @@ def clear_matching(store, text: str, actor: str = 'owner', hint: str = '') -> di
             'words': used, 'rules': rules}
 
 
+def search_timeline(store, sel: dict, limit: int = 12) -> list:
+    """The history, by the same selector the pipe uses - and over ALL of it, not the last fortnight.
+    lookup() only ever looked 14 days back and needed half the owner's words to hit, so anything older
+    simply did not exist to the assistant (the owner, 2026-09-07: "lookup should find the correct
+    period and surface likely match")."""
+    from .routing import tokens
+    sel = {k: v for k, v in (sel or {}).items() if v not in (None, '', [])}
+    want = lambda f: str(sel.get(f) or '').strip().lower()
+    who, cat = want('sender'), want('category')
+    words = [w for w in tokens(str(sel.get('contains') or ''))]
+    older = sel.get('older_than_hours')
+    out = []
+    for r in store.feed(limit=4000, days=int(sel.get('days') or 3650)):
+        if r.get('Channel') == 'assistant': continue
+        hay = f"{r.get('FromName') or ''} {r.get('FromEmail') or ''}".lower()
+        if who and who not in hay: continue
+        if cat and str(r.get('Category') or '').lower() != cat: continue
+        subj = str(r.get('Subject') or '')
+        if words and not all(w in set(tokens(subj + ' ' + hay)) for w in words): continue
+        if older:
+            from datetime import datetime as _dt
+            d = funnel._dt(r.get('SentAt'))
+            if not d or (datetime.now() - d).total_seconds() < float(older) * 3600: continue
+        out.append({'ref': task_ref(r['TaskId']) if r.get('TaskId') else '', 'when': str(r.get('SentAt') or ''),
+                    'who': r.get('FromName') or r.get('FromEmail') or '?', 'title': subj, 'mid': r.get('MessageId')})
+        if len(out) >= limit: break
+    return out
+
+
+def read_op(store, kind: str, params: dict) -> str:
+    """A LOOK-UP, run at once. Changes nothing, waits for no confirmation, and never moves what is on
+    the table - asking about another task must not hijack the walk (the owner, 2026-09-07). The answer
+    goes back to the model, which then speaks with it."""
+    p = params or {}
+    if kind == 'task.read':
+        ref = str(p.get('ref') or '').strip()
+        m = re.search(r'(\d+)', ref)
+        tid = int(p.get('id') or (m.group(1) if m else 0) or 0)
+        t = store.get_task(tid) if tid else None
+        if not t: return f"There is no task {ref or p.get('id')}."
+        out = [f"{task_ref(tid)} [{t.get('Kind')} / {t.get('Status')}] {t.get('Title')}",
+               f"opened {str(t.get('CreatedAt') or '')[:16]} by {t.get('CreatedBy')}"]
+        if t.get('Summary'): out.append(f"the ask: {_cut(t['Summary'], 900)}")
+        for msg in (store.list_messages(tid) or [])[:6]:
+            out.append(f"  message {str(msg.get('SentAt') or '')[:16]} from {msg.get('FromName') or msg.get('FromEmail')}: "
+                       f"{_cut(msg.get('Subject') or '', 120)} - {_cut(msg.get('BodyText') or '', 400)}")
+        for c in (store.list_comments(tid) or [])[-8:]:
+            out.append(f"  {c.get('Actor')} ({c.get('ActorType')}) {str(c.get('CreatedAt') or '')[:16]}: {_cut(c.get('Body') or '', 500)}")
+        return NEWLINE.join(out)
+    if kind == 'report.read':
+        title = str(p.get('title') or '').strip().lower()
+        srcs = [x for x in store.list_sources(active_only=False) if x.get('Channel') == 'report']
+        src = (next((x for x in srcs if str(x.get('SourceId')) == str(p.get('source_id'))), None)
+               or next((x for x in srcs if title and title in str(x.get('Address') or '').lower()), None))
+        if not src: return 'No report by that name. The ones set up: ' + ', '.join(str(x.get('Address')) for x in srcs[:20])
+        out = [f"REPORT {src.get('Address')} (active: {bool(src.get('Active'))})"]
+        for r in (store.report_runs(src['SourceId'], 6) or []):
+            out.append(f"  {str(r.get('at') or '')[:16]} {'FAILED' if r.get('failed') else 'ok'} "
+                       f"{r.get('ms') or 0}ms - {_cut(r.get('error') or r.get('summary') or r.get('said') or '', 400)}")
+        return NEWLINE.join(out)
+    if kind == 'timeline.search':
+        sel = {k: v for k, v in p.items() if k != 'limit'}
+        if sel.get('select'): sel = sel['select']
+        limit = max(1, min(int(p.get('limit') or 12), 40))
+        hits = search_timeline(store, sel, limit)
+        if not hits: return 'Nothing in the history matches that.'
+        return NEWLINE.join(f"{h['ref'] or '-'} {h['when'][:16]} {h['who']}: {_cut(h['title'], 120)}" for h in hits)
+    return f'{kind} is not a look-up this app has.'
+
+
+def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: str = 'owner') -> dict:
+    """The model named an operation out of the registry. Turn it into the same proposal card a verb
+    makes - NOTHING runs here (PW-123/124); the owner's confirmation is still what executes it.
+
+    A SET is counted before it is offered, so the card says how many and the owner is never told
+    "done" about a number nobody checked (the owner, 2026-09-07: it cleared 13 of 72 and said done)."""
+    kind, params = call['kind'], dict(call.get('params') or {})
+    if toolcatalog.is_read(kind): raise ValueError(f'{kind} is a look-up, not something to confirm')
+    it = item or {}
+    if kind == 'pipe.clear':
+        sel = params.get('select') or {}
+        hits = select_items(store, sel)
+        if not hits:
+            said = ', '.join(f'{k}: {v}' for k, v in (sel or {}).items()) or 'nothing'
+            say_ = (f"Nothing in the pipe matches {said}, so there is nothing to clear. "
+                    'Say it another way and I will look again - nothing has been touched.')
+            record_related(store, tid, item, 'assistant', say_)
+            return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
+        where = ', '.join(f'{k}: {v}' for k, v in sel.items())
+        label = f"Clear {len(hits)} from the pipe"
+        summary = f"{len(hits)} item{'s' if len(hits) != 1 else ''} - {where}"
+        tail = ('They are marked read and stay on the Timeline; nothing is deleted. '
+                'Nothing has been started - confirm below, or tell me what to change.')
+        prop = _propose_raw(store, tid, 'pipe.clear', 0, {'select': sel, 'text': text}, label, summary, tail, actor, item)
+        return {'say': prop['say'], 'options': [], 'chips': [], 'decision': None, 'proposal': prop}
+    # everything else acts on ONE thing: the item on the table unless the call named its own target
+    for f in toolcatalog.CONTEXT_FILLED:                 # a pile key is ours to supply, never the model's
+        if f in operations.KINDS[kind][1] and not params.get(f):
+            if not it.get(f): raise ValueError(f'there is nothing on the table for {kind} to act on')
+            params[f] = it[f]
+    target = params.pop('target', None) or it.get('mid') or it.get('tid') or it.get('rid') or 0
+    label = toolcatalog.PURPOSE.get(kind, kind).split(' - ')[0].strip()
+    label = label[0].upper() + label[1:] if label else kind
+    prop = _propose_raw(store, tid, kind, int(target or 0), params, label, _where(it) or kind,
+                        'Nothing has been started - confirm below, or tell me what to change.', actor, item)
+    return {'say': prop['say'], 'options': [], 'chips': [], 'decision': None, 'proposal': prop}
+
+
 def _carry_out(store, tid: int, text: str, words: dict, item0: dict | None, actor: str) -> dict:
-    """The decisions Taskuary makes good on itself - a sweep of the pipe, a hand-off that becomes a
-    task, a set-up - so the receipt is the fact rather than an instruction to a page."""
+    """The two decisions that are already a REVIEW for the owner's yes rather than a proposal card: a switch
+    (proposals.py puts it in Review, nothing changes until approved) and a hand-off to a person (a draft,
+    sent only on approval)."""
     rec = lambda body, card=None: record_related(store, tid, item0, 'assistant', body, card)
-    if words['verb'] == 'clear':
-        out = clear_matching(store, text, actor, hint=_last_owner_words(store, tid, text))
-        if out['cleared']:
-            say_ = (f"Cleared {out['cleared']} from the pipe - {', '.join(out['titles'][:3])}{'…' if out['cleared'] > 3 else ''}. "
-                    'Read, not deleted; they are on the Timeline.'
-                    + (f" And remembered as {'a rule' if len(out['rules']) == 1 else str(len(out['rules'])) + ' rules'}: "
-                       + '; '.join(out['rules']) + ' - the next ones file themselves, and anything that actually asks you '
-                       'something still reaches you.' if out.get('rules') else '')
-                    + (' And that sender goes straight past you from now on.' if out.get('remember') and not out.get('rules') else ''))
-        elif out.get('rules'):
-            say_ = ('Nothing of those is in the pipe right now - but it is noted: ' + '; '.join(out['rules'])
-                    + ' files itself from now on. They stay on the Timeline, and anything that actually asks you '
-                      'something still reaches you.')
-        else: say_ = 'Nothing in the pipe matches those words.'
-        rec(say_ + ' Moving on.')
-        return {'say': say_ + ' Moving on.', 'options': [], 'decision': {**words, 'cleared': out}}
     if words['verb'] == 'setting':
         changes, says = switch_ask(text)
         try: out = propose_switch(store, changes, says, text, actor)
@@ -1300,34 +1395,6 @@ def _carry_out(store, tid: int, text: str, words: dict, item0: dict | None, acto
                 f"{says}. Approve it below and it changes; nothing changes until you do.")
         rec(say_, out['card'])
         return {'say': say_, 'options': [], 'decision': {'verb': 'setting', 'reviewId': out['reviewId'], 'changes': changes}}
-    if words['verb'] == 'split':
-        try: out = split_item(store, item0, text, actor)
-        except Exception as e:
-            logger.warning(f'concierge: the split did not happen - {e}')
-            say_ = f"I could not split that one - open {(item0 or {}).get('ref') or 'the task'} and split it there."
-            rec(say_)
-            return {'say': say_, 'options': [], 'decision': None}
-        say_ = (f"Split: {out['ref']} keeps \"{out['kept']}\" and {out['newRef']} is \"{out['title']}\". "
-                'Each is its own job now, so an agent sent at one only gets that one.'
-                if out.get('newRef') else
-                ('I can only see one ask in that one' + (f" - {out['why']}" if out.get('why') else '')
-                 + '. Tell me the second job in your own words and I will make it, or open '
-                 + f"{out.get('ref') or 'the task'} and split it there. It stays on the table either way."))
-        rec(say_)
-        return {'say': say_, 'options': [], 'decision': {'verb': 'split', **out}}
-    if words['verb'] == 'remember':
-        note = (words.get('text') or '').strip()
-        if not note:
-            say_ = 'Remember what? Say the fact and I will keep it.'
-            rec(say_)
-            return {'say': say_, 'options': [], 'decision': None}
-        mid_ = remember_fact(store, note, actor)
-        # a memory is not a verdict about the thing on the table: it does not settle it, and the
-        # receipt used to say "Moving on." while nothing moved at all (2026-09-03)
-        say_ = (f"Remembered: {_cut(note, 200)}."
-                + (f" {item0.get('ref') or 'The one on the table'} is still on the table." if item0 else ' What next?'))
-        rec(say_)
-        return {'say': say_, 'options': [], 'decision': {'verb': 'remembered', 'memoryId': mid_, 'note': note}}
     if words['verb'] == 'forward':
         try: out = forward_item(store, item0 or {}, words.get('who') or '', words.get('text') or '', actor)
         except Exception as e:
@@ -1338,55 +1405,7 @@ def _carry_out(store, tid: int, text: str, words: dict, item0: dict | None, acto
                 'Approving it sends the message and closes this one out here.')
         rec(say_, out['card'])
         return {'say': say_, 'options': [], 'decision': {'verb': 'forwarded', 'reviewId': out['reviewId'], 'to': out['to']}}
-    if words['verb'] == 'stop_agent':
-        end = _agent_task(store, item0, text)
-        if not end:
-            say_ = 'No agent is running right now - nothing to stop.'
-            rec(say_)
-            return {'say': say_, 'options': [], 'decision': None}
-        wrap = bool(re.search(r"\b(wrap|finished|done|it'?s done)\b", text, re.I))
-        if wrap:
-            # a wrap needs a transcript to write the report FROM: without one the page 422'd
-            # underneath "Wrapping TQ-0001 up..." (2026-09-03)
-            from . import terminal as term
-            try: has = bool((term.transcript_for(store, end) or ('',))[0].strip())
-            except Exception: has = False
-            if not has: wrap = False
-        say_ = (f"Wrapping {task_ref(end)} up - the report goes on the task, the reply is drafted and it closes."
-                if wrap else f"Stopping the agent on {task_ref(end)}. The task stays open - say close it when you want it closed."
-                             + ('' if not re.search(r'\bwrap\b', text, re.I) else ' There is no transcript to write a report from yet, so there is nothing to wrap.'))
-        rec(say_)
-        return {'say': say_, 'options': [], 'decision': {'verb': 'stop_agent', 'taskId': end, 'ref': task_ref(end), 'wrap': wrap}}
-    if words['verb'] in ('coder', 'regular_agent'):   # nothing on the table: their words ARE the brief
-        try:
-            job = str(words.get('text') or text).strip()
-            kind = 'coding' if words['verb'] == 'coder' else 'general'
-            brief = _handoff_brief(store, tid, job)
-            made = setup_task(store, brief, actor, title=_handoff_title(store, tid, job), kind=kind,
-                              agent_job=kind == 'general')
-            if kind == 'general':
-                session = general.start_session(store, made['taskId'], actor=actor)
-                threading.Thread(target=session.send_prompt, args=(brief,), daemon=True).start()
-            say_ = (f"{made['ref']} - \"{made['title']}\" is with the "
-                    f"{'coding' if kind == 'coding' else 'regular'} agent now. It comes back here when it is done, "
-                    'or when it needs a fact from you.')
-            rec(say_)
-            return {'say': say_, 'options': [], 'decision': {'verb': 'created', 'taskId': made['taskId'], 'ref': made['ref'], 'title': made['title']}}
-        except Exception as e:
-            logger.warning(f'concierge: the hand-off did not start - {e}')
-            say_ = "I could not start that here - open the Board and hand it to an agent."
-            rec(say_)
-            return {'say': say_, 'options': [], 'decision': None}
-    try:
-        made = setup_task(store, text, actor)
-        say_ = (f"{made['ref']} - \"{made['title']}\". Open it and I'll walk you through it step by step: it is a "
-                'conversation with the assistant, not a coding job, so nothing is built and no repository is touched.')
-        rec(say_)
-        return {'say': say_, 'options': [], 'decision': {'verb': 'walkthrough', 'taskId': made['taskId'], 'ref': made['ref'], 'title': made['title']}}
-    except Exception as e:
-        logger.warning(f'concierge: the set-up did not open - {e}')
-        rec(RECEIPTS['setup'])
-        return {'say': RECEIPTS['setup'], 'options': [], 'decision': words}
+    raise ValueError(f"{words['verb']} is a proposal - it is never carried out on the words alone")
 
 
 def _agent_task(store, item0: dict | None, text: str) -> int | None:
@@ -1445,7 +1464,7 @@ def propose_switch(store, changes: list, says: str, text: str, actor: str = 'own
 def remember_fact(store, note: str, actor: str = 'owner') -> int:
     """A fact the owner told us to keep. Written HERE rather than left to the page, so the receipt
     is the fact: "Remembered." used to go out whether or not a row was ever written (2026-09-03)."""
-    mid = store.add_memory({'Scope': 'global', 'ScopeKey': None, 'Note': note.strip()[:1000],
+    mid = store.add_memory({'Scope': 'global', 'ScopeKey': None, 'Note': redact(note.strip())[:1000],
                             'Source': 'manual', 'Active': 1, 'CreatedBy': actor})
     store.audit('memory', mid, 'create', actor, detail={'from': 'assistant chat'})
     return mid
@@ -1487,13 +1506,15 @@ def forward_item(store, item: dict, who: str, text: str, actor: str = 'owner') -
 
 def close_task(store, tid: int, actor: str = 'owner') -> bool:
     """Close a task from the chat: the pending draft on it is dismissed first (a closed task must not
-    leave a reply waiting for a yes), then the task itself. False when it was closed already."""
+    leave a reply waiting for a yes), then the task itself. False when already closed with no draft."""
     t = store.get_task(tid) or {}
-    if not t or t.get('Status') in ('done', 'dropped'): return False
-    rv = store.pending_review(tid)
-    if rv:
-        try: store.decide_review(rv['ReviewId'], 'no_reply', None, actor, note='the owner closed the task')
-        except Exception as e: logger.warning(f'concierge: the draft on {task_ref(tid)} stayed pending - {e}')
+    if not t: return False
+    closed = t.get('Status') in ('done', 'dropped')
+    rv = store.pending_review(tid, live_only=False)
+    if closed and not rv: return False
+    while rv:
+        store.decide_review(rv['ReviewId'], 'no_reply', None, actor, note='the owner closed the task')
+        rv = store.pending_review(tid, live_only=False)
     # a closed task has nobody working it: the PATCH road stops the session and this one did not, so
     # "close it" from the chat left the agent running in the checkout (2026-09-03)
     try:
@@ -1503,8 +1524,14 @@ def close_task(store, tid: int, actor: str = 'owner') -> bool:
             terminal.close(s.sid)
             store.add_comment(tid, actor, 'human', 'Stopped the agent - the task was closed from the chat.')
     except Exception as e: logger.warning(f'concierge: the agent on {task_ref(tid)} was not stopped - {e}')
-    store.update_task(tid, {'Status': 'done'}, actor)
+    if not closed: store.update_task(tid, {'Status': 'done'}, actor)
     store.audit('task', tid, 'close_from_assistant', actor)
+    # ...and the row goes off Unread with it (the owner, 2026-09-07: "it should just go off the unread
+    # timeline"). Closing is the decision, wherever it was made; only the CHAT's close used to post the
+    # read receipt, so a close on the Tasks page left the mail behind it sitting in the pipe as an fyi.
+    # A reply that arrives afterwards is a new unit and comes back unread, and All keeps the whole thread.
+    try: funnel.settle(store, f'task:{tid}', 'done', actor, note='the task was closed')
+    except Exception as e: logger.debug(f'the closed task did not settle its item: {e}')
     funnel.invalidate()
     return True
 
@@ -1545,17 +1572,57 @@ def card_for(item: dict) -> dict:
     """The card under the line - by kind, by code. The renderer draws it from these few fields
     and reloads the live facts (draft text, agent tail) from the item's ids."""
     return {k: item.get(k) for k in ('key', 'kind', 'lane', 'title', 'who', 'when', 'why', 'mid', 'tid', 'ref', 'rid', 'idea', 'coding', 'source_id', 'preview', 'sent', 'stale', 'sig', 'more',
-                                       'idea_kind', 'agent', 'asking', 'tail', 'event', 'summary', 'bad', 'draft', 'channel', 'category', 'action', 'sid', 'mode')}
+                                       'idea_kind', 'agent', 'asking', 'tail', 'event', 'summary', 'bad', 'draft', 'channel', 'category', 'action', 'sid', 'mode',
+                                       'presentation_revision', 'order_band', 'processing_id', 'member_ids', 'aliases', 'unread', 'deferred', 'actionable')}
+
+
+def move_on(store, key: str, actor: str = 'owner') -> dict:
+    """Put down the thing the owner is walking away from. It is READ - and if it was still waiting on a
+    reply, that reply is no longer owed: the pending draft is decided `no_reply` and leaves the Review
+    queue (the owner, 2026-09-07: "if there is agent awaiting your approval for reply and you hit next
+    then no more reply needed. It's closed").
+
+    The TASK is left alone. Nothing is cancelled and no session is stopped - a parked agent goes on
+    working, it just stops interrupting; reopening is the Board's business, not the walk's."""
+    if not key: return {}
+    try: item = funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
+    except Exception as e:
+        logger.debug(f'concierge: nothing to put down for {key} - {e}'); return {}
+    if not item: return {}
+    funnel.settle(store, key, 'surfaced', actor, note=item.get('sig'), read=True)
+    ended = []
+    for rid in ([item['rid']] if item.get('rid') else []):
+        rv = store.get_review(int(rid))
+        if not rv or rv.get('Status') not in ('pending', 'held'): continue
+        from . import verdicts
+        try:
+            verdicts.decide(store, rv, 'no_reply', None, 'walked past in the chat - the owner did not want a reply', actor)
+            ended.append(int(rid))
+        except Exception as e: logger.warning(f'concierge: the draft on {key} could not be put down - {e}')
+    return {'key': key, 'read': True, 'reviews_ended': ended}
 
 
 def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = None, trace=None, cancel=None,
-            include_surfaced: bool = False, exclude: str = None) -> dict:
+            include_surfaced: bool = False, exclude: str = None, selection=None, commit_guard=None,
+            bound_dock: dict = None, leaving: str = None) -> dict:
     """The next thing out of the pipe (or the one named; or the next piece of MAIL), said in one
-    breath and marked as shown. Nothing left: says so."""
-    task, _ = general.dock_task(store, actor)
+    breath and marked as shown. Nothing left: says so.
+
+    `leaving` is the item the owner is walking away from - Next, and only Next. It is put down on the
+    way out (move_on): read, and any reply it was still waiting on is ended."""
+    if selection is not None and key is not None:
+        raise ValueError('a captured automatic selection cannot name a different item')
+    put_down = (lambda: move_on(store, leaving, actor)) if leaving else (lambda: None)
+    if bound_dock is not None and selection is None:
+        raise ValueError('a bound dock is only valid with a captured selection')
+    task = bound_dock if bound_dock is not None else general.dock_task(store, actor)[0]
     tid = task['TaskId']
-    p = funnel.pile(store, force=True)
-    item = funnel.next_item(store, key, only, include_surfaced, exclude) or (funnel.item_for_key(store, key) if key else None)
+    p = selection.pile if selection is not None else funnel.pile(store, force=True)
+    item = selection.selected if selection is not None else (
+        funnel.next_item(store, key, only, include_surfaced, exclude)
+        or (funnel.item_for_key(store, key) if key else None)
+    )
+    guarded = (lambda: commit_guard()) if commit_guard is not None else (lambda: nullcontext())
     if not item:
         left = [i for i in p['items'] if not i.get('settling')]
         waiting = [i for i in left if i.get('surfaced') and i['lane'] != 'working']
@@ -1567,9 +1634,19 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         elif only and left:
             # the mail is done; what remains is the rest of the pipe - offer it rather than call the day over
             say = f"That's all the mail. {len(left)} other thing{'s' if len(left) != 1 else ''} still wait{'s' if len(left) == 1 else ''} - {funnel.summary(left).split(' - ', 1)[-1].split('.')[0]}. Say next and I'll take you through them."
+        elif selection is not None and any(selection.pending.values()):
+            pending = selection.pending
+            parts = ([f"{pending['working']} in progress"] if pending['working'] else [])
+            parts += ([f"{pending['settling']} still being triaged"] if pending['settling'] else [])
+            parts += ([f"{pending['scheduled']} scheduled for a little later"] if pending['scheduled'] else [])
+            say = "Nothing else needs you right now; " + ', '.join(parts) + '.'
         else: say = ALL_DONE
-        record(store, tid, 'assistant', say)
-        return {'item': None, 'say': say, 'options': [], 'left': len(p['items']), 'exhausted': only if (only and left) else None}
+        with guarded():
+            put_down()
+            if not key: set_current(store, tid, None, actor)                  # the walk ran out: nothing is on the table
+            record(store, tid, 'assistant', say)
+        return {'item': None, 'say': say, 'options': [], 'chips': walk_chips(len(left)), 'left': len(p['items']),
+                'exhausted': only if (only and left) else None}
     # an agent has this one now (it started after the pile was built, or the owner just sent it): there is
     # nothing for the owner to do until it stops, so say so, let it go, and take the next one. It comes
     # back by itself - as the agent's question, its draft, or its finished job.
@@ -1577,221 +1654,658 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         # it stays in the pipe, at the top, in hand - and comes to the front by itself when the agent stops
         who = item.get('working') or next((t.get('agent') or t.get('label') for t in _live(store) if t.get('taskId') == item['tid']), None) or 'the agent'
         say = f"{item.get('ref') or item['title']} is with {who} right now - nothing for you until it stops or asks. I'll bring it down then."
-        record_related(store, tid, item, 'assistant', say + ('' if key else ' Moving on.'))
-        return surface(store, None, llm, actor, only, trace, cancel, include_surfaced, exclude) if not key else {'item': None, 'say': say, 'options': [], 'left': len(p['items'])}
+        with guarded():
+            put_down()
+            record_related(store, tid, item, 'assistant', say + ('' if key else ' Moving on.'))
+        return surface(store, None, llm, actor, only, trace, cancel, include_surfaced, exclude) if not key else {'item': None, 'say': say, 'options': [], 'chips': walk_chips(len(p['items'])), 'left': len(p['items'])}
     # FYIs have no action to take, so the normal walk brings four together. A row explicitly
     # clicked on the Timeline still opens by itself (`key` is set); only Next/Walk batches them.
     if not key and item['lane'] == 'fyi':
-        batch = funnel.fyi_batch(store, item)
+        batch = item.get('items') if selection is not None and item.get('kind') == 'fyis' else funnel.fyi_batch(store, item)
         llm = _brain_for(store, tid, llm, trace, cancel, fast=True) if (llm is not None or INTRO_AI) else None
-        say = ''
+        say, gists, remember_llm = '', {}, False
         if llm:
             try:
-                fx = '\n'.join(f"- {i.get('who') or '?'}: \"{i['title']}\" - {i.get('preview') or ''}" for i in batch)
+                # the shape is code's (one numbered line per entry, so each gets its own summary - PW-151); the words are COUNSEL's
+                fx = '\n'.join(f"{n}. {i.get('who') or '?'}: \"{i['title']}\" - {i.get('preview') or ''}" for n, i in enumerate(batch, 1))
                 user = (f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'])}\n\n"
                         f"FYI - {len(batch)} thing{'s' if len(batch) != 1 else ''} people told the owner, nothing to do with any of them:\n{fx}\n\n"
-                        "Sum them up in one or two sentences - who said what and the gist. No options line and no question is needed.")
+                        f"Answer with exactly {len(batch)} numbered line{'s' if len(batch) != 1 else ''}, in that order, one sentence each: who said what, and the gist. No options line.")
                 say, _options = parse_options(str(llm(_system(store, llm), user, max_tokens=MAX_TOKENS) or '').strip())
-                _remember_sid(store, tid, llm)
+                if not in_character(say): say = ''
+                gists = _numbered(say, len(batch))
+                remember_llm = True
             except Exception as e: logger.warning(f'concierge: the fyi pass failed - {e}')
         if not say:
             say = (f"{len(batch)} thing{'s' if len(batch) != 1 else ''} people told you, nothing to do: "
                    + '; '.join(f"{i.get('who') or 'someone'} - {i['title']}" for i in batch) + '.')
-        for i in batch: funnel.settle(store, i['key'], 'surfaced', actor)
+        batch = [i | {'summary': gists.get(n) or i.get('summary') or i.get('preview') or ''} for n, i in enumerate(batch, 1)]
         card = {'key': 'fyis:' + ','.join(i['key'] for i in batch), 'kind': 'fyis', 'lane': 'fyi',
                 'title': f"{len(batch)} fyi", 'who': '', 'when': batch[0].get('when'),
                 'since': batch[0].get('since'), 'channel': batch[0].get('channel'),
-                'why': 'people told you things; nothing to do', 'items': [card_for(i) for i in batch]}
-        record_related(store, tid, card, 'assistant', say, card)
-        return {'item': card, 'say': say, 'options': [], 'left': len(p['items']) - len(batch)}
+                'why': 'people told you things; nothing to do', 'items': [card_for(i) for i in batch],
+                'presentation_revision': item.get('presentation_revision')}
+        with guarded():
+            put_down()
+            if remember_llm:
+                try: _remember_sid(store, tid, llm)
+                except Exception as e: logger.warning(f'concierge: the fyi conversation did not save - {e}')
+            # shown IS read: the state is `surfaced`, and it carries the entry's own summary
+            for n, i in enumerate(batch, 1): funnel.settle(store, i['key'], 'surfaced', actor, note=None if i.get('sig') else gists.get(n), read=True)
+            card['chips'] = chips_for(store, card)
+            set_current(store, tid, card['key'], actor)
+            record_related(store, tid, card, 'assistant', say, card)
+        return {'item': card, 'say': say, 'options': [], 'chips': card['chips'], 'left': len(p['items']) - len(batch)}
 
     llm = _brain_for(store, tid, llm, trace, cancel, fast=True) if (llm is not None or INTRO_AI) else None   # the facts speak unless asked otherwise
-    say, options = '', []
+    say, options, wanted, remember_llm = '', [], '', False
     if llm:
         try:
-            ask = ("A REPORT landed - one sentence: which report, when, and whether it failed (then name the cause from what they wrote). Do NOT summarize "
-                   "its contents; the owner reads it with the button. ") if item['kind'] == 'report' and not item.get('bad') else \
-                  ("Say it in THREE BEATS, plainly, two or three sentences: (1) WHERE IT CAME FROM - who wrote, on what channel, when, and what they "
-                    "asked in their words; when TRIAGE COMBINED messages, describe that whole bundle together in this one presentation; "
-                    "(2) WHAT WAS DONE - triage's verdict, or what the agent did and found (THE AGENT FOUND / TASK NOW), or "
-                   "nothing yet; (3) WHAT YOU NEED FROM THE OWNER - name the button: approve the draft below, answer the agent, read it, or nothing. "
-                   + ('This is a REPLY waiting for the yes: beat 3 is whether to send THE DRAFT below. ' if item['kind'] in ('review', 'action') else '')
-                   + ('The agent is parked and waiting: beat 3 is its question. ' if item['kind'] == 'agent' else ''))
-            say, options = _ask(store, llm, tid, item, ask, p['items'])
-            _remember_sid(store, tid, llm)
+            # the card's structure is code's to state; the explanation itself is COUNSEL's (PW-153)
+            ask = ('Introduce the item on the table to the owner. '
+                   + ('A report landed: say which and when, and whether it failed - its contents are read with the button, not summarised here. '
+                      if item['kind'] == 'report' and not item.get('bad') else '')
+                   + ('The card below holds the draft that waits for their yes. ' if item['kind'] in ('review', 'action') else '')
+                   + ('The agent is parked on the question in the card. ' if item['kind'] == 'agent' else ''))
+            say, options, wanted = _ask(store, llm, tid, item, ask, p['items'])
+            remember_llm = True
         except Exception as e: logger.warning(f'concierge: the model pass failed - {e}')
     if not say: say = fallback(item, True)
-    funnel.settle(store, item['key'], 'surfaced', actor, note=item.get('sig'))
-    record_related(store, tid, item, 'assistant', say + (f"\nOPTIONS: {' | '.join(options)}" if options else ''), card_for(item))
-    return {'item': item, 'say': say, 'options': options, 'left': len(p['items']) - 1}
+    chips = chips_for(store, item, wanted)
+    with guarded():
+        put_down()
+        if remember_llm:
+            try: _remember_sid(store, tid, llm)
+            except Exception as e: logger.warning(f'concierge: the model conversation did not save - {e}')
+        # in the chat = read, without exception (the owner, 2026-09-07: "hitting next or done should mark it
+        # read and then move on"). A draft waiting on a yes used to be held back unread; walking past one now
+        # ends the reply obligation instead - see move_on(), which the Next road calls on the way out.
+        funnel.settle(store, item['key'], 'surfaced', actor, note=item.get('sig'), read=True)
+        set_current(store, tid, item['key'], actor)                          # on the table, written down (PW-162)
+        record_related(store, tid, item, 'assistant', say + (f"\nOPTIONS: {' | '.join(options)}" if options else ''),
+                       card_for(item) | {'chips': chips})
+    return {'item': item | {'chips': chips}, 'say': say, 'options': options, 'chips': chips, 'left': len(p['items']) - 1}
 
 
-def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace=None, cancel=None) -> dict:
-    """The owner's words, answered briefly - about the item on the table when there is one."""
+# What the owner may decide about the thing on the table, as PROPOSALS (PW-123): verb -> (operation kind,
+# the button's label, whether confirming it settles the item on the table). Nothing here runs on the words;
+# the confirmed proposal runs through server._run_operation, the same handler every entry point uses.
+PROPOSALS = {
+    'coder': ('task.create_from_message', 'Send to the coding agent', True), 'regular_agent': ('task.create_from_message', 'Send to a regular agent', True),
+    'mine': ('task.create_from_message', 'Put it on my list', True),
+    'not_ours': ('message.file', 'File it', True), 'not_ours_remember': ('preference.exclude_sender', 'File it and remember this kind', True),
+    'not_ours_sender': ('preference.exclude_sender', 'Ignore this sender from now on', True),
+    'block_sender': ('preference.sender_rule', 'Add an exclusion rule in Settings', True),
+    'archive': ('message.archive', 'Archive it', True),
+    'close': ('task.complete', 'Close the task', True), 'done': ('item.settle', 'Mark it handled', True),
+    'later': ('item.settle', 'Push it back', True), 'skip': ('item.settle', 'Skip until tomorrow', True),
+    'approve': ('review.approve', 'Send the reply', True), 'answer_agent': ('agent.answer', 'Send the answer to the agent', True),
+    'stop_agent': ('agent.stop', 'Stop the agent', False), 'rerun': ('report.rerun', 'Run the report again', True),
+    'remember': ('memory.remember', 'Remember it', False), 'split': ('task.split', 'Split it in two', False),
+    'clear': ('pipe.clear', 'Clear them from the pipe', False), 'setup': ('task.setup', 'Open the walk-through', False),
+}
+AUTO = ('done', 'skip', 'later', 'close')     # settles what is on the table; nothing leaves, nothing is handed off
+# the operations that take the item off the table, so the walk moves on after them (the page reads
+# `settles` off the proposal it is holding; a chat comes back a turn later and has only the kind)
+SETTLING_KINDS = frozenset(kind for kind, _label, settles in PROPOSALS.values() if settles)
+NO_BRAIN = ('I can read you the facts, but I cannot take an instruction without an AI connector - set one up under '
+            "Connections, or use the card's own buttons.")
+
+
+def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', title: str = None, dock_tid: int = None) -> dict:
+    """A hand-off with nothing on the table: the owner's words ARE the brief. The confirmed `task.create_from_text`
+    lands here - the task is made and the agent started only then (PW-124)."""
+    job = str(text or '').strip()
+    if not job: raise ValueError('say what the agent should do')
+    tid = dock_tid or general.dock_task(store, actor)[0]['TaskId']
+    brief = _handoff_brief(store, tid, job)
+    made = setup_task(store, brief, actor, title=title or _handoff_title(store, tid, job), kind=kind, agent_job=kind == 'general')
+    if kind == 'general':
+        session = general.start_session(store, made['taskId'], actor=actor)
+        threading.Thread(target=session.send_prompt, args=(brief,), daemon=True).start()
+    return made
+
+
+def _resolve_named(store, phrase: str, item: dict | None) -> str | None:
+    """The pile key the model's ON: words name - '?' when they name something that cannot be found."""
+    from .routing import tokens
+    ref = re.search(r'\bTQ-?0*(\d+)\b', phrase or '', re.I)
+    if ref: return f"task:{int(ref.group(1))}" if store.get_task(int(ref.group(1))) else '?'
+    words = [w for w in tokens(phrase or '') if w not in _CUES and w not in _FILLER and len(w) > 2]
+    hit = (lookup(store, ' '.join(words)) if words else None) or _pile_hit(store, words, item or {})
+    return hit or '?'
+
+
+def open_proposal(store, dock_tid: int) -> dict | None:
+    """The proposal on the table - the newest proposal card in this chat whose row is still `proposed`."""
+    for c in reversed(general.chat_rows(store, dock_tid)):
+        m = _MARK.search(c.get('Body') or '')
+        if not m: continue
+        try: card = json.loads(m.group(1))
+        except ValueError: continue
+        if card.get('kind') != 'proposal': continue
+        op = operations.get(store, card.get('op')) if card.get('op') else None
+        return op if op and op.get('status') == 'proposed' else None
+    return None
+
+
+def run_proposal(store, op: dict, actor: str = 'owner') -> dict:
+    """Execute a confirmed proposal outside a request: the SAME handler the page's Confirm button runs,
+    with the after-work (learning, auto-drafts, closing a session) drained here instead of by FastAPI.
+
+    The handlers are route functions and they read the app's own store, which is this one in a running
+    Taskuary; a test that hands a different store must patch `server.store` as the API tests do."""
+    import asyncio
+    from fastapi import BackgroundTasks
+    from .server import _run_operation
+    bg = BackgroundTasks()
+    out = operations.execute(store, op['id'], op['version'], lambda: _run_operation(op, bg), actor)
+    if bg.tasks:
+        try: asyncio.run(bg())
+        except Exception as e: logger.warning(f'the work after {op["id"]} did not finish: {e}')
+    return out
+
+
+def confirm_open(store, tid: int, item: dict | None, cancelled: bool, actor: str = 'owner') -> dict:
+    """The owner's yes (or no) to the card already in front of them, in words instead of a click.
+
+    A chat has no buttons at all, so without this the phone could never send a drafted reply. The
+    desktop had the same hole from the other side: a typed "yes go ahead" was read as the decision
+    again, which only re-proposed the same operation (version 2) and changed nothing."""
+    prop = open_proposal(store, tid)
+    if not prop:
+        say_ = 'Nothing is waiting on your yes just now.'
+        record_related(store, tid, item, 'assistant', say_)
+        return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
+    if cancelled:
+        operations.cancel(store, prop['id'], actor)
+        say_ = f"Left alone - {describe_op(store, prop)[0].lower()} is not happening. Nothing was touched."
+        record_related(store, tid, item, 'assistant', say_)
+        return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
+    out = run_proposal(store, prop, actor)
+    return {'say': receipt(store, out, actor), 'options': [], 'chips': [], 'decision': {'verb': 'confirm'},
+            'executed': {'id': prop['id'], 'kind': prop['kind'], 'status': out.get('status')},
+            'settled': out.get('status') == 'done' and prop['kind'] in SETTLING_KINDS}
+
+
+def _where(it: dict) -> str:
+    title = str(it.get('title') or '')
+    who = it.get('who') if it.get('who') and not title.lower().startswith(str(it['who']).lower()) else ''   # "Assistant - Assistant idea"
+    return f"{who + ' - ' if who else ''}{title}{' (' + it['ref'] + ')' if it.get('ref') else ''}".strip()
+
+
+def _brief_from_item(store, item: dict) -> str:
+    """What to tell an agent when the owner pressed a button instead of typing: the item itself - what it
+    is, who it is from, and everything already known about it (the same facts the assistant reads)."""
+    return f"Take this on and report back what you find: {_where(item) or 'the item below'}.\n\n{facts(store, item)}".strip()
+
+
+def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: str, actor: str = 'owner',
+                elsewhere: bool = False, table: dict | None = None) -> dict:
+    """The owner's decision as a proposal row (operations.propose): the exact target and parameters, a label
+    for its button, and the line that says what WILL happen. A decision that changes the proposal already on the
+    table revises it (a new confirmation version) instead of stacking a second one (PW-123)."""
+    verb = decision['verb']; kind, label, settles = PROPOSALS[verb]
+    d_text = (decision.get('text') or '').strip()
+    it = item or {}
+    target, params, note = None, {}, ''
+    if verb in ('coder', 'regular_agent', 'mine'):
+        want = {'coder': 'coding', 'regular_agent': 'general', 'mine': 'task'}[verb]
+        if it.get('mid'): target, params = it['mid'], {'kind': want, 'instructions': d_text or None}
+        elif verb == 'mine': raise ValueError('nothing is on the table to put on your list')
+        else:
+            # A hand-off asked for by BUTTON carries no sentence, so the brief is the item itself. Without
+            # this the chip proposed a task with no text at all and operations refused it outright
+            # ('task.create_from_text needs text') - an offered word that did nothing.
+            job = (d_text or text or '').strip() or _brief_from_item(store, it)
+            title = _handoff_title(store, dock_tid, job) if (d_text or text or '').strip() else (it.get('title') or 'Look into this')
+            kind, target, params = 'task.create_from_text', 0, {'kind': want, 'text': job, 'title': title}
+            label = 'Start a coding agent on it' if want == 'coding' else 'Start a regular agent on it'
+    elif verb == 'not_ours': target, params = it.get('mid'), {'learn': False}
+    elif verb in ('not_ours_remember', 'not_ours_sender'): target, params = it.get('mid'), {'scope': 'subject' if verb == 'not_ours_remember' else 'sender'}
+    elif verb == 'block_sender': target = it.get('mid')      # the rule is keyed on the sender of THIS message
+    elif verb == 'archive': target = it.get('mid')
+    elif verb == 'close': target = it.get('tid')
+    elif verb in ('done', 'later', 'skip'):
+        if not it.get('key'): raise ValueError('nothing is on the table')
+        # "done" said about an agent parked on a question is not a row to tick: the job is over, so the task
+        # closes and the session ends with it - the shared task.complete road does both
+        if verb == 'done' and it.get('kind') == 'agent' and it.get('tid'): kind, label, target, params = 'task.complete', 'Close the task and stop its agent', it['tid'], {'agent': True}
+        else: target, params = it.get('tid') or 0, {'key': it['key'], 'verb': verb, 'tid': it.get('tid'), 'rid': it.get('rid'), 'kind': it.get('kind')}
+    elif verb == 'approve': target = it.get('rid')
+    elif verb == 'answer_agent': target, params = it.get('tid'), {'text': d_text or 'yes'}
+    elif verb == 'stop_agent':
+        end = _agent_task(store, item, text)
+        if not end: raise ValueError('no agent is running right now - nothing to stop')
+        asked_wrap = wrap = bool(re.search(r"\b(wrap|finished|it'?s done)\b", text, re.I))
+        if wrap:                                     # a wrap writes the report FROM the transcript: without one there is nothing to wrap
+            from . import terminal as term
+            try: wrap = bool((term.transcript_for(store, end) or ('',))[0].strip())
+            except Exception: wrap = False
+        target, params, label = end, {'wrap': wrap}, ('Wrap it up' if wrap else label)
+        if asked_wrap and not wrap: note = ' There is no transcript to write a report from yet, so there is nothing to wrap - this stops the agent and the task stays open.'
+    elif verb == 'rerun': target = it.get('source_id')
+    elif verb == 'remember':
+        if not d_text: raise ValueError('remember what? Say the fact and I will keep it')
+        target, params = 0, {'note': d_text}
+    elif verb == 'split': target, params = it.get('tid'), {'text': text, 'key': it.get('key')}
+    elif verb == 'clear': target, params = 0, {'text': text, 'hint': _last_owner_words(store, dock_tid, text)}
+    elif verb == 'setup': target, params = 0, {'text': d_text or text}
+    if target is None: raise ValueError(f"there is nothing to {SAYS_VERB.get(verb, verb)} on this one")
+    params = {k: v for k, v in params.items() if v is not None}
+    prev = open_proposal(store, dock_tid)
+    if prev and prev['kind'] == kind and int(prev['target']) == int(target): op = operations.revise(store, prev['id'], params, actor)
+    else:
+        if prev: operations.cancel(store, prev['id'], actor)
+        op = operations.propose(store, kind, target, params, actor)
+    where = _where(it) if it else (params.get('title') or _cut(params.get('text') or params.get('note') or '', 120))
+    summary = f"{where} → {label[0].lower() + label[1:]}"
+    lead = (f"That is {where}, not the one on the table - so I am proposing it there; {(table or {}).get('ref') or 'the one on the table'} is untouched. "
+            if elsewhere else '')
+    head = f"Changed to: {label} - {summary}" if op['version'] > 1 else f"{label}: {summary}"
+    say_ = lead + f"{head}.{note} Nothing has been started - confirm below, or tell me what to change."
+    return {**op, 'verb': verb, 'label': label, 'summary': summary, 'settles': bool(settles and not elsewhere),
+            'key': it.get('key'), 'ref': it.get('ref'), 'tid': it.get('tid'), 'say': say_}
+
+
+def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'owner', table: bool = False) -> dict:
+    """A card's own button on ONE entry (PW-151): the same proposal the words would make, without the interpreter -
+    the target is explicit. From a card it never settles what is on the table and the entry's siblings are not
+    touched; from the chips under the composer (`table`) the entry IS the table, so a plain verb runs at once and
+    settles it, exactly as the typed word would."""
+    if verb not in PROPOSALS: raise ValueError(f'{verb} is not something a card proposes')
+    item = funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
+    if not item: raise ValueError('that one is not in the pipe any more')
+    # kind routes the task (2026-08-30): a general task goes to a regular agent, whatever the chip is called
+    if verb == 'coder' and item.get('tid') and (store.get_task(item['tid']) or {}).get('Kind') == 'general': verb = 'regular_agent'
+    tid = general.dock_task(store, actor)[0]['TaskId']
+    why = cannot(item, verb, store)
+    if why: raise ValueError(why)
+    record_related(store, tid, item, 'user', f"{PROPOSALS[verb][1]}: {item.get('title') or item.get('ref') or key}")
+    prop = propose_for(store, tid, {'verb': verb, 'text': text or ''}, item, text or '', actor, table=item if table else None)
+    prop['settles'] = bool(table and PROPOSALS[verb][2])
+    if table and verb in AUTO: prop.update(auto=True, say=f"{prop['label']} - {_where(item)}.")
+    record_related(store, tid, item, 'assistant', prop['say'], {'kind': 'proposal', 'key': prop.get('key'), 'title': prop['label'], 'op': prop['id'],
+                                                               'tid': prop.get('tid'), 'ref': prop.get('ref'), 'lane': item.get('lane')})
+    return prop
+
+
+# ── setting things up from the chat (PW-194..197): sorted and gathered by AI, confirmed, created through the tabs' roads ──
+# a token typed into the chat is not kept (PW-196): what looks like one is replaced before any row is written
+_SECRETISH = re.compile(r"(?<![\w-])(?:xox[abpr]-[\w-]{10,}|sk-[A-Za-z0-9_-]{16,}|gh[pous]_[A-Za-z0-9]{20,}|AKIA[A-Z0-9]{12,}"
+                        r"|ey[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|[A-Fa-f0-9]{32,})(?![\w-])")
+SECRET_WORDS = re.compile(r'(secret|token|password|passwd|api[_ -]?key|refresh|private[_ -]?key|client[_ -]?secret|bearer)', re.I)
+SETUP_QUESTIONS = 'setup_questions'
+SETUP_SORT_SYSTEM = ('You sort one set-up request from the owner of a small company\'s assistant. Answer JSON only: '
+                     '{"kind": "report" | "connection" | "investigate", "provider": "<connector type or null>", "why": "<one sentence>"}. '
+                     'A REPORT reads connected systems on a schedule and files what it found (a check, a digest, a scheduled agent job). '
+                     'A CONNECTION adds or configures a system Taskuary talks to (mail, chat, a database, a books system, an AI provider) - '
+                     'name its type from connector_types when you can. INVESTIGATE is a set-up that needs real digging first - a portal to '
+                     'read, systems to choose between, several moving parts - where a walk-through with an agent is the honest next step. '
+                     'A simple configuration is never investigate.')
+
+
+def redact(text: str) -> str: return _SECRETISH.sub('[redacted]', str(text or ''))
+
+
+def _compose_llm(store, trace=None, cancel=None):
+    try: return llm_mod.build_llm(store, trace=trace, cancel=cancel)
+    except Exception as e:
+        logger.warning(f'concierge: no composer brain - {e}'); return None
+
+
+def sort_setup(store, text: str, llm) -> dict:
+    """What kind of set-up the words ask for, by the model: a report, a connection (and to what), or digging."""
+    from . import compose
+    types = sorted(store_mod.DEFAULT_ROLES)
+    try: out = compose._json(llm(SETUP_SORT_SYSTEM, json.dumps({'request': text, 'connector_types': types}), max_tokens=300)) or {}
+    except Exception as e:
+        logger.warning(f'concierge: the set-up sort failed - {e}'); out = {}
+    kind = str(out.get('kind') or 'report').lower(); prov = str(out.get('provider') or '').lower().strip()
+    return {'kind': kind if kind in ('report', 'connection', 'investigate') else 'report', 'provider': prov if prov in types else None,
+            'why': str(out.get('why') or '')[:300]}
+
+
+def _pending_setup(store, tid: int) -> dict | None:
+    """The set-up questions asked last turn, if the last assistant line asked them."""
+    rows = [c for c in general.chat_rows(store, tid) if c.get('ActorType') == general.ASSISTANT_TYPE]
+    card = _card_of(rows[-1]) if rows else None
+    return card if card and card.get('kind') == SETUP_QUESTIONS else None
+
+
+def _propose_raw(store, dock_tid: int, kind: str, target: int, params: dict, label: str, summary: str, tail: str, actor: str,
+                 item: dict | None = None) -> dict:
+    """A proposal that is not about the item on the table: the same revise-or-replace rule as propose_for, recorded as a card."""
+    prev = open_proposal(store, dock_tid)
+    if prev and prev['kind'] == kind and int(prev['target']) == int(target): op = operations.revise(store, prev['id'], params, actor)
+    else:
+        if prev: operations.cancel(store, prev['id'], actor)
+        op = operations.propose(store, kind, target, params, actor)
+    text = (f"Changed to: {label} - {summary}" if op['version'] > 1 else f"{label}: {summary}") + f". {tail}"
+    record_related(store, dock_tid, item, 'assistant', text, {'kind': 'proposal', 'key': None, 'title': label, 'op': op['id'], 'tid': None, 'ref': None})
+    return {**op, 'verb': 'setup', 'label': label, 'summary': summary, 'settles': False, 'key': None, 'ref': None, 'tid': None, 'say': text}
+
+
+def _schedule_words(cfg: dict) -> str:
+    from . import reports
+    return reports.schedule_words(cfg)
+
+
+def report_facts(cfg: dict) -> dict:
+    """What the confirmation box says about a report (PW-195): source, inputs, schedule, enabled state, behaviour, delivery."""
+    srcs = cfg.get('sources') or []
+    src = ', '.join(str(x.get('type') or '?') for x in srcs if isinstance(x, dict)) if srcs else str(cfg.get('type') or '')
+    return {'title': str(cfg.get('title') or ''), 'source': src, 'inputs': _cut(str(cfg.get('query') or cfg.get('object') or cfg.get('url') or cfg.get('path') or cfg.get('prompt') or ''), 160),
+            'summary_instructions': _cut(str(cfg.get('ai_prompt') or ''), 160) or 'none - the raw result is filed',
+            'schedule': _schedule_words(cfg) + (f" ({cfg['tz']})" if cfg.get('tz') else ''),
+            'enabled': 'yes - it runs on its schedule once created', 'triage': 'triage reads it' if cfg.get('triage') else 'informational - filed on the Timeline, not triaged',
+            'delivery': str((cfg.get('deliver') or {}).get('to') or '') or 'the Timeline only'}
+
+
+def _walkthrough(store, tid: int, ask: str, item: dict | None, actor: str, lead: str) -> dict:
+    """The set-up needs digging: a walk-through with the regular agent, proposed with the reason (PW-197)."""
+    prop = propose_for(store, tid, {'verb': 'setup', 'text': ask}, item, ask, actor)
+    prop['say'] = f"{lead} {prop['say']}"
+    record_related(store, tid, item, 'assistant', prop['say'], {'kind': 'proposal', 'key': None, 'title': prop['label'], 'op': prop['id'], 'tid': None, 'ref': None})
+    return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}
+
+
+def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: str = 'owner', llm=None,
+               trace=None, cancel=None) -> dict:
+    """A set-up asked for in the chat (PW-194): sorted by the model, gathered by the composer - its questions come back as
+    questions and the next words answer them - and put in front of the owner as a proposal that the shared Reports /
+    Connections road creates on the click. Secrets never pass through here (PW-196); digging is a walk-through (PW-197)."""
+    rec = lambda body, card=None: record_related(store, tid, item, 'assistant', body, card)
+    cllm = llm or _compose_llm(store, trace, cancel)
+    if not cllm:
+        say_ = 'Setting that up needs an AI connector - Connections → AI - or the Reports and Connections tabs, where the forms are. Nothing is set up.'
+        rec(say_); return {'say': say_, 'options': [], 'decision': None}
+    pending, answers = _pending_setup(store, tid), None
+    if pending:
+        ask, answers = pending['ask'], {'questions': pending.get('questions') or [], 'reply': text}
+        sort = sort_setup(store, f"{ask}. The owner answered: {text}", cllm)
+    else: sort = sort_setup(store, ask, cllm)
+    if sort['kind'] == 'investigate':
+        return _walkthrough(store, tid, ask, item, actor, f"This needs digging before it can be configured{' - ' + sort['why'] if sort.get('why') else ''}.")
+    if sort['kind'] == 'connection':
+        return _propose_connection(store, tid, ask, sort.get('provider'), item, actor)
+    from . import compose
+    out = compose.compose(store, ask, cllm, answers=answers)
+    if out.get('questions'):
+        qs = out['questions']
+        say_ = 'Before I put it together: ' + ' '.join(f"({n}) {q}" for n, q in enumerate(qs, 1)) + ' Nothing is set up yet.'
+        rec(say_, {'kind': SETUP_QUESTIONS, 'ask': ask, 'questions': qs})
+        return {'say': say_, 'options': [], 'decision': None}
+    if out.get('error') or not out.get('config'):                        # a configuration the composer itself could not stand behind
+        return _walkthrough(store, tid, ask, item, actor, f"I could not configure that from here ({out.get('error') or 'no configuration came back'}).")
+    cfg, facts = out['config'], report_facts(out['config'])
+    params = {'config': cfg, **facts}
+    looked = ', '.join(str(x) for x in (out.get('looked_at') or [])[:4])
+    tail = ((out.get('explain') + ' ') if out.get('explain') else '') + '; '.join(f"{k.replace('_', ' ')}: {v}" for k, v in facts.items() if k != 'title' and v)            + (f'. I read {looked} to build it' if looked else '')            + '. Nothing is saved - confirm below, tell me what to change, or preview a dry run first.'
+    prop = _propose_raw(store, tid, 'report.create', 0, params, 'Create the report', f"{facts['title']} ({cfg.get('type')})", tail, actor, item)
+    return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}
+
+
+def _propose_connection(store, tid: int, ask: str, provider: str | None, item: dict | None, actor: str) -> dict:
+    """A connection (PW-196): provider and non-secret configuration, the authority it will hold and what that unlocks;
+    the secret is never asked for here - the card takes it, securely - and it stays off until the owner turns it on."""
+    from . import scopes
+    rec = lambda body, card=None: record_related(store, tid, item, 'assistant', body, card)
+    if not provider:
+        types = sorted(store_mod.DEFAULT_ROLES)
+        say_ = ('Which system is it? ' + ', '.join(types) + ' - name it and I will put the connection in front of you. '
+                'A password, token or key never goes here; it goes on the card. Nothing is set up yet.')
+        rec(say_, {'kind': SETUP_QUESTIONS, 'ask': ask, 'questions': ['Which system should I connect?']})
+        return {'say': say_, 'options': [], 'decision': None}
+    existing = store.get_connector_by_type(provider)
+    cid = int(existing['ConnectorId']) if existing and not existing.get('Active') else 0
+    name = (existing or {}).get('Name') if cid else f"{provider.title()} (from the chat)"
+    scope = scopes.default_scope(provider)
+    params = {'type': provider, 'name': name, 'scope': scope, 'permissions': ', '.join(scopes.actions_at(scope)) or 'read',
+              'secret': 'never here - the card asks for it securely', 'starts': 'stays off until you turn it on after authorizing'}
+    tail = (f"A {provider} connection with {scope} authority ({params['permissions']}). I never take a token or password in this chat: "
+            'once the card exists, sign in or paste the secret there and run its Test. It stays off - nothing polls, nothing starts - '
+            'until you turn it on. Nothing is created - confirm below, or tell me what to change.')
+    prop = _propose_raw(store, tid, 'connection.create', cid, params, 'Create the connection', f"{name} ({provider})", tail, actor, item)
+    return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}
+
+
+def describe_op(store, op: dict) -> tuple:
+    """(the button's label, what it was about) for a proposal row - the receipt's two facts."""
+    kind, p, tk, target = op.get('kind'), op.get('params') or {}, op.get('targetKind'), op.get('target')
+    by_kind = {kind_: [PROPOSALS[v][1] for v in PROPOSALS if PROPOSALS[v][0] == kind_][0] for kind_ in {PROPOSALS[v][0] for v in PROPOSALS}}
+    label = by_kind.get(kind, kind)
+    if kind == 'task.create_from_message': label = {'coding': 'Send to the coding agent', 'general': 'Send to a regular agent'}.get(str(p.get('kind')), 'Put it on my list')
+    if kind == 'task.create_from_text': label = 'Start a coding agent on it' if p.get('kind') == 'coding' else 'Start a regular agent on it'
+    if kind == 'preference.exclude_sender': label = 'Silence this sender' if p.get('scope') == 'sender' else 'File it and remember this kind'
+    if kind == 'item.settle': label = {'later': 'Push it back', 'skip': 'Skip until tomorrow'}.get(str(p.get('verb')), 'Mark it handled')
+    if kind == 'task.complete' and p.get('agent'): label = 'Close the task and stop its agent'
+    if kind == 'agent.stop' and p.get('wrap'): label = 'Wrap it up'
+    if kind == 'report.create': label = 'Create the report'
+    if kind == 'connection.create': label = 'Create the connection'
+    ref = ''
+    try:
+        if tk == 'task' and target: ref = task_ref(int(target))
+        elif tk == 'message' and target:
+            m = store.get_message(int(target)) or {}
+            ref = task_ref(m['TaskId']) if m.get('TaskId') else (m.get('Subject') or '')
+        elif tk == 'review' and target:
+            rv = store.get_review(int(target)) or {}
+            ref = task_ref(rv['TaskId']) if rv.get('TaskId') else f'rv{target}'
+        elif tk == 'item': ref = task_ref(int(p['tid'])) if p.get('tid') else str(p.get('key') or '')
+        elif tk == 'source' and target: ref = f'report {target}'
+        elif tk == 'report': ref = str(p.get('title') or '')
+        elif tk == 'connector': ref = str(p.get('name') or '')
+    except Exception: ref = ''
+    return label, ref
+
+
+def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
+    """What the handler reported, in the words the sweep, the split and the hand-off used to say for themselves."""
+    o = o or {}
+    if kind == 'pipe.clear':
+        if o.get('cleared'):
+            return (f" Cleared {o['cleared']} from the pipe - {', '.join((o.get('titles') or [])[:3])}{'…' if o['cleared'] > 3 else ''}. "
+                    'Read, not deleted; they are on the Timeline.'
+                    + (f" {o['stuck']} would not move just then and {'is' if o['stuck'] == 1 else 'are'} still in the pipe"
+                       ' - say it again and they go too.' if o.get('stuck') else '')
+                    + (f" And remembered as {'a rule' if len(o['rules']) == 1 else str(len(o['rules'])) + ' rules'}: " + '; '.join(o['rules'])
+                       + ' - the next ones file themselves, and anything that actually asks you something still reaches you.' if o.get('rules') else '')
+                    + (' And that sender goes straight past you from now on.' if o.get('remember') and not o.get('rules') else ''))
+        if o.get('rules'):
+            return (' Nothing of those is in the pipe right now - but it is noted: ' + '; '.join(o['rules'])
+                    + ' files itself from now on. They stay on the Timeline, and anything that actually asks you something still reaches you.')
+        return ' Nothing in the pipe matches those words.'
+    if kind == 'task.split':
+        if o.get('newRef'): return f" {o.get('ref') or 'It'} keeps \"{o.get('kept') or ''}\" and {o['newRef']} is \"{o.get('title') or ''}\" - each is its own job now."
+        return ' I can only see one ask in that one' + (f" - {o['why']}" if o.get('why') else '') + '. It stays as it was.'
+    if kind == 'task.create_from_text' and o.get('ref'):
+        return f" {o['ref']} - \"{o.get('title') or ''}\" is with the {'coding' if p.get('kind') == 'coding' else 'regular'} agent now; it comes back here when it is done."
+    if kind == 'task.setup' and o.get('ref'):
+        return (f" {o['ref']} - \"{o.get('title') or ''}\" is open as a walk-through: a conversation with the assistant, nothing built, no repository touched. "
+                'Open it when you want to start; its browser opens beside the assistant.')
+    if kind == 'task.create_from_message' and p.get('kind') in ('coding', 'general'):
+        if o.get('existing'): return f" {o.get('agent') or 'An agent'} was already on it."
+        if o.get('started') or o.get('chat'): return f" {o.get('agent') or 'The agent'} is on it - moving on."
+    if kind == 'item.settle' and o.get('closed'): return f" {task_ref(int(o['closed']))} closed."
+    if kind == 'agent.stop' and not p.get('wrap'): return ' The task stays open - say close it when you want it closed.'
+    if kind == 'memory.remember': return ' A memory settles nothing: the walk is where it was.'
+    if kind == 'report.create' and o.get('sourceId'):
+        return f" \"{o.get('title')}\" is on the Reports tab{' and runs on its schedule' if o.get('enabled') else ', switched off'}."
+    if kind == 'connection.create' and o.get('connectorId'):
+        return (f" The {o.get('type')} card \"{o.get('name')}\" is {o.get('state')} - finish it on the card (sign in or paste the secret there), "
+                'then Test; it stays off until you turn it on.')
+    if kind == 'task.complete' and o.get('already'): return ' It was closed already.'
+    return ''
+
+
+def receipt(store, op: dict, actor: str = 'owner') -> str:
+    """After the click: the fact of what happened, in the chat - never before it ran (PW-125)."""
+    label, ref = describe_op(store, op)
+    st = op.get('status')
+    if st == 'done':
+        line = (f"{'Already done' if op.get('duplicate') else 'Done'} - {label}{' · ' + ref if ref else ''}."
+                + ('' if op.get('duplicate') else _outcome_line(op.get('kind'), op.get('params') or {}, op.get('outcome'))))
+    elif st == 'error': line = f"Not done - {op.get('error') or 'it failed'}. {ref or 'It'} is where it was."
+    else: line = f"Not done - {op.get('error') or st}. {ref or 'It'} is where it was."
+    # only what THIS chat proposed is its news. A close from the Tasks page or the wall used to be narrated
+    # here too - and opened a fresh chat to say it in (the owner, 2026-09-07: "no one asked you to do that")
+    raw = store.get_settings().get('assistant_dock_task_id')
+    dock_tid = int(raw) if str(raw or '').isdigit() else None
+    if not dock_tid or not _chat_proposed(store, dock_tid, op.get('id')): return line
+    record(store, dock_tid, 'assistant', line)
+    return line
+
+
+def _chat_proposed(store, dock_tid: int, oid: str) -> bool:
+    for c in general.chat_rows(store, dock_tid):
+        m = _MARK.search(c.get('Body') or '')
+        if not m: continue
+        try: card = json.loads(m.group(1))
+        except ValueError: continue
+        if card.get('kind') == 'proposal' and card.get('op') == oid: return True
+    return False
+
+
+def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace=None, cancel=None, item: dict | None = None) -> dict:
+    """The owner's words, answered briefly - about the item on the table when there is one. The MODEL interprets
+    them (PW-121): a question is answered, a subject named is pulled in, and a decision becomes a PROPOSAL the
+    owner confirms (PW-123/124) - except Next, which moves the walk and marks nothing, and a reply request, which
+    drafts at once and sends nothing (PW-126/128). No phrase table decides anything."""
     text = str(text or '').strip()
     if not text: raise ValueError('say something')
     task, _ = general.dock_task(store, actor)
     tid = task['TaskId']
-    # a clear decision needs no model at all: carry it out (the page runs the verb) and receipt it, instantly
-    p0 = funnel.pile(store)
-    item0 = funnel.next_item(store, key) if key else None
-    record_related(store, tid, item0, 'user', text)
-    rec = lambda role, body, card=None: record_related(store, tid, item0, role, body, card)
-    words0 = decide_words(text)
-    # “Okay, send it” accepts the regular-work offer in the immediately preceding turn. It is not
-    # approval of a nonexistent email, and the Assistant must not forget the job it just offered.
-    if not item0 and words0 and words0['verb'] == 'approve':
-        offered = _accepted_regular_offer(store, tid)
-        if offered: words0 = {'verb': 'regular_agent', 'text': offered, 'said': text, 'rest': ''}
-    if words0 and words0['verb'] == 'agent_choice':
-        say_ = ('Which kind should take it: a coding agent that works in a repository, or a regular '
-                'agent for reading, analysis, and non-coding work? Nothing has been started yet.')
-        options = ['Coding agent', 'Regular agent']
-        rec('assistant', say_ + f"\nOPTIONS: {' | '.join(options)}")
-        return {'say': say_, 'options': options, 'decision': None}
-    if words0 and words0['verb'] == 'skip_choice':
-        say_ = ('Should I dismiss only this one, or remember this kind so future messages like it '
-                'are filed automatically? Nothing has changed yet.')
-        options = ['Just this once', 'Forever for this kind']
-        rec('assistant', say_ + f"\nOPTIONS: {' | '.join(options)}")
-        return {'say': say_, 'options': options, 'decision': None}
-    # The verbs Taskuary honours ITSELF come first, whether or not something is on the table: a sweep,
-    # a hand-off, a close. With a card open, a sweep used to fall into the receipt below and the page
-    # was left to do it - which it cannot - so "make rules to not surface..." answered "Cleared. Moving
-    # on." and swept nothing (the owner, 2026-09-03: "this did not work?").
-    # "approve and remember that Kishan handles refunds" is two things: the memory used to be dropped
-    if words0 and words0.get('remember'):
-        try: remember_fact(store, words0['remember'], actor)
-        except Exception as e: logger.warning(f'concierge: the memory did not save - {e}')
-    if (words0 and words0['verb'] in ('clear', 'setup', 'stop_agent', 'setting', 'remember')
-            or (words0 and words0['verb'] in ('split', 'forward') and item0)
-            or (words0 and words0['verb'] in ('coder', 'regular_agent') and not item0)):
-        return _carry_out(store, tid, text, words0, item0, actor)
-    if words0 and words0['verb'] == 'split' and not item0:
-        say_ = 'Nothing is on the table to split - pick the one you mean from the pipe and say it again.'
+    p = funnel.pile(store)
+    if item is None: item = funnel.next_item(store, key, items=funnel.full_items(store)) if key else None   # the route already built it
+    record_related(store, tid, item, 'user', text)
+    rec = lambda role, body, card=None: record_related(store, tid, item, role, body, card)
+    llm = _brain_for(store, tid, llm, trace, cancel)
+    if not llm:
+        say_ = f"{fallback(item, False, p['items'])} {NO_BRAIN}".strip()
         rec('assistant', say_)
-        return {'say': say_, 'options': [], 'decision': None}
-    # NOTHING ON THE TABLE. "next", "done", "walk me through my tasks", "start with the mail" all did
-    # nothing at all - no item, so no decision, so the words fell through to a model that had nothing
-    # to decide about (2026-09-03). The walk starts and continues from words, exactly as from buttons.
-    if not item0:
-        if words0 and words0['verb'] in ('next', 'done', 'skip', 'later') or _START.search(text):
+        return {'say': say_, 'options': [], 'chips': chips_for(store, item) or walk_chips(len(p['items'])), 'decision': None}
+    reply, options, decision, call, did_read = '', [], None, None, False
+    try:
+        from . import handbook as hub
+        hub_context = hub.block(store, text, actions=False) if hub.enabled(store) else ''
+        from . import toolcatalog
+        system = (_system(store, llm) + '\n\n' + toolcatalog.block(store)
+                  + (f'\n\n{hub.ASSISTANT_LINE}' if hub.enabled(store) else ''))
+        raw = str(llm(system,
+                      f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n\n{facts(store, item)}{trouble(store, text)}\n\n"
+                      + (hub_context + '\n\n' if hub_context else '')
+                      + (f"CONVERSATION SO FAR:\n{_turns(store, tid)}\n\n" if _turns(store, tid) else '')
+                      + f"The owner says: {text}\nAnswer them, briefly. If this is a decision about the item on the table, name it (DECIDE line).",
+                      max_tokens=MAX_TOKENS) or '').strip()
+        if hub.enabled(store): raw = hub.publish_assistant_entries(store, tid, raw, 'assistant')
+        raw, call = parse_call(raw)
+        # A LOOK-UP runs at once and comes straight back, because it changes nothing and waits for
+        # nobody. The model then answers with what it read - one round only, so a question can never
+        # become an unbounded search (the owner, 2026-09-07: "read should be immediate").
+        for _ in range(READ_ROUNDS):
+            if not (call and toolcatalog.is_read(call['kind'])): break
+            did_read = True
+            found = read_op(store, call['kind'], call['params'])
+            trace and trace('tool', call['kind'], {'params': call['params']})
+            raw = str(llm(system, f"You looked up {call['kind']} and it says:\n{_cut(found, 6000)}\n\n"
+                                  f"The owner asked: {text}\nAnswer them with what you just read, briefly.",
+                          max_tokens=MAX_TOKENS) or '').strip()
+            raw, call = parse_call(raw)
+        # the budget is spent and it still wants to read: that is as far as this turn goes. A read is
+        # never handed on to call_turn, which only knows operations that CHANGE something.
+        if call and toolcatalog.is_read(call['kind']): call = None
+        raw, decision = parse_decision(raw)
+        reply, options = parse_options(raw)
+        if not in_character(reply):
+            logger.info('concierge: the voice broke character - answering with the facts instead')
+            reply, options = '', []
+        _remember_sid(store, tid, llm)
+    except Exception as e: logger.warning(f'concierge: the model pass failed - {e}')
+    if call and not _CORRECTION.search(text):
+        try: return call_turn(store, tid, call, item, text, actor)
+        except ValueError as e:
+            say_ = f"I could not put that in front of you - {e}."
+            rec('assistant', say_)
+            return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
+    # The MODEL may answer a correction by moving on - it did: "that's not a fail, it says all clear?" came back
+    # as DECIDE: next, so the one thing the owner said was never taken (2026-09-03).
+    if decision and decision['verb'] in ('next', 'skip', 'later', 'done') and _CORRECTION.search(text): decision = None
+    # words that point at something else pull it in and talk about THAT (everything is the chat)
+    if not decision and not did_read:
+        found = lookup(store, text)
+        if found and found != key:
+            out = surface(store, found, llm, actor, None, trace, cancel)
+            if out.get('item'): return out
+    verb = (decision or {}).get('verb')
+    # their yes to the card already waiting on it - the button, said in words (the only road a phone has)
+    if verb in ('confirm', 'cancel'): return confirm_open(store, tid, item, verb == 'cancel', actor)
+    # a batch of fyi is one thing on the table: "not ours" about a handful of fyi is what "read" means
+    if decision and item and item.get('kind') == 'fyis' and not decision.get('on') and verb in ('not_ours', 'not_ours_remember', 'archive', 'close'):
+        decision, verb = {**decision, 'verb': 'done'}, 'done'
+    # NOTHING ON THE TABLE: next / done / later move the WALK; a verb that needs something to act on says so
+    if decision and not item:
+        if verb in ('next', 'done', 'skip', 'later'):
             only = 'mail' if re.search(r'\b(mail|inbox|e-?mail|what came in)\b', text, re.I) else None
             return surface(store, None, llm, actor, only, trace, cancel)
-        # ...and a verb that needs something to act ON says so, rather than letting the model claim
-        # it closed a task it never touched ("Done. Yosef Adler - Hey is closed." - it was not)
-        if words0 and words0['verb'] in NEEDS:
+        if verb in NEEDS:                              # a hand-off is NOT in NEEDS: the owner's words are its brief
             say_ = ('Nothing is on the table. Say next and I will bring the next thing up, or name the one '
                     'you mean - the sender or its TQ ref - and I will do it there.')
             rec('assistant', say_)
-            return {'say': say_, 'options': [], 'decision': None}
-    quick = words0 if item0 else None
-    # a batch of fyi is one thing on the table: "not ours" about a handful of fyi is what "read" means
-    if quick and item0.get('kind') == 'fyis' and quick['verb'] in ('not_ours', 'not_ours_remember', 'archive', 'close'):
-        quick = {**quick, 'verb': 'done'}
-    if quick and quick['verb'] == 'assent':                      # "yes" means whatever this card's own button does
-        v = assent_verb(item0)
-        if not v:
-            say_ = (f"Yes to what, exactly? {item0.get('ref') or item0.get('title')} has nothing waiting on a yes - "
-                    'say next to move on, or tell me what to do with it.')
+            return {'say': say_, 'options': [], 'chips': walk_chips(len(p['items'])), 'decision': None}
+    # a switch is already a proposal in Review (proposals.py); a hand-off to a person is a DRAFT for approval
+    if decision and verb == 'setting': return _carry_out(store, tid, text, {**decision, 'said': text}, item, actor)
+    if decision and verb == 'forward' and item:
+        who = (decision.get('text') or '').split(':')[0].strip()
+        return _carry_out(store, tid, text, {'verb': 'forward', 'text': decision.get('text') or '', 'who': who, 'said': text}, item, actor)
+    # the words name ANOTHER subject: resolve it and propose THERE, or ask - never on what happens to be open
+    target_item, elsewhere = item, False
+    if decision and item and decision.get('on'):
+        other = _resolve_named(store, decision['on'], item)
+        if other == '?':
+            say_ = (f"Careful - you named something that is not what is on the table. On the table is {_where(item)}, "
+                    'and I could not find what you meant. Say it again with the sender or the ref and I will do it there; nothing has been touched.')
             rec('assistant', say_)
-            return {'say': say_, 'options': [], 'decision': None}
-        quick = {**quick, 'verb': v, 'text': quick.get('text') if v == 'answer_agent' else ''}
-    if quick:
-        # the words name ANOTHER subject: resolve it and act THERE, or ask - never on what happens to be open
-        if quick['verb'] in GUARDED:
-            other = named_elsewhere(store, quick, item0, quick['verb'] in COSTLY)
-            if other == '?':
-                say_ = (f"Careful - you named something that is not what is on the table. On the table is "
-                        f"{item0.get('who') + ' - ' if item0.get('who') else ''}{item0.get('title')}"
-                        f"{' (' + item0['ref'] + ')' if item0.get('ref') else ''}, and I could not find what you meant. "
-                        'Say it again with the sender or the ref and I will do it there; nothing has been touched.')
-                rec('assistant', say_)
-                return {'say': say_, 'options': [], 'decision': None}
-            if other:
-                it2 = funnel.next_item(store, other) or funnel.item_for_key(store, other)
-                if it2 and it2.get('key') != item0.get('key'):
-                    why = cannot(it2, quick['verb'], store)
-                    if why:
-                        rec('assistant', why)
-                        return {'say': why, 'options': [], 'decision': None}
-                    say_ = (f"That is {it2.get('who') + ' - ' if it2.get('who') else ''}{it2.get('title')}"
-                            f"{' (' + it2['ref'] + ')' if it2.get('ref') else ''}, not the one on the table - so I am doing it there. "
-                            f"{RECEIPTS.get(quick['verb'], '')} "
-                            f"{item0.get('ref') or 'The one on the table'} is untouched.")
-                    rec('assistant', say_)
-                    return {'say': say_, 'options': [], 'decision': {**quick, 'target': card_for(it2)}}
-        why = cannot(item0, quick['verb'], store)
+            return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
+        # one entry of the fyi handful is a thing of its own (PW-126): the verb lands on it, its siblings stay unread
+        members = {e.get('key'): e for e in (item.get('items') or [])} if item.get('kind') == 'fyis' else {}
+        it2 = members.get(other) or funnel.next_item(store, other) or funnel.item_for_key(store, other)
+        if it2 and it2.get('key') != item.get('key'): target_item, elsewhere = it2, True
+    if decision and verb and target_item:
+        why = cannot(target_item, verb, store)
         if why:
             rec('assistant', why)
-            return {'say': why, 'options': [], 'decision': None}
-        # "close it" is the one verb Taskuary can honour ITSELF, so it does: the receipt used to be the
-        # page's job, and a page that could not find the card did nothing while this line already said
-        # the task was closed (the owner, 2026-09-03: "I told the ai to close it but it did not").
-        # "done" said about an agent parked on a question is not a row to tick: the job is over, so
-        # the session ends with the task. It used to touch neither (2026-09-03).
-        if quick['verb'] == 'done' and item0.get('kind') == 'agent' and item0.get('tid'):
-            close_task(store, item0['tid'], actor)
-            reply = f"{task_ref(item0['tid'])} closed and its agent stopped. Moving on."
-            rec('assistant', reply)
-            return {'say': reply, 'options': [], 'decision': {'verb': 'closed', 'taskId': item0['tid'], 'ref': task_ref(item0['tid'])}}
-        if quick['verb'] == 'close' and item0.get('tid'):
-            done = close_task(store, item0['tid'], actor)
-            reply = f"{task_ref(item0['tid'])} closed. Moving on." if done else f"{task_ref(item0['tid'])} was already closed. Moving on."
-            rec('assistant', reply)
-            return {'say': reply, 'options': [], 'decision': {'verb': 'closed', 'taskId': item0['tid'], 'ref': task_ref(item0['tid'])}}
-        reply = RECEIPTS.get(quick['verb'], 'Doing that now.') + (f" And remembered: {_cut(quick['remember'], 160)}." if quick.get('remember') else '')
-        rec('assistant', reply)
-        return {'say': reply, 'options': [], 'decision': quick}
-    words = words0
-    # words that point at something else: pull it in and talk about THAT (everything is the chat)
-    found = None if words else lookup(store, text)     # an instruction is carried out, never answered with the mail it names
-    if found and found != key:
-        out = surface(store, found, llm, actor, None, trace, cancel)
-        if out.get('item'): return out
-    p = funnel.pile(store)
-    item = funnel.next_item(store, key) if key else None
-    llm = _brain_for(store, tid, llm, trace, cancel)
-    reply, options, decision = '', [], None
-    if llm:
-        try:
-            from . import handbook as hub
-            hub_context = hub.block(store, text, actions=False) if hub.enabled(store) else ''
-            system = _system(store, llm) + (f'\n\n{hub.ASSISTANT_LINE}' if hub.enabled(store) else '')
-            raw = str(llm(system,
-                          f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n\n{facts(store, item)}{trouble(store, text)}\n\n"
-                          + (hub_context + '\n\n' if hub_context else '')
-                          + (f"CONVERSATION SO FAR:\n{_turns(store, tid)}\n\n" if _turns(store, tid) else '')
-                          + f"The owner says: {text}\nAnswer them, briefly. If this is a decision about the item on the table, carry it out (DECIDE line).",
-                          max_tokens=MAX_TOKENS) or '').strip()
-            if hub.enabled(store): raw = hub.publish_assistant_entries(store, tid, raw, 'assistant')
-            raw, decision = parse_decision(raw)
-            reply, options = parse_options(raw)
-            # the voice describing its own plumbing is never the answer (in_character): the facts are
-            if not in_character(reply):
-                logger.info('concierge: the voice broke character - answering with the facts instead')
-                reply, options = '', []
-            _remember_sid(store, tid, llm)
-        except Exception as e: logger.warning(f'concierge: the model pass failed - {e}')
-    if item and decision is None: decision = decide_words(text)
-    # The MODEL may also answer a correction by moving on - it did: "that's not a fail, it says all
-    # clear?" came back as DECIDE: next, so the one thing the owner said was never taken (2026-09-03).
-    if decision and decision['verb'] in ('next', 'skip', 'later', 'done') and _CORRECTION.search(text or ''):
-        decision = None
-    if not item: decision = None                               # nothing on the table to decide about
-    if decision and decision['verb'] == 'assent': decision = ({**decision, 'verb': assent_verb(item)} if assent_verb(item) else None)
-    # the model may name a verb this card cannot carry either: the honest line beats a receipt the
-    # page then contradicts (2026-09-03)
-    if decision:
-        no = cannot(item, decision['verb'], store)
-        if no: reply, decision = no, None
-    # a decision is CARRIED OUT by the page, then receipted - so the line under it is the plain fact of what
-    # happens now, never the model's claim that it already did something (haiku said "Task created" after
-    # trying its own task tool, 2026-09-03)
-    if decision: reply = ''
-    if not reply: reply = RECEIPTS.get((decision or {}).get('verb'), '') or fallback(item, False, p['items'])
+            return {'say': why, 'options': [], 'chips': chips_for(store, target_item), 'decision': None}
+    # the two immediate exceptions the owner approved: Next moves the walk (PW-128); a reply DRAFTS (PW-126)
+    if decision and verb == 'next' and item:
+        move_on(store, item['key'], actor)
+        rec('assistant', RECEIPTS['next'])
+        return {'say': RECEIPTS['next'], 'options': [], 'chips': [], 'decision': {'verb': 'next'}}
+    if decision and verb in ('reply', 'redraft') and target_item:
+        rec('assistant', RECEIPTS[verb])
+        d = {'verb': verb, 'text': decision.get('text') or ''}
+        if elsewhere: d['target'] = card_for(target_item)
+        return {'say': RECEIPTS[verb], 'options': [], 'chips': [], 'decision': d}
+    if decision and verb == 'setup':                                     # a report, a connection: gathered, then confirmed (PW-194)
+        return setup_turn(store, tid, text, decision.get('text') or text, item, actor, trace=trace, cancel=cancel)
+    if decision and verb in PROPOSALS:
+        try: prop = propose_for(store, tid, decision, target_item, text, actor, elsewhere=elsewhere, table=item)
+        except ValueError as e:
+            say_ = f"I could not put that in front of you - {e}."
+            rec('assistant', say_)
+            return {'say': say_, 'options': [], 'chips': chips_for(store, target_item), 'decision': None}
+        # a plain verb on the item on the table runs at once - the page presses the button itself (the owner,
+        # 2026-09-07: "I did already - it should close it; only confirm when you are not sure"). A hand-off, a
+        # send, a rule or a verb aimed elsewhere still waits for the button.
+        if verb in AUTO and not elsewhere:
+            prop.update(auto=True, say=f"{prop['label']} - {_where(target_item or {})}.")
+        rec('assistant', prop['say'], {'kind': 'proposal', 'key': prop.get('key'), 'title': prop['label'], 'op': prop['id'],
+                                        'tid': prop.get('tid'), 'ref': prop.get('ref'), 'lane': (target_item or {}).get('lane')})
+        return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}
+    if not reply: reply = fallback(item, False, p['items'])
+    chips = chips_for(store, item) or walk_chips(len(p['items']))
     rec('assistant', reply + (f"\nOPTIONS: {' | '.join(options)}" if options else ''))
-    return {'say': reply, 'options': options, 'decision': decision}
+    return {'say': reply, 'options': options, 'chips': chips, 'decision': None}
 
 
 def act(store, key: str, verb: str, actor: str = 'owner', llm=None, hours: float = None) -> dict:

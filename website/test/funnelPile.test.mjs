@@ -2,13 +2,21 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { LANES, LANE_META, ageText, arrivals, cardFor, currentItemFromPile, departures, drawOrder, followsItem, keysOf, laneMeta, statusLine, topAlert } from "../src/funnelPile.js";
+import { LANES, LANE_META, ageText, arrivals, chipsOf, lastSaidIndex, cardFor, currentItemFromPile, currentPresentationChanged, departures, displayRevision, drawOrder, followsItem, keysOf, laneMeta, refreshCurrentPresentation, refreshPilePresentation, statusLine, topAlert } from "../src/funnelPile.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 const cardsSrc = () => read("assistantCards.jsx");
 
+test('Current follows only an explicit canonical migration or lineage alias', () => {
+  const prior = { key: 'review:8', tid: 3 };
+  const fresh = { key: 'processing:root', processing_id: 'root', aliases: ['review:8'], tid: 3, lane: 'approve' };
+  assert.equal(followsItem(prior, fresh), true);
+  assert.equal(currentItemFromPile(prior, { items: [], current: fresh }), fresh);
+  assert.equal(followsItem({ ...prior, key: 'review:9' }, fresh), false);
+});
+
 test("every lane the server knows has a word, a mark and a role the theme can colour", () => {
-  assert.deepStrictEqual(LANES, ["blocked", "time", "approve", "broken", "asked", "forgotten", "report", "fyi", "working"]);
+  assert.deepStrictEqual(LANES, ["blocked", "time", "approve", "asked", "queued", "broken", "forgotten", "report", "fyi", "working"]);
   // a failed check is second only to an agent that is stuck, wears the oxblood `bad` role, and
   // is NOT in the server's MUTED_LANES - a rule that quiets a chatty report cannot quiet it failing
   assert.strictEqual(LANE_META.broken.role, "bad");
@@ -64,6 +72,42 @@ test("a dispatched message follows its task into the live agent row", () => {
   assert.equal(followsItem(card, { key: "agent:999", tid: 999, lane: "working" }), false);
 });
 
+test("full display revisions replace completed pile responses and retain identical ones", () => {
+  const old = { rev: "legacy-same", display_revision: "display-1", items: [{ key: "a", preview: "old" }] };
+  const edited = { rev: "legacy-same", display_revision: "display-2", items: [{ key: "a", preview: "new" }] };
+  assert.equal(displayRevision(old), "display-1");
+  assert.equal(displayRevision({ rev: "legacy-only" }), "legacy-only");
+  assert.equal(refreshPilePresentation(old, { ...old }), old);
+  assert.equal(refreshPilePresentation(old, edited), edited);
+  assert.deepEqual(refreshPilePresentation(null, { items: [] }), { items: [] });
+});
+
+test("a changed Current presentation is a complete replacement so removed fields stay removed", () => {
+  const old = { key: "msg:44", lane: "approve", presentation_revision: "p1",
+    preview: "old excerpt", draft: true, tail: ["old question"], more: 3 };
+  const fresh = { key: "msg:44", lane: "asked", presentation_revision: "p2", title: "Fresh title" };
+  const fromPile = currentItemFromPile(old, { current: fresh, items: [] });
+  const replaced = refreshCurrentPresentation(old, fromPile);
+  assert.equal(currentPresentationChanged(old, fresh), true);
+  assert.equal(replaced, fresh);
+  assert.deepEqual(replaced, fresh);
+  assert.equal("preview" in replaced, false);
+  assert.equal("draft" in replaced, false);
+  assert.equal("tail" in replaced, false);
+  assert.equal("more" in replaced, false);
+  assert.equal(refreshCurrentPresentation(fresh, { ...fresh }), fresh);
+});
+
+test("an explicitly missing scoped Current cannot resurrect from a stale queue row", () => {
+  const current = { key: "msg:44", tid: 7, presentation_revision: "p1" };
+  assert.equal(currentItemFromPile(current, { current: null, items: [{ ...current, presentation_revision: "p2" }] }), null);
+  assert.equal(currentItemFromPile(current, { items: [{ ...current, presentation_revision: "p2" }] }).presentation_revision, "p2");
+  const working = { key: "agent:7", tid: 7, lane: "working", presentation_revision: "worker-p1" };
+  assert.equal(currentItemFromPile(current, { current: null, items: [working] }), working);
+  assert.equal(currentItemFromPile(current, { current: null, items: [{ ...working, tid: 8 }] }), null);
+  assert.equal(currentItemFromPile(current, { current: null, items: [{ ...working, lane: "blocked" }] }), null);
+});
+
 test("ages read as a person says them", () => {
   const now = new Date("2026-09-03T12:00:00").getTime();
   assert.strictEqual(ageText("2026-09-03 12:12:00", now), "in 12 min");
@@ -93,7 +137,7 @@ test("the by-the-way bar shows the first alert nobody has put down - and only wh
   assert.strictEqual(topAlert(alerts.slice(2), new Set(), { key: "x", lane: "fyi" }).key, "alert:c");   // on an fyi: the draft outranks it
   assert.strictEqual(topAlert(alerts.slice(2), new Set(), { key: "x", lane: "approve" }), null);      // on another draft: it does not
   assert.strictEqual(topAlert(alerts.slice(2), new Set(), { key: "c", lane: "approve" }), null);      // it IS the one on the table
-  assert.strictEqual(topAlert(alerts.slice(1, 2), new Set(), { key: "x", lane: "blocked" }).key, "alert:b");   // an agent always interrupts
+  assert.strictEqual(topAlert(alerts.slice(1, 2), new Set(), { key: "x", lane: "blocked" }), null);   // equal owner-wait bands do not interrupt
   assert.strictEqual(topAlert(alerts, new Set(["alert:a", "alert:b", "alert:c"])), null);
   assert.strictEqual(topAlert(null, new Set()), null);
 });
@@ -114,6 +158,15 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.match(view, /\/api\/funnel\/pile/);
   assert.match(view, /\/api\/concierge\/next/);
   assert.match(view, /All done/);
+  assert.match(view, /!pile \? \(/);                  // loading is not a false empty Timeline
+  assert.match(view, /Loading timeline/);
+  assert.match(view, /const sharedFilter = useRef\("\{\}"\)/); // default filter must not force a duplicate mount rebuild
+  const feedSource = read("FeedView.jsx");
+  assert.match(feedSource, /view === "unread" && top && !unreadInventory/); // wait for canonical Unread; do not race it with legacy feed reads
+  assert.match(feedSource, /\{!top && <FunnelBar/); // Assistant's pile replaces the legacy funnel query
+  assert.match(view, /const visibleItems = items\.slice\(0, revealed\)/); // first load paints incrementally
+  assert.match(view, /requestAnimationFrame\(addBatch\)/);              // progressive batches do not impose one frame per row
+  assert.match(view, /count \+ 24/);                                     // large accounts finish promptly
   assert.match(view, /By the way/);
   assert.doesNotMatch(view, /tq-pipe-walls/);             // no funnel: what comes out next is the FIRST row
   assert.match(view, /current: true \}\] : \[\]\), \.\.\.drawOrder/);   // what is on the table sits at the TOP as CURRENT
@@ -127,24 +180,36 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   // only process those?"). The one narrowing the walk takes is `only`, which is the "Just what
   // came in" button. If that ever changes, these two are where it has to be said out loud.
   const pileRequest = view.slice(view.indexOf('api.get("/api/funnel/pile"'), view.indexOf("setPile", view.indexOf('api.get("/api/funnel/pile"')));
-  assert.match(pileRequest, /currentRef\.current\?\.key \? \{ current: currentRef\.current\.key \}/);
+  // The pile lookup remains scoped to Current, with its key captured before the request so a
+  // superseded response cannot reconcile a newer Current selected while the request was pending.
+  assert.match(pileRequest, /requestedCurrentKey \? \{ current: requestedCurrentKey \}/);
   assert.doesNotMatch(pileRequest, /\b(cat|pick|channel|source)\b/);
-  assert.match(view, /\{ key: body\.key, only: body\.only, include_surfaced: body\.include_surfaced, exclude: body\.exclude \}/);
+  assert.match(view, /key: body\.key, only: body\.only, include_surfaced: body\.include_surfaced, exclude: body\.exclude,/);
+  assert.match(view, /selection_revision: body\.selection_revision, expected_next_key: body\.expected_next_key, expected_next_members: body\.expected_next_members/);
   assert.doesNotMatch(view, /include_surfaced: true/); // a read row is not presented again by Next
   assert.doesNotMatch(view, /i\.surfaced && !i\.current \? "shown"/);                              // unread never looks processed
   assert.match(view, /stage=\{stageMode === "chat" \? chat : placeholder\} rowMode=\{stageMode\}/);   // the two ways to use the stage
   assert.match(view, /onPull=\{\(r\) => pull\(keyForRow\(r\)/);   // a Timeline row is pulled in by the pipe's own key
   assert.match(view, /window\.location\.hash = `msg=\$\{mid\}`/);   // "on the Timeline" pins the row over the chat
   assert.doesNotMatch(view, /turn\(\{ mode: "open" \}\)/);   // the day never writes itself: the welcome is the door
-  assert.match(view, /if \(data\.decision\) await decide\(data\.decision\)/);   // words are carried out, never left as advice
-  assert.match(view, /dispatch`, \{ kind: "coding", instruction: d\.text \|\| null \}/); // ...and an explicit coding hand-off carries them
-  assert.match(view, /verb === "regular_agent"/);                                  // regular and coding are different roads
+  // words are interpreted, never dispatched (PW-121..125): the two immediate exceptions (Next, a reply
+  // draft) run on the decision; everything else arrives as a proposal card whose button submits the
+  // structured proposal by id and version to the shared execute road
+  assert.match(view, /if \(!prop && data\.decision\) await decide\(data\.decision\)/);
+  assert.match(view, /\/api\/operations\/\$\{p\.id\}\/execute`, \{ version: p\.version \}/);
+  assert.doesNotMatch(view, /dispatch`, \{ kind: "coding"/);                       // no verb is carried out from the chat itself
+  assert.doesNotMatch(view, /tq-quick/);                  // nothing sits over the composer any more
+  assert.doesNotMatch(view, /SUGGESTIONS/);               // ...and the page invents no vocabulary of its own
+  assert.match(view, /className="tq-verbs"/);             // the action words are IN the assistant's line
+  assert.match(view, /chipsOf\(m\)/);                       // from the durable turn: a poll must not erase them
+  assert.match(view, /chip: runChip/);                    // one road for every one of them
   assert.match(view, /triage moved it up/);                // the rail shows promotions
   assert.match(view, /data\.events\?\.length/);           // the watcher's lines land in the chat as they happen
   assert.match(cardsSrc(), /Show the final report/);        // ...and a finished job's report reads right there
-  assert.match(cardsSrc(), /Run it again/);                 // a rerun is queued, never run in the chat
+  // a rerun is the chat line's word now, not a second button on the card (2026-09-07: "only one place")
+  assert.doesNotMatch(cardsSrc(), /Run it again/);
   assert.match(cardsSrc(), /Open walkthrough/);             // set-up opens the Assistant operator, not a coding checkout
-  assert.match(view, /verb === "done" && cur && cur\.kind !== "agent"/);   // done on a task closes the task
+  assert.doesNotMatch(view, /onClick=\{\(\) => settle\("done"\)\}/);   // Done is a suggestion, not a button that settles
   assert.match(read("FeedView.jsx"), /\/api\/ingest\/poll/);            // sync now, on the rail's header
   assert.match(view, /new ResizeObserver\(\(\) => \{ if \(el\.scrollHeight/);   // the chat keeps its bottom in view as it grows
   assert.doesNotMatch(view, /maxWidth: 1380/);             // the chat takes the width it has
@@ -163,8 +228,11 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   const feed = read("FeedView.jsx");
   assert.match(feed, /useState\(top \? "unread" : ""\)/);   // the Assistant rail opens on unread
   assert.match(feed, /view === "unread" \? \(typeof top/);     // ranked pipe, not historical rows
-  assert.match(feed, /const visibleStage = unreadView \? stage : null/); // All/Needs me never keep the chat on the right
-  assert.match(feed, /const chatMode = unreadView && rowMode === "chat"/); // their rows open one at a time instead
+  // PW107 supersedes only the third Needs me surface with exactly All + Unread. The existing
+  // All/detail and Unread/chat assertions follow the interaction helper where that logic moved.
+  assert.match(feed, /feedViews\(!!top\)/);
+  assert.match(feed, /const visibleStage = interaction\.showChatStage \? stage : null/);
+  assert.match(feed, /const chatMode = interaction\.pullRowIntoChat/);
   assert.match(feed, /\) : visibleStage \|\| \(/);                    // no selection shows the review placeholder, not chat history
   assert.match(feed, /label: "Assistant discussion"/);               // task-bound walkthrough turns remain readable in All
   assert.match(feed, /"concierge_user", "concierge_assistant"/);      // distinct from an agent's own working conversation
@@ -175,8 +243,10 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.match(feed, /addEventListener\("hashchange", openHash\)/);   // a card's #msg= opens the row while the rail is already up
   const cards = read("assistantCards.jsx");
   // the two "not ours" doors the owner asked for: one that teaches memory, one that does not
-  assert.match(cards, /not-mine/); assert.match(cards, /Not ours — remember it/); assert.match(cards, /Not ours, just this once/);
-  assert.match(cards, /Approve & send/); assert.match(cards, /Prep me/);
+  // 'not ours' is the chat line's word now (concierge.CHIPS), not a panel on the card
+  assert.doesNotMatch(cardsSrc(), /not-mine/);
+  // prep is the chat line's word now (concierge.CHIPS meeting), not a button on the card
+  assert.doesNotMatch(cardsSrc(), /Prep me/);
   assert.match(cards, /SourceMark/); assert.match(cards, /ChannelIcon/);   // the logo of where it came from
   assert.match(cards, /On the Timeline/);                                   // every card links to the whole of it
   // Once triage combines chat lines into a task, both an ordinary item and its pending reply show
@@ -187,7 +257,7 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.match(cards, /filter\(\(m\) => String\(m\.Status \|\| ""\) !== "context"\)/);
   assert.match(cards, /messages combined by triage/);
   assert.match(cards, /const \[full, setFull\] = useState\(true\)/);
-  assert.equal((cards.match(/<CombinedTaskText card=\{card\} \/>/g) || []).length, 2); // reply + ordinary message
+  assert.equal((cards.match(/<CombinedTaskText card=\{card\} \/>/g) || []).length, 3); // reply + ordinary message + the task card (PW-152)
   assert.match(read("SettingsView.jsx"), /funnel_hours/); assert.match(read("SettingsView.jsx"), /funnel_max/);
 });
 
@@ -200,4 +270,32 @@ test("a few kinds say more than their lane does", async () => {
   assert.equal(rowMeta({ kind: "report", lane: "report" }).word, laneMeta("report").word);
   assert.equal(rowMeta({ kind: "fyi", lane: "fyi" }).word, "fyi");
   assert.equal(rowMeta(null).word, "fyi");
+});
+
+test("alerts consume shared bands and cannot displace time-critical Current with an agent wait", () => {
+  const wait = { key: "alert:agent", item: "agent", kind: "agent", lane: "blocked", order_band: 2 };
+  const urgent = { key: "alert:urgent", item: "urgent", kind: "asked", lane: "time", order_band: 1 };
+  assert.equal(topAlert([wait], new Set(), { key: "now", kind: "idea", lane: "asked", order_band: 1 }), null);
+  assert.equal(topAlert([wait, urgent], new Set(), { key: "now", lane: "approve", order_band: 2 }), urgent);
+  // an agent waiting and a meeting that is not imminent are BOTH the owner's task now (one level for
+  // what triage called work, 2026-09-07), so neither interrupts the other: an alert has to outrank
+  // the card on the table, and only urgent does. The agent still waits in the rail at its own age.
+  assert.equal(topAlert([wait], new Set(), { key: "later", kind: "meeting", lane: "time", calendar_ready: false }), null);
+  assert.equal(topAlert([urgent], new Set(), { key: "later", kind: "meeting", lane: "time", calendar_ready: false }), urgent);
+  assert.equal(topAlert([urgent], new Set(), { key: "now", lane: "fyi" }, new Set(["urgent"])), null);
+});
+
+test("the action words hang on the last thing Taskuary SAID about the item, not on a passive notice", () => {
+  const item = { id: "a1", role: "assistant", card: { key: "msg:1", kind: "review", chips: [{ verb: "approve", label: "Send the reply" }] } };
+  const notice = { id: "a2", role: "assistant", card: { key: "agent:9", kind: "agent", background_event: true } };
+  assert.equal(lastSaidIndex([{ id: "u1", role: "user" }, item]), 1);
+  assert.equal(lastSaidIndex([item, notice]), 0, "a background update must not take the words off the item");
+  assert.equal(lastSaidIndex([item, { id: "r1", role: "receipt" }]), 0, "a receipt is not somewhere to act");
+  assert.equal(lastSaidIndex([]), -1);
+  // an answer to a typed question carries them on the turn itself; a surfaced item on its card
+  assert.deepEqual(chipsOf(item).map((c) => c.verb), ["approve"]);
+  assert.deepEqual(chipsOf({ role: "assistant", chips: [{ verb: "next", label: "Next" }] }).map((c) => c.verb), ["next"]);
+  // ...and a clarifying choice replaces them: it goes back as words, so mixing the two invites two answers
+  assert.deepEqual(chipsOf({ ...item, options: ["Tuesday", "Thursday"] }), [{ ask: "Tuesday", label: "Tuesday" }, { ask: "Thursday", label: "Thursday" }]);
+  assert.deepEqual(chipsOf({ role: "assistant" }), []);
 });

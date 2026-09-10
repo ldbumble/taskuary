@@ -26,12 +26,16 @@ import { readNdjson, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { onLive } from "./live.js";
 import { Md, looksMd } from "./md.jsx";
-import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
+import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12, localDay } from "./ui.jsx";
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
-import { ageText, arrivals, cardFor, currentItemFromPile, drawOrder, followsItem, keysOf, rowMeta, statusLine, topAlert } from "./funnelPile.js";
+import ProposalCard from "./ProposalCard.jsx";
+import { afterCancel, afterExecute, proposalOf } from "./proposalCard.js";
+import { ageText, arrivals, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, followsItem, hasNextSelection, interactiveCardIndex, keysOf, lastSaidIndex, chipsOf, nextMarkerKey, nextSelectionBody, nextSelectionScope, pendingAlerts, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, levelOf, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
+import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
 import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WrapupCard } from "./assistantCards.jsx";
 import FeedView from "./FeedView.jsx";
+import { ROADS, roadOfCard } from "./timelineState.js";
 import "./assistantView.css";
 
 // what a PERSON sent, whatever lane it landed in (funnel.came_in): a slipped follow-up about a mail
@@ -51,7 +55,15 @@ const EMOJI_REPLIES = [
   ["👏", "Well done"], ["🙏", "Thank you"], ["✅", "Confirmed"], ["👀", "Looking"],
   ["🤔", "Thinking"], ["😕", "Unsure"], ["👎", "No thanks"], ["🔥", "Excellent"],
 ];
-const errText = (e) => e?.response?.data?.detail || e?.message || "Taskuary could not answer.";
+const errText = (e) => {
+  const detail = e?.response?.data?.detail || e?.detail;
+  if (detail?.code?.startsWith("selection_")) return detail.message || (detail.code === "selection_unavailable"
+    ? "Next is temporarily unavailable. Review the refreshed list and try again."
+    : detail.retryable === false
+    ? "That Next request may already have completed. Review the refreshed conversation before acting again."
+    : "Next changed while the list refreshed. Review the updated Next item and press Next again.");
+  return (typeof detail === "string" ? detail : null) || e?.message || "Taskuary could not answer.";
+};
 const speakOn = () => { try { return localStorage.getItem("taskuary_speak") === "1"; } catch { return false; } };
 const speak = (text) => {
   if (!text || typeof window === "undefined" || !window.speechSynthesis) return;
@@ -70,11 +82,49 @@ function greeting() {
   return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
 }
 
+const shortDay = (value) => {
+  const at = new Date(String(value || "").replace(" ", "T"));
+  if (!Number.isFinite(at.getTime())) return "";
+  const opts = at.getFullYear() === new Date().getFullYear()
+    ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "2-digit" };
+  return at.toLocaleDateString("en-US", opts);
+};
+
 function Pile({ pile, current, onPull }) {
   const items = pile?.items || [];
+  // A full account can return dozens of canonical rows together. Painting that entire stack in
+  // one React commit leaves the rail blank until the browser has laid out every card. On the
+  // first successful load, put the first row down immediately and admit a small batch per
+  // animation frame. One row per frame made a 507-row account take at least 8.5 seconds even
+  // before layout; batching keeps progressive paint without making the inventory the timer.
+  const firstLoad = useRef(null);
+  const [revealed, setRevealed] = useState(1);
+  useEffect(() => {
+    if (!pile) return undefined;
+    const revision = displayRevision(pile) || "loaded";
+    if (firstLoad.current !== null) {
+      firstLoad.current = revision;
+      setRevealed(items.length);
+      return undefined;
+    }
+    firstLoad.current = revision;
+    setRevealed(Math.min(1, items.length));
+    if (items.length <= 1) return undefined;
+    let frame = 0;
+    const addBatch = () => {
+      setRevealed((count) => {
+        const next = Math.min(items.length, count + 24);
+        if (next < items.length) frame = requestAnimationFrame(addBatch);
+        return next;
+      });
+    };
+    frame = requestAnimationFrame(addBatch);
+    return () => cancelAnimationFrame(frame);
+  }, [displayRevision(pile)]);                                     // eslint-disable-line react-hooks/exhaustive-deps
+  const visibleItems = items.slice(0, revealed);
   // the one on the table sits at the TOP as CURRENT - it slides up there from wherever it was in the
   // pile (same key, same element), and a task named in the chat lands there from nowhere
-  const drawn = [...(current ? [{ ...current, current: true }] : []), ...drawOrder(items).filter((i) => i.key !== current?.key)];
+  const drawn = [...(current ? [{ ...current, current: true }] : []), ...drawOrder(visibleItems).filter((i) => i.key !== current?.key)];
   const prev = useRef(null);
   const [landing, setLanding] = useState(new Set());
   useEffect(() => {
@@ -84,35 +134,66 @@ function Pile({ pile, current, onPull }) {
     setLanding(fresh);
     const t = setTimeout(() => setLanding(new Set()), 40);       // one frame above the pipe, then it falls to its slot
     return () => clearTimeout(t);
-  }, [pile?.rev]);                                                 // eslint-disable-line react-hooks/exhaustive-deps
+  }, [displayRevision(pile)]);                                     // eslint-disable-line react-hooks/exhaustive-deps
   // The NEXT pill has to be what the Next button will actually bring up. The server skips what an
   // agent has in hand and what this walk already showed (funnel.next_item); the pill did not, so a
   // coder parked on a question wore NEXT while two fyi about lunch came out instead (2026-09-03).
-  const upNext = (i) => !i.settling && i.lane !== "working" && i.key !== current?.key;
-  const nextKey = (items.find((i) => upNext(i) && !i.surfaced) || items.find(upNext))?.key;
+  // New servers capture the selection from the same snapshot as this pile. FYI batches have a
+  // composite selected key, so their first ordered member wears the visible NEXT marker.
+  const nextKey = nextMarkerKey(pile, items, current);
   // how close to empty, once that is worth saying (the owner asked for it at "halfway down the
   // funnel", so from fifteen: the count is the encouragement - no header, no total)
   const left = items.filter((i) => !i.settling && i.lane !== "working").length;
   const cheer = !left || left > 15 ? "" : left === 1 ? "One more and the pipe is clear."
     : left <= 5 ? `${left} to go, then the pipe is clear.` : `${left} away from a clear pipe.`;
+  // Position the stack in one pass. Re-summing every preceding row for every card was quadratic
+  // on each progressive render and starved refresh requests on large accounts.
+  const today = localDay(new Date().toISOString());
+  let stackHeight = 0;
+  const positioned = drawn.map((item) => {
+    const top = stackHeight;
+    stackHeight += item.current ? CUR_H : ROW_H;
+    return { item, top };
+  });
   return (
     <div className="tq-pile" data-tq-keep>
-      {!drawn.length ? (
+      {!pile ? (
+        <div className="tq-pile-empty" role="status"><CircularProgress size={18} /><b>Loading timeline</b>Reading what arrived and what still needs you.</div>
+      ) : !drawn.length ? (
         <div className="tq-pile-empty"><span className="mark">✓</span><b>All done</b>Nothing is waiting on you. New things land here as they arrive, and Taskuary speaks up.</div>
       ) : (
-        <div className="tq-pile-stack" style={{ height: drawn.reduce((h, i) => h + (i.current ? CUR_H : ROW_H), 0) }}>
-          {drawn.map((i, idx) => {
-            const top = drawn.slice(0, idx).reduce((h, r) => h + (r.current ? CUR_H : ROW_H), 0);
+        <div className="tq-pile-stack" style={{ height: stackHeight }}>
+          {positioned.map(({ item: i, top }) => {
             const meta = rowMeta(i);
             const role = meta.role ? ROLES[meta.role].solid : "#d3ccc1";
             const cls = ["tq-pile-row", landing.has(i.key) ? "landing" : "", i.settling ? "settling" : "", i.current ? "current" : i.key === nextKey ? "next" : ""].filter(Boolean).join(" ");
+            const stamp = i.kind === "meeting" ? i.when : (i.since || i.when);
             const who = i.who && !i.title.toLowerCase().startsWith(i.who.toLowerCase()) ? i.who : "";
-            const tag = i.settling ? "triaging…" : i.kind === "agent" && i.asking ? "asked you" : meta.word;
-            const loud = i.lane === "blocked" || i.lane === "time";
-            const promoted = loud || i.lane === "approve";           // triage moved it up: the little arrow says so
+            // triaging while the AI is deciding, then WHAT IT DECIDED - the same word the Timeline row
+            // and the Triage tab show (the owner, 2026-09-07). The lane is the level heading over the
+            // rail now, so a lane word here only repeated it. An agent's own question is not a
+            // verdict about the message, so it keeps saying so.
+            const road = ROADS.find((r) => r.key === roadOfCard(i));
+            // ...and a report you set up, or an agent's own result, was judged by nobody: it keeps
+            // the word for what it IS (the owner, 2026-09-07: "report should say report")
+            const tag = i.settling ? "triaging…" : i.kind === "agent" && i.asking ? "asked you"
+              : road ? road.label : meta.word;
+            // The mark is drawn for what is on the owner. "approve" was missing from this list, so
+            // every pending reply lost the ✉️ LANE_META already gives it and read like an ordinary
+            // coding row - the one thing actually waiting on them, unmarked (the owner, 2026-09-10:
+            // "it's missing emoji task"). timelineState.STATES calls the same two states loud.
+            const loud = i.lane === "blocked" || i.lane === "approve" || i.lane === "time";
+            const promoted = !!i.promoted;                                  // triage moved it up: a server fact, never a lane
             return (
-              <div key={i.key} className={cls} style={{ top: landing.has(i.key) ? -ROW_H : top, "--edge": role }}>
-                <span className="when">{fmtTime12(i.kind === "meeting" ? i.when : (i.since || i.when))}</span>
+              <div key={i.key} className={cls} data-tq-day={localDay(i.kind === "meeting" ? i.when : (i.since || i.when)) || "undated"}
+                data-tq-run={levelOf(i)}
+                style={{ top: landing.has(i.key) ? -ROW_H : top, "--edge": role }}>
+                <span className="when">{fmtTime12(stamp)}
+                  {/* work is ranked, not chronological, so a row can be days old with only a clock on
+                      it - and the heading above the rail is its level now, not its day (the owner,
+                      2026-09-07: "for work don't we need date and time if it's not from today"). The
+                      date only appears when it is not today's, so today's rows are unchanged. */}
+                  {localDay(stamp) && localDay(stamp) !== today && <i className="day">{shortDay(stamp)}</i>}</span>
                 <span className="rail"><i style={{ background: role }} /></span>
                 <div className="card" onClick={() => !i.settling && !i.current && onPull(i.key, `Show me “${i.title}”`)}
                   title={`${meta.word}${promoted ? " · triage moved it up" : ""}${i.surfaced && !i.current ? " · shown already, still waiting on you" : ""} — ${i.why || ""}`}>
@@ -151,7 +232,7 @@ const StageMode = ({ mode, setMode }) => (
 );
 
 // ── one line of the conversation, with its card ───────────────────────────────────────────
-function Line({ m, live, actions, fresh }) {
+function Line({ m, live, last, actions, fresh }) {
   if (m.role === "user") return <div className="tq-msg you"><div className="body">{m.text}</div></div>;
   if (m.role === "receipt") return (
     <div className="tq-msg receipt"><span /><div className="body">✓ {m.text}
@@ -160,10 +241,19 @@ function Line({ m, live, actions, fresh }) {
   // The funnel deliberately renames msg:<mid> to agent:<tid> when somebody takes the task. Follow
   // the task identity across that rename; matching only the old key left a live coder displayed as
   // "nobody on it" until a new chat line happened to replace the card.
-  const follows = live && followsItem(m.card, fresh);
-  const c = follows ? { ...m.card, ...fresh } : m.card;   // the live card follows the pile
-  const kind = c?.kind === "setup" ? "setup" : cardFor(c);
+  const follows = live && !m.proposal && followsItem(m.card, fresh);   // a proposal is its own card, never the item's
+  // ``fresh`` is a complete presentation, not a patch. Exact replacement clears source fields
+  // that disappeared while retaining the durable conversation line and the card's local UI state.
+  const c = follows ? fresh : m.card;                     // the live card follows the pile
+  const kind = c?.kind === "setup" ? "setup" : (m.proposal || c?.kind === "proposal") ? "proposal" : cardFor(c);
+  // From the DURABLE turn, never from `fresh`: the vocabulary was chosen when the line was written and
+  // is recorded with it, while a pile refresh rebuilds the live item WITHOUT chips - reading them off
+  // `fresh` made the words vanish on the next poll. A verb that has since stopped applying is refused
+  // server-side at propose time, which is the only place that can know.
+  // A proposal is waiting on its own Confirm: offering the item's verbs beside it invites two answers.
+  const chips = last && !m.proposal && kind !== "proposal" ? chipsOf(m) : [];
   const card = live && m.card && kind ? {
+    proposal: <ProposalCard p={m.proposal || c} onConfirm={actions.confirm} onCancel={actions.cancel} onPreview={actions.preview} />,
     reply: <ReplyCard card={c} onDone={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} />,
     agent: <AgentCard card={c} onDone={actions.done} onOpenTask={actions.openTask} />,
     meeting: <MeetingCard card={c} onDone={actions.done} onOpenTask={actions.openTask} />,
@@ -174,7 +264,7 @@ function Line({ m, live, actions, fresh }) {
     setup: <SetupCard card={m.card} onNavigate={actions.navigate} onHandOff={actions.handOff} />,
     brief: <BriefCard card={m.card} onStart={actions.start} />,
     task: <TaskCard card={c} onDone={actions.done} onOpenTask={actions.openTask} />,
-    fyis: <FyisCard card={c} onDone={actions.done} onSurface={(k) => actions.surface(k)} onTimeline={actions.timeline} />,
+    fyis: <FyisCard card={c} onDone={actions.done} onSurface={actions.surface} onTimeline={actions.timeline} onPropose={actions.propose} />,
     wrapup: <WrapupCard card={c} onDone={actions.done} onOpenTask={actions.openTask} />,
   }[kind] : null;
   return (
@@ -190,11 +280,20 @@ function Line({ m, live, actions, fresh }) {
             </div>
           )}
           {card}
+          {/* The action words, in the assistant's own line - one place to look, chosen by the server from
+              the item's kind and already filtered to what this one can carry (concierge.chips_for). A
+              strip over the composer and a second row under the bubble said the same things twice and
+              neither was where the sentence was (the owner, 2026-09-07). */}
+          {last && !!chips.length && (
+            <div className="tq-verbs">
+              {chips.map((c, i) => (
+                <button key={c.verb || c.label} type="button" className={i === 0 ? "tq-verb primary" : "tq-verb"}
+                  title={c.hint || undefined} disabled={actions.busy} onClick={() => actions.chip(c)}>{c.label}</button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
-      {live && !!m.options?.length && (
-        <div className="tq-options">{m.options.map((o) => <button key={o} type="button" className="tq-chip" onClick={() => actions.pick(o)}>{o}</button>)}</div>
-      )}
     </>
   );
 }
@@ -202,9 +301,15 @@ function Line({ m, live, actions, fresh }) {
 // ── the page ─────────────────────────────────────────────────────────────────────────────────
 export default function AssistantView({ onOpenTask, onNavigate, onChanged, active = true }) {
   const [state, setState] = useState(null);           // /api/concierge: the dock task, its turns, the AI choices
+  const handoff = state?.handoff || null;             // the walk is in a phone chat: this tab is locked behind it
   const [msgs, setMsgs] = useState([]);
   const [pile, setPile] = useState(null);
   const [busy, setBusy] = useState(false);
+  // the walk validates Current against the pile before it can say anything, and that read was
+  // 5-47s (2026-09-09). busy is the TURN's interlock and surface() refuses to run while it is
+  // set, so opening needs its own flag - without one the button stayed enabled, said nothing,
+  // and looked broken for the whole wait.
+  const [starting, setStarting] = useState(false);
   const [resetting, setResetting] = useState(false);  // replacing a chat is housekeeping, never an AI turn
   const [work, setWork] = useState([]);              // the turn's tool calls and progress, as they stream
   const [err, setErr] = useState("");
@@ -212,6 +317,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [currentItem, setCurrentItem] = useState(null);   // ...and the item itself, drawn at the top of the pipe
   const [text, setText] = useState("");
   const [acked, setAcked] = useState(() => new Set());
+  const [notices, setNotices] = useState([]);           // the page's own strip notices: a newer message on Current (PW-165)
   const [chatsOpen, setChatsOpen] = useState(false);
   const [chats, setChats] = useState([]);
   const [chatsLoading, setChatsLoading] = useState(false);
@@ -229,16 +335,22 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const turnFlight = useRef(false);       // React state updates after the event; this closes same-tick double submits
   // Pile construction is comparatively expensive. Never let a timer tick and a websocket
   // notification queue duplicate requests in this tab; remember one forced refresh instead.
-  const pileFlight = useRef(false);
+  const pileFlight = useRef(null);
   const pileForcePending = useRef(false);
   const loadPileRef = useRef(null);
+  const currentRef = useRef(null); const surfaceRef = useRef(null); const speakRef = useRef(null);
+  const noticedRef = useRef(null);      // the context notice the stream already showed this turn
+  const only = useRef(null);                                       // "mail" once the owner chose to start with the mail
+  const selectionRef = useRef(null);
+  const selectionContractSeen = useRef(false);
 
   // one turn of the assistant, streamed: tool calls show under the dots as they happen, `done` is the answer
   const turn = useCallback(async (body) => {
     setWork([]);
     const plain = async () => {
       const endpoint = body.mode === "open" ? "/api/concierge/open" : body.mode === "next" ? "/api/concierge/next" : "/api/concierge/say";
-      return (await api.post(endpoint, body.mode === "next" ? { key: body.key, only: body.only, include_surfaced: body.include_surfaced, exclude: body.exclude }
+      return (await api.post(endpoint, body.mode === "next" ? { key: body.key, only: body.only, include_surfaced: body.include_surfaced, exclude: body.exclude,
+        selection_revision: body.selection_revision, expected_next_key: body.expected_next_key, expected_next_members: body.expected_next_members }
         : body.mode === "say" ? { text: body.text, key: body.key, context_mid: body.context_mid } : {})).data;
     };
     // The public demo is intentionally a local script. Do not even attempt the streaming AI
@@ -246,12 +358,29 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (DEMO) return plain();
     const token = localStorage.getItem("taskuary_token");
     const res = await fetch("/api/concierge/stream", { method: "POST", headers: { "Content-Type": "application/json", ...(token ? { "X-Taskuary-Token": token } : {}) }, body: JSON.stringify(body) });
-    if (!res.ok || !res.body) {                       // the static demo, or an older server: the plain door
-      return plain();
+    if (!res.ok) {
+      // An old server may not have the streaming door. A selection conflict is authoritative:
+      // replaying it through the plain endpoint would submit the same navigation twice.
+      if ([404, 405, 501].includes(res.status)) return plain();
+      let payload = null;
+      try { payload = await res.json(); } catch { /* retain the HTTP status */ }
+      const error = new Error(typeof payload?.detail === "string" ? payload.detail : `Assistant request failed (${res.status})`);
+      error.response = { status: res.status, data: payload || {} };
+      throw error;
     }
+    if (!res.body) return plain();                    // the static demo, or an older server: the plain door
     for await (const ev of readNdjson(res.body)) {
       if (ev.type === "done") { setWork([]); return ev; }
-      if (ev.type === "error") throw new Error(ev.error || "The assistant could not answer.");
+      if (ev.type === "error") {
+        const error = new Error(ev.error || "The assistant could not answer.");
+        error.code = ev.code; error.detail = ev.detail;
+        throw error;
+      }
+      // the thread moved while we were about to speak (PW-052): said now, before the answer, once
+      if (ev.type === "context_update" && ev.say) {
+        setMsgs((m) => [...m, { id: `context${Date.now()}`, role: "assistant", text: ev.say }]);
+        noticedRef.current = ev.say;
+      }
       // only real work shows under the dots - a command, a read, a call - never the CLI's own housekeeping
       if (ev.type === "tool_call" && !/^(ToolSearch|TodoWrite|TaskCreate|TaskUpdate|TaskList|Skill)$/.test(ev.name || ""))
         setWork((w) => [...w, `${ev.name || "tool"} ${toolTarget(ev.detail?.args).slice(0, 90)}`].slice(-6));
@@ -264,13 +393,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const { data } = await api.get("/api/concierge");
     if (epoch !== chatEpoch.current) return null;
     setState(data); setMsgs(data.messages || []);
-    // A closed task may have an older `agentdone` card in the transcript. It remains readable
-    // history, but it is not live work and must not be restored as CURRENT in the pipe.
-    const last = [...(data.messages || [])].reverse().find((m) => m.card && !["brief", "setup", "agentdone"].includes(m.card.kind));
-    setCurrent(last?.card?.key || null); setCurrentItem(last?.card || null);
+    // Current is the server's persisted, validated word (PW-162) - never inferred from the last card in the
+    // transcript: a handled item stays readable history and is not revived as live work, and an invalid
+    // Current comes back null with nothing chosen in its place.
+    const last = data.current || null;
+    currentRef.current = last;
+    selectionRef.current = null;
+    setCurrent(last?.key || null); setCurrentItem(last);
     return data;
   }, []);
-  const currentRef = useRef(null); const surfaceRef = useRef(null); const speakRef = useRef(null);
   // A decision can schedule the next card a few hundred milliseconds later. Those callbacks
   // belong to the conversation that scheduled them: New chat must cancel them, or the archived
   // walk starts advancing inside the new blank conversation without the owner asking anything.
@@ -298,41 +429,41 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (resettingRef.current) return;
     if (pileFlight.current) {
       if (force) pileForcePending.current = true;
-      return;
+      return pileFlight.current;
     }
-    pileFlight.current = true;
     const epoch = chatEpoch.current;
-    try {
+    // The optional `current` response belongs to this exact key. A click can put B on the table
+    // while the request for A is in flight; that older response may still refresh the rail, but it
+    // must never replace or clear B.
+    const requestedCurrentKey = currentRef.current?.key || null;
+    const requestedScope = nextSelectionScope(only.current, requestedCurrentKey);
+    const request = (async () => { try {
       // the key we are holding rides along, so the server can say whether it is still a thing
       const { data } = await api.get("/api/funnel/pile", { params: {
-        ...(currentRef.current?.key ? { current: currentRef.current.key } : {}),
+        ...(requestedCurrentKey ? { current: requestedCurrentKey } : {}),
+        only: requestedScope.only, include_surfaced: requestedScope.include_surfaced,
+        exclude: requestedScope.exclude,
         ...(force ? { force: 1 } : {}),
       } });
-      if (epoch !== chatEpoch.current || resettingRef.current) return;
-      setPile((p) => p?.rev === data.rev ? p : data);
+      const activeScope = nextSelectionScope(only.current, currentRef.current?.key || null);
+      if (epoch !== chatEpoch.current || resettingRef.current || !sameSelectionScope(requestedScope, activeScope)) {
+        pileForcePending.current = true;
+        return null;
+      }
+      const captured = captureNextSelection(data, requestedScope);
+      if (hasNextSelection(data)) selectionContractSeen.current = true;
+      selectionRef.current = captured;
+      setPile((p) => refreshPilePresentation(p, data));
       // Provider messages can arrive while this conversation is already open. The server writes
       // the resulting correction (for example, "you replied in WhatsApp; draft removed") into the
       // durable conversation, so read new turns on every freshness check -- not only when an agent
       // watcher event happens to accompany them.
       const { data: st } = await api.get("/api/concierge");
       if (epoch !== chatEpoch.current || resettingRef.current) return;
-      const fresh = [];
-      setMsgs((m) => {
-        const merged = mergeDurableTurns(m, st.messages || []);
-        fresh.push(...merged.added);
-        return merged.messages;
-      });
+      setMsgs((m) => mergeDurableTurns(m, st.messages || []).messages);
       if (data.events?.length) {
-        // the watcher recorded its lines on the conversation: pick them up, and if one is about the item on
-        // the table, the table clears and the walk moves on
-        // ...and a line the WATCHER wrote puts its card on the table, exactly as surfacing one does.
-        // It did not, so the page still thought nothing was current and drew the "By the way" bar for
-        // the very card sitting in the chat (the owner, 2026-09-03: "Don't show bottom prompt if it's
-        // already in main chat").
-        const put = [...fresh].reverse().find((x) => x.card && !["brief", "setup", "agentdone"].includes(x.card.kind));
-        if (put) { setCurrent(put.card.key); setCurrentItem(put.card); }
-        const hit = data.events.find((e) => currentRef.current && e.tid === currentRef.current.tid && e.kind !== "parked" && e.kind !== "asking");
-        if (hit) { setCurrent(null); setCurrentItem(null); deferInChat(() => surfaceRef.current?.(), 900); }
+        // The watcher's word is a strip notice the server keeps (PW-165/166) and, here, a spoken line.
+        // Background activity is never permission to choose, replace, clear, or advance the subject.
         for (const e of data.events) if (e.kind === "done" || e.kind === "asking") speakRef.current?.(e.text);
       }
       // the item on the table is live: an agent that stops and starts again changes what its row and card say
@@ -340,47 +471,83 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       // the table clears itself instead of showing a draft that is no longer waiting on anybody.
       {
         const cur = currentRef.current;
+        if ((cur?.key || null) !== requestedCurrentKey) return captured;
         // Starting from Tasks/Board changes msg:<mid> into agent:<tid>. The old key is correctly
         // absent, but the task is not gone: prefer its working row before clearing the table.
         const fresh = currentItemFromPile(cur, data);
         if (fresh) {
           const newer = fresh.mid && cur.mid && fresh.mid !== cur.mid;
           if (newer) {
+            // an update about Current is a strip notice (PW-165), never a line the chat writes by itself; the
+            // context refresh below is passive and the subject does not change
             const preview = String(fresh.preview || "").replace(/\s+/g, " ").trim().slice(0, 180);
             const line = `New message from ${fresh.who || "someone"} arrived on ${fresh.ref || fresh.title || "this thread"}`
-              + (preview ? `: “${preview}”` : "") + ". I refreshed the context."
+              + (preview ? `: “${preview}”` : "") + ". The context is refreshed."
               + (fresh.rid ? " The earlier draft is now out of date; redraft it before sending." : "");
-            setMsgs((m) => [...m, { id: `context${Date.now()}`, role: "assistant", text: line }]);
+            const key = `notice:msg:${fresh.mid}`;
+            setNotices((n) => [...n.filter((x) => x.key !== key), { key, item: cur.key, kind: "update", lane: cur.lane, text: line, notice: true, local: true }]);
             speakRef.current?.(line);
           }
-          if (newer || fresh.key !== cur.key || fresh.lane !== cur.lane || fresh.why !== cur.why || fresh.asking !== cur.asking
-              || fresh.stale !== cur.stale || fresh.sig !== cur.sig || fresh.sid !== cur.sid || fresh.agent !== cur.agent) {
-            const merged = { ...cur, ...fresh };
-            currentRef.current = merged;
-            setCurrent(merged.key);
-            setCurrentItem(merged);
+          const refreshed = refreshCurrentPresentation(cur, fresh);
+          if (newer || refreshed !== cur) {
+            currentRef.current = refreshed;
+            setCurrent(refreshed.key);
+            setCurrentItem(refreshed);
           }
         } else if (cur?.key && "current" in data && data.current === null) {
+          currentRef.current = null;
+          selectionRef.current = null;
           setCurrent(null); setCurrentItem(null);
         }
       }
-    } catch { /* the live event or safety timer will retry */ }
+      return captured;
+    } catch (error) {
+      const guard = selectionGuardDetail(error);
+      if (guard) {
+        selectionContractSeen.current = true;
+        selectionRef.current = null;
+        setPile((p) => replaceSelectionToken(p, guard));
+        setErr(errText(error));
+      }
+      // membership still settling behind a write: ask again in a moment rather than freeze on stale rows
+      if (isCoveragePending(error)) setTimeout(() => loadPileRef.current?.(force), 1200);
+      return null; /* the live event or safety timer will retry */
+    }
     finally {
-      pileFlight.current = false;
+      pileFlight.current = null;
       if (pileForcePending.current && !resettingRef.current) {
         pileForcePending.current = false;
         queueMicrotask(() => loadPileRef.current?.(true));
       }
-    }
-  }, [deferInChat]);
+    } })();
+    pileFlight.current = request;
+    return request;
+  }, []);
   useEffect(() => { loadPileRef.current = loadPile; }, [loadPile]);
+  // FeedView's initial filter is the unfiltered JSON object below. Treat that as the
+  // starting state instead of a change: otherwise mount starts the normal cached read,
+  // then immediately queues a forced second rebuild for the exact same scope.
+  const sharedFilter = useRef("{}");
+  const inventoryFilterChanged = useCallback((filter) => {
+    if (sharedFilter.current === filter) return;
+    sharedFilter.current = filter;
+    only.current = filter === '{}' ? null : `view:${filter}`;
+    selectionRef.current = null;
+    loadPileRef.current?.(true);
+  }, []);
   useEffect(() => { currentRef.current = currentItem; }, [currentItem]);
   useEffect(() => { loadState().catch((e) => setErr(errText(e))); }, [loadState]);
   // Writes push an event and force one fresh rebuild. The timer is only a disconnected-socket
   // safety net: rebuilding this multi-source pile every five seconds starved Board, Tasks and
   // Past chats behind work whose answer had not changed.
   useEffect(() => pollWhileActive(active, () => loadPile(false), 30000), [active, loadPile]);
-  useEffect(() => active ? onLive(["feed-changed", "task-changed"], () => loadPile(true)) : undefined, [active, loadPile]);
+  // a sync lands rows several times a second; one forced rebuild after the burst, not one per row
+  useEffect(() => {
+    if (!active) return undefined;
+    let t = 0;
+    const off = onLive(["feed-changed", "task-changed"], () => { clearTimeout(t); t = setTimeout(() => loadPile(true), 1500); });
+    return () => { clearTimeout(t); off?.(); };
+  }, [active, loadPile]);
   useEffect(() => { const el = bodyRef.current; if (el) el.scrollTop = el.scrollHeight; }, [msgs, busy]);
   // ...and again whenever the thread GROWS - a card that loaded its draft, a report that unfolded - so the
   // bottom of the conversation is always what you see, unless you have scrolled up to read
@@ -394,34 +561,107 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
 
   const items = pile?.items || [];
   const ready = items.filter((i) => !i.settling);
+  const canAdvance = canAdvanceSelection(pile, ready, only.current);
   // an alert about something already IN the conversation is noise: the card is right there
   const shownKeys = useMemo(() => new Set(msgs.slice(-8).map((m) => m.card?.key).filter(Boolean)), [msgs]);
-  const alert = useMemo(() => topAlert(pile?.alerts, acked, currentItem, shownKeys), [pile, acked, currentItem, shownKeys]);
+  const pending = useMemo(() => pendingAlerts([...(pile?.alerts || []), ...notices], acked, currentItem, shownKeys), [pile, notices, acked, currentItem, shownKeys]);
+  const alert = pending[0] || null;
   const say = useCallback((line) => { if (speakOnState) speak(line); }, [speakOnState]);
   useEffect(() => { speakRef.current = say; }, [say]);
-  const only = useRef(null);                                       // "mail" once the owner chose to start with the mail
   const landed = useCallback((data) => {
-    if (data.exhausted) only.current = null;            // the mail ran out: Next continues with the rest of the pipe
+    if (data.exhausted && !only.current?.startsWith("view:")) only.current = null;            // the mail ran out: Next continues with the rest of the pipe
     const card = data.item ? { ...data.item } : null;
     setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: data.options || [], card }]);
+    currentRef.current = card;
+    selectionRef.current = null;
     if (card) { setCurrent(card.key); setCurrentItem(card); } else { setCurrent(null); setCurrentItem(null); }
-    say(data.say); loadPile();
+    say(data.say); loadPile(true);
   }, [loadPile, say]);
 
+  const ensureNextSelection = useCallback(async (scope) => {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const captured = selectionRef.current;
+      if (captured && sameSelectionScope(captured.scope, scope)) return captured;
+      await loadPileRef.current?.(true);
+    }
+    const captured = selectionRef.current;
+    return captured && sameSelectionScope(captured.scope, scope) ? captured : null;
+  }, []);
+
   // pull the next thing (or the one named; or the next piece of mail) out of the pipe and say it
-  const surface = useCallback(async (key = null, asUser = null) => {
-    if (busy || resetting || turnFlight.current) return;
+  const surface = useCallback(async (key = null, asUser = null, leaving = null) => {
+    if (busy || resetting || handoff || turnFlight.current) return;
     turnFlight.current = true;
     setBusy(true); setErr("");
-    if (asUser) setMsgs((m) => [...m, { id: `u${Date.now()}`, role: "user", text: asUser }]);
-    try { landed(await turn({ mode: "next", key, only: key ? null : only.current,
-                              exclude: key ? null : currentRef.current?.key || null })); }
-    catch (e) { setErr(errText(e)); }
+    const epoch = chatEpoch.current;
+    const scope = nextSelectionScope(key ? null : only.current, key ? null : currentRef.current?.key || null);
+    const capture = key ? null : await ensureNextSelection(scope);
+    const activeScope = nextSelectionScope(key ? null : only.current, key ? null : currentRef.current?.key || null);
+    const scopeMoved = !key && !sameSelectionScope(scope, activeScope);
+    if (epoch !== chatEpoch.current || resettingRef.current || scopeMoved) {
+      turnFlight.current = false;
+      setBusy(false);
+      // a new chat or a reset is the owner's own doing and stays quiet. The rail re-emitting under
+      // a slow pile is NOT: this returned with no error and no message, and between 08:20 and
+      // 08:47 on 2026-09-09 not one press reached the server while the button looked alive.
+      if (scopeMoved) setErr((m) => m || "The list moved while that was loading - press it again.");
+      return;
+    }
+    // A failed modern capture (including selection_unavailable) never becomes an optimistic owner
+    // turn. The pile refresh already supplied the bounded error; a later explicit gesture retries.
+    if (!key && selectionContractSeen.current && !capture) {
+      setErr((message) => message || "Next is still refreshing. Review the updated list and press Next again.");
+      turnFlight.current = false;
+      setBusy(false);
+      return;
+    }
+    const optimisticId = asUser ? `u${Date.now()}` : null;
+    if (optimisticId) setMsgs((m) => [...m, { id: optimisticId, role: "user", text: asUser }]);
+    try {
+      // A named Timeline/pile row remains an explicit pull. Automatic Walk/Next echoes the exact
+      // server capture; demo/old-server payloads alone retain the legacy tokenless fallback.
+      const navigation = capture ? nextSelectionBody(capture) : scope;
+      landed(await turn({ mode: "next", key, leaving, ...navigation }));
+    } catch (e) {
+      const guard = selectionGuardDetail(e);
+      if (guard) {
+        if (optimisticId) setMsgs((m) => m.filter((message) => message.id !== optimisticId));
+        const freshCapture = captureNextSelection(guard, scope);
+        selectionContractSeen.current = true;
+        selectionRef.current = freshCapture;
+        setPile((p) => replaceSelectionToken(p, guard));
+        loadPile(true);                       // refresh the rows, never retry the navigation
+      }
+      setErr(errText(e));
+    }
     turnFlight.current = false;
     setBusy(false);
-  }, [busy, landed, resetting, turn]);
+  }, [busy, ensureNextSelection, handoff, landed, loadPile, resetting, turn]);
   useEffect(() => { surfaceRef.current = surface; }, [surface]);
-  const start = (what) => { only.current = what; surface(null, what === "mail" ? "Just what came in." : "Walk me through my tasks."); };
+  const startFlight = useRef(false);
+  const start = async (what) => {
+    if (busy || resetting || handoff || turnFlight.current || startFlight.current || starting) return;
+    startFlight.current = true;
+    const epoch = chatEpoch.current;
+    const said = what === "mail" ? "Just what came in." : "Walk me through my tasks.";
+    setStarting(true); setErr("");
+    setMsgs((m) => [...m, { id: `u${Date.now()}`, role: "user", text: said }]);
+    try {
+      only.current = sharedFilter.current && sharedFilter.current !== "{}" ? `view:${sharedFilter.current}` : (pile?.canonical ? null : what);
+      selectionRef.current = null;
+      await loadPile(true);                   // validate/resume Current under the requested scope
+      if (epoch !== chatEpoch.current || resettingRef.current) return;
+      // the line is already on screen: surface must not post a second copy of it
+      if (!currentRef.current) await surface(null, null);
+    } catch (e) {
+      // the owner's line is on screen now, so a failure has to be answered on screen too -
+      // an unhandled rejection would leave "Walk me through my tasks." sitting there alone
+      setErr(errText(e));
+    } finally {
+      startFlight.current = false;
+      setStarting(false);
+    }
+  };
 
   // The day used to write itself the moment the page opened - a model call nobody asked for, which
   // also landed UNDER a "Set something up" the owner had already pressed (2026-09-03: "I hit new chat
@@ -430,20 +670,26 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
 
   const send = async (line) => {
     const t = String(line ?? text).trim();
-    if (!t || busy || resetting || turnFlight.current) return;
+    if (!t || busy || resetting || handoff || turnFlight.current) return;
     turnFlight.current = true;
     setText(""); setBusy(true); setErr("");
     setMsgs((m) => [...m, { id: `u${Date.now()}`, role: "user", text: t }]);
     try {
-      const data = await turn({ mode: "say", text: t, key: current, context_mid: currentItem?.mid || null });
-      if (data.context_update) {
+      const ask = () => turn({ mode: "say", text: t, key: current, context_mid: currentItem?.mid || null });
+      const data = await ask().catch(async (e) => { if (!isCoveragePending(e)) throw e; await new Promise((r) => setTimeout(r, 1200)); return ask(); });
+      if (data.context_update && noticedRef.current !== data.context_update) {   // not already said by the stream event
         setMsgs((m) => [...m, { id: `context${Date.now()}`, role: "assistant", text: data.context_update }]);
         say(data.context_update);
       }
+      noticedRef.current = null;
       if (data.item) landed(data);                       // the words pointed at something: it is on the table now
       else {
-        setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: data.options || [] }]); say(data.say);
-        if (data.decision) await decide(data.decision);  // the words were a decision: carry it out, then move on
+        const prop = proposalOf(data);      // a consequential decision arrives as a proposal to confirm (PW-123)
+        setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [],
+                                ...(prop ? { proposal: prop, card: { kind: "proposal", key: prop.key, title: prop.label, op: prop.id, tid: prop.tid, ref: prop.ref } } : {}) }]);
+        say(data.say);
+        if (prop?.auto) await runProposal(prop);                   // a plain verb on the item on the table: no button to press
+        else if (!prop && data.decision) await decide(data.decision);  // the two immediate exceptions: a reply drafts, Next moves (PW-126/128)
       }
     } catch (e) { setErr(errText(e)); }
     turnFlight.current = false;
@@ -456,155 +702,116 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (text.trim()) setText((v) => `${v}${/\s$/.test(v) ? "" : " "}${emoji}`);
     else send(emoji);
   };
-  // the owner decided in words: the same doors the card's buttons open, then the next thing. Never stuck.
+  // the owner decided in words. Only two decisions still run without a confirmation (PW-126/128): a reply
+  // request DRAFTS (nothing is sent, nothing is marked), and Next moves the walk without marking, closing
+  // or deferring anything. Everything else arrives as a proposal card and runs from its button.
   const decide = async (d) => {
-    // The card is looked up by the key on the table, and it can be MISSING - a key that changed under
-    // a pile refresh, a card older than the thread we hold. Every branch below is guarded on it, so a
-    // missing card used to mean nothing happened at all while the server had already said "Closing the
-    // task. Moving on." (the owner, 2026-09-03: "I told the ai to close it but it did not"). The live
-    // item is the same shape and is the fallback; when neither has what the verb needs, say so.
-    // ...and when the owner's SENTENCE named another subject, the server resolves it and sends the
-    // item it meant along as `target`. That one is acted on; the card on the table is not touched
-    // and does not settle (2026-09-03: "not ours" about the outage deleted the finished coding task).
     const cur = d.target || [...msgs].reverse().find((m) => m.card && m.card.key === current)?.card || currentItem || null;
     const elsewhere = !!d.target;
     const mid = cur?.mid, verb = d.verb;
-    const needs = { reply: mid, approve: cur?.rid, redraft: cur?.rid, not_ours: mid, not_ours_remember: mid, not_ours_sender: mid,
-                    coder: mid, mine: mid, forward: mid, archive: mid, answer_agent: cur?.tid, rerun: cur?.source_id, close: cur?.tid };
-    if (verb in needs && !needs[verb]) {
-      setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt",
-                              text: `I could not do that from here - ${cur ? `${cur.ref || "this one"} has nothing to ${verb} on it` : "nothing is on the table"}. Open it and the buttons will.`,
-                              tid: cur?.tid, ref: cur?.ref }]);
-      return;
-    }
-    // moving on happens ONLY on the item that is on the table, and only when the verb settled it
-    const after = async (receipt) => {
-      if (receipt) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: receipt, tid: cur?.tid, ref: cur?.ref }]);
-      if (elsewhere) { loadPile(); return; }
-      await done(null);
-    };
     try {
+      if (verb === "next") {
+        selectionRef.current = null;
+        deferInChat(() => surfaceRef.current?.(), 300); return;
+      }
       if (verb === "reply" && mid) {
         const { data } = await api.post(`/api/messages/${mid}/reply`, { draft: true, instruction: d.text || null });
-        if (data.reviewId && !elsewhere) { await api.post("/api/funnel/settle", { key: current, verb: "done" }); setCurrent(null); deferInChat(() => surfaceRef.current?.(`review:${data.reviewId}`), 300); return; }
-        if (data.reviewId) { loadPile(); return; }
-      } else if (verb === "redraft" && cur?.rid && mid) {
-        // the draft itself is rewritten and the SAME review comes back up - the model used to claim
-        // the edit and the next approve sent the untouched original (2026-09-03)
+        if (data.reviewId && !elsewhere) { setCurrent(null); deferInChat(() => surfaceRef.current?.(`review:${data.reviewId}`), 300); return; }
+        loadPile(); return;
+      }
+      if (verb === "redraft" && cur?.rid && mid) {
         const { data } = await api.post(`/api/messages/${mid}/reply`, { draft: true, redraft: true, instruction: d.text || null });
         setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: data.draft ? "Rewritten - read it below before you send it." : "I could not rewrite it here; edit the draft on the card and send that." }]);
         if (!elsewhere) { setCurrent(null); deferInChat(() => surfaceRef.current?.(`review:${cur.rid}`), 300); } else loadPile();
         return;
-      } else if (verb === "approve" && cur?.rid) {
-        const { data } = await api.post(`/api/reviews/${cur.rid}/decide`, { verb: "approve", final_text: null, note: null });
-        // a refusal is not an error banner: nothing was sent, the review is untouched, and the
-        // card stays where it is (an empty draft, or a verdict that already landed)
-        if (data.empty || data.already) {
-          setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: cur.tid, ref: cur.ref,
-                                  text: data.empty ? "Nothing was sent - there is no draft on this one yet. Say reply and what to tell them, and it lands here for your yes."
-                                                   : `Nothing was sent - ${cur.ref || "this one"} was already ${data.status}. It is off the queue.` }]);
-          loadPile(); return;
-        }
-        if (data.send_error) throw new Error(data.send_error);
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: `Sent${cur.who ? ` to ${cur.who}` : ""}.${cur.tid ? ` ${cur.ref} closed.` : ""}` }]);
-      } else if (verb === "answer_agent" && cur?.tid) {
-        await api.post(`/api/tasks/${cur.tid}/waitroom`, { text: d.text || "yes" });
-        await after(`Told ${cur.agent || "the agent"}: “${String(d.text || "yes").slice(0, 80)}”`);
-        return;
-      } else if (verb === "archive" && mid) {
-        const { data } = await api.post(`/api/messages/${mid}/file`, { learn: false, archive: true });
-        await after(`Archived${data.ref ? ` - ${data.ref} is closed, not deleted` : " - off the pipe, nothing deleted"}.`);
-        return;
-      } else if (verb === "remembered" || verb === "forwarded" || verb === "setting" || verb === "split") {
-        // Taskuary already did these itself and said so; the card the server recorded is in the
-        // thread. Nothing to settle - a memory is not a verdict about the thing on the table.
-        loadPile(); return;
-      } else if (verb === "remember" && d.text) { await api.post("/api/memory", { note: d.text, scope: "global" }); loadPile(); return; }
-      else if (verb === "followup" && current) { await api.post("/api/concierge/act", { key: current, verb: "followup" }); await after("Follow-up drafted - it waits for your yes."); return; }
-      else if (verb === "not_ours_sender" && mid) await api.post(`/api/messages/${mid}/not-mine`, { scope: "sender" });
-      else if (verb === "not_ours" && mid) {
-        const { data } = await api.post(`/api/messages/${mid}/file`, { learn: false });
-        if (data.taskArchived) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: cur?.tid, ref: data.ref, text: `Filed. ${data.ref} was kept and closed, not deleted - an agent had worked it.` }]);
       }
-      else if (verb === "not_ours_remember" && mid) await api.post(`/api/messages/${mid}/not-mine`, { scope: "subject" });
-      else if (verb === "coder" && mid) {
-        const { data } = await api.post(`/api/messages/${mid}/dispatch`, { kind: "coding", instruction: d.text || null });
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: `${data.ref || "It"} is with the coding agent${d.text ? " with your note" : ""} - I'll bring it back when it's done.` }]);
-      }
-      else if (verb === "regular_agent" && mid) {
-        const { data } = await api.post(`/api/messages/${mid}/dispatch`, { kind: "general", instruction: d.text || null });
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: `${data.ref || "It"} is with ${data.agent || "the regular agent"}${d.text ? " with your note" : ""} - I'll bring it back when it's done.` }]);
-      }
-      else if (verb === "mine" && mid) await api.post(`/api/messages/${mid}/mine`, { kind: "task" });
-      else if (verb === "rerun" && cur?.source_id) {
-        const { data } = await api.post(`/api/reports/${cur.source_id}/rerun`);
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: `${data.title || "The report"} is rerunning in the background - it lands back in the pipe when it's done.` }]);
-      } else if (verb === "close" && cur?.tid) {
-        await api.patch(`/api/tasks/${cur.tid}`, { Status: "done" });
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: `${cur.ref || "The task"} closed.` }]);
-      }
-      else if (verb === "stop_agent" && d.taskId) {       // ending the AGENT, which is not closing the task
-        if (d.wrap) await api.post(`/api/tasks/${d.taskId}/wrap`, { close: true });
-        else await api.post(`/api/tasks/${d.taskId}/agent/stop`);
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: d.taskId, ref: d.ref,
-                                text: d.wrap ? `${d.ref} wrapped up - the report is on it and the task is closed.`
-                                             : `The agent on ${d.ref} is stopped. The task is still open.` }]);
-        loadPile(); return;
-      }
-      else if (verb === "walkthrough" && d.taskId) {      // a set-up is a conversation, not a build
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: d.taskId, ref: d.ref,
-                                text: `${d.ref} is open as a walk-through - nothing was built. Open it when you want to start; its browser opens beside the assistant.` }]);
-        loadPile(); return;                              // the owner is mid-conversation: do not yank the tab
-      }
-      else if (verb === "created") {                      // the words WERE the brief: the task exists already
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: d.taskId, ref: d.ref,
-                                text: `${d.ref} is with the coding agent - it comes back here when it is done.` }]);
-        loadPile(); return;
-      }
-      else if (verb === "clear") {
-        const c = d.cleared || {};
-        // a standing RULE already keeps these out of the pipe; a sender-wide verdict on top of it would
-        // reach everything that person ever sends, which is not what "don't need these" means
-        if (c.remember && c.mid && !c.rules?.length) { try { await api.post(`/api/messages/${c.mid}/not-mine`, { scope: "sender" }); } catch { /* the sweep still happened */ } }
-        loadPile(); return;
-      }
-      else if (verb === "setup" && d.text) {
-        const { data } = await api.post("/api/concierge/setup", { text: d.text });
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: data.taskId, ref: data.ref,
-                                text: `${data.ref} — "${data.title}" is open as a step-by-step walkthrough. Open it when you want to start; its browser opens beside the assistant.` }]);
-        if (!current) return;                       // ...and the walk stays where it was: see handOff
-      }
-      else if (["later", "skip", "next", "done", "closed", "ack"].includes(verb)) { /* settled below */ }
-      else if (!(verb in needs)) {
-        // NOTHING falls through to done(null) any more: an unknown verb used to mark the item on
-        // the table done for good while the chat said something else entirely (2026-09-03)
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: cur?.tid, ref: cur?.ref,
-                                text: `I don't have a road for that here${cur?.ref ? ` - ${cur.ref} is untouched` : ""}. Open it and its own buttons will.` }]);
-        return;
-      }
-      if (verb === "done" && cur && cur.kind !== "agent") {
-        // done on a task-backed item means the TASK is done: its pending draft is dismissed and it closes
-        if (cur.rid) { try { await api.post(`/api/reviews/${cur.rid}/decide`, { verb: "no_reply", final_text: null, note: "handled - the owner said so" }); } catch { /* it may be decided already */ } }
-        if (cur.tid) { try { await api.patch(`/api/tasks/${cur.tid}`, { Status: "done" }); setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: `${cur.ref} closed.` }]); } catch { /* fine */ } }
-      }
-      if (["later", "skip"].includes(verb)) { await settle(verb); return; }
-      await after(null);
+      if (verb === "setting" || verb === "forwarded") { loadPile(); return; }   // Taskuary put these in Review itself
+      setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: cur?.tid, ref: cur?.ref,
+                              text: `That needs a confirmation card and none came back${cur?.ref ? ` - ${cur.ref} is untouched` : ""}. Say it again.` }]);
     } catch (e) { setErr(errText(e)); }
   };
+  // the confirmation button (PW-124/125): the structured proposal by id and version - never a phrase sent
+  // back through the interpreter. The receipt is what the server said happened; the walk moves only on a
+  // success that settles the item on the table.
+  const confirmProposal = async (p) => { if (!busy) await runProposal(p); };
+  const runProposal = async (p) => {
+    setBusy(true);
+    try {
+      let res;
+      try { res = (await api.post(`/api/operations/${p.id}/execute`, { version: p.version })).data; }
+      catch (e) { res = { status: e?.response?.status === 409 ? "stale" : "error", error: e?.response?.data?.detail || errText(e) }; }
+      const out = afterExecute(p, res);
+      setMsgs((m) => [...m.map((x) => (x.proposal?.id === p.id ? { ...x, proposal: { ...x.proposal, status: out.status, repo: out.repo || null, outcome: res?.outcome || null } } : x)),
+                       { id: `r${Date.now()}`, role: "receipt", text: out.receipt, tid: p.tid, ref: p.ref }]);
+      onChanged?.();
+      // the server already settled or closed the item; a settle proposal (later, tomorrow, done) must not be
+      // re-marked "done" by the page, so it advances without the settle post. A hand-off that STARTED advances
+      // once the same way (PW-135): the delegated task stays in Unread as Working, nothing is settled; a
+      // repository still to choose, a failed start or a cancel keep the item where it is.
+      if (out.settle && p.key && p.key === current) { if (p.kind === "item.settle" || out.handoff) advance(); else await done(null); }
+      else loadPile();
+    } finally { setBusy(false); }
+  };
+  // a card button on ONE entry (PW-151): the same proposal road the words take, minus the interpreter - the
+  // target is explicit. The card lands in the chat and runs from its own button, like any proposal.
+  const proposeDirect = async (verb, key, table = false) => {
+    const { data } = await api.post("/api/concierge/propose", { verb, key, table });
+    setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: [], proposal: data,
+                            card: { kind: "proposal", key: data.key, title: data.label, op: data.id, tid: data.tid, ref: data.ref } }]);
+    say(data.say);
+    return data;
+  };
+  // Get me ready for this meeting: a conversation with the assistant, no checkout (server: calendar/prep)
+  const prep = async (item) => {
+    const e = item?.event || {};
+    const { data } = await api.post("/api/calendar/prep", { ...e, instruction: "Get me ready for this meeting: who is in it, what came before it, what I should say." });
+    setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: data.taskId, ref: data.ref,
+                            text: `${data.ref} - prep is open as its own conversation with the assistant.` }]);
+    advance();
+  };
+  // ONE road for every action word in the chat. A word the assistant offered is a word that runs: the
+  // verb goes to the same proposal endpoint a card button uses, with the target explicit. The two that
+  // are not proposals keep their own immediate behaviour - a reply DRAFTS (PW-126), Next moves the walk
+  // and puts down what it left. An OPTIONS choice is not a verb at all: it goes back as the owner's words.
+  const runChip = async (c) => {
+    if (busy || resetting || handoff || !c) return;
+    if (c.ask) { send(c.ask); return; }
+    const item = currentRef.current || currentItem;
+    const key = item?.key || current;
+    if (c.verb === "next") { surface(null, null, key); return; }
+    if (c.verb === "reply" || c.verb === "redraft") { await decide({ verb: c.verb }); return; }
+    setBusy(true); setErr("");
+    try {
+      if (c.verb === "prep") await prep(item);
+      else if (c.verb === "followup") {
+        const out = await api.post("/api/concierge/act", { key, verb: "followup" });
+        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: "Follow-up drafted - it waits for your yes.", tid: out.data?.taskId }]);
+        advance();
+      } else {
+        const pr = await proposeDirect(c.verb, key, true);
+        if (pr?.auto) await runProposal(pr);
+      }
+    } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
+  };
+  // a dry run of a proposed report (PW-195): the server refuses anything that could write
+  const previewProposal = async (p) => (await api.post(`/api/operations/${p.id}/preview`)).data;
+  const cancelProposal = async (p) => {
+    try { await api.delete(`/api/operations/${p.id}`); } catch { /* it may be gone already */ }
+    const out = afterCancel(p);
+    setMsgs((m) => [...m.map((x) => (x.proposal?.id === p.id ? { ...x, proposal: { ...x.proposal, status: out.status } } : x)),
+                     { id: `r${Date.now()}`, role: "receipt", text: out.receipt, tid: p.tid, ref: p.ref }]);
+  };
   // a card did its thing: say so in the thread, then move on
-  const done = async (receipt) => {
-    if (receipt) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: receipt }]);
-    if (current) { try { await api.post("/api/funnel/settle", { key: current, verb: "done" }); } catch { /* it may already be gone */ } }
+  const advance = () => {
+    currentRef.current = null; selectionRef.current = null;
     setCurrent(null); setCurrentItem(null);
     onChanged?.();                                     // a draft may have gone out: the Review badge recounts
     deferInChat(() => surfaceRef.current?.(), 500);
   };
-  const settle = async (verb) => {
-    if (!current) { surface(); return; }
-    try { await api.post("/api/funnel/settle", { key: current, verb }); } catch { /* fine */ }
-    setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: verb === "done" ? "Done." : verb === "later" ? "Pushed back a few hours — it comes back into the pipe then." : "Skipped until tomorrow morning." }]);
-    setCurrent(null); setCurrentItem(null); loadPile();
-    deferInChat(() => surfaceRef.current?.(), 400);
+  const done = async (receipt) => {
+    if (receipt) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: receipt }]);
+    if (current) { try { await api.post("/api/funnel/settle", { key: current, verb: "done" }); } catch { /* it may already be gone */ } }
+    advance();
   };
   const setup = () => setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: "Tell me what to set up - a report, a connection, an automation - in a sentence. I open it as a walk-through with the assistant: it takes you through it here, nothing is built and no repository is touched. If something does have to be built, say send it to the coding agent.",
     card: { key: "setup", kind: "setup", lane: "report", title: "Set something up" }, options: [] }]);
@@ -623,14 +830,25 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     } catch (e) { setErr(errText(e)); }
     setBusy(false);
   };
+  // Later puts the NOTICE down, not the item or the task behind it; Open is the owner's own navigation to it
+  // (PW-166) - the one road by which a background update ever reaches the table
   const ack = async (a, go) => {
     setAcked((s) => new Set([...s, a.key]));
-    api.post("/api/funnel/settle", { key: a.key, verb: "ack" }).catch(() => {});
-    if (go) surface(a.item, `Show me — ${a.text}`);
+    if (!a.local) api.post("/api/funnel/settle", { key: a.key, verb: "ack" }).catch(() => {});
+    if (go) surface(a.item, `Open — ${a.text}`);
   };
+  // past chats are read, a page at a time (PW-157): listing them changes nothing on the server
+  const [chatsNext, setChatsNext] = useState(null);
   const openChats = async () => {
     setChatsOpen(true); setChatsLoading(true);
-    try { setChats((await api.get("/api/concierge/chats", { timeout: 10000 })).data.data || []); }
+    try { const { data } = await api.get("/api/concierge/chats", { params: { limit: 25 }, timeout: 10000 }); setChats(data.data || []); setChatsNext(data.next || null); }
+    catch (e) { setErr(errText(e)); }
+    setChatsLoading(false);
+  };
+  const moreChats = async () => {
+    if (!chatsNext) return;
+    setChatsLoading(true);
+    try { const { data } = await api.get("/api/concierge/chats", { params: { limit: 25, before: chatsNext }, timeout: 10000 }); setChats((c) => [...c, ...(data.data || [])]); setChatsNext(data.next || null); }
     catch (e) { setErr(errText(e)); }
     setChatsLoading(false);
   };
@@ -643,9 +861,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     setResetting(true);
     // Clear first. Archiving is not a prompt and must never draw Taskuary's thinking animation.
     // Keep provider and pile metadata on screen while the server swaps the hidden durable chat.
-    only.current = null;
+    only.current = sharedFilter.current && sharedFilter.current !== "{}" ? `view:${sharedFilter.current}` : null;
     currentRef.current = null;
-    setMsgs([]); setText(""); setWork([]); setErr(""); setAcked(new Set());
+    selectionRef.current = null;
+    setMsgs([]); setText(""); setWork([]); setErr(""); setAcked(new Set()); setNotices([]);
     setOld(null); setChatsOpen(false); setCurrent(null); setCurrentItem(null);
     setState((s) => s ? { ...s, messages: [] } : s);
     try {
@@ -679,9 +898,20 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // a card's "open on the Timeline": the row opens on the stage, over the chat, right here - the rail
   // reads the hash and pins the row (FeedView); its close comes back to the conversation
   const timeline = (mid) => { window.location.hash = `msg=${mid}`; };
-  const openWhatsApp = () => {
-    window.location.hash = "connector=whatsapp";
-    onNavigate?.("Connections");
+  // The walk, taken to a chat you already have connected (WhatsApp, Telegram). This is not a way to
+  // CONNECT one - a chat with no Assistant card offers nothing here (the owner, 2026-09-07: "point is
+  // to talk to assistant through it not connect it"). While it is there the tab locks itself: two
+  // screens answering the same item is how the same mail gets replied to twice.
+  const handOver = async (d) => {
+    if (busy || resetting || handoff) return;
+    setBusy(true); setErr("");
+    try { await api.post("/api/concierge/handoff", { channel: d.channel }); await loadState(); }
+    catch (e) { setErr(errText(e)); } finally { setBusy(false); }
+  };
+  const takeBack = async () => {
+    setBusy(true); setErr("");
+    try { await api.post("/api/concierge/handoff/end"); await loadState(); }
+    catch (e) { setErr(errText(e)); } finally { setBusy(false); }
   };
   // a row pulled off the rail - the pipe's or the Timeline's - goes on the table exactly as the pipe's
   // own click does, by the same key (so the server puts the same item up, whichever list it came from)
@@ -703,20 +933,29 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     pull(key, asUser);
   };
 
-  const actions = { done, start, handOff, openTask: onOpenTask, timeline, navigate: onNavigate, pick: (o) => send(o),
+  const actions = { done, start, handOff, openTask: onOpenTask, timeline, navigate: onNavigate,
+    chip: runChip, busy: busy || resetting || !!handoff,
+    confirm: confirmProposal, cancel: cancelProposal, propose: proposeDirect, preview: previewProposal,
     surface: (key, note) => {
       if (note) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: note }]);
       deferInChat(() => key ? surfaceRef.current?.(key) : loadPileRef.current?.(), 900);
     } };
   const shown = old ? old.messages : msgs;
-  const lastCardIdx = useMemo(() => { for (let i = shown.length - 1; i >= 0; i -= 1) if (shown[i].card) return i; return -1; }, [shown]);
+  const handedTo = handoff ? (state?.doorways || []).find((d) => d.channel === handoff.channel) : null;
+  const lastCardIdx = useMemo(() => interactiveCardIndex(shown), [shown]);
+  const lastSaidIdx = useMemo(() => lastSaidIndex(shown), [shown]);
 
   const chat = (
     <div className="tq-asst-col" style={{ position: "relative", flex: 1, minHeight: 0 }}>
       <div className="tq-chat-head">
         <Box sx={{ width: 30, height: 30, borderRadius: 2, background: "linear-gradient(90deg, #55697a, #7d9a7c)", display: "grid", placeItems: "center", flexShrink: 0 }}><TaskuaryMark size={22} /></Box>
-        <div className="who" style={{ minWidth: 0 }}><b>Taskuary</b><span>{old ? `An earlier chat · ${fmtDateTime(old.at)}` : resetting ? "new chat" : statusLine(items, busy)}</span></div>
+        <div className="who" style={{ minWidth: 0 }}><b>Taskuary</b><span>{old ? `An earlier chat · ${fmtDateTime(old.at)}` : resetting ? "new chat" : !pile ? "Loading your items…" : statusLine(items, busy)}</span></div>
         <div className="grow" />
+        {/* Setting Taskuary up is not a first-run-only wizard (PW-189): the entry stays on the header, and it
+            opens the same AI-led walk-through in THIS conversation - nothing is navigated away from, and the
+            click carries no phrase for anything to interpret. */}
+        <Tooltip title="Walk through setting Taskuary up — the AI brain, where work arrives, your documents and reports">
+          <button type="button" className="tq-chip tq-phone-hide" disabled={busy || resetting} onClick={setup}>Set up Taskuary</button></Tooltip>
         <StageMode mode={stageMode} setMode={setStageMode} />
         <Tooltip title="The Timeline"><IconButton size="small" onClick={() => setRailOpen(true)} sx={{ display: { xs: "inline-flex", md: "none" } }}><ViewSidebarIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
         <Tooltip title={speakOnState ? "Reading replies aloud — click to stop" : "Read replies aloud"}><IconButton size="small" className="tq-phone-hide" onClick={toggleSpeak}>{speakOnState ? <VolumeUpIcon sx={{ fontSize: 18, color: "#526b53" }} /> : <VolumeOffIcon sx={{ fontSize: 18, color: DIM }} />}</IconButton></Tooltip>
@@ -749,6 +988,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                 <span>{[c.mail ? `${c.mail} mail` : "", c.seen ? `${c.seen} looked at` : "", c.minutes ? `${c.minutes} min` : "", ageText(c.at)].filter(Boolean).join(" · ")}</span>
               </div>
             ))}
+            {chatsNext && !chatsLoading && <button type="button" className="tq-chip" style={{ margin: 8 }} onClick={moreChats}>Earlier chats</button>}
           </div>
         </div>
       )}
@@ -762,16 +1002,26 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               <span>{items.length ? `How can I help? ${waitingLine(ready)}`
                 : "How can I help? Nothing is waiting on you - ask me anything, or set something up."}</span>
               <div className="tq-modes">
-                <button type="button" className="tq-chip primary" disabled={resetting || !ready.length} onClick={() => start(null)}
-                  title="Everything in the pipe, most important first - mail, reports, agents, meetings">Walk me through my tasks</button>
-                <button type="button" className="tq-chip" disabled={resetting || !incoming(ready).length} onClick={() => start("mail")}
-                  title="Only what people sent you - mail and chat">Just what came in</button>
+                <button type="button" className="tq-chip primary" disabled={busy || resetting || starting || !canAdvance} onClick={() => start(null)}
+                  title="Everything in the pipe, most important first - mail, reports, agents, meetings">{starting ? "Reading your pipe..." : "Walk me through my tasks"}</button>
+                {!pile?.canonical && <button type="button" className="tq-chip" disabled={busy || resetting || starting || !incoming(ready).length} onClick={() => start("mail")}
+                  title="Only what people sent you - mail and chat">Just what came in</button>}
                 <button type="button" className="tq-chip" disabled={resetting} onClick={setup}
                   title="A scheduled check that reads and summarises, or a workflow that writes data">Set up a report or workflow</button>
+                {/* the same walk, on your phone - offered only for a chat that is already connected and
+                    names an Assistant chat, because this talks to the assistant, it does not set one up */}
+                {(state?.doorways || []).map((d) => (
+                  <button key={d.channel} type="button" className="tq-chip tq-chip-chat" disabled={busy || resetting || !canAdvance}
+                    onClick={() => handOver(d)} title={`I say hello in ${d.name} and take you through the same items there; this tab locks until you take it back`}>
+                    <ChannelIcon channel={d.channel} sx={{ fontSize: 14 }} />
+                    Walk me through them in {d.label}
+                  </button>
+                ))}
               </div>
             </div>
           )}
-          {shown.map((m, i) => <Line key={m.id} m={m} live={!old && i === lastCardIdx} actions={actions} fresh={currentItem} />)}
+          {shown.map((m, i) => <Line key={m.id} m={m} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx}
+                                     actions={actions} fresh={currentItem} />)}
           {busy && (
             <div className="tq-msg"><div className="avatar"><TaskuaryMark size={18} /></div>
               <div className="body"><span className="tq-typing"><i /><i /><i /></span>
@@ -782,24 +1032,29 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           {err && <Typography sx={{ color: "#7a2f3c", fontSize: 12, mb: 1 }}>{err}</Typography>}
         </div>
       </div>
-      {alert && !old && (
+      {/* ONE bottom strip for every unsolicited update (PW-165), kept until Open or Later (PW-166); the rest of
+          the queue waits behind it and comes up as each is put down */}
+      {/* while the walk is in a chat the interruption is SENT there (remote_assistant.push_alerts);
+          a strip on the locked tab would only be a button that cannot act */}
+      {alert && !old && !handoff && (
         <div className="tq-btw" role="status">
-          <span className="dot" /><div className="txt"><b>By the way —</b>{alert.text}.{current ? " Finish this one and say next, or switch now." : ""}</div>
-          <button type="button" className="tq-chip primary" onClick={() => ack(alert, true)}>{current ? "Switch to it" : "Show me"}</button>
+          <span className="dot" /><div className="txt"><b>By the way —</b>{alert.text}.{pending.length > 1 ? ` (+${pending.length - 1} more)` : ""}</div>
+          <button type="button" className="tq-chip primary" onClick={() => ack(alert, true)}>{alert.item === current ? "Open the update" : current ? "Switch to it" : "Open"}</button>
           <button type="button" className="tq-chip" onClick={() => ack(alert, false)}>Later</button>
         </div>
       )}
-      {!old && (
+      {/* the walk is on the phone: this tab does not get to answer the same item (the owner, 2026-09-07:
+          "make the desktop unavailable if sent to whatsapp otherwise it's confusing") */}
+      {!old && handoff && (
+        <div className="tq-handed" role="status">
+          <ChannelIcon channel={handoff.channel} sx={{ fontSize: 17 }} />
+          <div className="txt"><b>The walk is in {handedTo?.label || handoff.channel}</b>
+            <span>Answer me there and I keep going. This chat waits so the same thing is not answered twice.</span></div>
+          <button type="button" className="tq-chip primary" disabled={busy} onClick={takeBack}>Take it back</button>
+        </div>
+      )}
+      {!old && !handoff && (
         <div className="tq-compose">
-          <div className="tq-quick">
-            <button type="button" className="tq-chip" disabled={busy || resetting || !ready.length} onClick={() => surface()}>Next</button>
-            {current && <>
-              <button type="button" className="tq-chip" disabled={busy || resetting} onClick={() => settle("done")}>Done</button>
-              <button type="button" className="tq-chip" disabled={busy || resetting} onClick={() => settle("later")}>Later</button>
-              <button type="button" className="tq-chip" disabled={busy || resetting} onClick={() => settle("skip")}>Tomorrow</button>
-            </>}
-            <button type="button" className="tq-chip" disabled={busy || resetting} onClick={setup}>Set something up</button>
-          </div>
           <div className="tq-compose-box">
             <MicButton size={18} sx={{ width: 34, height: 34, p: 0, color: DIM }} onText={(t) => setText((v) => (v ? `${v} ${t}` : t))} />
             <Tooltip title="Send an emoji response">
@@ -828,11 +1083,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             </Box>
             {!!text.trim() && <Typography sx={{ fontSize: 10.5, color: FAINT, px: 0.4, pt: 0.75 }}>Added to your draft; press send when ready.</Typography>}
           </Popover>
-          <div className="tq-compose-hint">Enter sends · Shift+Enter adds a line · click a row on the left to pull it in · the buttons on a card do the acting</div>
-          <button type="button" className="tq-whatsapp-connect" onClick={openWhatsApp}>
-            <ChannelIcon channel="whatsapp" sx={{ fontSize: 15 }} />
-            Connect WhatsApp to the Assistant
-          </button>
+          <div className="tq-compose-hint">Enter sends · Shift+Enter adds a line · click a row on the left to pull it in · the words under each message do the acting</div>
         </div>
       )}
     </div>
@@ -853,6 +1104,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
 
   return (
     <FeedView onOpenTask={onOpenTask} onChanged={onChanged} active={active}
+      onInventoryFilter={inventoryFilterChanged} unreadInventory={pile}
       top={({ openByMid }) => <Pile pile={pile} current={old ? null : currentItem}
         onPull={(key, asUser) => pullOrOpen(key, asUser, openByMid)} />}
       stage={stageMode === "chat" ? chat : placeholder} rowMode={stageMode}

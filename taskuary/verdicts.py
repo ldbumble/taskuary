@@ -7,7 +7,41 @@ writes, a reject what should never have been drafted).
 import json
 from loguru import logger
 
-VERB2STATUS = {'approve': 'approved', 'edit': 'edited', 'reject': 'rejected', 'no_reply': 'no_reply'}
+VERB2STATUS = {'approve': 'approved', 'edit': 'edited', 'reject': 'rejected', 'no_reply': 'no_reply',
+               'close_unsent': 'closed_unsent'}   # the owner's explicit close when sending is unavailable (PW-145) - never 'sent'
+
+
+def context_moved(store, rv: dict):
+    """Has the thread materially moved since this draft was pinned (PW-240)? A stale mark triage set, or an
+    inbound message set that differs from the pinned revision - never a polling timestamp, never an FYI filed
+    with nothing to do. Returns (moved, the newest material inbound message or None)."""
+    from . import operations
+    if rv.get('Kind') == 'action': return False, None
+    tid = rv.get('TaskId')
+    if tid:
+        latest = store.last_material_inbound_on_task(tid)
+        if rv.get('ContextRevision'): moved = operations.message_revision(store, tid) != rv['ContextRevision']
+        else: moved = bool(latest and latest.get('MessageId') != rv.get('MessageId'))
+    else:
+        m = store.get_message(rv.get('MessageId')) if rv.get('MessageId') else None
+        latest = store.last_inbound_in(m['ConversationId']) if m and m.get('ConversationId') else None
+        moved = bool(latest and latest.get('MessageId') != rv.get('MessageId'))
+    return bool(rv.get('Stale') or moved), latest
+
+
+def _now_iso() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def _mark_delivery(store, rid: int, env: dict, state: str, attempted_at: str = None) -> None:
+    """The send's own state on the review's envelope: sent | failed | unknown (PW-144) - and when it was tried."""
+    env = dict(env or {}); env.setdefault('kind', 'reply')
+    env['delivery'] = state
+    if attempted_at: env['attempted_at'] = attempted_at
+    env['attempts'] = int(env.get('attempts') or 0) + (1 if state != 'sent' or attempted_at else 0)
+    try: store.set_review_envelope(rid, env)
+    except Exception as e: logger.debug(f'delivery mark skipped: {e}')
 
 
 def _settle_task_after_sent_reply(store, rv: dict, actor: str, was_sent: bool):
@@ -62,6 +96,12 @@ def _settle_task_after_sent_reply(store, rv: dict, actor: str, was_sent: bool):
     if task.get('Status') not in ('done', 'dropped'):
         store.update_task(task_id, {'Status': 'done'}, actor)
         store.add_comment(task_id, actor, 'human', 'Closed - the reply went out.')
+        # ...and the item leaves Unread with it (PW-149). Canonical Unread empties on read receipts, and
+        # nobody writes one for a reply approved from the Review page - so the answered thread sat in the
+        # pile as 'a person asked you for something' with its task already closed. All keeps the whole thread.
+        from . import funnel
+        try: funnel.settle(store, f'task:{task_id}', 'done', actor, note='the reply went out')
+        except Exception as e: logger.debug(f'the sent reply did not settle its item: {e}')
     if stopped:
         store.add_comment(task_id, actor, 'human', 'Stopped the parked agent because the task reply was sent.')
 
@@ -86,6 +126,27 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
     if verb_in in ('approve', 'edit') and not (final_text or '').strip() and not (rv.get('DraftText') or '').strip():
         return {'ok': False, 'status': 'pending', 'sent': None, 'empty': True,
                 'send_error': 'there is no draft to send - write the reply (or let the AI draft it) and approve that'}
+    # the draft is checked against the thread AS IT IS NOW before anything leaves (PW-055): a stale mark, or an
+    # inbound message set that moved since the draft was pinned, refuses the send here - the Review button and
+    # the phone road land through this one door, so neither can send yesterday's wording
+    if verb_in in ('approve', 'edit') and rv.get('Kind') != 'action' and rv.get('TaskId'):
+        moved, _latest = context_moved(store, rv)
+        if moved:
+            if not rv.get('Stale'): store.mark_review_stale(rid)
+            return {'ok': False, 'status': 'pending', 'sent': None, 'stale': True,
+                    'send_error': 'New messages arrived after this draft was written - nothing was sent. Redraft it with the latest context and approve again.'}
+    # Close without sending (PW-145): the owner's own word that no reply will go out - the unsent draft stays,
+    # the closure and its reason are recorded, the reply obligation ends, and nothing here ever reads as Sent
+    if verb_in == 'close_unsent':
+        why = str(note or '').strip() or (outbound.send_block(store, (store.get_message(rv['MessageId']) or {}).get('Channel')) if rv.get('MessageId') else '') or 'the owner chose not to send a reply'
+        store.decide_review(rid, 'closed_unsent', rv.get('DraftText'), actor, why)
+        if rv.get('TaskId'):
+            store.add_comment(rv['TaskId'], actor, 'human', f'Closed without sending - no reply went out: {why}. The unsent draft is kept on the review.')
+            from . import selfclose
+            if not selfclose.stays_open(store, rv['TaskId']) and (store.get_task(rv['TaskId']) or {}).get('Status') not in ('done', 'dropped'):
+                store.update_task(rv['TaskId'], {'Status': 'done'}, actor)
+        store.audit('review', rid, 'close_unsent', actor, detail={'why': why[:200]})
+        return {'ok': True, 'status': 'closed_unsent', 'sent': None, 'send_error': None}
     # ONE approve: if the text differs from the draft, it was edited - no need to declare it
     if verb_in in ('approve', 'edit'):
         final = final_text if (final_text or '').strip() else rv.get('DraftText')
@@ -121,7 +182,7 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
     if deliver.get('kind') == 'zoho_invoice' and verb in ('reject', 'no_reply') and deliver.get('item_id'):
         from . import invoice_workflow
         invoice_workflow.mark_skipped(store, int(deliver['item_id']))
-    if final and deliver:
+    if final and deliver and deliver.get('kind') != 'reply':
         try:
             if deliver.get('kind') == 'zoho_invoice':
                 from . import invoice_workflow, scopes, zoho
@@ -152,12 +213,57 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
         return {'ok': True, 'status': VERB2STATUS[verb], 'sent': sent, 'send_error': None}
     if final and rv.get('MessageId'):
         msg = store.get_message(rv['MessageId'])
+        # the server's own check, whatever a surface showed (PW-045): a channel that cannot carry
+        # the reply refuses BEFORE any send is attempted, keeps the text as the draft, and says why
+        block = outbound.send_block(store, (msg or {}).get('Channel'))
+        if block:
+            send_err = f'not sent - {block}'
+            if rv.get('TaskId'):
+                store.add_comment(rv['TaskId'], actor, 'human', f'NOT SENT - {block}. The approved text is kept as the draft.')
+            store.update_review_draft(rid, final, rv.get('RunId'))
+            store.unhold_review(rid, f'approved, but it cannot be sent from here: {block}')
+            store.audit('review', rid, verb, actor, detail={'kind': rv.get('Kind'), 'sent': False, 'blocked': block})
+            return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': send_err}
+        # the recipients the owner reviewed (PW-064): the pinned envelope, unless this click named a CC list itself
+        env = deliver if deliver.get('kind') == 'reply' else {}
+        # an earlier attempt whose delivery is UNKNOWN is reconciled with the provider before anything is sent
+        # again (PW-144): found = it went out, settle it; not found = the retry is safe
+        if env.get('delivery') == 'unknown':
+            found = outbound.reconcile_sent(store, msg, final, since=env.get('attempted_at'))
+            if found:
+                sent = found; _mark_delivery(store, rid, env, 'sent')
+                if rv.get('TaskId'): store.add_comment(rv['TaskId'], actor, 'human', 'The earlier send did go out - confirmed with the provider; nothing was sent again.')
+                store.audit('review', rid, 'reconciled_sent', actor, detail={'id': found.get('id')})
+                _settle_task_after_sent_reply(store, rv, actor, True)
+                store.audit('review', rid, verb, actor, detail={'kind': rv.get('Kind'), 'sent': True})
+                return {'ok': True, 'status': VERB2STATUS[verb], 'sent': sent, 'send_error': None, 'delivery': 'reconciled'}
+        attempted_at = _now_iso()
         try:
-            sent = outbound.reply_to_message(store, msg, final, cc=cc)
+            sent = outbound.reply_to_message(store, msg, final, to=env.get('to') or None, cc=cc if cc is not None else env.get('cc'))
             if rv.get('TaskId'):
                 copied = f", copied {', '.join(sent.get('cc') or [])}" if sent.get('cc') else ''
                 store.add_comment(rv['TaskId'], actor, 'human',
                                   f"Sent by {sent['channel']} to {', '.join(sent.get('to') or []) or 'the chat'}{copied}.")
+        except outbound.UNKNOWN_ERRORS as e:
+            # the provider did not answer: the mail may well have gone out. Delivery UNKNOWN is its own state
+            # (PW-144) - not a failure, not a send - reconciled now, and again before any retry
+            send_err = f'delivery unknown - the provider did not answer ({str(e)[:120]}); checking whether it went out before anything is retried'
+            logger.warning(f'reply send uncertain for review {rid}: {e}')
+            store.update_review_draft(rid, final, rv.get('RunId'))
+            _mark_delivery(store, rid, env, 'unknown', attempted_at)
+            found = outbound.reconcile_sent(store, msg, final, since=attempted_at)
+            if found:
+                _mark_delivery(store, rid, env, 'sent')
+                store.decide_review(rid, VERB2STATUS[verb], final, actor, note)
+                if rv.get('TaskId'): store.add_comment(rv['TaskId'], actor, 'human', f"Sent by email to {', '.join(found.get('to') or []) or 'the thread'} - confirmed with the provider after a slow answer.")
+                _settle_task_after_sent_reply(store, rv, actor, True)
+                store.audit('review', rid, verb, actor, detail={'kind': rv.get('Kind'), 'sent': True, 'reconciled': True})
+                return {'ok': True, 'status': VERB2STATUS[verb], 'sent': found, 'send_error': None, 'delivery': 'reconciled'}
+            if rv.get('TaskId'):
+                store.add_comment(rv['TaskId'], actor, 'human', 'DELIVERY UNKNOWN - the provider did not answer and the Sent folder does not show the reply yet. Nothing was retried; approve again to check and, only if it is not there, send once.')
+            store.unhold_review(rid, 'approved - delivery UNKNOWN: the provider did not answer; approve again to check the Sent folder and send only if it is not there')
+            store.audit('review', rid, 'delivery_unknown', actor, detail={'error': str(e)[:200]})
+            return {'ok': True, 'status': 'pending', 'sent': None, 'send_error': send_err, 'delivery': 'unknown'}
         except Exception as e:
             send_err = str(e)[:300]
             logger.warning(f'reply send failed for review {rid}: {send_err}')
@@ -166,6 +272,7 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
             # an approved reply that never LEFT is not done: back to the queue wearing the
             # error, the approved text becomes the draft, approving again retries the send
             store.update_review_draft(rid, final, rv.get('RunId'))
+            _mark_delivery(store, rid, env, 'failed')
             store.unhold_review(rid, f'approved, but sending FAILED: {send_err} - fix the channel and approve again')
     if verb == 'no_reply' and rv.get('TaskId'):
         from . import selfclose
@@ -178,9 +285,15 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
     store.audit('review', rid, verb, actor, detail={'kind': rv.get('Kind'), 'sent': bool(sent)})
     if verb in ('edit', 'reject', 'no_reply'):
         m = (store.get_message(rv['MessageId']) if rv.get('MessageId') else None) or {}
+        # an EDIT's note is about the wording - it goes to STYLE.md as a writing instruction (PW-061); a rejection's
+        # or no-reply's note is about whether a reply was owed at all, which is triage's to learn
+        if verb == 'edit' and note:
+            from . import responder
+            try: responder.style_feedback(store, note, actor)
+            except Exception as e: logger.warning(f'style feedback not saved: {e}')
         ev = (f"rv{rid}: owner verdict '{verb}' on a drafted reply to \"{(m.get('Subject') or rv.get('Kind') or '')[:80]}\" "
-              f"from {m.get('FromEmail') or '?'}" + (f"; their note: {note[:200]}" if note else ''))
+              f"from {m.get('FromEmail') or '?'}" + (f"; their note: {note[:200]}" if note and verb != 'edit' else ''))
         if verb == 'edit': ev += f"\nDRAFT:\n{(rv.get('DraftText') or '')[:700]}\nSENT INSTEAD:\n{(final or '')[:700]}"
         if learn_async: learn_async(learn.learn_from, store, ev)
         else: learn.learn_from(store, ev)
-    return {'ok': True, 'status': 'pending' if send_err else VERB2STATUS[verb], 'sent': sent, 'send_error': send_err}
+    return {'ok': True, 'status': 'pending' if send_err else VERB2STATUS[verb], 'sent': sent, 'send_error': send_err, **({'delivery': 'failed'} if send_err else {})}

@@ -2,6 +2,7 @@
 code that assembles it. These cover the three things that answer it: the prompt map, the AWS
 catalog behind the service/operation pickers, and the version the header reports.
 """
+import json
 import re
 import unittest
 from pathlib import Path
@@ -139,6 +140,18 @@ class VersionTests(unittest.TestCase):
             stale = {v for v in re.findall(r'v(\d+(?:\.\d+)+)', (root / name).read_text(encoding='utf-8'))
                      if v != taskuary.__version__}
             self.assertEqual(stale, set(), f'{name} still advertises {stale}; this is {taskuary.__version__}')
+
+    def test_the_demo_does_not_advertise_an_older_version(self):
+        """The THIRD hardcoded copy of the number, and the one nobody was watching: taskuary.com/demo
+        has no server, so its header reads /api/version out of a recording (website/demo_fixtures.mjs
+        freezes a live `--demo` instance into src/demoFixtures.json). The recording is only re-dumped
+        when the fixtures change, so the public demo sat on v0.3.3.2 through four releases until the
+        owner noticed (2026-09-07: "it still say old version"). Patch the three fields on a release -
+        the rest of the recording is a real instance's output and must stay exactly as dumped."""
+        fx = json.loads((Path(__file__).parent.parent / 'website' / 'src' / 'demoFixtures.json').read_text(encoding='utf-8'))
+        said = {fx['/api/version']['version'], fx['/api/build']['version'], fx['/api/build']['disk_version']}
+        self.assertEqual(said, {taskuary.__version__},
+                         f'the demo recording advertises {said}; this is {taskuary.__version__}')
 
 
 if __name__ == '__main__':

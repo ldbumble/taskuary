@@ -17,6 +17,13 @@ Two write paths, deliberately different speeds:
   kill the ones that did not. Implicit signals (drafts approved untouched) are counted
   ONLY here: individually they are noise, in aggregate they are confirmation.
 
+Both write paths end in settle(), which does in code the bookkeeping a model does badly: it keys
+every line so a rephrase cannot orphan its history, merges the near-duplicates the hot pass was
+asked (and often failed) to avoid, and ages out the untested lines that enough reflections have
+now passed over without confirming - because an s:N that only ever moves on evidence never falls
+when a pattern quietly stops being true. The clock there counts REFLECTIONS, never days: a
+calendar would charge a line for a quiet fortnight in which nothing could have confirmed it.
+
 Hypotheses are never injected into prompts: a pattern seen once is a guess, and a guess in
 a system prompt is a rule. Only promoted sections travel (injectable()) - and rules whose
 effect is to HIDE mail never promote themselves at all: they wait in 'Proposed' for the
@@ -66,6 +73,8 @@ REFLECT_SYSTEM = (
     'NOT A TASK): then the owner has already said it, and it goes straight into the matching section.\n'
     '- Add new hypotheses only for patterns 2+ episodes support; singles stay unwritten.\n'
     '- Never contradict SOUL.md (it outranks this file); never invent facts beyond the events.\n'
+    "- Keep each line's k: byte-for-byte - it is how a line is recognised across rewrites, and a "
+    'changed one orphans its evidence and its history. A line you add fresh needs none.\n'
     '- Keep the section headers, all four <!-- --> marker lines, and every {{owner}}-style '
     'placeholder exactly as they are; keep the whole file under 120 lines.\n'
     '- End with a footer: _last reflection: date - what changed in a few words_ (replace any old one).')
@@ -77,6 +86,35 @@ def _put_block(doc, a, b, body):
     head, rest = doc.split(a, 1)
     return f'{head}{a}\n{body.strip()}\n{b}' + rest.split(b, 1)[1]
 def _unfence(s): return re.sub(r'^```\w*\s*$|^```\s*$', '', (s or '').strip(), flags=re.M).strip()
+
+
+def settle(store, old_doc: str, doc: str, today: str = None) -> str:
+    """The bookkeeping no longer asked of the model, after every machine write.
+
+    Each tagged line gets a `k:` - its identity from then on, so the reflection rephrasing at the
+    margins stops orphaning a line's history and its evidence; lines that share one are merged
+    rather than left to coexist as near-duplicates (the one thing LESSON_SYSTEM asks for that a
+    model reliably gets wrong); evidence that grew restarts the line's clock; and a line still
+    under test that has gone quiet through enough reflections to decay to nothing
+    (learnedgraph.effective) is dropped. Untagged lines are the owner's and come through
+    byte-for-byte."""
+    from . import learnedgraph as lg
+    today, log = today or _today(), lg.reflect_log(store)
+    was = {l['key']: l for l in lg.lines(old_doc)}
+    out, kept = [], {}
+    for raw, l in lg.walk(doc):
+        if not l: out.append(raw); continue
+        prev = kept.get(l['key'])
+        if prev is None:
+            kept[l['key']] = dict(l, _at=len(out)); out.append(raw); continue
+        prev['score'] = max(prev['score'], l['score'])                    # the stronger of two claims about one pattern
+        prev['ev'] += [e for e in l['ev'] if e not in prev['ev']]
+        prev['seen'] = max(prev['seen'], l['seen'])
+    for l in kept.values():
+        o = was.get(l['key'])
+        if o and set(l['ev']) - set(o['ev']): l['seen'] = today           # something new confirmed it: the clock restarts here
+        out[l.pop('_at')] = lg.fmt(l) if lg.effective(l, log) > 0 else None
+    return '\n'.join(r for r in out if r is not None)
 
 
 def injectable(text: str) -> str:
@@ -150,7 +188,7 @@ def learn_from(store, event: str, llm=None):
         # a broken answer never lands in the doc - markers inside it would corrupt the block splice
         if not out or '<!--' in out or len(out) > 6000: return
         if out != hyp:
-            new_doc = _put_block(doc, HYP_START, HYP_END, out)
+            new_doc = settle(store, doc, _put_block(doc, HYP_START, HYP_END, out))
             store.save_doc(DOC, new_doc, 'learn')
             from . import learnedgraph; learnedgraph.record(store, doc, new_doc, 'learn')
         if n >= REFLECT_AT: reflect(store, llm)
@@ -210,9 +248,15 @@ def reflect(store, llm=None) -> bool:
     if not (new.startswith('#') and 200 < len(new) <= 12_000 and new.count('\n') <= 160
             and all(new.count(m) == 1 for m in markers)):
         logger.warning('reflection produced an unusable doc - kept the old one'); return False
-    final = new.rstrip('\n') + ('\n\n' + verdicts.strip('\n') + '\n' if verdicts else '')
+    from . import learnedgraph
+    # this reflection is itself an opportunity: it read the window, so every line it did not
+    # touch has just gone one tick quieter. Recorded BEFORE settle, which measures against it.
+    learnedgraph.reflect_log(store, _today())
+    settled = settle(store, doc, new.rstrip('\n'))
+    final = settled + ('\n\n' + verdicts.strip('\n') + '\n' if verdicts else '')
     store.save_doc(DOC, final, 'reflect')
-    from . import learnedgraph; learnedgraph.record(store, doc, final, 'reflect')
+    learnedgraph.record(store, doc, new, 'reflect')            # what the reflection itself did to the lines
+    learnedgraph.record(store, new, settled, 'decay')          # and what the clock did to the ones it left alone
     auto_adopt(store)                              # what the owner already said does not wait for a click
     store.set_setting('learn_pending', '0', 'reflect')
     store.set_setting('learn_last_reflect', datetime.now().isoformat(sep=' ', timespec='seconds'), 'reflect')
@@ -230,7 +274,7 @@ def adopt(store, key: str, actor: str = 'owner') -> dict:
     doc = store.get_doc(DOC) or ''
     target = next((l for l in learnedgraph.lines(doc) if l['key'] == key and l['status'] != 'live'), None)
     if not target: raise ValueError('no proposed or hypothesis line with that key')
-    raw = next(r for r in doc.splitlines() if learnedgraph.TAG.match(r) and learnedgraph._key(learnedgraph.TAG.match(r).group('text')) == key)
+    raw = next(r for r, l in learnedgraph.walk(doc) if l and l['key'] == key)
     rest = doc.replace(raw + '\n', '', 1).replace(raw, '', 1)
     if ADOPT_UNDER in rest:
         head, tail = rest.split(ADOPT_UNDER, 1)

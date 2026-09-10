@@ -18,7 +18,7 @@ import api from "./api";
 import AgentWall from "./AgentWall.jsx";
 import { NO_REPO, planTask } from "./newTask.js";
 import { agentName, saidFromTail } from "./agentWork.js";
-import { isGeneralKind } from "./autostart.js";
+import { isAgentKind, isGeneralKind } from "./autostart.js";
 import { onLive } from "./live.js";
 import { ALERT, GRADIENT, PANEL, PANEL2, BORDER, CATPPUCCIN, DIM, FAINT, INK, ROLES, card, hoverable, mono } from "./theme.jsx";
 import { ChannelIcon, ActionChip, AgentPicker, useAgents, timeAgo, Empty, IDLE_WAITING, isWaiting, PromptThumbs, TellAgent, WorkPane, usePromptImages, TaskuaryMark, assignedAgent } from "./ui.jsx";
@@ -287,7 +287,10 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
   const shots = usePromptImages();      // screenshots on the new task's prompt, same as the Wall's queue box
 
   const load = useCallback(async () => {
-    try { setTasks(((await api.get("/api/tasks", { params: { active: 1 } })).data.data || []).filter((t) => t.Status !== "dropped")); }
+    // the floor shows work a SESSION runs: a reply is drafted by the model triage uses and never
+    // opens one, a to-do is the owner's own list. Both stay in Tasks and Review (isAgentKind).
+    try { setTasks(((await api.get("/api/tasks", { params: { active: 1 } })).data.data || [])
+      .filter((t) => t.Status !== "dropped" && isAgentKind(t.Kind))); }
     catch (e) { setErr(e?.response?.data?.detail || "Failed to load the board"); }
   }, []);
   useEffect(() => { load(); return active ? onLive("task-changed", load) : undefined; }, [load, active]);

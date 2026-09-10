@@ -84,11 +84,15 @@ const PRIORITIES = ["low", "normal", "high", "urgent"];
 // what a task IS decides which machinery works it: coding gets a repo session, a reply
 // gets the responder and the Review queue, general gets the visual conversation. Keep the
 // explicit non-coding label: calling this only "assistant" hid the option the owner asked for.
+// WHO works it, then what it is - the owner's own words (2026-09-10: "tag tasks as reply/your
+// task/agent (maybe coding vs general)"). "your task" is deliberately the same phrase the work
+// rail's own heading uses for band 2 (funnelPile.LEVEL_META), so one thing has one name in both
+// places. The two `agent` kinds are the two that reach the Board; reply and your task do not.
 const KIND_OPTIONS = [
-  { key: "task", label: "to do", hint: "a task on your list; start an agent only when you choose to" },
-  { key: "general", label: "general / non-coding", hint: "research, writing, analysis, planning, and other assistant work" },
-  { key: "coding", label: "coding", hint: "the configured CLI in a repository terminal" },
-  { key: "reply", label: "reply", hint: "draft an answer for approval in Review" },
+  { key: "task", label: "your task", hint: "yours to do - nothing works it, and it is not on the Board" },
+  { key: "general", label: "agent · general", hint: "research, writing, analysis, planning - an agent runs it without a repository" },
+  { key: "coding", label: "agent · coding", hint: "the configured CLI in a repository terminal" },
+  { key: "reply", label: "reply", hint: "drafted by the model triage uses and approved in Review - it never opens a session" },
 ];
 const KINDS = KIND_OPTIONS.map((o) => o.key);
 const kindLabel = (kind) => KIND_OPTIONS.find((o) => o.key === kind)?.label || kind;
@@ -719,6 +723,13 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       fontFamily: "'IBM Plex Sans', 'Segoe UI', Arial, sans-serif", fontVariantNumeric: "tabular-nums",
                       letterSpacing: ".015em", fontWeight: 750, fontSize: 12,
                       whiteSpace: "nowrap", flexShrink: 0 }} data-tq-task-ref="">{task.ref}</Typography>
+                    {/* WHO works it, on every row: reply / your task / agent - the split that decides
+                        whether it reaches the Board at all, so it should not need opening the task
+                        to see (the owner, 2026-09-10). Quiet by design: it identifies, it does not
+                        shout, and only one chip here is ever allowed to. */}
+                    <Chip size="small" label={kindLabel(task.Kind || "task")}
+                      title={KIND_OPTIONS.find((o) => o.key === (task.Kind || "task"))?.hint || "what kind of work this is"}
+                      sx={{ height: 17, fontSize: 9.5, bgcolor: "#eae4d8", color: "#55697a", fontWeight: 600 }} />
                     <LifecycleChip kind="task" phase={taskPhase(task.Status)} compact />
                     <StateChip task={task} />
                     {task.Priority === "urgent" && <Chip size="small" label="urgent" sx={{ bgcolor: PILL_COLORS.red.bg, color: PILL_COLORS.red.fg, height: 17, fontSize: 10 }} />}

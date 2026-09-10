@@ -23,6 +23,7 @@ import api from "./api";
 import SoulInterview from "./SoulInterview.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL2 } from "./theme.jsx";
 import { useCliInstall, InstallLine } from "./cliInstall.jsx";
+import { useCliLogin, SignInButton, LoginPane, canSignIn } from "./cliLogin.jsx";
 
 // "Three things and Taskuary works" was prose. Steps were added to the wizard and it went on
 // saying three, because a number written as a word is a number nobody updates. Counted now -
@@ -151,16 +152,23 @@ const CliPicker = ({ asBrain, onDone }) => {
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState(null);
   const { install, busy: installing, note } = useCliInstall();
+  const { signIn, opening, pane, note: loginNote } = useCliLogin();
   const reload = () => api.get("/api/cli/detect").then(({ data }) => setList(data.data || [])).catch(() => setList([]));
   useEffect(() => { reload(); }, []);
   // Install, then keep going. Stopping at "installed" would leave the owner to find the second
   // button, and the cmd handed on is the ABSOLUTE path the installer reported: this server's PATH
   // predates the install, so a profile saved as bare "claude" would need a restart to run.
+  //
+  // ...but a CLI installed ten seconds ago has NO CREDENTIALS, and running the test on it landed
+  // the owner on "signed out - open a terminal" at the exact step this wizard exists to remove.
+  // So a CLI whose sign-in Taskuary can host hands off to the pane instead, and the test waits.
   const getAndUse = async (cli) => {
     const done = await install(cli);
     if (!done) return;
     await reload();
-    await use({ ...cli, cmd: done.path || cli.cmd });
+    const fresh = { ...cli, cmd: done.path || cli.cmd, installed: true };
+    if (canSignIn(fresh)) { await signIn(fresh); return; }
+    await use(fresh);
   };
   const use = async (cli) => {
     setBusy(cli.name); setMsg(null);
@@ -205,15 +213,30 @@ const CliPicker = ({ asBrain, onDone }) => {
               </Typography>
             )}
           </Box>
-          {cli.installed ? (
+          {cli.installed ? (<>
+            {/* installed and signed out look identical from here, so Sign in is offered rather
+                than guessed at - the CLI itself is what says whether it was needed */}
+            <SignInButton cli={cli} opening={opening} onSignIn={signIn} />
             <Button size="small" variant="outlined" disabled={!!busy || !!installing} onClick={() => use(cli)}
               sx={{ fontSize: 11.5, whiteSpace: "nowrap" }}>
               {busy === cli.name ? "testing…" : asBrain ? "Use & test" : "Add & test"}
             </Button>
-          ) : <InstallLine cli={cli} busy={installing} onInstall={() => getAndUse(cli)} />}
+          </>) : <InstallLine cli={cli} busy={installing} onInstall={() => getAndUse(cli)} />}
         </Box>
       ))}
-      {(msg || note) && <Alert severity={(msg || note).bad ? "error" : "success"} sx={{ mt: 1, fontSize: 12.5 }}>{(msg || note).text}</Alert>}
+      {/* The sign-in itself, in the same session the Board is showing. Nothing here closes it:
+          a pane must not vanish while its owner is mid-OAuth, and Done is theirs on the task. */}
+      {pane && (
+        <Box sx={{ mt: 1 }}>
+          <LoginPane pane={pane} />
+          <Button size="small" variant="outlined" sx={{ mt: 0.75, fontSize: 11.5 }} disabled={!!busy}
+            title="Check whether the sign-in landed. The pane stays open either way — closing it is yours."
+            onClick={() => { const cli = (list || []).find((o) => o.login === pane.name); if (cli) use(cli); }}>
+            {busy ? "testing…" : "I have signed in — test it"}
+          </Button>
+        </Box>
+      )}
+      {(msg || note || loginNote) && <Alert severity={(msg || note || loginNote).bad ? "error" : "success"} sx={{ mt: 1, fontSize: 12.5 }}>{(msg || note || loginNote).text}</Alert>}
     </Box>
   );
 };

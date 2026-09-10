@@ -51,13 +51,24 @@ FALLBACK_CATEGORIES = ('report', 'info', 'idea', 'todo', 'coding', 'review', 'pr
 
 
 def vocabularies(store=None) -> dict:
-    """{category, kind, lane} -> the values actually in the pile right now."""
+    """{category, kind, lane} -> the values actually in the PIPE right now.
+
+    The same set concierge.select_items searches, and that is the whole point. This read
+    keep_surfaced=True - the whole timeline, all-time - while the selector only ever filtered the
+    live pipe, so five categories were advertised that could not possibly match: assistant,
+    automated, error, filed, yours. The model asked to clear `category: assistant` because the app
+    told it that was a legal value, got nothing, and the answer blamed the pipe: "nothing matches,
+    so there is nothing to clear" - about eleven rows the owner was looking at (2026-09-10).
+
+    select_items already carries the same lesson for itself ("it offered to clear 72 when seven were
+    actually waiting", 2026-09-07); the menu was left reading the wide set. A value offered here has
+    to be a value that can be found there."""
     out = {'category': list(FALLBACK_CATEGORIES), 'kind': [], 'lane': []}
     from . import funnel
     out['lane'] = list(funnel.LANES)
     if store is None: return out
     try:
-        items = funnel.build(store, keep_surfaced=True)['items']
+        items = funnel.build(store)['items']
     except Exception:
         return out
     seen = lambda f: sorted({str(i.get(f) or '') for i in items} - {''})

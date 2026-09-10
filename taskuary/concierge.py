@@ -20,6 +20,7 @@ multiple choice at the end of a line (OPTIONS: a | b | c) when a decision has cl
 no button covers it; the choice comes back as the owner's next words.
 """
 import contextvars, json, re, threading
+from collections import Counter
 from contextlib import contextmanager, nullcontext
 from datetime import datetime, timedelta
 from loguru import logger
@@ -1150,6 +1151,20 @@ def _sweep(store, words: list, actor: str) -> tuple[int, list, list, list]:
     return hit, titles, mids, swept
 
 
+def pipe_holds(store) -> str:
+    """What the pipe actually contains, by kind and by who - the sentence a MISS needs. "Nothing
+    matches" on its own reads as "those items are not there", which is what it said about eleven
+    rows the owner could see (2026-09-10). Counted over the same set select_items searches."""
+    try: items = funnel.build(store)['items']
+    except Exception: return ''
+    if not items: return 'The pipe is empty.'
+    kinds = Counter(str(i.get('kind') or '?') for i in items)
+    who = Counter(str(i.get('who') or '').strip() for i in items if str(i.get('who') or '').strip())
+    part = ', '.join(f'{n} {k}' for k, n in kinds.most_common())
+    top = ', '.join(w for w, _ in who.most_common(3))
+    return (f"The pipe holds {len(items)}: {part}." + (f' Senders include {top}.' if top else ''))
+
+
 def select_items(store, sel: dict) -> list:
     """The items a SELECTOR describes. Every field is optional and they AND together; an empty selector
     matches nothing, deliberately - "clear everything" must be asked for by naming a field, never by
@@ -1354,8 +1369,11 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         hits = select_items(store, sel)
         if not hits:
             said = ', '.join(f'{k}: {v}' for k, v in (sel or {}).items()) or 'nothing'
+            # ...and WHAT IS THERE, so a miss can be re-aimed instead of read as "those items do not
+            # exist". The owner was looking at eleven rows while this said nothing matched them
+            # (2026-09-10): the selector had been offered a category the pipe could not hold.
             say_ = (f"Nothing in the pipe matches {said}, so there is nothing to clear. "
-                    'Say it another way and I will look again - nothing has been touched.')
+                    f"{pipe_holds(store)} Say it another way and I will look again - nothing has been touched.")
             record_related(store, tid, item, 'assistant', say_)
             return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
         where = ', '.join(f'{k}: {v}' for k, v in sel.items())

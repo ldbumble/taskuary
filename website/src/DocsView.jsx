@@ -62,6 +62,14 @@ function HowItWorks() {
 // each is done (docs/beyond-code.md). They open in the same editor, but never share the operator
 // document shelf—a company can have hundreds without burying the owner's identity card.
 const isPb = (n) => n.startsWith("pb:");
+// A PROFILE's rules document (RESEARCHER.md, ANALYST.md, ...). Its own section rather than more
+// entries in the fixed eight: the operator set is a constitution that always exists, profiles are a
+// roster the owner adds to and removes from - the same reason playbooks got their own shelf. The
+// document is the `doc` row named after the agent row, so `coder` is CODER.md and lives in BOTH:
+// one row, so editing it here or under Operator documents is the same edit.
+const isProf = (n) => n.startsWith("prof:");
+const profName = (n) => n.slice(5);
+const PROF_BLURB = "The rules every session of THIS worker is seeded with, stacked on top of AGENT.md. What it may do alone, what it must ask about first, what a finished piece of its work looks like. Triage picks the worker; this document is who that worker is. Blank it entirely and the shipped default comes back.";
 const pbSlug = (n) => n.slice(3);
 const PB_BLURB = "How THIS company does one kind of job, for the agent that will do it: when it starts, which connections it uses, the steps, what it may do alone, what to ask first, and what counts as done. Triage matches new messages against `when`; the connector cards list the playbooks that name them.";
 
@@ -130,6 +138,7 @@ export default function DocsView() {
   const [view, setView] = useState("text");    // LEARNED.md: text, or the picture of what drives what (#27)
   const [interview, setInterview] = useState(false);   // SOUL.md, asked for rather than guessed
   const [books, setBooks] = useState([]);              // the playbooks on disk: slug, title, when, uses
+  const [profs, setProfs] = useState([]);              // the agent rows: each one a worker with a rules document
   const [tpl, setTpl] = useState("");                  // what a new one starts from
   const [pbMsg, setPbMsg] = useState("");
   const [pbFilter, setPbFilter] = useState("");
@@ -162,6 +171,29 @@ export default function DocsView() {
     } catch { /* an older server: the shelf simply stays empty */ }
   }, []);
   useEffect(() => { loadBooks(); }, [loadBooks]);
+
+  const loadProfs = useCallback(async () => {
+    try {
+      const { data } = await api.get("/api/agents");
+      // the STORE rows, not config.toml's table: those are the workers triage is actually offered
+      setProfs((data.data || []).map((r) => {
+        let prof = {};
+        try { prof = JSON.parse(r.Config || "{}"); } catch { /* an unreadable row still gets its document */ }
+        return { name: r.Name, purpose: prof.purpose || "" };
+      }));
+    } catch { /* an older server: the shelf simply stays empty */ }
+  }, []);
+  useEffect(() => { loadProfs(); }, [loadProfs]);
+
+  // open a profile's document: fetched on first open, like a playbook's text
+  const openProf = useCallback(async (name) => {
+    const key = `prof:${name}`;
+    setSection("profiles"); setGenMsg(""); setGenEv(null); setPbMsg(""); setDocName(key);
+    try {
+      const { data } = await api.get(`/api/doc/${name}`);
+      setDocs((d) => ({ ...d, [key]: data.content || "" })); setSaved((d) => ({ ...d, [key]: data.content || "" }));
+    } catch (e) { setErr(e?.response?.data?.detail || `could not open ${name}`); }
+  }, []);
 
   // open a playbook: its text is fetched on first open, not with the shelf (the shelf is titles)
   const openPb = useCallback(async (slug, seedUses = "") => {
@@ -204,7 +236,14 @@ export default function DocsView() {
       } catch (e) { setPbMsg(e?.response?.data?.detail || "could not save"); }
       return;
     }
-    await api.put(`/api/doc/${docName}`, { content: docs[docName] });
+    const target = isProf(docName) ? profName(docName) : docName;
+    await api.put(`/api/doc/${target}`, { content: docs[docName] });
+    if (isProf(docName)) {                      // blank = the shipped default came back: show what took
+      const { data } = await api.get(`/api/doc/${target}`);
+      setDocs((d) => ({ ...d, [docName]: data.content || "" }));
+      setSaved((d) => ({ ...d, [docName]: data.content || "" }));
+      return;
+    }
     setSaved({ ...saved, [docName]: docs[docName] });
   };
   const removePb = async () => {
@@ -222,7 +261,9 @@ export default function DocsView() {
     setSection(next); setGenMsg(""); setGenEv(null); setPbMsg("");
     if (next === "how") return;                      // reference: no shelf, no editor, nothing to open
     if (next === "documents") {
-      if (isPb(docName)) setDocName(NAMES[0]);
+      if (isPb(docName) || isProf(docName)) setDocName(NAMES[0]);
+    } else if (next === "profiles") {
+      if (!isProf(docName)) openProf(profs[0]?.name || "coder");
     } else if (!isPb(docName)) {
       openPb(books[0]?.slug || "new");
     }
@@ -231,7 +272,9 @@ export default function DocsView() {
     const q = pbFilter.trim().toLowerCase();
     return !q || [b.title, b.when, b.slug, ...(b.uses || [])].some((v) => String(v || "").toLowerCase().includes(q));
   });
-  const meta = isPb(docName)
+  const meta = isProf(docName)
+    ? { label: `${profName(docName).toUpperCase()}.md`, blurb: PROF_BLURB }
+    : isPb(docName)
     ? { label: docName === "pb:new" ? "New playbook" : `${pbSlug(docName)}.md`, blurb: PB_BLURB }
     : DOCS[docName];
 
@@ -243,7 +286,8 @@ export default function DocsView() {
   return (
     <>
     <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 2.5, borderBottom: "1px solid #e1dcd5" }}>
-      {[["documents", "Operator documents"], ["playbooks", `Playbooks${books.length ? ` (${books.length})` : ""}`],
+      {[["documents", "Operator documents"], ["profiles", `Profiles${profs.length ? ` (${profs.length})` : ""}`],
+        ["playbooks", `Playbooks${books.length ? ` (${books.length})` : ""}`],
         ["how", "How it works"]].map(([key, label]) => (
         <Box key={key} component="button" onClick={() => chooseSection(key)}
           sx={{ appearance: "none", border: 0, borderBottom: `2px solid ${section === key ? "#55697a" : "transparent"}`,
@@ -259,7 +303,36 @@ export default function DocsView() {
       gap: 3, alignItems: "start" }}>
 
       <Box sx={{ position: { md: "sticky" }, top: { md: 62 } }}>
-        {section === "documents" ? (
+        {section === "profiles" ? (
+          <>
+            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16, mb: 0.5 }}>Profiles</Typography>
+            <Typography sx={{ fontSize: 11.5, color: FAINT, mb: 1.5 }}>
+              The workers. Triage picks one per task and its session is seeded with that worker’s rules.
+              Add, remove or re-point a worker’s CLI on the Agents page.
+            </Typography>
+            {!profs.length && <Typography sx={{ fontSize: 12, color: FAINT }}>No agents yet — add one on the Agents page.</Typography>}
+            {profs.map((pr) => (
+              <Box key={pr.name} onClick={() => openProf(pr.name)}
+                sx={{ p: 1.4, mb: 0.75, borderRadius: 2, cursor: "pointer",
+                  bgcolor: `prof:${pr.name}` === docName ? "#fff" : "transparent",
+                  border: `1px solid ${`prof:${pr.name}` === docName ? "#d8cfbe" : "transparent"}`,
+                  boxShadow: `prof:${pr.name}` === docName ? "0 1px 3px rgba(30,50,38,.06)" : "none",
+                  "&:hover": { bgcolor: `prof:${pr.name}` === docName ? "#fff" : "#f4f1ec" } }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <TaskuaryMark size={19} />
+                  <Typography noWrap sx={{ ...mono, fontSize: 12, fontWeight: 600, color: INK, flex: 1, minWidth: 0 }}>
+                    {pr.name.toUpperCase()}.md
+                  </Typography>
+                  {`prof:${pr.name}` === docName && (
+                    <Box component="span" sx={{ px: 0.7, height: 17, display: "inline-flex", alignItems: "center",
+                      borderRadius: 1.25, bgcolor: "#55697a", color: "#fff", fontSize: 9.5, fontWeight: 700 }}>open</Box>
+                  )}
+                </Box>
+                <Typography sx={{ fontSize: 11.5, color: FAINT, pt: 0.5 }}>{pr.purpose || "no purpose set — triage cannot tell when to pick it"}</Typography>
+              </Box>
+            ))}
+          </>
+        ) : section === "documents" ? (
           <>
             <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16, mb: 1.5 }}>Operator documents</Typography>
             {NAMES.map((n) => (

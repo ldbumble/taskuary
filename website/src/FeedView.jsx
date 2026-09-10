@@ -86,7 +86,7 @@ import { TerminalPane } from "./TerminalView.jsx";
 import { feedInteraction, feedViews } from "./feedViews.js";
 import {
   appendProcessingPage, firstProcessingPage, fullProcessingRow, isCoveragePending, isSnapshotExpired,
-  processingAllParams, processingDetailPath, processingErrorMessage, processingMessageDetail, processingRefreshCandidate,
+  processingAllParams, processingDetailPath, processingErrorCode, processingErrorMessage, processingMessageDetail, processingRefreshCandidate,
   processingRowId, processingSelectionKey, processingTarget, processingTransportLimit, rowOwnsMessage, unreadProcessingRows,
 } from "./processingAll.js";
 
@@ -1074,12 +1074,14 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
       setSel(selected); setDetail(loaded.detail);
     } catch (e) {
       if (want.current !== requestKey) return;
-      const code = e?.response?.data?.detail?.code;
-      if (code === "processing_target_moved") {
-        setErr(e.response.data.detail.message || "That item changed. Refreshing the Timeline.");
+      // through the helpers: the structured refusal is on the error, and the copy in
+      // response.data.detail is flattened to a string for rendering (apiError.js). Reading the
+      // flattened one is what showed a reconcile lag as "Request failed with status code 409".
+      if (processingErrorCode(e) === "processing_target_moved") {
+        setErr(e.detail?.message || "That item changed. Refreshing the Timeline.");
         closeSelection(); load(rowsLen.current);
       } else {
-        setErr(e?.response?.data?.detail?.message || e?.message || "Failed to load item detail");
+        setErr(processingErrorMessage(e, "Failed to load item detail"));
       }
     }
   };
@@ -1138,9 +1140,8 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
         setSel(loaded.row); setDetail(loaded.detail);
       }).catch((e) => {
         if (want.current !== requestKey) return;
-        const detail = e?.response?.data?.detail;
-        setErr(detail?.message || e?.message || "Failed to refresh item detail");
-        if (detail?.code === "processing_target_moved" || e?.response?.status === 404) closeSelection();
+        setErr(processingErrorMessage(e, "Failed to refresh item detail"));
+        if (processingErrorCode(e) === "processing_target_moved" || e?.response?.status === 404) closeSelection();
       });
       return;
     }

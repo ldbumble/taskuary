@@ -42,6 +42,13 @@ test("installing a CLI opens its setup instead of testing a CLI that has never b
   assert.match(src, /useCliSetup\(\)/);
 });
 
+test("the test after a sign-in saves the absolute path, not the bare name", () => {
+  // cliinstall puts the CLI on PATH in three places, and the profile's own `cmd` is the one that
+  // makes the app independent of PATH. detect's row for an unconfigured CLI carries the bare bin
+  // name, so this route saved "claude" and worked only because the install had patched os.environ.
+  assert.match(read("SetupWizard.jsx"), /use\(\{ \.\.\.cli, cmd: cli\.path \|\| cli\.cmd \}\)/);
+});
+
 test("a passing test moves the wizard on, and leaves Done to the owner", () => {
   const src = read("SetupWizard.jsx");
   assert.match(src, /api\.post\(`\/api\/agents\/\$\{encodeURIComponent\(cli\.name\)\}\/test`/);

@@ -27,13 +27,18 @@ export function processingAllParams({ category = "", pick = "", discovered = [],
 
 export const processingTransportLimit = (wanted) => Math.min(PROCESSING_ALL_MAX_PAGE, Math.max(1, Math.trunc(wanted)));
 
+// `error.detail` FIRST: api.js keeps the structured body there and leaves a string in
+// response.data.detail for display. Read the display copy first and every code below is a JSON
+// blob that matches nothing - which is how "membership is being reconciled" became a red banner.
+const detailOf = (error) => error?.detail ?? error?.response?.data?.detail;   // an HTTP error, or a streamed error event
+
 export function processingErrorCode(error) {
-  const detail = error?.response?.data?.detail ?? error?.detail;   // an HTTP error, or a streamed error event
+  const detail = detailOf(error);
   return typeof detail === "string" ? detail : detail?.code || error?.code || "";
 }
 
 export function processingErrorMessage(error, fallback) {
-  const detail = error?.response?.data?.detail;
+  const detail = detailOf(error);
   return (typeof detail === "string" ? detail : detail?.message) || error?.message || fallback;
 }
 

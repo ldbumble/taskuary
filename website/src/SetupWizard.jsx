@@ -229,9 +229,13 @@ const CliPicker = ({ asBrain, onDone }) => {
       {pane && (
         <Box sx={{ mt: 1 }}>
           <CliPane pane={pane} />
+          {/* `path` over `cmd` on the way into the test: detect's row for a CLI that has no profile
+              yet carries the BARE bin name, and the profile is meant to hold the absolute path so
+              nothing the app does depends on PATH (cliinstall's second of three). This route saved
+              "claude" and leaned on the environ patch the install had just done. */}
           <Button size="small" variant="outlined" sx={{ mt: 0.75, fontSize: 11.5 }} disabled={!!busy}
             title="Check whether the sign-in landed. The pane stays open either way — closing it is yours."
-            onClick={() => { const cli = (list || []).find((o) => o.setup === pane.name); if (cli) use(cli); }}>
+            onClick={() => { const cli = (list || []).find((o) => o.setup === pane.name); if (cli) use({ ...cli, cmd: cli.path || cli.cmd }); }}>
             {busy ? "testing…" : "I have signed in — test it"}
           </Button>
         </Box>

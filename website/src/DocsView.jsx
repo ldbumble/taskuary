@@ -299,10 +299,16 @@ export default function DocsView() {
       ))}
     </Box>
     {section === "how" ? <HowItWorks /> : (
+    /* One screenful, two columns that scroll INSIDE themselves. The page used to grow past the
+       viewport, which put "Who the documents speak for" - and its Save button - below the fold
+       behind eight document rows (the owner, 2026-09-10: "should be in first view of the screen").
+       alignItems stretch (not start) is what lets a column be told its height at all. */
     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "300px minmax(0,1fr)" },
-      gap: 3, alignItems: "start" }}>
+      gap: 3, alignItems: { xs: "start", md: "stretch" },
+      height: { md: "calc(100vh - 150px)" }, minHeight: { md: 420 } }}>
 
-      <Box sx={{ position: { md: "sticky" }, top: { md: 62 } }}>
+      <Box sx={{ display: "flex", flexDirection: "column", minHeight: 0,
+                 maxHeight: { xs: "none", md: "100%" } }}>
         {section === "profiles" ? (
           <>
             <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16, mb: 0.5 }}>Profiles</Typography>
@@ -310,6 +316,7 @@ export default function DocsView() {
               The workers. Triage picks one per task and its session is seeded with that worker’s rules.
               Add, remove or re-point a worker’s CLI on the Agents page.
             </Typography>
+            <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", pr: 0.5, mr: -0.5 }}>
             {!profs.length && <Typography sx={{ fontSize: 12, color: FAINT }}>No agents yet — add one on the Agents page.</Typography>}
             {profs.map((pr) => (
               <Box key={pr.name} onClick={() => openProf(pr.name)}
@@ -331,10 +338,13 @@ export default function DocsView() {
                 <Typography sx={{ fontSize: 11.5, color: FAINT, pt: 0.5 }}>{pr.purpose || "no purpose set — triage cannot tell when to pick it"}</Typography>
               </Box>
             ))}
+            </Box>
           </>
         ) : section === "documents" ? (
           <>
-            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16, mb: 1.5 }}>Operator documents</Typography>
+            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16, mb: 1.5, flexShrink: 0 }}>Operator documents</Typography>
+            {/* the eight scroll; the identity card below them does not, so it is always on screen */}
+            <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", pr: 0.5, mr: -0.5 }}>
             {NAMES.map((n) => (
               <Box key={n} onClick={() => { setGenMsg(""); setGenEv(null); setDocName(n); }}
                 sx={{ p: 1.4, mb: 0.75, borderRadius: 2, cursor: "pointer",
@@ -353,7 +363,8 @@ export default function DocsView() {
                 <Typography noWrap sx={{ fontSize: 11.5, color: FAINT, pt: 0.5 }}>{DOCS[n].blurb}</Typography>
               </Box>
             ))}
-            <Box sx={{ mt: 2 }}><OwnerCard /></Box>
+            </Box>
+            <Box sx={{ mt: 1.5, flexShrink: 0 }}><OwnerCard /></Box>
           </>
         ) : (
           <>
@@ -398,9 +409,9 @@ export default function DocsView() {
         )}
       </Box>
 
-      <Box sx={{ minWidth: 0 }}>
-        {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
-        <Box sx={{ display: "flex", alignItems: "flex-start", gap: 2, mb: 1.5, flexWrap: { xs: "wrap", md: "nowrap" } }}>
+      <Box sx={{ minWidth: 0, display: "flex", flexDirection: "column", minHeight: 0 }}>
+        {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5, flexShrink: 0 }}>{err}</Alert>}
+        <Box sx={{ display: "flex", alignItems: "flex-start", gap: 2, mb: 1.5, flexShrink: 0, flexWrap: { xs: "wrap", md: "nowrap" } }}>
           {/* on a phone the title takes its own line; beside four buttons it was 45px wide */}
           <Box sx={{ flex: 1, minWidth: 0, flexBasis: { xs: "100%", md: "auto" } }}>
             <Typography noWrap sx={{ ...mono, color: INK, fontWeight: 700, fontSize: 17 }}>{meta.label}</Typography>
@@ -477,11 +488,18 @@ export default function DocsView() {
           </Box>
         )}
         {docName === "learned" && view === "viz" ? <LearnedView onChanged={load} /> : (
-        <TextField fullWidth multiline minRows={22} maxRows={40} value={docs[docName] || ""}
-          onChange={(e) => setDocs({ ...docs, [docName]: e.target.value })} sx={{ bgcolor: "#fff" }}
+        /* It FILLS what is left of the column and scrolls inside itself. minRows 22/maxRows 40 sized
+           the field to the DOCUMENT, so SOUL.md pushed the footer - and the whole left column with
+           it - past the bottom of the screen. minRows stays as the floor for the stacked phone
+           layout, where the column has no height to divide up. */
+        <TextField fullWidth multiline minRows={12} value={docs[docName] || ""}
+          onChange={(e) => setDocs({ ...docs, [docName]: e.target.value })}
+          sx={{ bgcolor: "#fff", flex: { md: 1 }, minHeight: 0,
+                "& .MuiInputBase-root": { md: { height: "100%" }, alignItems: "flex-start", overflow: "auto" },
+                "& .MuiInputBase-inputMultiline": { height: { md: "100% !important" }, overflow: "auto !important" } }}
           inputProps={{ style: { fontFamily: "'IBM Plex Mono', Consolas, monospace", fontSize: 12, lineHeight: 1.6, color: INK } }} />
         )}
-        <Typography variant="caption" sx={{ color: FAINT, display: "block", pt: 1.25, lineHeight: 1.6 }}>
+        <Typography variant="caption" sx={{ color: FAINT, display: "block", pt: 1.25, lineHeight: 1.6, flexShrink: 0 }}>
           {isPb(docName)
             ? "Keep the six labelled lines - when is what triage matches, uses is which cards list it. Saved as a file under ~/.taskuary/playbooks, beside your database."
             : "Editing this changes the funnel on the very next message. Nothing here is sent anywhere — these files live beside your database."}

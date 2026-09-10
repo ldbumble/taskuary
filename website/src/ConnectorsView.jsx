@@ -551,6 +551,22 @@ const DATA_META = {
     agent: ["GET {base}/api/connectors/{cid}/teller/status{hdr}: has_app says whether the application id is saved, connected whether a token is. Neither is yours to make - the owner signs up at teller.io and signs in at their bank through Connect a bank on the card. Ask for the application id and the certificate paths, save them in ConfigJson, then ask them to press Connect a bank.",
       "Once connected, POST {base}/api/connectors/{cid}/test{hdr}. A 403 means the certificate does not match the application or the token belongs to another environment. Turn the card on, SETUP DONE.",
       "Do not add up transactions yourself to answer 'how much did we spend' - run_tool with type teller_spend does it, per account and in total, and its numbers are the ones the owner's alerts are set against."] },
+  simplefin: { title: "Bank & card feed (SimpleFIN)", types: ["simplefin_accounts", "simplefin_transactions", "simplefin_balances", "simplefin_spend"],
+    fields: [["what to call this connection on the card (optional)", "institution", "our bank"]],
+    secretLabel: "access URL (write-only) \u2014 Connect with a setup token fills it in",
+    desc: "The same bank and card feed as the Teller card, from the bridge anyone can sign up to: every account one SimpleFIN token carries, its transactions newest first, its balances, and a spend rollup. Read-only by construction \u2014 the SimpleFIN protocol has no write verbs at all. The feed refreshes about once a day, so a balance says the date it is as of.",
+    connect: { widget: "token", label: "Connect with a setup token", status: (cid) => `/api/connectors/${cid}/simplefin/status`, claim: (cid) => `/api/connectors/${cid}/simplefin/claim`,
+      text: "Paste the setup token from your SimpleFIN account. Taskuary trades it for an access URL, once \u2014 the token cannot be reused." },
+    howto: ["bridge.simplefin.org \u2192 create an account (it is $1.50/month or $15/year, billed to you, and it is the only cost here) \u2192 link your banks under Financial Institutions. There is no application to register, no approval to wait for and no client certificate.",
+      "On your SimpleFIN account, My Accounts \u2192 Apps \u2192 Get a setup token. Paste it here and press Connect with a setup token. It is spent by that press: a re-connect needs a fresh one.",
+      "Test lists the accounts the token carries. One token can carry SEVERAL banks, so unlike the Teller card this is usually one card for everything \u2014 pick an account per report by a word of its name.",
+      "Build the reports on the REPORTS tab: 'Bank & card \u2014 transactions (SimpleFIN)' for one account or all of them, so many days back; switch on 'can become work (triage decides)' and every new transaction arrives as a message \u2014 the front door of the card-to-books playbook (docs/beyond-code.md).",
+      "Spend as a number, not a list: the 'simplefin_spend' report totals what left each account over a window (days 0 = today) and adds a TOTAL row. Its headline starts with the total on purpose \u2014 an alert of 'more than 500' on this report therefore compares DOLLARS, not the number of rows. Cents are ignored by that comparison.",
+      "Two limits worth knowing before you schedule anything: the bridge refreshes about once a day (so 'today' means as of the last sync), and it allows 24 reads a day \u2014 this card caches one response behind all four reports and refuses past 20 rather than letting your token be disabled."],
+    agent: ["GET {base}/api/connectors/{cid}/simplefin/status{hdr}: connected says whether the access URL is on the card. The setup token is NOT yours to make or to ask for casually \u2014 the owner gets it from their own SimpleFIN account and pastes it into the card. Nothing else needs saving first.",
+      "Once connected, POST {base}/api/connectors/{cid}/test{hdr}. A 403 means the access URL is stale (a fresh setup token fixes it); a 402 means their bridge subscription lapsed. Turn the card on, SETUP DONE.",
+      "Do not add up transactions yourself to answer 'how much did we spend' \u2014 run_tool with type simplefin_spend does it, per account and in total, and its numbers are the ones the owner's alerts are set against.",
+      "Read-only, and not merely by policy: there is no write endpoint in the protocol to reach for."] },
   yahoo: { title: "Yahoo Finance (best-effort)", types: ["yahoo_quotes", "yahoo_history"], fields: [], noSecret: true,
     desc: "Yahoo retired its official market-data API in 2017. This card reads an undocumented endpoint (v8/finance/chart) that happens to still work with no login — it may change or break without notice, so treat it as best-effort, not a supported integration.",
     howto: ["No key, no sign-up: nothing to paste. Test calls the same endpoint Yahoo Finance's own charts use, for AAPL by default.",
@@ -1113,7 +1129,7 @@ export default function ConnectorsView() {
       ...catalogCards("Corporate systems"),
     ]},
     { title: "Markets & finance", cards: [
-      ...dataCards(["teller", "yahoo", "coingecko", "frankfurter", "sec_edgar", "screen"]),
+      ...dataCards(["simplefin", "teller", "yahoo", "coingecko", "frankfurter", "sec_edgar", "screen"]),
       ...plannedCards(["stooq"]),
       ...catalogCards("Markets & finance"),
     ]},
@@ -1916,6 +1932,7 @@ function OAuthConnect({ conn, meta, reload }) {
   const [st, setSt] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [token, setToken] = useState("");
   const load = useCallback(async () => { try { setSt((await api.get(meta.connect.status(conn.ConnectorId))).data); } catch { /* the card still works */ } }, [conn.ConnectorId, meta]);
   useEffect(() => { load(); }, [load]);
   // the sign-in happens in another tab; poll while it is likely underway so the box flips to
@@ -1942,9 +1959,22 @@ function OAuthConnect({ conn, meta, reload }) {
     });
     tc.open();
   };
+  // SimpleFIN has no widget and no redirect: the owner links their banks at their own bridge
+  // account and brings back a setup token. It is ONE-SHOT - the server spends it claiming the
+  // access URL - so the field is cleared only on success, and the reason for a failure is shown
+  // rather than swallowed: a token thrown away by a typo cannot be pasted again.
+  const pasteToken = async () => {
+    setBusy(true);
+    try {
+      await api.post(meta.connect.claim(conn.ConnectorId), { setup_token: token.trim() });
+      setToken(""); await load(); reload();
+    } catch (e) { setErr(e?.response?.data?.detail || "that token did not claim"); }
+    setBusy(false);
+  };
   const go = async () => {
     setErr("");
     try {
+      if (meta.connect.widget === "token") return await pasteToken();
       if (meta.connect.widget === "teller") return await teller();
       const { data } = await api.get(meta.connect.start(conn.ConnectorId)); window.open(data.url, "_blank", "noopener"); setBusy(true);
     } catch (e) { setErr(e?.response?.data?.detail || e?.message || "could not start the sign-in"); }
@@ -1952,14 +1982,25 @@ function OAuthConnect({ conn, meta, reload }) {
   return (
     <Box sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-        <Button variant="contained" disableElevation disabled={!st?.has_app || busy} onClick={go}
+        {meta.connect.widget === "token" && (
+          <TextField size="small" value={token} onChange={(e) => setToken(e.target.value)} disabled={busy}
+            placeholder="setup token from your SimpleFIN account" sx={{ bgcolor: "#fff", minWidth: 260, flex: 1 }}
+            inputProps={{ spellCheck: false, autoComplete: "off", style: { fontSize: 12.5 } }} />
+        )}
+        <Button variant="contained" disableElevation onClick={go}
+          disabled={busy || !st?.has_app || (meta.connect.widget === "token" && !token.trim())}
           title={st?.has_app ? meta.connect.text : "save the app's client id and secret first"}>
-          {busy ? <><CircularProgress size={12} sx={{ color: "#fff", mr: 1 }} /> waiting for the sign-in…</> : st?.connected ? "Reconnect" : meta.connect.label}
+          {busy ? <><CircularProgress size={12} sx={{ color: "#fff", mr: 1 }} /> {meta.connect.widget === "token" ? "claiming…" : "waiting for the sign-in…"}</> : st?.connected ? "Reconnect" : meta.connect.label}
         </Button>
         {st?.connected
           ? <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Connected{st.realm_id ? ` · company ${st.realm_id}` : ""}{st.institution ? ` · ${st.institution}` : ""}{(st.env || st.environment) === "sandbox" ? " · sandbox" : ""}</Typography>
           : <Typography variant="body2" sx={{ color: DIM }}>{st?.has_app ? "keys saved — not connected yet" : "paste the application's keys below and Save first"}</Typography>}
       </Box>
+      {st?.bridge && !st?.connected && (
+        <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75, lineHeight: 1.6 }}>
+          Link your banks and get the token at <Box component="a" href={st.bridge} target="_blank" rel="noopener" sx={{ color: INK }}>{st.bridge.replace(/^https:\/\//, "")}</Box> \u2014 My Accounts \u2192 Apps \u2192 Get a setup token.
+        </Typography>
+      )}
       {st?.redirect_uri && (
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75, lineHeight: 1.6 }}>
           The Intuit app must list this redirect URI, exactly: <Box component="code" sx={{ ...mono, fontSize: 11, color: INK, bgcolor: "#fff", px: 0.6, borderRadius: 0.75, border: `1px solid ${BORDER}` }}>{st.redirect_uri}</Box>

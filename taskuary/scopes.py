@@ -42,6 +42,8 @@ ACTIONS = {
     # is what makes a bill an agent's PROPOSAL rather than an agent's decision.
     'intacct_create': 'write', 'intacct_update': 'write',
     'teller_accounts': 'read', 'teller_transactions': 'read', 'teller_balances': 'read', 'teller_spend': 'read',    # a feed cannot move money
+    # SimpleFIN cannot be anything but read: its protocol has no write verbs to expose
+    'simplefin_accounts': 'read', 'simplefin_transactions': 'read', 'simplefin_balances': 'read', 'simplefin_spend': 'read',
     # market data: every one of these is a window on a public market. Nothing upstream moves.
     'coingecko_prices': 'read', 'fx_rates': 'read', 'yahoo_quotes': 'read', 'yahoo_history': 'read',
     'edgar_filings': 'read', 'edgar_facts': 'read', 'fred_series': 'read',
@@ -102,7 +104,7 @@ DEFAULT_SCOPE = {
     'telegram': 'write', 'whatsapp': 'write', 'imessage': 'write', 'discord': 'write',
     'gmail': 'write', 'imap': 'write',
     'mssql': 'read', 'database': 'read', 'prometheus': 'read', 'datadog': 'read',
-    'intacct': 'read', 'quickbooks': 'read', 'teller': 'read',
+    'intacct': 'read', 'quickbooks': 'read', 'teller': 'read', 'simplefin': 'read',
     'coingecko': 'read', 'frankfurter': 'read', 'yahoo': 'read', 'sec_edgar': 'read',
     'twelvedata': 'read', 'alphavantage': 'read', 'fred': 'read',
     'finnhub': 'read', 'polygon': 'read', 'tiingo': 'read', 'fmp': 'read', 'alpaca': 'read',

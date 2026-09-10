@@ -96,12 +96,21 @@ the period was open. A thin card still says what is missing.
    - *Statement mail.* Card issuers already email statements and alerts; the mailbox connector
      already ingests them and their attachments. A playbook that reads the PDF/CSV needs no new
      connector. This is where to start - it exercises the whole loop with zero new plumbing.
-   - *A bank-data aggregator* - **Teller, built (taskuary/teller.py, 2026-09-01)**: the owner
-     enrols each bank login themselves in the card (Teller Connect), development tier free to 100
-     logins, certificate auth outside sandbox. Chosen over Plaid because this is a local install
-     and the owner does the enrolment - no hosted approval flow, no per-account fee at this size.
-     Its transactions report with "can become work" on is the trigger: each new transaction is a
-     message triage judges.
+   - *A bank-data aggregator* - **SimpleFIN, built (taskuary/simplefin.py, 2026-09-10)**: the
+     owner links their banks at their own SimpleFIN Bridge account, presses "Get a setup token"
+     and pastes it into the card, which spends it once for a write-only access URL. $1.50/month
+     or $15/year, billed to them; no application to register, no approval to wait for, no client
+     certificate. Read-only because the protocol has no write verbs. Its transactions report with
+     "can become work" on is the trigger: each new transaction is a message triage judges.
+   - *The same feed through Teller* - **built first (taskuary/teller.py, 2026-09-01)** and kept
+     for owners who already have credentials, but **Teller stopped taking signups** (checked
+     2026-09-10), which is the whole reason the SimpleFIN card exists. The lesson is worth keeping
+     for the next connector: a data source that needs an approval flow to sign up for can close
+     that flow, and a card nobody new can connect is not a card.
+   - *Not BAI2/EDI bank files.* Tempting - the corporate banks already send them - but a BAI2 feed
+     is set up per company by the bank's treasury desk, priced for that, and unavailable to
+     everyone else. It fails the test this whole page is written against: anyone must be able to
+     turn it on themselves.
 4. **Proof for non-code.** Teach `proof.py` to read a playbook's `done when` and check it.
 
 ## A second worked example: a document, not a bill

@@ -3876,6 +3876,40 @@ def teller_enroll(cid: int, body: TellerEnrollBody):
     store.audit('connector', cid, 'teller_enrolled', ACTOR, detail={'institution': body.institution or ''})
     return {'ok': True}
 
+# ── SimpleFIN (simplefin.py): the owner pastes a setup token; the server spends it, once ──
+class SimpleFinClaimBody(BaseModel): setup_token: str
+
+@app.get('/api/connectors/{cid}/simplefin/status')
+def simplefin_status(cid: int):
+    """Nothing has to be saved before connecting - there is no application to register and no
+    certificate, so `has_app` is true from the start. `connected` is whether the access URL is on
+    the card."""
+    from .simplefin import BRIDGE, budget
+    c = store.get_connector(cid, with_secret=True)
+    if not c or c['Type'] != 'simplefin': raise HTTPException(404, 'not a SimpleFIN connector')
+    conf = json.loads(c.get('ConfigJson') or '{}')
+    return {'has_app': True, 'connected': bool(c.get('Secret')), 'bridge': BRIDGE,
+            'institution': conf.get('institution') or '', 'reads_today': budget()}
+
+@app.post('/api/connectors/{cid}/simplefin/claim')
+def simplefin_claim(cid: int, body: SimpleFinClaimBody):
+    """Trade the setup token for the access URL and keep only the URL (write-only).
+
+    The token is SPENT by this call - SimpleFIN answers a second claim with "Forbidden" - so the
+    422s below matter: a mistyped token must fail before it is thrown away, and a token that was
+    already claimed must say so in those words rather than looking like a network fault. The
+    access URL carries its own basic-auth credentials, which is why it never comes back out."""
+    from .simplefin import SimpleFinError, claim, claim_url
+    c = store.get_connector(cid)
+    if not c or c['Type'] != 'simplefin': raise HTTPException(404, 'not a SimpleFIN connector')
+    try: claim_url(body.setup_token)                       # decodes, or 422 with the reason
+    except ValueError as e: raise HTTPException(422, str(e)) from e
+    try: access = claim(body.setup_token)
+    except SimpleFinError as e: raise HTTPException(422, str(e)) from e
+    store.save_connector({'ConnectorId': cid, 'Secret': access, 'Active': True}, ACTOR)
+    store.audit('connector', cid, 'simplefin_claimed', ACTOR, detail={'host': access.split('@')[-1].split('/')[0]})
+    return {'ok': True}
+
 @app.get('/api/intacct/fields')
 def intacct_object_fields(obj: str, connector_id: int = None):
     """What this company's copy of an Intacct object actually carries, custom fields and all.

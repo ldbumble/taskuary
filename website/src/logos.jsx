@@ -87,6 +87,7 @@ export const LOGOS = {
   netsuite: (p) => <T p={p} bg="#125580" text="NS" size={9.5} />,
   quickbooks: (p) => <T p={p} bg="#2CA01C" text="qb" size={10.5} />,
   teller: (p) => <T p={p} bg="#1a1a1a" text="T" size={12} />,
+  simplefin: (p) => <T p={p} bg="#2f6f5f" text="SF" size={10} />,
   yahoo: (p) => <T p={p} bg="#6001D2" text="Y!" size={9.5} />,
   coingecko: (p) => <T p={p} bg="#8BC53F" text="CG" size={9} />,
   frankfurter: (p) => <T p={p} bg="#2B5A8C" text="FX" size={10} />,

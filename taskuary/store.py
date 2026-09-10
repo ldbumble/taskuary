@@ -453,6 +453,7 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  'quickbooks': 'report,tool',
                  'zoho_invoice': 'report,tool',
                  'teller': 'report,tool',          # the bank feed: transactions as a report (and "can become work"), balances as a tool
+                 'simplefin': 'report,tool',       # the same feed, from the bridge anyone can sign up to
                  # market data (markets.py): four keyless cards, each a report source and an agent tool
                  'coingecko': 'report,tool', 'frankfurter': 'report,tool',
                  'yahoo': 'report,tool', 'sec_edgar': 'report,tool',
@@ -703,6 +704,7 @@ class SQLiteStore:
                          ('sentry', 'Sentry'), ('pagerduty', 'PagerDuty'),
                          ('prometheus', 'Prometheus'), ('datadog', 'Datadog'),
                          ('intacct', 'Sage Intacct'), ('quickbooks', 'QuickBooks Online'), ('teller', 'Bank & card feed (Teller)'),
+                         ('simplefin', 'Bank & card feed (SimpleFIN)'),
                          ('coingecko', 'Crypto prices (CoinGecko)'), ('frankfurter', 'FX rates'),
                          ('yahoo', 'Yahoo Finance (best-effort)'), ('sec_edgar', 'SEC filings (EDGAR)'),
                          ('twelvedata', 'Twelve Data'), ('alphavantage', 'Alpha Vantage'), ('fred', 'FRED (keyless)'),

@@ -614,6 +614,12 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'teller_accounts': _lazy('teller', 'run_teller_accounts'), 'teller_transactions': _lazy('teller', 'run_teller_transactions'),
             'teller_balances': _lazy('teller', 'run_teller_balances'),
             'teller_spend': _lazy('teller', 'run_teller_spend'),      # the rollup: how much, per card and in total
+            # the same feed for everyone else (simplefin.py): Teller stopped taking signups, so this
+            # is the one an owner can actually connect - same four tools, one cached call behind them
+            'simplefin_accounts': _lazy('simplefin', 'run_simplefin_accounts'),
+            'simplefin_transactions': _lazy('simplefin', 'run_simplefin_transactions'),
+            'simplefin_balances': _lazy('simplefin', 'run_simplefin_balances'),
+            'simplefin_spend': _lazy('simplefin', 'run_simplefin_spend'),
             # market data (markets.py): the watchlist, the filing and the FX rate as report sources.
             # These five cards need no credentials at all, which is why they are the ones CI exercises.
             'coingecko_prices': _lazy('markets', 'run_coingecko_prices'), 'fx_rates': _lazy('markets', 'run_fx_rates'),
@@ -685,6 +691,8 @@ CARD_OF = {'s3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 
            'quickbooks_vendors': 'quickbooks', 'quickbooks_accounts': 'quickbooks', 'quickbooks_bill': 'quickbooks', 'quickbooks_expense': 'quickbooks',
            'zoho_monthly_invoices': 'zoho_invoice',
            'teller_accounts': 'teller', 'teller_transactions': 'teller', 'teller_balances': 'teller', 'teller_spend': 'teller',
+           'simplefin_accounts': 'simplefin', 'simplefin_transactions': 'simplefin',
+           'simplefin_balances': 'simplefin', 'simplefin_spend': 'simplefin',
            'coingecko_prices': 'coingecko', 'fx_rates': 'frankfurter',
            'yahoo_quotes': 'yahoo', 'yahoo_history': 'yahoo',
            'edgar_filings': 'sec_edgar', 'edgar_facts': 'sec_edgar',
@@ -762,6 +770,11 @@ def intacct_connection(store, connector_id=None) -> dict:
     neither is a password to this company's books, and burying them write-only would only mean
     nobody can ever check the sender id for a typo."""
     return _card(store, 'intacct', 'user_password', connector_id)
+
+
+def _simplefin_connection(store, connector_id=None) -> dict:
+    from .simplefin import connection
+    return connection(store, connector_id)
 
 
 def _teller_connection(store, connector_id=None) -> dict:
@@ -845,6 +858,8 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  'intacct_create': intacct_connection, 'intacct_update': intacct_connection,
                  **{t: _quickbooks_connection for t in ('quickbooks', 'quickbooks_vendors', 'quickbooks_accounts', 'quickbooks_bill', 'quickbooks_expense')},
                  **{t: _teller_connection for t in ('teller_accounts', 'teller_transactions', 'teller_balances', 'teller_spend')},
+                 **{t: _simplefin_connection for t in ('simplefin_accounts', 'simplefin_transactions',
+                                                       'simplefin_balances', 'simplefin_spend')},
                  # both borrow: SharePoint the Outlook tenant app, Sheets the Gmail card's Google client
                  'sharepoint_list': _sharepoint_connection, 'sharepoint_file': _sharepoint_connection,
                  'google_sheets': _sheets_connection,

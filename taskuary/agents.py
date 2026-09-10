@@ -243,7 +243,7 @@ _UNAVAILABLE = re.compile(
     r'too many requests|resource exhausted|try again (?:at|after|later)|resets? (?:at|in)', re.I)
 
 def signed_out_msg(name: str, why: str, cmd: str = '') -> str:
-    """Taskuary hosts the sign-in itself now (clilogin.py), so this stops sending people away.
+    """Taskuary opens the CLI's own setup itself now (clisetup.py), so this stops sending people away.
 
     The name that arrives here is the PROFILE's - every install ships one called `coder` - so the
     CLI is read off the command it runs, which is the rule cliinstall.recipe_for exists for. Told
@@ -251,8 +251,8 @@ def signed_out_msg(name: str, why: str, cmd: str = '') -> str:
     from . import cliinstall
     cli = cliinstall.recipe_for(cmd) or name
     how = _LOGIN_HOW.get(cli, f"run `{cli}` and sign in again")
-    return (f"{name} is signed out on this machine ({why.strip()[:160]}). Press Sign in on "
-            f"Connections > AI CLI agents and finish it in the pane that opens - or {how} in a terminal.")
+    return (f"{name} is signed out on this machine ({why.strip()[:160]}). Press Set it up on "
+            f"Connections > AI CLI agents and sign in there in the pane that opens - or {how} in a terminal.")
 
 
 # Windows refuses to START some installs rather than failing inside them, and says only

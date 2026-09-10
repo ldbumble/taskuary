@@ -23,7 +23,7 @@ import api from "./api";
 import SoulInterview from "./SoulInterview.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL2 } from "./theme.jsx";
 import { useCliInstall, InstallLine } from "./cliInstall.jsx";
-import { useCliLogin, SignInButton, LoginPane, canSignIn } from "./cliLogin.jsx";
+import { useCliSetup, SetupButton, CliPane, canSetup } from "./cliSetup.jsx";
 
 // "Three things and Taskuary works" was prose. Steps were added to the wizard and it went on
 // saying three, because a number written as a word is a number nobody updates. Counted now -
@@ -152,7 +152,7 @@ const CliPicker = ({ asBrain, onDone }) => {
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState(null);
   const { install, busy: installing, note } = useCliInstall();
-  const { signIn, opening, pane, note: loginNote } = useCliLogin();
+  const { openSetup, opening, pane, note: setupNote } = useCliSetup();
   const reload = () => api.get("/api/cli/detect").then(({ data }) => setList(data.data || [])).catch(() => setList([]));
   useEffect(() => { reload(); }, []);
   // Install, then keep going. Stopping at "installed" would leave the owner to find the second
@@ -167,7 +167,7 @@ const CliPicker = ({ asBrain, onDone }) => {
     if (!done) return;
     await reload();
     const fresh = { ...cli, cmd: done.path || cli.cmd, installed: true };
-    if (canSignIn(fresh)) { await signIn(fresh); return; }
+    if (canSetup(fresh)) { await openSetup(fresh); return; }
     await use(fresh);
   };
   const use = async (cli) => {
@@ -216,7 +216,7 @@ const CliPicker = ({ asBrain, onDone }) => {
           {cli.installed ? (<>
             {/* installed and signed out look identical from here, so Sign in is offered rather
                 than guessed at - the CLI itself is what says whether it was needed */}
-            <SignInButton cli={cli} opening={opening} onSignIn={signIn} />
+            <SetupButton cli={cli} opening={opening} onOpen={openSetup} />
             <Button size="small" variant="outlined" disabled={!!busy || !!installing} onClick={() => use(cli)}
               sx={{ fontSize: 11.5, whiteSpace: "nowrap" }}>
               {busy === cli.name ? "testing…" : asBrain ? "Use & test" : "Add & test"}
@@ -228,15 +228,15 @@ const CliPicker = ({ asBrain, onDone }) => {
           a pane must not vanish while its owner is mid-OAuth, and Done is theirs on the task. */}
       {pane && (
         <Box sx={{ mt: 1 }}>
-          <LoginPane pane={pane} />
+          <CliPane pane={pane} />
           <Button size="small" variant="outlined" sx={{ mt: 0.75, fontSize: 11.5 }} disabled={!!busy}
             title="Check whether the sign-in landed. The pane stays open either way — closing it is yours."
-            onClick={() => { const cli = (list || []).find((o) => o.login === pane.name); if (cli) use(cli); }}>
+            onClick={() => { const cli = (list || []).find((o) => o.setup === pane.name); if (cli) use(cli); }}>
             {busy ? "testing…" : "I have signed in — test it"}
           </Button>
         </Box>
       )}
-      {(msg || note || loginNote) && <Alert severity={(msg || note || loginNote).bad ? "error" : "success"} sx={{ mt: 1, fontSize: 12.5 }}>{(msg || note || loginNote).text}</Alert>}
+      {(msg || note || setupNote) && <Alert severity={(msg || note || setupNote).bad ? "error" : "success"} sx={{ mt: 1, fontSize: 12.5 }}>{(msg || note || setupNote).text}</Alert>}
     </Box>
   );
 };

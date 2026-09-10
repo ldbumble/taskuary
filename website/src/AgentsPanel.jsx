@@ -7,7 +7,7 @@ import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, card, mono } from "./theme.jsx";
 import { Crumb, Empty, LandingCard, ConfirmDelete, TaskuaryMark } from "./ui.jsx";
 import { useCliInstall, InstallLine } from "./cliInstall.jsx";
-import { useCliLogin, SignInButton, LoginPane } from "./cliLogin.jsx";
+import { useCliSetup, SetupButton, CliPane } from "./cliSetup.jsx";
 import BoltIcon from "@mui/icons-material/Bolt";
 import StarIcon from "@mui/icons-material/Star";
 
@@ -136,7 +136,7 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
     }).catch(() => setCanGet({}));
   }, [agents]);
   const { install, busy: installing, note: installNote } = useCliInstall();
-  const { signIn, opening, pane, note: loginNote } = useCliLogin();
+  const { openSetup, opening, pane, note: setupNote } = useCliSetup();
   // installing from an EXISTING profile: point that profile at the absolute path afterwards, so
   // the agent runner can start it without waiting for this process to be restarted
   const getFor = async (name, cmd) => {
@@ -177,10 +177,10 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
               : null} />
         ))}
         {installNote && <Alert severity={installNote.bad ? "error" : "success"} sx={{ gridColumn: "1 / -1", fontSize: 12.5 }}>{installNote.text}</Alert>}
-        {loginNote && <Alert severity={loginNote.bad ? "error" : "success"} sx={{ gridColumn: "1 / -1", fontSize: 12.5 }}>{loginNote.text}</Alert>}
+        {setupNote && <Alert severity={setupNote.bad ? "error" : "success"} sx={{ gridColumn: "1 / -1", fontSize: 12.5 }}>{setupNote.text}</Alert>}
         {/* the sign-in, in the same session the Board is showing. Nothing here closes it - the
             task's own Done does, and only when the owner says so. */}
-        {pane && <Box sx={{ gridColumn: "1 / -1" }}><LoginPane pane={pane} /></Box>}
+        {pane && <Box sx={{ gridColumn: "1 / -1" }}><CliPane pane={pane} /></Box>}
       </Box>
       {brains.length > 0 && (
         <Box sx={{ mb: 2, p: 1.5, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 2 }}>
@@ -246,8 +246,8 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
                 {/* signed-out and signed-in look identical from here - the page has no signal for
                     it, and the CLI itself is the only thing that knows. Sign in is always a
                     legitimate thing to press, so offer it rather than guess. */}
-                <SignInButton cli={{ ...canGet[a.cmd], installed: here[name] !== false }}
-                  opening={opening} onSignIn={signIn} sx={{ fontSize: 10.5 }} />
+                <SetupButton cli={{ ...canGet[a.cmd], installed: here[name] !== false }}
+                  opening={opening} onOpen={openSetup} sx={{ fontSize: 10.5 }} />
                 {defAgent === name && here[name] === false && effective && effective !== name && (
                   <Chip size="small" label={`work goes to ${effective}`}
                     title="Your default cannot run here, so tasks are dispatched to an agent that can."

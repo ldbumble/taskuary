@@ -579,7 +579,7 @@ class CoreTests(unittest.TestCase):
                 run_cli({'cmd': 'claude', 'args': ['-c', script]}, 'hi', lambda *a: None)
         msg = str(e.exception)
         # it names the button this app now has (clilogin.py), and keeps the terminal road as the fallback
-        self.assertIn('signed out', msg); self.assertIn('/login', msg); self.assertIn('Sign in', msg)
+        self.assertIn('signed out', msg); self.assertIn('/login', msg); self.assertIn('Set it up', msg)
         self.assertIn('OAuth session expired', msg)                      # the original reason still travels with it
         with mock.patch('taskuary.agents._resolve_cmd', return_value=[sys.executable]):   # any other failure keeps the plain exit line
             with self.assertRaises(RuntimeError) as e2:

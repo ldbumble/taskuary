@@ -3978,19 +3978,20 @@ def cli_install_state():
     from . import cliinstall
     return cliinstall.state()
 
-class CliLoginBody(BaseModel): name: str
+class CliSetupBody(BaseModel): name: str
 
-@app.post('/api/cli/login')
-def cli_login(body: CliLoginBody):
-    """Open the CLI's own sign-in in a live pane, as a setup task on the Board.
+@app.post('/api/cli/setup')
+def cli_setup(body: CliSetupBody):
+    """Open the CLI itself in a live pane, as a setup task on the Board, and let it run its own
+    onboarding - settings, then the sign-in.
 
     On guard.DENIED beside /api/cli/install: an agent reads untrusted mail, and an agent that can
-    start an OAuth flow on this machine can be talked into starting one. A second press reattaches
-    to the open pane rather than running a second flow beside it."""
-    from . import clilogin, clis
+    run a CLI's setup on this machine can be talked into running one. A second press reattaches to
+    the open pane rather than starting a second one beside it."""
+    from . import clis, clisetup
     name = str(body.name or '')
     label = next((k['label'] for k in clis.KNOWN if k['name'] == name), '')
-    try: return clilogin.start(store, name, ACTOR, label=label)
+    try: return clisetup.start(store, name, ACTOR, label=label)
     except ValueError as e: raise HTTPException(422, str(e))
 
 @app.get('/api/setup')

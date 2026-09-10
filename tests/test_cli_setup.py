@@ -1,45 +1,44 @@
-"""Signing a coding CLI in, in a pane Taskuary hosts: what it may start, who may press it, and
+"""Setting a coding CLI up in a pane Taskuary hosts: what it may start, who may press it, and
 what the session is allowed to keep.
 
 Nothing here starts a real CLI. `Term` is faked in every test that reaches one - a suite that
-spawns claude is a suite that opens an OAuth flow on whoever's machine it runs on.
+spawns claude is a suite that runs an onboarding on whoever's machine it runs on.
 """
 import unittest
 from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import aisetup, clilogin, guard, server
+from taskuary import aisetup, clisetup, guard, server
 
 c = TestClient(server.app)
 
 
 class TableTests(unittest.TestCase):
-    """This starts a process and types into it. An open field would be 'run anything here'."""
+    """This runs a program on the owner's machine. An open field would be 'run anything here'."""
 
     def test_the_menu_is_closed(self):
         for bad in ('rm -rf /', 'some-cli-nobody-vetted', '', 'aider'):
-            with self.assertRaises(ValueError): clilogin.argv(bad)
+            with self.assertRaises(ValueError): clisetup.argv(bad)
 
-    def test_every_row_is_keyed_by_the_recipe_name_not_the_binary(self):
+    def test_every_name_is_the_recipe_not_the_binary(self):
         """`cursor-agent` is the binary; `cursor` is the recipe, and what the UI holds."""
         from taskuary import cliinstall
-        self.assertIn('cursor', clilogin.RECIPES)
-        self.assertNotIn('cursor-agent', clilogin.RECIPES)
-        for name in clilogin.RECIPES: self.assertIn(name, cliinstall.RECIPES, name)
+        self.assertIn('cursor', clisetup.SETUP)
+        self.assertNotIn('cursor-agent', clisetup.SETUP)
+        for name in clisetup.SETUP: self.assertIn(name, cliinstall.RECIPES, name)
 
-    def test_the_two_shapes_are_the_ones_the_clis_actually_have(self):
-        self.assertEqual(clilogin.RECIPES['codex']['args'], ['login'])
-        self.assertEqual(clilogin.RECIPES['cursor']['args'], ['login'])
-        self.assertEqual(clilogin.RECIPES['claude']['type'], '/login')
-        self.assertEqual(clilogin.RECIPES['copilot']['type'], '/login')
-        # gemini opens Google's page on a plain run: nothing on argv, nothing typed
-        self.assertEqual(clilogin.RECIPES['gemini'], {'args': [], 'type': ''})
+    def test_it_starts_the_cli_and_nothing_else(self):
+        """The CLI's own onboarding asks for the settings and the sign-in. Adding to that command
+        line - or typing into the box - is us guessing at a conversation it has properly."""
+        for name in clisetup.SETUP:
+            with mock.patch('taskuary.cliinstall.find', return_value='/x/thing'):
+                self.assertEqual(clisetup.argv(name), ['/x/thing'], name)
 
-    def test_a_sign_in_ends_the_way_a_setup_task_ends(self):
+    def test_a_set_up_ends_the_way_a_setup_task_ends(self):
         """No report, no proposals, no reply draft - coder.wrap routes Kind='setup' to this."""
-        self.assertEqual(clilogin.KIND, aisetup.KIND)
-        self.assertIs(clilogin.finish, aisetup.finish)
+        self.assertEqual(clisetup.KIND, aisetup.KIND)
+        self.assertIs(clisetup.finish, aisetup.finish)
 
 
 class ArgvTests(unittest.TestCase):
@@ -47,16 +46,16 @@ class ArgvTests(unittest.TestCase):
 
     def test_the_binary_is_found_never_assumed(self):
         with mock.patch('taskuary.cliinstall.find', return_value=r'C:\x\codex.exe'):
-            self.assertEqual(clilogin.argv('codex'), [r'C:\x\codex.exe', 'login'])
+            self.assertEqual(clisetup.argv('codex'), [r'C:\x\codex.exe'])
 
     def test_a_cli_that_is_not_here_yet_says_so_instead_of_starting_nothing(self):
         with mock.patch('taskuary.cliinstall.find', return_value=''):
-            with self.assertRaises(ValueError) as e: clilogin.argv('claude')
+            with self.assertRaises(ValueError) as e: clisetup.argv('claude')
         self.assertIn('install', str(e.exception).lower())
 
 
 class FakeTerm:
-    """A pane that never spawns anything. Records what it was asked to type."""
+    """A pane that never spawns anything. Records anything it was asked to type."""
 
     def __init__(self, argv, cwd, label, task_id=None, agent=None, rows=32, cols=110, store=None):
         self.argv, self.cwd, self.label, self.task_id, self.agent = argv, cwd, label, task_id, agent
@@ -75,7 +74,7 @@ class EndpointTests(unittest.TestCase):
         self.addCleanup(lambda: term.SESSIONS.pop('fake123', None))
 
     def test_it_opens_a_setup_task_the_board_will_show(self):
-        r = c.post('/api/cli/login', json={'name': 'claude'})
+        r = c.post('/api/cli/setup', json={'name': 'claude'})
         self.assertEqual(r.status_code, 200, r.text)
         tid = r.json()['taskId']
         task = server.store.get_task(tid)
@@ -84,45 +83,41 @@ class EndpointTests(unittest.TestCase):
         self.assertIn('cli:claude', str(task['Tags']))
         self.assertIn('Claude Code', task['Title'])          # the label, not the bare recipe name
 
-    def test_the_pane_keeps_no_transcript_and_types_the_login(self):
+    def test_the_pane_keeps_no_transcript_and_nothing_is_typed_for_the_owner(self):
         from taskuary import terminal as term
-        c.post('/api/cli/login', json={'name': 'claude'})
+        c.post('/api/cli/setup', json={'name': 'claude'})
         t = term.SESSIONS['fake123']
-        self.assertFalse(t.keep_transcript)                   # secrets are typed into this one
-        self.assertEqual(t.seeded, '/login')
+        self.assertFalse(t.keep_transcript)                   # an account and a token go in here
+        self.assertIsNone(t.seeded)                           # the CLI runs its own onboarding
         self.assertIsNone(t.agent)                            # off the blackboard, off the roster
+        self.assertEqual(t.argv, ['/x/claude'])
 
-    def test_a_subcommand_cli_is_not_typed_into(self):
-        from taskuary import terminal as term
-        c.post('/api/cli/login', json={'name': 'codex'})
-        self.assertIsNone(term.SESSIONS['fake123'].seeded)
-
-    def test_a_second_press_reattaches_instead_of_starting_a_second_oauth(self):
-        first = c.post('/api/cli/login', json={'name': 'claude'}).json()
-        again = c.post('/api/cli/login', json={'name': 'claude'}).json()
+    def test_a_second_press_reattaches_instead_of_starting_a_second_one(self):
+        first = c.post('/api/cli/setup', json={'name': 'claude'}).json()
+        again = c.post('/api/cli/setup', json={'name': 'claude'}).json()
         self.assertTrue(again['existing'])
         self.assertEqual(again['taskId'], first['taskId'])
 
     def test_an_unknown_cli_is_refused(self):
-        self.assertEqual(c.post('/api/cli/login', json={'name': 'rm -rf /'}).status_code, 422)
+        self.assertEqual(c.post('/api/cli/setup', json={'name': 'rm -rf /'}).status_code, 422)
 
     def test_a_cli_that_is_not_installed_is_refused(self):
         with mock.patch('taskuary.cliinstall.find', return_value=''):
-            self.assertEqual(c.post('/api/cli/login', json={'name': 'claude'}).status_code, 422)
+            self.assertEqual(c.post('/api/cli/setup', json={'name': 'claude'}).status_code, 422)
 
 
 class GuardTests(unittest.TestCase):
-    def test_an_agent_may_not_start_an_oauth_flow(self):
-        """An agent reads untrusted mail. Starting a sign-in on the owner's machine is theirs."""
-        self.assertTrue(guard.denied('POST', '/api/cli/login'), 'POST /api/cli/login must be on guard.DENIED')
+    def test_an_agent_may_not_start_one(self):
+        """An agent reads untrusted mail. Running a CLI's setup on this machine is the owner's."""
+        self.assertTrue(guard.denied('POST', '/api/cli/setup'), 'POST /api/cli/setup must be on guard.DENIED')
 
-    def test_the_page_is_told_which_clis_can_be_signed_in(self):
+    def test_the_page_is_told_which_clis_can_be_set_up(self):
         """A button is never drawn over a road that does not exist - `installable`'s own rule."""
         rows = c.get('/api/cli/detect').json()['data']
         self.assertTrue(rows)
         for row in rows:
-            self.assertIn('login', row)
-            if row['login']: self.assertIn(row['login'], clilogin.RECIPES)
+            self.assertIn('setup', row)
+            if row['setup']: self.assertIn(row['setup'], clisetup.SETUP)
 
 
 class SignedOutMessageTests(unittest.TestCase):
@@ -131,7 +126,7 @@ class SignedOutMessageTests(unittest.TestCase):
     def test_it_names_the_button_this_app_now_has(self):
         from taskuary import agents
         msg = agents.signed_out_msg('coder', 'not logged in', r'C:\n\claude.cmd')
-        self.assertIn('Sign in', msg)
+        self.assertIn('Set it up', msg)
         self.assertNotIn('Open a terminal', msg)
 
     def test_a_profile_is_mapped_to_its_cli_not_read_as_one(self):
@@ -140,9 +135,11 @@ class SignedOutMessageTests(unittest.TestCase):
         self.assertIn('/login', agents.signed_out_msg('coder', 'x', r'C:\n\claude.cmd'))
         self.assertIn('codex login', agents.signed_out_msg('coder', 'x', '/usr/bin/codex'))
 
-    def test_all_five_signable_clis_have_a_sentence(self):
+    def test_all_five_clis_have_a_terminal_sentence_too(self):
+        """The pane is the road; a terminal is still a road, and the only one when the app is not
+        the thing in front of you."""
         from taskuary import agents
-        for name in clilogin.RECIPES: self.assertIn(name, agents._LOGIN_HOW, name)
+        for name in clisetup.SETUP: self.assertIn(name, agents._LOGIN_HOW, name)
 
     def test_an_unknown_cli_still_gets_a_usable_sentence(self):
         from taskuary import agents

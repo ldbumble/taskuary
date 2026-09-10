@@ -1,5 +1,13 @@
 # CLI sign-in Implementation Plan
 
+> **SUPERSEDED 2026-09-09.** This plan was written against a *sign-in shaped* design — a per-CLI
+> table of login recipes with `/login` typed into the box — and was built and then corrected. What
+> shipped opens the CLI plain and lets it run its own onboarding, which collapsed the table to a
+> closed set of names: `taskuary/clisetup.py`, `POST /api/cli/setup`, `website/src/cliSetup.jsx`.
+> Read `docs/superpowers/specs/2026-09-09-cli-sign-in.md` for the design as built. Kept because the
+> task decomposition and the verified seams below are still accurate; the names and the login
+> recipes in them are not.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Finish a coding CLI's own sign-in inside Taskuary — a live pane on an ordinary setup task — instead of telling the owner to open a terminal.

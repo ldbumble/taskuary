@@ -503,20 +503,27 @@ TerminalPane.displayName = "TerminalPane";
 // terminal's colors. Claude Code additionally themes ITSELF, which is set inside Claude
 // Code - a command to run there, not something to write into somebody's global CLI config
 // behind their back.
-export const ThemeHint = () => (
+//
+// The knobs it describes sit at 0.62 opacity until hovered, which is the whole reason this
+// exists: nobody finds a discreet control they were never told about. `cli` narrows it to one
+// row - Claude Code's own /theme is noise under a codex pane, which paints with the terminal's
+// palette and has no theme command of its own.
+export const ThemeHint = ({ cli = "" }) => (
   <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1.5 }}>
     The session's top-right corner holds both knobs: A− / A+ set the text size, 7px to 14px with
     the current one shown between them (7 fits roughly twice the run on screen — the leading
     tightens with it, so the rows are gained rather than spent on whitespace), and the picker switches the terminal
     palette (Catppuccin, Dracula, Tokyo Night, Gruvbox, One Dark) — that restyles codex and any
-    other CLI, since a TUI paints with the terminal's colors. To match Catppuccin inside Claude
-    Code itself, run{" "}
-    <Box component="code" sx={{ ...mono, bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 1,
-      px: 0.75, py: 0.25, fontSize: 11, cursor: "pointer" }}
-      title="click to copy"
-      onClick={() => navigator.clipboard?.writeText("/plugin install catppuccin@matcra587/claude-themes")}>
-      /plugin install catppuccin@matcra587/claude-themes
-    </Box>{" "}
-    in a Claude Code session, then pick a flavor with /theme.
+    other CLI, since a TUI paints with the terminal's colors.
+    {(!cli || cli === "claude") && <>
+      {" "}To match Catppuccin inside Claude Code itself, run{" "}
+      <Box component="code" sx={{ ...mono, bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 1,
+        px: 0.75, py: 0.25, fontSize: 11, cursor: "pointer" }}
+        title="click to copy"
+        onClick={() => navigator.clipboard?.writeText("/plugin install catppuccin@matcra587/claude-themes")}>
+        /plugin install catppuccin@matcra587/claude-themes
+      </Box>{" "}
+      in a Claude Code session, then pick a flavor with /theme.
+    </>}
   </Typography>
 );

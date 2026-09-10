@@ -12,7 +12,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@mui/material";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import api from "./api";
-import { SessionPane } from "./TerminalView.jsx";
+import { SessionPane, ThemeHint } from "./TerminalView.jsx";
 import { canSetup, setupTitle } from "./cliSetup.js";
 
 export { canSetup, setupTitle };
@@ -57,4 +57,12 @@ export const SetupButton = ({ cli, opening, onOpen, sx = {} }) => {
 };
 
 // The pane itself, wherever the caller puts it. One session id - the Board is showing the same one.
-export const CliPane = ({ pane, height = "46vh" }) => (pane?.sid ? <SessionPane sid={pane.sid} height={height} /> : null);
+//
+// The theme note rides WITH the pane: the CLI's own onboarding asks for its theme in here, and the
+// two knobs that restyle the pane itself are deliberately faint. Explaining them anywhere else is
+// explaining them to somebody who is not looking at them. (It was orphaned for three weeks when
+// the Terminal tab that used to carry it was removed.)
+export const CliPane = ({ pane, height = "46vh" }) => (pane?.sid ? (<>
+  <SessionPane sid={pane.sid} height={height} />
+  <ThemeHint cli={pane.name} />
+</>) : null);

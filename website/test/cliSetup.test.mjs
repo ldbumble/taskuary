@@ -49,6 +49,15 @@ test("a passing test moves the wizard on, and leaves Done to the owner", () => {
   assert.doesNotMatch(src, /\/wrap/);
 });
 
+test("the theme note rides with the pane, and Claude Code's own /theme stays claude-only", () => {
+  // ThemeHint was exported and rendered NOWHERE from 2026-08-18 (the Terminal tab that carried it
+  // was removed) until this: the setup pane is where a theme is actually being chosen.
+  assert.match(read("cliSetup.jsx"), /<ThemeHint cli=\{pane\.name\}/);
+  const term = read("TerminalView.jsx");
+  assert.match(term, /export const ThemeHint = \(\{ cli = "" \}\)/);
+  assert.match(term, /cli === "claude"/);      // codex paints with the terminal; it has no /theme
+});
+
 test("the agents page offers it on a row Taskuary can set up", () => {
   const src = read("AgentsPanel.jsx");
   assert.match(src, /SetupButton/);

@@ -99,10 +99,31 @@ class AgendaNeverBlocksThePileTests(unittest.TestCase):
     calendarView per mailbox, 20s timeout each. The 60s cache meant most /api/funnel/pile calls
     were ~5s and whichever one refreshed was 45s (2026-09-09)."""
 
+    # "did the refresh thread run at all" is a LIVENESS check, so it gets a generous budget. The
+    # one real timing assertion in this class is `waited < 2` below, and that one stays tight.
+    STARTED = 30
+
     def setUp(self):
+        self._quiesce()                      # a refresh from the previous test can still be running
+        self.addCleanup(self._quiesce)
+
+    @classmethod
+    def _quiesce(cls):
+        """Let any refresh thread finish BEFORE clearing the cache, then clear it.
+
+        Clearing it from under a running refresh is what made this class flaky. _read_agenda writes
+        the `at` stamp back AFTER the clear, so the next test's `block=False` read finds a cache
+        that looks fresh (line 286 of assistant.py returns early), no refresh is started at all,
+        and its `started.wait(...)` times out with "False is not true". It failed exactly that way
+        on macos-latest/3.10 three times (7205ed5, b1b613f), always at
+        test_the_refresh_lands_for_the_next_reader, and never on a box fast enough to close the
+        window between the clear and the leftover thread's write.
+        """
+        import threading
         from taskuary import assistant
+        for t in threading.enumerate():
+            if t.name == 'taskuary-agenda': t.join(cls.STARTED)
         assistant._AGENDA.clear()
-        self.addCleanup(assistant._AGENDA.clear)
 
     @staticmethod
     def _store():
@@ -126,7 +147,7 @@ class AgendaNeverBlocksThePileTests(unittest.TestCase):
             t0 = time.perf_counter()
             funnel.from_calendar(s, datetime.now())          # the pile's calendar leg
             waited = time.perf_counter() - t0
-            self.assertTrue(started.wait(5), 'the refresh never ran')
+            self.assertTrue(started.wait(self.STARTED), 'the refresh never ran')
             release.set()
         self.assertLess(waited, 2, f'the pile waited {waited:.1f}s on the calendar')
 
@@ -136,7 +157,7 @@ class AgendaNeverBlocksThePileTests(unittest.TestCase):
         s, started, release = self._store(), threading.Event(), threading.Event()
         with mock.patch('taskuary.calendar.agenda', self._slow(started, release)):
             assistant._agenda(s, block=False)
-            self.assertTrue(started.wait(5))
+            self.assertTrue(started.wait(self.STARTED), 'the refresh never ran')
             release.set()
             for _ in range(200):
                 if assistant._AGENDA.get('events'): break
@@ -162,7 +183,7 @@ class AgendaNeverBlocksThePileTests(unittest.TestCase):
             return {'events': []}
         with mock.patch('taskuary.calendar.agenda', slow_agenda):
             for _ in range(5): assistant._agenda(s, block=False)
-            self.assertTrue(started.wait(5))
+            self.assertTrue(started.wait(self.STARTED), 'the refresh never ran')
             release.set()
         self.assertEqual(len(calls), 1, f'{len(calls)} concurrent Graph reads')
 

@@ -14,7 +14,12 @@ import StarIcon from "@mui/icons-material/Star";
 // One-click presets: pick your CLI, Save, Test - done. Taskuary pipes the prompt on
 // STDIN; --yolo / --full-auto / --dangerously-skip-permissions style flags matter,
 // because a headless run has nobody to click "approve".
-const PRESETS = [
+// Fallback only. The real list is clis.KNOWN on the server, delivered by /api/cli/detect and
+// merged in by `presets` below — this static copy is what shows before that request lands (and
+// if it fails). Keeping it as the SOURCE is what hid Muse Code: it was registered server-side,
+// installable, detected, and still absent from this tab because nobody edited this array too
+// (the owner, 2026-09-10). Anything added to clis.KNOWN now appears here on its own.
+const FALLBACK_PRESETS = [
   { name: "coder", label: "Claude Code", cmd: "claude",
     args: ["-p", "--dangerously-skip-permissions", "--output-format", "stream-json", "--verbose"], resume: "--resume", timeout: 1500,
     desc: "Recommended - stream-json shows the run LIVE on the Board and gives resumable sessions." },
@@ -27,6 +32,20 @@ const PRESETS = [
   { name: "copilot", label: "Copilot CLI", cmd: "copilot", args: ["-p", "--allow-all-tools"], resume: "", timeout: 1500,
     desc: "GitHub Copilot CLI - some versions want the prompt as an argument; run Test to verify." },
 ];
+
+// What a preset card says under its title, per CLI. The server carries the flags; the sentence
+// explaining WHY you would choose this one is a product decision and stays here.
+const PRESET_DESC = {
+  claude: "Recommended - stream-json shows the run LIVE on the Board and gives resumable sessions.",
+  codex: "OpenAI Codex CLI, non-interactive exec mode.",
+  gemini: "Google Gemini CLI - --yolo auto-approves tool use.",
+  cursor: "Cursor's cursor-agent in headless print mode.",
+  copilot: "GitHub Copilot CLI - some versions want the prompt as an argument; run Test to verify.",
+  muse: "Meta's Muse Code on Muse Spark - `exec` runs it headless. macOS/Linux/WSL2 only.",
+};
+// The profile a preset creates is named for its JOB, and every install has shipped Claude
+// Code's as `coder`. clis.KNOWN names rows after the CLI, so this keeps that one as it was.
+const PRESET_NAME = { claude: "coder" };
 
 const NEWLINE = String.fromCharCode(10);
 const ARGS_PH = ['-p', '--dangerously-skip-permissions', '--output-format', 'stream-json', '--verbose'].join(NEWLINE);
@@ -54,7 +73,6 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
   const [err, setErr] = useState("");
   const [here, setHere] = useState({});           // agent -> its CLI resolves on this machine
   const [effective, setEffective] = useState(""); // ...and the one work is really dispatched to
-  const [work, setWork] = useState({});            // existing tasks/playbooks and scheduled report skills
 
   const load = useCallback(async () => {
     try {
@@ -63,7 +81,6 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
       // which of them this machine can actually start, and which one work really goes to
       setHere(Object.fromEntries((data.data || []).map((r) => [r.Name, r.installed !== false])));
       setEffective(data.default || "");
-      setWork(data.work || {});
     }
     catch (e) { setErr(e?.response?.data?.detail || "Failed to load agents"); }
   }, []);
@@ -128,11 +145,20 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
   // and a saved profile name their CLI. First row wins: the known-CLI rows come first and carry
   // the vendor's label, where a profile row would carry its own nickname.
   const [canGet, setCanGet] = useState({});
+  const [presets, setPresets] = useState(FALLBACK_PRESETS);   // replaced by clis.KNOWN once detect answers
   useEffect(() => {
     api.get("/api/cli/detect").then(({ data }) => {
       const by = {};
       for (const r of data.data || []) if (!(r.cmd in by)) by[r.cmd] = r;
       setCanGet(by);
+      // a KNOWN row carries its own flags and label; a row that is only somebody's saved
+      // profile (it has `profile`) is not a preset and must not become a card
+      const known = (data.data || []).filter((r) => !r.profile && r.args?.length);
+      if (known.length) setPresets(known.map((r) => ({
+        name: PRESET_NAME[r.name] || r.name, label: r.label, cmd: r.cmd, args: r.args,
+        resume: (r.resume_args || [])[0] || "",
+        timeout: r.timeout || 1500, desc: PRESET_DESC[r.name] || `${r.label} in headless mode.`,
+      })));
     }).catch(() => setCanGet({}));
   }, [agents]);
   const { install, busy: installing, note: installNote } = useCliInstall();
@@ -169,7 +195,7 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
           onClick={() => setDraft({ ...BLANK_AGENT })}>Add agent</Button>
       </Box>
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "repeat(3, minmax(0, 1fr))" }, gap: 2.5, mb: 3 }}>
-        {PRESETS.map((pr) => (
+        {presets.map((pr) => (
           <LandingCard key={pr.name} title={pr.label} desc={pr.desc}
             icon={<TaskuaryMark size={19} />} onOpen={() => usePreset(pr)}
             foot={canGet[pr.cmd] && !canGet[pr.cmd].installed
@@ -207,7 +233,6 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
       )}
       {!Object.keys(agents).length && <Empty>No agents yet — click a preset above, Save, then Test.</Empty>}
       {Object.entries(agents).map(([name, a]) => {
-        const owned = work[name] || { tasks: [], reports: [] };
         const test = tests[name];
         return (
           <React.Fragment key={name}>
@@ -267,33 +292,6 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
                     documents live with documents, and this page is where the CLI is configured (the
                     owner, 2026-09-10: "the ui for profiles should be in Docs not in settings"). */}
                 <Button size="small" color="error" onClick={() => setConfirmDel(name)}>Delete</Button>
-              </Box>
-              <Box sx={{ ml: 0.25, mt: 1, display: "flex", gap: 0.75, flexWrap: "wrap", alignItems: "center" }}>
-                {!owned.tasks.length && !owned.reports.length && (
-                  <Typography variant="caption" sx={{ color: FAINT }}>
-                    No work assigned — the playbook or report supplies the job when this worker is chosen.
-                  </Typography>
-                )}
-                {owned.tasks.slice(0, 4).map((task) => (
-                  <Chip key={`task-${task.taskId}`} size="small"
-                    label={`${task.ref} · ${task.title}${task.playbook ? ` · ${task.playbook.title}` : ""}`}
-                    title={task.playbook
-                      ? `Owned task · playbook: ${task.playbook.title}${task.playbook.uses.length ? ` · uses ${task.playbook.uses.join(", ")}` : ""}`
-                      : "Owned task"}
-                    component="a" href={`#task=${task.taskId}`} clickable
-                    sx={{ maxWidth: 360, height: 22, fontSize: 10, bgcolor: "#eef3ec", color: "#47654a",
-                      "& .MuiChip-label": { overflow: "hidden", textOverflow: "ellipsis" } }} />
-                ))}
-                {owned.tasks.length > 4 && <Typography variant="caption" sx={{ color: FAINT }}>+{owned.tasks.length - 4} tasks</Typography>}
-                {owned.reports.slice(0, 4).map((report) => (
-                  <Chip key={`report-${report.sourceId}`} size="small"
-                    label={`${report.title} · ${report.kind}${report.skills.length ? ` · /${report.skills.join(", /")}` : ""}`}
-                    title={`${report.active ? "Enabled" : "Disabled"} ${report.kind}${report.skills.length ? ` · saved skill${report.skills.length === 1 ? "" : "s"}: /${report.skills.join(", /")}` : " · plain-English instructions"}`}
-                    sx={{ maxWidth: 360, height: 22, fontSize: 10, bgcolor: "#f1ead9", color: "#6b5f45",
-                      opacity: report.active ? 1 : 0.6,
-                      "& .MuiChip-label": { overflow: "hidden", textOverflow: "ellipsis" } }} />
-                ))}
-                {owned.reports.length > 4 && <Typography variant="caption" sx={{ color: FAINT }}>+{owned.reports.length - 4} reports</Typography>}
               </Box>
             </Box>
             {test && !test.busy && (

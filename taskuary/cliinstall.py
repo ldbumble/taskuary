@@ -55,10 +55,17 @@ RECIPES = {
     'copilot': [{'how': 'npm', 'pkg': '@github/copilot'}],
     # cursor-agent IS on npm but ships no bin, so npm is not a road; its installer is bash-only
     'cursor': [{'how': 'script', 'os': 'posix', 'cmd': ['bash', '-lc', 'curl https://cursor.com/install -fsS | bash']}],
+    # muse is a static binary behind a shell installer - no npm package, and no release archive
+    # named by platform triple, so `binary` is not a road either. The installer itself exits
+    # `unsupported platform` on Windows (WSL2 is Meta's answer), which is why this is posix-only:
+    # plan() then returns [] on Windows and the row draws no Install button over a road that
+    # hard-fails. A Windows owner reaches Muse Spark through the `meta` connector instead.
+    'muse': [{'how': 'script', 'os': 'posix', 'cmd': ['bash', '-lc', 'curl -fsSL https://dev.meta.ai/install.sh | bash']}],
 }
 
 # what to look for once an installer says it is done - the bin name, not the profile's nickname
-BINARY = {'claude': 'claude', 'codex': 'codex', 'gemini': 'gemini', 'copilot': 'copilot', 'cursor': 'cursor-agent'}
+BINARY = {'claude': 'claude', 'codex': 'codex', 'gemini': 'gemini', 'copilot': 'copilot', 'cursor': 'cursor-agent',
+          'muse': 'muse'}
 CMD2NAME = {v: k for k, v in BINARY.items()}       # cursor-agent -> cursor: the bin is not the recipe
 
 
@@ -108,6 +115,25 @@ def plan(name: str, has_npm: bool = None, system: str = None) -> list:
         if r['how'] == 'npm' and not have_npm: continue
         out.append(r)
     return out
+
+
+def why_not(name: str, has_npm: bool = None, system: str = None) -> str:
+    """Why `plan` came back empty, in the owner's words - or '' when there IS a road.
+
+    A row that simply vanished was the worse answer: the CLI exists, Taskuary knows about it,
+    and "it is not in the list" reads as "Taskuary does not support it" rather than "your
+    operating system cannot run its installer". Said out loud, the owner knows what to do
+    (turn on WSL2, install Node) instead of wondering whether the app is broken."""
+    if name not in RECIPES: return ''
+    if plan(name, has_npm=has_npm, system=system): return ''
+    nt = (system or platform.system()) == 'Windows' if system else WINDOWS
+    hows = {r['how'] for r in RECIPES[name]}
+    if nt and not any(r.get('os') != 'posix' for r in RECIPES[name]):
+        return ("its installer does not run on Windows - install it inside WSL2 "
+                "(wsl --install), or use this vendor's API connector instead")
+    if 'npm' in hows and not (bool(npm()) if has_npm is None else has_npm):
+        return 'it installs through npm, and Node is not on this machine yet - install Node first (nodejs.org)'
+    return 'its installer does not support this operating system'
 
 
 def find(name: str) -> str:

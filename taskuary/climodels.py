@@ -12,7 +12,16 @@ from pathlib import Path
 
 STATIC = {'claude': [{'id': m, 'label': m, 'desc': '', 'efforts': [], 'default_effort': ''}
                      for m in ('opus', 'sonnet', 'haiku', 'claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5')],
-          'gemini': [{'id': m, 'label': m, 'desc': '', 'efforts': [], 'default_effort': ''} for m in ('gemini-2.5-pro', 'gemini-2.5-flash')]}
+          'gemini': [{'id': m, 'label': m, 'desc': '', 'efforts': [], 'default_effort': ''} for m in ('gemini-2.5-pro', 'gemini-2.5-flash')],
+          # Muse Spark, standard tier first: the -contributor ids cost ~12x less because prompts and
+          # completions train Meta's products, so nothing here picks one for the owner. `efforts` is
+          # deliberately EMPTY even though muse has reasoning levels - the @effort pick is translated
+          # to codex's `-c model_reasoning_effort=`, and muse spells it --reasoning-effort, so
+          # offering the levels would emit a flag muse does not have.
+          'muse': [{'id': 'muse-spark-1.3', 'label': 'Muse Spark 1.3', 'desc': 'newest; standard (private) tier', 'efforts': [], 'default_effort': ''},
+                   {'id': 'muse-spark-1.2', 'label': 'Muse Spark 1.2', 'desc': 'standard (private) tier', 'efforts': [], 'default_effort': ''},
+                   {'id': 'muse-spark-1.2-contributor', 'label': 'Muse Spark 1.2 (contributor)',
+                    'desc': 'far cheaper - Meta trains on your prompts and completions', 'efforts': [], 'default_effort': ''}]}
 CODEX_FALLBACK = [{'id': 'gpt-5.5', 'label': 'GPT-5.5', 'desc': '', 'efforts': ['low', 'medium', 'high', 'xhigh'], 'default_effort': 'medium'}]
 
 

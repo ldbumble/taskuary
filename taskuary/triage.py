@@ -57,6 +57,20 @@ FIELDS = {
         'do not resurrect it. Say when you disagree.',
 }
 
+# WHAT THE ANSWER MUST CONTAIN, as opposed to what the verdict should BE. Named separately
+# because an owner-written or generated TRIAGE.md REPLACES INTENT_SYSTEM wholesale, and this
+# install's (UpdatedBy=histgen) never mentions title, summary or checklist - so the model
+# answered intent/kind/why only, ingest fell back to routing.draft_task_fields' body[:1000],
+# and every task carried the whole email as its ask, signature and legal footer included, with
+# no todos at all (the owner, 2026-09-10). classify_intent re-appends this when the document
+# omits it, for exactly the reason it re-appends FIELDS: the output SHAPE is a contract, not a
+# judgement, and the document is only entitled to the judgement.
+TASK_FIELDS = (
+    'For a task, also answer "title" (what the work is, 12 words max), "summary" (what was asked and by whom, '
+    'two sentences - the ask itself, never the signature, the confidentiality footer or quoted earlier mail) and '
+    '"checklist": ["<one distinct requested outcome each>"] - drawn only from what the message and exchange '
+    'actually ask for; never invent a requirement, never list anything as already done.')
+
 INTENT_SYSTEM = (
     'Classify one inbound work message. Answer JSON only: '
     '{"intent": "task|reply_only|fyi", "kind": "coding|general|task", "profile": "<a name from THE WORKERS, when any are listed>", '
@@ -98,9 +112,7 @@ INTENT_SYSTEM = (
     + FIELDS['others_replied'] + '\n'
     + FIELDS['exchange'] + '\n'
     + FIELDS['assistant_said'] + '\n'
-    'For a task, also answer "title" (what the work is, 12 words max), "summary" (what was asked and by whom, two sentences) and '
-    '"checklist": ["<one distinct requested outcome each>"] - drawn only from what the message and exchange actually ask for; never invent a requirement, '
-    'never list anything as already done.\n'
+    + TASK_FIELDS + '\n'
     'Torn between task and reply_only? Choose task. Torn between task and fyi? Choose task unless the mail plainly asks '
     'nobody for anything - a task the owner glances at and drops costs less than a job nobody did, and a drafted reply '
     'is no substitute for either.')
@@ -256,6 +268,46 @@ def dedupe_quoted(body: str, priors) -> str:
     return '\n'.join(out).rstrip()
 
 
+# The same two sentences the full verdict is asked for, and the same checklist rule, so a task
+# born by hand reads like one born from triage. Deliberately NOT a second opinion on kind,
+# repository or playbook: promoting is the owner saying "this is work", and re-litigating that
+# is how a hand-made task would end up somewhere they did not put it.
+ASK_SYSTEM = (
+    'You are reading one message that the owner has just turned into a task. Answer ONLY with a '
+    'JSON object: {"summary": "<what was asked and by whom, two sentences>", '
+    '"checklist": ["<one distinct requested outcome each>"]}. The checklist is drawn only from '
+    'what the message actually asks for; never invent a requirement, never list anything as '
+    'already done, and never include the signature, the confidentiality footer or quoted '
+    'earlier mail. If the message asks for nothing concrete, return an empty checklist.')
+
+
+def extract_ask(msg: dict, llm=None) -> dict:
+    """{'summary', 'checklist'} for a task made by hand.
+
+    task_from_message used to store the raw body sliced at 1000 characters, so the task's ask
+    was the whole email - greeting, signature, legal footer and the quoted thread underneath -
+    and there was no checklist at all, because nothing had asked for one (the owner, 2026-09-10:
+    "shouldn't the ai triage pull out just the task?"). It should, and now the hand road asks
+    the same question the automatic one does.
+
+    No brain, or a brain that fails: fall back to strip_boilerplate, which is still the sender's
+    own words minus the footer - never worse than what was stored before.
+    """
+    body = strip_boilerplate(dedupe_quoted(str(msg.get('BodyText') or msg.get('body') or ''), []))
+    subject = str(msg.get('Subject') or msg.get('subject') or '')
+    if not llm: return {'summary': body[:1000], 'checklist': []}
+    try:
+        raw = llm(ASK_SYSTEM, f'Subject: {subject}\n\n{body[:6000]}')
+        j = json.loads(re.sub(r'^```(json)?|```$', '', str(raw or '').strip(), flags=re.M))
+        summary = str(j.get('summary') or '').strip()
+        items = [x.strip() for x in (j.get('checklist') or []) if isinstance(x, str) and x.strip()]
+        return {'summary': summary or body[:1000], 'checklist': items[:12]}
+    except Exception as e:                       # a promote must never fail because a model did
+        from loguru import logger
+        logger.warning(f'could not extract the ask, keeping the plain body: {e}')
+        return {'summary': body[:1000], 'checklist': []}
+
+
 def repo_choice_of(j: dict, repos: list) -> dict:
     """The verdict's repository, validated against the known ones (PW-094): a name not on the list is
     dropped and becomes the owner's choice, as does anything the model called ambiguous."""
@@ -351,6 +403,11 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # (the prior mail on the thread) reached this install's generated doc as an unnamed key
             unsaid = [t for k, t in FIELDS.items() if (thread or {}).get(k) and k not in base]
             if unsaid: base += '\n\nTHE PAYLOAD ALSO CARRIES:\n' + '\n'.join(unsaid)
+            # ...and the same for what the ANSWER must carry. A generated document describes how to
+            # judge and never restates the output shape, so asking for it again here is not
+            # overriding the owner - it is the half of the prompt the document was never writing.
+            if 'checklist' not in base or '"summary"' not in base:
+                base += '\n\nWHATEVER ELSE YOU ANSWER, THE SHAPE IS FIXED:\n' + TASK_FIELDS
             system = base + (f"\n\nOperator's document:\n{soul[:2500]}" if soul else '')
             # `learned` is LEARNED.md's active sections: the profile distilled from the owner's
             # past verdicts. It refines the operator's document; explicit notes still outrank it.

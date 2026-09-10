@@ -91,8 +91,14 @@ class AddressingTests(unittest.TestCase):
 
     def test_the_code_supplies_the_signal_and_never_a_rule_about_it(self):
         """How much a cc counts for is a judgement, and judgement belongs in TRIAGE.md where the
-        owner can argue with it - so nothing is appended to their document behind their back. An
-        untouched doc tracks the shipped template, which is how the paragraph gets there."""
+        owner can argue with it - so no RULE is appended to their document behind their back. An
+        untouched doc tracks the shipped template, which is how the paragraph gets there.
+
+        The output SHAPE is the one thing that is still appended, and it is not a judgement: a
+        generated document says how to decide and never restates the JSON keys, and without them
+        the model returned no summary and no checklist, so every task's ask became the raw email
+        (2026-09-10, triage.TASK_FIELDS). This test guards the line between the two - the owner's
+        words must arrive intact, and nothing may be added that says how to WEIGH anything."""
         seen = {}
         def llm(system, user, images=None):
             seen['system'], seen['user'] = system, user
@@ -100,7 +106,12 @@ class AddressingTests(unittest.TestCase):
         msg = {'source_name': ME, 'from_email': 'dana@vendor.com', 'subject': 'Ledger',
                'body': 'Uri - can you confirm the ledger?', 'to': ['dana@vendor.com'], 'cc': [ME]}
         out = triage.classify_intent(msg, llm=llm, system='My own rules. Answer JSON only.', mine={ME})
-        self.assertEqual(seen['system'], 'My own rules. Answer JSON only.')   # not one word added
+        # the owner's document arrives first and whole, and the ONLY thing after it is the shape
+        self.assertTrue(seen['system'].startswith('My own rules. Answer JSON only.'))
+        added = seen['system'][len('My own rules. Answer JSON only.'):]
+        self.assertEqual(added.strip(), ('WHATEVER ELSE YOU ANSWER, THE SHAPE IS FIXED:\n' + triage.TASK_FIELDS).strip())
+        for judgement in ('cc', 'weigh', 'prefer fyi', 'escalate', 'urgent'):
+            self.assertNotIn(judgement, added.lower(), f'a rule about {judgement} was appended')
         self.assertIn('"addressed_to_you": "cc"', seen['user'])               # the signal is there
         # and a cc CAN be the owner's work: nothing in the pipeline overrides that verdict
         self.assertEqual(out['intent'], 'task')

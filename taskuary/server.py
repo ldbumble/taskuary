@@ -3343,7 +3343,9 @@ def brains():
     # of a spelling test (free typing still allowed for models we don't know about).
     CONN_MODELS = {'anthropic': ['claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5'],
                    'openai': ['gpt-4o-mini'],
-                   'openrouter': ['openrouter/auto', 'meta-llama/llama-3.3-70b-instruct']}
+                   'openrouter': ['openrouter/auto', 'meta-llama/llama-3.3-70b-instruct'],
+                   # the private tier leads; -contributor is a data-sharing choice, not a default
+                   'meta': ['muse-spark-1.2', 'muse-spark-1.3', 'muse-spark-1.2-contributor']}
     for o in out:
         if o['kind'] == 'api':
             c = store.get_connector(int(o['value'][10:]))
@@ -5613,6 +5615,27 @@ def settings():
 def set_setting(body: SettingBody):
     store.set_setting(body.name, body.value, ACTOR)
     return {'ok': True}
+
+@app.get('/api/ai/defaults')
+def ai_defaults():
+    """The three AI defaults with the model each will ACTUALLY run, and which screen owns it."""
+    from . import aidefaults
+    return aidefaults.state(store, cfg)
+
+
+class AiDefaultBody(BaseModel):
+    slot: str
+    value: str = None                   # None = leave the brain/agent alone, only touch the model
+    model: str = None                   # None = leave alone; '' = clear back to the provider default
+    effort: str = None
+
+
+@app.post('/api/ai/defaults')
+def set_ai_default(body: AiDefaultBody):
+    from . import aidefaults
+    try: return aidefaults.apply(store, cfg, body.slot, body.value, body.model, body.effort, ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+
 
 @app.get('/api/audit/verify')
 def verify(): return store.verify_audit_chain()

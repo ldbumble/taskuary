@@ -1279,9 +1279,17 @@ def task_from_message(store, mid: int, actor: str = 'owner', kind: str = 'coding
     if not m: raise ValueError(f'no message {mid}')
     if m.get('TaskId'): return m['TaskId']
     title = (m.get('Subject') or f"{m.get('FromName') or m.get('FromEmail') or m.get('Channel')} message")[:200]
-    tid = store.create_task({'Title': title, 'Summary': str(m.get('BodyText') or '')[:1000], 'Kind': kind,
+    # The ask, not the email. This used to store BodyText[:1000], so the task's own summary was
+    # the greeting, the signature, the legal footer and the quoted thread underneath - and it
+    # carried no checklist, because the automatic road is the only one that had ever asked for
+    # one (the owner, 2026-09-10). Same question, same wording, so a task promoted by hand reads
+    # like a task triage made. No brain: strip_boilerplate, still better than the raw body.
+    from . import llm as _llm, triage as _triage
+    ask = _triage.extract_ask(m, _llm.build_llm(store))
+    tid = store.create_task({'Title': title, 'Summary': ask['summary'], 'Kind': kind,
                              'Source': m.get('Channel') or 'api', 'SourceRef': m.get('SourceLink'),
                              **({'Assignee': assignee} if assignee else {})}, actor)
+    if ask['checklist']: store.set_task_checklist(tid, ask['checklist'], 'triage')
     store.attach_message(mid, tid)
     # what was said about THIS message before it was work travels with it (operations.py, PW-133)
     from . import operations
@@ -1306,9 +1314,13 @@ def split_message(store, mid: int, actor: str = 'owner', kind: str = None) -> in
     # shares - and the ask is never the greeting line it opens with
     if parent and (parent.get('Title') or '').strip().lower() == title.strip().lower():
         title = ask_line(body) or title
-    tid = store.create_task({'Title': title, 'Summary': body[:2000],
+    # the split-off task gets the same treatment as the promoted one: the ask, not the mail
+    from . import llm as _llm, triage as _triage
+    ask = _triage.extract_ask(m, _llm.build_llm(store))
+    tid = store.create_task({'Title': title, 'Summary': ask['summary'],
                              'Kind': kind or (parent or {}).get('Kind') or 'coding',
                              'Source': m.get('Channel') or 'api', 'SourceRef': m.get('SourceLink')}, actor)
+    if ask['checklist']: store.set_task_checklist(tid, ask['checklist'], 'triage')
     store.attach_message(mid, tid)
     store.add_route(mid, tid, 'create', None,
                     f'split off {task_ref(old)} - a separate ask in the same thread' if old else 'made its own task',
@@ -1378,6 +1390,65 @@ def _auto_code(store, tid):
     except Exception as e:
         logger.warning(f'auto dispatch failed for task {tid}: {e}')
         bb.record_failure(store, tid, e, agent, label='Auto-start')   # counted, said, and retried on a bounded budget (PW-085)
+
+
+def _is_raw_body(summary: str, body: str) -> bool:
+    """Is this task's summary a COPY of the message rather than a description of the ask?
+
+    Length alone is the wrong test - `body[:1000]` is the fingerprint of the two paths that
+    copied, but a genuine two-sentence summary could be any length and a short mail was copied
+    whole. The definitive test is that the summary is a PREFIX of the message: a model writing
+    two sentences about a mail does not reproduce its opening characters exactly.
+    """
+    s, b = ' '.join(str(summary or '').split()), ' '.join(str(body or '').split())
+    if not s or not b: return False
+    return b.startswith(s[:400]) if len(s) >= 400 else b.startswith(s)
+
+
+def backfill_asks(store, llm=None, actor: str = 'owner', dry_run: bool = True,
+                  include_closed: bool = False, limit: int = 0) -> list:
+    """Re-derive the ask and the todos for tasks that were filed with the raw email as their ask.
+
+    Two roads produced those: a generated TRIAGE.md that never asked the model for a summary or
+    a checklist (triage.TASK_FIELDS - the model answered intent only, so ingest fell back to
+    routing.draft_task_fields' body[:1000]), and task_from_message, which copied the body by
+    construction. Both are fixed going forward; this is for the rows already on the board.
+
+    Deliberately conservative, because this REWRITES the owner's tasks:
+      - only where the summary is literally a prefix of the source message (_is_raw_body);
+      - never where a checklist already exists - they may have ticked items off it;
+      - open tasks only unless asked otherwise: a closed task's ask is history;
+      - dry_run by default, so the first run tells you what it would do and changes nothing.
+    Returns one row per task considered, each saying what happened and why.
+    """
+    from . import triage
+    out = []
+    for t in store.list_tasks(active_only=not include_closed):
+        # both spellings: in a dry run nothing is 'rewrote', and a limit that only counted that
+        # ran the whole board anyway - which on a paid brain is a bill, not just a slow command
+        if limit and len([o for o in out if o['action'] in ('rewrote', 'would rewrite')]) >= limit: break
+        tid = t['TaskId']
+        msgs = store.list_messages(task_id=tid)
+        src = msgs[0] if msgs else None
+        row = {'task_id': tid, 'ref': task_ref(tid), 'title': t.get('Title') or '', 'action': 'skipped', 'why': ''}
+        if not src: row['why'] = 'no source message to re-read'; out.append(row); continue
+        if store.task_checklist(tid): row['why'] = 'already has a checklist'; out.append(row); continue
+        if not _is_raw_body(t.get('Summary'), src.get('BodyText')):
+            row['why'] = 'summary is not a copy of the message'; out.append(row); continue
+        ask = triage.extract_ask(src, llm)
+        # a fallback that only strips the footer is still worth writing - it is the difference
+        # between the ask and the ask plus an address block - but a no-op is not
+        if ' '.join((ask['summary'] or '').split()) == ' '.join(str(t.get('Summary') or '').split()) and not ask['checklist']:
+            row['why'] = 'nothing better to write'; out.append(row); continue
+        row.update(action='would rewrite' if dry_run else 'rewrote', summary=ask['summary'],
+                   checklist=ask['checklist'], why=f"{len(ask['checklist'])} todo(s)")
+        if not dry_run:
+            store.update_task(tid, {'Summary': ask['summary']}, actor)
+            if ask['checklist']: store.set_task_checklist(tid, ask['checklist'], 'triage')
+            store.audit('task', tid, 'backfill_ask', actor,
+                        detail={'todos': len(ask['checklist']), 'was_chars': len(str(t.get('Summary') or ''))})
+        out.append(row)
+    return out
 
 
 def reroute_held_no_repo(store, actor: str = 'owner', start: bool = True) -> list:

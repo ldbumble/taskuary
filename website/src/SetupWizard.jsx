@@ -77,6 +77,7 @@ const BRAINS = [
   { type: "anthropic", label: "Anthropic", hint: "console.anthropic.com → API keys", ph: "sk-ant-…" },
   { type: "openai", label: "OpenAI", hint: "platform.openai.com → API keys", ph: "sk-…" },
   { type: "openrouter", label: "OpenRouter", hint: "one key, most models", ph: "sk-or-…" },
+  { type: "meta", label: "Meta Muse Spark", hint: "dev.meta.ai → API keys", ph: "…" },
 ];
 /* Mailboxes that connect with an address and a password. Outlook and Teams need an Entra app
    registration (three values and an admin consent screen); Slack needs a bot token from an app
@@ -202,6 +203,7 @@ const CliPicker = ({ asBrain, onDone }) => {
               {cli.path ? cli.path
                 : cli.configured ? `configured here${cli.cmd ? ` as “${cli.cmd}”` : ""}, but not found on this machine — Install puts it here, or fix the command in Connections → AI CLI agents`
                 : cli.installable ? `${cli.cmd} — not on this machine yet`
+                : cli.why_not ? `${cli.cmd} — ${cli.why_not}`
                 : cli.cmd}
             </Typography>
             {/* found, runnable by hand, and still refused from a background process - so it is

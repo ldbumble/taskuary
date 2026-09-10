@@ -35,7 +35,11 @@ finish = aisetup.finish               # ...so its ending is aisetup's, unchanged
 # The CLIs whose first run Taskuary will open. Closed, and keyed by RECIPE name (cursor, not
 # cursor-agent) so this, cliinstall.RECIPES and clis.detect's `install` field all agree. aider is
 # not here: it takes an API key in a config file and has no interactive setup to walk.
-SETUP = frozenset({'claude', 'codex', 'gemini', 'copilot', 'cursor'})
+# muse belongs here for the usual reason: its first run opens a browser sign-in against a Meta
+# developer account and mints the CLI's own key, and that is exactly the conversation this pane
+# exists to let the owner have. argv() still refuses it when the binary is absent, which on
+# Windows it always will be.
+SETUP = frozenset({'claude', 'codex', 'gemini', 'copilot', 'cursor', 'muse'})
 
 
 def tag(name: str) -> str: return f'cli:{name}'

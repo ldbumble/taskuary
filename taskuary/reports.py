@@ -614,6 +614,11 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'entra_signins': run_entra_signins, 'entra_licenses': run_entra_licenses,
             'prometheus': run_prometheus, 'datadog': run_datadog,
             'winrm': run_winrm, 'mcp': run_mcp, 'rest': run_rest,
+            # Robinhood over its hosted MCP: the manifest, the reads, and the one write.
+            # The write is registered like QuickBooks' bill - it exists so it can be PROPOSED.
+            'robinhood_tools': _lazy('robinhood', 'run_robinhood_tools'),
+            'robinhood_read': _lazy('robinhood', 'run_robinhood_read'),
+            'robinhood_order': _lazy('robinhood', 'run_robinhood_order'),
             'intacct': run_intacct, 'intacct_fields': run_intacct_fields,
             # ...and the two WRITES: generic by object, like the reads. Gated by the card's scope
             # (it ships at read), so an agent proposes them and the owner approves.
@@ -828,6 +833,13 @@ def _apikey_card(typ):
     return lambda store, connector_id=None: _card(store, typ, 'api_key', connector_id)
 
 
+def robinhood_connection(store, connector_id=None) -> dict:
+    """The MCP url (optional - it defaults) plus the bearer token, which IS the card's one
+    write-only Secret. `url` and `token` are both CONNECTION_KEYS, so a tool call cannot point
+    the token somewhere else."""
+    return _card(store, 'robinhood', 'token', connector_id)
+
+
 def smb_connection(store, connector_id=None) -> dict:
     """The share root and its OPTIONAL credentials (blank = the owner's own Windows session), plus
     the store itself - because `smb_write` takes an attachment id and an attachment is a row in it."""
@@ -865,6 +877,9 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  'tiingo_history': _apikey_card('tiingo'), 'tiingo_news': _apikey_card('tiingo'),
                  'fmp_fundamentals': _apikey_card('fmp'), 'fmp_ratios': _apikey_card('fmp'),
                  'alpaca_quotes': alpaca_connection, 'alpaca_bars': alpaca_connection,
+                 # the write shares the card, so an approved proposal reaches the same account
+                 'robinhood_tools': robinhood_connection, 'robinhood_read': robinhood_connection,
+                 'robinhood_order': robinhood_connection,
                  'aws': aws_connection, 's3_object': aws_connection, 'cloudwatch_logs': aws_connection,
                  'azure': azure_connection, 'azure_blob': azure_connection, 'azure_logs': azure_connection,
                  'entra_users': azure_connection, 'entra_groups': azure_connection,

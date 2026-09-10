@@ -56,6 +56,11 @@ ACTIONS = {
     'tiingo_history': 'read', 'tiingo_news': 'read',
     'fmp_fundamentals': 'read', 'fmp_ratios': 'read',
     'alpaca_quotes': 'read', 'alpaca_bars': 'read',
+    # Robinhood is the first connection here that can MOVE MONEY. Listing the manifest and
+    # reading the portfolio are windows; placing an order is not, and the card ships at 'read'
+    # (DEFAULT_SCOPE) so an agent can only ever propose one. robinhood_read additionally
+    # refuses any tool the server has not marked readOnlyHint - see robinhood._call.
+    'robinhood_tools': 'read', 'robinhood_read': 'read', 'robinhood_order': 'write',
     'markets_screen': 'read',    # the screen only reads through whichever provider it borrows
     # the semantic layer (semantic.py) reaches the ERP only through those same reads. The check
     # DOES write - a metric it cannot reconcile is demoted, a verified one is frozen to a skill -
@@ -108,6 +113,7 @@ DEFAULT_SCOPE = {
     'coingecko': 'read', 'frankfurter': 'read', 'yahoo': 'read', 'sec_edgar': 'read',
     'twelvedata': 'read', 'alphavantage': 'read', 'fred': 'read',
     'finnhub': 'read', 'polygon': 'read', 'tiingo': 'read', 'fmp': 'read', 'alpaca': 'read',
+    'robinhood': 'read',                                     # a broker starts as a window; raising it is the owner's call
     'screen': 'read',
     'zoho_invoice': 'write',
     'aws': 'read', 'azure': 'read',

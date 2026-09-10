@@ -66,6 +66,13 @@ def main():
     ap.add_argument('--reroute-held', action='store_true',
                     help='move open coding tasks that have no nameable repository to the agent that '
                          'needs none, and start them; prints what moved, then exits')
+    # the rows filed before triage was asked for a summary and a checklist: their ask is the raw
+    # email, footer and quoted thread included, and they have no todos at all
+    ap.add_argument('--backfill-asks', action='store_true',
+                    help='re-derive the ask and the todos for tasks whose summary is a copy of the '
+                         'email. Prints what it WOULD change and writes nothing unless --apply.')
+    ap.add_argument('--apply', action='store_true', help='with --backfill-asks: actually write the changes')
+    ap.add_argument('--include-closed', action='store_true', help='with --backfill-asks: closed tasks too')
     ap.add_argument('--evalset', choices=['build', 'share', 'evaluate', 'ablate'], metavar='ACTION',
                     help='triage dataset: build (labelled cases from your verdicts -> ~/.taskuary/eval), '
                          'evaluate (score the configured AI over them), ablate (score with and without memory), '
@@ -234,6 +241,26 @@ def main():
         moved = ingest.reroute_held_no_repo(SQLiteStore(config.db_path()))
         for t in moved: print(f"{task_ref(t['TaskId'])} -> general: {t['Title']}")
         print(f"{len(moved)} task{'s' if len(moved) != 1 else ''} moved.")
+        return
+    if args.backfill_asks:
+        import sys
+        from . import ingest, llm as _llm
+        from .store import SQLiteStore
+        try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except (AttributeError, OSError): pass
+        store = SQLiteStore(config.db_path())
+        brain = _llm.build_llm(store)
+        if not brain:
+            print('No AI brain configured, so the summaries will only be stripped of their footers '
+                  'and no todos can be drawn. Configure one under Settings > Triage & agents for the real thing.')
+        rows = ingest.backfill_asks(store, brain, dry_run=not args.apply, include_closed=args.include_closed)
+        touched = [r for r in rows if r['action'] in ('rewrote', 'would rewrite')]
+        for r in touched:
+            print(f"{r['ref']} {r['title'][:60]}")
+            print(f"    ask:  {(r.get('summary') or '')[:150]}")
+            for i in r.get('checklist') or []: print(f"    todo: {i}")
+        print(f"\n{len(touched)} of {len(rows)} task(s) {'rewritten' if args.apply else 'would be rewritten'}.")
+        if touched and not args.apply: print('Nothing was written. Re-run with --apply to write it.')
         return
     if args.evalset:
         import sys

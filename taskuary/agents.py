@@ -234,7 +234,8 @@ def _live_line(j):
 _SIGNED_OUT = re.compile(r'OAuth session expired|Failed to authenticate|not logged in|Not logged in|please (?:run )?[`\']?(?:claude )?/?login|codex login|401 Unauthorized', re.I)
 _LOGIN_HOW = {'claude': "run `claude` and type `/login`", 'copilot': "run `copilot` and type `/login`",
               'codex': "run `codex login`", 'cursor': "run `cursor-agent login`",
-              'gemini': "run `gemini` once and finish Google's sign-in"}
+              'gemini': "run `gemini` once and finish Google's sign-in",
+              'muse': "run `muse` once and finish the browser sign-in at dev.meta.ai"}
 # Provider/plan exhaustion is different from an agent failing the work. Only this availability
 # class is safe to hand to another configured agent automatically: a compile error should remain
 # with the agent that owns it, while "session limit; resets at 11:50" should not strand the task.

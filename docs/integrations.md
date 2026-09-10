@@ -40,7 +40,8 @@ Nothing is polled without an enabled role.
 | Anthropic, OpenAI, Azure OpenAI | Available | Triage, drafts, report summaries, and Assistant runs |
 | OpenRouter | Available | Hosted open and closed models through one API |
 | Ollama | Available | Local models with no API key; the compatible base URL also supports LM Studio, llama.cpp, and vLLM |
-| Claude Code, Codex, Gemini, Cursor, Copilot | Available | Presets for live coding sessions; custom stdin-based CLIs are supported too |
+| Meta Model API (Muse Spark) | Available | Muse Spark through Meta's OpenAI-compatible API — the road to the model on Windows, where the `muse` CLI does not install. `muse-spark-1.2-contributor` costs about a twelfth as much because Meta uses your prompts and completions to improve its products |
+| Claude Code, Codex, Gemini, Cursor, Copilot, Muse Code | Available | Presets for live coding sessions; custom stdin-based CLIs are supported too. Muse Code is macOS/Linux/WSL2 only — its installer exits `unsupported platform` on Windows |
 | Knowledge base | Available | Documents from SharePoint library folders and local folders (docx, pptx, xlsx, html, text; pdf with `pypdf`) indexed into Taskuary's own SQLite (FTS5) — a `kb_search` report and agent tool, a scheduled `kb_reindex`, and passages fed to the reply drafter, the assistant and coding sessions automatically |
 | agent-browser (Vercel) | Optional | A local headless Chromium the coding agent drives from its terminal (`npm install -g agent-browser && agent-browser install`, Apache-2.0). When it is installed, the page the agent is on appears live beside the session (task page and Wall), with Take over for a password or 2FA code the agent must not type, and Snapshot to keep the frame on the task |
 

@@ -19,6 +19,7 @@ import AltRouteIcon from "@mui/icons-material/AltRoute";
 import PsychologyIcon from "@mui/icons-material/Psychology";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import { AgentsPage } from "./AgentsPanel.jsx";
+import AiDefaults from "./AiDefaults.jsx";
 import AboutYou from "./AboutYou.jsx";
 import UpdateCard from "./UpdateCard.jsx";
 import SystemUpdateAltIcon from "@mui/icons-material/SystemUpdateAlt";
@@ -47,10 +48,10 @@ const KNOB_META = {
   intent_classify_enabled: { group: "Triage & routing", label: "Intent triage", type: "switch",
     desc: "Classify every new message: a task to DO, a question to ANSWER, or FYI to file.",
     help: "The heart of the funnel. Every inbound message is read (by the triage brain below, guided by SOUL.md) and classified: task = something must be done, so an agent can be dispatched; reply_only = answering IS the work, so a reply is drafted for your approval; fyi = informational, filed with no task and no draft.\n\nOff: every message becomes a task, which turns newsletters into work items. Leave this on unless you are debugging triage itself." },
-  triage_ai: { group: "Triage & routing", label: "Triage brain", type: "brain",
+  triage_ai: { group: "Triage & agents", label: "Triage brain", type: "brain",
     desc: "Which AI reads and classifies inbound messages.",
     help: "TWO BRAINS: a small, fast cloud model (Anthropic / OpenAI / Azure OpenAI) classifies each message in under a second for a fraction of a cent, while your CLI agent — the expensive, capable one — is saved for actually working tasks.\n\nONE BRAIN, TWO GEARS also works well: pick a CLI agent here and set its 'light model' (Connections → AI CLI agents → Edit) — triage, drafts, summaries and the digest then run on the cheap fast tier (haiku, gemini-flash…) while coding sessions keep the agent's main model. No second API key, one bill.\n\nauto = the first active AI connector holding a key. Obvious automated noise is filtered by cheap heuristics before any AI is called either way." },
-  triage_backup_ai: { group: "Triage & routing", label: "Backup brains", type: "brains",
+  triage_backup_ai: { group: "Triage & agents", label: "Backup brains", type: "brains",
     desc: "Ordered alternatives for triage, reply drafts, summaries, reports, and assistant chat when the chosen AI is unavailable.",
     help: "Pick more than one. Taskuary tries them in the order shown when the primary brain hits a session or usage limit, is signed out, has no key, or otherwise refuses the call. A fallback uses its own default model; a model name chosen for Claude is never handed to Codex.\n\nThis starts blank because crossing from a cloud API to a local CLI can change cost and privacy. Once you name backups, the same chain protects every short/background AI job as well as the non-coding assistant." },
   default_action: { group: "Triage & routing", label: "When no rule matches", type: "select", options: ["draft", "task_only", "escalate"],
@@ -88,10 +89,10 @@ const KNOB_META = {
     help: "An earlier design had a separate send gate. Sending is now simply what Approve & send does, so this switch controls nothing." },
 
   // ── Assistant: the voice on the Timeline (assistant.py) ──
-  concierge_ai: { group: "Assistant", label: "Assistant tab brain", type: "brain",
+  concierge_ai: { group: "Triage & agents", label: "Assistant tab brain", type: "brain",
     desc: "Which AI speaks on the Assistant tab and walks you through the pipe. auto = your default coding agent's CLI on its quick gear.",
     help: "THREE DEFAULTS, one place each: the triage brain (Triage & routing), the default coding agent (Coder agent), and this one.\n\nA CLI agent here can ACT - read a task or message, rerun a report, run a data tool - because it has a shell; it runs in its own scratch folder on a light model (Claude: haiku, Codex: low effort, Gemini: flash, or the agent's own 'light model' from Connections → AI CLI agents) and picks its conversation back up turn to turn, so only the first turn pays the start-up. An API connector answers faster but can only talk. Sending, approving and pushing are your buttons whichever speaks." },
-  concierge_model: { group: "Assistant", label: "Assistant tab model", type: "text",
+  concierge_model: { group: "Triage & agents", label: "Assistant tab model", type: "text",
     desc: "Override the quick gear for the brain above (e.g. sonnet, gpt-5.4-mini@low). Blank = the default.",
     help: "For a CLI this is its --model (Codex takes model@effort); for an API connector, its model or deployment name. Changing it starts a fresh CLI conversation." },
   assistant_ai: { group: "Assistant", label: "Bubble & WhatsApp assistant brain", type: "brain",
@@ -111,10 +112,10 @@ const KNOB_META = {
     help: "Switch a kind off and it never appears in a post again; lines already posted keep their actions and conversation. 'idea' is the only one that needs an AI connector — the others are read straight off the hub's own tables and your calendar. With 'idea' off no model is called at all: the facts post in the hub's own words." },
 
   // ── Coder agent: who works the tasks, and how eagerly ──
-  default_agent: { group: "Coder agent", label: "Default agent", type: "agent",
+  default_agent: { group: "Triage & agents", label: "Default agent", type: "agent",
     desc: "The CLI agent that works tasks when nothing names one.",
     help: "Start session, Send to coding agent and auto-dispatch all use this agent unless you pick another in the moment; every agent picker lists it first. The roster itself lives under Connections → AI CLI agents, where the default row wears the star.\n\nGitHub-specific permissions (may agents open issues? push?) are on the GitHub connector card, because they are decisions about how your team uses GitHub, not about Taskuary." },
-  backup_agents: { group: "Coder agent", label: "Backup coding agents", type: "agents",
+  backup_agents: { group: "Triage & agents", label: "Backup coding agents", type: "agents",
     desc: "If the first CLI is out of sessions, signed out, unavailable, or cannot start, continue the same task with another configured agent.",
     help: "Automatic (the default) tries every other configured CLI in roster order. Or select one or more explicit backups to control the chain. The task, incoming messages, attachments, repository, and seed prompt all travel to the replacement.\n\nA normal agent error does not silently switch authors halfway through work. Failover is for availability failures: session/usage/rate limits, quota or capacity, expired login, a missing executable, or a CLI that cannot start." },
   answer_to_agent: { group: "Coder agent", label: "Hand answers to the working agent", type: "select",
@@ -220,7 +221,7 @@ const KNOB_META = {
     desc: "How many days the Timeline shows. Display only — nothing is deleted.",
     help: "Purely the Timeline's window. Older messages stay in the database, in task histories, and in search." },
 };
-const GROUPS = ["Triage & routing", "Replies", "Assistant", "Coder agent", "Notifications", "Attachments & images", "Sync & startup", "Display", "Other"];
+const GROUPS = ["Triage & agents", "Triage & routing", "Replies", "Assistant", "Coder agent", "Notifications", "Attachments & images", "Sync & startup", "Display", "Other"];
 // Internal state, and settings that live on another page - never shown as knobs. The "Other" tab
 // used to catch every bookkeeping value the server ever wrote (digest_report_seeded, task_id_mark,
 // learn_pending, owner_bio...), each with a switch that did something nobody could predict.
@@ -229,6 +230,7 @@ const HIDDEN = new Set(["ingest_status", "agent_issues_enabled", "agent_push_ena
                         "auto_draft_enabled",   // replies are always drafted (PW-043); the old switch no longer gates anything
                         "last_pinged_review", "triage_last_error",                          // bookkeeping
                         "setup_dismissed", "task_id_mark", "learn_pending", "learn_last_reflect"]);
+const PANEL_OWNED = new Set(["triage_ai", "default_agent", "concierge_ai", "concierge_model"]);
 const hidden = (name) => HIDDEN.has(name) || name.startsWith("owner_") || name.endsWith("_seeded");   // owner_* = About you
 const meta = (name) => KNOB_META[name] || { group: "Other", label: name, type: "auto" };
 
@@ -251,7 +253,11 @@ const PAGES = {
   updates: { title: "Updates", icon: SystemUpdateAltIcon, desc: "Which build is running, which is the latest release, and one button that installs it and reopens — connections and settings untouched." },
 };
 
-function SettingsPages({ page, setPage, q, setQ }) {
+// onNavigate is threaded through: goFromPanel below calls it, and it was declared on
+// SettingsView instead - two components apart, so the panel's "go to Connections" was a
+// ReferenceError waiting for a click. The scope test only tracks set* setters, so eslint's
+// no-undef is what caught it before it shipped.
+function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
   const [policies, setPolicies] = useState(null);
   const [settings, setSettings] = useState([]);
   const [memory, setMemory] = useState([]);
@@ -259,7 +265,8 @@ function SettingsPages({ page, setPage, q, setQ }) {
   const [draft, setDraft] = useState(null);
   const [verify, setVerify] = useState(null);
   const [help, setHelp] = useState(null);
-  const [cfgTab, setCfgTab] = useState("Triage & routing");
+  const [panelOk, setPanelOk] = useState(false);   // the AI defaults panel is standing up; until it is, the plain rows stay
+  const [cfgTab, setCfgTab] = useState(GROUPS[0]);   // the leading tab, whatever it is - a hardcoded name here went stale the moment a group was added in front of it
   const [err, setErr] = useState("");
 
   const [brains, setBrains] = useState([{ value: "", label: "auto — first active AI connector", ready: true }]);
@@ -285,6 +292,15 @@ function SettingsPages({ page, setPage, q, setQ }) {
   const toggleMemory = async (m) => { await api.patch(`/api/memory/${m.MemoryId}`, { active: !m.Active }); load(); };
   const addNote = async () => { await api.post("/api/memory", newNote); setNewNote(null); load(); };
   const runVerify = async () => setVerify((await api.get("/api/audit/verify")).data);
+
+  // Where a model is really saved. The AI defaults panel names the owning screen and this
+  // opens it: the CLI roster is a Settings page, a connector card lives on Connections (whose
+  // own hash router picks up connector=<id>), so the tab has to move for the second kind.
+  const goFromPanel = (where) => {
+    if (where === "agents") { setPage("agents"); return; }
+    if (where && where.startsWith("connector:")) window.location.hash = `connector=${where.slice(10)}`;
+    onNavigate?.("Connections");
+  };
 
   // Deep search: every hit knows which page (and tab) it lives on and jumps there.
   const hit = (...parts) => parts.join(" ").toLowerCase().includes(q.toLowerCase());
@@ -424,13 +440,15 @@ function SettingsPages({ page, setPage, q, setQ }) {
 
   /* ── detail pages ─────────────────────────────────────────────────────── */
   if (page === "config") {
-    const rows = settings.filter((s) => !hidden(s.Name) && meta(s.Name).group === cfgTab);
+    const rows = settings.filter((s) => !hidden(s.Name) && meta(s.Name).group === cfgTab
+      && !(cfgTab === "Triage & agents" && panelOk && PANEL_OWNED.has(s.Name)));
     const tabs = GROUPS.filter((g) => settings.some((s) => meta(s.Name).group === g));
     return (
       <Box>
         {/* the segmented pill bar, same as Reports and the Timeline - the old underlined tab
             strip was the one place in the app still wearing a different header */}
         <Box sx={{ mb: 2 }}><FilterPills options={tabs} value={cfgTab} onChange={setCfgTab} /></Box>
+        {cfgTab === "Triage & agents" && <AiDefaults brains={brains} agents={agentNames} onGo={goFromPanel} onLoaded={setPanelOk} />}
         {cfgTab === "Notifications" && <NotifyStatus connectors={connectors} settings={settings} />}
         {rows.map((s) => {
           const m = meta(s.Name);
@@ -664,7 +682,7 @@ function SettingsPages({ page, setPage, q, setQ }) {
 // trip between two settings went section → back → section; these five are edited together.
 const NAV = ["about", "config", "policies", "memory", "agents", "audit", "updates"];
 
-export default function SettingsView() {
+export default function SettingsView({ onNavigate }) {
   const [page, setPage] = useState(NAV[0]);      // the rail's first entry is where Settings opens - About you
   const [q, setQ] = useState("");
   return (
@@ -702,7 +720,7 @@ export default function SettingsView() {
             <Typography variant="body2" sx={{ color: DIM, mt: 0.25 }}>{PAGES[page].desc}</Typography>
           </Box>
         )}
-        <SettingsPages page={q ? null : page} setPage={setPage} q={q} setQ={setQ} />
+        <SettingsPages page={q ? null : page} setPage={setPage} q={q} setQ={setQ} onNavigate={onNavigate} />
       </Box>
     </Box>
   );

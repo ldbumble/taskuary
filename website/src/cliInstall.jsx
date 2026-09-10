@@ -59,9 +59,12 @@ export const useCliInstall = () => {
 // bash-only, so on Windows the row says so instead of offering a button that cannot work).
 export const InstallLine = ({ cli, busy, onInstall, sx = {} }) => {
   if (cli.installed) return null;
+  // `why_not` is the server saying WHICH wall this is (no Node, or an installer that refuses
+  // this OS). Naming it beats "cannot install this one for you", which left the owner unable
+  // to tell a missing dependency from an unsupported platform.
   if (!cli.installable) {
     return <Typography variant="caption" sx={{ color: FAINT, ...sx }}>
-      not on this machine — Taskuary cannot install this one for you
+      not on this machine — {cli.why_not || "Taskuary cannot install this one for you"}
     </Typography>;
   }
   return (

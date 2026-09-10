@@ -15,7 +15,7 @@ everything on one model (and one bill). Configure it in Settings -> Triage & rou
 import base64, json, mimetypes, requests
 from pathlib import Path
 
-AI_TYPES = ('anthropic', 'openai', 'azure_openai', 'openrouter', 'ollama')
+AI_TYPES = ('anthropic', 'openai', 'azure_openai', 'openrouter', 'ollama', 'meta')
 
 # What a vision model will look at. "See below." is half the mail this app reads, and below was
 # a screenshot - a text-only funnel filed the sentence and threw the actual ask away.
@@ -209,6 +209,17 @@ def make_llm(t, cfg: dict, key: str):
         # 'openrouter/auto' lets their router pick, so an empty model box still works.
         urls = ['https://openrouter.ai/api/v1/chat/completions']
         headers, model = {'Authorization': f'Bearer {key}', 'X-Title': 'Taskuary'}, cfg.get('model') or 'openrouter/auto'
+    elif t == 'meta':
+        # Meta Model API - Muse Spark behind the OpenAI chat-completions schema, so it needs no
+        # branch of its own beyond the base url. This is the road to Muse Spark on a machine that
+        # cannot run the muse CLI at all (its installer is posix-only), and it is a triage brain
+        # only: the CODING side is the CLI. base_url is overridable for the same reason ollama's
+        # is - the surface is standard, so a gateway or proxy in front of it still speaks it.
+        # muse-spark-1.2-contributor is ~12x cheaper AND trains Meta's products on what you send;
+        # the default stays on the private tier, and the card says so rather than deciding for you.
+        base = (cfg.get('base_url') or 'https://api.meta.ai/v1').rstrip('/')
+        urls = [f'{base}/chat/completions']
+        headers, model = {'Authorization': f'Bearer {key}'}, cfg.get('model') or 'muse-spark-1.2'
     elif t == 'ollama':
         # a LOCAL server speaking the OpenAI surface. Ollama's port out of the box, but base_url
         # reaches LM Studio (:1234), llama.cpp, vLLM - anything /v1-compatible - so open-source

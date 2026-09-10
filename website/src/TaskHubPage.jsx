@@ -455,7 +455,7 @@ export default function TaskHubPage() {
           {tab === "Reports" && <ReportsView key={`rp${tick}-${reset}`} />}
           {tab === "Connections" && <ConnectorsView key={`c${tick}-${reset}`} />}
           {tab === "Docs" && <DocsView key={`d${tick}-${reset}`} />}
-          {tab === "Settings" && <SettingsView key={`s${tick}-${reset}`} />}
+          {tab === "Settings" && <SettingsView key={`s${tick}-${reset}`} onNavigate={go} />}
         </Box>
         {/* the bubble is the same assistant; on its own page it would be a second chat over the first */}
         {tab !== "Assistant" && <FloatingAssistant onNavigate={go} onChanged={refreshPending} activeTab={tab} />}

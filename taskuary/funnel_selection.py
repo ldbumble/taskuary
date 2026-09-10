@@ -192,7 +192,9 @@ def capture_selection(store, *, only=None, include_surfaced=False,
         pile = funnel.present(store, copy.deepcopy(pile))
     items = pile.get("items") or []
     ready = _eligible(items, scope, captured_now)
-    first = next((item for item in ready if not item.get("surfaced")),
+    # funnel.on_you first, then unread, then anything ready: the same order as the legacy walk, and
+    # the reason a pending reply is not buried under an inbox of unread fyi.
+    first = next((item for item in ready if funnel.on_you(item) or not item.get("surfaced")),
                  ready[0] if ready else None)
     if first is not None and first.get("lane") == "fyi":
         selected, member_keys = _batch(first, ready)

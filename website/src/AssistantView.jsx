@@ -178,7 +178,11 @@ function Pile({ pile, current, onPull }) {
             // the word for what it IS (the owner, 2026-09-07: "report should say report")
             const tag = i.settling ? "triaging…" : i.kind === "agent" && i.asking ? "asked you"
               : road ? road.label : meta.word;
-            const loud = i.lane === "blocked" || i.lane === "time";
+            // The mark is drawn for what is on the owner. "approve" was missing from this list, so
+            // every pending reply lost the ✉️ LANE_META already gives it and read like an ordinary
+            // coding row - the one thing actually waiting on them, unmarked (the owner, 2026-09-10:
+            // "it's missing emoji task"). timelineState.STATES calls the same two states loud.
+            const loud = i.lane === "blocked" || i.lane === "approve" || i.lane === "time";
             const promoted = !!i.promoted;                                  // triage moved it up: a server fact, never a lane
             return (
               <div key={i.key} className={cls} data-tq-day={localDay(i.kind === "meeting" ? i.when : (i.since || i.when)) || "undated"}

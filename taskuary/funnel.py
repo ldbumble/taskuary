@@ -265,8 +265,12 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
             if not bad and r.get('TaskId') and (r.get('NeedsYou') or r.get('Category') in ('coding', 'todo', 'action')):
                 base['source_id'] = sid
             else:
+                ran = _activity_time(base.get('since') or base.get('when'))
+                brief = not bad and is_digest_source(store, sid) and ran is not None and ran.date() == datetime.now().date()
                 out.append(_item(f"report:{r['MessageId']}", 'report', 'broken' if bad else 'report', subj, bad=bad, source_id=sid,
-                                 why='the check failed - the cause is in it' if bad else 'a report you set up landed', **base))
+                                 brief_today=brief,
+                                 why='your brief for today - what is going on, and what is pressing' if brief
+                                     else ('the check failed - the cause is in it' if bad else 'a report you set up landed'), **base))
                 if group and threads.get(group) is None: threads[group] = out[-1]
                 continue
         cat = r.get('Category') or ''
@@ -295,19 +299,39 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
     return out
 
 
-_SOURCES = {'at': 0.0, 'by': {}}
+_SOURCES = {'at': 0.0, 'by': {}, 'digest': set()}
 def report_source_id(store, name: str) -> int | None:
     """The report source behind a report message (its SourceName is the report's title) - cached a minute."""
     if time.time() - _SOURCES['at'] > 60:
-        by = {}
+        by, digest = {}, set()
         for src in store.list_sources(active_only=False):
             if src.get('Channel') != 'report': continue
-            try: title = json.loads(src.get('ConfigJson') or '{}').get('title')
-            except ValueError: title = None
+            try: cfg = json.loads(src.get('ConfigJson') or '{}')
+            except ValueError: cfg = {}
+            title = cfg.get('title')
+            # the SAME test reports.py uses to decide a run is the digest, so a renamed report is
+            # still the brief and a report merely CALLED "digest" is not
+            if 'digest' in {cfg.get('type'), *(s.get('type') for s in cfg.get('sources') or [])}:
+                digest.add(src['SourceId'])
             for k in (src.get('Address'), title):
                 if k: by[str(k)] = src['SourceId']
-        _SOURCES.update(at=time.time(), by=by)
+        _SOURCES.update(at=time.time(), by=by, digest=digest)
     return _SOURCES['by'].get(str(name or ''))
+
+
+def is_digest_source(store, sid) -> bool:
+    """Is this report source the Morning digest? Read from its CONFIGURATION, never its title - the
+    owner may rename it, and matching the word would also catch a report that is merely about digests."""
+    if not sid: return False
+    report_source_id(store, '')                     # warms the same one-minute cache
+    return sid in _SOURCES['digest']
+
+
+def todays_brief(item: dict) -> bool:
+    """TODAY's morning digest - the one row that leads the work rail (the owner, 2026-09-10: "just
+    surface the morning digest report to the top of the work and then we are good"). Yesterday's is an
+    ordinary landed report: a stale brief sitting at the top of the day is worse than no brief at all."""
+    return bool(item.get('brief_today'))
 
 
 def report_failed(store, sid, subject: str) -> bool:
@@ -502,6 +526,8 @@ def from_wrapped(store, now: datetime, busy: set) -> list:
 # reports because both were one band): what asks you, then what waits for an agent, then what broke, then what landed.
 def _band(item):
     lane = item.get('lane')
+    # today's brief is WORK, not a landed result: it is the thing the owner reads before anything else
+    if todays_brief(item): return attention_band(actionable=True)
     if item.get('kind') == 'meeting':
         return attention_band(urgent=not _not_yet(item), actionable=True)
     # a landed result is its own level; 'slipped' is an idea nobody judged, which is an fyi, not work
@@ -527,7 +553,9 @@ def _order(items: list) -> list:
     "no reason why open task is before a reply drafted". Urgency has a level of its own."""
     def key(item):
         activity = _activity_time(item.get('sort_at') or item.get('since') or item.get('when'))
-        return (_band(item), activity is None, activity or datetime.max, str(item.get('key') or ''))
+        # ...and today's brief leads its band, whatever the clock says: it is written this morning, so
+        # oldest-first would otherwise put every older piece of work in front of the day's own summary
+        return (_band(item), not todays_brief(item), activity is None, activity or datetime.max, str(item.get('key') or ''))
     return sorted(items, key=key)
 
 
@@ -898,6 +926,20 @@ def _not_yet(i: dict) -> bool:
     return i.get('mins') is not None and i['mins'] > ALERT_MIN
 
 
+ON_YOU = ('blocked', 'approve')     # the two lanes attention_band calls owner_wait: an agent asked, or a reply waits
+
+def on_you(item: dict) -> bool:
+    """Is this item WAITING ON THE OWNER - an agent parked on a question, a reply wanting their yes?
+
+    These outrank a merely-unread row in the walk. "New arrivals still lead" was the rule for every
+    lane, and with a pipe holding fifty unread fyi it meant the one thing actually on the owner was
+    shown once and then never came up again until the fyi were drained (the owner, 2026-09-10:
+    "coding task is not surfacing at all, it's stuck on the work timeline?"). Being shown is not a
+    decision, so it cannot retire the item; only settling it, or later/skip, takes it off the walk -
+    and _eligible's 30-minute cooldown is what keeps it from coming straight back."""
+    return item.get('lane') in ON_YOU
+
+
 def next_item(store, key: str = None, only: str = None, include_surfaced: bool = False,
               exclude: str = None, items: list | None = None) -> dict | None:
     """What comes out of the mouth: the named item (read or not - the chat may return to it), or
@@ -919,10 +961,10 @@ def next_item(store, key: str = None, only: str = None, include_surfaced: bool =
              and (include_surfaced or not i.get('surfaced')
                   or (i['lane'] in ('blocked', 'approve') and _ts(i.get('surfaced_at')) <= again))]
     if only == 'mail': ready = [i for i in ready if came_in(i) or i['kind'] in INTERRUPTS]
-    # New arrivals still lead.  Once those are exhausted, a merely-shown row is walked normally:
-    # being put in the conversation never counted as the owner's decision, so it cannot make an
-    # unread row unreachable.
-    return _present_one(store, next((i for i in ready if not i.get('surfaced')), ready[0] if ready else None))
+    # What is ON THE OWNER leads; after that, new arrivals; after those, a merely-shown row is walked
+    # normally. Being put in the conversation never counted as the owner's decision, so it cannot make
+    # an unread row unreachable - nor bury the one item that is actually waiting on them under fifty fyi.
+    return _present_one(store, next((i for i in ready if on_you(i) or not i.get('surfaced')), ready[0] if ready else None))
 
 
 def batch_item(store, key: str) -> dict | None:

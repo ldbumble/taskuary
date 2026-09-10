@@ -18,8 +18,11 @@ pip install taskuary
 taskuary
 ```
 
-The browser interface opens automatically. To run the same interface in a native desktop
-window:
+The browser interface opens automatically. The first visit offers a two-minute
+walkthrough of the pages; replay it from the question mark in the top bar, or open
+`http://127.0.0.1:7787/#tour`.
+
+To run the same interface in a native desktop window:
 
 ```bash
 pip install "taskuary[desktop]"
@@ -49,7 +52,9 @@ port beyond the local machine.
 
 ## First-run setup
 
-Open **Connections** and configure these in order:
+A short walkthrough names the pages the first time the app opens — replay it anytime
+from the question mark, **How Taskuary works** on the Assistant welcome, or `#tour`.
+Then open **Connections** and configure these in order:
 
 1. **A triage brain.** Add an Anthropic, OpenAI, Azure OpenAI, or OpenRouter key, or connect
    Ollama for a local model. A small inexpensive model is usually enough for triage.

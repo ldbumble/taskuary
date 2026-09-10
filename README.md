@@ -69,6 +69,9 @@ Replies and proposed actions wait in Review. You decide what sends, runs, closes
 
 ## How work flows
 
+The in-app walkthrough (question mark → **How Taskuary works**) names these pages on
+the running app.
+
 ### 1. Work arrives and gets sorted
 
 Taskuary reads connected inboxes, separates tasks from noise, and shows the result on one Timeline.

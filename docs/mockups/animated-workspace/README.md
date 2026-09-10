@@ -2,7 +2,7 @@
 
 A standalone, interactive 3D concept based on the adjacent generated hero image. The geometry, characters, lighting, and animation are built in Three.js; the image is not used as a backdrop. This is an illustrative mockup, not a connection to real agents or email.
 
-The hero centers the interactive room in the space beside the incoming feed, with no visible headline or marketing copy column. On narrow screens the feed moves below the room. A page heading and activity announcements remain available to screen readers. The walking animation resets all orientation axes after leaving a chair so the agent faces forward on both outbound and inbound trips.
+The hero follows the current Taskuary landing page: a small centered Taskuary mark above “Your inbox, staffed by AI agents.”, the interactive room underneath, and the arriving feed on the right. There is no separate top navigation bar or marketing copy column. On narrow screens the feed moves below the room. Activity announcements remain available to screen readers. The walking animation resets all orientation axes after leaving a chair so the agent faces forward on both outbound and inbound trips.
 
 The incoming feed and room share the same story state: Milo's task goes from collection to pickup to work at a desk, and Nora's email goes from drafting to waiting for approval to approved. A small task slip flies from the feed toward the doorway at pickup (disabled with reduced motion). Hovering a task highlights its agent; clicking it opens the corresponding work detail or draft. A separate FYI card illustrates a message already handled by a teammate. Messages are examples and task subjects rotate across arrivals.
 

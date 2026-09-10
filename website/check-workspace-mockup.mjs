@@ -22,6 +22,9 @@ try {
   }
   await assertWalkingForward();
   assert.equal(await page.$('.intro'),null);
+  assert.equal(await page.$eval('.hero-heading h1',el=>el.textContent),'Your inbox, staffed by AI agents.');
+  assert.equal(await page.$('nav'),null);
+  assert.equal(await page.$$eval('.incoming-card',cards=>cards.length),5);
   assert.equal(await page.$eval('#incoming-draft',el=>el.dataset.stage),'waiting');
   assert.equal(await page.$eval('#incoming-task',el=>el.dataset.stage),'entering');
   const layout=await page.evaluate(()=>({room:document.querySelector('#world').getBoundingClientRect().right,feed:document.querySelector('.incoming-rail').getBoundingClientRect().left}));

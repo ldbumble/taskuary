@@ -36,6 +36,7 @@ import { mergeDurableTurns } from "./assistantTurns.js";
 import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WrapupCard } from "./assistantCards.jsx";
 import FeedView from "./FeedView.jsx";
 import { ROADS, roadOfCard } from "./timelineState.js";
+import { requestTour } from "./productTour.js";
 import "./assistantView.css";
 
 // what a PERSON sent, whatever lane it landed in (funnel.came_in): a slipped follow-up about a mail
@@ -1008,6 +1009,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                   title="Only what people sent you - mail and chat">Just what came in</button>}
                 <button type="button" className="tq-chip" disabled={resetting} onClick={setup}
                   title="A scheduled check that reads and summarises, or a workflow that writes data">Set up a report or workflow</button>
+                <button type="button" className="tq-chip" disabled={resetting} onClick={() => requestTour()}
+                  title="A short tour of the pages, in plain words">How Taskuary works</button>
                 {/* the same walk, on your phone - offered only for a chat that is already connected and
                     names an Assistant chat, because this talks to the assistant, it does not set one up */}
                 {(state?.doorways || []).map((d) => (

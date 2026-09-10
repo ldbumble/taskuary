@@ -29,6 +29,8 @@ import { dismissHandRaise, enqueueHandRaise, handRaiseWhat, isWatchingTask } fro
 import { TaskuaryMark } from "./ui.jsx";
 import FloatingAssistant from "./FloatingAssistant.jsx";
 import AssistantView from "./AssistantView.jsx";
+import ProductTour from "./ProductTour.jsx";
+import { TOUR_EVENT, hashWantsTour, rememberTour, shouldOfferTour, tourSeen } from "./productTour.js";
 
 // The strip reads left to right as the day does: what arrived (Timeline), what is being worked
 // (Board, Tasks), what is waiting on you (Review), then what has been WRITTEN DOWN - Reports and
@@ -160,6 +162,31 @@ function StaleBuild() {
   );
 }
 
+function HelpMenu({ onTour }) {
+  const [el, setEl] = useState(null);
+  return (
+    <>
+      <Tooltip title="Help — how Taskuary works, or report a problem">
+        <IconButton size="small" aria-label="Taskuary help" onClick={(e) => setEl(e.currentTarget)}>
+          <HelpOutlineIcon sx={{ fontSize: 17, color: DIM }} />
+        </IconButton>
+      </Tooltip>
+      <Popover open={!!el} anchorEl={el} onClose={() => setEl(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        slotProps={{ paper: { sx: { width: 280, p: 0.6, mt: 0.5 } } }}>
+        <MenuItem onClick={() => { setEl(null); onTour(); }} sx={{ fontSize: 13, borderRadius: 1, py: 1 }}>
+          How Taskuary works
+        </MenuItem>
+        <MenuItem component="a" href={SUPPORT_URL} target="_blank" rel="noopener noreferrer"
+          onClick={() => setEl(null)} sx={{ fontSize: 13, borderRadius: 1, py: 1 }}>
+          Report a problem
+        </MenuItem>
+      </Popover>
+    </>
+  );
+}
+
 function ServerVersion() {
   const [v, setV] = useState(null);
   useEffect(() => { api.get("/api/version").then(({ data }) => setV(data)).catch(() => {}); }, []);
@@ -195,6 +222,15 @@ export default function TaskHubPage() {
   const [setup, reloadSetup] = useSetup(tick);
   const [setupOpen, setSetupOpen] = useState(false);
   const [greeted, setGreeted] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
+  const openTour = useCallback(() => setTourOpen(true), []);
+  const closeTour = useCallback((reason) => {
+    rememberTour(reason === "done" ? "done" : "skipped");
+    setTourOpen(false);
+    if (typeof window !== "undefined" && hashWantsTour(window.location.hash)) {
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+  }, []);
   // the agent raised its hand: sound + desktop notification + a toast with the way to it.
   // The toast queues immediately; settings are read only for sound/desktop delivery. Making the
   // visible notification wait on that request made it appear at arbitrary times on a busy server.
@@ -229,6 +265,30 @@ export default function TaskHubPage() {
     if (setup.done === 0) setSetupOpen(true);
     setGreeted(true);
   }, [setup, greeted, demo]);
+  // The rooms walkthrough waits until the setup panel is out of the way (it is a different
+  // conversation: connecting vs. naming). Demo has no setup, so it offers on first visit.
+  useEffect(() => {
+    if (tourOpen) return undefined;
+    const demoNow = DEMO || !!demo;
+    if (!shouldOfferTour({
+      seen: tourSeen(), demo: demoNow, setupOpen,
+      setupReady: setup?.ready, setupDismissed: setup?.dismissed,
+      setupKnown: demoNow || !!setup,
+    })) return undefined;
+    const t = setTimeout(() => setTourOpen(true), 700);
+    return () => clearTimeout(t);
+  }, [demo, setup, setupOpen, tourOpen]);
+  useEffect(() => {
+    const start = () => setTourOpen(true);
+    const fromHash = () => { if (hashWantsTour(window.location.hash)) start(); };
+    fromHash();
+    window.addEventListener("hashchange", fromHash);
+    window.addEventListener(TOUR_EVENT, start);
+    return () => {
+      window.removeEventListener("hashchange", fromHash);
+      window.removeEventListener(TOUR_EVENT, start);
+    };
+  }, []);
   const dismissSetup = async (d) => {
     await api.post("/api/setup/dismiss", { dismissed: d });
     reloadSetup();
@@ -339,9 +399,10 @@ export default function TaskHubPage() {
           {/* Below 900px the full tab strip had no room: it began under the brand and its
               off-screen pages had no visible affordance. One labelled selector keeps the
               current page and every destination reachable without a mystery swipe. */}
+          <Box data-tour="pages" sx={{ display: { xs: "flex", md: "none" } }}>
           <Select size="small" value={tab} onChange={(e) => go(e.target.value)}
             inputProps={{ "aria-label": "Taskuary page" }}
-            sx={{ display: { xs: "flex", md: "none" }, height: 30, minWidth: 0,
+            sx={{ display: "flex", height: 30, minWidth: 0,
               width: { xs: 112, sm: 160 }, ml: 0.25, bgcolor: "#f4efe6", borderRadius: 99,
               color: "#55697a", fontSize: 12, fontWeight: 700,
               "& .MuiSelect-select": { py: 0.4, pl: 1.25, pr: "28px !important" },
@@ -352,6 +413,7 @@ export default function TaskHubPage() {
               </MenuItem>
             ))}
           </Select>
+          </Box>
 
           {/* Centred on the WINDOW, not in the space left over. Two flex spacers would centre it
               between the brand and the counter, which lands well right of true centre because
@@ -368,6 +430,7 @@ export default function TaskHubPage() {
               // the Assistant sits in the MIDDLE of the strip wearing the mark: it is the main way through the
               // day now, and the other tabs are where you go to see the whole of something
               <Box key={t} onClick={() => go(t)} title="Taskuary — your assistant walks you through what needs you"
+                data-tour="tab-Assistant"
                 sx={{ display: "flex", alignItems: "center", gap: 0.7, px: 1.6, py: 0.35, mx: 0.5, borderRadius: 99, cursor: "pointer",
                   fontSize: 13, fontWeight: 800, whiteSpace: "nowrap", color: tab === t ? "#fff" : "#41525f",
                   background: tab === t ? GRADIENT : "#e4e9ee", border: `1px solid ${tab === t ? "transparent" : "#cbd4dc"}`,
@@ -379,7 +442,7 @@ export default function TaskHubPage() {
               // the count rides INSIDE the pill. A MUI Badge hangs outside its child's box, and
               // this strip is overflowX:auto - so the number was being clipped by the scroller
               // it sits in, which is how "Review 1" showed up as a half-eaten dot.
-              <Box key={t} onClick={() => go(t)}
+              <Box key={t} onClick={() => go(t)} data-tour={`tab-${t}`}
                 sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 1.5, py: 0.5, borderRadius: 99,
                   cursor: "pointer", fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap",
                   color: tab === t ? "#55697a" : DIM, bgcolor: tab === t ? "#eae4d8" : "transparent",
@@ -400,12 +463,7 @@ export default function TaskHubPage() {
               yields to nothing - the banner sat on top of "Timeline". */}
           <StaleBuild />
           {!DEMO && !demo && <SetupChip state={setup} onOpen={() => setSetupOpen(true)} />}
-          <Tooltip title="Support — report a problem or attach screenshots on GitHub">
-            <IconButton component="a" href={SUPPORT_URL} target="_blank" rel="noopener noreferrer"
-              size="small" aria-label="Taskuary support and issue reporting">
-              <HelpOutlineIcon sx={{ fontSize: 17, color: DIM }} />
-            </IconButton>
-          </Tooltip>
+          <HelpMenu onTour={openTour} />
           {/* the Fix button lands on the card itself: Connectors reads #connector=<type> on the way in */}
           <Bell onGo={(p) => { if (p.connector) window.location.hash = `connector=${p.connector}`; go(p.where || "Connections"); }} />
           <Tooltip title="Refresh">
@@ -459,6 +517,7 @@ export default function TaskHubPage() {
         </Box>
         {/* the bubble is the same assistant; on its own page it would be a second chat over the first */}
         {tab !== "Assistant" && <FloatingAssistant onNavigate={go} onChanged={refreshPending} activeTab={tab} />}
+        <ProductTour open={tourOpen} tab={tab} onNavigate={go} onClose={closeTour} />
       </Box>
     </ThemeProvider>
   );

@@ -28,7 +28,8 @@ export default function ProductTour({ open, tab, onNavigate, onClose }) {
     if (!open) return undefined;
     const measure = () => {
       const el = step.target ? document.querySelector(`[data-tour="${step.target}"]`) : null;
-      const target = visibleRect(el);
+      let target = visibleRect(el);
+      if (step.target && !target) target = visibleRect(document.querySelector('[data-tour="pages"]'));
       const nextHole = holeFor(target);
       setHole(nextHole);
       const card = cardRef.current?.getBoundingClientRect();

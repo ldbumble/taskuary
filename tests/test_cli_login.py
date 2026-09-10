@@ -123,3 +123,27 @@ class GuardTests(unittest.TestCase):
         for row in rows:
             self.assertIn('login', row)
             if row['login']: self.assertIn(row['login'], clilogin.RECIPES)
+
+
+class SignedOutMessageTests(unittest.TestCase):
+    """The sentence a failing run shows. It used to send the owner to a terminal."""
+
+    def test_it_names_the_button_this_app_now_has(self):
+        from taskuary import agents
+        msg = agents.signed_out_msg('coder', 'not logged in', r'C:\n\claude.cmd')
+        self.assertIn('Sign in', msg)
+        self.assertNotIn('Open a terminal', msg)
+
+    def test_a_profile_is_mapped_to_its_cli_not_read_as_one(self):
+        """Every install ships a profile called `coder`; _LOGIN_HOW.get('coder') always missed."""
+        from taskuary import agents
+        self.assertIn('/login', agents.signed_out_msg('coder', 'x', r'C:\n\claude.cmd'))
+        self.assertIn('codex login', agents.signed_out_msg('coder', 'x', '/usr/bin/codex'))
+
+    def test_all_five_signable_clis_have_a_sentence(self):
+        from taskuary import agents
+        for name in clilogin.RECIPES: self.assertIn(name, agents._LOGIN_HOW, name)
+
+    def test_an_unknown_cli_still_gets_a_usable_sentence(self):
+        from taskuary import agents
+        self.assertIn('aider', agents.signed_out_msg('aider', 'x', '/usr/bin/aider'))

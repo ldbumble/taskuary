@@ -232,7 +232,9 @@ def _live_line(j):
 
 # the CLI's own login has lapsed - nothing in Taskuary can renew it, only the user at a terminal can
 _SIGNED_OUT = re.compile(r'OAuth session expired|Failed to authenticate|not logged in|Not logged in|please (?:run )?[`\']?(?:claude )?/?login|codex login|401 Unauthorized', re.I)
-_LOGIN_HOW = {'claude': "run `claude`, type `/login` and finish the sign-in", 'codex': "run `codex login` and finish the sign-in"}
+_LOGIN_HOW = {'claude': "run `claude` and type `/login`", 'copilot': "run `copilot` and type `/login`",
+              'codex': "run `codex login`", 'cursor': "run `cursor-agent login`",
+              'gemini': "run `gemini` once and finish Google's sign-in"}
 # Provider/plan exhaustion is different from an agent failing the work. Only this availability
 # class is safe to hand to another configured agent automatically: a compile error should remain
 # with the agent that owns it, while "session limit; resets at 11:50" should not strand the task.
@@ -240,9 +242,17 @@ _UNAVAILABLE = re.compile(
     r'session limit|usage limit|rate limit|quota|capacity|temporarily unavailable|service unavailable|'
     r'too many requests|resource exhausted|try again (?:at|after|later)|resets? (?:at|in)', re.I)
 
-def signed_out_msg(name: str, why: str) -> str:
-    how = _LOGIN_HOW.get(name, f"run `{name}` and sign in again")
-    return f"{name} is signed out on this machine ({why.strip()[:160]}). Open a terminal, {how}, then come back here and try again."
+def signed_out_msg(name: str, why: str, cmd: str = '') -> str:
+    """Taskuary hosts the sign-in itself now (clilogin.py), so this stops sending people away.
+
+    The name that arrives here is the PROFILE's - every install ships one called `coder` - so the
+    CLI is read off the command it runs, which is the rule cliinstall.recipe_for exists for. Told
+    the profile name, _LOGIN_HOW.get('coder') missed every time and always had."""
+    from . import cliinstall
+    cli = cliinstall.recipe_for(cmd) or name
+    how = _LOGIN_HOW.get(cli, f"run `{cli}` and sign in again")
+    return (f"{name} is signed out on this machine ({why.strip()[:160]}). Press Sign in on "
+            f"Connections > AI CLI agents and finish it in the pane that opens - or {how} in a terminal.")
 
 
 # Windows refuses to START some installs rather than failing inside them, and says only
@@ -503,7 +513,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
             ((err_buf[0] if err_buf else '') or '\n'.join(raw[-5:]) or 'no output')[:500]
         limit = rate_limited(raw) or rate_limited(why)
         if limit: raise RuntimeError(rate_limit_msg(name, limit))
-        if _SIGNED_OUT.search(why): raise RuntimeError(signed_out_msg(name, why))
+        if _SIGNED_OUT.search(why): raise RuntimeError(signed_out_msg(name, why, cmd[0] if cmd else ''))
         # a refusal to START, not a failed run: the CLI produced no output of its own and the
         # only thing on stderr is the refusal
         if _DENIED.search(why) and not raw: raise RuntimeError(denied_msg(name, cmd[0] if cmd else '', why))

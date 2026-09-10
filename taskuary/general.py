@@ -525,6 +525,7 @@ def _images(paths) -> list:
 class GeneralSession:
     """A connector-backed conversation with the live-session contract used by the terminal."""
     mode = 'assistant'
+    blocks_on_owner = False              # a turn that ended holds nothing up: no prompt to park at (PW-226)
     argv = []
     cwd = ''
     label = 'Taskuary assistant'

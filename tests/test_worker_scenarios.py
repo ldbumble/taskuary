@@ -69,6 +69,17 @@ class Providers(Base):
         ws.record(self.s, self.tid, 'run1', 'working', source='hook')
         self.assertIs(ws.waiting_of(self.s, a), False, 'the run said working; the screen is repaint noise')
 
+    def test_a_run_whose_turn_ended_is_no_longer_painted_as_working(self):
+        """The wall, 2026-09-10: hooks fired, the turn ended at its prompt, and the card kept pulsing
+        `coder - Bash cd ... - 12m` because a silent word was read as "definitely not waiting"."""
+        a = live(self.tid); a.idle = lambda: 900.0; a.tail = lambda n=3: ['bypass permissions on (shift+tab to cycle)']
+        term.SESSIONS['run1'] = a
+        ws.record(self.s, self.tid, 'run1', 'working', source='hook')
+        self.assertIs(ws.waiting_of(self.s, a), False)
+        ws.record(self.s, self.tid, 'run1', 'turn_end', text='Done with the T12 half.', source='hook')
+        self.assertIsNone(ws.waiting_of(self.s, a), 'the turn ended: the run says nothing about the owner')
+        self.assertIs(term.worker_fields(self.s, a)['waiting'], True, 'so the screen decides, and it is parked')
+
     def test_approval_allow_and_deny_are_both_answers(self):
         a = live(self.tid); a.send_prompt = lambda t: a.typed.append(t); term.SESSIONS['run1'] = a
         ws.record(self.s, self.tid, 'run1', 'approval_needed', request_id='p1', text='Delete the branch?', source='hook')

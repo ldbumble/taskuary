@@ -7,7 +7,7 @@ owner's answer is bound to (workerstate.answer)."""
 import unittest
 from unittest import mock
 
-from taskuary import general, selfclose, workerstate as ws
+from taskuary import general, selfclose, terminal, workerstate as ws
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
@@ -46,7 +46,9 @@ class ApiWorkerSignals(unittest.TestCase):
         st = ws.status(self.s, self.tid)
         self.assertEqual(st['requests'], []); self.assertNotEqual(st['state'], 'input_needed')
         self.assertEqual([e['Kind'] for e in ws.events(self.s, self.tid, sess.sid)], ['working', 'turn_end'])
-        self.assertIs(ws.waiting_of(self.s, sess), False, 'a parked assistant with no question raises no hand (PW-226)')
+        self.assertIsNone(ws.waiting_of(self.s, sess), 'a turn that ended says nothing about the owner')
+        # ...and an API conversation parks at no prompt, so the silence resolves to no hand raise (PW-226)
+        self.assertIs(terminal.worker_fields(self.s, sess)['waiting'], False)
 
     def test_the_owners_answer_resumes_the_same_session(self):
         sess, _ = self.turn('[[TASKUARY-ASK]] Which vendor? | Acme | Globex')

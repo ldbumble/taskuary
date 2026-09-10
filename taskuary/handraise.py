@@ -32,10 +32,11 @@ def tick(store) -> int:
         if not getattr(term, 'alive', False) or not getattr(term, 'task_id', None): continue
         ident = _identity(sid, term)
         # the run's own word first (workerstate.py, PW-228): an open request is the hand, a working run raises
-        # none however quiet its screen; a run that never reported keeps the screen heuristic
+        # none however quiet its screen; a run whose word is silent - it never reported, or its turn just
+        # ended - keeps the screen heuristic
         from . import workerstate as ws
         word = ws.waiting_of(store, term)
-        waiting = word if word is not None else (term.waiting() if hasattr(term, 'waiting') else terminal.waiting_of(term))
+        waiting = word if word is not None else terminal.screen_waiting(term)
         req = ws.asking_of(store, term) if word else None
         current[ident] = bool(waiting)
         if waiting and not _state.get(ident):

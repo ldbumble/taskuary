@@ -447,9 +447,19 @@ class Term:
                 'work': w.snapshot(files, self.cwd, (self.tail(1) or [''])[-1]) if w else None}
 
 
+def screen_waiting(t) -> bool:
+    """The fallback for when the run's own word is silent: is this session parked at a prompt?
+
+    A session that never blocks on the owner - an API conversation, which simply ends its turn and
+    holds nothing up - is not waiting however quiet it is (PW-226); only a pty parks.
+    """
+    if not getattr(t, 'blocks_on_owner', True): return False
+    return t.waiting() if hasattr(t, 'waiting') else waiting_of(t)
+
+
 def worker_fields(store, t) -> dict:
-    """{waiting, request} for a session: the run's own word when it has reported (workerstate), the
-    screen's latched phase otherwise (PW-228)."""
+    """{waiting, request} for a session: the run's own word when it has one (workerstate), the
+    screen's latched phase when that word is silent (PW-228)."""
     from . import workerstate as ws
     req = None
     try:
@@ -457,8 +467,7 @@ def worker_fields(store, t) -> dict:
         if w is not None: req = ws.asking_of(store, t) if w else None
     except Exception as e:
         logger.debug(f'worker state unavailable for {getattr(t, "sid", "?")}: {e}'); w = None
-    if w is None:
-        w = (stable_phase_of(t) == 'parked') if isinstance(t, Term) else waiting_of(t)
+    if w is None: w = screen_waiting(t)
     return {'waiting': bool(w), 'request': req}
 
 

@@ -60,7 +60,7 @@ releases behind this way, and the public demo sat on v0.3.3.2 through four.
 |---|---|
 | `pyproject.toml` | `version = "X.Y.Z.W"` |
 | `README.md` | `currently **vX.Y.Z.W**` |
-| `README.md` | the badge's `release=X.Y.Z.W` cache-buster |
+| `README.md` | the badge's `release=X.Y.Z.W` cache-buster (and `asof=` — see below) |
 | `docs/roadmap.md` | `currently vX.Y.Z.W` |
 | `website/src/demoFixtures.json` | `/api/version.version`, `/api/build.version`, `/api/build.disk_version` |
 
@@ -178,7 +178,19 @@ curl -s https://api.github.com/repos/ldbumble/taskuary/releases/latest | python 
 - The GitHub release must carry `Taskuary.exe` as well as both dists, or Settings → Updates has
   nothing to offer exe installs.
 - A stale shields badge right after a release is cache, not a broken publish, as long as PyPI's
-  own JSON says the new number.
+  own JSON says the new number. **But do not leave it there.** Bumping `release=` at the start of a
+  release is not enough on its own: GitHub proxies README images through camo, camo fetches the new
+  URL immediately, and shields answers that first fetch from ITS own PyPI cache - which is still on
+  the previous version for a few minutes after the upload. Camo then holds that stale render for
+  hours. That is how the pill read v0.3.3.13 while PyPI, pyproject and the README all said 0.3.4.0
+  (2026-09-10).
+  So the LAST step of a release, after the publish workflow is green, is:
+  ```
+  curl -s "https://img.shields.io/pypi/v/taskuary.svg" | grep -o 'v0\.[0-9.]*' | head -1
+  ```
+  When that finally prints the new version, bump the badge's `asof=` to today's date and push. The
+  changed URL is a new object to camo, so it re-fetches - now from a warm shields - and the pill is
+  right. Bumping `release=` alone cannot do it: that value is already the new version.
 
 The publish workflow already refuses to upload a wheel that does not contain `index.html`, the JS
 and CSS bundles, the operator templates and the WhatsApp bridge, and it installs the wheel into a

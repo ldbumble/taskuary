@@ -365,8 +365,13 @@ def profiles(store) -> dict:
 # no migration. `purpose` is the one line triage is shown when it picks; `kind` is deliberately never
 # 'coding', because that is what the coding-specific paths key on.
 DEFAULT_PROFILES = {
-    'researcher': {'kind': 'research', 'purpose': 'find out and report - reading, sources, comparisons; changes nothing'},
-    'analyst':    {'kind': 'analysis', 'purpose': 'numbers out of our own systems - reconcile, explain, flag what is off'},
+    # researcher and analyst split on WHOSE information it is, not on how hard the question is: the
+    # first pair of purpose lines both read as "find out something", and "look into last month's
+    # spend" could have gone either way (the owner, 2026-09-10: "sharpen analyst vs researcher").
+    'researcher': {'kind': 'research', 'purpose': 'OUTSIDE information - the web, vendors, public filings, documents, what other '
+                                                  'companies do. Reads and reports with sources; queries none of our systems'},
+    'analyst':    {'kind': 'analysis', 'purpose': 'OUR OWN figures - the databases, the ledger, the bank feeds, our reports. '
+                                                  'Queries them, reconciles them, explains what the numbers say'},
     'coordinator': {'kind': 'coordination', 'purpose': 'meetings, chasing people, scheduling and follow-ups'},
     'marketer':   {'kind': 'marketing', 'purpose': 'copy, positioning and campaigns - drafts, never sends'},
     'trader':     {'kind': 'markets', 'purpose': 'markets and positions - proposes, never places an order'},

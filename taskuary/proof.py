@@ -103,19 +103,39 @@ def tests_from(text: str) -> dict:
                 r'\s*(?:$|Running\b|Doc-tests\b'
                 r'|running \d+ tests?\b|test .*\.\.\.'
                 r'|warning:|error\[|note:|help:|-->|\d*\s*\||=\s)')
+            def same_invocation(lines):
+                # A failed binary prints a two-part report between result lines. The
+                # first `failures:` opens test stdout/panic details (whose contents are
+                # deliberately free-form); the second opens a list of indented test
+                # names. Requiring both headings keeps arbitrary transcript text from
+                # joining two separate cargo invocations.
+                failure_sections = 0
+                for candidate in lines:
+                    if candidate.strip() == 'failures:':
+                        failure_sections += 1
+                        if failure_sections > 2:
+                            return False
+                    elif failure_sections == 1:
+                        continue
+                    elif failure_sections == 2 and re.match(r'[ \t]{4}\S', candidate):
+                        continue
+                    elif not same.match(candidate):
+                        return False
+                return failure_sections in (0, 2)
+
             def gap(before, after):
                 # From the end of the line `before` sits on to the start of the
                 # line `after` sits on: the matched text stops at "failed", and
                 # the rest of its own line is not scaffolding.
-                start = text.find(chr(10), before.end())
+                start = text.find('\n', before.end())
                 start = len(text) if start < 0 else start + 1
-                end = text.rfind(chr(10), 0, after.start())
+                end = text.rfind('\n', 0, after.start())
                 return text[start:end + 1] if end >= start else ''
 
             keep = [found[-1]]
             for n in range(len(found) - 1, 0, -1):
                 lines = gap(found[n - 1], found[n]).splitlines()
-                if not all(same.match(line) for line in lines):
+                if not same_invocation(lines):
                     break
                 keep.insert(0, found[n - 1])
             passed = sum(int(mm.group(1)) for mm in keep)
@@ -150,9 +170,10 @@ def tests_from(text: str) -> dict:
             total = int((re.search(r'OK \((\d+) tests?', said)
                          or re.search(r'Tests: (\d+)', said)).group(1))
             hurt = sum(int(n) for n in re.findall(r'(?:Failures|Errors): (\d+)', said))
-            passed, failed = total - hurt, hurt
+            skipped = sum(int(n) for n in re.findall(r'Skipped: (\d+)', said))
+            passed, failed = total - hurt - skipped, hurt
         elif runner == 'unittest':
-            # "FAILED (failures=1, errors=1, skipped=1)" over 5 tests is 3 passed and 2
+            # "FAILED (failures=1, errors=1, skipped=1)" over 5 tests is 2 passed and 2
             # failed, not 5 failed. Skips are neither, the way they are everywhere else
             # here. A card that says 42 failed when 3 did is the same trust problem as
             # the false gap this all exists to remove.
@@ -162,12 +183,13 @@ def tests_from(text: str) -> dict:
             total, verdict = nums[0], m.group(2)
             hurt = sum(int(n) for n in
                        re.findall(r'(?<!expected )(?:failures|errors)=(\d+)', verdict))
+            skipped = sum(int(n) for n in re.findall(r'(?<!expected )skipped=(\d+)', verdict))
             if hurt or verdict.startswith('OK'):
-                passed, failed = total - hurt, hurt
+                passed, failed = total - hurt - skipped, hurt
             else:
                 # A FAILED with no counts in its parenthetical - "FAILED (unexpected
                 # successes=1)" - is at least one failure, not all of them.
-                passed, failed = total - 1, 1
+                passed, failed = total - skipped - 1, 1
         else:
             passed, failed = (0, 0) if m.group(1) == 'ok' else (0, 1)
         return {'ran': True, 'runner': runner, 'passed': passed, 'failed': failed,

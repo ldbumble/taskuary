@@ -63,19 +63,21 @@ class ProofTests(unittest.TestCase):
         self.assertEqual((r['runner'], r['passed'], r['failed']), ('phpunit', 41, 1))
         r = proof.tests_from('FAILURES!\nTests: 42, Assertions: 108, Errors: 1, Failures: 2.')
         self.assertEqual((r['passed'], r['failed']), (39, 3))
-        # risky/incomplete is still a pass
-        r = proof.tests_from('OK, but incomplete, skipped, or risky tests!\nTests: 42, Assertions: 108, Skipped: 1.')
-        self.assertEqual((r['runner'], r['passed'], r['failed']), ('phpunit', 42, 0))
+        # skips are neither passes nor failures
+        r = proof.tests_from('OK, but incomplete, skipped, or risky tests!\nTests: 42, Assertions: 108, Skipped: 2.')
+        self.assertEqual((r['runner'], r['passed'], r['failed']), ('phpunit', 40, 0))
+        r = proof.tests_from('FAILURES!\nTests: 42, Assertions: 108, Failures: 3, Skipped: 4.')
+        self.assertEqual((r['passed'], r['failed']), (35, 3))
         r = proof.tests_from('Ran 42 tests in 1.234s\n\nOK')
         self.assertEqual((r['runner'], r['passed'], r['failed']), ('unittest', 42, 0))
         r = proof.tests_from('Ran 42 tests in 1.234s\n\nFAILED (failures=3)')
         self.assertEqual((r['passed'], r['failed']), (39, 3))
         # failures and errors both count, and skips are neither
         r = proof.tests_from('Ran 5 tests in 0.1s\n\nFAILED (failures=1, errors=1, skipped=1)')
-        self.assertEqual((r['passed'], r['failed']), (3, 2))
+        self.assertEqual((r['passed'], r['failed']), (2, 2))
         # the OK line can carry a tail of its own
-        r = proof.tests_from('Ran 42 tests in 1.2s\n\nOK (skipped=2)')
-        self.assertEqual((r['passed'], r['failed']), (42, 0))
+        r = proof.tests_from('Ran 10 tests in 1.2s\n\nOK (skipped=2)')
+        self.assertEqual((r['passed'], r['failed']), (8, 0))
 
 
     def test_the_review_cases_that_used_to_read_wrong(self):
@@ -194,6 +196,38 @@ class ProofTests(unittest.TestCase):
         self.assertEqual(r['passed'], 43)
         self.assertNotIn('0 passed', r['line'])
         self.assertIn('43 passed', r['line'])
+
+    def test_a_red_cargo_run_keeps_every_binary_around_its_failure_report(self):
+        """Cargo's panic report sits between binary summaries in --no-fail-fast."""
+        said = (
+            '     Running unittests src/lib.rs\n'
+            'test result: ok. 3 passed; 0 failed; 0 ignored\n'
+            '     Running tests/it.rs\n'
+            'running 2 tests\n'
+            'test it_a ... FAILED\n'
+            'test it_b ... ok\n'
+            '\n'
+            'failures:\n'
+            '\n'
+            '---- it_a stdout ----\n'
+            "thread 'it_a' panicked at tests/it.rs:5:5:\n"
+            'assertion `left == right` failed\n'
+            '  left: 1\n'
+            ' right: 2\n'
+            'note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n'
+            '\n'
+            'failures:\n'
+            '    it_a\n'
+            '\n'
+            'test result: FAILED. 1 passed; 1 failed; 0 ignored\n'
+            '   Doc-tests mycrate\n'
+            'running 1 test\n'
+            'test src/lib.rs - add (line 3) ... ok\n'
+            'test result: ok. 1 passed; 0 failed; 0 ignored\n'
+        )
+        r = proof.tests_from(said)
+        self.assertEqual((r['passed'], r['failed']), (5, 1))
+        self.assertEqual(r['line'], '3 cargo test binaries: 5 passed; 1 failed')
 
     def test_phpunit_keeps_last_run_wins_across_all_four_endings(self):
         """One runner, one pattern - which is what makes the rule hold.

@@ -41,6 +41,248 @@ class ProofTests(unittest.TestCase):
         # the LAST run is the truth: a fixed suite must not report the earlier failure
         self.assertEqual(proof.tests_from('5 passed, 2 failed in 1s\n...\n7 passed in 2s')['failed'], 0)
 
+    def test_more_runners_report_their_own_numbers(self):
+        """Every runner's own summary line, with the numbers it actually prints."""
+        r = proof.tests_from('test result: ok. 42 passed; 0 failed; 1 ignored')
+        self.assertEqual((r['runner'], r['passed'], r['failed']), ('cargo', 42, 0))
+        r = proof.tests_from('test result: FAILED. 39 passed; 3 failed; 0 ignored')
+        self.assertEqual((r['passed'], r['failed']), (39, 3))
+        # surefire counts the TOTAL, and its errors are failures
+        r = proof.tests_from('Tests run: 42, Failures: 2, Errors: 1, Skipped: 0')
+        self.assertEqual((r['runner'], r['passed'], r['failed']), ('maven', 39, 3))
+        r = proof.tests_from('42 examples, 0 failures')
+        self.assertEqual((r['runner'], r['passed'], r['failed']), ('rspec', 42, 0))
+        r = proof.tests_from('1 example, 1 failure')
+        self.assertEqual((r['passed'], r['failed']), (0, 1))
+        r = proof.tests_from('OK (42 tests, 108 assertions)')
+        self.assertEqual((r['runner'], r['passed'], r['failed']), ('phpunit', 42, 0))
+        r = proof.tests_from('FAILURES!\nTests: 42, Assertions: 108, Failures: 3.')
+        self.assertEqual((r['runner'], r['passed'], r['failed']), ('phpunit', 39, 3))
+        # ERRORS! matched nothing before, so an errored suite read as no run at all
+        r = proof.tests_from('ERRORS!\nTests: 42, Assertions: 108, Errors: 1.')
+        self.assertEqual((r['runner'], r['passed'], r['failed']), ('phpunit', 41, 1))
+        r = proof.tests_from('FAILURES!\nTests: 42, Assertions: 108, Errors: 1, Failures: 2.')
+        self.assertEqual((r['passed'], r['failed']), (39, 3))
+        # skips are neither passes nor failures
+        r = proof.tests_from('OK, but incomplete, skipped, or risky tests!\nTests: 42, Assertions: 108, Skipped: 2.')
+        self.assertEqual((r['runner'], r['passed'], r['failed']), ('phpunit', 40, 0))
+        r = proof.tests_from('FAILURES!\nTests: 42, Assertions: 108, Failures: 3, Skipped: 4.')
+        self.assertEqual((r['passed'], r['failed']), (35, 3))
+        r = proof.tests_from('Ran 42 tests in 1.234s\n\nOK')
+        self.assertEqual((r['runner'], r['passed'], r['failed']), ('unittest', 42, 0))
+        r = proof.tests_from('Ran 42 tests in 1.234s\n\nFAILED (failures=3)')
+        self.assertEqual((r['passed'], r['failed']), (39, 3))
+        # failures and errors both count, and skips are neither
+        r = proof.tests_from('Ran 5 tests in 0.1s\n\nFAILED (failures=1, errors=1, skipped=1)')
+        self.assertEqual((r['passed'], r['failed']), (2, 2))
+        # the OK line can carry a tail of its own
+        r = proof.tests_from('Ran 10 tests in 1.2s\n\nOK (skipped=2)')
+        self.assertEqual((r['passed'], r['failed']), (8, 0))
+
+
+    def test_the_review_cases_that_used_to_read_wrong(self):
+        """Three shapes a real run prints that the first pass got wrong.
+
+        Each of these was a number a card would have shown somebody, which is
+        the whole point of the gaps line: a figure that is confidently wrong
+        costs more than an admitted gap.
+        """
+        # cargo prints doc-tests LAST, and it is 0/0 on most crates, so
+        # last-match-wins turned a green suite into 0 passed.
+        cargo = (
+            "   Compiling mycrate v0.1.0\n"
+            "    Finished test [unoptimized] target(s)\n"
+            "     Running unittests src/lib.rs\n"
+            "test result: ok. 42 passed; 0 failed; 1 ignored\n"
+            "   Doc-tests mycrate\n"
+            "running 1 test\n"
+            "test src/lib.rs - add (line 3) ... ok\n"
+            "test result: ok. 1 passed; 0 failed; 0 ignored\n"
+        )
+        r = proof.tests_from(cargo)
+        self.assertEqual((r["runner"], r["passed"], r["failed"]), ("cargo", 43, 0))
+
+        # A red cargo run keeps both numbers across the binaries.
+        red = (
+            "    Finished test [unoptimized] target(s)\n"
+            "test result: FAILED. 39 passed; 3 failed; 0 ignored\n"
+            "   Doc-tests mycrate\n"
+            "test result: ok. 0 passed; 0 failed; 0 ignored\n"
+        )
+        r = proof.tests_from(red)
+        self.assertEqual((r["passed"], r["failed"]), (39, 3))
+
+        # rspec's pattern was unanchored, so prose about a suite read as a run.
+        self.assertFalse(
+            proof.tests_from(
+                "we have 3 examples, 0 failures were seen in prod"
+            )["ran"],
+            "prose mentioning examples and failures is not a test result",
+        )
+        # and the real summary, which starts at column 0, still is one.
+        r = proof.tests_from("Finished in 0.1s\n42 examples, 0 failures")
+        self.assertEqual((r["runner"], r["passed"], r["failed"]), ("rspec", 42, 0))
+
+    def test_a_new_runner_named_without_numbers_is_not_a_result(self):
+        """The rule that keeps the gaps line trustworthy, held for the new runners."""
+        for said in ('I will run cargo test next',
+                     'running mvn test now',
+                     'rspec is the suite here',
+                     'phpunit will be run',
+                     'Ran 42 tests in 1.234s'):      # no verdict yet: still going
+            self.assertFalse(proof.tests_from(said)['ran'], said)
+
+    def test_the_last_run_wins_for_the_new_runners_too(self):
+        red = 'test result: FAILED. 39 passed; 3 failed'
+        green = 'test result: ok. 42 passed; 0 failed'
+        self.assertEqual(proof.tests_from(red + '\n...\n' + green)['failed'], 0)
+
+    def test_two_cargo_runs_with_only_scaffolding_between_them_are_not_summed(self):
+        """A Makefile running cargo twice, echoing nothing between.
+
+        `Compiling` and `Finished` are start-of-invocation markers: they never
+        appear between the binaries of one `cargo test`, so treating them as
+        "same invocation" could only ever merge two separate runs - and that
+        breaks the rule the rest of this file holds, that a suite which is now
+        green does not report the earlier failure.
+        """
+        said = ('test result: FAILED. 7 passed; 3 failed\n'
+                '   Compiling mycrate v0.1.0\n'
+                '    Finished test [unoptimized] target(s)\n'
+                'test result: ok. 10 passed; 0 failed\n')
+        r = proof.tests_from(said)
+        self.assertEqual((r['passed'], r['failed']), (10, 0))
+
+    def test_a_cargo_run_the_walk_cannot_account_for_says_nothing(self):
+        """The one place a wrong number would wear the green tone.
+
+        If the walk breaks somewhere it does not understand, what survives is
+        cargo's doc-tests line - normally 0 passed, 0 failed. Reported, that
+        renders as an OK pill reading "0 tests passed" over a suite whose real
+        result was never read, which is strictly worse than the gap this module
+        exists to close. So it admits the hole instead.
+        """
+        said = ('test result: ok. 12 passed; 0 failed\n'
+                'make: *** [test] Error 2\n'
+                '   Doc-tests mycrate\n'
+                'test result: ok. 0 passed; 0 failed\n')
+        self.assertFalse(proof.tests_from(said)['ran'])
+
+    def test_a_rustc_warning_does_not_break_the_walk(self):
+        """A diagnostic before the doc-tests block is still one invocation."""
+        said = ('     Running unittests src/lib.rs\n'
+                'test result: ok. 2 passed; 0 failed\n'
+                'warning: unused variable: `x`\n'
+                ' --> src/lib.rs:5:9\n'
+                '  |\n'
+                '5 |     let x = 1;\n'
+                '  |         ^\n'
+                '   Doc-tests mycrate\n'
+                'test result: ok. 0 passed; 0 failed\n')
+        r = proof.tests_from(said)
+        self.assertEqual((r['passed'], r['failed']), (2, 0))
+
+    def test_the_cargo_receipt_agrees_with_the_numbers_beside_it(self):
+        """`line` is printed under the pill so the figure can be checked.
+
+        For a summed invocation the last binary's own result is the doc-tests
+        0/0, so showing it would read "0 passed; 0 failed" underneath "43 tests
+        passed" - a receipt that contradicts what it backs.
+        """
+        said = ('test result: ok. 42 passed; 0 failed\n'
+                '   Doc-tests mycrate\n'
+                'test result: ok. 1 passed; 0 failed\n')
+        r = proof.tests_from(said)
+        self.assertEqual(r['passed'], 43)
+        self.assertNotIn('0 passed', r['line'])
+        self.assertIn('43 passed', r['line'])
+
+    def test_a_red_cargo_run_keeps_every_binary_around_its_failure_report(self):
+        """Cargo's panic report sits between binary summaries in --no-fail-fast."""
+        said = (
+            '     Running unittests src/lib.rs\n'
+            'test result: ok. 3 passed; 0 failed; 0 ignored\n'
+            '     Running tests/it.rs\n'
+            'running 2 tests\n'
+            'test it_a ... FAILED\n'
+            'test it_b ... ok\n'
+            '\n'
+            'failures:\n'
+            '\n'
+            '---- it_a stdout ----\n'
+            "thread 'it_a' panicked at tests/it.rs:5:5:\n"
+            'assertion `left == right` failed\n'
+            '  left: 1\n'
+            ' right: 2\n'
+            'note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n'
+            '\n'
+            'failures:\n'
+            '    it_a\n'
+            '\n'
+            'test result: FAILED. 1 passed; 1 failed; 0 ignored\n'
+            '   Doc-tests mycrate\n'
+            'running 1 test\n'
+            'test src/lib.rs - add (line 3) ... ok\n'
+            'test result: ok. 1 passed; 0 failed; 0 ignored\n'
+        )
+        r = proof.tests_from(said)
+        self.assertEqual((r['passed'], r['failed']), (5, 1))
+        self.assertEqual(r['line'], '3 cargo test binaries: 5 passed; 1 failed')
+
+    def test_phpunit_keeps_last_run_wins_across_all_four_endings(self):
+        """One runner, one pattern - which is what makes the rule hold.
+
+        tests_from returns on the first PATTERN that matches anywhere in the
+        text, so while phpunit's endings sat in three separate entries the
+        green one was reached first and a fixed-then-broken suite reported
+        green. That is worse than the false gap this PR removes.
+        """
+        broke = ('OK (42 tests, 108 assertions)\n'
+                 '$ phpunit\n'
+                 'FAILURES!\n'
+                 'Tests: 42, Assertions: 108, Failures: 3.\n')
+        r = proof.tests_from(broke)
+        self.assertEqual((r['runner'], r['passed'], r['failed']), ('phpunit', 39, 3))
+
+        risky_then_red = ('OK, but incomplete, skipped, or risky tests!\n'
+                          'Tests: 42, Assertions: 108.\n'
+                          '$ phpunit\n'
+                          'ERRORS!\n'
+                          'Tests: 42, Assertions: 108, Errors: 1.\n')
+        r = proof.tests_from(risky_then_red)
+        self.assertEqual((r['passed'], r['failed']), (41, 1))
+
+        fixed = ('FAILURES!\n'
+                 'Tests: 42, Assertions: 108, Failures: 3.\n'
+                 '$ phpunit\n'
+                 'OK (42 tests, 108 assertions)\n')
+        self.assertEqual(proof.tests_from(fixed)['failed'], 0)
+
+    def test_an_expected_failure_is_not_a_failure(self):
+        """unittest prints xfails on runs it calls OK.
+
+        `OK (expected failures=2)` came out 8 passed and 2 failed, so the pill
+        went red over a suite whose own last word was OK. An xfail is the one
+        thing a suite marks as expected; counting it teaches people to stop
+        reading the pill.
+        """
+        r = proof.tests_from('Ran 10 tests in 1.0s\n\nOK (expected failures=2)')
+        self.assertEqual((r['passed'], r['failed']), (10, 0))
+        r = proof.tests_from('Ran 10 tests in 1.0s\n\nFAILED (failures=1, expected failures=2)')
+        self.assertEqual((r['passed'], r['failed']), (9, 1))
+
+    def test_a_failed_verdict_with_no_counts_is_one_failure_not_all_of_them(self):
+        """`FAILED (unexpected successes=1)` carries no failures= or errors=."""
+        r = proof.tests_from('Ran 10 tests in 1.0s\n\nFAILED (unexpected successes=1)')
+        self.assertEqual((r['passed'], r['failed']), (9, 1))
+
+    def test_skips_are_not_passes_for_surefire_or_rspec(self):
+        """The convention the rest of the module already holds."""
+        r = proof.tests_from('Tests run: 42, Failures: 0, Errors: 0, Skipped: 5')
+        self.assertEqual((r['runner'], r['passed'], r['failed']), ('maven', 37, 0))
+        r = proof.tests_from('5 examples, 0 failures, 2 pending')
+        self.assertEqual((r['runner'], r['passed'], r['failed']), ('rspec', 3, 0))
+
     def test_merely_mentioning_pytest_is_not_a_result(self):
         self.assertFalse(proof.tests_from('I will now run pytest on the suite')['ran'])
         self.assertFalse(proof.tests_from('')['ran'])

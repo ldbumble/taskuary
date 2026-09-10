@@ -1,6 +1,6 @@
 # Status and roadmap
 
-Taskuary is early—currently v0.3.4.0—and moving fast. The core funnel, review queue, agent
+Taskuary is early—currently v0.3.4.1—and moving fast. The core funnel, review queue, agent
 sessions, and reports pipeline are real and in daily use. Breaking changes remain possible
 before 1.0.
 
@@ -10,7 +10,7 @@ before 1.0.
 - Resumable, live-streamed coding-agent sessions in the user's own repositories
 - General-work assistant sessions with interchangeable assistant-ui and terminal views,
   persistent task conversation, queue, image attachments, and the shared browser pane
-- Claude Code, Codex, Gemini, Cursor, and Copilot presets with connection tests
+- Claude Code, Codex, Gemini, Cursor, Copilot, and Muse Code presets with connection tests
 - Timeline, task Board, Studio floor, and multi-terminal Wall
 - Assistant posts with evidence, actions, reviewed material, and cross-check notes
 - Scheduled report pipelines from source to query, AI summary, spreadsheet, chart, and Timeline

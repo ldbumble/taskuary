@@ -26,6 +26,12 @@ KNOWN = [
      'args': ['-p', '--force', '--output-format', 'text'], 'timeout': 1500},
     {'name': 'copilot', 'cmd': 'copilot', 'label': 'GitHub Copilot CLI',
      'args': ['-p', '--allow-all-tools'], 'timeout': 1500},
+    # Meta's agent, on Muse Spark. `exec` is its headless verb (codex's shape, not claude's -p) and
+    # --yolo is the approval bypass without which a headless run parks on a prompt forever. Its
+    # --json emits Meta's own JSONL event schema, which nothing here parses, so it stays off and
+    # the run is read as plain text. POSIX only - see cliinstall.RECIPES.
+    {'name': 'muse', 'cmd': 'muse', 'label': 'Meta Muse Code',
+     'args': ['exec', '--yolo'], 'timeout': 1500},
 ]
 
 
@@ -52,7 +58,10 @@ def tools() -> list:
 # flags to add). Gemini's default approval mode refuses tool calls headlessly, so dropping suffices.
 READONLY = {'claude': (('--dangerously-skip-permissions',), ('--tools', '')),
             'codex': (('--dangerously-bypass-approvals-and-sandbox', '--full-auto'), ('--sandbox', 'read-only')),
-            'gemini': (('--yolo',), ())}
+            'gemini': (('--yolo',), ()),
+            # muse: same reasoning as gemini. --yolo is what turns approval AND the sandbox off, so
+            # dropping it puts both back; its default on-request mode has nobody to ask in `exec`.
+            'muse': (('--yolo',), ())}
 
 # A report is allowed to LOOK, but not to act. That is deliberately different from the mail
 # classifier above, which gets no tools at all because the text it classifies is untrusted input.
@@ -73,6 +82,7 @@ REPORT_READ = {
                ('--tools', REPORT_TOOLS, '--allowedTools', REPORT_TOOLS, '--disallowedTools', 'mcp__*')),
     'codex': READONLY['codex'],
     'gemini': READONLY['gemini'],
+    'muse': READONLY['muse'],
 }
 
 
@@ -145,12 +155,16 @@ def detect(store=None) -> list:
         # row's name: a profile is called `coder`, and there is no recipe called that.
         recipe = cliinstall.recipe_for(k['cmd'])
         installable = bool(cliinstall.plan(recipe))
-        if not found and k['name'] not in have and not installable: continue
+        # A CLI with no road on THIS machine still gets a row, carrying the reason (`why_not`).
+        # Dropping it was worse than a dead button: muse and cursor are both posix-only, so on
+        # Windows they simply were not in the list, which reads as "Taskuary does not support
+        # this" rather than "your OS cannot run its installer" (the owner, 2026-09-10).
         runs, blocked = runnable(k['cmd']) if found else ('', False)
         # `setup` is the recipe whose own first run Taskuary can open, or '' - the same rule as
         # `installable`: never draw a button over a road that does not exist
         out.append({**k, 'installed': bool(found), 'path': found or '', 'runs': runs, 'store': blocked,
                     'install': recipe, 'installable': installable, 'configured': k['name'] in have,
+                    'why_not': '' if (found or installable) else cliinstall.why_not(recipe),
                     'setup': recipe if recipe in clisetup.SETUP else ''})
     import json, os
     labels = {k['cmd']: k['label'] for k in KNOWN}
@@ -169,5 +183,6 @@ def detect(store=None) -> list:
                     'args': list(prof.get('args') or []), 'installed': bool(found), 'path': found or '',
                     'runs': runs, 'store': blocked, 'install': recipe,
                     'installable': bool(cliinstall.plan(recipe)), 'configured': True,
+                    'why_not': '' if (found or cliinstall.plan(recipe)) else cliinstall.why_not(recipe),
                     'setup': recipe if recipe in clisetup.SETUP else ''})
     return out

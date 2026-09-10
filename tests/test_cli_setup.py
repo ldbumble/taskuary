@@ -135,7 +135,7 @@ class SignedOutMessageTests(unittest.TestCase):
         self.assertIn('/login', agents.signed_out_msg('coder', 'x', r'C:\n\claude.cmd'))
         self.assertIn('codex login', agents.signed_out_msg('coder', 'x', '/usr/bin/codex'))
 
-    def test_all_five_clis_have_a_terminal_sentence_too(self):
+    def test_every_setup_cli_has_a_terminal_sentence_too(self):
         """The pane is the road; a terminal is still a road, and the only one when the app is not
         the thing in front of you."""
         from taskuary import agents

@@ -270,7 +270,10 @@ related closed tasks so the agent starts with what Taskuary already knows.
 ## Bring your own coding agent
 
 Every run can choose a configured CLI and, when supported, a model. Built-in presets cover
-Claude Code, Codex, Gemini, Cursor, and Copilot. Any CLI that accepts a prompt on stdin can
+Claude Code, Codex, Gemini, Cursor, Copilot, and Muse Code (macOS/Linux/WSL2 only — Meta's
+installer refuses Windows; the Meta Model API connector reaches Muse Spark there instead, though
+a Muse Code subscription covers only the CLI's own key and never a key you create yourself).
+Any CLI that accepts a prompt on stdin can
 work; the connector lets you define its command, arguments, model argument, and working
 directory behavior.
 

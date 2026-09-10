@@ -51,12 +51,13 @@ port beyond the local machine.
 
 Open **Connections** and configure these in order:
 
-1. **A triage brain.** Add an Anthropic, OpenAI, Azure OpenAI, or OpenRouter key, or connect
-   Ollama for a local model. A small inexpensive model is usually enough for triage.
+1. **A triage brain.** Add an Anthropic, OpenAI, Azure OpenAI, OpenRouter, or Meta Model API
+   (Muse Spark) key, or connect Ollama for a local model. A small inexpensive model is usually
+   enough for triage.
 2. **An inbound channel.** Connect Outlook, Gmail/IMAP, Teams, Slack, Telegram, WhatsApp,
    Discord, or one of the supported work systems. New items begin appearing on the Timeline.
-3. **A coding CLI.** Choose a preset for Claude Code, Codex, Gemini, Cursor, or Copilot,
-   then save and test it. If the CLI is not on this machine yet, press **Install** on its card
+3. **A coding CLI.** Choose a preset for Claude Code, Codex, Gemini, Cursor, Copilot, or
+   Muse Code, then save and test it. If the CLI is not on this machine yet, press **Install** on its card
    (or on the same row in the setup wizard): Taskuary runs the vendor's own installer, or npm,
    or downloads the release binary, and puts it on your PATH. A GitHub token can discover
    repositories automatically.

@@ -16,6 +16,18 @@ export const GENERAL_KINDS = new Set(["general", "research", "marketing", "triag
 
 export const isGeneralKind = (kind) => GENERAL_KINDS.has(String(kind || "general").toLowerCase());
 
+// The Board is the agent floor - "board is only for things that hit agents" (the owner,
+// 2026-09-10). A `reply` is drafted by the same model triage uses: it never opens a session and
+// never queues for a slot, so a card for it on the floor is a worker that does not exist. A `task`
+// is the owner's own list with nothing working it, and `setup` is a walk-through in the chat. All
+// three stay in Tasks and in Review - they are simply not agent work.
+//
+// Stated as what is NOT agent work, so it FAILS OPEN: a kind nobody has thought of yet keeps its
+// card rather than disappearing from the one screen that is meant to show everything running.
+export const NO_AGENT_KINDS = new Set(["reply", "task", "setup"]);
+
+export const isAgentKind = (kind) => !NO_AGENT_KINDS.has(String(kind || "").toLowerCase());
+
 /** What the Tasks tab should do right now. `detail` is whatever is loaded, stale or not. */
 export const autostartPlan = ({ autostart, selected, detail, hasSession }) => {
   const task = detail?.task?.TaskId === selected ? detail.task : null;   // never the previous one

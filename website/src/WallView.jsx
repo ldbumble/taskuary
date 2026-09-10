@@ -64,6 +64,9 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
     ]);
     const fresh = (tm.data.data || []).filter((s) => s.alive && s.taskId);
     setSessions((current) => holdWrappingSessions(fresh, current, wrappingRef.current));
+    // NOT filtered by kind, unlike the columns and the studio: the Wall's cards come from
+    // /api/terminals - live sessions - and this is only the lookup that gives one its title. A
+    // session the owner started by hand on a reply would lose its name, having earned its place.
     setTasks(Object.fromEntries((tk.data.data || []).map((t) => [t.TaskId, t])));
   }, []);
   useEffect(() => { if (!active) return undefined; load(); return onLive("task-changed", load); }, [active, load]);

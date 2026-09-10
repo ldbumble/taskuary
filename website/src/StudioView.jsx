@@ -7,6 +7,7 @@ import { Box, CircularProgress, Slider, Typography } from "@mui/material";
 import api from "./api";
 import { pollWhileVisible } from "./visible.js";
 import { onLive } from "./live.js";
+import { isAgentKind } from "./autostart.js";
 import { PANEL, BORDER, DIM, FAINT, INK, ACCENT, ROLES, mono } from "./theme.jsx";
 import { FileChips } from "./BoardView.jsx";
 import { WorkLine, isWaiting } from "./ui.jsx";
@@ -28,7 +29,8 @@ export default function StudioView({ onOpenTask, refresh = 0, active = true }) {
       api.get("/api/agents").catch(() => ({ data: {} })),
       api.get("/api/settings").catch(() => ({ data: {} })),
     ]);
-    setTasks((taskResponse.data.data || []).filter((task) => task.Status !== "dropped"));
+    // the same floor as the columns, so the same rule: only work an agent runs (isAgentKind)
+    setTasks((taskResponse.data.data || []).filter((task) => task.Status !== "dropped" && isAgentKind(task.Kind)));
     setAgents(agentResponse.data.data || agentResponse.data.agents || []);
     const row = (settingResponse.data.data || []).find((setting) => setting.Name === "auto_sessions");
     setCap((current) => current == null ? Math.max(1, Math.min(8, parseInt(row?.Value, 10) || 4)) : current);

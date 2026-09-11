@@ -25,6 +25,21 @@ DOCK_TAG = 'assistant:dock'
 SETUP_REF = 'assistant:setup'          # a walkthrough opened from the Assistant (concierge.setup_task)
 SETUP_SKILL = Path(__file__).parent / 'skills' / 'taskuary-setup' / 'SKILL.md'
 SETUP_SKILL_CHARS = 8_000
+# The tag concierge.walk_is_external writes when the walk is over the owner's OWN systems - a
+# portal, a payroll site, anything Taskuary has no card for. The shipped skill is the procedure for
+# configuring THIS install and the wrong map for that: asked to log into ADP and clock in every
+# morning, a walk carrying it reads out the AI-brain-and-inbound-source checklist instead
+# (the owner, 2026-09-10). Absent, the skill rides - most set-ups really are about this install.
+SETUP_EXTERNAL = 'setup:external'
+WALK_CLI = 'codex'                     # see walk_pick
+EXTERNAL_WALK = (
+    "This walk is not about configuring Taskuary. The owner wants you to operate a system of their "
+    "own, with them, step by step. Read what they actually asked for, find the real screen or "
+    "sign-in it needs, and take them through it one step at a time - your browser is beside this "
+    "conversation and they can take the keyboard for anything you must never type. Before the "
+    "steps, say in one line whether this can be finished from here and what part cannot: an "
+    "automation that has to run on a schedule with nobody watching is exactly the sort of thing to "
+    "name now rather than at the end.")
 SCROLLBACK = 200_000
 MAX_CONTEXT = 24_000
 MAX_REPLY_TOKENS = 2_000
@@ -90,7 +105,7 @@ def provider_options(store) -> list:
         cmd = re.split(r'[\\/]', str(cfg.get('cmd') or row['Name']))[-1].lower().rsplit('.', 1)[0]
         label = labels.get(cmd) or cmd or row['Name']
         if row['Name'] != cmd: label += f" · {row['Name']}"
-        out.append({'id': f"cli:{row['Name']}", 'pick': f"cli:{row['Name']}", 'type': 'cli',
+        out.append({'id': f"cli:{row['Name']}", 'pick': f"cli:{row['Name']}", 'type': 'cli', 'cmd': cmd,
                     'label': f'{label} (your CLI)', 'model': cfg.get('model') or ''})
     for row in store.list_connectors():
         if row.get('Type') not in llm_mod.AI_TYPES or not row.get('Active'): continue
@@ -102,6 +117,18 @@ def provider_options(store) -> list:
                     'pick': f"connector:{row['ConnectorId']}", 'type': row['Type'],
                     'label': f"{row.get('Name') or row['Type']} (API)", 'model': model})
     return out
+
+
+def walk_pick(store) -> str:
+    """Which brain drives a set-up walk-through, when the owner has not chosen one.
+
+    It must be a CLI: only a CLI has the browser tool, and a walk that cannot click is a walk that
+    reads a checklist out loud. Among CLIs it is codex, because codex's own config already names
+    the model the owner wants at a real keyboard. No model is named HERE - naming one would freeze
+    it; changing it in codex's config changes this. An explicit choice in the chat still outranks
+    it, and with no CLI at all this names nobody rather than an API brain that cannot act."""
+    clis = [o for o in provider_options(store) if o.get('type') == 'cli']
+    return next((o['pick'] for o in clis if o.get('cmd') == WALK_CLI), '') or (clis[0]['pick'] if clis else '')
 
 
 def default_pick(store) -> str:
@@ -359,7 +386,8 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # branching in here or a second assistant system prompt competing with this one (PW-190). It rides
     # in the same slot a playbook does, so one task-brief structure serves both.
     if str(task.get('SourceRef') or '') == SETUP_REF:
-        system += '\n\nPROCEDURE FOR THIS JOB\n' + _cut(setup_skill(), SETUP_SKILL_CHARS)
+        outside = store.task_has_tag(tid, SETUP_EXTERNAL)
+        system += '\n\nPROCEDURE FOR THIS JOB\n' + (EXTERNAL_WALK if outside else _cut(setup_skill(), SETUP_SKILL_CHARS))
     if dock:
         system += (
             "\n\nHOVERING GUIDE\nThis conversation is the owner's always-available Taskuary guide. "
@@ -927,11 +955,10 @@ def start_session(store, tid: int, connector_id=None, model=None, actor='owner',
     if not handles(task): raise ValueError('assistant view is for general, research, marketing, and triage tasks')
     terminal.resume_task(store, tid, actor)
     # A setup walkthrough needs an operator, not a coder in a checkout. If the dock is normally
-    # backed by an API-only chat model, choose the first configured CLI for this task so it can
-    # actually drive the embedded browser. An explicit provider choice still wins.
+    # backed by an API-only chat model, choose a CLI for this task so it can actually drive the
+    # embedded browser - walk_pick says which. An explicit provider choice still wins.
     if task.get('SourceRef') == SETUP_REF and connector_id is None and not model and not pick:
-        tool_cli = next((o for o in provider_options(store) if o.get('type') == 'cli'), None)
-        if tool_cli: pick = tool_cli['pick']
+        pick = walk_pick(store) or None
     existing = session_for(tid)
     if existing:
         if connector_id is not None or model or pick:

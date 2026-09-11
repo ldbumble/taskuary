@@ -581,7 +581,11 @@ class SetupAndTroubleTests(unittest.TestCase):
         with mock.patch('taskuary.ingest._spawn') as spawn:
             made = concierge.setup_task(s, 'find out why the export drops inter-company rows', kind='coding')
         self.assertEqual(s.get_task(made['taskId'])['Kind'], 'coding'); self.assertTrue(spawn.called)
-        with mock.patch.object(server, 'store', s), mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch('taskuary.ingest._spawn'):
+        # the card's own road. The walk it opens is live now (server._walk_opens), so its session and
+        # its sort are held still here - what they DO is tests/test_setup_walk.py's business.
+        with mock.patch.object(server, 'store', s), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
+             mock.patch('taskuary.ingest._spawn'), mock.patch.object(general, 'start_session'), \
+             mock.patch.object(concierge, 'walk_is_external', return_value=False):
             c = TestClient(server.app)
             self.assertEqual(c.post('/api/concierge/setup', json={'text': 'build an alert when the PTO import fails'}).json()['ref'][:3], 'TQ-')
             self.assertEqual(c.post('/api/concierge/setup', json={'text': ' '}).status_code, 422)

@@ -103,6 +103,19 @@ class LiveSocketTests(unittest.TestCase):
         s.create_task({'Title': 'new work', 'Status': 'open'}, 't')
         self.assertIsNone(funnel._CACHE['pile'])
 
+    def test_a_setting_the_owner_changed_invalidates_that_pile_too(self):
+        """A setting is an INPUT to the pile (mutes, feed_days, the owner's own address), so leaving the
+        cache alone meant a change the owner just made showed up to thirty seconds later, or on the next
+        New chat (2026-09-10 audit). The ephemeral clocks are exempt: they are written constantly and
+        no projection reads them."""
+        s = MemoryStore()
+        funnel._CACHE.update(at=time.time(), pile={'rev': 'old'})
+        s.set_setting('feed_days', '30', 'owner')
+        self.assertIsNone(funnel._CACHE['pile'])
+        funnel._CACHE.update(at=time.time(), pile={'rev': 'old'})
+        s.set_setting('ingest_status', '{"stage": "reading Outlook"}', 'owner')
+        self.assertEqual(funnel._CACHE['pile'], {'rev': 'old'})       # a progress clock rebuilds nothing
+
     def test_a_task_update_pokes_the_feed_and_task_views(self):
         tab, s = _Tab(), MemoryStore()
         async def once():

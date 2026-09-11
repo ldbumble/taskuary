@@ -29,8 +29,8 @@ import { Md, looksMd } from "./md.jsx";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12, localDay } from "./ui.jsx";
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
-import { afterCancel, afterExecute, proposalOf } from "./proposalCard.js";
-import { ageText, arrivals, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, followsItem, hasNextSelection, interactiveCardIndex, keysOf, lastSaidIndex, chipsOf, nextMarkerKey, nextSelectionBody, nextSelectionScope, pendingAlerts, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, levelOf, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
+import { afterCancel, afterExecute, markExecuted, proposalOf } from "./proposalCard.js";
+import { ageText, agoText, arrivals, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, followsItem, hasNextSelection, interactiveCardIndex, keysOf, lastSaidIndex, chipsOf, nextMarkerKey, nextSelectionBody, nextSelectionScope, pendingAlerts, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, levelOf, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
 import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WrapupCard } from "./assistantCards.jsx";
@@ -207,7 +207,7 @@ function Pile({ pile, current, onPull }) {
                     <span className="tq-pile-tag" style={{ color: meta.role ? ROLES[meta.role].ink : "#6f6960", background: meta.role ? ROLES[meta.role].tint : "#eee9e1", borderColor: meta.role ? ROLES[meta.role].bd : "#ddd6cb" }}>
                       {loud ? `${meta.mark} ` : ""}{tag}</span>
                   </div>
-                  {i.current && <div className="sub">{[i.why, i.kind === "meeting" ? ageText(i.when) : `${ageText(i.since || i.when)} ago`].filter(Boolean).join(" · ")}</div>}
+                  {i.current && <div className="sub">{[i.why, i.kind === "meeting" ? ageText(i.when) : agoText(i.since || i.when)].filter(Boolean).join(" · ")}</div>}
                 </div>
               </div>
             );
@@ -541,12 +541,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // safety net: rebuilding this multi-source pile every five seconds starved Board, Tasks and
   // Past chats behind work whose answer had not changed.
   useEffect(() => pollWhileActive(active, () => loadPile(false), 30000), [active, loadPile]);
-  // a sync lands rows several times a second; one forced rebuild after the burst, not one per row
+  // a sync lands rows several times a second; one forced rebuild after the burst, not one per row -
+  // and a CEILING, because a run that keeps talking pushed the trailing timer out indefinitely and
+  // left the pile on its 30-second safety poll (2026-09-10 audit).
   useEffect(() => {
     if (!active) return undefined;
-    let t = 0;
-    const off = onLive(["feed-changed", "task-changed"], () => { clearTimeout(t); t = setTimeout(() => loadPile(true), 1500); });
-    return () => { clearTimeout(t); off?.(); };
+    return onLive(["feed-changed", "task-changed"], () => loadPile(true), { wait: 1500, max: 5000 });
   }, [active, loadPile]);
   useEffect(() => { const el = bodyRef.current; if (el) el.scrollTop = el.scrollHeight; }, [msgs, busy]);
   // ...and again whenever the thread GROWS - a card that loaded its draft, a report that unfolded - so the
@@ -689,7 +689,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                                 ...(prop ? { proposal: prop, card: { kind: "proposal", key: prop.key, title: prop.label, op: prop.id, tid: prop.tid, ref: prop.ref } } : {}) }]);
         say(data.say);
         if (prop?.auto) await runProposal(prop);                   // a plain verb on the item on the table: no button to press
-        else if (!prop && data.decision) await decide(data.decision);  // the two immediate exceptions: a reply drafts, Next moves (PW-126/128)
+        else if (!prop && data.decision) await decide(data.decision, data);  // the two immediate exceptions: a reply drafts, Next moves (PW-126/128)
       }
     } catch (e) { setErr(errText(e)); }
     turnFlight.current = false;
@@ -705,11 +705,21 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // the owner decided in words. Only two decisions still run without a confirmation (PW-126/128): a reply
   // request DRAFTS (nothing is sent, nothing is marked), and Next moves the walk without marking, closing
   // or deferring anything. Everything else arrives as a proposal card and runs from its button.
-  const decide = async (d) => {
+  const decide = async (d, data) => {
     const cur = d.target || [...msgs].reverse().find((m) => m.card && m.card.key === current)?.card || currentItem || null;
     const elsewhere = !!d.target;
     const mid = cur?.mid, verb = d.verb;
     try {
+      // their yes (or no) to the card already on the table, said instead of clicked: the server ran it
+      // before it answered, so the only thing left here is to stop the card saying "proposed" and move
+      // the walk on if the item is off the table. Falling through to the receipt below announced a
+      // failure over a success and left the walk sitting on finished work (2026-09-10 walk).
+      if (verb === "confirm" || verb === "cancel") {
+        setMsgs((m) => markExecuted(m, data?.executed));
+        onChanged?.();
+        if (data?.settled) advance(); else loadPile();
+        return;
+      }
       if (verb === "next") {
         selectionRef.current = null;
         deferInChat(() => surfaceRef.current?.(), 300); return;

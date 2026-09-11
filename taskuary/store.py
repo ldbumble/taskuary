@@ -3203,6 +3203,13 @@ class SQLiteStore:
             self._processing_ignored_writes += 1
         else:
             self._processing_display_cache = {}
+            # ...and the Assistant's pile is built from settings too - the mutes, feed_days, the
+            # owner's own address. Leaving its cache alone showed a change the owner had just made up
+            # to PILE_EVERY seconds later, or not until New chat (2026-09-10 audit).
+            try:
+                from . import funnel
+                funnel.invalidate()
+            except Exception: pass
         if name == 'ingest_status':
             try: extra = json.loads(value) if isinstance(value, str) else {}
             except (TypeError, ValueError): extra = {}

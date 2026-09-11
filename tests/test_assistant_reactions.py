@@ -727,6 +727,20 @@ class WrongTargetTests(unittest.TestCase):
         self.assertEqual(t['Status'], 'done')                                        # closed, kept, report and all
         self.assertTrue(any('CODER REPORT' in (c['Body'] or '') for c in s.list_comments(tid)))
 
+    def test_filing_a_message_whose_task_carries_a_drafted_reply_archives_it(self):
+        """A drafted reply IS work that deleting destroys, and nothing else records it: no agent ever
+        commented, so 'what would this lose?' answered nothing and the task was hard-deleted with the
+        draft inside it (2026-09-10 audit)."""
+        s = store()
+        out = arrive(s, subject='Where is the June invoice?', body='Can you send it?', llm=brain('reply_only', None))
+        tid, mid = out['task_id'], out['message_id']
+        rv = s.pending_review(tid); s.save_review_draft(rv['ReviewId'], 'Attached - sorry for the wait.')
+        with mock.patch.object(server, 'store', s), mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            r = TestClient(server.app).post(f'/api/messages/{mid}/file', json={'learn': False}).json()
+        self.assertFalse(r['taskDeleted']); self.assertTrue(r['taskArchived'])
+        self.assertEqual(s.get_task(tid)['Status'], 'done')                  # closed and kept, not gone
+        self.assertIn('Attached', s.get_review(rv['ReviewId'])['DraftText'])
+
 
 class ApproveOnceTests(unittest.TestCase):
     """A2/A3. Approving is sending: it happens once, and never with nothing to send."""

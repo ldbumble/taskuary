@@ -248,6 +248,14 @@ export const ageText = (iso, now = Date.now()) => {
   return `${Math.round(a / 1440)}d`;
 };
 
+// ...and the same age as a SENTENCE. `ageText` answers "how far", which is why four cards appended
+// " ago" to it and read "now ago" on anything under two minutes - and "in 3 min ago" on a stamp the
+// server clocked a moment ahead of the browser (2026-09-10 audit).
+export const agoText = (iso, now = Date.now()) => {
+  const a = ageText(iso, now);
+  return !a ? "" : a === "now" ? "just now" : a.startsWith("in ") ? a : `${a} ago`;
+};
+
 // the header's one line under "Taskuary"
 export const statusLine = (items, busy) => {
   if (busy) return "thinking…";

@@ -4,7 +4,8 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Box, Button, Chip, CircularProgress, TextField, Typography } from "@mui/material";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import api from "./api";
-import { proposalPresentation, reviewText } from "./reviewProposal.js";
+import { onLive } from "./live.js";
+import { proposalPresentation, reviewStatusLabel, reviewText } from "./reviewProposal.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, PILL_COLORS } from "./theme.jsx";
 import { CcRow, ChannelIcon, RefChip, timeAgo, Empty, FilterPills, cleanText, splitQuoted } from "./ui.jsx";
 import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
@@ -86,6 +87,10 @@ export default function ReviewView({ onOpenTask, onChanged }) {
     catch (e) { setErr(e?.response?.data?.detail || "Failed to load reviews"); }
   }, [filter]);
   useEffect(() => { load(); }, [load]);
+  // ...and again when the queue CHANGES under you. A review is poked as feed-changed/task-changed
+  // (store._poke_review), but this tab never listened: a draft an agent filed while you sat here
+  // stayed invisible until the header's refresh icon remounted the whole page (2026-09-10 audit).
+  useEffect(() => onLive(["feed-changed", "task-changed"], load, { wait: 250, max: 1500 }), [load]);
   // Replies start empty. A new outbound email keeps the CC chosen in the composer inside Deliver,
   // so it remains visible and editable when the draft reaches Review.
   const [cc, setCc] = useState({});      // per-review edits; absent means use its saved delivery CC
@@ -167,7 +172,7 @@ export default function ReviewView({ onOpenTask, onChanged }) {
             </Box>
             <ChannelIcon channel={r.Channel} />
             <RefChip taskId={r.TaskId} onClick={() => onOpenTask(r.TaskId)} />
-            <Chip size="small" label={r.Status} sx={{ height: 19, fontSize: 10, bgcolor: PANEL, border: `1px solid ${BORDER}`, color: DIM }} />
+            <Chip size="small" label={reviewStatusLabel(r.Status)} sx={{ height: 19, fontSize: 10, bgcolor: PANEL, border: `1px solid ${BORDER}`, color: DIM }} />
           </Box>
           <Box sx={{ px: 1.5, py: 1.25 }}>
             {r.Reason && (r.DraftText || !/draft/i.test(r.Reason)) && (

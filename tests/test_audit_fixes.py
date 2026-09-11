@@ -200,6 +200,13 @@ class DoorTests(unittest.TestCase):
     def test_f03_no_token_is_no_longer_the_owner(self):
         self.assertEqual(c.post('/api/tasks/purge-dropped', headers={'X-Taskuary-Token': ''}).status_code, 401)
         self.assertEqual(c.post('/api/tasks/purge-dropped', headers={'X-Taskuary-Token': 'wrong'}).status_code, 401)
+        # ...and it REFUSES IN JSON. A bare HTML body meant `detail` was undefined, so a tab left open
+        # across a token change answered every single click with the generic "that did not work"
+        # fallback of whichever screen you were on (2026-09-10 audit).
+        r = c.post('/api/tasks/purge-dropped', headers={'X-Taskuary-Token': 'wrong'})
+        self.assertEqual(r.headers['content-type'].split(';')[0], 'application/json')
+        self.assertEqual(r.json()['code'], 'unauthorized')
+        self.assertIn('reload', r.json()['detail'].lower())
         # ...which is also how an agent stops defeating the deny list by simply not sending its header
         self.assertEqual(guard.scope_of({'token': 'o', 'agent_token': 'a'}, {}), guard.ANON)
 

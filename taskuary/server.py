@@ -177,7 +177,11 @@ async def token_gate(request: Request, call_next):
         file_read = request.url.path.startswith(('/api/attachments/', '/api/task-artifacts/'))
         if not (file_read and request.query_params.get('token') == tok) \
                 and request.url.path not in ('/api/quickbooks/callback', '/api/zoho/callback'):
-            return HTMLResponse('unauthorized', status_code=401)
+            # In JSON, like every other refusal: an HTML body left `detail` undefined, so a tab that
+            # was open across a token change answered every click with whichever screen's generic
+            # "that did not work" fallback happened to be nearest (2026-09-10 audit).
+            return JSONResponse({'detail': 'This page is signed in with an out-of-date token - reload it.',
+                                 'code': 'unauthorized'}, status_code=401)
     # WHAT AN AGENT MAY NOT DO, before a handler exists to be talked round (guard.py). A session
     # runs with the agent token in its environment, and the routes that SEND - approve a reply,
     # hand work to a person, start an outbound message - are refused to it here, in code. Not in
@@ -1282,6 +1286,11 @@ def work_on_task(tid: int) -> str:
         live = hub_term.for_task(tid) or next((x for x in hub_term.live_sessions() if x.get('taskId') == tid), None)
         if live: had.append('an agent is working it')
     except Exception: pass
+    # A written reply waiting for a yes is work too, and nothing else records it: the drafter leaves no
+    # comment, so a reply-only task answered "not ours" was hard-deleted with the draft inside it
+    # (2026-09-10 audit). An EMPTY pending review is only a question nobody answered - still deletable.
+    rv = store.pending_review(tid)
+    if rv and str(rv.get('DraftText') or '').strip(): had.append('it carries a reply waiting to be sent')
     cs = store.list_comments(tid)
     if any(str(c.get('Body') or '').startswith(('CODER REPORT', 'HANDOVER NOTE')) for c in cs): had.append('it carries an agent report')
     # the router's own bookkeeping ('not auto-started', 'start failed', 'queued') is not an agent's work: a task

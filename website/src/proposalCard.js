@@ -35,3 +35,13 @@ export function afterExecute(p, res) {
 }
 
 export function afterCancel(p) { return { receipt: `Cancelled - nothing changed; ${p.ref || "it"} is where it was.`, status: "cancelled" }; }
+
+// The owner said yes IN WORDS. The server (concierge.confirm_open) had already run the operation by the
+// time the answer came back, so there is no button left to press and no second execute to do - the card
+// in the chat only has to stop saying "proposed". Without this the page reported a failure over a success
+// ("that needs a confirmation card and none came back") and the walk stopped on work already done.
+export function markExecuted(msgs, executed) {
+  if (!executed?.id) return msgs;
+  return (msgs || []).map((m) => (m.proposal?.id === executed.id
+    ? { ...m, proposal: { ...m.proposal, status: executed.status || "done" } } : m));
+}

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="880" height="260" viewBox="0 0 880 260"
      font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif"
-     role="img" aria-label="Daily installs of taskuary from PyPI, mirrors excluded. 44 yesterday   ·   1,682 in the last 7 days   ·   3,052 in 30">
+     role="img" aria-label="Daily installs of taskuary from PyPI, mirrors excluded. 484 yesterday   ·   1,978 in the last 7 days   ·   3,536 in 30">
   <style>
     text { font-size: 11px; }
     .title { font-size: 13px; font-weight: 600; fill: #1f2328; }
@@ -17,11 +17,11 @@
     }
   </style>
   <text x="52" y="22" class="title">taskuary · installs from PyPI</text>
-  <text x="52" y="38" class="dim">44 yesterday   ·   1,682 in the last 7 days   ·   3,052 in 30</text>
+  <text x="52" y="38" class="dim">484 yesterday   ·   1,978 in the last 7 days   ·   3,536 in 30</text>
   <line x1="52" y1="230.0" x2="802" y2="230.0" class="grid"/><text x="42" y="233.5" class="dim" text-anchor="end">0</text><line x1="52" y1="141.0" x2="802" y2="141.0" class="grid"/><text x="42" y="144.5" class="dim" text-anchor="end">375</text><line x1="52" y1="52.0" x2="802" y2="52.0" class="grid"/><text x="42" y="55.5" class="dim" text-anchor="end">750</text>
-  <path d="M52.0,230 L52.0,196.5 L98.9,226.0 L145.8,207.2 L192.6,226.0 L239.5,211.5 L286.4,222.2 L333.2,228.1 L380.1,174.0 L427.0,176.4 L473.9,107.1 L520.8,185.4 L567.6,107.1 L614.5,203.7 L661.4,226.0 L708.2,100.2 L755.1,169.0 L802.0,219.6 L802.0,230 Z" class="area"/>
-  <polyline points="52.0,196.5 98.9,211.3 145.8,209.9 192.6,213.9 239.5,213.4 286.4,214.9 333.2,216.8 380.1,213.6 427.0,206.5 473.9,192.2 520.8,186.4 567.6,171.4 614.5,168.8 661.4,168.5 708.2,158.0 755.1,156.9 802.0,173.0" class="line"/>
-  <circle cx="802.0" cy="219.6" r="3.5" class="dot"/><text x="811.0" y="223.1" class="key">daily</text><text x="811.0" y="176.5" class="key">7-day mean</text>
-  <text x="52.0" y="250" class="dim" text-anchor="middle">Aug 24</text><text x="192.6" y="250" class="dim" text-anchor="middle">Aug 27</text><text x="333.2" y="250" class="dim" text-anchor="middle">Aug 30</text><text x="520.8" y="250" class="dim" text-anchor="middle">Sep 3</text><text x="661.4" y="250" class="dim" text-anchor="middle">Sep 6</text><text x="802.0" y="250" class="dim" text-anchor="middle">Sep 9</text>
+  <path d="M52.0,230 L52.0,196.5 L96.1,226.0 L140.2,207.2 L184.4,226.0 L228.5,211.5 L272.6,222.2 L316.7,228.1 L360.8,174.0 L404.9,176.4 L449.1,107.1 L493.2,185.4 L537.3,107.1 L581.4,203.7 L625.5,226.0 L669.6,100.2 L713.8,169.0 L757.9,219.6 L802.0,115.1 L802.0,230 Z" class="area"/>
+  <polyline points="52.0,196.5 96.1,211.3 140.2,209.9 184.4,213.9 228.5,213.4 272.6,214.9 316.7,216.8 360.8,213.6 404.9,206.5 449.1,192.2 493.2,186.4 537.3,171.4 581.4,168.8 625.5,168.5 669.6,158.0 713.8,156.9 757.9,173.0 802.0,162.9" class="line"/>
+  <circle cx="802.0" cy="115.1" r="3.5" class="dot"/><text x="811.0" y="118.6" class="key">daily</text><text x="811.0" y="166.4" class="key">7-day mean</text>
+  <text x="52.0" y="250" class="dim" text-anchor="middle">Aug 24</text><text x="184.4" y="250" class="dim" text-anchor="middle">Aug 27</text><text x="360.8" y="250" class="dim" text-anchor="middle">Aug 31</text><text x="493.2" y="250" class="dim" text-anchor="middle">Sep 3</text><text x="669.6" y="250" class="dim" text-anchor="middle">Sep 7</text><text x="802.0" y="250" class="dim" text-anchor="middle">Sep 10</text>
   <text x="802" y="22" class="dim" text-anchor="end">mirrors excluded</text>
 </svg>

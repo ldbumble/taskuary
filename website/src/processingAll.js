@@ -124,6 +124,13 @@ export function unreadProcessingRows(pile) {
       Category: item.category || "",
       MsgStatus: item.status || "",
       ProcessingCounts: { members: item.member_ids.length },
+      // THE LANE IS THE ROW'S WORD, and the pile already decided it. Dropping it here made the work
+      // rail fall back to triage's road chip plus a 9px state glyph, so an agent that had stopped and
+      // put its hand up wore "chat" and a hand too small to find (the owner, 2026-09-11: "the little
+      // waving hand is really small still... it should show agent waving"). LaneTag draws `blocked`
+      // loud, with the word, which is the whole point of the lane having one.
+      Lane: item.lane || "",
+      AgentWaiting: item.lane === "blocked" ? 1 : 0,     // `blocked` IS "an agent stopped and is waiting on you"
       Unread: item.unread ? 1 : 0,
     }];
   });

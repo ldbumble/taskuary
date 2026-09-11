@@ -91,6 +91,22 @@ test("canonical Unread reuses its pile envelope instead of fetching All again", 
   assert.equal(unreadProcessingRows({ canonical: false, items: [] }), null);
 });
 
+// The lane is the row's own word and the pile already decided it. Dropping it here left the work rail
+// showing triage's road chip and a 9px state glyph, so an agent that had stopped and put its hand up
+// read "chat" with a hand too small to find (the owner, 2026-09-11: "it should show agent waving").
+test("an unread row keeps the pile's lane, so a waving agent wears its own word", () => {
+  const pile = (lane, kind) => unreadProcessingRows({ canonical: true, rev: "pile-rev", items: [{
+    key: `processing:root-${lane}`, processing_id: `root-${lane}`, member_ids: ["task:507"],
+    context_revision: "c", view_revision: "v", tid: 507, kind, lane, title: "Install devin",
+  }] })[0];
+  const waving = pile("blocked", "agent");
+  assert.equal(waving.Lane, "blocked");
+  assert.equal(waving.AgentWaiting, 1);
+  const fyi = pile("fyi", "fyi");
+  assert.equal(fyi.Lane, "fyi");
+  assert.equal(fyi.AgentWaiting, 0);
+});
+
 test("frozen pages concatenate once and reject mixed leases or duplicate roots", () => {
   const first = firstProcessingPage(page("lease-a", [item("a"), item("b")], "cursor-2"));
   assert.ok(first.rows.every((row) => row.AllSnapshotRevision === "lease-a"));

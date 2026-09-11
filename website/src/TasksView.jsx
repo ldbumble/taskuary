@@ -234,8 +234,13 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     // tab's old list until the next task-changed.
     if (!active) return undefined;
     loadTasks();
-    return onLive("task-changed", loadTasks);
-  }, [active, loadTasks]);
+    // ...and the OPEN task with it. A session can be started from anywhere - the Assistant's
+    // "send to the coding agent", the Board, a second window - and the detail poll only runs
+    // once something is already known to be live, so a task sitting open on this page could
+    // never learn it had an agent (TQ-0500: the Board showed a live coder session while this
+    // page offered to start one, which would have made a second).
+    return onLive("task-changed", () => { loadTasks(); if (selRef.current) loadDetail(selRef.current); });
+  }, [active, loadTasks, loadDetail]);
   // the roster is user-config - default to whatever actually exists
   useEffect(() => {
     if (agents.length && !agents.includes(run.agent)) setRun((r) => ({ ...r, agent: agents[0] }));
@@ -402,6 +407,14 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     } catch { if (!stale(tid)) setTerm(null); }
   }, []);
   useEffect(() => { setTerm(undefined); findTerm(selected); }, [selected, findTerm]);
+  // The task's own detail already carries the live session (it is where sessionAlive is read
+  // from), so take it rather than wait for a re-selection to go looking. A session that has
+  // ENDED is deliberately not adopted: findTerm keeps the dead one because its scrollback is
+  // exactly what Done and Pause need, and `for_task` only ever returns a live one.
+  useEffect(() => {
+    const live = detail?.session;
+    if (live?.alive && live.sid !== term?.sid) setTerm(live);
+  }, [detail?.session, term?.sid]);
   const openTerm = useCallback(async (body) => {
     try {
       const { data } = await api.post("/api/terminals", body); setTerm(data);

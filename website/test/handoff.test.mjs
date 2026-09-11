@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { afterExecute, isHandoff } from "../src/proposalCard.js";
+import { afterConfirm, afterExecute, isHandoff } from "../src/proposalCard.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 const coder = { id: "ab12", kind: "task.create_from_message", target: 7, version: 1, params: { kind: "coding" }, label: "Send to the coding agent", settles: true, key: "msg:7", ref: "TQ-0007" };
@@ -28,7 +28,9 @@ test("a started hand-off advances; one that needs a repository asks and keeps th
 
 test("the page advances without settling on a started hand-off, and the card asks for the repository", () => {
   const view = read("AssistantView.jsx");
-  assert.match(view, /if \(p\.kind === "item\.settle" \|\| out\.handoff\) advance\(\); else await done\(null\);/);
+  assert.match(view, /const step = afterConfirm\(p, out, current\);/);
+  assert.match(view, /if \(step === "advance"\) advance\(\); else if \(step === "settle"\) await done\(null\); else loadPile\(\);/);
+  assert.equal(afterConfirm(coder, { settle: true, handoff: true, status: "done" }, coder.key), "advance");
   assert.match(view, /repo: out\.repo \|\| null/);
   const card = read("ProposalCard.jsx");
   assert.match(card, /import \{ RepoPicker \} from "\.\/RepoPicker\.jsx"/);

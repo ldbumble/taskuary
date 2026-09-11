@@ -67,13 +67,24 @@ export function holdLive() {
   return () => {};
 }
 
-export function onLive(kinds, fn) {
+// `{wait, max}` coalesces a burst into one call. A sync lands rows several times a second and every
+// listener that refetches per row is doing the same expensive read dozens of times. A plain trailing
+// debounce is not enough on its own: while the rows keep landing the timer keeps being pushed out, so
+// a chatty agent starved the refresh entirely until its 30-second safety poll came round (2026-09-10
+// audit). `max` is the ceiling - after that long waiting, the next event goes straight through.
+export function onLive(kinds, fn, opts) {
   const want = new Set(!kinds ? [] : (typeof kinds === "string" ? [kinds] : kinds));
-  let dirty = false;
+  const wait = Number(opts?.wait) || 0, max = Number(opts?.max) || 0;
+  let dirty = false, coalesce = 0, waitingSince = 0;
+  const fire = (ev) => { clearTimeout(coalesce); coalesce = 0; waitingSince = 0; fn(ev); };
   const got = (ev) => {
     if (!visible()) { dirty = true; return; }
     dirty = false;
-    fn(ev);
+    if (!wait) return fn(ev);
+    if (!waitingSince) waitingSince = Date.now();
+    if (max && Date.now() - waitingSince >= max) return fire(ev);
+    clearTimeout(coalesce);
+    coalesce = setTimeout(() => fire(ev), wait);
   };
   const rec = { want, got };
   subs.add(rec);
@@ -84,6 +95,7 @@ export function onLive(kinds, fn) {
   if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVis);
   return () => {
     subs.delete(rec);
+    clearTimeout(coalesce);
     if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVis);
   };
 }

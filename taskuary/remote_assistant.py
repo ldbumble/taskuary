@@ -264,14 +264,19 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
     then sit there, and "draft a reply" would be a promise nothing kept.
     """
     from . import concierge
-    said, verb = [turn_text(out, lead)], (out.get('decision') or {}).get('verb')
+    decision = out.get('decision') or {}
+    said, verb = [turn_text(out, lead)], decision.get('verb')
+    # The words can name somebody OTHER than what is on the table. The interpreter resolves that into
+    # `decision.target` and the desktop's decide() drafts THERE; drafting on `item` regardless answered
+    # whoever happened to be up - "reply to Chana" wrote to Dovid (2026-09-10 audit).
+    on = decision.get('target') or item
     walk_on, prop = verb == 'next' or bool(out.get('settled')), out.get('proposal')
     if prop and prop.get('auto') and prop.get('status') == 'proposed':
         done = concierge.run_proposal(store, prop, actor)
         said.append(concierge.receipt(store, done, actor))
         walk_on = done.get('status') == 'done' and prop.get('settles')
-    elif verb in ('reply', 'redraft') and (item or {}).get('mid'):
-        rid = _draft(store, item, verb, (out.get('decision') or {}).get('text') or '')
+    elif verb in ('reply', 'redraft') and (on or {}).get('mid'):
+        rid = _draft(store, on, verb, decision.get('text') or '')
         if rid:                                             # the draft is the next thing to read, so go to it
             nxt = concierge.surface(store, f'review:{rid}', actor=actor)
             return '\n\n'.join(said + [turn_text(nxt)])

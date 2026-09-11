@@ -41,3 +41,13 @@ export const proposalPresentation = (review) => {
     rejectLabel: "Dismiss",
   };
 };
+
+// The DB's own word for a verdict is not a sentence in English: the queue's chip printed
+// "closed_unsent" and "no_reply" straight out of the row (2026-09-10 audit). An unknown status still
+// shows rather than disappearing - a blank chip would hide a state nobody has named yet.
+export const REVIEW_STATUS = {
+  pending: "waiting on you", held: "on hold", approved: "sent", edited: "edited & sent",
+  rejected: "rejected", no_reply: "no reply needed", closed_unsent: "closed without sending",
+  superseded: "overtaken",
+};
+export const reviewStatusLabel = (status) => REVIEW_STATUS[status] || String(status || "").replace(/_/g, " ");

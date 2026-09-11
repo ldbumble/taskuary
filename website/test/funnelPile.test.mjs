@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { LANES, LANE_META, ageText, arrivals, chipsOf, lastSaidIndex, cardFor, currentItemFromPile, currentPresentationChanged, departures, displayRevision, drawOrder, followsItem, keysOf, laneMeta, refreshCurrentPresentation, refreshPilePresentation, statusLine, topAlert } from "../src/funnelPile.js";
+import { LANES, LANE_META, ageText, agoText, arrivals, chipsOf, lastSaidIndex, cardFor, currentItemFromPile, currentPresentationChanged, departures, displayRevision, drawOrder, followsItem, keysOf, laneMeta, refreshCurrentPresentation, refreshPilePresentation, statusLine, topAlert } from "../src/funnelPile.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 const cardsSrc = () => read("assistantCards.jsx");
@@ -195,7 +195,7 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   // words are interpreted, never dispatched (PW-121..125): the two immediate exceptions (Next, a reply
   // draft) run on the decision; everything else arrives as a proposal card whose button submits the
   // structured proposal by id and version to the shared execute road
-  assert.match(view, /if \(!prop && data\.decision\) await decide\(data\.decision\)/);
+  assert.match(view, /if \(!prop && data\.decision\) await decide\(data\.decision, data\)/);
   assert.match(view, /\/api\/operations\/\$\{p\.id\}\/execute`, \{ version: p\.version \}/);
   assert.doesNotMatch(view, /dispatch`, \{ kind: "coding"/);                       // no verb is carried out from the chat itself
   assert.doesNotMatch(view, /tq-quick/);                  // nothing sits over the composer any more
@@ -298,4 +298,18 @@ test("the action words hang on the last thing Taskuary SAID about the item, not 
   // ...and a clarifying choice replaces them: it goes back as words, so mixing the two invites two answers
   assert.deepEqual(chipsOf({ ...item, options: ["Tuesday", "Thursday"] }), [{ ask: "Tuesday", label: "Tuesday" }, { ask: "Thursday", label: "Thursday" }]);
   assert.deepEqual(chipsOf({ role: "assistant" }), []);
+});
+
+// Four cards read `${ageText(x)} ago` and so said "now ago" on anything fresher than two minutes -
+// and "in 3 min ago" when the server's stamp was a moment ahead of the browser's clock.
+test("an age said as a sentence never reads 'now ago' or 'in 3 min ago'", () => {
+  const now = Date.parse("2026-09-10T12:00:00Z");
+  const at = (min) => new Date(now - min * 60000).toISOString();
+  assert.equal(agoText(at(0), now), "just now");
+  assert.equal(agoText(at(1), now), "just now");
+  assert.equal(agoText(at(7), now), "7 min ago");
+  assert.equal(agoText(at(150), now), "2h ago");
+  assert.equal(agoText(at(-3), now), "in 3 min");     // a stamp in the future is not an age at all
+  assert.equal(agoText(null, now), "");
+  assert.equal(agoText("not a date", now), "");
 });

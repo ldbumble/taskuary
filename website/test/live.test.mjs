@@ -165,3 +165,35 @@ test("a non-JSON frame is not one of ours", async () => {
     stop();
   });
 });
+
+// A sync lands rows several times a second. Every listener that refetches per row does the same
+// expensive read dozens of times - and a plain trailing debounce is starved outright while the rows
+// keep coming, which is how a chatty agent left the pile on its 30-second poll (2026-09-10 audit).
+test("a burst is one refresh, and a burst that never stops still gets one", async () => {
+  await withSocket(async () => {
+    globalThis.document = { visibilityState: "visible", addEventListener: () => {}, removeEventListener: () => {} };
+    let calls = 0;
+    const stop = onLive("feed-changed", () => { calls += 1; }, { wait: 20, max: 60 });
+    for (let i = 0; i < 5; i += 1) __testFanout({ type: "feed-changed" });
+    assert.equal(calls, 0, "five rows in one tick are not five reads");
+    await new Promise((r) => setTimeout(r, 40));
+    assert.equal(calls, 1, "the burst settles into exactly one read");
+
+    // ...and now a stream that never lets the timer expire: the ceiling lets one through anyway
+    const started = Date.now();
+    while (Date.now() - started < 90) { __testFanout({ type: "feed-changed" }); }
+    assert.ok(calls >= 2, `the ceiling has to fire during an unbroken stream (calls=${calls})`);
+    stop();
+  });
+});
+
+test("without a wait, onLive still calls straight through", async () => {
+  await withSocket(() => {
+    globalThis.document = { visibilityState: "visible", addEventListener: () => {}, removeEventListener: () => {} };
+    let calls = 0;
+    const stop = onLive("feed-changed", () => { calls += 1; });
+    __testFanout({ type: "feed-changed" }); __testFanout({ type: "feed-changed" });
+    assert.equal(calls, 2);
+    stop();
+  });
+});

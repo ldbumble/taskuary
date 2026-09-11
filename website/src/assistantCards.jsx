@@ -16,7 +16,7 @@ import { runOperation } from "./taskOps.js";
 import { ChannelIcon, TaskuaryMark, cleanText, fmtDateTime } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import { ROLES, ASSISTANT } from "./theme.jsx";
-import { laneMeta, ageText } from "./funnelPile.js";
+import { laneMeta, ageText, agoText } from "./funnelPile.js";
 import { sendBlockLine, draftState } from "./sendState.js";
 import { progressLine } from "./checklist.js";
 import { TerminalPane } from "./TerminalView.jsx";
@@ -346,7 +346,7 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone }) {
     setBusy(false);
   };
   return (
-    <CardShell card={card} kicker={card.bad ? "a report failed" : "a report landed"} title={card.title} sub={`${ageText(card.when)} ago`} err={err}>
+    <CardShell card={card} kicker={card.bad ? "a report failed" : "a report landed"} title={card.title} sub={agoText(card.when)} err={err}>
       {card.bad && !full && <div className="tq-card-excerpt">The run failed — the cause is in the report.</div>}
       {full && card.mid && <FullText mid={card.mid} revision={card.presentation_revision} />}
       <div className="tq-card-actions">
@@ -390,7 +390,7 @@ export function AgentDoneCard({ card, onOpenTask, onDone, onSurface }) {
   }, [open, card.tid, card.presentation_revision]);
   const show = () => setOpen((o) => !o);
   return (
-    <CardShell card={card} kicker="an agent finished" title={card.title} sub={`${card.who || "agent"} · ${ageText(card.when)} ago`} err={err}>
+    <CardShell card={card} kicker="an agent finished" title={card.title} sub={`${card.who || "agent"} · ${agoText(card.when)}`} err={err}>
       {card.summary && !open && <div className="tq-card-excerpt">{card.summary}</div>}
       {open && <div className="tq-card-full">{report === null ? "…" : looksMd(report) ? <Md text={report} /> : report}</div>}
       <div className="tq-card-actions">
@@ -469,7 +469,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface })
   };
   return (
     <CardShell card={card} kicker={card.kind === "fyi" ? "fyi" : suggestedKind === "coding" ? "coding · nobody on it" : card.kind === "todo" ? "on your list" : "asked you"} title={card.title}
-      sub={`${card.who || "someone"} · ${ageText(card.when)} ago`} err={err}>
+      sub={`${card.who || "someone"} · ${agoText(card.when)}`} err={err}>
       {!full && card.preview && <div className="tq-card-excerpt">{card.preview}</div>}
       {full && card.mid && <CombinedTaskText card={card} />}
       <div className="tq-card-actions">

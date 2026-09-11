@@ -6,7 +6,7 @@ import { Badge, Box, Button, CircularProgress, IconButton, MenuItem, Popover, Se
 import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import { pollWhileVisible } from "./visible.js";
-import { holdLive } from "./live.js";
+import { holdLive, onLive } from "./live.js";
 import { ThemeProvider, CssBaseline } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
@@ -277,6 +277,9 @@ export default function TaskHubPage() {
     catch { /* badge is optional */ }
   }, []);
   useEffect(() => { refreshPending(); }, [refreshPending, tick]);
+  // The badge counts a queue the server changes on its own - a drafter finishing, a reply that
+  // landed. Counting only on mount and on the refresh icon left "Review · 2" over three drafts.
+  useEffect(() => onLive(["feed-changed", "task-changed"], refreshPending, { wait: 250, max: 1500 }), [refreshPending]);
 
   // A terminal belongs to the task it is working - there is no dock and no terminal tab.
   // Opening a task with start=true means "and put your CLI on it now".

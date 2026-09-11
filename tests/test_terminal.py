@@ -671,6 +671,10 @@ class TerminalTests(unittest.TestCase):
         # this test's prompt, and assert it fits, or the failure mode is invisible.
         saved = {n: server.store.get_doc(n) for n in ('agent', 'coder', 'soul')}   # AGENT.md rides in the seed too (PW-182)
         for n in saved: server.store.save_doc(n, '', 'test')
+        # Runtime now restores blank profile documents. This test isolates terminal input,
+        # so omit that block explicitly instead of relying on an empty persisted document.
+        rules_patch = mock.patch.object(terminal, 'rules_text', return_value='')
+        rules_patch.start(); self.addCleanup(rules_patch.stop)
         # ...and the wall, the owner's standing notes, the semantic layer, and the CONTEXT FILE
         # line below. Every one of them is real prompt content that grows with whatever other
         # tests left in the shared store, and this test measures the SEED - so it owns every

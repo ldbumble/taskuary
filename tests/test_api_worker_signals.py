@@ -67,3 +67,18 @@ class ApiWorkerSignals(unittest.TestCase):
         def brain(system, user, **kw): seen['system'] = system; return 'ok'
         with mock.patch.object(general.llm_mod, 'build_llm', return_value=brain): sess.send_prompt('hi')
         self.assertIn(selfclose.ASK_MARKER, seen['system'])
+
+    def test_a_turn_that_died_is_not_a_turn_still_working(self):
+        """A turn whose brain raised left `working` as the last word anybody had. The task wore
+        "Agent is working" for thirteen hours over a CLI that had exited in two seconds, and the
+        chat showed the question with no answer and no reason (TQ-0496, 2026-09-11)."""
+        with mock.patch.object(general, '_selected', return_value=('cli:codex', 'Codex', '')):
+            sess = general.GeneralSession(self.s, self.tid)
+        def boom(system, user, **kw): raise RuntimeError('codex exit 1: that model needs a newer Codex')
+        with mock.patch.object(general.llm_mod, 'build_llm', return_value=boom), \
+                self.assertRaises(RuntimeError):
+            sess.send_prompt('clock me in at nine')
+        evs = ws.events(self.s, self.tid, sess.sid)
+        self.assertEqual([e['Kind'] for e in evs], ['working', 'failed'])
+        self.assertEqual(ws.status(self.s, self.tid)['state'], 'failed')
+        self.assertIn('newer Codex', evs[-1]['Text'])       # the reason travels with the event

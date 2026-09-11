@@ -235,7 +235,8 @@ _SIGNED_OUT = re.compile(r'OAuth session expired|Failed to authenticate|not logg
 _LOGIN_HOW = {'claude': "run `claude` and type `/login`", 'copilot': "run `copilot` and type `/login`",
               'codex': "run `codex login`", 'cursor': "run `cursor-agent login`",
               'gemini': "run `gemini` once and finish Google's sign-in",
-              'muse': "run `muse` once and finish the browser sign-in at dev.meta.ai"}
+              'muse': "run `muse` once and finish the browser sign-in at dev.meta.ai",
+              'devin': "run `devin auth login` and finish the browser sign-in"}
 # Provider/plan exhaustion is different from an agent failing the work. Only this availability
 # class is safe to hand to another configured agent automatically: a compile error should remain
 # with the agent that owns it, while "session limit; resets at 11:50" should not strand the task.
@@ -298,6 +299,55 @@ def rate_limit_msg(name: str, info: dict) -> str:
              else ' Usage beyond the plan is turned off for this account, so it waits rather than costing more.')
     return (f'{name} has reached {allowance}, so it did not run.{at} Nothing is wrong with this '
             f'report or its setup - it will run normally once the allowance resets.{extra}')
+
+
+# A CLI's REASON is on stdout, with its events; stderr is where it says it is getting started.
+# Reading the reason off stderr made "codex exit 1: Reading prompt from stdin..." the whole
+# account of a run that had in fact been told, in JSON on stdout, that the model in
+# ~/.codex/config.toml needed a newer Codex. Thirteen hours of "Agent is working" over a two-second
+# failure nobody could see (the owner, TQ-0496, 2026-09-11).
+_NOISE = re.compile(r'^\s*reading prompt from stdin\.*\s*$', re.I)
+
+
+def _said(msg) -> str:
+    """The sentence inside an error envelope. A provider's 400 reaches the owner through two
+    layers of JSON-as-a-string, and what they need out of it is the one line in English."""
+    text = str(msg or '').strip()
+    for _ in range(3):                                # deep enough for provider-in-CLI-in-event
+        if not text.startswith('{'): break
+        try: j = json.loads(text)
+        except ValueError: break
+        if not isinstance(j, dict): break
+        inner = j.get('error') if isinstance(j.get('error'), dict) else {}
+        nxt = str(inner.get('message') or j.get('message') or '').strip()
+        if not nxt: break
+        text = nxt
+    return text
+
+
+def _event_error(line: str) -> str:
+    """The failure one event line reports, or '' - an ordinary event is not a fault."""
+    try: j = json.loads(line)
+    except ValueError: return ''
+    if not isinstance(j, dict): return ''
+    if j.get('type') in ('error', 'turn.failed'):
+        inner = j.get('error') if isinstance(j.get('error'), dict) else {}
+        return _said(inner.get('message') or j.get('message'))
+    item = j.get('item') if isinstance(j.get('item'), dict) else {}
+    return _said(item.get('message')) if item.get('type') == 'error' else ''
+
+
+def cli_failure(raw, err: str = '') -> str:
+    """Why the run failed: the CLI's own newest error event, else what it put on stderr.
+
+    The newest wins because an earlier one is usually a warning the run carried on past - codex
+    grumbles about unknown model metadata and then fails on the refusal that actually stopped it.
+    """
+    for line in reversed(list(raw or [])):
+        said = _event_error(str(line))
+        if said: return said
+    clean = '\n'.join(ln for ln in str(err or '').splitlines() if ln.strip() and not _NOISE.match(ln))
+    return clean.strip() or '\n'.join(list(raw or [])[-5:]) or 'no output'
 
 
 _DENIED = re.compile(r'access is denied|winerror 5|permission denied|operation not permitted', re.I)
@@ -403,6 +453,45 @@ def seed_profiles(cfg: dict) -> list:
     return added
 
 
+def profile_purpose(name: str, prof: dict, kind: str = 'coding') -> str:
+    return str(prof.get('purpose') or DEFAULT_PROFILES.get(name, {}).get('purpose')
+               or ('writes and changes code, in a repository' if kind == 'coding' else '')).strip()
+
+
+def profile_document(store, name: str, prof: dict = None) -> str:
+    """The job owns the instructions; changing its CLI does not create CODEX.md."""
+    row = store.get_agent(name) or {}
+    if prof is None:
+        try: prof = json.loads(row.get('Config') or '{}')
+        except ValueError: prof = {}
+    explicit = str(prof.get('rules_doc') or '').strip()
+    if explicit and re.fullmatch(r'[a-z0-9][a-z0-9_-]*', explicit): return explicit
+    kind = prof.get('kind') or DEFAULT_PROFILES.get(name, {}).get('kind') or row.get('Kind')
+    return 'coder' if kind == 'coding' else name
+
+
+def profile_template(store, name: str) -> str:
+    """A shipped role, or useful starter instructions for a new named worker."""
+    if not re.fullmatch(r'[a-z0-9][a-z0-9_-]*', name): return ''
+    folder = Path(__file__).parent / 'templates'
+    source = folder / f'{name}.md'
+    if source.is_file(): return source.read_text(encoding='utf-8')
+    row = store.get_agent(name)
+    if not row: return ''
+    try: prof = json.loads(row.get('Config') or '{}')
+    except ValueError: prof = {}
+    purpose = profile_purpose(name, prof, row.get('Kind') or 'coding') or 'Complete the task assigned by the owner.'
+    return (folder / 'profile.md').read_text(encoding='utf-8').replace('PROFILE_NAME', name.upper()).replace('PROFILE_PURPOSE', purpose)
+
+
+def ensure_profile_document(store, name: str) -> str:
+    doc = profile_document(store, name)
+    if not str(store.get_doc(doc) or '').strip():
+        starter = profile_template(store, doc)
+        if starter.strip(): store.save_doc(doc, starter, 'template')
+    return doc
+
+
 def roster(store) -> str:
     """The workers triage may choose between: one line each, name and purpose. Same shape as the
     playbook menu (playbooks.menu) because triage validates the answer against these very lines -
@@ -412,8 +501,8 @@ def roster(store) -> str:
         if not a.get('Active', 1): continue
         try: prof = json.loads(a.get('Config') or '{}')
         except ValueError: prof = {}
-        purpose = str(prof.get('purpose') or DEFAULT_PROFILES.get(a['Name'], {}).get('purpose')
-                      or ('writes and changes code, in a repository' if a.get('Kind') == 'coding' else '')).strip()
+        if prof.get('triage_enabled') is False: continue
+        purpose = profile_purpose(a['Name'], prof, a.get('Kind') or 'coding')
         if purpose: out.append(f"- {a['Name']}: {purpose}")
     return '\n'.join(out)
 
@@ -567,15 +656,19 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     err_t.join(5)      # the exit code can land before the stderr reader has appended - 'boom' read as 'no output' on a fast CI box
     if p.returncode != 0:
         if cancel is not None and cancel.is_set(): raise RuntimeError('cancelled')
-        why = f'timed out after {profile.get("timeout", 1200)}s' if timed.is_set() else \
-            ((err_buf[0] if err_buf else '') or '\n'.join(raw[-5:]) or 'no output')[:500]
-        limit = rate_limited(raw) or rate_limited(why)
+        err = ''.join(err_buf)
+        said = cli_failure(raw, err)
+        why = (f'timed out after {profile.get("timeout", 1200)}s' if timed.is_set() else said)[:500]
+        # the CLASSIFYING patterns read both streams: a sign-in refusal or a Windows launch
+        # refusal lands on stderr, while the reason the owner reads now comes off stdout
+        hay = f'{said}\n{err}'
+        limit = rate_limited(raw) or rate_limited(hay)
         if limit: raise RuntimeError(rate_limit_msg(name, limit))
-        if _SIGNED_OUT.search(why): raise RuntimeError(signed_out_msg(name, why, cmd[0] if cmd else ''))
+        if _SIGNED_OUT.search(hay): raise RuntimeError(signed_out_msg(name, said, cmd[0] if cmd else ''))
         # a refusal to START, not a failed run: the CLI produced no output of its own and the
         # only thing on stderr is the refusal
-        if _DENIED.search(why) and not raw: raise RuntimeError(denied_msg(name, cmd[0] if cmd else '', why))
-        if _NO_HOME.search(why): raise RuntimeError(no_home_msg(_cli_name(name) or name))
+        if _DENIED.search(hay) and not raw: raise RuntimeError(denied_msg(name, cmd[0] if cmd else '', said))
+        if _NO_HOME.search(hay): raise RuntimeError(no_home_msg(_cli_name(name) or name))
         raise RuntimeError(f'{name} exit {p.returncode}: {why}')
     if final is not None: out, sid = str(final.get('result') or '').strip(), final.get('session_id')
     elif streamed_out: out, sid = streamed_out, streamed_sid

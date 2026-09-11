@@ -80,9 +80,15 @@ export const messagesWithTrace = (messages, session, keepStart = true) => {
     out.push({ id: `live-${session.sid}-${session.trace_revision || 0}`, role: "assistant", content: parts });
     return out;
   }
-  for (let i = out.length - 1; i >= 0; i -= 1) {
-    if (out[i].role === "assistant") { out[i].content = [...parts, ...out[i].content]; break; }
-  }
+  // The trail belongs to the NEWEST turn. When that turn filed an answer the trail is its
+  // working, and rides above it as it always has. When it died it filed nothing - and the trail
+  // was folded backwards into some older answer, or, on a first question, into nothing at all:
+  // the chat showed the question, no reply, and no reason, over a task still chipped "agent
+  // working" (TQ-0496 - codex exited 1 refusing the model it was configured with). A turn's
+  // last word is its record when there is no other.
+  const tail = out[out.length - 1];
+  if (tail?.role === "assistant") tail.content = [...parts, ...tail.content];
+  else out.push({ id: `trace-${session.sid}-${session.trace_revision || 0}`, role: "assistant", content: parts });
   return out;
 };
 

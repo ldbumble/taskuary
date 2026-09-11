@@ -27,7 +27,7 @@ the rest of the day:
   3. the registry (Windows) or the shell rc file (posix), so a terminal opened tomorrow has it.
 Only (3) is what people mean by "on PATH", and it is the one that helps least today.
 """
-import os, platform, shutil, threading, time
+import os, platform, shutil, subprocess, threading, time
 from pathlib import Path
 
 from loguru import logger
@@ -61,11 +61,24 @@ RECIPES = {
     # plan() then returns [] on Windows and the row draws no Install button over a road that
     # hard-fails. A Windows owner reaches Muse Spark through the `meta` connector instead.
     'muse': [{'how': 'script', 'os': 'posix', 'cmd': ['bash', '-lc', 'curl -fsSL https://dev.meta.ai/install.sh | bash']}],
+    # devin publishes a script per OS and nothing else - no npm package, and its releases are
+    # laid out by the installer's own versioned scheme rather than as triple-named archives, so
+    # `binary` is not a road. Both scripts END BY RUNNING `devin setup`, the CLI's interactive
+    # wizard, which has no terminal to run in when it is spawned from here: the short timeout is
+    # how long we wait for a wizard that may never return, and install() treats a timeout with a
+    # binary on disk as the success it is.
+    'devin': [
+        {'how': 'script', 'os': 'nt', 'timeout': 300,
+         'cmd': ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+                 '-Command', 'irm https://static.devin.ai/cli/setup.ps1 | iex']},
+        {'how': 'script', 'os': 'posix', 'timeout': 300,
+         'cmd': ['bash', '-lc', 'curl -fsSL https://cli.devin.ai/install.sh | bash']},
+    ],
 }
 
 # what to look for once an installer says it is done - the bin name, not the profile's nickname
 BINARY = {'claude': 'claude', 'codex': 'codex', 'gemini': 'gemini', 'copilot': 'copilot', 'cursor': 'cursor-agent',
-          'muse': 'muse'}
+          'muse': 'muse', 'devin': 'devin'}
 CMD2NAME = {v: k for k, v in BINARY.items()}       # cursor-agent -> cursor: the bin is not the recipe
 
 
@@ -81,13 +94,75 @@ def recipe_for(cmd: str) -> str:
     return base if base in RECIPES else CMD2NAME.get(base, '')
 
 
-_STATE = {'phase': 'idle', 'name': '', 'detail': '', 'path': '', 'at': 0.0}   # idle|installing|done|failed
+# UPDATING IS NOT INSTALLING AGAIN. A CLI that ships its own updater is the one thing that knows
+# where it put itself - codex keeps its releases under ~/.codex/packages/standalone/<version>
+# behind a junction, and an `npm -g` over that leaves a second copy with the old one still first
+# on PATH. So the vendor's updater first, the package manager only as the fallback.
+#
+# The button exists because a CLI too old for its own configured model fails every single run and
+# says so only in the JSON it writes to stdout: codex 0.148.0 answering "The 'gpt-6-astra' model
+# requires a newer version of Codex" to everything Taskuary asked it (the owner, 2026-09-11).
+# A closed table, for the same reason RECIPES is one: this runs a program on the owner's machine.
+UPDATES = {
+    'claude': [{'how': 'self', 'args': ['update']}, {'how': 'npm', 'pkg': '@anthropic-ai/claude-code@latest'}],
+    'codex': [{'how': 'self', 'args': ['update']}, {'how': 'npm', 'pkg': '@openai/codex@latest'}],
+    'gemini': [{'how': 'npm', 'pkg': '@google/gemini-cli@latest'}],
+    'copilot': [{'how': 'npm', 'pkg': '@github/copilot@latest'}],
+}
+
+_STATE = {'phase': 'idle', 'name': '', 'verb': 'install', 'detail': '', 'path': '', 'at': 0.0}   # idle|installing|done|failed
 _LOCK = threading.Lock()
 
 
 def state() -> dict: return dict(_STATE)
-def reset() -> None: _STATE.update(phase='idle', name='', detail='', path='', at=0.0)
-def _set(phase, name='', detail='', path=''): _STATE.update(phase=phase, name=name, detail=str(detail)[-400:], path=path, at=time.time())
+def reset() -> None: _STATE.update(phase='idle', name='', verb='install', detail='', path='', at=0.0)
+def _set(phase, name='', detail='', path='', verb='install'):
+    _STATE.update(phase=phase, name=name, verb=verb, detail=str(detail)[-400:], path=path, at=time.time())
+
+
+def update_plan(name: str, has_npm: bool = None) -> list:
+    """The update roads that could run here, best first. Pure, like `plan` - `updatable` in the UI
+    is `bool(update_plan(...))`, so a button is never drawn over a road that does not exist."""
+    have_npm = bool(npm()) if has_npm is None else has_npm
+    return [r for r in UPDATES.get(name, ()) if r['how'] != 'npm' or have_npm]
+
+
+def update(name: str) -> dict:
+    """Bring an already-installed CLI up to date. Synchronous - `start_update` is the API's."""
+    roads = update_plan(name)
+    if not roads:
+        _set('failed', name, f'Taskuary has no updater for {name} - reinstall it the way you installed it', verb='update')
+        return state()
+    # An update is not an install: with nothing here there is nothing to bring up to date, and
+    # running a package manager would quietly become an install the owner did not press.
+    exe = find(name)
+    if not exe:
+        _set('failed', name, f'{name} is not on this machine - install it first', verb='update')
+        return state()
+    _set('installing', name, f'updating {name}…', verb='update')
+    last = ''
+    for r in roads:
+        try:
+            cmd = [exe] + list(r['args']) if r['how'] == 'self' else [npm() or 'npm', 'install', '-g', r['pkg']]
+            rc, out = _run(cmd, timeout=r.get('timeout', 900))
+        except Exception as e:
+            last = str(e); logger.warning(f'{name}: {r["how"]} update raised - {e}'); continue
+        if rc != 0:
+            last = out or f'{r["how"]} exited {rc}'; logger.warning(f'{name}: {r["how"]} update failed - {last[-200:]}'); continue
+        _set('done', name, out.strip()[-400:] or f'{name} is up to date', find(name) or exe, verb='update')
+        logger.info(f'updated {name}')
+        return state()
+    _set('failed', name, f'could not update {name}: {last}', verb='update')
+    return state()
+
+
+def start_update(name: str, **kw) -> dict:
+    """Update in the background, for the same reason `start` installs in one."""
+    with _LOCK:
+        if _STATE['phase'] == 'installing': return state()
+        _set('installing', name, f'updating {name}…', verb='update')
+    threading.Thread(target=update, args=(name,), kwargs=kw, daemon=True, name=f'update-{name}').start()
+    return state()
 
 
 def npm() -> str:
@@ -144,7 +219,11 @@ def find(name: str) -> str:
     if found: return found
     home = Path.home()
     roots = [bin_dir(), home / '.local' / 'bin', home / 'bin']
-    if WINDOWS: roots += [Path(os.getenv('APPDATA', '')) / 'npm', home / '.local' / 'bin']
+    # devin's own scheme: %LOCALAPPDATA%\devin\cli\bin on Windows, which its installer puts on the
+    # USER path - a path this long-running process will not see until it is restarted, so looking
+    # there is the difference between "installed" and "the installer said yes and left nothing"
+    if WINDOWS: roots += [Path(os.getenv('APPDATA', '')) / 'npm', home / '.local' / 'bin',
+                          Path(os.getenv('LOCALAPPDATA', '')) / 'devin' / 'cli' / 'bin']
     else: roots += [Path('/usr/local/bin'), Path('/opt/homebrew/bin')]
     for d in roots:
         for ext in ('.exe', '.cmd', '.bat', '') if WINDOWS else ('',):
@@ -259,11 +338,17 @@ def install(name: str, has_npm: bool = None, system: str = None) -> dict:
                 _binary(name, r)
             else:
                 cmd = list(r['cmd']) if r['how'] == 'script' else [npm() or 'npm', 'install', '-g', r['pkg']]
-                rc, out = _run(cmd)
+                rc, out = _run(cmd, timeout=r.get('timeout', 900))
                 if rc != 0: last = out or f'{r["how"]} exited {rc}'; logger.warning(f'{name}: {r["how"]} failed - {last[-200:]}'); continue
                 last = out
         except Exception as e:
-            last = str(e); logger.warning(f'{name}: {r["how"]} raised - {e}'); continue
+            last = str(e); logger.warning(f'{name}: {r["how"]} raised - {e}')
+            # A TIMEOUT IS NOT PROOF OF FAILURE. An installer that ends by starting the CLI's own
+            # interactive wizard (devin's does) never returns when it is spawned with no terminal
+            # - while the binary it wrote a second earlier is installed and runnable. Only a
+            # timeout gets this second look: any other exception left the install where it fell.
+            if not (isinstance(e, subprocess.TimeoutExpired) and find(name)): continue
+            last = 'the installer finished but its setup wizard needed a terminal'
         # rc 0 proves the installer ran, not that anything is runnable: only a binary does that
         found = find(name)
         if found:

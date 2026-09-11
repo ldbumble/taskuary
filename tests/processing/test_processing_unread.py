@@ -300,6 +300,35 @@ def test_a_task_closed_before_this_shipped_also_leaves_unread(store):
     assert [i for i in later['items'] if i['tid'] == tid], 'a reply after the close is unread again'
 
 
+def test_our_own_reply_filed_after_the_close_does_not_reopen_the_row(store):
+    """The reply IS usually what closed the task, and it is filed a second later - so counting it as
+    "mail that arrived after the close" put every task closed by answering it straight back into the
+    work tab, and left it there for ever.
+
+    The owner, 2026-09-11: "why are closed tasks showing up in work??" - TQ-0491 closed 18:18:07 with
+    its own sent reply stamped 18:18:08, and TQ-0404, closed four days earlier, the same way.
+    """
+    tid = store.create_task({'Title': 'central', 'Kind': 'coding', 'Status': 'open'}, 'fixture')
+    mid = add(store, 'RE: central', tid=tid, status='routed')
+    both(store)
+    store.update_task(tid, {'Status': 'done'}, 'owner')
+    closed_at = store.get_task(tid)['ClosedAt']
+    a_second_later = (datetime.fromisoformat(str(closed_at)[:19]) + timedelta(seconds=1)).isoformat(' ')
+    # every shape the owner's own line arrives in: read back out of Sent (`context`), and one
+    # Taskuary sent itself (`Direction: out`) - ingest.is_ours knows all three
+    store.add_message({'ExternalId': 'own-reply', 'ConversationId': 'RE: central', 'TaskId': tid,
+                       'Channel': 'email', 'SourceName': 'fixture@example.test', 'FromName': 'You',
+                       'Subject': 'RE: central', 'BodyText': 'sent it', 'Status': 'context',
+                       'Direction': 'out', 'SentAt': a_second_later})
+    _, after = both(store)
+    assert [i for i in after['items'] if i['tid'] == tid] == [], 'our own reply is not new mail'
+    # ...and a real reply from THEM after the close is still new work
+    add(store, 'They wrote back', tid=tid, status='routed',
+        sent=(datetime.now() + timedelta(minutes=1)).isoformat(' '))
+    _, later = both(store)
+    assert [i for i in later['items'] if i['tid'] == tid], 'a reply from them reopens it'
+
+
 def test_grouped_root_identity_survives_review_and_new_member_activity(store):
     tid = store.create_task({'Title': 'Shared task', 'Kind': 'general', 'Status': 'open'}, 'test')
     mid = add(store, 'Original request', tid=tid, status='routed')

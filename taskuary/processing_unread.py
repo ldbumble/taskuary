@@ -27,9 +27,20 @@ def query_for(store, only=None, *, history=True):
 
 
 def _arrived_after_close(task, view) -> bool:
+    """Did THEY write after the task was closed? Closing ends the work, it does not deafen the
+    thread - so a real reply afterwards is new work and comes back.
+
+    Our OWN line is not that, and it is the common case: the reply is usually the very thing that
+    closed the task, filed a second after it. Counting it put every task closed by answering it
+    straight back into the work tab and left it there - TQ-0491 closed 18:18:07 with its own sent
+    reply stamped 18:18:08, and TQ-0404, four days closed, the same way (the owner, 2026-09-11:
+    "why are closed tasks showing up in work??").
+    """
+    from .ingest import is_ours
     at = processing_all._stamp(task.get('ClosedAt'))
     if not at: return False
-    return any((processing_all._stamp(m.get('SentAt')) or at) > at for m in view.get('messages') or [])
+    return any((processing_all._stamp(m.get('SentAt')) or at) > at
+               for m in view.get('messages') or [] if not is_ours(m))
 
 
 def card_for(store, item, compact, live_state, now, states=None):

@@ -24,7 +24,7 @@ import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, SideRail, ConfirmDelete, Confirm } from "./ui.jsx";
 import { CAN_NOTIFY } from "./notify.js";
 import { hasLogo } from "./logos.jsx";
-import { AgentsPage } from "./AgentsPanel.jsx";
+import { CliConnectionsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
 import { plannedFor } from "./connectorCatalog.js";
 import { pollSecondsField } from "./pollFields.js";
@@ -1045,7 +1045,7 @@ export default function ConnectorsView() {
 
   if (!connectors) return <CircularProgress size={22} sx={{ m: 4 }} />;
 
-  if (open?.kind === "agents") return <AgentsPage section="Connections" title="AI CLI agents" onBack={() => setOpen(null)} />;
+  if (open?.kind === "agents") return <CliConnectionsPage onBack={() => setOpen(null)} />;
   if (open?.kind === "voice-vocabulary") return <VoiceVocabulary onBack={() => setOpen(null)} />;
   if (open?.kind === "connector") {
     const conn = connectors.find((c) => c.ConnectorId === open.id);

@@ -947,7 +947,8 @@ def rules_text(store, chars: int = DOC_CHARS, profile: str = 'coder') -> str:
     The doc says it is 'stacked on top of SOUL.md for every coder run' - it never was: these docs live
     in Taskuary's own database, nowhere the agent can read, so the rules only reach a session if the
     prompt carries them."""
-    doc = str(store.doc(profile) or '')
+    from .agents import ensure_profile_document
+    doc = str(store.doc(ensure_profile_document(store, profile)) or '')
     keep = [l.strip(' #*-').strip() if l.lstrip().startswith('#') else l.strip()
             for l in doc.splitlines() if l.strip()]
     return ' '.join(' '.join(keep).split())[:chars]
@@ -1106,7 +1107,9 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # to CODER.md here would be the bug, not a safety net.
     prof = profile_of(t)
     rules = rules_text(store, profile=prof)
-    if rules: parts.append(f"{'CODING RULES' if prof == 'coder' else 'RULES'} ({prof.upper()}.md): {no_emails(rules)}")
+    from .agents import profile_document
+    rules_doc = profile_document(store, prof)
+    if rules: parts.append(f"{'CODING RULES' if rules_doc == 'coder' else 'RULES'} ({rules_doc.upper()}.md): {no_emails(rules)}")
     # the playbook for THIS kind of job (playbooks.py): triage tagged the task with it, and it is the
     # operative rule set here - CODER.md's "work only in the repository" is the wrong first rule for a
     # bill, so the playbook says so out loud; the closing-out and wall rules still stand

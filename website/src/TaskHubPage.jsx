@@ -183,7 +183,7 @@ export default function TaskHubPage() {
     if (/^#(?:task=\d+|new-task)/.test(hash)) return "Tasks";
     if (/^#report=/.test(hash)) return "Reports";
     if (/^#connector=/.test(hash)) return "Connections";
-    if (/^#playbook=/.test(hash)) return "Docs";
+    if (/^#(?:playbook=|profiles(?:$|=))/.test(hash)) return "Docs";
     return "Assistant";
   });
   const demo = useDemo();          // the badge, and what the header hides to make room for it
@@ -291,7 +291,7 @@ export default function TaskHubPage() {
       // a card's "open on the Timeline": the rail on the Assistant tab reads the same hash and pins the row
       if (/^#msg=\d+/.test(window.location.hash || "")) go("Assistant");
       // a connector card's playbook link: the words live on the Docs tab (DocsView reads the hash itself)
-      if (/playbook=/.test(window.location.hash || "")) go("Docs");
+      if (/^#(?:playbook=|profiles(?:$|=))/.test(window.location.hash || "")) go("Docs");
     };
     fromHash(); window.addEventListener("hashchange", fromHash);
     return () => window.removeEventListener("hashchange", fromHash);

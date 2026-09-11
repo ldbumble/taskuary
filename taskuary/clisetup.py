@@ -33,13 +33,17 @@ KIND = aisetup.KIND                   # a set-up is a setup task, and Done alrea
 finish = aisetup.finish               # ...so its ending is aisetup's, unchanged
 
 # The CLIs whose first run Taskuary will open. Closed, and keyed by RECIPE name (cursor, not
-# cursor-agent) so this, cliinstall.RECIPES and clis.detect's `install` field all agree. aider is
-# not here: it takes an API key in a config file and has no interactive setup to walk.
+# cursor-agent) so this, cliinstall.RECIPES and clis.detect's `install` field all agree. A CLI
+# that only takes an API key out of a config file has no first run to open, and does not belong
+# on this tab at all - a key is the connectors' door, not this one (aider, removed 2026-09-11).
 # muse belongs here for the usual reason: its first run opens a browser sign-in against a Meta
 # developer account and mints the CLI's own key, and that is exactly the conversation this pane
 # exists to let the owner have. argv() still refuses it when the binary is absent, which on
 # Windows it always will be.
-SETUP = frozenset({'claude', 'codex', 'gemini', 'copilot', 'cursor', 'muse'})
+# devin belongs here twice over: its installer already tried to run `devin setup` and could not
+# (no terminal), and its sign-in is a browser round trip that falls back to pasting a token back
+# into the CLI - a conversation that needs the pane, not a spawn nobody can see.
+SETUP = frozenset({'claude', 'codex', 'gemini', 'copilot', 'cursor', 'muse', 'devin'})
 
 
 def tag(name: str) -> str: return f'cli:{name}'

@@ -18,7 +18,6 @@ import TuneIcon from "@mui/icons-material/Tune";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
 import PsychologyIcon from "@mui/icons-material/Psychology";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
-import { AgentsPage } from "./AgentsPanel.jsx";
 import AiDefaults from "./AiDefaults.jsx";
 import AboutYou from "./AboutYou.jsx";
 import UpdateCard from "./UpdateCard.jsx";
@@ -50,7 +49,7 @@ const KNOB_META = {
     help: "The heart of the funnel. Every inbound message is read (by the triage brain below, guided by SOUL.md) and classified: task = something must be done, so an agent can be dispatched; reply_only = answering IS the work, so a reply is drafted for your approval; fyi = informational, filed with no task and no draft.\n\nOff: every message becomes a task, which turns newsletters into work items. Leave this on unless you are debugging triage itself." },
   triage_ai: { group: "Triage & agents", label: "Triage brain", type: "brain",
     desc: "Which AI reads and classifies inbound messages.",
-    help: "TWO BRAINS: a small, fast cloud model (Anthropic / OpenAI / Azure OpenAI) classifies each message in under a second for a fraction of a cent, while your CLI agent — the expensive, capable one — is saved for actually working tasks.\n\nONE BRAIN, TWO GEARS also works well: pick a CLI agent here and set its 'light model' (Connections → AI CLI agents → Edit) — triage, drafts, summaries and the digest then run on the cheap fast tier (haiku, gemini-flash…) while coding sessions keep the agent's main model. No second API key, one bill.\n\nauto = the first active AI connector holding a key. Obvious automated noise is filtered by cheap heuristics before any AI is called either way." },
+    help: "TWO BRAINS: a small, fast cloud model (Anthropic / OpenAI / Azure OpenAI) classifies each message in under a second for a fraction of a cent, while your CLI agent — the expensive, capable one — is saved for actually working tasks.\n\nONE BRAIN, TWO GEARS also works well: pick a CLI agent here and set its 'light model' (Docs → Profiles → Manage profiles → Edit) — triage, drafts, summaries and the digest then run on the cheap fast tier (haiku, gemini-flash…) while coding sessions keep the agent's main model. No second API key, one bill.\n\nauto = the first active AI connector holding a key. Obvious automated noise is filtered by cheap heuristics before any AI is called either way." },
   triage_backup_ai: { group: "Triage & agents", label: "Backup brains", type: "brains",
     desc: "Ordered alternatives for triage, reply drafts, summaries, reports, and assistant chat when the chosen AI is unavailable.",
     help: "Pick more than one. Taskuary tries them in the order shown when the primary brain hits a session or usage limit, is signed out, has no key, or otherwise refuses the call. A fallback uses its own default model; a model name chosen for Claude is never handed to Codex.\n\nThis starts blank because crossing from a cloud API to a local CLI can change cost and privacy. Once you name backups, the same chain protects every short/background AI job as well as the non-coding assistant." },
@@ -91,7 +90,7 @@ const KNOB_META = {
   // ── Assistant: the voice on the Timeline (assistant.py) ──
   concierge_ai: { group: "Triage & agents", label: "Assistant tab brain", type: "brain",
     desc: "Which AI speaks on the Assistant tab and walks you through the pipe. auto = your default coding agent's CLI on its quick gear.",
-    help: "THREE DEFAULTS, one place each: the triage brain (Triage & routing), the default coding agent (Coder agent), and this one.\n\nA CLI agent here can ACT - read a task or message, rerun a report, run a data tool - because it has a shell; it runs in its own scratch folder on a light model (Claude: haiku, Codex: low effort, Gemini: flash, or the agent's own 'light model' from Connections → AI CLI agents) and picks its conversation back up turn to turn, so only the first turn pays the start-up. An API connector answers faster but can only talk. Sending, approving and pushing are your buttons whichever speaks." },
+    help: "THREE DEFAULTS, one place each: the triage brain (Triage & routing), the default coding agent (Coder agent), and this one.\n\nA CLI agent here can ACT - read a task or message, rerun a report, run a data tool - because it has a shell; it runs in its own scratch folder on a light model (Claude: haiku, Codex: low effort, Gemini: flash, or the agent's own 'light model' from Docs → Profiles) and picks its conversation back up turn to turn, so only the first turn pays the start-up. An API connector answers faster but can only talk. Sending, approving and pushing are your buttons whichever speaks." },
   concierge_model: { group: "Triage & agents", label: "Assistant tab model", type: "text",
     desc: "Override the quick gear for the brain above (e.g. sonnet, gpt-5.4-mini@low). Blank = the default.",
     help: "For a CLI this is its --model (Codex takes model@effort); for an API connector, its model or deployment name. Changing it starts a fresh CLI conversation." },
@@ -114,7 +113,7 @@ const KNOB_META = {
   // ── Coder agent: who works the tasks, and how eagerly ──
   default_agent: { group: "Triage & agents", label: "Default agent", type: "agent",
     desc: "The CLI agent that works tasks when nothing names one.",
-    help: "Start session, Send to coding agent and auto-dispatch all use this agent unless you pick another in the moment; every agent picker lists it first. The roster itself lives under Connections → AI CLI agents, where the default row wears the star.\n\nGitHub-specific permissions (may agents open issues? push?) are on the GitHub connector card, because they are decisions about how your team uses GitHub, not about Taskuary." },
+    help: "Start session, Send to coding agent and auto-dispatch all use this agent unless you pick another in the moment; every agent picker lists it first. The roster itself lives under Docs → Profiles → Manage profiles, where the default row wears the star.\n\nGitHub-specific permissions (may agents open issues? push?) are on the GitHub connector card, because they are decisions about how your team uses GitHub, not about Taskuary." },
   backup_agents: { group: "Triage & agents", label: "Backup coding agents", type: "agents",
     desc: "If the first CLI is out of sessions, signed out, unavailable, or cannot start, continue the same task with another configured agent.",
     help: "Automatic (the default) tries every other configured CLI in roster order. Or select one or more explicit backups to control the chain. The task, incoming messages, attachments, repository, and seed prompt all travel to the replacement.\n\nA normal agent error does not silently switch authors halfway through work. Failover is for availability failures: session/usage/rate limits, quota or capacity, expired login, a missing executable, or a CLI that cannot start." },
@@ -603,7 +602,7 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
   if (page === "updates") return <UpdateCard />;
 
   if (page === "agents") {
-    return <AgentsPage onBack={() => setPage(null)} />;
+    return <Button onClick={() => { window.location.hash = "profiles"; }}>Manage profiles in Docs</Button>;
   }
 
   if (page === "audit") {

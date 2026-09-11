@@ -14,6 +14,7 @@ import AddIcon from "@mui/icons-material/Add";
 import api from "./api";
 import { Md } from "./md.jsx";
 import LearnedView from "./LearnedView.jsx";
+import { AgentsPage } from "./AgentsPanel.jsx";
 import SoulInterview from "./SoulInterview.jsx";
 import { FAINT, INK, mono } from "./theme.jsx";
 import { TaskuaryMark } from "./ui.jsx";
@@ -69,7 +70,7 @@ const isPb = (n) => n.startsWith("pb:");
 // one row, so editing it here or under Operator documents is the same edit.
 const isProf = (n) => n.startsWith("prof:");
 const profName = (n) => n.slice(5);
-const PROF_BLURB = "The rules every session of THIS worker is seeded with, stacked on top of AGENT.md. What it may do alone, what it must ask about first, what a finished piece of its work looks like. Triage picks the worker; this document is who that worker is. Blank it entirely and the shipped default comes back.";
+const PROF_BLURB = "Instructions for the workers listed under this profile, added to AGENT.md for each task. Define how they work and what they deliver. Workers using different CLIs can share these instructions. Blank the document to restore its starter version.";
 const pbSlug = (n) => n.slice(3);
 const PB_BLURB = "How THIS company does one kind of job, for the agent that will do it: when it starts, which connections it uses, the steps, what it may do alone, what to ask first, and what counts as done. Triage matches new messages against `when`; the connector cards list the playbooks that name them.";
 
@@ -125,6 +126,8 @@ const OwnerCard = () => {
 };
 
 export default function DocsView() {
+  const [manageProfiles, setManageProfiles] = useState(false);
+  const [createProfile, setCreateProfile] = useState(false);
   const [docName, setDocName] = useState(NAMES[0]);
   const [section, setSection] = useState("documents");
   const [docs, setDocs] = useState(Object.fromEntries(NAMES.map((n) => [n, ""])));
@@ -176,11 +179,19 @@ export default function DocsView() {
     try {
       const { data } = await api.get("/api/agents");
       // the STORE rows, not config.toml's table: those are the workers triage is actually offered
-      setProfs((data.data || []).map((r) => {
+      const grouped = new Map();
+      for (const r of data.data || []) {
         let prof = {};
         try { prof = JSON.parse(r.Config || "{}"); } catch { /* an unreadable row still gets its document */ }
-        return { name: r.Name, purpose: prof.purpose || "" };
-      }));
+        const kind = prof.kind || r.Kind || "coding";
+        const name = r.rules_doc || prof.rules_doc || (kind === "coding" ? "coder" : r.Name);
+        if (!grouped.has(name)) grouped.set(name, { name, purpose: r.purpose || prof.purpose ||
+          (kind === "coding" ? "Write, review and test code in a repository." : ""), members: [] });
+        grouped.get(name).members.push(r.Name);
+      }
+      const profiles = [...grouped.values()];
+      setProfs(profiles);
+      return profiles;
     } catch { /* an older server: the shelf simply stays empty */ }
   }, []);
   useEffect(() => { loadProfs(); }, [loadProfs]);
@@ -194,6 +205,17 @@ export default function DocsView() {
       setDocs((d) => ({ ...d, [key]: data.content || "" })); setSaved((d) => ({ ...d, [key]: data.content || "" }));
     } catch (e) { setErr(e?.response?.data?.detail || `could not open ${name}`); }
   }, []);
+
+  useEffect(() => {
+    const fromHash = () => {
+      if (window.location.hash !== "#profiles") return;
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      setManageProfiles(false);
+      openProf(profs[0]?.name || "coder");
+    };
+    fromHash(); window.addEventListener("hashchange", fromHash);
+    return () => window.removeEventListener("hashchange", fromHash);
+  }, [openProf, profs]);
 
   // open a playbook: its text is fetched on first open, not with the shelf (the shelf is titles)
   const openPb = useCallback(async (slug, seedUses = "") => {
@@ -278,6 +300,12 @@ export default function DocsView() {
     ? { label: docName === "pb:new" ? "New playbook" : `${pbSlug(docName)}.md`, blurb: PB_BLURB }
     : DOCS[docName];
 
+  if (manageProfiles) return <AgentsPage initialCreate={createProfile} onCreated={async (name, rulesDoc) => {
+    await loadProfs(); setManageProfiles(false); await openProf(rulesDoc || name);
+  }} onBack={async () => {
+    await loadProfs(); setManageProfiles(false);
+  }} />;
+
   if (!loaded && !err) return <CircularProgress size={22} sx={{ m: 4 }} />;
 
   // Operator documents and playbooks share an editor, not a shelf. The fixed operator set stays
@@ -312,12 +340,16 @@ export default function DocsView() {
         {section === "profiles" ? (
           <>
             <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16, mb: 0.5 }}>Profiles</Typography>
+            <Box sx={{ display: "flex", gap: 0.5, mb: 1 }}>
+              <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => { setCreateProfile(true); setManageProfiles(true); }}>Add profile</Button>
+              <Button size="small" onClick={() => { setCreateProfile(false); setManageProfiles(true); }}>Manage profiles</Button>
+            </Box>
             <Typography sx={{ fontSize: 11.5, color: FAINT, mb: 1.5 }}>
               The workers. Triage picks one per task and its session is seeded with that worker’s rules.
-              Add, remove or re-point a worker’s CLI on the Agents page.
+              Edit its instructions here, or manage its name and CLI settings above.
             </Typography>
             <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", pr: 0.5, mr: -0.5 }}>
-            {!profs.length && <Typography sx={{ fontSize: 12, color: FAINT }}>No agents yet — add one on the Agents page.</Typography>}
+            {!profs.length && <Typography sx={{ fontSize: 12, color: FAINT }}>No profiles yet — use Manage profiles to add one.</Typography>}
             {profs.map((pr) => (
               <Box key={pr.name} onClick={() => openProf(pr.name)}
                 sx={{ p: 1.4, mb: 0.75, borderRadius: 2, cursor: "pointer",
@@ -336,6 +368,7 @@ export default function DocsView() {
                   )}
                 </Box>
                 <Typography sx={{ fontSize: 11.5, color: FAINT, pt: 0.5 }}>{pr.purpose || "no purpose set — triage cannot tell when to pick it"}</Typography>
+                <Typography sx={{ fontSize: 11, color: FAINT, pt: 0.5 }}>Used by {pr.members.join(", ")}</Typography>
               </Box>
             ))}
             </Box>

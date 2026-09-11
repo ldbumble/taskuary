@@ -39,7 +39,13 @@ DAYS = 14                # the fallback event window when no reflection has ever
 HYP_START, HYP_END = '<!-- hypotheses:start -->', '<!-- hypotheses:end -->'
 PROP_START, PROP_END = '<!-- proposed:start -->', '<!-- proposed:end -->'
 VERD_START, VERD_END = '<!-- verdicts:start -->', '<!-- verdicts:end -->'
-_GATED = re.compile(r'\n## [^\n]*\n+<!-- (hypotheses|proposed|verdicts):start -->.*?<!-- \1:end -->\n?', re.S)
+# A gated section is its heading, whatever prose introduces it, and the marked block - and the
+# prose is the part this used to miss. The pattern wanted the marker directly under the heading,
+# but the shipped document explains each section first ("every verdict you give, dated, with the
+# sender and subject..."), so the heading and its explainer rode into every triage prompt while
+# the content underneath was correctly stripped: a section header describing what was not sent.
+_GATED = re.compile(r'\n## [^\n]*\n(?:(?!##)[^\n]*\n)*?<!-- (hypotheses|proposed|verdicts):start -->'
+                    r'.*?<!-- \1:end -->\n?', re.S)
 VERD_HEADER = '## Verdicts - the evidence'
 VERD_KEEP = 60           # the most recent verdict lines the doc shows; the table keeps them all
 
@@ -128,7 +134,20 @@ def injectable(text: str) -> str:
         if a in out and b in out:
             head, rest = out.split(a, 1)
             out = head + rest.split(b, 1)[1]
-    return out.strip()
+    return _without_preamble(out).strip()
+
+
+# The italic paragraph under the title explains the FILE to whoever opens it - what the [s:N] tag
+# means, that SOUL.md outranks it, that their own lines are never touched. None of that is a thing
+# triage should know, and it is 900 characters of a 1500-character budget: the document grew its
+# explanation, and the learned rules were what got cut to make room (this install went from two
+# rules reaching triage to one). The reader's half of the document stops at the first heading.
+_PREAMBLE = re.compile(r'\A(#[^\n]*\n+)_.*?_\s*\n+(?=#)', re.S)
+
+
+def _without_preamble(doc: str) -> str:
+    """The doc minus the italic note addressed to its human reader; the title is kept."""
+    return _PREAMBLE.sub(r'\1', doc or '')
 
 
 def render_verdicts(store) -> str:

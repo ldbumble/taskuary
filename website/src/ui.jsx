@@ -955,13 +955,18 @@ const LC = {
   neutral: { bg: "#f4f1ec", fg: "#55697a", bd: "#d8cfbe" },
   working: { bg: "#e3e6e1", fg: "#526b55", bd: "#cbd5c9" },
   you: { bg: "#f3e7e9", fg: "#8a3646", bd: "#dfc7cc" },
+  // theme.jsx has always called ALERT "the needs-you pill" and this wore the tint instead - the
+  // same weight as four calmer phases, so the one state where work has STOPPED until the owner
+  // answers read like the rest (the owner, 2026-09-11: "make the needs you a little redder").
+  needsYou: { bg: ALERT, fg: "#fffdfb", bd: ALERT },
   done: { bg: "#dfeade", fg: "#47654a", bd: "#c8d9c7" },
   reply: { bg: "#f1ead9", fg: "#765f38", bd: "#ded0ad" },
 };
 
 const lifecycleColor = (kind, phase) => {
   const value = String(phase || "");
-  if (value === "needs you" || value === "draft ready" || value === "approval needed" || value === "ready") return LC.you;
+  if (value === "needs you") return LC.needsYou;          // an agent blocked on you, and only that
+  if (value === "draft ready" || value === "approval needed" || value === "ready") return LC.you;
   if (value === "working" || value === "in progress") return LC.working;
   if (value === "done" || value === "sent" || value === "result ready") return LC.done;
   if (kind === "reply") return LC.reply;

@@ -63,7 +63,11 @@ export const pileBandTops = (rail, railTop) => {
 // "fyi" where unread said "a check failed")
 const LaneTag = ({ lane }) => {
   const m = laneMeta(lane), c = m.role ? ROLES[m.role] : null;
-  return <span className="tq-pile-tag" title={m.hint} style={{ color: c ? c.ink : "#6f6960", background: c ? c.tint : "#eee9e1", borderColor: c ? c.bd : "#ddd6cb" }}>{m.word}</span>;
+  // a LOUD lane wears its mark and a larger pill - work has stopped until you answer, and that
+  // should be findable from across the rail rather than read off a 9px pill like any other
+  return <span className={`tq-pile-tag${m.loud ? " loud" : ""}`} title={m.hint}
+    style={{ color: c ? c.ink : "#6f6960", background: c ? c.tint : "#eee9e1", borderColor: c ? c.bd : "#ddd6cb" }}>
+    {m.loud && m.mark ? `${m.mark} ` : ""}{m.word}</span>;
 };
 
 // ...and on the Timeline the tag is TRIAGE's word, the one the row's own Triage tab highlights -
@@ -2298,6 +2302,18 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
 
   const [mined, setMined] = useState(null);          // "Mine to do" made a task, and its ref
   const [notCoding, setNotCoding] = useState(false); // "Mine, not agent" landed - the button says so
+  const [mineAsk, setMineAsk] = useState(false);     // ...and where the work actually lives, asked first
+  const [mineWhere, setMineWhere] = useState("");
+  const [mining, setMining] = useState(false);
+  const takeItMine = async () => {
+    if (mining) return;
+    setMining(true); setRouteErr("");
+    try {
+      await api.post(`/api/tasks/${sel.TaskId}/not-coding`, { learn: true, belongs_to: mineWhere.trim() || null });
+      setNotCoding(true); setMineAsk(false); setMineWhere(""); onRefresh?.();
+    } catch (e) { setRouteErr(e?.response?.data?.detail || "that did not work"); }
+    finally { setMining(false); }
+  };
   const [routeErr, setRouteErr] = useState("");      // ...or was refused, and the reason is shown here
   const [closed, setClosed] = useState(null);        // ...and closing one from the panel
   const [releasing, setReleasing] = useState(false);
@@ -2631,15 +2647,28 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
 
             <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
               <TrayGroupLabel note="correct who owns it; MEMORY choices teach future triage">ROUTING</TrayGroupLabel>
+              {/* Saying it is yours only says where the work does NOT go. The one thing triage
+                  cannot work out for itself is where it DOES - it only knows the repositories it
+                  has code for, so a job that lives in ADP had no answer it could give. Asked here
+                  inline rather than in a modal: this is a quiet drawer, not a decision to dramatise. */}
+              {mineAsk && sel.TaskId && (
+                <Box sx={{ display: "flex", gap: 0.8, alignItems: "center", flexWrap: "wrap", mb: 0.9 }}>
+                  <TextField size="small" autoFocus value={mineWhere} onChange={(e) => setMineWhere(e.target.value)}
+                    placeholder="Where does this really live? e.g. ADP (optional)"
+                    onKeyDown={(e) => { if (e.key === "Enter") takeItMine(); }}
+                    sx={{ flex: 1, minWidth: 210, "& .MuiInputBase-input": { fontSize: 12.5, py: 0.7 } }} />
+                  <TrayBtn tone="teach" teaches disabled={mining} onClick={takeItMine}
+                    icon={<PsychologyOutlinedIcon sx={{ fontSize: 16 }} />}>
+                    {mining ? "Teaching triage…" : "Put it on my list"}</TrayBtn>
+                  <TrayBtn tone="quiet" disabled={mining} onClick={() => { setMineAsk(false); setMineWhere(""); }}>Cancel</TrayBtn>
+                </Box>
+              )}
               <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap", alignItems: "center" }}>
                 {sel.TaskId && (
                   <TrayBtn tone="teach" teaches disabled={notCoding} icon={<PsychologyOutlinedIcon sx={{ fontSize: 16 }} />}
                     title="make this your task instead of agent work, and remember that choice"
-                    onClick={async () => {
-                      setRouteErr("");
-                      try { await api.post(`/api/tasks/${sel.TaskId}/not-coding`); setNotCoding(true); onRefresh?.(); }
-                      catch (e) { setRouteErr(e?.response?.data?.detail || "that did not work"); }
-                    }}>{notCoding ? "Now yours" : "Mine, not agent"}</TrayBtn>
+                    onClick={() => { setRouteErr(""); setMineAsk(true); }}>
+                    {notCoding ? "Now yours" : "Mine, not agent"}</TrayBtn>
                 )}
                 {sel.TaskId && (
                   <TrayBtn icon={<CallSplitIcon sx={{ fontSize: 15 }} />}

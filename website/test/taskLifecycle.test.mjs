@@ -95,3 +95,24 @@ test("closing the task never hides behind a fold, and a finished chat can be clo
   // interrupted work says so on the task page, not only in the list row
   assert.match(source, /interruptedTask && <Chip/);
 });
+
+test("the agent heading says what the agent is doing, not that a session exists", () => {
+  // "② coder is working" sat beside its own chip reading "agent · needs you", because the title
+  // asked only whether a pty was alive. The coder had been parked on a question for an hour
+  // (the owner, 2026-09-11, TQ-0499: "is this the same bug?" - yes, the third surface of it).
+  const view = readFileSync(fileURLToPath(new URL("../src/TasksView.jsx", import.meta.url)), "utf8");
+  assert.doesNotMatch(view, /title=\{term\?\.alive \? `\$\{agentName\(t\)\} is working`/);
+  assert.match(view, /agentState === "needs you" \? `\$\{agentName\(t\)\} needs you`/);
+  // and the two states still come from one place: agentPhase already reads the session's own word
+  assert.match(readFileSync(fileURLToPath(new URL("../src/taskLifecycle.js", import.meta.url)), "utf8"), /session\?\.alive\) return session\.waiting \? "needs you" : "working"/);
+});
+
+test("needs you is the one phase that wears the loud colour", () => {
+  const ui = readFileSync(fileURLToPath(new URL("../src/ui.jsx", import.meta.url)), "utf8");
+  // the palette has always said so - theme.jsx calls ALERT "the needs-you pill" - but the chip
+  // used the pale tint, the same weight as four calmer phases (the owner, 2026-09-11)
+  assert.match(ui, /needsYou: \{ bg: ALERT, fg: "#fffdfb", bd: ALERT \}/);
+  assert.match(ui, /if \(value === "needs you"\) return LC\.needsYou;/);
+  // ...and only that one: a draft waiting for a yes is not an agent blocked on you
+  assert.match(ui, /if \(value === "draft ready" \|\| value === "approval needed" \|\| value === "ready"\) return LC\.you;/);
+});

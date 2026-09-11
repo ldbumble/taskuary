@@ -443,8 +443,8 @@ def seed_profiles(cfg: dict) -> list:
     headless, which is exactly the trap the presets exist to avoid."""
     have = cfg.setdefault('agents', {})
     base = have.get('coder') or next((p for p in have.values() if p.get('kind', 'coding') == 'coding'), None)
-    if not (base or {}).get('cmd'): return []               # nothing to inherit from: leave it to setup
-    keep = {k: v for k, v in base.items() if k in ('cmd', 'args', 'resume', 'resume_args', 'timeout')}
+    if not ((base or {}).get('cmd') or (base or {}).get('provider')): return []
+    keep = {k: v for k, v in base.items() if k in ('provider', 'cmd', 'args', 'resume', 'resume_args', 'timeout')}
     added = []
     for name, prof in DEFAULT_PROFILES.items():
         if name in have: continue

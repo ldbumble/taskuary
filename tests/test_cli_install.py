@@ -45,6 +45,14 @@ class PlanTests(unittest.TestCase):
         self.assertTrue(cliinstall.plan('cursor', has_npm=False, system='Darwin'))
 
 
+class InstallerLaunchTests(unittest.TestCase):
+    def test_launch_denial_names_the_executable_and_does_not_claim_install_ran(self):
+        with mock.patch.object(cliinstall, 'WINDOWS', True), \
+                mock.patch.object(cliinstall.spawn, 'run', side_effect=PermissionError('Access is denied')):
+            with self.assertRaisesRegex(RuntimeError, 'denied starting blocked-installer.*Protection history'):
+                cliinstall._run(['blocked-installer'])
+
+
 class PathTests(unittest.TestCase):
     """A perfect PATH write reaches no process that is already running - including this one."""
 
@@ -224,7 +232,11 @@ class DetectTests(unittest.TestCase):
         self.assertFalse(by['mine']['installable'])
 
     def test_what_is_installed_is_still_reported_as_installed(self):
-        with mock.patch.object(clis.shutil, 'which', side_effect=lambda cmd: '/usr/bin/claude' if cmd == 'claude' else None):
+        # `path=` because detection asks twice now: this process's PATH, then the live one a CLI
+        # installed after Taskuary started resolves on (clis.which). Answering None to the second
+        # call keeps this double saying exactly what it always said - only claude is here.
+        found = lambda cmd, path=None: '/usr/bin/claude' if (cmd == 'claude' and path is None) else None
+        with mock.patch.object(clis.shutil, 'which', side_effect=found):
             by = {r['name']: r for r in clis.detect(None)}
         self.assertTrue(by['claude']['installed'])
         self.assertEqual(by['claude']['path'], '/usr/bin/claude')

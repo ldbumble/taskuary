@@ -64,6 +64,7 @@ DENIED = (
     (r'POST', r'^/api/deps/', 'installing software on this machine is the owner\'s decision'),
     (r'POST', r'^/api/cli/(install|update)', "installing or updating a coding CLI runs a vendor installer on this machine - the owner's decision"),
     (r'POST', r'^/api/cli/setup', "setting a coding CLI up runs it on this machine, and signs in as the owner - their decision"),
+    (r'PUT|DELETE|POST', r'^/api/cli/connections', 'CLI commands and connection tests are configured by the owner'),
     (r'POST', r'^/api/problems/', 'what is failing is the owner\'s to read - an agent does not get to clear the bell'),
     # ...and the doors the 2026-09-02 audit found standing open: releasing the held task of the very
     # sender the hold exists for, landing work, running an executor or a query with a card's

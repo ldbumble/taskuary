@@ -27,8 +27,27 @@ test("the task card carries the whole grouped context, the task summary and the 
   const cards = read("assistantCards.jsx");
   const combined = cards.slice(cards.indexOf("function CombinedTaskText"), cards.indexOf("export function CardShell"));
   assert.match(combined, /doc\.task\?\.Summary/); assert.match(combined, /className="tq-task-focus"/);
-  assert.match(combined, /doc\.checklist\.map/); assert.match(combined, /tq-task-focus-item/);
+  assert.match(combined, /items\.map/); assert.match(combined, /tq-task-focus-item/);
   assert.match(combined, /Email context · \{messages\.length\} messages combined by triage/);
   const task = cards.slice(cards.indexOf("export function TaskCard"), cards.indexOf("export function FyisCard"));
   assert.match(task, /\{card\.tid && <CombinedTaskText card=\{card\} \/>\}/);
+});
+
+test("a box means an item you can tick, and the job is not said twice", () => {
+  // The header wore a checkbox that ticked nothing, above a bold summary that repeated the one
+  // item under it (the owner, 2026-09-11: "seems duplicated ... boxes should be for specific
+  // items in the task list").
+  const cards = read("assistantCards.jsx");
+  const combined = cards.slice(cards.indexOf("function CombinedTaskText"), cards.indexOf("export function CardShell"));
+  const label = /<div className="tq-task-focus-label">([\s\S]*?)<\/div>/.exec(combined)[1];
+  assert.doesNotMatch(label, /tq-task-box/, "the header keeps the word and loses the box");
+  assert.match(label, /\{items\.length \? "Task list" : "Task"\}/);
+  // the summary stands in only when there is no list to read instead
+  assert.match(combined, /\{!items\.length && taskText && <div className="tq-task-focus-text">/);
+  // ...and every remaining box belongs to one item
+  assert.equal((combined.match(/tq-task-box/g) || []).length, 1);
+  // the 25px indent existed to clear that header box; without it the list starts at the edge
+  const css = read("assistantView.css");
+  assert.match(css, /\.tq-task-focus-list \{ margin: 11px 0 0 0;/);
+  assert.match(css, /\.tq-task-focus-text \{ margin: 8px 0 0 0;/);
 });

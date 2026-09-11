@@ -51,7 +51,8 @@ def _prof(cfg, store, name: str) -> dict:
 
 def _cli_of(cfg, store, name: str) -> str:
     from .clis import _base
-    return _base(_prof(cfg, store, name).get('cmd') or name)
+    from .cli_connections import resolve
+    return _base(resolve(cfg, _prof(cfg, store, name)).get('cmd') or name)
 
 
 def ai_connectors(store) -> list:
@@ -151,7 +152,8 @@ def _save_profile(store, cfg, name: str, prof: dict) -> None:
     from . import config
     cfg.setdefault('agents', {})[name] = prof
     config.save(cfg)
-    store.upsert_agent(name, prof.get('kind', 'coding'), 'cli', json.dumps(prof))
+    from .cli_connections import sync
+    sync(cfg, store, name)
 
 
 def apply(store, cfg, slot_key: str, value=None, model=None, effort=None, actor: str = 'owner') -> dict:

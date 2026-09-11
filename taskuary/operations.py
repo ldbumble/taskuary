@@ -42,6 +42,11 @@ KINDS = {
     'agent.stop':               ('task', (), None),
     'report.rerun':             ('source', (), None),
     'memory.remember':          ('memory', ('note',), None),
+    # ...and the routing memory, which the chat could not reach at all. Teaching only: it says how
+    # work LIKE this should be judged next time, and never moves the task it was said about - the
+    # owner saying "timesheet asks are never coding" about something already closed is still the
+    # lesson, and reclassifying a closed task to make the point would be a second, unasked act.
+    'routing.remember':         ('task', ('field', 'value'), None),
     'task.split':               ('task', ('text',), None),
     'pipe.clear':               ('pipe', (), None),          # `text` OR `select` - a sentence, or a named set
     'task.setup':               ('text', ('text',), None),

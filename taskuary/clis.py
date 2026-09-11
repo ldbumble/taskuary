@@ -140,6 +140,22 @@ def store_app(path: str) -> bool:
     return '\\windowsapps\\' in str(path or '').lower()
 
 
+def which(cmd: str) -> str:
+    """Where a CLI is, as the AGENT RUNNER sees it - this process's PATH, then the live one.
+
+    A long-running app keeps the environment it was launched with, so a CLI installed after
+    Taskuary started, or one whose vendor writes the USER path, resolves on the registry PATH and
+    not on ours. agents._resolve_cmd has always fallen back to it; detection did not, and said so
+    in a comment claiming the two agreed. They did not: codex under %LOCALAPPDATA%\\Programs ran
+    every agent session on the owner's machine while Connections > AI CLI agents offered to
+    install it and hid the Update button (2026-09-11)."""
+    from .agents import _fresh_path
+    found = shutil.which(cmd)
+    if found: return found
+    try: return shutil.which(cmd, path=_fresh_path()) or ''
+    except OSError: return ''            # a registry we cannot read is not an error worth raising
+
+
 def runnable(cmd: str) -> tuple:
     """(what will actually run, is it the blocked Store copy). agents._resolve_cmd already
     prefers an ordinary install when both exist, so a Store path here means there is no other."""
@@ -159,9 +175,7 @@ def detect(store=None) -> list:
     have = {a['Name']: a for a in (store.list_agents() if store else [])}
     out = []
     for k in KNOWN:
-        # a fresh PATH is not read here: shutil.which sees the process's own, which is what the
-        # agent runner will use too, so the two agree
-        found = shutil.which(k['cmd'])
+        found = which(k['cmd'])
         # a CLI nobody has installed is exactly who the Install button is for, so it gets a row.
         # Dropping it is what left the wizard saying "no AI CLI found" with nothing to press.
         # `install` is the RECIPE the row is an install of - what the button posts. It is not the
@@ -190,7 +204,7 @@ def detect(store=None) -> list:
         except ValueError: prof = {}
         cmd = str(prof.get('cmd') or '')
         base = os.path.basename(cmd).lower().rsplit('.', 1)[0] if cmd else ''
-        found = shutil.which(cmd) if cmd else None
+        found = which(cmd) if cmd else None
         # the row is about the CLI, not the profile's nickname: 'coder' running claude is Claude
         # Code - and "already configured" said nothing about whether claude is even on this machine
         runs, blocked = runnable(cmd) if found else ('', False)

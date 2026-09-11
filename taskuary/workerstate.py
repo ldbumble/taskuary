@@ -62,6 +62,26 @@ def events(store, tid: int, sid: str = None) -> list:
     return [e for e in store.worker_events(tid) if sid is None or str(e['Sid']) == str(sid)]
 
 
+def open_requests(evs: list) -> list:
+    """The requests still outstanding, oldest first.
+
+    A question the owner has SPOKEN SINCE is not still being asked. `working` is the owner
+    speaking - hooks.py records it on UserPromptSubmit - so a request from before their latest
+    prompt has been overtaken by it, whether or not anyone wrote an `answered` event.
+
+    Only the answer route writes one, and answering in the pane is the ordinary way to answer. So
+    a single permission notification made a session read "stopped - waiting on you" for the rest
+    of its life: TQ-0500 sat at the top of Work under that sentence while the coder was mid-search,
+    twenty minutes and four prompts later (the owner, 2026-09-11: "when i input another prompt it
+    does not pick up its coding again"). A request raised DURING the current turn still stands -
+    it comes after that turn's own prompt.
+    """
+    answered = {e['RequestId'] for e in evs if e['Kind'] == 'answered'}
+    spoke = max((i for i, e in enumerate(evs) if e['Kind'] == 'working'), default=-1)
+    return [e for i, e in enumerate(evs)
+            if i > spoke and e['Kind'] in REQUESTS and e['RequestId'] not in answered]
+
+
 def _public_request(e: dict) -> dict:
     try: choices = json.loads(e['ChoicesJson']) if e.get('ChoicesJson') else []
     except ValueError: choices = []
@@ -73,8 +93,7 @@ def status(store, tid: int) -> dict:
     sid = current_sid(store, tid)
     live = _live(tid) is not None
     evs = events(store, tid, sid) if sid else []
-    answered = {e['RequestId'] for e in evs if e['Kind'] == 'answered'}
-    requests = [_public_request(e) for e in evs if e['Kind'] in REQUESTS and e['RequestId'] not in answered]
+    requests = [_public_request(e) for e in open_requests(evs)]
     out = {'sid': sid, 'live': live, 'requests': requests, 'result': None, 'state': 'unknown'}
     if not evs: return out
     last = evs[-1]
@@ -156,8 +175,7 @@ def waiting_of(store, t):
     if not tid or not sid: return None
     evs = events(store, tid, sid)
     if not evs: return None
-    answered = {e['RequestId'] for e in evs if e['Kind'] == 'answered'}
-    if any(e['Kind'] in REQUESTS and e['RequestId'] not in answered for e in evs): return True
+    if open_requests(evs): return True
     return False if evs[-1]['Kind'] in ('working', 'answered') else None
 
 
@@ -166,8 +184,7 @@ def asking_of(store, t):
     tid, sid = getattr(t, 'task_id', None), str(getattr(t, 'sid', '') or '')
     if not tid or not sid: return None
     evs = events(store, tid, sid)
-    answered = {e['RequestId'] for e in evs if e['Kind'] == 'answered'}
-    open_ = [e for e in evs if e['Kind'] in REQUESTS and e['RequestId'] not in answered]
+    open_ = open_requests(evs)
     if not open_: return None
     approvals = [e for e in open_ if e['Kind'] == 'approval_needed']
     return _public_request((approvals or open_)[-1])

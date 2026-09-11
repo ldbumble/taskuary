@@ -25,8 +25,9 @@ export const recipeOf = (cli) => (typeof cli === "string" ? cli : cli?.install |
 const VERBS = { install: { path: "/api/cli/install", ing: "installing", noun: "installer" },
                 update: { path: "/api/cli/update", ing: "updating", noun: "updater" } };
 
-export const useCliInstall = () => {
+export const useCliInstall = ({ terminal = false } = {}) => {
   const [busy, setBusy] = useState("");
+  const [pane, setPane] = useState(null);
   const [note, setNote] = useState(null);              // { bad, text }
   const alive = useRef(true);
   useEffect(() => () => { alive.current = false; }, []);
@@ -37,7 +38,12 @@ export const useCliInstall = () => {
     const put = (fn, x) => { if (alive.current) fn(x); };
     put(setBusy, name); put(setNote, { text: `${v.ing} ${name}…` });
     try {
-      await api.post(v.path, { name });
+      const started = await api.post(terminal ? `${v.path}/terminal` : v.path, { name, ...(terminal ? { terminal: true } : {}) });
+      if (started.data.sid) put(setPane, { sid: started.data.sid, taskId: started.data.taskId, name, verb });
+      else if (terminal) {
+        put(setBusy, ""); put(setNote, { bad: true, text: "This server started the installer in the background. Restart Taskuary to enable the installation terminal." });
+        return null;
+      }
       const end = Date.now() + GIVE_UP_MS;
       for (;;) {
         await wait(POLL_MS);
@@ -54,14 +60,14 @@ export const useCliInstall = () => {
         if (Date.now() > end) { put(setBusy, ""); put(setNote, { bad: true, text: `${name} is still ${v.ing} — check back in a minute` }); return null; }
       }
     } catch (e) {
-      put(setNote, { bad: true, text: e?.response?.data?.detail || e?.message || "that did not work" });
+      put(setNote, { bad: true, text: terminal && e?.response?.status === 404 ? "Restart Taskuary to enable the installation terminal." : e?.response?.data?.detail || e?.message || "that did not work" });
       put(setBusy, ""); return null;
     }
-  }, []);
+  }, [terminal]);
 
   const install = useCallback((cli) => run(cli, "install"), [run]);
   const update = useCallback((cli) => run(cli, "update"), [run]);
-  return { install, update, busy, note, setNote };
+  return { install, update, busy, note, setNote, pane, setPane };
 };
 
 // "not on this machine — Install". Drawn only where there is a way in: `installable` is the

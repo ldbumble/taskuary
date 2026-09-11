@@ -31,10 +31,14 @@ test("the button is drawn only over a road that exists", () => {
 test("an installed CLI on the AI CLI agents page can be updated in place", () => {
   const panel = read("AgentsPanel.jsx");
   assert.match(panel, /import \{ useCliInstall, InstallLine, UpdateLine \}/);
-  assert.match(panel, /const \{ install, update, busy, note \} = useCliInstall\(\);/);
-  // it sits with Set it up, under "Installed" - the not-installed road still gets Install alone
-  assert.match(panel, /<UpdateLine cli=\{cli\} busy=\{busy\} onUpdate=\{async \(\) => \{ if \(await update\(cli\)\) await load\(\); \}\}/);
-  assert.match(panel, /\) : <InstallLine cli=\{cli\}/);
+  // the hook's shape is the page's business - assert only that it takes `update` out and uses it,
+  // or this breaks every time the panel gains an option it needs from the same hook
+  assert.match(panel, /const \{[^}]*\bupdate\b[^}]*\} = useCliInstall\(/);
+  // Update rides with the INSTALLED branch and Install with the other - the shape of that branch
+  // is the page's to change, so match the wiring and not its punctuation
+  assert.match(panel, /<UpdateLine cli=\{cli\}[^>]*onUpdate=\{async \(\) => \{ if \(await update\(cli\)\) await load\(\); \}\}/);
+  assert.match(panel, /cli\.installed \?[\s\S]{0,400}?<UpdateLine/);
+  assert.match(panel, /<InstallLine cli=\{cli\}[^>]*onInstall=/);
 });
 
 test("the server's own words are what the owner reads when it finishes", () => {

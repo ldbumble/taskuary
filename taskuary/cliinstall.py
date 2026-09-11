@@ -115,7 +115,9 @@ _LOCK = threading.Lock()
 
 
 def state() -> dict: return dict(_STATE)
-def reset() -> None: _STATE.update(phase='idle', name='', verb='install', detail='', path='', at=0.0)
+def reset() -> None:
+    _STATE.clear()
+    _STATE.update(phase='idle', name='', verb='install', detail='', path='', at=0.0)
 def _set(phase, name='', detail='', path='', verb='install'):
     _STATE.update(phase=phase, name=name, verb=verb, detail=str(detail)[-400:], path=path, at=time.time())
 
@@ -127,7 +129,7 @@ def update_plan(name: str, has_npm: bool = None) -> list:
     return [r for r in UPDATES.get(name, ()) if r['how'] != 'npm' or have_npm]
 
 
-def update(name: str) -> dict:
+def update(name: str, runner=None) -> dict:
     """Bring an already-installed CLI up to date. Synchronous - `start_update` is the API's."""
     roads = update_plan(name)
     if not roads:
@@ -144,7 +146,7 @@ def update(name: str) -> dict:
     for r in roads:
         try:
             cmd = [exe] + list(r['args']) if r['how'] == 'self' else [npm() or 'npm', 'install', '-g', r['pkg']]
-            rc, out = _run(cmd, timeout=r.get('timeout', 900))
+            rc, out = (runner or _run)(cmd, timeout=r.get('timeout', 900))
         except Exception as e:
             last = str(e); logger.warning(f'{name}: {r["how"]} update raised - {e}'); continue
         if rc != 0:
@@ -160,6 +162,7 @@ def start_update(name: str, **kw) -> dict:
     """Update in the background, for the same reason `start` installs in one."""
     with _LOCK:
         if _STATE['phase'] == 'installing': return state()
+        _STATE.pop('sid', None); _STATE.pop('taskId', None)
         _set('installing', name, f'updating {name}…', verb='update')
     threading.Thread(target=update, args=(name,), kwargs=kw, daemon=True, name=f'update-{name}').start()
     return state()
@@ -215,7 +218,12 @@ def find(name: str) -> str:
     """Where the CLI is NOW - PATH first, then the places installers put things when the PATH
     this process inherited predates them (a GUI app keeps the environment it was launched with)."""
     cmd = BINARY.get(name, name)
-    found = shutil.which(cmd)
+    # ...the LIVE PATH included, which is the one a vendor's own installer writes to. codex puts
+    # itself under %LOCALAPPDATA%\Programs\OpenAI\Codex\bin and adds that to the user path; this
+    # process never sees it, so `update` refused with "not on this machine" for a CLI that was
+    # running agent sessions at the time (the owner, 2026-09-11).
+    from .clis import which
+    found = which(cmd)
     if found: return found
     home = Path.home()
     roots = [bin_dir(), home / '.local' / 'bin', home / 'bin']
@@ -234,7 +242,14 @@ def find(name: str) -> str:
 
 def _run(cmd: list, timeout: int = 900) -> tuple:
     """(returncode, output). One place, so a test can stand in front of every installer at once."""
-    r = spawn.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout)
+    try:
+        r = spawn.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout)
+    except PermissionError as e:
+        # Defender can reject CreateProcess itself (WinError 5), before there is stderr.
+        # Do not mistake this for an installer that needs administrator permissions.
+        raise RuntimeError(f'Permission denied starting {Path(cmd[0]).name}; the installer did not start. '
+                           'Check Windows Security > Protection history or your organization\'s app restrictions '
+                           'for the reason.' if WINDOWS else f'Permission denied starting {cmd[0]}; the installer did not start.') from e
     return int(r.returncode or 0), ((r.stdout or '') + (r.stderr or '')).strip()
 
 
@@ -318,7 +333,7 @@ def persist_windows(d) -> str:
     return new
 
 
-def install(name: str, has_npm: bool = None, system: str = None) -> dict:
+def install(name: str, has_npm: bool = None, system: str = None, runner=None) -> dict:
     """Try each road in turn until the CLI actually answers to its name. Synchronous - `start`
     is the one the API calls."""
     if name not in RECIPES:
@@ -335,10 +350,11 @@ def install(name: str, has_npm: bool = None, system: str = None) -> dict:
     for r in roads:
         try:
             if r['how'] == 'binary':
+                if runner: runner.message(f'Downloading {name} from GitHub releases ({r["repo"]}) into {bin_dir()}')
                 _binary(name, r)
             else:
                 cmd = list(r['cmd']) if r['how'] == 'script' else [npm() or 'npm', 'install', '-g', r['pkg']]
-                rc, out = _run(cmd, timeout=r.get('timeout', 900))
+                rc, out = (runner or _run)(cmd, timeout=r.get('timeout', 900))
                 if rc != 0: last = out or f'{r["how"]} exited {rc}'; logger.warning(f'{name}: {r["how"]} failed - {last[-200:]}'); continue
                 last = out
         except Exception as e:
@@ -366,6 +382,7 @@ def start(name: str, **kw) -> dict:
     HTTP request should be holding the browser open for it (wabridge.start, same shape)."""
     with _LOCK:
         if _STATE['phase'] == 'installing': return state()
+        _STATE.pop('sid', None); _STATE.pop('taskId', None)
         _set('installing', name, f'installing {name}…')
     threading.Thread(target=install, args=(name,), kwargs=kw, daemon=True, name=f'install-{name}').start()
     return state()

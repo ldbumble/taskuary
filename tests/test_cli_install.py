@@ -86,6 +86,11 @@ class InstallTests(unittest.TestCase):
         cliinstall.reset()
         self.env = mock.patch.dict(os.environ, {'PATH': os.environ.get('PATH', '')})
         self.env.start(); self.addCleanup(self.env.stop)
+        # Fake installs must not persist their temporary directories in the user's
+        # Windows registry or shell profile; patching os.environ alone cannot undo it.
+        for name in ('persist_windows', 'persist_posix'):
+            persist = mock.patch.object(cliinstall, name)
+            persist.start(); self.addCleanup(persist.stop)
 
     def test_it_runs_the_first_recipe_and_reports_where_the_binary_landed(self):
         import tempfile

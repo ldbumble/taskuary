@@ -33,6 +33,11 @@ def seeded(s):
 
 
 class TheRosterTests(unittest.TestCase):
+    def test_database_seeds_all_shipped_profile_documents(self):
+        s = store()
+        for name in hub_agents.DEFAULT_PROFILES:
+            self.assertGreater(len(s.get_doc(name) or ''), 200, name)
+
     def test_the_shipped_profiles_are_the_five_the_owner_chose(self):
         self.assertEqual(set(hub_agents.DEFAULT_PROFILES),
                          {'researcher', 'analyst', 'coordinator', 'marketer', 'trader'})
@@ -102,6 +107,85 @@ class TheRosterTests(unittest.TestCase):
         cfg = {}
         self.assertEqual(hub_agents.seed_profiles(cfg), [])
         self.assertEqual(cfg.get('agents'), {})
+
+
+class ProfileEditingTests(unittest.TestCase):
+    def setUp(self):
+        from taskuary import server
+        from fastapi.testclient import TestClient
+        self.server = server
+        self.s = seeded(store())
+        cfg = {**server.cfg, 'agents': hub_agents.profiles(self.s)}
+        for patch in (mock.patch.object(server, 'store', self.s), mock.patch.object(server, 'cfg', cfg),
+                      mock.patch.object(server.config, 'save')):
+            patch.start(); self.addCleanup(patch.stop)
+        self.client = TestClient(server.app)
+
+    def test_opening_a_missing_or_blank_role_restores_its_own_template(self):
+        self.s.cx.execute("DELETE FROM doc WHERE Name='trader'")
+        self.s.save_doc('analyst', '', 'owner')
+        for name in ('trader', 'analyst'):
+            result = self.client.get(f'/api/doc/{name}')
+            self.assertEqual(result.status_code, 200)
+            self.assertGreater(len(result.json()['content']), 200)
+            self.assertEqual(self.s.get_doc(name), result.json()['content'])
+        self.s.save_doc('trader', 'The owner wrote this.', 'owner')
+        self.assertEqual(self.client.get('/api/doc/trader').json()['content'], 'The owner wrote this.')
+
+    def test_codex_and_coder_edit_and_run_the_same_document(self):
+        self.s.upsert_agent('codex', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
+        self.s.save_doc('coder', 'Shared coding rules: test every changed behavior.', 'owner')
+        result = self.client.get('/api/doc/codex').json()
+        self.assertEqual(result['name'], 'coder')
+        self.assertEqual(result['content'], self.s.get_doc('coder'))
+        self.client.put('/api/doc/codex', json={'content': 'Shared coding rules: preserve user changes.'})
+        self.assertIn('preserve user changes', terminal.rules_text(self.s, profile='codex'))
+        self.assertEqual(terminal.rules_text(self.s, profile='codex'), terminal.rules_text(self.s, profile='coder'))
+        self.assertFalse(self.s.get_doc('codex'))
+
+    def test_new_profile_gets_starter_rules_and_is_immediately_in_triage(self):
+        result = self.client.put('/api/agents/procurement', json={
+            'cmd': 'claude', 'args': ['-p'], 'kind': 'general', 'purpose': 'Compare vendor quotes and explain costs.',
+            'rules_doc': 'procurement', 'triage_enabled': True})
+        self.assertEqual(result.status_code, 200, result.text)
+        self.assertTrue(result.json()['triage_available'])
+        self.assertEqual(result.json()['rules_doc'], 'procurement')
+        doc = self.client.get('/api/doc/procurement').json()['content']
+        self.assertIn('Compare vendor quotes', doc)
+        self.assertIn('AGENT.md', doc)
+        roster = hub_agents.roster(self.s)
+        self.assertIn('- procurement: Compare vendor quotes', roster)
+        decision = triage.classify_intent({'Subject': 'Compare these vendors', 'Body': 'Find the best quote'},
+            lambda *args, **kwargs: json.dumps({'intent': 'task', 'kind': 'general', 'profile': 'procurement'}),
+            profiles=roster)
+        self.assertEqual(decision['profile'], 'procurement')
+
+    def test_changing_the_cli_keeps_routing_metadata_and_manual_profiles_stay_out_of_triage(self):
+        original = hub_agents.profiles(self.s)['researcher']
+        self.s.save_doc('researcher', 'Custom research instructions.', 'owner')
+        result = self.client.put('/api/agents/researcher', json={'cmd': 'codex'})
+        self.assertEqual(result.status_code, 200, result.text)
+        updated = hub_agents.profiles(self.s)['researcher']
+        self.assertEqual(updated['kind'], original['kind'])
+        self.assertEqual(updated['purpose'], original['purpose'])
+        self.assertEqual(self.s.get_doc('researcher'), 'Custom research instructions.')
+        result = self.client.put('/api/agents/researcher', json={'triage_enabled': False})
+        self.assertEqual(result.status_code, 200)
+        self.assertNotIn('- researcher:', hub_agents.roster(self.s))
+        self.assertIsNotNone(self.s.get_agent('researcher'))
+
+    def test_a_routed_general_task_uses_the_named_workers_cli_and_instructions(self):
+        from taskuary import general
+        self.s.save_doc('researcher', 'Research rule: compare independent public sources.', 'owner')
+        self.s.save_doc('coder', 'CODE-ONLY SENTINEL: edit repository files.', 'owner')
+        task_id = self.s.create_task({'Title': 'Compare vendors', 'Kind': 'general', 'Status': 'open',
+                                     'Assignee': 'agent:researcher'}, 'owner')
+        task = self.s.get_task(task_id)
+        self.assertEqual(general.default_pick(self.s, task), 'cli:researcher')
+        system, _ = general._prompt(self.s, task_id)
+        self.assertIn('RESEARCHER.md', system)
+        self.assertIn('compare independent public sources', system)
+        self.assertNotIn('CODE-ONLY SENTINEL', system)
 
 
 class TriageNamesTheProfileTests(unittest.TestCase):

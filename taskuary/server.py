@@ -777,7 +777,7 @@ def _assistant_payload(task_id: int, session=None):
     return {'messages': general.history(store, task_id), 'providers': general.provider_options(store),
             # what the chat WOULD run on if nobody picks: the picker showed providers[0] instead,
             # which is always a CLI, so a task with no session nominated a coding agent (TQ-0420)
-            'defaultPick': general.default_pick(store),
+            'defaultPick': general.default_pick(store, task),
             'session': session.info(tail=3) if session else None}
 
 @app.get('/api/tasks/{task_id}/assistant')
@@ -4062,6 +4062,27 @@ def cli_install(body: CliInstallBody):
     store.audit('connector', 0, 'cli_install_started', ACTOR, detail={'name': name})
     return out
 
+@app.post('/api/cli/update')
+def cli_update(body: CliInstallBody):
+    """Bring an already-installed CLI up to date, from the AI CLI agents page.
+
+    A CLI too old for the model its own config pins fails every run and says so only in the JSON
+    it writes to stdout - codex 0.148.0 answering "requires a newer version of Codex" to everything
+    Taskuary asked it (the owner, 2026-09-11). On guard.DENIED beside /api/cli/install, and it
+    reports through the same phase the install does: the page polls, it does not hold a request.
+    """
+    from . import cliinstall
+    name = str(body.name or '')
+    if name not in cliinstall.UPDATES:
+        raise HTTPException(422, f'Taskuary has no updater for {name} '
+                                 f'({", ".join(sorted(cliinstall.UPDATES))})')
+    now = cliinstall.state()
+    if now['phase'] == 'installing' and now['name'] != name:
+        raise HTTPException(409, f'{now["name"]} is {now.get("verb") or "install"}ing right now - one at a time')
+    out = cliinstall.start_update(name)
+    store.audit('connector', 0, 'cli_update_started', ACTOR, detail={'name': name})
+    return out
+
 @app.get('/api/cli/install/state')
 def cli_install_state():
     """Which phase the install is in, and the absolute path once there is one. The page saves
@@ -4214,7 +4235,10 @@ def agents():
     head = hub_agents.default_agent(store)
     rows = sorted(store.list_agents(), key=lambda a: a['Name'] != head)
     profs = hub_agents.profiles(store)
-    return {'data': [{**a, 'installed': hub_agents.runs_here(profs.get(a['Name']) or {})} for a in rows],
+    return {'data': [{**a, 'installed': hub_agents.runs_here(profs.get(a['Name']) or {}),
+                      'rules_doc': hub_agents.profile_document(store, a['Name']),
+                      'purpose': hub_agents.profile_purpose(a['Name'], profs.get(a['Name']) or {}, a.get('Kind') or 'coding')}
+                     for a in rows],
             'config': cfg.get('agents', {}), 'default': head,
             'models': {a['Name']: _models(a) for a in store.list_agents()},
             'work': _agent_work(store)}
@@ -4239,12 +4263,27 @@ def agent_test(name: str):
 
 @app.put('/api/agents/{name}')
 def put_agent(name: str, body: dict):
-    if not body.get('cmd'): raise HTTPException(422, 'cmd is required')
-    cfg.setdefault('agents', {})[name] = body
+    if not re.fullmatch(r'[a-z0-9][a-z0-9_-]*', name):
+        raise HTTPException(422, 'Use a lowercase profile name with letters, numbers, hyphens or underscores')
+    row = store.get_agent(name) or {}
+    existing = cfg.get('agents', {}).get(name) or json.loads(row.get('Config') or '{}')
+    profile = {**existing, **body}
+    if not str(profile.get('cmd') or '').strip(): raise HTTPException(422, 'cmd is required')
+    profile['kind'] = profile.get('kind') or hub_agents.DEFAULT_PROFILES.get(name, {}).get('kind') or row.get('Kind') or 'coding'
+    profile['purpose'] = hub_agents.profile_purpose(name, profile, profile['kind'])
+    if profile.get('triage_enabled', True) and not profile['purpose']:
+        raise HTTPException(422, 'Describe when triage should choose this profile, or turn off automatic triage routing')
+    if profile.get('rules_doc') and not re.fullmatch(r'[a-z0-9][a-z0-9_-]*', str(profile['rules_doc'])):
+        raise HTTPException(422, 'Invalid rules document name')
+    rules_doc = profile.get('rules_doc')
+    if rules_doc and rules_doc != name and not store.get_doc(rules_doc) and not hub_agents.profile_template(store, rules_doc):
+        raise HTTPException(422, 'Choose an existing instructions document or this profile\'s own document')
+    cfg.setdefault('agents', {})[name] = profile
     config.save(cfg)
-    store.upsert_agent(name, body.get('kind', 'coding'), 'cli', json.dumps(body))
+    store.upsert_agent(name, profile['kind'], 'cli', json.dumps(profile))
+    rules_doc = hub_agents.ensure_profile_document(store, name)
     store.audit('agent', 0, 'save', ACTOR, detail=name)
-    return {'ok': True}
+    return {'ok': True, 'rules_doc': rules_doc, 'triage_available': profile.get('triage_enabled', True) is not False and bool(profile['purpose'])}
 
 @app.delete('/api/agents/{name}')
 def delete_agent(name: str):
@@ -4256,8 +4295,7 @@ def delete_agent(name: str):
     return {'ok': True}
 
 def _template_text(name: str) -> str:
-    try: return (Path(__file__).parent / 'templates' / f'{name}.md').read_text(encoding='utf-8')
-    except OSError: return ''
+    return hub_agents.profile_template(store, name)
 
 def _heal_blank_doc(name: str) -> str:
     """An EMPTY operator document is never what anyone meant: it switches off the rules every prompt
@@ -4265,7 +4303,7 @@ def _heal_blank_doc(name: str) -> str:
     templates have always said "blank the document entirely and the shipped default is used again",
     so that is what happens - here, the moment it is read, not at the next restart."""
     cur = store.get_doc(name)
-    if cur is not None and not str(cur).strip():
+    if not str(cur or '').strip():
         t = _template_text(name)
         if t.strip():
             store.save_doc(name, t, 'template'); store.audit('doc', 0, 'restored_blank', 'system', detail={'doc': name})
@@ -4286,12 +4324,14 @@ def how_it_works():
 @app.get('/api/doc/{name}')
 def get_doc(name: str):
     """Raw for the editor, rendered so you can see what an agent will actually read."""
+    name = hub_agents.profile_document(store, name)
     content = _heal_blank_doc(name)
     return {'name': name, 'content': content, 'rendered': store.doc(name) or '',
             'owner': store.owner()}
 
 @app.put('/api/doc/{name}')
 def put_doc(name: str, body: DocBody):
+    name = hub_agents.profile_document(store, name)
     # blank = "give me the shipped default back", as the templates' own comments promise
     if not str(body.content or '').strip() and _template_text(name).strip():
         store.save_doc(name, _template_text(name), 'template')

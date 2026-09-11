@@ -1,12 +1,11 @@
-// Bring-your-own-AI-CLI editor - shared by Settings (Agents page) and Connections
-// (AI CLI agents card). Any CLI that reads a prompt on stdin is a teammate.
+// CLI installation lives in Connections; named workers are managed in Docs > Profiles.
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, Box, Button, Chip, CircularProgress, ListSubheader, MenuItem, Select, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogContent, DialogTitle, FormControlLabel, ListSubheader, MenuItem, Select, Switch, TextField, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, card, mono } from "./theme.jsx";
 import { Crumb, Empty, LandingCard, ConfirmDelete, TaskuaryMark } from "./ui.jsx";
-import { useCliInstall, InstallLine } from "./cliInstall.jsx";
+import { useCliInstall, InstallLine, UpdateLine } from "./cliInstall.jsx";
 import { useCliSetup, SetupButton, CliPane } from "./cliSetup.jsx";
 import BoltIcon from "@mui/icons-material/Bolt";
 import StarIcon from "@mui/icons-material/Star";
@@ -42,6 +41,7 @@ const PRESET_DESC = {
   cursor: "Cursor's cursor-agent in headless print mode.",
   copilot: "GitHub Copilot CLI - some versions want the prompt as an argument; run Test to verify.",
   muse: "Meta's Muse Code on Muse Spark - `exec` runs it headless. macOS/Linux/WSL2 only.",
+  devin: "Cognition's Devin, running locally - `-p` is its headless turn; run Test to verify it takes the prompt.",
 };
 // The profile a preset creates is named for its JOB, and every install has shipped Claude
 // Code's as `coder`. clis.KNOWN names rows after the CLI, so this keeps that one as it was.
@@ -63,13 +63,64 @@ const pickLabel = (v) => v.startsWith("effort:")
 // "C:\...\OpenAI\Codex\bin\codex.exe" is codex: the picks key on the CLI, not on how the path was typed
 const cliBase = (cmd) => String(cmd || "").trim().replace(/^.*[\\/]/, "").replace(/\.(cmd|exe|bat|ps1)$/i, "").toLowerCase();
 
-const BLANK_AGENT = { name: "", cmd: "", args: "", resume: "", timeout: "", cwd: "", cwdMap: "", lightModel: "" };
+const BLANK_AGENT = { name: "", cmd: "", args: "", resume: "", timeout: "", cwd: "", cwdMap: "", lightModel: "",
+  purpose: "", kind: "general", rulesDoc: "", triageEnabled: true };
+const PROFILE_KINDS = ["general", "coding", "research", "analysis", "coordination", "marketing", "markets"];
 const lines = (v) => String(v || "").split(NEWLINE).map((x) => x.trim()).filter(Boolean);
 
-export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) => {
+export const CliConnectionsPage = ({ onBack }) => {
+  const [clis, setClis] = useState(null);
+  const [err, setErr] = useState("");
+  const { install, update, busy, note } = useCliInstall();
+  const { openSetup, opening, pane, note: setupNote } = useCliSetup();
+  const load = useCallback(async () => {
+    try {
+      const { data } = await api.get("/api/cli/detect");
+      // Saved workers share these tools. They are not additional CLI connections.
+      setClis((data.data || []).filter((row) => !row.profile));
+      setErr("");
+    } catch (e) { setErr(e?.response?.data?.detail || "Could not load CLI connections"); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  return (
+    <Box sx={{ maxWidth: 980, mx: "auto" }}>
+      <Crumb section="Connections" title="AI CLI agents" onBack={onBack} />
+      <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>
+        Install and sign in to the CLI tools your agents use. Several worker profiles can share one CLI.
+      </Typography>
+      <Button size="small" onClick={() => { window.location.hash = "profiles"; }} sx={{ mb: 2 }}>Manage profiles in Docs</Button>
+      {err && <Alert severity="error" action={<Button onClick={load}>Retry</Button>} sx={{ mb: 2 }}>{err}</Alert>}
+      {!clis && !err && <CircularProgress size={22} />}
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "repeat(3, minmax(0, 1fr))" }, gap: 2.5 }}>
+        {(clis || []).map((cli) => (
+          <Box key={cli.name} sx={{ ...card, p: 2 }}>
+            <Box sx={{ display: "flex", gap: 1, alignItems: "center", mb: 0.75 }}>
+              <TaskuaryMark size={19} />
+              <Typography sx={{ color: INK, fontSize: 14, fontWeight: 700 }}>{cli.label}</Typography>
+            </Box>
+            <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>{PRESET_DESC[cli.name] || `${cli.label} in headless mode.`}</Typography>
+            {cli.installed ? (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                <Typography variant="caption" sx={{ color: DIM }}>Installed</Typography>
+                <SetupButton cli={cli} opening={opening} onOpen={openSetup} />
+                {/* installed is not the same as able to run: a CLI too old for the model its own
+                    config pins fails every single run (the owner, 2026-09-11) */}
+                <UpdateLine cli={cli} busy={busy} onUpdate={async () => { if (await update(cli)) await load(); }} />
+              </Box>
+            ) : <InstallLine cli={cli} busy={busy} onInstall={async () => { if (await install(cli)) await load(); }} />}
+          </Box>
+        ))}
+      </Box>
+      {[note, setupNote].filter(Boolean).map((message, i) => <Alert key={i} severity={message.bad ? "error" : "success"} sx={{ mt: 2 }}>{message.text}</Alert>)}
+      {pane && <Box sx={{ mt: 2 }}><CliPane pane={pane} /></Box>}
+    </Box>
+  );
+};
+
+export const AgentsPage = ({ onBack, section = "Docs", title = "Manage profiles", initialCreate = false, onCreated }) => {
   const [agents, setAgents] = useState(null);
   const [catalog, setCatalog] = useState({});     // per agent: the CLI's own model list (codex reads it off disk)
-  const [draft, setDraft] = useState(null);
+  const [draft, setDraft] = useState(initialCreate ? { ...BLANK_AGENT } : null);
   const [err, setErr] = useState("");
   const [here, setHere] = useState({});           // agent -> its CLI resolves on this machine
   const [effective, setEffective] = useState(""); // ...and the one work is really dispatched to
@@ -77,7 +128,12 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
   const load = useCallback(async () => {
     try {
       const { data } = await api.get("/api/agents");
-      setAgents(data.config || {}); setCatalog(data.models || {});
+      const rows = Object.fromEntries((data.data || []).map((r) => [r.Name, r]));
+      setAgents(Object.fromEntries(Object.entries(data.config || {}).map(([name, prof]) => [name, {
+        ...prof, purpose: prof.purpose || rows[name]?.purpose || "",
+        kind: prof.kind || rows[name]?.Kind || "coding",
+        rules_doc: rows[name]?.rules_doc || prof.rules_doc || "",
+      }]))); setCatalog(data.models || {});
       // which of them this machine can actually start, and which one work really goes to
       setHere(Object.fromEntries((data.data || []).map((r) => [r.Name, r.installed !== false])));
       setEffective(data.default || "");
@@ -88,12 +144,14 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
 
   const edit = (name) => {
     const a = agents[name] || {};
-    setDraft({ name, cmd: a.cmd || "", args: (a.args || []).join(NEWLINE), resume: (a.resume_args || []).join(" "),
+    setDraft({ name, purpose: a.purpose || "", kind: a.kind || "coding", rulesDoc: a.rules_doc || "", triageEnabled: a.triage_enabled !== false,
+      cmd: a.cmd || "", args: (a.args || []).join(NEWLINE), resume: (a.resume_args || []).join(" "),
       timeout: a.timeout || "", cwd: a.cwd || "", lightModel: a.light_model || "",
       cwdMap: Object.entries(a.cwd_map || {}).map(([k, v]) => `${k} = ${v}`).join(NEWLINE) });
   };
   const save = async () => {
-    const p = { cmd: draft.cmd.trim(), args: lines(draft.args) };
+    const p = { ...agents[draft.name], cmd: draft.cmd.trim(), args: lines(draft.args),
+      purpose: draft.purpose.trim(), kind: draft.kind, rules_doc: draft.rulesDoc || draft.name.trim(), triage_enabled: draft.triageEnabled };
     if (draft.resume.trim()) p.resume_args = draft.resume.trim().split(/\s+/);
     if (draft.timeout) p.timeout = Number(draft.timeout);
     if (draft.cwd.trim()) p.cwd = draft.cwd.trim();
@@ -101,7 +159,12 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
     for (const l of lines(draft.cwdMap)) { const i = l.indexOf("="); if (i > 0) map[l.slice(0, i).trim()] = l.slice(i + 1).trim(); }
     if (Object.keys(map).length) p.cwd_map = map;
     if (draft.lightModel.trim()) p.light_model = draft.lightModel.trim();
-    try { await api.put(`/api/agents/${encodeURIComponent(draft.name.trim())}`, p); setDraft(null); load(); }
+    try {
+      const name = draft.name.trim(), isNew = !agents[name];
+      const { data } = await api.put(`/api/agents/${encodeURIComponent(name)}`, p);
+      setDraft(null); await load();
+      if (isNew) onCreated?.(name, data.rules_doc || p.rules_doc);
+    }
     catch (e) { setErr(e?.response?.data?.detail || "save failed"); }
   };
   const [confirmDel, setConfirmDel] = useState(null);
@@ -118,22 +181,6 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
     await api.patch("/api/settings", { name: "default_agent", value: name });
     setDefAgent(name);
   };
-  // WHICH brain triages is one exclusive choice across everything that could do it - the AI
-  // connectors holding keys and these CLI agents. Selecting one deselects the other, because
-  // it is one setting; /api/brains already lists every candidate with whether it is ready.
-  const [brains, setBrains] = useState([]);
-  const [triage, setTriage] = useState("");
-  useEffect(() => {
-    api.get("/api/brains").then(({ data }) => setBrains(data.data || [])).catch(() => {});
-    api.get("/api/settings").then(({ data }) => {
-      setTriage((data.data || []).find((x) => x.Name === "triage_ai")?.Value || "");
-    }).catch(() => {});
-  }, []);
-  const pickTriage = async (value) => {
-    await api.patch("/api/settings", { name: "triage_ai", value });
-    setTriage(value);
-  };
-
   const runTest = async (name) => {
     setTests((t) => ({ ...t, [name]: { busy: true } }));
     try {
@@ -176,7 +223,7 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
   const usePreset = (pr) => {
     let name = pr.name, n = 2;
     while (agents[name]) name = `${pr.name}-${n++}`;
-    setDraft({ name, cmd: pr.cmd, args: pr.args.join(NEWLINE),
+    setDraft({ ...BLANK_AGENT, name, kind: "coding", purpose: "Write, review and test code in the task's repository.", rulesDoc: "coder", cmd: pr.cmd, args: pr.args.join(NEWLINE),
       resume: pr.resume, timeout: pr.timeout, cwd: "", cwdMap: "" });
   };
 
@@ -192,7 +239,7 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
         </Typography>
         <Box sx={{ flex: 1 }} />
         <Button size="small" variant="contained" startIcon={<AddIcon sx={{ fontSize: 14 }} />}
-          onClick={() => setDraft({ ...BLANK_AGENT })}>Add agent</Button>
+          onClick={() => setDraft({ ...BLANK_AGENT })}>Add profile</Button>
       </Box>
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "repeat(3, minmax(0, 1fr))" }, gap: 2.5, mb: 3 }}>
         {presets.map((pr) => (
@@ -208,29 +255,6 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
             task's own Done does, and only when the owner says so. */}
         {pane && <Box sx={{ gridColumn: "1 / -1" }}><CliPane pane={pane} /></Box>}
       </Box>
-      {brains.length > 0 && (
-        <Box sx={{ mb: 2, p: 1.5, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 2 }}>
-          <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13 }}>Who does the triage?</Typography>
-          <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1 }}>
-            One brain reads and classifies every inbound message — an AI connector (cheap, instant)
-            or one of the CLI agents below (no API key; give it a light model so triage does not run
-            the coding tier). Picking one unpicks the other: it is a single choice.
-          </Typography>
-          <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap" }}>
-            {brains.map((b) => {
-              const on = triage === b.value;
-              return (
-                <Chip key={b.value || "auto"} size="small" label={b.label} clickable={b.ready}
-                  onClick={() => b.ready && pickTriage(b.value)}
-                  title={b.ready ? "" : "not ready — save a key / finish setup on its connector first"}
-                  sx={{ height: 24, fontSize: 11, fontWeight: on ? 700 : 400, opacity: b.ready ? 1 : 0.45,
-                    bgcolor: on ? "#55697a" : "#fff", color: on ? "#fff" : DIM,
-                    border: `1px solid ${on ? "#55697a" : BORDER}` }} />
-              );
-            })}
-          </Box>
-        </Box>
-      )}
       {!Object.keys(agents).length && <Empty>No agents yet — click a preset above, Save, then Test.</Empty>}
       {Object.entries(agents).map(([name, a]) => {
         const test = tests[name];
@@ -288,9 +312,6 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
                 <Button size="small" startIcon={<BoltIcon sx={{ fontSize: 13 }} />} disabled={tests[name]?.busy}
                   onClick={() => runTest(name)}>{tests[name]?.busy ? "Testing…" : "Test"}</Button>
                 <Button size="small" onClick={() => edit(name)}>Edit</Button>
-                {/* its rules document (RESEARCHER.md, CODER.md, ...) is edited in Docs -> Profiles:
-                    documents live with documents, and this page is where the CLI is configured (the
-                    owner, 2026-09-10: "the ui for profiles should be in Docs not in settings"). */}
                 <Button size="small" color="error" onClick={() => setConfirmDel(name)}>Delete</Button>
               </Box>
             </Box>
@@ -303,14 +324,35 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
         );
       })}
       {draft && (
-        <Box sx={{ ...card, bgcolor: PANEL2, p: 2, mt: 2, display: "flex", flexDirection: "column", gap: 1.25 }}>
-          <Typography variant="body2" sx={{ color: "#55697a", fontWeight: 700 }}>{agents[draft.name] ? `Edit agent · ${draft.name}` : "New agent"}</Typography>
+        <Dialog open fullWidth maxWidth="md" onClose={() => setDraft(null)} aria-labelledby="profile-editor-title">
+          <DialogTitle id="profile-editor-title">{agents[draft.name] ? `Edit profile · ${draft.name}` : "New profile"}</DialogTitle>
+          <DialogContent>
+          {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
+        <Box sx={{ pt: 1, display: "flex", flexDirection: "column", gap: 1.25 }}>
           <Box sx={{ display: "flex", gap: 1 }}>
-            <TextField label="worker name" value={draft.name} disabled={!!agents[draft.name]} sx={{ width: 180 }}
+            <TextField autoFocus label="worker name" value={draft.name} disabled={!!agents[draft.name]} sx={{ width: 180 }}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
             <TextField fullWidth label='cmd — "claude", "codex", your own wrapper…' value={draft.cmd}
               onChange={(e) => setDraft({ ...draft, cmd: e.target.value })} />
           </Box>
+          <TextField label="When triage should choose this profile" multiline minRows={2} value={draft.purpose}
+            required={draft.triageEnabled} helperText="Describe the work it owns, for example: compare vendors using public sources and cite findings."
+            onChange={(e) => setDraft({ ...draft, purpose: e.target.value })} />
+          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+            <TextField select label="Work type" value={draft.kind} sx={{ minWidth: 180 }}
+              onChange={(e) => setDraft({ ...draft, kind: e.target.value, rulesDoc: e.target.value === "coding" ? "coder" : "" })}>
+              {[...new Set([...PROFILE_KINDS, draft.kind])].map((kind) => <MenuItem key={kind} value={kind}>{kind}</MenuItem>)}
+            </TextField>
+            <TextField select label="Instructions document" value={draft.rulesDoc} sx={{ flex: 1, minWidth: 220 }}
+              helperText="Coding workers can share CODER.md regardless of which CLI they run."
+              onChange={(e) => setDraft({ ...draft, rulesDoc: e.target.value })}>
+              <MenuItem value="">Own document with starter instructions</MenuItem>
+              {[...new Set(["coder", ...Object.entries(agents).map(([name, a]) => a.rules_doc || name), draft.rulesDoc])].filter(Boolean)
+                .map((name) => <MenuItem key={name} value={name}>{name.toUpperCase()}.md</MenuItem>)}
+            </TextField>
+          </Box>
+          <FormControlLabel control={<Switch checked={draft.triageEnabled} onChange={(e) => setDraft({ ...draft, triageEnabled: e.target.checked })} />}
+            label="Available to triage for new tasks" />
           <TextField label="args (one per line)" multiline minRows={2} value={draft.args}
             placeholder={ARGS_PH}
             onChange={(e) => setDraft({ ...draft, args: e.target.value })} />
@@ -366,10 +408,12 @@ export const AgentsPage = ({ onBack, section = "Settings", title = "Agents" }) =
           <TextField label="repo → dir map (one 'org/repo = C:/src/checkout' per line)" multiline minRows={2}
             value={draft.cwdMap} onChange={(e) => setDraft({ ...draft, cwdMap: e.target.value })} />
           <Box sx={{ display: "flex", gap: 0.75 }}>
-            <Button size="small" variant="contained" disabled={!draft.name.trim() || !draft.cmd.trim()} onClick={save}>Save</Button>
+            <Button size="small" variant="contained" disabled={!draft.name.trim() || !draft.cmd.trim() || (draft.triageEnabled && !draft.purpose.trim())} onClick={save}>Save</Button>
             <Button size="small" onClick={() => setDraft(null)}>Cancel</Button>
           </Box>
         </Box>
+          </DialogContent>
+        </Dialog>
       )}
       <ConfirmDelete open={!!confirmDel} what={`the agent "${confirmDel}"`}
         consequence="Any task set to use it falls back to the default agent. Sessions it has already run are kept."

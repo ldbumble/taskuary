@@ -62,7 +62,7 @@ DENIED = (
     (r'POST|PUT|PATCH|DELETE', r'^/api/(invoice-batches|reports/\d+/invoice-batches)(/|$)',
      'preparing or changing an invoice batch is the owner\'s decision'),
     (r'POST', r'^/api/deps/', 'installing software on this machine is the owner\'s decision'),
-    (r'POST', r'^/api/cli/install', "installing a coding CLI runs a vendor installer on this machine - the owner's decision"),
+    (r'POST', r'^/api/cli/(install|update)', "installing or updating a coding CLI runs a vendor installer on this machine - the owner's decision"),
     (r'POST', r'^/api/cli/setup', "setting a coding CLI up runs it on this machine, and signs in as the owner - their decision"),
     (r'POST', r'^/api/problems/', 'what is failing is the owner\'s to read - an agent does not get to clear the bell'),
     # ...and the doors the 2026-09-02 audit found standing open: releasing the held task of the very

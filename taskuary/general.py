@@ -131,13 +131,19 @@ def walk_pick(store) -> str:
     return next((o['pick'] for o in clis if o.get('cmd') == WALK_CLI), '') or (clis[0]['pick'] if clis else '')
 
 
-def default_pick(store) -> str:
+def assigned_pick(store, task: dict) -> str:
+    who = str((task or {}).get('Assignee') or '')
+    name = who.split(':', 1)[1] if who.startswith('agent:') else ''
+    return f'cli:{name}' if name and store.get_agent(name) else ''
+
+
+def default_pick(store, task: dict = None) -> str:
     """Which provider the chat would use if nobody chose one - the SAME reading start_session makes.
 
     The workspace used to default its picker to providers[0], and provider_options lists CLIs first,
     so a general task with no session nominated a CODING agent and posted that as its pick. The
     server's own answer prefers an API brain and only falls back to a CLI when there is none."""
-    return _selected(store)[0]
+    return assigned_pick(store, task) or _selected(store)[0]
 
 
 def _selected(store, connector_id=None, model=None, pick=None) -> tuple[str, str, str]:
@@ -377,6 +383,14 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         + (f'{layer}\n\n{TEACH_ME}\n\n' if layer else f'{TEACH_ME}\n\n')
         + f"RULES (AGENT.md - every worker)\n{agent_rules}\n\nASSISTANT STYLE\n{counsel}"
     )
+    # Triage's named worker also owns general work: its instructions and CLI must travel
+    # together, otherwise a research profile is only a label on the task.
+    chosen = assigned_pick(store, task)
+    if chosen:
+        from .agents import ensure_profile_document
+        doc = ensure_profile_document(store, chosen.split(':', 1)[1])
+        profile_rules = _brief.rules(store, doc, 4_000)
+        if profile_rules: system += f'\n\nPROFILE RULES ({doc.upper()}.md)\n{profile_rules}'
     # the procedure triage selected for this job rides here exactly as it rides in a coding brief
     # (playbooks.seed_block) - one task-brief structure for either worker kind (PW-206)
     from . import playbooks as _pbk
@@ -563,6 +577,8 @@ class GeneralSession:
     def __init__(self, store, task_id: int, connector_id=None, model=None, pick=None):
         self.sid = uuid.uuid4().hex[:12]
         self.store, self.task_id = store, task_id
+        if connector_id is None and not pick:
+            pick = assigned_pick(store, store.get_task(task_id)) or None
         self.pick, self.provider, self.model = _selected(store, connector_id, model, pick)
         self.started = datetime.now().isoformat(sep=' ', timespec='seconds')
         self.buf, self.n, self.ended, self.last = deque(), 0, None, time.time()
@@ -857,6 +873,18 @@ class GeneralSession:
         except Exception as e:
             self._remember_trace('error', 'assistant', {'result': str(e), 'is_error': True})
             self._emit(f'\x1b[1;31merror>\x1b[0m {e}\r\n\r\n')
+            # A TURN THAT DIED IS NOT A TURN STILL RUNNING. The turn opened with a `working`
+            # event and, on this road, closed with nothing - so `working` stayed the last word
+            # and the task wore "Agent is working" over a CLI that had exited two seconds in.
+            # Thirteen hours of it, on a question the chat showed with no answer beneath it
+            # (TQ-0496, 2026-09-11: codex refused the model in ~/.codex/config.toml).
+            # A background task swallows what it raises, so this is also the only place the
+            # reason reaches the log.
+            try:
+                from . import workerstate as ws
+                ws.record(self.store, self.task_id, self.sid, 'failed', text=str(e)[:4000], source='api')
+            except Exception as skipped: logger.debug(f'api worker event skipped: {skipped}')
+            logger.warning(f'assistant turn failed on task {self.task_id}: {e}')
             raise
         finally:
             self.busy, self.last = False, time.time()

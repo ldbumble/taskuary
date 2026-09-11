@@ -41,3 +41,14 @@ test("the working dots animate from the general workspace's own stylesheet", () 
   assert.match(css, /\.tq-aui-thinking i \{[^}]*animation: tqAuiThinking/);
   assert.match(css, /@keyframes tqAuiThinking/);
 });
+
+test("a turn that died shows its reason, with no answer of its own to hang it on", () => {
+  const view = read("GeneralWorkspace.jsx");
+  assert.match(view, /progress\.push\(`⚠ \$\{event\.detail\?\.result/);           // the reason is built
+  // ...and it reaches the page. The trail used to be folded into the newest ASSISTANT message,
+  // so a turn that filed no answer folded it into nothing and the chat showed the question,
+  // no reply, and no reason at all (TQ-0496).
+  assert.match(view, /const tail = out\[out\.length - 1\];/);
+  assert.match(view, /tail\?\.role === "assistant"[\s\S]{0,400}?out\.push\(\{ id: `trace-/);
+  assert.doesNotMatch(view, /for \(let i = out\.length - 1; i >= 0; i -= 1\)/);
+});

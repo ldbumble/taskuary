@@ -20,8 +20,6 @@ KNOWN = [
      'args': ['exec', '--dangerously-bypass-approvals-and-sandbox'], 'timeout': 1500},
     {'name': 'gemini', 'cmd': 'gemini', 'label': 'Gemini CLI',
      'args': ['-p', '--yolo'], 'timeout': 1500},
-    {'name': 'aider', 'cmd': 'aider', 'label': 'Aider',
-     'args': ['--yes-always', '--no-auto-commits', '--message'], 'timeout': 1500},
     {'name': 'cursor', 'cmd': 'cursor-agent', 'label': 'Cursor CLI',
      'args': ['-p', '--force', '--output-format', 'text'], 'timeout': 1500},
     {'name': 'copilot', 'cmd': 'copilot', 'label': 'GitHub Copilot CLI',
@@ -32,6 +30,16 @@ KNOWN = [
     # the run is read as plain text. POSIX only - see cliinstall.RECIPES.
     {'name': 'muse', 'cmd': 'muse', 'label': 'Meta Muse Code',
      'args': ['exec', '--yolo'], 'timeout': 1500},
+    # Cognition's Devin for Terminal - claude's shape (-p is the headless turn), different
+    # spellings for the two things a headless run cannot do without:
+    #   --permission-mode dangerous  the approval bypass, a MODE here rather than a flag;
+    #   --respect-workspace-trust    --print cannot draw the trust prompt, so in an untrusted
+    #     folder it refuses to start - and half of what this app runs is ~/.taskuary/scratch,
+    #     not a checkout (the same dead end codex's --skip-git-repo-check answers). The `=`
+    #     form on purpose: the value is optional, and a space-separated one is read as a prompt.
+    # No stream-json equivalent, so the Board reads the run as plain text.
+    {'name': 'devin', 'cmd': 'devin', 'label': 'Devin CLI',
+     'args': ['--permission-mode', 'dangerous', '--respect-workspace-trust=false', '-p'], 'timeout': 1500},
 ]
 
 
@@ -61,7 +69,11 @@ READONLY = {'claude': (('--dangerously-skip-permissions',), ('--tools', '')),
             'gemini': (('--yolo',), ()),
             # muse: same reasoning as gemini. --yolo is what turns approval AND the sandbox off, so
             # dropping it puts both back; its default on-request mode has nobody to ask in `exec`.
-            'muse': (('--yolo',), ())}
+            'muse': (('--yolo',), ()),
+            # devin: the bypass is a mode, so it is swapped rather than dropped. `normal` auto-
+            # approves reads inside the folder and asks before every write or shell command -
+            # and headlessly there is nobody to ask, which is exactly the point.
+            'devin': (('--permission-mode', 'dangerous'), ('--permission-mode', 'normal'))}
 
 # A report is allowed to LOOK, but not to act. That is deliberately different from the mail
 # classifier above, which gets no tools at all because the text it classifies is untrusted input.
@@ -83,6 +95,7 @@ REPORT_READ = {
     'codex': READONLY['codex'],
     'gemini': READONLY['gemini'],
     'muse': READONLY['muse'],
+    'devin': READONLY['devin'],
 }
 
 
@@ -164,6 +177,9 @@ def detect(store=None) -> list:
         # `installable`: never draw a button over a road that does not exist
         out.append({**k, 'installed': bool(found), 'path': found or '', 'runs': runs, 'store': blocked,
                     'install': recipe, 'installable': installable, 'configured': k['name'] in have,
+                    # a CLI that IS here can still be too old to run: `updatable` is the Update
+                    # button's own road test, and only a CLI already on this machine has one
+                    'updatable': bool(found and cliinstall.update_plan(recipe)),
                     'why_not': '' if (found or installable) else cliinstall.why_not(recipe),
                     'setup': recipe if recipe in clisetup.SETUP else ''})
     import json, os
@@ -183,6 +199,7 @@ def detect(store=None) -> list:
                     'args': list(prof.get('args') or []), 'installed': bool(found), 'path': found or '',
                     'runs': runs, 'store': blocked, 'install': recipe,
                     'installable': bool(cliinstall.plan(recipe)), 'configured': True,
+                    'updatable': bool(found and cliinstall.update_plan(recipe)),
                     'why_not': '' if (found or cliinstall.plan(recipe)) else cliinstall.why_not(recipe),
                     'setup': recipe if recipe in clisetup.SETUP else ''})
     return out

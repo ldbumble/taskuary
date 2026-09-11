@@ -1,5 +1,15 @@
 # Agent profiles: CODER.md is one profile, not the ground
 
+Profile documents now seed into the database, including on existing installations. Opening a
+missing or blank document restores its starter instructions without replacing nonempty edits.
+Coding workers share `CODER.md` by default; `rules_doc` can explicitly choose a shared or separate
+document. Docs groups workers by that document, so Coder and Codex appear together.
+
+Use **Docs → Profiles → Add profile** to set the worker's name, CLI, work type and routing purpose.
+With **Available to triage for new tasks** enabled, saving adds it to the roster used by the next
+triage call. Turning that off keeps it available for manual use. New workers get starter
+instructions, and both coding and general sessions load the assigned worker's rules.
+
 > **BUILT 2026-09-10** — the minimal version of this shipped. A profile is an `agent` row and its
 > rules document is the `doc` row of the same name; `coder` already was that, so no table and no
 > migration were needed. Five profiles ship (researcher, analyst, coordinator, marketer, trader),

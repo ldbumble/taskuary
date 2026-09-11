@@ -461,8 +461,10 @@ class ApiTests(unittest.TestCase):
 
     def test_agents_ui_flow_persists_to_config(self):
         prof = {'cmd': 'claude', 'args': ['-p'], 'resume_args': ['--resume'], 'timeout': 900,
-                'cwd_map': {'o/r': 'C:/src/r'}}
-        self.assertEqual(c.put('/api/agents/uitest', json=prof).json(), {'ok': True})
+                'cwd_map': {'o/r': 'C:/src/r'}, 'kind': 'coding',
+                'purpose': 'writes and changes code, in a repository'}
+        self.assertEqual(c.put('/api/agents/uitest', json=prof).json(),
+                         {'ok': True, 'rules_doc': 'coder', 'triage_available': True})
         self.assertEqual(c.get('/api/agents').json()['config']['uitest'], prof)
         self.assertTrue(any(a['Name'] == 'uitest' for a in c.get('/api/agents').json()['data']))
         self.assertEqual(config.load()['agents']['uitest'], prof)  # written to config.toml

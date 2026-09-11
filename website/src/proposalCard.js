@@ -35,12 +35,17 @@ export function afterExecute(p, res) {
 }
 
 // What the page does after a confirmed proposal: move the walk on, settle the item on the table first,
-// or just reload the rail. The server has ALREADY settled for a settle proposal, for a hand-off that
-// started, and for a sweep that took the table with it (pipe.clear carries Current's key) - those only
-// advance. A sweep that left the table alone reloads: nothing on the table moved.
+// offer Next, or just reload the rail. The server has ALREADY settled for a settle proposal and for a
+// hand-off that started - those only advance.
+//
+// A SWEEP that took the table with it (pipe.clear carries Current's key) is "offer": clearing the pipe
+// is not walking it, so the table is put down and Next becomes a button under the receipt rather than
+// something the page does for you (the owner, 2026-09-11: "it doesn't have to move on but should show
+// button next"). A sweep that left the table alone reloads - nothing on the table moved.
 export function afterConfirm(p, out, current) {
   if (!(out?.settle && p.key && p.key === current)) return "reload";
-  return p.kind === "item.settle" || p.kind === "pipe.clear" || out.handoff ? "advance" : "settle";
+  if (p.kind === "pipe.clear") return "offer";
+  return p.kind === "item.settle" || out.handoff ? "advance" : "settle";
 }
 
 export function afterCancel(p) { return { receipt: `Cancelled - nothing changed; ${p.ref || "it"} is where it was.`, status: "cancelled" }; }

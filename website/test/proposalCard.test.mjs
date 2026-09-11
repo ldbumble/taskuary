@@ -3,6 +3,7 @@
 // the server said happened; bottom suggestions are ordinary text.
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { proposalOf, describe, afterExecute, afterConfirm, afterCancel, markExecuted } from "../src/proposalCard.js";
 
 const p = { id: "ab12", kind: "task.create_from_message", target: 7, version: 1, status: "proposed", verb: "coder",
@@ -58,15 +59,26 @@ test("a yes said in words settles the card the server already ran", () => {
 });
 
 // A sweep clears the pipe by SELECTOR, and when what it clears includes the item on the table it has
-// settled that too - the page must move to the next thing instead of sitting on what it just cleared
-// (the owner, 2026-09-11: "did not move to next after"), and must not re-settle it.
-test("a sweep that took the table with it advances the walk; one that did not just reloads", () => {
+// settled that too - so the page puts the table down and OFFERS Next, rather than walking on by itself
+// (the owner, 2026-09-11: "it doesn't have to move on but should show button next") and rather than
+// leaving the cleared report sitting there as Current ("did not move to next after").
+test("a sweep that took the table with it offers Next; one that did not just reloads", () => {
   const swept = { id: "c1", kind: "pipe.clear", key: "msg:9", settles: true };
   const done = { settle: true, status: "done" };
-  assert.equal(afterConfirm(swept, done, "msg:9"), "advance");
+  assert.equal(afterConfirm(swept, done, "msg:9"), "offer");
   assert.equal(afterConfirm(swept, done, "msg:4"), "reload");        // the table was not in the sweep
   assert.equal(afterConfirm({ id: "c2", kind: "pipe.clear" }, done, "msg:9"), "reload");
   assert.equal(afterConfirm(swept, { settle: false, status: "error" }, "msg:9"), "reload");
   assert.equal(afterConfirm({ ...p, kind: "item.settle" }, done, "task:7"), "advance");
   assert.equal(afterConfirm(p, done, "task:7"), "settle");           // the page still settles this one
+});
+
+// The Next button itself: the receipt row carries chips, and a sweep that took the table puts one there.
+test("the receipt after a sweep carries Next, and the page puts the table down without walking on", () => {
+  const view = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
+  assert.match(view, /const chips = step === "offer" \? \[\{ verb: "next", label: "Next" \}\] : \[\];/);
+  assert.match(view, /role: "receipt", text: out\.receipt, tid: p\.tid, ref: p\.ref, chips/);
+  assert.match(view, /\{last && !!chipsOf\(m\)\.length && \(/);       // the receipt row renders them
+  assert.match(view, /const clearTable = \(\) => \{/);                 // putting the table down is not advancing
+  assert.doesNotMatch(view, /if \(step === "offer"\) advance\(\)/);
 });

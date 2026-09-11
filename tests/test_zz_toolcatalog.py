@@ -311,10 +311,11 @@ class SweepReachesTheTableTests(unittest.TestCase):
         self.assertEqual(out['cleared'], len(all_six))
         self.assertEqual(concierge.current_key(s, dock['TaskId']), '', 'the cleared item stayed on the table')
 
-    def test_the_card_advances_the_walk_when_it_sweeps_the_table(self):
-        """The sweep settles Current itself, so the card carries its key and the page moves to the next
-        thing rather than sitting on what it just cleared (the owner, 2026-09-11: "did not move to next
-        after"). A sweep that leaves the table alone carries no key and the walk stays where it is."""
+    def test_the_card_says_when_it_sweeps_the_table_as_well(self):
+        """The sweep settles Current itself, so the card carries its key: that is how the page knows the
+        table went with the rest, puts it down and offers Next instead of leaving the cleared report
+        sitting there (the owner, 2026-09-11: "did not move to next after"; "it doesn't have to move on
+        but should show button next"). A sweep that leaves the table alone carries no key."""
         s = self._pile()
         dock, _ = concierge.general.dock_task(s, 'owner')
         cat = self._cat(s)

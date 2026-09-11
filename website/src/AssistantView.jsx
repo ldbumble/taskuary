@@ -244,6 +244,16 @@ function Line({ m, live, last, actions, fresh }) {
   if (m.role === "receipt") return (
     <div className="tq-msg receipt"><span /><div className="body">✓ {m.text}
       {!!m.tid && <button type="button" className="tq-chip" style={{ marginLeft: 8 }} onClick={() => actions.openTask?.(m.tid)}>Open {m.ref || "the task"}</button>}
+      {/* a receipt can carry the walk's own word: a sweep puts the table down and OFFERS Next rather
+          than jumping to the next thing by itself (the owner, 2026-09-11). Same strip, same buttons. */}
+      {last && !!chipsOf(m).length && (
+        <div className="tq-verbs">
+          {chipsOf(m).map((c, i) => (
+            <button key={c.verb || c.label} type="button" className={i === 0 ? "tq-verb primary" : "tq-verb"}
+              disabled={actions.busy} onClick={() => actions.chip(c)}>{c.label}</button>
+          ))}
+        </div>
+      )}
     </div></div>);
   // The funnel deliberately renames msg:<mid> to agent:<tid> when somebody takes the task. Follow
   // the task identity across that rename; matching only the old key left a live coder displayed as
@@ -763,16 +773,20 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       try { res = (await api.post(`/api/operations/${p.id}/execute`, { version: p.version })).data; }
       catch (e) { res = { status: e?.response?.status === 409 ? "stale" : "error", error: e?.response?.data?.detail || errText(e) }; }
       const out = afterExecute(p, res);
+      const step = afterConfirm(p, out, current);
+      // a sweep cleared what was on the table too: the receipt carries Next, and the walk waits for it
+      const chips = step === "offer" ? [{ verb: "next", label: "Next" }] : [];
       setMsgs((m) => [...m.map((x) => (x.proposal?.id === p.id ? { ...x, proposal: { ...x.proposal, status: out.status, repo: out.repo || null, outcome: res?.outcome || null } } : x)),
-                       { id: `r${Date.now()}`, role: "receipt", text: out.receipt, tid: p.tid, ref: p.ref }]);
+                       { id: `r${Date.now()}`, role: "receipt", text: out.receipt, tid: p.tid, ref: p.ref, chips }]);
       onChanged?.();
       // the server already settled or closed the item; a settle proposal (later, tomorrow, done) must not be
       // re-marked "done" by the page, so it advances without the settle post. A hand-off that STARTED advances
       // once the same way (PW-135): the delegated task stays in Unread as Working, nothing is settled; a
       // repository still to choose, a failed start or a cancel keep the item where it is. A sweep that
-      // cleared the table is the same case: it settled Current itself, so the walk moves to the next thing.
-      const step = afterConfirm(p, out, current);
-      if (step === "advance") advance(); else if (step === "settle") await done(null); else loadPile();
+      // cleared the table settled it too, but does NOT walk on: the table is put down and Next is offered.
+      if (step === "advance") advance();
+      else if (step === "settle") await done(null);
+      else { if (step === "offer") clearTable(); loadPile(); }
     } finally { setBusy(false); }
   };
   // a card button on ONE entry (PW-151): the same proposal road the words take, minus the interpreter - the
@@ -825,9 +839,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                      { id: `r${Date.now()}`, role: "receipt", text: out.receipt, tid: p.tid, ref: p.ref }]);
   };
   // a card did its thing: say so in the thread, then move on
-  const advance = () => {
+  // the table is put down - nothing is chosen in its place. Walking on is advance(), which is this
+  // plus asking for the next thing; a sweep does only this and leaves Next to the owner's finger.
+  const clearTable = () => {
     currentRef.current = null; selectionRef.current = null;
     setCurrent(null); setCurrentItem(null);
+  };
+  const advance = () => {
+    clearTable();
     onChanged?.();                                     // a draft may have gone out: the Review badge recounts
     deferInChat(() => surfaceRef.current?.(), 500);
   };

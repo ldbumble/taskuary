@@ -29,7 +29,7 @@ import { Md, looksMd } from "./md.jsx";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12, localDay } from "./ui.jsx";
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
-import { afterCancel, afterExecute, markExecuted, proposalOf } from "./proposalCard.js";
+import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf } from "./proposalCard.js";
 import { ageText, agoText, arrivals, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, followsItem, hasNextSelection, interactiveCardIndex, keysOf, lastSaidIndex, chipsOf, nextMarkerKey, nextSelectionBody, nextSelectionScope, pendingAlerts, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, levelOf, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
@@ -769,9 +769,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       // the server already settled or closed the item; a settle proposal (later, tomorrow, done) must not be
       // re-marked "done" by the page, so it advances without the settle post. A hand-off that STARTED advances
       // once the same way (PW-135): the delegated task stays in Unread as Working, nothing is settled; a
-      // repository still to choose, a failed start or a cancel keep the item where it is.
-      if (out.settle && p.key && p.key === current) { if (p.kind === "item.settle" || out.handoff) advance(); else await done(null); }
-      else loadPile();
+      // repository still to choose, a failed start or a cancel keep the item where it is. A sweep that
+      // cleared the table is the same case: it settled Current itself, so the walk moves to the next thing.
+      const step = afterConfirm(p, out, current);
+      if (step === "advance") advance(); else if (step === "settle") await done(null); else loadPile();
     } finally { setBusy(false); }
   };
   // a card button on ONE entry (PW-151): the same proposal road the words take, minus the interpreter - the

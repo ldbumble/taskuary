@@ -33,7 +33,9 @@ class ShellRunner:
         if not self.term.n: raise RuntimeError('The installation shell did not become ready')
 
     def message(self, text):
+        from .terminal import plain
         self.ready()
+        text = ' '.join(plain(str(text)).split())
         self.term.write(('Write-Host ' + ps_quote(text) if self.windows else 'printf "%s\\n" ' + shlex.quote(text)) + '\r')
 
     def __call__(self, cmd, timeout=900):
@@ -52,7 +54,8 @@ class ShellRunner:
                 time.sleep(.2)
         result.unlink(missing_ok=True)
         self.term.settle(.5)  # the completion file can arrive before the pty reader drains stdout
-        return code, self.term.scrollback()[offset:][-3000:]
+        from .terminal import plain
+        return code, plain(self.term.scrollback()[offset:])[-3000:]
 
 
 def start(store, name, verb='install', actor='owner'):
@@ -95,7 +98,7 @@ def start(store, name, verb='install', actor='owner'):
             except Exception as e:
                 cliinstall._set('failed', name, str(e), verb=verb)
                 return
-            try: runner.message(result.get('detail') or result['phase'])
+            try: runner.message(f'{name}: {result["phase"]}. ' + ('See the output above for the error.' if result['phase'] == 'failed' else result.get('detail', '')))
             except RuntimeError: pass  # closing an already-finished pane does not undo installation
         threading.Thread(target=work, daemon=True, name=f'cli-{verb}-terminal').start()
         return cliinstall.state()

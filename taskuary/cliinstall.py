@@ -37,6 +37,20 @@ from . import spawn
 WINDOWS = os.name == 'nt'
 MARK = '# added by Taskuary'                       # the rc line's fingerprint, so we append once
 
+
+def powershell_installer(url):
+    """Read and parse the complete vendor script before executing any of it."""
+    quoted = "'" + url.replace("'", "''") + "'"
+    return ("$ErrorActionPreference = 'Stop'; "
+            "$taskuaryInstallerText = (Invoke-WebRequest -UseBasicParsing -Uri " + quoted + ").Content; "
+            "if ([string]::IsNullOrWhiteSpace($taskuaryInstallerText)) { throw 'The vendor returned an empty installer' }; "
+            "$taskuaryInstallerTokens = $null; $taskuaryInstallerErrors = $null; "
+            "[System.Management.Automation.Language.Parser]::ParseInput($taskuaryInstallerText, "
+            "[ref]$taskuaryInstallerTokens, [ref]$taskuaryInstallerErrors) | Out-Null; "
+            "if ($taskuaryInstallerErrors.Count) { throw ('The downloaded installer could not be parsed; nothing was executed: ' "
+            "+ ($taskuaryInstallerErrors.Message -join '; ')) }; "
+            "Invoke-Expression $taskuaryInstallerText")
+
 # name -> the ways in, best first. `os` narrows a recipe to a platform; absent means anywhere.
 # npm package names and their bins verified against the registry, 2026-09-09.
 RECIPES = {
@@ -70,7 +84,7 @@ RECIPES = {
     'devin': [
         {'how': 'script', 'os': 'nt', 'timeout': 300,
          'cmd': ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass',
-                 '-Command', 'irm https://static.devin.ai/cli/setup.ps1 | iex']},
+                 '-Command', powershell_installer('https://static.devin.ai/cli/setup.ps1')]},
         {'how': 'script', 'os': 'posix', 'timeout': 300,
          'cmd': ['bash', '-lc', 'curl -fsSL https://cli.devin.ai/install.sh | bash']},
     ],
@@ -150,7 +164,9 @@ def update(name: str, runner=None) -> dict:
         except Exception as e:
             last = str(e); logger.warning(f'{name}: {r["how"]} update raised - {e}'); continue
         if rc != 0:
-            last = out or f'{r["how"]} exited {rc}'; logger.warning(f'{name}: {r["how"]} update failed - {last[-200:]}'); continue
+            last = (f'{r["how"]} exited {rc}. See the installation terminal for full output.' if runner
+                    else out or f'{r["how"]} exited {rc}')
+            logger.warning(f'{name}: {r["how"]} update failed - {last[-200:]}'); continue
         _set('done', name, out.strip()[-400:] or f'{name} is up to date', find(name) or exe, verb='update')
         logger.info(f'updated {name}')
         return state()
@@ -355,7 +371,10 @@ def install(name: str, has_npm: bool = None, system: str = None, runner=None) ->
             else:
                 cmd = list(r['cmd']) if r['how'] == 'script' else [npm() or 'npm', 'install', '-g', r['pkg']]
                 rc, out = (runner or _run)(cmd, timeout=r.get('timeout', 900))
-                if rc != 0: last = out or f'{r["how"]} exited {rc}'; logger.warning(f'{name}: {r["how"]} failed - {last[-200:]}'); continue
+                if rc != 0:
+                    last = (f'{r["how"]} exited {rc}. See the installation terminal for full output.' if runner
+                            else out or f'{r["how"]} exited {rc}')
+                    logger.warning(f'{name}: {r["how"]} failed - {last[-200:]}'); continue
                 last = out
         except Exception as e:
             last = str(e); logger.warning(f'{name}: {r["how"]} raised - {e}')

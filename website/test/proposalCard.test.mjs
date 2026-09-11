@@ -3,7 +3,7 @@
 // the server said happened; bottom suggestions are ordinary text.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { proposalOf, describe, afterExecute, afterCancel, markExecuted } from "../src/proposalCard.js";
+import { proposalOf, describe, afterExecute, afterConfirm, afterCancel, markExecuted } from "../src/proposalCard.js";
 
 const p = { id: "ab12", kind: "task.create_from_message", target: 7, version: 1, status: "proposed", verb: "coder",
   params: { kind: "coding", instructions: "check the June rows" }, label: "Send to the coding agent",
@@ -55,4 +55,18 @@ test("a yes said in words settles the card the server already ran", () => {
   assert.equal(out[1].proposal.status, "proposed");     // somebody else's card is not touched
   assert.equal(out[2].text, "yes, go ahead");
   assert.equal(markExecuted(msgs, undefined), msgs);    // nothing executed: the thread is left exactly as it was
+});
+
+// A sweep clears the pipe by SELECTOR, and when what it clears includes the item on the table it has
+// settled that too - the page must move to the next thing instead of sitting on what it just cleared
+// (the owner, 2026-09-11: "did not move to next after"), and must not re-settle it.
+test("a sweep that took the table with it advances the walk; one that did not just reloads", () => {
+  const swept = { id: "c1", kind: "pipe.clear", key: "msg:9", settles: true };
+  const done = { settle: true, status: "done" };
+  assert.equal(afterConfirm(swept, done, "msg:9"), "advance");
+  assert.equal(afterConfirm(swept, done, "msg:4"), "reload");        // the table was not in the sweep
+  assert.equal(afterConfirm({ id: "c2", kind: "pipe.clear" }, done, "msg:9"), "reload");
+  assert.equal(afterConfirm(swept, { settle: false, status: "error" }, "msg:9"), "reload");
+  assert.equal(afterConfirm({ ...p, kind: "item.settle" }, done, "task:7"), "advance");
+  assert.equal(afterConfirm(p, done, "task:7"), "settle");           // the page still settles this one
 });

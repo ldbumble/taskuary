@@ -34,6 +34,15 @@ export function afterExecute(p, res) {
   return { receipt: `Not done - ${res?.error || "it failed"}. Nothing moved.`, settle: false, status: res?.status || "error" };
 }
 
+// What the page does after a confirmed proposal: move the walk on, settle the item on the table first,
+// or just reload the rail. The server has ALREADY settled for a settle proposal, for a hand-off that
+// started, and for a sweep that took the table with it (pipe.clear carries Current's key) - those only
+// advance. A sweep that left the table alone reloads: nothing on the table moved.
+export function afterConfirm(p, out, current) {
+  if (!(out?.settle && p.key && p.key === current)) return "reload";
+  return p.kind === "item.settle" || p.kind === "pipe.clear" || out.handoff ? "advance" : "settle";
+}
+
 export function afterCancel(p) { return { receipt: `Cancelled - nothing changed; ${p.ref || "it"} is where it was.`, status: "cancelled" }; }
 
 // The owner said yes IN WORDS. The server (concierge.confirm_open) had already run the operation by the

@@ -277,3 +277,56 @@ class ReadsTests(unittest.TestCase):
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             concierge.say(s, 'tell me everything', llm=greedy)
         self.assertLessEqual(len(calls), concierge.READ_ROUNDS + 1, calls)
+
+
+class SweepReachesTheTableTests(unittest.TestCase):
+    """The item ON THE TABLE has been put in the chat, which marks it surfaced/read - and a surfaced
+    row is not in `funnel.build()`. So the sweep could not see the very report the owner was looking
+    at: it cleared five of six and left Current where it was (the owner, 2026-09-11: "it did not clear
+    all 6 reports including current and did not move to next after")."""
+    def _pile(self, n=6):
+        s = T.store()
+        with mock.patch.object(ingest, '_spawn'):
+            for i in range(n):
+                T.arrive(s, subject=f'Process Error Check {i} - 0 rows', body='.', who='Taskuary',
+                         email='checks@ours.com', conv=f'c:r{i}', hours=i + 1, llm=T.brain('fyi', None, 'a report'))
+        return s
+
+    def _cat(self, s):
+        from collections import Counter
+        items = funnel.build(s, keep_surfaced=True)['items']
+        return Counter(i.get('category') for i in items).most_common(1)[0][0]
+
+    def test_the_report_on_the_table_is_swept_with_the_rest(self):
+        s = self._pile()
+        dock, _ = concierge.general.dock_task(s, 'owner')
+        cat = self._cat(s)
+        all_six = funnel.build(s, keep_surfaced=True)['items']
+        held = all_six[0]
+        funnel.settle(s, held['key'], 'surfaced', 'owner', read=True)      # the assistant put it in the chat
+        concierge.set_current(s, dock['TaskId'], held['key'], 'owner')
+        self.assertEqual(len(concierge.select_items(s, {'category': cat})), len(all_six),
+                         'the item on the table is invisible to the selector')
+        out = concierge.clear_selected(s, {'category': cat}, 'owner')
+        self.assertEqual(out['cleared'], len(all_six))
+        self.assertEqual(concierge.current_key(s, dock['TaskId']), '', 'the cleared item stayed on the table')
+
+    def test_the_card_advances_the_walk_when_it_sweeps_the_table(self):
+        """The sweep settles Current itself, so the card carries its key and the page moves to the next
+        thing rather than sitting on what it just cleared (the owner, 2026-09-11: "did not move to next
+        after"). A sweep that leaves the table alone carries no key and the walk stays where it is."""
+        s = self._pile()
+        dock, _ = concierge.general.dock_task(s, 'owner')
+        cat = self._cat(s)
+        held = funnel.build(s, keep_surfaced=True)['items'][0]
+        funnel.settle(s, held['key'], 'surfaced', 'owner', read=True)
+        concierge.set_current(s, dock['TaskId'], held['key'], 'owner')
+        call = {'kind': 'pipe.clear', 'params': {'select': {'category': cat}}}
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            p = concierge.call_turn(s, dock['TaskId'], call, None, 'mark all the report items as read', 'owner')['proposal']
+        self.assertEqual(p['key'], held['key'])
+        self.assertTrue(p['settles'])
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            other = concierge.call_turn(s, dock['TaskId'], {'kind': 'pipe.clear', 'params': {'select': {'sender': 'nobody@nowhere.com'}}},
+                                        None, 'clear those', 'owner')
+        self.assertIsNone(other.get('proposal'))            # nothing matched - and nothing on the table moved

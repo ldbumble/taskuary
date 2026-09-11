@@ -1151,11 +1151,35 @@ def _sweep(store, words: list, actor: str) -> tuple[int, list, list, list]:
     return hit, titles, mids, swept
 
 
+def _on_the_table(store, actor: str = 'owner') -> list:
+    """The item the walk is holding, as pile items. Putting one in the chat settles it `surfaced, read`
+    - so build() no longer has it, and the sweep could not see the very report the owner was looking at:
+    it cleared five of six and left Current sitting there (the owner, 2026-09-11: "it did not clear all
+    6 reports including current"). A batch on the table is its members."""
+    try: key = current_key(store, general.dock_task(store, actor)[0]['TaskId'])
+    except Exception as e: logger.debug(f'concierge: no table to read - {e}'); return []
+    if not key: return []
+    out = []
+    for k in (key[5:].split(',') if key.startswith('fyis:') else [key]):
+        if not k: continue
+        try: it = funnel.next_item(store, k, include_surfaced=True) or funnel.item_for_key(store, k)
+        except Exception as e: logger.debug(f'concierge: {k} is on the table but not in the pile - {e}'); it = None
+        if it: out.append(it)
+    return out
+
+
+def _pipe(store) -> list:
+    """The pipe AS THE OWNER SEES IT: what is unread, plus what is on the table. Counted once."""
+    items = funnel.build(store)['items']
+    have = {i['key'] for i in items}
+    return items + [i for i in _on_the_table(store) if i.get('key') and i['key'] not in have]
+
+
 def pipe_holds(store) -> str:
     """What the pipe actually contains, by kind and by who - the sentence a MISS needs. "Nothing
     matches" on its own reads as "those items are not there", which is what it said about eleven
     rows the owner could see (2026-09-10). Counted over the same set select_items searches."""
-    try: items = funnel.build(store)['items']
+    try: items = _pipe(store)
     except Exception: return ''
     if not items: return 'The pipe is empty.'
     kinds = Counter(str(i.get('kind') or '?') for i in items)
@@ -1182,7 +1206,7 @@ def select_items(store, sel: dict) -> list:
     # "clear 72" when seven reports were actually waiting, because 65 of them had been read days ago
     # (the owner, 2026-09-07: "there isn't 72 in the pipeline. There are 8 open report category in
     # unread. 72 is all time but we don't care about those").
-    for i in funnel.build(store)['items']:
+    for i in _pipe(store):
         if i['lane'] in ('blocked', 'working'): continue                  # an agent's question is never swept
         if cat and str(i.get('category') or '').lower() != cat: continue
         if kind and str(i.get('kind') or '').lower() != kind: continue
@@ -1382,6 +1406,12 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         tail = ('They are marked read and stay on the Timeline; nothing is deleted. '
                 'Nothing has been started - confirm below, or tell me what to change.')
         prop = _propose_raw(store, tid, 'pipe.clear', 0, {'select': sel, 'text': text}, label, summary, tail, actor, item)
+        # A sweep that takes the table with it has settled the table: the walk moves to the next thing
+        # instead of sitting on what it just cleared (the owner, 2026-09-11: "did not move to next
+        # after"). The KEY is what the page matches against Current; the server does the settling.
+        table = {i['key'] for i in _on_the_table(store, actor) if i.get('key')}
+        held = current_key(store, tid)
+        if held and table and table <= {i['key'] for i in hits}: prop = {**prop, 'key': held, 'settles': True}
         return {'say': prop['say'], 'options': [], 'chips': [], 'decision': None, 'proposal': prop}
     # everything else acts on ONE thing: the item on the table unless the call named its own target
     for f in toolcatalog.CONTEXT_FILLED:                 # a pile key is ours to supply, never the model's

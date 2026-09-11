@@ -38,6 +38,14 @@ export const useCliInstall = ({ terminal = false } = {}) => {
     const put = (fn, x) => { if (alive.current) fn(x); };
     put(setBusy, name); put(setNote, { text: `${v.ing} ${name}…` });
     try {
+      if (terminal) {
+        const { data } = await api.get('/api/version');
+        if ((data.cli_installer_revision || 0) < 2) {
+          put(setBusy, '');
+          put(setNote, { bad: true, text: 'Taskuary is still running the previous installer. Restart Taskuary before trying again; no installer was started.' });
+          return null;
+        }
+      }
       const started = await api.post(terminal ? `${v.path}/terminal` : v.path, { name, ...(terminal ? { terminal: true } : {}) });
       if (started.data.sid) put(setPane, { sid: started.data.sid, taskId: started.data.taskId, name, verb });
       else if (terminal) {

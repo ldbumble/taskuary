@@ -1562,6 +1562,36 @@ def close_task(store, tid: int, actor: str = 'owner') -> bool:
 # no repository, no checkout, nothing built. Real building is a hand-off the owner asks for by name.
 SETUP_KIND = 'general'
 
+WALK_SORT = ('The owner asked for something to be set up. Decide which of two jobs this is. '
+             'CONFIGURING TASKUARY ITSELF: its AI brain, a connector card, a source it reads, a '
+             'report or workflow, one of its operator documents - anything that has a screen in '
+             'this app. OPERATING ANOTHER SYSTEM on their behalf: signing into a site, driving a '
+             'portal, a tool this app has no card for. Answer with JSON only: {"taskuary": true} '
+             'for the first, {"taskuary": false} for the second.')
+
+
+def walk_is_external(store, text: str, llm=None) -> bool:
+    """Is this walk over the owner's OWN systems rather than over configuring Taskuary?
+
+    The shipped taskuary-setup SKILL is the procedure for configuring this install, and the wrong
+    map for anything else: asked to log into a payroll portal and clock in every morning, a walk
+    carrying it reads out the AI-brain-and-inbound-source checklist instead (the owner, 2026-09-10:
+    "it's supposed to walk me through this?").
+
+    The MODEL reads the intent - there is no word list here - and only a clear "no" moves the walk
+    off the skill. An unsure answer, a brain that is not there, one that returns prose or dies
+    keeps it, because most set-ups really are about this install."""
+    try: brain_ = llm or brain(store, fast=True)
+    except Exception as e:
+        logger.debug(f'the walk sort has no brain - {e}'); return False
+    if not brain_: return False
+    from . import compose
+    try: out = compose._json(brain_(WALK_SORT, str(text or '')[:2_000], max_tokens=60)) or {}
+    except Exception as e:
+        logger.info(f'the walk sort did not answer, so the walk keeps the skill - {str(e)[:200]}'); return False
+    return out.get('taskuary') is False
+
+
 def setup_task(store, text: str, actor: str = 'owner', title: str = '', kind: str = SETUP_KIND,
                agent_job: bool = False) -> dict:
     """'Set up a report that...': a task with the owner's words in it, opened for the agent that can

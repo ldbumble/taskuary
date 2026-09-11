@@ -35,8 +35,15 @@ import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
 import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WrapupCard } from "./assistantCards.jsx";
 import FeedView from "./FeedView.jsx";
+import GeneralWorkspace from "./GeneralWorkspace.jsx";
 import { ROADS, roadOfCard } from "./timelineState.js";
 import "./assistantView.css";
+
+// Which walk-through this tab was in. Per-browser and deliberately thin - one task id - because the
+// walk itself lives on the server: a reload asks the task whether it is still an open set-up before
+// showing anything, so a stale key restores nothing.
+const WALK_KEY = "taskuary_walk_tid";
+const isOpenWalk = (t) => !!t && t.SourceRef === "assistant:setup" && !["done", "dropped"].includes(t.Status);
 
 // what a PERSON sent, whatever lane it landed in (funnel.came_in): a slipped follow-up about a mail
 // is still mail, and the walk that skipped it said "0 of them are mail" with five in the pipe
@@ -302,6 +309,11 @@ function Line({ m, live, last, actions, fresh }) {
 export default function AssistantView({ onOpenTask, onNavigate, onChanged, active = true }) {
   const [state, setState] = useState(null);           // /api/concierge: the dock task, its turns, the AI choices
   const handoff = state?.handoff || null;             // the walk is in a phone chat: this tab is locked behind it
+  // A set-up walk-through, running HERE. The conversation binds to that task's own session - which
+  // is the one with the browser and the operator's brain - so the owner never leaves this tab to be
+  // walked through something they just asked for. Leaving is a button; the task and its session
+  // outlive it either way, so nothing is lost by leaving and nothing is resumed by accident.
+  const [walk, setWalk] = useState(null);
   const [msgs, setMsgs] = useState([]);
   const [pile, setPile] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -825,18 +837,51 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   };
   const setup = () => setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: "Tell me what to set up - a report, a connection, an automation - in a sentence. I open it as a walk-through with the assistant: it takes you through it here, nothing is built and no repository is touched. If something does have to be built, say send it to the coding agent.",
     card: { key: "setup", kind: "setup", lane: "report", title: "Set something up" }, options: [] }]);
+  // The walk's task, fetched once so GeneralWorkspace has the row it needs (it owns everything
+  // after that: the session, the provider, the browser beside the thread).
+  const enterWalk = async ({ tid, ref, title }) => {
+    try {
+      const { data } = await api.get(`/api/tasks/${tid}`);
+      setWalk({ tid, ref, title: title || data.task?.Title || "", task: data.task });
+      try { localStorage.setItem(WALK_KEY, String(tid)); } catch { /* private mode */ }
+    } catch (e) { setErr(errText(e)); }
+  };
+  // Leaving puts the WALK down, never the task: the session keeps whatever it was doing and the
+  // row is on the Board. This is a change of what this pane is showing, so it asks the server for
+  // nothing (PW-166 - a background update reaches the table by the owner's own navigation).
+  const leaveWalk = () => {
+    setWalk(null);
+    try { localStorage.removeItem(WALK_KEY); } catch { /* private mode */ }
+  };
+  // A reload does not abandon the walk. The id is all this browser kept; the TASK says whether it
+  // is still one - closed, dropped or reopened as something else and this shows the chat instead.
+  useEffect(() => {
+    let live = true;
+    let tid = null;
+    try { tid = localStorage.getItem(WALK_KEY); } catch { /* private mode */ }
+    if (!tid) return undefined;
+    api.get(`/api/tasks/${tid}`).then(({ data }) => {
+      if (!live) return;
+      if (isOpenWalk(data.task)) setWalk({ tid: Number(tid), ref: data.task.Ref || `TQ-${String(tid).padStart(4, "0")}`, title: data.task.Title, task: data.task });
+      else try { localStorage.removeItem(WALK_KEY); } catch { /* private mode */ }
+    }).catch(() => { try { localStorage.removeItem(WALK_KEY); } catch { /* private mode */ } });
+    return () => { live = false; };
+  }, []);
   const handOff = async (text) => {
     if (!text.trim() || busy) return;
     setBusy(true); setErr("");
     setMsgs((m) => [...m, { id: `u${Date.now()}`, role: "user", text }]);
     try {
       const { data } = await api.post("/api/concierge/setup", { text });
-      // ...and we STAY here. Opening the task yanked the owner off the Assistant tab the moment
-      // they asked for a walk-through, and sixty seconds later its own session raised a hand at
-      // them from the tab they had been thrown onto (the 2026-09-03 break test). The receipt is a
-      // link: they go when they want to.
+      // ...and we STAY here, and the walk STARTS here. Opening the task yanked the owner off the
+      // Assistant tab the moment they asked for a walk-through (the 2026-09-03 break test) - so it
+      // stopped navigating, and then nothing walked them at all: a cold row and "open it when you
+      // want to start" (the owner, 2026-09-10: "it's supposed to walk me through this?"). The
+      // conversation binds to that task's own session instead. Its browser comes with it, and
+      // leaving the walk is a button, not a navigation.
       setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: data.taskId, ref: data.ref,
-                              text: `${data.ref} — "${data.title}" is open as a step-by-step walkthrough. Open it when you want to start; its browser opens beside the assistant.` }]);
+                              text: `${data.ref} — "${data.title}". The walk is below; nothing is built and no repository is touched.` }]);
+      enterWalk({ tid: data.taskId, ref: data.ref, title: data.title });
     } catch (e) { setErr(errText(e)); }
     setBusy(false);
   };
@@ -1002,6 +1047,21 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           </div>
         </div>
       )}
+      {/* the set-up walk, running in this pane: the task's own conversation, with its browser beside
+          it (GeneralWorkspace/SessionPane). The chat underneath is kept, not replaced - Leave puts
+          the walk down and the conversation is where it was. */}
+      {!old && walk && (
+        <>
+          <div className="tq-handed" role="status">
+            <TaskuaryMark size={17} />
+            <div className="txt"><b>Walking you through {walk.ref}</b>
+              <span>{walk.title}. Nothing is built and no repository is touched; its browser opens beside this conversation.</span></div>
+            <button type="button" className="tq-chip" onClick={leaveWalk}>Leave the walk</button>
+          </div>
+          <div className="tq-walk"><GeneralWorkspace task={walk.task} compact /></div>
+        </>
+      )}
+      {!walk && (
       <div className="tq-chat-body" ref={bodyRef}>
         <div className="tq-chat-inner">
           {!state && !err && <Box sx={{ display: "grid", placeItems: "center", py: 6 }}><CircularProgress size={22} /></Box>}
@@ -1042,11 +1102,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           {err && <Typography sx={{ color: "#7a2f3c", fontSize: 12, mb: 1 }}>{err}</Typography>}
         </div>
       </div>
+      )}
       {/* ONE bottom strip for every unsolicited update (PW-165), kept until Open or Later (PW-166); the rest of
           the queue waits behind it and comes up as each is put down */}
       {/* while the walk is in a chat the interruption is SENT there (remote_assistant.push_alerts);
           a strip on the locked tab would only be a button that cannot act */}
-      {alert && !old && !handoff && (
+      {alert && !old && !handoff && !walk && (
         <div className="tq-btw" role="status">
           <span className="dot" /><div className="txt"><b>By the way —</b>{alert.text}.{pending.length > 1 ? ` (+${pending.length - 1} more)` : ""}</div>
           <button type="button" className="tq-chip primary" onClick={() => ack(alert, true)}>{alert.item === current ? "Open the update" : current ? "Switch to it" : "Open"}</button>
@@ -1063,7 +1124,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           <button type="button" className="tq-chip primary" disabled={busy} onClick={takeBack}>Take it back</button>
         </div>
       )}
-      {!old && !handoff && (
+      {!old && !handoff && !walk && (
         <div className="tq-compose">
           <div className="tq-compose-box">
             <MicButton size={18} sx={{ width: 34, height: 34, p: 0, color: DIM }} onText={(t) => setText((v) => (v ? `${v} ${t}` : t))} />

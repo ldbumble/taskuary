@@ -2975,11 +2975,46 @@ def concierge_propose(body: ConciergeProposeBody):
 class SetupBody2(BaseModel): text: str
 
 @app.post('/api/concierge/setup')
-def concierge_setup(body: SetupBody2):
-    """'Set up X': a coding task with the owner's words, started on the default agent."""
+def concierge_setup(body: SetupBody2, background: BackgroundTasks):
+    """'Set up X': a walk-through task with the owner's words, and the walk STARTS."""
     from . import concierge
-    try: return concierge.setup_task(store, body.text, ACTOR)
+    try: made = concierge.setup_task(store, body.text, ACTOR)
     except ValueError as e: raise HTTPException(422, str(e))
+    background.add_task(_walk_opens, made['taskId'], body.text)
+    return made
+
+
+# What the walk is told to do first. Like OPENING it is an instruction, never the owner's words -
+# their ask is already the one human comment on the task, and repeating it back as a second user
+# turn is the conversation talking to itself.
+WALK_OPENING = (
+    "The owner just asked for this in the Assistant chat and is watching this conversation right "
+    "now. Begin the walk. Do not restate their ask and do not ask them to confirm they want it. "
+    "First line: whether this can be done from here, and name any part that cannot. Then take them "
+    "through the FIRST step only - the actual screen, sign-in or setting - and ask the single thing "
+    "you need from them to take it. One step per turn, then stop and wait.")
+
+
+def _walk_opens(task_id: int, text: str):
+    """A set-up walk-through actually starts, right after the response, so the chat is already
+    bound to it on screen. It used to open a task and say "open it when you want to start", which
+    left the owner holding a cold row and doing the walking themselves (the owner, 2026-09-10:
+    "it's supposed to walk me through this?").
+
+    Never raises. A walk that could not start costs a sentence, and the task is still there to be
+    opened by hand - which is exactly where this stood before."""
+    from . import concierge, general
+    if general.session_for(task_id): return              # already in conversation - not ours to interrupt
+    if not general.provider_options(store):
+        # same reason as _assistant_opens: a session with no brain parks forever, looking live
+        logger.info(f'no AI connector, so the walk-through {task_ref(task_id)} cannot start')
+        return
+    try:
+        if concierge.walk_is_external(store, text): store.tag_task(task_id, general.SETUP_EXTERNAL, actor=ACTOR)
+        general.start_session(store, task_id, actor=ACTOR).send_prompt(WALK_OPENING, as_owner=False, echo=False)
+    except Exception as e:
+        general.drop_session(task_id)                    # and never leave half a session behind
+        logger.info(f'the walk-through {task_ref(task_id)} could not start: {str(e)[:200]}')
 
 @app.post('/api/concierge/act')
 def concierge_act(body: ConciergeActBody):

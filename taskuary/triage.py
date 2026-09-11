@@ -351,7 +351,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                     learned: str = None, system: str = None, notes_left: int = 0, mine=(),
                     thread: dict = None, watch: str = None, playbooks: str = None,
                     project: dict = None, candidates: list = None, repos: list = None,
-                    profiles: str = None) -> dict:
+                    profiles: str = None, routing_history: list = None) -> dict:
     """`notes` are the owner's past verdicts that may bear on this message - each one dated,
     with the sender and subject it was given on - selected by sender and topic overlap
     (ingest.relevant_notes). They are EVIDENCE: the model judges how alike this message is,
@@ -470,6 +470,9 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                            'supporting evidence, not proof that everything they write concerns that project. When two '
                            'repositories are plausible, or none fits, say null with needs_repo_choice true and the owner will choose - '
                            'never force a match because one repository happens to be configured.')
+            if routing_history:
+                from .routingmemory import PROMPT as _ROUTING_PROMPT
+                system += _ROUTING_PROMPT
             if candidates is not None:
                 system += ('\n\nTHIS IS A CHAT LINE, and same_day_lines are the lines of this room from the SAME calendar day, '
                            'oldest first, each with its id and the task it belongs to (null = none yet). Add to your answer '
@@ -491,6 +494,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                                    'recipients': len(msg.get('to') or []) + len(msg.get('cc') or [])} if how else {}),
                                **(thread or {}),
                                **({'project_context': project} if project else {}),
+                               **({'routing_history': routing_history} if routing_history else {}),
                                **({'same_day_lines': [{k: c.get(k) for k in ('id', 'who', 'when', 'text', 'task_id')} for c in candidates]} if candidates is not None else {}),
                                # 160 cut every real description mid-clause - taskuary lost "do the work, you approve", FanApp
                                # lost the noun its whole sentence was about. This is the one line the model routes on.

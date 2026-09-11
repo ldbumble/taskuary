@@ -38,6 +38,9 @@
 .tq-pile-row .up { flex: 0 0 auto; color: #526b53; font-weight: 800; font-size: 11px; }
 .tq-pile-ref { flex: 0 0 auto; font: 500 9px 'IBM Plex Mono', Consolas, monospace; color: #a09889; letter-spacing: .02em; }
 .tq-pile-tag { flex: 0 0 auto; display: inline-block; padding: 0 6px; border-radius: 99px; border: 1px solid; font: 600 9px/15px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .01em; white-space: nowrap; }
+/* the waving agent: the one lane where work has STOPPED until the owner answers, so it is
+   the one pill sized to be seen rather than read (the owner, 2026-09-11) */
+.tq-pile-tag.loud { padding: 1px 9px; font-size: 11px; line-height: 17px; font-weight: 700; letter-spacing: .005em; }
 .tq-pile-next { flex: 0 0 auto; font: 800 8.5px/1 'IBM Plex Mono', Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; color: #fff; background: linear-gradient(90deg, #55697a, #7d9a7c); padding: 3px 6px; border-radius: 99px; }
 .tq-pile-next.cur { background: linear-gradient(90deg, #41525f, #55697a); }
 /* the current one opens up: the second line says why it is here */
@@ -115,8 +118,8 @@
 .tq-task-focus-label em { margin-left: auto; color: #747b73; font-style: normal; font-weight: 600; letter-spacing: 0; text-transform: none; }
 .tq-task-box { width: 17px; height: 17px; flex: 0 0 17px; display: inline-grid; place-items: center; border: 2px solid #718b75;
   border-radius: 4px; color: #fff; background: #fff; font: 750 12px/1 'IBM Plex Sans', system-ui, sans-serif; }
-.tq-task-focus-text { margin: 8px 0 0 25px; font-size: 16px; line-height: 1.42; font-weight: 700; color: #20231f; overflow-wrap: anywhere; }
-.tq-task-focus-list { margin: 11px 0 0 25px; padding-top: 9px; border-top: 1px solid #e0e7e1; display: grid; gap: 7px; }
+.tq-task-focus-text { margin: 8px 0 0 0; font-size: 16px; line-height: 1.42; font-weight: 700; color: #20231f; overflow-wrap: anywhere; }
+.tq-task-focus-list { margin: 11px 0 0 0; padding-top: 9px; border-top: 1px solid #e0e7e1; display: grid; gap: 7px; }
 .tq-task-focus-item { display: flex; align-items: flex-start; gap: 9px; font-size: 13px; line-height: 1.4; color: #30332e; }
 .tq-task-focus-item .tq-task-box { margin-top: 1px; width: 16px; height: 16px; flex-basis: 16px; }
 .tq-task-focus-item.done { color: #777c74; text-decoration: line-through; }

@@ -40,7 +40,14 @@ def row_lane(row: dict) -> str:
             and not row.get('Working') and not row.get('AgentWaiting')): return 'queued'
     band = feed_band(row)
     # one level for everything that is the owner's task: the lane still says WHICH kind it is
-    if band == 2: return 'approve' if (row.get('ReviewStatus') == 'pending' or row.get('AgentWaiting')) else 'asked'
+    if band == 2:
+        # ...and an agent that stopped and is waiting on you is not a drafted reply awaiting a
+        # yes. The lane table has always had a word for it - `blocked`, the 👋 - and this never
+        # returned it, so a parked coder wore "needs your yes", the same pill as a draft (the
+        # owner, 2026-09-11: "can't see the hand waving"). Both stay band 2, so the rail files
+        # them together under "your task"; only the word on the row changes.
+        if row.get('AgentWaiting'): return 'blocked'
+        return 'approve' if row.get('ReviewStatus') == 'pending' else 'asked'
     return {1: 'time', 3: 'report', 4: 'fyi', 5: 'working'}[band]
 
 

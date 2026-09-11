@@ -1,7 +1,7 @@
 # Taskuary
 
 [![CI](https://github.com/ldbumble/taskuary/actions/workflows/ci.yml/badge.svg)](https://github.com/ldbumble/taskuary/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/taskuary.svg?cacheSeconds=300&release=0.3.4.4&asof=2026-09-11)](https://pypi.org/project/taskuary/)
+[![PyPI](https://img.shields.io/pypi/v/taskuary.svg?cacheSeconds=300&release=0.3.4.5&asof=2026-09-11)](https://pypi.org/project/taskuary/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab.svg)](https://github.com/ldbumble/taskuary)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -12,7 +12,7 @@ your agents, and brings decisions back to you. Nothing sends or ships without yo
 
 ![The Taskuary Studio assembling as work arrives and AI agents take their seats.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.gif?v=workspace)
 
-Taskuary is early—currently **v0.3.4.4**—so breaking changes are still possible before 1.0.
+Taskuary is early—currently **v0.3.4.5**—so breaking changes are still possible before 1.0.
 
 <p align="center">
   <a href="https://taskuary.com/demo/"><img
@@ -49,9 +49,14 @@ review the work, make the call, and approve what happens next.
 **Agents in your own repos**
 
 Send coding work to Claude Code, Codex, Gemini, Cursor, Copilot, Muse Code, or another CLI.
-Install and sign in under Connections → AI CLI agents. Manage named workers, their CLI settings,
-and their instructions under Docs → Profiles.
-Use **Add profile** to choose a CLI and describe when triage should select it. Leave
+Configure each CLI once under **Connections → AI CLI agents**: command, arguments, timeout,
+installation, sign-in and connection tests. Profiles share that connection.
+Connection cards show installation status separately from configuration. If Windows blocks an
+installer before it starts, check Windows Security's Protection history for the reason.
+Install and Update open a terminal beneath the CLI cards, showing commands and live output.
+You can answer the vendor's prompts there; closing the terminal stops a running installer.
+Under **Docs → Profiles**, use **Add profile** to choose a provider and model, set the worker's
+instructions, and describe when triage should select it. Leave
 **Available to triage for new tasks** on to include it automatically. Each profile starts with
 editable instructions; coding workers such as Coder and Codex share `CODER.md`.
 

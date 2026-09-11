@@ -92,14 +92,20 @@ function CombinedTaskText({ card }) {
   // disappearing into the thread's pale metadata. The list is read-only here; ticking stays on the task.
   const taskText = String(doc.task?.Summary || doc.task?.Title || card.title || "").trim();
   const progress = progressLine(doc.checklist);
-  const task = (taskText || (doc.checklist || []).length) ? (
+  // THE LIST IS THE TASK when there is one. This said the job twice - a bold summary, then a
+  // checklist item repeating it - under a header checkbox that ticked nothing and belonged to
+  // nothing (the owner, 2026-09-11: "seems duplicated... boxes should be for specific items in
+  // the task list"). A box now means exactly one thing: an item you can tick. The summary stands
+  // in only when there are no items, so a card with no list still says what the job is.
+  const items = doc.checklist || [];
+  const task = (taskText || items.length) ? (
     <div className="tq-task-focus" role="group" aria-label="Task to do">
-      <div className="tq-task-focus-label"><span className="tq-task-box" aria-hidden="true" />Task
+      <div className="tq-task-focus-label">{items.length ? "Task list" : "Task"}
         {progress && <em>{progress}</em>}
       </div>
-      {taskText && <div className="tq-task-focus-text">{taskText}</div>}
-      {!!(doc.checklist || []).length && <div className="tq-task-focus-list">
-        {doc.checklist.map((item, n) => (
+      {!items.length && taskText && <div className="tq-task-focus-text">{taskText}</div>}
+      {!!items.length && <div className="tq-task-focus-list">
+        {items.map((item, n) => (
           <div className={`tq-task-focus-item${item.done ? " done" : ""}`} key={item.id || n}>
             <span className="tq-task-box" aria-hidden="true">{item.done ? "✓" : ""}</span>
             <span>{item.text}</span>

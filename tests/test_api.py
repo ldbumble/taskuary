@@ -460,7 +460,9 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(vals['feed_days'], '7')
 
     def test_agents_ui_flow_persists_to_config(self):
-        prof = {'cmd': 'claude', 'args': ['-p'], 'resume_args': ['--resume'], 'timeout': 900,
+        self.assertEqual(c.put('/api/cli/connections/uitest-cli', json={
+            'cmd': 'uitest-cli', 'args': ['-p'], 'resume_args': ['--resume'], 'timeout': 900}).status_code, 200)
+        prof = {'provider': 'cli:uitest-cli', 'model': 'sonnet',
                 'cwd_map': {'o/r': 'C:/src/r'}, 'kind': 'coding',
                 'purpose': 'writes and changes code, in a repository'}
         self.assertEqual(c.put('/api/agents/uitest', json=prof).json(),
@@ -471,6 +473,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(c.put('/api/agents/bad', json={'args': []}).status_code, 422)
         self.assertEqual(c.delete('/api/agents/uitest').json(), {'ok': True})
         self.assertNotIn('uitest', config.load().get('agents', {}))
+        self.assertEqual(c.delete('/api/cli/connections/uitest-cli').status_code, 200)
         self.assertEqual(c.delete('/api/agents/uitest').status_code, 404)
 
     def test_put_agent_does_not_persist_env_server(self):
@@ -494,7 +497,8 @@ class ApiTests(unittest.TestCase):
             disk = tomllib.loads(path.read_text(encoding='utf-8'))
             self.assertTrue(disk['server'].pop('agent_token', None))     # minted on load, belongs on disk
             self.assertEqual(disk['server'], stored)
-            self.assertEqual(disk['agents']['overlay-api']['cmd'], 'echo')
+            self.assertEqual(disk['agents']['overlay-api']['provider'], 'cli:echo')
+            self.assertEqual(disk['cli_connections']['echo']['cmd'], 'echo')
         finally:
             server.cfg['server'] = old_server
             (server.cfg.get('agents') or {}).pop('overlay-api', None)

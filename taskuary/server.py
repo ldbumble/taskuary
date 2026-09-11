@@ -1,7 +1,7 @@
 """The local HTTP API + built-in minimal web UI. Localhost-only by default; set
 [server].token in config to require an X-Taskuary-Token header (for LAN/self-hosting).
 """
-import asyncio, contextlib, json, re, secrets, sys, threading, time, weakref
+import asyncio, contextlib, copy, json, re, secrets, sys, threading, time, weakref
 import requests
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -17,6 +17,7 @@ from .ingest import ingest_message, split_message, task_from_message
 from .reports import (PLANNED, REGISTRY, note_app_up, render_report, resolve_cfg, run_due_reports,
                       run_report_source)
 from . import agents as hub_agents
+from . import cli_connections
 from . import blackboard
 from . import guard
 from . import policy as policy_engine
@@ -38,18 +39,20 @@ store = SQLiteStore(config.db_path())
 try:
     from loguru import logger as _log                    # loguru is not bound at module scope yet here
     _added = hub_agents.seed_profiles(cfg)
-    if _added:
+    _split_cli = cli_connections.migrate(cfg)
+    if _split_cli:
+        import shutil
+        _config_file = config.home() / 'config.toml'
+        _backup_file = config.home() / 'config.before-cli-connections.toml'
+        if _config_file.exists() and not _backup_file.exists(): shutil.copy2(_config_file, _backup_file)
+    if _added or _split_cli:
         config.save(cfg)
+    if _added:
         _log.info(f"added the shipped agent profiles: {', '.join(_added)}")
 except Exception as _e:
     from loguru import logger as _log
     _log.warning(f'could not seed the shipped agent profiles: {_e}')
-for name, prof in cfg.get('agents', {}).items():
-    # merge, don't clobber: paths DISCOVERED at runtime (find_checkout) live on the agent row,
-    # and a boot that rewrites Config from config.toml wholesale would forget them
-    _old = json.loads((store.get_agent(name) or {}).get('Config') or '{}')
-    prof = {**prof, 'cwd_map': {**(_old.get('cwd_map') or {}), **(prof.get('cwd_map') or {})}}
-    store.upsert_agent(name, prof.get('kind', 'coding'), 'cli', json.dumps(prof))
+cli_connections.sync(cfg, store)
 @asynccontextmanager
 async def _lifespan(_app):
     live_bus.bind(asyncio.get_running_loop())
@@ -560,8 +563,26 @@ def _run_operation(op: dict, background: BackgroundTasks):
         return _dispatch_task_to_its_agent(tid, DispatchBody(kind=p.get('kind'), agent=p.get('agent'), instruction=p.get('instructions'), model=p.get('model')), background)
     if kind == 'task.set_kind':
         if str(p.get('kind')) == 'task': return not_coding(tid, NotATaskBody(learn=bool(p.get('learn', True))), background)
-        store.update_task(tid, {'Kind': str(p.get('kind'))}, ACTOR); return {'kind': p.get('kind')}
+        # ...and every other kind down the task page's own road, not a bare field write. Writing
+        # the column directly skipped BOTH things the PATCH does: it taught nothing (so "hand it
+        # to the assistant" from a card was the one reclassification that never reached either
+        # memory) and it left a live session attached to a task that had changed worker mode.
+        update_task(tid, TaskBody(Kind=str(p.get('kind'))), background)
+        return {'kind': p.get('kind')}
     if kind == 'task.not_a_task': return not_a_task(tid, NotATaskBody(learn=bool(p.get('learn', True))), background)
+    if kind == 'routing.remember':
+        # the assistant teaching the routing memory in words, which it could not do at all: it could
+        # keep a free-text fact (memory.remember) that every verdict then reads, but not a SCOPED,
+        # weighted one about this sender and this field. Teaching only - the task is not moved.
+        from . import routingmemory as rmem
+        field, value = str(p.get('field') or '').strip().lower(), str(p.get('value') or '').strip()
+        if field not in rmem.FIELDS: raise HTTPException(422, f"a routing lesson is about {', '.join(rmem.FIELDS)} - not {field or 'nothing'}")
+        if not value: raise HTTPException(422, 'say what it should have been')
+        if not store.get_task(tid): raise HTTPException(404, 'task not found')
+        taught = _teach_routing(tid, field, value, background=background)
+        if not taught: return {'field': field, 'value': value, 'learned': 0, 'already': True}
+        store.add_comment(tid, ACTOR, 'human', f'You told the assistant: work like this is {field} {value}. Triage learns from it.')
+        return {'field': field, 'value': value, **taught}
     if kind == 'task.complete':
         # the same close the PATCH road does: the pending draft is dismissed and the agent on it is stopped
         from . import concierge
@@ -952,6 +973,9 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
     # opens; otherwise both stayed registered on the task and the UI could attach to the wrong
     # one. The same rule lets the kind control move a live coding task into non-coding work.
     next_kind = fields.get('Kind')
+    # what triage said, read BEFORE the write that overturns it - verdict_of_task reads the task's
+    # current Kind, so capturing it afterwards would record the owner's answer as the verdict
+    was_verdict = operations.verdict_of_task(store, task_id) if next_kind and next_kind != t.get('Kind') else None
     if next_kind and next_kind != t.get('Kind'):
         from . import general
         live = hub_term.session_for(task_id)
@@ -979,6 +1003,20 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
             from . import funnel as _funnel
             try: _funnel.settle(store, f'task:{task_id}', 'done', ACTOR, note='the task was closed')
             except Exception as e: logger.debug(f'the closed task did not settle its item: {e}')
+    # The kind control is a VERDICT, not a field edit. It used to be the only door to "this is
+    # mine, not the agent's" that taught nothing - the tray button beside it reached the identical
+    # end state and wrote the lesson - so the owner's correction was given and dropped on the floor
+    # (TQ-0501, 2026-09-11). Same judgement, same learning, whichever control they reach for.
+    if next_kind and next_kind != t.get('Kind') and next_kind in ('task', 'general', 'coding'):
+        # moving it OFF the agent entirely is the button's judgement, so it writes the button's
+        # four records. general/coding are still agent work - a weaker signal, the routing fact only.
+        if next_kind == 'task': _teach_not_coding(task_id, t, was_verdict, None, True, background)
+        else: _teach_routing(task_id, 'kind', next_kind, background=background)
+    # ...and WHICH worker: reassigning the profile overturns triage's `profile`, the field that
+    # decided an analyst read a timesheet ask in a bank-feeds checkout.
+    who = str(fields.get('Assignee') or '')
+    if who.startswith('agent:') and who != str(t.get('Assignee') or ''):
+        _teach_routing(task_id, 'profile', who.split(':', 1)[1], background=background)
     # "This is not a coding task - it just needs an answer." Changing the kind to reply IS that
     # verdict, so the task enters the Review queue the way a question would have at triage:
     # a draft review appears (auto-drafted when that is on), instead of a repo session.
@@ -1089,7 +1127,7 @@ def task_repos(task_id: int, agent: str = 'coder'):
     return {'data': _repo_rows(task_id, agent), 'picked': picked, 'why': why}
 
 @app.put('/api/tasks/{task_id}/repo')
-def set_task_repo(task_id: int, body: RepoBody):
+def set_task_repo(task_id: int, body: RepoBody, background: BackgroundTasks = None):
     """Put this task in the right checkout. The `repo:` tag is the override that always wins over
     the guess, so this is also how you correct one - and because a running session is already in
     the wrong tree, `restart` closes it and opens a fresh one whose prompt names the new repo."""
@@ -1106,11 +1144,11 @@ def set_task_repo(task_id: int, body: RepoBody):
         row = store.get_agent(body.agent)
         if not row: raise HTTPException(422, f'unknown agent: {body.agent}')
         if not Path(body.path).is_dir(): raise HTTPException(422, f'not a directory: {body.path}')
-        prof = json.loads(row.get('Config') or '{}')
+        prof = copy.deepcopy(cfg.get('agents', {}).get(body.agent) or json.loads(row.get('Config') or '{}'))
         prof.setdefault('cwd_map', {})[body.repo] = body.path
         cfg.setdefault('agents', {})[body.agent] = prof
         config.save(cfg)
-        store.upsert_agent(body.agent, row.get('Kind') or 'coding', 'cli', json.dumps(prof))
+        cli_connections.sync(cfg, store, body.agent)
     store.add_comment(task_id, ACTOR, 'human',
                       'Marked general - no repository. The session opens in the agent\'s own folder '
                       'and the prompt says there is no codebase to change.' if body.repo == hub_term.NO_REPO
@@ -1119,7 +1157,14 @@ def set_task_repo(task_id: int, body: RepoBody):
     store.audit('task', task_id, 'set_repo', ACTOR, detail={'repo': body.repo, 'path': body.path})
     if body.repo and body.repo != hub_term.NO_REPO:
         from .projects import learn_task_repository
+        from . import routingmemory as rmem
         learn_task_repository(store, task_id, body.repo, ACTOR)
+        # the project graph already weighted this choice; what it never did was tell the PROFILE.
+        # "triage chose FanApp and the owner moved the work to TopE" is a pattern worth generalising,
+        # and it reached LEARNED.md as nothing at all.
+        if background is not None and str(t.get('Tags') or '').find(f'repo:{body.repo}') < 0:
+            try: background.add_task(learn.learn_from, store, rmem.lesson(store, task_id, 'repository', body.repo))
+            except Exception as e: logger.debug(f'repo lesson skipped: {e}')
     from .docsync import sync_projects
     sync_projects(store, ACTOR)
     out = {'ok': True, 'repo': body.repo}
@@ -1134,6 +1179,10 @@ class NotATaskBody(BaseModel):
     # "archive it": off the pipe and closed, never deleted - the chat's own verb, and what
     # filing does anyway to a task an agent has worked (work_on_task)
     archive: bool = False
+    # ...and the half the verdict never carried: WHERE it actually belongs. "Not for the agent"
+    # says where the work does not go; only this says where it does, and the routing table had
+    # no way to hold a system that is not a git repository at all (TQ-0501: clocking in is ADP).
+    belongs_to: str | None = None
 
 def _teach_not_a_task(m: dict, background=None):
     """The NOT A TASK verdict, written the SAME way whichever door it came through - the task
@@ -1176,28 +1225,104 @@ def not_coding(task_id: int, body: NotATaskBody = None, background: BackgroundTa
     if not t: raise HTTPException(404, 'task not found')
     live = hub_term.session_for(task_id)
     if live and live.alive: hub_term.close(live.sid)
-    was_kind, was_route = operations.verdict_of_task(store, task_id)
+    was = operations.verdict_of_task(store, task_id)
     store.update_task(task_id, {'Kind': 'task'}, ACTOR)
     store.clear_dispatch(task_id)
-    operations.record_direct(store, 'task.set_kind', task_id, {'kind': 'task'}, ACTOR, {'kind': 'task'}, verdict=was_kind, route_id=was_route)
+    belongs = (body.belongs_to if body else None)
+    taught = _teach_not_coding(task_id, t, was, belongs, body is None or body.learn, background)
+    store.add_comment(task_id, ACTOR, 'human', 'Not a coding task - kept on your list; the agent is off it.'
+                      + (f" It belongs to {belongs.strip()}." if (belongs or '').strip() else ''))
+    store.audit('task', task_id, 'not_coding', ACTOR, detail=dict(taught))
+    return {'ok': True, 'kind': 'task', **taught}
+
+
+def _teach_not_coding(task_id: int, t: dict, was: tuple, belongs_to: str = None,
+                      learn_it: bool = True, background=None) -> dict:
+    """The NOT-FOR-THE-AGENT verdict, written the SAME way whichever control gave it.
+
+    There are two controls for one judgement - the button on the task and the kind selector beside
+    it - and they used to teach different things: the button wrote the evidence line, the learned
+    profile and the overturned-verdict record, while the selector, which is the one most people
+    reach for, wrote the field and nothing else (TQ-0501, the owner: "i updated the type to 'your
+    task'... does that trigger memory?" - it did not). Four writes, one of them new:
+
+    - the OVERTURNED VERDICT, so what triage said and what the owner made of it stay joined;
+    - an EVIDENCE LINE in the memory table, which ingest.notes_for puts in front of triage on the
+      next message about this sender or topic;
+    - the general lesson, distilled into LEARNED.md by the hot pass (learn.learn_from);
+    - the ROUTING FACT, weighted and task-keyed (routingmemory) - and, when the owner typed one,
+      WHERE the work actually lives, which is the half no verdict has ever carried.
+    """
+    was_kind, was_route = was if was else (None, None)
+    operations.record_direct(store, 'task.set_kind', task_id, {'kind': 'task'}, ACTOR, {'kind': 'task'},
+                             verdict=was_kind, route_id=was_route)
     msgs = store.list_messages(task_id)
     learned = None
-    if msgs and (body is None or body.learn):
+    if msgs and learn_it:
         m = msgs[0]; em = (m.get('FromEmail') or '').lower(); topic = _topic_key(m)
-        mid = store.add_memory({'Scope': 'subject' if topic else 'sender' if em else 'global', 'ScopeKey': topic or em or None,
-                                'Source': 'verdict', 'Active': 1, 'CreatedBy': ACTOR,
-                                'Note': f"{str(m.get('SentAt') or '')[:10]}: \"{(m.get('Subject') or t.get('Title') or '')[:90]}\""
-                                        + (f' from {em}' if em else '') + (f' - the topic "{topic}"' if topic else '')
-                                        + ' - NOT A CODING TASK: real work, kept on the owner\'s list, no agent'})
-        learned = mid
+        said = (m.get('Subject') or t.get('Title') or '')[:90]
+        learned = store.add_memory({'Scope': 'subject' if topic else 'sender' if em else 'global', 'ScopeKey': topic or em or None,
+                                    'Source': 'verdict', 'Active': 1, 'CreatedBy': ACTOR,
+                                    'Note': f"{str(m.get('SentAt') or '')[:10]}: \"{said}\""
+                                            + (f' from {em}' if em else '') + (f' - the topic "{topic}"' if topic else '')
+                                            + ' - NOT A CODING TASK: real work, kept on the owner\'s list, no agent'
+                                            + (f' - it belongs to {belongs_to.strip()}' if (belongs_to or '').strip() else '')})
         learn.note_verdicts(store)
-        if background is not None:
-            background.add_task(learn.learn_from, store,
-                                f"mem{mid}: owner said NOT A CODING TASK: \"{(m.get('Subject') or t.get('Title') or '')[:80]}\" - "
-                                'real work, but not for the coding agent')
-    store.add_comment(task_id, ACTOR, 'human', 'Not a coding task - kept on your list; the agent is off it.')
-    store.audit('task', task_id, 'not_coding', ACTOR, detail={'memory_id': learned})
-    return {'ok': True, 'kind': 'task', 'memoryId': learned}
+    # the general lesson is _teach_routing's to write, once, in words that name what triage had
+    # actually answered - this used to write its own vaguer copy alongside it. The memory id rides
+    # as the evidence key so LEARNED.md's `ev:` tag points at the line the owner can actually read.
+    return {'memoryId': learned,
+            **_teach_routing(task_id, 'kind', 'task', belongs_to=belongs_to, background=background,
+                             ev=f'mem{learned}' if learned else None)}
+
+
+def _reclassify(task_id: int, want: str, background=None) -> None:
+    """Move an EXISTING task to a kind the owner just chose, down the task page's own road.
+
+    Four controls reclassify a task and each used to do it its own way: the kind selector (the
+    PATCH), the button, a timeline card's operation, and the assistant's "put it on my list" /
+    "talk this one through". The last three wrote `Kind` straight to the column - so they taught
+    neither memory, and left any live session attached to a task that had changed worker mode.
+    One road, so a judgement is worth the same wherever it is given.
+    """
+    t = store.get_task(task_id) or {}
+    if not t or t.get('Kind') == want or t.get('Status') in ('done', 'dropped'): return
+    update_task(task_id, TaskBody(Kind=want), background)
+
+
+def _teach_routing(task_id: int, field: str, value: str, belongs_to: str = None,
+                   background=None, ev: str = None) -> dict:
+    """One correction to a triage verdict, learned wherever it came from.
+
+    Every door that overturns a routing field lands here - the task page's button, the kind
+    control, the assistant's "put it on my list" - because the SAME judgement taught different
+    things depending on which one you used, and the one most people reach for (the kind control)
+    taught nothing at all.
+
+    It writes to BOTH memories, which answer different questions. The routing fact
+    (routingmemory) is the precise one: this sender, this field, this value, weighted by how many
+    times it has held - what the next verdict is shown. The LEARNED.md line is the general one,
+    distilled by the hot pass into a pattern about how the owner works. Only the first existed
+    for anything but `kind`, so a reassigned worker or a rerouted repository taught the profile
+    nothing whatever.
+
+    A failure to learn never fails the correction: the owner's change to their own task lands
+    whatever either memory does.
+    """
+    from . import routingmemory as rmem
+    out = {}
+    for f, v in (('system', (belongs_to or '').strip()), (field, value)):
+        if not v: continue
+        try:
+            said = rmem.lesson(store, task_id, f, v, belongs_to if f != 'system' else None, ev)
+            n = rmem.learn_correction(store, task_id, f, v, ACTOR, reason=said[:200])
+            if n: out[f'learned_{f}'] = n
+            # the general lesson, once per correction and only when it taught something new -
+            # a re-press of the same button must not spend an AI call restating a known pattern
+            if n and background is not None: background.add_task(learn.learn_from, store, said)
+        except Exception as e:
+            logger.warning(f'routing memory: {f}={v} on task {task_id} not learned - {e}')
+    return out
 
 @app.post('/api/tasks/{task_id}/not-a-task')
 def not_a_task(task_id: int, body: NotATaskBody = None, background: BackgroundTasks = None):
@@ -1982,7 +2107,12 @@ def mine_message(mid: int, body: MineBody = None, background: BackgroundTasks = 
     if not m: raise HTTPException(404, 'message not found')
     _learn_promotion(m, background)
     verdict, route_id = operations.verdict_of_message(store, m)
-    tid = m.get('TaskId') or task_from_message(store, mid, ACTOR, (body.kind if body else None) or 'task', ACTOR)
+    want = (body.kind if body else None) or 'task'
+    # A message that ALREADY has a task short-circuits task_from_message, so "this one is mine"
+    # on anything triage had already opened changed nothing and taught nothing - it claimed the
+    # task and left the kind exactly as the verdict it was overturning (the audit, 2026-09-11).
+    tid = m.get('TaskId') or task_from_message(store, mid, ACTOR, want, ACTOR)
+    _reclassify(tid, want, background)
     from . import selfclose
     selfclose.claim(store, tid, ACTOR)
     if not (store.get_task(tid) or {}).get('Assignee'): store.update_task(tid, {'Assignee': ACTOR}, ACTOR)
@@ -2009,8 +2139,8 @@ def chat_message(mid: int, background: BackgroundTasks = None):
     operations.record_direct(store, 'task.create_from_message', mid, {'kind': 'general'}, ACTOR, {'taskId': tid}, verdict=verdict, route_id=route_id)
     from . import selfclose
     selfclose.claim(store, tid, ACTOR)
+    _reclassify(tid, 'general', background)
     t = store.get_task(tid) or {}
-    if (t.get('Kind') or '') != 'general': store.update_task(tid, {'Kind': 'general'}, ACTOR)
     # the ask tag is what GeneralWorkspace reads to open with the question instead of an empty
     # thread (website/src/newTask.js). It strips the tag as it asks, so a reload never re-asks.
     tags = [x.strip() for x in str(t.get('Tags') or '').split(',') if x.strip()]
@@ -3395,7 +3525,7 @@ def brains():
             c = store.get_connector(int(o['value'][10:]))
             o['models'] = CONN_MODELS.get((c or {}).get('Type'), [])
     def _cli_of(a):
-        prof = cfg.get('agents', {}).get(a['Name']) or json.loads(a.get('Config') or '{}')
+        prof = json.loads(a.get('Config') or '{}')
         return cli_base(prof.get('cmd') or a['Name'])
     out += [{'value': f"cli:{a['Name']}",
              'label': (_cli_of(a) + (f" · {a['Name']}" if _cli_of(a) != a['Name'] else '')) + ' (your CLI)',
@@ -4039,9 +4169,12 @@ def cli_detect():
     from . import clis
     return {'data': clis.detect(store), 'tools': clis.tools()}    # tools: optional helpers (agent-browser), never offered as agents
 
-class CliInstallBody(BaseModel): name: str
+class CliInstallBody(BaseModel):
+    name: str
+    terminal: bool = False
 
 @app.post('/api/cli/install')
+@app.post('/api/cli/install/terminal')
 def cli_install(body: CliInstallBody):
     """Install a coding CLI on this machine. The owner's button - it is on guard.DENIED, because
     an agent that can run a vendor installer can be talked into running any installer.
@@ -4058,11 +4191,16 @@ def cli_install(body: CliInstallBody):
     now = cliinstall.state()
     if now['phase'] == 'installing' and now['name'] != name:
         raise HTTPException(409, f'{now["name"]} is installing right now - one at a time')
-    out = cliinstall.start(name)
+    if body.terminal:
+        from . import cli_install_terminal
+        try: out = cli_install_terminal.start(store, name, actor=ACTOR)
+        except (ValueError, RuntimeError, OSError) as e: raise HTTPException(422, str(e))
+    else: out = cliinstall.start(name)
     store.audit('connector', 0, 'cli_install_started', ACTOR, detail={'name': name})
     return out
 
 @app.post('/api/cli/update')
+@app.post('/api/cli/update/terminal')
 def cli_update(body: CliInstallBody):
     """Bring an already-installed CLI up to date, from the AI CLI agents page.
 
@@ -4079,7 +4217,11 @@ def cli_update(body: CliInstallBody):
     now = cliinstall.state()
     if now['phase'] == 'installing' and now['name'] != name:
         raise HTTPException(409, f'{now["name"]} is {now.get("verb") or "install"}ing right now - one at a time')
-    out = cliinstall.start_update(name)
+    if body.terminal:
+        from . import cli_install_terminal
+        try: out = cli_install_terminal.start(store, name, verb='update', actor=ACTOR)
+        except (ValueError, RuntimeError, OSError) as e: raise HTTPException(422, str(e))
+    else: out = cliinstall.start_update(name)
     store.audit('connector', 0, 'cli_update_started', ACTOR, detail={'name': name})
     return out
 
@@ -4217,6 +4359,68 @@ def _agent_work(store_, books=None):
             })
     return out
 
+@app.get('/api/cli/connections')
+def list_cli_connections():
+    from . import clis, climodels
+    known = {r['name']: r for r in clis.detect(store) if not r.get('profile')}
+    configured = cfg.get('cli_connections', {})
+    rows = []
+    for name in dict.fromkeys([*known, *configured]):
+        command = configured.get(name) or {k: known[name][k] for k in cli_connections.COMMAND_FIELDS if k in known.get(name, {})}
+        command = cli_connections.with_defaults(command)
+        base = cli_connections.cli_key(command.get('cmd'))
+        row = {**known.get(base, {}), **known.get(name, {}), 'name': name,
+               'label': known.get(name, {}).get('label') or name,
+               'config': command, 'configured': name in configured,
+               'models': climodels.catalog(base)}
+        if name in configured: row['installed'] = hub_agents.runs_here(command)
+        rows.append(row)
+    return {'data': rows}
+
+
+@app.put('/api/cli/connections/{name}')
+def put_cli_connection(name: str, body: dict):
+    if not re.fullmatch(r'[a-z0-9][a-z0-9_-]*', name): raise HTTPException(422, 'Invalid connection name')
+    if not isinstance(body.get('cmd'), str) or not body['cmd'].strip(): raise HTTPException(422, 'Command is required')
+    if not isinstance(body.get('args', []), list) or any(not isinstance(a, str) for a in body.get('args', [])):
+        raise HTTPException(422, 'Arguments must be a list of strings')
+    if 'resume_args' in body and (not isinstance(body['resume_args'], list) or any(not isinstance(a, str) for a in body['resume_args'])):
+        raise HTTPException(422, 'Resume arguments must be a list of strings')
+    if 'timeout' in body and (not isinstance(body['timeout'], (int, float)) or body['timeout'] <= 0):
+        raise HTTPException(422, 'Timeout must be a positive number')
+    base = cli_connections.cli_key(body['cmd'])
+    duplicate = next((key for key, c in cfg.get('cli_connections', {}).items()
+                      if key != name and cli_connections.cli_key(c.get('cmd')) == base), None)
+    if duplicate: raise HTTPException(409, f'This CLI already has a connection: {duplicate}. Edit that connection instead.')
+    connection = cli_connections.with_defaults({k: v for k, v in body.items() if k in cli_connections.COMMAND_FIELDS})
+    cfg.setdefault('cli_connections', {})[name] = connection
+    config.save(cfg)
+    cli_connections.sync(cfg, store)
+    store.audit('cli_connection', 0, 'save', ACTOR, detail=name)
+    return {'ok': True}
+
+
+@app.delete('/api/cli/connections/{name}')
+def delete_cli_connection(name: str):
+    users = [n for n, p in cfg.get('agents', {}).items() if p.get('provider') == f'cli:{name}']
+    if users: raise HTTPException(409, f'Choose another provider for these profiles first: {", ".join(users)}')
+    if name not in cfg.get('cli_connections', {}): raise HTTPException(404, 'Connection not found')
+    cfg['cli_connections'].pop(name)
+    config.save(cfg)
+    store.audit('cli_connection', 0, 'delete', ACTOR, detail=name)
+    return {'ok': True}
+
+
+@app.post('/api/cli/connections/{name}/test')
+def test_cli_connection(name: str):
+    connection = cfg.get('cli_connections', {}).get(name)
+    if not connection: raise HTTPException(404, 'Configure the CLI connection first')
+    try:
+        result, _, _ = hub_agents.run_cli({**connection, 'timeout': 30}, 'Reply with exactly: ok', lambda *a: None)
+        return {'ok': True, 'result': str(result or '')[:300]}
+    except Exception as e: return {'ok': False, 'error': str(e)[:400]}
+
+
 @app.get('/api/agents')
 def agents():
     """data = store rows (for dispatch pickers); config = the editable profiles;
@@ -4247,10 +4451,8 @@ def agents():
 def agent_test(name: str):
     """One tiny real run through the configured CLI ('Reply with exactly: ok') - proves
     the command exists, flags are right, and headless mode doesn't hang on approvals."""
-    prof = cfg.get('agents', {}).get(name)
-    if not prof:
-        a = store.get_agent(name)
-        prof = json.loads(a['Config']) if a and a.get('Config') else None
+    a = store.get_agent(name)
+    prof = json.loads(a['Config']) if a and a.get('Config') else None
     if not prof: raise HTTPException(404, 'agent not found')
     profile = {**prof, 'timeout': min(int(prof.get('timeout', 120) or 120), 180)}
     try:
@@ -4266,9 +4468,12 @@ def put_agent(name: str, body: dict):
     if not re.fullmatch(r'[a-z0-9][a-z0-9_-]*', name):
         raise HTTPException(422, 'Use a lowercase profile name with letters, numbers, hyphens or underscores')
     row = store.get_agent(name) or {}
-    existing = cfg.get('agents', {}).get(name) or json.loads(row.get('Config') or '{}')
-    profile = {**existing, **body}
-    if not str(profile.get('cmd') or '').strip(): raise HTTPException(422, 'cmd is required')
+    candidate = copy.deepcopy(cfg)
+    try:
+        profile = cli_connections.set_profile(candidate, store, name, body)
+        resolved = cli_connections.resolve(candidate, profile)
+    except ValueError as e: raise HTTPException(422, str(e))
+    if not str(resolved.get('cmd') or '').strip(): raise HTTPException(422, 'Choose a configured CLI provider')
     profile['kind'] = profile.get('kind') or hub_agents.DEFAULT_PROFILES.get(name, {}).get('kind') or row.get('Kind') or 'coding'
     profile['purpose'] = hub_agents.profile_purpose(name, profile, profile['kind'])
     if profile.get('triage_enabled', True) and not profile['purpose']:
@@ -4278,9 +4483,10 @@ def put_agent(name: str, body: dict):
     rules_doc = profile.get('rules_doc')
     if rules_doc and rules_doc != name and not store.get_doc(rules_doc) and not hub_agents.profile_template(store, rules_doc):
         raise HTTPException(422, 'Choose an existing instructions document or this profile\'s own document')
-    cfg.setdefault('agents', {})[name] = profile
+    cfg['agents'] = candidate['agents']
+    cfg['cli_connections'] = candidate.get('cli_connections', {})
     config.save(cfg)
-    store.upsert_agent(name, profile['kind'], 'cli', json.dumps(profile))
+    cli_connections.sync(cfg, store, name)
     rules_doc = hub_agents.ensure_profile_document(store, name)
     store.audit('agent', 0, 'save', ACTOR, detail=name)
     return {'ok': True, 'rules_doc': rules_doc, 'triage_available': profile.get('triage_enabled', True) is not False and bool(profile['purpose'])}

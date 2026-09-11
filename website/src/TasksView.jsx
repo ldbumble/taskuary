@@ -31,6 +31,7 @@ import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
+import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import PauseCircleIcon from "@mui/icons-material/PauseCircleOutline";
 import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
@@ -164,6 +165,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const [feedOpen, setFeedOpen] = useState(false);   // Feed the agent, for THIS task
   const [askSenderOpen, setAskSenderOpen] = useState(false);
   const [senderQuestion, setSenderQuestion] = useState("");
+  // "this one is mine" - the verdict that used to be a silent dropdown (TQ-0501)
+  const [mineOpen, setMineOpen] = useState(false);
+  const [belongsTo, setBelongsTo] = useState("");
+  const [savingMine, setSavingMine] = useState(false);
   const [askingSender, setAskingSender] = useState(false);
   const [openingReply, setOpeningReply] = useState(false);
   const [openStage, setOpenStage] = useState(null);   // a stage you opened by hand, overriding the computed focus
@@ -577,6 +582,23 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       if (!stale(id)) setErr(e?.response?.data?.detail || "Could not prepare the question for the sender");
     } finally { if (!stale(id)) setAskingSender(false); }
   };
+  // The owner overturning the routing verdict: the task becomes theirs, any agent on it stops, and
+  // - the half that never existed - they can say where the work actually lives. "Not for the agent"
+  // only ever said where it does NOT go, so the next message like it was judged no better.
+  const takeItMyself = async () => {
+    if (!selected || savingMine) return;
+    const id = selected;
+    setSavingMine(true); setErr("");
+    try {
+      await api.post(`/api/tasks/${id}/not-coding`, { learn: true, belongs_to: belongsTo.trim() || null });
+      if (stale(id)) return;
+      setMineOpen(false); setBelongsTo("");
+      await Promise.all([loadDetail(id), loadTasks()]);
+      onChanged?.();
+    } catch (e) {
+      if (!stale(id)) setErr(e?.response?.data?.detail || "Could not put the task on your list");
+    } finally { if (!stale(id)) setSavingMine(false); }
+  };
   const openReply = async (generate = false) => {
     if (!sourceMessage?.MessageId || openingReply) return;
     const id = selected;
@@ -854,10 +876,17 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     <WorkflowHeading number="1" title="Task" description="The job itself — ownership and completion live here."
                       chip={<LifecycleChip kind="task" phase={taskState} compact />} tone="#55697a" {...stageProps("task")}
                       action={!["done", "dropped"].includes(t.Status) && stage !== "task"
-                        ? <Button size="small" variant="outlined" startIcon={<DoneAllIcon sx={{ fontSize: 14 }} />}
-                            sx={{ fontSize: 10.5, minHeight: 25, py: 0, px: 0.9 }}
-                            title="Closes the task. Its agent and its reply stay separate decisions."
-                            onClick={() => finish("done")}>Mark done</Button>
+                        ? <Box sx={{ display: "flex", gap: 0.7 }}>
+                            {t.Kind !== "task" && (
+                              <Button size="small" variant="outlined" startIcon={<PersonOutlineIcon sx={{ fontSize: 14 }} />}
+                                sx={{ fontSize: 10.5, minHeight: 25, py: 0, px: 0.9, color: DIM, borderColor: BORDER }}
+                                title="Real work, but not the agent's. It goes on your list and triage learns from it."
+                                onClick={() => setMineOpen(true)}>Mine, not the agent's</Button>)}
+                            <Button size="small" variant="outlined" startIcon={<DoneAllIcon sx={{ fontSize: 14 }} />}
+                              sx={{ fontSize: 10.5, minHeight: 25, py: 0, px: 0.9 }}
+                              title="Closes the task. Its agent and its reply stay separate decisions."
+                              onClick={() => finish("done")}>Mark done</Button>
+                          </Box>
                         : null} />
                     {stage === "task" && <>
                     <Divider sx={{ my: 1.2, borderColor: BORDER }} />
@@ -1003,7 +1032,14 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   <Box sx={{ minWidth: 0, flex: liveCodingSession ? "0 1 auto" : "initial" }}>
                     {/* the agent by NAME, not by which binary is running: "Agent running · Claude Code
                         · coder (your CLI)" named a product and a profile (the owner, 2026-09-08) */}
-                    <WorkflowHeading number="2" title={term?.alive ? `${agentName(t)} is working` : "Agent work"}
+                    {/* A LIVE SESSION IS NOT A WORKING ONE. This asked only whether a pty existed,
+                        so the heading read "coder is working" directly above its own chip saying
+                        "agent · needs you" - on a coder that had been parked on a question for an
+                        hour (the owner, 2026-09-11, TQ-0499). agentState is the session's own word
+                        (taskLifecycle.agentPhase); the heading now says what the chip says. */}
+                    <WorkflowHeading number="2" title={!term?.alive ? "Agent work"
+                      : agentState === "needs you" ? `${agentName(t)} needs you`
+                        : `${agentName(t)} is working`}
                     description={term?.alive
                       ? ""
                       : "Run, pause, stop, or restart an agent. None of these actions completes the task."}
@@ -1469,6 +1505,25 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           <Button variant="contained" disableElevation onClick={askSender}
             disabled={askingSender || !senderQuestion.trim()}>
             {askingSender ? <CircularProgress size={15} /> : "Put in Review"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={mineOpen} onClose={() => !savingMine && setMineOpen(false)} fullWidth maxWidth="sm"
+        PaperProps={{ sx: { borderRadius: 3 } }}>
+        <DialogTitle>Yours, not the agent's · {detail?.ref}</DialogTitle>
+        <DialogContent sx={{ pt: "8px !important" }}>
+          <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
+            The task stays and goes on your list; any agent working it stops. Triage learns from this,
+            so the next message like it is judged better.
+          </Typography>
+          <TextField autoFocus fullWidth label="Where does this work actually live? (optional)"
+            value={belongsTo} onChange={(e) => setBelongsTo(e.target.value)}
+            placeholder="ADP" helperText="Name the system that really holds it. This is the part triage cannot work out on its own — it only knows the repositories it has the code for." />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setMineOpen(false)} disabled={savingMine}>Cancel</Button>
+          <Button variant="contained" disableElevation onClick={takeItMyself} disabled={savingMine}>
+            {savingMine ? <CircularProgress size={15} /> : "Put it on my list"}
           </Button>
         </DialogActions>
       </Dialog>

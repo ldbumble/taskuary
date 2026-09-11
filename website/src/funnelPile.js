@@ -6,7 +6,11 @@
 // Presentation lanes; the server supplies the five attention bands and item order.
 export const LANES = ["blocked", "time", "approve", "asked", "queued", "broken", "forgotten", "report", "fyi", "working"];
 export const LANE_META = {
-  blocked:   { word: "agent waiting", role: "you",     mark: "👋", hint: "an agent stopped and is waiting on you — it is blocking work" },
+  // the one lane that is a person waving at you from across the room: it wears its hand and a
+  // size the eye catches, because it is the only lane where work has actually STOPPED until you
+  // answer (the owner, 2026-09-11). `loud` is the same idea timelineState.waving has carried all
+  // along, and the same word, so the two vocabularies say one thing.
+  blocked:   { word: "agent waving", role: "you",     mark: "👋", loud: true, hint: "an agent stopped and is waiting on you — it is blocking work" },
   time:      { word: "coming up",     role: "working", mark: "⏱",  hint: "a meeting inside two hours, or an urgent sender" },
   approve:   { word: "needs your yes", role: "you",    mark: "✉️", hint: "a reply or an action is drafted and waits for you" },
   broken:    { word: "a check failed", role: "bad",     mark: "🛠",  hint: "a report or workflow you set up could not run - the cause is in it" },

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { LANES, LANE_META, ageText, agoText, arrivals, chipsOf, lastSaidIndex, cardFor, currentItemFromPile, currentPresentationChanged, departures, displayRevision, drawOrder, followsItem, keysOf, laneMeta, refreshCurrentPresentation, refreshPilePresentation, statusLine, topAlert } from "../src/funnelPile.js";
+import { LANES, LANE_META, attentionBand, levelOf, ageText, agoText, arrivals, chipsOf, lastSaidIndex, cardFor, currentItemFromPile, currentPresentationChanged, departures, displayRevision, drawOrder, followsItem, keysOf, laneMeta, refreshCurrentPresentation, refreshPilePresentation, statusLine, topAlert } from "../src/funnelPile.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 const cardsSrc = () => read("assistantCards.jsx");
@@ -312,4 +312,24 @@ test("an age said as a sentence never reads 'now ago' or 'in 3 min ago'", () => 
   assert.equal(agoText(at(-3), now), "in 3 min");     // a stamp in the future is not an age at all
   assert.equal(agoText(null, now), "");
   assert.equal(agoText("not a date", now), "");
+});
+
+test("the waving agent is the one lane sized to be seen", () => {
+  // "can't see the hand waving. used to say agent waving?" (the owner, 2026-09-11). The mark and
+  // the word were both in the table; nothing wore them, because row_lane never said `blocked`.
+  const meta = LANE_META.blocked;
+  assert.equal(meta.word, "agent waving");          // ...the same word timelineState.waving uses
+  assert.equal(meta.mark, "👋");
+  assert.equal(meta.loud, true);
+  // and it is the ONLY loud lane - a rail where everything shouts says nothing
+  assert.deepEqual(Object.entries(LANE_META).filter(([, m]) => m.loud).map(([k]) => k), ["blocked"]);
+  // still the owner's own level, not a new one
+  assert.equal(attentionBand({ lane: "blocked" }), attentionBand({ lane: "approve" }));
+});
+
+test("a loud lane wears its mark and its bigger pill", () => {
+  const feed = read("FeedView.jsx");
+  assert.match(feed, /className=\{`tq-pile-tag\$\{m\.loud \? " loud" : ""\}`\}/);
+  assert.match(feed, /\{m\.loud && m\.mark \? `\$\{m\.mark\} ` : ""\}\{m\.word\}/);
+  assert.match(read("assistantView.css"), /\.tq-pile-tag\.loud \{[^}]*font-size: 11px/);
 });

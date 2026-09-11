@@ -463,7 +463,10 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
                              playbooks=_playbook_menu(), project=project, candidates=candidates, repos=repos or None,
                              # ...and WHICH worker, out of the ones this install actually has: the roster is
                              # data the owner edits on the Agents page, never a vocabulary in the prompt
-                             profiles=hub_agents.roster(store) or None)
+                             profiles=hub_agents.roster(store) or None,
+                             # ...and what the owner corrected LAST time a message like this was
+                             # judged. The loop closes here: a verdict, a correction, a better verdict.
+                             routing_history=_routing_history(store, msg))
     intent['notes'], intent['notes_left'] = notes, notes_left
     return intent, fail
 
@@ -780,7 +783,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     # verdict leads (what the classifier decided and why), routing explains new-vs-attached,
     # and the tail says what happened NEXT - "it's a task" without "and who is working it"
     # answered a question nobody asked
-    reason = r['reason']
+    reason, verdict = r['reason'], None
     if r['decision'] != 'attach':
         # every kind names its OWN ending. Without the two lines in the middle a general or a
         # task fell through to "sent to the coding agent" - which nothing had done - and the
@@ -795,7 +798,12 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                   + (f" · playbook {intent['playbook']}" if intent.get('playbook') else '')
                   + _notes_note()
                   + f" · {r['reason']} · {act}")
-    store.add_route(mid, tid, r['decision'], r['score'], reason, r['candidates'], actor)
+        # the verdict itself, kept: the route row has always held what triage DECIDED in prose,
+        # which nothing but a person can read. A correction is only learnable against the answer
+        # it corrected, so the answer goes on file here - see routingmemory. An `attach` has no
+        # fresh verdict to keep (the task it joins already has one), hence inside the guard.
+        verdict = {k: v for k, v in intent.items() if k not in ('raw_output', 'parse_error')}
+    store.add_route(mid, tid, r['decision'], r['score'], reason, r['candidates'], actor, verdict=verdict)
     logger.info(f"ingest: {r['decision']} -> {task_ref(tid)}")
     # the timeline pushed INTO a chat: 'needs_me' pings only what is waiting on YOU - a question
     # to answer, or a task nobody was dispatched at. A task an agent just started is being
@@ -1139,6 +1147,16 @@ def exchange_lines(store, msg: dict, budget: int = None, limit: int = 200) -> li
 TRIAGE_REPO_TAG, NEEDS_REPO_TAG = 'triage-repo:', 'needs-repo-choice'
 
 
+def _routing_history(store, msg: dict) -> list:
+    """The owner's past corrections that bear on this message (routingmemory). Never fatal: a
+    verdict with no history is the normal case and must not become a verdict with no brain."""
+    try:
+        from .routingmemory import facts_for
+        return facts_for(store, msg) or None
+    except Exception as e:
+        logger.debug(f'routing history unavailable - {e}'); return None
+
+
 def repo_candidates(store) -> list:
     """The repositories triage may name (PW-092): the learned project graph's repository edges, with
     what each project is, plus the SOUL.md repo map. Only these can be chosen; anything else is dropped."""
@@ -1277,7 +1295,27 @@ def task_from_message(store, mid: int, actor: str = 'owner', kind: str = 'coding
     (go into some web app and click the thing). Already-routed messages keep the task they are on."""
     m = store.get_message(mid)
     if not m: raise ValueError(f'no message {mid}')
-    if m.get('TaskId'): return m['TaskId']
+    if m.get('TaskId'):
+        # "Already-routed messages keep the task they are on" - but the assistant's "put it on my
+        # list" arrives here too, and on a task that already exists that made it a no-op: the kind
+        # stayed whatever triage said and nothing was taught. Promoting an existing task IS the
+        # verdict, so it lands like the task page's own (server._teach_routing).
+        tid = m['TaskId']
+        t = store.get_task(tid) or {}
+        if kind and t.get('Kind') and t['Kind'] != kind and t.get('Status') not in ('done', 'dropped'):
+            store.update_task(tid, {'Kind': kind}, actor)
+            store.add_comment(tid, actor, 'human', f'Reclassified as {kind}.')
+            try:
+                from . import routingmemory as rmem
+                said = rmem.lesson(store, tid, 'kind', kind)
+                if rmem.learn_correction(store, tid, 'kind', kind, actor, reason=said[:200]):
+                    # the same two memories the buttons write. Reclassifying from the chat used to
+                    # write neither, so "put it on my list" taught less than the button saying it.
+                    from . import learn as _learn
+                    _spawn(_learn.learn_from, store, said)
+            except Exception as e:
+                logger.warning(f'routing memory: kind={kind} on {task_ref(tid)} not learned - {e}')
+        return tid
     title = (m.get('Subject') or f"{m.get('FromName') or m.get('FromEmail') or m.get('Channel')} message")[:200]
     # The ask, not the email. This used to store BodyText[:1000], so the task's own summary was
     # the greeting, the signature, the legal footer and the quoted thread underneath - and it

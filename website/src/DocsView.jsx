@@ -302,6 +302,8 @@ export default function DocsView() {
 
   if (manageProfiles) return <AgentsPage initialCreate={createProfile} onCreated={async (name, rulesDoc) => {
     await loadProfs(); setManageProfiles(false); await openProf(rulesDoc || name);
+  }} onRules={async (rulesDoc) => {
+    setManageProfiles(false); await openProf(rulesDoc);
   }} onBack={async () => {
     await loadProfs(); setManageProfiles(false);
   }} />;
@@ -346,7 +348,7 @@ export default function DocsView() {
             </Box>
             <Typography sx={{ fontSize: 11.5, color: FAINT, mb: 1.5 }}>
               The workers. Triage picks one per task and its session is seeded with that worker’s rules.
-              Edit its instructions here, or manage its name and CLI settings above.
+              Edit its instructions here, or manage its name, provider and model above.
             </Typography>
             <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", pr: 0.5, mr: -0.5 }}>
             {!profs.length && <Typography sx={{ fontSize: 12, color: FAINT }}>No profiles yet — use Manage profiles to add one.</Typography>}

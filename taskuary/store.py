@@ -19,6 +19,8 @@ POLICY_COLS = ('Name', 'Kind', 'Pattern', 'Action', 'Reason', 'SortOrder', 'Acti
 SOURCE_COLS = ('Channel', 'Address', 'Owner', 'ConnectorId', 'Active', 'ConfigJson')
 MEMORY_COLS = ('Scope', 'ScopeKey', 'Note', 'Source', 'Active', 'CreatedBy')
 PROJECT_COLS = ('Name', 'Description', 'Active', 'CreatedBy', 'UpdatedBy')
+ROUTING_FACT_COLS = ('Field', 'Signal', 'SignalKey', 'Value', 'Confidence', 'EvidenceCount',
+                     'Confirmed', 'Source')
 PROJECT_LINK_COLS = ('ProjectId', 'Kind', 'Value', 'Label', 'Confidence', 'EvidenceCount',
                      'Confirmed', 'Source')
 ATT_COLS = ('MessageId', 'ExternalId', 'Name', 'ContentType', 'Size', 'ContentId', 'Inline', 'Path')
@@ -132,7 +134,7 @@ CREATE TABLE IF NOT EXISTS task_artifact (ArtifactId INTEGER PRIMARY KEY, TaskId
   ContentType TEXT, Size INTEGER, Path TEXT, Kind TEXT, CreatedBy TEXT, CreatedAt TEXT);
 CREATE TABLE IF NOT EXISTS route (RouteId INTEGER PRIMARY KEY, MessageId INTEGER, TaskId INTEGER,
   Decision TEXT, Score REAL, Reason TEXT, CandidatesJson TEXT, RoutedBy TEXT, CreatedAt TEXT,
-  RawOutput TEXT, ParseError TEXT);
+  RawOutput TEXT, ParseError TEXT, VerdictJson TEXT);
 CREATE TABLE IF NOT EXISTS comment (CommentId INTEGER PRIMARY KEY, TaskId INTEGER, Actor TEXT,
   ActorType TEXT, Body TEXT, CreatedAt TEXT);
 CREATE TABLE IF NOT EXISTS audit (Id INTEGER PRIMARY KEY, EntityType TEXT, EntityId INTEGER,
@@ -166,6 +168,17 @@ CREATE TABLE IF NOT EXISTS project_link (LinkId INTEGER PRIMARY KEY, ProjectId I
   UNIQUE(ProjectId, Kind, Value));
 CREATE TABLE IF NOT EXISTS project_evidence (EvidenceId INTEGER PRIMARY KEY, LinkId INTEGER NOT NULL,
   TaskId INTEGER NOT NULL, Reason TEXT, CreatedAt TEXT, UNIQUE(LinkId, TaskId));
+-- What triage decided, and what the owner made of it. Deliberately project_link's shape: the
+-- repository field has had exactly this loop since the project graph landed, and it is the only
+-- verdict field that ever learned anything. `routing_fact` generalises it to the rest - one field
+-- of the verdict, keyed to a signal the NEXT message can carry - rather than inventing a second
+-- vocabulary for the same idea. Evidence is task-keyed, so a replay cannot inflate a guess.
+CREATE TABLE IF NOT EXISTS routing_fact (FactId INTEGER PRIMARY KEY, Field TEXT NOT NULL,
+  Signal TEXT NOT NULL, SignalKey TEXT COLLATE NOCASE NOT NULL, Value TEXT NOT NULL,
+  Confidence REAL DEFAULT 0, EvidenceCount INTEGER DEFAULT 0, Confirmed INTEGER DEFAULT 0,
+  Source TEXT, CreatedAt TEXT, UpdatedAt TEXT, UNIQUE(Field, Signal, SignalKey, Value));
+CREATE TABLE IF NOT EXISTS routing_evidence (EvidenceId INTEGER PRIMARY KEY, FactId INTEGER NOT NULL,
+  TaskId INTEGER NOT NULL, Reason TEXT, CreatedAt TEXT, UNIQUE(FactId, TaskId));
 CREATE TABLE IF NOT EXISTS doc (Name TEXT PRIMARY KEY, Content TEXT, UpdatedBy TEXT, UpdatedAt TEXT);
 CREATE TABLE IF NOT EXISTS dispatchq (QId INTEGER PRIMARY KEY, TaskId INTEGER, BehindTaskId INTEGER,
   Agent TEXT, Reason TEXT, CreatedAt TEXT);
@@ -294,6 +307,8 @@ INDEXES = (
     'CREATE INDEX IF NOT EXISTS idx_project_link_identity ON project_link(Kind, Value, Confidence)',
     'CREATE INDEX IF NOT EXISTS idx_project_link_project ON project_link(ProjectId, Kind)',
     'CREATE INDEX IF NOT EXISTS idx_project_evidence_task ON project_evidence(TaskId, LinkId)',
+    'CREATE INDEX IF NOT EXISTS idx_routing_fact_lookup ON routing_fact(Field, Signal, SignalKey)',
+    'CREATE INDEX IF NOT EXISTS idx_routing_evidence_task ON routing_evidence(TaskId, FactId)',
     'CREATE INDEX IF NOT EXISTS idx_route_message ON route(MessageId, RouteId)',
     'CREATE INDEX IF NOT EXISTS idx_route_task ON route(TaskId)',
     'CREATE INDEX IF NOT EXISTS idx_review_message ON review(MessageId, ReviewId)',
@@ -560,6 +575,13 @@ class SQLiteStore:
                 self.cx.execute('ALTER TABLE route ADD COLUMN RawOutput TEXT')
             if 'ParseError' not in routecols:
                 self.cx.execute('ALTER TABLE route ADD COLUMN ParseError TEXT')
+            # ...and keep the verdict when triage SUCCEEDS. RawOutput cannot carry it: a non-null
+            # one raises the Timeline's diagnostic panel (FeedView: the "what did triage answer"
+            # box), so every task would have worn an error face. Its own column instead - the
+            # before half of every correction diff, without which a rewritten summary or a
+            # reassigned profile teaches nothing, because nothing remembers what was there.
+            if 'VerdictJson' not in routecols:
+                self.cx.execute('ALTER TABLE route ADD COLUMN VerdictJson TEXT')
             # why a reply draft could not be written (PW-046): the review stays pending and
             # reply-needed, the reason is shown beside it with a retry, never mistaken for a draft
             rvcols = {r[1] for r in self.cx.execute('PRAGMA table_info(review)')}
@@ -2722,12 +2744,21 @@ class SQLiteStore:
         return self._one('SELECT * FROM transcript WHERE TaskId=? ORDER BY TranscriptId DESC LIMIT 1', (task_id,))
 
     def add_route(self, mid, tid, decision, score, reason, candidates, routed_by='router',
-                  raw_output=None, parse_error=None):
+                  raw_output=None, parse_error=None, verdict=None):
         return self._exec('''INSERT INTO route
-            (MessageId,TaskId,Decision,Score,Reason,CandidatesJson,RoutedBy,CreatedAt,RawOutput,ParseError)
-            VALUES (?,?,?,?,?,?,?,?,?,?)''',
+            (MessageId,TaskId,Decision,Score,Reason,CandidatesJson,RoutedBy,CreatedAt,RawOutput,ParseError,VerdictJson)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
                           (mid, tid, decision, score, reason, json.dumps(candidates), routed_by, _now(),
-                           raw_output, parse_error))
+                           raw_output, parse_error,
+                           json.dumps(verdict, default=str)[:8000] if verdict else None))
+    def task_verdict(self, task_id):
+        """The triage verdict a correction is measured against: the newest route row on this task
+        that kept one. Absent for tasks routed before the column existed, and for the mechanical
+        router, which has no verdict to keep."""
+        row = self._one('SELECT VerdictJson FROM route WHERE TaskId=? AND VerdictJson IS NOT NULL '
+                        'ORDER BY RouteId DESC LIMIT 1', (task_id,))
+        try: return json.loads(row['VerdictJson']) if row else None
+        except Exception: return None
     def list_routes(self, task_id): return self._rows('SELECT * FROM route WHERE TaskId=? ORDER BY RouteId', (task_id,))
     def add_comment(self, task_id, actor, actor_type, body):
         return self._exec('INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt) VALUES (?,?,?,?,?)',
@@ -3301,6 +3332,49 @@ class SQLiteStore:
                                              'EvidenceCount': 0, 'Confirmed': 1 if confirmed else 0,
                                              'Source': source}, PROJECT_LINK_COLS,
                             {'CreatedAt': _now(), 'UpdatedAt': _now()})
+
+    def upsert_routing_fact(self, field: str, signal: str, key: str, value: str,
+                            confidence: float = 0, confirmed: bool = False, source: str = 'system') -> int:
+        """One lesson about a verdict field, added without weakening evidence already on it."""
+        field, signal = str(field or '').strip().lower(), str(signal or '').strip().lower()
+        key, value = str(key or '').strip(), str(value or '').strip()
+        if not (field and signal and key and value): raise ValueError('a routing fact needs a field, a signal and a value')
+        row = self._one('SELECT * FROM routing_fact WHERE Field=? AND Signal=? AND SignalKey=? COLLATE NOCASE AND Value=?',
+                        (field, signal, key, value))
+        if row:
+            self._exec('UPDATE routing_fact SET Confidence=MAX(Confidence,?), Confirmed=MAX(Confirmed,?), '
+                       "Source=COALESCE(NULLIF(?,''),Source), UpdatedAt=? WHERE FactId=?",
+                       (float(confidence or 0), 1 if confirmed else 0, source, _now(), row['FactId']))
+            return row['FactId']
+        return self._insert('routing_fact', {'Field': field, 'Signal': signal, 'SignalKey': key, 'Value': value,
+                                             'Confidence': float(confidence or 0), 'EvidenceCount': 0,
+                                             'Confirmed': 1 if confirmed else 0, 'Source': source},
+                            ROUTING_FACT_COLS, {'CreatedAt': _now(), 'UpdatedAt': _now()})
+
+    def add_routing_evidence(self, fact_id: int, task_id: int, reason: str = 'owner corrected the verdict') -> bool:
+        """Count a task once against a lesson. Same curve the project graph uses, for the same
+        reason: one correction is a visible hypothesis (.72), two independent ones may route (.86)."""
+        if self._one('SELECT 1 x FROM routing_evidence WHERE FactId=? AND TaskId=?', (fact_id, task_id)):
+            return False
+        try:
+            self._exec('INSERT INTO routing_evidence (FactId,TaskId,Reason,CreatedAt) VALUES (?,?,?,?)',
+                       (fact_id, task_id, reason, _now()))
+        except sqlite3.IntegrityError:
+            return False
+        n = self._one('SELECT COUNT(*) n FROM routing_evidence WHERE FactId=?', (fact_id,))['n']
+        self._exec('UPDATE routing_fact SET EvidenceCount=?, Confidence=MAX(Confidence,?), UpdatedAt=? WHERE FactId=?',
+                   (n, min(.96, .58 + .14 * int(n)), _now(), fact_id))
+        return True
+
+    def routing_facts(self, field: str = None, signals: list = None) -> list:
+        """Lessons on file, strongest first. `signals` is [(signal, key), ...] from this message."""
+        sql, args = 'SELECT * FROM routing_fact WHERE 1=1', []
+        if field: sql, args = sql + ' AND Field=?', args + [str(field).lower()]
+        if signals is not None:
+            if not signals: return []
+            sql += ' AND (' + ' OR '.join(['(Signal=? AND SignalKey=? COLLATE NOCASE)'] * len(signals)) + ')'
+            for s, k in signals: args += [str(s).lower(), str(k)]
+        return self._rows(sql + ' ORDER BY Confirmed DESC, Confidence DESC, EvidenceCount DESC', tuple(args))
 
     def add_project_evidence(self, link_id: int, task_id: int, reason: str = 'owner chose repository') -> bool:
         """Count a task once on an identity edge; return False when startup already replayed it."""

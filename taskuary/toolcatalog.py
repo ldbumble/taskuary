@@ -31,6 +31,11 @@ PURPOSE = {
     'agent.stop':               'stop the running agent',
     'report.rerun':             'run that report again',
     'memory.remember':          'keep a fact - `note`',
+    'routing.remember':         ('remember how work like this should be ROUTED next time - `field`: kind | profile | system, '
+                                 'and `value`. kind: coding (an agent in a checkout) | general (the assistant) | task (the owner, '
+                                 'no agent). system: where the work actually lives when no repository here can touch it, named '
+                                 'plainly ("ADP"). It teaches triage and moves nothing - say it when the owner tells you a '
+                                 'verdict was wrong, or where a kind of job really belongs.'),
     'task.split':               'split one arrival into two jobs - `text`',
     'pipe.clear':               'clear a SET of items from the pipe at once - takes `select` (below); read, never deleted',
     'task.setup':               'open a walk-through with the assistant, for a set-up that needs digging first - `text`',

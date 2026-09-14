@@ -1,0 +1,80 @@
+{
+  "recordedAt": "2026-09-14T17:52:50.703Z",
+  "commit": "c8977f998c5adadf7463aedb1f22e366d3c91874",
+  "demoIndex": "assets/index-ChiEocQp.js",
+  "scenarioClock": "2026-09-03 10:24 local; advances during playback",
+  "duration": 126.28863945578233,
+  "chapters": [
+    {
+      "id": "01",
+      "title": "Start with “Walk me through my tasks”",
+      "caption": "One click brings the next request forward",
+      "voice": "Start with Walk me through my tasks. Here's Ruth's request.",
+      "start": 0,
+      "duration": 6.338639455782313
+    },
+    {
+      "id": "02",
+      "title": "Connect the tools you already use",
+      "caption": "Your inbox brings the request in",
+      "voice": "First, connect the tools you already use. Outlook, Gmail, Teams, and other services can bring requests into Taskuary. You set this up once. You do not need to copy each new request into an AI chat.",
+      "start": 6.338639455782313,
+      "duration": 16.9,
+      "capturedBuild": "assets/index-DMFWVN3E.js"
+    },
+    {
+      "id": "03",
+      "title": "Connect the source of your numbers",
+      "caption": "The assistant needs access to the information behind the answer",
+      "voice": "Then connect the source of your information. In this example, the numbers belong in the company's finance database. Connections also include spreadsheets and business systems. Your assistant works from the sources you make available.",
+      "start": 23.238639455782312,
+      "duration": 16.8,
+      "capturedBuild": "assets/index-DMFWVN3E.js"
+    },
+    {
+      "id": "04",
+      "title": "Choose the AI you want to use",
+      "caption": "Claude Code, Codex, or a connected local model",
+      "voice": "Choose the AI connection for the work. You can configure Claude Code or Codex through their command line connections, or connect a local model through Ollama. After setup, the everyday work happens in the same general assistant workspace.",
+      "start": 40.03863945578232,
+      "duration": 16.84,
+      "capturedBuild": "assets/index-DMFWVN3E.js"
+    },
+    {
+      "id": "05",
+      "title": "Open the request. The assistant gets to work.",
+      "caption": "The original request is already in the workspace",
+      "voice": "Now open Ruth's request and choose Send to agent. Her original question goes straight into the general assistant workspace. In this scripted example, the assistant prepares the August total, compares it with July, and checks that the categories add up.",
+      "start": 56.87863945578232,
+      "duration": 17.9,
+      "capturedBuild": "assets/index-DMFWVN3E.js"
+    },
+    {
+      "id": "06",
+      "title": "The answer is ready",
+      "caption": "A total, a comparison, a breakdown, and the reporting cutoff",
+      "voice": "Here is the result: one hundred ninety two thousand, six hundred dollars, up eight percent from July. The category breakdown is included, along with the reporting cutoff and what was excluded. The assistant has also prepared the reply.",
+      "start": 74.77863945578233,
+      "duration": 17.73,
+      "capturedBuild": "assets/index-DMFWVN3E.js"
+    },
+    {
+      "id": "07",
+      "title": "Review the finished reply",
+      "caption": "Read it. Edit it if needed. Approve when you are ready.",
+      "voice": "Open Review. The reply to Ruth is ready to read, with the same numbers and the important context. You can edit the wording here. You do not have to assemble the answer or copy it back into your email.",
+      "start": 92.50863945578233,
+      "duration": 15.29,
+      "capturedBuild": "assets/index-DMFWVN3E.js"
+    },
+    {
+      "id": "08",
+      "title": "One approval closes the loop",
+      "caption": "Simulated approval · no email is sent in the demo",
+      "voice": "When it looks right, approve the reply. It leaves the pending queue. This demo sends nothing; it shows the approval step. That is the everyday flow: a request comes in, your general assistant prepares the work, and you review the result.",
+      "start": 107.79863945578234,
+      "duration": 18.49,
+      "capturedBuild": "assets/index-DMFWVN3E.js"
+    }
+  ]
+}

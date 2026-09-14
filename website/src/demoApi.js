@@ -14,6 +14,7 @@ import FIXTURES from "./demoFixtures.json";
 import { track } from "./demoTrack";
 import { demoTerminalRecording } from "./demoTerminal.js";
 import { createDemoAssistantState, installDemoAssistantTimeline } from "./demoAssistantData.js";
+import { installNumbersWorkflow, finishNumbersWorkflow, NUMBERS_TASK, NUMBERS_REQUEST, NUMBERS_RESULT } from "./demoNumbers.js";
 
 export const DEMO = import.meta.env?.VITE_DEMO === "1";
 
@@ -21,6 +22,9 @@ const clone = (x) => JSON.parse(JSON.stringify(x ?? null));
 const state = clone(FIXTURES);          // the recording, as this visitor has changed it
 installDemoAssistantTimeline(state);
 const scriptedAssistant = createDemoAssistantState();
+const numbersWorkflow = typeof location !== "undefined" && new URLSearchParams(location.search).get("workflow") === "numbers";
+if (numbersWorkflow) installNumbersWorkflow(state, scriptedAssistant);
+let numbersStarted = false;
 scriptedAssistant.transcripts[scriptedAssistant.activeTaskId] = scriptedAssistant.messages;
 let nextId = 9000;
 
@@ -37,6 +41,12 @@ const read = (url) => {
   });
   if (p === "/api/funnel/pile") return clone(scriptedAssistant.pile);
   if (p === "/api/concierge/chats") return clone({ data: scriptedAssistant.chats });
+  if (p === "/api/reviews") {
+    const status = new URLSearchParams(query(url)).get("status");
+    const box = clone(state[p] || { data: [] });
+    if (status) box.data = box.data.filter((review) => review.Status === status);
+    return box;
+  }
   let conciergeChat = p.match(/^\/api\/concierge\/chats\/(\d+)$/);
   if (conciergeChat) {
     const taskId = Number(conciergeChat[1]);
@@ -45,6 +55,10 @@ const read = (url) => {
   }
   if (state[url] !== undefined && state[url] !== null) return clone(state[url]);
   if (state[p] !== undefined && state[p] !== null) return clone(state[p]);
+  if (/^\/api\/tasks\/\d+\/diff$/.test(p)) return {
+    files: [], added: 0, removed: 0, scope: "task",
+    why: "This demo has no checkout to inspect. In your own Taskuary, this shows the agent's changes.",
+  };
   let m = p.match(/^\/api\/tasks\/(\d+)\/assistant$/);
   if (m) return clone(state["/api/tasks/detail"]?.[`${m[1]}:assistant`]) || { messages: [], providers: [], session: null };
   m = p.match(/^\/api\/tasks\/(\d+)$/);
@@ -96,6 +110,10 @@ const assistantBox = (taskId) => {
   box.session ||= { sid: `demo${taskId}`, alive: true, provider: "Claude Code · coder (your CLI)",
     label: "Taskuary assistant", mode: "assistant", model: "", pick: "cli:coder", busy: false,
     trace: [], trace_revision: 0 };
+  if (numbersWorkflow && Number(taskId) === NUMBERS_TASK) {
+    box.session.provider = box.providers.find(p => p.id === box.session.pick)?.label || box.providers[0].label;
+    if (box.session.pick === "cli:coder") box.session.pick = "cli:analyst";
+  }
   return box;
 };
 
@@ -115,6 +133,7 @@ const dockTask = () => {
 };
 
 const demoReply = (taskId, asked) => {
+  if (numbersWorkflow && Number(taskId) === NUMBERS_TASK) return NUMBERS_RESULT;
   const task = state["/api/tasks/detail"]?.[String(taskId)]?.task;
   if (task?.SourceRef !== "assistant:dock") return REPLIES[assistantBox(taskId).messages.length % REPLIES.length];
   const attention = feedRows().find((r) => r.NeedsYou) || feedRows()[0];
@@ -209,15 +228,21 @@ export const startDemoAssistant = (taskId, body, emit = () => {}) => {
   emit({ type: "start", session: clone(box.session) });
   return new Promise((resolve) => {
     setTimeout(() => {
-      const progress = { type: "progress", name: "text", detail: "reading the task and the thread it came from" };
+      const progress = { type: "progress", name: "text", detail: numbersWorkflow && Number(taskId) === NUMBERS_TASK
+        ? "Reading the fictional posted-invoice report; comparing August with July and checking the category totals."
+        : "reading the task and the thread it came from" };
       box.session.trace.push(progress); box.session.trace_revision += 1; emit(clone(progress));
       setTimeout(() => {
         const said = demoReply(taskId, asked);
         box.messages.push({ id: `a${++nextId}`, role: "assistant", content: [{ type: "text", text: said }] });
         box.session.busy = false;
+        if (numbersWorkflow && Number(taskId) === NUMBERS_TASK) {
+          finishNumbersWorkflow(state);
+          box.session.waiting = true; box.session.phase = "parked";
+        }
         const done = { type: "done", reply: said, payload: clone(box) };
         emit(done); resolve(done);
-      }, 800);
+      }, numbersWorkflow && Number(taskId) === NUMBERS_TASK ? 8000 : 800);
     }, 500);
   });
 };
@@ -239,6 +264,17 @@ const write = (method, url, body) => {
   const p = path(url);
   noted(method, p);
   let m;
+
+  if (method === "post" && numbersWorkflow && p === `/api/tasks/${NUMBERS_TASK}/dispatch`) {
+    const existing = numbersStarted;
+    if (!existing) {
+      numbersStarted = true;
+      const detail = state["/api/tasks/detail"][NUMBERS_TASK];
+      detail.comments.push({ ActorType: "assistant_user", Actor: "Ruth Bennett", Body: NUMBERS_REQUEST, CreatedAt: "2026-09-03 10:24:00" });
+      startDemoAssistant(NUMBERS_TASK, { text: NUMBERS_REQUEST });
+    }
+    return { dispatch: "assistant", started: !existing, existing, taskId: NUMBERS_TASK, ref: "TQ-0018", agent: "analyst", demo: true };
+  }
 
   if (method === "post" && p === "/api/assistant/dock/new") {
     const previous = scriptedAssistant.chats.find((c) => c.taskId === scriptedAssistant.activeTaskId);
@@ -410,7 +446,13 @@ const write = (method, url, body) => {
 
   if ((m = p.match(/^\/api\/tasks\/(\d+)\/assistant\/(messages|session)$/))) {
     const box = assistantBox(m[1]);
-    if (m[2] === "session") return { ...box, providers: box.providers || [] };
+    if (m[2] === "session") {
+      if (numbersWorkflow && Number(m[1]) === NUMBERS_TASK && body?.pick) {
+        box.session.pick = body.pick;
+        box.session.provider = box.providers.find(p => p.id === body.pick)?.label || box.session.provider;
+      }
+      return { ...box, providers: box.providers || [] };
+    }
     const asked = String(body?.text || "").trim();
     if (asked) {
       box.messages.push({ id: `u${++nextId}`, role: "user", content: [{ type: "text", text: asked }] });
@@ -488,7 +530,11 @@ const respond = (fn) => new Promise((resolve, reject) => {
 });
 
 const demoApi = {
-  get: (url) => respond(() => { noted("get", path(url)); return read(url); }),
+  get: (url, config) => respond(() => {
+    const params = new URLSearchParams(config?.params || {}).toString();
+    const target = params ? `${url}${String(url).includes("?") ? "&" : "?"}${params}` : url;
+    noted("get", path(url)); return read(target);
+  }),
   post: (url, body) => respond(() => write("post", url, body)),
   patch: (url, body) => respond(() => write("patch", url, body)),
   put: (url, body) => respond(() => write("put", url, body)),

@@ -19,6 +19,12 @@ from .counsel import is_invite
 GRAPH = 'https://graph.microsoft.com/v1.0'
 MAIL_SELECT = ('id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,bodyPreview,body,'
                'conversationId,webLink,hasAttachments,isRead,inferenceClassification,flag')
+# ...and the same thing without the one field that carries the weight. A folder page LISTS; the
+# bodies come back afterwards (_mail_bodies) for the mail that survives the policy, so a flood
+# sender's twenty thousand characters are never pulled across the wire for a row nobody opens.
+MAIL_LIST_SELECT = ','.join(f for f in MAIL_SELECT.split(',') if f != 'body')
+MAIL_BODY_SELECT = 'id,body'
+BODY_BATCH = 20              # Graph's $batch ceiling
 
 
 def _cfg(c): return json.loads(c.get('ConfigJson') or '{}')
@@ -475,7 +481,7 @@ def _mail_msgs(tok, upn, since, folder='inbox', cap=MAIL_BATCH, inclusive=False,
     bounds = f"receivedDateTime {'ge' if inclusive else 'gt'} {since}"
     if through: bounds += f' and receivedDateTime le {through}'
     params, out = (None if continuation else {
-        '$top': 50, '$orderby': 'receivedDateTime asc', '$select': MAIL_SELECT, '$filter': bounds
+        '$top': 50, '$orderby': 'receivedDateTime asc', '$select': MAIL_LIST_SELECT, '$filter': bounds
     }), []
     seen_urls = set()
     while url and len(out) < cap:
@@ -493,6 +499,44 @@ def _mail_msgs(tok, upn, since, folder='inbox', cap=MAIL_BATCH, inclusive=False,
     # full page. Durable callers keep that bounded one-page overshoot and its exact nextLink;
     # the historical list-only helper retains its advertised hard view cap.
     return (out, url) if with_continuation else out[:cap]
+
+
+def _mail_bodies(tok: str, upn: str, ids: list) -> list:
+    """The bodies for mail already listed, twenty at a time through Graph's $batch. A failed
+    sub-request is simply a message with no body - _body falls back to the preview the listing
+    already carried, which is what the old single-request page would have given a stripped mail."""
+    out = []
+    for i in range(0, len(ids), BODY_BATCH):
+        chunk = ids[i:i + BODY_BATCH]
+        r = requests.post(f'{GRAPH}/$batch', timeout=60, headers={'Authorization': f'Bearer {tok}'},
+                          json={'requests': [{'id': str(k), 'method': 'GET',
+                                              'url': f'/users/{upn}/messages/{x}?$select={MAIL_BODY_SELECT}'}
+                                             for k, x in enumerate(chunk)]})
+        r.raise_for_status()
+        for resp in r.json().get('responses') or []:
+            body = resp.get('body')
+            if resp.get('status') == 200 and isinstance(body, dict) and body.get('id'): out.append(body)
+            else: logger.debug(f"mail body {resp.get('id')} came back {resp.get('status')}")
+    return out
+
+
+def _hydrate(tok: str, upn: str, drop=None):
+    """Fill a listed page back in - only what is actually MISSING, like chains completes a thread.
+    `drop(m)` names the mail a policy throws away on its envelope alone: that mail keeps the
+    255-char preview as its body and costs no request at all."""
+    def go(batch):
+        want = [m['id'] for m in batch if 'body' not in m and not (drop and drop(m))]
+        if not want: return batch
+        got = {b['id']: b for b in _mail_bodies(tok, upn, want)}
+        return [{**m, **got.get(m['id'], {})} for m in batch]
+    return go
+
+
+def _envelope(m: dict) -> dict:
+    """What a bodyless policy rule reads: who sent it, what it is called, and the preview Graph
+    hands out free with the listing (a keyword found there is found in the full body too)."""
+    frm = (m.get('from') or {}).get('emailAddress') or {}
+    return {'from_email': frm.get('address'), 'subject': m.get('subject'), 'body': m.get('bodyPreview')}
 
 
 _MAIL_MSGS_IMPLEMENTATION = _mail_msgs
@@ -548,7 +592,7 @@ def _mail_progress(s: dict, requested_since: str = None) -> tuple[dict, dict]:
 
 
 def _mail_folder(tok, s: dict, folder: str, since_iso: str, through: str,
-                 cursor: dict, handle, save) -> int:
+                 cursor: dict, handle, save, hydrate=None) -> int:
     """Drain one folder oldest-first, batch by batch, until a short batch says it is exhausted.
 
     handle(m) takes each message not yet seen this poll and returns what it added. Between
@@ -579,6 +623,8 @@ def _mail_folder(tok, s: dict, folder: str, since_iso: str, through: str,
             result = (_mail_msgs(tok, s['Address'], since, folder=folder), None)
         batch, continuation = result if isinstance(result, tuple) else (result, None)
         fresh = [m for m in batch if m['id'] not in seen]
+        # the page's bodies, fetched once for the whole batch - never one request per message
+        if hydrate and fresh: fresh = hydrate(fresh)
         for m in fresh:
             seen.add(m['id']); n += handle(m)
         if not continuation: break
@@ -1204,7 +1250,11 @@ def _poll_one(store, c, file_only, backfill_days, llm, read_it) -> int:
                         # a duplicate is still mail the hub has read - the flag may just be
                         # older than the switch, and skipping it would strand those bold rows
                         if read_it and not m.get('isRead'): mark_mail_read(tok, s['Address'], m['id'])
-                        if fresh_thread:
+                        # ...but only for mail that STAYED. A skip policy's mail is never shown, so the
+                        # chain behind it is never read either - and a shared log mailbox is one dead
+                        # conversation per message: a 3-day catch-up bought 634 history calls that each
+                        # listed the one message we already had and added nothing (3.5 of its 13 minutes).
+                        if fresh_thread and out['status'] not in ('skipped', 'ignored', 'duplicate'):
                             # Another configured folder may still own older messages in this
                             # conversation. History must wait for every intake folder to finish.
                             before = _local(m.get('receivedDateTime') or '')
@@ -1215,11 +1265,17 @@ def _poll_one(store, c, file_only, backfill_days, llm, read_it) -> int:
                 # timeline, never triaged into work - then every folder the source asks for (the Inbox
                 # alone unless the card says otherwise), each oldest first and read to the end
                 folders = [('sentitems', lambda m: ingest_outbound_mail(store, s['Address'], m))] + [(f, inbound(f)) for f in source_folders(s)]
+                # your own replies are always read in full; inbound mail pays for its body only if a
+                # bodyless rule has not already thrown it away (policy.dropped_unseen)
+                from . import policy as policy_engine
+                pols = store.list_policies()
+                sent_fill = _hydrate(tok, s['Address'])
+                in_fill = _hydrate(tok, s['Address'], drop=lambda m: policy_engine.dropped_unseen(_envelope(m), pols))
                 broken = []
                 for folder, handle in folders:
                     try:
-                        n += _mail_folder(tok, s, folder, cycle_since, through,
-                                          cursor, handle, save)
+                        n += _mail_folder(tok, s, folder, cycle_since, through, cursor, handle, save,
+                                          hydrate=sent_fill if folder == 'sentitems' else in_fill)
                     except _MailSourceChanged as e:
                         logger.warning(f"outlook {s['Address']} {folder}: {e}")
                         broken.append(f'{folder}: {e}')

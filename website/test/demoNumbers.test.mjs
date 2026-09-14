@@ -1,0 +1,31 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { installNumbersWorkflow, finishNumbersWorkflow, NUMBERS_TASK, NUMBERS_MESSAGE, NUMBERS_REVIEW, NUMBERS_DRAFT, NUMBERS_RESULT } from '../src/demoNumbers.js';
+import { createDemoAssistantState } from '../src/demoAssistantData.js';
+
+test('numbers walkthrough keeps the request, general workspace and review on the same task', async () => {
+  const state = JSON.parse(await readFile(new URL('../src/demoFixtures.json', import.meta.url), 'utf8'));
+  const assistant = createDemoAssistantState();
+  installNumbersWorkflow(state, assistant);
+  const task = state['/api/tasks/detail'][NUMBERS_TASK];
+  assert.equal(task.task.Kind, 'general');
+  assert.equal(task.messages[0].MessageId, NUMBERS_MESSAGE);
+  assert.equal(task.reviews.length, 0);
+  assert.equal(state['/api/reviews'].data.length, 0, 'no review before preparation');
+  assert.equal(assistant.pile.items[0].tid, NUMBERS_TASK);
+  assert.deepEqual(assistant.messages, [], 'the walkthrough begins at the welcome button');
+  const review = finishNumbersWorkflow(state);
+  finishNumbersWorkflow(state);
+  assert.equal(state['/api/reviews'].data.length, 1, 'reopening the workspace does not duplicate its review');
+  assert.equal(review.ReviewId, NUMBERS_REVIEW);
+  assert.equal(review.TaskId, NUMBERS_TASK);
+  assert.equal(review.MessageId, NUMBERS_MESSAGE);
+  assert.equal(review.Status, 'pending');
+  assert.equal(task.reviews[0], review);
+  const amounts = [...NUMBERS_RESULT.matchAll(/\| (?:Supplies|Services|Software) \| \$([\d,]+)/g)].map(m => Number(m[1].replaceAll(',','')));
+  const total = Number(NUMBERS_DRAFT.match(/spend was \$([\d,]+)/)[1].replaceAll(',',''));
+  assert.equal(amounts.length, 3);
+  assert.equal(amounts.reduce((a,b)=>a+b,0), total, 'the reply total matches the result categories');
+  assert.match(NUMBERS_DRAFT, /Open purchase orders are excluded/i);
+});

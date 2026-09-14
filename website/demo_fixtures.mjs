@@ -33,11 +33,11 @@ const PATHS = [
   "/api/setup", "/api/funnel", "/api/funnel/pile", "/api/concierge", "/api/concierge/chats",
   "/api/ingest/status", "/api/problems", "/api/runs/live",
   "/api/feed?limit=200", "/api/tasks?active=1", "/api/tasks",
-  "/api/reviews", "/api/terminals", "/api/agents", "/api/brains", "/api/cli/detect",
+  "/api/reviews", "/api/terminals", "/api/agents", "/api/brains", "/api/cli/detect", "/api/cli/connections",
   "/api/connectors", "/api/sources", "/api/report-types", "/api/reports/last-runs",
   "/api/board/notes", "/api/hub", "/api/people", "/api/send-targets", "/api/memory", "/api/policies",
   "/api/calendar/today", "/api/audit/recent", "/api/semantic/metrics", "/api/soul/interview",
-  "/api/voice/status", "/api/learned/graph",
+  "/api/voice/status", "/api/learned/graph", "/api/how-it-works",
 ];
 
 const out = {};
@@ -54,7 +54,9 @@ for (const path of PATHS) {
 // the docs, and the per-task detail for everything on the board - the two things a visitor
 // clicks into first
 out["/api/doc"] = {};
-for (const name of ["soul", "triage", "style", "counsel", "coder", "digest", "learned"]) {
+const profileDocs = Object.entries(out["/api/agents"]?.config || {})
+  .map(([name, config]) => config.rules_doc || name);
+for (const name of new Set(["soul", "triage", "style", "counsel", "agent", "coder", "digest", "learned", ...profileDocs])) {
   const r = await fetch(`${BASE}/api/doc/${name}`).catch(() => null);
   out["/api/doc"][name] = r && r.ok ? await r.json() : { content: "" };
 }
@@ -64,6 +66,8 @@ for (const t of (out["/api/tasks"]?.data || [])) {
   if (r && r.ok) out["/api/tasks/detail"][t.TaskId] = await r.json();
   const a = await fetch(`${BASE}/api/tasks/${t.TaskId}/assistant`).catch(() => null);
   if (a && a.ok) out["/api/tasks/detail"][`${t.TaskId}:assistant`] = await a.json();
+  const diff = await fetch(`${BASE}/api/tasks/${t.TaskId}/diff`).catch(() => null);
+  if (diff && diff.ok) out[`/api/tasks/${t.TaskId}/diff`] = await diff.json();
 }
 // Attachments, and the FILES themselves. The static demo has no server to serve
 // /api/attachments/7 from, so every image rides in the recording as a data: URI - which is how

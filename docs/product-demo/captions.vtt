@@ -1,0 +1,82 @@
+WEBVTT
+
+00:00:00.350 --> 00:00:03.424
+Start with Walk me through my tasks.
+
+00:00:03.424 --> 00:00:05.389
+Here's Ruth's request.
+
+00:00:06.689 --> 00:00:09.935
+First, connect the tools you already use.
+
+00:00:09.935 --> 00:00:15.954
+Outlook, Gmail, Teams, and other services can bring requests into Taskuary.
+
+00:00:15.954 --> 00:00:17.696
+You set this up once.
+
+00:00:17.696 --> 00:00:22.289
+You do not need to copy each new request into an AI chat.
+
+00:00:23.589 --> 00:00:26.516
+Then connect the source of your information.
+
+00:00:26.516 --> 00:00:31.239
+In this example, the numbers belong in the company's finance database.
+
+00:00:31.239 --> 00:00:35.230
+Connections also include spreadsheets and business systems.
+
+00:00:35.230 --> 00:00:39.089
+Your assistant works from the sources you make available.
+
+00:00:40.389 --> 00:00:42.870
+Choose the AI connection for the work.
+
+00:00:42.870 --> 00:00:50.705
+You can configure Claude Code or Codex through their command line connections, or connect a local model through Ollama.
+
+00:00:50.705 --> 00:00:55.929
+After setup, the everyday work happens in the same general assistant workspace.
+
+00:00:57.229 --> 00:01:00.456
+Now open Ruth's request and choose Send to agent.
+
+00:01:00.456 --> 00:01:05.331
+Her original question goes straight into the general assistant workspace.
+
+00:01:05.331 --> 00:01:13.829
+In this scripted example, the assistant prepares the August total, compares it with July, and checks that the categories add up.
+
+00:01:15.129 --> 00:01:22.190
+Here is the result: one hundred ninety two thousand, six hundred dollars, up eight percent from July.
+
+00:01:22.190 --> 00:01:28.552
+The category breakdown is included, along with the reporting cutoff and what was excluded.
+
+00:01:28.552 --> 00:01:31.559
+The assistant has also prepared the reply.
+
+00:01:32.859 --> 00:01:33.698
+Open Review.
+
+00:01:33.698 --> 00:01:39.644
+The reply to Ruth is ready to read, with the same numbers and the important context.
+
+00:01:39.644 --> 00:01:41.812
+You can edit the wording here.
+
+00:01:41.812 --> 00:01:46.849
+You do not have to assemble the answer or copy it back into your email.
+
+00:01:48.149 --> 00:01:50.977
+When it looks right, approve the reply.
+
+00:01:50.977 --> 00:01:53.081
+It leaves the pending queue.
+
+00:01:53.081 --> 00:01:56.925
+This demo sends nothing; it shows the approval step.
+
+00:01:56.925 --> 00:02:05.339
+That is the everyday flow: a request comes in, your general assistant prepares the work, and you review the result.

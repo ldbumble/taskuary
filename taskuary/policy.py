@@ -30,6 +30,22 @@ def matches(policy: dict, msg: dict, known_sender: bool = True) -> bool:
     return False
 
 
+# the kinds that judge a message by its envelope alone - no body, no sender history
+BODYLESS = ('sender', 'sender_domain', 'noreply')
+
+
+def dropped_unseen(msg: dict, policies: list) -> bool:
+    """Is this message thrown away on its envelope alone? Then its body is never worth downloading.
+
+    'skip' and 'ignore' are the top two tiers, so nothing a later rule says can put the message back
+    on the timeline - and a rule that reads the body can only ever agree to drop it harder. A shared
+    log mailbox is almost entirely this: 622 of 630 messages in one 3-day catch-up, each carrying a
+    full body through the folder page for a row nobody will ever open.
+    """
+    return any(p.get('Active', 1) and p['Kind'] in BODYLESS and p['Action'] in ('skip', 'ignore')
+               and matches(p, msg) for p in policies)
+
+
 def apply_retroactively(store, policy: dict) -> int:
     """A skip rule works BACKWARDS too: muting a flood sender shouldn't leave 200 of their
     old rows sitting on the timeline. Turning the rule off puts that history back (as

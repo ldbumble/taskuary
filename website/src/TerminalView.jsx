@@ -151,6 +151,12 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
     // instead, at reading speed, so an agent is visibly working on a page with no server
     if (import.meta.env.VITE_DEMO === "1") {
       let stop = false;
+      refit.current = fitSafely;
+      const observer = new ResizeObserver(() => {
+        const box = host.current?.getBoundingClientRect();
+        if (!stop && box && usableTerminalBox(box.width, box.height)) fitSafely();
+      });
+      observer.observe(host.current);
       (async () => {
         const api = (await import("./api.js")).default;
         const { data } = await api.get(`/api/terminals/${sid}`).catch(() => ({ data: null }));
@@ -159,11 +165,13 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
           || "the agent's session replays here");
         for (const line of text.split(NL)) {
           if (stop) return;
-          term.writeln(line);
+          await new Promise((resolve) => term.writeln(line, resolve));
+          if (stop) return;
+          setState("live"); setRestoring(false);
           await new Promise((r) => setTimeout(r, 90));
         }
       })();
-      return () => { stop = true; };
+      return () => { stop = true; observer.disconnect(); refit.current = () => {}; term.dispose(); };
     }
     const ws = new WebSocket(wsUrl(sid));
     const send = (m) => ws.readyState === 1 && ws.send(JSON.stringify(m));

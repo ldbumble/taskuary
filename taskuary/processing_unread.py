@@ -132,11 +132,18 @@ def card_for(store, item, compact, live_state, now, states=None):
                 unread=unread, deferred=bool(read.get('deferred')), defer_until=read.get('defer_until'),
                 more=max(0, compact['counts'].get('messages', 0) - 1),
                 source=row.get('SourceName') or compact['source'], status=row.get('MsgStatus') or compact['status'], order_band=funnel._band(card))
-    # shown-but-not-read exists only for the lanes that wait on a yes: the mark keeps Next from bouncing
-    # straight back to a draft it just introduced (everything else shown is read - the receipt says so)
+    # shown-but-not-read exists for the lanes whose unread is NOT the receipt's to give: the mark keeps
+    # Next from bouncing straight back to what it just introduced (everything else shown is read - the
+    # receipt says so).
+    # 'queued' belongs with them. A task handed to an agent that has not started is forced unread by the
+    # clause above, so its receipts - all of them read - decide nothing, and with no shown-mark either
+    # there was nothing left to keep it out of the walk: Next introduced it, Next chose it again, for as
+    # long as the owner kept pressing (the owner, 2026-09-14: "i keep on clicking next on the assistant
+    # idea but it just comes right back behind the current one"). It stays unread, so the work tab still
+    # holds it; it is simply no longer the thing the walk offers next. A new chat clears the mark.
     card.pop('surfaced', None); card.pop('surfaced_at', None)
     shown = next((st for k in [card['key'], *card['aliases']] for st in [(states or {}).get(k)] if st and st.get('Status') == 'surfaced'), None)
-    if shown and card['lane'] in ('approve', 'blocked'): card.update(surfaced=True, surfaced_at=shown.get('At'))
+    if shown and card['lane'] in ('approve', 'blocked', 'queued'): card.update(surfaced=True, surfaced_at=shown.get('At'))
     if card['lane'] == 'fyi' and not card.get('sig'):
         summaries = [r for r in view.get('processing_summaries', [])
                      if r.get('ContextRevision') == item['context_revision'] and r.get('Summary')

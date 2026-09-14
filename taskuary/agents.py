@@ -565,7 +565,14 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         m, eff = split_pick(profile['model'])
         cmd += [profile.get('model_arg') or '--model', m]
         if eff: cmd += ['-c', f'model_reasoning_effort={eff}']
-    if resume and profile.get('resume_args'): cmd += list(profile['resume_args']) + [resume]
+    if resume:
+        if is_codex:
+            # Keep exec's existing sandbox/config flags, and resume the exact thread.
+            cmd += ['resume', resume, '--json', '-']
+        elif profile.get('resume_args'):
+            cmd += list(profile['resume_args']) + [resume]
+        elif _cli_name(name) == 'claude':
+            cmd += ['--resume', resume]
     cwd = profile.get('cwd')
     head0 = _git(cwd, 'rev-parse', 'HEAD')
     trace('prompt', 'prompt_sent_to_agent', prompt)

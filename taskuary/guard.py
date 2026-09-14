@@ -46,6 +46,7 @@ OWNER, AGENT, ANON = 'owner', 'agent', 'anon'
 # a new route can make something leave the machine or can widen what an agent may reach; never
 # make it conditional on a setting, and never let a document turn an entry off.
 DENIED = (
+    (r'POST', r'^/api/tasks/\d+/resume$', 'resuming previous work is the owner\'s choice'),
     # anything that puts a message in front of a human somewhere else
     (r'POST', r'^/api/reviews/\d+/decide$', 'approving a reply sends it - that is the owner\'s'),
     (r'POST', r'^/api/tasks/\d+/handoff$', 'handing work to a person sends them a message'),

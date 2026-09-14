@@ -118,18 +118,18 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
 
 
 def build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None,
-              cli_tools: bool = False, extra_env: dict = None, research: bool = False):
+              cli_tools: bool = False, extra_env: dict = None, research: bool = False, fallback_user=None):
     """The brain, or the demo's script. Everything in the app asks for its brain here, which is
     the one place a demo can be told to answer without a key, a CLI, or a request that leaves
     the machine (demo.py)."""
     from . import demo
     # the demo answers from a script: no key, no CLI, no request leaving the machine
     if demo.enabled(): return demo.brain()
-    return _build_llm(store, pick, model, trace, cancel, resume, cli_tools, extra_env, research)
+    return _build_llm(store, pick, model, trace, cancel, resume, cli_tools, extra_env, research, fallback_user)
 
 
 def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None,
-               cli_tools: bool = False, extra_env: dict = None, research: bool = False):
+               cli_tools: bool = False, extra_env: dict = None, research: bool = False, fallback_user=None):
     """The brain named by `pick` ('' = first active AI connector, 'connector:<id>',
     'cli:<agent>'), defaulting to the triage_ai setting - callers like reports may name
     their OWN brain and model per job instead of riding the triage tier. The owner's ordered
@@ -164,14 +164,16 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
     brains = [(candidate, one(candidate, i == 0)) for i, candidate in enumerate(picks)]
     brains = [(candidate, brain) for candidate, brain in brains if brain]
     if not brains: return None
-    if len(brains) == 1: return brains[0][1]
+    if len(brains) == 1 and brains[0][0] == primary: return brains[0][1]
 
     def failover(system, user, **kwargs):
         from .agents import availability_failure
         last = None
         for i, (candidate, brain) in enumerate(brains):
             try:
-                out = brain(system, user, **kwargs)
+                # A backup has no access to the primary CLI's native conversation.
+                context = fallback_user if candidate != primary and fallback_user is not None else user
+                out = brain(system, context, **kwargs)
                 failover.last_pick = candidate
                 failover.session_id = getattr(brain, 'session_id', None)
                 return out

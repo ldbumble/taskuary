@@ -57,6 +57,23 @@ the floating assistant conversation.
 Marking the task done is stronger: it completes the task and also ends any live agent session,
 because a finished task should not leave an orphan process running.
 
+## Picking up work later
+
+The Assistant page has a **Continue previous work** section for unfinished tasks with saved
+agent work. Each card shows an excerpt from the latest saved reply or handover. **Resume** opens
+the task and continues its work; **Review draft** opens a pending result for review. Loading the
+page does not start agents. A session that is already running is opened without starting another.
+
+General-agent chats save their selected provider, model, and native CLI conversation ID across
+Taskuary restarts. Claude and Codex resume that exact conversation when it is still available and
+the provider configuration matches. If the native conversation is missing or the provider changes,
+the assistant continues from Taskuary's saved conversation and shows a notice. Local and API models
+also use the saved conversation. Coding terminals use their existing checkout and handover flow.
+
+This reuses existing replies, transcripts, and handovers; it adds no checkpoint jobs or AI summary
+calls. Native IDs are saved after a completed turn, so an interrupted first turn may require the
+saved-history fallback. Resume does not approve pending actions or send replies.
+
 ## Reply controls
 
 The Reply section exists whenever the task has an incoming sender. It shows whether no reply has

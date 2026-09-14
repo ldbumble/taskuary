@@ -89,7 +89,10 @@ test("every component used in JSX is declared in that file", () => {
     const known = new Set([
       // imported: both `import X from` and the named `{ A, B as C }` forms
       ...[...raw.matchAll(/import\s+(\w+)\s*(?:,|from)/g)].map((m) => m[1]),
-      ...[...raw.matchAll(/import\s*\{([^}]*)\}\s*from/g)]
+      // ...including the COMBINED form. `import\s*\{` cannot match `import React, { Suspense }`,
+      // so every named import sitting behind a default one was invisible here - and the first file
+      // to use one as a tag was reported as a component that throws at render (2026-09-14).
+      ...[...raw.matchAll(/import\s+(?:\w+\s*,\s*)?\{([^}]*)\}\s*from/g)]
         .flatMap((m) => m[1].split(",").map((x) => x.trim().split(/\s+as\s+/).pop().trim())),
       // declared here
       ...[...raw.matchAll(/(?:const|let|var|function|class)\s+([A-Z]\w*)/g)].map((m) => m[1]),

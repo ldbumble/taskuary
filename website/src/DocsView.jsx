@@ -2,7 +2,7 @@
 // open beside it - these six are read against each other, so hiding five behind a landing
 // grid cost a round trip every time you wanted to compare two.
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, Box, Button, CircularProgress, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, TextField, Typography } from "@mui/material";
 import AutoStoriesIcon from "@mui/icons-material/AutoStories";
 import HistoryEduIcon from "@mui/icons-material/HistoryEdu";
 import PsychologyIcon from "@mui/icons-material/Psychology";
@@ -16,6 +16,7 @@ import { Md } from "./md.jsx";
 import LearnedView from "./LearnedView.jsx";
 import { AgentsPage } from "./AgentsPanel.jsx";
 import SoulInterview from "./SoulInterview.jsx";
+import NewPlaybookDialog from "./NewPlaybookDialog.jsx";
 import { FAINT, INK, mono } from "./theme.jsx";
 import { TaskuaryMark } from "./ui.jsx";
 
@@ -145,6 +146,10 @@ export default function DocsView() {
   const [tpl, setTpl] = useState("");                  // what a new one starts from
   const [pbMsg, setPbMsg] = useState("");
   const [pbFilter, setPbFilter] = useState("");
+  const [newPlaybook, setNewPlaybook] = useState(null);
+  const [deletePlaybook, setDeletePlaybook] = useState(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   // the generation is inspectable, not a vibe: poll its status while it runs so the button
   // narrates ("reading you@... — 240 sent so far"), then show the exact evidence it judged
   useEffect(() => {
@@ -240,6 +245,7 @@ export default function DocsView() {
       if (!m) return;
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
       const [what, type] = m[1].split(":");
+      if (what === "new") { setSection("playbooks"); setNewPlaybook({ connectorType: type || "" }); return; }
       openPb(what, type || "");
     };
     fromHash(); window.addEventListener("hashchange", fromHash);
@@ -275,9 +281,22 @@ export default function DocsView() {
       else setDocs((d) => ({ ...d, "pb:new": tpl }));
       return;
     }
-    try { await api.delete(`/api/playbooks/${slug}`); } catch { /* already gone */ }
-    const next = books.find((b) => b.slug !== slug);
-    await loadBooks(); await openPb(next?.slug || "new");
+    setDeleteError("");
+    setDeletePlaybook({ slug, title: books.find((b) => b.slug === slug)?.title || slug });
+  };
+  const confirmDeletePb = async () => {
+    if (!deletePlaybook || deleteBusy) return;
+    const { slug } = deletePlaybook;
+    setDeleteBusy(true); setDeleteError("");
+    try {
+      try { await api.delete(`/api/playbooks/${slug}`); }
+      catch (e) { if (e?.response?.status !== 404) throw e; }
+      const next = books.find((b) => b.slug !== slug);
+      await loadBooks(); await openPb(next?.slug || "new");
+      setDeletePlaybook(null);
+    } catch (e) {
+      setDeleteError(e?.response?.data?.detail || "Could not delete this playbook. Please try again.");
+    } finally { setDeleteBusy(false); }
   };
   const chooseSection = (next) => {
     setSection(next); setGenMsg(""); setGenEv(null); setPbMsg("");
@@ -407,12 +426,12 @@ export default function DocsView() {
             <Typography sx={{ fontSize: 11.5, color: FAINT, mb: 1.25, lineHeight: 1.5 }}>
               One per kind of job—how it is done here, and where the line is between “just do it” and “ask”.
             </Typography>
-            <Box onClick={() => openPb("new")}
+            <Box component="button" type="button" onClick={() => setNewPlaybook({ connectorType: "" })}
               sx={{ p: 1.1, mb: 1, borderRadius: 2, cursor: "pointer", display: "flex", alignItems: "center", gap: 1,
                 border: `1px dashed ${docName === "pb:new" ? "#d8cfbe" : "#e1dcd5"}`, bgcolor: docName === "pb:new" ? "#fff" : "transparent",
                 "&:hover": { bgcolor: "#f4f1ec" } }}>
               <AddIcon sx={{ fontSize: 17, color: "#55697a" }} />
-              <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#55697a" }}>{books.length ? "New playbook" : "Write the first playbook"}</Typography>
+              <Typography component="span" sx={{ fontSize: 12, fontWeight: 600, color: "#55697a" }}>New playbook</Typography>
             </Box>
             {books.length > 0 && <TextField size="small" fullWidth value={pbFilter} onChange={(e) => setPbFilter(e.target.value)}
               placeholder={`Search ${books.length} playbook${books.length === 1 ? "" : "s"}`}
@@ -547,6 +566,25 @@ export default function DocsView() {
         }} />
     </Box>
     )}
+    {newPlaybook && <NewPlaybookDialog {...newPlaybook}
+      onClose={() => { setNewPlaybook(null); loadBooks(); }}
+      onManual={() => { openPb("new", newPlaybook.connectorType); setNewPlaybook(null); }} />}
+    <Dialog open={!!deletePlaybook} onClose={deleteBusy ? undefined : () => setDeletePlaybook(null)}
+      fullWidth maxWidth="xs" aria-labelledby="delete-playbook-title" aria-describedby="delete-playbook-description">
+      <DialogTitle id="delete-playbook-title">Delete playbook?</DialogTitle>
+      <DialogContent>
+        <DialogContentText id="delete-playbook-description">
+          Delete “{deletePlaybook?.title}”? New requests will no longer match this playbook, and it will be removed from your connector cards. This cannot be undone.
+        </DialogContentText>
+        {deleteError && <Alert severity="error" sx={{ mt: 2 }}>{deleteError}</Alert>}
+      </DialogContent>
+      <DialogActions>
+        <Button autoFocus disabled={deleteBusy} onClick={() => setDeletePlaybook(null)}>Cancel</Button>
+        <Button variant="contained" color="error" disabled={deleteBusy} onClick={confirmDeletePb}>
+          {deleteBusy ? "Deleting…" : "Delete playbook"}
+        </Button>
+      </DialogActions>
+    </Dialog>
     </>
   );
 }

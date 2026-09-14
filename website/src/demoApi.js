@@ -34,6 +34,27 @@ const query = (url) => String(url || "").includes("?") ? String(url).split("?").
 // a read: the exact url, then the path alone, then a shape that will not crash a caller
 const read = (url) => {
   const p = path(url);
+  if (p === "/api/assistant/previous-work") {
+    const reviews = state["/api/reviews"]?.data || [];
+    return { data: taskRows().filter((task) => ["open", "waiting", "in_progress"].includes(task.Status)
+      && !["assistant:dock", "assistant:concierge"].includes(task.SourceRef)).flatMap((task) => {
+      const detail = state["/api/tasks/detail"]?.[task.TaskId];
+      const last = [...(detail?.comments || [])].reverse().find((c) => c.ActorType === "assistant_agent" || /^(CODER REPORT|HANDOVER NOTE)/.test(c.Body || ""));
+      if (!last && !detail?.transcript) return [];
+      const review = reviews.find((r) => r.TaskId === task.TaskId && r.Status === "pending");
+      return [{ taskId: task.TaskId, title: task.Title, recap: (last?.Body || task.Summary || "Saved work is available.").slice(0, 600),
+        lastWorkedAt: last?.CreatedAt || task.UpdatedAt || task.CreatedAt, action: review ? "review" : "resume", reviewId: review?.ReviewId }];
+    }).slice(0, 5) };
+  }
+  if (p === "/api/playbooks/examples") {
+    const params = new URLSearchParams(query(url)), q = (params.get("q") || "").toLowerCase();
+    const before = Number(params.get("before") || 0);
+    const rows = feedRows().filter((row) => row.Channel === "email" && row.Direction !== "out"
+      && (!before || row.MessageId < before)
+      && (!q || `${row.Subject} ${row.FromName} ${row.FromEmail} ${row.BodyText || row.Preview || ""}`.toLowerCase().includes(q)))
+      .sort((a, b) => b.MessageId - a.MessageId).map((row) => ({ ...row, BodyText: row.BodyText || row.Preview || "" }));
+    return clone({ data: rows.slice(0, 20), next: rows.length > 20 ? rows[19].MessageId : null });
+  }
   if (p === "/api/concierge") return clone({
     task: scriptedAssistant.task, ref: `TQ-${String(scriptedAssistant.activeTaskId).padStart(4, "0")}`,
     messages: scriptedAssistant.messages, providers: [{ pick: "demo:scripted", type: "demo", label: "Scripted demo" }],
@@ -135,6 +156,22 @@ const dockTask = () => {
 const demoReply = (taskId, asked) => {
   if (numbersWorkflow && Number(taskId) === NUMBERS_TASK) return NUMBERS_RESULT;
   const task = state["/api/tasks/detail"]?.[String(taskId)]?.task;
+  if (task?.SourceRef === "assistant:playbook") {
+    const text = "# Prepare updated item numbers\nwhen: someone requests the latest figures for an item\n"
+      + "uses: connected reporting source (read)\nsteps: identify the item and reporting period; gather the latest figures; compare with the previous period; draft a summary with sources\n"
+      + "alone: read connected sources and prepare a draft\nask first: sending the summary or changing source data\ndone when: the owner has reviewed the sourced summary\n";
+    const reviews = (state["/api/reviews"] ||= { data: [] }).data;
+    let review = reviews.find((r) => r.TaskId === Number(taskId) && r.Kind === "action");
+    if (!review) {
+      review = { ReviewId: ++nextId, TaskId: Number(taskId), Kind: "action", Status: "pending", Title: task.Title,
+        DraftText: JSON.stringify({ action: "write_playbook", slug: "prepare-updated-item-numbers", text, why: "Scripted playbook setup example" }),
+        Reason: "Review the example playbook before saving it", CreatedAt: new Date().toISOString() };
+      reviews.unshift(review);
+      state["/api/tasks/detail"][String(taskId)].reviews.push(review);
+    }
+    const preview = text.replace(/^(when|uses|steps|alone|ask first|done when):/gm, "**$1:**").replaceAll("\n", "\n\n");
+    return `Here is the scripted example draft. In your own Taskuary, your AI adapts it to your answers and connections.\n\n${preview}\nThe draft is in Review (rv${review.ReviewId}) for you to edit. Nothing is saved to your real workspace from this demo.`;
+  }
   if (task?.SourceRef !== "assistant:dock") return REPLIES[assistantBox(taskId).messages.length % REPLIES.length];
   const attention = feedRows().find((r) => r.NeedsYou) || feedRows()[0];
   const work = taskRows().find((t) => t.Status && !["done", "dropped"].includes(t.Status));
@@ -397,6 +434,31 @@ const write = (method, url, body) => {
   if (method === "post" && p === "/api/assistant/dock") {
     const task = dockTask();
     return { task: clone(task), ref: task.ref, created: true };
+  }
+
+  if (method === "post" && (m = p.match(/^\/api\/tasks\/(\d+)\/resume$/))) {
+    const id = Number(m[1]);
+    const review = (state["/api/reviews"]?.data || []).find((r) => r.TaskId === id && r.Status === "pending");
+    return { action: review ? "review" : "open", taskId: id, reviewId: review?.ReviewId };
+  }
+
+  if (method === "post" && p === "/api/playbooks/setup") {
+    const example = feedRows().find((row) => row.MessageId === body?.message_id);
+    const id = ++nextId;
+    const task = { TaskId: id, Title: `Create playbook: ${example?.Subject || body?.text || "Updated item numbers"}`,
+      Summary: body?.text || "Create a reusable workflow from an example email", Kind: "general", Status: "open",
+      Source: "assistant", SourceRef: "assistant:playbook", Priority: "normal", CreatedAt: new Date().toISOString() };
+    taskRows().unshift(task);
+    state["/api/tasks/detail"][id] = { task, ref: `TQ-${id}`, messages: [], attachments: [], comments: [], routes: [], runs: [], audit: [], reviews: [] };
+    const box = assistantBox(id);
+    box.session.provider = "Scripted demo";
+    box.session.pick = "demo:scripted";
+    box.providers = [{ id: "demo:scripted", type: "demo", label: "Scripted demo", model: "" }];
+    box.messages = [
+      { id: `u${++nextId}`, role: "user", content: [{ type: "text", text: `${task.Summary}${example ? `\nExample email: ${example.Subject}` : ""}${body?.connector_type ? `\nConnection: ${body.connector_type}` : ""}` }] },
+      { id: `a${++nextId}`, role: "assistant", content: [{ type: "text", text: "Let's build a playbook for gathering the latest item numbers and preparing a summary for your review. This demo uses scripted answers; your own AI will tailor the steps to your request.\n\nWhich connected system holds the numbers?" }] },
+    ];
+    return clone({ taskId: id, task, ref: `TQ-${id}` });
   }
 
   if (method === "post" && p === "/api/tasks") {

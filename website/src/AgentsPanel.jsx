@@ -2,8 +2,9 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogContent, DialogTitle, FormControlLabel, MenuItem, Switch, TextField, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import api from "./api";
-import { BORDER, DIM, card, mono } from "./theme.jsx";
+import { BORDER, DIM, ROLES, card, mono } from "./theme.jsx";
 import { Crumb, Empty, ConfirmDelete, TaskuaryMark } from "./ui.jsx";
 import { useCliInstall, InstallLine, UpdateLine } from "./cliInstall.jsx";
 import { useCliSetup, SetupButton, CliPane } from "./cliSetup.jsx";
@@ -60,7 +61,10 @@ export const CliConnectionsPage = ({ onBack }) => {
       {(clis || []).map((cli) => <Box key={cli.name} data-connection={cli.name} sx={{ ...card, p: 2 }}>
         <Box sx={{ display: "flex", gap: 1, alignItems: "center", mb: 1 }}>
           <TaskuaryMark size={19} /><Typography sx={{ fontWeight: 700, flex: 1 }}>{cli.label}</Typography>
-          <Chip size="small" label={cli.installed ? "Installed" : cli.installable ? "Not installed" : "Cannot install here"} />
+          <Chip size="small" label={cli.installed ? "Installed" : cli.installable ? "Not installed" : "Cannot install here"}
+            icon={cli.installed ? <CheckCircleOutlineIcon /> : undefined}
+            sx={cli.installed ? { bgcolor: ROLES.done.tint, color: ROLES.done.ink, border: `1px solid ${ROLES.done.bd}`,
+              fontWeight: 700, "& .MuiChip-icon": { color: "inherit" } } : undefined} />
           {cli.configured && <Chip size="small" label="Configured" />}
         </Box>
         <Typography sx={{ ...mono, fontSize: 12, overflowWrap: "anywhere", mb: 1 }}>{cli.config.cmd} {(cli.config.args || []).join(" ")}</Typography>

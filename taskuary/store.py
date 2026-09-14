@@ -130,6 +130,8 @@ CREATE TABLE IF NOT EXISTS attachment (AttachmentId INTEGER PRIMARY KEY, Message
   Name TEXT, ContentType TEXT, Size INTEGER, ContentId TEXT, Inline INTEGER DEFAULT 0, Path TEXT, CreatedAt TEXT);
 CREATE TABLE IF NOT EXISTS transcript (TranscriptId INTEGER PRIMARY KEY, TaskId INTEGER, Sid TEXT,
   Agent TEXT, Cwd TEXT, Text TEXT, CreatedAt TEXT);
+CREATE TABLE IF NOT EXISTS session_resume (TaskId INTEGER PRIMARY KEY, Pick TEXT, Model TEXT,
+  NativeId TEXT, ContextKey TEXT, UpdatedAt TEXT);
 CREATE TABLE IF NOT EXISTS task_artifact (ArtifactId INTEGER PRIMARY KEY, TaskId INTEGER, Name TEXT,
   ContentType TEXT, Size INTEGER, Path TEXT, Kind TEXT, CreatedBy TEXT, CreatedAt TEXT);
 CREATE TABLE IF NOT EXISTS route (RouteId INTEGER PRIMARY KEY, MessageId INTEGER, TaskId INTEGER,
@@ -513,14 +515,14 @@ def _reader_copy(snap):
 
     The cached snapshot is served with live worker telemetry overlaid on it (apply_workers), plus a
     fresh `as_of` and `snapshot_revision` - so it cannot be handed out by reference. It used to be
-    handed out as a FULL deep copy of every message, task, comment and attachment under it.
+    handed out as a FULL deep copy: 84,130 recursive calls per pile build on the owner's store
+    (2026-09-14 profile), about 75ms, on a path whose whole purpose is to avoid work.
 
     The write set is three levels and seven keys: `as_of`, `snapshot_revision`,
     `worker_attention_available` and `worker_input_revision` at the top; `view_revision` on each
-    item; `worker_attention` and `worker_attention_available` on each item's view - and that
-    attention list is REPLACED, never appended to. Everything beneath those is read-only on this
-    path and is shared by reference. Worth about 12% of a pile build on the owner's store
-    (2026-09-14, interleaved A/B: 236ms to 207ms median).
+    item; `worker_attention` and `worker_attention_available` on each item's view - and the
+    attention list is REPLACED, never appended to. Everything under those - messages, tasks,
+    comments, attachments, ideas - is read-only on this path and is shared by reference.
     """
     return {**snap, 'items': [{**item, 'view': dict(item.get('view') or {})}
                               for item in snap.get('items') or []]}
@@ -1250,6 +1252,7 @@ class SQLiteStore:
         for q in ("UPDATE message SET TaskId=NULL, Status='filed' WHERE TaskId=?", 'UPDATE route SET TaskId=NULL WHERE TaskId=?',
                   'DELETE FROM review WHERE TaskId=?', 'DELETE FROM comment WHERE TaskId=?',
                   'DELETE FROM run WHERE TaskId=?', 'DELETE FROM task_artifact WHERE TaskId=?',
+                  'DELETE FROM session_resume WHERE TaskId=?',
                   'DELETE FROM task WHERE TaskId=?'):
             self._exec(q, (task_id,))
         self._bump_snapshots()
@@ -2700,6 +2703,46 @@ class SQLiteStore:
                         'ORDER BY r.RouteId DESC LIMIT 1', tuple(mids))
         return (row or {}).get('Reason') or ''
     def list_messages(self, task_id): return self._rows('SELECT * FROM message WHERE TaskId=? ORDER BY SentAt', (task_id,))
+    def playbook_examples(self, query='', before=0):
+        """Page through imported incoming email, including old and already filed requests."""
+        where, args = ["Channel='email'", "Direction='in'"], []
+        if before:
+            where.append('MessageId<?'); args.append(before)
+        if query.strip():
+            # Literal substring search: a sender's '%' or '_' is not a SQL wildcard.
+            where.append("instr(lower(COALESCE(Subject,'') || char(10) || COALESCE(FromName,'') "
+                         "|| char(10) || COALESCE(FromEmail,'') || char(10) || COALESCE(BodyText,'')), lower(?))>0")
+            args.append(query.strip())
+        rows = self._rows('SELECT MessageId, Subject, FromName, FromEmail, SentAt, '
+                          'substr(BodyText,1,4000) BodyText FROM message WHERE ' + ' AND '.join(where)
+                          + ' ORDER BY MessageId DESC LIMIT 21', tuple(args))
+        return {'data': rows[:20], 'next': rows[19]['MessageId'] if len(rows) > 20 else None}
+
+    def saved_session(self, task_id):
+        return self._one('SELECT * FROM session_resume WHERE TaskId=?', (task_id,))
+
+    def save_session(self, task_id, pick, model, native_id, context_key):
+        self._exec('INSERT INTO session_resume (TaskId,Pick,Model,NativeId,ContextKey,UpdatedAt) VALUES (?,?,?,?,?,?) '
+                   'ON CONFLICT(TaskId) DO UPDATE SET Pick=excluded.Pick, Model=excluded.Model, '
+                   'NativeId=excluded.NativeId, ContextKey=excluded.ContextKey, UpdatedAt=excluded.UpdatedAt',
+                   (task_id, pick, model, native_id or '', context_key, _now()))
+
+    def previous_work(self):
+        """Existing work records for the welcome card; no summaries or new AI jobs."""
+        return self._rows('''SELECT t.TaskId, t.Title, t.Status, t.Kind, t.SourceRef,
+                   c.Body Recap, tr.Agent, tr.Cwd,
+                   MAX(COALESCE(c.CreatedAt,''), COALESCE(tr.CreatedAt,'')) LastWorkedAt
+            FROM task t
+            LEFT JOIN comment c ON c.CommentId=(SELECT MAX(c2.CommentId) FROM comment c2
+                WHERE c2.TaskId=t.TaskId AND (c2.ActorType='assistant_agent'
+                    OR c2.Body LIKE 'HANDOVER NOTE%' OR c2.Body LIKE 'CODER REPORT%'))
+            LEFT JOIN transcript tr ON tr.TranscriptId=(SELECT MAX(tr2.TranscriptId) FROM transcript tr2 WHERE tr2.TaskId=t.TaskId)
+            WHERE COALESCE(t.SourceRef,'') NOT IN ('assistant:dock','assistant:concierge')
+                AND (t.Status IN ('open','waiting','in_progress') OR (t.Status='done'
+                    AND EXISTS (SELECT 1 FROM review r WHERE r.TaskId=t.TaskId AND r.Status='pending')))
+                AND (c.CommentId IS NOT NULL OR tr.TranscriptId IS NOT NULL)
+            ORDER BY LastWorkedAt DESC, t.TaskId DESC LIMIT 100''')
+
     def scan_messages(self, limit=20000):
         """Just enough of every message to re-run a policy over the history (bodies capped)."""
         # ConversationId rides along so a history reader can pair inbound mail with what the owner

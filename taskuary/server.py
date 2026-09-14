@@ -1109,6 +1109,50 @@ def comment(task_id: int, body: TextBody):
     store.add_comment(task_id, ACTOR, 'human', body.body)
     return {'ok': True}
 
+
+@app.get('/api/assistant/previous-work')
+def previous_work():
+    from . import continuity
+    return {'data': continuity.previous_work(store)}
+
+
+_RESUME_LOCK = threading.Lock()
+
+
+def _resume_assistant(task_id):
+    from . import continuity, general
+    try:
+        general.start_session(store, task_id, actor=ACTOR).send_prompt(
+            continuity.RESUME_PROMPT, as_owner=False, echo=False)
+    except Exception as e:
+        _walk_cannot(task_id, f'The session could not resume: {e}. Your saved conversation is still here.')
+    finally:
+        general.OPENING.discard(task_id)
+
+
+@app.post('/api/tasks/{task_id}/resume')
+def resume_previous_work(task_id: int, background: BackgroundTasks):
+    from . import continuity, general
+    with _RESUME_LOCK:
+        task = store.get_task(task_id)
+        if not task: raise HTTPException(404, 'task not found')
+        if task.get('Status') == 'dropped': raise HTTPException(409, 'This task was dismissed.')
+        review = store.pending_review(task_id)
+        if review: return {'action': 'review', 'reviewId': review['ReviewId'], 'taskId': task_id}
+        if task.get('Status') not in ('open', 'waiting', 'in_progress'):
+            raise HTTPException(409, 'This task is already finished.')
+        if task_id in general.OPENING or any(s.task_id == task_id and s.alive for s in list(hub_term.SESSIONS.values())):
+            return {'action': 'open', 'taskId': task_id}
+        if general.handles(task) and not general.provider_options(store):
+            raise HTTPException(422, 'Connect an AI provider in Connections to resume this work.')
+        general.OPENING.add(task_id)
+    if general.handles(task):
+        background.add_task(_resume_assistant, task_id)
+    else:
+        try: continue_task(task_id, CodeBody(instruction=continuity.RESUME_PROMPT))
+        finally: general.OPENING.discard(task_id)
+    return {'action': 'open', 'taskId': task_id}
+
 NEEDS_REPO = re.compile(r'could not tell which checkout|no local path|does not exist|choose one', re.I)
 
 
@@ -4611,6 +4655,43 @@ def put_doc(name: str, body: DocBody):
 def list_playbooks():
     return {'data': [{k: v for k, v in b.items() if k != 'text'} for b in playbooks.list_all()],
             'template': playbooks.template(), 'folder': str(playbooks.folder())}
+
+@app.get('/api/playbooks/examples')
+def playbook_examples(q: str = '', before: int = 0):
+    return store.playbook_examples(q[:300], max(0, before))
+
+
+class PlaybookSetupBody(BaseModel):
+    text: str = ''
+    message_id: int | None = None
+    connector_type: str = ''
+
+
+def _playbook_opens(task_id: int):
+    from . import general
+    try:
+        general.start_session(store, task_id, actor=ACTOR).send_prompt(
+            playbooks.SETUP_OPENING, as_owner=False, echo=False)
+    except Exception as e:
+        general.drop_session(task_id)
+        _walk_cannot(task_id, f'Playbook setup could not start: {e}. You can retry in this conversation.')
+    finally:
+        general.OPENING.discard(task_id)
+
+
+@app.post('/api/playbooks/setup')
+def setup_playbook(body: PlaybookSetupBody, background: BackgroundTasks):
+    from . import general
+    if not general.provider_options(store):
+        raise HTTPException(422, 'Connect an AI provider in Connections first, then return to create your playbook.')
+    try:
+        made = playbooks.setup_task(store, body.text, body.message_id, body.connector_type, ACTOR)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    general.OPENING.add(made['taskId'])
+    background.add_task(_playbook_opens, made['taskId'])
+    return made
+
 
 @app.get('/api/playbooks/{slug}')
 def get_playbook(slug: str):

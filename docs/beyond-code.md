@@ -27,6 +27,19 @@ needs exactly what fixing a bug needs, and the three things are the same three:
 Where the current design falls short is (2): there is one playbook, CODER.md, and it is about code.
 "Work ONLY in the repository the task names" is the wrong first rule for a bill.
 
+## Creating a playbook with AI
+
+In **Docs → Playbooks**, **New playbook** opens guided setup. Choose **Use a past email** to
+search imported incoming mail (including older, filed requests), or **Start from scratch** to
+describe the workflow. An email is optional reference material; its original task and routing
+stay intact. A connector's **New playbook** link carries that connection into the same dialog.
+
+**Set up with AI** starts a saved general assistant conversation using your configured provider.
+The assistant helps define the trigger, connections, steps, approval rules, and finished result.
+Its draft goes to **Review**, where you can edit and approve it before it becomes a playbook.
+You can close setup and resume from **Tasks**, or choose **Write manually** for the markdown editor.
+The public demo illustrates this flow with clearly labelled scripted replies.
+
 ## The proposal: playbooks, accreted one at a time
 
 You do not enumerate a million tasks. You let the company's playbooks accrete, one per **kind of

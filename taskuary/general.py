@@ -147,6 +147,10 @@ def default_pick(store, task: dict = None) -> str:
     ...except on a walk-through, where start_session overrides that with walk_pick - and this did
     not, so the strip named the API brain while codex was driving the browser, and the owner's first
     typed reply would have handed the walk to a brain that cannot click (the owner, 2026-09-14)."""
+    saved = store.saved_session((task or {}).get('TaskId')) or {}
+    assigned = assigned_pick(store, task)
+    if saved.get('Pick') and (not assigned or assigned == saved['Pick']):
+        if any(o['pick'] == saved['Pick'] for o in provider_options(store)): return saved['Pick']
     if str((task or {}).get('SourceRef') or '') == SETUP_REF:
         walk = walk_pick(store)
         if walk: return walk
@@ -584,8 +588,13 @@ class GeneralSession:
     def __init__(self, store, task_id: int, connector_id=None, model=None, pick=None):
         self.sid = uuid.uuid4().hex[:12]
         self.store, self.task_id = store, task_id
+        saved = store.saved_session(task_id) or {}
         if connector_id is None and not pick:
             pick = assigned_pick(store, store.get_task(task_id)) or None
+            if not pick and any(o['pick'] == saved.get('Pick') for o in provider_options(store)):
+                pick = saved['Pick']
+        if model is None and (pick or (f'connector:{connector_id}' if connector_id else '')) == saved.get('Pick'):
+            model = saved.get('Model') or None
         self.pick, self.provider, self.model = _selected(store, connector_id, model, pick)
         self.started = datetime.now().isoformat(sep=' ', timespec='seconds')
         self.buf, self.n, self.ended, self.last = deque(), 0, None, time.time()
@@ -595,6 +604,14 @@ class GeneralSession:
         self._input, self._lock = '', threading.Lock()
         self._cancel = None                  # the stop switch for the answer being written now
         self.cli_sid = ''                    # the CLI's OWN conversation, resumed turn to turn
+        from . import continuity
+        self.resume_notice = ''
+        if (saved.get('Pick') == self.pick and continuity.can_resume(store, self.pick)
+                and saved.get('ContextKey') == continuity.context_key(store, self.pick, self.model)):
+            self.cli_sid = saved.get('NativeId') or ''
+        if saved and not self.cli_sid:
+            self.resume_notice = 'Continuing from the saved conversation.'
+        self._remember_session()
         from . import browserview
         self.browser_wanted = browserview.wanted(self.store.get_task(self.task_id))
         # The browser that asked the question is only one VIEW of this session. Keep the
@@ -606,6 +623,22 @@ class GeneralSession:
         from .witness import Witness
         self.witness = Witness()
         self._restore_terminal()
+
+    def _remember_session(self):
+        from . import continuity
+        self.store.save_session(self.task_id, self.pick, self.model, self.cli_sid,
+                                continuity.context_key(self.store, self.pick, self.model))
+
+    def select_provider(self, connector_id=None, model=None, pick=None):
+        from . import continuity
+        chosen = _selected(self.store, connector_id, model, pick)
+        saved = self.store.saved_session(self.task_id) or {}
+        if ((chosen[0], chosen[2]) != (self.pick, self.model)
+                or saved.get('ContextKey') != continuity.context_key(self.store, chosen[0], chosen[2])):
+            self.cli_sid = '' # Provider session IDs must never cross a provider/model change.
+            self.resume_notice = 'Continuing from the saved conversation with the selected provider.'
+        self.pick, self.provider, self.model = chosen
+        self._remember_session()
 
     def _append(self, text):
         if not text: return
@@ -738,7 +771,14 @@ class GeneralSession:
         self.trace_revision += 1
         try:
             if connector_id is not None or model or pick:
-                self.pick, self.provider, self.model = _selected(self.store, connector_id, model, pick)
+                self.select_provider(connector_id, model, pick)
+            elif self.cli_sid:
+                from . import continuity
+                saved = self.store.saved_session(self.task_id) or {}
+                if saved.get('ContextKey') != continuity.context_key(self.store, self.pick, self.model):
+                    self.cli_sid = ''
+                    self.resume_notice = 'Continuing from the saved conversation with the selected provider.'
+                    self._remember_session()
             if not self.pick:
                 raise RuntimeError('connect a CLI agent or an AI provider before starting general work')
             if echo and as_owner: self._emit(f'\x1b[1;34myou>\x1b[0m {text}\r\n')
@@ -801,7 +841,7 @@ class GeneralSession:
             # Read/Glob/Grep/WebFetch/WebSearch, granted so a headless run need not click, and no
             # command, edit, write, or MCP tool. Looking is not acting.
             build_args = dict(pick=self.pick, model=self.model or None, trace=visible,
-                              cancel=cancel, resume=self.cli_sid or None, research=True)
+                              cancel=cancel, resume=self.cli_sid or None, research=True, fallback_user=user)
             # the NAME always rides (so a browser this session opens is one the pane can find); the
             # shell and the browser brief ride only for a task that asked for a browser
             if browser_env: build_args.update(extra_env=browser_env)
@@ -827,7 +867,10 @@ class GeneralSession:
                 if not self.cli_sid or (cancel is not None and cancel.is_set()): raise
                 logger.info(f'assistant could not resume {self.cli_sid} on task {self.task_id}; starting a new one')
                 self.cli_sid = ''
+                self.resume_notice = 'The original session could not be resumed. Restored from the saved conversation.'
+                self._remember_session()
                 system, user = _prompt(self.store, self.task_id)
+                if not as_owner: user += '\n\n' + text
                 if delivery_instructions:
                     system = f'{system}\n\n{str(delivery_instructions).strip()}'
                 from . import handbook as hub
@@ -847,14 +890,21 @@ class GeneralSession:
                 brain = llm_mod.build_llm(self.store, **build_args)
                 limit = DOCK_REPLY_TOKENS if is_dock(self.store.get_task(self.task_id)) else MAX_REPLY_TOKENS
                 reply = str(brain(system, user, max_tokens=limit, images=_images(paths)) or '').strip()
-            self.cli_sid = getattr(brain, 'session_id', '') or self.cli_sid
             actual = getattr(brain, 'last_pick', '')
-            if actual and actual != self.pick:
+            if isinstance(actual, str) and actual and actual != self.pick:
                 choice = next((o for o in provider_options(self.store) if o['pick'] == actual), None)
                 self.pick = actual
                 if choice:
                     self.provider, self.model = choice['label'], choice.get('model') or ''
+                self.cli_sid = ''
+                self.resume_notice = 'Continuing from the saved conversation with the backup provider.'
+            from . import continuity
+            native_id = getattr(brain, 'session_id', '')
+            self.cli_sid = ((native_id if isinstance(native_id, str) else '') or self.cli_sid) if continuity.can_resume(self.store, self.pick) else ''
+            self._remember_session()
             if not reply: raise RuntimeError('the model returned an empty response')
+            from . import playbooks
+            reply = playbooks.collect_setup_draft(self.store, self.task_id, reply)
             # An API-backed assistant has no shell, so Hub publishing rides as a private response
             # envelope. Consume it before the response enters history or reaches the browser.
             from . import handbook as hub
@@ -970,6 +1020,7 @@ class GeneralSession:
                 'provider': self.provider, 'pick': self.pick,
                 'connector_id': int(self.pick.split(':', 1)[1]) if self.pick.startswith('connector:') else None,
                 'model': self.model,
+                'resume_notice': self.resume_notice,
                 **({'tail': self.tail(tail)} if tail else {})}
         if not details: return base
         from . import browserview
@@ -1011,12 +1062,15 @@ def start_session(store, tid: int, connector_id=None, model=None, actor='owner',
     # A setup walkthrough needs an operator, not a coder in a checkout. If the dock is normally
     # backed by an API-only chat model, choose a CLI for this task so it can actually drive the
     # embedded browser - walk_pick says which. An explicit provider choice still wins.
-    if task.get('SourceRef') == SETUP_REF and connector_id is None and not model and not pick:
+    if task.get('SourceRef') == SETUP_REF and connector_id is None and not model and not pick and not store.saved_session(tid):
         pick = walk_pick(store) or None
     existing = session_for(tid)
     if existing:
         if connector_id is not None or model or pick:
-            existing.pick, existing.provider, existing.model = _selected(store, connector_id, model, pick)
+            chosen = _selected(store, connector_id, model, pick)
+            if existing.busy and (chosen[0], chosen[2]) != (existing.pick, existing.model):
+                raise ValueError('Wait for the current response to finish before changing providers.')
+            existing.select_provider(connector_id, model, pick)
         return existing
     # A session that has ENDED is not a session. It used to sit in the registry keeping the task
     # occupied, so the next question got "this task already has a different live session" and,

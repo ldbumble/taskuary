@@ -101,7 +101,7 @@ class VerdictTests(unittest.TestCase):
         rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply',
                             'Status': 'pending', 'DraftText': 'here is the answer'})
         seen = {}
-        def fake(store, msg, body, to=None, cc=None):
+        def fake(store, msg, body, to=None, cc=None, attachments=None):
             seen['cc'] = cc
             return {'channel': 'email', 'to': ['them@partner.example'], 'cc': cc or []}
         with mock.patch.object(outbound, 'reply_to_message', side_effect=fake):
@@ -123,7 +123,7 @@ class VerdictTests(unittest.TestCase):
                             'Status': 'pending', 'DraftText': 'the answer'})
         seen = {}
         with mock.patch.object(server.outbound, 'reply_to_message',
-                               side_effect=lambda st, m, b, to=None, cc=None: (seen.update(cc=cc),
+                               side_effect=lambda st, m, b, to=None, cc=None, attachments=None: (seen.update(cc=cc),
                                    {'channel': 'email', 'to': ['them@partner.example'], 'cc': cc or []})[1]):
             r = c.post(f'/api/reviews/{rid}/decide',
                        json={'verb': 'approve', 'final_text': 'the answer', 'cc': ['mindy@corp.example']})

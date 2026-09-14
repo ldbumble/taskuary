@@ -726,14 +726,26 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
     return n
 
 
-def send_smtp(store, c, to: list, subject: str, body: str, in_reply_to: str = None, cc: list = None) -> dict:
+def send_smtp(store, c, to: list, subject: str, body: str, in_reply_to: str = None, cc: list = None,
+              attachments: list = None) -> dict:
     """The reply, over the provider's own SMTP, threaded with In-Reply-To/References. `cc` is the
     colleague the owner looped in: on the header so everyone sees it, and in the envelope so the
     server actually delivers to them (the header alone sends nothing - it is only text)."""
     imap_h, smtp_h, cfg = _hosts(c)
     user = (cfg.get('address') or '').strip()
     cc = [a for a in (cc or []) if a]
-    m = MIMEText(body, 'plain', 'utf-8')
+    # A reply that carries files is a multipart message; without them it stays the plain text it was.
+    if attachments:
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.application import MIMEApplication
+        m = MIMEMultipart()
+        m.attach(MIMEText(body, 'plain', 'utf-8'))
+        for f in attachments:
+            part = MIMEApplication(f['bytes'], name=f['name'])
+            part['Content-Disposition'] = f'attachment; filename="{f["name"]}"'
+            m.attach(part)
+    else:
+        m = MIMEText(body, 'plain', 'utf-8')
     m['From'], m['To'], m['Subject'] = user, ', '.join(to), subject or '(no subject)'
     if cc: m['Cc'] = ', '.join(cc)
     if in_reply_to:
@@ -746,4 +758,5 @@ def send_smtp(store, c, to: list, subject: str, body: str, in_reply_to: str = No
         verify_pin(S.sock, cfg, smtp_h)
         S.login(user, c['Secret'])
         S.sendmail(user, list(to) + cc, m.as_string())
-    return {'channel': 'email', 'to': to, 'cc': cc, 'mailbox': user, 'threaded': bool(in_reply_to)}
+    return {'channel': 'email', 'to': to, 'cc': cc, 'mailbox': user, 'threaded': bool(in_reply_to),
+            'attached': [f['name'] for f in (attachments or [])]}

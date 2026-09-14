@@ -2325,6 +2325,21 @@ def reviews(status: str = None):
             r['LatestSentAt'] = latest.get('SentAt')
     return {'data': rows}
 
+@app.post('/api/reviews/{rid}/attachment')
+async def review_attach(rid: int, request: Request, name: str = ''):
+    """Put a file on a pending reply. The bytes are the raw body (no multipart dependency, like the
+    waiting room's images); `name` is what the recipient will see it called."""
+    from . import verdicts
+    data = await request.body()
+    try: return verdicts.attach(store, rid, name or 'attachment', data, ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+
+@app.delete('/api/reviews/{rid}/attachment')
+def review_detach(rid: int, name: str):
+    from . import verdicts
+    try: return verdicts.detach(store, rid, name, ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+
 @app.post('/api/reviews/{rid}/decide')
 def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
     """The verdict itself lives in verdicts.decide - ONE door, shared with the phone road

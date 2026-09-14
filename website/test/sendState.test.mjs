@@ -5,8 +5,10 @@ import { sendBlockLine, draftState, replyEnvelope, replySendFailure } from "../s
 
 test("reply envelopes preserve exact saved To and CC and distinguish other delivery kinds", () => {
   const env = { kind: "reply", to: ["a@example.test", "b@example.test"], cc: ["c@example.test"], delivery: "unknown" };
-  assert.deepEqual(replyEnvelope({ Deliver: JSON.stringify(env) }), env);
-  assert.deepEqual(replyEnvelope({ Deliver: env }), env);
+  // ...and now what RIDES with it: an envelope written before attachments existed reads as none
+  const read = { ...env, attachments: [] };
+  assert.deepEqual(replyEnvelope({ Deliver: JSON.stringify(env) }), read);
+  assert.deepEqual(replyEnvelope({ Deliver: env }), read);
   for (const Deliver of [undefined, "{", "null", '{"kind":"outbound","to":["hidden@example.test"]}']) {
     assert.equal(replyEnvelope({ Deliver }), null);
   }

@@ -11,7 +11,10 @@ export function replyEnvelope(review) {
     const env = typeof review?.Deliver === "string" ? JSON.parse(review.Deliver) : review?.Deliver;
     if (env?.kind !== "reply") return null;
     return { ...env, to: Array.isArray(env.to) ? env.to.filter((v) => typeof v === "string") : [],
-      cc: Array.isArray(env.cc) ? env.cc.filter((v) => typeof v === "string") : [] };
+      cc: Array.isArray(env.cc) ? env.cc.filter((v) => typeof v === "string") : [],
+      // what RIDES with the words (verdicts.attach) - a card that does not show these is a card
+      // that looks identical whether two workbooks are going or none are
+      attachments: Array.isArray(env.attachments) ? env.attachments.filter((f) => f && f.name) : [] };
   } catch { return null; }
 }
 

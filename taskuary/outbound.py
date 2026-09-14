@@ -7,7 +7,9 @@ mail nobody connects), a chat answers in the chat.
 
 Nothing sends itself. Every call here is behind a human verdict or an explicit hand-off.
 """
-import json
+import base64, json, mimetypes
+from pathlib import Path
+
 import requests
 from loguru import logger
 
@@ -50,8 +52,98 @@ def addrs(xs) -> list:
     return out
 
 
+ATTACH_MAX = 25 * 1024 * 1024        # what Exchange accepts on one message; refuse before sending, not during
+GRAPH_INLINE = 3 * 1024 * 1024       # over this Graph wants an upload session rather than base64 in the body
+UPLOAD_CHUNK = 5 * 320 * 1024        # Graph requires a multiple of 320 KiB
+
+
+def read_attachments(items) -> list:
+    """The files a reply is CARRYING, read off disk before anything is sent.
+
+    A draft that says "attached are the files" and goes out with none is the failure this exists to
+    stop (the owner, 2026-09-14), so everything that can go wrong - a path that moved, a file too big
+    for the mailbox - fails HERE, with the draft still unsent and the reason in the owner's words.
+
+    `items` are the envelope's own records: {'name', 'path'}. Returns the same with 'size', 'type'
+    and the bytes read."""
+    out, total = [], 0
+    for it in (items or []):
+        path = Path(str((it or {}).get('path') or ''))
+        name = str((it or {}).get('name') or path.name or 'attachment')
+        if not path.is_file(): raise RuntimeError(f'the file "{name}" is no longer where it was put ({path})')
+        data = path.read_bytes()
+        total += len(data)
+        if total > ATTACH_MAX:
+            raise RuntimeError(f'these files come to more than {ATTACH_MAX // (1024 * 1024)}MB, which no mailbox will accept - '
+                               'send a link to them instead')
+        out.append({'name': name, 'path': str(path), 'size': len(data), 'bytes': data,
+                    'type': mimetypes.guess_type(name)[0] or 'application/octet-stream'})
+    return out
+
+
+def _attach_to_draft(hdr: dict, box: str, draft_id: str, f: dict):
+    """One file onto a draft message: in the request when it is small, through an upload session
+    when it is not. 3.3MB of payroll workbooks is exactly the size that needs the second road."""
+    if f['size'] <= GRAPH_INLINE:
+        r = requests.post(f'{GRAPH}/users/{box}/messages/{draft_id}/attachments', headers=hdr, timeout=120,
+                          data=json.dumps({'@odata.type': '#microsoft.graph.fileAttachment', 'name': f['name'],
+                                           'contentType': f['type'],
+                                           'contentBytes': base64.b64encode(f['bytes']).decode('ascii')}))
+        if r.status_code >= 300: raise RuntimeError(f'graph could not attach {f["name"]} ({r.status_code}): {r.text[:200]}')
+        return
+    r = requests.post(f'{GRAPH}/users/{box}/messages/{draft_id}/attachments/createUploadSession', headers=hdr, timeout=60,
+                      data=json.dumps({'AttachmentItem': {'attachmentType': 'file', 'name': f['name'], 'size': f['size']}}))
+    if r.status_code >= 300: raise RuntimeError(f'graph refused an upload for {f["name"]} ({r.status_code}): {r.text[:200]}')
+    url = r.json().get('uploadUrl')
+    if not url: raise RuntimeError(f'graph gave no upload url for {f["name"]}')
+    for start in range(0, f['size'], UPLOAD_CHUNK):
+        chunk = f['bytes'][start:start + UPLOAD_CHUNK]
+        end = start + len(chunk) - 1
+        # the upload url is pre-authorised: sending our token to it is what makes Graph reject the chunk
+        rr = requests.put(url, data=chunk, timeout=300,
+                          headers={'Content-Length': str(len(chunk)),
+                                   'Content-Range': f'bytes {start}-{end}/{f["size"]}'})
+        if rr.status_code >= 300:
+            raise RuntimeError(f'uploading {f["name"]} failed at {start} ({rr.status_code}): {rr.text[:200]}')
+
+
+def _send_with_files(hdr: dict, box: str, to: list, cc: list, subject: str, body: str,
+                     reply_to_graph_id: str, files: list) -> dict:
+    """A mail that carries files is composed as a DRAFT and then sent.
+
+    Graph's one-shot /reply and /sendMail take a body and nothing else, so anything with an
+    attachment has to exist as a message first. A reply keeps its thread by starting from
+    createReply - whose draft already holds the quoted original, which our text goes above, exactly
+    where the one-shot road puts it."""
+    import html as _html
+    said = _html.escape(body).replace(chr(10), '<br>')
+    if reply_to_graph_id:
+        r = requests.post(f'{GRAPH}/users/{box}/messages/{reply_to_graph_id}/createReply', headers=hdr, timeout=30, data='{}')
+        if r.status_code >= 300: raise RuntimeError(f'graph could not open a reply ({r.status_code}): {r.text[:200]}')
+        draft = r.json() or {}
+        did = draft.get('id')
+        quoted = ((draft.get('body') or {}).get('content') or '')
+        patch = {'body': {'contentType': 'HTML', 'content': said + quoted}}
+        if to: patch['toRecipients'] = [{'emailAddress': {'address': a}} for a in to]
+        if cc: patch['ccRecipients'] = [{'emailAddress': {'address': a}} for a in cc]
+        r = requests.patch(f'{GRAPH}/users/{box}/messages/{did}', headers=hdr, timeout=30, data=json.dumps(patch))
+    else:
+        msg = {'subject': subject or '(no subject)', 'body': {'contentType': 'HTML', 'content': said},
+               'toRecipients': [{'emailAddress': {'address': a}} for a in to]}
+        if cc: msg['ccRecipients'] = [{'emailAddress': {'address': a}} for a in cc]
+        r = requests.post(f'{GRAPH}/users/{box}/messages', headers=hdr, timeout=30, data=json.dumps(msg))
+        did = (r.json() or {}).get('id') if r.status_code < 300 else None
+    if r.status_code >= 300: raise RuntimeError(f'graph could not compose the mail ({r.status_code}): {r.text[:200]}')
+    if not did: raise RuntimeError('graph composed no draft to attach to')
+    for f in files: _attach_to_draft(hdr, box, did, f)
+    r = requests.post(f'{GRAPH}/users/{box}/messages/{did}/send', headers=hdr, timeout=120)
+    if r.status_code >= 300: raise RuntimeError(f'graph sendMail failed ({r.status_code}): {r.text[:300]}')
+    return {'channel': 'email', 'to': to, 'cc': cc, 'mailbox': box, 'threaded': bool(reply_to_graph_id),
+            'attached': [f['name'] for f in files]}
+
+
 def send_email(store, to: list, subject: str, body: str, reply_to_graph_id: str = None, mailbox: str = None,
-               connector_id=None, cc: list = None) -> dict:
+               connector_id=None, cc: list = None, attachments: list = None) -> dict:
     """Reply in thread when we know the Graph message id, otherwise a new mail. Plain text:
     these are answers from a person, not marketing.
 
@@ -64,6 +156,8 @@ def send_email(store, to: list, subject: str, body: str, reply_to_graph_id: str 
     to, cc = addrs(to), addrs(cc)
     if not to and not reply_to_graph_id: raise RuntimeError('no recipient')
     hdr = {'Authorization': f'Bearer {tok}', 'Content-Type': 'application/json'}
+    files = read_attachments(attachments)
+    if files: return _send_with_files(hdr, box, to, cc, subject, body, reply_to_graph_id, files)
     if reply_to_graph_id:
         # Graph reads the reply `comment` as HTML, so plain-text newlines collapse into one long
         # line - greeting, body and signature all jammed together. Escape and give the breaks back.
@@ -389,7 +483,7 @@ def reconcile_sent(store, msg: dict, body: str, since: str = None):
     return None
 
 
-def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = None) -> dict:
+def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = None, attachments: list = None) -> dict:
     """Answer wherever the request came from. The message row carries everything needed:
     the mailbox it arrived in, the Graph id for threading, or the chat id."""
     ch, ext = msg.get('Channel'), str(msg.get('ExternalId') or '')
@@ -399,6 +493,12 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
     if cc and ch != 'email':
         raise RuntimeError(f'a {ch} message has no cc - answer by email to copy somebody, '
                            'or add them to the chat itself')
+    # Graph chat messages carry no bytes: a file in a Teams chat is a file in that chat's SharePoint
+    # folder, referenced from the message. Until that exists, a draft carrying files can only go by
+    # mail - and saying so beats sending the words and quietly dropping what they promise.
+    if attachments and ch != 'email':
+        raise RuntimeError(f'a {ch} message cannot carry a file - answer by email to attach these, '
+                           'or share a link to them in the chat')
     if ch == 'email' and ext.startswith('imap:'):
         # mail that arrived over IMAP goes back over the provider's own SMTP, in-thread
         from .imapmail import send_smtp
@@ -408,11 +508,13 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
                   and json.loads(x.get('ConfigJson') or '{}').get('address', '').lower() == box.lower()), None)
         if not c: raise RuntimeError(f'no IMAP connection is set up for {box}')
         return send_smtp(store, c, to or [msg.get('FromEmail')], f"Re: {msg.get('Subject') or ''}".strip(),
-                         body, in_reply_to=msg.get('ConversationId'), cc=cc)
+                         body, in_reply_to=msg.get('ConversationId'), cc=cc,
+                         attachments=read_attachments(attachments))
     if ch == 'email':
         return send_email(store, to or [msg.get('FromEmail')], f"Re: {msg.get('Subject') or ''}".strip(),
                           body, ext[6:] if ext.startswith('graph:') else None, msg.get('SourceName'),
-                          _source_connector_id(store, 'email', msg.get('SourceName')), cc=cc)
+                          _source_connector_id(store, 'email', msg.get('SourceName')), cc=cc,
+                          attachments=attachments)
     if ch == 'teams':
         chat = (msg.get('ConversationId') or '')[6:]        # 'teams:19:...'
         if not chat: raise RuntimeError('this chat message has no chat id to answer in')

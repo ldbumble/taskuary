@@ -2983,6 +2983,10 @@ class SQLiteStore:
                        m.Channel, m.SourceName, m.ConversationId, substr(m.BodyText, 1, 1500) Preview {_REVIEW_FROM}
                 WHERE {_NOT_ORPHAN} AND {_VISIBLE_PENDING}'''
         return self._rows(q + (' AND rv.Status=?' if status else '') + ' ORDER BY rv.ReviewId DESC', (status,) if status else ())
+    def set_review_deliver(self, rid, deliver: str):
+        """The delivery envelope - who it goes to, and now WHAT RIDES WITH IT (verdicts.attach)."""
+        self._exec('UPDATE review SET Deliver=? WHERE ReviewId=?', (deliver, rid))
+        self._review_changed(rid)
     def decide_review(self, rid, status, final, by, note=None):
         self._exec('UPDATE review SET Status=?, FinalText=?, DecidedBy=?, DecidedAt=?, DecideNote=? WHERE ReviewId=?',
                    (status, final, by, _now(), note, rid))

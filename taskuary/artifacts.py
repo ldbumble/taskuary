@@ -270,3 +270,15 @@ def attach_report_output(store, mid: int, title: str, body: str) -> list:
                                           'ContentType': 'image/svg+xml', 'Size': c.stat().st_size,
                                           'Inline': 1, 'Path': str(c)}))
     return made
+
+
+def outbox_dir(review_id: int):
+    """Files waiting to go OUT with a reply, one folder per review.
+
+    They are copies, deliberately: the agent staged its workbooks in Downloads and the owner may
+    tidy that folder an hour before the draft is approved. What the card shows has to be what the
+    send carries, so it is kept here from the moment it is attached."""
+    from . import config
+    d = config.home() / 'attachments' / 'outbox' / str(int(review_id))
+    d.mkdir(parents=True, exist_ok=True)
+    return d

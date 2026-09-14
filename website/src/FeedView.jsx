@@ -43,6 +43,7 @@ import { Md, looksMd } from "./md.jsx";
 import { subjectOf, sourceOf } from "./feedText.js";
 import { HOLD_TAG, ROADS, hasTag, roadOf, stateMeta, stateOf, subline } from "./timelineState.js";
 import { sendBlockLine, draftState, replyEnvelope, replySendFailure } from "./sendState.js";
+import ReplyFiles from "./ReplyFiles.jsx";
 import { timelinePhases } from "./taskLifecycle.js";
 import StateMark, { edgeOf } from "./StateMark.jsx";
 import { LEVEL_META, laneMeta, levelLabel, levelsOf } from "./funnelPile.js";
@@ -3573,6 +3574,7 @@ const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr
   const [editedCc, setCc] = useState(null);
   const cc = editedCc ?? envelope?.cc ?? [];
   const deliveryUnknown = sendErr?.unknown || envelope?.delivery === "unknown";
+  const files = envelope?.attachments || [];
   const text = editText ?? draft ?? "";
   const save = async (value = text) => {
     try { await api.patch(`/api/reviews/${reviewId}`, { body: value }); onChanged?.(); }
@@ -3595,6 +3597,7 @@ const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr
     <CcRow cc={cc} setCc={setCc} channel={channel} />
     <TextField fullWidth multiline minRows={3} size="small" placeholder="Type your reply, or generate a draft with AI"
       value={text} onChange={(e) => setEditText(e.target.value)} onBlur={(e) => save(e.target.value)} sx={{ mb: 1 }} />
+    <ReplyFiles reviewId={reviewId} files={envelope?.attachments || []} text={text} channel={channel} onChanged={onChanged} />
     {drafting.line && (
       <Typography variant="caption" sx={{ display: "block", mb: 0.75, color: drafting.state === "failed" ? ALERT_INK : DIM }}>{drafting.line}</Typography>
     )}
@@ -3615,7 +3618,9 @@ const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr
           <Button size="small" variant="contained" disabled={!text.trim() || (channel === "email" && !review) || (envelope && !envelope.to.length)}
             onClick={() => decide(reviewId, "approve", text, cc)}
             title="Sends the text above on the channel it arrived on">
-            {deliveryUnknown ? "Check delivery and retry" : cc.length ? `Approve & send, copying ${cc.length}` : "Approve & send"}</Button>
+            {deliveryUnknown ? "Check delivery and retry"
+              : [`Approve & send`, files.length ? `${files.length} file${files.length === 1 ? "" : "s"}` : "",
+                 cc.length ? `copying ${cc.length}` : ""].filter(Boolean).join(" · ")}</Button>
           <Button size="small" sx={{ color: "#867f74" }} onClick={() => decide(reviewId, "no_reply")}>No reply needed</Button>
         </>
       )}

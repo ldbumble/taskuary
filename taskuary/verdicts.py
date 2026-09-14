@@ -4,7 +4,9 @@ FAILS returns the review to the queue wearing the error, so nothing looks finish
 never left the machine. The corrections feed LEARNED.md (an edit shows how the owner
 writes, a reject what should never have been drafted).
 """
-import json
+import json, re
+from pathlib import Path
+
 from loguru import logger
 
 VERB2STATUS = {'approve': 'approved', 'edit': 'edited', 'reject': 'rejected', 'no_reply': 'no_reply',
@@ -32,6 +34,56 @@ def context_moved(store, rv: dict):
 def _now_iso() -> str:
     from datetime import datetime, timezone
     return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+SAFE_NAME = re.compile(r'[^A-Za-z0-9._ -]+')
+
+
+def attach(store, rid: int, name: str, data: bytes, actor: str = 'owner') -> dict:
+    """Put a file on a pending reply: copied into the review's own folder, named in its envelope.
+
+    The draft said "attached are the PTO accrual files" and the envelope carried nothing, because
+    nothing in Taskuary could attach anything (the owner, 2026-09-14: "otherwise it looks like it
+    sends without attachment"). This is the other half of the fix - the card's half is showing it."""
+    from .artifacts import outbox_dir
+    rv = store.get_review(int(rid))
+    if not rv: raise ValueError('no such reply')
+    if rv.get('Status') not in ('pending', 'held'): raise ValueError('this reply has already been decided')
+    name = SAFE_NAME.sub('_', str(name or '').strip())[:120] or 'attachment'
+    if not data: raise ValueError('that file is empty')
+    from . import outbound
+    if len(data) > outbound.ATTACH_MAX:
+        raise ValueError(f'that file is over {outbound.ATTACH_MAX // (1024 * 1024)}MB, which no mailbox will accept')
+    path = outbox_dir(rid) / name
+    path.write_bytes(data)
+    env = _envelope(rv)
+    files = [f for f in (env.get('attachments') or []) if f.get('name') != name]
+    files.append({'name': name, 'path': str(path), 'size': len(data)})
+    env['attachments'] = files
+    store.set_review_deliver(int(rid), json.dumps(env))
+    store.audit('review', int(rid), 'attached', actor, detail={'name': name, 'size': len(data)})
+    return {'attachments': files}
+
+
+def detach(store, rid: int, name: str, actor: str = 'owner') -> dict:
+    """Take a file back off a reply - the copy goes too, so nothing lingers addressed to somebody."""
+    rv = store.get_review(int(rid))
+    if not rv: raise ValueError('no such reply')
+    env = _envelope(rv)
+    keep = [f for f in (env.get('attachments') or []) if f.get('name') != name]
+    gone = next((f for f in (env.get('attachments') or []) if f.get('name') == name), None)
+    env['attachments'] = keep
+    store.set_review_deliver(int(rid), json.dumps(env))
+    if gone:
+        try: Path(gone['path']).unlink(missing_ok=True)
+        except OSError as e: logger.debug(f'could not remove {gone.get("path")}: {e}')
+    store.audit('review', int(rid), 'detached', actor, detail={'name': name})
+    return {'attachments': keep}
+
+
+def _envelope(rv: dict) -> dict:
+    try: return json.loads(rv.get('Deliver') or '{}') or {}
+    except (TypeError, ValueError): return {}
 
 
 def _mark_delivery(store, rid: int, env: dict, state: str, attempted_at: str = None) -> None:
@@ -239,11 +291,15 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
                 return {'ok': True, 'status': VERB2STATUS[verb], 'sent': sent, 'send_error': None, 'delivery': 'reconciled'}
         attempted_at = _now_iso()
         try:
-            sent = outbound.reply_to_message(store, msg, final, to=env.get('to') or None, cc=cc if cc is not None else env.get('cc'))
+            # what the owner saw on the card rides with the words: the files are part of the reply
+            sent = outbound.reply_to_message(store, msg, final, to=env.get('to') or None,
+                                             cc=cc if cc is not None else env.get('cc'),
+                                             attachments=env.get('attachments'))
             if rv.get('TaskId'):
                 copied = f", copied {', '.join(sent.get('cc') or [])}" if sent.get('cc') else ''
+                files = f" with {', '.join(sent.get('attached') or [])}" if sent.get('attached') else ''
                 store.add_comment(rv['TaskId'], actor, 'human',
-                                  f"Sent by {sent['channel']} to {', '.join(sent.get('to') or []) or 'the chat'}{copied}.")
+                                  f"Sent by {sent['channel']} to {', '.join(sent.get('to') or []) or 'the chat'}{copied}{files}.")
         except outbound.UNKNOWN_ERRORS as e:
             # the provider did not answer: the mail may well have gone out. Delivery UNKNOWN is its own state
             # (PW-144) - not a failure, not a send - reconciled now, and again before any retry

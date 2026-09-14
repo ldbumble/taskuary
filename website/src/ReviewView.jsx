@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Box, Button, Chip, CircularProgress, TextField, Typography } from "@mui/material";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import api from "./api";
+import ReplyFiles from "./ReplyFiles.jsx";
 import { onLive } from "./live.js";
 import { proposalPresentation, reviewStatusLabel, reviewText } from "./reviewProposal.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, PILL_COLORS } from "./theme.jsx";
@@ -58,6 +59,10 @@ const deliveryTo = (review) => {
 };
 const deliveryMeta = (review) => {
   try { return JSON.parse(review.Deliver || "null") || {}; } catch { return {}; }
+};
+const deliveryFiles = (review) => {
+  const raw = deliveryMeta(review).attachments;
+  return Array.isArray(raw) ? raw.filter((f) => f && f.name) : [];
 };
 const deliveryCc = (review) => {
   const raw = deliveryMeta(review).cc;
@@ -202,6 +207,8 @@ export default function ReviewView({ onOpenTask, onChanged }) {
                     {proposal?.destination || replyContext(r)}
                   </Typography>
                 </Box>
+                {!proposal && <ReplyFiles reviewId={r.ReviewId} files={deliveryFiles(r)}
+                  text={edits[r.ReviewId] ?? reviewText(r)} channel={r.Channel} onChanged={load} />}
                 {!proposal && <CcRow cc={ccFor(r)} setCc={(v) => setCc({ ...cc, [r.ReviewId]: v })}
                   channel={r.Channel} />}
                 <TextField fullWidth multiline minRows={2} maxRows={r.Kind === "action" ? 24 : 8}

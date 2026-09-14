@@ -69,7 +69,7 @@ class PinnedAndSentTests(unittest.TestCase):
         env = json.loads(s.get_review(rid)['Deliver'])
         self.assertEqual((env['kind'], env['mode'], env['to'], env['cc']), ('reply', 'reply_all', ['dana@vendor.example', 'sam@vendor.example'], ['pat@vendor.example']))
         sent = {}
-        with mock.patch.object(outbound, 'reply_to_message', side_effect=lambda st, m, body, to=None, cc=None: sent.update(to=to, cc=cc, body=body) or {'channel': 'email', 'to': to, 'cc': cc}):
+        with mock.patch.object(outbound, 'reply_to_message', side_effect=lambda st, m, body, to=None, cc=None, attachments=None: sent.update(to=to, cc=cc, body=body) or {'channel': 'email', 'to': to, 'cc': cc}):
             out = verdicts.decide(s, s.get_review(rid), 'approve')
         self.assertTrue(out['ok']); self.assertEqual((sent['to'], sent['cc']), (env['to'], env['cc']))
 
@@ -83,7 +83,7 @@ class PinnedAndSentTests(unittest.TestCase):
             r2 = c.put(f'/api/reviews/{rid}/envelope', json={'to': ['dana@vendor.example', 'boss@vendor.example'], 'cc': ['me@elsewhere.example', 'me@elsewhere.example']}).json()
             self.assertEqual((r2['to'], r2['cc']), (['dana@vendor.example', 'boss@vendor.example'], ['me@elsewhere.example']))
         sent = {}
-        with mock.patch.object(outbound, 'reply_to_message', side_effect=lambda st, m, body, to=None, cc=None: sent.update(to=to, cc=cc) or {'channel': 'email', 'to': to, 'cc': cc}):
+        with mock.patch.object(outbound, 'reply_to_message', side_effect=lambda st, m, body, to=None, cc=None, attachments=None: sent.update(to=to, cc=cc) or {'channel': 'email', 'to': to, 'cc': cc}):
             verdicts.decide(s, s.get_review(rid), 'approve')
         self.assertEqual((sent['to'], sent['cc']), (['dana@vendor.example', 'boss@vendor.example'], ['me@elsewhere.example']))
 
@@ -91,7 +91,7 @@ class PinnedAndSentTests(unittest.TestCase):
         s, tid, mid, rid = self.thread()
         responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: 'Here it is.')
         sent = {}
-        with mock.patch.object(outbound, 'reply_to_message', side_effect=lambda st, m, body, to=None, cc=None: sent.update(body=body) or {'channel': 'email', 'to': to, 'cc': cc}):
+        with mock.patch.object(outbound, 'reply_to_message', side_effect=lambda st, m, body, to=None, cc=None, attachments=None: sent.update(body=body) or {'channel': 'email', 'to': to, 'cc': cc}):
             verdicts.decide(s, s.get_review(rid), 'edit', 'Attached - the numbers are final.\n\nBest,\nUri Nussbaum\nMFA Heritage')
         self.assertEqual(sent['body'], 'Attached - the numbers are final.\n\nBest,\nUri Nussbaum\nMFA Heritage')
 

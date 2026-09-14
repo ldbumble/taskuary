@@ -1,10 +1,15 @@
-"""A task made by hand gets the ASK, not the email.
+"""A task gets the ASK, not the email - promoted by hand or made by triage.
 
 task_from_message stored BodyText[:1000] as the task's summary, so promoting a mail put the
 greeting, the signature block, the confidentiality footer and the quoted thread underneath on
 the task - and no checklist at all, because only the automatic road had ever asked for one
 (the owner, 2026-09-10: "shouldn't the ai triage pull out just the task and that will show as
 list as todo's").
+
+The automatic road kept the raw body a while longer: a verdict that names no summary of its own
+(reply_only names none) fell through to draft_task_fields, which stored body[:1000] - so 5,998
+characters of quoted thread landed on the task whose ask was one sentence (the owner, 2026-09-14:
+"why is the whole email showing up not the specific task?").
 """
 import json, unittest
 from unittest import mock
@@ -29,6 +34,27 @@ From: Uri Nussbaum <unussbaum@mfaheritage.net>
 Sent: Wednesday, September 2, 2026 17:53
 To: Hancock, J. D. <jdhancock@mfa.net>
 """
+
+
+class AutomaticRoadTests(unittest.TestCase):
+    def test_the_triaged_summary_is_the_ask_not_the_whole_thread(self):
+        from taskuary.routing import draft_task_fields
+        out = draft_task_fields({'subject': 'Re: Hosting', 'body': MAIL})
+        self.assertIn('check back in on this', out['summary'])
+        for gone in ('Penn Forest', 'confidential', 'From: Uri', '540.776.7576'):
+            self.assertNotIn(gone, out['summary'], gone)
+
+    def test_a_verdict_that_names_its_own_summary_still_wins(self):
+        """The fallback never overrides the brain - it is only what stands in for it."""
+        s = MemoryStore()
+        llm = mock.Mock(return_value=json.dumps({'intent': 'task', 'kind': 'task', 'why': 'an ask',
+                                                 'title': 'Roll out the screening tool',
+                                                 'summary': 'J.D. is chasing the rollout.'}))
+        with mock.patch.object(ingest, '_spawn'):
+            r = ingest.ingest_message(s, {'external_id': 'x', 'channel': 'email', 'from_email': 'jd@mfa.net',
+                                          'conversation_id': 'c1', 'subject': 'Re: Hosting', 'body': MAIL,
+                                          'sent_at': '2026-09-14 09:00:00'}, llm=llm)
+        self.assertEqual(s.get_task(r['task_id'])['Summary'], 'J.D. is chasing the rollout.')
 
 
 class ExtractTests(unittest.TestCase):

@@ -508,6 +508,24 @@ ROLES = ('trigger', 'feed', 'report', 'tool', 'notify')
 def roles_of(c) -> set: return {r for r in (c.get('Roles') or '').split(',') if r}
 
 
+def _reader_copy(snap):
+    """A private copy of exactly what a reader of the display cache may WRITE to.
+
+    The cached snapshot is served with live worker telemetry overlaid on it (apply_workers), plus a
+    fresh `as_of` and `snapshot_revision` - so it cannot be handed out by reference. It used to be
+    handed out as a FULL deep copy of every message, task, comment and attachment under it.
+
+    The write set is three levels and seven keys: `as_of`, `snapshot_revision`,
+    `worker_attention_available` and `worker_input_revision` at the top; `view_revision` on each
+    item; `worker_attention` and `worker_attention_available` on each item's view - and that
+    attention list is REPLACED, never appended to. Everything beneath those is read-only on this
+    path and is shared by reference. Worth about 12% of a pile build on the owner's store
+    (2026-09-14, interleaved A/B: 236ms to 207ms median).
+    """
+    return {**snap, 'items': [{**item, 'view': dict(item.get('view') or {})}
+                              for item in snap.get('items') or []]}
+
+
 def _snapcopy(o):
     """A private deep copy of an inventory snapshot, for the copy that guards the display cache.
 
@@ -2119,7 +2137,7 @@ class SQLiteStore:
                                  as_of[:10])
             cached = self._processing_display_cache.get(display_cache_key)
             if cached is not None:
-                snapshot = apply_workers(_snapcopy(cached))
+                snapshot = apply_workers(_reader_copy(cached))
                 snapshot['as_of'] = as_of
                 snapshot.pop('snapshot_revision', None)
                 snapshot['snapshot_revision'] = hashlib.sha256(json.dumps(

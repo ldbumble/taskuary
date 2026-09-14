@@ -353,3 +353,67 @@ class ListTasksJoinTests(unittest.TestCase):
         ids = {t['TaskId'] for t in fx.s.list_tasks(active_only=True)}
         self.assertEqual(ids, {live.tid, today.tid})
         self.assertIn(old.tid, {t['TaskId'] for t in fx.s.list_tasks()})
+
+
+class InventoryCacheIsolationTests(unittest.TestCase):
+    """The display cache hands back a structure the caller is free to write to.
+
+    processing_inventory_snapshot overlays live worker telemetry onto every item on the way out
+    (store.apply_workers), and stamps `as_of` and a fresh `snapshot_revision`. Without isolation
+    the cache would keep the previous poll's agent state for ever. The copy is therefore
+    load-bearing - but it copies EVERYTHING, 84k nodes on the owner's store, when the write set is
+    a handful of keys. These tests pin the contract so the copy can be narrowed to the writes.
+    """
+
+    NOW = '2026-09-14 12:00:00'
+
+    def _seeded(self):
+        s = MemoryStore()
+        f = Factory(s)
+        for n in range(4):
+            tid = s.create_task({'Title': f'task {n}', 'Kind': 'task', 'Status': 'open'}, 'test')
+            f.message(task=tid, subject=f'subject {n}', body=f'body {n}')
+        s.reconcile_processing_membership()
+        return s
+
+    def _snap(self, s):
+        return s.processing_inventory_snapshot(fixed_now=self.NOW, display_only=True, live_state=[])
+
+    def test_a_caller_may_write_into_what_it_is_given(self):
+        s = self._seeded()
+        first = self._snap(s)
+        self.assertTrue(first.get('items'), 'nothing to test against')
+        first['items'][0]['view']['worker_attention'] = ['MUTATED BY A CALLER']
+        first['items'][0]['poisoned'] = True
+        first['poisoned'] = True
+        second = self._snap(s)
+        self.assertNotIn('poisoned', second, 'the top level leaked into the cache')
+        self.assertNotIn('poisoned', second['items'][0], 'an item leaked into the cache')
+        self.assertNotEqual(second['items'][0]['view'].get('worker_attention'),
+                            ['MUTATED BY A CALLER'], "a caller's write reached the next reader")
+
+    def test_two_readers_never_share_the_objects_they_may_write_to(self):
+        """The overlay writes item['view_revision'] and two keys on each view, so those three
+        must be per-reader. Everything under them is read-only and may be shared."""
+        s = self._seeded()
+        a, b = self._snap(s), self._snap(s)
+        self.assertIsNot(a, b)
+        self.assertIsNot(a['items'], b['items'])
+        for x, y in zip(a['items'], b['items']):
+            self.assertIsNot(x, y, 'items are written to')
+            self.assertIsNot(x['view'], y['view'], 'views are written to')
+
+    def test_the_content_it_hands_back_is_the_same_either_way(self):
+        s = self._seeded()
+        a, b = self._snap(s), self._snap(s)
+        drop = lambda d: {k: v for k, v in d.items() if k not in ('as_of', 'snapshot_revision')}
+        self.assertEqual(drop(a), drop(b), 'two reads of an unchanged store must agree')
+
+    def test_a_write_to_the_store_is_still_seen(self):
+        """The cache key counts writes; a new task must not be served from a stale entry."""
+        s = self._seeded()
+        before = len(self._snap(s)['items'])
+        tid = s.create_task({'Title': 'brand new', 'Kind': 'task', 'Status': 'open'}, 'test')
+        Factory(s).message(task=tid, subject='brand new', body='brand new')
+        s.reconcile_processing_membership()
+        self.assertGreater(len(self._snap(s)['items']), before)

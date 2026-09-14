@@ -151,7 +151,7 @@ export function createDemoAssistantState() {
         { key: "alert:agent:7", item: "agent:7", kind: "agent", lane: "blocked", text: "coder asked you something on TQ-0007" },
       ],
       lanes: [
-        { lane: "blocked", word: "agent waiting", role: "you", n: 1 },
+        { lane: "blocked", word: "agent waving", role: "you", n: 1 },
         { lane: "approve", word: "reply pending", role: "you", n: 1 },
         { lane: "asked", word: "asked you", role: "working", n: 1 },
         { lane: "forgotten", word: "slipped", role: "info", n: 1 },

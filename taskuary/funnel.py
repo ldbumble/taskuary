@@ -19,7 +19,10 @@ from .processing_order import attention_band, priority_rank
 
 LANES = ('blocked', 'time', 'approve', 'asked', 'queued', 'broken', 'forgotten', 'report', 'fyi', 'working')
 # the lane's one word on the card, and which role colours its dot (theme.jsx ROLES)
-LANE_WORDS = {'blocked': ('agent waiting', 'you'), 'broken': ('a check failed', 'bad'), 'time': ('coming up', 'working'), 'approve': ('needs your yes', 'you'),
+# 'waving', not 'waiting': the page has said waving since the pile was drawn, and the two
+# vocabularies must say one thing (the owner, 2026-09-14). A waiting agent is passive; this
+# lane is the one where somebody is trying to get your attention.
+LANE_WORDS = {'blocked': ('agent waving', 'you'), 'broken': ('a check failed', 'bad'), 'time': ('coming up', 'working'), 'approve': ('needs your yes', 'you'),
               'asked': ('asked you', 'working'), 'queued': ('waiting to start', 'working'), 'forgotten': ('slipped', 'info'), 'report': ('landed', 'info'), 'fyi': ('fyi', None),
               'working': ('agent working', 'working')}   # visible in band 5 until the agent stops or asks
 # A chat cannot draw an icon, so it wears the emoji the desktop already uses - these ARE the marks in

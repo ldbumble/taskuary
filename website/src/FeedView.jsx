@@ -43,6 +43,7 @@ import { Md, looksMd } from "./md.jsx";
 import { subjectOf, sourceOf } from "./feedText.js";
 import { HOLD_TAG, ROADS, hasTag, roadOf, stateMeta, stateOf, subline } from "./timelineState.js";
 import { sendBlockLine, draftState, replyEnvelope, replySendFailure } from "./sendState.js";
+import { rowLane } from "./rowLane.js";
 import ReplyFiles from "./ReplyFiles.jsx";
 import { timelinePhases } from "./taskLifecycle.js";
 import StateMark, { edgeOf } from "./StateMark.jsx";
@@ -1728,8 +1729,11 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                                   sx={{ ...mono, fontSize: 9.5, color: ACCENT, flexShrink: 0 }}>out</Typography>
                               )}
                               {r.TaskId && <LifecycleChip kind="task" phase={phases.task} compact sx={{ flexShrink: 0 }} />}
-                              {/* work says what is waiting NOW; the Timeline says what TRIAGE said */}
-                              {view === "unread" && r.Lane ? <LaneTag lane={r.Lane} />
+                              {/* work says what is waiting NOW; the Timeline says what TRIAGE said.
+                                  The feed sends no Lane - it never has - so the row's own facts name
+                                  it (rowLane.js), and the road word is what is left when nothing is
+                                  waiting on you. */}
+                              {view === "unread" && (r.Lane || rowLane(r)) ? <LaneTag lane={r.Lane || rowLane(r)} />
                                 : generic ? (
                                   <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 9.5, flexShrink: 0 }}>
                                     {r.OpenTarget.kind}{r.MsgStatus ? ` · ${r.MsgStatus}` : ""}

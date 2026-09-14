@@ -25,6 +25,7 @@ import { DEMO } from "./demoApi.js";
 import { readNdjson, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { onLive } from "./live.js";
+import PreviousWork from "./PreviousWork.jsx";
 import { Md, looksMd } from "./md.jsx";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12, localDay } from "./ui.jsx";
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
@@ -1110,6 +1111,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                   </button>
                 ))}
               </div>
+              {/* Unfinished work from before, with its own recap - listed, never resumed by arriving
+                  here (website/browser/previous-work.test.mjs: "Loading the welcome card never
+                  starts an agent"). Restored from that test after this import was lost to a stray
+                  `git checkout --` on 2026-09-14. */}
+              <PreviousWork active={active} onOpenTask={onOpenTask}
+                onReview={(rid) => surfaceRef.current?.(`review:${rid}`)} />
             </div>
           )}
           {shown.map((m, i) => <Line key={m.id} m={m} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx}

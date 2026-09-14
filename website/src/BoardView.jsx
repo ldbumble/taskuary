@@ -277,7 +277,7 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feedOpen]);
   const [repos, setRepos] = useState([]);
-  const { agents, models, cmds } = useAgents();
+  const { agents, models, cmds, kinds } = useAgents();
   const [live, setLive] = useState({});                // TaskId -> {tail, AgentName} while a run works
   // how = does an agent start on it now, or does it just get filed. There is no third
   // option: work always happens in a session you can watch and talk to.
@@ -590,10 +590,10 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
               asked for a terminal below, in which case the CLI is exactly what matters */}
           <Box sx={{ display: plan.chat ? "none" : "block" }}>
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
-              Agent and model — which CLI works it, and which model that CLI runs
+              Which CLI works it — and which model that CLI runs
             </Typography>
             <Box sx={{ display: "flex", gap: 1 }}>
-              <AgentPicker agents={agents} models={models} agent={nt.agent} model={nt.model}
+              <AgentPicker agents={agents} models={models} kinds={kinds} coding agent={nt.agent} model={nt.model}
                 onAgent={(a) => setNt({ ...nt, agent: a, model: "" })} onModel={(m) => setNt({ ...nt, model: m })} />
             </Box>
             {agents.length < 2 && (

@@ -55,6 +55,48 @@ def resolve(cfg, profile):
     return {**{k: v for k, v in profile.items() if k not in COMMAND_FIELDS}, **with_defaults(connection)}
 
 
+def adopt_installed(cfg, store) -> list:
+    """Every AI CLI ON THIS MACHINE can be started - that is the whole idea of them.
+
+    A CLI reaches the pickers only through a WORKER: a profile naming what it is for, bound to a
+    connection naming how to run it. The setup wizard writes those for whatever was installed the
+    day it ran, and never again - so Devin and Copilot, installed months later and detected by
+    /api/cli/detect ever since, appeared nowhere and could not be started at all (the owner,
+    2026-09-14: "any ai cli agents should be possible to start no? isn't that the whole idea of it").
+
+    So: a known CLI that is installed gets its connection from clis.KNOWN (which already carries the
+    headless flags each one needs) and, if no worker is bound to it yet, a coding worker named after
+    it - the coding profile is CODER.md, the same one `coder` and `codex` carry, so the only thing
+    that varies between them is which CLI runs it. Nothing already configured is touched: a
+    connection the owner edited stays edited, and a CLI they deliberately have no worker for stays
+    that way once one exists. Returns the workers it made."""
+    # cliinstall.find, not shutil.which: a vendor's installer writes the USER path and this process
+    # keeps whatever environment it was launched with, so devin's own %LOCALAPPDATA%\devin\cliin
+    # is invisible to a plain PATH lookup - which is exactly the CLI this exists for.
+    from . import clis
+    from .cliinstall import find as find_cli
+    connections = cfg.setdefault('cli_connections', {})
+    profiles = cfg.setdefault('agents', {})
+    bound = {str(p.get('provider') or '')[4:] for p in profiles.values() if str(p.get('provider') or '').startswith('cli:')}
+    coding = next((p for p in profiles.values() if p.get('kind') == 'coding'), {})
+    made = []
+    for spec in clis.KNOWN:
+        if not find_cli(spec['name']): continue
+        key = cli_key(spec['cmd']) or spec['name']
+        if key not in connections:
+            connections[key] = with_defaults({k: v for k, v in spec.items() if k in COMMAND_FIELDS})
+        if key in bound or spec['name'] in profiles: continue
+        profiles[spec['name']] = {
+            'kind': 'coding', 'rules_doc': 'coder', 'provider': f'cli:{key}',
+            'purpose': coding.get('purpose') or 'Write, review and test code in a repository.',
+            # the repositories the other coding workers already know, so a new CLI lands in the same
+            # checkouts rather than nowhere
+            'cwd_map': dict(coding.get('cwd_map') or {})}
+        made.append(spec['name'])
+    if made: sync(cfg, store)
+    return made
+
+
 def sync(cfg, store, name=None):
     for worker, profile in cfg.get('agents', {}).items():
         if name is not None and worker != name: continue

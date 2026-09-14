@@ -642,29 +642,45 @@ export const useAgents = () => {
   const [agents, setAgents] = useState([]);
   const [models, setModels] = useState({});
   const [cmds, setCmds] = useState({});
+  const [kinds, setKinds] = useState({});
   useEffect(() => {
     api.get("/api/agents").then(({ data }) => {
       setAgents((data.data || []).map((a) => a.Name));
       setModels(data.models || {});
+      // what each worker is FOR. A coding dialog asks which CLI; the five general profiles -
+      // researcher, analyst, coordinator, marketer, trader - answer a question it never asked.
+      setKinds(Object.fromEntries((data.data || []).map((a) => [a.Name, a.Kind])));
       // profile name -> the CLI it actually runs ('coder' is usually claude) - the Board
       // tints a working card by the BRAND, and the name alone doesn't say which one it is
       setCmds(Object.fromEntries(Object.entries(data.config || {}).map(([k, v]) => [k, (v || {}).cmd || k])));
     }).catch(() => {});
   }, []);
-  return { agents, models, cmds };
+  return { agents, models, cmds, kinds };
 };
 
-export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, size = 30 }) => {
+// CODING IS THE PROFILE. Both shipped coding workers carry rules_doc "coder", so `coder` and
+// `codex` are not two workers to choose between - they are one job on two CLIs, and the question a
+// repository dialog asks is which CLI runs it (the owner, 2026-09-14: "for coding there is no need
+// to choose profile. That's for general. Coding is the profile for coding sessions"). So in coding
+// mode the menu says the CLI, and the five general profiles are not offered at all.
+export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, size = 30, coding = false, kinds = {} }) => {
   const info = models[agent] || {};
   const choices = info.choices || [];
+  const shown = coding && Object.keys(kinds).length
+    ? agents.filter((a) => kinds[a] === "coding") : agents;
+  const cliOf = (a) => models[a]?.cli || models[a]?.cmd || a;
+  const list = shown.length ? shown : [agent];
   return (
     <>
-      <Select size="small" value={agents.includes(agent) ? agent : (agents[0] || agent)}
+      <Select size="small" value={list.includes(agent) ? agent : (list[0] || agent)}
         onChange={(e) => onAgent(e.target.value)}
         sx={{ fontSize: 12.5, height: size, bgcolor: "#fff", minWidth: 120 }}>
-        {(agents.length ? agents : [agent]).map((a) => (
+        {list.map((a) => (
           <MenuItem key={a} value={a} sx={{ fontSize: 12.5 }}>
-            {a}{models[a]?.cmd ? ` · ${models[a].cmd}` : ""}
+            {coding ? cliOf(a) : a}
+            {coding
+              ? (a !== cliOf(a) ? <em style={{ marginLeft: 6, fontStyle: "normal", color: "#8a847a", fontSize: 11 }}>{a}</em> : null)
+              : (models[a]?.cmd ? ` · ${models[a].cmd}` : "")}
           </MenuItem>
         ))}
       </Select>

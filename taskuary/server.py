@@ -53,6 +53,15 @@ except Exception as _e:
     from loguru import logger as _log
     _log.warning(f'could not seed the shipped agent profiles: {_e}')
 cli_connections.sync(cfg, store)
+try:
+    _adopted = cli_connections.adopt_installed(cfg, store)
+    if _adopted:
+        config.save(cfg)
+        from loguru import logger as _log
+        _log.info(f"every installed CLI can be started: added {', '.join(_adopted)}")
+except Exception as _e:
+    from loguru import logger as _log
+    _log.warning(f'could not adopt the installed CLIs: {_e}')
 @asynccontextmanager
 async def _lifespan(_app):
     live_bus.bind(asyncio.get_running_loop())

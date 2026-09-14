@@ -221,6 +221,28 @@ def start(sid: str, url: str = 'about:blank') -> bool:
         return False
 
 
+def set_viewport(sid: str, w: int, h: int) -> bool:
+    """Render the page at the SHAPE OF THE PANE the owner is watching it in.
+
+    Chrome renders at a viewport nobody chose - a wide desktop default - and the pane is taller than
+    it is wide, so fitFrame letterboxes it: measured 2026-09-14, 55% of the pane was black and the
+    page drew at 38% of its size. The width stays desktop (browserSplit.MIN_VIEWPORT_W) so sites
+    serve the layout a desktop gets; only the shape follows the pane.
+
+    Fire and forget: the page still draws, letterboxed, if this never lands. Nothing is waited on -
+    a piped agent-browser call blocks until the DAEMON exits, not until the command does."""
+    exe = shutil.which('agent-browser')
+    w, h = int(w), int(h)
+    if not exe or not (200 <= w <= 4000 and 200 <= h <= 4000): return False
+    try:
+        spawn.popen([exe, '--session', session_name(sid), 'set', 'viewport', str(w), str(h)],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, close_fds=True)
+        return True
+    except (OSError, subprocess.SubprocessError) as e:
+        logger.debug(f'could not resize the browser of {sid}: {e}')
+        return False
+
+
 def brief() -> str:
     """What an agent with a browser of its own needs to know. Longer than hint() on purpose -
     this only rides when the owner asked for a browser, so it can afford to say how to drive

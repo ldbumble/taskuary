@@ -1,7 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_RATIO, clampRatio, fitFrame, keyMessage, layoutFor, mouseMessage, parseMessage, ratioFromPointer,
-  shortUrl, toPage, wheelMessage } from "../src/browserSplit.js";
+import {
+  DEFAULT_RATIO,
+  clampRatio,
+  fitFrame,
+  keyMessage,
+  layoutFor,
+  mouseMessage,
+  parseMessage,
+  ratioFromPointer,
+  shortUrl,
+  toPage,
+  viewportFor,
+  viewportMoved,
+  wheelMessage,
+} from "../src/browserSplit.js";
 
 test("the split stays between a third and four fifths, and defaults when unset", () => {
   assert.equal(clampRatio(0.58), 0.58);
@@ -71,4 +84,24 @@ test("the slot decides: no browser is nothing, a narrow slot is a chip, otherwis
   assert.equal(layoutFor(500, true, false), "chip");
   assert.equal(layoutFor(1200, true, false), "split");
   assert.equal(layoutFor(1200, true, true), "folded");
+});
+
+
+test("the page is given the pane's shape, at a desktop width", () => {
+  // 55% of the pane was black because a 16:9 render was fitted into a tall box (measured
+  // 2026-09-14). Matching the SHAPE removes the bars; holding the WIDTH keeps the desktop layout.
+  assert.deepEqual(viewportFor(860, 1060), { w: 1200, h: 1479 });   // narrow pane: width floors at 1200
+  assert.deepEqual(viewportFor(1600, 800), { w: 1600, h: 800 });    // a wide pane keeps its own width
+  assert.deepEqual(viewportFor(488, 605), { w: 1200, h: 1488 });
+  assert.equal(viewportFor(0, 600), null);
+  assert.equal(viewportFor(600, 0), null);
+  assert.ok(viewportFor(1200, 10).h >= 400, "never a slit: a floor keeps the page usable");
+});
+
+test("dragging the splitter does not re-lay-out Chrome for six pixels", () => {
+  const was = { w: 1200, h: 1400 };
+  assert.equal(viewportMoved(was, { w: 1200, h: 1410 }), false);
+  assert.equal(viewportMoved(was, { w: 1200, h: 1460 }), true);
+  assert.equal(viewportMoved(null, was), true, "the first measurement always lands");
+  assert.equal(viewportMoved(was, null), false);
 });

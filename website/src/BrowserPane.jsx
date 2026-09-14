@@ -6,7 +6,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { Box, Typography } from "@mui/material";
 import api from "./api.js";
 import { BORDER, CATPPUCCIN, FAINT, PANEL, mono } from "./theme.jsx";
-import { fitFrame, keyMessage, mouseMessage, parseMessage, shortUrl, wheelMessage } from "./browserSplit.js";
+import { fitFrame, keyMessage, mouseMessage, parseMessage, shortUrl, viewportFor, viewportMoved,
+  wheelMessage } from "./browserSplit.js";
 
 const wsUrl = (sid) => {
   const t = localStorage.getItem("taskuary_token");
@@ -24,6 +25,21 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", onFold, overl
   const [note, setNote] = useState("");
   const drivingRef = useRef(false);
   drivingRef.current = driving;
+  const shape = useRef(null), shapeTimer = useRef(null);
+
+  /* THE PAGE IS GIVEN THIS PANE'S SHAPE, so there is nothing left to letterbox. Debounced, because
+     the splitter drags; ignored on failure, because a browser that will not resize still draws. */
+  const fitViewport = () => {
+    if (!box.current) return;
+    const r = box.current.getBoundingClientRect();
+    const want = viewportFor(r.width, r.height);
+    if (!viewportMoved(shape.current, want)) return;
+    clearTimeout(shapeTimer.current);
+    shapeTimer.current = setTimeout(() => {
+      shape.current = want;
+      api.post(`/api/terminals/${sid}/browser/viewport`, want).catch(() => { shape.current = null; });
+    }, 400);
+  };
 
   // draw whatever the newest frame is into whatever size the box is now
   const paint = () => {
@@ -65,9 +81,11 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", onFold, overl
       ws.onclose = () => { setLive(false); if (!closed) retry = setTimeout(connect, 2000); };
     };
     connect();
-    const ro = new ResizeObserver(paint);
+    const ro = new ResizeObserver(() => { paint(); fitViewport(); });
     ro.observe(box.current);
-    return () => { closed = true; clearTimeout(retry); clearTimeout(staleTimer); ro.disconnect(); ws?.close(); };
+    fitViewport();
+    return () => { closed = true; clearTimeout(retry); clearTimeout(staleTimer); clearTimeout(shapeTimer.current);
+      ro.disconnect(); ws?.close(); };
   }, [sid]);
 
   // input reaches the page only while the owner is driving - a stray click on a watched pane

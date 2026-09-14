@@ -151,6 +151,39 @@ class AskingForOneLaterTests(unittest.TestCase):
         self.assertFalse(bv.wanted(s.get_task(tid)), 'and the task is not marked for a browser it cannot have')
 
 
+class TheShapeOfThePageTests(unittest.TestCase):
+    """The pane says what shape it is; the page renders that shape, so there is nothing to letterbox."""
+
+    def test_the_viewport_is_set_on_the_session_and_never_waited_on(self):
+        with mock.patch.object(bv.shutil, 'which', return_value='ab'), \
+             mock.patch.object(bv.spawn, 'popen') as popen:
+            self.assertTrue(bv.set_viewport('abc123', 1200, 1480))
+        self.assertEqual(popen.call_args.args[0],
+                         ['ab', '--session', 'tq-abc123', 'set', 'viewport', '1200', '1480'])
+        # a piped agent-browser call blocks until the DAEMON exits, which is a hang, not a resize
+        self.assertEqual(popen.call_args.kwargs.get('stdout'), subprocess.DEVNULL)
+
+    def test_a_nonsense_shape_is_refused_rather_than_handed_to_chrome(self):
+        with mock.patch.object(bv.shutil, 'which', return_value='ab'), \
+             mock.patch.object(bv.spawn, 'popen') as popen:
+            self.assertFalse(bv.set_viewport('abc123', 0, 800))
+            self.assertFalse(bv.set_viewport('abc123', 1200, 99_000))
+        popen.assert_not_called()
+
+    def test_with_no_tool_installed_it_simply_says_no(self):
+        with mock.patch.object(bv.shutil, 'which', return_value=None):
+            self.assertFalse(bv.set_viewport('abc123', 1200, 1480))
+
+    def test_the_endpoint_hands_the_pane_shape_through(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        with mock.patch.object(bv, 'set_viewport', return_value=True) as sv:
+            r = TestClient(server.app).post('/api/terminals/sid-9/browser/viewport', json={'w': 1200, 'h': 1480})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json(), {'set': True})
+        self.assertEqual(sv.call_args.args, ('sid-9', 1200, 1480))
+
+
 class StartingItTests(unittest.TestCase):
     def test_it_is_bound_to_the_session_and_restored_from_the_owners_own_cookies(self):
         seen = {}

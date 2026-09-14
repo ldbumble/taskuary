@@ -85,6 +85,24 @@ export const parseMessage = (raw) => {
   return m;
 };
 
+// THE SHAPE OF THE PAGE ITSELF. Chrome renders at a viewport nobody set - 1280x720, a wide desktop
+// shape - and fitFrame then letterboxes that into a pane which is taller than it is wide: measured
+// 2026-09-14, 55% of the pane was black and the page drew at 38%. Telling the browser the pane's
+// SHAPE removes the bars; keeping a desktop WIDTH keeps the layout sites serve to a desktop, which
+// is the one thing matching the pane exactly would have cost (the owner chose this trade).
+export const MIN_VIEWPORT_W = 1200;
+export const MIN_VIEWPORT_H = 400;
+
+export const viewportFor = (w, h) => {
+  if (!(w > 0 && h > 0)) return null;
+  const vw = Math.round(Math.max(MIN_VIEWPORT_W, w));
+  return { w: vw, h: Math.max(MIN_VIEWPORT_H, Math.round(vw * (h / w))) };
+};
+
+// Dragging the splitter fires a resize every frame; Chrome should not be re-laid-out for six pixels.
+export const viewportMoved = (was, now, tol = 32) =>
+  !!now && (!was || Math.abs(was.w - now.w) > tol || Math.abs(was.h - now.h) > tol);
+
 // A page address as the toolbar shows it: scheme and trailing slash dropped, long paths cut in the middle
 export const shortUrl = (u, max = 64) => {
   if (!u) return "";

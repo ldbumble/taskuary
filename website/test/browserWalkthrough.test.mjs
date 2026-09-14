@@ -45,3 +45,31 @@ test("a conversation that turns out to need a page can be given one, from the ta
   // ...and the pane reserves its half at once, instead of waiting for the task row to catch up
   assert.match(workspace, /expectBrowser=\{wantsBrowser\(task\) \|\| browserOn\}/);
 });
+
+test("every agent screen can take the whole window - the chat's and the terminal's alike", () => {
+  // Agent screens live in two families: the chat workspace (the walk, the task page, the Timeline
+  // drawer, an assistant card) and the terminal pane (the task page's coding session, the Wall's
+  // tiles, the drawer, a terminal card). A toggle in only the first would have missed the Wall,
+  // which is where a pane is smallest (the owner, 2026-09-14: "across both").
+  const workspace = read("GeneralWorkspace.jsx");
+  const terminal = read("TerminalView.jsx");
+  const shared = read("fullScreen.js");
+  assert.match(workspace, /import \{ FULL_SX, useFullScreen \} from "\.\/fullScreen\.js"/);
+  assert.match(terminal, /import \{ FULL_SX, useFullScreen \} from "\.\/fullScreen\.js"/);
+  assert.match(workspace, /\.\.\.\(full && !dock \? FULL_SX : null\)/, "the dock keeps its own expand");
+  assert.match(terminal, /\.\.\.\(full \? \{ \.\.\.FULL_SX/);
+  assert.match(terminal, /canFull && \(/, "the terminal pane carries its own button");
+  assert.match(terminal, /<TerminalPaneInner canFull/, "...and every TerminalPane gets it");
+  // one at a time, and Esc always gets you out
+  assert.match(shared, /let closeOther = null;/);
+  assert.match(shared, /e\.key === "Escape"/);
+  assert.doesNotMatch(shared, /localStorage/, "full screen is a moment, not a preference");
+});
+
+test("the browser is told the pane's shape, debounced, and never blocks the picture", () => {
+  const pane = read("BrowserPane.jsx");
+  assert.match(pane, /viewportFor\(r\.width, r\.height\)/);
+  assert.match(pane, /if \(!viewportMoved\(shape\.current, want\)\) return;/);
+  assert.match(pane, /setTimeout\(\(\) => \{[\s\S]{0,240}?browser\/viewport`, want\)\.catch/);
+  assert.match(pane, /new ResizeObserver\(\(\) => \{ paint\(\); fitViewport\(\); \}\)/);
+});

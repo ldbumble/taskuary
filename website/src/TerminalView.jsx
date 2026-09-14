@@ -4,12 +4,15 @@
 // on the Board). No terminal tab, no dock at the bottom of the screen. The pty lives
 // server-side, so leaving the page (or reloading) never kills it - coming back re-attaches.
 import React, { useEffect, useRef, useState } from "react";
-import { Box, CircularProgress, Typography } from "@mui/material";
+import { Box, CircularProgress, IconButton, Tooltip, Typography } from "@mui/material";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import "@xterm/xterm/css/xterm.css";
+import OpenInFullIcon from "@mui/icons-material/OpenInFull";
+import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
+import { FULL_SX, useFullScreen } from "./fullScreen.js";
 import { BORDER, CATPPUCCIN, FAINT, PANEL, XTERM_THEME, mono } from "./theme.jsx";
 import { MicButton } from "./ui.jsx";
 import { canRevealTerminal, changedTerminalSize, safeTerminalRows, usableTerminalBox } from "./terminalSizing.js";
@@ -409,13 +412,18 @@ export const TerminalPreview = ({ sid, height = 280, onOpen }) => {
 // server (agent-browser's own state files), polled - nothing here asks the agent. A slot too
 // narrow for two panes (a Wall tile three across) gets a chip instead, which opens the browser
 // OVER the terminal until dismissed.
-export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus = true, expectBrowser = false }) => {
+export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus = true, expectBrowser = false,
+                             canFull = false }) => {
   const slot = useRef(null);
   const [browser, setBrowser] = useState({ open: false, url: "" });
   const [width, setWidth] = useState(0);
   const [folded, setFolded] = useState(() => savedFold(sid));
   const [ratio, setRatio] = useState(savedRatio);
   const [peek, setPeek] = useState(false);
+  // A Wall tile is one of four across and a drawer pane is 480px tall: enough to notice an agent
+  // working, not enough to watch one - and far too little once a browser is beside the terminal.
+  // The chat workspace runs this itself, from its own strip, so it asks for no button here.
+  const { full, toggle: toggleFull } = useFullScreen();
   useEffect(() => {
     let stop = false;
     const tick = async () => {
@@ -443,7 +451,7 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
     const up = () => { rememberRatio(r); window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); };
     window.addEventListener("mousemove", move); window.addEventListener("mouseup", up);
   };
-  const fixed = height !== "100%";
+  const fixed = height !== "100%" && !full;
   const chip = (layout === "chip" || layout === "folded") && !peek && (
     // A ROW of its own, not a badge floating over the output. Absolutely positioned it sat on
     // top of the agent's first line - the one place a terminal is guaranteed to have something
@@ -463,7 +471,17 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   );
   return (
     <Box ref={slot} sx={{ display: "flex", flexDirection: "row", position: "relative", minHeight: 0, minWidth: 0,
-      ...(fixed ? { height } : { flex: 1 }) }}>
+      ...(fixed ? { height } : { flex: 1 }),
+      ...(full ? { ...FULL_SX, bgcolor: "#101010", flex: "unset" } : null) }}>
+      {canFull && (
+        <Tooltip title={full ? "Back to the page (Esc)" : "Give this session the whole window"}>
+          <IconButton size="small" onClick={toggleFull} aria-label={full ? "Exit full screen" : "Full screen"}
+            sx={{ position: "absolute", top: 4, right: 6, zIndex: 4, p: 0.4, color: "#b9b2a8",
+              bgcolor: "#1a1a1acc", border: `1px solid ${BORDER}`, "&:hover": { color: "#e1dcd5", bgcolor: "#1a1a1a" } }}>
+            {full ? <CloseFullscreenIcon sx={{ fontSize: 14 }} /> : <OpenInFullIcon sx={{ fontSize: 14 }} />}
+          </IconButton>
+        </Tooltip>
+      )}
       <Box sx={{ flex: layout === "split" ? `0 0 calc(${((1 - ratio) * 100).toFixed(2)}% - 4px)` : 1, minWidth: 0, minHeight: 0,
         display: "flex", flexDirection: "column", position: "relative",
         // the terminal takes what is left after the chip's row; only IT stretches
@@ -493,9 +511,10 @@ const TerminalPaneInner = (props) => <SessionPane {...props} />;
 
 // Wall status polls should update the header, not ask React to reconcile xterm's DOM. xterm owns
 // everything inside its host after mount; sid/height are the only props that change its surface.
-export const TerminalPane = React.memo(TerminalPaneInner,
+const TerminalPaneOuter = (props) => <TerminalPaneInner canFull {...props} />;
+export const TerminalPane = React.memo(TerminalPaneOuter,
   (a, b) => a.sid === b.sid && a.height === b.height && a.autoFocus === b.autoFocus
-    && a.expectBrowser === b.expectBrowser);
+    && a.expectBrowser === b.expectBrowser && a.canFull === b.canFull);
 TerminalPane.displayName = "TerminalPane";
 
 // Taskuary's terminals default to Catppuccin Mocha, switchable per pane (top-right picker)

@@ -5900,6 +5900,16 @@ def terminal_browser_snapshot(sid: str, body: SnapBody):
     try: return browserview.snapshot(store, sid, ACTOR, body.task_id)
     except ValueError as e: raise HTTPException(422, str(e))
 
+class ViewportBody(BaseModel):
+    w: int
+    h: int
+
+@app.post('/api/terminals/{sid}/browser/viewport')
+def terminal_browser_viewport(sid: str, body: ViewportBody):
+    """The pane says what shape it is; the page is rendered that shape, so there is no letterbox."""
+    from . import browserview
+    return {'set': browserview.set_viewport(sid, body.w, body.h)}
+
 @app.websocket('/api/terminals/{sid}/browser/ws')
 async def terminal_browser_ws(ws: WebSocket, sid: str):
     """agent-browser's screencast, relayed: frames out, the owner's input back when they take over.

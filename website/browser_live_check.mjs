@@ -63,16 +63,44 @@ const seen = await page.evaluate(() => {
     colours.add(`${data[i] >> 3},${data[i + 1] >> 3},${data[i + 2] >> 3}`);
     if (data[i] > 200 && data[i + 1] > 200 && data[i + 2] > 200) light += 1;
   }
+  // BARS: the top and bottom rows of the canvas. The relay fills the box with #101010 before it
+  // draws, so a letterboxed frame leaves those rows flat black across their whole width.
+  const row = (y) => {
+    const d = ctx.getImageData(0, y, c.width, 1).data;
+    let dark = 0, n = 0;
+    for (let i = 0; i < d.length; i += 4 * 13) { n += 1; if (d[i] < 40 && d[i + 1] < 40 && d[i + 2] < 40) dark += 1; }
+    return +(dark / n).toFixed(2);
+  };
+  const bars = { top: row(2), bottom: row(c.height - 3) };
   const text = document.querySelector(".tq-walk")?.innerText || "";
-  return { canvas: { w: Math.round(r.width), h: Math.round(r.height) }, pixels, colours: colours.size,
+  return { canvas: { w: Math.round(r.width), h: Math.round(r.height) }, pixels, colours: colours.size, bars,
     lightShare: +(light / pixels).toFixed(3), live: /\bLIVE\b/.test(text),
     url: (text.match(/[\w.-]+\.(?:com|org|net|test|dev)[^\s]*/) || [null])[0],
     takeOver: /Take over/.test(text) };
 });
 
+// ...and does FULL SCREEN actually give it the window? Click it and measure again.
+const fullSeen = await (async () => {
+  const clicked = await page.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find((x) => /Full screen/.test(x.textContent));
+    if (!b) return false;
+    b.click(); return true;
+  });
+  if (!clicked) return { clicked: false };
+  await wait(1500);
+  return page.evaluate(() => {
+    const card = document.querySelector(".tq-walk > div") || document.querySelector(".tq-walk");
+    const c = document.querySelector("canvas");
+    const r = card.getBoundingClientRect(), b = c.getBoundingClientRect();
+    return { clicked: true, card: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
+      canvas: { w: Math.round(b.width), h: Math.round(b.height) },
+      exit: /Exit full screen/.test(document.body.innerText) };
+  });
+})();
+
 const shot = process.argv[4] || null;
-if (shot) { const el = await page.$(".tq-walk"); if (el) await el.screenshot({ path: shot }); }
-console.log(JSON.stringify({ ...seen, shot, pageErrors: errors }, null, 2));
+if (shot) await page.screenshot({ path: shot });          // the viewport: in full screen the pane IS the window
+console.log(JSON.stringify({ ...seen, full: fullSeen, shot, pageErrors: errors }, null, 2));
 await browser.close();
 
 const bad = [];
@@ -80,6 +108,12 @@ if (!seen.canvas.w) bad.push("the browser canvas has no width");
 if (seen.colours < 8) bad.push(`the canvas is blank - only ${seen.colours} distinct colours, so no frame was painted`);
 if (!seen.live) bad.push("the toolbar never said LIVE, so frames are not arriving");
 if (!seen.takeOver) bad.push("no Take over control");
+if (seen.bars && (seen.bars.top > 0.9 || seen.bars.bottom > 0.9))
+  bad.push(`letterboxed: top row ${seen.bars.top} dark, bottom ${seen.bars.bottom} - the page was not given the pane's shape`);
+if (!fullSeen.clicked) bad.push("no Full screen control on the workspace strip");
+else if (fullSeen.card.w < 1400 || fullSeen.card.h < 860) bad.push(`full screen did not take the window: ${fullSeen.card.w}x${fullSeen.card.h}`);
+else if (fullSeen.canvas.w <= seen.canvas.w) bad.push(`the browser did not grow: ${seen.canvas.w} -> ${fullSeen.canvas.w}`);
+else if (!fullSeen.exit) bad.push("full screen offers no way out");
 if (errors.length) bad.push(`page errors: ${errors.join(" | ")}`);
 if (bad.length) { console.error("FAIL\n- " + bad.join("\n- ")); process.exit(1); }
 console.log("OK - a real page, relayed from a real browser, painted in the app");

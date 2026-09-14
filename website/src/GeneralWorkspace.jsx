@@ -11,6 +11,8 @@ import TerminalIcon from "@mui/icons-material/Terminal";
 import ViewDayIcon from "@mui/icons-material/ViewDay";
 import FunctionsIcon from "@mui/icons-material/Functions";
 import PublicIcon from "@mui/icons-material/Public";
+import OpenInFullIcon from "@mui/icons-material/OpenInFull";
+import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import SendRoundedIcon from "@mui/icons-material/SendRounded";
@@ -21,6 +23,7 @@ import api from "./api.js";
 import { streamAssistant, toolTarget } from "./assistantStream.js";
 import { wantsAsk, wantsBrowser, withoutAsk } from "./newTask.js";
 import { paneFor } from "./generalPane.js";
+import { FULL_SX, useFullScreen } from "./fullScreen.js";
 import { pickFor } from "./assistantProvider.js";
 import { agentName, workOf, doingNow, trailText, turnStart, elapsedText } from "./agentWork.js";
 import { Md } from "./md.jsx";
@@ -533,6 +536,8 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
   // A browser this pane asked for, before the task row it was mounted with catches up
   const [browserOn, setBrowserOn] = useState(false);
   const [browserBusy, setBrowserBusy] = useState(false);
+  // the whole window, where it stands - the dock is exempt, it has its own expand
+  const { full, toggle: toggleFull } = useFullScreen();
   const [newChatBusy, setNewChatBusy] = useState(false);
   const [confirmNewChat, setConfirmNewChat] = useState(false);
   const fileRef = useRef(null);
@@ -697,7 +702,8 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
   return (
     <Box className={dock ? `tq-aui-dock${dockExpanded ? " tq-aui-dock-expanded" : ""}` : undefined} onPaste={pasted} sx={{ border: dock ? 0 : `1px solid ${BORDER}`, borderRadius: dock ? 0 : 1.75, overflow: "hidden", bgcolor: PANEL2,
       minHeight: 0, display: "flex", flexDirection: "column",
-      ...(compact ? { height: "100%" } : { flex: "1 1 auto" }) }}>
+      ...(compact ? { height: "100%" } : { flex: "1 1 auto" }),
+      ...(full && !dock ? FULL_SX : null) }}>
       {/* the strip wraps when its box is narrow - a phone, or a half-width Wall pane; scrolled sideways it hid the view buttons entirely */}
       {!dock && <Box sx={{ minHeight: 39, px: 1.25, py: { xs: 0.5, md: 0 }, display: "flex", alignItems: "center", gap: 0.8, borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL,
         flexWrap: "wrap", flexShrink: 0 }}>
@@ -733,6 +739,11 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
         <Button size="small" startIcon={<FunctionsIcon sx={{ fontSize: 14 }} />} variant={view === "numbers" ? "contained" : "text"}
           title="Certified numbers: the figures this assistant is allowed to state as fact about your own systems, because each was proved against numbers you already knew. Teach it one by asking for a figure it does not have yet."
           onClick={() => chooseView("numbers")} sx={{ minWidth: 0, fontSize: 11, flexShrink: 0 }}>Numbers</Button>
+        <Button size="small" onClick={toggleFull} sx={{ minWidth: 0, fontSize: 11, flexShrink: 0 }}
+          title={full ? "Back to the page (Esc)" : "Give this conversation and its browser the whole window"}
+          startIcon={full ? <CloseFullscreenIcon sx={{ fontSize: 13 }} /> : <OpenInFullIcon sx={{ fontSize: 13 }} />}>
+          {full ? "Exit full screen" : "Full screen"}
+        </Button>
       </Box>}
       {dock && <Box sx={{ px: 1, py: 0.55, display: "flex", alignItems: "center", gap: 0.65,
         flexWrap: "wrap", bgcolor: PANEL, borderBottom: `1px solid ${BORDER}` }}>

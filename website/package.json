@@ -13,7 +13,7 @@
     "lint:undef": "eslint -c eslint.undef.mjs src/*.jsx src/*.js"
   },
   "dependencies": {
-    "@assistant-ui/react": "^0.15.17",
+    "@assistant-ui/react": "^0.15.19",
     "@emotion/react": "^11.13.0",
     "@emotion/styled": "^11.13.0",
     "@mui/icons-material": "^6.1.0",

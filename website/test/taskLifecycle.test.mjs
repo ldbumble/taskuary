@@ -56,8 +56,11 @@ test("one stage is open: the last thing owed wins, and a closed task shows itsel
   assert.equal(focusStage(draftReady), "reply");                                    // sending it is what closes the task
   assert.equal(focusStage({ ...draftReady, agent: "needs you" }), "reply");
   assert.equal(focusStage({ kind: "reply", task: "open", agent: "not started", reply: "not drafted", hasSender: true }), "reply");
-  assert.equal(focusStage({ kind: "coding", task: "open", agent: "not started", reply: "sent", hasSender: true }), "agent");
-  assert.equal(focusStage({ kind: "general", task: "open", agent: "not started", reply: "not needed" }), "agent");
+  // the kind does not open the agent stage - having work in it does (2026-09-14)
+  assert.equal(focusStage({ kind: "coding", task: "open", agent: "not started", reply: "sent", hasSender: true }), "task");
+  assert.equal(focusStage({ kind: "general", task: "open", agent: "not started", reply: "not needed" }), "task");
+  assert.equal(focusStage({ kind: "coding", task: "open", agent: "working", reply: "not drafted" }), "agent");
+  assert.equal(focusStage({ kind: "general", task: "open", agent: "in conversation", reply: "not drafted" }), "agent");
   assert.equal(focusStage({ kind: "task", task: "open", agent: "stopped", reply: "not drafted" }), "agent");
   assert.equal(focusStage({ kind: "task", task: "open", agent: "not started", reply: "not drafted" }), "task");
   assert.equal(focusStage({ kind: "reply", task: "open", agent: "not started", reply: "not drafted" }), "task");   // no sender to answer

@@ -704,6 +704,25 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # the verdict's own title/summary lead (PW-074); the router's subject/body cut is the fallback
         if intent.get('title'): f['title'] = intent['title']
         if intent.get('summary'): f['summary'] = intent['summary']
+        # ...and with the title known, the OTHER identity a repeat can carry. A daily machine alert
+        # gets a fresh conversation id every morning, so identity_route rightly finds no thread to
+        # join and the owner collects one indistinguishable task per day (TQ-0510 and TQ-0511, the
+        # same title and sender, 2026-09-14). The same address asking the same triaged thing, while
+        # that work is still open, is the same job. Exact title, exact address, open task only.
+        # TRIAGE's title, never the router's subject cut: a subject line is the very resemblance that
+        # joined two unrelated refunds in 2026-09-03, and two people can send one subject about two
+        # different things. A verdict that named no title has said nothing to match on.
+        twin = store.open_task_with_same_ask(intent.get('title'), msg.get('from_email'))
+        if twin:
+            mid = _land(store, msg, twin, 'routed')
+            store.add_route(mid, twin, 'attach', 1.0,
+                            f"attached: {msg.get('from_email')} has already asked this and {task_ref(twin)} is still "
+                            f"open - the same ask on a new thread is not a second task" + _notes_note(), [], 'triage')
+            store.add_comment(twin, actor, 'agent',
+                              f"Again from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''} - the same ask, kept here")
+            if intent.get('checklist'): store.merge_task_checklist(twin, intent['checklist'], 'triage')
+            logger.info(f"ingest: a repeat of {task_ref(twin)} - {msg.get('subject') or ''}")
+            return {'status': 'routed', 'task_id': twin, 'message_id': mid}
         tid = store.create_task({'Title': f['title'], 'Summary': f['summary'], 'Kind': f['kind'],
                                  'Priority': f['priority'], 'Source': msg.get('channel') or 'api',
                                  'SourceRef': msg.get('source_link'),

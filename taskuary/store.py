@@ -1418,6 +1418,21 @@ class SQLiteStore:
             if r: return r['TaskId']
         # channels without a conversation id (and mail whose References header was rewritten)
         return next((m['TaskId'] for m in reversed(self.thread_messages(None, subject)) if m['TaskId']), None) if subject else None
+    def open_task_with_same_ask(self, title, from_email):
+        """The OPEN task this exact ask is already sitting on, when the thread cannot say so.
+
+        A machine that mails the same alert daily gets a new conversation id every time, so the
+        thread check rightly finds nothing to join and the owner collects one task per day: TQ-0510
+        and TQ-0511, identical titles, one day apart (2026-09-14). Identity here is triage's own
+        title plus the sender's address, both matched EXACTLY - resemblance still decides nothing
+        (ingest.identity_route), and a closed task is never reopened by a repeat.
+        """
+        if not (title or '').strip() or not (from_email or '').strip(): return None
+        r = self._one("SELECT t.TaskId FROM task t JOIN message m ON m.TaskId=t.TaskId "
+                      "WHERE t.Status NOT IN ('done','dropped') AND LOWER(TRIM(t.Title))=? "
+                      "AND LOWER(TRIM(IFNULL(m.FromEmail,'')))=? AND IFNULL(m.Direction,'in')='in' "
+                      "ORDER BY t.TaskId DESC LIMIT 1", (title.strip().lower(), from_email.strip().lower()))
+        return r['TaskId'] if r else None
     def task_last_activity(self, task_id):
         r = self._one('SELECT MAX(x) last FROM (SELECT MAX(CreatedAt) x FROM comment WHERE TaskId=? UNION ALL '
                       'SELECT MAX(SentAt) FROM message WHERE TaskId=? UNION ALL SELECT MAX(IFNULL(UpdatedAt, StartedAt)) FROM run WHERE TaskId=?)',

@@ -46,6 +46,36 @@ class IdentityTests(unittest.TestCase):
         self.assertEqual(b['status'], 'created'); self.assertNotEqual(b['task_id'], a['task_id'])
         self.assertIn('no conversation identity', s.message_routes(b['message_id'])[-1]['Reason'])
 
+    def test_the_same_ask_from_the_same_sender_joins_the_open_task_it_already_has(self):
+        """A daily machine alert gets a new conversation every morning, so the thread check finds
+        nothing to join: TQ-0510 and TQ-0511, one title, one sender, one day apart (2026-09-14)."""
+        s = MemoryStore()
+        gateway = lambda *a, **k: ('{"intent": "task", "kind": "task", "why": "the gateway is deprecated", '
+                                   '"title": "Upgrade deprecated Power BI gateway"}')
+        frm = 'no-reply-powerbi@microsoft.com'
+        a = mail(s, 'a', 'Refresh succeeded with critical warnings.', 'AAQk-day-1', frm=frm, llm=gateway)
+        b = mail(s, 'b', 'Refresh succeeded with critical warnings.', 'AAQk-day-2', frm=frm, llm=gateway,
+                 at='2026-09-07 09:00:00')
+        self.assertEqual((a['status'], b['status']), ('created', 'routed'))
+        self.assertEqual(b['task_id'], a['task_id'])
+        self.assertIn('has already asked this', s.message_routes(b['message_id'])[-1]['Reason'])
+
+    def test_a_repeat_is_matched_on_the_triaged_ask_not_the_subject_line(self):
+        """The subject is the resemblance that joined two unrelated refunds; a verdict with no title
+        of its own has said nothing to match on, so the mails stay apart however alike they read."""
+        s = MemoryStore()
+        a = mail(s, 'a', 'Please approve the refund for Jane Doe.', 'AAQk-thread-A')
+        b = mail(s, 'b', 'Please approve the refund for Jane Doe.', 'AAQk-thread-B')
+        self.assertNotEqual(b['task_id'], a['task_id'])
+
+    def test_a_repeat_never_reopens_a_closed_task(self):
+        s = MemoryStore()
+        named = lambda *a, **k: '{"intent": "task", "kind": "task", "why": "an ask", "title": "Send the July file"}'
+        a = mail(s, 'a', 'The July file please.', 'AAQk-thread-A', llm=named)
+        s.update_task(a['task_id'], {'Status': 'done'}, 'owner')
+        b = mail(s, 'b', 'The July file please.', 'AAQk-thread-B', llm=named, at='2026-09-07 09:00:00')
+        self.assertEqual(b['status'], 'created'); self.assertNotEqual(b['task_id'], a['task_id'])
+
     def test_a_reply_on_a_closed_tasks_thread_does_not_reopen_it(self):
         s = MemoryStore()
         a = mail(s, 'a', 'Please approve the refund for Jane Doe.', 'AAQk-thread-A')

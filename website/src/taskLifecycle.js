@@ -46,11 +46,18 @@ export const replyPhase = (reviews = []) => {
 // Three cards open at once never say which one is asking you for something. Exactly one stage is
 // the focus and the other two fold to their heading: a pending draft outranks everything (sending
 // it is the step that closes the task), then the agent, then the task itself.
+//
+// The agent stage earns the focus by having WORK IN IT, not by the task's kind. Kind alone opened it
+// on every coding and general task, including the ones whose agent may never start: a Power BI alert
+// from a no-reply address is the assistant's by kind, and the first-time-sender gate then forbids the
+// start - so the page opened on an empty pane offering a button, with the ask itself folded away
+// (the owner, 2026-09-14: "it should be the task (number 1 pane) ... why is the agent expanded?").
+// A live session never reaches here at all; TasksView pins the agent stage while a pty is alive.
 export const focusStage = ({ kind, task, agent, reply, hasSender } = {}) => {
   if (reply === "draft ready") return "reply";
   if (hasSender && kind === "reply" && !["sent", "not needed"].includes(reply)) return "reply";
   if (["done", "dropped"].includes(task)) return "task";
-  if (["coding", "general"].includes(kind) || (agent && agent !== "not started")) return "agent";
+  if (agent && agent !== "not started") return "agent";
   return "task";
 };
 

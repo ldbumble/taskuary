@@ -311,6 +311,17 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
         # it is not the same as the owner reading it.
         out.append(_item(f"msg:{r['MessageId']}", 'fyi', 'fyi', subj, why=r.get('RouteReason') or 'a person told you something; nothing to do', **base))
         if group and out and threads.get(group) is None: threads[group] = out[-1]
+    # ONE brief leads the day. `brief_today` is true of every digest run made today, and the digest
+    # ran twice on 2026-09-14 - so two identical "Morning digest" rows sat at the top of the work
+    # rail, both promoted out of the report band ("we should only have the latest one. The other one
+    # should be in the timeline report"). A later run REPLACES the earlier one: it summarises the
+    # same day from further along it. The one it replaced is the ordinary landed report it always
+    # was - still on the Timeline, no longer leading the day.
+    if len(briefs := [i for i in out if i.get('brief_today')]) > 1:
+        stamp = lambda i: _activity_time(i.get('sort_at') or i.get('since') or i.get('when')) or datetime.min
+        for i in sorted(briefs, key=stamp)[:-1]:
+            i['brief_today'] = False
+            i['why'] = 'a later brief has replaced this one - the day is summarised above'
     for group, n in more.items():                 # the rest of each task/thread, counted on the row that speaks for it
         held = threads.get(group)
         if held is not None: held['more'] = held.get('more', 0) + n

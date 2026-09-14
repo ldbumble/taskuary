@@ -108,6 +108,23 @@ class TodaysBriefLeadsTests(unittest.TestCase):
         self.assertFalse(funnel.todays_brief(brief))
         self.assertEqual(brief['order_band'], 3)
 
+    def test_only_the_latest_brief_of_the_day_leads_and_the_earlier_one_lands(self):
+        """The digest is "daily at 08:00 + on app start (at most once a day)", so opening the app
+        at 07:20 and the 08:00 slot both produced one - and two identical rows led the work rail
+        (the owner, 2026-09-14: "we should only have the latest one")."""
+        s = store()
+        report_source(s)
+        report_run(s, hours=3, body='THE WINDOW IN NUMBERS: the 07:20 one')
+        report_run(s, hours=1, body='THE WINDOW IN NUMBERS: the 08:00 one')
+        items = funnel.build(s)['items']
+        briefs = [i for i in items if i['kind'] == 'report']
+        self.assertEqual(len(briefs), 2, 'both runs are still on the timeline')
+        self.assertEqual([funnel.todays_brief(i) for i in briefs], [True, False], 'one brief leads, the other lands')
+        self.assertTrue(funnel.todays_brief(items[0]))
+        self.assertIn('the 08:00 one', items[0]['preview'] or items[0].get('why') or '')
+        self.assertEqual([i['order_band'] for i in briefs], [2, 3])
+        self.assertIn('a later brief has replaced this one', briefs[1]['why'])
+
     def test_an_ordinary_report_run_today_is_not_the_brief(self):
         s = store()
         report_source(s, title='Process Error Check', kind='sql')

@@ -839,6 +839,29 @@ def assistant_message(task_id: int, body: AssistantMessageBody):
     except (ValueError, RuntimeError) as e: raise HTTPException(422, str(e))
     return {'reply': reply, **_assistant_payload(task_id, session)}
 
+@app.post('/api/tasks/{task_id}/assistant/browser')
+def assistant_browser(task_id: int):
+    """Give THIS conversation a browser, now.
+
+    A browser only ever arrived with the task: the needs:browser mark is set when the task is made
+    (the New task dialog's checkbox, or a set-up walk), and nothing in the agent tab could add it
+    afterwards. So a chat that turned out to need a page had no way to get one, and the owner asked
+    why a browser never showed up there (2026-09-14). Pressing this IS the mark: the task carries it
+    from now on, and a session already running gets its Chrome without being restarted.
+    """
+    from . import browserview, general
+    task = store.get_task(task_id)
+    if not task: raise HTTPException(404, 'task not found')
+    if not general.handles(task): raise HTTPException(422, 'a browser belongs to an assistant conversation')
+    if not browserview.installed():
+        raise HTTPException(422, 'agent-browser is not installed - Connections -> AI CLI agents lists it')
+    store.tag_task(task_id, browserview.WANTS, actor=ACTOR)
+    session = general.session_for(task_id)
+    if session:
+        session.browser_wanted = True                 # the next turn hands the CLI its browser brief
+        threading.Thread(target=browserview.start, args=(session.sid,), daemon=True).start()
+    return _assistant_payload(task_id, session)
+
 @app.post('/api/tasks/{task_id}/assistant/cancel')
 def assistant_cancel(task_id: int):
     """The stop button. The ONLY thing that stops an answer being written - walking away does

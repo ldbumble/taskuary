@@ -50,6 +50,105 @@ class AskingForOneTests(unittest.TestCase):
         self.assertIn('NEVER type a password', said)    # ...and the owner types those, in the pane
         self.assertIn('$TASKUARY_URL', said)             # reuse this server; never start another port
         self.assertIn('NEVER use --session, --headed', said)
+        # ...and it is told to LOOK with the accessibility tree, which is what the browser already
+        # knows about its own page - an order of magnitude cheaper than the same page as pixels.
+        self.assertIn('snapshot -i -c', said)
+        self.assertIn('@ref', said)
+        self.assertIn('screenshot only when', said)
+
+
+class TheChatIsNamedTooTests(unittest.TestCase):
+    """A browser the CHAT opens is one the pane can find.
+
+    Every pty has carried AGENT_BROWSER_SESSION since TQ-0255, so a coding agent's browser appears
+    beside its terminal on its own. The Assistant's own sessions were named only when the task
+    carried needs:browser - so in the general agent tab a browser could never show up at all, and
+    the owner asked why (2026-09-14). Naming costs one environment variable and starts nothing;
+    LAUNCHING Chrome and granting a shell still belong to a task that asked for a browser.
+    """
+
+    def _turn(self, tags=''):
+        """One assistant turn on a CLI brain, with everything outside this decision held still."""
+        from taskuary import general, llm as llm_mod
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Look something up', 'Summary': 'go', 'Kind': 'general',
+                             'Status': 'open', 'Tags': tags}, 'owner')
+        session = general.GeneralSession(s, tid)
+        session.pick, session.provider, session.model = 'cli:coder', 'Claude Code (your CLI)', ''
+        seen = {}
+        def build(store, **kw): seen.update(kw); return None                  # no brain: the turn stops here
+        with mock.patch.object(llm_mod, 'build_llm', side_effect=build), \
+             mock.patch.object(bv, 'start', return_value=True) as started:
+            with self.assertRaises(RuntimeError):                             # "the selected AI connector is unavailable"
+                session.send_prompt('go', echo=False)
+        return seen, started
+
+    def test_a_plain_chat_is_bound_without_a_browser_being_started(self):
+        seen, started = self._turn()
+        self.assertIn('AGENT_BROWSER_SESSION', seen.get('extra_env') or {})
+        self.assertFalse(seen.get('cli_tools'), 'a chat that did not ask for a browser gets no shell')
+        started.assert_not_called()
+
+    def test_a_task_that_asked_for_one_gets_the_browser_and_the_brief(self):
+        seen, started = self._turn(tags=bv.WANTS)
+        self.assertIn('AGENT_BROWSER_SESSION', seen.get('extra_env') or {})
+        self.assertTrue(seen.get('cli_tools'), 'it has to be able to RUN agent-browser')
+        started.assert_called_once()
+
+
+class AskingForOneLaterTests(unittest.TestCase):
+    """The agent tab's own button. Before it, needs:browser could only be set when the task was
+    made, so a conversation that turned out to need a page never got one."""
+
+    def _client(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        return TestClient(server.app), server
+
+    def test_pressing_it_marks_the_task_and_starts_the_browser_on_the_live_session(self):
+        from taskuary import general
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Look at the portal', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        client, server = self._client()
+        class Live:                                    # a real object: a Mock's info() is not JSON
+            sid, browser_wanted = 'sid-1', False
+            def info(self, tail=0): return {'sid': 'sid-1', 'alive': True, 'busy': False}
+        live = Live()
+        with mock.patch.object(server, 'store', s), \
+             mock.patch.object(bv, 'installed', return_value=True), \
+             mock.patch.object(general, 'session_for', return_value=live), \
+             mock.patch.object(bv, 'start') as start, \
+             mock.patch.object(server.threading, 'Thread') as thread:
+            r = client.post(f'/api/tasks/{tid}/assistant/browser')
+            launched = thread.call_args.kwargs                 # while bv.start is still the patched one
+            start.assert_not_called()                          # it is launched on the thread, not inline
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(bv.wanted(s.get_task(tid)), 'the press IS the mark on the task')
+        self.assertTrue(live.browser_wanted, 'and the running session hands its next turn the brief')
+        self.assertIs(launched['target'], start)
+        self.assertEqual(launched['args'], ('sid-1',))
+
+    def test_with_no_session_yet_it_still_marks_the_task(self):
+        from taskuary import general
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Look at the portal', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        client, server = self._client()
+        with mock.patch.object(server, 'store', s), \
+             mock.patch.object(bv, 'installed', return_value=True), \
+             mock.patch.object(general, 'session_for', return_value=None), \
+             mock.patch.object(general, 'provider_options', return_value=[]):
+            self.assertEqual(client.post(f'/api/tasks/{tid}/assistant/browser').status_code, 200)
+        self.assertTrue(bv.wanted(s.get_task(tid)))
+
+    def test_it_says_so_rather_than_promising_a_browser_that_is_not_installed(self):
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Look at the portal', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        client, server = self._client()
+        with mock.patch.object(server, 'store', s), mock.patch.object(bv, 'installed', return_value=False):
+            r = client.post(f'/api/tasks/{tid}/assistant/browser')
+        self.assertEqual(r.status_code, 422)
+        self.assertIn('agent-browser', r.json()['detail'])
+        self.assertFalse(bv.wanted(s.get_task(tid)), 'and the task is not marked for a browser it cannot have')
 
 
 class StartingItTests(unittest.TestCase):
@@ -59,8 +158,16 @@ class StartingItTests(unittest.TestCase):
              mock.patch.object(bv, 'state', side_effect=[{'open': False}, {'open': True}]), \
              mock.patch.object(bv.spawn, 'popen', side_effect=lambda cmd, **kw: seen.update(cmd=cmd)):
             self.assertTrue(bv.start('abc123', 'https://portal.example'))
-        self.assertEqual(seen['cmd'][:6], ['ab', '--session', 'tq-abc123', '--restore', bv.RESTORE_KEY, 'open'])
-        self.assertEqual(seen['cmd'][6], 'https://portal.example')
+        self.assertEqual(seen['cmd'][:5], ['ab', '--session', 'tq-abc123', '--restore', bv.RESTORE_KEY])
+        self.assertEqual(seen['cmd'][-2:], ['open', 'https://portal.example'])
+        # ...and it does not announce itself. agent-browser leaves navigator.webdriver true by
+        # default (measured 2026-09-14); a login page reads that before anything subtler.
+        self.assertIn('--args', seen['cmd'])
+        self.assertIn('AutomationControlled', seen['cmd'][seen['cmd'].index('--args') + 1])
+        # HEADED is not how this browser is hidden - the pane is. A headed Chrome on Windows is a
+        # window across the owner's own work (the owner, 2026-09-14: "it should not show up in
+        # random. but in the browser").
+        self.assertNotIn('--headed', seen['cmd'])
 
     def test_a_browser_the_agent_already_opened_is_not_opened_twice(self):
         with mock.patch.object(bv.shutil, 'which', return_value='ab'), \

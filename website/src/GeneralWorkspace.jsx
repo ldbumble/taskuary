@@ -10,6 +10,7 @@ import EventRepeatIcon from "@mui/icons-material/EventRepeat";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import ViewDayIcon from "@mui/icons-material/ViewDay";
 import FunctionsIcon from "@mui/icons-material/Functions";
+import PublicIcon from "@mui/icons-material/Public";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import SendRoundedIcon from "@mui/icons-material/SendRounded";
@@ -529,6 +530,9 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [reportBusy, setReportBusy] = useState(false);
+  // A browser this pane asked for, before the task row it was mounted with catches up
+  const [browserOn, setBrowserOn] = useState(false);
+  const [browserBusy, setBrowserBusy] = useState(false);
   const [newChatBusy, setNewChatBusy] = useState(false);
   const [confirmNewChat, setConfirmNewChat] = useState(false);
   const fileRef = useRef(null);
@@ -629,6 +633,18 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
     }, 2500);
     return () => { live = false; clearInterval(timer); };
   }, [busy, task.TaskId, data?.messages]);
+  /* THE BROWSER, on demand. It used to arrive only with the task - the New task dialog's checkbox
+     or a set-up walk - so a conversation that turned out to need a page could never get one, and no
+     browser ever appeared in the agent tab (the owner, 2026-09-14). The button is the mark: the task
+     carries needs:browser from now on and a running session gets its Chrome without a restart. */
+  const openBrowser = async () => {
+    setError(""); setBrowserBusy(true);
+    try {
+      const { data: fresh } = await api.post(`/api/tasks/${task.TaskId}/assistant/browser`);
+      setBrowserOn(true); accept(fresh); setThreadKey((k) => k + 1);
+    } catch (e) { setError(errText(e)); }
+    finally { setBrowserBusy(false); }
+  };
   const makeReport = async () => {
     setError(""); setNotice(""); setReportBusy(true);
     try {
@@ -706,6 +722,14 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
           title="The same conversation as raw session output - what the CLI actually printed."
           onClick={() => chooseView("terminal")} sx={{ minWidth: 0, fontSize: 11, flexShrink: 0 }}>Terminal</Button>
         {/* what it is ALLOWED to state as fact about our own numbers - the chat teaches it, this shows it */}
+        {/* only while there is not one: a browser is a thing you are given once, not a toggle */}
+        {!wantsBrowser(task) && !browserOn && (
+          <Button size="small" startIcon={<PublicIcon sx={{ fontSize: 14 }} />} disabled={browserBusy}
+            title="Open a browser for this task - it appears beside the conversation and the agent drives it while you watch"
+            onClick={openBrowser} sx={{ minWidth: 0, fontSize: 11, flexShrink: 0 }}>
+            {browserBusy ? "Opening…" : "Browser"}
+          </Button>
+        )}
         <Button size="small" startIcon={<FunctionsIcon sx={{ fontSize: 14 }} />} variant={view === "numbers" ? "contained" : "text"}
           title="Certified numbers: the figures this assistant is allowed to state as fact about your own systems, because each was proved against numbers you already knew. Teach it one by asking for a figure it does not have yet."
           onClick={() => chooseView("numbers")} sx={{ minWidth: 0, fontSize: 11, flexShrink: 0 }}>Numbers</Button>
@@ -772,7 +796,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
             Nothing has run on this task yet — ask something and the session's own output appears here.
           </Box>
         ) : session ? (
-          <SessionPane sid={session.sid} height="100%" expectBrowser={wantsBrowser(task)}>{thread}</SessionPane>
+          <SessionPane sid={session.sid} height="100%" expectBrowser={wantsBrowser(task) || browserOn}>{thread}</SessionPane>
         ) : thread}
       </Box>
     </Box>

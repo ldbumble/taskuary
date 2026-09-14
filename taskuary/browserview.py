@@ -38,6 +38,14 @@ _TTL = 2.0                      # state() is on the terminal-listing poll path: 
 # the browser is quick - this returns the moment it answers.
 LAUNCH_WAIT = 25.0
 LAUNCH_POLL = 0.25
+# Chrome's own launch flags. agent-browser leaves `navigator.webdriver` TRUE by default (measured
+# here 2026-09-14: true without this flag, false with it) - the cheapest tell a login page has, and
+# one it reads before any of the interesting signals. The other half of the 2026 detection advice is
+# to run HEADED, and that half is deliberately not taken: Windows has no virtual display, so a headed
+# browser is a Chrome window sitting across the owner's own work - which is exactly what happened
+# when it was tried (the owner, 2026-09-14: "I closed it by mistake. It should not show up in random.
+# but in the browser."). The pane IS where this browser shows.
+LAUNCH_ARGS = '--disable-blink-features=AutomationControlled'
 LAST = {}                       # sid -> the newest frame seen by any relay: what Snapshot files
 _CACHE = {}                     # sid -> (when, state)
 _START_LOCKS = {}               # sid -> one launch at a time; session mount + first prompt race otherwise opens two Chromes
@@ -45,6 +53,7 @@ _START_LOCKS_GUARD = threading.Lock()
 _KEPT = re.compile(r'^\{\s*"type"\s*:\s*"(frame|url)"')   # the head of the message, before paying for a 50KB parse
 
 
+def installed() -> bool: return bool(shutil.which('agent-browser'))
 def session_name(sid: str) -> str: return f'tq-{sid}'
 def env(sid: str) -> dict: return {'AGENT_BROWSER_SESSION': session_name(sid)}
 def home() -> Path: return Path(os.environ.get('AGENT_BROWSER_HOME') or Path.home() / '.agent-browser')
@@ -195,7 +204,8 @@ def start(sid: str, url: str = 'about:blank') -> bool:
         lock = _START_LOCKS.setdefault(sid, threading.Lock())
     with lock:
         if state(sid, fresh=True)['open']: return True             # the agent or mount got there first
-        cmd = [exe, '--session', session_name(sid), '--restore', RESTORE_KEY, 'open', url or 'about:blank']
+        cmd = [exe, '--session', session_name(sid), '--restore', RESTORE_KEY, '--args', LAUNCH_ARGS,
+               'open', url or 'about:blank']
         try:
             # detached and HEADLESS: the live pane is the visible browser. --headed opens a second
             # desktop window outside Taskuary and defeats the side-by-side surface.
@@ -218,8 +228,20 @@ def brief() -> str:
     return ('A BROWSER IS OPEN for this task and the owner is WATCHING it beside this session. '
             'Drive the existing tab with `agent-browser` - it is already bound and restored, so '
             'NEVER use --session, --headed, profile listing, or launch Chrome separately. Navigate '
-            'with `agent-browser open <url>`; read `agent-browser skills get core --full` only if '
-            'you do not know a command. Taskuary itself is already running at $TASKUARY_URL: do not '
+            'with `agent-browser open <url>`. '
+            # LOOK, and look CHEAPLY. The accessibility tree is what the browser already knows about
+            # its own page - every control's role, name and state, with a @ref to act on - and it is
+            # an order of magnitude smaller than the same page as pixels. An agent that screenshots
+            # its way through a login burns the context it needs for the job and still guesses at
+            # which box is the user id.
+            'LOOK BEFORE YOU CLICK: `agent-browser snapshot -i -c` prints the page as an '
+            'accessibility tree - every interactive element with its role, its name and a @ref you '
+            'can act on (`agent-browser click @ref3`, `agent-browser type @ref1 "..."`). Use it as '
+            'your eyes. `agent-browser read` gives the page text, `agent-browser find role button '
+            '"Sign in" click` finds a control by what it IS. Take a screenshot only when the '
+            'question is genuinely visual - it costs far more and says less. '
+            '`agent-browser skills get core --full` if you need a command you do not know. '
+            'Taskuary itself is already running at $TASKUARY_URL: do not '
             'start Taskuary, Vite, or another local server. '
             'NEVER type a password, a 2FA code or a card number: navigate to the page that asks '
             'and tell the owner here - they type it in the pane themselves.')

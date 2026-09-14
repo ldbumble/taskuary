@@ -30,7 +30,18 @@ test("an embedded terminal never steals focus and scrolls the Assistant upward",
 test("an expected walkthrough browser reserves the side-by-side pane while Chrome starts", () => {
   const workspace = read("GeneralWorkspace.jsx");
   const terminal = read("TerminalView.jsx");
-  assert.match(workspace, /expectBrowser=\{wantsBrowser\(task\)\}/);
+  assert.match(workspace, /expectBrowser=\{wantsBrowser\(task\) \|\| browserOn\}/);
   assert.match(terminal, /browser\.open \|\| expectBrowser/);
   assert.match(terminal, /browser · starting…/);
+});
+
+test("a conversation that turns out to need a page can be given one, from the tab it is in", () => {
+  // needs:browser used to be settable only when the task was MADE (the New task dialog, or a
+  // set-up walk), so no browser could ever appear in the general agent tab afterwards (the owner,
+  // 2026-09-14: "why didn't they show up in the general agent tab?").
+  const workspace = read("GeneralWorkspace.jsx");
+  assert.match(workspace, /api\.post\(`\/api\/tasks\/\$\{task\.TaskId\}\/assistant\/browser`\)/);
+  assert.match(workspace, /\{!wantsBrowser\(task\) && !browserOn && \(/, "offered only while there is not one");
+  // ...and the pane reserves its half at once, instead of waiting for the task row to catch up
+  assert.match(workspace, /expectBrowser=\{wantsBrowser\(task\) \|\| browserOn\}/);
 });

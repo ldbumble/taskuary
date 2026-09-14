@@ -748,14 +748,23 @@ class GeneralSession:
                 system = f'{system}\n\n{str(delivery_instructions).strip()}'
             if not as_owner: user = f'{user}\n\n{text}'      # the instruction, carried but not attributed
             browser_tools, browser_env = False, None
-            if self.browser_wanted and self.pick.startswith('cli:'):
+            if self.pick.startswith('cli:'):
                 # This is still the conversational Assistant, not a coding PTY. Give its headless
                 # CLI the same named browser session as the pane, and wait for the one background
                 # launch so its first command reuses that Chrome instead of racing a second one.
+                #
+                # NAMED whether or not a browser was asked for. Binding is one environment variable
+                # and starts nothing; unbound, any browser this session does open lands in
+                # agent-browser's `default` session - one the pane cannot find - so the owner would
+                # watch an empty box while the work happened where they cannot see it (the owner,
+                # 2026-09-14: "why didn't they show up in the general agent tab?"). Every pty has
+                # been named since TQ-0255 (terminal.py); the chat was the one that was not.
                 from . import browserview, terminal
-                if browserview.start(self.sid):
+                browser_env = {**terminal.session_env('assistant', self.task_id, sid=self.sid), **browserview.env(self.sid)}
+                # ...but Chrome is only LAUNCHED, and the shell only granted, for a task that asked
+                # for one. A chat that did not is a research session: it reads, it does not run.
+                if self.browser_wanted and browserview.start(self.sid):
                     browser_tools = True
-                    browser_env = {**terminal.session_env('assistant', self.task_id, sid=self.sid), **browserview.env(self.sid)}
                     system = f'{system}\n\n{browserview.brief()}'
             # only a CLI-backed chat can post to the wall: an API provider has no shell to
             # run the command in, and telling it about a command it cannot run is a lie
@@ -793,8 +802,10 @@ class GeneralSession:
             # command, edit, write, or MCP tool. Looking is not acting.
             build_args = dict(pick=self.pick, model=self.model or None, trace=visible,
                               cancel=cancel, resume=self.cli_sid or None, research=True)
-            if browser_tools:
-                build_args.update(cli_tools=True, extra_env=browser_env)
+            # the NAME always rides (so a browser this session opens is one the pane can find); the
+            # shell and the browser brief ride only for a task that asked for a browser
+            if browser_env: build_args.update(extra_env=browser_env)
+            if browser_tools: build_args.update(cli_tools=True)
             brain = llm_mod.build_llm(self.store, **build_args)
             if not brain: raise RuntimeError('the selected AI connector is unavailable')
             if self.cli_sid:

@@ -216,12 +216,30 @@ export const refreshCurrentPresentation = (current, fresh) =>
 
 // The card under a line is decided by the item's KIND, never by the model. Every kind maps to
 // exactly one card so a reload draws the same conversation.
-export const cardFor = (item) => {
-  if (!item) return null;
-  // A message becomes the agent's live work without becoming a different historical message.
-  // Lane is the current truth: once it is working, draw the agent controls instead of leaving the
-  // old "nobody on it" message card and its Start button on screen.
-  if (item.lane === "working" && item.tid) return "agent";
+// WHAT THIS ITEM IS ASKING OF YOU, and the words that say so - the assistant's answer to the task
+// page's focusStage, and kept in the same precedence so the two cannot drift: a draft waiting for a
+// yes, then an agent that stopped, then work nobody has started, then the job itself.
+//
+// The lane, not the kind, decides. `kind` alone sent a task handed to an agent that never started
+// through `default: "message"` - drawn as "a person wrote something", with no list, no reason and
+// no way to start it (the owner, 2026-09-14). A `working` lane never reaches the walk at all - the
+// pile excludes it until the agent stops or asks - but an item already in front of you can BECOME
+// working while you read it, and then it is the agent's card.
+export const assistantFocus = (item) => {
+  if (!item) return { card: null, lead: "" };
+  const who = item.agent || item.working || "the agent";
+  if (item.lane === "working" && item.tid) return { card: "agent", lead: `${who} is working on this — nothing for you here yet.` };
+  if (item.lane === "blocked") return { card: "agent", lead: `${who} stopped and is waiting on you.` };
+  if (item.kind === "review" || item.kind === "action" || item.lane === "approve")
+    return { card: "reply", lead: item.kind === "action"
+      ? "An agent proposed this. Read it, then it runs only if you say so."
+      : "A reply is drafted and waiting for your yes — read what they asked, then send it." };
+  if (item.lane === "queued" && item.tid)
+    return { card: "task", lead: `This one is on you — ${who === "the agent" ? "it was handed over" : `${who} was handed it`} and has not started.` };
+  return { card: cardKind(item), lead: item.why || "" };
+};
+
+const cardKind = (item) => {
   switch (item.kind) {
     case "review": case "action": return "reply";
     case "agent": return "agent";
@@ -237,6 +255,8 @@ export const cardFor = (item) => {
     default: return "message";          // asked, todo, fyi - a person wrote something
   }
 };
+
+export const cardFor = (item) => (item ? assistantFocus(item).card : null);
 
 // "in 12 min" / "now" / "2h ago" - how long an item has waited, or until a meeting starts
 export const ageText = (iso, now = Date.now()) => {

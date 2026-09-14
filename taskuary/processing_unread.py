@@ -109,6 +109,12 @@ def card_for(store, item, compact, live_state, now, states=None):
     # "What about all the other tasks?")
     if queued and card['lane'] == 'asked':
         card.update(lane='queued', why=f"handed to {task['Assignee'].split(':', 1)[-1] or 'an agent'}, not started yet")
+    # ...and WHY it has not started, which the lane word cannot say. "waiting to start" reads as a
+    # queue that clears itself; every cause underneath it needs the owner instead (2026-09-14).
+    if card['lane'] == 'queued' and card.get('tid'):
+        card['why_idle'] = funnel.not_started_why(store, card['tid'])
+        if not card.get('why'):
+            card['why'] = f"handed to {str(task.get('Assignee') or '').split(':', 1)[-1] or 'an agent'}, not started yet"
     if worker and active:
         agent_cards = funnel.from_agents(store, live_state=[worker], now=now)
         if agent_cards:

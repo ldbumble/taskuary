@@ -116,11 +116,9 @@ def _selection_facts(item: dict) -> dict:
     return facts
 
 
-def _batch(first: dict, ready: list[dict]) -> tuple[dict, tuple[str, ...]]:
-    from . import funnel
-
+def _batch(first: dict, ready: list[dict], size: int) -> tuple[dict, tuple[str, ...]]:
     members = ([first] + [item for item in ready
-                          if item.get("lane") == "fyi" and item.get("key") != first.get("key")])[:funnel.FYI_BATCH]
+                          if item.get("lane") == "fyi" and item.get("key") != first.get("key")])[:size]
     keys = tuple(item["key"] for item in members)
     card = {
         "key": "fyis:" + ",".join(keys),
@@ -197,7 +195,7 @@ def capture_selection(store, *, only=None, include_surfaced=False,
     first = next((item for item in ready if funnel.on_you(item) or not item.get("surfaced")),
                  ready[0] if ready else None)
     if first is not None and first.get("lane") == "fyi":
-        selected, member_keys = _batch(first, ready)
+        selected, member_keys = _batch(first, ready, funnel.fyi_batch_size(store))
     else:
         selected = copy.deepcopy(first) if first is not None else None
         member_keys = (selected["key"],) if selected is not None else ()

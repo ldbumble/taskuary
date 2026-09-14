@@ -363,6 +363,41 @@ def todays_brief(item: dict) -> bool:
     return bool(item.get('brief_today'))
 
 
+AUTO_OFF = 'not auto-worked:'          # the clause triage writes on a route it declined to start
+
+
+def not_started_why(store, tid) -> str:
+    """Why nothing is running on a task that was handed to an agent and never began.
+
+    "waiting to start" says the state and not the cause, so the owner reads it as a queue that will
+    clear itself - and it will not: every reason below needs them (the owner, 2026-09-14: "if the
+    agent did not start, tell the user why it did not start, or left over from yesterday").
+
+    Structured facts first, our own written sentence last. The `interrupted` tag is the strongest -
+    terminal.release_task writes it when Taskuary itself closed on top of a live worker (PW-262),
+    and nothing restarts by itself. Then a run that really ran and stopped. Then triage's own words
+    about why it declined to start (the first-time-sender gate writes them, and a no-reply address
+    will never clear it). Returns '' when the task is not actually idle - the caller decides who asks.
+    """
+    from . import terminal
+    t = store.get_task(tid) or {}
+    who = str(t.get('Assignee') or '').split(':', 1)[-1] or 'an agent'
+    tags = str(t.get('Tags') or '')
+    old = ' It has been waiting since yesterday.' if str(t.get('CreatedAt') or '')[:10] < datetime.now().strftime('%Y-%m-%d') else ''
+    if terminal.INTERRUPTED in [x.strip() for x in tags.split(',')]:
+        return f'Taskuary closed while {who} had this, so the session went with it. Nothing restarts by itself.' + old
+    if any(r.get('Status') in ('stopped', 'failed', 'error') for r in (store.list_runs(tid) or [])):
+        return f'{who} ran on this and stopped without finishing it.' + old
+    msg = store.last_inbound_on_task(tid) or {}
+    for r in reversed(store.message_routes(msg.get('MessageId')) or []) if msg.get('MessageId') else []:
+        reason = str(r.get('Reason') or '')
+        if AUTO_OFF in reason:
+            return 'Triage did not start it: ' + reason.split(AUTO_OFF, 1)[1].strip().rstrip('.') + '.' + old
+    if store.get_settings().get('coder_auto_enabled', '1') != '1' and (t.get('Kind') or '') == 'coding':
+        return f'Auto-start is off, so {who} waits for you to press Start.' + old
+    return f'It was handed to {who} and nothing has started it.' + old
+
+
 def report_failed(store, subject: str, mid=None) -> bool:
     """Did the run that produced THIS row fail? The run linked to this very message says so
     (report_run.MessageId); otherwise the subject's own convention ('- FAILED'). Never a word found
@@ -975,6 +1010,18 @@ def came_in(i: dict) -> bool:
     and the brief said "0 of them are mail" with five in the pipe (the owner, 2026-09-03)."""
     return bool(i.get('mid')) and (i.get('channel') or 'email') not in NOT_INCOMING
 FYI_BATCH = 4                              # FYI has no action: the normal chat walk reads four together
+FYI_BATCH_RANGE = (1, 10)                  # ...and how many is the owner's (Settings -> Assistant)
+
+
+def fyi_batch_size(store) -> int:
+    """How many fyi the walk puts up together. Clamped: a hand-edited 0 would empty the fyi lane
+    from the walk entirely, and a 500 would answer the day in one unreadable card."""
+    lo, hi = FYI_BATCH_RANGE
+    # ...and a store that cannot answer gets the default rather than an exception: how many fyi to
+    # read together is a preference, and no preference is worth failing a selection over.
+    try: n = int(str(store.get_settings().get('fyi_batch') or FYI_BATCH).strip())
+    except (AttributeError, TypeError, ValueError): return FYI_BATCH
+    return max(lo, min(hi, n))
 
 def _not_yet(i: dict) -> bool:
     """On the timeline, but nothing to say about it YET - the walk skips it and comes back.
@@ -1053,7 +1100,7 @@ def batch_item(store, key: str) -> dict | None:
 def fyi_batch(store, first: dict) -> list:
     """The next few fyi's, the first included - what comes out together when the mouth reaches the fyi lane."""
     ready = [i for i in pile(store, force=True)['items'] if not i.get('settling') and not i.get('surfaced') and i['lane'] == 'fyi']
-    return ([first] + [i for i in ready if i['key'] != first['key']])[:FYI_BATCH]
+    return ([first] + [i for i in ready if i['key'] != first['key']])[:fyi_batch_size(store)]
 
 
 def item_for_key(store, key: str) -> dict | None:

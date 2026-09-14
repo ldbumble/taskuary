@@ -16,7 +16,7 @@ import { runOperation } from "./taskOps.js";
 import { ChannelIcon, TaskuaryMark, cleanText, fmtDateTime } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import { ROLES, ASSISTANT } from "./theme.jsx";
-import { laneMeta, ageText, agoText } from "./funnelPile.js";
+import { laneMeta, ageText, agoText, assistantFocus } from "./funnelPile.js";
 import { sendBlockLine, draftState } from "./sendState.js";
 import { progressLine } from "./checklist.js";
 import { TerminalPane } from "./TerminalView.jsx";
@@ -204,7 +204,12 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
   return (
     <CardShell card={card} title={rv?.Subject || card.title} sub={rv ? (action ? "An agent proposed this. It runs only if you say so." : `To ${who}`) : "loading…"} err={err}>
       {rv?.Preview && !action && !full && <div className="tq-card-excerpt">{cleanText(rv.Preview).slice(0, 400)}</div>}
+      {/* WHAT YOU ARE ANSWERING, said to be that. The block came up unlabelled above an unlabelled
+          box, so the card opened with the task list and the owner had to work out which half was
+          theirs (the owner, 2026-09-14: "though you need to see what you are responding to"). */}
+      {full && card.mid && !action && <div className="tq-task-focus-label">They asked</div>}
       {full && card.mid && <CombinedTaskText card={card} />}
+      {rv && !action && <div className="tq-task-focus-label" style={{ marginTop: 8 }}>Your draft</div>}
       {rv && (
         <TextField fullWidth multiline minRows={2} maxRows={9} value={value} onChange={(e) => setText(e.target.value)}
           placeholder={action ? "" : "No draft yet — choose Draft with AI, or write it here"}
@@ -515,25 +520,45 @@ export function BriefCard({ card, onStart }) {
 // a task named in the chat, with no mail of its own to act on: read what the agent left, open it, or tell it something
 export function TaskCard({ card, onDone, onOpenTask }) {
   const [text, setText] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
+  // NOBODY IS ON THIS. The card offered one action - queue a line for the agent to read when it next
+  // stops - on a task whose agent had never started and never would: the message went into a waiting
+  // room nothing was going to read (the owner, 2026-09-14). Idle work gets the button that changes
+  // that; telling the agent something stays for when there IS one.
+  const idle = card.lane === "queued";
   const tell = async () => {
     if (!text.trim()) return;
-    setBusy(true); setErr("");
+    setBusy("tell"); setErr("");
     try { await api.post(`/api/tasks/${card.tid}/waitroom`, { text }); onDone?.(`Queued for the agent on ${card.ref}: “${text.trim().slice(0, 80)}”`); }
     catch (e) { setErr(errText(e)); }
-    setBusy(false);
+    setBusy("");
+  };
+  const start = async () => {
+    setBusy("start"); setErr("");
+    // the one dispatch road the task page and the general button use (PW-216) - the kind switch, the
+    // live-worker check and the repository all decided in one place, never re-judged here
+    try { await runOperation(api, "dispatch.prepare", card.tid, { kind: card.coding === false ? "general" : "coding" });
+          onDone?.(`Started on ${card.ref}.`); }
+    catch (e) { setErr(errText(e)); }
+    setBusy("");
   };
   return (
-    <CardShell card={card} kicker="the task you asked about" title={card.title} sub={card.why} err={err}>
+    <CardShell card={card} kicker={idle ? "waiting to start" : "the task you asked about"} title={card.title}
+      sub={assistantFocus(card).lead || card.why} err={err}>
       {card.summary && <div className="tq-card-excerpt">{card.summary}</div>}
       {card.tid && <CombinedTaskText card={card} />}
-      <TextField fullWidth multiline minRows={1} maxRows={4} value={text} onChange={(e) => setText(e.target.value)}
+      {idle && card.why_idle && <div className="tq-card-excerpt"><b>Why it has not started:</b> {card.why_idle}</div>}
+      {!idle && <TextField fullWidth multiline minRows={1} maxRows={4} value={text} onChange={(e) => setText(e.target.value)}
         placeholder="Tell the agent on this task something — it is typed in when it next stops"
-        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); tell(); } }} sx={{ mt: 1, "& textarea": { fontSize: 12.5 } }} />
+        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); tell(); } }} sx={{ mt: 1, "& textarea": { fontSize: 12.5 } }} />}
       <div className="tq-card-actions">
-        <Button size="small" variant="contained" disableElevation onClick={() => onOpenTask?.(card.tid)} sx={primary}>Open {card.ref}</Button>
-        <Button size="small" variant="outlined" disabled={busy || !text.trim()} onClick={tell} sx={quiet}>{busy ? "Queuing…" : "Tell the agent"}</Button>
+        {idle
+          ? <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={start} sx={primary}>{busy === "start" ? "Starting…" : "Start the agent"}</Button>
+          : <Button size="small" variant="contained" disableElevation onClick={() => onOpenTask?.(card.tid)} sx={primary}>Open {card.ref}</Button>}
+        {idle
+          ? <Button size="small" variant="outlined" onClick={() => onOpenTask?.(card.tid)} sx={quiet}>Open {card.ref}</Button>
+          : <Button size="small" variant="outlined" disabled={!!busy || !text.trim()} onClick={tell} sx={quiet}>{busy === "tell" ? "Queuing…" : "Tell the agent"}</Button>}
       </div>
     </CardShell>
   );

@@ -8,15 +8,17 @@ on:
     tags: ['v*']
   workflow_dispatch:        # a dry run to TestPyPI without cutting a tag
 
+permissions: { contents: read }
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: '3.12' }
-      - uses: actions/setup-node@v4
-        with: { node-version: '20' }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: '22' }
 
       # The UI is committed, but a release must never ship a stale bundle: build it from the
       # source in THIS tag rather than trusting whatever was last committed.
@@ -52,7 +54,7 @@ jobs:
           /tmp/v/bin/python -c "import taskuary.server; print('imports clean')"
           /tmp/v/bin/taskuary --help
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: { name: dist, path: dist/ }
 
   pypi:
@@ -62,9 +64,9 @@ jobs:
     environment: pypi
     permissions: { id-token: write }        # this is what Trusted Publishing signs with
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with: { name: dist, path: dist }
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
 
   testpypi:
     needs: build
@@ -73,9 +75,9 @@ jobs:
     environment: testpypi
     permissions: { id-token: write }
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with: { name: dist, path: dist }
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
 
@@ -85,27 +87,41 @@ jobs:
     runs-on: windows-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: '3.12' }
       - run: pip install -e .[mssql,desktop,build,bundle]
       - run: pyinstaller taskuary.spec
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: { name: exe, path: dist/Taskuary.exe }
 
   release:
     needs: [pypi, exe]
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    permissions: { contents: write }        # to create the release and attach the files
+    permissions:
+      contents: write # Create the release and attach artifacts.
+      id-token: write # Short-lived Sigstore signing identity; no signing key secret.
+      attestations: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with: { name: dist, path: dist }
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with: { name: exe, path: dist }
+      - name: Attest the release artifacts
+        id: provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: dist/*
+          create-storage-record: false
+      - name: Include the signed verification bundle
+        env:
+          BUNDLE_PATH: ${{ steps.provenance.outputs.bundle-path }}
+        run: cp "$BUNDLE_PATH" dist/provenance.sigstore.json
       # The Changelog link in the README points at /releases. A bare tag there is not a
       # changelog - and the sdist/wheel attached give anyone auditing the release something
       # to compare against what PyPI is serving.
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           generate_release_notes: true
           files: dist/*

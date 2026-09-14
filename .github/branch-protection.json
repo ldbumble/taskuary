@@ -1,0 +1,21 @@
+{
+  "required_status_checks": {
+    "strict": true,
+    "checks": [
+      { "context": "ci-required", "app_id": 15368 },
+      { "context": "Analyze (python)", "app_id": 15368 },
+      { "context": "Analyze (javascript-typescript)", "app_id": 15368 }
+    ]
+  },
+  "enforce_admins": true,
+  "required_pull_request_reviews": {
+    "dismiss_stale_reviews": true,
+    "require_code_owner_reviews": false,
+    "required_approving_review_count": 0,
+    "require_last_push_approval": false
+  },
+  "restrictions": null,
+  "required_conversation_resolution": true,
+  "allow_force_pushes": false,
+  "allow_deletions": false
+}

@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { roadOf, roadOfCard } from "../src/timelineState.js";
 
 // The tag on a Timeline row is TRIAGE's word - the one the row's own Triage tab highlights - and
@@ -39,4 +40,18 @@ test("a pile card gets the same word as the timeline row it came from", () => {
 test("a row nothing triaged keeps the word for what it is", () => {
   assert.equal(roadOf({ Channel: "report", RouteReason: "a report you set up" }), null);
   assert.equal(roadOfCard({ route: "a report you set up", task_kind: "" }), null);
+});
+
+test("what is WAITING outranks what triage called the job", () => {
+  // A drafted reply on a coding task wore "coding" beside its own envelope, because the pipe took
+  // the road unconditionally - and the lane heading above the rail says "your task", which does not
+  // say a reply is ready (the owner, 2026-09-14: "still says coding not reply waiting?"). The three
+  // lanes that are ON the owner say their own word; every other row keeps the road, which is the
+  // verdict the Timeline row and the Triage tab show.
+  const view = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
+  assert.ok(view.includes('const loud = i.lane === "blocked" || i.lane === "approve" || i.lane === "time";'));
+  assert.ok(view.includes(": loud ? meta.word : road ? road.label : meta.word;"),
+    "what is waiting on you wins; everything else keeps the road");
+  // loud is read by the tag, so it has to be computed before it
+  assert.ok(view.indexOf('const loud = i.lane === "blocked"') < view.indexOf("const tag = i.settling"));
 });

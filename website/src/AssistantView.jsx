@@ -184,13 +184,20 @@ function Pile({ pile, current, onPull }) {
             const road = ROADS.find((r) => r.key === roadOfCard(i));
             // ...and a report you set up, or an agent's own result, was judged by nobody: it keeps
             // the word for what it IS (the owner, 2026-09-07: "report should say report")
-            const tag = i.settling ? "triaging…" : i.kind === "agent" && i.asking ? "asked you"
-              : road ? road.label : meta.word;
             // The mark is drawn for what is on the owner. "approve" was missing from this list, so
             // every pending reply lost the ✉️ LANE_META already gives it and read like an ordinary
             // coding row - the one thing actually waiting on them, unmarked (the owner, 2026-09-10:
             // "it's missing emoji task"). timelineState.STATES calls the same two states loud.
             const loud = i.lane === "blocked" || i.lane === "approve" || i.lane === "time";
+            // ...and when something is WAITING ON YOU, what it is waiting for outranks what triage
+            // called the job. A reply drafted and waiting wore "coding" beside its own ✉️, because
+            // the road won here unconditionally - and the lane heading above the rail says "your
+            // task", which does not say a reply is ready (the owner, 2026-09-14: "still says coding
+            // not reply waiting?"). For every other row the road stays the word: it is the verdict
+            // the Timeline row and the Triage tab show, and repeating a quiet lane is repeating the
+            // heading.
+            const tag = i.settling ? "triaging…" : i.kind === "agent" && i.asking ? "asked you"
+              : loud ? meta.word : road ? road.label : meta.word;
             const promoted = !!i.promoted;                                  // triage moved it up: a server fact, never a lane
             return (
               <div key={i.key} className={cls} data-tq-day={localDay(i.kind === "meeting" ? i.when : (i.since || i.when)) || "undated"}

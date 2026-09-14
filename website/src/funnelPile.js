@@ -234,8 +234,13 @@ export const assistantFocus = (item) => {
     return { card: "reply", lead: item.kind === "action"
       ? "An agent proposed this. Read it, then it runs only if you say so."
       : "A reply is drafted and waiting for your yes — read what they asked, then send it." };
+  // "codex was handed it and has not started" - both halves wrong on the row that prompted it. A
+  // session HAD run (08:10 to 10:56 on TQ-0515), so "has not started" was false, and naming the
+  // worker made it read as a chosen specialist sitting idle rather than an app that went down under
+  // it (the owner, 2026-09-14: "why does the lead say codex and not 'agent has it'?"). `queued` is a
+  // statement about NOW: nothing is on it. Who, and what happened, is why_idle's to say - it knows.
   if (item.lane === "queued" && item.tid)
-    return { card: "task", lead: `This one is on you — ${who === "the agent" ? "it was handed over" : `${who} was handed it`} and has not started.` };
+    return { card: "task", lead: "This one is on you — no agent is on it right now." };
   return { card: cardKind(item), lead: item.why || "" };
 };
 

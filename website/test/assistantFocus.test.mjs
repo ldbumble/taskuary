@@ -26,15 +26,20 @@ test("an agent that stopped is the agent card and names who is waiting", () => {
   assert.equal(f.lead, "codex stopped and is waiting on you.");
 });
 
-test("work handed over and never started is the task, and it is on you", () => {
+test("work nobody is on is the task, and it is on you", () => {
   const f = assistantFocus(item({ lane: "queued", agent: "codex" }));
   assert.equal(f.card, "task", "it used to be drawn as a message from a person");
   assert.match(f.lead, /on you/);
-  assert.match(f.lead, /codex was handed it and has not started/);
+  assert.match(f.lead, /no agent is on it right now/);
 });
 
-test("...and with nobody named it still says the work is unstarted", () => {
-  assert.match(assistantFocus(item({ lane: "queued" })).lead, /handed over and has not started/);
+test("the lead states NOW, and never names a worker it cannot vouch for", () => {
+  // 'queued' covers a session that ran and died, so "codex has not started" was false on both halves
+  for (const over of [{ lane: "queued", agent: "codex" }, { lane: "queued" }]) {
+    const lead = assistantFocus(item(over)).lead;
+    assert.doesNotMatch(lead, /codex/, lead);
+    assert.doesNotMatch(lead, /has not started|was handed/, lead);
+  }
 });
 
 test("a live agent is the agent card - reachable only on what is already in front of you", () => {

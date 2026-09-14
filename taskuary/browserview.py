@@ -30,6 +30,14 @@ from . import spawn
 MAX_FPS = 12                    # a watched page, not a game: 12 frames/s at ~50KB each is plenty and easy on a LAN tab
 MAX_FRAME = 8 * 1024 * 1024     # a 1280x720 jpeg is ~54KB; this is the ceiling for a huge viewport, not a target
 _TTL = 2.0                      # state() is on the terminal-listing poll path: one socket probe per pane per 2s, not per render
+# How long a launch is given before the caller is told it did not come up. Ten seconds was a warm
+# Chrome's budget - a measured cold start on Windows (first launch of the day, profile restore) took
+# longer than that and came up seconds later, with the caller already told there was no browser. That
+# is the worst outcome of the three: the agent is never handed the session name, so the browser it
+# opens for itself is one the owner's pane is not watching (2026-09-14). Waiting costs nothing when
+# the browser is quick - this returns the moment it answers.
+LAUNCH_WAIT = 25.0
+LAUNCH_POLL = 0.25
 LAST = {}                       # sid -> the newest frame seen by any relay: what Snapshot files
 _CACHE = {}                     # sid -> (when, state)
 _START_LOCKS = {}               # sid -> one launch at a time; session mount + first prompt race otherwise opens two Chromes
@@ -196,10 +204,10 @@ def start(sid: str, url: str = 'about:blank') -> bool:
         except (OSError, subprocess.SubprocessError) as e:
             logger.warning(f'could not start the browser for {sid}: {e}')
             return False
-        for _ in range(40):                                        # it has a Chrome to launch
-            time.sleep(0.25)
+        for _ in range(int(LAUNCH_WAIT / LAUNCH_POLL)):            # it has a Chrome to launch
+            time.sleep(LAUNCH_POLL)
             if state(sid, fresh=True)['open']: return True
-        logger.warning(f'the browser for {sid} did not come up within 10s')
+        logger.warning(f'the browser for {sid} did not come up within {LAUNCH_WAIT:.0f}s')
         return False
 
 

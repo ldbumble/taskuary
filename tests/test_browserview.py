@@ -67,6 +67,19 @@ class StateTests(unittest.TestCase):
             self.assertFalse(bv.state('s2', fresh=True)['open'])   # the relay asks for the truth
         finally: srv.close()
 
+    def test_a_cold_chrome_is_waited_for_rather_than_declared_absent(self):
+        """A launch slower than the old ten seconds still counts as a launch.
+
+        It came up seconds after start() had already returned False - and a False here is not a
+        missing browser, it is an agent never handed the session name, driving a browser the owner's
+        pane is not watching (2026-09-14)."""
+        slept, opens = [], iter([False] * 60 + [True])
+        with mock.patch.object(bv.shutil, 'which', return_value='agent-browser'), mock.patch.object(bv.spawn, 'popen'):
+            with mock.patch.object(bv.time, 'sleep', slept.append), \
+                 mock.patch.object(bv, 'state', side_effect=lambda sid, fresh=False: {'open': next(opens), 'url': '', 'port': 0}):
+                self.assertTrue(bv.start('slow'))
+        self.assertGreater(sum(slept), 10, 'it waited past the warm budget rather than giving up on it')
+
     def test_the_session_name_rides_in_the_pty_environment(self):
         """Every pty gets AGENT_BROWSER_SESSION=tq-<sid>: whatever agent-browser command the agent
         runs lands in a session Taskuary can find - no cooperation from the agent needed."""

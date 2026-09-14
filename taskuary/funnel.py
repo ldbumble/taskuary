@@ -894,13 +894,19 @@ def announce(store, actor: str = 'assistant') -> list:
         for tid in state_dropped: _STATE.pop(tid, None), _SEEN.pop(tid, None)   # said once; a closed task is not watched again
     if events:
         # an unsolicited update is a NOTICE for the bottom strip (PW-165) - never a line or a card the watcher
-        # writes into the chat by itself. It stays until the owner opens it or puts it down (PW-166). A parked or
-        # asking agent is already an alert of the pile's own, so it is not kept twice; a newer fact about the
-        # same task replaces the older notice, so nothing repeats unless the facts changed.
+        # writes into the chat by itself. A parked or asking agent is already an alert of the pile's own, so it
+        # is not kept twice; a newer fact about the same task replaces the older notice, so nothing repeats
+        # unless the facts changed.
+        # A FINISHED task is not one of them. The strip is for what is waiting on the owner, and a closed task
+        # is waiting for nothing - so "codex finished TQ-0505. The task is closed." sat on the strip for three
+        # days wanting a click that changed nothing (the owner, 2026-09-14: "why is this showing up if it's
+        # closed?"). The done event still fires - it clears the working notice and lets the table drop a closed
+        # card - it just does not become a row of its own. What the agent LEFT behind is what speaks: a question
+        # it parked on, a draft wanting a yes, both alerts the pile raises by itself.
         for e in events:
             e['card'] = None
             store.clear_funnel_state(f"notice:{e['tid']}")
-            if e['kind'] in ('working', 'done'): notify(store, e, actor)
+            if e['kind'] == 'working': notify(store, e, actor)
         invalidate()
     return events
 
@@ -925,7 +931,8 @@ def notices(store, states: dict = None) -> list:
     read. The transition that would retire it (working -> done) is seen only by the in-memory watcher,
     and a restart makes its first look remember instead of announce - so the row outlived its agent by
     days and every fresh phone walk re-told it (the owner, 2026-09-10: "there are no agents open??").
-    A `done` notice is history and stands until the owner puts it down.
+    A `done` notice is no longer written at all, and one left over from a build that did write them is
+    dropped here rather than left waiting for a click - see `announce`.
     """
     states = states if states is not None else store.funnel_states()
     out, worked = [], None
@@ -933,6 +940,8 @@ def notices(store, states: dict = None) -> list:
         if not k.startswith('notice:') or st.get('Status') != 'notice' or not st.get('Note'): continue
         try: e = json.loads(st['Note'])
         except ValueError: continue
+        # nothing is owed on a closed task; a leftover row from an older build goes quietly
+        if e.get('kind') == 'done': store.clear_funnel_state(k); continue
         working = e.get('kind') == 'working'
         if working:
             if worked is None: worked = worked_now(store)

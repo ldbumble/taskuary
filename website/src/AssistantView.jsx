@@ -486,7 +486,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       if (data.events?.length) {
         // The watcher's word is a strip notice the server keeps (PW-165/166) and, here, a spoken line.
         // Background activity is never permission to choose, replace, clear, or advance the subject.
-        for (const e of data.events) if (e.kind === "done" || e.kind === "asking") speakRef.current?.(e.text);
+        // A FINISHED task says nothing: it is waiting on nobody. An agent that stopped to ask is the
+        // one transition that lands on the owner, so it is the one that speaks (the owner, 2026-09-14).
+        for (const e of data.events) if (e.kind === "asking") speakRef.current?.(e.text);
       }
       // the item on the table is live: an agent that stops and starts again changes what its row and card say
       // ...and when the server says the key is GONE - the reply was sent, the task closed, it was swept -

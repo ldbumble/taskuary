@@ -489,7 +489,7 @@ class LanesTests(unittest.TestCase):
             self.assertEqual(funnel.announce(s), [])                                  # a closed task is not watched again
         # The watcher writes nothing into the chat (PW-165): its word is a notice on the strip, kept until Open or Later
         self.assertEqual(concierge.history(s, general.dock_task(s)[0]['TaskId']), [])
-        self.assertEqual([(a['kind'], a['item']) for a in funnel.notices(s)], [('done', f'task:{t}')])
+        self.assertEqual(funnel.notices(s), [], 'and a closed task is not even that: it waits on nobody')
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             self.assertIn('events', funnel.pile(s, force=True))
 
@@ -508,13 +508,23 @@ class LanesTests(unittest.TestCase):
             self.assertEqual(funnel.notices(s), [], 'the session ended and the task closed: the claim is dead')
         self.assertNotIn(f'notice:{t}', s.funnel_states(), 'and the row is cleared, not re-checked for ever')
 
-    def test_a_done_notice_survives_because_it_is_history_not_a_live_claim(self):
+    def test_a_finished_task_leaves_no_notice_but_one_waiting_on_you_does(self):
+        """The owner, 2026-09-14: "why is this showing up if it's closed?" - a done row had sat on the
+        strip for three days. The strip is what is waiting on him, and a closed task waits on nobody."""
         s = store()
         t = s.create_task({'Title': 'Pto', 'Kind': 'coding', 'Status': 'done'}, 'o')
-        funnel.notify(s, {'tid': t, 'ref': 'TQ-0001', 'kind': 'done', 'agent': 'codex',
+        funnel.notify(s, {'tid': t, 'ref': 'TQ-0001', 'kind': 'done', 'agent': 'codex',      # written by an older build
                           'text': 'codex finished TQ-0001 (Pto). The task is closed.'})
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
-            self.assertEqual([a['kind'] for a in funnel.notices(s)], ['done'])
+            self.assertEqual(funnel.notices(s), [], 'the leftover row goes without waiting for a click')
+        self.assertNotIn(f'notice:{t}', s.funnel_states(), 'and it is cleared, not re-read for ever')
+        # ...while an agent that stopped to ask is exactly what the strip is for - raised by the pile itself
+        t2 = s.create_task({'Title': 'Import', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
+        mail(s, 'Import', hours=3, tid=t2)
+        parked = [{'taskId': t2, 'agent': 'codex', 'label': 'codex', 'started': ago(hours=1), 'idle': 200,
+                   'waiting': True, 'tail': ['import now? (y/n)']}]
+        with mock.patch('taskuary.terminal.live_sessions', return_value=parked):
+            self.assertEqual([a['kind'] for a in funnel.alerts(s)], ['agent'])
 
     def test_a_meeting_inside_two_hours_is_time_sensitive_and_inside_fifteen_minutes_interrupts(self):
         s = store()

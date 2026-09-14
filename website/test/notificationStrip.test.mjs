@@ -10,7 +10,7 @@ import { pendingAlerts, topAlert } from "../src/funnelPile.js";
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 
 test("a notice is pending whatever is on the table; a pile alert only when it outranks it", () => {
-  const done = { key: "notice:7", item: "task:7", kind: "done", lane: "report", text: "codex finished TQ-0007", notice: true, order_band: 3 };
+  const done = { key: "notice:7", item: "agent:7", kind: "working", lane: "working", text: "codex is working on TQ-0007", notice: true, order_band: 3 };
   const update = { key: "notice:msg:9", item: "msg:9", kind: "update", lane: "asked", text: "New message on this thread", notice: true, local: true };
   const draft = { key: "alert:review:3", item: "review:3", kind: "review", lane: "approve", text: "a reply waits", order_band: 2 };
   const onUrgent = { key: "msg:9", lane: "time", order_band: 1 };

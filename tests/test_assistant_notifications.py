@@ -6,6 +6,9 @@ server keeps it on the funnel state until the owner opens it or puts it down, a 
 same task replaces the older one, a parked agent is the pile's own alert and is never kept twice, and
 nothing about it marks the item read, touches the task, or moves the walk. Later puts the notice down,
 not the item; a new chat does not raise a put-down notice again.
+
+And a FINISHED task is no update at all (2026-09-14): the strip is what waits on the owner, so a closed
+task leaves neither a row nor a spoken line - only what the agent left behind, which the pile raises.
 """
 import unittest
 from datetime import datetime, timedelta
@@ -49,20 +52,17 @@ class WatcherTests(unittest.TestCase):
     def _alerts(self, s, sessions=()):
         with mock.patch.object(terminal, 'live_sessions', return_value=list(sessions)): return funnel.pile(s, force=True)['alerts']
 
-    def test_a_finished_agent_is_a_notice_on_the_strip_and_not_a_line_in_the_chat(self):
+    def test_a_finished_agent_leaves_nothing_on_the_strip_and_nothing_in_the_chat(self):
         s = store(); t = task(s); dock = general.dock_task(s)[0]['TaskId']
         self.assertEqual(self._events(s, live(t)), [])                                  # the first look only remembers
         s.add_comment(t, 'codex', 'agent', 'CODER REPORT\nSummary: imported all 80 files.')
         s.update_task(t, {'Status': 'done'}, 'o')
         ev = self._events(s, [])
-        self.assertEqual([(e['kind'], e['card']) for e in ev], [('done', None)])
+        self.assertEqual([(e['kind'], e['card']) for e in ev], [('done', None)])        # the transition is still SEEN...
         self.assertEqual(concierge.history(s, dock), [])                                # nothing written into the chat (PW-165)
-        notice = [a for a in self._alerts(s) if a.get('notice')]
-        self.assertEqual([(a['key'], a['item'], a['kind']) for a in notice], [(f'notice:{t}', f'task:{t}', 'done')])
-        self.assertIn('imported all 80 files', notice[0]['text'])
-        # it STAYS - a second look, a later poll, a reload all find it (PW-166) - and it is not repeated
-        self.assertEqual(self._events(s, []), [])
-        self.assertEqual(len([a for a in self._alerts(s) if a.get('notice')]), 1)
+        self.assertEqual([a for a in self._alerts(s) if a.get('notice')], [])           # ...and it asks the owner for nothing
+        self.assertNotIn(f'notice:{t}', s.funnel_states())
+        self.assertEqual(self._events(s, []), [])                                       # a closed task is not watched again
 
     def test_a_parked_agent_is_the_piles_own_alert_and_is_never_kept_twice(self):
         s = store(); t = task(s); dock = general.dock_task(s)[0]['TaskId']
@@ -84,20 +84,22 @@ class WatcherTests(unittest.TestCase):
         self.assertNotIn('next thing', ev[0]['text'])                                   # not a nudge to advance (PW-168)
         s.update_task(t, {'Status': 'done'}, 'o')
         self._events(s, [])
-        self.assertEqual([a['kind'] for a in self._alerts(s) if a.get('notice')], ['done'])   # one notice per task
+        self.assertEqual([a for a in self._alerts(s) if a.get('notice')], [])            # and finishing takes the row away
 
     def test_later_puts_the_notice_down_and_nothing_else(self):
         s = store(); t = task(s)
-        self._events(s, live(t)); s.update_task(t, {'Status': 'done'}, 'o'); self._events(s, [])
+        self._events(s, live(t, idle=200, waiting=True, tail=['ok?']))                   # first look: parked, remembered
+        self._events(s, live(t))                                                         # ...then it starts working: a notice
         key = f'notice:{t}'
-        with mock.patch.object(server, 'store', s), mock.patch.object(terminal, 'live_sessions', return_value=[]):
+        self.assertEqual([a['kind'] for a in self._alerts(s, live(t)) if a.get('notice')], ['working'])
+        with mock.patch.object(server, 'store', s), mock.patch.object(terminal, 'live_sessions', return_value=live(t)):
             c = TestClient(server.app)
             self.assertEqual(c.post('/api/funnel/settle', json={'key': key, 'verb': 'ack'}).json()['verb'], 'ack')
             self.assertEqual([a for a in c.get('/api/funnel/pile?force=1').json()['alerts'] if a.get('notice')], [])
-        self.assertEqual(s.get_task(t)['Status'], 'done')                                # the task is as it was
+        self.assertEqual(s.get_task(t)['Status'], 'in_progress')                         # the task is as it was
         self.assertEqual({k: v['Status'] for k, v in s.funnel_states().items() if not k.startswith('notice:')}, {})   # no item was marked
         funnel.reset_walk(s)                                                             # a new chat...
-        self.assertEqual([a for a in self._alerts(s) if a.get('notice')], [])            # ...does not raise it again
+        self.assertEqual([a for a in self._alerts(s, live(t)) if a.get('notice')], [])   # ...does not raise it again
         self.assertNotIn(key, s.funnel_states())
 
     def test_a_walk_on_is_the_owners_move_never_the_watchers(self):

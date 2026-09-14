@@ -99,8 +99,8 @@ class LifecycleTests(unittest.TestCase):
         self.assertTrue(done['ok']); self.assertEqual(s.get_task(t)['Status'], 'done')
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             p = funnel.pile(s, force=True)
-            self.assertEqual([e['kind'] for e in p['events']], ['done'])        # the watcher's word: a strip notice, not a chat line (PW-165)
-            self.assertEqual([a['kind'] for a in p['alerts'] if a.get('notice')], ['done'])
+            self.assertEqual([e['kind'] for e in p['events']], ['done'])        # the watcher saw it close - and says nothing (PW-165)
+            self.assertEqual([a for a in p['alerts'] if a.get('notice')], [])    # a finished task waits on nobody: the strip is clear
             self.assertEqual(p['items'], [])
             out = concierge.surface(s)
         self.assertIsNone(out['item']); self.assertEqual(out['say'], concierge.ALL_DONE)

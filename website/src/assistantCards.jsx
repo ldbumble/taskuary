@@ -12,6 +12,7 @@ import DoneRoundedIcon from "@mui/icons-material/DoneRounded";
 import EventIcon from "@mui/icons-material/Event";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import api from "./api.js";
+import { gistFor } from "./fyiRow.js";
 import { runOperation } from "./taskOps.js";
 import { ChannelIcon, TaskuaryMark, cleanText, fmtDateTime } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
@@ -587,15 +588,25 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
     <CardShell card={card} kicker={`${items.length} fyi · nothing to do`} title={null} err={err}>
       {items.map((i) => (
         <div key={i.key} className="tq-fyi">
-          <div className="tq-fyi-row">
+          {/* The LINE is the item: it wraps rather than being cut, and it is said once - an
+              assistant's idea files the same sentence as title and gist (fyiRow.gistFor). */}
+          <div className="tq-fyi-line">
             <SourceMark item={i} size={13} />
-            <b>{i.who || "someone"}</b><span className="t">{i.title}</span>
-            <Button size="small" onClick={() => setOpen((o) => (o === i.key ? null : i.key))} sx={faint}>{open === i.key ? "Fold" : "Read"}</Button>
-            <Button size="small" onClick={() => onSurface?.(i.key)} sx={faint}>Dig in</Button>
+            <b>{i.who || "someone"}</b>
+            <span className="t">{i.title}</span>
           </div>
-          {open !== i.key && (i.summary || i.preview) && <div className="tq-fyi-gist">{i.summary || i.preview}</div>}
+          {open !== i.key && gistFor(i) && <div className="tq-fyi-gist">{gistFor(i)}</div>}
           {open === i.key && i.mid && <FullText mid={i.mid} revision={i.presentation_revision || card.presentation_revision} />}
-          {i.mid && (
+          {/* two doors, each named for what it does: one unfolds the message under this line, the
+              other takes the item into the conversation. "Read" and "Dig in" said one thing twice. */}
+          <div className="tq-fyi-doors">
+            {i.mid && <Button size="small" onClick={() => setOpen((o) => (o === i.key ? null : i.key))} sx={faint}>
+              {open === i.key ? "Hide" : "Full message"}</Button>}
+            <Button size="small" onClick={() => onSurface?.(i.key)} sx={faint}>Talk about it</Button>
+          </div>
+          {/* ...and acting on it belongs to the ONE you opened. Four buttons on every row is twelve
+              on a three-fyi card, and the card's whole point is that none of them needs you. */}
+          {open === i.key && i.mid && (
             <div className="tq-card-actions" style={{ marginTop: 2 }}>
               <Button size="small" disabled={!!busy} onClick={() => reply(i)} sx={faint}>Reply</Button>
               <Button size="small" disabled={!!busy} onClick={() => propose("mine", i)} sx={faint}>Make task</Button>

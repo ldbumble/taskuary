@@ -101,11 +101,16 @@
 .tq-card-kicker .src { display: inline-flex; align-items: center; margin-right: 2px; }
 .tq-fyi { padding: 6px 0; border-top: 1px solid #efeae2; }
 .tq-fyi:first-of-type { border-top: 0; }
-.tq-fyi-row { display: flex; align-items: center; gap: 7px; min-width: 0; }
-.tq-fyi-row b { flex: 0 0 auto; font-size: 12px; color: #262521; }
-.tq-fyi-row .t { flex: 1 1 auto; min-width: 0; font-size: 12px; color: #4d4a43; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tq-fyi-row button { text-transform: none; font-size: 10.5px; min-width: 0; padding: 1px 6px; }
-.tq-fyi-gist { margin: 2px 0 0 20px; font-size: 11px; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* the line is the item: it WRAPS (a truncated sentence twice over is what made this card
+   unreadable), and the eye lands on one block of words per fyi */
+.tq-fyi-line { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+.tq-fyi-line b { flex: 0 0 auto; font-size: 12px; color: #262521; }
+.tq-fyi-line .t { flex: 1 1 auto; min-width: 0; font-size: 12px; line-height: 1.5; color: #262521;
+  overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+.tq-fyi-doors { display: flex; justify-content: flex-end; gap: 2px; margin-top: 1px; }
+.tq-fyi-doors button { text-transform: none; font-size: 10.5px; min-width: 0; padding: 1px 6px; }
+.tq-fyi-gist { margin: 2px 0 0 20px; font-size: 11px; color: #6e685f; line-height: 1.45;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .tq-card-term { margin-top: 8px; border-radius: 8px; overflow: hidden; border: 1px solid #2a2b33; background: #1e1e2e; }
 /* the assistant's own chat in the card: the page's ground, not a terminal's */
 .tq-card-chat { margin-top: 8px; border-radius: 8px; overflow: hidden; border: 1px solid #ddd6c8; background: #faf7f1; display: flex; flex-direction: column; }

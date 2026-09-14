@@ -11,12 +11,15 @@ const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, impo
 test("each fyi entry shows its own summary and acts alone through the proposal road", () => {
   const cards = read("assistantCards.jsx");
   const fyis = cards.slice(cards.indexOf("export function FyisCard"), cards.indexOf("export function WrapupCard"));
-  assert.match(fyis, /\{i\.summary \|\| i\.preview\}/);                              // the summary, the gist as the fallback
+  // the gist rides through gistFor now: it is dropped when it only restates the line above it,
+  // which is every assistant idea (fyiRow.js, and test/fyiRow.test.mjs)
+  assert.match(fyis, /\{open !== i\.key && gistFor\(i\) && <div className="tq-fyi-gist">\{gistFor\(i\)\}<\/div>\}/);
   for (const label of ["Reply", "Make task", "Coding agent", "Regular agent"]) assert.match(fyis, new RegExp(`>${label}</Button>`));
   assert.match(fyis, /propose\("mine", i\)/); assert.match(fyis, /propose\("coder", i\)/); assert.match(fyis, /propose\("regular_agent", i\)/);
   assert.match(fyis, /onPropose\?\.\(verb, i\.key\)/);                               // the entry's own key, never the handful's
   assert.match(fyis, /api\.post\(`\/api\/messages\/\$\{i\.mid\}\/reply`, \{ draft: true \}\)/);   // a reply drafts at once
   assert.doesNotMatch(fyis.slice(0, fyis.indexOf('variant="contained"')), /onDone\?\./);  // no entry action settles the handful
+  assert.match(fyis, /\{open === i\.key && i\.mid && \(\s*<div className="tq-card-actions"/);   // ...and they belong to the one you opened
   const view = read("AssistantView.jsx");
   assert.match(view, /api\.post\("\/api\/concierge\/propose", \{ verb, key, table \}\)/);
   assert.match(view, /onPropose=\{actions\.propose\}/);

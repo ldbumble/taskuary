@@ -16,7 +16,7 @@
     "@assistant-ui/react": "^0.15.17",
     "@emotion/react": "^11.13.0",
     "@emotion/styled": "^11.13.0",
-    "@mui/icons-material": "^6.1.0",
+    "@mui/icons-material": "^9.4.0",
     "@mui/material": "^6.1.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-unicode11": "^0.9.0",

@@ -1428,9 +1428,13 @@ class SQLiteStore:
         (ingest.identity_route), and a closed task is never reopened by a repeat.
         """
         if not (title or '').strip() or not (from_email or '').strip(): return None
-        r = self._one("SELECT t.TaskId FROM task t JOIN message m ON m.TaskId=t.TaskId "
-                      "WHERE t.Status NOT IN ('done','dropped') AND LOWER(TRIM(t.Title))=? "
-                      "AND LOWER(TRIM(IFNULL(m.FromEmail,'')))=? AND IFNULL(m.Direction,'in')='in' "
+        # Driven from the TASKS, of which a handful are ever open, not from the messages, of which
+        # there are tens of thousands: joining message-first scanned the whole table on every triaged
+        # mail (14ms on a 6.7k-row store, growing with it). LOWER(TRIM()) rules out idx_message_from
+        # either way, so the answer is to reach the address through few rows, not many.
+        r = self._one("SELECT t.TaskId FROM task t WHERE t.Status NOT IN ('done','dropped') "
+                      "AND LOWER(TRIM(t.Title))=? AND EXISTS (SELECT 1 FROM message m WHERE m.TaskId=t.TaskId "
+                      "AND IFNULL(m.Direction,'in')='in' AND LOWER(TRIM(IFNULL(m.FromEmail,'')))=?) "
                       "ORDER BY t.TaskId DESC LIMIT 1", (title.strip().lower(), from_email.strip().lower()))
         return r['TaskId'] if r else None
     def task_last_activity(self, task_id):

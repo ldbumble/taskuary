@@ -84,7 +84,12 @@ CHIPS = {'review': ('approve', 'close', 'redraft', 'not_ours', 'next'), 'action'
          'asked': ('reply', 'regular_agent', 'coder', 'mine', 'not_ours', 'not_ours_sender', 'next'),
          'todo': ('reply', 'regular_agent', 'coder', 'mine', 'not_ours', 'not_ours_sender', 'next'),
          'fyi': ('not_ours', 'not_ours_sender', 'block_sender', 'mine', 'next'),
-         'fyis': ('done', 'not_ours_sender', 'block_sender', 'next')}
+         # ...except the handful, which is the one card carrying its own "All read, next" button.
+         # `done` IS that button (it posts verb done) and `next` ends the same way on rows that were
+         # read the moment they were shown - so the owner had three controls for one outcome (2026-09-14:
+         # "we don't need both buttons if they mark them as read. it's doing the same thing"). What is
+         # left here is what the button cannot do: rule on the sender.
+         'fyis': ('not_ours_sender', 'block_sender')}
 # THE CONTRACT is the part code reads: two line shapes and the verb vocabulary behind the card's buttons.
 # How to behave is COUNSEL's - the owner's document, not this file (PW-248/256). Removing prose here
 # removed no safeguard: verbs are validated in parse_decision, targets and freshness in operations.

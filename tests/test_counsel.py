@@ -35,6 +35,18 @@ class InviteDetectionTests(unittest.TestCase):
         self.assertFalse(counsel.is_invite({'subject': 'Re: invoice 4471', 'body': {'content': 'see attached'}}))
         self.assertFalse(counsel.is_invite({'Subject': 'Your invitation to the vendor portal'}))     # a word, not a prefix
 
+    def test_every_type_graph_actually_sends_reads_as_meeting_mail(self):
+        """An invitation is `eventMessageRequest` and an accept/decline is `eventMessageResponse` -
+        the plain `eventMessage` this used to test for is the one Graph sends least. Checking for the
+        exact word missed a real Teams invitation in the owner's mailbox, so ingest never applied its
+        own rule (a meeting is to be ready for, not work) and the monthly directors meeting became a
+        task (TQ-0520, 2026-09-14)."""
+        for t in ('#microsoft.graph.eventMessageRequest', '#microsoft.graph.eventMessageResponse',
+                  '#microsoft.graph.eventMessage'):
+            self.assertTrue(counsel.is_invite({'@odata.type': t, 'subject': 'Monthly Directors Meeting'}), t)
+        self.assertFalse(counsel.is_invite({'@odata.type': '#microsoft.graph.message',
+                                            'subject': 'Monthly Directors Meeting'}))
+
 
 class DossierTests(unittest.TestCase):
     def test_reads_sender_history_own_replies_topic_and_open_tasks(self):

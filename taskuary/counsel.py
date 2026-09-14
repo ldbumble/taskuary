@@ -20,9 +20,21 @@ _INVITE_SUBJ = re.compile(r'^\s*((updated |new )?invitation|accepted|declined|te
                           r'meeting (request|forward notification))\b', re.I)
 
 def is_invite(m: dict) -> bool:
-    """Graph marks meeting mail with @odata.type eventMessage (and a meetingMessageType); anything
-    else is judged by the subject prefix Outlook/Google put on invites."""
-    if str(m.get('@odata.type') or '').lower().endswith('eventmessage') or m.get('meetingMessageType'): return True
+    """Graph types meeting mail on @odata.type; anything else is judged by the subject prefix
+    Outlook and Google put on invites.
+
+    The type is a FAMILY, not one string: an invitation arrives as `eventMessageRequest`, an
+    accept or decline as `eventMessageResponse`, and only some meeting mail as plain
+    `eventMessage`. Testing for the exact word missed every real invite - measured against the
+    owner's own mailbox, 2026-09-14: a Teams invitation typed `#microsoft.graph.eventMessageRequest`
+    read as NOT an invite, so ingest never applied its own rule that a meeting is something to be
+    ready for rather than work, and the monthly directors meeting became TQ-0520, a task.
+
+    `meetingMessageType` would have caught it too and cannot be relied on: it belongs to the derived
+    type, so a mail poll that asks for it by name is refused outright (Graph: "Could not find a
+    property named 'meetingMessageType' on type 'Message'"). It is honoured when a caller happens to
+    hold the full object."""
+    if 'eventmessage' in str(m.get('@odata.type') or '').lower() or m.get('meetingMessageType'): return True
     return bool(_INVITE_SUBJ.match(str(m.get('subject') or m.get('Subject') or '')))
 
 

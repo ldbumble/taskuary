@@ -185,3 +185,57 @@ if __name__ == '__main__':
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class BatchWakesTabsOnceTests(unittest.TestCase):
+    """Every settle empties the pile cache and wakes every open tab, which answers with a rebuild.
+    A handful of fyi settled together did that once per member, so several rebuilds of the whole
+    pile raced each other in front of the Next behind them (the owner, 2026-09-14: "when i hit
+    'all read, next' on fyi it takes 2/3 seconds")."""
+
+    def _watch(self):
+        """What actually reaches the tabs: live.emit, below _poke and below the hold."""
+        from taskuary import live
+        seen = []
+        return mock.patch.object(live, 'emit', lambda kind, **p: seen.append(kind)), seen
+
+    def _keys(self, s, n=4):
+        for i in range(n + 2): fyi(s, f'newsletter {i}')
+        return [i['key'] for i in funnel.build(s)['items'] if i['lane'] == 'fyi'][:n]
+
+    def test_a_batch_wakes_the_tabs_once_not_once_per_member(self):
+        s = store()
+        keys = self._keys(s)
+        woke = self._watch()
+        with woke[0]:
+            funnel.settle(s, 'fyis:' + ','.join(keys), 'done', 'owner')
+        self.assertEqual(woke[1].count('feed-changed'), 1,
+                         f'{woke[1].count("feed-changed")} wake-ups for one batch of {len(keys)}')
+
+    def test_the_members_are_all_still_settled(self):
+        """Coalescing the shouting must not coalesce the writing."""
+        s = store()
+        keys = self._keys(s)
+        funnel.settle(s, 'fyis:' + ','.join(keys), 'done', 'owner')
+        states = s.funnel_states()
+        for k in keys:
+            self.assertEqual((states.get(k) or {}).get('Status'), 'done', k)
+
+    def test_a_single_item_still_wakes_them(self):
+        s = store()
+        key = self._keys(s, 1)[0]
+        woke = self._watch()
+        with woke[0]:
+            funnel.settle(s, key, 'done', 'owner')
+        self.assertIn('feed-changed', woke[1], 'one item must still wake the tabs')
+
+    def test_the_wake_up_survives_a_failure_half_way_through(self):
+        """A caller that raised part way has still changed what the tabs are looking at."""
+        s = store()
+        woke = self._watch()
+        with woke[0]:
+            with self.assertRaises(RuntimeError):
+                with s.one_poke():
+                    s._poke('feed-changed')
+                    raise RuntimeError('half way')
+        self.assertEqual(woke[1].count('feed-changed'), 1)

@@ -1149,7 +1149,11 @@ def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, n
     it has been put in the chat it leaves Unread (the owner, 2026-09-06). ack: an alert was seen."""
     if verb not in VERBS: raise ValueError(f'unknown verb: {verb}')
     if key.startswith('fyis:'):                                   # a batch: the verb lands on every member
-        out = [settle(store, k, verb, by, hours, note, expected_context=expected_context, read=read) for k in key[5:].split(',') if k]
+        # ...and wakes the tabs ONCE. Each settle empties the pile cache and fires the live event
+        # every open Assistant answers with a forced rebuild, so four fyi settled together set four
+        # rebuilds of a 60-item pile racing each other in front of the Next that follows.
+        with store.one_poke():
+            out = [settle(store, k, verb, by, hours, note, expected_context=expected_context, read=read) for k in key[5:].split(',') if k]
         return {'key': key, 'verb': verb, 'until': (out[0] if out else {}).get('until')}
     until = None
     if verb == 'later': until = (datetime.now() + timedelta(hours=hours or LATER_HOURS)).strftime('%Y-%m-%d %H:%M:%S')

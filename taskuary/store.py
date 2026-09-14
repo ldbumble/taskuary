@@ -561,6 +561,7 @@ class SQLiteStore:
         # set because a second connection (desktop + web, or a stuck poll) otherwise
         # fails instantly with "database is locked" instead of waiting its turn.
         self.cx.execute('PRAGMA busy_timeout=5000')
+        self._poke_held = None       # one_poke(): a batch's wake-ups, held and sent once
         self._snap_hold = 0
         self._snap_cache = None
         self._processing_display_cache = {}
@@ -1003,8 +1004,33 @@ class SQLiteStore:
         cols = list(d)
         return self._exec(f"INSERT INTO {table} ({','.join(cols)}) VALUES ({','.join('?'*len(cols))})",
                           [d[c] for c in cols])
+    @contextlib.contextmanager
+    def one_poke(self):
+        """Hold the UI wake-ups of a batch and send them ONCE at the end.
+
+        A settle pokes `feed-changed`, which empties the pile cache and wakes every open tab - and
+        a handful of fyi settled together did that four times over, so four forced rebuilds of a
+        60-item pile raced each other while the owner waited on the Next behind them (2026-09-14:
+        "all read, next on fyi takes 2/3 seconds"). The writes still land one at a time; only the
+        shouting is coalesced. Re-entrant, and it fires even if the body raises - a caller that
+        failed half way through has still changed what the tabs are looking at.
+        """
+        if getattr(self, '_poke_held', None) is not None:      # already inside one: the outer owns it
+            yield
+            return
+        self._poke_held, held = {}, None
+        try:
+            yield
+        finally:
+            held, self._poke_held = self._poke_held, None
+            for kinds, payload in held.values(): self._poke(*kinds, **payload)
+
     def _poke(self, *kinds, **payload):
         """Wake the UI. A write that does not change what a tab is looking at stays quiet."""
+        held = getattr(self, '_poke_held', None)
+        if held is not None:
+            held[(kinds, tuple(sorted(payload.items())))] = (kinds, payload)
+            return
         try:
             # The Assistant pile is expensive to assemble, so its normal reads use a long cache.
             # Any durable feed/task change invalidates that cache before the websocket wakes the

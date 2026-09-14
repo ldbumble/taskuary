@@ -56,6 +56,23 @@ app — `index.html`, the JS and CSS bundles, the operator templates, the WhatsA
 installs cleanly into an empty venv. A wheel whose UI is missing installs perfectly and then
 serves a blank page, which is a worse first impression than no package at all.
 
+## Verify release provenance
+
+New tagged releases include signed Sigstore build provenance for the wheel, source archive,
+and Windows executable. The release job attests the exact artifacts produced by that workflow
+run and attaches `provenance.sigstore.json`; it uses GitHub's short-lived signing identity,
+not a stored private key. Previous releases are not retroactively attested.
+
+After downloading an artifact, verify its digest and repository identity with GitHub CLI:
+
+```bash
+gh attestation verify Taskuary.exe --repo ldbumble/taskuary --signer-workflow ldbumble/taskuary/.github/workflows/publish.yml
+```
+
+Replace `Taskuary.exe` with the downloaded wheel or source archive to verify those artifacts.
+A checksum alone does not establish this identity. A provenance signature also does not mean
+that the code is free of vulnerabilities.
+
 ## After the first publish
 
 Change the two install lines in `README.md`:

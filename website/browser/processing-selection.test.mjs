@@ -93,7 +93,9 @@ test("PW-118 rejects a changed captured Next without advancing Current or retryi
     }
   });
   await page.goto(h.ui, { waitUntil: "domcontentloaded", timeout: 20000 });
-  await page.waitForSelector(".tq-pile-row .card", { timeout: 15000 });
+  // The pile loads progressively; the first card need not be this review yet.
+  await page.waitForFunction(wanted => [...document.querySelectorAll(".tq-pile-row .card")]
+    .some(n => n.querySelector("b")?.textContent.trim() === wanted), { timeout: 15000 }, target.title);
   await page.evaluate(wanted => {
     const row = [...document.querySelectorAll(".tq-pile-row .card")]
       .find(n => n.querySelector("b")?.textContent.trim() === wanted);

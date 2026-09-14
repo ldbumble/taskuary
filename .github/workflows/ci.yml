@@ -2,6 +2,7 @@ name: ci
 on:
   push: { branches: [master, main] }
   pull_request: { branches: [master, main] }
+  workflow_dispatch: # Run required checks on a bot-created chart PR.
 
 # Fork PRs get a read-only token. First-time outside collaborators still need a
 # maintainer to click "Approve and run workflows" (repo Actions setting) - the
@@ -9,6 +10,25 @@ on:
 permissions: { contents: read }
 
 jobs:
+  ci-required:
+    name: ci-required
+    if: always()
+    needs: [test, build-web, browser, docker]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every CI job to pass
+        env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          results = json.loads(os.environ['JOB_RESULTS'])
+          failed = {name: job['result'] for name, job in results.items() if job['result'] != 'success'}
+          if failed:
+              raise SystemExit(f'Required CI jobs did not pass: {failed}')
+          print('All required CI jobs passed')
+          PY
+
   test:
     strategy:
       fail-fast: false
@@ -17,8 +37,8 @@ jobs:
         python: ["3.10", "3.12"]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with: { python-version: "${{ matrix.python }}" }
       - run: pip install -e .[dev]
       - run: pip install pyodbc
@@ -36,8 +56,8 @@ jobs:
     # and the node:test suite covers the view logic that has no Python behind it
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with: { node-version: "22" }
       - run: npm ci
         working-directory: website
@@ -61,10 +81,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with: { python-version: "3.12" }
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with: { node-version: "22" }
       - run: pip install -e .[dev]
       - run: npm ci
@@ -78,7 +98,7 @@ jobs:
     # seeded into the regression volume first so /api/feed is a real Timeline.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - run: docker compose build
       - name: Smoke the container
         run: |
@@ -133,10 +153,10 @@ jobs:
     if: github.event_name == 'push'
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with: { python-version: "3.12" }
       - run: pip install -e .[mssql,desktop,build,bundle]
       - run: pyinstaller taskuary.spec
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: { name: Taskuary-windows-exe, path: dist/Taskuary.exe }

@@ -13,6 +13,7 @@ Two things the owner reported on 2026-09-10, looking at a pipe of 1 pending repl
 """
 import json, unittest
 from datetime import datetime, timedelta
+from unittest import mock
 
 from taskuary import funnel
 from taskuary.store import MemoryStore
@@ -84,6 +85,41 @@ class OnYouIsNeverBuriedTests(unittest.TestCase):
         self.assertFalse(funnel.on_you({'lane': 'fyi'}))
         self.assertFalse(funnel.on_you({'lane': 'report'}))
         self.assertFalse(funnel.on_you({'lane': 'working'}))
+
+
+class FyiBatchCostTests(unittest.TestCase):
+    """An fyi Next used to build the pile twice - once to choose the row, once to find its siblings.
+    About 450ms of pure Python each on the owner's store, and CPU is what the server is short of."""
+
+    def test_the_batch_never_forces_a_second_pile(self):
+        s = store()
+        report_source(s)                       # anything; the batch only reads fyi rows
+        for n in range(6): fyi(s, f'newsletter {n}')
+        first = next(i for i in funnel.build(s)['items'] if i['lane'] == 'fyi')
+        seen = []
+        real = funnel.pile
+        with mock.patch.object(funnel, 'pile', side_effect=lambda st, force=False, **k: (seen.append(force), real(st, force=force, **k))[1]):
+            batch = funnel.fyi_batch(s, first)
+        self.assertTrue(batch, 'the batch still comes back')
+        self.assertNotIn(True, seen, 'fyi_batch forced a rebuild the caller had already paid for')
+
+    def test_a_caller_holding_the_pile_can_hand_it_over(self):
+        s = store()
+        for n in range(6): fyi(s, f'newsletter {n}')
+        items = funnel.build(s)['items']
+        first = next(i for i in items if i['lane'] == 'fyi')
+        with mock.patch.object(funnel, 'pile', side_effect=AssertionError('the pile was rebuilt')):
+            batch = funnel.fyi_batch(s, first, items=items)
+        self.assertEqual(batch[0]['key'], first['key'])
+        self.assertTrue(all(i['lane'] == 'fyi' for i in batch))
+
+    def test_the_batch_is_as_big_as_the_setting_says(self):
+        s = store()
+        s.set_setting('fyi_batch', '2', 'owner')
+        for n in range(6): fyi(s, f'newsletter {n}')
+        items = funnel.build(s)['items']
+        first = next(i for i in items if i['lane'] == 'fyi')
+        self.assertEqual(len(funnel.fyi_batch(s, first, items=items)), 2)
 
 
 class TodaysBriefLeadsTests(unittest.TestCase):

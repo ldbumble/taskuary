@@ -1097,9 +1097,17 @@ def batch_item(store, key: str) -> dict | None:
                                      items=[dict(i) for i in got], members=[i['key'] for i in got]))
 
 
-def fyi_batch(store, first: dict) -> list:
-    """The next few fyi's, the first included - what comes out together when the mouth reaches the fyi lane."""
-    ready = [i for i in pile(store, force=True)['items'] if not i.get('settling') and not i.get('surfaced') and i['lane'] == 'fyi']
+def fyi_batch(store, first: dict, items: list | None = None) -> list:
+    """The next few fyi's, the first included - what comes out together when the mouth reaches the fyi lane.
+
+    It forced a REBUILD to find the other three. Every caller had just built the pile to choose
+    `first` out of it, so an fyi Next paid for two: about 450ms of pure Python each on the owner's
+    store (2026-09-14 profile - 84k snapshot copies and 274 cards per build), and CPU is what the
+    whole server is short of. The caller's own list is passed in where there is one; otherwise the
+    cached pile answers, which is the same picture `first` was chosen from and never a staler one.
+    """
+    pool = items if items is not None else pile(store)['items']
+    ready = [i for i in pool if not i.get('settling') and not i.get('surfaced') and i['lane'] == 'fyi']
     return ([first] + [i for i in ready if i['key'] != first['key']])[:fyi_batch_size(store)]
 
 

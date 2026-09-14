@@ -545,9 +545,14 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
   const accept = useCallback((payload) => {
     setData(payload);
     const provider = pickFor(payload);
+    // A LIVE session's own pick outranks whatever the picker opened on. A walk's brain is chosen by
+    // the server (general.walk_pick), so a strip frozen on the mount-time default both misnamed the
+    // agent that was working - "Azure OpenAI (API)" over codex driving the browser - and is what the
+    // owner's next message would have been sent to (the owner, 2026-09-14).
+    const live = !!payload?.session?.pick;
     if (provider) {
-      setConnectorId((old) => old || String(provider.id));
-      setModel((old) => old || payload?.session?.model || provider.model || "");
+      setConnectorId((old) => (live || !old ? String(provider.id) : old));
+      setModel((old) => (live || !old ? (payload?.session?.model || provider.model || "") : old));
     }
     onSession?.(payload?.session || null);
     onBusyChange?.(!!payload?.session?.busy);
@@ -603,7 +608,12 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
      goes away, so when it comes back the conversation may be mid-sentence - or already have
      the reply, filed on the task. Poll while it is busy and show it the moment it lands;
      threadKey remounts the thread, which is how assistant-ui takes new initial messages. */
-  const busy = !!data?.session?.busy;
+  // Work in flight on this task that this pane is not driving: an answer being written in another
+  // tab - and the one that read as a dead pane, a walk whose session the server is still opening in
+  // the background (server._walk_opens). Mount's snapshot lands inside that gap, so a poll gated on
+  // the session alone never started at all: no question, no band, no browser beside the conversation
+  // for the whole first answer (the owner, 2026-09-14: "it looked like it did not start").
+  const busy = !!data?.session?.busy || !!data?.starting;
   useEffect(() => {
     if (!busy) return undefined;
     let live = true;

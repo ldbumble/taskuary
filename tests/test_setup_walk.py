@@ -63,10 +63,48 @@ class WalkStartsTests(unittest.TestCase):
         text, kw = sessions['s'].said[0]
         self.assertFalse(kw.get('as_owner', True), 'the opening turn is an instruction, not the owner speaking')
         self.assertIn('walk', text.lower())
-        # and the owner is not quoted twice: their ask is the one human comment on the task
-        human = [c for c in s.list_comments(r.json()['taskId']) if c['ActorType'] == 'human']
-        self.assertEqual(len(human), 1)
-        self.assertIn('refunds report', human[0]['Body'])
+        # and the owner is not quoted twice: their ask is said once, and it is their own turn
+        said = [c for c in s.list_comments(r.json()['taskId']) if 'refunds report' in (c['Body'] or '')]
+        self.assertEqual(len(said), 1)
+        self.assertEqual(said[0]['ActorType'], general.USER_TYPE)
+
+    def test_the_walk_opens_with_the_owners_own_words_on_screen(self):
+        # The conversation showed the ANSWER with no question above it: the ask was filed as an
+        # ordinary human comment, which the chat does not render, so a walk that was working looked
+        # like a walk that had never started (the owner, 2026-09-14).
+        s = store()
+        r, _ = post(s, 'log into adp and clock me in every morning')
+        first = general.history(s, r.json()['taskId'])[0]
+        self.assertEqual(first['role'], 'user')
+        self.assertIn('clock me in', first['content'][0]['text'])
+
+    def test_a_pane_that_opens_before_the_session_exists_is_told_the_walk_is_starting(self):
+        # The pane loads its snapshot the moment the card posts - a second or two BEFORE the
+        # background walk has a session - and it only polls while something says it is working.
+        s, seen = store(), {}
+        def start(st, tid, *a, **k):
+            seen['during'] = server._assistant_payload(tid)
+            return FakeSession(tid)
+        r, _ = post(s, 'set up a weekly refunds report', start=start)
+        self.assertTrue(seen['during']['starting'], 'a walk with no session yet is still work in flight')
+        self.assertIsNone(seen['during']['session'])
+        with mock.patch.object(server, 'store', s), mock.patch.object(general, 'provider_options', return_value=ONE_CLI):
+            after = server._assistant_payload(r.json()['taskId'])
+        self.assertFalse(after['starting'], 'and it is over once the walk has spoken')
+
+    def test_a_walk_that_could_not_start_says_so_where_the_owner_is_looking(self):
+        s = store()
+        r, _ = post(s, 'set up a report', start=mock.Mock(side_effect=RuntimeError('no brain today')))
+        last = general.history(s, r.json()['taskId'])[-1]
+        self.assertEqual(last['role'], 'assistant')
+        self.assertIn('could not start', last['content'][0]['text'])
+
+    def test_with_no_ai_at_all_the_conversation_still_says_why_nothing_happened(self):
+        s = store()
+        r, _ = post(s, 'set up a report', providers=[], start=mock.Mock())
+        last = general.history(s, r.json()['taskId'])[-1]
+        self.assertEqual(last['role'], 'assistant')
+        self.assertIn('AI', last['content'][0]['text'])
 
     def test_a_walk_over_the_owners_own_systems_is_tagged_so_the_prompt_can_read_it(self):
         s = store()
@@ -107,6 +145,22 @@ class WalkBrainTests(unittest.TestCase):
         # the owner wants gpt-6-astra for browser work; that lives in ~/.codex/config.toml. Naming
         # it in the code would freeze it, so walk_pick returns a PICK and never a model.
         self.assertNotIn('gpt-', ' '.join(str(c) for c in general.walk_pick.__code__.co_consts))
+
+    def test_the_picker_names_the_walks_own_brain_before_a_session_exists(self):
+        # default_pick is documented as "the SAME reading start_session makes" - and it was not
+        # making it for a walk: the strip offered the API brain while codex was driving, and the
+        # owner's first typed reply would have handed the walk to a brain with no browser.
+        s = store()
+        s.upsert_agent('codex', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
+        row = s.get_connector_by_type('openai')
+        s.save_connector({'ConnectorId': row['ConnectorId'], 'Active': 1, 'Secret': 'sk-test',
+                          'Name': 'Work model', 'ConfigJson': '{"model":"gpt-test"}'}, 'owner')
+        s.set_setting('assistant_ai', f"connector:{row['ConnectorId']}", 'owner')
+        walk = {'SourceRef': general.SETUP_REF, 'Kind': 'general'}
+        self.assertEqual(general.default_pick(s, walk), general.walk_pick(s))
+        self.assertTrue(general.default_pick(s, walk).startswith('cli:'))
+        # ...and an ordinary general task still gets the brain it always did
+        self.assertEqual(general.default_pick(s, {'Kind': 'general'}), f"connector:{row['ConnectorId']}")
 
     def test_provider_options_says_which_cli_each_choice_actually_runs(self):
         s = MemoryStore()

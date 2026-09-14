@@ -799,6 +799,8 @@ def _assistant_payload(task_id: int, session=None):
             # what the chat WOULD run on if nobody picks: the picker showed providers[0] instead,
             # which is always a CLI, so a task with no session nominated a coding agent (TQ-0420)
             'defaultPick': general.default_pick(store, task),
+            # a walk whose session is still being opened is WORK IN FLIGHT, not an idle conversation
+            'starting': task_id in general.OPENING,
             'session': session.info(tail=3) if session else None}
 
 @app.get('/api/tasks/{task_id}/assistant')
@@ -3107,9 +3109,12 @@ class SetupBody2(BaseModel): text: str
 @app.post('/api/concierge/setup')
 def concierge_setup(body: SetupBody2, background: BackgroundTasks):
     """'Set up X': a walk-through task with the owner's words, and the walk STARTS."""
-    from . import concierge
+    from . import concierge, general
     try: made = concierge.setup_task(store, body.text, ACTOR)
     except ValueError as e: raise HTTPException(422, str(e))
+    # marked HERE, not in the background task: the pane loads its snapshot within a second of this
+    # response and has to be told that a session is coming, or it stops looking for one
+    general.OPENING.add(made['taskId'])
     background.add_task(_walk_opens, made['taskId'], body.text)
     return made
 
@@ -3134,17 +3139,31 @@ def _walk_opens(task_id: int, text: str):
     Never raises. A walk that could not start costs a sentence, and the task is still there to be
     opened by hand - which is exactly where this stood before."""
     from . import concierge, general
-    if general.session_for(task_id): return              # already in conversation - not ours to interrupt
-    if not general.provider_options(store):
-        # same reason as _assistant_opens: a session with no brain parks forever, looking live
-        logger.info(f'no AI connector, so the walk-through {task_ref(task_id)} cannot start')
-        return
     try:
-        if concierge.walk_is_external(store, text): store.tag_task(task_id, general.SETUP_EXTERNAL, actor=ACTOR)
-        general.start_session(store, task_id, actor=ACTOR).send_prompt(WALK_OPENING, as_owner=False, echo=False)
-    except Exception as e:
-        general.drop_session(task_id)                    # and never leave half a session behind
-        logger.info(f'the walk-through {task_ref(task_id)} could not start: {str(e)[:200]}')
+        if general.session_for(task_id): return          # already in conversation - not ours to interrupt
+        if not general.provider_options(store):
+            # same reason as _assistant_opens: a session with no brain parks forever, looking live
+            logger.info(f'no AI connector, so the walk-through {task_ref(task_id)} cannot start')
+            _walk_cannot(task_id, 'No AI is connected yet, so I cannot start the walk. Connect one under '
+                                  'Connections and ask me again.')
+            return
+        try:
+            if concierge.walk_is_external(store, text): store.tag_task(task_id, general.SETUP_EXTERNAL, actor=ACTOR)
+            general.start_session(store, task_id, actor=ACTOR).send_prompt(WALK_OPENING, as_owner=False, echo=False)
+        except Exception as e:
+            general.drop_session(task_id)                # and never leave half a session behind
+            logger.info(f'the walk-through {task_ref(task_id)} could not start: {str(e)[:200]}')
+            # ...and it says so in the conversation. Logged only, a walk that died on its first
+            # breath is indistinguishable from one still thinking: an empty pane either way.
+            _walk_cannot(task_id, f'The walk could not start: {str(e)[:200]}')
+    finally:
+        general.OPENING.discard(task_id)
+
+
+def _walk_cannot(task_id: int, why: str):
+    from . import general
+    try: store.add_comment(task_id, 'assistant', general.ASSISTANT_TYPE, why)
+    except Exception as e: logger.debug(f'the walk {task_ref(task_id)} could not report its own failure - {e}')
 
 @app.post('/api/concierge/act')
 def concierge_act(body: ConciergeActBody):

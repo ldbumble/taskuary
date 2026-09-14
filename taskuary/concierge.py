@@ -1638,7 +1638,12 @@ def setup_task(store, text: str, actor: str = 'owner', title: str = '', kind: st
                              # setting. Its Assistant session owns that browser; a coding handoff
                              # keeps the ordinary task controls instead.
                              'Tags': browserview.WANTS if kind == SETUP_KIND and not agent_job else ''}, actor)
-    store.add_comment(tid, actor, 'human', f'Asked in the Assistant chat: {text}')
+    # The ask is the conversation's FIRST TURN, not a note filed beside it. As a plain human comment
+    # the chat does not render it, so a walk showed an answer with no question above it and read as
+    # a walk that had never started (the owner, 2026-09-14). A hand-off has no conversation to open
+    # here - the agent's own brief becomes its first turn - so there the ask stays a note.
+    if kind == SETUP_KIND and not agent_job: store.add_comment(tid, actor, general.USER_TYPE, text)
+    else: store.add_comment(tid, actor, 'human', f'Asked in the Assistant chat: {text}')
     store.audit('task', tid, 'create_from_assistant_setup', actor)
     if kind == 'coding':
         try: ingest._spawn(ingest._auto_code, store, tid)

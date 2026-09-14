@@ -142,7 +142,14 @@ def default_pick(store, task: dict = None) -> str:
 
     The workspace used to default its picker to providers[0], and provider_options lists CLIs first,
     so a general task with no session nominated a CODING agent and posted that as its pick. The
-    server's own answer prefers an API brain and only falls back to a CLI when there is none."""
+    server's own answer prefers an API brain and only falls back to a CLI when there is none.
+
+    ...except on a walk-through, where start_session overrides that with walk_pick - and this did
+    not, so the strip named the API brain while codex was driving the browser, and the owner's first
+    typed reply would have handed the walk to a brain that cannot click (the owner, 2026-09-14)."""
+    if str((task or {}).get('SourceRef') or '') == SETUP_REF:
+        walk = walk_pick(store)
+        if walk: return walk
     return assigned_pick(store, task) or _selected(store)[0]
 
 
@@ -957,6 +964,14 @@ class GeneralSession:
         from . import browserview
         return {**base, 'trace': list(self.trace), 'trace_revision': self.trace_revision,
                 'files': [], 'browser': browserview.state(self.sid), 'work': None}
+
+
+# Walks whose opening turn is being started right now (server._walk_opens). The card posts, the
+# task exists at once, and the session follows a second or two later in the background - and the
+# pane loads its snapshot inside that gap. Without this it saw no session, concluded nothing was
+# running, never polled again, and sat on its welcome copy through the whole first answer
+# (the owner, 2026-09-14: "it looked like it did not start").
+OPENING = set()
 
 
 def session_for(tid: int):

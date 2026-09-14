@@ -31,6 +31,30 @@ test("the band reports the turn, and never invents a total it was not told", () 
   assert.match(css, /\.tq-aui-dock \.tq-aui-tool-complete summary em \{ display: block; \}/);
 });
 
+test("a turn the SERVER started before this pane opened is still a turn in flight", () => {
+  // The walk's opening turn is dispatched in the background a second or two after the task exists
+  // (server._walk_opens), so the snapshot this pane loads on mount can arrive before there is any
+  // session to see. Polling only while a session said "busy" left the welcome copy on screen
+  // through the whole first answer - no question, no band, no browser beside it, which reads
+  // exactly like a walk that never started (the owner, 2026-09-14).
+  const view = read("GeneralWorkspace.jsx");
+  assert.match(view, /const busy = !!data\?\.session\?\.busy \|\| !!data\?\.starting;/);
+  const poll = view.slice(view.indexOf("const busy ="), view.indexOf("const makeReport"));
+  assert.match(poll, /if \(!busy\) return undefined;/, "one definition of work in flight drives the poll");
+  assert.match(poll, /api\.get\(`\/api\/tasks\/\$\{task\.TaskId\}\/assistant`\)/);
+});
+
+test("the picker names the brain that is actually answering, not the one it opened on", () => {
+  // The strip said "Azure OpenAI (API)" while codex drove the walk's browser, and that stale value
+  // is what the next message would have been SENT to - handing a browser walk to a brain that
+  // cannot click (the owner, 2026-09-14).
+  const view = read("GeneralWorkspace.jsx");
+  const at = view.indexOf("const accept = useCallback");
+  const accept = view.slice(at, view.indexOf("onSession]);", at));
+  assert.match(accept, /payload\?\.session\?\.pick/, "a live session's own pick wins over what the picker opened on");
+  assert.doesNotMatch(accept, /setConnectorId\(\(old\) => old \|\| String\(provider\.id\)\);\s*$/m);
+});
+
 test("the offer to schedule the workflow waits for the answer it is offering to repeat", () => {
   const view = read("GeneralWorkspace.jsx");
   assert.match(view, /!dock && !serverBusy && messages\?\.some/);

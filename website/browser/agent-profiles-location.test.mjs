@@ -21,6 +21,7 @@ async function connectionsPage(page) {
 test('Connections share CLI commands; Docs profiles choose only provider and model', { timeout: 120000 }, async (t) => {
   const harness = await startHarness(); t.after(() => harness.close());
   const page = await harness.newPage(), errors = [], writes = [], installs = [];
+  let installerRevision = 1;
   page.on('pageerror', (e) => errors.push(e.message));
   const profiles = {
     coder: { provider: 'cli:claude', kind: 'coding', rules_doc: 'coder', purpose: 'Edit code' },
@@ -36,6 +37,7 @@ test('Connections share CLI commands; Docs profiles choose only provider and mod
   page.off('request', page.fixtureRequestGuard);
   page.on('request', (request) => {
     const path = new URL(request.url()).pathname; let data;
+    if (path === '/api/version') data = { version: 'fixture', cli_installer_revision: installerRevision };
     if (path === '/api/agents') data = { config: profiles, models: {}, default: 'coder',
       data: Object.entries(profiles).map(([Name, config]) => ({ Name, Config: JSON.stringify(config), installed: true })) };
     if (path === '/api/cli/connections') data = { data: clis };
@@ -80,6 +82,10 @@ test('Connections share CLI commands; Docs profiles choose only provider and mod
   assert.deepEqual(writes[0].update.args, ['-p', '--verbose']);
   await mkdir('../.codex-tmp', { recursive: true });
   await page.screenshot({ path: '../.codex-tmp/cli-connections.png', fullPage: true });
+  await page.evaluate(() => [...document.querySelectorAll('[data-connection="devin"] button')].find((el) => el.textContent === 'Install').click());
+  await page.waitForFunction(() => document.body.innerText.includes('no installer was started'));
+  assert.deepEqual(installs, [], 'A stale server must not repeat its broken installer command');
+  installerRevision = 2;
   await page.evaluate(() => [...document.querySelectorAll('[data-connection="devin"] button')].find((el) => el.textContent === 'Install').click());
   await page.waitForSelector('.xterm');
   assert.deepEqual(installs, [{ name: 'devin', terminal: true }]);

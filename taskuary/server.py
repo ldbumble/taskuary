@@ -308,7 +308,7 @@ from . import __version__ as _ver
 _started = datetime.now().isoformat(sep=' ', timespec='seconds')
 
 @app.get('/api/version')
-def version(): return {'version': _ver, 'started': _started}
+def version(): return {'version': _ver, 'started': _started, 'cli_installer_revision': 2}
 
 # ── update in place (update.py): Settings → Updates ─────────────────────────────────────
 @app.get('/api/update')

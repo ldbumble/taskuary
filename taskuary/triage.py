@@ -65,11 +65,19 @@ FIELDS = {
 # no todos at all (the owner, 2026-09-10). classify_intent re-appends this when the document
 # omits it, for exactly the reason it re-appends FIELDS: the output SHAPE is a contract, not a
 # judgement, and the document is only entitled to the judgement.
+#
+# A REPLY LANDS AS A ROW TOO. This said "for a task", and reply_only is a different intent - so a
+# question triage decided to answer came back as intent/why alone, took the same fallback, and put
+# Dvora's whole mail on the card: her one sentence, her signature, the legal notice and the thread
+# under it, 5,998 characters of it (the owner, 2026-09-14). Answering for a reply as well costs a
+# title and two sentences on a call already being made, and it is the same question the model has
+# just answered for itself in `why`. The checklist stays the task's: what a reply owes is the reply.
 TASK_FIELDS = (
-    'For a task, also answer "title" (what the work is, 12 words max), "summary" (what was asked and by whom, '
-    'two sentences - the ask itself, never the signature, the confidentiality footer or quoted earlier mail) and '
-    '"checklist": ["<one distinct requested outcome each>"] - drawn only from what the message and exchange '
-    'actually ask for; never invent a requirement, never list anything as already done.')
+    'For a task OR a reply_only, also answer "title" (what the work is, 12 words max) and "summary" (what was '
+    'asked and by whom, two sentences - the ask itself, never the signature, the confidentiality footer or quoted '
+    'earlier mail). A reply_only becomes a row the owner reads from those two exactly as a task does. '
+    'For a task, also answer "checklist": ["<one distinct requested outcome each>"] - drawn only from what the '
+    'message and exchange actually ask for; never invent a requirement, never list anything as already done.')
 
 INTENT_SYSTEM = (
     'Classify one inbound work message. Answer JSON only: '
@@ -534,14 +542,18 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                     out['profile'] = pr
                 if candidates is not None: out.update(relationship_of(j, candidates))
                 if repos and out['intent'] == 'task': out.update(repo_choice_of(j, repos))
-                if out['intent'] == 'task':
-                    # the work, named (PW-074): a title and summary of what was asked and the distinct
-                    # outcomes as a list - validated, never trusted; the router falls back when absent
+                # the work, named (PW-074): a title and summary of what was asked - validated, never
+                # trusted; the router falls back when absent. A reply_only is named too: it lands as a
+                # row the owner reads exactly like a task, and keeping the pair for 'task' alone is how
+                # a question triage answered came to wear a lowercased subject line over the whole mail
+                # (the owner, 2026-09-14). The CHECKLIST stays the task's - what a reply owes is the reply.
+                if out['intent'] in ('task', 'reply_only'):
                     title = ' '.join(str(j.get('title') or '').split())[:120]
                     summary = str(j.get('summary') or '').strip()[:1000]
                     if title: out['title'] = title
                     if summary: out['summary'] = summary
-                    if isinstance(j.get('checklist'), list): out['checklist'] = [x for x in j['checklist'] if isinstance(x, str)]
+                if out['intent'] == 'task' and isinstance(j.get('checklist'), list):
+                    out['checklist'] = [x for x in j['checklist'] if isinstance(x, str)]
                 return out
             parse_error = f"invalid intent {j.get('intent')!r}; expected task, reply_only, or fyi"
         except Exception as e:

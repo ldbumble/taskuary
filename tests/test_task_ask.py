@@ -44,6 +44,26 @@ class AutomaticRoadTests(unittest.TestCase):
         for gone in ('Penn Forest', 'confidential', 'From: Uri', '540.776.7576'):
             self.assertNotIn(gone, out['summary'], gone)
 
+    def test_a_reply_only_verdict_carries_the_ask_too(self):
+        """reply_only lands as a row of its own, so it is asked for a title and a summary like any
+        other - it used to answer intent/why alone and fall through to the raw body."""
+        self.assertIn('reply_only', triage.TASK_FIELDS)
+        s = MemoryStore()
+        llm = mock.Mock(return_value=json.dumps({
+            'intent': 'reply_only', 'why': 'Dvora asks which documentation you meant',
+            'title': 'Answer Dvora on the EPR documentation',
+            'summary': 'Dvora Cohen asks which documentation you were referring to; she says the PAM and Review PDFs are all that is in use.'}))
+        with mock.patch.object(ingest, '_spawn'):
+            r = ingest.ingest_message(s, {'external_id': 'd', 'channel': 'email', 'from_email': 'dcohen@hrtgcs.example',
+                                          'conversation_id': 'c-epr', 'subject': 'RE: Mindy Gorelick Annual EPR- AUG 2026',
+                                          'body': MAIL, 'sent_at': '2026-09-14 09:02:00'}, llm=llm)
+        task = s.get_task(r['task_id'])
+        self.assertEqual(task['Kind'], 'reply')
+        self.assertEqual(task['Title'], 'Answer Dvora on the EPR documentation')
+        self.assertIn('which documentation you were referring to', task['Summary'])
+        for gone in ('Penn Forest', 'confidential', 'From: Uri'):
+            self.assertNotIn(gone, task['Summary'], gone)
+
     def test_a_verdict_that_names_its_own_summary_still_wins(self):
         """The fallback never overrides the brain - it is only what stands in for it."""
         s = MemoryStore()

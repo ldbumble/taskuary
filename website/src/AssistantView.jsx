@@ -1088,6 +1088,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       <div className="tq-chat-body" ref={bodyRef}>
         <div className="tq-chat-inner">
           {!state && !err && <Box sx={{ display: "grid", placeItems: "center", py: 6 }}><CircularProgress size={22} /></Box>}
+          {/* Unfinished work from before, with its own recap - listed, never resumed by arriving here
+              (previous-work.test.mjs: "Loading the welcome card never starts an agent"). It sits
+              OUTSIDE the welcome card: that card unmounts the moment a line lands in the chat, and
+              reviewing one saved draft puts a line there - which took the shelf away with the rest
+              of the list still on it. It draws nothing when there is nothing saved. */}
+          {state && <PreviousWork active={active} onOpenTask={onOpenTask}
+            onReview={(rid) => surfaceRef.current?.(`review:${rid}`)} />}
           {state && !shown.length && !busy && (
             <div className="tq-welcome">
               <TaskuaryMark size={30} />
@@ -1111,12 +1118,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                   </button>
                 ))}
               </div>
-              {/* Unfinished work from before, with its own recap - listed, never resumed by arriving
-                  here (website/browser/previous-work.test.mjs: "Loading the welcome card never
-                  starts an agent"). Restored from that test after this import was lost to a stray
-                  `git checkout --` on 2026-09-14. */}
-              <PreviousWork active={active} onOpenTask={onOpenTask}
-                onReview={(rid) => surfaceRef.current?.(`review:${rid}`)} />
             </div>
           )}
           {shown.map((m, i) => <Line key={m.id} m={m} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx}

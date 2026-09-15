@@ -11,6 +11,8 @@ from collections import deque
 from datetime import datetime
 from loguru import logger
 
+from . import redact     # imports nothing of ours: safe at module level
+
 SCROLLBACK = 200_000        # chars kept for late joiners / reconnects
 # What phase detection reads. A 32x110 screen is ~3.5k chars and a TUI repaints its footer
 # constantly, so the last few KB always carry a whole one - while a pyte pass over the FULL
@@ -757,7 +759,9 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     if agent:
         try: pretrust(cwd, ' '.join(str(a) for a in argv))     # no first-run dialog to park on
         except Exception as e: logger.debug(f'pretrust skipped: {e}')
-    seed = ' '.join(seed_fn(cwd).split()) if (seed_fn and agent) else None
+    # One scrub for BOTH roads: the prompt is about to go either into argv (seed_argv) or be
+    # typed into the pane, and either way it reaches the CLI's provider. See redact.py.
+    seed = redact.scrub(' '.join(seed_fn(cwd).split())) if (seed_fn and agent) else None
     extra = seed_argv(profile, seed) if seed and not resume else None
     # pywinpty joins argv with list2cmdline - correct for a direct .exe - but an npm .CMD shim
     # runs through `cmd /c`, and cmd.exe parses & | < > and stray quotes as ITS OWN syntax:

@@ -13,6 +13,8 @@ from pathlib import Path
 import requests
 from loguru import logger
 
+from . import redact
+
 GRAPH = 'https://graph.microsoft.com/v1.0'
 
 
@@ -292,6 +294,18 @@ def send_block(store, channel) -> str:
     return ''
 
 
+GUARD = ("this text still carries a {mark}...] placeholder. Credentials are taken out of PROMPTS "
+         "(redact.py), never out of the owner's own mail - so a placeholder in something addressed "
+         "to a person means a prompt's text was reused as the message. Rewrite it from the thread.")
+
+
+def _no_placeholder(body, subject=''):
+    """Refuse rather than deliver a hole. The recipient would read `[redacted:aws-key]` where a
+    sentence belongs, and neither they nor the owner would ever learn why."""
+    if redact.holds_placeholder(body) or redact.holds_placeholder(subject):
+        raise RuntimeError(GUARD.format(mark=redact.MARK))
+
+
 def send_out(store, channel: str, to, subject: str, body: str, cc: list = None) -> dict:
     """Send something nobody asked for: a report going OUT, to an address the owner chose.
 
@@ -301,6 +315,7 @@ def send_out(store, channel: str, to, subject: str, body: str, cc: list = None) 
     for replies is off for this too, because "Taskuary may write to Slack" is one decision and
     not two.
     """
+    _no_placeholder(body, subject)
     to = [t.strip() for t in (to if isinstance(to, (list, tuple)) else str(to or '').split(',')) if str(t).strip()]
     ch, cc = (channel or 'email').lower(), addrs(cc)
     if cc and ch != 'email':
@@ -486,6 +501,7 @@ def reconcile_sent(store, msg: dict, body: str, since: str = None):
 def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = None, attachments: list = None) -> dict:
     """Answer wherever the request came from. The message row carries everything needed:
     the mailbox it arrived in, the Graph id for threading, or the chat id."""
+    _no_placeholder(body)
     ch, ext = msg.get('Channel'), str(msg.get('ExternalId') or '')
     cc = addrs(cc)
     # cc is a mail idea. A chat has members, not recipients, and quietly dropping the person the

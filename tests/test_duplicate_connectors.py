@@ -58,8 +58,14 @@ class DuplicateConnectors(unittest.TestCase):
         store.save_connector({'ConnectorId': first, 'ConfigJson': json.dumps({'model': 'first'}), 'Active': 1}, 'test')
         second = store.save_connector({'Type': 'ollama', 'Name': 'Local reasoning',
                                        'ConfigJson': json.dumps({'model': 'second'}), 'Active': 1}, 'test')
-        with mock.patch('taskuary.llm.make_llm', side_effect=lambda typ, cfg, secret: (typ, cfg, secret)):
-            typ, cfg, _ = build_llm(store, f'connector:{second}')
+        # a brain is a CALLABLE (build_llm now hands back one wrapped in the credential scrub -
+        # see redact.py), so the stand-in carries what it was built from rather than being a tuple
+        def fake(typ, cfg, secret):
+            brain = lambda system, user, **kw: ''
+            brain.built_from = (typ, cfg, secret)
+            return brain
+        with mock.patch('taskuary.llm.make_llm', side_effect=fake):
+            typ, cfg, _ = build_llm(store, f'connector:{second}').built_from
         self.assertEqual((typ, cfg['model']), ('ollama', 'second'))
 
     def test_chat_reply_uses_the_instance_that_owns_the_source(self):

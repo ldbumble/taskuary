@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from loguru import logger
 
-from . import spawn
+from . import redact, spawn
 from .store import task_ref
 from .clis import preset_args
 
@@ -622,6 +622,10 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     the run trace so the Board shows the agent working live. claude's stream-json events
     render as readable tool/text lines; any other CLI's plain stdout streams as-is.
     Returns (result, session_id, diff)."""
+    # Whatever built this prompt, a credential in it would go to the CLI's provider and be filed
+    # in the run's own trace two lines below. task_context() writes each message's BodyText in
+    # verbatim, so mail is the likeliest way one arrives here. See redact.py.
+    prompt = redact.scrub(prompt)
     name = profile.get('cmd', 'claude')
     args = list(profile.get('args') or preset_args(name) or ['-p'])
     # Codex's normal exec output is human prose with no boundary between commands, searches,

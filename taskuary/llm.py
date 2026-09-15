@@ -16,6 +16,8 @@ import base64, json, mimetypes, requests
 from pathlib import Path
 from time import sleep
 
+from . import redact
+
 AI_TYPES = ('anthropic', 'openai', 'azure_openai', 'openrouter', 'ollama', 'meta')
 
 # What a vision model will look at. "See below." is half the mail this app reads, and below was
@@ -126,7 +128,25 @@ def build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None
     from . import demo
     # the demo answers from a script: no key, no CLI, no request leaving the machine
     if demo.enabled(): return demo.brain()
-    return _build_llm(store, pick, model, trace, cancel, resume, cli_tools, extra_env, research, fallback_user)
+    brain = _build_llm(store, pick, model, trace, cancel, resume, cli_tools, extra_env, research, fallback_user)
+    return _Scrubbed(brain) if brain else brain
+
+
+class _Scrubbed:
+    """A brain with the credentials taken out of what it is asked.
+
+    Wrapping HERE is the point: `build_llm` is the one door every hosted call in the app goes
+    through, so triage, the assistant, the concierge, the drafter and the digest are all covered
+    by one seam instead of each remembering. See redact.py for what is taken and what is not.
+
+    It proxies attributes rather than copying them because `failover` sets `.session_id` and
+    `.last_pick` DURING a call, and a resumed CLI thread is carried on exactly those.
+    """
+    def __init__(self, brain): object.__setattr__(self, '_brain', brain)
+    def __call__(self, system, user, *a, **kw):
+        return self._brain(redact.scrub(system), redact.scrub(user), *a, **kw)
+    def __getattr__(self, k): return getattr(object.__getattribute__(self, '_brain'), k)
+    def __setattr__(self, k, v): setattr(object.__getattribute__(self, '_brain'), k, v)
 
 
 def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None,

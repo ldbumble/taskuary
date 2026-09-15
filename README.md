@@ -98,6 +98,24 @@ Finished work, draft replies, questions, and loose ends return for review. You d
 
 ![The assistant walking the pipe: the item on the table, its drafted reply, and Approve & send waiting on you](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/screenshot-assistant.png?v=0.3.3.2)
 
+## What leaves your machine
+
+Taskuary runs locally. The one thing that goes out is the prompt—whatever your AI provider or
+coding CLI needs to do the work you asked for.
+
+Credentials are taken out of that prompt first. If a colleague mails an API key, a connection
+string, or a private key, it is replaced with a labelled placeholder (`[redacted:aws-key]`) at
+each of the three doors a prompt can leave by: the hosted models, a headless CLI run, and the
+first prompt of an agent pane. Your mail itself is never altered—the scrub is on the way out,
+not on the way in—so a vendor's one-time code stays readable where it arrived. Nothing Taskuary
+sends carries a placeholder either: a reply still holding one is refused, not delivered.
+
+The rules are deterministic rather than a model's judgement, because by the time a model could
+judge, the credential would already be in a prompt. So they catch credentials with a
+recognizable shape—provider keys, tokens, credentialed URLs, connection strings, private
+keys—and they will not catch a sentence like "the wifi password is bluefish17". Report anything
+you find through [SECURITY.md](SECURITY.md).
+
 ## Install
 
 ### Windows app

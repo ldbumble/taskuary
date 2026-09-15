@@ -34,3 +34,21 @@ export const sourceOf = (r) => {
   const who = r.FromName || r.FromEmail || "";
   return src && src !== who ? src : "";
 };
+
+// A GENERATED body - a report's error summary, the assistant's own note - is written as structure:
+// a lead, then a list. The Summary pane ran the whole thing through one flattening clamp, so the
+// list arrived mashed into the sentence as a wall of run-on text. Split it so the pane can draw the
+// list as a list. A body with NO list comes back untouched: a mail's "Hi Uri," followed by a blank
+// line is a greeting, not a summary, and re-cutting on that would hide the actual question.
+const BULLET = /^[-•*]\s+/;
+export const structured = (body) => {
+  const text = String(body || "");
+  const lines = text.split("\n");
+  const at = lines.findIndex((l) => BULLET.test(l.trim()));
+  if (at < 0) return { lead: text, bullets: [] };
+  return {
+    lead: lines.slice(0, at).join("\n").trim(),
+    bullets: lines.slice(at).map((l) => l.trim()).filter((l) => BULLET.test(l))
+      .map((l) => l.replace(BULLET, "").trim()),
+  };
+};

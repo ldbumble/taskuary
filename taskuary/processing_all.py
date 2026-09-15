@@ -33,6 +33,23 @@ def idea_lane(idea: dict) -> str:
     return 'asked' if triage.get('intent') in ('task', 'reply_only') else 'fyi'
 
 
+def idea_reason(idea: dict) -> str:
+    """An idea's verdict in the app's one triage vocabulary - the same sentence a message's route
+    row carries, so the detail pane can show WHY under Triage instead of "Not routed."
+
+    An idea is triaged like anything else, but the row never repeated the verdict, and a screen that
+    cannot show one reads as a screen where none was reached (the owner, 2026-09-15: "from timeline
+    it seems like assistant ideas don't go through triage but they do no?"). A verdict that FAILED
+    is not a road it chose, and gets no line - `unjudged` is the word for that, not 'fyi'."""
+    try: action = json.loads(idea.get('ActionJson') or '{}')
+    except (ValueError, TypeError): action = {}
+    triage = action.get('triage') or {}
+    intent = triage.get('intent')
+    if triage.get('error') or triage.get('pending') or intent not in ('task', 'reply_only', 'fyi'): return ''
+    why = str(triage.get('why') or '').strip()
+    return f'triage: {intent}' + (f' - {why}' if why else '')
+
+
 def row_lane(row: dict) -> str:
     """The pile's word for a feed row, so All and unread say the same thing about one item."""
     if row.get('ReportFailed'): return 'broken'
@@ -362,6 +379,8 @@ def compact_inventory(snapshot, query, *, include_excluded=False, degraded_ok=Fa
                       'Preview': preview, 'MsgStatus': status, 'Category': category,
                       'Lane': ('queued' if str(entity.get('Assignee') or '').startswith('agent:') else 'asked') if open_task
                               else 'approve' if kind == 'review' else idea_lane(entity) if kind == 'idea' else 'fyi'}
+            # ...and the verdict that chose that lane, in words, so the pane under it can say why
+            if kind == 'idea' and (reason := idea_reason(entity)): legacy['RouteReason'] = reason
         counts = {kind: sum(mid.startswith(prefix + ':') for mid in members) for kind, prefix in (
             ('messages', 'message'), ('tasks', 'task'), ('ideas', 'idea'), ('reviews', 'review'))}
         counts.update(members=len(members), attachments=len(view.get('attachments', [])))

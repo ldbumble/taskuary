@@ -42,7 +42,7 @@ import MicOffIcon from "@mui/icons-material/MicOff";
 import { Md, looksMd } from "./md.jsx";
 import DigestText from "./DigestText.jsx";
 import TodayMeetingsStrip from "./TodayMeetingsStrip.jsx";
-import { subjectOf, sourceOf } from "./feedText.js";
+import { subjectOf, sourceOf, structured } from "./feedText.js";
 import { HOLD_TAG, ROADS, VERDICTS, hasTag, roadOf, stateMeta, stateOf, subline, verdictOf } from "./timelineState.js";
 import { sendBlockLine, draftState, replyEnvelope, replySendFailure } from "./sendState.js";
 import { rowLane } from "./rowLane.js";
@@ -147,6 +147,13 @@ const actionOf = (r) => (r.Channel === "report" ? "report"
 // recorded as filed before that state existed
 const triageFailed = (r) => r?.MsgStatus === "error" || /(?:AI )?triage (?:failed|returned an answer it could not read)/i
   .test(String(r?.RouteReason || ""));
+
+// Which rows get the PLAIN pane instead of the four stages. An idea does not belong here: it is
+// triaged like anything else and its verdict now rides on the row, so it has a Triage step to show
+// and a Message step to fill - it only ever fell to the bare pane because its open target is not a
+// message (the owner, 2026-09-15: "why does idea show this screen and not the regular all other on
+// the timelines"). A standalone task or review still has no story to tell, so they keep it.
+const bareDetail = (sel) => !!sel?.ProcessingItemId && !["message", "idea"].includes(sel.OpenTarget?.kind);
 
 // NeedsYou comes from the server and means one thing: nobody else is moving this. It
 // outranks the verdict chip, because "what happened to it" matters less than "is it mine".
@@ -1742,7 +1749,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
         sx={{ minWidth: 0, minHeight: 0, display: stageShown ? "flex" : "none", flexDirection: "column", "& > *": { minHeight: 0 } }}>
         {calSel && !sel ? <EventPanel e={calSel} onClose={() => setCalSel(null)} onOpenTask={onOpenTask} />
           : sel ? (
-            sel.ProcessingItemId && sel.OpenTarget?.kind !== "message" ? (
+            bareDetail(sel) ? (
               <CanonicalDetail sel={sel} detail={detail} onOpenTask={onOpenTask}
                 onOpenMessage={(mid) => openByMid(mid)}
                 onClose={closeSelection} />
@@ -1781,7 +1788,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
           PaperProps={{ sx: { width: "100%", p: 1, bgcolor: BG, borderRadius: 0 } }}>
           {calSel && !sel ? <EventPanel e={calSel} onClose={() => setCalSel(null)} onOpenTask={onOpenTask} />
             : sel ? (
-              sel.ProcessingItemId && sel.OpenTarget?.kind !== "message" ? (
+              bareDetail(sel) ? (
                 <CanonicalDetail sel={sel} detail={detail} onOpenTask={onOpenTask}
                   onOpenMessage={(mid) => openByMid(mid)}
                   onClose={closeSelection} />
@@ -1962,7 +1969,7 @@ const PanelLabel = ({ children }) => (
 //
 // A step with children cannot be a <button>: a button may not contain a textbox or another
 // button. So it becomes a row whose HEADER is the button and whose body is yours.
-const StoryTimelineStep = ({ title, status, summary, onOpen, first, last, state = "idle", children }) => {
+const StoryTimelineStep = ({ title, status, summary, bullets, onOpen, first, last, state = "idle", children }) => {
   const dot = state === "current" ? "#c7a258" : state === "done" ? "#718f74" : "#cfc8bc";
   const rail = (
     <Box sx={{ alignSelf: "stretch", position: "relative" }}>
@@ -1989,6 +1996,21 @@ const StoryTimelineStep = ({ title, status, summary, onOpen, first, last, state 
         </Box>
         {summary && <Typography sx={{ color: DIM, fontSize: 11.5, lineHeight: 1.38, overflow: "hidden",
           display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{summary}</Typography>}
+        {/* what the body listed, still a list. A few lines only - the step is a summary, and the
+            whole of it is one click away on the tab this row opens. */}
+        {!!bullets?.length && (
+          <Box sx={{ mt: 0.3 }}>
+            {bullets.slice(0, 3).map((line, i) => (
+              <Box key={i} sx={{ display: "flex", gap: 0.6, color: DIM, fontSize: 11, lineHeight: 1.45 }}>
+                <Box component="span" sx={{ color: FAINT, flexShrink: 0 }}>·</Box>
+                <Box component="span" sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{line}</Box>
+              </Box>
+            ))}
+            {bullets.length > 3 && (
+              <Box sx={{ color: FAINT, fontSize: 10.5, mt: 0.15 }}>+{bullets.length - 3} more</Box>
+            )}
+          </Box>
+        )}
       </Box>
       <Box sx={{ display: "grid", placeItems: "center" }}>
         <ChevronRightIcon sx={{ color: FAINT, fontSize: 13 }} />
@@ -2251,7 +2273,9 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
   const reportText = String(rep?.Body || "").replace(/^(CODER REPORT|HANDOVER NOTE)\s*/i, "").trim();
   const reportResult = ((/(?:^|\n)Summary:[ \t]*([^\n]+)/im.exec(reportText) ||
     /(?:^|\n)Result:[ \t]*([^\n]+)/im.exec(reportText) || [])[1] || cleanText(reportText)).trim();
-  const messageSummary = cleanText(sel.Preview || sel.Subject || "No message preview available.");
+  // a generated body carries its own structure (a lead, then a list); flattening the whole thing
+  // into one clamp turned a report's error summary into a wall of run-on text (2026-09-15)
+  const messageBody = structured(cleanText(detail?.body || sel.Preview || sel.Subject || "No message preview available."));
   const triageStatus = ["assistant", "report", "calendar"].includes(sel.Channel)
     ? "fyi" : failedTriage ? "needs your choice" : (roadOf(sel) || "not routed");
 
@@ -2368,7 +2392,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
                   </Typography>
                 </Box>
               </Box>
-              <MessageBlock messages={detail?.messages} focusId={sel.MessageId} fallback={sel.Preview} threadTotal={detail?.thread_total} askIds={detail?.ask_ids} />
+              <MessageBlock messages={detail?.messages} focusId={sel.MessageId} fallback={detail?.body || sel.Preview} threadTotal={detail?.thread_total} askIds={detail?.ask_ids} />
             </Box>
           ) : (
             <>
@@ -2377,7 +2401,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
                   px: 0.75, pt: 0.45, pb: 0.75 }}>
                   <StoryTimelineStep title="Message" first state="done"
                     status={(detail?.messages || []).length > 1 ? `${detail.messages.length} messages` : "received"}
-                    summary={messageSummary}
+                    summary={messageBody.lead} bullets={messageBody.bullets}
                     onOpen={() => setTab("msg")} />
                   <StoryTimelineStep title="Triage" status={triageStatus} summary={roadLine}
                     state={failedTriage ? "current" : triageStatus !== "not routed" ? "done" : "idle"}
@@ -2409,7 +2433,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
                   {sel.Channel === "assistant" && <AssistantPost sel={sel} onOpenTask={onOpenTask} onChanged={() => onRefresh?.()} />}
                   {sel.Channel === "report" && /morning digest/i.test(`${sel.SourceName || ""} ${sel.Subject || ""}`) && <TodayMeetingsStrip />}
                   {sel.Channel !== "assistant" && (
-                    <MessageBlock key={sel.MessageId} messages={detail?.messages} focusId={sel.MessageId} fallback={sel.Preview} threadTotal={detail?.thread_total} askIds={detail?.ask_ids} />
+                    <MessageBlock key={sel.MessageId} messages={detail?.messages} focusId={sel.MessageId} fallback={detail?.body || sel.Preview} threadTotal={detail?.thread_total} askIds={detail?.ask_ids} />
                   )}
                   {history.length > 0 && (
                     <>

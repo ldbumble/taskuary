@@ -276,13 +276,22 @@ test("canonical All renders every root once with truthful details and frozen pag
   assert.ok((await page.$eval("[data-reply-recipients]", (node) => node.textContent)).includes("canonical-sibling-copy@example.test"),
     "switching exact reviews must load that review's CC instead of retaining another review's edits");
 
-  for (const kind of ["task", "idea", "review"]) {
+  // A standalone task or review has no story to tell, so it keeps the plain pane.
+  for (const kind of ["task", "review"]) {
     const root = seed.standalone[kind];
     await clickItem(page, root.item_id);
     await page.waitForSelector(`[data-processing-generic-detail][data-processing-detail-kind="${kind}"]`, { timeout: 10000 });
     assert.ok((await page.$eval("[data-processing-generic-detail]", (node) => node.innerText)).includes(root.body_marker),
       `${kind} full persisted body was not rendered`);
   }
+  // An IDEA does. It is triaged like anything else, so it gets the same Message/Triage/Agent stages
+  // every other row gets - reading it on the bare pane was what made triage look like something
+  // ideas skip (the owner, 2026-09-15). Its whole persisted body must survive the move.
+  await clickItem(page, seed.standalone.idea.item_id);
+  await page.waitForSelector('[role="tablist"][aria-label="Message workflow views"]', { timeout: 10000 });
+  assert.equal(await page.$("[data-processing-generic-detail]"), null,
+    "an idea must no longer fall to the bare pane");
+  await waitForStageMarker(page, seed.standalone.idea.body_marker);
   const writesAfterIntentionalDraft = automaticWrites().length;
   assert.ok(writesAfterIntentionalDraft >= writesAtAll, "the explicit draft edit may save when its field loses focus");
 

@@ -367,9 +367,14 @@ def isolated_runtime_boundaries():
 
     @asynccontextmanager
     async def safe_lifespan(app):
-        # Preserve the production lifespan itself, including cleanup, but replace only the six
+        # Preserve the production lifespan itself, including cleanup, but replace only the seven
         # background integration starters while entering it.  Their direct unit tests still call
         # the real functions outside this narrow context.
+        #
+        # EVERY forever-loop the lifespan starts belongs here. doorway_forever was added without one
+        # (2026-09-15) and, unlike the others, ticks once a SECOND against the module-global store -
+        # so it read a store a later test had already closed and segfaulted the whole run partway
+        # through, on CI, intermittently, with no failing assertion to point at.
         import threading
         done = threading.Event()
         _LIFESPAN_DONE.append(done)
@@ -382,6 +387,7 @@ def isolated_runtime_boundaries():
                  mock.patch.object(server, 'catch_up_on_startup', stopped('startup catch-up')), \
                  mock.patch.object(server, 'poll_forever', stopped('poll scheduler')), \
                  mock.patch.object(server, 'quick_forever', stopped('chat poll scheduler')), \
+                 mock.patch.object(server, 'doorway_forever', stopped('assistant doorway')), \
                  mock.patch.object(blackboard, 'schedule_due', stopped('dispatch retry scheduler')), \
                  mock.patch.object(waitroom, 'watch', stopped('waitroom watcher')):
                 entered = await context.__aenter__()

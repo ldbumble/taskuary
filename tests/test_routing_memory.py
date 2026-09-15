@@ -49,6 +49,14 @@ class VerdictIsKept(unittest.TestCase):
         s.add_route(2, tid, 'create', None, 'r', [], 'triage', verdict={'kind': 'general'})
         self.assertEqual(s.task_verdict(tid)['kind'], 'general')
 
+    def test_a_follow_up_verdict_is_visible_but_does_not_replace_the_tasks_original_verdict(self):
+        s = store(); tid = arrived(s)
+        s.add_route(1, tid, 'create', None, 'r', [], 'triage', verdict={'kind': 'coding'})
+        s.add_route(2, tid, 'attach', None, 'r', [], 'triage',
+                    verdict={'intent': 'fyi', 'why': 'only says thank you'})
+        self.assertIsNotNone(s.list_routes(tid)[-1]['VerdictJson'])
+        self.assertEqual(s.task_verdict(tid)['kind'], 'coding')
+
     def test_a_broken_answer_still_reaches_the_diagnostic_panel_alone(self):
         # RawOutput raises the Timeline's "what did triage answer" box, so a SUCCESSFUL verdict
         # must never land there or every task wears an error face.

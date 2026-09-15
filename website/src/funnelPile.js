@@ -1,35 +1,31 @@
+import vocab from "../../taskuary/lanes.json" with { type: "json" };
 // The pipe, as the Assistant page draws it: what each lane is called and coloured, which item is a
 // new arrival (it drops in from the top and slides to its slot), and which card goes under a line.
 // Pure and dependency-free so it runs under bare node (test/funnelPile.test.mjs); colour is named
 // by ROLE (theme.jsx ROLES) so this file cannot drift from the palette.
 
-// Presentation lanes; the server supplies the five attention bands and item order.
-export const LANES = ["blocked", "time", "approve", "asked", "queued", "broken", "forgotten", "report", "fyi", "working"];
-export const LANE_META = {
-  // the one lane that is a person waving at you from across the room: it wears its hand and a
-  // size the eye catches, because it is the only lane where work has actually STOPPED until you
-  // answer (the owner, 2026-09-11). `loud` is the same idea timelineState.waving has carried all
-  // along, and the same word, so the two vocabularies say one thing.
-  blocked:   { word: "agent waving", role: "you",     mark: "👋", loud: true, hint: "an agent stopped and is waiting on you — it is blocking work" },
-  time:      { word: "coming up",     role: "working", mark: "⏱",  hint: "a meeting inside two hours, or an urgent sender" },
-  approve:   { word: "needs your yes", role: "you",    mark: "✉️", hint: "a reply or an action is drafted and waits for you" },
-  broken:    { word: "a check failed", role: "bad",     mark: "🛠",  hint: "a report or workflow you set up could not run - the cause is in it" },
-  asked:     { word: "asked you",     role: "working", mark: "🙋", hint: "a person asked you for something and nobody is on it" },
-  queued:    { word: "waiting to start", role: "working", mark: "⏳", hint: "handed to an agent and not started yet" },
-  forgotten: { word: "slipped",       role: "info",    mark: "🧵", hint: "the ask that slipped, the promise you made, the thread gone quiet" },
-  report:    { word: "report",        role: "info",    mark: "📄", hint: "a report you set up landed, or an agent finished a job" },
-  fyi:       { word: "fyi",           role: null,      mark: "👀", hint: "a person told you something — read it or don't" },
-  working:   { word: "agent working", role: "working", mark: "⚙️", hint: "an agent has it — nothing for you until it stops or asks; it moves up when it needs your input" },
-};
+// ONE VOCABULARY, in taskuary/lanes.json - loaded by the chat (funnel.py) from the same file, so a
+// lane cannot mean one thing on the rail and another in a sentence. They were two hand-kept tables
+// in two languages and had already drifted: this page said a report lane reads "report" while the
+// server said "landed", and nothing could tell you which was the mistake (the owner, 2026-09-15:
+// "we built one idea and then it was changed... it's in a bunch of places").
+//
+// The file carries word, role (theme.jsx ROLES, or null for a lane that takes no colour), mark, hint,
+// and `loud` on the one lane that is a person waving at you from across the room - the only lane where
+// work has actually STOPPED until you answer. `counted` is the plural-counting form ("3 landed", never
+// "3 report") and defaults to the word.
+const byKey = (rows) => Object.fromEntries(rows.map(({ key, counted, ...meta }) => [key, meta]));
+export const LANES = vocab.lanes.map((l) => l.key);
+export const LANE_META = byKey(vocab.lanes);
+// the word that COUNTS, for a sentence that says how many of each are waiting
+export const LANE_COUNTED = Object.fromEntries(vocab.lanes.map((l) => [l.key, l.counted || l.word]));
+export const laneCounted = (lane) => LANE_COUNTED[lane] || LANE_COUNTED.fyi;
 export const laneMeta = (lane) => LANE_META[lane] || LANE_META.fyi;
 
 // A few KINDS carry more than their lane does. An agent's finished job and a report you set up share
 // the 'report' lane (both just landed), but reading "report" on the coder's own summary is wrong (the
 // owner, 2026-09-03: "it's not a report but agent awaiting little hand no?").
-export const KIND_META = {
-  agentdone: { word: "agent finished", role: "working", mark: "✅" },
-  wrapup:    { word: "close it?",      role: "info",    mark: "🗂" },
-};
+export const KIND_META = byKey(vocab.kinds);
 export const rowMeta = (item) => ({ ...laneMeta(item?.lane), ...(KIND_META[item?.kind] || {}) });
 
 // The column is drawn top → bottom = next out → last out: the SERVER sends next-first and the rail

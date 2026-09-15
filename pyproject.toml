@@ -71,4 +71,6 @@ include = ["taskuary*"]
 [tool.setuptools.package-data]
 # whatsapp/ too: the bridge error tells you to run `node bridge.mjs` out of the package, and
 # a pip install without it is an instruction pointing at a directory that does not exist.
-taskuary = ["web/*", "web/assets/*", "templates/*.md", "templates/history/*.md", "skills/*/*.md", "whatsapp/*"]
+# lanes.json is the ONE lane vocabulary the desktop imports at build time and funnel.py reads at
+# runtime - a wheel without it cannot name a lane at all.
+taskuary = ["lanes.json", "web/*", "web/assets/*", "templates/*.md", "templates/history/*.md", "skills/*/*.md", "whatsapp/*"]

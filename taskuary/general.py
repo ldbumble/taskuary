@@ -57,6 +57,18 @@ and the desired report sections or output shape. Convert one-off dates into rela
 Never copy secrets, access tokens, incidental debugging, old findings, or the previous answer as if it were current.
 Do not mention this conversation. Do not add a schedule; the user chooses that separately."""
 
+# ...and a SIGN-IN THE OWNER TYPED ONCE is not a step of every run. The first draft off a browser walk
+# read "Open the login page. Pause for the owner to enter credentials manually and confirm", so the
+# repeat run dutifully walked to the sign-in screen, found a form, and stopped - on a profile that was
+# already signed in (2026-09-15). The credential moment belongs to the walk; the job it becomes starts
+# where the owner left it.
+REPORT_DRAFT_BROWSER = """
+This work was done in a browser the agent drives, and every future run opens that same browser with the
+owner's saved profile - so it starts SIGNED IN where they signed in. Write the instruction for a run that
+nobody is watching: go straight to the page that holds the answer and read it. Never make waiting for the
+owner to type a password, or confirming that they have, a step - that happened once, in the set-up. Say
+only that if the site turns the run away, it should stop on the sign-in page and ask the owner."""
+
 
 # The conversation IS the teaching surface. An assistant that quietly guesses at a customised
 # ERP is worse than one that says "I do not know this number yet, let us prove it" - so the
@@ -119,6 +131,12 @@ def provider_options(store) -> list:
     return out
 
 
+def _browser_task(task: dict) -> bool:
+    """Does this task drive a browser? Only a CLI can: the browser is driven from a shell."""
+    from . import browserview
+    return browserview.wanted(task)
+
+
 def walk_pick(store) -> str:
     """Which brain drives a set-up walk-through, when the owner has not chosen one.
 
@@ -151,7 +169,11 @@ def default_pick(store, task: dict = None) -> str:
     assigned = assigned_pick(store, task)
     if saved.get('Pick') and (not assigned or assigned == saved['Pick']):
         if any(o['pick'] == saved['Pick'] for o in provider_options(store)): return saved['Pick']
-    if str((task or {}).get('SourceRef') or '') == SETUP_REF:
+    # ...and the same is true of any task with a BROWSER, whoever opened it. A workflow's repeat run
+    # carried its browser and its brief and answered "opening the secure area cannot be done from
+    # here", because the quick API brain this falls back to has no shell to run agent-browser in
+    # (2026-09-15). What needs hands takes the pick that has them.
+    if str((task or {}).get('SourceRef') or '') == SETUP_REF or _browser_task(task):
         walk = walk_pick(store)
         if walk: return walk
     return assigned_pick(store, task) or _selected(store)[0]
@@ -529,8 +551,9 @@ def report_draft(store, tid: int, pick=None, model=None) -> dict:
         for c in rows[-24:])
     user = (f"TASK TITLE: {task.get('Title') or ''}\nTASK SUMMARY: {task.get('Summary') or ''}\n\n"
             f"CONVERSATION\n{_cut(conversation, 20000)}")
+    system = REPORT_DRAFT_SYSTEM + (REPORT_DRAFT_BROWSER if _browser_task(task) else '')
     try:
-        raw = str(brain(REPORT_DRAFT_SYSTEM, user, max_tokens=REPORT_DRAFT_TOKENS) or '').strip()
+        raw = str(brain(system, user, max_tokens=REPORT_DRAFT_TOKENS) or '').strip()
         clean = re.sub(r'^```(?:json)?\s*|\s*```$', '', raw, flags=re.I)
         try: made = json.loads(clean)
         except (ValueError, TypeError):
@@ -821,6 +844,11 @@ class GeneralSession:
             paths = list(dict.fromkeys(source_paths + list(attachments or [])
                                        + [m.group('path') for m in _IMAGE_PATH.finditer(text)]))
             def visible(kind, name, detail):
+                # the ask marker is for Taskuary, never for the screen - and a CLI that narrates its
+                # plan puts it in a progress line long before the reply it is stripped from
+                if kind in ('progress', 'live') and isinstance(detail, str):
+                    detail = _sc.without_ask(detail)
+                    if not detail.strip(): return
                 self._remember_trace(kind, name, detail)
                 if trace: trace(kind, name, detail)
                 if kind == 'tool_call':
@@ -1062,7 +1090,7 @@ def start_session(store, tid: int, connector_id=None, model=None, actor='owner',
     # A setup walkthrough needs an operator, not a coder in a checkout. If the dock is normally
     # backed by an API-only chat model, choose a CLI for this task so it can actually drive the
     # embedded browser - walk_pick says which. An explicit provider choice still wins.
-    if task.get('SourceRef') == SETUP_REF and connector_id is None and not model and not pick and not store.saved_session(tid):
+    if (task.get('SourceRef') == SETUP_REF or _browser_task(task)) and connector_id is None and not model and not pick and not store.saved_session(tid):
         pick = walk_pick(store) or None
     existing = session_for(tid)
     if existing:

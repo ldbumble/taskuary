@@ -23,8 +23,11 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", onFold, overl
   const [url, setUrl] = useState(url0);
   const [driving, setDriving] = useState(false);
   const [note, setNote] = useState("");
+  // they tried to use a page they are only watching - the keyboard went nowhere and said nothing
+  const [asked, setAsked] = useState(false);
   const drivingRef = useRef(false);
   drivingRef.current = driving;
+  const held = useRef(0);       // the newest frame's seq while this tab is hidden: acked on return
   const shape = useRef(null), shapeTimer = useRef(null);
 
   /* THE PAGE IS GIVEN THIS PANE'S SHAPE, so there is nothing left to letterbox. Debounced, because
@@ -58,7 +61,7 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", onFold, overl
   };
 
   useEffect(() => {
-    let ws, closed = false, retry = null, staleTimer = null;
+    let ws, closed = false, retry = null;
     const connect = () => {
       ws = new WebSocket(wsUrl(sid));
       const send = (m) => ws.readyState === 1 && ws.send(JSON.stringify(m));
@@ -67,10 +70,18 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", onFold, overl
         const m = parseMessage(e.data);
         if (!m) return;
         if (m.type === "frame") {
+          /* A TAB NOBODY IS LOOKING AT was still paying for all of it: a 50KB decode and a repaint
+             every 80ms, and an ack asking for the next one. The stream is ack-paced end to end
+             (browserview.py), so holding the ack stops it at the source - Chrome stops capturing -
+             and the frame it stopped on is acked the moment the tab comes back. */
+          if (document.hidden) { held.current = m.seq; return; }
           const im = new Image();
           im.onload = () => {
+            /* LIVE IS THE SOCKET, NOT THE CLOCK. This went grey four seconds after the last frame -
+               and an ack-paced stream sends no frame at all while a page sits still, so a sign-in
+               form the agent was waiting on read as a dead pane (2026-09-15). It is live until the
+               relay closes; a page that is not moving is a page that is not moving. */
             img.current = im; paint(); setLive(true);
-            clearTimeout(staleTimer); staleTimer = setTimeout(() => setLive(false), 4000);
             send({ type: "ack", seq: m.seq });       // ack AFTER drawing: the next frame is the page now, not history
           };
           im.src = m.src;
@@ -81,19 +92,28 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", onFold, overl
       ws.onclose = () => { setLive(false); if (!closed) retry = setTimeout(connect, 2000); };
     };
     connect();
+    const wake = () => {
+      if (document.hidden || !held.current) return;
+      sendRef.current?.({ type: "ack", seq: held.current });
+      held.current = 0;
+    };
+    document.addEventListener("visibilitychange", wake);
     const ro = new ResizeObserver(() => { paint(); fitViewport(); });
     ro.observe(box.current);
     fitViewport();
-    return () => { closed = true; clearTimeout(retry); clearTimeout(staleTimer); clearTimeout(shapeTimer.current);
-      ro.disconnect(); ws?.close(); };
+    return () => { closed = true; clearTimeout(retry); clearTimeout(shapeTimer.current);
+      document.removeEventListener("visibilitychange", wake); ro.disconnect(); ws?.close(); };
   }, [sid]);
 
   // input reaches the page only while the owner is driving - a stray click on a watched pane
   // must not click the agent's page out from under it
   const forward = (m) => m && drivingRef.current && sendRef.current?.(m);
-  const onMouse = (e) => { if (!drivingRef.current) return; e.preventDefault(); forward(mouseMessage(e.type, e.nativeEvent, fit.current)); };
+  const takeOver = () => { setAsked(false); setDriving(true); requestAnimationFrame(() => canvas.current?.focus()); };
+  const onMouse = (e) => { if (!drivingRef.current) return void (e.type === "mousedown" && setAsked(true)); e.preventDefault(); forward(mouseMessage(e.type, e.nativeEvent, fit.current)); };
   const onWheel = (e) => { if (!drivingRef.current) return; e.preventDefault(); forward(wheelMessage(e.nativeEvent, fit.current)); };
-  const onKey = (e) => { if (!drivingRef.current) return; e.preventDefault(); e.stopPropagation(); forward(keyMessage(e.type, e.nativeEvent)); };
+  // the page asked for a password, the agent said to type it here, and the keystroke went nowhere
+  // and said nothing (the owner, 2026-09-14). Dropping it is right; dropping it in silence is not.
+  const onKey = (e) => { if (!drivingRef.current) return void setAsked(true); e.preventDefault(); e.stopPropagation(); forward(keyMessage(e.type, e.nativeEvent)); };
 
   const snapshot = async () => {
     try {
@@ -122,7 +142,7 @@ Take over to drive it yourself; close the session to close it."
           {shortUrl(url) || "the agent's browser"}
         </Typography>
         {note && <Typography sx={{ ...mono, fontSize: 10, color: CATPPUCCIN.green, flexShrink: 0 }}>{note}</Typography>}
-        <Box component="button" onClick={() => { setDriving((d) => !d); requestAnimationFrame(() => canvas.current?.focus()); }}
+        <Box component="button" onClick={() => (driving ? setDriving(false) : takeOver())}
           title={driving ? "give the page back to the agent" : "drive the page yourself - for a password or a code the agent must not type"}
           sx={{ ...btn, ...(driving ? { color: CATPPUCCIN.yellow, borderColor: CATPPUCCIN.yellow } : {}) }}>
           {driving ? "Hand back" : "Take over"}
@@ -141,6 +161,16 @@ Take over to drive it yourself; close the session to close it."
             bgcolor: "#000000aa", px: 0.75, py: 0.25, borderRadius: 1, pointerEvents: "none" }}>
             you are driving — the agent's next command still runs; hand back when done
           </Typography>
+        )}
+        {asked && !driving && (
+          <Box sx={{ position: "absolute", left: 8, right: 8, bottom: 6, display: "flex", alignItems: "center", gap: 1,
+            bgcolor: "#000000cc", border: `1px solid ${CATPPUCCIN.yellow}66`, px: 1, py: 0.5, borderRadius: 1 }}>
+            <Typography sx={{ ...mono, fontSize: 10, color: "#e1dcd5", flex: 1 }}>
+              You are watching the agent's page — Take over to type on it.
+            </Typography>
+            <Box component="button" onClick={takeOver}
+              sx={{ ...btn, color: CATPPUCCIN.yellow, borderColor: CATPPUCCIN.yellow }}>Take over</Box>
+          </Box>
         )}
       </Box>
     </Box>

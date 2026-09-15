@@ -50,6 +50,15 @@ def brain(intent, why='because', kind=None):
 
 
 class FollowUpVerdictTests(unittest.TestCase):
+    def test_a_standalone_fyi_keeps_the_structured_response_for_the_timeline(self):
+        s = store()
+        msg = reply('For your information, payroll closed successfully.', 'Payroll closed')
+        msg.update(external_id='x:fyi', conversation_id='c:fyi')
+        out = ingest.ingest_message(s, msg, llm=brain('fyi', 'reports a completed event and asks for nothing'))
+        route = s.message_routes(out['message_id'])[-1]
+        self.assertEqual(out['status'], 'filed')
+        self.assertEqual(json.loads(route['VerdictJson'])['intent'], 'fyi')
+
     def test_an_fyi_follow_up_is_filed_onto_the_task_and_leaves_the_pipe_alone(self):
         s = store(); t = opened(s)
         out = ingest.ingest_message(s, reply(), llm=brain('fyi', 'only says thanks - nothing left to do'))
@@ -58,6 +67,8 @@ class FollowUpVerdictTests(unittest.TestCase):
         self.assertEqual((row['Status'], row['TaskId']), ('filed', t))                 # on the chain, off the pile
         reason = s.list_routes(t)[-1]['Reason']
         self.assertIn('triage: fyi', reason); self.assertIn('only says thanks', reason); self.assertIn('for the chain', reason)
+        saved = json.loads(s.list_routes(t)[-1]['VerdictJson'])
+        self.assertEqual((saved['intent'], saved['why']), ('fyi', 'only says thanks - nothing left to do'))
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             items = funnel.build(s)['items']
         self.assertEqual([(i['kind'], i['lane']) for i in items], [('wrapup', 'report')])   # your reply went out; close it?
@@ -68,6 +79,8 @@ class FollowUpVerdictTests(unittest.TestCase):
                                     llm=brain('task', 'asks for the M44 period too', kind='coding'))
         self.assertEqual((out['status'], out['task_id']), ('attached', t))
         self.assertEqual(s.get_message(out['message_id'])['Status'], 'routed')
+        saved = json.loads(s.list_routes(t)[-1]['VerdictJson'])
+        self.assertEqual((saved['intent'], saved['kind']), ('task', 'coding'))
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             self.assertEqual([(i['kind'], i['lane']) for i in funnel.build(s)['items']], [('todo', 'asked')])
 

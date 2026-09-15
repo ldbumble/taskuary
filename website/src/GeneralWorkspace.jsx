@@ -354,7 +354,7 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
 
 function AssistantThread({ task, messages, onAsked, onStop, selectionRef, attachmentsRef, onSent, onClearAttachments, onAttach, onReport, reportBusy,
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
-  serverBusy = false, provider, name = "Taskuary", work, since }) {
+  serverBusy = false, provider, name = "Taskuary", work, since, revision = 0, asking, onAnswer }) {
   // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
   // dock is the assistant that helps you run Taskuary, not an agent doing a job (the owner,
   // 2026-09-08: "make sure the ux doesnt change or the general assistants").
@@ -427,6 +427,20 @@ function AssistantThread({ task, messages, onAsked, onStop, selectionRef, attach
     },
   }), [attachmentsRef, onBusyChange, onClearAttachments, onSent, selectionRef, task.TaskId]);
   const runtime = useLocalRuntime(modelAdapter, { initialMessages: initial(messages) });
+  /* WHAT ARRIVED WHILE YOU WERE TYPING goes into the thread that is already standing. This used to
+     be a key bump, which remounts - and the draft lives in the composer INSIDE this runtime, so the
+     2.5s busy poll emptied the box under the owner's fingers every time the agent took another step
+     (the owner, 2026-09-14). reset() swaps the messages in place and never touches the composer. */
+  const shown = useRef(messages);
+  shown.current = messages;
+  const applied = useRef(revision);
+  useEffect(() => {
+    if (applied.current === revision) return;
+    applied.current = revision;
+    // this pane's own stream is the live truth while it runs; its `done` files the server's copy
+    if (runtime.thread.getState().isRunning) return;
+    runtime.thread.reset(initial(shown.current));
+  }, [revision, runtime]);
   const prompted = useRef(null);
   useEffect(() => {
     if (!prompt?.text || prompted.current === prompt.id) return;
@@ -480,6 +494,20 @@ function AssistantThread({ task, messages, onAsked, onStop, selectionRef, attach
           {serverBusy && (dock ? <Thinking provider={provider} />
                                 : <AgentBand name={name} provider={provider} work={work} since={since} />)}
           {dock && <DockActions messages={messages} expanded={dockExpanded} onNavigate={onDockNavigate} onChanged={onDockChanged} />}
+          {/* THE HAND IT RAISED, and the answers it offered. The agent stops on a real blocker with the
+              question and its choices (selfclose.ASK_LINE); both were recorded and neither was shown, so
+              the owner read a paragraph and typed their answer back by hand (2026-09-15). A choice goes in
+              as their next message - the same road the composer uses, so the turn streams as it always did. */}
+          {!dock && asking && (
+            <div className="tq-aui-asking">
+              <div><b>{asking.kind === "approval_needed" ? `${name} needs your approval` : `${name} asked you`}</b><span>{asking.text}</span></div>
+              <div className="tq-aui-asking-choices">
+                {(asking.choices || []).map((c) => (
+                  <Button key={c} size="small" variant="outlined" onClick={() => onAnswer?.(c)}>{c}</Button>
+                ))}
+              </div>
+            </div>
+          )}
           {!dock && !serverBusy && messages?.some((m) => m.role === "assistant") && (
             <div className="tq-aui-report-action">
               <div><b>Worth running again?</b><span>Creates a daily report from this workflow; adjust its cadence in Reports.</span></div>
@@ -528,10 +556,14 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
   const [connectorId, setConnectorId] = useState("");
   const [model, setModel] = useState("");
   const [attachments, setAttachments] = useState([]);
-  const [threadKey, setThreadKey] = useState(0);
+  const [revision, setRevision] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  // the raised hand this pane has answered: the poll still carries it until the agent's next turn
+  // records `working`, and an answered question must stop offering its buttons at once
+  const [answered, setAnswered] = useState("");
+  const [ownPrompt, setOwnPrompt] = useState(null);
   const [reportBusy, setReportBusy] = useState(false);
   // A browser this pane asked for, before the task row it was mounted with catches up
   const [browserOn, setBrowserOn] = useState(false);
@@ -581,7 +613,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
     if (next === "assistant" && view !== "assistant") {
       try {
         const r = await api.get(`/api/tasks/${task.TaskId}/assistant`);
-        accept(r.data); setThreadKey((n) => n + 1);
+        accept(r.data); setRevision((k) => k + 1);
       } catch (e) { setError(errText(e)); }
     }
     setView(next);
@@ -616,7 +648,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
   /* An answer written while you were somewhere else. The run no longer dies when this pane
      goes away, so when it comes back the conversation may be mid-sentence - or already have
      the reply, filed on the task. Poll while it is busy and show it the moment it lands;
-     threadKey remounts the thread, which is how assistant-ui takes new initial messages. */
+     a revision bump hands them to the thread that is already standing (never a remount - see AssistantThread). */
   // Work in flight on this task that this pane is not driving: an answer being written in another
   // tab - and the one that read as a dead pane, a walk whose session the server is still opening in
   // the background (server._walk_opens). Mount's snapshot lands inside that gap, so a poll gated on
@@ -633,7 +665,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
         const grew = (fresh.messages || []).length !== (data?.messages || []).length;
         const traceChanged = fresh.session?.trace_revision !== data?.session?.trace_revision;
         setData(fresh);
-        if (grew || traceChanged) setThreadKey((k) => k + 1);
+        if (grew || traceChanged) setRevision((k) => k + 1);
       } catch { /* it will still be there next tick */ }
     }, 2500);
     return () => { live = false; clearInterval(timer); };
@@ -646,7 +678,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
     setError(""); setBrowserBusy(true);
     try {
       const { data: fresh } = await api.post(`/api/tasks/${task.TaskId}/assistant/browser`);
-      setBrowserOn(true); accept(fresh); setThreadKey((k) => k + 1);
+      setBrowserOn(true); accept(fresh); setRevision((k) => k + 1);
     } catch (e) { setError(errText(e)); }
     finally { setBrowserBusy(false); }
   };
@@ -688,13 +720,17 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
   // the chat IS the workspace, running or not (generalPane.js) - a session only decides whether
   // there is a terminal to show beside it
   const pane = paneFor(view, !!session);
+  const asking = data?.asking && data.asking.request_id !== answered ? data.asking : null;
+  const answerAsk = (text) => { setAnswered(asking.request_id); setOwnPrompt({ id: `ask:${asking.request_id}`, text }); };
+  const promptUsed = (id) => { if (ownPrompt?.id === id) setOwnPrompt(null); else onPromptUsed?.(id); };
   const thread = (
     <AgentNameCtx.Provider value={name}>
-      <AssistantThread key={`${task.TaskId}-${threadKey}`} task={task} messages={shownMessages}
+      <AssistantThread key={task.TaskId} revision={revision} task={task} messages={shownMessages}
         onAsked={dropAsk} onStop={stopRun} selectionRef={selectionRef}
         attachmentsRef={attachmentsRef} onSent={sent} onClearAttachments={clearAttachments}
         onAttach={() => fileRef.current?.click()} onReport={makeReport} reportBusy={reportBusy}
-        dock={dock} dockExpanded={dockExpanded} prompt={prompt} onPromptUsed={onPromptUsed}
+        dock={dock} dockExpanded={dockExpanded} prompt={ownPrompt || prompt} onPromptUsed={promptUsed}
+        asking={asking} onAnswer={answerAsk}
         onBusyChange={onBusyChange} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
         serverBusy={busy} provider={session?.provider || pickedLabel} name={name} work={work} since={since} />
     </AgentNameCtx.Provider>

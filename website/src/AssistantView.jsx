@@ -31,7 +31,7 @@ import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12, localDay 
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
 import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf } from "./proposalCard.js";
-import { ageText, agoText, arrivals, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, followsItem, hasNextSelection, interactiveCardIndex, keysOf, lastSaidIndex, chipsOf, nextMarkerKey, nextSelectionBody, nextSelectionScope, pendingAlerts, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, levelOf, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
+import { ageText, agoText, arrivals, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, followsItem, hasNextSelection, interactiveCardIndex, keysOf, laneCounted, lastSaidIndex, chipsOf, nextMarkerKey, nextSelectionBody, nextSelectionScope, pendingAlerts, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, levelOf, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
 import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WrapupCard } from "./assistantCards.jsx";
@@ -51,8 +51,10 @@ const isOpenWalk = (t) => !!t && t.SourceRef === "assistant:setup" && !["done", 
 const incoming = (items) => (items || []).filter((i) => i.mid && !["report", "own", "assistant"].includes(i.channel || "email"));
 const waitingLine = (items) => {
   const n = (items || []).length, came = incoming(items).length;
-  const by = [["slipped", "forgotten"], ["landed", "report"], ["fyi", "fyi"]]
-    .map(([w, lane]) => [w, (items || []).filter((i) => i.lane === lane).length]).filter(([, k]) => k);
+  // the counting words come from the one vocabulary (taskuary/lanes.json via funnelPile), not from a
+  // third copy written out here - this line said "landed" while the row beside it said "report"
+  const by = ["forgotten", "report", "fyi"]
+    .map((lane) => [laneCounted(lane), (items || []).filter((i) => i.lane === lane).length]).filter(([, k]) => k);
   return `${n} waiting${came ? ` - ${came} came in` : ""}${by.length ? `, ${by.map(([w, k]) => `${k} ${w}`).join(", ")}` : ""}.`
     + " I'll take you through them one at a time.";
 };

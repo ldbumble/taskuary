@@ -10,6 +10,7 @@ until the separate canonical Unread/read-state cutover. All remains chronologica
 """
 import hashlib, json, re, threading, time
 from datetime import datetime, timedelta
+from pathlib import Path
 from loguru import logger
 
 from .store import task_ref
@@ -17,20 +18,25 @@ from .assistant import _ts, _dt, _short, _cut, _gist, _agenda, _OOO
 from .funnel_presentation import present as _present
 from .processing_order import attention_band, priority_rank
 
-LANES = ('blocked', 'time', 'approve', 'asked', 'queued', 'broken', 'forgotten', 'report', 'fyi', 'working')
-# the lane's one word on the card, and which role colours its dot (theme.jsx ROLES)
+# ONE VOCABULARY, in taskuary/lanes.json - the words, roles and marks a lane wears, loaded here and
+# imported by the desktop (website/src/funnelPile.js) from the same file. They were two hand-kept
+# tables in two languages and had already drifted: this file said a report lane reads 'landed' while
+# the page said 'report', and nothing could tell you which was the mistake (the owner, 2026-09-15:
+# "we built one idea and then it was changed... it's in a bunch of places").
+#
 # 'waving', not 'waiting': the page has said waving since the pile was drawn, and the two
-# vocabularies must say one thing (the owner, 2026-09-14). A waiting agent is passive; this
+# vocabularies must say one thing (the owner, 2026-09-14). A waiting agent is passive; that
 # lane is the one where somebody is trying to get your attention.
-LANE_WORDS = {'blocked': ('agent waving', 'you'), 'broken': ('a check failed', 'bad'), 'time': ('coming up', 'working'), 'approve': ('needs your yes', 'you'),
-              'asked': ('asked you', 'working'), 'queued': ('waiting to start', 'working'), 'forgotten': ('slipped', 'info'), 'report': ('landed', 'info'), 'fyi': ('fyi', None),
-              'working': ('agent working', 'working')}   # visible in band 5 until the agent stops or asks
-# A chat cannot draw an icon, so it wears the emoji the desktop already uses - these ARE the marks in
-# website/src/funnelPile.js (LANE_META/KIND_META), and the two tables must stay in step. A few KINDS
-# outrank their lane: an agent's own finish and a report you set up share the 'report' lane.
-LANE_MARKS = {'blocked': '👋', 'time': '⏱', 'approve': '✉️', 'broken': '🛠', 'asked': '🙋', 'queued': '⏳',
-              'forgotten': '🧵', 'report': '📄', 'fyi': '👀', 'working': '⚙️'}
-KIND_MARKS = {'agentdone': '✅', 'wrapup': '🗂'}
+_VOCAB = json.loads((Path(__file__).parent / 'lanes.json').read_text(encoding='utf-8'))
+LANES = tuple(l['key'] for l in _VOCAB['lanes'])
+LANE_WORDS = {l['key']: (l['word'], l['role']) for l in _VOCAB['lanes']}   # the word, and the theme role its dot takes
+# ...and the form that COUNTS. "3 landed" is English; "3 report" is not - the only reason one lane
+# ever carried two words. Everything else counts under the word it wears.
+LANE_COUNTED = {l['key']: l.get('counted') or l['word'] for l in _VOCAB['lanes']}
+# A chat cannot draw an icon, so it wears the emoji the desktop uses - the same entry, not a copy.
+# A few KINDS outrank their lane: an agent's own finish and a report you set up share the 'report' lane.
+LANE_MARKS = {l['key']: l['mark'] for l in _VOCAB['lanes']}
+KIND_MARKS = {k['key']: k['mark'] for k in _VOCAB['kinds']}
 # ...and where it came from. The desktop paints a brand logo here; a chat gets one emoji per source,
 # and a source we have no mark for gets NONE - an invented glyph says something untrue about it.
 CHANNEL_MARKS = {'email': '📧', 'teams': '👥', 'slack': '💬', 'telegram': '✈️', 'whatsapp': '📱', 'imessage': '📱',
@@ -312,6 +318,15 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
         # Anything incoming which reached the Timeline and was not handled above is unread
         # information.  Triage may label it automated/promo/feed/filed/assistant, but classifying
         # it is not the same as the owner reading it.
+        # ...except a row NOTHING judged. It reached no verdict, so it cannot wear the word for
+        # "somebody told you something; nothing to do" - which is the exact face the error state was
+        # added to keep it out of (ingest, PW-036). Same quiet band, honest word, and the Retry is
+        # one tap in (the owner, 2026-09-15: "were they put to fyi even with a error? that's a bad bug").
+        if cat == 'error':
+            out.append(_item(f"msg:{r['MessageId']}", 'fyi', 'unjudged', subj,
+                             why=r.get('RouteReason') or 'triage could not classify this - nothing was started', **base))
+            if group and threads.get(group) is None: threads[group] = out[-1]
+            continue
         out.append(_item(f"msg:{r['MessageId']}", 'fyi', 'fyi', subj, why=r.get('RouteReason') or 'a person told you something; nothing to do', **base))
         if group and out and threads.get(group) is None: threads[group] = out[-1]
     # ONE brief leads the day. `brief_today` is true of every digest run made today, and the digest
@@ -435,6 +450,25 @@ def agent_found(store, tid) -> str:
     if not rep: return ''
     m = _REPORT_SUMMARY.search(rep['Body'])
     return _short(m.group(1) if m else rep['Body'].split('\n', 1)[-1], 300)
+
+
+def paused_conversation(store, item: dict) -> dict:
+    """Render resumable general work as a paused agent conversation, never as an unowned task."""
+    tid = item.get('tid')
+    if not tid or item.get('lane') == 'working': return item
+    task = store.get_task(tid) or {}
+    if task.get('Status') not in ('open', 'waiting', 'in_progress') or not store.saved_session(tid): return item
+    try:
+        from . import general
+        if not general.handles(task) or tid in general.OPENING or general.session_for(tid): return item
+    except Exception:
+        return item
+    replies = [c for c in store.list_comments(tid) if c.get('ActorType') == 'assistant_agent']
+    if not replies: return item
+    last = str(replies[-1].get('Body') or '').strip()
+    return item | {'key': f'agent:{tid}', 'kind': 'agent', 'lane': 'blocked', 'paused': True,
+                   'agent': 'assistant', 'mode': 'assistant', 'tail': [last[:600]] if last else [],
+                   'why': 'this conversation paused when Taskuary stopped; its saved context is ready to resume'}
 
 
 def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
@@ -723,6 +757,9 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
     # whether it asked) - so its item replaces the row's
     agents = {a['key']: a for a in from_agents(store, live_state=live_state, now=now)}
     items = [agents.pop(i['key']) | {'mid': i.get('mid')} if i['key'] in agents else i for i in items] + list(agents.values())
+    # A saved general-agent conversation survived the restart even though its in-memory worker did
+    # not. Keep it on the agent road, explicitly paused, with the existing Resume action.
+    items = [paused_conversation(store, i) if i.get('kind') != 'agent' else i for i in items]
     # ...and the mail that STARTED a task whose agent is now waiting is not a second item: the
     # agent's question is the thing to answer, and answering it is answering the mail
     parked = {i['tid'] for i in items if i['kind'] == 'agent'}
@@ -1237,7 +1274,7 @@ def summary(items: list, coming: bool = True) -> str:
     """One line for the concierge's prompt: how much is left and of what. `coming` names the next
     few - left OUT when one item is on the table, so a small model cannot wander off to them."""
     if not items: return 'THE PIPE IS EMPTY - nothing else needs the owner right now.'
-    parts = [f"{n} {LANE_WORDS[l][0]}" for l in LANES if (n := sum(1 for i in items if i['lane'] == l))]
+    parts = [f"{n} {LANE_COUNTED[l]}" for l in LANES if (n := sum(1 for i in items if i['lane'] == l))]
     nxt = [i for i in items if not i.get('settling')][:3] if coming else []
     return (f"LEFT IN THE PIPE: {len(items)} - {', '.join(parts)}."
             + (' Coming next: ' + '; '.join(f"{i['who'] + ' - ' if i.get('who') else ''}{i['title']} ({LANE_WORDS[i['lane']][0]}{', shown already, still waiting' if i.get('surfaced') else ''})" for i in nxt) if nxt else ''))

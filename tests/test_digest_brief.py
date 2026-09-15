@@ -161,15 +161,15 @@ if __name__ == '__main__': unittest.main()
 
 
 class PromptOrder(unittest.TestCase):
-    def test_in_flight_leads_and_the_old_stock_prompt_still_upgrades(self):
-        """Owner, 2026-09-02: numbers on top, then in flight, people want, follow-ups, ideas. And the
-        prompt that shipped before must stay recognisable, or an untouched install keeps the old order."""
+    def test_errors_then_meetings_lead_and_the_old_stock_prompt_still_upgrades(self):
+        """The current reading order is explicit and prior stock text still upgrades safely."""
         from taskuary import digest
         p = digest.PROMPT
-        self.assertLess(p.index('THE WINDOW IN NUMBERS'), p.index('In flight'))
-        self.assertLess(p.index('In flight'), p.index('People want'))
-        self.assertLess(p.index('People want'), p.index('Follow up'))
-        self.assertLess(p.index('Follow up'), p.index('New ideas'))
+        self.assertLess(p.index('Errors -'), p.index('Meetings today -'))
+        self.assertLess(p.index('Meetings today -'), p.index('People want -'))
+        self.assertLess(p.index('People want -'), p.index('In flight -'))
+        self.assertIn('numbered list (1., 2., 3.', p)
+        self.assertIn(digest._PROMPT_2026_09_02_MEMORY, digest.OLD_PROMPTS)
         self.assertIn(digest._PROMPT_2026_08_31_MEMORY, digest.OLD_PROMPTS)
         self.assertIn('What slipped', digest._PROMPT_2026_08_31_MEMORY)
         self.assertNotIn('What slipped', p)

@@ -1,0 +1,98 @@
+{
+  "_": "The lane vocabulary, once. Python (funnel.py) and the desktop (funnelPile.js) both build their tables from this file, so a word cannot mean one thing on the rail and another in chat. `counted` is the plural-counting form for prose and defaults to `word`.",
+  "lanes": [
+    {
+      "key": "blocked",
+      "word": "agent waving",
+      "role": "you",
+      "mark": "👋",
+      "hint": "an agent stopped and is waiting on you — it is blocking work",
+      "loud": true
+    },
+    {
+      "key": "time",
+      "word": "coming up",
+      "role": "working",
+      "mark": "⏱",
+      "hint": "a meeting inside two hours, or an urgent sender"
+    },
+    {
+      "key": "approve",
+      "word": "needs your yes",
+      "role": "you",
+      "mark": "✉️",
+      "hint": "a reply or an action is drafted and waits for you"
+    },
+    {
+      "key": "asked",
+      "word": "asked you",
+      "role": "working",
+      "mark": "🙋",
+      "hint": "a person asked you for something and nobody is on it"
+    },
+    {
+      "key": "queued",
+      "word": "waiting to start",
+      "role": "working",
+      "mark": "⏳",
+      "hint": "handed to an agent and not started yet"
+    },
+    {
+      "key": "broken",
+      "word": "a check failed",
+      "role": "bad",
+      "mark": "🛠",
+      "hint": "a report or workflow you set up could not run - the cause is in it"
+    },
+    {
+      "key": "unjudged",
+      "word": "triage failed",
+      "role": "bad",
+      "mark": "⚠️",
+      "hint": "triage could not classify this — nothing was started; open it and retry, or choose what it is"
+    },
+    {
+      "key": "forgotten",
+      "word": "slipped",
+      "role": "info",
+      "mark": "🧵",
+      "hint": "the ask that slipped, the promise you made, the thread gone quiet"
+    },
+    {
+      "key": "report",
+      "word": "report",
+      "role": "info",
+      "mark": "📄",
+      "hint": "a report you set up landed, or an agent finished a job",
+      "counted": "landed"
+    },
+    {
+      "key": "fyi",
+      "word": "fyi",
+      "role": null,
+      "mark": "👀",
+      "hint": "a person told you something — read it or don't"
+    },
+    {
+      "key": "working",
+      "word": "agent working",
+      "role": "working",
+      "mark": "⚙️",
+      "hint": "an agent has it — nothing for you until it stops or asks; it moves up when it needs your input"
+    }
+  ],
+  "kinds": [
+    {
+      "key": "agentdone",
+      "word": "agent finished",
+      "role": "working",
+      "mark": "✅"
+    },
+    {
+      "key": "wrapup",
+      "word": "close it?",
+      "role": "info",
+      "mark": "🗂"
+    }
+  ]
+}

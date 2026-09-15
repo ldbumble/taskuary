@@ -247,3 +247,19 @@ class VotedOn(unittest.TestCase):
         blk = handbook.block(s, 'run the AP importer tests')
         self.assertIn(f"#{p['LoreId']} [importers] (+0)", blk)
         self.assertIn('--upvote <id>', blk)
+
+    def test_top_promotes_votes_then_discussion(self):
+        s = MemoryStore()
+        discussed = handbook.post(s, 'The importer has a documented retry window', '', 'importers', author='coder')
+        s.lore_comment(discussed['LoreId'], 'Confirmed during the September close.', 'analyst')
+        s.lore_comment(discussed['LoreId'], 'The same window held during October.', 'owner')
+        quiet = handbook.post(s, 'The importer emits a completion marker', '', 'importers', author='coder')
+
+        # Discussion promotes an otherwise equal entry, even when the quiet one is newer.
+        self.assertEqual([p['LoreId'] for p in s.lore_posts(sort='top')][:2],
+                         [discussed['LoreId'], quiet['LoreId']])
+        self.assertEqual(s.lore_posts(sort='top')[0]['Comments'], 2)
+
+        # Agreement remains the primary value signal; comments are its forum-style tie-breaker.
+        handbook.vote(s, quiet['LoreId'], 1, 'analyst')
+        self.assertEqual(s.lore_posts(sort='top')[0]['LoreId'], quiet['LoreId'])

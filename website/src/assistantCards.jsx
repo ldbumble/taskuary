@@ -16,6 +16,8 @@ import { gistFor } from "./fyiRow.js";
 import { runOperation } from "./taskOps.js";
 import { ChannelIcon, TaskuaryMark, cleanText, fmtDateTime } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
+import DigestText from "./DigestText.jsx";
+import TodayMeetingsStrip from "./TodayMeetingsStrip.jsx";
 import { ROLES, ASSISTANT } from "./theme.jsx";
 import { laneMeta, ageText, agoText, assistantFocus } from "./funnelPile.js";
 import { sendBlockLine, draftState } from "./sendState.js";
@@ -62,9 +64,10 @@ function FullText({ mid, revision }) {
   const body = cleanText(doc.BodyText || "");
   const cut = body.indexOf("\n--- raw data ---");
   const text = cut >= 0 ? body.slice(0, cut) : body;
+  const morning = doc.SourceName === "Morning digest" || /^Morning digest\b/i.test(doc.Subject || "");
   return (
     <div className="tq-card-full">
-      {looksMd(text) ? <Md text={text} /> : (text || "(empty)")}
+      {morning ? <DigestText text={text} /> : looksMd(text) ? <Md text={text} /> : (text || "(empty)")}
       {doc.SourceLink && <div className="tq-card-note"><a href={doc.SourceLink} target="_blank" rel="noreferrer" style={{ color: "#55697a" }}>open the original</a></div>}
     </div>
   );
@@ -98,7 +101,12 @@ function CombinedTaskText({ card }) {
   // nothing (the owner, 2026-09-11: "seems duplicated... boxes should be for specific items in
   // the task list"). A box now means exactly one thing: an item you can tick. The summary stands
   // in only when there are no items, so a card with no list still says what the job is.
-  const items = doc.checklist || [];
+  const storedItems = doc.checklist || [];
+  const ownTask = messages.length === 1 && messages[0]?.Channel === "own";
+  // A task created from the Assistant used to have no checklist at all. Give the older records the
+  // same one-item list shape as newly created ones without inventing a second copy of their words.
+  const items = storedItems.length ? storedItems : (ownTask && taskText
+    ? [{ id: "task", text: taskText, done: false, displayOnly: true }] : []);
   const task = (taskText || items.length) ? (
     <div className="tq-task-focus" role="group" aria-label="Task to do">
       <div className="tq-task-focus-label">{items.length ? "Task list" : "Task"}
@@ -115,7 +123,12 @@ function CombinedTaskText({ card }) {
       </div>}
     </div>
   ) : null;
-  if (messages.length <= 1) return <>{task}<FullText mid={card?.mid} revision={card?.presentation_revision} /></>;
+  const onlyBody = cleanText(messages[0]?.BodyText || "").toLocaleLowerCase();
+  const taskWords = cleanText(taskText).toLocaleLowerCase();
+  // An `own` source message is the receipt for creating the task. When its body is exactly the task
+  // text, showing it beneath the task list says the same sentence a third time and adds no context.
+  const repeatReceipt = ownTask && onlyBody && onlyBody === taskWords;
+  if (messages.length <= 1) return <>{task}{!repeatReceipt && <FullText mid={card?.mid} revision={card?.presentation_revision} />}</>;
   return <>
     {task}
     <div className="tq-card-full tq-card-context">
@@ -256,7 +269,7 @@ export function AgentCard({ card, onDone, onOpenTask }) {
   // unless the owner explicitly asks to see it; opening a regular API agent inline made the
   // orchestration chat look as though it had silently changed identities. Its OWN chat is not a
   // hand-off, and folding that leaves the card with nothing to read and nowhere to answer.
-  const [live, setLive] = useState(chat);
+  const [live, setLive] = useState(chat && !card.paused);
   const answer = async () => {
     if (!text.trim()) return;
     setBusy(true); setErr("");
@@ -266,6 +279,14 @@ export function AgentCard({ card, onDone, onOpenTask }) {
   };
   const working = card.lane === "working";
   const who = chat ? "assistant" : "agent";
+  const resume = async () => {
+    setBusy(true); setErr("");
+    try {
+      await api.post(`/api/tasks/${card.tid}/resume`);
+      onOpenTask?.(card.tid, { start: false });
+    } catch (e) { setErr(errText(e)); }
+    setBusy(false);
+  };
   // ...and the two ways an agent ENDS, in the chat, where the owner is looking (2026-09-03: "we need
   // to button to close down agent in the chat. it's finished.."). Wrapping up is the whole ending -
   // the transcript becomes the report, proposals become reviews, the reply gets drafted, the task
@@ -282,8 +303,9 @@ export function AgentCard({ card, onDone, onOpenTask }) {
     setEnding("");
   };
   return (
-    <CardShell card={card} kicker={working ? `the ${who} is working again` : card.asking ? `the ${who} asked` : `the ${who} stopped`} title={card.title}
-      sub={`${card.working || card.agent || who} · ${working ? "back at it - nothing for you until it stops" : card.asking ? "waiting on your answer" : chat ? "waiting on you" : "parked at its prompt"}`} err={err}>
+    <CardShell card={card} kicker={working ? `the ${who} is working again` : card.paused ? "conversation paused" : card.asking ? `the ${who} asked` : `the ${who} stopped`} title={card.paused ? null : card.title}
+      sub={`${card.working || card.agent || who} · ${working ? "back at it - nothing for you until it stops" : card.paused ? "saved after Taskuary stopped - ready to resume" : card.asking ? "waiting on your answer" : chat ? "waiting on you" : "parked at its prompt"}`} err={err}>
+      {card.paused && card.tid && <CombinedTaskText card={card} />}
       {chat && live ? (
         <div className="tq-card-chat" style={{ height: big ? 640 : 340 }}>
           <React.Suspense fallback={<div className="tq-card-tail">Opening the conversation…</div>}>
@@ -295,7 +317,7 @@ export function AgentCard({ card, onDone, onOpenTask }) {
           <TerminalPane sid={card.sid} height={big ? "640px" : "340px"} autoFocus={false} />
         </div>
       ) : !!card.tail?.length && <div className="tq-card-tail">{card.tail.join("\n")}</div>}
-      {(chat || card.sid) && (
+      {(chat || card.sid) && !card.paused && (
         <div className="tq-card-note" style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <span>{!live ? (chat ? "Conversation folded." : "Screen folded.")
             : chat ? "This is the conversation — answer it here." : "This is the agent's own screen — click in and type to answer it there."}</span>
@@ -307,12 +329,14 @@ export function AgentCard({ card, onDone, onOpenTask }) {
       )}
       {/* the chat above already has a composer, and it talks to the assistant. This box queues into
           the WAITING ROOM, which is a terminal's letterbox - two of them is two different sends. */}
-      {!(chat && live) && <TextField fullWidth multiline minRows={1} maxRows={5} value={text} onChange={(e) => setText(e.target.value)}
+      {!card.paused && !(chat && live) && <TextField fullWidth multiline minRows={1} maxRows={5} value={text} onChange={(e) => setText(e.target.value)}
         placeholder={card.asking ? "Or answer here — it goes straight in, it is waiting for it" : "Tell it what to do next"}
         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); answer(); } }}
         sx={{ mt: 1, "& textarea": { fontSize: 12.5 } }} />}
       <div className="tq-card-actions">
-        {!(chat && live) && <Button size="small" variant="contained" disableElevation disabled={busy || !text.trim()} onClick={answer} sx={primary}>{busy ? "Sending…" : "Answer"}</Button>}
+        {card.paused
+          ? <Button size="small" variant="contained" disableElevation disabled={busy} onClick={resume} sx={primary}>{busy ? "Resuming…" : "Resume conversation"}</Button>
+          : !(chat && live) && <Button size="small" variant="contained" disableElevation disabled={busy || !text.trim()} onClick={answer} sx={primary}>{busy ? "Sending…" : "Answer"}</Button>}
         <span className="sp" />
         <Button size="small" onClick={() => onOpenTask?.(card.tid, { start: false })} sx={faint}>
           {chat ? "Open the task" : "Open agent workspace"}</Button>
@@ -360,6 +384,7 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone }) {
   return (
     <CardShell card={card} kicker={card.bad ? "a report failed" : "a report landed"} title={card.title} sub={agoText(card.when)} err={err}>
       {card.bad && !full && <div className="tq-card-excerpt">The run failed — the cause is in the report.</div>}
+      {full && card.brief_today && <TodayMeetingsStrip />}
       {full && card.mid && <FullText mid={card.mid} revision={card.presentation_revision} />}
       <div className="tq-card-actions">
         <Button size="small" variant="contained" disableElevation onClick={() => setFull((v) => !v)} sx={primary}>{full ? "Fold it" : "Read it"}</Button>
@@ -480,7 +505,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface })
     setBusy("");
   };
   return (
-    <CardShell card={card} kicker={card.kind === "fyi" ? "fyi" : suggestedKind === "coding" ? "coding · nobody on it" : card.kind === "todo" ? "on your list" : "asked you"} title={card.title}
+    <CardShell card={card} kicker={card.kind === "fyi" ? "fyi" : suggestedKind === "coding" ? "coding · nobody on it" : card.kind === "todo" ? "on your list" : "asked you"} title={card.channel === "own" ? null : card.title}
       sub={`${card.who || "someone"} · ${agoText(card.when)}`} err={err}>
       {!full && card.preview && <div className="tq-card-excerpt">{card.preview}</div>}
       {full && card.mid && <CombinedTaskText card={card} />}

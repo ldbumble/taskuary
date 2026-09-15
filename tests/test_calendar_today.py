@@ -55,9 +55,10 @@ class TodayTests(unittest.TestCase):
             lines = cal.render_today(t)
             self.assertEqual(lines, ['  9:00-9:30 AM · Standup · with Sam, Priya · online'])       # the owner's clock, not the server's
             text = digest.gather(s, 1)
-        self.assertTrue(text.splitlines()[2].startswith('MEETINGS TODAY'))    # after the NOW line, meetings lead
+        self.assertEqual(text.splitlines()[2], 'MEETINGS TODAY:')             # internal prompt explanation stays hidden
+        self.assertNotIn("'with' = the other people", text)
         self.assertIn('Standup · with Sam, Priya', text)
-        self.assertIn('one bullet per meeting from MEETINGS TODAY', digest.PROMPT)
+        self.assertIn('one item per meeting from MEETINGS TODAY', digest.PROMPT)
         self.assertTrue(any('under 400 words' in p and 'By the tags' in p for p in digest.OLD_PROMPTS))   # the previous stock prompt upgrades itself
 
     def test_a_calendar_that_cannot_be_read_says_so_in_the_digest(self):

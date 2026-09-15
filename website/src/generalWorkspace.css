@@ -16,6 +16,11 @@
 .tq-aui-report-action > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .tq-aui-report-action b { color: #4d514b; font-size: 12px; }
 .tq-aui-report-action span { color: #858078; font-size: 10.5px; }
+.tq-aui-asking { width: min(760px, 92%); margin: 2px auto 10px; padding: 10px 12px; border: 1px solid #d8c9a8; border-left: 3px solid #b08b4f; border-radius: 11px; background: #fbf7ee; display: flex; align-items: center; gap: 12px; }
+.tq-aui-asking > div:first-of-type { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tq-aui-asking b { color: #4d514b; font-size: 12px; }
+.tq-aui-asking span { color: #6b665e; font-size: 11px; }
+.tq-aui-asking-choices { display: flex; gap: 6px; flex-wrap: wrap; flex-shrink: 0; }
 .tq-aui-progress { margin: 0 0 8px; border: 1px dashed #ddd7cd; border-radius: 9px; color: #77766f; font-size: 11.5px; }
 .tq-aui-progress summary { cursor: pointer; padding: 6px 9px; font-weight: 650; color: #676b64; }
 .tq-aui-progress > div { padding: 0 9px 8px; white-space: pre-wrap; line-height: 1.45; }
@@ -112,4 +117,5 @@
 /* on a phone the recurring-report offer stacks: side by side the text squeezed into a one-word column */
 @media (max-width: 600px) {
   .tq-aui-report-action { flex-direction: column; align-items: stretch; gap: 10px; }
+  .tq-aui-asking { flex-direction: column; align-items: stretch; gap: 8px; }
 }

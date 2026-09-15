@@ -63,6 +63,21 @@ export const ROADS = [
   { key: "general", label: "chat", hint: "talk it through with the assistant" },
   { key: "task", label: "task", hint: "yours - nothing works it" },
 ];
+// ...and the two verdicts that are NOT roads, because triage never reached them: your own standing
+// rule turned the message away, or the model was down and nothing judged it at all. Neither writes
+// a `triage:` line, so roadOf below has never had a word for either and the row went out bare - a
+// policy ignore on every ordinary day, not only when the model is sick (the owner, 2026-09-15:
+// "on timeline items are missing tags??"). Read off `Decision`, the routing verdict itself, not
+// off the reason prose.
+export const VERDICTS = [
+  { key: "ignored", label: "ignored", hint: "you said this sender is not a task - nothing was started" },
+  { key: "error", label: "triage failed", hint: STATES.error.hint },
+];
+export const verdictOf = (row) => (row?.MsgStatus === "error" ? "error"
+  // an error outranks the road even on a follow-up that has a task (PW-036/037): nothing judged
+  // THIS message, whatever the thread it landed on was once called.
+  : row?.Decision === "ignore" || row?.MsgStatus === "ignored" ? "ignored" : null);
+
 // which road the route line says it took. `kind` decides coding vs general and rides on the
 // task, so the two are read from different places on purpose.
 export const roadOf = (sel) => {

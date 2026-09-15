@@ -1163,10 +1163,13 @@ class NeverWorkTests(unittest.TestCase):
         self.assertIn('AI triage failed', s.message_routes(out['message_id'])[-1]['Reason'])
         self.assertIn('connector 500', s.get_settings().get('triage_last_error') or '')
         # A failed classifier must not invent work, but the arrival is still unread information.
-        # Filing/category is not a read receipt: it remains in the shared All/Unread inventory as
-        # an FYI explaining the connector failure until the owner reads or handles it.
+        # Filing/category is not a read receipt: it remains in the shared All/Unread inventory
+        # until the owner reads or handles it - quiet, at the same level as an fyi.
+        # It does not wear the WORD fyi, though: that word claims a verdict was reached, and this
+        # line asserted the exact face PW-036 exists to prevent (the owner, 2026-09-15: "were they
+        # put to fyi even with a error? that's a bad bug"). Same band, honest word.
         items = pile(s)
-        self.assertEqual([(i['kind'], i['lane'], i.get('tid')) for i in items], [('fyi', 'fyi', None)])
+        self.assertEqual([(i['kind'], i['lane'], i.get('tid')) for i in items], [('fyi', 'unjudged', None)])
         self.assertIn('AI triage failed', items[0]['why'])
 
     def test_a_brain_that_answers_nonsense_files_it_rather_than_guessing(self):

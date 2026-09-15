@@ -563,6 +563,8 @@ class SetupAndTroubleTests(unittest.TestCase):
         self.assertEqual((t['Kind'], t['Status'], t['Source']), ('general', 'open', 'assistant'))
         self.assertEqual(out['title'], "report that pulls last month's Zoho invoices every Monday"); self.assertEqual(t['Title'][:6], 'Report')
         self.assertIn('Zoho invoices', t['Summary'])
+        self.assertEqual([i['text'] for i in s.task_checklist(out['taskId'])],
+                         ["set up a report that pulls last month's Zoho invoices every Monday"])
         self.assertIn('needs:browser', t['Tags'])          # the walkthrough owns the visible browser, not a coder
         self.assertFalse(spawn.called)                       # nobody is sent into a checkout
         # said in the chat, a set-up is a PROPOSAL: the walk-through opens on the click, never on the words (here the
@@ -866,7 +868,7 @@ class ApiTests(unittest.TestCase):
             self.assertEqual([i['key'] for i in pile['items']], [f'review:{r}'])
             # nine lanes now: 'broken' was added between approve and asked, so a failed check ranks
             # above a person's ask instead of behind every report (funnel.LANES)
-            self.assertEqual([l['n'] for l in pile['lanes']], [0, 0, 1, 0, 0, 0, 0, 0, 0, 0])   # ten lanes since 'queued' (2026-09-07)
+            self.assertEqual([l['n'] for l in pile['lanes']], [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0])   # eleven since 'unjudged' (2026-09-15)
             nxt = c.post('/api/concierge/next', json={}).json()
             self.assertEqual(nxt['item']['rid'], r)
             self.assertEqual(nxt['say'], 'Dana wrote on email (5h ago): "Export still broken". Since then: triage judged it a reply to write. From you: approve the draft below, or redraft it.')      # the facts, instant (2026-09-07)

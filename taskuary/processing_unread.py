@@ -127,8 +127,11 @@ def card_for(store, item, compact, live_state, now, states=None):
     elif (row.get('Working') or persisted_working) and active and not review:
         who = row.get('Working') or 'agent'
         card.update(kind='agent', lane='working', working=who, agent=who)
+    elif active and not review:
+        card = funnel.paused_conversation(store, card)
     # Worker attention is not a read operation. An active worker remains visible.
-    unread = not closed and bool((read['unread'] and not read.get('deferred')) or (active and (worker or row.get('Working') or persisted_working or queued)))
+    unread = not closed and bool((read['unread'] and not read.get('deferred')) or
+                                 (active and (worker or row.get('Working') or persisted_working or queued or card.get('paused'))))
     # the arrow means triage moved it up: an idea or a task raised to "asked you", or an urgent ask
     card['promoted'] = bool(card.get('urgent_request')) or (card['lane'] == 'asked' and (card['kind'] in ('idea', 'todo') or row.get('Channel') == 'assistant'))
     card.update(key='processing:' + item['item_id'], processing_id=item['item_id'],

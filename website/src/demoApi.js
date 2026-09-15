@@ -101,7 +101,8 @@ const read = (url) => {
     const all = hubRows(qs.status === "removed");
     let rows = all.filter((r) => (!qs.topic || r.Topic === qs.topic) && (!qs.kind || r.Kind === qs.kind)
       && (!qs.q || `${r.Title} ${r.Body}`.toLowerCase().includes(qs.q.toLowerCase())));
-    if (qs.sort === "top") rows = [...rows].sort((a, b) => (b.Score || 0) - (a.Score || 0));
+    if (qs.sort === "top") rows = [...rows].sort((a, b) =>
+      (b.Score || 0) - (a.Score || 0) || (b.Comments || 0) - (a.Comments || 0));
     return clone({ ...hubBox(), data: rows });
   }
   m = p.match(/^\/api\/(?:hub|handbook)\/(\d+)$/);

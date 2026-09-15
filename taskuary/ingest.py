@@ -471,6 +471,12 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
     return intent, fail
 
 
+def _stored_verdict(intent: dict | None) -> dict | None:
+    """The usable structured triage answer, without failure-only transport fields."""
+    if not intent or intent.get('degraded'): return None
+    return {k: v for k, v in intent.items() if k not in ('raw_output', 'parse_error', 'degraded')}
+
+
 def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only: bool = False) -> dict:
     """file_only = this connection is a FEED, not a trigger: the item is shown on the
     timeline and nothing else happens to it - no triage, no AI call, no task. It is a
@@ -576,7 +582,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         if follow and follow.get('intent') == 'fyi' and not follow.get('degraded'):
             mid = _land(store, msg, tid, 'filed')
             store.add_route(mid, tid, 'attach', r.get('score'),
-                            f"triage: fyi - {follow.get('why') or 'nothing to do'} · kept on {task_ref(tid)} for the chain", [], 'triage')
+                            f"triage: fyi - {follow.get('why') or 'nothing to do'} · kept on {task_ref(tid)} for the chain", [], 'triage',
+                            verdict=_stored_verdict(follow))
             store.add_comment(tid, actor, 'agent', f"New {msg.get('channel')} from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''} - fyi, nothing to do")
             logger.info(f"ingest: filed onto {task_ref(tid)} as fyi - {msg.get('subject') or ''}")
             return {'status': 'filed', 'task_id': tid, 'message_id': mid}
@@ -673,7 +680,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         if intent['intent'] == 'fyi':
             mid = _land(store, msg, None, 'filed')
             store.add_route(mid, None, 'file', None,
-                            f"triage: fyi - {intent.get('why') or 'informational'}" + _notes_note(), [], 'triage')
+                            f"triage: fyi - {intent.get('why') or 'informational'}" + _notes_note(), [], 'triage',
+                            verdict=_stored_verdict(intent))
             return {'status': 'filed', 'task_id': None, 'message_id': mid}
         # a question is reply-needed whatever the channel can carry (PW-042): sending capability
         # decides whether the draft can be SENT from here, never whether it is written - it used to
@@ -717,7 +725,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             mid = _land(store, msg, twin, 'routed')
             store.add_route(mid, twin, 'attach', 1.0,
                             f"attached: {msg.get('from_email')} has already asked this and {task_ref(twin)} is still "
-                            f"open - the same ask on a new thread is not a second task" + _notes_note(), [], 'triage')
+                            f"open - the same ask on a new thread is not a second task" + _notes_note(), [], 'triage',
+                            verdict=_stored_verdict(intent))
             store.add_comment(twin, actor, 'agent',
                               f"Again from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''} - the same ask, kept here")
             if intent.get('checklist'): store.merge_task_checklist(twin, intent['checklist'], 'triage')
@@ -802,7 +811,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     # verdict leads (what the classifier decided and why), routing explains new-vs-attached,
     # and the tail says what happened NEXT - "it's a task" without "and who is working it"
     # answered a question nobody asked
-    reason, verdict = r['reason'], None
+    reason = r['reason']
+    verdict = _stored_verdict(follow) if r['decision'] == 'attach' and follow else None
     if r['decision'] != 'attach':
         # every kind names its OWN ending. Without the two lines in the middle a general or a
         # task fell through to "sent to the coding agent" - which nothing had done - and the
@@ -819,9 +829,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                   + f" · {r['reason']} · {act}")
         # the verdict itself, kept: the route row has always held what triage DECIDED in prose,
         # which nothing but a person can read. A correction is only learnable against the answer
-        # it corrected, so the answer goes on file here - see routingmemory. An `attach` has no
-        # fresh verdict to keep (the task it joins already has one), hence inside the guard.
-        verdict = {k: v for k, v in intent.items() if k not in ('raw_output', 'parse_error')}
+        # it corrected, so the answer goes on file here - see routingmemory. An attached message
+        # keeps its own verdict above for the Timeline, while store.task_verdict deliberately
+        # continues to read the task-creating verdict for correction learning.
+        verdict = _stored_verdict(intent)
     store.add_route(mid, tid, r['decision'], r['score'], reason, r['candidates'], actor, verdict=verdict)
     logger.info(f"ingest: {r['decision']} -> {task_ref(tid)}")
     # the timeline pushed INTO a chat: 'needs_me' pings only what is waiting on YOU - a question
@@ -1599,3 +1610,58 @@ def _fields(msg, task_id):
             # kept so a verdict can be replayed against the lines that decided it (evalset.py)
             'RecipientsJson': json.dumps({'to': list(msg.get('to') or []), 'cc': list(msg.get('cc') or [])})
                               if (msg.get('to') or msg.get('cc')) else None}
+
+
+# HOW MANY OF THE STRANDED ROWS ONE SYNC WILL TRY. The sweep stops at the first failure anyway, so
+# this only caps a genuine backlog: 25 messages is one bad hour of mail, and a cycle is minutes away.
+RETRY_SWEEP = 25
+# ...and how many times ONE row is retried before it is left to the owner's own button. An outage is
+# over in one or two cycles; a row that keeps failing after this is failing for its own reasons, and
+# retrying it every cycle forever would spend a call each time to learn the same thing.
+RETRY_TRIES = 4
+
+
+def retry_failed_triage(store, llm=None, limit: int = RETRY_SWEEP) -> int:
+    """Run the rows nothing ever judged through triage again, now that there is a brain to ask.
+
+    Retry existed only as a button on one opened row, so an outage stranded everything it touched:
+    the brain came back minutes later and judged only what arrived AFTER it, while the messages it
+    had failed on sat wearing no verdict until somebody noticed and clicked each one (the owner,
+    2026-09-15: "we should also retry the ones that triage failed if it becomes available on next
+    sync no?").
+
+    Cheap when the brain is still down: the FIRST failure ends the sweep, so a dead endpoint costs
+    one call a cycle rather than one per stranded row. Oldest first, because that is the order the
+    Timeline reads and the order the owner would have clicked. claim_retriage is the same
+    compare-and-set the button uses, so a sweep and a click cannot both triage one message.
+    """
+    if llm is None: return 0
+    stranded = store.stranded_triage_failures(limit)
+    done = 0
+    for row in stranded:
+        if (row.get('Tries') or 0) >= RETRY_TRIES:
+            logger.debug(f"retry sweep: message {row['MessageId']} has failed {row['Tries']}x - left for the owner")
+            continue
+        mid = row['MessageId']
+        m = store.get_message(mid)
+        if not m or not store.claim_retriage(mid): continue
+        try:
+            out = ingest_message(store, {**_from_row(m, store), '_mid': mid}, actor='retry-sweep', llm=llm)
+        except Exception as e:
+            # the pipeline itself broke rather than the AI: put the row back where it was, with the
+            # reason on it, exactly as the button's endpoint does
+            now = store.get_message(mid) or {}
+            store.place_message(mid, now.get('TaskId'), 'error')
+            store.add_route(mid, now.get('TaskId'), 'file', None,
+                            f'triage retry failed ({str(e)[:200]}) - unclassified; retry available', [],
+                            'triage', parse_error=str(e)[:1000])
+            logger.warning(f'retry sweep: message {mid} - {e}')
+            return done
+        # ingest_message records an AI failure as an error rather than raising, so the STATUS is what
+        # says whether the brain answered. Still down: stop, and leave the rest for the next cycle.
+        if out.get('status') == 'error':
+            logger.info(f'retry sweep: triage is still failing - {len(stranded) - done} row(s) left for next sync')
+            return done
+        done += 1
+    if done: logger.info(f'retry sweep: {done} stranded row(s) judged')
+    return done

@@ -49,8 +49,23 @@ test("a box means an item you can tick, and the job is not said twice", () => {
   assert.match(combined, /\{!items\.length && taskText && <div className="tq-task-focus-text">/);
   // ...and every remaining box belongs to one item
   assert.equal((combined.match(/tq-task-box/g) || []).length, 1);
+  assert.match(combined, /const ownTask = messages\.length === 1/);
+  assert.match(combined, /const repeatReceipt = ownTask/);
+  assert.match(combined, /!repeatReceipt && <FullText/);
   // the 25px indent existed to clear that header box; without it the list starts at the edge
   const css = read("assistantView.css");
   assert.match(css, /\.tq-task-focus-list \{ margin: 11px 0 0 0;/);
   assert.match(css, /\.tq-task-focus-text \{ margin: 8px 0 0 0;/);
+});
+
+test("a paused assistant task exposes resume instead of pretending nobody has worked it", () => {
+  const cards = read("assistantCards.jsx");
+  const agent = cards.slice(cards.indexOf("export function AgentCard"), cards.indexOf("export function MeetingCard"));
+  assert.match(agent, /card\.paused \? "conversation paused"/);
+  assert.match(agent, /\/api\/tasks\/\$\{card\.tid\}\/resume/);
+  assert.match(agent, /"Resume conversation"/);
+  assert.match(agent, /card\.paused && card\.tid && <CombinedTaskText/);
+  const tasks = read("TasksView.jsx");
+  assert.match(tasks, /const resumeGeneralAgent = async/);
+  assert.match(tasks, /"Resume conversation"/);
 });

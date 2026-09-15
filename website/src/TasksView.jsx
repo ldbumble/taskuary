@@ -152,6 +152,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // behind an explicit restart action instead of looking like the main thing to do next.
   const [restartOpen, setRestartOpen] = useState(false);
   const [startingAgent, setStartingAgent] = useState("");
+  const [generalRevision, setGeneralRevision] = useState(0);
   const [comment, setComment] = useState("");
   // the waiting room: notes for the agent, typed in when it stops (waitroom.py)
   const [wait, setWait] = useState({ data: [], state: null });
@@ -692,6 +693,19 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       if (!stale(id)) setErr(e?.response?.data?.detail || "Could not start the non-coding agent");
     } finally { if (!stale(id)) setStartingAgent(""); }
   };
+  const resumeGeneralAgent = async () => {
+    if (!selected || startingAgent) return;
+    const id = selected;
+    setStartingAgent("resume"); setErr("");
+    try {
+      await api.post(`/api/tasks/${id}/resume`);
+      if (!stale(id)) setGeneralRevision((n) => n + 1);
+      await Promise.all([loadDetail(id), loadTasks()]);
+      onChanged?.();
+    } catch (e) {
+      if (!stale(id)) setErr(e?.response?.data?.detail || "Could not resume this conversation");
+    } finally { if (!stale(id)) setStartingAgent(""); }
+  };
   useEffect(() => { if (!liveCodingSession) setFeedOpen(false); }, [liveCodingSession]);
   return (
     <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
@@ -1165,6 +1179,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   {isGeneral && generalStarted && !term?.alive && (
                     <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${BORDER}`, display: "flex",
                       alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
+                      <Button size="small" variant="contained" disableElevation disabled={!!startingAgent}
+                        startIcon={startingAgent === "resume" ? <CircularProgress size={12} /> : <RefreshIcon sx={{ fontSize: 15 }} />}
+                        title="Resumes the saved provider conversation and continues from its existing context."
+                        onClick={resumeGeneralAgent}>{startingAgent === "resume" ? "Resuming…" : "Resume conversation"}</Button>
                       <Button size="small" variant="outlined" disabled={!!wrapping} startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />}
                         title="Files this conversation's last answer as the task's result and ends its session. The task stays open until you mark it done."
                         onClick={wrapUp}>Save this conversation's result</Button>
@@ -1202,7 +1220,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   <Box sx={{ flex: "1 1 0", minHeight: { xs: 360, md: 420 },
                     display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
-                      <GeneralWorkspace task={t} compact onSession={generalSession} onOpenReports={onGoReports} />
+                      <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} onOpenReports={onGoReports} />
                     </React.Suspense>
                   </Box>
                 ) : workspaceMode === "wrapping" ? (

@@ -2788,6 +2788,12 @@ class SQLiteStore:
     # no-AI install's "awaiting AI triage" is deliberately not here: flipping years of that
     # history at once would be the bulk conversion PW-040 forbids; new arrivals wear the state.
     TRIAGE_FAILURE = r"^(AI triage failed \(|AI triage returned an answer it could not read|triage failed \(|triage retry failed \()"
+    # ...and the row that never reached the AI at all, because there was no connector to ask. It is
+    # the same thing to the owner - unjudged, waiting - so the sweep that retries failures retries it
+    # too, the moment a brain exists. Kept separate from TRIAGE_FAILURE, which also decides which
+    # legacy `filed` rows are upgraded: an install that never had an AI must not have its history
+    # rewritten by one being connected today.
+    TRIAGE_UNJUDGED = TRIAGE_FAILURE[:-1] + r"|awaiting AI triage)"
     def upgrade_auto_start(self) -> bool:
         """An install that had switched the coding agent's auto-start OFF said 'no unattended sessions'
         before the assistant had a switch of its own: the new switch starts off for it too (PW-070).
@@ -2814,6 +2820,25 @@ class SQLiteStore:
         for mid in ids: self._exec("UPDATE message SET Status='error' WHERE MessageId=? AND Status='filed'", (mid,))
         if ids: self._poke('feed-changed')
         return len(ids)
+    def stranded_triage_failures(self, limit=25) -> list:
+        """Rows the AI never judged, oldest first, with how many times it has already been tried.
+
+        A triage failure was only ever retried by hand, one row at a time, from the opened row - so
+        an outage left every message it touched stranded for good, wearing no verdict, while the
+        brain that came back minutes later judged only what arrived AFTER it (the owner, 2026-09-15:
+        "we should also retry the ones that triage failed if it becomes available on next sync no?").
+
+        `Tries` counts the failure diagnostics already written for the row, so a message that fails
+        for its own reasons - a body no model can answer about - stops being retried instead of
+        costing a call every cycle forever. Same identification as upgrade_triage_failures.
+        """
+        rows = self._rows("""SELECT m.MessageId, m.SentAt, r.Reason,
+                               (SELECT COUNT(*) FROM route x WHERE x.MessageId=m.MessageId
+                                AND x.ParseError IS NOT NULL) Tries
+                             FROM message m JOIN route r
+                               ON r.RouteId=(SELECT MAX(RouteId) FROM route WHERE MessageId=m.MessageId)
+                             WHERE m.Status='error' ORDER BY m.MessageId LIMIT ?""", (limit,))
+        return [dict(r) for r in rows if re.match(self.TRIAGE_UNJUDGED, r['Reason'] or '')]
     def pending_triage(self, limit=500):
         return self._rows("SELECT * FROM message WHERE Status='triaging' ORDER BY MessageId LIMIT ?", (limit,))
     def attach_message(self, mid, task_id):
@@ -2860,10 +2885,11 @@ class SQLiteStore:
                            json.dumps(verdict, default=str)[:8000] if verdict else None))
     def task_verdict(self, task_id):
         """The triage verdict a correction is measured against: the newest route row on this task
-        that kept one. Absent for tasks routed before the column existed, and for the mechanical
-        router, which has no verdict to keep."""
+        that created the task and kept one. Follow-up messages now keep their own structured
+        verdict for the Timeline, but must not replace the task's original routing decision.
+        Absent for tasks routed before the column existed, and for the mechanical router."""
         row = self._one('SELECT VerdictJson FROM route WHERE TaskId=? AND VerdictJson IS NOT NULL '
-                        'ORDER BY RouteId DESC LIMIT 1', (task_id,))
+                        "AND Decision<>'attach' ORDER BY RouteId DESC LIMIT 1", (task_id,))
         try: return json.loads(row['VerdictJson']) if row else None
         except Exception: return None
     def list_routes(self, task_id): return self._rows('SELECT * FROM route WHERE TaskId=? ORDER BY RouteId', (task_id,))
@@ -3943,7 +3969,9 @@ class SQLiteStore:
              + (['l.Topic=?'] if topic else []) + (['l.Kind=?'] if kind else [])
              + ([f'({score}) > 0'] if terms else []))
         p = [*like] + ([topic] if topic else []) + ([kind] if kind else []) + [*like]
-        order = ('Hits DESC, ' if terms else '') + ('l.Score DESC, l.UpdatedAt DESC' if sort == 'top' or terms else 'l.UpdatedAt DESC')
+        # Agreement is the strongest value signal; discussion breaks ties. The same ordering
+        # feeds the Hub tab and handbook.block(), so validated entries reach later agents first.
+        order = ('Hits DESC, ' if terms else '') + ('l.Score DESC, Comments DESC, l.UpdatedAt DESC' if sort == 'top' or terms else 'l.UpdatedAt DESC')
         return self._rows(f'SELECT l.*, ({score}) Hits, (SELECT COUNT(*) FROM lore_comment WHERE LoreId=l.LoreId) Comments '
                           f'FROM lore l WHERE {" AND ".join(w)} ORDER BY {order} LIMIT ?', (*p, int(limit)))
     def lore_vote(self, lid, delta: int, actor: str = 'owner') -> int:

@@ -158,5 +158,14 @@ class TheCommandTests(unittest.TestCase):
         self.assertFalse((tmp / 'o.svg').exists())
 
 
+class TheWorkflowTests(unittest.TestCase):
+    def test_the_daily_update_pushes_directly_without_opening_a_pr(self):
+        workflow = (Path(__file__).resolve().parent.parent / '.github' / 'workflows' / 'downloads.yml').read_text(encoding='utf-8')
+        self.assertIn('git push origin HEAD:master', workflow)
+        self.assertIn('python -m unittest tests/test_pypi_downloads.py', workflow)
+        self.assertNotIn('create-pull-request', workflow)
+        self.assertNotIn('automation/downloads', workflow)
+
+
 if __name__ == '__main__':
     unittest.main()

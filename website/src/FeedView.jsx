@@ -40,10 +40,13 @@ import { AgentPicker, ChannelIcon, LifecycleChip, RefChip, CcRow, ChoiceRow, Cod
 import MicIcon from "@mui/icons-material/Mic";
 import MicOffIcon from "@mui/icons-material/MicOff";
 import { Md, looksMd } from "./md.jsx";
+import DigestText from "./DigestText.jsx";
+import TodayMeetingsStrip from "./TodayMeetingsStrip.jsx";
 import { subjectOf, sourceOf } from "./feedText.js";
-import { HOLD_TAG, ROADS, hasTag, roadOf, stateMeta, stateOf, subline } from "./timelineState.js";
+import { HOLD_TAG, ROADS, VERDICTS, hasTag, roadOf, stateMeta, stateOf, subline, verdictOf } from "./timelineState.js";
 import { sendBlockLine, draftState, replyEnvelope, replySendFailure } from "./sendState.js";
 import { rowLane } from "./rowLane.js";
+import { extraTriageFields, intentLabel, kindLabel, latestTriageVerdict, legacyTriageVerdict, relationshipLabel } from "./triageVerdict.js";
 import ReplyFiles from "./ReplyFiles.jsx";
 import { timelinePhases } from "./taskLifecycle.js";
 import StateMark, { edgeOf } from "./StateMark.jsx";
@@ -76,11 +79,19 @@ const LaneTag = ({ lane }) => {
 // nothing else (the owner, 2026-09-07: "the tag on the row should match what the triage shows").
 // The lane is about what is waiting NOW, so everything finished read "fyi" whatever triage had
 // said about it: a question triage sent to Review showed the same word as a newsletter.
-const RoadTag = ({ row }) => {
-  const meta = ROADS.find((r) => r.key === roadOf(row))
+// WHAT THE TAG WILL SAY, or null when nothing has a word for this row - one place, so the state
+// mark can fill exactly the gap the tag leaves instead of guessing at it from a transport detail.
+export const tagMeta = (row) =>
+  // when triage never reached a verdict, the row still says what HAPPENED to it rather than going
+  // bare: your own rule turned it away, or the model was down (timelineState.verdictOf).
+  VERDICTS.find((v) => v.key === verdictOf(row))
+    || ROADS.find((r) => r.key === roadOf(row))
     // a report you set up, or an agent's own result, was judged by nobody - so it says what it IS,
     // the same word the rail uses for it (the owner, 2026-09-07: "report should say report")
     || (row.Channel === "report" ? { label: laneMeta("report").word, hint: laneMeta("report").hint } : null);
+
+const RoadTag = ({ row }) => {
+  const meta = tagMeta(row);
   if (!meta) return null;
   return <span className="tq-pile-tag" title={meta.hint}
     style={{ color: "#6f6960", background: "#eee9e1", borderColor: "#ddd6cb" }}>{meta.label}</span>;
@@ -452,80 +463,6 @@ const EventPanel = ({ e, onClose, onOpenTask }) => {
         <Box sx={{ pt: 1.25, borderTop: `1px dashed ${BORDER}` }}>
           <MeetingPrep e={e} onOpenTask={onOpenTask} />
         </Box>
-      </Box>
-    </Box>
-  );
-};
-
-// The day's meetings as one strip above the Morning digest: a track from 7 to 7, each meeting a
-// block at its hour, sliding into place; a pulsing mark for now. The digest's words are below it;
-// this is the shape of the day at a glance.
-const TodayStrip = () => {
-  const [t, setT] = useState(null);
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    let alive = true;
-    api.get("/api/calendar/today").then(({ data }) => alive && setT(data)).catch(() => alive && setT({ events: [] }));
-    const id = setInterval(() => setTick((x) => x + 1), 60000);
-    return () => { alive = false; clearInterval(id); };
-  }, []);
-  if (!t) return null;
-  const evs = (t.events || []).filter((e) => !e.all_day);
-  const allDay = (t.events || []).filter((e) => e.all_day);
-  if (!t.events?.length) return null;
-  const H0 = 7, H1 = 19, span = H1 - H0;
-  const hourOf = (s) => { const d = new Date(String(s).replace(" ", "T")); return d.getHours() + d.getMinutes() / 60; };
-  const now = new Date(); const nowH = now.getHours() + now.getMinutes() / 60;
-  const pct = (h) => `${Math.max(0, Math.min(100, ((h - H0) / span) * 100))}%`;
-  return (
-    <Box data-tick={tick} sx={{ mb: 1.5, p: 1.25, bgcolor: "#f5f0e4", border: "1px solid #e3d9c2", borderRadius: 2,
-      "@keyframes tqSlide": { from: { opacity: 0, transform: "translateY(6px) scaleX(.6)" }, to: { opacity: 1, transform: "none" } },
-      "@keyframes tqPulse": { "0%": { boxShadow: "0 0 0 0 rgba(138,54,70,.45)" }, "100%": { boxShadow: "0 0 0 8px rgba(138,54,70,0)" } } }}>
-      <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, mb: 0.75 }}>
-        <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: "#6b5f45", fontWeight: 700 }}>📅 TODAY’S MEETINGS · {t.events.length}</Typography>
-        {allDay.map((e) => <Typography key={e.subject} variant="caption" sx={{ color: FAINT }}>· all day: {e.subject}</Typography>)}
-      </Box>
-      {/* the track */}
-      <Box sx={{ position: "relative", height: 44, borderTop: "1px solid #ddd2b9", borderBottom: "1px solid #ddd2b9" }}>
-        {Array.from({ length: span + 1 }, (_, i) => H0 + i).map((h) => (
-          <Box key={h} sx={{ position: "absolute", left: pct(h), top: 0, bottom: 0, borderLeft: `1px dotted ${h % 3 === 0 ? "#c9b98f" : "#e6dcc3"}` }}>
-            {h % 3 === 0 && <Typography sx={{ ...mono, fontSize: 8.5, color: FAINT, position: "absolute", top: 46, left: -8 }}>{h > 12 ? `${h - 12}p` : h === 12 ? "12p" : `${h}a`}</Typography>}
-          </Box>
-        ))}
-        {evs.map((e, i) => {
-          const s = hourOf(e.start), en = e.end ? hourOf(e.end) : s + 0.5;
-          const live = nowH >= s && nowH <= en, past = nowH > en;
-          // a title only fits a block that is wide enough (~75 min on this track); shorter meetings
-          // carry their number and the list below carries the name - long or short, it always fits
-          const wide = en - s >= 1.25;
-          return (
-            <Box key={`${e.start}-${i}`} title={`${e.subject}${e.who?.length ? ` · with ${e.who.join(", ")}` : ""}${e.about ? `\n${e.about}` : ""}`}
-              sx={{ position: "absolute", left: pct(s), width: `calc(${pct(Math.max(en, s + 0.35))} - ${pct(s)})`, top: 8, height: 28, borderRadius: 1,
-                bgcolor: live ? "#8a3646" : past ? "#d9cfb6" : "#8a7a5c", color: live || !past ? "#fffdfb" : "#6b5f45",
-                px: wide ? 0.75 : 0, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
-                fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", textOverflow: "ellipsis",
-                transformOrigin: "left center", animation: `tqSlide .5s ease ${i * 0.08}s both`, cursor: "default" }}>
-              <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{wide ? e.subject : i + 1}</Box>
-            </Box>
-          );
-        })}
-        {nowH >= H0 && nowH <= H1 && (
-          <Box sx={{ position: "absolute", left: pct(nowH), top: -4, bottom: -4, width: 2, bgcolor: "#8a3646", borderRadius: 1 }}>
-            <Box sx={{ position: "absolute", top: -5, left: -4, width: 10, height: 10, borderRadius: "50%", bgcolor: "#8a3646", animation: "tqPulse 1.6s ease-out infinite" }} />
-          </Box>
-        )}
-      </Box>
-      <Box sx={{ mt: 2.25, display: "flex", flexDirection: "column", gap: 0.35 }}>
-        {evs.map((e, i) => (
-          <Typography key={`${e.start}-l${i}`} variant="caption" sx={{ color: INK, display: "flex", gap: 0.75, alignItems: "baseline", flexWrap: "wrap", animation: `tqSlide .4s ease ${0.3 + i * 0.06}s both` }}>
-            {/* the number is the block on the track: a short meeting cannot hold its own name up there */}
-            <Box component="span" sx={{ ...mono, color: "#6b5f45", fontSize: 10, minWidth: 16, textAlign: "right" }}>{i + 1}.</Box>
-            <Box component="span" sx={{ ...mono, color: "#6b5f45", fontSize: 10.5, minWidth: 62 }}>{fmtTime12(e.start)}</Box>
-            <Box component="span" sx={{ fontWeight: 600, overflowWrap: "anywhere" }}>{e.subject}</Box>
-            {!!(e.who || []).length && <Box component="span" sx={{ color: DIM }}>with {e.who.slice(0, 4).map((w) => w.split(" ")[0]).join(", ")}{e.who.length > 4 ? ` +${e.who.length - 4}` : ""}</Box>}
-            {e.about && <Box component="span" sx={{ color: FAINT }}>— {e.about.length > 90 ? `${e.about.slice(0, 90)}…` : e.about}</Box>}
-          </Typography>
-        ))}
       </Box>
     </Box>
   );
@@ -1641,6 +1578,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                     const phases = timelinePhases(r);
                     const rowId = processingRowId(r);
                     const generic = !!r.ProcessingItemId && r.OpenTarget?.kind !== "message";
+                    const rowWord = view === "unread" ? (r.Lane || rowLane(r)) : null;   // the lane word, when the rail is showing lanes
                     const fold = canonicalAll ? null : foldOf.get(r.MessageId);
                     const inFold = canonicalAll ? null : memberOf.get(r.MessageId);
                     // A member is never drawn HERE, open or shut - the fold draws its own, in one
@@ -1730,16 +1668,23 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                               )}
                               {r.TaskId && <LifecycleChip kind="task" phase={phases.task} compact sx={{ flexShrink: 0 }} />}
                               {/* work says what is waiting NOW; the Timeline says what TRIAGE said.
-                                  The feed sends no Lane - it never has - so the row's own facts name
-                                  it (rowLane.js), and the road word is what is left when nothing is
-                                  waiting on you. */}
-                              {view === "unread" && (r.Lane || rowLane(r)) ? <LaneTag lane={r.Lane || rowLane(r)} />
+                                  The canonical All sends a Lane on every row; /api/feed - still served
+                                  behind the "canonical grouping is still finishing" banner, and to an
+                                  install whose processing reads are not active - sends none, so the
+                                  row's own facts name it (rowLane.js) and the road word is what is
+                                  left when nothing is waiting on you.
+                                  ONE WORD PER ROW: the state mark fills the gap only when none of the
+                                  three above produced one. It used to be gated on `!r.Lane`, a
+                                  transport detail - so the legacy feed drew the mark BESIDE the word
+                                  it already had, and the canonical feed drew nothing at all on a row
+                                  the tag had no word for. */}
+                              {rowWord ? <LaneTag lane={rowWord} />
                                 : generic ? (
                                   <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 9.5, flexShrink: 0 }}>
                                     {r.OpenTarget.kind}{r.MsgStatus ? ` · ${r.MsgStatus}` : ""}
                                   </Typography>
                                 ) : <RoadTag row={r} />}
-                              {!generic && !r.Lane && <StateMark row={r} state={st} />}   {/* the lane word says it once */}
+                              {!generic && !rowWord && !tagMeta(r) && <StateMark row={r} state={st} />}
                             </Box>
                             {/* the second line, only on the row you are on: who has it and what
                                 it is waiting for, every clause from a field the server sent */}
@@ -2457,7 +2402,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
               {tab === "msg" && (
                 <Box>
                   {sel.Channel === "assistant" && <AssistantPost sel={sel} onOpenTask={onOpenTask} onChanged={() => onRefresh?.()} />}
-                  {sel.Channel === "report" && /morning digest/i.test(`${sel.SourceName || ""} ${sel.Subject || ""}`) && <TodayStrip />}
+                  {sel.Channel === "report" && /morning digest/i.test(`${sel.SourceName || ""} ${sel.Subject || ""}`) && <TodayMeetingsStrip />}
                   {sel.Channel !== "assistant" && (
                     <MessageBlock key={sel.MessageId} messages={detail?.messages} focusId={sel.MessageId} fallback={sel.Preview} threadTotal={detail?.thread_total} askIds={detail?.ask_ids} />
                   )}
@@ -2875,6 +2820,156 @@ const ThreadFold = ({ entry, open, onToggle, onOpenRow, sel }) => {
   );
 };
 
+const TRIAGE_FACT_TONES = {
+  intent: { dot: "#6f8a6e", bg: "#f4f7f2", bd: "#d8e1d5" },
+  kind: { dot: "#65798b", bg: "#f3f6f8", bd: "#d8e0e6" },
+  profile: { dot: "#8a7355", bg: "#f8f5ef", bd: "#e5ddcf" },
+  repo: { dot: "#725f88", bg: "#f6f3f8", bd: "#dfd7e5" },
+  relation: { dot: "#8a6d69", bg: "#f8f4f3", bd: "#e5d9d7" },
+};
+
+const TriageFact = ({ label, value, tone = "intent" }) => {
+  if (!value) return null;
+  const c = TRIAGE_FACT_TONES[tone] || TRIAGE_FACT_TONES.intent;
+  return (
+    <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.7, minHeight: 31,
+      border: `1px solid ${c.bd}`, borderRadius: 99, bgcolor: c.bg, px: 1.05, py: 0.35 }}>
+      <Box aria-hidden sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: c.dot, flexShrink: 0 }} />
+      <Typography component="span" sx={{ fontSize: 9, fontWeight: 700, letterSpacing: ".09em",
+        textTransform: "uppercase", color: FAINT }}>{label}</Typography>
+      <Typography component="span" sx={{ fontSize: 11.5, fontWeight: 700, color: INK }}>{value}</Typography>
+    </Box>
+  );
+};
+
+const TriageVerdictCard = ({ verdict, exact = true }) => {
+  if (!verdict) return null;
+  const checklist = Array.isArray(verdict.checklist)
+    ? verdict.checklist.filter((x) => typeof x === "string" && x.trim()) : [];
+  const isFyi = verdict.intent === "fyi";
+  const isReply = verdict.intent === "reply_only";
+  const destination = kindLabel(verdict.kind) || (isFyi ? "Filed" : isReply ? "Reply review" : "");
+  const worker = verdict.profile || (isFyi || isReply ? "No agent" : "");
+  const repo = verdict.repository || (verdict.needs_repo_choice ? "Repository choice needed"
+    : isFyi || isReply || (verdict.kind && verdict.kind !== "coding") ? "Not applicable"
+      : verdict.kind === "coding" ? "No repository recorded" : "");
+  const extras = extraTriageFields(verdict);
+  const noteCount = Array.isArray(verdict.notes) ? verdict.notes.length : 0;
+  return (
+    <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: "#fcfaf7", overflow: "hidden" }}>
+      <Box sx={{ px: 1.5, py: 1.25, borderBottom: `1px solid ${BORDER}`,
+        background: "linear-gradient(135deg, #fbfaf6 0%, #f4f6f2 100%)" }}>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, mb: 0.85 }}>
+          <Typography sx={{ fontSize: 12.5, fontWeight: 750, color: INK }}>
+            {exact ? "Triage's structured response" : "Saved triage result"}
+          </Typography>
+          {!exact && <Typography variant="caption" sx={{ fontSize: 9.5, color: FAINT }}>limited saved response · reconstructed</Typography>}
+        </Box>
+        <Box sx={{ display: "flex", gap: 0.65, flexWrap: "wrap" }}>
+          <TriageFact label="Item" value={intentLabel(verdict.intent)} tone="intent" />
+          <TriageFact label="Goes to" value={destination} tone="kind" />
+          <TriageFact label="Worker" value={worker} tone="profile" />
+          <TriageFact label="Playbook" value={verdict.playbook} tone="profile" />
+          <TriageFact label="Thread" value={relationshipLabel(verdict.relationship)} tone="relation" />
+        </Box>
+      </Box>
+
+      <Box sx={{ px: 1.5, py: 1.35, display: "grid", gap: 1.25 }}>
+        {(verdict.title || verdict.summary) && (
+          <Box>
+            <Typography sx={{ ...mono, fontSize: 9.5, color: FAINT, letterSpacing: ".08em", textTransform: "uppercase" }}>
+              Work it pulled out
+            </Typography>
+            {verdict.title && <Typography sx={{ mt: 0.35, fontSize: 14, fontWeight: 750, color: INK, lineHeight: 1.35 }}>
+              {verdict.title}
+            </Typography>}
+            {verdict.summary && <Typography sx={{ mt: 0.35, fontSize: 12.25, color: DIM, lineHeight: 1.6 }}>
+              {verdict.summary}
+            </Typography>}
+          </Box>
+        )}
+
+        {(repo || verdict.repo_reason) && (
+          <Box sx={{ border: `1px solid ${TRIAGE_FACT_TONES.repo.bd}`, borderRadius: 1.5,
+            bgcolor: TRIAGE_FACT_TONES.repo.bg, px: 1.15, py: 0.9 }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.7 }}>
+              <Box aria-hidden sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: TRIAGE_FACT_TONES.repo.dot }} />
+              <Typography sx={{ ...mono, fontSize: 9.5, color: FAINT, letterSpacing: ".07em", textTransform: "uppercase" }}>
+                Repository
+              </Typography>
+              <Typography sx={{ fontSize: 12, fontWeight: 750, color: INK }}>{repo || "None selected"}</Typography>
+            </Box>
+            {(verdict.repo_reason || repo === "Not applicable") && <Typography sx={{ mt: 0.45, ml: 1.7, fontSize: 11.5, color: DIM, lineHeight: 1.5 }}>
+              {verdict.repo_reason || (isFyi ? "No task was created from this item." : "This route does not use a code repository.")}
+            </Typography>}
+          </Box>
+        )}
+
+        {!!verdict.intent && (
+          <Box>
+            <Typography sx={{ ...mono, fontSize: 9.5, color: FAINT, letterSpacing: ".08em", textTransform: "uppercase" }}>
+              Task list
+            </Typography>
+            {checklist.length ? (
+              <Box component="ol" sx={{ listStyle: "none", p: 0, m: "7px 0 0", display: "grid", gap: 0.6 }}>
+                {checklist.map((item, i) => (
+                  <Box component="li" key={`${i}-${item}`} sx={{ display: "grid", gridTemplateColumns: "23px minmax(0, 1fr)",
+                    gap: 0.8, alignItems: "start" }}>
+                    <Box aria-hidden sx={{ width: 21, height: 21, borderRadius: "50%", border: "1px solid #c9d2c8",
+                      bgcolor: "#f4f7f2", color: "#536b58", display: "grid", placeItems: "center",
+                      ...mono, fontSize: 9.5, fontWeight: 700 }}>{i + 1}</Box>
+                    <Typography sx={{ pt: 0.15, fontSize: 12.25, color: INK, lineHeight: 1.55 }}>{item}</Typography>
+                  </Box>
+                ))}
+              </Box>
+            ) : <Typography sx={{ mt: 0.35, fontSize: 11.5, color: FAINT }}>
+              {isFyi ? "None — triage found no requested action."
+                : isReply ? "None — this was routed to a reply instead of a task."
+                  : "No separate checklist was returned."}
+            </Typography>}
+          </Box>
+        )}
+
+        {!exact && (
+          <Typography variant="caption" sx={{ color: FAINT, lineHeight: 1.55 }}>
+            This route was saved without structured triage details. These fields come from its saved route and resulting task; details that were never stored are not invented.
+          </Typography>
+        )}
+
+        {verdict.why && (
+          <Box sx={{ borderTop: `1px solid ${BORDER}`, pt: 1.05 }}>
+            <Typography sx={{ ...mono, fontSize: 9.5, color: FAINT, letterSpacing: ".08em", textTransform: "uppercase" }}>
+              Why
+            </Typography>
+            <Typography sx={{ mt: 0.3, fontSize: 12.25, color: DIM, lineHeight: 1.6 }}>{verdict.why}</Typography>
+          </Box>
+        )}
+
+        {(verdict.existing_task_id || (verdict.related_message_ids || []).length) && (
+          <Typography variant="caption" sx={{ color: FAINT, lineHeight: 1.55 }}>
+            {verdict.existing_task_id ? `Linked to ${ref(verdict.existing_task_id)}` : ""}
+            {verdict.existing_task_id && (verdict.related_message_ids || []).length ? " · " : ""}
+            {(verdict.related_message_ids || []).length ? `Related timeline items ${verdict.related_message_ids.join(", ")}` : ""}
+          </Typography>
+        )}
+        {(noteCount > 0 || verdict.notes_left > 0) && (
+          <Typography variant="caption" sx={{ color: FAINT }}>
+            Memory evidence considered: {noteCount}{verdict.notes_left ? ` shown, ${verdict.notes_left} more did not fit` : ""}
+          </Typography>
+        )}
+        {extras.length > 0 && (
+          <Box sx={{ display: "flex", gap: 0.6, flexWrap: "wrap" }}>
+            {extras.map(([key, value]) => (
+              <TriageFact key={key} label={key.replaceAll("_", " ")}
+                value={typeof value === "object" ? JSON.stringify(value) : String(value)} tone="relation" />
+            ))}
+          </Box>
+        )}
+      </Box>
+    </Box>
+  );
+};
+
 const TriagePane = ({ sel, detail, onRefresh }) => {
   const road = roadOf(sel);
   const failed = triageFailed(sel);
@@ -2931,6 +3026,10 @@ const TriagePane = ({ sel, detail, onRefresh }) => {
   const why = String(sel.RouteReason || "").replace(/^triage:\s*\w+\s*-\s*/, "").split(" · ")[0];
   const rest = String(sel.RouteReason || "").split(" · ").slice(1);
   const watch = (detail?.task || {}).Kind === "note";
+  const savedVerdict = latestTriageVerdict(trail);
+  const shownVerdict = savedVerdict || legacyTriageVerdict({
+    routeReason: sel.RouteReason, routes: trail, task: detail?.task, checklist: detail?.checklist,
+  });
   if (!sel.RouteReason && !road) return (
     <Typography variant="caption" sx={{ color: FAINT, lineHeight: 1.7 }}>
       Nothing judged this. {watch ? "You wrote it." : "It is here to be read."}
@@ -2964,15 +3063,17 @@ const TriagePane = ({ sel, detail, onRefresh }) => {
           {ROADS.find((r) => r.key === road)?.hint}
         </Typography>}
       </Box>
-      <PanelLabel>And why</PanelLabel>
-      <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1.5, py: 1.25, bgcolor: "#fcfaf7" }}>
-        <Typography sx={{ fontSize: 13, color: INK, lineHeight: 1.65 }}>{why || sel.RouteReason}</Typography>
-        {!!rest.length && (
-          <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.85, lineHeight: 1.6 }}>
-            {rest.join(" · ")}
-          </Typography>
-        )}
-      </Box>
+      <PanelLabel>Full triage response</PanelLabel>
+      {shownVerdict ? <TriageVerdictCard verdict={shownVerdict} exact={!!savedVerdict} /> : (
+        <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1.5, py: 1.25, bgcolor: "#fcfaf7" }}>
+          <Typography sx={{ fontSize: 13, color: INK, lineHeight: 1.65 }}>{why || sel.RouteReason}</Typography>
+          {!!rest.length && (
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.85, lineHeight: 1.6 }}>
+              {rest.join(" · ")}
+            </Typography>
+          )}
+        </Box>
+      )}
       {diagnostic && (
         <>
           <PanelLabel>What the triage AI returned</PanelLabel>
@@ -3156,7 +3257,8 @@ const Bubble = ({ m, fallback, context }) => {
           {quoted && <Typography variant="caption" sx={{ color: FAINT }}>· replying on this thread</Typography>}
         </Box>
       )}
-      {m?.Channel === "report" ? (looksMd(text) ? <Md text={text} /> : <SectionedText text={text} />)
+      {m?.Channel === "report" ? ((m?.SourceName === "Morning digest" || /^Morning digest\b/i.test(m?.Subject || ""))
+          ? <DigestText text={text} /> : looksMd(text) ? <Md text={text} /> : <SectionedText text={text} />)
         : own && (!text.trim() || text === "…")
           ? <Typography variant="body2" sx={{ color: FAINT, fontStyle: "italic" }}>You started this yourself — there is no incoming message behind it.</Typography>
         : <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, textAlign: "left" }}>

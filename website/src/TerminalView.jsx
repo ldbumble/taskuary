@@ -510,7 +510,10 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
           </Box>
         </>
       )}
-      {peek && showingBrowser && <BrowserPane sid={sid} url={browser.url} overlay onFold={() => setPeek(false)} />}
+      {/* peek is the CHIP layout's browser. Left standing when the box grew into a split - a wider
+          window, the full-screen button - it mounted a second pane on the same session: two sockets,
+          two decodes, two screencast clients on one Chrome, for one page. */}
+      {peek && layout === "chip" && showingBrowser && <BrowserPane sid={sid} url={browser.url} overlay onFold={() => setPeek(false)} />}
     </Box>
   );
 };

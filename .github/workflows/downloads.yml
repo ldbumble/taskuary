@@ -10,7 +10,7 @@ on:
   schedule: [{ cron: '17 7 * * *' }]      # after PyPI's stats settle for the previous UTC day
   workflow_dispatch:
 
-permissions: { contents: read }
+permissions: { contents: write }
 
 concurrency:
   group: downloads
@@ -19,39 +19,30 @@ concurrency:
 jobs:
   chart:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # Update only the automation branch, never master.
-      pull-requests: write # Propose chart changes for review.
-      actions: write # GITHUB_TOKEN PRs need explicit dispatch to run required checks.
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: master
-          persist-credentials: false
+          persist-credentials: true
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with: { python-version: '3.12' }
       - run: pip install pypistats
+      - name: Test the download generator
+        run: python -m unittest tests/test_pypi_downloads.py
 
       # The CSV is the long memory: the API only keeps 180 days, and merging into a committed
       # history is what lets the series outlive that window.
       - run: python tools/pypi_downloads.py --package taskuary --history docs/downloads.csv --out docs/downloads.svg
 
-      - name: Propose the chart update
-        id: chart-pr
-        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
-        with:
-          branch: automation/downloads
-          base: master
-          add-paths: |
-            docs/downloads.csv
-            docs/downloads.svg
-          commit-message: 'docs: update download counts'
-          title: 'docs: update download counts'
-          body: 'Refresh the PyPI download history and chart. Mirrors are excluded. Required CI must pass before merging.'
-      - name: Run required checks for the chart PR
-        if: steps.chart-pr.outputs.pull-request-operation == 'created' || steps.chart-pr.outputs.pull-request-operation == 'updated'
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Commit the chart directly to master
         run: |
-          gh workflow run ci.yml --ref automation/downloads
-          gh workflow run codeql.yml --ref automation/downloads
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/downloads.csv docs/downloads.svg
+          if git diff --quiet --cached; then
+            echo 'No download changes to commit.'
+            exit 0
+          fi
+          git commit -m 'docs: update download counts'
+          git push origin HEAD:master

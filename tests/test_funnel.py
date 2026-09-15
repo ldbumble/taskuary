@@ -59,6 +59,26 @@ class CacheTests(unittest.TestCase):
         self.assertEqual(answers, ['fresh', 'fresh'])
 
 
+class PausedConversationTests(unittest.TestCase):
+    def test_saved_general_work_is_a_paused_agent_with_its_last_answer(self):
+        s = store()
+        tid = s.create_task({'Title': 'Set up ADP', 'Summary': 'Clock in at 9', 'Kind': 'general',
+                             'Status': 'open', 'SourceRef': 'assistant:setup'}, 'owner')
+        s.add_comment(tid, 'assistant', 'assistant_agent', 'The sign-in page is open. Enter your user ID.')
+        s.save_session(tid, 'cli:codex', '', 'native-1', 'context-1')
+        item = funnel.paused_conversation(s, {'key': 'msg:1', 'kind': 'todo', 'lane': 'asked',
+                                               'tid': tid, 'title': 'Set up ADP'})
+        self.assertEqual((item['key'], item['kind'], item['lane'], item['paused'], item['mode']),
+                         (f'agent:{tid}', 'agent', 'blocked', True, 'assistant'))
+        self.assertIn('sign-in page is open', item['tail'][0])
+
+    def test_a_task_with_no_saved_conversation_stays_an_ordinary_task(self):
+        s = store()
+        tid = s.create_task({'Title': 'Call Dana', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        item = {'key': 'msg:1', 'kind': 'todo', 'lane': 'asked', 'tid': tid}
+        self.assertEqual(funnel.paused_conversation(s, item), item)
+
+
 class FollowUpTests(unittest.TestCase):
     """What a reply on an open task IS is triage's verdict, not the task's kind and not a keyword here
     (the owner, 2026-09-03: "Thank you is a close should not be hard coded"). ingest files an fyi

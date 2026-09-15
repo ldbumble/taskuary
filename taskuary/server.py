@@ -797,6 +797,11 @@ def task_detail(task_id: int):
             'transcript': {'sid': tr['Sid'], 'agent': tr['Agent'], 'cwd': tr['Cwd'],
                            'at': tr['CreatedAt'], 'chars': len(tr['Text'] or '')} if tr else None}
 
+def _workerstate():
+    from . import workerstate
+    return workerstate
+
+
 def _assistant_payload(task_id: int, session=None):
     from . import general
     task = store.get_task(task_id)
@@ -810,6 +815,11 @@ def _assistant_payload(task_id: int, session=None):
             'defaultPick': general.default_pick(store, task),
             # a walk whose session is still being opened is WORK IN FLIGHT, not an idle conversation
             'starting': task_id in general.OPENING,
+            # THE RAISED HAND, where the owner is standing. The agent's question and the answers it
+            # offered have been recorded since PW-225 and nothing ever showed them: the workspace got
+            # the prose ("tell me when you're signed in") and the two choices it named were never
+            # clickable anywhere (2026-09-15). The chip said "needs you"; the question did not.
+            'asking': _workerstate().asking_of(store, session) if session else None,
             'session': session.info(tail=3) if session else None}
 
 @app.get('/api/tasks/{task_id}/assistant')
@@ -908,6 +918,13 @@ def assistant_create_report(task_id: int, body: AssistantSessionBody = None):
     title, prompt = draft['title'].strip()[:160], draft['prompt'].strip()[:12000]
     report_cfg = {'type': 'agent', 'title': title, 'agent': agent, 'daily_at': '08:00',
                   'origin_task_id': task_id, 'origin_task_ref': task_ref(task_id)}
+    # A WALK DONE IN THE BROWSER REPEATS IN ONE. Without this the promoted job ran through the report
+    # loop, whose CLI has no shell and no browser, so tomorrow's run could not reach the page the
+    # owner signed into today - and the agent that tried said so and refused to save the report
+    # (2026-09-15). Marked here, it is dispatched as a workflow instead: a real session, the same
+    # named browser, the owner's restored profile (workflows.run, browserview.start).
+    from . import browserview
+    if browserview.wanted(task): report_cfg['browser'] = True
     chosen_model = body.model if chosen.get('pick') == body.pick else chosen.get('model')
     if chosen_model: report_cfg['model'] = str(chosen_model).strip()
     if len(prompt) > general.REPORT_SKILL_CHARS:
@@ -5367,6 +5384,14 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
             if ticket.error: logger.warning(f'deferred triage drain failed: {ticket.error}')
         except Exception as e:
             logger.warning(f'deferred triage drain failed: {e}')
+        # ...and the rows an EARLIER sync could not judge, now that this one has a brain to ask.
+        # After the drain, so today's arrivals are judged first and a still-dead endpoint is
+        # discovered on them rather than on the backlog (ingest.retry_failed_triage).
+        try:
+            retried = ingest_mod.retry_failed_triage(target_store, _llm(target_store))
+            if retried: _status_progress(target_store, status, f'{what} · {retried} retried', phase='triaging')
+        except Exception as e:
+            logger.warning(f'retrying stranded triage failures failed: {e}')
         # the git loop: a task's PR is watched here, and a red build goes back to the agent
         # that wrote the code (ci.py) - off unless the owner turned ci_watch on
         _status_progress(target_store, status, what, phase='checking')

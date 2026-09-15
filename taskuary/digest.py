@@ -106,17 +106,47 @@ _PROMPT_WITHOUT_STANDING_MEMORY = (
 # can advance it without touching an owner-edited report. The digest used to receive only the
 # verdicts CREATED in this window; those are news about what the owner decided, not the standing
 # memory that decides whether today's material deserves their attention at all.
-PROMPT = _PROMPT_WITHOUT_STANDING_MEMORY.replace(
+_PROMPT_2026_09_02_MEMORY = _PROMPT_WITHOUT_STANDING_MEMORY.replace(
     'Never invent facts; no preamble, no sign-off, nothing outside the sections.',
     'WHAT THE OWNER HAS ALREADY DECIDED governs every section: do not surface, summarize, chase, '
     'or suggest action on anything those standing verdicts rule out. They are instructions about '
     'relevance, not events to repeat as news. Never invent facts; no preamble, no sign-off, nothing '
     'outside the sections.')
 
+# 2026-09-15: this remains an AI-written brief. The source blocks below are evidence, not a second
+# rule engine. The prompt makes the reading order and visual contract unambiguous, while the model
+# still decides what matters by applying the owner's standing memory to the day's actual material.
+PROMPT = (
+    'Write my morning brief - what I, half awake, should hold in mind TODAY. Be a sharp assistant who '
+    'has read everything, not a transcript or a report of counts. Under 450 words. Every section must '
+    'have the exact emoji heading below on its own line, followed by a numbered list (1., 2., 3.; '
+    'restart at 1 in every section), then a blank line. Never use hyphen bullets. Use these sections '
+    'IN THIS ORDER and OMIT any with nothing to say:\n'
+    '\U0001F6A8 Errors - failures, unreadable sources, and broken report runs from MEETINGS TODAY or WHAT '
+    'ARRIVED; name the system and the useful cause, not a raw exception dump\n'
+    '\U0001F4C5 Meetings today - one item per meeting from MEETINGS TODAY, in time order: time, title, the '
+    'other people (first names, never me), and the invite\'s own useful description. Do not repeat '
+    'source labels or parenthetical instructions such as "with = the other people"\n'
+    '\U0001F64B People want - asks from people I have not answered and replies awaiting approval: who, what, '
+    'since when, and what already covers it; check OUT OF OFFICE before suggesting a chase\n'
+    '\U0001F680 In flight - from OPEN WORK and FINISHED THIS WINDOW: what an agent is doing, what shipped, '
+    'and what has gone quiet\n'
+    '\U0001F501 Follow up - promises I have not kept and things I asked for that never came back\n'
+    '\U0001F4A1 New ideas - useful open ideas the assistant already raised, plus genuine patterns worth a heads-up\n'
+    '\U0001F50E What happened - the material story of the window from WHAT PEOPLE SAID and WHAT ARRIVED\n'
+    '\U0001F4CC Keep honoring - standing decisions that still affect today, only when mentioning one helps explain '
+    'what was omitted or how something was handled\n'
+    '\U0001F4CA At a glance - THE WINDOW IN NUMBERS, at most one numbered item and only when the numbers help\n'
+    'WHAT THE OWNER HAS ALREADY DECIDED is binding relevance context and governs every section. Apply it before '
+    'writing: do not surface, summarize, chase, or suggest action on anything those standing verdicts '
+    'rule out. Those verdicts are instructions, not events to repeat as news. Every TQ-ref must appear '
+    'in the data with the same title and its link. A block reading "(none)" has nothing to say. Say what '
+    'matters, not your reasoning. Never invent facts; no preamble, no sign-off, and nothing outside the sections.')
+
 # every prompt ever SHIPPED, so store.__init__ can tell "still the stock text" (upgrade it)
 # from "the owner wrote this" (never touch) - same deal the template docs get
 OLD_PROMPTS = (
-    _PROMPT_WITHOUT_STANDING_MEMORY,
+    _PROMPT_WITHOUT_STANDING_MEMORY, _PROMPT_2026_09_02_MEMORY,
     _PROMPT_2026_08_31, _PROMPT_2026_08_31_MEMORY,
     (
     'Write what the owner, half awake, should hold in mind TODAY, under 450 words, grouped into '
@@ -277,7 +307,7 @@ def gather(store, days: int = DAYS) -> str:
         lines = cal.render_today(t) + [f'  COULD NOT READ: {e}' for e in t.get('errors') or []]
     except Exception as e:
         lines = [f'  COULD NOT READ: {str(e)[:160]}']
-    _block(out, "MEETINGS TODAY (in order; 'with' = the other people, 'about' = the invite's own words):", lines)
+    _block(out, 'MEETINGS TODAY:', lines)
     # what slipped: their ask, nobody answered - the one block a brief of counts never had
     state = {i['Key']: i for i in store.list_ideas()}
     def said(c):

@@ -327,6 +327,14 @@ ASK_LINE = (f'ASKING THE OWNER: when you cannot continue without their answer, e
             f'waiting for them and brings their answer back to you. Only for a real blocker, never for a rhetorical question.')
 
 
+def without_ask(text: str) -> str:
+    """The marker taken out of anything the owner READS. It was stripped from the filed reply and
+    nowhere else, so a CLI that put its question in a progress line printed Taskuary's own plumbing
+    into the middle of the agent's thinking - `[[TASKUARY-ASK]] Have you signed in? | Signed in |
+    Login failed`, verbatim, on screen (2026-09-15). The question itself is shown as a question."""
+    return _ASK_RE.sub('', str(text or '')).rstrip()
+
+
 def ask_marker(text: str) -> tuple:
     """(cleaned reply, question, choices) - or (text, None, []) when the reply asks nothing structurally."""
     m = _ASK_RE.search(text or '')

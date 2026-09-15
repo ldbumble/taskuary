@@ -24,7 +24,7 @@ import UpdateCard from "./UpdateCard.jsx";
 import SystemUpdateAltIcon from "@mui/icons-material/SystemUpdateAlt";
 import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, ACTION_COLORS } from "./theme.jsx";
-import { ChannelIcon, ConfirmDelete, Empty, FilterPills, TaskuaryMark } from "./ui.jsx";
+import { ChannelIcon, ConfirmDelete, Empty, FilterPills } from "./ui.jsx";
 import { notifyState } from "./notify.js";
 
 
@@ -250,7 +250,6 @@ const PAGES = {
   config: { title: "Configuration", icon: TuneIcon, desc: "Triage, drafting, coder and display knobs — how the funnel behaves." },
   policies: { title: "Routing policies", icon: AltRouteIcon, desc: "Deterministic rules the AI can never override — ignores, escalations, auto-answers." },
   memory: { title: "Verdicts & notes", icon: PsychologyIcon, desc: "The evidence behind LEARNED.md — every verdict you gave, one line each, plus notes you write. Toggle off what it learned wrong." },
-  agents: { title: "Agents", icon: (props) => <TaskuaryMark size={22} sx={props?.sx} />, desc: "Bring your own AI CLI — cmd, args, resumable sessions, repo → checkout map." },
   audit: { title: "Audit integrity", icon: VerifiedIcon, desc: "Who did what, when — a tamper-evident record of every action, and a button that proves nobody edited it." },
   updates: { title: "Updates", icon: SystemUpdateAltIcon, desc: "Which build is running, which is the latest release, and one button that installs it and reopens — connections and settings untouched." },
 };
@@ -299,7 +298,11 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
   // opens it: the CLI roster is a Settings page, a connector card lives on Connections (whose
   // own hash router picks up connector=<id>), so the tab has to move for the second kind.
   const goFromPanel = (where) => {
-    if (where === "agents") { setPage("agents"); return; }
+    if (where === "agents") {
+      window.location.hash = "profiles";
+      onNavigate?.("Docs");
+      return;
+    }
     if (where && where.startsWith("connector:")) window.location.hash = `connector=${where.slice(10)}`;
     onNavigate?.("Connections");
   };
@@ -604,10 +607,6 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
   if (page === "about") return <AboutYou />;
   if (page === "updates") return <UpdateCard />;
 
-  if (page === "agents") {
-    return <Button onClick={() => { window.location.hash = "profiles"; }}>Manage profiles in Docs</Button>;
-  }
-
   if (page === "audit") {
     return (
       <Box>
@@ -682,7 +681,7 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
 
 // One page, a rail, and a search box that is always reachable. The landing grid meant every
 // trip between two settings went section → back → section; these five are edited together.
-const NAV = ["about", "config", "policies", "memory", "agents", "audit", "updates"];
+const NAV = ["about", "config", "policies", "memory", "audit", "updates"];
 
 export default function SettingsView({ onNavigate }) {
   const [page, setPage] = useState(NAV[0]);      // the rail's first entry is where Settings opens - About you

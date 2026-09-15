@@ -20,17 +20,13 @@ not uncommitted changes or a guarantee that the application has no vulnerabiliti
 - Scan Python and JavaScript/TypeScript with CodeQL on pushes, pull requests, and weekly.
 - Build the packaged UI and release UI with Node 22. Commit regenerated assets with
   source or build-tool changes so CI's existing source/bundle check stays useful.
-- Require PRs, passing CI and CodeQL, an up-to-date branch, and resolved conversations
-  before merging into master. Force pushes and branch deletion are prohibited, including
-  for administrators. The API configuration is in `.github/branch-protection.json`.
-  Human approval is optional until another maintainer is available; this does not satisfy
-  Scorecard's independent-human-review requirement.
+- Run CI and CodeQL on pushes and pull requests. Branch protection is currently disabled so
+  the daily generated download chart can commit directly to master.
 - Publish signed provenance for future release artifacts and attach the Sigstore bundle.
   See [verification instructions](../RELEASING.md#verify-release-provenance).
-- Propose daily chart changes through an automation PR. Because GitHub suppresses normal
-  workflow triggers for GITHUB_TOKEN-created PRs, the chart job explicitly dispatches CI
-  and CodeQL on its branch. Repository settings must allow Actions to create PRs; the
-  workflow never approves or merges them.
+- Commit daily chart changes directly to master with GitHub's short-lived repository token.
+  The chart workflow runs the focused generator tests before committing because pushes made
+  with that token do not start another workflow run.
 
 CodeQL and Dependabot become active once their configuration reaches the default branch.
 CodeQL findings need review after the first hosted run. Scorecard publishes on a push to
@@ -40,7 +36,7 @@ master and weekly; a new score cannot be promised before that scan completes.
 
 | Check | Published result | Next step |
 | --- | --- | --- |
-| Branch protection | 0/10 | Apply the committed API configuration to master; require CI and PRs while human approval remains optional for the solo maintainer. |
+| Branch protection | 0/10 | Direct automated chart commits currently require an unprotected master branch. Revisit this if the update mechanism changes. |
 | Code review | 0/10 | Use pull requests with independent human review; Scorecard did not find approvals on the last 30 changesets. AI reviews do not count for this check. |
 | CI tests | Unscored | Scorecard found no pull requests. Keep the existing tests running and merge tested PRs; do not remove checks to obtain a green badge. |
 | Signed releases | 0/10 | The next tagged release will generate signed provenance. Existing unsigned releases remain historical results. |
@@ -50,15 +46,8 @@ master and weekly; a new score cannot be promised before that scan completes.
 | Maintained | 0/10 | The report penalizes repositories younger than 90 days. Continue maintaining the project; this is not evidence that its current tests fail. |
 | Contributors | 3/10 | Broader independent contributions improve this over time. |
 
-Apply the branch configuration with an administrator's authenticated GitHub CLI:
-
-```bash
-gh api --method PUT repos/ldbumble/taskuary/branches/master/protection --input .github/branch-protection.json
-```
-
-The automated chart workflow uses GitHub's short-lived repository token. It does not need
-a personal access token or a bypass of branch protection. Required checks are bound to
-the GitHub Actions app so another integration cannot satisfy them with matching names.
+The automated chart workflow uses GitHub's short-lived repository token and does not need
+a personal access token.
 
 The [OpenSSF check definitions](https://github.com/ossf/scorecard/blob/main/docs/checks.md)
 explain the scoring rules and their limitations. Security policy, licensing, packaging,

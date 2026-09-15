@@ -16,7 +16,11 @@ test('Current follows only an explicit canonical migration or lineage alias', ()
 });
 
 test("every lane the server knows has a word, a mark and a role the theme can colour", () => {
-  assert.deepStrictEqual(LANES, ["blocked", "time", "approve", "asked", "queued", "broken", "forgotten", "report", "fyi", "working"]);
+  assert.deepStrictEqual(LANES, ["blocked", "time", "approve", "asked", "queued", "broken", "unjudged", "forgotten", "report", "fyi", "working"]);
+  // ...and a row NOTHING judged is not an fyi: `fyi` claims a verdict was reached, and the whole
+  // point of the error state is that none was (the owner, 2026-09-15: "that's a bad bug")
+  assert.strictEqual(LANE_META.unjudged.word, "triage failed");
+  assert.strictEqual(LANE_META.unjudged.role, "bad");
   // a failed check is second only to an agent that is stuck, wears the oxblood `bad` role, and
   // is NOT in the server's MUTED_LANES - a rule that quiets a chatty report cannot quiet it failing
   assert.strictEqual(LANE_META.broken.role, "bad");
@@ -257,7 +261,7 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.match(cards, /filter\(\(m\) => String\(m\.Status \|\| ""\) !== "context"\)/);
   assert.match(cards, /messages combined by triage/);
   assert.match(cards, /const \[full, setFull\] = useState\(true\)/);
-  assert.equal((cards.match(/<CombinedTaskText card=\{card\} \/>/g) || []).length, 3); // reply + ordinary message + the task card (PW-152)
+  assert.equal((cards.match(/<CombinedTaskText card=\{card\} \/>/g) || []).length, 4); // reply + paused agent + ordinary message + task card
   assert.match(read("SettingsView.jsx"), /funnel_hours/); assert.match(read("SettingsView.jsx"), /funnel_max/);
 });
 

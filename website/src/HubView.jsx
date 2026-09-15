@@ -80,6 +80,8 @@ const Post = ({ p, onChanged, onOpenTask }) => {
   const comments = full?.comments || [];
   const removed = p.Status && p.Status !== "live";
   const score = p.Score || 0, mine = p.MyVote || 0;
+  const commentCount = p.Comments || 0;
+  const voteLabel = score === 1 ? "upvote" : score >= 0 ? "upvotes" : "score";
   return (
     <Box sx={{ border: `1px solid ${BORDER}`, borderLeft: `2px solid ${removed ? BORDER : ROLES[k.role].solid}`,
       borderRadius: 2, bgcolor: PANEL, mb: 1.25, overflow: "hidden", opacity: removed ? 0.8 : 1 }}>
@@ -93,6 +95,9 @@ const Post = ({ p, onChanged, onOpenTask }) => {
           </IconButton>
           <Typography sx={{ ...mono, fontSize: 11.5, fontWeight: 700, lineHeight: 1,
             color: score > 0 ? ACCENT : score < 0 ? ALERT_INK : FAINT }}>{score}</Typography>
+          <Typography sx={{ ...mono, fontSize: 7.5, lineHeight: 1.2, color: FAINT, mt: 0.3 }}>
+            {voteLabel}
+          </Typography>
           <IconButton size="small" onClick={() => vote(false)} title="wrong or stale — below zero it is removed"
             sx={{ p: { xs: 0.9, md: 0.25 }, color: mine < 0 ? ALERT_INK : FAINT, "&:hover": { color: ALERT_INK } }}>
             <ArrowDownwardIcon sx={{ fontSize: { xs: 20, md: 16 } }} />
@@ -127,8 +132,9 @@ const Post = ({ p, onChanged, onOpenTask }) => {
             )}
             <Button size="small" onClick={() => setOpen((v) => !v)}
               startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 14 }} />}
-              sx={{ fontSize: 11.5, color: DIM, minWidth: 0 }}>
-              {p.Comments ? `${p.Comments} comment${p.Comments === 1 ? "" : "s"}` : "comment"}
+              sx={{ fontSize: 11.5, color: commentCount ? ACCENT2 : DIM, minWidth: 0,
+                fontWeight: commentCount ? 700 : 400 }}>
+              {commentCount} comment{commentCount === 1 ? "" : "s"}
             </Button>
             <Box sx={{ flex: 1 }} />
             {removed ? (
@@ -241,7 +247,8 @@ export default function HubView({ onOpenTask }) {
   const [kind, setKind] = useState("");
   const [q, setQ] = useState("");
   const [typed, setTyped] = useState("");
-  const [sort, setSort] = useState("new");
+  // This is a forum: open on what the room validated; newest remains one click away.
+  const [sort, setSort] = useState("top");
   const [removed, setRemoved] = useState(false);   // the shelf the vote (or you) took things off
   const [newOpen, setNewOpen] = useState(false);
   const load = useCallback(async () => {
@@ -303,8 +310,8 @@ export default function HubView({ onOpenTask }) {
             sx={{ width: { xs: "100%", sm: 260 }, "& .MuiInputBase-root": { fontSize: 12.5, bgcolor: PANEL } }} />
           <Select size="small" value={sort} onChange={(e) => setSort(e.target.value)}
             sx={{ fontSize: 12, bgcolor: PANEL, height: 34 }}>
+            <MenuItem value="top" sx={{ fontSize: 12.5 }}>most valuable</MenuItem>
             <MenuItem value="new" sx={{ fontSize: 12.5 }}>newest</MenuItem>
-            <MenuItem value="top" sx={{ fontSize: 12.5 }}>top voted</MenuItem>
           </Select>
           <Select size="small" value={kind} onChange={(e) => setKind(e.target.value)} displayEmpty
             sx={{ fontSize: 12, bgcolor: PANEL, height: 34, minWidth: 128 }}>

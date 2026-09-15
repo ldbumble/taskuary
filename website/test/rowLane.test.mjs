@@ -50,5 +50,8 @@ test("with nothing waiting the row keeps triage's road word", () => {
 test("the rail asks for it, and the server's word for that lane matches the page's", () => {
   const feed = read("FeedView.jsx");
   assert.match(feed, /import \{ rowLane \} from "\.\/rowLane\.js"/);
-  assert.match(feed, /view === "unread" && \(r\.Lane \|\| rowLane\(r\)\) \? <LaneTag lane=\{r\.Lane \|\| rowLane\(r\)\} \/>/);
+  // computed ONCE into rowWord, because the state mark now asks the same question - "did anything
+  // already say a word for this row?" - and a second copy of the expression could disagree with it
+  assert.match(feed, /const rowWord = view === "unread" \? \(r\.Lane \|\| rowLane\(r\)\) : null;/);
+  assert.match(feed, /\{rowWord \? <LaneTag lane=\{rowWord\} \/>/);
 });

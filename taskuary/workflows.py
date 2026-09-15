@@ -32,9 +32,17 @@ def cfg_of(src) -> dict:
 
 
 def is_workflow(src_or_cfg) -> bool:
-    """A job that writes data or keeps state; a report only reads."""
+    """A job that writes data or keeps state; a report only reads.
+
+    A job DRIVEN IN THE BROWSER is one of these even when it only reads, because the report loop cannot
+    run it at all: reports.run_agent builds its CLI read-only and with no shell, so `agent-browser` is
+    not there to call and yesterday's sign-in is not there to reuse. A walk that signed into a portal
+    and was then promoted to a daily job produced a report that could only fail (the owner, 2026-09-15:
+    "why can't it save the workflow and browser state for tomorrow? that's the whole idea of a
+    workflow"). The workflow road hands it to a real session, which opens the same named browser with
+    the owner's restored profile."""
     cfg = cfg_of(src_or_cfg); t = str(cfg.get('type') or '')
-    return t == 'zoho_monthly_invoices' or (t == 'agent' and cfg.get('access') == 'write')
+    return t == 'zoho_monthly_invoices' or (t == 'agent' and (cfg.get('access') == 'write' or cfg.get('browser')))
 
 
 def runs_on(cfg: dict) -> str:
@@ -59,6 +67,7 @@ def definition(store, src) -> dict:
             'connections': list(cfg.get('uses') or ([cfg['connector_id']] if cfg.get('connector_id') else [])),
             'allowed_actions': ['write'] if cfg.get('access') == 'write' or cfg.get('type') == 'zoho_monthly_invoices' else ['read'],
             'approvals': str(cfg.get('ask_first') or cfg.get('approvals') or '').strip(), 'done_when': str(cfg.get('done_when') or '').strip(),
+            'browser': bool(cfg.get('browser')),
             'schedule': {k: cfg[k] for k in ('cron', 'every_minutes', 'every', 'on_startup', 'tz', 'at') if cfg.get(k) is not None},
             'runs_on': runs_on(cfg), 'agent': cfg.get('agent') or None,
             'enabled': bool(src.get('Active', 1)) if isinstance(src, dict) else True}
@@ -83,6 +92,15 @@ def brief(defn: dict, trigger: str, when: str, context: dict = None) -> str:
     lines.append('ALLOWED ACTIONS: ' + ("you may write to the connected systems this workflow names, through Taskuary's tools and proposals; "
                                         'anything outside them, and anything under ASK FIRST, waits for the owner'
                                         if 'write' in defn['allowed_actions'] else 'read only - propose changes, make none'))
+    # the sign-in the owner typed by hand on an earlier run is in the profile this browser restores
+    # (browserview.RESTORE_KEY), so the job starts signed in for as long as the site lets it
+    if defn.get('browser'):
+        lines.append('BROWSER: this job is driven in the browser the owner is watching, opened with their saved '
+                     'profile - the sign-in they typed by hand on an earlier run is restored with it. LOOK FIRST: '
+                     'open the page and read it. Most runs are already signed in and nobody needs to be asked; a '
+                     'scheduled run happens when the owner is not there. Only when the page actually turns you away '
+                     'do you stop - leave it on the sign-in screen and ask them to type it in the pane. Never type '
+                     'a password or a code yourself.')
     if defn.get('approvals'): lines.append('ASK FIRST: ' + defn['approvals'])
     if defn.get('done_when'): lines.append('DONE WHEN: ' + defn['done_when'])
     lines.append('This is a configured workflow, not an incoming request: no triage and no procedure selection apply. '
@@ -97,8 +115,12 @@ def run(store, src, actor: str = 'schedule', trigger: str = 'schedule', context:
     defn = definition(store, src)
     when = datetime.now().strftime('%Y-%m-%d %H:%M')
     text, kind = brief(defn, trigger, when, context), definition(store, src)['runs_on']
+    from . import browserview
+    # a browser job's run task asks for a browser the way the walk that taught it did: the tag is what
+    # general.py reads to launch one, bound to this session and restored from the owner's profile
+    tags = browserview.WANTS if kind == 'general' and defn.get('browser') else ''
     tid = store.create_task({'Title': f"{defn['title']} - {when}", 'Summary': text, 'Kind': kind, 'Status': 'open', 'Priority': 'normal',
-                             'Source': 'workflow', 'SourceRef': f"workflow:{defn['source_id']}"}, actor)
+                             'Source': 'workflow', 'SourceRef': f"workflow:{defn['source_id']}", 'Tags': tags}, actor)
     store.add_comment(tid, actor, 'agent', f"Workflow run ({trigger}): handed to the {'coding' if kind == 'coding' else 'regular'} agent with the workflow definition - no triage.")
     logger.info(f"workflow {defn['title']!r} ({trigger}) -> {task_ref(tid)} on the {kind} agent")
     if kind == 'coding': ingest._auto_code(store, tid)

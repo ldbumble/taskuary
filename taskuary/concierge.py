@@ -1643,6 +1643,11 @@ def setup_task(store, text: str, actor: str = 'owner', title: str = '', kind: st
                              # setting. Its Assistant session owns that browser; a coding handoff
                              # keeps the ordinary task controls instead.
                              'Tags': browserview.WANTS if kind == SETUP_KIND and not agent_job else ''}, actor)
+    # A task the owner creates in the Assistant deserves the same concrete list surface as work
+    # triage creates from an incoming ask. With no checklist the card rendered Summary as a banner,
+    # then rendered the identical own-message below it; there was no box and the ask appeared three
+    # times. The initial ask is the first real item. It can be split or edited later like any list.
+    store.set_task_checklist(tid, [text], actor)
     # The ask is the conversation's FIRST TURN, not a note filed beside it. As a plain human comment
     # the chat does not render it, so a walk showed an answer with no question above it and read as
     # a walk that had never started (the owner, 2026-09-14). A hand-off has no conversation to open
@@ -1661,7 +1666,7 @@ def card_for(item: dict) -> dict:
     and reloads the live facts (draft text, agent tail) from the item's ids."""
     return {k: item.get(k) for k in ('key', 'kind', 'lane', 'title', 'who', 'when', 'why', 'mid', 'tid', 'ref', 'rid', 'idea', 'coding', 'source_id', 'preview', 'sent', 'stale', 'sig', 'more',
                                        'idea_kind', 'agent', 'asking', 'tail', 'event', 'summary', 'bad', 'draft', 'channel', 'category', 'action', 'sid', 'mode',
-                                       'presentation_revision', 'order_band', 'processing_id', 'member_ids', 'aliases', 'unread', 'deferred', 'actionable')}
+                                       'presentation_revision', 'order_band', 'processing_id', 'member_ids', 'aliases', 'unread', 'deferred', 'actionable', 'paused')}
 
 
 def move_on(store, key: str, actor: str = 'owner') -> dict:
@@ -2030,7 +2035,15 @@ SETUP_SORT_SYSTEM = ('You sort one set-up request from the owner of a small comp
                      'A CONNECTION adds or configures a system Taskuary talks to (mail, chat, a database, a books system, an AI provider) - '
                      'name its type from connector_types when you can. INVESTIGATE is a set-up that needs real digging first - a portal to '
                      'read, systems to choose between, several moving parts - where a walk-through with an agent is the honest next step. '
-                     'A simple configuration is never investigate.')
+                     'A simple configuration is never investigate. '
+                     # The assistant HAS a browser, and nothing here said so: asked for a daily report off a page behind a
+                     # sign-in, this sorted to "report", and the composer - which only knows connectors - replied "connect a
+                     # browser/web automation source", naming a connector that does not exist and cannot be added (the owner,
+                     # 2026-09-15). Work done ON A WEBSITE is the walk-through's, and the walk is where the browser opens.
+                     'WORK DONE ON A WEBSITE IS ALWAYS INVESTIGATE: signing into a site or portal, reading or filling a page, '
+                     'anything whose only road is a browser. Taskuary drives its own browser in a walk-through, beside the '
+                     'owner, and keeps the sign-in they type there; there is no browser connector to add and connector_types '
+                     'has none. Never answer "connection" for a website, and never a report that would need one.')
 
 
 def redact(text: str) -> str: return _SECRETISH.sub('[redacted]', str(text or ''))

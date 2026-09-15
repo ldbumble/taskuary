@@ -36,6 +36,10 @@ def idea_lane(idea: dict) -> str:
 def row_lane(row: dict) -> str:
     """The pile's word for a feed row, so All and unread say the same thing about one item."""
     if row.get('ReportFailed'): return 'broken'
+    # nothing judged this one: the AI was down or answered unusably. It stays in the quiet band -
+    # it is not work until somebody decides it is - but it must not wear 'fyi', the word for a
+    # verdict that was actually reached (the owner, 2026-09-15: "that's a bad bug").
+    if row.get('MsgStatus') == 'error': return 'unjudged'
     if (row.get('TaskStatus') in ('open', 'in_progress') and str(row.get('Assignee') or '').startswith('agent:')
             and not row.get('Working') and not row.get('AgentWaiting')): return 'queued'
     band = feed_band(row)

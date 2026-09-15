@@ -10,6 +10,9 @@ use - the exact failure a wizard exists to prevent.
 """
 import shutil
 
+# `acp`: how this CLI is launched as an Agent Client Protocol server - the ARGUMENTS, never a
+# boolean, so claude or codex can be added later by pointing a profile at their adapter without
+# touching code. Only the three that speak it natively ship with it; see docs/acp-transport.md.
 KNOWN = [
     {'name': 'claude', 'cmd': 'claude', 'label': 'Claude Code',
      # --dangerously-skip-permissions: headless claude otherwise blocks on approvals forever.
@@ -22,14 +25,15 @@ KNOWN = [
     # and finds it): ~/.gemini/tmp/<sha256 of the project root>/chats, and ~/.cursor/chats/**/<id>.
     # Read from their documentation, not from a machine that ran them - see sessionfiles.
     {'name': 'gemini', 'cmd': 'gemini', 'label': 'Gemini CLI',
-     'args': ['-p', '--yolo'], 'resume_args': ['--resume'], 'timeout': 1500},
+     'args': ['-p', '--yolo'], 'resume_args': ['--resume'], 'acp': ['--acp'], 'timeout': 1500},
     {'name': 'cursor', 'cmd': 'cursor-agent', 'label': 'Cursor CLI',
-     'args': ['-p', '--force', '--output-format', 'text'], 'resume_args': ['--resume={id}'], 'timeout': 1500},
+     'args': ['-p', '--force', '--output-format', 'text'], 'resume_args': ['--resume={id}'],
+     'acp': ['acp'], 'timeout': 1500},
     # --resume takes an OPTIONAL value, so the id has to be JOINED to it ({id}); its own help says
     # `copilot --resume=<session-id>`. It also takes --session-id=<uuid> for a NEW session, which is
     # how a pane names its conversation up front rather than learning it later (agents.ASSIGN_ARGS).
     {'name': 'copilot', 'cmd': 'copilot', 'label': 'GitHub Copilot CLI',
-     'args': ['-p', '--allow-all-tools'], 'resume_args': ['--resume={id}'], 'timeout': 1500},
+     'args': ['-p', '--allow-all-tools'], 'resume_args': ['--resume={id}'], 'acp': ['--acp'], 'timeout': 1500},
     # Meta's agent, on Muse Spark. `exec` is its headless verb (codex's shape, not claude's -p) and
     # --yolo is the approval bypass without which a headless run parks on a prompt forever. Its
     # --json emits Meta's own JSONL event schema, which nothing here parses, so it stays off and

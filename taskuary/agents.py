@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from loguru import logger
 
-from . import redact, spawn
+from . import acp as acp_mod, redact, spawn
 from .store import task_ref
 from .clis import preset_args
 
@@ -617,6 +617,64 @@ def agent_chain(store, primary: str = None) -> list[str]:
     return out
 
 
+def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, extra_env: dict = None):
+    """One headless turn over ACP. Returns (result, session_id, diff) - run_cli's own contract, so
+    nothing upstream can tell which road a run took.
+
+    Two things are better here than on the argv road, and they are the reason this exists. The
+    session id is RETURNED by session/new rather than scraped out of a vendor's temp directory
+    afterwards, and the agent's progress arrives as typed events rather than as text to parse.
+
+    It fails loudly on purpose. There is no fallback to the argv road: a silent fallback would
+    hide which of the two is broken, and this transport is new.
+    """
+    name = profile.get('cmd', 'claude')
+    cmd = _resolve_cmd(name) + list(profile.get('acp') or [])
+    cwd = profile.get('cwd')
+    trace('prompt', 'prompt_sent_to_agent', prompt)
+    trace('tool', 'cli', f'{name} over acp cwd={cwd or os.getcwd()}' + (f' resume={resume}' if resume else ''))
+    head0 = _git(cwd, 'rev-parse', 'HEAD')
+    env = child_env({**os.environ, **(extra_env or {})})
+
+    def show(u):
+        line = acp_mod.trace_line(u)
+        if line: trace('live', name, line)
+
+    try:
+        client = acp_mod.ACPClient(cmd[0], cmd[1:], cwd=cwd, env=env,
+                                   timeout=profile.get('timeout', 1200), on_update=show)
+    except PermissionError as e:
+        raise FileNotFoundError(denied_msg(name, cmd[0] if cmd else '', e)) from e
+    with _CLI_CHILDREN_LOCK: _CLI_CHILDREN.add(client.p)
+    watcher = None
+    if cancel is not None:
+        # A browser Cancel asks the agent to stop first; killing the process is the backstop for
+        # an agent that does not honour session/cancel.
+        def _cancel():
+            cancel.wait()
+            if cancel.is_set(): client.cancel(); client.close()
+        watcher = threading.Thread(target=_cancel, daemon=True); watcher.start()
+    try:
+        caps = client.connect()
+        if resume and caps.get('loadSession'): client.load_session(resume, cwd)
+        else:
+            if resume: trace('progress', 'acp', f'{name} cannot reload a session; starting a fresh one')
+            client.new_session(cwd)
+        stop, said = client.prompt(prompt)
+        if stop and stop not in ('end_turn', 'cancelled'):
+            trace('progress', 'acp', f'the turn ended early: {stop}')
+        diff = ''
+        if cwd:
+            head1 = _git(cwd, 'rev-parse', 'HEAD')
+            if head1 and head1 != head0: diff = _git(cwd, 'diff', f'{head0}..{head1}')
+            unc = _git(cwd, 'diff', 'HEAD')
+            if unc: diff = '\n'.join(x for x in (diff, unc) if x).strip()
+        return said, client.session_id, (diff[:150000] or None)
+    finally:
+        with _CLI_CHILDREN_LOCK: _CLI_CHILDREN.discard(client.p)
+        client.close()
+
+
 def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, extra_env: dict = None):
     """One headless invocation of the configured CLI, output STREAMED line by line into
     the run trace so the Board shows the agent working live. claude's stream-json events
@@ -626,6 +684,11 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     # in the run's own trace two lines below. task_context() writes each message's BodyText in
     # verbatim, so mail is the likeliest way one arrives here. See redact.py.
     prompt = redact.scrub(prompt)
+    # The ACP road, for the profiles marked for it: the general agent's tool-using runs on a CLI
+    # that speaks the protocol natively. Everything else - triage, the drafter, coding sessions,
+    # every pane - stays on the argv road below. See docs/acp-transport.md.
+    if profile.get('acp') and profile.get('acp_ok'):
+        return run_acp(profile, prompt, trace, resume=resume, cancel=cancel, extra_env=extra_env)
     name = profile.get('cmd', 'claude')
     args = list(profile.get('args') or preset_args(name) or ['-p'])
     # Codex's normal exec output is human prose with no boundary between commands, searches,

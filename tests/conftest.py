@@ -309,7 +309,7 @@ def isolated_runtime_boundaries():
             return (hashlib.sha256(script.encode()).hexdigest() in allowed
                     and all(x in {'exec', '--json', '--skip-git-repo-check'} for x in trailing))
         allowed_files = {Path(__file__).resolve().parent / name
-                         for name in ('fake_mcp_server.py', 'fake_tui.py')}
+                         for name in ('fake_mcp_server.py', 'fake_tui.py', 'fake_acp_server.py')}
         return len(args) == 1 and Path(args[0]).resolve() in allowed_files
 
     def git_allowed(argv, kwargs) -> bool:

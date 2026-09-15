@@ -84,6 +84,9 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
         prof['args'] = restrict(prof.get('cmd', 'claude'), list(prof.get('args') or preset_args(prof.get('cmd', 'claude')) or ['-p']))
         scratch = config.home() / 'scratch'; scratch.mkdir(exist_ok=True)
         prof['cwd'] = cwd or str(scratch)
+    # The ACP road is for the general agent's tool-using runs only. `no_hands` is exactly the
+    # classifier - triage and the drafter, one verdict with every tool off - and it keeps argv.
+    if not no_hands: prof['acp_ok'] = True
     light = str(prof.get('light_model') or '')
     if light.startswith('effort:'):
         # codex on a ChatGPT plan serves ONLY the plan's models - no mini/nano tier exists -

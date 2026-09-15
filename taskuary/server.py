@@ -333,7 +333,12 @@ def update_apply():
     from . import update
     try: out = update.apply()
     except Exception as e: raise HTTPException(422, str(e))
-    store.audit('app', 0, 'update', ACTOR, detail={k: v for k, v in out.items() if k != 'pip'})
+    # Once apply() returns, the swap helper is ALREADY RUNNING and waiting for this process to go.
+    # Anything that throws between here and exit_soon strands it on a PID that never dies - which
+    # is how one machine was left with no app and a console spinning on `find "<pid>"`
+    # (2026-09-15). The audit row is worth writing and is not worth the app for.
+    try: store.audit('app', 0, 'update', ACTOR, detail={k: v for k, v in out.items() if k != 'pip'})
+    except Exception as e: logger.warning(f'update: could not write the audit row, restarting anyway - {e}')
     if out.get('restarting'): update.exit_soon()
     return out
 

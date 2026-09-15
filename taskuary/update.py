@@ -30,6 +30,9 @@ REPO = 'ldbumble/taskuary'
 LATEST_API = f'https://api.github.com/repos/{REPO}/releases/latest'
 EXE_URL = f'https://github.com/{REPO}/releases/latest/download/Taskuary.exe'
 TIMEOUT = 20
+# How long the helper waits for the old program to go before deciding it never will. Unbounded
+# was the bug (2026-09-15): Update left a console spinning on a PID that stayed, and no app.
+WAIT_S = 120
 _cache = {'at': 0.0, 'result': None}
 CACHE_S = 600                   # GitHub allows 60 anonymous calls an hour; the header pill asks often
 
@@ -129,9 +132,18 @@ def swap_script(exe: Path, new: Path, pid: int, args: list) -> str:
         'setlocal',
         f'set "update_log={log}"',
         '> "%update_log%" echo update helper started %date% %time%',
+        'set /a waited=0',
         ':wait',
         f'tasklist /FI "PID eq {pid}" 2>nul | find "{pid}" >nul',
-        'if not errorlevel 1 (timeout /t 1 /nobreak >nul & goto wait)',
+        # `ping`, not `timeout`: this helper runs with its stdin on DEVNULL, and timeout answers
+        # redirected stdin with "ERROR: Input redirection is not supported" - so the poll never
+        # slept, it spun. ping -n 2 is one second and needs neither a console nor stdin.
+        'if not errorlevel 1 (',
+        '  set /a waited+=1',
+        f'  if %waited% geq {WAIT_S} goto stuck',
+        '  ping -n 2 127.0.0.1 >nul',
+        '  goto wait',
+        ')',
         '>> "%update_log%" echo old process exited %date% %time%',
         'set /a tries=0',
         ':swap',
@@ -139,7 +151,10 @@ def swap_script(exe: Path, new: Path, pid: int, args: list) -> str:
         'if errorlevel 1 (',
         '  set /a tries+=1',
         '  if %tries% geq 30 goto giveup',
-        '  timeout /t 1 /nobreak >nul',
+        # same reason as the wait loop: timeout cannot run with stdin on DEVNULL, so "retry for
+        # 30 seconds while the scanner lets go of the download" was really 30 tries in a few
+        # milliseconds - and then it gave up on a file that would have been free a second later.
+        '  ping -n 2 127.0.0.1 >nul',
         '  goto swap',
         ')',
         '>> "%update_log%" echo program swapped; launching new build %date% %time%',
@@ -148,6 +163,14 @@ def swap_script(exe: Path, new: Path, pid: int, args: list) -> str:
         '>> "%update_log%" echo launch requested successfully %date% %time%',
         'del "%~f0"',
         'exit /b 0',
+        ':stuck',
+        # The old program never exited. Leaving the owner with no app at all is the worst
+        # outcome available, so put the KNOWN GOOD one back in front of them and say why in the
+        # log; the new build stays staged and the next Update tries again.
+        '>> "%update_log%" echo ERROR: the old process never exited; starting it again unchanged %date% %time%',
+        f'start "" /D {q(exe.parent)} {q(exe)} {argstr}'.rstrip(),
+        'del "%~f0"',
+        'exit /b 3',
         ':giveup',
         '>> "%update_log%" echo ERROR: could not replace the old program after 30 tries %date% %time%',
         f'start "" /D {q(exe.parent)} {q(exe)} {argstr}'.rstrip(),
@@ -170,8 +193,13 @@ def _launch_swap(script: Path, cwd: Path):
     """
     cmd = os.environ.get('COMSPEC') or 'cmd.exe'
     argv = [cmd, '/d', '/c', 'call', str(script)]
-    base = (getattr(subprocess, 'DETACHED_PROCESS', 0)
-            | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)
+    # NOT DETACHED_PROCESS. Windows ignores CREATE_NO_WINDOW when DETACHED_PROCESS is set, and a
+    # detached cmd.exe allocates a console of its OWN - which Windows 11 hands to Windows Terminal.
+    # That is the black window the owner was left staring at, titled with whatever the batch was
+    # running at the time (`find "10592"`). CREATE_NO_WINDOW alone gives the helper a console it
+    # needs for tasklist/find/ping, and hides it. CREATE_NEW_PROCESS_GROUP still keeps our Ctrl
+    # events off it, and the breakaway below is what actually outlives us.
+    base = (getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)
             | getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     kw = dict(cwd=str(cwd), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
               stderr=subprocess.DEVNULL, close_fds=True)

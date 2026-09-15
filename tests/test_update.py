@@ -214,3 +214,54 @@ class OverTheApi(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TheHelperDoesNotStrandTheOwner(unittest.TestCase):
+    """Uri, 2026-09-15, on a machine running the packaged build: pressed Update, the app never came
+    back, and a console window sat there showing `find "10592"` - the wait loop, spinning on a PID
+    that never went. Closing that window is what finally let the app reopen.
+
+    Three defects, each wrong on its own:
+      * the helper is asked for NO window and gets one anyway;
+      * its one-second sleep cannot run at all where it runs;
+      * and the wait is unbounded, so a process that never exits means no app, forever.
+    """
+
+    def test_the_wait_is_bounded_so_a_process_that_never_exits_still_gives_the_app_back(self):
+        s = update.swap_script(PureWindowsPath(r'C:\Apps\Taskuary.exe'),
+                               PureWindowsPath(r'C:\Apps\Taskuary.new.exe'), 4242, [])
+        self.assertIn('goto stuck', s)                    # the loop has a way out that is not the PID
+        self.assertIn(':stuck', s)
+        # and giving up must still leave a running program - the old one, which is known good
+        stuck = s.split(':stuck', 1)[1]
+        self.assertIn(r'start "" /D "C:\Apps" "C:\Apps\Taskuary.exe"', stuck)
+
+    def test_it_does_not_sleep_with_a_command_that_refuses_redirected_stdin(self):
+        """_launch_swap passes stdin=DEVNULL, and `timeout` answers redirected stdin with
+        "ERROR: Input redirection is not supported" - so the poll never slept, it spun."""
+        s = update.swap_script(Path('T.exe'), Path('T.new.exe'), 1, [])
+        self.assertNotIn('timeout /t', s)
+        self.assertIn('ping -n', s)                       # works with no console and no stdin
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows creation flags')
+    def test_the_helper_gets_no_console_of_its_own(self):
+        """CREATE_NO_WINDOW is IGNORED when DETACHED_PROCESS is set: the child then has no console,
+        cmd.exe allocates one for itself, and Windows 11 hands it to Windows Terminal - which is the
+        window the owner saw. CREATE_NO_WINDOW alone is what actually hides it."""
+        with mock.patch.object(update.subprocess, 'Popen') as pop:
+            update._launch_swap(Path(r'C:\Apps\taskuary-update.cmd'), Path(r'C:\Apps'))
+        flags = pop.call_args.kwargs['creationflags']
+        self.assertTrue(flags & update.subprocess.CREATE_NO_WINDOW)
+        self.assertFalse(flags & update.subprocess.DETACHED_PROCESS)
+
+    def test_the_process_still_exits_when_the_audit_row_cannot_be_written(self):
+        """The helper is already running by the time apply() returns - it was started inside
+        _apply_exe. So ANYTHING that throws between that and the exit strands it: it waits on a PID
+        that now never goes, and the owner is left with no app and a console. The audit row is one
+        such thing; an 89MB SQLite under load answers 'database is locked' often enough."""
+        from taskuary import server
+        with mock.patch.object(update, 'apply', return_value={'how': 'exe', 'restarting': True}), \
+             mock.patch.object(server.store, 'audit', side_effect=RuntimeError('database is locked')), \
+             mock.patch.object(update, 'exit_soon') as bye:
+            server.update_apply()
+        bye.assert_called_once()

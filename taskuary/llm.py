@@ -14,6 +14,7 @@ everything on one model (and one bill). Configure it in Settings -> Triage & rou
 """
 import base64, json, mimetypes, requests
 from pathlib import Path
+from time import sleep
 
 AI_TYPES = ('anthropic', 'openai', 'azure_openai', 'openrouter', 'ollama', 'meta')
 
@@ -187,6 +188,45 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
     return failover
 
 
+# A cloud brain answers 500 for reasons that have nothing to do with what you asked, and every
+# caller here read the first answer as the verdict. On 2026-09-15 one Azure endpoint failed from
+# 01:55 to 04:25 and triage filed five messages unjudged, then failed again at 07:28 and the
+# Morning digest and Process Error Check went out carrying '(AI summary failed: azure_openai
+# error 500)' where their summary belonged. A scheduled report gets no second chance, so the blip
+# is ridden out here, in the one place every cloud brain passes through.
+RETRY_STATUS = (429, 500, 502, 503, 504)   # the ENDPOINT's problem; a 4xx is the request's own
+RETRY_TRIES = 3                            # attempts per call - bounded: a poll thread waits on this
+RETRY_WAIT = (1, 4)                        # seconds before attempt 2, then before attempt 3
+RETRY_WAIT_MAX = 30                        # a longer Retry-After is an outage, not a pause
+
+
+def retry_wait(last, attempt: int) -> float:
+    """Our own spacing, unless the endpoint said when to come back - a 429 always does."""
+    w = RETRY_WAIT[min(attempt, len(RETRY_WAIT)) - 1]
+    after = str((getattr(last, 'headers', None) or {}).get('Retry-After') or '').strip()
+    return max(w, min(int(after), RETRY_WAIT_MAX)) if after.isdigit() else w
+
+
+def post_retrying(url, headers, body, timeout):
+    """One completion call, tried again while the failure is the endpoint's rather than the
+    request's. Returns the last response for the caller to read; a connection that never comes
+    back raises its own error, as it always did."""
+    last = None
+    for attempt in range(RETRY_TRIES):
+        if attempt: sleep(retry_wait(last, attempt))
+        try: r = requests.post(url, headers=headers, json=body, timeout=timeout)
+        except requests.RequestException as e: last = e; continue
+        if r.status_code not in RETRY_STATUS: return r
+        last = r
+    if isinstance(last, Exception): raise last
+    return last
+
+
+def tried(r) -> str:
+    """So the row the owner reads says we rode it out and it stayed down, not that we gave up."""
+    return f' after {RETRY_TRIES} tries' if r.status_code in RETRY_STATUS else ''
+
+
 def make_llm(t, cfg: dict, key: str):
     if not key and t != 'ollama': raise RuntimeError('no API key saved - paste one under Credentials')
     if t == 'anthropic':
@@ -256,14 +296,14 @@ def make_llm(t, cfg: dict, key: str):
                 body = {'messages': msgs, tok_param: max_tokens}
                 if model: body['model'] = model
                 # a local model may spend its first call loading weights off disk - give it room
-                r = requests.post(url, headers=headers, json=body, timeout=180 if t == 'ollama' else 60)
+                r = post_retrying(url, headers, body, 180 if t == 'ollama' else 60)
                 if r.status_code == 200:
                     return r.json()['choices'][0]['message']['content']
                 last = r
                 if r.status_code == 404: break                     # wrong surface -> next url
                 if not (r.status_code == 400 and 'max_completion_tokens' in r.text):
-                    raise RuntimeError(f'{t} error {r.status_code} at {url.split("?")[0]}: {r.text[:300]}')
-        raise RuntimeError(f'{t} error {last.status_code} at {urls[-1].split("?")[0]}: {last.text[:300]}')
+                    raise RuntimeError(f'{t} error {r.status_code} at {url.split("?")[0]}{tried(r)}: {r.text[:300]}')
+        raise RuntimeError(f'{t} error {last.status_code} at {urls[-1].split("?")[0]}{tried(last)}: {last.text[:300]}')
     return llm
 
 

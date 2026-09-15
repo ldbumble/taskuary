@@ -565,5 +565,84 @@ class LlmTests(unittest.TestCase):
         with self.assertRaises(RuntimeError): llm.make_llm('azure_openai', {}, 'k')
 
 
+class TransientBrainTests(unittest.TestCase):
+    """One Azure endpoint answered 500 from 01:55 to 04:25 on 2026-09-15 and again at 07:28, and
+    every caller took the first answer as the verdict: triage filed five messages unjudged, and
+    the Morning digest and Process Error Check went out carrying '(AI summary failed:
+    azure_openai error 500)' where their summary belonged. A report runs on a clock and gets no
+    second chance, so a blip must be ridden out here, where every cloud brain passes."""
+
+    def setUp(self):
+        self.slept = []
+        p = mock.patch('taskuary.llm.sleep', self.slept.append); p.start(); self.addCleanup(p.stop)
+        self.fn = llm.make_llm('azure_openai', {'endpoint': 'https://r.openai.azure.com', 'deployment': 'gpt-5.2-chat',
+                                                'api_version': '2024-12-01-preview'}, 'k')
+
+    def replies(self, *codes):
+        """One fake answer per call: a status code, or an exception to raise. The last repeats."""
+        self.calls = []
+        def post(url, headers=None, json=None, timeout=None):
+            code = codes[min(len(self.calls), len(codes) - 1)]
+            self.calls.append(url)
+            if isinstance(code, Exception): raise code
+            r = mock.Mock(); r.status_code, r.text, r.headers = code, f'the endpoint said {code}', {}
+            if code == 200: r.json.return_value = {'choices': [{'message': {'content': 'ok'}}]}
+            return r
+        return mock.patch('taskuary.llm.requests.post', side_effect=post)
+
+    def test_a_blip_is_ridden_out_instead_of_reported_as_a_verdict(self):
+        with self.replies(500, 500, 200): self.assertEqual(self.fn('s', 'u'), 'ok')
+        self.assertEqual(len(self.calls), 3)
+        self.assertEqual(self.slept, list(llm.RETRY_WAIT))
+
+    def test_a_dead_endpoint_fails_bounded_and_says_it_tried(self):
+        with self.replies(500), self.assertRaises(RuntimeError) as e: self.fn('s', 'u')
+        self.assertIn('error 500', str(e.exception))
+        self.assertIn(f'after {llm.RETRY_TRIES} tries', str(e.exception))
+        self.assertEqual(len(self.calls), llm.RETRY_TRIES, 'bounded - the poll thread waits on this')
+
+    def test_the_requests_own_fault_is_never_retried(self):
+        """A 400/401/403 says the body or the key is wrong; sending it again buys nothing."""
+        for code in (400, 401, 403):
+            with self.replies(code), self.assertRaises(RuntimeError) as e: self.fn('s', 'u')
+            self.assertEqual(len(self.calls), 1, f'{code} is not transient')
+            self.assertNotIn('tries', str(e.exception))
+        self.assertEqual(self.slept, [])
+
+    def test_a_dropped_connection_is_the_same_kind_of_blip(self):
+        import requests as rq
+        with self.replies(rq.ConnectionError('connection reset'), 200): self.assertEqual(self.fn('s', 'u'), 'ok')
+        self.assertEqual(len(self.calls), 2)
+
+    def test_a_connection_that_never_comes_back_still_raises_its_own_error(self):
+        import requests as rq
+        with self.replies(rq.ConnectionError('connection reset')), self.assertRaises(rq.ConnectionError): self.fn('s', 'u')
+        self.assertEqual(len(self.calls), llm.RETRY_TRIES)
+
+    def test_the_endpoint_says_when_to_come_back(self):
+        """A 429 always carries Retry-After - honour it over our own spacing, but never sleep a
+        poll thread for the length of an outage."""
+        calls = []
+        def post(url, headers=None, json=None, timeout=None):
+            calls.append(url)
+            r = mock.Mock(); r.status_code, r.text = 429, 'too many requests'
+            r.headers = {'Retry-After': '3' if len(calls) == 1 else '9999'}
+            if len(calls) > 2: r.status_code = 200; r.json.return_value = {'choices': [{'message': {'content': 'ok'}}]}
+            return r
+        with mock.patch('taskuary.llm.requests.post', side_effect=post): self.assertEqual(self.fn('s', 'u'), 'ok')
+        self.assertEqual(self.slept, [3, llm.RETRY_WAIT_MAX])
+
+    def test_the_url_and_token_param_walks_still_work(self):
+        """The retry sits inside the compat grid - it must not swallow either fallback."""
+        calls = []
+        def post(url, headers=None, json=None, timeout=None):
+            calls.append(url); r = mock.Mock(); r.headers = {}
+            if 'max_completion_tokens' in json: r.status_code, r.text = 400, 'Unrecognized request argument supplied: max_completion_tokens'
+            else: r.status_code = 200; r.json.return_value = {'choices': [{'message': {'content': 'ok'}}]}
+            return r
+        with mock.patch('taskuary.llm.requests.post', side_effect=post): self.assertEqual(self.fn('s', 'u'), 'ok')
+        self.assertEqual(len(calls), 2); self.assertEqual(self.slept, [])
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -2,22 +2,71 @@
 
 ## The workflow
 
-Work arrives as messages, but work is tasks—and people usually become the translation
-layer. They read the message, decide what it means, open the ticket, do the work, and write
-back.
+Follow one request from arrival to approval: Ruth needs the latest vendor spend numbers
+before the operations review. The screenshots show the real app with fictional demo data.
+For installation and your first connections, start with [Getting started](getting-started.md).
 
-Taskuary automates the ends and leaves you the middle:
+### 1. Find incoming work on the Timeline
 
-1. Mail, chats, issues, incidents, and reports arrive on one Timeline.
-2. AI triage files noise, drafts answers to questions, and turns concrete work into tasks.
-3. Coding tasks run in the CLI and repository you configured. General, research, marketing,
-   and triage tasks run in a conversational workspace; its assistant and terminal views share
-   one session, and both can sit beside the session browser. Plain tasks wait on your list.
-   See [The five roads](#the-five-roads) for what each verdict means.
-4. Results and replies return for review. Nothing sends or ships without approval. A triaged
-   coding task may close itself when its agent finishes; owner-controlled tasks never do.
+Connect your mail, chats, issue trackers, and reports in **Connections**, then open the
+**Timeline**. Ruth's email arrives alongside the other work of the day. Open its row to
+read the request and see what triage decided.
 
-Nothing leaves the machine except calls to services you explicitly configure.
+In this image, each row has an added source label **above its original time**, making it easy
+to distinguish email, Teams, GitHub, WhatsApp, SQL reports, and Assistant posts. Calendar
+entries show the meeting time.
+
+![The Timeline with each item's source above its original time, including Ruth's vendor spend email and the day's meetings.](readme/01-timeline-sources-and-times.png)
+
+### 2. Open the task
+
+Ruth asks for the August total, the change from July, and a breakdown by category. Taskuary
+turns that request into **TQ-0018**. Open it in **Tasks** to see the original instructions,
+the assigned agent, and separate sections for the task, agent work, and reply.
+
+This example uses a general agent. Coding work uses your configured CLI and repository;
+personal tasks wait for you. [The five roads](#the-five-roads) explains the routing choices.
+
+![TQ-0018 in Tasks, with Ruth's original request, ownership, task status, and agent assignment.](readme/02-task.png)
+
+### 3. Let the agent prepare the result
+
+Open **Agent work** and choose **Send to agent**. Follow the session, answer its questions,
+and inspect the result. Here, the agent prepares the vendor spend summary, compares August
+with July, checks the category totals, and drafts a reply for Ruth.
+
+![The general agent's vendor spend analysis with totals, category breakdown, comparison, and source.](readme/03-agent.png)
+
+### 4. Review and approve the reply
+
+Open **Review** to compare the draft with Ruth's request. Edit the wording or recipients
+if needed, then choose **Approve & send** to reply through the original channel. You can
+also ask for a redraft, reject it, or decide no reply is needed.
+
+Finishing an agent run and completing a task are separate actions. Owner-controlled tasks
+remain yours to close; see [Tasks, agent sessions, and replies](task-lifecycle.md).
+
+![Review showing Ruth's original request, the prepared vendor spend reply, and Approve & send.](readme/04-review.png)
+
+### 5. Ask the Assistant for the next step
+
+Open **Assistant** and choose **Walk me through my tasks**. It brings Ruth's request into
+the conversation and links to the task, keeping the next action within reach. You can ask
+follow-up questions in the same conversation.
+
+![The Assistant discussing Ruth's request and offering a direct link to TQ-0018.](readme/05-assistant.png)
+
+### 6. Start the day with your digest and calendar
+
+Open **Morning digest** on the Timeline to see what people need, what is in flight, and
+today's meetings. The calendar makes the deadline concrete: Ruth needs the numbers before
+the operations review. The animation shows the meeting strip appearing above the brief.
+
+![The morning digest and animated calendar, with the operations review and vendor planning meeting.](readme/06-morning.gif)
+
+That is the basic loop: a request arrives, becomes a task, gets worked, and comes back for
+your approval. The sections below explain routing, the rest of the workspace, and the
+features that help across tasks.
 
 ## The five roads
 
@@ -98,8 +147,6 @@ back on both surfaces.
 
 ## Timeline and workspace
 
-![The Timeline: mail, chats, reports, and an Assistant post on one day-grouped rail.](screenshot-timeline-crop.png)
-
 The Timeline is the front door. Its chips distinguish work that needs you from completed,
 filed, informational, promotional, and automated items. Open a row to see the complete
 message, inline attachments, triage reasoning, a drafted reply, and the available actions.
@@ -142,8 +189,6 @@ times and say when a calendar cannot be read instead of inventing availability.
 
 ## The Assistant
 
-![The Assistant's evidence-backed suggestions, controls, reviewed material, and note to its next check.](screenshot-assistant.png)
-
 The Assistant runs on its own schedule and when the app opens. It posts only when it finds
 something useful: an unanswered reply, context for an upcoming meeting, a quiet task, or a
 pattern across incoming work. Each suggestion names its evidence and offers **Make it a
@@ -169,12 +214,23 @@ choose connections that exist, it reads the real schema before writing a query, 
 rather than guessing. The same help sits on every individual source card, in the report builder
 and here. [Reports and the Assistant](reports-and-assistant.md) covers the whole builder.
 
+<a id="learned-memory"></a>
+
 ## Learning from your decisions
 
 Every verdict is evidence. Editing a draft teaches voice; rejecting one teaches what should
 not be drafted; choosing **Not our task** teaches where your responsibility ends. The exact
 decision is kept with its date, sender, and subject so future triage can judge whether a new
 message is genuinely similar.
+
+Repeated patterns become lessons in **LEARNED.md**: how you write, what you own, and what
+deserves a task. For example, repeatedly moving the numbers to the top of a reply can teach
+Taskuary to lead with the total next time. Open **Docs → LEARNED.md** to read, edit, or delete
+the lessons. The screenshot shows example active lessons, hypotheses, and proposed rules.
+
+![LEARNED.md in the document editor, with active lessons, evidence tags, hypotheses, and proposed rules.](readme/11-learned-memory.png)
+
+### How the memory works
 
 ![How repeated verdicts become a general lesson in LEARNED.md.](learning-loop.svg)
 
@@ -185,13 +241,20 @@ rule. Each machine-written line in `LEARNED.md` has a score and receipts:
 - John drops greetings and signs off in one word. [s:4 | ev: rv12,rv15,rv31 | seen: 2026-08-19]
 ```
 
-- `s` is the strength. A hypothesis starts at 2, gains a point when evidence agrees, loses
-  one when evidence contradicts it, becomes active at 4, and is removed at 0.
+- `s` is the strength. A hypothesis starts at 2. Reflection is instructed to promote it at
+  4 or more, supported by at least three episodes across two people or threads.
+  Contradictions weaken it; stale hypotheses also decay across reflection cycles.
 - `ev` identifies the verdicts that taught the lesson.
 - `seen` is the last date on which it held.
+- A stable `k` identifies the lesson across rewrites.
+
+An explicit correction can start a hypothesis; batched reflection compares multiple
+decisions, including untouched approvals. The prompt builder excludes Hypotheses, Proposed
+rules, and raw Verdicts. Active lessons inform triage, reply drafts, and agent context.
 
 Delete a learned line and it is gone. Lines you write yourself have no machine tag and are
-never changed. A learned rule that would hide mail waits for explicit approval, and
+never changed. An inferred rule that would hide or file work waits in Proposed rules;
+two matching explicit owner verdicts can already supply that authorization. In all cases,
 `SOUL.md` always outranks `LEARNED.md`. One Settings switch disables the learning loop.
 
 **Generate from history** on `TRIAGE.md` and `STYLE.md` can bootstrap this process from the
@@ -217,8 +280,6 @@ moves it down without deleting it.
 
 ## Multiple agents in one repository
 
-![Working cards show each agent's modified files while a potentially overlapping task waits.](screenshot-board.png)
-
 Taskuary can auto-dispatch several coding sessions while reducing collisions in a shared
 checkout:
 
@@ -233,10 +294,25 @@ checkout:
 - **First in has control.** The newcomer is told which files belong to another session and
   must not edit, revert, stash, or commit them.
 
-![The Wall shows three live agent terminals side by side.](screenshot-wall.png)
+### Leave notes for the next agent
+
+Open the Board's **Live handoffs** to see what agents are working on, what is blocked, and
+what is ready for another session. Notes preserve the context of the work, and read markers
+show which agents have seen them.
+
+![Live handoff notes showing agent progress, shared context, and which agents have read each note.](readme/09-handoffs.png)
 
 The Wall supports the same sessions side by side. Panes can be rearranged and resized, and
 each has its own queued-prompt box and waiting indicator.
+
+## Shared knowledge in the Hub
+
+Open **Hub** to browse discoveries, decisions, and useful warnings by topic. Expand an entry
+to read the discussion behind it. Agents can find earlier work, add what they learned, and
+correct a conclusion as new evidence arrives. Handoff notes help the next session continue
+a job; Hub entries keep knowledge useful across jobs.
+
+![The Hub with topics, shared discoveries, and an expanded discussion between agents.](readme/08-hub.png)
 
 ## The operator documents
 
@@ -269,6 +345,11 @@ related closed tasks so the agent starts with what Taskuary already knows.
 
 ## Bring your own coding agent
 
+Open **Connections → AI CLI agents** to install, sign in to, and test your coding tools.
+Configure the connection once, then choose it when assigning or restarting an agent run.
+
+![AI CLI connections with installation, sign-in, and connection controls.](readme/07-coding-clis.png)
+
 Every run can choose a configured CLI and, when supported, a model. Built-in presets cover
 Claude Code, Codex, Gemini, Cursor, Copilot, and Muse Code (macOS/Linux/WSL2 only — Meta's
 installer refuses Windows; the Meta Model API connector reaches Muse Spark there instead, though
@@ -281,6 +362,21 @@ Headless agents need their noninteractive or auto-approval flag so they do not h
 for a click that cannot occur. The connector's **Test** action runs a small prompt through the
 CLI before it receives real work. Claude Code JSON output is parsed for resumable sessions;
 plain-text CLIs work as well.
+
+## What leaves your machine
+
+Taskuary runs locally and calls the services you configure. Hosted AI providers and coding
+CLIs receive the prompts needed for their work. **With a model running on your machine,
+those AI prompts stay local too.** Connected services such as mail still use their configured
+connections.
+
+![Task context passes through a credential check before reaching the selected AI provider or coding CLI.](readme/10-prompt-privacy.svg)
+
+Before a prompt goes to a hosted model, a headless CLI run, or the first turn of an agent pane,
+Taskuary replaces recognizable credentials with labelled placeholders. The original mail
+stays unchanged. A reply still containing one of those placeholders is refused rather than
+sent. These deterministic rules recognize credential shapes; they cannot catch every secret.
+See [Security](../SECURITY.md) for the reporting policy.
 
 ## Related documentation
 

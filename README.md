@@ -33,7 +33,7 @@ numbers through the real app, using fictional demo data.
 Mail, chats, issue trackers, alerts, and reports land on one Timeline. See what arrived,
 what became a task, and what needs you without opening every system in turn.
 
-![An annotated Timeline: each item shows its original time below its source—Email, Teams, WhatsApp, GitHub, SQL report, Assistant, Daily digest, or Calendar.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline.png?v=sources-and-times)
+![An annotated Timeline: each item shows its original time below its source—Email, Teams, WhatsApp, GitHub, SQL report, Assistant, Daily digest, or Calendar.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline-sources-and-times.png)
 
 ### 2. Turn incoming work into tasks
 
@@ -122,7 +122,7 @@ in `SOUL.md` take precedence.
   rules. Two matching explicit owner verdicts can already supply that authorization.
   Untagged lines you write are preserved, and learning can be disabled in Settings.
 
-See [Learning from your decisions](docs/product-guide.md#learning-from-your-decisions),
+See [Learning from your decisions](https://github.com/ldbumble/taskuary/blob/master/docs/product-guide.md#learned-memory),
 or the implementation in [learn.py](taskuary/learn.py) and [learnedgraph.py](taskuary/learnedgraph.py).
 
 </details>

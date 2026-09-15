@@ -1,6 +1,7 @@
 # README walkthrough images
 
-The hero is kept separately at `docs/hero.gif`. These images follow one invented
+The README and product guide share these images. The hero is kept separately at
+`docs/hero.gif`. These images follow one invented
 vendor-spend request through the current React interface, then show a few key
 features. The calendar GIF replays the app's meeting entrance and clock pulse.
 `06-morning.png` is its static alternative. The privacy SVG is an illustrated flow.
@@ -28,6 +29,8 @@ Product source files and the deployed demo are unchanged.
 
 The first image shows readable source labels above the original timestamps for this image only;
 SQL report labels reflect the sample reports' SQL Server source configurations.
+Its filename is `01-timeline-sources-and-times.png` so readers receive the updated image
+even if an older Timeline image is cached.
 The LEARNED.md image uses authored example lessons in the real document editor.
 To recapture and frame just those two images, add `--memory-update` to both commands.
 For just the Timeline image, use `--timeline-only` instead.

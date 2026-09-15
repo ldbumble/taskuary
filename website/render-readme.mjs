@@ -11,7 +11,7 @@ const scratch = path.join(root, '.codex-tmp/readme');
 const out = path.join(root, 'docs/readme');
 await mkdir(out, { recursive: true });
 const shots = [
-  ['01-timeline','timeline','Everything lands in one Timeline.',[14,61,720,730],'01 / ARRIVE'],
+  ['01-timeline-sources-and-times','timeline','Everything lands in one Timeline.',[14,61,720,730],'01 / ARRIVE'],
   ['02-task','task','A request becomes a task.',[410,70,776,523],'02 / ORGANIZE'],
   ['03-agent','agent','The agent does the work.',[426,255,760,675],'03 / WORK'],
   ['04-review','review','The last word is yours.',[200,125,800,525],'04 / APPROVE'],

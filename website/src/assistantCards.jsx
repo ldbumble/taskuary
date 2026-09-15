@@ -163,9 +163,36 @@ export function CardShell({ card, kicker, title, sub, children, err }) {
         {card?.ref && <em>{card.ref}</em>}</div>
       {title && <div className="tq-card-title">{title}</div>}
       {sub && <div className="tq-card-sub">{sub}</div>}
+      {/* why it is BACK. Clearing a task never closed it, so the work tab raises it again once it has
+          been quiet - and the card has to say that itself, or the only answer is "why am I seeing this
+          again?" (the owner, 2026-09-15: "if they ask why explain it should be closed") */}
+      {card?.why_open && <div className="tq-card-excerpt">{card.why_open}</div>}
       {children}
       {err && <div className="tq-card-err">{err}</div>}
     </div>
+  );
+}
+
+// THE STEP NOTHING ELSE TAKES. Sending a reply, an agent finishing and pressing Next all leave the
+// task open - so it sat in Tasks with nobody to end it, and the work tab now raises it again every
+// hour until somebody does (the owner, 2026-09-15: "We need button for Completed inline with the
+// chat"). One road: the same task.complete the spoken "close it" takes, so button and word cannot
+// disagree about what closing means.
+export function CompleteButton({ card, onDone, disabled }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  if (!card?.tid) return null;
+  const close = async () => {
+    setBusy(true); setErr("");
+    try { await runOperation(api, "task.complete", card.tid); onDone?.(`${card.ref || "The task"} is closed.`); }
+    catch (e) { setErr(errText(e)); setBusy(false); }
+  };
+  return (
+    <>
+      <Button size="small" variant="outlined" disabled={busy || disabled} onClick={close} sx={quiet}
+        title="Close the task - it stops coming back to Work">{busy ? "Closing…" : "Completed"}</Button>
+      {err && <span className="tq-card-err">{err}</span>}
+    </>
   );
 }
 
@@ -344,6 +371,7 @@ export function AgentCard({ card, onDone, onOpenTask }) {
         <span className="sp" />
         <Button size="small" onClick={() => onOpenTask?.(card.tid, { start: false })} sx={faint}>
           {chat ? "Open the task" : "Open agent workspace"}</Button>
+        <CompleteButton card={card} onDone={onDone} />
       </div>
     </CardShell>
   );
@@ -392,6 +420,7 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone }) {
       {full && card.mid && <FullText mid={card.mid} revision={card.presentation_revision} />}
       <div className="tq-card-actions">
         <Button size="small" variant="contained" disableElevation onClick={() => setFull((v) => !v)} sx={primary}>{full ? "Fold it" : "Read it"}</Button>
+        <CompleteButton card={card} onDone={onDone} />
         <span className="sp" />
         <Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />
       </div>
@@ -442,6 +471,7 @@ export function AgentDoneCard({ card, onOpenTask, onDone, onSurface }) {
             {busy ? "Drafting…" : "Reply from this"}</Button>
         )}
         <Button size="small" onClick={() => onOpenTask?.(card.tid)} sx={faint}>Open {card.ref}</Button>
+        <CompleteButton card={card} onDone={onDone} />
         {onDone && <Button size="small" onClick={() => onDone("Seen.")} sx={faint}>Seen, next</Button>}
       </div>
     </CardShell>
@@ -515,6 +545,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface })
       {full && card.mid && <CombinedTaskText card={card} />}
       <div className="tq-card-actions">
         <Button size="small" variant="outlined" onClick={() => setFull((v) => !v)} sx={quiet}>{full ? "Fold" : "Read it"}</Button>
+        <CompleteButton card={card} onDone={onDone} />
         <span className="sp" />
         <Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />
       </div>
@@ -589,6 +620,7 @@ export function TaskCard({ card, onDone, onOpenTask }) {
         {idle
           ? <Button size="small" variant="outlined" onClick={() => onOpenTask?.(card.tid)} sx={quiet}>Open {card.ref}</Button>
           : <Button size="small" variant="outlined" disabled={!!busy || !text.trim()} onClick={tell} sx={quiet}>{busy === "tell" ? "Queuing…" : "Tell the agent"}</Button>}
+        <CompleteButton card={card} onDone={onDone} />
       </div>
     </CardShell>
   );

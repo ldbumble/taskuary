@@ -26,6 +26,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 
 from . import funnel, general, llm as llm_mod, store as store_mod, toolcatalog
+from .redact import scrub as _scrub
 from .assistant import _ts
 from . import operations
 from .store import task_ref
@@ -417,6 +418,10 @@ def facts(store, item: dict) -> str:
         e = item.get('event') or {}
         lines.append(f"meeting {e.get('start')} - {e.get('end') or ''}" + (f" with {', '.join(e.get('who') or [])}" if e.get('who') else '')
                      + (f" | where: {e.get('where')}" if e.get('where') else '') + (f" | the invite says: {_cut(e.get('about'), 400)}" if e.get('about') else ''))
+    # why it is BACK. The card says this itself; the spoken answer has to say the same thing, or "why
+    # am I seeing this again?" gets two answers (the owner, 2026-09-15: "if they ask why explain it
+    # should be closed").
+    if item.get('why_open'): lines.append(f"WHY IT IS BACK: {item['why_open']} The card's Completed button closes it.")
     if item['kind'] == 'agentdone': lines.append(f"the agent's summary: {item.get('summary') or ''}")
     if item['kind'] == 'wrapup': lines.append(f"WRAP-UP: the reply went out (\"{item.get('sent') or ''}\")" + (f"; the agent finished: {item['summary']}" if item.get('summary') else '') + ' - the task is still open; ask whether to close it')
     if item['kind'] == 'report' and item.get('source_id'):
@@ -2029,8 +2034,6 @@ def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'own
 
 # ── setting things up from the chat (PW-194..197): sorted and gathered by AI, confirmed, created through the tabs' roads ──
 # a token typed into the chat is not kept (PW-196): what looks like one is replaced before any row is written
-_SECRETISH = re.compile(r"(?<![\w-])(?:xox[abpr]-[\w-]{10,}|sk-[A-Za-z0-9_-]{16,}|gh[pous]_[A-Za-z0-9]{20,}|AKIA[A-Z0-9]{12,}"
-                        r"|ey[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|[A-Fa-f0-9]{32,})(?![\w-])")
 SECRET_WORDS = re.compile(r'(secret|token|password|passwd|api[_ -]?key|refresh|private[_ -]?key|client[_ -]?secret|bearer)', re.I)
 SETUP_QUESTIONS = 'setup_questions'
 SETUP_SORT_SYSTEM = ('You sort one set-up request from the owner of a small company\'s assistant. Answer JSON only: '
@@ -2050,7 +2053,13 @@ SETUP_SORT_SYSTEM = ('You sort one set-up request from the owner of a small comp
                      'has none. Never answer "connection" for a website, and never a report that would need one.')
 
 
-def redact(text: str) -> str: return _SECRETISH.sub('[redacted]', str(text or ''))
+def redact(text: str) -> str:
+    """PW-196, now sharing the app's one vocabulary for what a credential looks like (redact.py).
+
+    It used to carry its own pattern ending in a catch-all for any long hex string - and a git SHA
+    is 40 of those, so "revert da8dae00..." was stored as "revert [redacted]", unreadable to the
+    owner and useless to an agent reading the turn back."""
+    return _scrub(text)
 
 
 def _compose_llm(store, trace=None, cancel=None):

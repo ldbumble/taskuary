@@ -87,9 +87,13 @@ def project(cur, item_id, view):
     version = active_version(cur)
     current = units(view)
     for unit in current:
-        unit['read'] = bool(cur.execute('''SELECT 1 FROM processing_read_receipt
+        # WHEN it was read, not just that it was: an open task nobody closed comes back to the work
+        # tab once it has been quiet that long, and the receipt is the only record of when it went.
+        row = cur.execute('''SELECT MAX(ReadAt) AS ReadAt FROM processing_read_receipt
             WHERE EntityKind=? AND LocalId=? AND Fingerprint=?''',
-            (unit['entity_kind'], unit['local_id'], unit['fingerprint'])).fetchone())
+            (unit['entity_kind'], unit['local_id'], unit['fingerprint'])).fetchone()
+        unit['read_at'] = (row['ReadAt'] if row else None) or None
+        unit['read'] = bool(unit['read_at'])
     # Root deferrals survive redirects. Exact legacy entity deferrals follow moves.
     deferrals = {row['Key']: dict(row) for row in cur.execute('''WITH RECURSIVE lineage(ItemId) AS (
         SELECT ? UNION SELECT p.ItemId FROM processing_item p JOIN lineage l
@@ -133,7 +137,9 @@ def state(item, now):
         until = max(deadlines, key=_time) if deadlines and all(deadlines) else None
     except (TypeError, ValueError):
         until = None
+    stamps = [u['read_at'] for u in read.get('units', ()) if u.get('read_at')]
     return dict(unread=any(not u.get('read') for u in read.get('units', ())),
+                read_at=max(stamps, key=_time) if stamps else None,
                 deferred=bool(active), defer_until=until)
 
 

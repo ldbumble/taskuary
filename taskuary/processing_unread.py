@@ -5,9 +5,19 @@ read policy, history windows, or an independent size limit after activation.
 """
 import copy
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from . import processing_all
+
+# An open task the owner cleared comes back to the work tab once it has been quiet this long. Done
+# used to be the end of it: the task stayed open in the task tab and the work tab never raised it
+# again (the owner, 2026-09-15: "it should show back up in the work also if it's still open later").
+RETURN_MINUTES = 60
+
+
+def return_minutes(store) -> int:
+    try: return max(1, int(store.get_settings().get('task_return_minutes') or RETURN_MINUTES))
+    except (TypeError, ValueError): return RETURN_MINUTES
 
 
 def query_for(store, only=None, *, history=True):
@@ -43,7 +53,7 @@ def _arrived_after_close(task, view) -> bool:
                for m in view.get('messages') or [] if not is_ours(m))
 
 
-def card_for(store, item, compact, live_state, now, states=None):
+def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MINUTES):
     from . import funnel
     from .processing_reads import state
 
@@ -129,9 +139,18 @@ def card_for(store, item, compact, live_state, now, states=None):
         card.update(kind='agent', lane='working', working=who, agent=who)
     elif active and not review:
         card = funnel.paused_conversation(store, card)
+    # ...and an open task nobody closed comes BACK once it has been quiet, so clearing it is a
+    # "not now", never a way to lose it. `queued` used to sit in the force-unread clause below, which
+    # made a task handed to an agent the one row Done could not shift - the same question answered two
+    # ways in one column (the owner, 2026-09-15: "why is that one showing up but not 575"). It clears
+    # like the rest now, and the hour brings it back. The owner's own Later/Skip still outranks it.
+    read_at = processing_all._stamp(read.get('read_at'))
+    back = bool(tid and active and not read.get('deferred') and read_at
+                and read_at <= now - timedelta(minutes=quiet))
+    if back: card['why_open'] = 'Nothing has closed this since you last looked. If it is done, close it.'
     # Worker attention is not a read operation. An active worker remains visible.
-    unread = not closed and bool((read['unread'] and not read.get('deferred')) or
-                                 (active and (worker or row.get('Working') or persisted_working or queued or card.get('paused'))))
+    unread = not closed and bool((read['unread'] and not read.get('deferred')) or back or
+                                 (active and (worker or row.get('Working') or persisted_working or card.get('paused'))))
     # the arrow means triage moved it up: an idea or a task raised to "asked you", or an urgent ask
     card['promoted'] = bool(card.get('urgent_request')) or (card['lane'] == 'asked' and (card['kind'] in ('idea', 'todo') or row.get('Channel') == 'assistant'))
     card.update(key='processing:' + item['item_id'], processing_id=item['item_id'],
@@ -187,7 +206,8 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
             if attempt == 2 or e.detail.get('code') != 'processing_coverage_pending': raise
     by_id = {item['item_id']: item for item in snapshot['items']}
     states = store.funnel_states()
-    cards = [card_for(store, by_id[row['item_id']], row, live_state, now, states) for row in rows]
+    quiet = return_minutes(store)
+    cards = [card_for(store, by_id[row['item_id']], row, live_state, now, states, quiet) for row in rows]
     cards = [card for card in cards if include_read or card['unread']]
     # Calendar keeps its established adapter; source filtering applies to it too.
     query = query_for(store, only)

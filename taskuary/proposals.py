@@ -60,6 +60,7 @@ SETTING_ALLOW = {
     'poll_minutes': 'how often the mailboxes are read',
     'funnel_hours': 'how far back the pipe reaches',
     'funnel_max': 'how much the pipe holds at once',
+    'task_return_minutes': 'how long an open task you cleared stays quiet before it comes back',
     'timeline_fade': 'how old rows dim on the Timeline',
     'calendar_enabled': 'read your calendar',
     'learn_enabled': 'learn from your verdicts',
@@ -110,7 +111,7 @@ def setting_changes(p: dict) -> tuple:
         v = str('1' if val is True else '0' if val is False else val).strip()
         if name in SETTING_VALUES and v not in SETTING_VALUES[name]:
             return [], f'{name} must be one of {", ".join(SETTING_VALUES[name])}'
-        if name in ('poll_minutes', 'funnel_hours', 'funnel_max') and not v.isdigit():
+        if name in ('poll_minutes', 'funnel_hours', 'funnel_max', 'task_return_minutes') and not v.isdigit():
             return [], f'{name} must be a whole number'
         out.append({'name': name, 'value': v, 'says': SETTING_ALLOW[name]})
     return out, '' if out else 'no change was named'

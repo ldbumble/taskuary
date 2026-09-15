@@ -38,6 +38,13 @@ def activate(db):
     return db.activate_processing_reads(fixed_now=NOW, live_state=[])
 
 
+def verdict(value):
+    """The visibility verdict alone. `read_at` rides along on the same dict - it is what the work
+    tab's hourly return reads - but it is a wall-clock stamp, so it is asserted where it means
+    something rather than in every exact comparison here."""
+    return {k: v for k, v in value.items() if k != 'read_at'}
+
+
 def owned_rows(db):
     names = [r[0] for r in db.cx.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'processing_%'")]
     return {name: [tuple(r) for r in db.cx.execute(f'SELECT * FROM "{name}"')] for name in names}
@@ -127,8 +134,8 @@ def test_active_deferral_survives_display_clear_and_new_member_then_expires(db):
     message(db, 'new deferred activity', task=tid)
     db.reconcile_processing_membership(fixed_now=NOW)
     value = processing_reads.state(picture(db, mid), NOW)
-    assert value == dict(unread=True, deferred=True, defer_until=FUTURE)
-    assert processing_reads.state(picture(db, mid), FUTURE) == dict(unread=True, deferred=False, defer_until=None)
+    assert verdict(value) == dict(unread=True, deferred=True, defer_until=FUTURE)
+    assert verdict(processing_reads.state(picture(db, mid), FUTURE)) == dict(unread=True, deferred=False, defer_until=None)
 
 
 def test_new_canonical_deferral_is_not_overwritten_by_surfaced(db):
@@ -137,7 +144,7 @@ def test_new_canonical_deferral_is_not_overwritten_by_surfaced(db):
     key = 'processing:' + item_id(db, mid)
     db.set_funnel_state(key, 'skip', until=FUTURE)
     db.set_funnel_state(key, 'surfaced')
-    assert processing_reads.state(picture(db, mid), NOW) == dict(unread=True, deferred=True, defer_until=FUTURE)
+    assert verdict(processing_reads.state(picture(db, mid), NOW)) == dict(unread=True, deferred=True, defer_until=FUTURE)
 
 
 def test_read_receipts_follow_exact_member_split_without_reading_its_new_neighbors(db):
@@ -238,7 +245,7 @@ def test_standalone_idea_task_review_historical_receipts_and_snooze(db):
         target = db.resolve_processing_target('legacy_funnel', key)['item_id']
         assert not processing_reads.state(db.processing_snapshot(target), NOW)['unread']
     target = db.resolve_processing_target('legacy_funnel', f"idea:{snoozed['IdeaId']}")['item_id']
-    assert processing_reads.state(db.processing_snapshot(target), NOW) == dict(unread=True, deferred=True, defer_until=FUTURE)
+    assert verdict(processing_reads.state(db.processing_snapshot(target), NOW)) == dict(unread=True, deferred=True, defer_until=FUTURE)
 
 
 def test_legacy_assistant_wrapper_deferral_is_retained_without_permanent_receipt(db):
@@ -249,7 +256,7 @@ def test_legacy_assistant_wrapper_deferral_is_retained_without_permanent_receipt
     db.set_brief(mid, json.dumps({'ideas': [{'id': idea['IdeaId']}]}))
     db.set_funnel_state(f"idea:{idea['IdeaId']}", 'later', until=FUTURE)
     activate(db)
-    assert processing_reads.state(picture(db, mid), NOW) == dict(unread=True, deferred=True, defer_until=FUTURE)
+    assert verdict(processing_reads.state(picture(db, mid), NOW)) == dict(unread=True, deferred=True, defer_until=FUTURE)
     assert not db.cx.execute("SELECT 1 FROM processing_read_receipt WHERE EntityKind='message'").fetchone()
 
 
@@ -321,7 +328,7 @@ def test_canonical_done_supersedes_retained_legacy_deferral(db):
     db.set_funnel_state(f'msg:{mid}', 'later', until=FUTURE)
     activate(db)
     db.set_funnel_state('processing:' + item_id(db, mid), 'done')
-    assert processing_reads.state(picture(db, mid), NOW) == dict(unread=False, deferred=False, defer_until=None)
+    assert verdict(processing_reads.state(picture(db, mid), NOW)) == dict(unread=False, deferred=False, defer_until=None)
 
 
 def test_active_concierge_done_accepts_its_own_discussion_without_expanding_members(db, monkeypatch):

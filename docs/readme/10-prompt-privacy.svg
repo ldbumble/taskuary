@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="460" viewBox="0 0 1200 460" role="img" aria-labelledby="title desc">
+  <title id="title">Prompts pass through a credential check</title>
+  <desc id="desc">Task context passes through deterministic credential detection before reaching the chosen AI provider or coding CLI. Recognizable secrets become labelled placeholders. Original mail is unchanged; the rules cannot catch every secret.</desc>
+  <defs>
+    <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#f2f4ee"/><stop offset="1" stop-color="#dfece3"/></linearGradient>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="m0 0 7 4-7 4" fill="none" stroke="#62806d" stroke-width="1.5"/></marker>
+  </defs>
+  <rect width="1200" height="460" fill="url(#bg)"/>
+  <g font-family="Segoe UI, sans-serif" fill="#233e3b">
+    <text x="40" y="44" font-size="13" font-weight="700" letter-spacing="2" fill="#57726a">KEY FEATURE / PROMPT PRIVACY</text>
+    <text x="1160" y="44" font-size="13" text-anchor="end" letter-spacing="1" fill="#678078">TASKUARY</text>
+    <text x="40" y="94" font-size="34" font-weight="650" letter-spacing="-1">A credential check before the prompt goes out.</text>
+    <rect x="40" y="140" width="324" height="204" rx="14" fill="#fcfbf9" stroke="#c8d5cd"/>
+    <rect x="438" y="140" width="324" height="204" rx="14" fill="#fcfbf9" stroke="#7f9c86" stroke-width="2"/>
+    <rect x="836" y="140" width="324" height="204" rx="14" fill="#fcfbf9" stroke="#c8d5cd"/>
+    <path d="M379 242h42" stroke="#62806d" stroke-width="2" marker-end="url(#arrow)"/>
+    <path d="M777 242h42" stroke="#62806d" stroke-width="2" marker-end="url(#arrow)"/>
+    <g font-size="12" font-weight="700" letter-spacing="1.5" fill="#6a8575">
+      <text x="64" y="179">ON YOUR MACHINE</text><text x="462" y="179">ON THE WAY OUT</text><text x="860" y="179">YOUR CHOSEN TOOL</text>
+    </g>
+    <g font-size="23" font-weight="600">
+      <text x="64" y="223">Task context</text><text x="462" y="223">Credential check</text><text x="860" y="223">AI provider or CLI</text>
+    </g>
+    <g font-size="16" fill="#576d63">
+      <text x="64" y="260">The request and the context</text><text x="64" y="284">needed to do the work.</text>
+      <text x="462" y="260">Recognizable secrets become</text><text x="462" y="284">labelled placeholders.</text>
+      <text x="860" y="260">Receives the prompt with</text><text x="860" y="284">detected credentials removed.</text>
+    </g>
+    <text x="40" y="392" font-size="16" font-weight="600">Original mail stays unchanged.</text>
+    <text x="40" y="423" font-size="14" fill="#637b72">Deterministic rules catch recognizable credential shapes. They cannot catch every secret.</text>
+    <text x="1160" y="423" text-anchor="end" font-size="12" fill="#637b72">Illustrated data flow</text>
+  </g>
+</svg>

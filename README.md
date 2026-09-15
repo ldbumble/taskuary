@@ -25,80 +25,78 @@ Taskuary is early—currently **v0.3.4.10**—so breaking changes are still poss
 
 ## What Taskuary can do
 
-**Connect every system. Keep control.**
+One request, from arrival to your approval. Follow Ruth's request for the latest vendor spend
+numbers through the real app, using fictional demo data.
 
-Bring your mail, chats, issue trackers, alerts, reports, and AI agents into one control center
-that runs on your machine. Every input lands on a single Timeline with its context, status, and
-available actions intact. Taskuary gives your tools one place to work together while you decide
-what can run, what can send, and what needs your attention.
+### 1. Connect every system. Keep control.
 
-![Taskuary's unified work pipe and chat, populated only with fictional demo data.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/screenshot-chat.png?v=0.3.3.2)
+Mail, chats, issue trackers, alerts, and reports land on one Timeline. See what arrived,
+what became a task, and what needs you without opening every system in turn.
 
-**Turn incoming work into tasks automatically**
+![A close-up of the Timeline, with Ruth's vendor spend request alongside incoming mail, chats, and reports.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline.png)
 
-AI triage reads every incoming item, understands what it means, and turns actionable requests
-into ready-to-run tasks. Routine updates are filed, questions get draft replies, and urgent
-decisions move to the front. Every choice comes with a reason, and you can change it at any time.
+### 2. Turn incoming work into tasks
 
-**Watch the work. Approve the outcome.**
+Ruth asks for the August total, the change from July, and a breakdown by category.
+Taskuary creates a task with the original request and assigns it to an agent.
 
-Taskuary keeps the system moving and brings you in when your judgment matters. The Assistant
-speaks up when a reply is waiting, a task has gone quiet, a report has failed, or a meeting is
-about to start. Each update arrives once, with the evidence and next actions attached, so you can
-review the work, make the call, and approve what happens next.
+![Ruth's request becomes TQ-0018, with its instructions, owner, and agent work together on the task page.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/02-task.png)
 
-**Agents in your own repos**
+### 3. Watch the agent work
 
-Send coding work to Claude Code, Codex, Gemini, Cursor, Copilot, Muse Code, or another CLI.
-Configure each CLI once under **Connections → AI CLI agents**: command, arguments, timeout,
-installation, sign-in and connection tests. Profiles share that connection.
-Connection cards show installation status separately from configuration. If Windows blocks an
-installer before it starts, check Windows Security's Protection history for the reason.
-Install and Update open a terminal beneath the CLI cards, showing commands and live output.
-You can answer the vendor's prompts there; closing the terminal stops a running installer.
-Under **Docs → Profiles**, use **Add profile** to choose a provider and model, set the worker's
-instructions, and describe when triage should select it. Leave
-**Available to triage for new tasks** on to include it automatically. Each profile starts with
-editable instructions; coding workers such as Coder and Codex share `CODER.md`.
+Open the task to follow the analysis. Here, the general agent prepares the numbers,
+checks that the categories add up, and drafts a reply.
 
-**Live workspaces**
+![The general agent's completed vendor spend analysis, with category totals, comparison, and source.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/03-agent.png)
 
-Watch the terminal, answer questions, review changes, and use the built-in browser without
-losing the session.
+### 4. Approve the outcome
 
-**Describe a check. Let it run itself.**
+The reply waits in **Review**, beside the request that started it. Read it, edit it,
+and choose **Approve & send** when it is ready.
 
-Say what you want watched in plain words and Taskuary builds it: read a folder of CSVs every
-morning, total the AP bills due in the next 30 days, count helpdesk tickets by day. Reports read
-and summarize, on a schedule or on demand, and can come back with an AI summary. Workflows write
-data and keep state. Quiet checks stay quiet, so the only one you hear about is the one that
-failed.
+![Review shows Ruth's original request and the prepared reply, with Approve & send waiting for the owner.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/04-review.png)
 
-**You stay in control**
+### 5. Let the Assistant walk you through it
 
-Replies and proposed actions wait in Review. You decide what sends, runs, closes, or gets dismissed.
+Choose **Walk me through my tasks**. The Assistant brings one item into the conversation,
+explains what needs your attention, and puts the next action within reach.
 
-## How work flows
+![A close-up of the Assistant bringing Ruth's request into the conversation, with a link to its task.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/05-assistant.png)
 
-### 1. Work arrives and gets sorted
+### 6. Start your day with the daily digest
 
-Taskuary reads connected inboxes, separates tasks from noise, and shows the result on one Timeline.
+Open your morning brief to see what people need, what is in flight, and what is on your calendar.
+The day's meetings sit above the digest, so Ruth's request has a clear deadline: the operations review.
 
-![The Timeline in task view: every message with its verdict, and the drafted reply waiting on you](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/screenshot-timeline-crop.png?v=0.3.3.2)
+![An animated close-up of the morning digest and calendar, showing the operations review and vendor planning meeting.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/06-morning.gif)
 
-### 2. An agent works on it
+## Key features
 
-Tasks move from **Queued** to **Agent working**. The Board shows live progress and anything waiting on you.
+### Use your coding CLI
 
-![Taskuary Board with queued, active, and waiting work](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/screenshot-board.png)
+Connect Claude Code, Codex, Gemini, Cursor, Copilot, Muse Code, or another CLI.
+Set up the connection once, then give your agents profiles with their own instructions.
+Follow their sessions, answer questions, and review the result from Taskuary.
 
-### 3. The result comes back to you
+![AI CLI connections in Taskuary, with installation, sign-in, and connection controls.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/07-coding-clis.png)
 
-Finished work, draft replies, questions, and loose ends return for review. You decide what to send, change, snooze, or dismiss.
+### A shared Hub for what agents learn
 
-![The assistant walking the pipe: the item on the table, its drafted reply, and Approve & send waiting on you](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/screenshot-assistant.png?v=0.3.3.2)
+Keep discoveries, decisions, and useful warnings by topic. Agents can find what earlier work
+uncovered, discuss it, and correct it instead of starting from scratch.
 
-## What leaves your machine
+![The Hub's topics and shared discoveries, including an expanded discussion between agents.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/08-hub.png)
+
+### Agents leave notes for each other
+
+The Board's **Live handoffs** show what agents are working on, what is blocked, and what is ready.
+An agent leaves a note; the next one reads it before picking up the work.
+
+![Live handoff notes on the agent wall, showing progress, shared context, and who has read each note.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/09-handoffs.png)
+
+### What leaves your machine
+
+![Task context passes through a credential check before reaching the chosen AI provider or CLI. Original mail stays unchanged.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/10-prompt-privacy.svg)
 
 Taskuary runs locally. The one thing that goes out is the prompt—whatever your AI provider or
 coding CLI needs to do the work you asked for.

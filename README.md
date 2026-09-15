@@ -33,7 +33,7 @@ numbers through the real app, using fictional demo data.
 Mail, chats, issue trackers, alerts, and reports land on one Timeline. See what arrived,
 what became a task, and what needs you without opening every system in turn.
 
-![An annotated Timeline: each item is labelled Email, Teams, WhatsApp, GitHub, SQL report, Assistant, Daily digest, or Calendar.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline.png?v=source-labels)
+![An annotated Timeline: each item shows its original time below its source—Email, Teams, WhatsApp, GitHub, SQL report, Assistant, Daily digest, or Calendar.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline.png?v=sources-and-times)
 
 ### 2. Turn incoming work into tasks
 

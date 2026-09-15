@@ -27,6 +27,7 @@ const page = await browser.newPage();
 const escape = text => text.replaceAll('&','&amp;').replaceAll('<','&lt;');
 try {
   for (const [name,source,title,clip,kicker] of shots) {
+    if (process.argv.includes('--timeline-only') && source !== 'timeline') continue;
     if (process.argv.includes('--memory-update') && !['timeline','learned'].includes(source)) continue;
     const data = (await readFile(path.join(scratch,source+'.png'))).toString('base64');
     const [x,y,w,h] = clip, scale = 1120/w, cropH = Math.round(h*scale);

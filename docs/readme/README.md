@@ -26,10 +26,11 @@ double resolution and framed at 1200 pixels wide. The capture widens the Timelin
 rail, narrows the Review column, and expands its reply editor for readability.
 Product source files and the deployed demo are unchanged.
 
-The first image replaces timestamps with readable source labels for this image only;
+The first image shows readable source labels above the original timestamps for this image only;
 SQL report labels reflect the sample reports' SQL Server source configurations.
 The LEARNED.md image uses authored example lessons in the real document editor.
 To recapture and frame just those two images, add `--memory-update` to both commands.
+For just the Timeline image, use `--timeline-only` instead.
 
 Review every final image at README width after regenerating: titles, amounts,
 source context, action buttons, and the ends of cards must remain visible.

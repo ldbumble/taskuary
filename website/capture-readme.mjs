@@ -118,23 +118,31 @@ const captureTimeline = async () => {
   await click('timeline', 'div');
   await page.evaluate(rows => {
     document.querySelector('[data-tq-timeline-stage]').parentElement.style.gridTemplateColumns = '720px minmax(0,1fr)';
-    const names = {email:'Email',teams:'Teams',github:'GitHub',whatsapp:'WhatsApp',assistant:'Assistant'};
+      const names = {email:'Email',teams:'Teams',github:'GitHub',whatsapp:'WhatsApp',assistant:'Assistant'};
+      const labelClock = (clock, label, color) => {
+        const time = clock.textContent;
+        clock.dataset.readmeOriginal = clock.innerHTML;
+        const source = document.createElement('span');
+        source.textContent = label;
+        Object.assign(source.style, {display:'block',fontFamily:'Segoe UI,sans-serif',fontSize:'11px',fontWeight:'700',color,letterSpacing:'-.2px'});
+        const timestamp = document.createElement('span');
+        timestamp.textContent = time;
+        Object.assign(timestamp.style, {display:'block',fontSize:'10px',fontWeight:'400',color:'#827e73'});
+        clock.replaceChildren(source, timestamp);
+        Object.assign(clock.style, {paddingTop:'2px',paddingLeft:'0',paddingRight:'8px',lineHeight:'12px'});
+      };
     for (const row of rows) {
       const node = document.querySelector(`[data-processing-item="readme-${row.MessageId}"]`);
       if (!node) continue;
       const label = row.Channel === 'report' ? (row.MessageId === 939 ? 'Daily digest' : 'SQL report') : names[row.Channel] || row.Channel;
       const clock = node.firstElementChild;
-      clock.dataset.readmeOriginal = clock.innerHTML;
-      clock.textContent = label;
-      Object.assign(clock.style,{fontFamily:'Segoe UI,sans-serif',fontSize:'11px',fontWeight:'700',color:row.Channel==='report'?'#89642d':'#426579',letterSpacing:'-.2px',paddingLeft:'0',paddingRight:'8px'});
+        labelClock(clock, label, row.Channel === 'report' ? '#89642d' : '#426579');
     }
     // Calendar rows precede the message rows and have no processing item id.
     for (const icon of document.querySelectorAll('[data-testid="EventIcon"]')) {
       const row = icon.closest('[data-tq-timeline-stage]') ? null : icon.parentElement.parentElement.parentElement;
       if (row?.firstElementChild && /^\d/.test(row.firstElementChild.textContent)) {
-        row.firstElementChild.dataset.readmeOriginal = row.firstElementChild.innerHTML;
-        row.firstElementChild.textContent='Calendar';
-        Object.assign(row.firstElementChild.style,{fontFamily:'Segoe UI,sans-serif',fontSize:'11px',fontWeight:'700',color:'#89642d'});
+          labelClock(row.firstElementChild, 'Calendar', '#89642d');
       }
     }
   },timelineRows);
@@ -160,7 +168,9 @@ try {
   await page.evaluate(() => document.fonts.ready);
   await page.evaluate(() => [...document.querySelectorAll('button')].find(e => e.textContent.trim() === 'Put it away')?.click());
   await delay(1000);
-  if (process.argv.includes('--memory-update')) {
+  if (process.argv.includes('--timeline-only')) {
+    await captureTimeline();
+  } else if (process.argv.includes('--memory-update')) {
     await captureTimeline(); await captureLearned();
   } else {
   if (!process.argv.includes('--extras')) {

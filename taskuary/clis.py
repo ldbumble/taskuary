@@ -22,8 +22,11 @@ KNOWN = [
      'args': ['-p', '--yolo'], 'timeout': 1500},
     {'name': 'cursor', 'cmd': 'cursor-agent', 'label': 'Cursor CLI',
      'args': ['-p', '--force', '--output-format', 'text'], 'timeout': 1500},
+    # --resume takes an OPTIONAL value, so the id has to be JOINED to it ({id}); its own help says
+    # `copilot --resume=<session-id>`. It also takes --session-id=<uuid> for a NEW session, which is
+    # how a pane names its conversation up front rather than learning it later (agents.ASSIGN_ARGS).
     {'name': 'copilot', 'cmd': 'copilot', 'label': 'GitHub Copilot CLI',
-     'args': ['-p', '--allow-all-tools'], 'timeout': 1500},
+     'args': ['-p', '--allow-all-tools'], 'resume_args': ['--resume={id}'], 'timeout': 1500},
     # Meta's agent, on Muse Spark. `exec` is its headless verb (codex's shape, not claude's -p) and
     # --yolo is the approval bypass without which a headless run parks on a prompt forever. Its
     # --json emits Meta's own JSONL event schema, which nothing here parses, so it stays off and
@@ -37,7 +40,8 @@ KNOWN = [
     #     folder it refuses to start - and half of what this app runs is ~/.taskuary/scratch,
     #     not a checkout (the same dead end codex's --skip-git-repo-check answers). The `=`
     #     form on purpose: the value is optional, and a space-separated one is read as a prompt.
-    # No stream-json equivalent, so the Board reads the run as plain text.
+    # No stream-json equivalent, so the Board reads the run as plain text. Interactive task
+    # sessions use `devin ... -- <prompt>` (terminal.SEED_ARGV), not simulated typing.
     {'name': 'devin', 'cmd': 'devin', 'label': 'Devin CLI',
      'args': ['--permission-mode', 'dangerous', '--respect-workspace-trust=false', '-p'], 'timeout': 1500},
 ]

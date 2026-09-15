@@ -596,6 +596,15 @@ class CoreTests(unittest.TestCase):
         with mock.patch.dict('os.environ', {'TERM': 'screen-256color', 'COLORTERM': 'x'}):
             self.assertEqual((clean_env()['TERM'], clean_env()['COLORTERM']), ('screen-256color', 'x'))   # a real value is left alone
 
+    def test_devin_sees_the_embedded_conpty_as_a_supported_windows_terminal(self):
+        """Devin otherwise mistakes pywinpty's ConPTY for legacy conhost and tells the owner to
+        switch apps, even though Taskuary renders that PTY through xterm.js."""
+        from taskuary import terminal
+        with mock.patch.object(terminal.os, 'name', 'nt'), mock.patch.dict(terminal.os.environ, {}, clear=True):
+            env = terminal.terminal_host_env([r'C:\tools\devin.exe'], 'abc123')
+            self.assertEqual((env['WT_SESSION'], env['TERM_PROGRAM']), ('taskuary-abc123', 'Taskuary'))
+            self.assertEqual(terminal.terminal_host_env(['codex.exe'], 'abc123'), {})
+
     def test_a_full_path_to_the_cli_still_finds_its_model_list(self):
         from taskuary.server import cli_base, CLI_MODELS
         for cmd in (r'C:\Users\rabbi\AppData\Local\OpenAI\Codex\bin\codex.exe', '/usr/local/bin/codex', 'codex', 'CODEX.CMD'):
@@ -681,6 +690,8 @@ class CoreTests(unittest.TestCase):
                              ['codex', '--dangerously-bypass-approvals-and-sandbox', '-m', 'gpt-5-codex',
                               '--no-alt-screen', '-c', 'tui.animations=false'])
             self.assertEqual(agent_argv({'cmd': 'gemini', 'interactive_args': ['chat']}), ['gemini', 'chat'])
+            self.assertEqual(agent_argv({'cmd': 'copilot'}, 'gpt-5.4')[-2:], ['--model', 'gpt-5.4'])
+            self.assertEqual(agent_argv({'cmd': 'devin'}, 'swe-2')[-2:], ['--model', 'swe-2'])
 
     def test_wrap_up_reads_the_screen_and_asks_the_agent_nothing(self):
         """Closing a session used to TYPE a summary request into the pty and wait for an answer.

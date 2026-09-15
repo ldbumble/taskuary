@@ -139,9 +139,20 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
     settings = store.get_settings()
     primary = str(pick if pick is not None else settings.get('triage_ai') or '').strip()
     backups = [x.strip() for x in str(settings.get('triage_backup_ai') or '').split(',') if x.strip()]
-    picks = []
+    picks, identities = [], set()
     for candidate in [primary, *backups]:
-        if candidate not in picks: picks.append(candidate)
+        identity = candidate
+        if candidate.startswith('cli:'):
+            # Brain menus select CLI tools, not job profiles. Older settings may still name
+            # several profiles backed by the same executable; trying Claude three times under
+            # coder/researcher/analyst is not failover and can repeat the same paid failure.
+            from . import agents as hub_agents
+            row = store.get_agent(candidate[4:])
+            try: prof = json.loads((row or {}).get('Config') or '{}')
+            except ValueError: prof = {}
+            identity = f"cli:{hub_agents.cli_of(prof, candidate[4:])}"
+        if identity not in identities:
+            picks.append(candidate); identities.add(identity)
 
     def one(candidate, first=False):
         chosen_model, chosen_resume = (model, resume) if first else (None, None)

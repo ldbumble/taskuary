@@ -35,12 +35,12 @@ class SeedArgvTests(unittest.TestCase):
                 terminal.SESSIONS.pop('atlas1', None)
 
     def test_prompt_rides_the_command_line_when_the_cli_takes_one(self):
-        """The fastest way to type a prompt is not to type it: claude/codex take it as an
-        argument, gemini behind -i - the session starts WITH it, no echo dance, no boot
-        dialog eating keystrokes. Unknown CLIs keep the verified typed path."""
+        """Known CLIs start WITH the ask, without a booting TUI eating simulated input."""
         self.assertEqual(terminal.seed_argv({'cmd': 'C:/x/claude.CMD'}, 'do it'), ['do it'])
         self.assertEqual(terminal.seed_argv({'cmd': 'codex'}, 'do it'), ['do it'])
         self.assertEqual(terminal.seed_argv({'cmd': 'gemini'}, 'do it'), ['-i', 'do it'])
+        self.assertEqual(terminal.seed_argv({'cmd': 'copilot'}, 'do it'), ['--interactive', 'do it'])
+        self.assertEqual(terminal.seed_argv({'cmd': 'C:/x/devin.exe'}, 'do it'), ['--', 'do it'])
         self.assertIsNone(terminal.seed_argv({'cmd': 'mystery-tui'}, 'do it'))
 
     def test_a_cmd_shim_never_gets_the_seed_on_its_command_line(self):
@@ -61,7 +61,8 @@ class SeedArgvTests(unittest.TestCase):
                 terminal.SESSIONS.pop('sh1', None)
 
     def test_open_session_embeds_the_seed_or_falls_back_to_typing(self):
-        for cmd, embedded in (('claude', True), ('mystery-tui', False)):
+        for cmd, embedded in (('claude', True), ('copilot', True), ('devin', True),
+                              ('mystery-tui', False)):
             server.store.upsert_agent('argvseed', 'coding', 'cli', json.dumps({'cmd': cmd, 'cwd': os.getcwd()}))
             with mock.patch.object(terminal, 'Term') as T, \
                  mock.patch('taskuary.agents._resolve_cmd', return_value=[cmd]):
@@ -77,6 +78,47 @@ class SeedArgvTests(unittest.TestCase):
                         T.return_value.seed.assert_called_once_with('TASK TQ-0001 - go')
                 finally:
                     terminal.SESSIONS.pop('e1', None)
+
+    def test_devin_and_copilot_launch_with_the_prompt_in_their_own_interactive_form(self):
+        cases = {
+            'devin': ['devin', '--permission-mode', 'dangerous',
+                      '--respect-workspace-trust=false', '--', 'TASK TQ-0001 - go'],
+            'copilot': ['copilot', '--allow-all-tools', '--interactive', 'TASK TQ-0001 - go'],
+        }
+        for cmd, expected in cases.items():
+            server.store.upsert_agent('atomicseed', 'coding', 'cli',
+                                      json.dumps({'cmd': cmd, 'cwd': os.getcwd()}))
+            with mock.patch.object(terminal, 'Term') as T, \
+                 mock.patch('taskuary.agents._resolve_cmd', return_value=[cmd]):
+                T.return_value = mock.Mock(sid='atomic1', cwd=os.getcwd(), info=lambda: {})
+                try:
+                    terminal.open_session(server.store, 'atomicseed',
+                                          seed_fn=lambda cwd: 'TASK TQ-0001 - go')
+                    launched = T.call_args.args[0]
+                    # Copilot can also be given Taskuary's new-session id. That flag is
+                    # orthogonal to prompt delivery and intentionally precedes --interactive.
+                    if cmd == 'copilot':
+                        launched = [a for a in launched if not a.startswith('--session-id=')]
+                    self.assertEqual(launched, expected)
+                    T.return_value.seed.assert_not_called()
+                    self.assertTrue(T.return_value.accepted)
+                finally:
+                    terminal.SESSIONS.pop('atomic1', None)
+
+    def test_devin_reports_an_accepted_prompt_while_its_first_turn_is_still_hidden(self):
+        class Fake:
+            argv, alive, accepted = ['devin.exe'], True, True
+            seeded = 'TASK TQ-0572 - Test. REPO: FanApp. ASK: Say hi for test.'
+            raw = 'Devin CLI\nSWE-1.6 Slow\nAsk Devin to build features'
+            def scrollback(self): return self.raw
+        t = Fake()
+        self.assertTrue(terminal.prompt_pending(t))
+        # Devin truncates long argv prompts in its UI; seeing their beginning is enough to know
+        # the first model turn arrived, and the observation remains latched after it scrolls away.
+        t.raw += '\nTASK TQ-0572 - Test. REPO: FanApp. ASK: Say hi for test. [prompt truncated here: 840 chars]'
+        self.assertFalse(terminal.prompt_pending(t))
+        t.raw = 'later screen with no original prompt'
+        self.assertFalse(terminal.prompt_pending(t))
 
     def test_codex_auto_degrades_when_the_windows_sandbox_helper_is_missing(self):
         """Without codex-windows-sandbox-setup.exe next to codex, workspace-write kills every

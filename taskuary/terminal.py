@@ -37,7 +37,18 @@ SOUL_CHARS = 1200                   # legacy budget; SOUL.md no longer rides in 
 # on the COMMAND LINE, so the session starts with it already submitted - instant, and immune
 # to boot dialogs eating keystrokes (codex's update chooser once swallowed half a toe and the
 # session opened on a beheaded ask). Typed seeding (Term.seed) stays for CLIs without one.
-SEED_ARGV = {'claude': lambda s: [s], 'codex': lambda s: [s], 'gemini': lambda s: ['-i', s]}
+# Every known CLI that can accept and submit its first interactive turn at launch belongs here.
+# Passing the ask as one argv item is atomic; opening the TUI and simulating keystrokes is only a
+# fallback for unknown wrappers.  These spellings come from each installed CLI's own --help:
+# Copilot uses --interactive <prompt>, while Devin separates its variadic prompt from PATH args
+# with `--`.  In particular, Devin's `-p` is print mode and gets removed by interactive_args().
+SEED_ARGV = {
+    'claude': lambda s: [s],
+    'codex': lambda s: [s],
+    'gemini': lambda s: ['-i', s],
+    'copilot': lambda s: ['--interactive', s],
+    'devin': lambda s: ['--', s],
+}
 
 def seed_argv(profile: dict, seed: str):
     """The argv tail that hands the CLI its first prompt directly - None when only typing can."""
@@ -87,6 +98,20 @@ def session_env(agent: str = '', task_id=None, cwd: str = '', sid: str = None) -
     tok = srv.get('agent_token')
     if tok: out[guard.AGENT_ENV] = tok
     return out
+
+
+def terminal_host_env(argv, sid: str = '') -> dict:
+    """Describe Taskuary's Windows terminal host to CLIs that inspect it.
+
+    Devin treats every ConPTY without ``WT_SESSION`` as legacy Console Host and paints a warning
+    telling the owner to leave Taskuary for Windows Terminal.  This pane is already a modern
+    ConPTY rendered by xterm.js, so advertise that capability and keep Taskuary's real name in
+    diagnostics.  Scope the marker to Devin: other CLIs have their own terminal detection and do
+    not need a Windows-Terminal compatibility flag.
+    """
+    if os.name != 'nt' or cli_of(argv) != 'devin': return {}
+    return {'WT_SESSION': os.environ.get('WT_SESSION') or f'taskuary-{sid or "terminal"}',
+            'TERM_PROGRAM': os.environ.get('TERM_PROGRAM') or 'Taskuary'}
 
 
 class _WinPty:
@@ -169,7 +194,8 @@ class Term:
         # the pane's browser name, and who this session IS - so `taskuary --note` inside it needs
         # no arguments to know which agent, task and checkout it is speaking for
         self.pty = (_WinPty if os.name == 'nt' else _UnixPty)(
-            argv, cwd, rows, cols, {**_bv.env(self.sid), **session_env(agent or label, task_id, cwd, sid=self.sid)})
+            argv, cwd, rows, cols, {**terminal_host_env(argv, self.sid), **_bv.env(self.sid),
+                                    **session_env(agent or label, task_id, cwd, sid=self.sid)})
         self.alive = True
         # started LAST, and store comes in through the constructor: a CLI that dies immediately
         # used to reach keep() before the caller had handed the session anywhere to file itself
@@ -239,7 +265,7 @@ class Term:
         buttons had nothing to read and quietly disappeared. Written on exit AND on close, because
         either can come first."""
         if not (self.store and self.task_id and self.keep_transcript): return
-        try: self.store.add_transcript(self.task_id, self.sid, harvest(self), self.agent, self.cwd)
+        try: self.store.add_transcript(self.task_id, self.sid, harvest(self), self.agent, self.cwd, self.ext_id)
         except Exception as e: logger.warning(f'could not file the transcript for {self.sid}: {e}')
 
     def settle(self, cap: float) -> bool:
@@ -435,6 +461,7 @@ class Term:
         base = {'sid': self.sid, 'label': self.label, 'cwd': self.cwd, 'taskId': self.task_id,
                 'agent': self.agent, 'cli': cli_of(self.argv), 'alive': self.alive, 'started': self.started,
                 'idle': self.idle(), 'phase': phase, 'waiting': word['waiting'], 'request': word['request'], 'accepted': getattr(self, 'accepted', None),
+                'promptPending': prompt_pending(self),
                 'cmd': ' '.join(self.argv), **({'tail': self.tail(tail)} if tail else {})}
         if not details:
             # Task lists need identity and lifecycle only. files() shells out to git and witness
@@ -460,6 +487,10 @@ def screen_waiting(t) -> bool:
 def worker_fields(store, t) -> dict:
     """{waiting, request} for a session: the run's own word when it has one (workerstate), the
     screen's latched phase when that word is silent (PW-228)."""
+    # Devin paints its argv-supplied prompt only when the first model turn comes back. Its idle
+    # input footer looks parked during that gap, but the prompt is already submitted and there is
+    # nothing for the owner to answer.
+    if prompt_pending(t): return {'waiting': False, 'request': None}
     from . import workerstate as ws
     req = None
     try:
@@ -477,8 +508,31 @@ def cli_of(argv) -> str:
     return re.split(r'[\\/]', str((argv or [''])[0]))[-1].lower().rsplit('.', 1)[0] if argv else ''
 
 
+def prompt_pending(t) -> bool:
+    """Whether Devin has the launch prompt but has not painted it/its first response yet.
+
+    The prompt is passed as one argv item, so ``accepted=True`` is proof it was submitted. Devin
+    deliberately truncates long prompts on screen, therefore look for the beginning (or its own
+    truncation marker), not the tail used to verify simulated typing. Once observed, latch it: the
+    prompt may later scroll out of the bounded terminal buffer.
+    """
+    if (not getattr(t, 'alive', False) or getattr(t, 'accepted', None) is not True or
+            cli_of(getattr(t, 'argv', [])) != 'devin' or not getattr(t, 'seeded', '')):
+        return False
+    if getattr(t, '_prompt_visible', False): return False
+    try:
+        raw = ''.join(t.scrollback()[-16000:].split()).lower()
+        head = ''.join(t.seeded[:60].split()).lower()
+        if (len(head) >= 10 and head in raw) or '[prompttruncatedhere:' in raw:
+            t._prompt_visible = True
+            return False
+    except Exception:
+        return False
+    return True
+
+
 _LIGHT_INFO = {'sid', 'label', 'cwd', 'taskId', 'agent', 'cli', 'mode', 'alive', 'busy',
-               'started', 'idle', 'phase', 'waiting', 'request', 'accepted', 'cmd', 'provider', 'pick',
+               'started', 'idle', 'phase', 'waiting', 'request', 'accepted', 'promptPending', 'cmd', 'provider', 'pick',
                'connector_id', 'model', 'tail'}
 
 def _info(t, tail=0, details=True) -> dict:
@@ -569,6 +623,24 @@ def _codex_browser_tui(argv: list) -> list:
     return out
 
 
+def bind_ext(t, ext_id: str) -> None:
+    """The CLI has named its own conversation (a claude hook, a codex rollout). File it AT ONCE:
+    keep() runs only on a clean exit, so a killed Taskuary must still leave yesterday resumable."""
+    if not ext_id or getattr(t, 'ext_id', '') == ext_id: return
+    t.ext_id = ext_id
+    store = getattr(t, 'store', None)
+    if not (store and getattr(t, 'task_id', None)): return
+    try: store.note_session_id(t.task_id, t.sid, ext_id, t.agent, t.cwd)
+    except Exception as e: logger.debug(f'could not file the session id for {t.sid}: {e}')
+
+
+def resume_seed(instruction: str = '') -> str:
+    """What a reopened conversation is told. Not seed_text's dossier: the CLI still holds the task,
+    the messages and what it already did - repeating them invites it to start the job again."""
+    from .continuity import RESUME_PROMPT
+    return f'{RESUME_PROMPT}\n\n{instruction.strip()}' if str(instruction or '').strip() else RESUME_PROMPT
+
+
 def agent_argv(profile: dict, model: str = None) -> list:
     """Interactive invocation of a configured CLI: its command, its own flags minus the pipe
     ones, and the model flag the headless runner uses (`model_arg`, e.g. codex wants -m).
@@ -621,12 +693,12 @@ def pretrust(cwd: str, agent: str = '', home: str = None) -> bool:
 
 def open_session(store, agent: str = None, task_id: int = None, repo: str = None, cwd: str = None,
                  rows: int = 32, cols: int = 110, actor: str = 'owner', model: str = None,
-                 seed_fn=None) -> Term:
+                 seed_fn=None, resume: str = None) -> Term:
     """Start a terminal: a configured agent CLI, or a plain shell when agent is None.
 
     `seed_fn(cwd) -> str` builds the first prompt once the working directory is known. CLIs
-    that take a prompt on the command line (claude, codex, gemini) get it THERE - the session
-    starts with it already submitted; the rest get it typed in (Term.seed)."""
+    that take an interactive prompt on the command line get it THERE - the session starts with
+    it already submitted; unknown wrappers get it typed in (Term.seed)."""
     import json
     profile = {}
     if agent:
@@ -671,11 +743,22 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     # without it answered "'claude' not found on PATH" to a task whose real problem was that nothing
     # said where it belonged - the wrong sentence, and the one the owner cannot act on.
     argv = agent_argv(profile, model) if agent else default_shell()
+    # Reopening the CLI's own conversation, by its own id. The prompt is TYPED into a resumed pane
+    # rather than handed over on the command line: `claude --resume <id> "..."` and its equivalents
+    # differ per CLI, and the typed road is the one verified against every TUI here.
+    from .agents import assign_argv, resume_argv
+    if agent and resume: argv = list(argv) + resume_argv(profile, resume)
+    # ...and for a NEW one, name it ourselves where the CLI allows (agents.ASSIGN_ARGS). Learning
+    # an id afterwards leaves a window - a pane killed inside it was gone for good - and it has to
+    # guess WHICH session a hook or a log belongs to. A name we chose has neither problem.
+    assigned = str(uuid.uuid4()) if agent and not resume else ''
+    named = assign_argv(profile, assigned) if assigned else []
+    argv, assigned = (list(argv) + named, assigned) if named else (argv, '')
     if agent:
         try: pretrust(cwd, ' '.join(str(a) for a in argv))     # no first-run dialog to park on
         except Exception as e: logger.debug(f'pretrust skipped: {e}')
     seed = ' '.join(seed_fn(cwd).split()) if (seed_fn and agent) else None
-    extra = seed_argv(profile, seed) if seed else None
+    extra = seed_argv(profile, seed) if seed and not resume else None
     # pywinpty joins argv with list2cmdline - correct for a direct .exe - but an npm .CMD shim
     # runs through `cmd /c`, and cmd.exe parses & | < > and stray quotes as ITS OWN syntax:
     # the seed's `subject "T&E System"` was cut AT THE AMPERSAND and half a prompt was
@@ -695,6 +778,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         except Exception as e: logger.debug(f'claude hooks not installed in {cwd}: {e}')
     t = Term(argv, cwd, label, task_id, agent, rows, cols, store)
     SESSIONS[t.sid] = t
+    if assigned: bind_ext(t, assigned)     # resumable before it has drawn a single character
     # the agents already here learn a newcomer arrived (PW-173): a line in their waiting room, typed when they park
     if agent and task_id and cwd and store:
         from . import blackboard as _bb
@@ -1394,7 +1478,7 @@ def guess_repo(store, tid: int, profile: dict) -> tuple:
 
 
 def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, instruction: str = None,
-                  actor: str = 'owner', cwd: str = None, _chain: list = None) -> dict:
+                  actor: str = 'owner', cwd: str = None, _chain: list = None, resume: str = None) -> dict:
     """Put a CLI on a task, in a REAL terminal - the only way an agent starts work here. An
     agent you cannot watch, interrupt or answer is the thing this app exists to replace."""
     import json
@@ -1412,6 +1496,9 @@ def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, inst
     from . import agents as hub_agents
     chain = list(_chain or hub_agents.agent_chain(store, agent))
     if not chain: chain = [agent]
+    # a saved conversation belongs to the CLI that held it: a backup harness handed an id it has
+    # never heard of would either refuse to start or quietly begin a blank session under its name
+    if resume: chain = [agent]
     term = repo = why = None
     chosen = None
     last_error = None
@@ -1427,8 +1514,9 @@ def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, inst
         continued_cwd = cwd if cwd and os.path.isdir(cwd) else None
         try:
             term = open_session(store, candidate, tid, repo, continued_cwd, 32, 110, actor,
-                                model if i == 0 else None,
-                                seed_fn=lambda here, r=repo: seed_text(store, tid, instruction, r, here))
+                                model if i == 0 else None, resume=resume,
+                                seed_fn=(lambda here: resume_seed(instruction)) if resume else
+                                        (lambda here, r=repo: seed_text(store, tid, instruction, r, here)))
             chosen = candidate
             chain = chain[i:]
             break
@@ -1511,6 +1599,7 @@ def stable_phase_of(t, now: float = None) -> str:
     alerted, then both took it back. A transition is now accepted only after the same target has
     held for PHASE_DWELL seconds. Process exit is separate (`alive=False`) and remains immediate.
     """
+    if prompt_pending(t): return 'working'
     at = time.time() if now is None else float(now)
     raw = _observed_phase(t)
     stable = getattr(t, '_phase_stable', 'working')
@@ -1577,6 +1666,7 @@ def screen(sid: str, lines: int = 32) -> dict | None:
     n = max(1, min(int(lines or 32), 120))
     shown = render(t.scrollback(), t.cols, t.rows).splitlines()
     return {'sid': t.sid, 'alive': bool(t.alive), 'rows': t.rows, 'cols': t.cols,
+            'promptPending': prompt_pending(t),
             'lines': shown[-n:]}
 
 

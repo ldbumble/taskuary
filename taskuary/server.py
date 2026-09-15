@@ -118,6 +118,7 @@ async def _lifespan(_app):
     note_app_up(store, start=True)   # this launch, so a shut-overnight gap is not read as a dead scheduler
     threading.Thread(target=poll_forever, daemon=True).start()
     threading.Thread(target=quick_forever, daemon=True).start()   # the chat clock, never behind a slow sync
+    threading.Thread(target=doorway_forever, daemon=True).start()  # the assistant chat, answered as fast as it is typed
     waitroom.watch(store)          # notes queued for a working agent land when it stops
     from . import msauth
     msauth.on_rotate = lambda cid, rt: store.save_connector({'ConnectorId': cid, 'Secret': rt}, 'msauth')   # a rotated Microsoft refresh token outlives a restart
@@ -789,13 +790,29 @@ def task_detail(task_id: int):
     # a session that has ended still leaves work to close out, so the page has to know one
     # happened - the Done and Pause buttons used to vanish with the pty
     tr = store.last_transcript(task_id)
+    rs = _resumable(task_id)[0]
     return {**d, 'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])},
             'artifacts': [_artifact_row(a) for a in d.get('artifacts') or []],
             # The detail page only needs lifecycle here; its terminal pane and optional WorkStrip
             # load their own rich data. Do not block selecting a task on git status.
             'session': hub_term.for_task(task_id, tail=3, details=False),
             'transcript': {'sid': tr['Sid'], 'agent': tr['Agent'], 'cwd': tr['Cwd'],
-                           'at': tr['CreatedAt'], 'chars': len(tr['Text'] or '')} if tr else None}
+                           'at': tr['CreatedAt'], 'chars': len(tr['Text'] or '')} if tr else None,
+            # ...and whether that ended session can be REOPENED rather than replaced. The id itself
+            # stays here: the page needs to know a conversation is waiting, not how to address it.
+            'resumable': {'sid': rs['Sid'], 'agent': rs['Agent'], 'cwd': rs['Cwd'], 'at': rs['CreatedAt']} if rs else None}
+
+
+def _resumable(task_id: int):
+    """(the session this task can be continued from, why it cannot). One judgement for the button
+    and the door behind it, so the page never offers what the endpoint will refuse."""
+    row = store.resumable_session(task_id)
+    if not row: return None, 'no saved session to continue - that agent never named a conversation we can reopen'
+    if not store.get_agent(row['Agent'] or ''):
+        return None, f'the coder "{row["Agent"]}" is no longer configured; use Run another agent'
+    if not (row['Cwd'] and Path(row['Cwd']).is_dir()):
+        return None, f'the checkout it worked in no longer exists: {row["Cwd"]}'
+    return row, ''
 
 def _workerstate():
     from . import workerstate
@@ -1130,6 +1147,36 @@ def continue_task(task_id: int, body: CodeBody):
                 detail={'agent': agent, 'fromSid': previous.get('Sid'), 'cwd': previous.get('Cwd')})
     return {'continued': True, 'agent': agent, 'fromSession': previous.get('Sid'), 'session': session}
 
+
+@app.post('/api/tasks/{task_id}/continue-session')
+def continue_session(task_id: int, body: CodeBody = None):
+    """Reopen the agent's OWN conversation, by the id its CLI gave it.
+
+    Not /continue, which starts a FRESH pane seeded with the handover note - a new agent reading
+    about what the last one did. Here the CLI still holds what it read, changed and asked, so the
+    prompt is only 'carry on'. The session id is the assistant's trick (session_resume) applied to
+    a pty: filed when a hook or a rollout names it, so a restart cannot take it away.
+    """
+    task = store.get_task(task_id)
+    if not task: raise HTTPException(404, 'task not found')
+    if task.get('Status') == 'dropped': raise HTTPException(409, 'This task was dismissed.')
+    if hub_term.for_task(task_id): raise HTTPException(409, 'this task already has a live session')
+    row, why = _resumable(task_id)
+    if not row: raise HTTPException(409, why)
+    # continuing IS live work again, whatever the card said: a finished task comes back to the work
+    # tab rather than having an agent run invisibly behind a done row (the owner, 2026-09-15)
+    if task.get('Status') not in ('open', 'waiting', 'in_progress'):
+        store.update_task(task_id, {'Status': 'in_progress'}, ACTOR)
+    try:
+        session = hub_term.start_on_task(store, task_id, row['Agent'], (body.model if body else None),
+                                         (body.instruction if body else None), ACTOR,
+                                         cwd=row['Cwd'], resume=row['ExtId'])
+    except (ValueError, RuntimeError, FileNotFoundError) as e:
+        raise HTTPException(422, str(e))
+    store.audit('task', task_id, 'continue-session', ACTOR, detail={'agent': row['Agent'], 'fromSid': row['Sid']})
+    return {'resumed': row['ExtId'], 'agent': row['Agent'], 'fromSession': row['Sid'], 'session': session}
+
+
 @app.post('/api/tasks/{task_id}/comments')
 def comment(task_id: int, body: TextBody):
     store.add_comment(task_id, ACTOR, 'human', body.body)
@@ -1165,12 +1212,15 @@ def resume_previous_work(task_id: int, background: BackgroundTasks):
         if task.get('Status') == 'dropped': raise HTTPException(409, 'This task was dismissed.')
         review = store.pending_review(task_id)
         if review: return {'action': 'review', 'reviewId': review['ReviewId'], 'taskId': task_id}
-        if task.get('Status') not in ('open', 'waiting', 'in_progress'):
-            raise HTTPException(409, 'This task is already finished.')
+        # A finished task is not a closed conversation. The agent's own session is still there to
+        # pick up - and picking it up means there is live work again, so the task comes back to the
+        # work tab rather than running invisibly behind a done row (the owner, 2026-09-15).
+        reopened = task.get('Status') not in ('open', 'waiting', 'in_progress')
         if task_id in general.OPENING or any(s.task_id == task_id and s.alive for s in list(hub_term.SESSIONS.values())):
             return {'action': 'open', 'taskId': task_id}
         if general.handles(task) and not general.provider_options(store):
             raise HTTPException(422, 'Connect an AI provider in Connections to resume this work.')
+        if reopened: store.update_task(task_id, {'Status': 'in_progress'}, ACTOR)
         general.OPENING.add(task_id)
     if general.handles(task):
         background.add_task(_resume_assistant, task_id)
@@ -1904,7 +1954,24 @@ def ignore_sender(mid: int, body: IgnoreSenderBody, background: BackgroundTasks 
     saved = next((p for p in store.list_policies(active_only=False) if p['PolicyId'] == pid), None)
     hidden = policy_engine.apply_retroactively(store, saved or {})
     if hidden: store.audit('policy', pid, 'apply_history', ACTOR, detail={'messages': hidden})
-    return {'ok': True, 'how': 'rule', 'policyId': pid, 'affected': hidden, 'sender': em}
+    # ...and the WORK their mail already made. apply_retroactively only hides messages, so the task
+    # triage had already cut from one of them stayed open and kept being offered - the owner silenced
+    # the sender and the very next thing the pipe showed was that sender again (2026-09-15: "i put
+    # this in that ignore sender but then it showed up again?").
+    # READ, exactly what pressing Next writes (concierge surfaces an item with read=True) - never
+    # closed: silencing who reported a thing is not a verdict on the thing. Nobody's work is thrown
+    # away, and a new arrival on the task makes it unread again, as any read receipt does.
+    quieted = []
+    from . import funnel as _funnel
+    for t in store.live_tasks_from_sender(em):
+        try:
+            _funnel.settle(store, f"task:{t['TaskId']}", 'surfaced', ACTOR, read=True,
+                           note=f'the owner silenced {em}')
+            quieted.append(t['TaskId'])
+        except Exception as e: logger.debug(f"task {t['TaskId']} did not settle under the new rule: {e}")
+    if quieted: store.audit('policy', pid, 'quiet_tasks', ACTOR, detail={'tasks': quieted})
+    return {'ok': True, 'how': 'rule', 'policyId': pid, 'affected': hidden, 'sender': em,
+            'quieted': quieted}
 
 def start_session(store_, tid: int, agent: str = None, model: str = None, instruction: str = None) -> dict:
     try:
@@ -3631,7 +3698,7 @@ def scope_catalog():
 @app.get('/api/brains')
 def brains():
     """Everything that could do intent triage: cloud AI connectors with a key, plus your
-    CLI agents (same brain that codes). Value goes into the `triage_ai` setting."""
+    CLI tools (through one representative worker each). Value goes into `triage_ai`."""
     from .llm import AI_TYPES
     # no steering: auto is one option among equals, and which brain triages is the owner's call
     out = [{'value': '', 'label': 'auto — first active AI connector', 'kind': 'auto', 'ready': True}]
@@ -3651,13 +3718,21 @@ def brains():
         if o['kind'] == 'api':
             c = store.get_connector(int(o['value'][10:]))
             o['models'] = CONN_MODELS.get((c or {}).get('Type'), [])
-    def _cli_of(a):
-        prof = json.loads(a.get('Config') or '{}')
-        return cli_base(prof.get('cmd') or a['Name'])
-    out += [{'value': f"cli:{a['Name']}",
-             'label': (_cli_of(a) + (f" · {a['Name']}" if _cli_of(a) != a['Name'] else '')) + ' (your CLI)',
-             'kind': 'cli', 'ready': True, 'models': CLI_MODELS.get(_cli_of(a), [])}
-            for a in store.list_agents()]
+    settings = store.get_settings()
+    selected = str(settings.get('triage_ai') or '')
+    preferred = ([selected[4:]] if selected.startswith('cli:') else [])
+    preferred += [x.strip()[4:] for x in str(settings.get('triage_backup_ai') or '').split(',')
+                  if x.strip().startswith('cli:')]
+    preferred += [str(settings.get('default_agent') or 'coder')]
+    # A profile is a job description, not another provider. Researcher, analyst and coder may
+    # all use Claude; show one Claude entry rather than several aliases for the same executable.
+    # The representative worker remains in the value because its light-model setting is still
+    # the runtime source of truth.
+    from . import climodels
+    out += [{'value': f"cli:{o['value']}", 'label': f"{o['label']} (your CLI)",
+             'kind': 'cli', 'ready': o['ready'],
+             'models': climodels.catalog(o['cli']).get('choices') or CLI_MODELS.get(o['cli'], [])}
+            for o in hub_agents.cli_agent_options(store, preferred=preferred)]
     current = store.get_settings().get('triage_ai') or ''
     # Old settings named a type (connector:anthropic). Keep accepting that in llm.py, but
     # point the picker at the concrete instance it currently resolves to.
@@ -5258,6 +5333,32 @@ def poll_forever():
         time.sleep(POLL_TICK)
 
 
+DOORWAY_TICK = 1.0              # the assistant chat is a conversation, not a mailbox - see doorway_forever
+
+
+def doorway_forever():
+    """THE DOORWAY IS NOT ON THE MAIL CLOCK. A message the owner types to the assistant in WhatsApp or
+    Telegram waited for that connector's 30-second tick before anything even read it, so a two-step
+    walk cost a minute of silence (the owner, 2026-09-15: "30 [seconds] is for incoming. talking to
+    whatsapp through assistant should be instant").
+
+    Only connectors that carry an Assistant chat are read here (remote_assistant.polls), and the read
+    is the SAME one the chat clock does - the per-type lock in _poll_quick means whichever gets there
+    first wins and the other tick is a no-op, and remote_assistant._claim makes a message answered by
+    both readers answer once. Nothing else about the poll changes: no reports, no CI."""
+    while True:
+        try:
+            from . import remote_assistant
+            types = []
+            for c in store.list_connectors():
+                if c.get('Active') and c.get('Type') not in types and remote_assistant.polls(store, c):
+                    types.append(c['Type'])
+            if types: _poll_on_quick_clock(types)
+        except Exception as e:
+            logger.debug(f'doorway poll failed: {e}')
+        time.sleep(DOORWAY_TICK)
+
+
 def quick_forever():
     """The chat clock. poll_minutes 0 is "background sync off", and that includes this clock.
 
@@ -5845,7 +5946,12 @@ async def terminal_ws(ws: WebSocket, sid: str):
                 if more is None: ended = True; break     # the exit marker keeps its place in the order
                 chunks.append(more)
             inflight += 1
-            try: await send_frame({'type': 'out', 'data': ''.join(chunks)})
+            try: await send_frame({'type': 'out', 'data': ''.join(chunks),
+                                   # Devin accepts the argv prompt immediately but does not paint
+                                   # it until its first model turn returns. Tell the pane the truth
+                                   # during that otherwise blank-looking interval.
+                                   'promptPending': hub_term.prompt_pending(t),
+                                   'cli': hub_term.cli_of(t.argv)})
             finally: inflight -= 1
             delivered += len(chunks)
             # Ignore output that was already queued when the resize began. The first new chunk
@@ -5888,7 +5994,9 @@ async def terminal_ws(ws: WebSocket, sid: str):
         t.quiet_for(ATTACH_QUIET)
         if t.scrollback():
             snap = hub_term.replay_text(t)
-            if snap: await send_frame({'type': 'out', 'replay': True, 'data': snap})
+            if snap: await send_frame({'type': 'out', 'replay': True, 'data': snap,
+                                      'promptPending': hub_term.prompt_pending(t),
+                                      'cli': hub_term.cli_of(t.argv)})
         first_resize = True
         while True:
             m = await ws.receive_json()

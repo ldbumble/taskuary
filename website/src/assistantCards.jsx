@@ -56,6 +56,10 @@ function FullText({ mid, revision }) {
   useEffect(() => {
     let live = true;
     if (shownFor.current !== mid) { setDoc(null); shownFor.current = mid; }   // a different message: blank
+    // ...and a card with no mail behind it asks for nothing. A task whose only message a skip rule
+    // hid has no mid, and fetching /api/messages/null painted FastAPI's own validation sentence
+    // ("path.mid: Input should be a valid integer") into the card (the owner, 2026-09-15).
+    if (mid == null || mid === "") { setDoc({ error: "" }); return () => { live = false; }; }
     api.get(`/api/messages/${mid}`).then(({ data }) => live && setDoc(data)).catch((e) => live && setDoc({ error: errText(e) }));
     return () => { live = false; };
   }, [mid, revision]);
@@ -335,7 +339,7 @@ export function AgentCard({ card, onDone, onOpenTask }) {
         sx={{ mt: 1, "& textarea": { fontSize: 12.5 } }} />}
       <div className="tq-card-actions">
         {card.paused
-          ? <Button size="small" variant="contained" disableElevation disabled={busy} onClick={resume} sx={primary}>{busy ? "Resuming…" : "Resume conversation"}</Button>
+          ? <Button size="small" variant="contained" disableElevation disabled={busy} onClick={resume} sx={primary}>{busy ? "Continuing…" : "Continue this session"}</Button>
           : !(chat && live) && <Button size="small" variant="contained" disableElevation disabled={busy || !text.trim()} onClick={answer} sx={primary}>{busy ? "Sending…" : "Answer"}</Button>}
         <span className="sp" />
         <Button size="small" onClick={() => onOpenTask?.(card.tid, { start: false })} sx={faint}>

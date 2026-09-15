@@ -79,7 +79,7 @@ def test_legacy_owner_opt_out_is_migrated_before_bridge_or_catchup_can_observe_i
         assert store._one("SELECT UpdatedBy FROM setting WHERE Name='general_auto_enabled'")['UpdatedBy'] == 'upgrade'
         doubles['open_drains'].assert_called_once_with(store)
         doubles['schedule_due'].assert_called_once_with(store)
-        assert doubles['threads'].call_count == 2  # harmless mocked poll clocks start after migration
+        assert doubles['threads'].call_count == 3  # harmless mocked clocks (full, chat, doorway) start after migration
     finally:
         store.cx.close()
 

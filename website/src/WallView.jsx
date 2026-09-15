@@ -267,7 +267,8 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
                       </Typography></Tooltip>
                     ) : (statusWork || waiting) ? (
                       <WorkLine work={statusWork} who={who} waiting={waiting}
-                        asking={l?.asking ?? s.asking} startedAt={l?.StartedAt || s.started} />
+                        asking={l?.asking ?? s.asking} startedAt={l?.StartedAt || s.started}
+                        promptPending={l?.promptPending ?? s.promptPending} />
                     ) : (
                       <Typography noWrap sx={{ ...mono, fontSize: 10, color: FAINT }}>● {who} session</Typography>
                     )}

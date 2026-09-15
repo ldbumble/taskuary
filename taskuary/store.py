@@ -129,7 +129,7 @@ CREATE TABLE IF NOT EXISTS message (MessageId INTEGER PRIMARY KEY, TaskId INTEGE
 CREATE TABLE IF NOT EXISTS attachment (AttachmentId INTEGER PRIMARY KEY, MessageId INTEGER, ExternalId TEXT,
   Name TEXT, ContentType TEXT, Size INTEGER, ContentId TEXT, Inline INTEGER DEFAULT 0, Path TEXT, CreatedAt TEXT);
 CREATE TABLE IF NOT EXISTS transcript (TranscriptId INTEGER PRIMARY KEY, TaskId INTEGER, Sid TEXT,
-  Agent TEXT, Cwd TEXT, Text TEXT, CreatedAt TEXT);
+  Agent TEXT, Cwd TEXT, Text TEXT, CreatedAt TEXT, ExtId TEXT);
 CREATE TABLE IF NOT EXISTS session_resume (TaskId INTEGER PRIMARY KEY, Pick TEXT, Model TEXT,
   NativeId TEXT, ContextKey TEXT, UpdatedAt TEXT);
 CREATE TABLE IF NOT EXISTS task_artifact (ArtifactId INTEGER PRIMARY KEY, TaskId INTEGER, Name TEXT,
@@ -343,6 +343,18 @@ INDEXES = (
 # projection.  Triggers, rather than Python write hooks, also cover migrations, test
 # fixtures and other direct SQL writers.  Reconciliation writes only processing_*
 # tables, so it never dirties itself.
+# EVERY TABLE WHOSE WRITES MUST BECOME VISIBLE HERE - which is NOT the same as "what the census
+# reads". reconcile_membership reads six of these; route, funnel_state, comment, task_artifact and
+# transcript it never opens, and trimming them looks like free work (2026-09-15: a pass walks ~25k
+# rows under BEGIN IMMEDIATE while wait_settled holds readers).
+#
+# It is not free, and this is the trap: the display cache is keyed on `self._writes`, a PER-CONNECTION
+# counter, so a write from ANOTHER process - an agent's comment, a CLI's route, a peer's read receipt -
+# never moves it. These triggers are the only thing that turns an external write into a local
+# generation change (see the cache-key comment in processing_inventory_snapshot), and
+# _processing_finish_funnel_write compensates for this connection's own funnel_state write precisely
+# because the trigger cannot tell the two apart. Drop one and this process serves a stale view after
+# another one writes. The cost to attack is the SIZE OF THE PASS, not the length of this list.
 PROCESSING_DIRTY_TABLES = (
     'task', 'message', 'review', 'idea', 'attachment', 'run', 'route',
     'funnel_state', 'comment', 'task_artifact', 'transcript',
@@ -664,6 +676,8 @@ class SQLiteStore:
             ncols = {r[1] for r in self.cx.execute('PRAGMA table_info(boardnote)')}
             if 'Rolled' not in ncols: self.cx.execute('ALTER TABLE boardnote ADD COLUMN Rolled TEXT')
             if 'Sid' not in ncols: self.cx.execute('ALTER TABLE boardnote ADD COLUMN Sid TEXT')   # the run that wrote it (PW-178)
+            tcols = {r[1] for r in self.cx.execute('PRAGMA table_info(transcript)')}
+            if 'ExtId' not in tcols: self.cx.execute('ALTER TABLE transcript ADD COLUMN ExtId TEXT')   # the CLI's own conversation, reopenable
             qcols = {r[1] for r in self.cx.execute('PRAGMA table_info(dispatchq)')}
             for col, typ in (('Value', 'REAL'), ('Floor', 'REAL'), ('Why', 'TEXT'),    # rank.py: value-ordered queue
                              ('Attempts', 'INTEGER DEFAULT 0'), ('LastError', 'TEXT'), ('NextAt', 'TEXT'), ('State', 'TEXT')):   # PW-085: the retry budget
@@ -2820,7 +2834,7 @@ class SQLiteStore:
         for mid in ids: self._exec("UPDATE message SET Status='error' WHERE MessageId=? AND Status='filed'", (mid,))
         if ids: self._poke('feed-changed')
         return len(ids)
-    def stranded_triage_failures(self, limit=25) -> list:
+    def stranded_triage_failures(self, limit=25, since=None) -> list:
         """Rows the AI never judged, oldest first, with how many times it has already been tried.
 
         A triage failure was only ever retried by hand, one row at a time, from the opened row - so
@@ -2831,14 +2845,34 @@ class SQLiteStore:
         `Tries` counts the failure diagnostics already written for the row, so a message that fails
         for its own reasons - a body no model can answer about - stops being retried instead of
         costing a call every cycle forever. Same identification as upgrade_triage_failures.
+
+        `since` bounds it to what is still NEWS. Triage decides what needs the owner now, and a
+        message that has sat unjudged for a fortnight is history: the first sweep resurrected two
+        WhatsApp lines and an email from two weeks earlier, made live tasks of them and drafted
+        replies to a conversation that had moved on five days later (the owner, 2026-09-15: "what
+        is this? don't see them in the task list?"). Anything older stays in `error` with the
+        Retry button it always had - reopening it is then somebody's decision, not a side effect.
+        Same clock both sides: SentAt is local 'YYYY-MM-DD HH:MM:SS' (norm_stamp), and so is _now().
         """
-        rows = self._rows("""SELECT m.MessageId, m.SentAt, r.Reason,
+        rows = self._rows(f"""SELECT m.MessageId, m.SentAt, r.Reason,
                                (SELECT COUNT(*) FROM route x WHERE x.MessageId=m.MessageId
                                 AND x.ParseError IS NOT NULL) Tries
                              FROM message m JOIN route r
                                ON r.RouteId=(SELECT MAX(RouteId) FROM route WHERE MessageId=m.MessageId)
-                             WHERE m.Status='error' ORDER BY m.MessageId LIMIT ?""", (limit,))
+                             WHERE m.Status='error'{' AND m.SentAt >= ?' if since else ''}
+                             ORDER BY m.MessageId LIMIT ?""", ((since, limit) if since else (limit,)))
         return [dict(r) for r in rows if re.match(self.TRIAGE_UNJUDGED, r['Reason'] or '')]
+    def live_tasks_from_sender(self, email: str) -> list:
+        """Open tasks carrying a message from this address - what a skip rule leaves behind.
+
+        Hiding the mail does not hide the WORK it already made: the rule marked the Power BI mail
+        skipped and its task sat in the pipe being offered again, which is worse than the Next the
+        owner could have pressed instead (the owner, 2026-09-15: "it should not be worse then
+        clicking next which marks it as read no?").
+        """
+        return self._rows("""SELECT DISTINCT t.TaskId, t.Title FROM task t JOIN message m ON m.TaskId=t.TaskId
+                             WHERE t.Status NOT IN ('done','dropped') AND lower(IFNULL(m.FromEmail,''))=?
+                             ORDER BY t.TaskId""", ((email or '').lower().strip(),))
     def pending_triage(self, limit=500):
         return self._rows("SELECT * FROM message WHERE Status='triaging' ORDER BY MessageId LIMIT ?", (limit,))
     def attach_message(self, mid, task_id):
@@ -2863,11 +2897,25 @@ class SQLiteStore:
         return self._one('SELECT * FROM task_artifact WHERE ArtifactId=?', (aid,))
     # A pty is not storage: the session's readable transcript is written here when it ends, so
     # "Done - wrap it up" still works an hour later, on a task whose CLI has long since exited.
-    def add_transcript(self, task_id, sid, text, agent=None, cwd=None):
+    def add_transcript(self, task_id, sid, text, agent=None, cwd=None, ext_id=None):
         if not (text or '').strip(): return None
+        prev = self._one('SELECT ExtId FROM transcript WHERE Sid=?', (sid,)) or {}
         self._exec('DELETE FROM transcript WHERE Sid=?', (sid,))      # one row per session, always the latest
-        return self._exec('INSERT INTO transcript (TaskId,Sid,Agent,Cwd,Text,CreatedAt) VALUES (?,?,?,?,?,?)',
-                          (task_id, sid, agent, cwd, text, _now()))
+        return self._exec('INSERT INTO transcript (TaskId,Sid,Agent,Cwd,Text,ExtId,CreatedAt) VALUES (?,?,?,?,?,?,?)',
+                          (task_id, sid, agent, cwd, text, ext_id or prev.get('ExtId') or '', _now()))
+    def note_session_id(self, task_id, sid, ext_id, agent=None, cwd=None):
+        """The CLI's OWN conversation id, filed the moment a hook or a rollout names it - NOT when
+        the pane closes. keep() runs only on a clean exit, so a killed Taskuary (or a rebooted box)
+        would otherwise take yesterday's resumable session with it."""
+        if not (sid and ext_id): return None
+        if self._one('SELECT TranscriptId FROM transcript WHERE Sid=?', (sid,)):
+            return self._exec('UPDATE transcript SET ExtId=? WHERE Sid=?', (ext_id, sid))
+        return self._exec('INSERT INTO transcript (TaskId,Sid,Agent,Cwd,Text,ExtId,CreatedAt) VALUES (?,?,?,?,?,?,?)',
+                          (task_id, sid, agent, cwd, '', ext_id, _now()))
+    def resumable_session(self, task_id):
+        """The newest session on this task whose CLI conversation can be reopened by its own id."""
+        return self._one("SELECT * FROM transcript WHERE TaskId=? AND COALESCE(ExtId,'')<>'' "
+                         'ORDER BY TranscriptId DESC LIMIT 1', (task_id,))
     def agented_task_ids(self) -> set:
         """Every task an agent has ever touched - a live-session transcript or a headless run. The
         Board is the agents' board: a reply the owner answered by hand is finished work, not board work."""

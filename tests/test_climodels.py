@@ -2,7 +2,7 @@
 import json, tempfile, unittest
 from pathlib import Path
 from unittest import mock
-from taskuary import climodels, llm
+from taskuary import climodels, clis, llm
 from taskuary.store import MemoryStore
 
 CACHE = {'models': [
@@ -31,6 +31,37 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(cat['source'], 'built-in'); self.assertTrue(cat['models'])
         self.assertIn('sonnet', climodels.catalog('claude')['choices'])
         self.assertEqual(climodels.split_pick('gpt-5.4-mini@low'), ('gpt-5.4-mini', 'low')); self.assertEqual(climodels.split_pick('opus'), ('opus', ''))
+
+    def test_copilot_models_come_from_the_installed_sdks_visible_choices(self):
+        declaration = ('export declare const HELP_VISIBLE_MODELS: '
+                       '("gpt-5.4" | "claude-sonnet-4.6" | "gpt-5.4")[];')
+        got = climodels.parse_copilot_models(declaration)
+        self.assertEqual([m['id'] for m in got], ['auto', 'gpt-5.4', 'claude-sonnet-4.6'])
+
+    def test_devin_catalog_uses_model_families_not_hundreds_of_reasoning_variants(self):
+        listing = """Available models (2 families)
+
+Claude Opus 5 (claude-opus-5)
+  aliases: opus
+  claude-opus-5-low     Claude Opus 5 Low
+GPT-5.6 Sol (gpt-5.6-sol)
+  gpt-5-6-sol-medium    GPT-5.6 Sol Medium
+"""
+        got = climodels.parse_devin_models(listing)
+        self.assertEqual([(m['id'], m['label']) for m in got],
+                         [('claude-opus-5', 'Claude Opus 5'), ('gpt-5.6-sol', 'GPT-5.6 Sol')])
+
+    def test_copilot_and_devin_are_real_model_catalogues_not_empty_placeholders(self):
+        with mock.patch.object(climodels, 'copilot_models', return_value=climodels._items(['auto', 'gpt-5.4'])), \
+             mock.patch.object(climodels, 'devin_models', return_value=climodels.parse_devin_models('SWE-2 (swe-2)')):
+            self.assertEqual(climodels.catalog('copilot')['choices'], ['auto', 'gpt-5.4'])
+            self.assertEqual(climodels.catalog('devin')['choices'], ['swe-2'])
+
+    def test_every_shipped_cli_has_a_provider_specific_model_picker(self):
+        with mock.patch.object(climodels, 'devin_models', return_value=climodels._items(['adaptive'])), \
+             mock.patch.object(climodels, 'copilot_models', return_value=climodels._items(['auto'])):
+            missing = [row['name'] for row in clis.KNOWN if not climodels.catalog(row['name'])['choices']]
+        self.assertEqual(missing, [])
 
     def test_a_model_at_effort_pick_becomes_model_plus_reasoning_flag(self):
         s = MemoryStore()

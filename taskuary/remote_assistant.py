@@ -206,7 +206,25 @@ def _now() -> str:
 
 
 # ── inbound: the owner's words, in their chat ───────────────────────────────────────────────────
-def intercept(store, channel: str, chat: str, text: str, *, from_me=False, taskuary=False, connector=None) -> bool:
+_ANSWERED = {}                         # (channel, id) -> when, so one message is answered once
+_ANSWERED_GUARD = threading.Lock()
+
+
+def _claim(channel: str, message_id) -> bool:
+    """First sight of this message? Two readers deliver the same one - the fast doorway loop and the
+    connector's own poll - and answering twice would reply twice."""
+    if not message_id: return True
+    key = (channel, str(message_id))
+    with _ANSWERED_GUARD:
+        if key in _ANSWERED: return False
+        _ANSWERED[key] = time.time()
+        if len(_ANSWERED) > 500:
+            for k, _ in sorted(_ANSWERED.items(), key=lambda kv: kv[1])[:250]: _ANSWERED.pop(k, None)
+    return True
+
+
+def intercept(store, channel: str, chat: str, text: str, *, from_me=False, taskuary=False, connector=None,
+              message_id=None) -> bool:
     """Claim an owner-authored question before it can be discarded or triaged.
 
     ``taskuary`` is stamped by the local bridge on every message Taskuary itself sends. Those echoes are
@@ -217,17 +235,25 @@ def intercept(store, channel: str, chat: str, text: str, *, from_me=False, tasku
     if taskuary: return True
     question = str(text or '').strip()
     if not from_me or not question or not enabled(store, channel, chat, connector): return False
+    if not _claim(channel, message_id): return True         # already answered; swallow the second sighting
     c = connector_for_chat(store, channel, chat, connector)
     # The answer outlives the poll that heard the question, and a poll hands its workers a single
     # writer thread it CLOSES when the cycle ends (channels._Writer) - a store call after that waits
     # on a queue nobody reads again. The turn talks to the store underneath instead, like any request.
     threading.Thread(target=_locked_respond,
-                     args=(getattr(store, '_store', store), channel, str(chat), question, c.get('ConnectorId')),
+                     args=(getattr(store, '_store', store), channel, str(chat), question, c.get('ConnectorId'),
+                           message_id),
                      name=f'taskuary-{channel}-assistant', daemon=True).start()
     return True
 
 
-def _locked_respond(store, channel: str, chat: str, question: str, connector_id: int):
+def _locked_respond(store, channel: str, chat: str, question: str, connector_id: int, message_id=None):
+    # the thumb goes up BEFORE the lock: it says "heard you", and it must not wait behind the turn
+    # already answering (which is exactly when the owner most needs to know they were heard)
+    if message_id:
+        from . import messengers
+        try: messengers.react(store, channel, chat, message_id, connector_id=connector_id)
+        except Exception as e: logger.debug(f'no receipt in {channel}: {e}')
     key = (id(store), channel, connector_id, chat)
     with _locks_guard: lock = _locks.setdefault(key, threading.Lock())
     with lock: respond(store, channel, chat, question, connector_id)
@@ -245,9 +271,13 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int):
             # the item on the table is the walk's own, persisted and validated here - a phone has no
             # client state to send, and the key is all say() needs to build the item afresh
             item = concierge.restore_current(store, tid)
-            question = resolve_index(store, channel, chat, question)      # "2" is the words we numbered
+            question, picked = resolve_index(store, channel, chat, question)   # "2" is the words we numbered
+            straight = answer_the_agent(store, item, question, picked)
+            if straight:
+                send(store, channel, chat, straight, connector_id)
+                return
             out = concierge.say(store, question, key=concierge.current_key(store, tid) or None, actor='owner')
-            text = carry_out(store, out, item)
+            text = carry_out(store, out, item, picked=picked)
         send(store, channel, chat, text, connector_id)
     except Exception as e:
         logger.warning(f'the {channel} assistant could not answer: {e}')
@@ -255,23 +285,60 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int):
         except Exception as send_error: logger.warning(f'the {channel} assistant could not send its error: {send_error}')
 
 
-def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: str = '') -> str:
+def answer_the_agent(store, item: dict | None, words: str, picked: bool, actor: str = 'owner') -> str:
+    """The owner picked one of the answers THE AGENT offered: send it, as typed, to the run that asked.
+
+    This is the desktop's choice button, in a chat. It deliberately goes nowhere near the model: the
+    words are the agent's own, the request they answer is the one on the item, and interpreting them
+    is how "Signed in" became the verb `answer_agent` with no text - which concierge sends to a
+    blocked agent as the literal word "yes" (measured 2026-09-15). Returns what to say back, or ''
+    when this was not one of those picks and the ordinary walk should take the turn.
+    """
+    from . import workerstate as ws
+    if not picked or not item or item.get('kind') != 'agent': return ''
+    if words not in agent_answers(item): return ''
+    out = ws.answer_open(store, int(item['tid']), words, actor) if item.get('tid') else {'delivered': False, 'state': 'no_request'}
+    who = item.get('agent') or 'the agent'
+    if out.get('delivered'): return f'Told {who}: "{words}".'
+    if out.get('state') == 'no_request': return f'{who} is not waiting on that any more - it is in its waiting room: "{words}".'
+    return f'Could not get that to {who} ({out.get("state")}): {out.get("why") or ""}'.strip()
+
+
+def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: str = '', picked: bool = False) -> str:
     """Everything the Assistant TAB does after a turn, done here - a chat has no page to do it.
 
     The desktop's own JavaScript is the missing half of the walk: it opens the draft a reply decision
     asks for, presses the button on a settle the assistant already decided (concierge.AUTO), and moves
     to the next item once something is off the table. Without this the phone would answer "Next." and
     then sit there, and "draft a reply" would be a promise nothing kept.
+
+    `picked` says the owner answered by NUMBER, off a message that showed them the draft and quoted
+    what arrived. That is the press of the button the desktop would have drawn, so the proposal it
+    makes runs here instead of coming back as "1 · yes, go ahead" - the second question that made one
+    decision cost two round trips on a slow chat (the owner, 2026-09-15).
     """
     from . import concierge
     decision = out.get('decision') or {}
-    said, verb = [turn_text(out, lead)], decision.get('verb')
+    said, verb = [turn_text(out, lead, store)], decision.get('verb')
     # The words can name somebody OTHER than what is on the table. The interpreter resolves that into
     # `decision.target` and the desktop's decide() drafts THERE; drafting on `item` regardless answered
     # whoever happened to be up - "reply to Chana" wrote to Dovid (2026-09-10 audit).
     on = decision.get('target') or item
     walk_on, prop = verb == 'next' or bool(out.get('settled')), out.get('proposal')
-    if prop and prop.get('auto') and prop.get('status') == 'proposed':
+    # "Answer it" with nothing after it is not an answer. concierge fills an empty answer_agent with
+    # the word "yes" - right for "shall I?", wrong and unrecoverable for "which branch?" - so the chip
+    # asks for the words instead of running (the agent's OWN choices never come through here; they are
+    # delivered verbatim by answer_the_agent).
+    if picked and verb == 'answer_agent' and not (decision.get('text') or '').strip():
+        return '\n\n'.join(said + [f"What should I tell {(on or {}).get('agent') or 'it'}? "
+                                   'Say it here and I will pass it straight to the run that is waiting.'])
+    if prop and picked and prop.get('status') == 'proposed':
+        # the number WAS the yes: run it, and say what happened instead of asking again
+        said[0] = turn_text({**out, 'proposal': None}, lead, store)
+        done = concierge.run_proposal(store, prop, actor)
+        said.append(concierge.receipt(store, done, actor))
+        walk_on = done.get('status') == 'done' and prop.get('settles')
+    elif prop and prop.get('auto') and prop.get('status') == 'proposed':
         done = concierge.run_proposal(store, prop, actor)
         said.append(concierge.receipt(store, done, actor))
         walk_on = done.get('status') == 'done' and prop.get('settles')
@@ -279,11 +346,11 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
         rid = _draft(store, on, verb, decision.get('text') or '')
         if rid:                                             # the draft is the next thing to read, so go to it
             nxt = concierge.surface(store, f'review:{rid}', actor=actor)
-            return '\n\n'.join(said + [turn_text(nxt)])
+            return '\n\n'.join(said + [turn_text(nxt, store=store)])
         said.append('I could not write that draft here - it is waiting on the Review tab.')
     if walk_on:
         nxt = concierge.surface(store, actor=actor)
-        return '\n\n'.join(said + [turn_text(nxt)])
+        return '\n\n'.join(said + [turn_text(nxt, store=store)])
     return '\n\n'.join(x for x in said if x)
 
 
@@ -300,12 +367,26 @@ def _draft(store, item: dict, verb: str, instruction: str):
 
 
 # ── outbound: a turn, as words a chat can carry ─────────────────────────────────────────────────
+def agent_answers(item: dict | None) -> list:
+    """The answers the AGENT itself offered, when it is an agent that is waiting on one.
+
+    These are the words that go back to the run - so they are what a chat must number. Without them a
+    numbered pick could only mean the chip "Answer it", which carries no text, and concierge's
+    answer_agent sends the literal word "yes" to an agent that asked "which branch?"."""
+    it = item or {}
+    return [str(c) for c in (it.get('choices') or [])] if it.get('kind') == 'agent' and it.get('asking') else []
+
+
 def choices(out: dict) -> list:
     """The words the owner can answer with. The desktop draws these as the action words under the line;
     a chat has to say them. A proposal is waiting on a yes, so that is the choice - nothing else runs."""
     if out.get('proposal') and not (out['proposal'].get('auto') or out['proposal'].get('status') == 'done'):
         return ['yes, go ahead', 'no, leave it']
-    return [str(o) for o in (out.get('options') or [])] or [c['label'] for c in (out.get('chips') or [])]
+    # an agent's own answers come first: they are the reply it is blocked on, and the chips below
+    # them ("Stop it", "Next") are what the owner does INSTEAD of answering
+    said = agent_answers(out.get('item'))
+    rest = [str(o) for o in (out.get('options') or [])] or [c['label'] for c in (out.get('chips') or [])]
+    return said + [w for w in rest if w not in said] if said else rest
 
 
 def source_line(item: dict | None) -> str:
@@ -319,12 +400,49 @@ def source_line(item: dict | None) -> str:
     return ' '.join(x for x in (funnel.CHANNEL_MARKS.get(ch, ''), bits) if x) if bits else ''
 
 
-def turn_text(out: dict, lead: str = '') -> str:
+def _cut(text: str, n: int) -> str:
+    t = ' '.join(str(text or '').split())
+    return t if len(t) <= n else t[:n].rstrip() + '…'
+
+
+def decision_block(store, item: dict | None) -> str:
+    """WHAT THE OWNER IS BEING ASKED TO APPROVE, in the message that asks them.
+
+    The desktop draws the incoming line and the draft under the card, so concierge's own sentence says
+    "approve the draft below" - and on a phone there was nothing below it (the owner, 2026-09-15: "you
+    didn't show the message or the drafed reply? what am i approving?"). A yes is only a yes to
+    something you were shown. The draft rides in FULL: it is the thing being sent in your name, and
+    send() already splits a long message on paragraph boundaries.
+    """
+    if not item: return ''
+    parts = []
+    # an agent that is blocked asked something exact; the alert only ever said that a hand went up
+    if item.get('kind') == 'agent' and item.get('asking'):
+        asked = ' '.join(str((item.get('tail') or [''])[0]).split())
+        if asked: parts.append('IT ASKED\n' + _cut(asked, 600))
+    try:
+        if item.get('mid'):
+            body = (store.get_message(int(item['mid'])) or {}).get('BodyText')
+            if str(body or '').strip(): parts.append('THEY WROTE\n> ' + _cut(body, 300))
+        if item.get('rid'):
+            rv = store.get_review(int(item['rid'])) or {}
+            # an `action` review's DraftText is the proposal's JSON, never prose to read out
+            draft = str(rv.get('DraftText') or '').strip() if rv.get('Kind') == 'draft' else ''
+            if draft: parts.append('YOUR DRAFT\n' + draft.strip())
+    except Exception as e:
+        logger.debug(f'the phone could not show what is on the table: {e}')
+    return '\n\n'.join(parts)
+
+
+def turn_text(out: dict, lead: str = '', store=None) -> str:
     """One turn as one message: where it came from, what was said, then what can be said back.
 
     The options used to ride one line joined by dots, which read as a single run-on sentence on a
     phone (the owner, 2026-09-10: "reply with should make it more clear they are separate"). Each owns
     a line now, and carries the number that answers it - see resolve_index for why that number works.
+
+    `store` is what lets the turn SHOW what it is asking about (decision_block). It is optional only
+    so a caller with nothing to look up still gets its words.
     """
     from . import funnel
     item = out.get('item') or {}
@@ -334,7 +452,8 @@ def turn_text(out: dict, lead: str = '') -> str:
     head = '\n'.join(x for x in (source_line(item), say) if x)
     words = choices(out)
     opts = 'Reply with one of:\n' + '\n'.join(f'{i} · {w}' for i, w in enumerate(words, 1)) if words else ''
-    return '\n\n'.join(x for x in (lead.strip(), head, opts) if x)
+    shown = decision_block(store, item) if store is not None else ''
+    return '\n\n'.join(x for x in (lead.strip(), head, shown, opts) if x)
 
 
 OFFERED_KEY = 'remote_offered'
@@ -348,19 +467,25 @@ def remember_offered(store, channel: str, chat: str, text: str) -> list:
     return words
 
 
-def resolve_index(store, channel: str, chat: str, text: str) -> str:
-    """"2" as an answer - because WE numbered the options a moment ago.
+def resolve_index(store, channel: str, chat: str, text: str) -> tuple[str, bool]:
+    """"2" as an answer - because WE numbered the options a moment ago. Returns (words, picked).
 
     The code indexes the list it offered; it reads no words and knows no verbs (the intent model still
     does that, on whatever this returns). Anything that is not one of the numbers we just wrote comes
     back untouched, as the owner's own words.
+
+    `picked` is what makes the number a DECISION rather than a suggestion: the owner chose a line we
+    wrote, off a message that showed them what it was about, so nothing is left to confirm (PW: the
+    owner, 2026-09-15, having answered "1" to "Send the reply" and been asked "1 · yes, go ahead" -
+    "this is confusing? I wrote 1 but it asked me again?"). Their own words stay a suggestion, because
+    there we are reading intent and can be wrong.
     """
     t = str(text or '').strip().lstrip('#').rstrip('.').strip()
-    if not t.isdigit(): return text
+    if not t.isdigit(): return text, False
     try: words = json.loads(store.get_settings().get(f'{OFFERED_KEY}:{channel}:{chat}') or '[]')
     except ValueError: words = []
     i = int(t)
-    return words[i - 1] if 1 <= i <= len(words) else text
+    return (words[i - 1], True) if 1 <= i <= len(words) else (text, False)
 
 
 def _chunks(text: str, limit=3900) -> list[str]:

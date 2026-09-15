@@ -87,8 +87,16 @@ def test_expiry_query_binding_tampering_and_store_isolation():
 def test_unready_coverage_never_claims_empty_and_unknown_dates_are_not_silently_dropped():
     snapshot = _snapshot(2)
     snapshot['coverage']['processing_reconciliation']['pending'] = True
+    # The page no longer REFUSES - a conflicted census refuses forever, and every caller fell back
+    # to the legacy feed. It answers, and must never present as though the census were settled: the
+    # manifest says what it could not group (test_degraded_instead_of_refusing.py).
+    page = processing_all.AllInventory().page(_SnapshotStore(snapshot))
+    assert page['coverage']['degraded']['reason'] == 'reconciling'
+    assert page['coverage']['degraded']['missing'] == 0
+    assert page['counts']['total'] == 2, 'it claims what it has, never an empty list'
+    # ...and the strict contract still stands for a caller that cannot present an incomplete answer
     with pytest.raises(processing_all.AllError) as caught:
-        processing_all.AllInventory().page(_SnapshotStore(snapshot))
+        processing_all.compact_inventory(snapshot, processing_all.normalize_query(None, None, 14))
     assert caught.value.detail['code'] == 'processing_coverage_pending'
     snapshot['coverage']['processing_reconciliation']['pending'] = False
     snapshot['items'][0]['view']['messages'][0].update(SentAt='unknown', CreatedAt='unknown')

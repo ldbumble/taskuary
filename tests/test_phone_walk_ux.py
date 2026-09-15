@@ -1,0 +1,218 @@
+"""What the phone walk asks you, it has to show you - and a number is an answer, not a suggestion.
+
+Driving a real ADP walk from WhatsApp, the owner was asked to "approve the draft below" with nothing
+below it, picked "1 · Send the reply" and was asked "1 · yes, go ahead" for the same decision, waited
+on the mail connector's 30-second clock for each of those round trips, and got no sign the hub had
+even heard them (the owner, 2026-09-15: "this is confusing? I wrote 1 but it asked me again?" / "what
+am i approving?" / "talking to whatsapp through assistant should be instant" / "can we also
+automatically do thumbs up to know the ai agent got the whatsapp").
+"""
+import json, unittest
+from unittest import mock
+
+from taskuary import messengers, remote_assistant
+from taskuary.store import MemoryStore
+
+JID = '15551234567@s.whatsapp.net'
+
+
+def store_with_a_draft():
+    """A task with an arrived message and a reply waiting on the owner's yes."""
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Refund question', 'Kind': 'reply', 'Status': 'open'}, 'owner')
+    mid = s.add_message({'TaskId': tid, 'Channel': 'whatsapp', 'FromName': 'Gabi', 'FromEmail': 'gabi@x.com',
+                         'Subject': 'Reply to Gabi check-in', 'BodyText': 'Are we still on for Thursday, and did the refund land?',
+                         'Status': 'open'})
+    rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
+                        'DraftText': 'Yes - Thursday still works, and the refund cleared this morning.'})
+    return s, {'key': f'review:{rid}', 'kind': 'review', 'lane': 'approve', 'rid': rid, 'mid': mid, 'tid': tid,
+               'who': 'Gabi', 'channel': 'whatsapp', 'title': 'Reply to Gabi check-in'}
+
+
+class ShowWhatYouAreApprovingTests(unittest.TestCase):
+    def test_the_turn_carries_what_they_wrote_and_the_draft_itself(self):
+        s, item = store_with_a_draft()
+        out = {'say': 'Gabi is owed a reply - the draft is below.', 'item': item,
+               'options': ['Send the reply', 'Redraft it', 'Next']}
+        text = remote_assistant.turn_text(out, store=s)
+        self.assertIn('THEY WROTE', text)
+        self.assertIn('did the refund land?', text)
+        self.assertIn('YOUR DRAFT', text)
+        self.assertIn('the refund cleared this morning', text)          # in full: it is sent in your name
+        self.assertLess(text.index('YOUR DRAFT'), text.index('Reply with one of:'))   # read it, then choose
+
+    def test_an_item_with_nothing_to_show_says_nothing_extra(self):
+        s, _ = store_with_a_draft()
+        out = {'say': 'Something landed.', 'item': {'kind': 'fyi', 'lane': 'fyi', 'who': 'Someone'}}
+        text = remote_assistant.turn_text(out, store=s)
+        self.assertNotIn('THEY WROTE', text)
+        self.assertNotIn('YOUR DRAFT', text)
+
+    def test_an_action_proposal_is_never_read_out_as_prose(self):
+        """An `action` review keeps the proposal's JSON in DraftText; that is machinery, not a draft."""
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Hand-off', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        rid = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending',
+                            'DraftText': json.dumps({'op': 'task.create_from_text'})})
+        text = remote_assistant.turn_text({'say': 'File it.', 'item': {'kind': 'action', 'lane': 'approve', 'rid': rid}}, store=s)
+        self.assertNotIn('YOUR DRAFT', text)
+        self.assertNotIn('task.create_from_text', text)
+
+
+class ANumberIsTheAnswerTests(unittest.TestCase):
+    def test_a_pick_says_so_and_free_words_do_not(self):
+        s = MemoryStore()
+        remote_assistant.remember_offered(s, 'whatsapp', JID, 'Reply with one of:\n1 · Send the reply\n2 · Next')
+        self.assertEqual(remote_assistant.resolve_index(s, 'whatsapp', JID, '1'), ('Send the reply', True))
+        self.assertEqual(remote_assistant.resolve_index(s, 'whatsapp', JID, 'send it'), ('send it', False))
+        self.assertEqual(remote_assistant.resolve_index(s, 'whatsapp', JID, '7'), ('7', False))
+
+    def test_a_picked_action_runs_instead_of_asking_the_same_thing_again(self):
+        s, item = store_with_a_draft()
+        prop = {'id': 'op1', 'status': 'proposed', 'settles': True, 'label': 'Send the reply'}
+        out = {'say': 'Send the reply: Gabi.', 'item': item, 'proposal': prop, 'decision': {'verb': 'approve'}}
+        from taskuary import concierge
+        with mock.patch.object(concierge, 'run_proposal', return_value={'status': 'done'}) as ran, \
+             mock.patch.object(concierge, 'receipt', return_value='Done - Send the reply.'), \
+             mock.patch.object(concierge, 'surface', return_value={'say': 'Next up: nothing.', 'item': None}):
+            text = remote_assistant.carry_out(s, out, item, picked=True)
+        ran.assert_called_once()
+        self.assertIn('Done - Send the reply.', text)
+        self.assertNotIn('yes, go ahead', text)              # the number WAS the yes
+
+    def test_words_we_only_interpreted_still_wait_for_a_yes(self):
+        s, item = store_with_a_draft()
+        prop = {'id': 'op1', 'status': 'proposed', 'settles': True, 'label': 'Send the reply'}
+        out = {'say': 'Send the reply: Gabi.', 'item': item, 'proposal': prop, 'decision': {'verb': 'approve'}}
+        from taskuary import concierge
+        with mock.patch.object(concierge, 'run_proposal') as ran:
+            text = remote_assistant.carry_out(s, out, item, picked=False)
+        ran.assert_not_called()
+        self.assertIn('yes, go ahead', text)
+
+
+class HeardYouTests(unittest.TestCase):
+    def test_whatsapp_reacts_through_the_bridge(self):
+        s = MemoryStore()
+        cid = s.get_connector_by_type('whatsapp')['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Active': 1, 'Secret': 'tok'}, 'test')
+        with mock.patch.object(messengers, '_wa', return_value={'ok': True, 'reacted': 1}) as wa:
+            self.assertTrue(messengers.react(s, 'whatsapp', JID, 'MSG1'))
+        self.assertEqual(wa.call_args[0][1], '/react')
+        self.assertEqual(wa.call_args[0][2]['id'], 'MSG1')
+
+    def test_telegram_reacts_through_the_bot_api(self):
+        s = MemoryStore()
+        cid = s.get_connector_by_type('telegram')['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Active': 1, 'Secret': 'tok'}, 'test')
+        with mock.patch.object(messengers, 'tg', return_value={'ok': True}) as tg:
+            self.assertTrue(messengers.react(s, 'telegram', '900100', '55'))
+        self.assertEqual(tg.call_args[0][1], 'setMessageReaction')
+        self.assertEqual(tg.call_args[1]['message_id'], 55)
+
+    def test_a_reaction_that_fails_never_costs_the_answer(self):
+        s = MemoryStore()
+        cid = s.get_connector_by_type('whatsapp')['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Active': 1, 'Secret': 'tok'}, 'test')
+        with mock.patch.object(messengers, '_wa', side_effect=RuntimeError('bridge is down')):
+            self.assertFalse(messengers.react(s, 'whatsapp', JID, 'MSG1'))
+
+
+class AnsweredOnceTests(unittest.TestCase):
+    def test_two_readers_of_the_same_message_answer_it_once(self):
+        """The fast doorway loop and the connector's own poll both see it (server.doorway_forever)."""
+        remote_assistant._ANSWERED.clear()
+        self.assertTrue(remote_assistant._claim('whatsapp', 'ABC'))
+        self.assertFalse(remote_assistant._claim('whatsapp', 'ABC'))
+        self.assertTrue(remote_assistant._claim('telegram', 'ABC'))      # a different chat's id is its own
+        self.assertTrue(remote_assistant._claim('whatsapp', None))       # nothing to dedupe on: always answer
+
+
+class OneMeansOneOnBothScreensTests(unittest.TestCase):
+    """The phone numbers its options because a chat has no buttons; the owner, having answered by
+    number there, typed "1" on the desktop too - where it was a digit the model interpreted, so it
+    answered about something else (the owner, 2026-09-15)."""
+
+    def test_a_bare_number_is_the_action_word_in_that_position(self):
+        from taskuary import concierge
+        s, item = store_with_a_draft()
+        words = [c['label'] for c in concierge.chips_for(s, item)]
+        self.assertTrue(words, 'a review item must offer action words for this to mean anything')
+        seen = {}
+        def brain(system, user, **kw):
+            seen['user'] = user
+            return 'Right you are.'
+        with mock.patch.object(concierge, '_brain_for', return_value=brain),              mock.patch.object(concierge, 'chips_for', wraps=concierge.chips_for):
+            concierge.say(s, '1', item=item)
+        self.assertIn(words[0], seen['user'], 'the model should have been handed the action, not the digit')
+
+    def test_a_number_nobody_offered_stays_the_owners_own_words(self):
+        from taskuary import concierge
+        s, item = store_with_a_draft()
+        seen = {}
+        def brain(system, user, **kw):
+            seen['user'] = user
+            return 'Right you are.'
+        with mock.patch.object(concierge, '_brain_for', return_value=brain):
+            concierge.say(s, '97', item=item)
+        self.assertIn('97', seen['user'])
+
+
+def asking_agent(question='Which branch should I build from?', choices=('main', 'dev')):
+    return {'key': 'agent:7', 'kind': 'agent', 'lane': 'blocked', 'tid': 7, 'ref': 'TQ-0007',
+            'title': 'Ship the release', 'agent': 'codex', 'asking': True,
+            'tail': [question], 'choices': list(choices), 'request_id': 'r7', 'request_kind': 'input_needed'}
+
+
+class AnAgentsQuestionComesBackAnsweredTests(unittest.TestCase):
+    """An agent blocked on a question reaches the phone, and what the owner picks has to reach the RUN -
+    as the agent's own words. Numbered, the chip "Answer it" carries no text at all, and concierge
+    sends an empty answer_agent to a blocked agent as the literal word "yes" (measured 2026-09-15)."""
+
+    def test_the_question_and_its_answers_are_both_in_the_message(self):
+        s = MemoryStore()
+        item = asking_agent()
+        text = remote_assistant.turn_text({'say': 'codex asked you something.', 'item': item,
+                                           'chips': [{'verb': 'answer_agent', 'label': 'Answer it'},
+                                                     {'verb': 'next', 'label': 'Next'}]}, store=s)
+        self.assertIn('IT ASKED', text)
+        self.assertIn('Which branch should I build from?', text)
+        self.assertIn('1 · main', text)                      # the agent's own answers, numbered first
+        self.assertIn('2 · dev', text)
+        self.assertIn('Answer it', text)                     # the chips still follow
+
+    def test_a_picked_answer_goes_to_the_run_verbatim(self):
+        from taskuary import workerstate as ws
+        s = MemoryStore()
+        with mock.patch.object(ws, 'answer_open', return_value={'delivered': True, 'state': 'delivered'}) as sent:
+            said = remote_assistant.answer_the_agent(s, asking_agent(), 'dev', picked=True)
+        sent.assert_called_once()
+        self.assertEqual(sent.call_args[0][2], 'dev', 'the agent must hear its own word, never "yes"')
+        self.assertIn('Told codex: "dev"', said)
+
+    def test_words_that_are_not_one_of_its_answers_take_the_ordinary_walk(self):
+        s = MemoryStore()
+        self.assertEqual(remote_assistant.answer_the_agent(s, asking_agent(), 'stop it', picked=True), '')
+        self.assertEqual(remote_assistant.answer_the_agent(s, asking_agent(), 'main', picked=False), '')
+
+    def test_answer_it_with_no_words_asks_instead_of_saying_yes(self):
+        s = MemoryStore()
+        item = asking_agent(choices=())
+        out = {'say': 'codex asked you something.', 'item': item, 'decision': {'verb': 'answer_agent', 'text': ''},
+               'proposal': {'id': 'op9', 'status': 'proposed', 'settles': True}}
+        from taskuary import concierge
+        with mock.patch.object(concierge, 'run_proposal') as ran:
+            text = remote_assistant.carry_out(s, out, item, picked=True)
+        ran.assert_not_called()
+        self.assertIn('What should I tell codex?', text)
+
+    def test_a_run_that_stopped_waiting_says_so_instead_of_swallowing_it(self):
+        from taskuary import workerstate as ws
+        s = MemoryStore()
+        with mock.patch.object(ws, 'answer_open', return_value={'delivered': False, 'state': 'no_request'}):
+            said = remote_assistant.answer_the_agent(s, asking_agent(), 'main', picked=True)
+        self.assertIn('waiting room', said)
+
+
+if __name__ == '__main__':
+    unittest.main()

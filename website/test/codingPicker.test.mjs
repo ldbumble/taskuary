@@ -15,9 +15,12 @@ test("the coding picker filters to coding workers and names them by their CLI", 
   const ui = read("ui.jsx");
   const picker = ui.slice(ui.indexOf("export const AgentPicker"), ui.indexOf("export const timeAgo"));
   assert.match(picker, /coding = false, kinds = \{\}/);
-  assert.match(picker, /coding && Object\.keys\(kinds\)\.length\s*\?\s*agents\.filter\(\(a\) => kinds\[a\] === "coding"\)/);
+  assert.match(picker, /\["coding", "cli"\]\.includes\(String\(kinds\[a\] \|\| ""\)\.toLowerCase\(\)\)/);
   assert.match(picker, /const cliOf = \(a\) => models\[a\]\?\.cli \|\| models\[a\]\?\.cmd \|\| a/);
   assert.match(picker, /\{coding \? cliOf\(a\) : a\}/);
+  assert.match(picker, /new Map\(shown\.map\(\(a\) => \[cliOf\(a\), a\]\)\)/);
+  assert.doesNotMatch(picker, /<em/);
+  assert.match(picker, /onChange=\{\(e\) => onAgent\(e\.target\.value\)\}/);
 });
 
 test("the hook carries what each worker is for", () => {
@@ -32,6 +35,12 @@ test("the new-task dialog asks the question it means, and passes the kinds", () 
   assert.doesNotMatch(board, /Agent and model — which CLI works it/);
   assert.match(board, /<AgentPicker agents=\{agents\} models=\{models\} kinds=\{kinds\} coding/);
   assert.match(board, /const \{ agents, models, cmds, kinds \} = useAgents\(\)/);
+  for (const name of ["NewSheet.jsx", "TasksView.jsx"]) {
+    const src = read(name);
+    assert.match(src, /<AgentPicker agents=\{agents\} models=\{models\} kinds=\{kinds\} coding/);
+  }
+  const sheet = read("NewSheet.jsx");
+  assert.match(sheet, /onAgent=\{\(a\) => \{ setAgent\(a\); setModel\(""\); \}\}/);
 });
 
 test("every other picker is untouched - a general worker is still chosen by name", () => {
@@ -39,4 +48,14 @@ test("every other picker is untouched - a general worker is still chosen by name
   const picker = ui.slice(ui.indexOf("export const AgentPicker"), ui.indexOf("export const timeAgo"));
   // without `coding` the list is every worker, labelled name · cli exactly as before
   assert.match(picker, /\(models\[a\]\?\.cmd \? ` · \$\{models\[a\]\.cmd\}` : ""\)/);
+});
+
+test("Settings defaults and backups offer coding CLIs rather than profile names", () => {
+  const settings = read("SettingsView.jsx");
+  const defaults = read("AiDefaults.jsx");
+  assert.match(settings, /\["coding", "cli"\]\.includes\(String\(a\.Kind \|\| ""\)\.toLowerCase\(\)\)/);
+  assert.match(settings, /label: models\[a\.Name\]\?\.cli \|\| models\[a\.Name\]\?\.cmd \|\| a\.Name/);
+  assert.match(settings, /automatic — any other coding CLI/);
+  assert.match(defaults, /\{isAgent \? "which CLI" : "which brain"\}/);
+  assert.match(defaults, /state\.agent_options \|\| agents/);
 });

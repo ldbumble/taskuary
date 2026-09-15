@@ -10,14 +10,19 @@ The sweep is deliberately cheap when the brain is still down: the FIRST failure 
 endpoint costs one call a cycle rather than one per stranded row.
 """
 import unittest
+from datetime import datetime, timedelta
 from unittest import mock
 
 from taskuary import ingest
 from taskuary.store import MemoryStore
 
+# RELATIVE, never a fixed date: the sweep only reaches back RETRY_HOURS, so a hardcoded stamp puts
+# every one of these messages outside the window the day after it is written.
+def ago(**kw): return (datetime.now() - timedelta(**kw)).strftime('%Y-%m-%d %H:%M:%S')
+
 MSG = {'external_id': 'e1', 'channel': 'email', 'from_email': 'someone@partner.example', 'from_name': 'Someone',
        'conversation_id': 'conv-e1', 'subject': 'Refund for Watson', 'body': 'Please look at the attached history.',
-       'sent_at': '2026-09-06 10:00:00'}
+       'sent_at': ago(minutes=5)}
 
 FYI = lambda *a, **k: '{"intent": "fyi", "why": "an automated notice"}'
 
@@ -90,6 +95,47 @@ class SweepTests(unittest.TestCase):
         mid = self.failed(1)[0]
         self.assertTrue(self.s.claim_retriage(mid))            # the owner's click got there first
         self.assertEqual(ingest.retry_failed_triage(self.s, FYI), 0)
+
+
+class AgeTests(unittest.TestCase):
+    """The sweep reaches back only as far as triage's job does.
+
+    The first version had no age bound, so the moment the brain came back it judged everything that
+    had EVER failed: two WhatsApp lines and an email from two weeks earlier became live tasks with
+    drafted replies, on a conversation that had moved on days before. Both drafts were written and
+    only escaped being sent because the assistant spotted a later reply (the owner, 2026-09-15:
+    "what is this? don't see them in the task list?").
+    """
+    def setUp(self): self.s = MemoryStore()
+
+    def _failed(self, sent_at, ext='old'):
+        out = ingest.ingest_message(self.s, {**MSG, 'external_id': ext, 'conversation_id': ext,
+                                             'sent_at': sent_at}, llm=boom)
+        self.assertEqual(out['status'], 'error')
+        return out['message_id']
+
+    def test_a_fortnight_old_failure_is_not_resurrected(self):
+        mid = self._failed(ago(days=14))
+        self.assertEqual(ingest.retry_failed_triage(self.s, FYI), 0)
+        self.assertEqual(self.s.get_message(mid)['Status'], 'error', 'it keeps its Retry button')
+
+    def test_this_outages_rows_are_swept(self):
+        mid = self._failed(ago(hours=2))
+        self.assertEqual(ingest.retry_failed_triage(self.s, FYI), 1)
+        self.assertEqual(self.s.get_message(mid)['Status'], 'filed')
+
+    def test_the_owners_own_retry_still_reaches_anything(self):
+        """The button is a decision somebody made; only the automatic sweep is bounded."""
+        mid = self._failed(ago(days=30))
+        self.assertTrue(self.s.claim_retriage(mid), 'no age bound on the explicit path')
+
+    def test_the_window_is_the_query_not_a_filter_after_it(self):
+        old = self._failed(ago(days=9), 'a')
+        new = self._failed(ago(hours=1), 'b')
+        since = ago(hours=24)
+        got = [r['MessageId'] for r in self.s.stranded_triage_failures(25, since=since)]
+        self.assertEqual(got, [new])
+        self.assertIn(old, [r['MessageId'] for r in self.s.stranded_triage_failures(25)])
 
 
 class PollWiringTests(unittest.TestCase):

@@ -100,7 +100,9 @@ export const CliConnectionsPage = ({ onBack }) => {
         <TextField autoFocus label="Connection name" disabled={draft.existing} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
         <TextField label="Command" value={draft.cmd} onChange={(e) => setDraft({ ...draft, cmd: e.target.value })} />
         <TextField label="Arguments (one per line)" multiline minRows={3} value={draft.args} onChange={(e) => setDraft({ ...draft, args: e.target.value })} />
-        <TextField label="Resume arguments (one per line)" multiline value={draft.resumeArgs} onChange={(e) => setDraft({ ...draft, resumeArgs: e.target.value })} />
+        <TextField label="Resume arguments (one per line)" multiline value={draft.resumeArgs}
+          helperText="How this CLI reopens a saved conversation. Write {id} where the session id goes — needed when the flag takes it joined, like --resume={id}. Without it the id is added as the next argument."
+          onChange={(e) => setDraft({ ...draft, resumeArgs: e.target.value })} />
         <TextField label="Timeout (seconds)" type="number" value={draft.timeout} onChange={(e) => setDraft({ ...draft, timeout: e.target.value })} />
         <TextField label="Model flag (optional)" helperText="Leave blank to use this CLI's standard model flag." value={draft.modelArg} onChange={(e) => setDraft({ ...draft, modelArg: e.target.value })} />
         <Typography variant="caption" sx={{ color: DIM }}>Changes apply to every profile using this connection on its next run.</Typography>

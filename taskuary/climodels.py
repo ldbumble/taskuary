@@ -7,12 +7,19 @@ said GPT-5.6-Sol; the owner rightly asked what it was. Claude Code keeps no such
 aliases stay static. A pick is spelled `model` or `model@effort` (gpt-5.4-mini@low); llm and
 agents turn the effort into codex's -c model_reasoning_effort=<effort>.
 """
-import json, os, re
+import json, os, re, shutil, subprocess
+from functools import lru_cache
 from pathlib import Path
 
 STATIC = {'claude': [{'id': m, 'label': m, 'desc': '', 'efforts': [], 'default_effort': ''}
                      for m in ('opus', 'sonnet', 'haiku', 'claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5')],
           'gemini': [{'id': m, 'label': m, 'desc': '', 'efforts': [], 'default_effort': ''} for m in ('gemini-2.5-pro', 'gemini-2.5-flash')],
+          # Cursor's available set is plan-dependent. These are the CLI's documented portable
+          # choices; `auto` remains valid as its account-aware router when a named model is not.
+          'cursor-agent': [{'id': m, 'label': m, 'desc': '', 'efforts': [], 'default_effort': ''}
+                           for m in ('auto', 'gpt-5', 'sonnet-4-thinking')],
+          'cursor': [{'id': m, 'label': m, 'desc': '', 'efforts': [], 'default_effort': ''}
+                     for m in ('auto', 'gpt-5', 'sonnet-4-thinking')],
           # Muse Spark, standard tier first: the -contributor ids cost ~12x less because prompts and
           # completions train Meta's products, so nothing here picks one for the owner. `efforts` is
           # deliberately EMPTY even though muse has reasoning levels - the @effort pick is translated
@@ -23,6 +30,86 @@ STATIC = {'claude': [{'id': m, 'label': m, 'desc': '', 'efforts': [], 'default_e
                    {'id': 'muse-spark-1.2-contributor', 'label': 'Muse Spark 1.2 (contributor)',
                     'desc': 'far cheaper - Meta trains on your prompts and completions', 'efforts': [], 'default_effort': ''}]}
 CODEX_FALLBACK = [{'id': 'gpt-5.5', 'label': 'GPT-5.5', 'desc': '', 'efforts': ['low', 'medium', 'high', 'xhigh'], 'default_effort': 'medium'}]
+# Copilot retrieves account policy at startup, but its installed SDK is still the authority for
+# model ids this CLI build understands. This fallback is used only when that declaration cannot
+# be read (a standalone binary rather than the npm package). `auto` lets Copilot choose from the
+# owner's actual entitlement and is therefore the safest first explicit choice.
+COPILOT_FALLBACK = ['auto', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex', 'gpt-5.2-codex',
+                    'claude-opus-4.7', 'claude-sonnet-4.6', 'claude-haiku-4.5']
+DEVIN_FALLBACK = ['claude-opus-5', 'claude-sonnet-5', 'gpt-6-astra', 'gpt-5.6-sol',
+                  'gpt-5.6-terra', 'gpt-5.6-luna', 'gemini-3.8-flash', 'swe-2',
+                  'swe-1.7-lightning', 'adaptive', 'gpt-5.4', 'gpt-5.4-mini',
+                  'claude-sonnet-4.6', 'claude-haiku-4.5', 'gemini-3.1-pro']
+
+
+def _items(ids, labels=None, source='') -> list:
+    labels = labels or {}
+    return [{'id': m, 'label': labels.get(m) or m, 'desc': source,
+             'efforts': [], 'default_effort': ''} for m in ids]
+
+
+def parse_devin_models(text: str) -> list:
+    """Family choices from `devin models list`.
+
+    Devin prints every priced reasoning variant below a non-indented family heading. The family
+    id itself is accepted by --model and keeps the picker usable (49 choices on this account,
+    rather than hundreds of low/high/fast combinations).
+    """
+    out, seen = [], set()
+    for line in str(text or '').splitlines():
+        if not line or line[:1].isspace(): continue
+        m = re.fullmatch(r'(.+?) \(([a-z0-9][a-z0-9._-]*)\)', line.strip())
+        if not m or m.group(2) in seen: continue
+        seen.add(m.group(2))
+        out.append({'id': m.group(2), 'label': m.group(1), 'desc': '',
+                    'efforts': [], 'default_effort': ''})
+    return out
+
+
+@lru_cache(maxsize=4)
+def _devin_models(exe: str) -> list:
+    if not exe: return []
+    try:
+        p = subprocess.run([exe, 'models', 'list'], capture_output=True, text=True,
+                           encoding='utf-8', errors='replace', timeout=20)
+        return parse_devin_models((p.stdout or '') + '\n' + (p.stderr or '')) if p.returncode == 0 else []
+    except Exception:
+        # Test/runtime isolation may deliberately forbid child processes. A model picker is not
+        # allowed to take the whole Connections or Settings API down with it.
+        return []
+
+
+def devin_models() -> list:
+    """The models this signed-in Devin account says it can use, cached for this server run."""
+    return _devin_models(shutil.which('devin') or '') or _items(DEVIN_FALLBACK)
+
+
+def parse_copilot_models(text: str) -> list:
+    """Model ids advertised by the installed Copilot SDK's HELP_VISIBLE_MODELS declaration."""
+    m = re.search(r'HELP_VISIBLE_MODELS:\s*\((.*?)\)\[\]', str(text or ''), re.S)
+    ids = re.findall(r'["\']([^"\']+)["\']', m.group(1)) if m else []
+    return _items(list(dict.fromkeys(['auto', *ids])))
+
+
+@lru_cache(maxsize=4)
+def _copilot_models(exe: str) -> list:
+    candidates = []
+    if exe:
+        base = Path(exe).parent
+        candidates += [base / 'node_modules' / '@github' / 'copilot' / 'sdk' / 'index.d.ts',
+                       base.parent / 'lib' / 'node_modules' / '@github' / 'copilot' / 'sdk' / 'index.d.ts']
+    for path in candidates:
+        try:
+            found = parse_copilot_models(path.read_text(encoding='utf-8', errors='replace'))
+            if found: return found
+        except OSError:
+            pass
+    return _items(COPILOT_FALLBACK)
+
+
+def copilot_models() -> list:
+    """Models understood by this installed Copilot CLI build (account policy is enforced by it)."""
+    return _copilot_models(shutil.which('copilot') or '')
 
 
 def codex_home() -> Path: return Path(os.getenv('CODEX_HOME') or Path.home() / '.codex')
@@ -55,6 +142,14 @@ def catalog(cli: str) -> dict:
     if cli == 'codex':
         models = codex_models() or CODEX_FALLBACK
         return {'models': models, 'current': codex_current(), 'source': 'codex models_cache.json' if codex_models() else 'built-in',
+                'choices': [m['id'] for m in models]}
+    if cli == 'copilot':
+        models = copilot_models()
+        return {'models': models, 'current': {}, 'source': 'installed Copilot SDK',
+                'choices': [m['id'] for m in models]}
+    if cli == 'devin':
+        models = devin_models()
+        return {'models': models, 'current': {}, 'source': 'devin models list' if models else 'unavailable',
                 'choices': [m['id'] for m in models]}
     models = STATIC.get(cli, [])
     return {'models': models, 'current': {}, 'source': 'built-in', 'choices': [m['id'] for m in models]}

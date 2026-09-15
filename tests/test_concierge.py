@@ -55,6 +55,19 @@ def drafted(s, subject='Export still broken', who='Dana', hours=5, draft='Attach
 
 
 class TurnTests(unittest.TestCase):
+    def test_todays_brief_card_keeps_the_flag_that_draws_its_calendar(self):
+        """The Assistant card must retain the funnel's brief marker.
+
+        ReportCard uses this field to mount TodayMeetingsStrip. Dropping it at the
+        public-card boundary left the Morning digest text visible but hid the day's
+        calendar timeline above it.
+        """
+        card = concierge.card_for({
+            'key': 'report:7', 'kind': 'report', 'lane': 'report',
+            'title': 'Morning digest', 'brief_today': True,
+        })
+        self.assertIs(card['brief_today'], True)
+
     def test_surface_says_the_next_item_marks_it_shown_and_records_the_card(self):
         s = store()
         t, m, r = drafted(s)

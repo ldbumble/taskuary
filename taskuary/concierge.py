@@ -1666,7 +1666,11 @@ def card_for(item: dict) -> dict:
     and reloads the live facts (draft text, agent tail) from the item's ids."""
     return {k: item.get(k) for k in ('key', 'kind', 'lane', 'title', 'who', 'when', 'why', 'mid', 'tid', 'ref', 'rid', 'idea', 'coding', 'source_id', 'preview', 'sent', 'stale', 'sig', 'more',
                                        'idea_kind', 'agent', 'asking', 'tail', 'event', 'summary', 'bad', 'draft', 'channel', 'category', 'action', 'sid', 'mode',
-                                       'presentation_revision', 'order_band', 'processing_id', 'member_ids', 'aliases', 'unread', 'deferred', 'actionable', 'paused')}
+                                       # the agent's own question and the answers it offered: what a chat numbers, and
+                                       # the request an answer is bound to (funnel.from_agents, workerstate PW-228)
+                                       'choices', 'request_id', 'request_kind',
+                                       'presentation_revision', 'order_band', 'processing_id', 'member_ids', 'aliases', 'unread', 'deferred', 'actionable', 'paused',
+                                       'brief_today')}
 
 
 def move_on(store, key: str, actor: str = 'owner') -> dict:
@@ -2279,6 +2283,15 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
     tid = task['TaskId']
     p = funnel.pile(store)
     if item is None: item = funnel.next_item(store, key, items=funnel.full_items(store)) if key else None   # the route already built it
+    # "1" MEANS THE SAME THING ON BOTH SCREENS. The phone numbers its options because a chat has no
+    # buttons, and the owner, having answered by number there, typed "1" on the desktop too - where it
+    # was just a digit for the model to interpret, so it answered about something else entirely (the
+    # owner, 2026-09-15: "on the desktop when I hit 1 it shows the past message not matching what i
+    # sent"). The action words under the line ARE numbered, in the order they are drawn.
+    if item and text.strip().lstrip('#').rstrip('.').strip().isdigit():
+        words = [c['label'] for c in chips_for(store, item)]
+        i = int(text.strip().lstrip('#').rstrip('.').strip())
+        if 1 <= i <= len(words): text = words[i - 1]
     record_related(store, tid, item, 'user', text)
     rec = lambda role, body, card=None: record_related(store, tid, item, role, body, card)
     llm = _brain_for(store, tid, llm, trace, cancel)

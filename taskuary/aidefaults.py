@@ -28,7 +28,7 @@ SLOTS = [
     {'key': 'triage_ai', 'label': 'Triage brain', 'pick': 'brain', 'gear': 'light',
      'desc': 'Reads every inbound message and decides: a task to do, a question to answer, or FYI to file.',
      'why': 'One message in, one line of JSON out - so this wants your cheapest fast model, not your best one.'},
-    {'key': 'default_agent', 'label': 'Default coding agent', 'pick': 'agent', 'gear': 'main',
+    {'key': 'default_agent', 'label': 'Default coding CLI', 'pick': 'agent', 'gear': 'main',
      'desc': 'Works the tasks. Start session, Send to coding agent and auto-dispatch all use this one.',
      'why': 'This is the expensive, capable gear: it reads your repository and writes code.'},
     {'key': 'concierge_ai', 'label': 'Assistant', 'pick': 'brain', 'gear': 'light',
@@ -86,7 +86,8 @@ def resolve(store, cfg, slot_key: str) -> dict:
         cat = climodels.catalog(cli)
         model, effort = climodels.split_pick(prof.get('model') or '')
         out.update(model=model, effort=effort, choices=cat['choices'], efforts=_efforts(cat, model),
-                   owner=f'the {name} profile' if name else '', owner_link='agents', cli=cli,
+                   owner=f'the {cli} coding profile' if cli else '', owner_link='agents', cli=cli,
+                   display=cli,
                    ready=bool(name))
         if not name: out['note'] = 'no coding agent configured yet'
         return out
@@ -142,8 +143,11 @@ def _conn_models(t: str) -> list: return list(_CONN_MODELS.get(t, []))
 
 def state(store, cfg) -> dict:
     """Every slot, plus the options each picker offers."""
+    from . import agents as hub_agents
     agents = [a['Name'] for a in store.list_agents()]
-    return {'slots': [resolve(store, cfg, s['key']) for s in SLOTS], 'agents': agents}
+    preferred = [str(store.get_settings().get('default_agent') or 'coder')]
+    return {'slots': [resolve(store, cfg, s['key']) for s in SLOTS], 'agents': agents,
+            'agent_options': hub_agents.cli_agent_options(store, preferred=preferred, coding_only=True)}
 
 
 def _save_profile(store, cfg, name: str, prof: dict) -> None:

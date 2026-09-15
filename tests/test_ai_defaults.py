@@ -6,6 +6,7 @@ mail" had a different answer on a different page for every kind of brain, and th
 could not tell you any of them (the owner, 2026-09-10).
 """
 import json, unittest
+from unittest import mock
 
 from fastapi.testclient import TestClient
 
@@ -78,6 +79,15 @@ class ResolveTests(unittest.TestCase):
         r = aidefaults.resolve(s, cfg, 'default_agent')
         self.assertEqual(r['model'], 'opus')                # not haiku
         self.assertEqual(r['owner_link'], 'agents')
+
+    def test_state_offers_coding_clis_instead_of_every_profile(self):
+        s, cfg = _store(), {'agents': {'coder': {'cmd': 'claude', 'model': 'opus'}}}
+        s.upsert_agent('researcher', 'research', 'cli', json.dumps({'cmd': 'claude'}))
+        s.upsert_agent('copilot', 'coding', 'cli', json.dumps({'cmd': 'copilot'}))
+        with mock.patch('taskuary.agents.runs_here', return_value=True):
+            options = aidefaults.state(s, cfg)['agent_options']
+        self.assertEqual([(o['value'], o['label']) for o in options],
+                         [('coder', 'claude'), ('copilot', 'copilot')])
 
 
 class ApplyTests(unittest.TestCase):

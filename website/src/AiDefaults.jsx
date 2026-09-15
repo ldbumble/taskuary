@@ -34,7 +34,9 @@ const Model = ({ slot, onSave }) => {
 // in the card rather than a caption under two dropdowns.
 const Slot = ({ slot, brains, agents, onSave, onGo }) => {
   const isAgent = slot.key === "default_agent";
-  const options = isAgent ? (agents || []).map((n) => ({ value: n, label: n, ready: true })) : brains;
+  const options = isAgent ? (agents || []).map((a) => typeof a === "string"
+    ? { value: a, label: a, ready: true }
+    : a) : brains;
   const picked = options.find((o) => o.value === slot.value);
   const runs = slot.model || slot.default_hint || "the provider default";
   return (
@@ -49,7 +51,7 @@ const Slot = ({ slot, brains, agents, onSave, onGo }) => {
       <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "flex-start" }}>
         <Box>
           <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.4, fontWeight: 700 }}>
-            {isAgent ? "which agent" : "which brain"}
+            {isAgent ? "which CLI" : "which brain"}
           </Typography>
           <Select size="small" displayEmpty value={picked ? slot.value : ""}
             onChange={(e) => onSave({ value: e.target.value })}
@@ -147,7 +149,7 @@ export default function AiDefaults({ brains, agents, onGo, onLoaded }) {
         </Alert>
       )}
       {state.slots.map((s) => (
-        <Slot key={s.key} slot={s} brains={brains} agents={state.agents || agents || []}
+        <Slot key={s.key} slot={s} brains={brains} agents={state.agent_options || agents || state.agents || []}
           onSave={(patch) => save(s, patch)} onGo={onGo} />
       ))}
     </Box>

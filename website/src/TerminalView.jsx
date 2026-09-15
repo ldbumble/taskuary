@@ -97,6 +97,7 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
   const exit = useRef(onExit);
   exit.current = onExit;
   const [state, setState] = useState("connecting");
+  const [promptState, setPromptState] = useState({ pending: false, cli: "agent" });
   // Reopening a task replays the whole scrollback in one write, and xterm parses it with the
   // viewport following along - so you watched the session scroll from its first line down to
   // the bottom, every time. The pane stays curtained until the server says the live screen is
@@ -126,6 +127,7 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
     return () => cancelAnimationFrame(id);
   }, [size]);
   useEffect(() => {
+    setPromptState({ pending: false, cli: "agent" });
     const term = new Terminal({ fontSize: savedSize(), fontFamily: TERM_FONT, fontWeightBold: 600,
       theme: THEMES[savedTheme()], cursorBlink: !readOnly, cursorStyle: "bar", scrollback: 10000,
       disableStdin: readOnly,
@@ -231,6 +233,9 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
     ws.onmessage = (e) => {
       const m = JSON.parse(e.data);
       if (m.type === "out") {
+        if (typeof m.promptPending === "boolean") {
+          setPromptState({ pending: m.promptPending, cli: m.cli || "agent" });
+        }
         output.push(m.data, m.replay);                    // a fresh replay curtains again when this batch writes
         // Read-only viewers deliberately send no resize, so the server has no redraw barrier to
         // answer with `ready`. The replay itself is their complete initial screen.
@@ -370,6 +375,16 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
           </Typography>
         </Box>
       )}
+      {!restoring && promptState.pending && (
+        <Box sx={{ position: "absolute", top: 7, left: "50%", transform: "translateX(-50%)", zIndex: 2,
+          display: "flex", alignItems: "center", gap: 0.75, px: 1, py: 0.35, borderRadius: 99,
+          bgcolor: "rgba(24,24,37,.92)", border: `1px solid ${CATPPUCCIN.surface}`, pointerEvents: "none" }}>
+          <CircularProgress size={10} sx={{ color: CATPPUCCIN.yellow }} />
+          <Typography noWrap variant="caption" sx={{ ...mono, fontSize: 10, color: CATPPUCCIN.yellow }}>
+            Task sent to {promptState.cli === "devin" ? "Devin" : promptState.cli} · waiting for first response…
+          </Typography>
+        </Box>
+      )}
       {state !== "live" && (
         <Typography variant="caption" sx={{ ...mono, position: "absolute", top: 6, right: 130, fontSize: 10,
           color: state === "exited" ? CATPPUCCIN.green : CATPPUCCIN.yellow }}>
@@ -403,7 +418,7 @@ export const TerminalPreview = ({ sid, height = 280, onOpen }) => {
         "&:hover": onOpen ? { borderColor: CATPPUCCIN.overlay } : {} }}>
       <Box sx={{ position: "absolute", top: 7, right: 10, display: "flex", alignItems: "center", gap: 0.55, zIndex: 1 }}>
         <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: shot?.alive === false ? CATPPUCCIN.dim : CATPPUCCIN.green }} />
-        <Typography sx={{ ...mono, fontSize: 9, color: CATPPUCCIN.faint }}>{shot ? "live terminal · open ↗" : "reading terminal…"}</Typography>
+        <Typography sx={{ ...mono, fontSize: 9, color: CATPPUCCIN.faint }}>{shot?.promptPending ? "prompt sent · waiting for response…" : shot ? "live terminal · open ↗" : "reading terminal…"}</Typography>
       </Box>
       <Box component="pre" aria-label="Live terminal screen" sx={{ m: 0, p: "22px 10px 10px", height: "100%",
         boxSizing: "border-box", overflow: "hidden", whiteSpace: "pre", color: CATPPUCCIN.fg,

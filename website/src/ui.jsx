@@ -664,23 +664,25 @@ export const useAgents = () => {
 // to choose profile. That's for general. Coding is the profile for coding sessions"). So in coding
 // mode the menu says the CLI, and the five general profiles are not offered at all.
 export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, size = 30, coding = false, kinds = {} }) => {
-  const info = models[agent] || {};
-  const choices = info.choices || [];
-  const shown = coding && Object.keys(kinds).length
-    ? agents.filter((a) => kinds[a] === "coding") : agents;
   const cliOf = (a) => models[a]?.cli || models[a]?.cmd || a;
-  const list = shown.length ? shown : [agent];
+  const shown = coding && Object.keys(kinds).length
+    ? agents.filter((a) => ["coding", "cli"].includes(String(kinds[a] || "").toLowerCase())) : agents;
+  // A coding picker chooses the executable, not one of several instruction profiles backed by it.
+  // The server sends the configured default first, so that profile represents its CLI here.
+  const distinct = coding ? [...new Map(shown.map((a) => [cliOf(a), a])).values()] : shown;
+  const list = distinct.length ? distinct : [agent];
+  const selected = list.includes(agent) ? agent : (list[0] || agent);
+  const info = models[selected] || {};
+  const choices = info.choices || [];
   return (
     <>
-      <Select size="small" value={list.includes(agent) ? agent : (list[0] || agent)}
+      <Select size="small" value={selected}
         onChange={(e) => onAgent(e.target.value)}
         sx={{ fontSize: 12.5, height: size, bgcolor: "#fff", minWidth: 120 }}>
         {list.map((a) => (
           <MenuItem key={a} value={a} sx={{ fontSize: 12.5 }}>
             {coding ? cliOf(a) : a}
-            {coding
-              ? (a !== cliOf(a) ? <em style={{ marginLeft: 6, fontStyle: "normal", color: "#8a847a", fontSize: 11 }}>{a}</em> : null)
-              : (models[a]?.cmd ? ` · ${models[a].cmd}` : "")}
+            {!coding && (models[a]?.cmd ? ` · ${models[a].cmd}` : "")}
           </MenuItem>
         ))}
       </Select>
@@ -1449,7 +1451,9 @@ const TERM_MARK = { done: "✓", now: "▸", todo: "○" };
 const TERM_TONE = { done: CATPPUCCIN.faint, now: CATPPUCCIN.yellow, todo: CATPPUCCIN.faint };
 
 // the one header line, shared by the pane and the compact WorkLine
-const workHead = (work, who, waiting, asking, startedAt) => {
+const workHead = (work, who, waiting, asking, startedAt, promptPending = false) => {
+  if (promptPending) return { tone: CATPPUCCIN.yellow, mark: "▮", text: who,
+    tool: "prompt sent · waiting for first response", t: startedAt ? secsAgo(startedAt) : "", blink: true };
   if (waiting) return { tone: CATPPUCCIN.yellow, mark: "⏸", text: `${who} ${asking ? "asked you something" : "stopped - waiting on you"}`, tool: "", t: "" };
   if (work?.tool?.name) return { tone: CATPPUCCIN.cyan, mark: "▮", text: who, tool: `${work.tool.name} ${fileName(work.tool.target) || work.tool.target || ""}`.trim(), t: secsAgo(work.tool.at), blink: true };
   if (work?.last_line) return { tone: CATPPUCCIN.cyan, mark: "▮", text: who, tool: `last line: ${work.last_line}`, t: startedAt ? secsAgo(startedAt) : "", blink: true, muted: true };
@@ -1460,7 +1464,7 @@ export const WorkPane = ({ run, onOpen }) => {
   // the CLI it runs, not the profile's nickname: a profile called codex that runs claude is claude here
   const work = run?.work || {}, who = run?.cli || run?.AgentName || run?.agent || "agent";
   const waiting = run?.kind === "session" && (run.asking || isWaiting(run));
-  const h = workHead(work, who, waiting, run?.asking, run?.StartedAt || run?.started);
+  const h = workHead(work, who, waiting, run?.asking, run?.StartedAt || run?.started, run?.promptPending);
   const todos = work.todos || [];
   const files = (work.files?.length ? work.files : (run?.files || []).map((p) => ({ path: p, n: 0 }))).slice(0, 4);
   const more = Math.max(0, (work.files?.length || run?.files?.length || 0) - files.length);
@@ -1518,8 +1522,8 @@ export const WorkPane = ({ run, onOpen }) => {
 };
 
 // one line, for a header: ● agent · Edit server.py · 4s  |  ● agent · last line: "…"
-export const WorkLine = ({ work, who = "agent", waiting = false, asking = false, startedAt }) => {
-  const h = workHead(work, who, waiting, asking, startedAt);
+export const WorkLine = ({ work, who = "agent", waiting = false, asking = false, startedAt, promptPending = false }) => {
+  const h = workHead(work, who, waiting, asking, startedAt, promptPending);
   if (!h.tool && !waiting) return null;
   return (
     <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.6, minWidth: 0, maxWidth: "100%", ...mono, fontSize: 10.5 }}>
@@ -1608,7 +1612,8 @@ export const WorkStrip = ({ taskId, live, session, provenance, defaultCollapsed 
         <Chip size="small" label={summary} sx={pillSx("muted")} />
         {checks > 0 && <Chip size="small" label={`${checks} to check`} sx={pillSx("you")} />}
         <Box sx={{ flex: 1 }} />
-        {w && <WorkLine work={w} who={who} waiting={false} startedAt={d.session?.started} />}
+        {w && <WorkLine work={w} who={who} waiting={false} startedAt={d.session?.started}
+          promptPending={d.session?.promptPending} />}
       </Box>
       {open && <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "minmax(0, 1fr) minmax(0, 1fr)" } }}>
         <Box sx={{ px: 1.5, py: 1, borderRight: { md: `1px solid ${BORDER}` } }}>

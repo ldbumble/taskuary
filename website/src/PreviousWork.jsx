@@ -47,7 +47,7 @@ export default function PreviousWork({ active = true, initiallyOpen = true, onOp
         <Button size="small" variant="outlined" disabled={busy !== null}
           onClick={() => item.action === "review" ? onReview(item.reviewId) : resume(item)}
           startIcon={busy === item.taskId ? <CircularProgress size={14} /> : undefined}>
-          {busy === item.taskId ? "Resuming…" : item.action === "review" ? "Review draft" : "Resume"}
+          {busy === item.taskId ? "Continuing…" : item.action === "review" ? "Review draft" : "Continue"}
         </Button>
       </Box>
       <Typography sx={{ fontSize: 12, color: "text.secondary", mt: 0.5, whiteSpace: "pre-wrap", overflowWrap: "anywhere",

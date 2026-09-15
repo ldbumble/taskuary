@@ -45,6 +45,23 @@ export function processingErrorMessage(error, fallback) {
 export const isCoveragePending = (error) => processingErrorCode(error) === "processing_coverage_pending";
 export const isSnapshotExpired = (error) => processingErrorCode(error) === "processing_snapshot_expired";
 
+// A page whose membership census had not settled used to be a 409 with no rows, so All fell back to
+// the legacy /api/feed every time. It now arrives WITH a manifest of what it could not group, and
+// the two questions that manifest answers are different:
+//   incomplete - entities exist that could not become items at all, so rows really are missing and
+//                only the legacy transport can show them. Rare, and the reason the fallback stays.
+//   settling   - the grouping is behind or conflicted but nothing is missing: read the page, say so
+//                quietly, and do NOT swap transports underneath the owner.
+export const degradedOf = (data) => (data?.coverage?.degraded) || null;
+export const isIncomplete = (data) => (degradedOf(data)?.missing || 0) > 0;
+export const settlingNotice = (data) => {
+  const d = degradedOf(data);
+  if (!d || (d.missing || 0) > 0) return "";
+  return d.reason === "conflicted"
+    ? "Grouping hit a conflict — items may be split until it is resolved."
+    : "Grouping is catching up — a few items may be split for a moment.";
+};
+
 function targetOf(item) {
   const target = item?.open_target;
   if (!object(target) || !["message", "task", "idea", "review"].includes(target.kind)

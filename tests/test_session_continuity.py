@@ -96,6 +96,24 @@ def test_backup_provider_receives_history_without_primary_session_id():
     assert answer.last_pick == 'cli:codex' and answer.session_id == 'codex-thread'
 
 
+def test_backup_brains_do_not_retry_the_same_cli_under_another_profile_name():
+    store = MemoryStore()
+    store.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'args': ['-p']}))
+    store.upsert_agent('researcher', 'research', 'cli', json.dumps({'cmd': 'claude', 'args': ['-p']}))
+    store.upsert_agent('codex', 'coding', 'cli', json.dumps({'cmd': 'codex', 'args': ['exec']}))
+    store.set_setting('triage_backup_ai', 'cli:researcher,cli:codex', 'owner')
+    made = []
+    def make(st, name, *args, **kw):
+        made.append(name)
+        if name == 'coder': return mock.Mock(side_effect=RuntimeError('provider unavailable'))
+        return lambda *a, **k: 'Codex answered'
+    with mock.patch.object(llm, 'make_cli_llm', side_effect=make), \
+         mock.patch.object(agents, 'availability_failure', return_value=True):
+        answer = llm._build_llm(store, pick='cli:coder')
+        assert answer('system', 'question') == 'Codex answered'
+    assert made == ['coder', 'codex']
+
+
 @pytest.mark.parametrize('provider', ['claude', 'codex'])
 def test_runner_uses_exact_resume_id_and_keeps_existing_permissions(provider):
     process = mock.Mock()
@@ -140,18 +158,23 @@ def test_resume_rechecks_pending_reviews_and_never_starts_work_for_them():
     assert guard.denied('POST', f'/api/tasks/{tid}/resume')
 
 
-def test_resume_starts_once_after_owner_click_and_finished_tasks_stay_finished():
-    store = MemoryStore(); tid = task(store); finished = task(store, Status='done'); seen = []
+def test_resume_starts_once_after_owner_click_and_reopens_a_finished_task():
+    store = MemoryStore(); tid = task(store); finished = task(store, Status='done')
+    dismissed = task(store, Status='dropped'); seen = []
     session = mock.Mock()
     def start(st, task_id, **kw):
         assert task_id in general.OPENING; seen.append(task_id); return session
     with mock.patch.object(server, 'store', store), mock.patch.object(general, 'provider_options', return_value=[{}]), \
          mock.patch.object(general, 'start_session', side_effect=start), mock.patch.dict(terminal.SESSIONS, {}, clear=True):
         client = TestClient(server.app)
-        assert client.post(f'/api/tasks/{finished}/resume').status_code == 409
+        assert client.post(f'/api/tasks/{dismissed}/resume').status_code == 409
+        # a task the agent finished and closed is still a conversation the owner can pick back up -
+        # and picking it up means there is live work again, so it comes back to the work tab
+        assert client.post(f'/api/tasks/{finished}/resume').status_code == 200
+        assert store.get_task(finished)['Status'] == 'in_progress'
         assert client.post(f'/api/tasks/{tid}/resume').status_code == 200
         general.OPENING.add(tid)
         try: assert client.post(f'/api/tasks/{tid}/resume').json()['action'] == 'open'
         finally: general.OPENING.discard(tid)
-    assert seen == [tid]
+    assert seen == [finished, tid]
     assert session.send_prompt.call_args.kwargs == {'as_owner': False, 'echo': False}

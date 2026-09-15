@@ -63,9 +63,12 @@ test("a paused assistant task exposes resume instead of pretending nobody has wo
   const agent = cards.slice(cards.indexOf("export function AgentCard"), cards.indexOf("export function MeetingCard"));
   assert.match(agent, /card\.paused \? "conversation paused"/);
   assert.match(agent, /\/api\/tasks\/\$\{card\.tid\}\/resume/);
-  assert.match(agent, /"Resume conversation"/);
+  assert.match(agent, /"Continue this session"/);
   assert.match(agent, /card\.paused && card\.tid && <CombinedTaskText/);
   const tasks = read("TasksView.jsx");
   assert.match(tasks, /const resumeGeneralAgent = async/);
-  assert.match(tasks, /"Resume conversation"/);
+  // one set of words for the one act, whichever agent held the conversation (2026-09-15)
+  assert.match(tasks, /"Continue this session"/);
+  assert.match(tasks, /const continueSession = async/);
+  assert.match(tasks, /\/api\/tasks\/\$\{id\}\/continue-session/);
 });

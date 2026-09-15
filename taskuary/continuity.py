@@ -19,9 +19,8 @@ def context_key(store, pick, model):
 
 def can_resume(store, pick):
     if not pick.startswith('cli:'): return False
-    from .agents import _cli_name
-    config = json.loads((store.get_agent(pick[4:]) or {}).get('Config') or '{}')
-    return _cli_name(config.get('cmd', 'claude')) in ('claude', 'codex') or bool(config.get('resume_args'))
+    from .agents import resume_argv
+    return bool(resume_argv(json.loads((store.get_agent(pick[4:]) or {}).get('Config') or '{}'), 'x'))
 
 
 def previous_work(store, limit=5):

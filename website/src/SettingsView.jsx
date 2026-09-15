@@ -2,7 +2,7 @@
 // description) that drill into detail pages - breadcrumb on top, big title, underline tabs,
 // then generous divider-separated rows. Search on the landing reaches EVERYTHING (knobs,
 // rules, memory, help text) and jumps straight to the right page + tab.
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
   IconButton, InputAdornment, MenuItem, Select, Switch, TextField, Typography,
@@ -26,6 +26,7 @@ import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, ACTION_COLORS } from "./theme.jsx";
 import { ChannelIcon, ConfirmDelete, Empty, FilterPills } from "./ui.jsx";
 import { notifyState } from "./notify.js";
+import { normalizeBrainOptions } from "./brainOptions.js";
 
 
 const KINDS = ["keyword", "sender", "sender_domain", "noreply", "first_time_sender"];
@@ -111,10 +112,10 @@ const KNOB_META = {
     help: "Switch a kind off and it never appears in a post again; lines already posted keep their actions and conversation. 'idea' is the only one that needs an AI connector — the others are read straight off the hub's own tables and your calendar. With 'idea' off no model is called at all: the facts post in the hub's own words." },
 
   // ── Coder agent: who works the tasks, and how eagerly ──
-  default_agent: { group: "Triage & agents", label: "Default agent", type: "agent",
+  default_agent: { group: "Triage & agents", label: "Default coding CLI", type: "agent",
     desc: "The CLI agent that works tasks when nothing names one.",
     help: "Start session, Send to coding agent and auto-dispatch all use this agent unless you pick another in the moment; every agent picker lists it first. The roster itself lives under Docs → Profiles → Manage profiles, where the default row wears the star.\n\nGitHub-specific permissions (may agents open issues? push?) are on the GitHub connector card, because they are decisions about how your team uses GitHub, not about Taskuary." },
-  backup_agents: { group: "Triage & agents", label: "Backup coding agents", type: "agents",
+  backup_agents: { group: "Triage & agents", label: "Backup coding CLIs", type: "agents",
     desc: "If the first CLI is out of sessions, signed out, unavailable, or cannot start, continue the same task with another configured agent.",
     help: "Automatic (the default) tries every other configured CLI in roster order. Or select one or more explicit backups to control the chain. The task, incoming messages, attachments, repository, and seed prompt all travel to the replacement.\n\nA normal agent error does not silently switch authors halfway through work. Failover is for availability failures: session/usage/rate limits, quota or capacity, expired login, a missing executable, or a CLI that cannot start." },
   answer_to_agent: { group: "Coder agent", label: "Hand answers to the working agent", type: "select",
@@ -272,6 +273,8 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
 
   const [brains, setBrains] = useState([{ value: "", label: "auto — first active AI connector", ready: true }]);
   const [agentNames, setAgentNames] = useState([]);
+  const [agentOptions, setAgentOptions] = useState([]);
+  const [agentModels, setAgentModels] = useState({});
   const [connectors, setConnectors] = useState([]);
 
   const load = useCallback(async () => {
@@ -279,10 +282,28 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
       const [p, s, m] = await Promise.all([api.get("/api/policies"), api.get("/api/settings"), api.get("/api/memory")]);
       setPolicies(p.data.data || []); setSettings(s.data.data || []); setMemory(m.data.data || []);
       api.get("/api/brains").then(({ data }) => setBrains(data.data || [])).catch(() => {});
-      api.get("/api/agents").then(({ data }) => setAgentNames((data.data || []).map((a) => a.Name))).catch(() => {});
+      api.get("/api/agents").then(({ data }) => {
+        const rows = data.data || [], models = data.models || {}, seen = new Set();
+        setAgentNames(rows.map((a) => a.Name));
+        setAgentModels(models);
+        // Settings asks which coding CLI runs, not which instruction profile it wears.
+        // The endpoint puts the saved default first; keep that order and collapse profiles
+        // backed by the same executable into one provider choice.
+        setAgentOptions(rows.filter((a) => ["coding", "cli"].includes(String(a.Kind || "").toLowerCase()))
+          .map((a) => ({ value: a.Name, label: models[a.Name]?.cli || models[a.Name]?.cmd || a.Name }))
+          .filter((a) => !seen.has(a.label) && seen.add(a.label)));
+      }).catch(() => {});
       api.get("/api/connectors").then(({ data }) => setConnectors(data.data || [])).catch(() => {});
     } catch (e) { setErr(e?.response?.data?.detail || "Failed to load settings"); }
   }, []);
+
+  const selectedBrains = useMemo(() => {
+    const value = (name) => settings.find((s) => s.Name === name)?.Value || "";
+    return [value("triage_ai"), ...String(value("triage_backup_ai")).split(",").map((v) => v.trim())];
+  }, [settings]);
+  const brainOptions = useMemo(
+    () => normalizeBrainOptions(brains, agentModels, selectedBrains),
+    [brains, agentModels, selectedBrains]);
   useEffect(() => { load(); }, [load]);
 
   const savePolicy = async (p) => { await api.post("/api/policies", p); setDraft(null); load(); };
@@ -321,35 +342,37 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
 
   const control = (s) => {
     const m = meta(s.Name);
-    // the agent roster is user-config, so the default-agent knob is a real dropdown of it
+    const codingOptions = agentOptions.length ? agentOptions : agentNames.map((n) => ({ value: n, label: n }));
+    // Coding defaults choose an executable. The stored value remains its representative worker
+    // so existing task/session APIs keep their profile-specific model and repository mappings.
     if (m.type === "agent") return (
-      <Select size="small" value={agentNames.includes(s.Value) ? s.Value : (agentNames[0] || "")}
+      <Select size="small" value={codingOptions.some((o) => o.value === s.Value) ? s.Value : (codingOptions[0]?.value || "")}
         onChange={(e) => saveSetting(s.Name, e.target.value)} sx={{ minWidth: 140, fontSize: 12.5, bgcolor: "#fff" }}>
-        {agentNames.map((n) => <MenuItem key={n} value={n} sx={{ fontSize: 12.5 }}>{n}</MenuItem>)}
-        {!agentNames.length && <MenuItem value="" disabled sx={{ fontSize: 12.5 }}>no agents yet — add one under Connections</MenuItem>}
+        {codingOptions.map((o) => <MenuItem key={o.value} value={o.value} sx={{ fontSize: 12.5 }}>{o.label}</MenuItem>)}
+        {!codingOptions.length && <MenuItem value="" disabled sx={{ fontSize: 12.5 }}>no coding CLI yet — add one under Connections</MenuItem>}
       </Select>
     );
     if (m.type === "agents") {
-      const values = s.Value === "*" ? ["*"] : String(s.Value || "").split(",").filter((v) => agentNames.includes(v));
+      const values = s.Value === "*" ? ["*"] : String(s.Value || "").split(",").filter((v) => codingOptions.some((o) => o.value === v));
       return (
         <Select size="small" multiple displayEmpty value={values}
-          renderValue={(picked) => picked.includes("*") ? "automatic — any other agent"
-            : picked.length ? picked.join(" → ") : "none"}
+          renderValue={(picked) => picked.includes("*") ? "automatic — any other coding CLI"
+            : picked.length ? picked.map((v) => codingOptions.find((o) => o.value === v)?.label || v).join(" → ") : "none"}
           onChange={(e) => {
             const picked = typeof e.target.value === "string" ? e.target.value.split(",") : e.target.value;
             saveSetting(s.Name, picked.includes("*") ? "*" : picked.join(","));
           }} sx={{ minWidth: 250, maxWidth: 380, fontSize: 12.5, bgcolor: "#fff" }}>
-          <MenuItem value="*" sx={{ fontSize: 12.5 }}>automatic — any other configured agent</MenuItem>
-          {agentNames.map((n) => <MenuItem key={n} value={n} sx={{ fontSize: 12.5 }}>{n}</MenuItem>)}
+          <MenuItem value="*" sx={{ fontSize: 12.5 }}>automatic — any other configured coding CLI</MenuItem>
+          {codingOptions.map((o) => <MenuItem key={o.value} value={o.value} sx={{ fontSize: 12.5 }}>{o.label}</MenuItem>)}
         </Select>
       );
     }
     // the brains list is dynamic: AI connectors that actually hold a key + your CLI agents
     if (m.type === "brain") return (
-      <Select size="small" displayEmpty value={brains.some((b) => b.value === s.Value) ? s.Value : ""}
+      <Select size="small" displayEmpty value={brainOptions.some((b) => b.value === s.Value) ? s.Value : ""}
         sx={{ minWidth: 250, fontSize: 12.5, bgcolor: "#fff" }}
         onChange={(e) => saveSetting(s.Name, e.target.value)}>
-        {brains.map((b) => (
+        {brainOptions.map((b) => (
           <MenuItem key={b.value} value={b.value} disabled={!b.ready} sx={{ fontSize: 12.5 }}>
             {b.label}{b.ready ? "" : " — no key saved"}
           </MenuItem>
@@ -357,7 +380,7 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
       </Select>
     );
     if (m.type === "brains") {
-      const options = brains.filter((b) => b.value);
+      const options = brainOptions.filter((b) => b.value);
       const values = String(s.Value || "").split(",").filter((v) => options.some((b) => b.value === v));
       return (
         <Select size="small" multiple displayEmpty value={values}
@@ -453,7 +476,7 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
         {/* the segmented pill bar, same as Reports and the Timeline - the old underlined tab
             strip was the one place in the app still wearing a different header */}
         <Box sx={{ mb: 2 }}><FilterPills options={tabs} value={cfgTab} onChange={setCfgTab} /></Box>
-        {cfgTab === "Triage & agents" && <AiDefaults brains={brains} agents={agentNames} onGo={goFromPanel} onLoaded={setPanelOk} />}
+        {cfgTab === "Triage & agents" && <AiDefaults brains={brainOptions} agents={agentOptions} onGo={goFromPanel} onLoaded={setPanelOk} />}
         {cfgTab === "Notifications" && <NotifyStatus connectors={connectors} settings={settings} />}
         {rows.map((s) => {
           const m = meta(s.Name);

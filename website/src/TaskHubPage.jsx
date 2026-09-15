@@ -27,7 +27,6 @@ import { loadedAsset, staleWhat } from "./staleBuild.js";
 import { useHandRaise, playSound, desktopNotify } from "./handraise.js";
 import { dismissHandRaise, enqueueHandRaise, handRaiseWhat, isWatchingTask } from "./handraiseState.js";
 import { TaskuaryMark } from "./ui.jsx";
-import FloatingAssistant from "./FloatingAssistant.jsx";
 import AssistantView from "./AssistantView.jsx";
 
 // The strip reads left to right as the day does: what arrived (Timeline), what is being worked
@@ -460,8 +459,9 @@ export default function TaskHubPage() {
           {tab === "Docs" && <DocsView key={`d${tick}-${reset}`} />}
           {tab === "Settings" && <SettingsView key={`s${tick}-${reset}`} onNavigate={go} />}
         </Box>
-        {/* the bubble is the same assistant; on its own page it would be a second chat over the first */}
-        {tab !== "Assistant" && <FloatingAssistant onNavigate={go} onChanged={refreshPending} activeTab={tab} />}
+        {/* The floating mark is gone (the owner, 2026-09-15: "we also don't need the taskuary image in
+            bottom right corner anymore"). It was the same assistant the Assistant tab already is, and
+            it sat on top of the work - over the browser pane's own Take over button, in full screen. */}
       </Box>
     </ThemeProvider>
   );

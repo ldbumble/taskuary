@@ -131,7 +131,7 @@ def receive(payload: dict) -> dict:
         # onto the agent's card - and its Stop judged against the agent's task (audit 2026-09-02)
         free = [x for x in mine if not getattr(x, 'ext_id', '')]
         if not free: return {'bound': False}
-        t = max(free, key=lambda x: x.last); t.ext_id = sid
+        t = max(free, key=lambda x: x.last); term.bind_ext(t, sid)
     for n in witness.claude_notes(payload): t.witness.note(n)
     _events(t, payload)
     # ...and the one hook that is not just an observation: Stop means the agent has finished

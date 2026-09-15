@@ -33,6 +33,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import PauseCircleIcon from "@mui/icons-material/PauseCircleOutline";
+import HistoryIcon from "@mui/icons-material/History";
 import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
 import AccountTreeIcon from "@mui/icons-material/AccountTree";
@@ -132,7 +133,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // fired on return. Only the newest request is allowed to repaint the list.
   const taskLoadSeq = useRef(0);
   const stale = (id) => selRef.current !== id;
-  const { agents, models } = useAgents();
+  const { agents, models, kinds } = useAgents();
   const pickerTask = useRef(null);          // initialize each task from its durable worker once
   const [err, setErr] = useState("");
   const [newOpen, setNewOpen] = useState(false);
@@ -244,7 +245,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   }, [active, loadTasks, loadDetail]);
   // the roster is user-config - default to whatever actually exists
   useEffect(() => {
-    if (agents.length && !agents.includes(run.agent)) setRun((r) => ({ ...r, agent: agents[0] }));
+    if (agents.length && !agents.includes(run.agent)) setRun((r) => ({ ...r, agent: agents[0], model: "" }));
   }, [agents, run.agent]);
   useEffect(() => { loadDetail(selected); }, [selected, loadDetail]);
   useEffect(() => {
@@ -693,6 +694,22 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       if (!stale(id)) setErr(e?.response?.data?.detail || "Could not start the non-coding agent");
     } finally { if (!stale(id)) setStartingAgent(""); }
   };
+  // Reopening the agent's OWN conversation - the assistant through /resume, a coding pane through
+  // its saved session id. Two roads because the two agents are held differently; one button, one
+  // set of words, because to the owner it is the same act (2026-09-15).
+  const continueSession = async () => {
+    if (!selected || startingAgent) return;
+    const id = selected;
+    setStartingAgent("resume"); setErr("");
+    try {
+      await api.post(`/api/tasks/${id}/continue-session`);
+      if (!stale(id)) setGeneralRevision((n) => n + 1);
+      await Promise.all([loadDetail(id), loadTasks()]);
+      onChanged?.();
+    } catch (e) {
+      if (!stale(id)) setErr(e?.response?.data?.detail || "Could not continue this session");
+    } finally { if (!stale(id)) setStartingAgent(""); }
+  };
   const resumeGeneralAgent = async () => {
     if (!selected || startingAgent) return;
     const id = selected;
@@ -1118,13 +1135,22 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   {!term?.alive && !isGeneral && !restartOpen && (report || detail?.transcript) && (
                     <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}`,
                       display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
-                      <Button size="small" variant="outlined" startIcon={<RefreshIcon sx={{ fontSize: 15 }} />}
+                      {/* the conversation the agent actually had, reopened by its own id - not a new
+                          agent reading a handover note about it. Offered only when the session, its
+                          coder and its checkout are all still there (server: _resumable). */}
+                      {detail?.resumable && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent}
+                        startIcon={startingAgent === "resume" ? <CircularProgress size={12} /> : <HistoryIcon sx={{ fontSize: 15 }} />}
+                        title={`Reopens ${detail.resumable.agent}'s own session in ${detail.resumable.cwd}. It still has what it read, changed and asked.`}
+                        onClick={continueSession}>{startingAgent === "resume" ? "Continuing…" : "Continue this session"}</Button>}
+                      <Button size="small" variant={detail?.resumable ? "text" : "outlined"} startIcon={<RefreshIcon sx={{ fontSize: 15 }} />}
                         onClick={() => setRestartOpen(true)}>Run another agent</Button>
                       {!report && <Button size="small" variant="text" disabled={!!wrapping}
                         title="Saves the stopped session's result and report. The task stays open."
                         startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>Save stopped run result</Button>}
                       <Typography variant="caption" sx={{ color: FAINT }}>
-                        Choose a different harness, model, or prompt on the next run.
+                        {taskState === "done" && detail?.resumable
+                          ? "This task is done - continuing puts it back in progress."
+                          : "Choose a different harness, model, or prompt on the next run."}
                       </Typography>
                     </Box>
                   )}
@@ -1134,7 +1160,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         {report || detail?.transcript ? "Configure the next run" : "Start an agent"}
                       </Typography>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
-                        <AgentPicker agents={agents} models={models} agent={run.agent} model={run.model}
+                        <AgentPicker agents={agents} models={models} kinds={kinds} coding agent={run.agent} model={run.model}
                           onAgent={(a) => setRun({ ...run, agent: a, model: "" })}
                           onModel={(m) => setRun({ ...run, model: m })} size={28} />
                         <Typography variant="caption" sx={{ color: FAINT }}>
@@ -1181,13 +1207,15 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
                       <Button size="small" variant="contained" disableElevation disabled={!!startingAgent}
                         startIcon={startingAgent === "resume" ? <CircularProgress size={12} /> : <RefreshIcon sx={{ fontSize: 15 }} />}
-                        title="Resumes the saved provider conversation and continues from its existing context."
-                        onClick={resumeGeneralAgent}>{startingAgent === "resume" ? "Resuming…" : "Resume conversation"}</Button>
+                        title="Reopens the saved provider conversation and continues from its existing context."
+                        onClick={resumeGeneralAgent}>{startingAgent === "resume" ? "Continuing…" : "Continue this session"}</Button>
                       <Button size="small" variant="outlined" disabled={!!wrapping} startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />}
                         title="Files this conversation's last answer as the task's result and ends its session. The task stays open until you mark it done."
                         onClick={wrapUp}>Save this conversation's result</Button>
                       <Typography variant="caption" sx={{ color: FAINT }}>
-                        Or send a message in the workspace below to pick it back up.
+                        {taskState === "done"
+                          ? "This task is done - continuing puts it back in progress."
+                          : "Or send a message in the workspace below to pick it back up."}
                       </Typography>
                     </Box>
                   )}

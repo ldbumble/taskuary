@@ -107,3 +107,19 @@ def test_connection_api_has_one_row_per_cli_and_validates_references():
         assert store.get_agent('custom') is None
         assert c.delete('/api/cli/connections/custom').status_code == 200
         assert c.put('/api/cli/connections/claude', json={'cmd': 'claude', 'timeout': -1}).status_code == 422
+
+
+def test_brain_api_lists_cli_tools_once_instead_of_every_profile_using_them():
+    from fastapi.testclient import TestClient
+    from taskuary import server
+    cfg, store = legacy(), MemoryStore()
+    cli_connections.migrate(cfg)
+    cli_connections.sync(cfg, store)
+    cfg['server'] = copy.deepcopy(server.cfg['server'])
+    store.set_setting('default_agent', 'coder', 'owner')
+    with mock.patch.object(server, 'cfg', cfg), mock.patch.object(server, 'store', store):
+        choices = [r for r in TestClient(server.app).get('/api/brains').json()['data'] if r['kind'] == 'cli']
+    assert [(r['value'], r['label']) for r in choices] == [
+        ('cli:coder', 'claude (your CLI)'),
+        ('cli:codex', 'codex (your CLI)'),
+    ]

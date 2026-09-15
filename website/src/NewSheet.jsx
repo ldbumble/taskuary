@@ -112,7 +112,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
   const aboutRef = useRef(null);
   const [mode, setMode] = useState("draft");
   // agent
-  const { agents, models } = useAgents();
+  const { agents, models, kinds } = useAgents();
   const [agent, setAgent] = useState("coder");
   const [model, setModel] = useState("");
   // "terminal" = a CLI on a keyboard, "chat" = the assistant's own thread. Held here rather
@@ -125,7 +125,9 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
   const [when, setWhen] = useState("");
 
   useEffect(() => { if (!open) return; setErr(""); setOk(""); }, [open]);
-  useEffect(() => { if (agents.length && !agents.includes(agent)) setAgent(agents[0]); }, [agents, agent]);
+  useEffect(() => {
+    if (agents.length && !agents.includes(agent)) { setAgent(agents[0]); setModel(""); }
+  }, [agents, agent]);
   useEffect(() => {
     if (!open) return;
     api.get("/api/send-targets").then(({ data }) => {
@@ -281,8 +283,8 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
               <Box>
                 <Label>Agent</Label>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap" }}>
-                  <AgentPicker agents={agents} models={models} agent={agent} model={model}
-                    onAgent={setAgent} onModel={setModel} size={30} />
+                  <AgentPicker agents={agents} models={models} kinds={kinds} coding agent={agent} model={model}
+                    onAgent={(a) => { setAgent(a); setModel(""); }} onModel={setModel} size={30} />
                   {/* no repository picker here on purpose: guess_repo ranks the checkouts against
                       what you just typed (SOUL.md's repo map), and a session that opens in the wrong
                       tree refuses to start rather than guessing. Name the system in the ask. */}

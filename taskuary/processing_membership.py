@@ -44,10 +44,26 @@ def _active_item_for(cur, entity, follow_item):
     return follow_item(cur, row['ItemId']) if row else None
 
 
+# What a census does NOT need to read. Membership is decided from ids, kinds and links; a message
+# BODY never moves an entity between items, and on a real mailbox it is most of the database - 8 MB
+# of prose dragged into Python on every pass, inside BEGIN IMMEDIATE, with readers waiting on it
+# (the owner, 2026-09-15). Named as a subtraction, not a whitelist: a column added to `message`
+# tomorrow keeps arriving here, and only what is listed below can ever go missing.
+_UNREAD_COLUMNS = {'message': ('BodyText',)}
+
+
+def _columns(cur, table):
+    """Every column of `table` except the ones a census demonstrably does not read."""
+    skip = _UNREAD_COLUMNS.get(table, ())
+    names = [r[1] for r in cur.execute(f'PRAGMA table_info({table})') if r[1] not in skip]
+    return ', '.join(f'"{n}"' for n in names) or '*'
+
+
 def reconcile_membership(cur, *, stamp, new_item_id, follow_item):
     """Apply one uncapped raw-identity census inside ``cur``'s transaction."""
     tasks = {str(r['TaskId']): dict(r) for r in cur.execute('SELECT * FROM task ORDER BY TaskId')}
-    messages = {str(r['MessageId']): dict(r) for r in cur.execute('SELECT * FROM message ORDER BY MessageId')}
+    messages = {str(r['MessageId']): dict(r) for r in cur.execute(
+        f'SELECT {_columns(cur, "message")} FROM message ORDER BY MessageId')}
     reviews = {str(r['ReviewId']): dict(r) for r in cur.execute('SELECT * FROM review ORDER BY ReviewId')}
     ideas = {str(r['IdeaId']): dict(r) for r in cur.execute('SELECT * FROM idea ORDER BY IdeaId')}
     attachments = {str(r['AttachmentId']): dict(r) for r in cur.execute(

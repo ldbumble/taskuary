@@ -379,6 +379,38 @@ def _cli_name(cmd: str) -> str:
     return re.split(r'[\\/]', str(cmd or ''))[-1].lower().rsplit('.', 1)[0]
 
 
+# How each CLI is told WHICH conversation. `{id}` marks where the id goes; an entry without one
+# takes it as the next argument. The joined form is not decoration: copilot's --resume takes an
+# OPTIONAL value, which a space-separated id is not read as. Verified 2026-09-15 from each CLI's
+# own --help on this machine; a CLI not named here resumes only if its profile says how.
+RESUME_ARGS = {'claude': ['--resume', '{id}'], 'codex': ['resume', '{id}'], 'copilot': ['--resume={id}']}
+# ...and the two that let the CALLER name a NEW conversation, which beats learning one afterwards:
+# the id exists before the CLI's first byte, so a pane killed in its first second is still
+# resumable and nothing has to be guessed from a working directory (hooks.py) or a log (witness).
+# claude verified by round trip - assigned, resumed, and its transcript filed under the id we gave.
+ASSIGN_ARGS = {'claude': ['--session-id', '{id}'], 'copilot': ['--session-id={id}']}
+
+
+def _with_id(args: list, sid: str) -> list:
+    out = [str(a).replace('{id}', sid) for a in args]
+    return out if any('{id}' in str(a) for a in args) else out + [sid]
+
+
+def resume_argv(profile: dict, sid: str) -> list:
+    """How this CLI is told to pick its OWN conversation back up - empty when it cannot, which is
+    the honest answer for gemini, cursor and devin until each one can also be told WHICH session it
+    had. A profile's own resume_args wins: the owner configured it for a CLI we do not ship."""
+    if not sid: return []
+    args = profile.get('resume_args') or RESUME_ARGS.get(_cli_name(profile.get('cmd', 'claude')))
+    return _with_id(list(args), sid) if args else []
+
+
+def assign_argv(profile: dict, sid: str) -> list:
+    """The argv tail that NAMES a new conversation - empty when this CLI names its own."""
+    args = ASSIGN_ARGS.get(_cli_name(profile.get('cmd', 'claude')))
+    return _with_id(list(args), sid) if (args and sid) else []
+
+
 def _codex_tool(item: dict):
     """Turn a Codex JSONL item into the common visual tool name/input contract."""
     typ = item.get('type')
@@ -408,6 +440,45 @@ def profiles(store) -> dict:
     for a in store.list_agents():
         try: out[a['Name']] = json.loads(a.get('Config') or '{}')
         except ValueError: out[a['Name']] = {}
+    return out
+
+
+def cli_of(profile: dict, fallback: str = '') -> str:
+    """The executable family behind a worker profile.
+
+    Profiles say what a worker is for; this is the separate answer to which CLI
+    actually runs it. Store rows are resolved execution snapshots, so ``cmd`` is
+    available here even after config.toml has moved it onto a CLI connection.
+    """
+    from .clis import _base
+    return _base((profile or {}).get('cmd') or fallback)
+
+
+def cli_agent_options(store, preferred=(), coding_only: bool = False) -> list[dict]:
+    """One representative worker per CLI, labelled by the CLI rather than the profile.
+
+    Runtime APIs still carry a worker name because its model is stored on that
+    profile. Pickers, however, ask which tool runs, so five profiles backed by
+    Claude must be one ``claude`` choice rather than five apparent providers.
+    """
+    rows = list(store.list_agents())
+    if coding_only:
+        # ``cli`` is the legacy Kind used by older databases for coding workers.
+        rows = [r for r in rows if str(r.get('Kind') or '').lower() in ('coding', 'cli')]
+    order = {str(name): i for i, name in enumerate(preferred or ()) if name}
+    rows.sort(key=lambda r: (order.get(str(r.get('Name')), len(order)),
+                             str(r.get('Kind') or '').lower() not in ('coding', 'cli')))
+    out, seen = [], set()
+    for row in rows:
+        name = str(row.get('Name') or '').strip()
+        if not name: continue
+        try: profile = json.loads(row.get('Config') or '{}')
+        except ValueError: profile = {}
+        cli = cli_of(profile, name)
+        if cli in seen: continue
+        seen.add(cli)
+        out.append({'value': name, 'label': cli, 'cli': cli,
+                    'ready': runs_here(profile), 'profile': name})
     return out
 
 
@@ -510,14 +581,11 @@ def roster(store) -> str:
 def default_agent(store) -> str:
     """Which agent a task goes to when nobody picked one.
 
-    The owner's choice wins - unless its CLI is not on this machine, in which case one that IS
-    beats a name that can only fail. Taskuary ships `coder` = claude, so on a machine with only
-    codex installed every dispatch died on a CLI nobody had, and the Board showed it as the
-    agent's failure (an owner's machine, 2026-08-31)."""
-    want = str(store.get_settings().get('default_agent') or 'coder').strip()
-    profs = profiles(store)
-    if want not in profs or runs_here(profs[want]): return want
-    return next((n for n, prof in profs.items() if runs_here(prof)), want)
+    Availability is deliberately NOT resolved here. A PATH probe is only a hint and can change
+    while Taskuary is running; using it to rewrite this answer made ``coder`` (Claude) silently
+    become Copilot. The terminal's bounded failover road tries backups after the chosen CLI
+    actually refuses to start, which is the only trustworthy time to switch providers."""
+    return str(store.get_settings().get('default_agent') or 'coder').strip()
 
 
 def agent_chain(store, primary: str = None) -> list[str]:
@@ -526,14 +594,23 @@ def agent_chain(store, primary: str = None) -> list[str]:
     `backup_agents=*` is the out-of-box resilient choice: every other roster entry, in the
     stable order the owner sees. Naming a CSV narrows and orders the chain explicitly.
     """
-    names = [str(a.get('Name') or '').strip() for a in store.list_agents() if a.get('Name')]
+    rows = list(store.list_agents())
+    names = [str(a.get('Name') or '').strip() for a in rows
+             if a.get('Name') and str(a.get('Kind') or '').lower() in ('coding', 'cli')]
     head = str(primary or default_agent(store) or '').strip()
-    if head and head not in names: return [head]
     setting = str(store.get_settings().get('backup_agents') or '').strip()
     backups = names if setting == '*' else [x.strip() for x in setting.split(',') if x.strip()]
-    out = []
+    by_name = {}
+    for row in rows:
+        try: by_name[str(row.get('Name') or '')] = json.loads(row.get('Config') or '{}')
+        except ValueError: by_name[str(row.get('Name') or '')] = {}
+    out, clis = [], set()
     for name in [head, *backups]:
-        if name and name not in out and name in names: out.append(name)
+        if not name or name in out: continue
+        if name != head and name not in names: continue
+        cli = cli_of(by_name.get(name) or {}, name)
+        if cli in clis: continue
+        out.append(name); clis.add(cli)
     return out
 
 
@@ -565,14 +642,8 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         m, eff = split_pick(profile['model'])
         cmd += [profile.get('model_arg') or '--model', m]
         if eff: cmd += ['-c', f'model_reasoning_effort={eff}']
-    if resume:
-        if is_codex:
-            # Keep exec's existing sandbox/config flags, and resume the exact thread.
-            cmd += ['resume', resume, '--json', '-']
-        elif profile.get('resume_args'):
-            cmd += list(profile['resume_args']) + [resume]
-        elif _cli_name(name) == 'claude':
-            cmd += ['--resume', resume]
+    # Keep exec's existing sandbox/config flags, and resume the exact thread.
+    if resume: cmd += resume_argv(profile, resume) + (['--json', '-'] if is_codex else [])
     cwd = profile.get('cwd')
     head0 = _git(cwd, 'rev-parse', 'HEAD')
     trace('prompt', 'prompt_sent_to_agent', prompt)

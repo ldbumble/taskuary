@@ -175,9 +175,16 @@ class RolloutTail(threading.Thread):
             try:
                 with open(f, encoding='utf-8') as fh: first = json.loads(fh.readline() or '{}')
             except (OSError, ValueError): continue
-            cwd = ((first.get('payload') or {}).get('cwd') or '') if first.get('type') == 'session_meta' else ''
+            meta = (first.get('payload') or {}) if first.get('type') == 'session_meta' else {}
+            cwd = meta.get('cwd') or ''
             if cwd and os.path.normcase(os.path.normpath(cwd)) == want:
-                _BOUND.add(f); return f
+                _BOUND.add(f)
+                # the rollout names the thread codex can be told to resume; the filename carries
+                # the same id for older rollouts that did not write it into session_meta
+                from .terminal import bind_ext
+                m = re.search(r'rollout-[\d\-T]+-(.+)\.jsonl$', os.path.basename(f))
+                bind_ext(self.t, str(meta.get('id') or (m.group(1) if m else '')))
+                return f
         return None
 
     def _feed(self):

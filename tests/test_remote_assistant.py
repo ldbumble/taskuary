@@ -115,7 +115,7 @@ class DoorwayBoundaryTests(unittest.TestCase):
              mock.patch.object(remote_assistant, 'intercept', return_value=True) as intercept:
             self.assertEqual(messengers.poll_whatsapp(store, connector, [], llm=None), 0)
         intercept.assert_called_once_with(store, 'whatsapp', JID, 'Walk me through important email',
-                                          from_me=True, connector=connector)
+                                          from_me=True, connector=connector, message_id='q')
         self.assertEqual(json.loads(store.get_connector(connector['ConnectorId'])['ConfigJson'])['wa_seq'], 9)
 
     def test_telegram_routes_only_the_named_private_chat(self):
@@ -177,10 +177,10 @@ class WordsInsteadOfButtonsTests(unittest.TestCase):
         offered, it never reads words (no hardcoded verbs)."""
         s = MemoryStore()
         remote_assistant.remember_offered(s, 'whatsapp', JID, 'Reply with one of:\n1 · Run it again\n2 · Hand it to an agent\n3 · Next')
-        self.assertEqual(remote_assistant.resolve_index(s, 'whatsapp', JID, '2'), 'Hand it to an agent')
-        self.assertEqual(remote_assistant.resolve_index(s, 'whatsapp', JID, '3.'), 'Next')
-        self.assertEqual(remote_assistant.resolve_index(s, 'whatsapp', JID, '9'), '9', "out of range stays the owner's own words")
-        self.assertEqual(remote_assistant.resolve_index(s, 'whatsapp', JID, 'run it again'), 'run it again')
+        self.assertEqual(remote_assistant.resolve_index(s, 'whatsapp', JID, '2'), ('Hand it to an agent', True))
+        self.assertEqual(remote_assistant.resolve_index(s, 'whatsapp', JID, '3.'), ('Next', True))
+        self.assertEqual(remote_assistant.resolve_index(s, 'whatsapp', JID, '9'), ('9', False), "out of range stays the owner's own words")
+        self.assertEqual(remote_assistant.resolve_index(s, 'whatsapp', JID, 'run it again'), ('run it again', False))
 
     def test_a_proposal_is_waiting_on_a_yes_and_nothing_else_is_offered(self):
         said = {'say': 'File it: Dana - invoice.', 'chips': [{'verb': 'next', 'label': 'Next'}],

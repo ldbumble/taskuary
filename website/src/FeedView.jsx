@@ -102,7 +102,7 @@ import { isVoicePlaceholder, voiceNoteBody } from "./voiceNote.js";
 import { TerminalPane } from "./TerminalView.jsx";
 import { feedInteraction, feedViews } from "./feedViews.js";
 import {
-  appendProcessingPage, firstProcessingPage, fullProcessingRow, isCoveragePending, isSnapshotExpired,
+  appendProcessingPage, firstProcessingPage, fullProcessingRow, isCoveragePending, isIncomplete, isSnapshotExpired, settlingNotice,
   processingAllParams, processingDetailPath, processingErrorCode, processingErrorMessage, processingMessageDetail, processingRefreshCandidate,
   processingRowId, processingSelectionKey, processingTarget, processingTransportLimit, rowOwnsMessage, unreadProcessingRows,
 } from "./processingAll.js";
@@ -715,11 +715,16 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
             if (request !== allRequest.current) return;
             page = appendProcessingPage(page, more.data);
           }
+          // ...unless the page itself says rows are missing. A census that has not settled now
+          // ANSWERS instead of refusing (coverage.degraded), and only the case where entities could
+          // not be grouped at all is incomplete enough to need the legacy transport. Everything else
+          // reads the canonical page and says so in a line, rather than swapping underneath you.
+          if (isIncomplete(data)) throw { response: { data: { detail: { code: "processing_coverage_pending" } } } };
           page.rows = page.rows.map((row) => ({ ...row, AllLoadGeneration: request }));
           allPage.current = page; allLegacyFallback.current = false;
           rowsByView.current.all = page.rows;
           setRows(page.rows); rowsLen.current = page.rows.length;
-          setNoMore(page.nextCursor == null); setAllFallbackNotice(""); setErr("");
+          setNoMore(page.nextCursor == null); setAllFallbackNotice(settlingNotice(data)); setErr("");
           return;
         } catch (e) {
           // During an incremental identity migration the backend explicitly says this account is

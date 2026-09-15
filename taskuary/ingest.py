@@ -6,6 +6,7 @@ Pipeline per message: dedup -> deterministic policy -> route to a task -> intent
 answering is the responder's job (reply_only), doing is the coder's.
 """
 import contextlib, hashlib, json, re, threading, time
+from datetime import datetime, timedelta
 from loguru import logger
 from .routing import ask_line, route, draft_task_fields, tokens
 from .policy import evaluate
@@ -1652,9 +1653,16 @@ RETRY_SWEEP = 25
 # over in one or two cycles; a row that keeps failing after this is failing for its own reasons, and
 # retrying it every cycle forever would spend a call each time to learn the same thing.
 RETRY_TRIES = 4
+# ...and how far back it reaches. An outage is over in a cycle or two; anything still unjudged a day
+# later is not an outage, it is history - and triage exists to say what needs the owner NOW. The
+# first sweep reached back a fortnight and made live tasks of two WhatsApp lines and an email from
+# early September, drafting replies to a conversation that had moved on days before (the owner,
+# 2026-09-15: "what is this? don't see them in the task list?"). Older failures keep the Retry
+# button they always had: reopening one is then a decision somebody made, not a side effect.
+RETRY_HOURS = 24
 
 
-def retry_failed_triage(store, llm=None, limit: int = RETRY_SWEEP) -> int:
+def retry_failed_triage(store, llm=None, limit: int = RETRY_SWEEP, hours: int = RETRY_HOURS) -> int:
     """Run the rows nothing ever judged through triage again, now that there is a brain to ask.
 
     Retry existed only as a button on one opened row, so an outage stranded everything it touched:
@@ -1669,7 +1677,8 @@ def retry_failed_triage(store, llm=None, limit: int = RETRY_SWEEP) -> int:
     compare-and-set the button uses, so a sweep and a click cannot both triage one message.
     """
     if llm is None: return 0
-    stranded = store.stranded_triage_failures(limit)
+    since = (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S') if hours else None
+    stranded = store.stranded_triage_failures(limit, since=since)
     done = 0
     for row in stranded:
         if (row.get('Tries') or 0) >= RETRY_TRIES:

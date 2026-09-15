@@ -236,6 +236,21 @@ http.createServer(async (req, res) => {
       if (keys.length) await sock.readMessages(keys);
       return json(res, 200, { ok: true, marked: keys.length });
     }
+    // A THUMB UP THE MOMENT WE TAKE IT. The owner types into a chat that then goes quiet while a
+    // model thinks, with no sign the hub even heard them (the owner, 2026-09-15: "can we also
+    // automatically do thumbs up to know the ai agent got the whatsapp"). Same shape as /read: the
+    // key we kept with the message is what Baileys reacts to, and an id that has rotated out of the
+    // window is skipped rather than failing the turn that is already answering.
+    if (req.method === "POST" && url.pathname === "/react") {
+      const chunks = []; for await (const c of req) chunks.push(c);
+      const { id, emoji } = JSON.parse(Buffer.concat(chunks).toString() || "{}");
+      if (!connected) return json(res, 503, { error: "not connected to WhatsApp" });
+      if (!id) return json(res, 400, { error: "id is required" });
+      const m = messages.find((x) => x.id === id && x.key);
+      if (!m) return json(res, 200, { ok: true, reacted: 0 });
+      await sock.sendMessage(m.key.remoteJid, { react: { text: String(emoji || "\u{1F44D}"), key: m.key } });
+      return json(res, 200, { ok: true, reacted: 1 });
+    }
     if (req.method === "POST" && url.pathname === "/send") {
       const chunks = []; for await (const c of req) chunks.push(c);
       const { jid, text: t } = JSON.parse(Buffer.concat(chunks).toString() || "{}");

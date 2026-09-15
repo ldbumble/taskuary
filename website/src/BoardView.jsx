@@ -303,7 +303,7 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
     return () => clearInterval(id);
   }, [active]);
   useEffect(() => {
-    if (agents.length && !agents.includes(nt.agent)) setNt((cur) => ({ ...cur, agent: agents[0] }));
+    if (agents.length && !agents.includes(nt.agent)) setNt((cur) => ({ ...cur, agent: agents[0], model: "" }));
   }, [agents, nt.agent]);
   useEffect(() => {
     // repo choices = the GitHub sources the connector discovered

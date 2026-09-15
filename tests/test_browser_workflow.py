@@ -160,5 +160,38 @@ class TheSignInWasAOneOffTests(unittest.TestCase):
             self.assertEqual('Never make waiting for the' in seen[-1], browser)
 
 
+class HandingOverTheKeyboardTests(unittest.TestCase):
+    """Told to let the owner type a credential, the agent asked for the User ID and then kept working
+    the same tab - snapshot, get url, read, and `open` on the sign-in URL again, on top of a
+    half-finished ADP sign-in. The SSO chain does not survive being re-entered: the tab ended on
+    about:blank and it polled a blank page for hours (the owner, 2026-09-15: "it showed the browser,
+    then turned white ... just spinning")."""
+
+    def test_the_brief_tells_it_to_stop_and_not_touch_the_tab(self):
+        b = browserview.brief()
+        self.assertIn('WHEN YOU HAND THEM THE KEYBOARD, STOP', b)
+        self.assertIn('run no browser command at all until they answer', b)
+        for forbidden in ('re-open the page', 'reload it', 'navigate', 'poll'):
+            self.assertIn(forbidden, b)
+        self.assertIn('NEVER type a password', b)            # the rule it already had, still there
+
+
+class TheWatchedBrowserOutlivesAPauseTests(unittest.TestCase):
+    """agent-browser shuts its daemon down after an hour of inactivity by default. A walk left
+    overnight on a half-finished ADP sign-in came back to a white pane: the browser had gone, and the
+    next command got a fresh empty one (the owner, 2026-09-15: "it showed the browser, then turned
+    white"). This browser belongs to the session and is closed by close(), not by a clock."""
+
+    def test_the_session_browser_is_launched_with_no_idle_timeout(self):
+        seen = {}
+        def popen(cmd, **kw): seen['cmd'] = cmd; raise OSError('not really launching one')
+        with mock.patch('shutil.which', return_value='agent-browser'),              mock.patch.object(browserview, 'state', return_value={'open': False, 'url': '', 'port': 0}),              mock.patch('taskuary.spawn.popen', popen):
+            browserview.start('abc123')
+        cmd = seen['cmd']
+        self.assertIn('--idle-timeout', cmd)
+        self.assertEqual(cmd[cmd.index('--idle-timeout') + 1], '0')
+        self.assertEqual(cmd[cmd.index('--restore') + 1], browserview.RESTORE_KEY)   # and still the owner's profile
+
+
 if __name__ == '__main__':
     unittest.main()

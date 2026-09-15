@@ -175,8 +175,13 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
         snapshot = store.processing_inventory_snapshot(
             fixed_now=now.isoformat(), live_state=live_state, display_only=True,
             history_days=query['days'])
+        # ...and the SECOND attempt takes what there is. A write landing between the settle check and
+        # the snapshot deserves one more try; a census that is still unsettled after it is a state
+        # the rail has to live in, not a reason to have no rail (processing_all.compact_inventory).
+        # The pile then carries coverage.degraded and says so rather than disappearing.
         try:
-            rows, coverage, counts = processing_all.compact_inventory(snapshot, query, include_excluded=include_read)
+            rows, coverage, counts = processing_all.compact_inventory(
+                snapshot, query, include_excluded=include_read, degraded_ok=attempt == 2)
             break
         except processing_all.AllError as e:      # a write landed between the settle check and the snapshot: once more
             if attempt == 2 or e.detail.get('code') != 'processing_coverage_pending': raise

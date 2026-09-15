@@ -155,7 +155,9 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.match(page, /if \(t === "Timeline"\) t = "Assistant"/);   // ...and old links to it still land
   assert.doesNotMatch(page, /<FeedView/);                   // the rail is mounted by the Assistant, nowhere else
   assert.match(page, /return "Assistant";/);              // still the default, after honoring a deep link first
-  assert.match(page, /tab !== "Assistant" && <FloatingAssistant/);
+  // the floating mark is gone (2026-09-15): it was the Assistant tab in a bubble, and it sat on
+  // top of the work - over the browser pane's own Take over button in full screen
+  assert.doesNotMatch(page, /<FloatingAssistant/);
   assert.match(page, /t === "Assistant" \? \(/);
   assert.match(page, /<TaskuaryMark size=\{18\} \/>\{t\}/);
   const view = read("AssistantView.jsx");

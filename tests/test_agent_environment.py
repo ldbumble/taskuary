@@ -97,13 +97,32 @@ class WhichAgentWorkTests(unittest.TestCase):
         with mock.patch.object(agents, 'runs_here', return_value=True):
             self.assertEqual(agents.default_agent(s), 'coder')
 
-    def test_a_default_that_cannot_run_here_hands_over_to_one_that_can(self):
+    def test_a_path_probe_never_silently_replaces_the_owners_default(self):
         s = MemoryStore()
         _agent(s, 'coder', 'claude')
         _agent(s, 'codex', 'codex')
         s.set_setting('default_agent', 'coder', 'o')
         with mock.patch.object(agents, 'runs_here', side_effect=lambda p: p.get('cmd') == 'codex'):
-            self.assertEqual(agents.default_agent(s), 'codex')
+            self.assertEqual(agents.default_agent(s), 'coder')
+
+    def test_backup_chain_contains_distinct_coding_clis_not_general_profiles(self):
+        s = MemoryStore()
+        _agent(s, 'coder', 'claude')
+        s.upsert_agent('researcher', 'research', 'cli', json.dumps({'cmd': 'claude'}))
+        s.upsert_agent('copilot', 'coding', 'cli', json.dumps({'cmd': 'copilot'}))
+        s.upsert_agent('claude-copy', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+        s.set_setting('default_agent', 'coder', 'o')
+        s.set_setting('backup_agents', '*', 'o')
+        self.assertEqual(agents.agent_chain(s), ['coder', 'copilot'])
+
+    def test_coding_cli_options_name_the_tool_and_collapse_profile_aliases(self):
+        s = MemoryStore()
+        _agent(s, 'coder', 'claude')
+        s.upsert_agent('researcher', 'research', 'cli', json.dumps({'cmd': 'claude'}))
+        s.upsert_agent('copilot', 'coding', 'cli', json.dumps({'cmd': 'copilot'}))
+        with mock.patch.object(agents, 'runs_here', return_value=True):
+            got = agents.cli_agent_options(s, preferred=['coder'], coding_only=True)
+        self.assertEqual([(o['value'], o['label']) for o in got], [('coder', 'claude'), ('copilot', 'copilot')])
 
     def test_with_nothing_installed_the_owners_choice_is_still_reported(self):
         """Silently renaming their default would be worse than failing where they can see it."""

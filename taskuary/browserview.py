@@ -204,8 +204,14 @@ def start(sid: str, url: str = 'about:blank') -> bool:
         lock = _START_LOCKS.setdefault(sid, threading.Lock())
     with lock:
         if state(sid, fresh=True)['open']: return True             # the agent or mount got there first
-        cmd = [exe, '--session', session_name(sid), '--restore', RESTORE_KEY, '--args', LAUNCH_ARGS,
-               'open', url or 'about:blank']
+        # ...AND IT STAYS UP WHILE THE TASK IS OPEN. agent-browser shuts its daemon down after an hour
+        # of inactivity by default, which is fine for a tool and wrong for a page someone is watching:
+        # a walk left overnight at a half-finished ADP sign-in came back to a white pane, because the
+        # browser had gone at 23:06 and the next command got a fresh empty one (the owner, 2026-09-15:
+        # "it showed the browser, then turned white"). This browser belongs to the session and dies
+        # with it - close() on the pty's end is what closes it, not a clock nobody set.
+        cmd = [exe, '--session', session_name(sid), '--restore', RESTORE_KEY, '--idle-timeout', '0',
+               '--args', LAUNCH_ARGS, 'open', url or 'about:blank']
         try:
             # detached and HEADLESS: the live pane is the visible browser. --headed opens a second
             # desktop window outside Taskuary and defeats the side-by-side surface.
@@ -266,7 +272,16 @@ def brief() -> str:
             'Taskuary itself is already running at $TASKUARY_URL: do not '
             'start Taskuary, Vite, or another local server. '
             'NEVER type a password, a 2FA code or a card number: navigate to the page that asks '
-            'and tell the owner here - they type it in the pane themselves.')
+            'and tell the owner here - they type it in the pane themselves. '
+            # THEN GET OUT OF THE WAY. Told to hand over the keyboard for an ADP sign-in, an agent
+            # asked for the User ID and kept working the same tab anyway - snapshot, get url, read,
+            # and `open` on the sign-in URL again (2026-09-15). What had actually blanked that page
+            # was the daemon idling out overnight, fixed in start(); this rule is the other half, and
+            # stands on its own: a page someone is signing into is not a page to poll or re-enter.
+            'WHEN YOU HAND THEM THE KEYBOARD, STOP: end that turn with the ask marker and run no '
+            'browser command at all until they answer. Do not re-open the page, reload it, navigate, '
+            'snapshot or poll to "check whether they are done" - a sign-in in progress is theirs, and '
+            'touching the tab throws away what they have typed. Their answer is what tells you to look.')
 
 
 def hint() -> str:

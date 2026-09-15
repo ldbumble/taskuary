@@ -284,12 +284,35 @@ def _generic_target(item, query, cutoff, include_excluded=False, vehicles_only=F
     return None
 
 
-def compact_inventory(snapshot, query, *, include_excluded=False):
+def _degraded(coverage, reconciliation) -> dict:
+    """What is NOT in this page, named precisely - the manifest that lets a caller keep reading.
+
+    `missing` is the honest number: entities with no membership row cannot appear as items at all,
+    so a page carrying any is INCOMPLETE and the caller must say so or go elsewhere. It counts every
+    uncatalogued entity, including ones the query would not have shown anyway, because deciding that
+    per entity needs the membership this state is missing - conservative in the safe direction.
+    """
+    uncatalogued = {kind: n for kind, n in (coverage.get('uncatalogued') or {}).items() if n}
+    return {'reason': 'conflicted' if reconciliation.get('status') == 'conflicted' else 'reconciling',
+            'missing': sum(uncatalogued.values()), 'uncatalogued': uncatalogued,
+            'conflicts': (reconciliation.get('conflicts') or [])[:20],
+            'dirty_generation': reconciliation.get('dirty_generation'),
+            'reconciled_generation': reconciliation.get('reconciled_generation')}
+
+
+def compact_inventory(snapshot, query, *, include_excluded=False, degraded_ok=False):
     coverage = copy.deepcopy(snapshot['coverage'])
     reconciliation = coverage.get('processing_reconciliation') or {}
     if (reconciliation.get('pending', True) or reconciliation.get('status') == 'conflicted'
             or any(coverage.get('uncatalogued', {}).values())):
-        raise AllError('processing_coverage_pending', 'All items are not ready yet', coverage=coverage)
+        # REFUSING IS NOT A DEGRADED MODE. This raised 409 with no rows, so a `conflicted` census -
+        # which persists until somebody resolves it, and which wait_settled deliberately does not
+        # wait out - meant the canonical All served NOTHING, and every page fell back to the legacy
+        # /api/feed. A page that says what it is missing is more useful than no page: the caller
+        # reads `coverage.degraded` and decides (the owner, 2026-09-15).
+        if not degraded_ok:
+            raise AllError('processing_coverage_pending', 'All items are not ready yet', coverage=coverage)
+        coverage['degraded'] = _degraded(coverage, reconciliation)
     now = _stamp(snapshot['as_of'])
     if now is None:
         raise AllError('processing_query_invalid', 'Invalid snapshot time', 422)
@@ -401,7 +424,7 @@ class AllInventory:
             snapshot = store.processing_inventory_snapshot(
                 fixed_now=fixed_now or datetime.now().isoformat(), live_state=live_state,
                 display_only=True, history_days=query['days'])
-            rows, coverage, counts = compact_inventory(snapshot, query)
+            rows, coverage, counts = compact_inventory(snapshot, query, degraded_ok=True)
             lease_id = uuid.uuid4().hex
             lease = {'created': self.clock(), 'query': query_revision, 'items': rows,
                      'snapshot_revision': snapshot['snapshot_revision'], 'coverage': coverage, 'counts': counts}

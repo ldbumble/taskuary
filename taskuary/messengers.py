@@ -114,7 +114,8 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
         # the same walk the desktop is on. A bot only ever hears the other side of a chat, so that
         # named private chat is what says the words are the owner's - there is no fromMe to read.
         if ((m.get('text') or '').strip() and (chat.get('type') or 'private') == 'private'
-                and remote_assistant.intercept(store, 'telegram', cid, m['text'], from_me=True, connector=c)):
+                and remote_assistant.intercept(store, 'telegram', cid, m['text'], from_me=True, connector=c,
+                                               message_id=m.get('message_id'))):
             continue
         if cid not in want:
             if cid not in known:      # first sight of this chat: register it OFF, ingest nothing
@@ -339,7 +340,7 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         # here too, so a notification or answer can never loop back as a fresh question.
         if (m.get('text') or '').strip() and remote_assistant.intercept(
                 store, 'whatsapp', jid, m['text'], from_me=bool(m.get('fromMe')),
-                connector=c):
+                connector=c, message_id=m.get('id')):
             continue
         if m.get('group') or jid.endswith('@g.us'):
             if jid not in want: continue                      # groups are opt-in, always
@@ -418,6 +419,33 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     if out.get('seq') is not None:
         store.set_connector_config(c['ConnectorId'], {**cfg, 'wa_seq': out['seq']})
     return n
+
+
+GOT_IT = '👍'      # the hub heard you - see react()
+
+
+def react(store, channel: str, chat: str, message_id: str, emoji: str = GOT_IT, connector_id=None) -> bool:
+    """Mark the owner's own message as TAKEN, in their chat, the moment the doorway claims it.
+
+    A chat that goes quiet while a model thinks is indistinguishable from one nobody is listening to
+    (the owner, 2026-09-15: "can we also automatically do thumbs up to know the ai agent got the
+    whatsapp"). Best effort by design: a reaction that will not send must never cost the answer that
+    is already on its way - every road out of here returns False rather than raising.
+    """
+    if not message_id: return False
+    try:
+        c = store.get_connector(int(connector_id), with_secret=True) if connector_id else             store.get_connector_by_type(channel, with_secret=True)
+        if not c or c.get('Type') != channel: return False
+        if channel == 'whatsapp':
+            # the bridge knows which chat the message was in: it kept the key it reacts with
+            return bool((_wa(c, '/react', {'id': str(message_id), 'emoji': emoji}) or {}).get('reacted'))
+        if channel == 'telegram' and c.get('Secret'):
+            tg(c['Secret'], 'setMessageReaction', chat_id=int(chat), message_id=int(message_id),
+               reaction=json.dumps([{'type': 'emoji', 'emoji': emoji}]))
+            return True
+    except Exception as e:
+        logger.debug(f'could not react in {channel}: {e}')
+    return False
 
 
 def wa_send(store, jid: str, body: str, connector_id=None) -> dict:

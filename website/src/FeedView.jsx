@@ -43,7 +43,7 @@ import { Md, looksMd } from "./md.jsx";
 import DigestText from "./DigestText.jsx";
 import TodayMeetingsStrip from "./TodayMeetingsStrip.jsx";
 import { subjectOf, sourceOf, structured } from "./feedText.js";
-import { HOLD_TAG, ROADS, VERDICTS, hasTag, roadOf, stateMeta, stateOf, subline, verdictOf } from "./timelineState.js";
+import { HOLD_TAG, ROADS, VERDICTS, hasTag, roadOf, stateMeta, stateOf, subline, triageSummary, verdictOf } from "./timelineState.js";
 import { sendBlockLine, draftState, replyEnvelope, replySendFailure } from "./sendState.js";
 import { rowLane } from "./rowLane.js";
 import { extraTriageFields, intentLabel, kindLabel, latestTriageVerdict, legacyTriageVerdict, relationshipLabel } from "./triageVerdict.js";
@@ -2271,17 +2271,24 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
   // the road, in words - the why sentence is one tab over, for when it is asked for
   const roadMeta = ROADS.find((r) => r.key === roadOf(sel));
   const failedTriage = triageFailed(sel);
-  const roadLine = roadMeta ? `${roadMeta.label} — ${roadMeta.hint}`
-    : failedTriage ? "Triage could not classify it, so no task was created. Choose what should happen below."
-    : (sel.RouteReason ? "No classification — choose what should happen below." : "Not routed.");
+  // ONE verdict behind the chip and the step. Assembled from roadOf alone, this said "No
+  // classification - choose what should happen below" about a message the owner's own rule had
+  // already turned away (timelineState.triageSummary).
+  const triage = triageSummary(sel);
+  const roadLine = failedTriage && triage.choose
+    ? "Triage could not classify it, so no task was created. Choose what should happen below."
+    : triage.line;
   const reportText = String(rep?.Body || "").replace(/^(CODER REPORT|HANDOVER NOTE)\s*/i, "").trim();
   const reportResult = ((/(?:^|\n)Summary:[ \t]*([^\n]+)/im.exec(reportText) ||
     /(?:^|\n)Result:[ \t]*([^\n]+)/im.exec(reportText) || [])[1] || cleanText(reportText)).trim();
   // a generated body carries its own structure (a lead, then a list); flattening the whole thing
   // into one clamp turned a report's error summary into a wall of run-on text (2026-09-15)
   const messageBody = structured(cleanText(detail?.body || sel.Preview || sel.Subject || "No message preview available."));
-  const triageStatus = ["assistant", "report", "calendar"].includes(sel.Channel)
-    ? "fyi" : failedTriage ? "needs your choice" : (roadOf(sel) || "not routed");
+  const triageStatus = triage.status;
+  // 255 is Graph's bodyPreview cap, so a body of exactly that length on a rule-ignored mail is the
+  // preview itself - the body was never fetched. A short ignored mail is whole and says nothing.
+  const envelopeOnly = verdictOf(sel) === "ignored"
+    && String((detail?.messages || []).find((m) => m.MessageId === sel.MessageId)?.BodyText || "").length === 255;
 
   const [mined, setMined] = useState(null);          // "Mine to do" made a task, and its ref
   const [notCoding, setNotCoding] = useState(false); // "Mine, not agent" landed - the button says so
@@ -2434,6 +2441,21 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
 
               {tab === "msg" && (
                 <Box>
+                  {/* A standing rule that ignores a sender also stops Taskuary paying for the body:
+                      the mail keeps Graph's free 255-character preview and no request is made
+                      (channels._hydrate). That is a saving, not a truncation - but the tab showed
+                      the stub with nothing to explain it and read as a bug (the owner, 2026-09-15:
+                      "where is the rest of the email of this one?? seems like you are cutting them
+                      off?"). 255 exactly is the cap, and so the signal that there IS more. */}
+                  {envelopeOnly && (
+                    <Box sx={{ mb: 1, px: 1.25, py: 0.9, borderRadius: 1.5, bgcolor: PANEL2,
+                      border: `1px solid ${BORDER}`, fontSize: 12, color: DIM, lineHeight: 1.6 }}>
+                      Only the first 255 characters were downloaded. A standing rule ignores this sender,
+                      so Taskuary never fetched the rest of the body.
+                      {sel.SourceLink && <> <Box component="a" href={sel.SourceLink} target="_blank" rel="noreferrer"
+                        sx={{ color: ACCENT }}>Open it in Outlook</Box> for the whole message.</>}
+                    </Box>
+                  )}
                   {sel.Channel === "assistant" && <AssistantPost sel={sel} onOpenTask={onOpenTask} onChanged={() => onRefresh?.()} />}
                   {sel.Channel === "report" && /morning digest/i.test(`${sel.SourceName || ""} ${sel.Subject || ""}`) && <TodayMeetingsStrip />}
                   {sel.Channel !== "assistant" && (
@@ -3264,7 +3286,11 @@ const Bubble = ({ m, fallback, context }) => {
   // an excerpt first. A PR body or a forwarded chain ran the panel into its own scrollbar
   // and pushed the choices under the fold; the first screen of a message is what the
   // decision needs, and the rest is one click, not a scroll, away
-  const LINES = 8, CHARS = 700;
+  // An ordinary mail should arrive WHOLE. At 8 lines / 700 chars the fold landed inside the first
+  // screen of most of them - a signature, and the address the owner actually needed, sat behind
+  // "show the whole message" on a nine-line note (2026-09-15). The fold is for a forwarded chain
+  // or a PR body, not for a paragraph and a sign-off.
+  const LINES = 20, CHARS = 2000;
   const rows = text.split("\n");
   const long = rows.length > LINES || text.length > CHARS;
   const excerpt = long ? rows.slice(0, LINES).join("\n").slice(0, CHARS).trimEnd() + " …" : text;
@@ -3273,8 +3299,10 @@ const Bubble = ({ m, fallback, context }) => {
     <Box sx={{ bgcolor: you || own ? "#e9e3d8" : PANEL2, border: `1px solid ${you || own ? "#d8d0c4" : BORDER}`,
       borderRadius: you || own ? "14px 14px 4px 14px" : "14px 14px 14px 4px", p: 1.25,
       borderLeft: `3px solid ${you ? "#8a7a5c" : "#6f8a6e"}`,
-      // context recedes; it is there to be read past, not acted on
-      opacity: context ? 0.58 : 1,
+      // context recedes; it is there to be read past, not acted on - but only a step back. At 0.58
+      // it was not receded, it was unreadable, which defeats the point of carrying it in at all
+      // (the owner, 2026-09-15: "why does this look so faded?").
+      opacity: context ? 0.75 : 1,
       maxWidth: you || own ? "88%" : "100%", ml: you || own ? "auto" : 0 }}>
       {/* who / which way / when - so "new inbound" is never confused with "your reply" */}
       {m && (
@@ -3368,7 +3396,11 @@ const MessageBlock = ({ messages, focusId, fallback, threadTotal, askIds }) => {
   };
   const label = loading ? "loading the conversation…"
     : earlier ? `↑ show ${Math.min(STEP, earlier)} older${earlier > STEP ? ` · ${earlier} before this` : ""}`
-    : `↑ the rest of this conversation — ${rest} earlier line${rest === 1 ? "" : "s"} in the same chat`;
+    // NOT "earlier". What is missing is whatever the item does not own, and on a thread the owner
+    // has already answered that is the reply that came back AFTER it - which then arrives at the
+    // bottom of the list while the pill that promised it sits at the top (2026-09-15: "the rest of
+    // the convo is nothing more when you click on it??").
+    : `↑ the rest of this conversation — ${rest} more line${rest === 1 ? "" : "s"} in the same chat`;
   return (
     <>
       {!!(earlier || rest || loading) && (

@@ -163,3 +163,24 @@ export function subline(row, ref = (id) => `TQ-${String(id).padStart(4, "0")}`) 
   }
   return bits.join(" · ");
 }
+
+// WHAT THE TRIAGE STEP SAYS, in one place, so the row's chip and the step under it cannot disagree
+// about the same row. It used to be assembled inline from `roadOf` alone, which has no word for a
+// verdict that is not a road: a message the owner's own standing rule had turned away reported
+// itself as "No classification - choose what should happen below", offering a choice that had
+// already been made (the owner, 2026-09-15: "why does it say no classification - choose what
+// happens below. it's ignore no choosing").
+//
+// `choose` is the honest part: it is true only when nothing has actually decided, and it is what
+// the panel uses to offer the buttons. A rule that ignored the sender decided; a model that fell
+// over did not.
+export const triageSummary = (sel) => {
+  const verdict = VERDICTS.find((v) => v.key === verdictOf(sel));
+  if (verdict) return { status: verdict.label, line: `${verdict.label} — ${verdict.hint}`,
+                        choose: verdict.key === "error" };
+  const road = ROADS.find((r) => r.key === roadOf(sel));
+  if (road) return { status: road.key, line: `${road.label} — ${road.hint}`, choose: false };
+  // a channel nobody sent is fyi by nature - there is no verdict to wait for
+  if (["assistant", "report", "calendar"].includes(sel?.Channel)) return { status: "fyi", line: "fyi — nothing to do", choose: false };
+  return { status: "not routed", line: sel?.RouteReason ? "No classification — choose what should happen below." : "Not routed.", choose: true };
+};

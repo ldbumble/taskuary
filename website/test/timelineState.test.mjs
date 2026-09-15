@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { HOLD_TAG, STATES, stateOf, subline } from "../src/timelineState.js";
+import { HOLD_TAG, STATES, stateOf, subline, triageSummary } from "../src/timelineState.js";
 
 test("a question from the agent outranks everything the message once was", () => {
   assert.equal(stateOf({ TaskId: 7, Category: "coding", Working: "claude", AgentWaiting: true }), "waving");
@@ -77,4 +77,36 @@ test("a message whose triage failed has an explicit error state with a retry hin
   assert.match(subline(row), /triage failed/i);
   // ...and it stays an error when the failed follow-up is linked to a task
   assert.equal(stateOf({ ...row, TaskId: 3, TaskStatus: "open" }), "error");
+});
+
+// THE TRIAGE STEP'S OWN WORDS. The row's chip and its Triage step read the same verdict off the
+// same row, so they cannot disagree about it. The step used to consult only `roadOf`, which has no
+// word for a standing rule turning a message away - so a message the owner's own policy had ignored
+// reported itself as undecided and offered a choice that had already been made (the owner,
+// 2026-09-15: "why does it say no classification - choose what happens below. it's ignore no
+// choosing").
+test("a message a standing rule turned away says so, and asks nothing", () => {
+  const t = triageSummary({ Decision: "ignore", MsgStatus: "ignored",
+    RouteReason: "policy 'not-a-task: noreply-securityapp@mfaheritage.net': owner said not a task" });
+  assert.equal(t.status, "ignored");
+  assert.match(t.line, /not a task/);
+  assert.equal(t.choose, false, "nothing is left to choose - the rule already chose");
+});
+
+test("a failed verdict asks, because nothing judged it", () => {
+  const t = triageSummary({ MsgStatus: "error", RouteReason: "AI triage failed" });
+  assert.equal(t.status, "triage failed");
+  assert.equal(t.choose, true);
+});
+
+test("a road triage actually took is still reported as that road", () => {
+  const t = triageSummary({ RouteReason: "triage: fyi - nothing to do here", Channel: "email" });
+  assert.equal(t.status, "fyi");
+  assert.equal(t.choose, false);
+});
+
+test("a message nothing has looked at yet still asks", () => {
+  const t = triageSummary({ RouteReason: "", Channel: "email" });
+  assert.equal(t.status, "not routed");
+  assert.equal(t.choose, true);
 });

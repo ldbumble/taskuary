@@ -648,9 +648,15 @@ def item_detail(store, item_id, *, kind=None, local_id=None, view_revision=None,
                 # store.task_detail(), and its own messages already are the exchange.)
                 own = {m['MessageId'] for m in scoped}
                 edge = min((m.get('SentAt') or '', m['MessageId']) for m in scoped)
+                # ...but a REPORT is not a conversation. Nobody sent it, each run is self-contained,
+                # and its conversation id names the recurring job rather than a topic - so there is
+                # nothing to read past. The End of day checkup opened on four earlier days of itself,
+                # receded to 58%, with today's below the fold: every bubble on the screen was context
+                # (the owner, 2026-09-15: "why does this look so faded?").
+                conversational = len(own) < CHAT_WINDOW and message.get('Channel') != 'report'
                 lead = ([m for m in thread if m['MessageId'] not in own
                          and (m.get('SentAt') or '', m['MessageId']) < edge][len(own) - CHAT_WINDOW:]
-                        if len(own) < CHAT_WINDOW else [])
+                        if conversational else [])
                 detail = {'task': None, 'messages': [dict(m) for m in lead] + scoped,
                           'ask_ids': sorted(own), 'comments': [], 'runs': [],
                           'attachments': view.get('attachments', []),

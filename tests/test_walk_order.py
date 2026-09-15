@@ -22,6 +22,23 @@ from taskuary.store import MemoryStore
 def ago(hours=0): return (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
 
 
+def today_ago(hours, span=3.0, now=None):
+    """`hours` ago, but never back past this morning's midnight.
+
+    A brief is today's by CALENDAR DATE (funnel: `ran.date() == datetime.now().date()`), so a run
+    stamped "2 hours ago" belongs to YESTERDAY whenever the suite starts before 02:00. CI runs on
+    whatever hour a push lands, and went red on all six platforms at 00:52 UTC (2026-09-15) while
+    the same commit passed for everyone who ran it by day.
+
+    Early in the day the offsets are squeezed into the part of today that has actually happened,
+    which keeps several runs in the ORDER a test needs while leaving them on the day it means. At
+    any ordinary hour nothing is scaled and the stamp is exactly `hours` old."""
+    now = now or datetime.now()
+    elapsed = (now - now.replace(hour=0, minute=0, second=0, microsecond=0)).total_seconds() / 3600
+    if elapsed > span + 0.5: return hours
+    return hours * (max(elapsed - 0.1, 0.05) / span)
+
+
 def store():
     s = MemoryStore()
     s.upsert_agent('coder', 'coding', 'cli', '{}')
@@ -123,10 +140,21 @@ class FyiBatchCostTests(unittest.TestCase):
 
 
 class TodaysBriefLeadsTests(unittest.TestCase):
+    def test_a_brief_stamp_lands_on_today_at_every_hour_of_the_clock(self):
+        """The guard on the guard: whatever hour CI starts, a run these tests call "today's" has
+        to BE today's, and two of them have to keep their order."""
+        for hour, minute in ((0, 3), (0, 52), (1, 30), (2, 45), (4, 0), (12, 0), (23, 59)):
+            now = datetime.now().replace(hour=hour, minute=minute, second=0, microsecond=0)
+            early, late = today_ago(3, now=now), today_ago(1, now=now)
+            with self.subTest(at=f'{hour:02d}:{minute:02d}'):
+                self.assertEqual((now - timedelta(hours=early)).date(), now.date(), 'the earlier run left today')
+                self.assertEqual((now - timedelta(hours=late)).date(), now.date(), 'the later run left today')
+                self.assertGreater(early, late, 'the 07:20 brief must still be older than the 08:00 one')
+
     def test_todays_digest_is_work_and_leads_the_pipe(self):
         s = store()
         report_source(s)
-        report_run(s, hours=2)
+        report_run(s, hours=today_ago(2))
         drafted(s, hours=20)
         items = funnel.build(s)['items']
         self.assertTrue(funnel.todays_brief(items[0]), f"the brief did not lead: {items[0]['title']}")
@@ -150,8 +178,8 @@ class TodaysBriefLeadsTests(unittest.TestCase):
         (the owner, 2026-09-14: "we should only have the latest one")."""
         s = store()
         report_source(s)
-        report_run(s, hours=3, body='THE WINDOW IN NUMBERS: the 07:20 one')
-        report_run(s, hours=1, body='THE WINDOW IN NUMBERS: the 08:00 one')
+        report_run(s, hours=today_ago(3), body='THE WINDOW IN NUMBERS: the 07:20 one')
+        report_run(s, hours=today_ago(1), body='THE WINDOW IN NUMBERS: the 08:00 one')
         items = funnel.build(s)['items']
         briefs = [i for i in items if i['kind'] == 'report']
         self.assertEqual(len(briefs), 2, 'both runs are still on the timeline')

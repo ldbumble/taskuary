@@ -61,26 +61,94 @@ def test_jira(store, c) -> str:
     return f"authenticated as {me.get('displayName') or me.get('emailAddress')} - issues assigned to you flow in on the next sync"
 
 
-def poll_jira(store, c, since, llm=None, file_only=False) -> int:
+def _jira_me(store, c) -> str:
+    """The accountId this token acts as, cached - so the hub can tell its OWN comments from a
+    person's and never answers itself. '' when Jira would not say; then nothing is treated as ours."""
+    me = str(store.get_settings().get('jira_account_id') or '')
+    if me: return me
+    try: me = str((_jira_get(c, '/rest/api/2/myself') or {}).get('accountId') or '')
+    except Exception as e:
+        logger.warning(f'jira: could not read our own account ({e}) - own comments may read as a stranger')
+        return ''
+    if me: store.set_setting('jira_account_id', me, 'jira')
+    return me
+
+
+def _jira_ended(store, issue, base: str) -> bool:
+    """True when this issue is RESOLVED and its task (if any) has been closed for it.
+
+    Jira has no open/closed flag: every workflow names its own final column (Done, Shipped,
+    Won't Fix), and the only thing common to all of them is statusCategory 'done'. The work is
+    over, so the task leaves the work list instead of waiting for somebody to notice - and it
+    says what ended it, because a task that closes itself silently is worse than one that stayed."""
+    f = issue.get('fields') or {}
+    if (((f.get('status') or {}).get('statusCategory') or {}).get('key') or '') != 'done': return False
+    tid = store.task_for_conversation(base)
+    t = store.get_task(tid) if tid else None
+    if t and t.get('Status') not in ('done', 'dropped'):
+        from .channels import close_upstream_ended
+        where, key = (f.get('status') or {}).get('name') or 'Done', base.split(':', 1)[-1]
+        said = (f'The Jira issue this task came from was moved to {where} '
+                f'({key}), so there is nothing left to do here.')
+        close_upstream_ended(store, tid, said, f'{key} was moved to {where} in Jira - {said}')
+        logger.info(f'jira: {base} is {where} - closed TQ-{tid:04d}')
+    return True
+
+
+def _jira_comments(store, c, issue, base: str, llm, file_only: bool) -> int:
+    """The conversation ON a Jira issue, as messages on the issue's own conversation - which is
+    what makes identity_route attach them to its task, re-judge them and rewrite a draft that is
+    now behind. They ride inside the search the poll already made, so they cost no extra call.
+
+    Ours and an app's are kept as history and never become work: Jira marks automation rules and
+    add-ons accountType=app, and a release bot is not a person asking you for something."""
+    from .channels import ingest_own_message
     from .ingest import ingest_message
+    comments = ((issue.get('fields') or {}).get('comment') or {}).get('comments') or []
+    me, n = _jira_me(store, c), 0
+    for cm in comments:
+        a, ext = cm.get('author') or {}, f"{base}:c{cm.get('id')}"
+        if store.message_exists(ext): continue
+        who = a.get('displayName') or 'Jira'
+        msg = {'external_id': ext, 'channel': 'jira', 'conversation_id': base,
+               'subject': f"Re: {base.split(':', 1)[-1]} {((issue.get('fields') or {}).get('summary') or '')}".strip(),
+               'body': str(cm.get('body') or '')[:20000], 'from_name': who,
+               'from_email': a.get('emailAddress'), 'sent_at': _stamp(cm.get('created')),
+               'source_link': f"{_jira_base(c)}/browse/{base.split(':', 1)[-1]}",
+               'source_name': _jira_base(c).split('//', 1)[-1]}
+        if (me and a.get('accountId') == me) or (a.get('accountType') or '') == 'app':
+            n += ingest_own_message(store, msg, f'comment on {base} by {who} - history, not work')
+            continue
+        n += ingest_message(store, msg, llm=llm, file_only=file_only)['status'] != 'duplicate'
+    return n
+
+
+def poll_jira(store, c, since, llm=None, file_only=False) -> int:
+    from .ingest import ingest_tracker
     mins = max(2, int((datetime.now() - since).total_seconds() // 60) + 1)
+    # `comment` rides along: the conversation is where "what changed" usually lives, and asking
+    # for it here costs nothing over the call the poll already makes. Jira inlines only the most
+    # recent page of a long thread; what it leaves behind is older than anything a poll is for.
     j = _jira_get(c, '/rest/api/2/search', maxResults=CAP,
                   jql=f'assignee = currentUser() AND updated >= "-{mins}m" ORDER BY updated ASC',
-                  fields='summary,description,status,priority,reporter,updated')
+                  fields='summary,description,status,priority,reporter,updated,comment')
     base, n = _jira_base(c), 0
     for i in j.get('issues', []):
         f = i.get('fields') or {}
         rep = (f.get('reporter') or {})
         head = (f"[Jira {i['key']} - status {((f.get('status') or {}).get('name') or '?')}"
                 f" · priority {((f.get('priority') or {}).get('name') or '?')} · assigned to you]")
-        out = ingest_message(store, file_only=file_only, msg={
+        if _jira_ended(store, i, f"jira:{i['key']}"): continue
+        n += _jira_comments(store, c, i, f"jira:{i['key']}", llm, file_only)
+        # the head line rides INSIDE the hashed words on purpose: a status or priority flip is
+        # a revision worth triaging, while a label or rank move never reaches the text at all
+        n += ingest_tracker(store, file_only=file_only, msg={
             'external_id': f"jira:{i['key']}", 'channel': 'jira',
             'subject': f"{i['key']} {f.get('summary') or ''}".strip(),
             'body': f"{head}\n{str(f.get('description') or '(no description)')[:20000]}",
             'from_name': rep.get('displayName') or 'Jira', 'from_email': rep.get('emailAddress'),
             'conversation_id': f"jira:{i['key']}", 'sent_at': _stamp(f.get('updated')),
             'source_link': f"{base}/browse/{i['key']}", 'source_name': base.split('//', 1)[-1]}, llm=llm)
-        n += out['status'] != 'duplicate'
     return n
 
 
@@ -106,7 +174,7 @@ def test_asana(store, c) -> str:
 
 
 def poll_asana(store, c, since, llm=None, file_only=False) -> int:
-    from .ingest import ingest_message
+    from .ingest import ingest_tracker
     gid = _cfg(c).get('workspace_gid')
     if not gid: raise RuntimeError('no workspace known yet - run Test on the Asana card once')
     rows = _asana_get(c, '/tasks', assignee='me', workspace=gid, completed_since='now', limit=CAP,
@@ -115,7 +183,7 @@ def poll_asana(store, c, since, llm=None, file_only=False) -> int:
     for t in rows:
         if _stamp(t.get('modified_at')) < since.strftime('%Y-%m-%d %H:%M:%S'): continue
         proj = next((m['project']['name'] for m in (t.get('memberships') or []) if m.get('project')), None)
-        out = ingest_message(store, file_only=file_only, msg={
+        n += ingest_tracker(store, file_only=file_only, msg={
             'external_id': f"asana:{t['gid']}", 'channel': 'asana',
             'subject': (t.get('name') or '').strip() or 'Asana task',
             'body': f"[Asana task{f' in {proj}' if proj else ''} - assigned to you]\n"
@@ -123,7 +191,6 @@ def poll_asana(store, c, since, llm=None, file_only=False) -> int:
             'from_name': ((t.get('created_by') or {}).get('name')) or 'Asana',
             'conversation_id': f"asana:{t['gid']}", 'sent_at': _stamp(t.get('modified_at')),
             'source_link': t.get('permalink_url'), 'source_name': proj or 'Asana'}, llm=llm)
-        n += out['status'] != 'duplicate'
     return n
 
 
@@ -151,7 +218,7 @@ def test_monday(store, c) -> str:
 def poll_monday(store, c, since, llm=None, file_only=False) -> int:
     """Monday has no 'my items' query, so the poll walks boards (the configured ids, or the
     most recently used) and keeps items whose People column names the owner."""
-    from .ingest import ingest_message
+    from .ingest import ingest_tracker
     cfg = _cfg(c)
     me = str(cfg.get('me_id') or '')
     if not me: raise RuntimeError('who you are on Monday is not known yet - run Test on the card once')
@@ -169,14 +236,13 @@ def poll_monday(store, c, since, llm=None, file_only=False) -> int:
             if _stamp(it.get('updated_at')) < since.strftime('%Y-%m-%d %H:%M:%S'): continue
             cols = ' · '.join(f"{cv.get('type')}: {cv['text']}" for cv in (it.get('column_values') or [])
                               if (cv.get('text') or '').strip())[:2000]
-            out = ingest_message(store, file_only=file_only, msg={
+            n += ingest_tracker(store, file_only=file_only, msg={
                 'external_id': f"monday:{it['id']}", 'channel': 'monday',
                 'subject': (it.get('name') or '').strip() or 'Monday item',
                 'body': f"[Monday item on board \"{b.get('name')}\" - assigned to you]\n{cols or '(no details)'}",
                 'from_name': ((it.get('creator') or {}).get('name')) or 'Monday',
                 'conversation_id': f"monday:{it['id']}", 'sent_at': _stamp(it.get('updated_at')),
                 'source_link': it.get('url'), 'source_name': b.get('name') or 'Monday'}, llm=llm)
-            n += out['status'] != 'duplicate'
     return n
 
 
@@ -219,7 +285,7 @@ def test_clickup(store, c) -> str:
 
 
 def poll_clickup(store, c, since, llm=None, file_only=False) -> int:
-    from .ingest import ingest_message
+    from .ingest import ingest_tracker
     cfg = _cfg(c)
     uid, tid = cfg.get('user_id'), cfg.get('team_id')
     if not (uid and tid): raise RuntimeError('no Workspace known yet - run Test on the ClickUp card once')
@@ -234,7 +300,7 @@ def poll_clickup(store, c, since, llm=None, file_only=False) -> int:
         head = (f"[ClickUp task in {lst} - status {((t.get('status') or {}).get('status') or '?')}"
                 f"{f' · priority {pri}' if pri else ''}{f' · due {_cu_ms(due)[:10]}' if due else ''} · assigned to you]")
         title = ' '.join(x for x in (t.get('custom_id'), t.get('name')) if x).strip()
-        out = ingest_message(store, file_only=file_only, msg={
+        n += ingest_tracker(store, file_only=file_only, msg={
             'external_id': f"clickup:{t['id']}", 'channel': 'clickup',
             'subject': title or 'ClickUp task',
             'body': f"{head}\n{str(t.get('description') or t.get('text_content') or '(no description)')[:20000]}",
@@ -242,7 +308,6 @@ def poll_clickup(store, c, since, llm=None, file_only=False) -> int:
             'from_email': ((t.get('creator') or {}).get('email')),
             'conversation_id': f"clickup:{t['id']}", 'sent_at': _cu_ms(t.get('date_updated')),
             'source_link': t.get('url'), 'source_name': lst}, llm=llm)
-        n += out['status'] != 'duplicate'
     return n
 
 
@@ -273,7 +338,7 @@ def test_todoist(store, c) -> str:
 
 
 def poll_todoist(store, c, since, llm=None, file_only=False) -> int:
-    from .ingest import ingest_message
+    from .ingest import ingest_tracker
     q = (_cfg(c).get('filter') or TODOIST_FILTER).strip()
     j = _todoist(c, '/tasks/filter', query=q, limit=CAP)
     n = 0
@@ -283,7 +348,7 @@ def poll_todoist(store, c, since, llm=None, file_only=False) -> int:
         pri = _TD_PRIORITY.get(t.get('priority'))
         head = (f"[Todoist task{f' · priority {pri}' if pri else ''}"
                 f"{f' · due {when}' if when else ''} · matched {q}]")
-        out = ingest_message(store, file_only=file_only, msg={
+        n += ingest_tracker(store, file_only=file_only, msg={
             'external_id': f"todoist:{t['id']}", 'channel': 'todoist',
             'subject': (t.get('content') or '').strip() or 'Todoist task',
             'body': f"{head}\n{str(t.get('description') or '(no description)')[:20000]}",
@@ -292,7 +357,6 @@ def poll_todoist(store, c, since, llm=None, file_only=False) -> int:
             # v1 dropped the task's own url field; this is the documented deep link
             'source_link': f"https://app.todoist.com/app/task/{t['id']}",
             'source_name': 'Todoist'}, llm=llm)
-        n += out['status'] != 'duplicate'
     return n
 
 

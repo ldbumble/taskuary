@@ -39,21 +39,20 @@ def test_gitlab(store, c) -> str:
 
 
 def poll_gitlab(store, c, since, llm=None, file_only=False) -> int:
-    from .ingest import ingest_message
+    from .ingest import ingest_tracker
     after, n = since.astimezone().isoformat(), 0
     items = ([('issue', i) for i in _gitlab(c, '/issues', scope='assigned_to_me', updated_after=after, per_page=CAP)]
              + [('merge request', m) for m in _gitlab(c, '/merge_requests', scope='assigned_to_me', updated_after=after, per_page=CAP)])
     for kind, i in items:
         who = (i.get('author') or {})
         proj = '/'.join(str(i.get('web_url') or '').split('/')[3:5]) or 'GitLab'
-        out = ingest_message(store, file_only=file_only, msg={
+        n += ingest_tracker(store, file_only=file_only, msg={
             'external_id': f"gitlab:{kind[0]}{i['id']}", 'channel': 'gitlab',
             'subject': f"{'!' if kind[0] == 'm' else '#'}{i.get('iid')} {i.get('title') or ''}".strip(),
             'body': f"[GitLab {kind} in {proj} - state {i.get('state')} - assigned to you]\n"
                     f"{str(i.get('description') or '(no description)')[:20000]}",
             'from_name': who.get('name') or 'GitLab', 'conversation_id': f"gitlab:{kind[0]}{i['id']}",
             'sent_at': _stamp(i.get('updated_at')), 'source_link': i.get('web_url'), 'source_name': proj}, llm=llm)
-        n += out['status'] != 'duplicate'
     return n
 
 
@@ -78,7 +77,7 @@ def test_azdo(store, c) -> str:
 
 
 def poll_azdo(store, c, since, llm=None, file_only=False) -> int:
-    from .ingest import ingest_message
+    from .ingest import ingest_tracker
     # WIQL dates are day-precision, so the query over-fetches and the watermark filters below
     wiql = ("Select [System.Id] From WorkItems Where [System.AssignedTo] = @Me "
             f"And [System.ChangedDate] >= '{since.strftime('%Y-%m-%d')}' Order By [System.ChangedDate] Asc")
@@ -90,7 +89,7 @@ def poll_azdo(store, c, since, llm=None, file_only=False) -> int:
         f = w.get('fields') or {}
         if _stamp(f.get('System.ChangedDate')) < _new(since): continue
         proj = f.get('System.TeamProject') or ''
-        out = ingest_message(store, file_only=file_only, msg={
+        n += ingest_tracker(store, file_only=file_only, msg={
             'external_id': f"azdo:{w['id']}", 'channel': 'azdo',
             'subject': f"#{w['id']} {f.get('System.Title') or ''}".strip(),
             'body': f"[Azure DevOps {f.get('System.WorkItemType') or 'work item'} in {proj} - "
@@ -100,7 +99,6 @@ def poll_azdo(store, c, since, llm=None, file_only=False) -> int:
                           if isinstance(f.get('System.CreatedBy'), dict) else f.get('System.CreatedBy')) or 'Azure DevOps',
             'conversation_id': f"azdo:{w['id']}", 'sent_at': _stamp(f.get('System.ChangedDate')),
             'source_link': f'{base}/{proj}/_workitems/edit/{w["id"]}', 'source_name': proj or 'Azure DevOps'}, llm=llm)
-        n += out['status'] != 'duplicate'
     return n
 
 
@@ -122,7 +120,7 @@ def test_linear(store, c) -> str:
 
 
 def poll_linear(store, c, since, llm=None, file_only=False) -> int:
-    from .ingest import ingest_message
+    from .ingest import ingest_tracker
     iso = since.astimezone().isoformat()
     data = _linear(c, '{ issues(filter: {assignee: {isMe: {eq: true}}, updatedAt: {gt: "%s"}}, first: %d) '
                       '{ nodes { identifier title description url updatedAt state { name } '
@@ -130,7 +128,7 @@ def poll_linear(store, c, since, llm=None, file_only=False) -> int:
     n = 0
     for i in (data.get('issues') or {}).get('nodes') or []:
         proj = (i.get('project') or {}).get('name')
-        out = ingest_message(store, file_only=file_only, msg={
+        n += ingest_tracker(store, file_only=file_only, msg={
             'external_id': f"linear:{i['identifier']}", 'channel': 'linear',
             'subject': f"{i['identifier']} {i.get('title') or ''}".strip(),
             'body': f"[Linear issue{f' in {proj}' if proj else ''} - state {((i.get('state') or {}).get('name'))} - assigned to you]\n"
@@ -138,7 +136,6 @@ def poll_linear(store, c, since, llm=None, file_only=False) -> int:
             'from_name': ((i.get('creator') or {}).get('name')) or 'Linear',
             'conversation_id': f"linear:{i['identifier']}", 'sent_at': _stamp(i.get('updatedAt')),
             'source_link': i.get('url'), 'source_name': proj or 'Linear'}, llm=llm)
-        n += out['status'] != 'duplicate'
     return n
 
 
@@ -159,20 +156,19 @@ def test_trello(store, c) -> str:
 
 
 def poll_trello(store, c, since, llm=None, file_only=False) -> int:
-    from .ingest import ingest_message
+    from .ingest import ingest_tracker
     cards = _trello(c, '/members/me/cards', filter='open',
                     fields='name,desc,dateLastActivity,url,idBoard', boards='open', board_fields='name')
     n = 0
     for t in cards[:200]:
         if _stamp(t.get('dateLastActivity')) < _new(since): continue
         board = ((t.get('board') or {}).get('name')) or 'Trello'
-        out = ingest_message(store, file_only=file_only, msg={
+        n += ingest_tracker(store, file_only=file_only, msg={
             'external_id': f"trello:{t['id']}", 'channel': 'trello',
             'subject': (t.get('name') or '').strip() or 'Trello card',
             'body': f"[Trello card on \"{board}\" - assigned to you]\n{str(t.get('desc') or '(no description)')[:20000]}",
             'from_name': 'Trello', 'conversation_id': f"trello:{t['id']}",
             'sent_at': _stamp(t.get('dateLastActivity')), 'source_link': t.get('url'), 'source_name': board}, llm=llm)
-        n += out['status'] != 'duplicate'
     return n
 
 
@@ -322,20 +318,19 @@ def test_pagerduty(store, c) -> str:
 
 
 def poll_pagerduty(store, c, since, llm=None, file_only=False) -> int:
-    from .ingest import ingest_message
+    from .ingest import ingest_tracker
     j = _pagerduty(c, '/incidents', since=since.astimezone().isoformat(), limit=CAP,
                    **{'sort_by': 'created_at:asc', 'statuses[]': ['triggered', 'acknowledged']})
     n = 0
     for i in j.get('incidents') or []:
         svc = ((i.get('service') or {}).get('summary')) or 'PagerDuty'
-        out = ingest_message(store, file_only=file_only, msg={
+        n += ingest_tracker(store, file_only=file_only, msg={
             'external_id': f"pagerduty:{i['id']}", 'channel': 'pagerduty',
             'subject': f"#{i.get('incident_number')} {i.get('title') or ''}".strip(),
             'body': f"[PagerDuty incident on {svc} - {i.get('status')} - urgency {i.get('urgency')}]\n"
                     f"{str(((i.get('body') or {}).get('details')) or i.get('summary') or '')[:20000]}",
             'from_name': svc, 'conversation_id': f"pagerduty:{i['id']}",
             'sent_at': _stamp(i.get('created_at')), 'source_link': i.get('html_url'), 'source_name': svc}, llm=llm)
-        n += out['status'] != 'duplicate'
     return n
 
 

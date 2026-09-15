@@ -5,7 +5,7 @@ Pipeline per message: dedup -> deterministic policy -> route to a task -> intent
 (task / reply_only / fyi) -> file or create. Real tasks NEVER get an auto reply-draft:
 answering is the responder's job (reply_only), doing is the coder's.
 """
-import contextlib, json, re, threading, time
+import contextlib, hashlib, json, re, threading, time
 from loguru import logger
 from .routing import ask_line, route, draft_task_fields, tokens
 from .policy import evaluate
@@ -475,6 +475,39 @@ def _stored_verdict(intent: dict | None) -> dict | None:
     """The usable structured triage answer, without failure-only transport fields."""
     if not intent or intent.get('degraded'): return None
     return {k: v for k, v in intent.items() if k not in ('raw_output', 'parse_error', 'degraded')}
+
+
+def rev_id(base: str, subject: str, body: str) -> str:
+    """A tracker id that changes when the item's WORDS change. `base` names the item
+    (jira:OPS-12, gh:owner/repo#42); the suffix is what it said that time. A tracker id used
+    to name the item alone, so ingest_message dropped every later version as a duplicate and
+    an issue rewritten after you first saw it reached nobody."""
+    words = '\n'.join((subject or '', body or ''))
+    return f'{base}@{hashlib.sha1(words.encode()).hexdigest()[:12]}'
+
+
+def seen_before(store, base: str, subject: str, body: str) -> bool:
+    """Has this exact version already landed? Content-addressed on purpose: a re-sync cannot
+    spam the timeline, and the first poll after this shipped is silent without a migration -
+    the row stored under the OLD bare id is re-hashed here and recognised (second branch)."""
+    rid = rev_id(base, subject, body)
+    if store.message_exists(rid): return True
+    row = store.message_by_external(base)
+    return bool(row) and rev_id(base, row.get('Subject') or '', row.get('BodyText') or '') == rid
+
+
+def ingest_tracker(store, msg: dict, llm=None, file_only: bool = False) -> int:
+    """One tracker item, keyed on its WORDS. Returns 1 when something landed, so a poll can
+    still count arrivals the way it always did.
+
+    `external_id` comes in naming the ITEM (jira:OPS-12) and goes to the funnel carrying the
+    version too; `conversation_id` keeps the bare name, and that is the whole trick - it is what
+    lets identity_route attach the new version to the task the item already has, re-judge it,
+    and rewrite a draft that is now behind the thread."""
+    base, subject, body = msg['external_id'], msg.get('subject') or '', msg.get('body') or ''
+    if seen_before(store, base, subject, body): return 0
+    out = ingest_message(store, {**msg, 'external_id': rev_id(base, subject, body)}, llm=llm, file_only=file_only)
+    return out['status'] != 'duplicate'
 
 
 def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only: bool = False) -> dict:

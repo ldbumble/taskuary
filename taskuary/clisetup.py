@@ -43,7 +43,7 @@ finish = aisetup.finish               # ...so its ending is aisetup's, unchanged
 # devin belongs here twice over: its installer already tried to run `devin setup` and could not
 # (no terminal), and its sign-in is a browser round trip that falls back to pasting a token back
 # into the CLI - a conversation that needs the pane, not a spawn nobody can see.
-SETUP = frozenset({'claude', 'codex', 'gemini', 'copilot', 'cursor', 'muse', 'devin'})
+SETUP = frozenset({'claude', 'codex', 'gemini', 'qwen', 'copilot', 'cursor', 'muse', 'devin'})
 
 
 def tag(name: str) -> str: return f'cli:{name}'

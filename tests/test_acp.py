@@ -163,7 +163,7 @@ class NothingElseChangesTests(unittest.TestCase):
 
     def test_only_the_clis_that_speak_it_natively_ship_with_it(self):
         by = {r['name']: r for r in clis.KNOWN}
-        self.assertEqual(sorted(n for n, r in by.items() if r.get('acp')), ['copilot', 'cursor', 'gemini'])
+        self.assertEqual(sorted(n for n, r in by.items() if r.get('acp')), ['copilot', 'cursor', 'gemini', 'qwen'])
         # claude and codex are adapter-only: reachable by putting the adapter in a profile, never shipped on
         for n in ('claude', 'codex', 'muse', 'devin'):
             self.assertIsNone(by[n].get('acp'))

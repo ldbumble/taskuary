@@ -12,7 +12,7 @@ import shutil
 
 # `acp`: how this CLI is launched as an Agent Client Protocol server - the ARGUMENTS, never a
 # boolean, so claude or codex can be added later by pointing a profile at their adapter without
-# touching code. Only the three that speak it natively ship with it; see docs/acp-transport.md.
+# touching code. Only native implementations ship with it; see docs/acp-transport.md.
 KNOWN = [
     {'name': 'claude', 'cmd': 'claude', 'label': 'Claude Code',
      # --dangerously-skip-permissions: headless claude otherwise blocks on approvals forever.
@@ -26,6 +26,11 @@ KNOWN = [
     # Read from their documentation, not from a machine that ran them - see sessionfiles.
     {'name': 'gemini', 'cmd': 'gemini', 'label': 'Gemini CLI',
      'args': ['-p', '--yolo'], 'resume_args': ['--resume'], 'acp': ['--acp'], 'timeout': 1500},
+    # Qwen Code 0.23.4: stdin selects headless mode; -p requires a string, so leave it out.
+    # Its stream-json uses the assistant/tool/result events already parsed by run_cli.
+    {'name': 'qwen', 'cmd': 'qwen', 'label': 'Qwen Code',
+     'args': ['--yolo', '--output-format', 'stream-json'],
+     'resume_args': ['--resume'], 'acp': ['--acp'], 'timeout': 1500},
     {'name': 'cursor', 'cmd': 'cursor-agent', 'label': 'Cursor CLI',
      'args': ['-p', '--force', '--output-format', 'text'], 'resume_args': ['--resume={id}'],
      'acp': ['acp'], 'timeout': 1500},
@@ -78,6 +83,9 @@ def tools() -> list:
 READONLY = {'claude': (('--dangerously-skip-permissions',), ('--tools', '')),
             'codex': (('--dangerously-bypass-approvals-and-sandbox', '--full-auto'), ('--sandbox', 'read-only')),
             'gemini': (('--yolo',), ()),
+            # Do not inherit a user's hooks, MCP servers or auto-approval rules for mail.
+            # The zero tool-call budget also refuses a tool requested by untrusted input.
+            'qwen': (('--yolo',), ('--approval-mode=plan', '--safe-mode', '--max-tool-calls=0')),
             # muse: same reasoning as gemini. --yolo is what turns approval AND the sandbox off, so
             # dropping it puts both back; its default on-request mode has nobody to ask in `exec`.
             'muse': (('--yolo',), ()),
@@ -105,6 +113,7 @@ REPORT_READ = {
                ('--tools', REPORT_TOOLS, '--allowedTools', REPORT_TOOLS, '--disallowedTools', 'mcp__*')),
     'codex': READONLY['codex'],
     'gemini': READONLY['gemini'],
+    'qwen': READONLY['qwen'],
     'muse': READONLY['muse'],
     'devin': READONLY['devin'],
 }

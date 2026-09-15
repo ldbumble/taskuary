@@ -56,11 +56,12 @@ Open **Connections** and configure these in order:
    enough for triage.
 2. **An inbound channel.** Connect Outlook, Gmail/IMAP, Teams, Slack, Telegram, WhatsApp,
    Discord, or one of the supported work systems. New items begin appearing on the Timeline.
-3. **A coding CLI.** Choose a preset for Claude Code, Codex, Gemini, Cursor, Copilot, or
+3. **A coding CLI.** Choose a preset for Claude Code, Codex, Qwen Code, Gemini, Cursor, Copilot, or
    Muse Code, then save and test it. If the CLI is not on this machine yet, press **Install** on its card
    (or on the same row in the setup wizard): Taskuary runs the vendor's own installer, or npm,
    or downloads the release binary, and puts it on your PATH. A GitHub token can discover
    repositories automatically.
+   [Qwen Code setup](qwen-code.md) covers its standalone installer, model provider, and local-model option.
 4. **Reports, if useful.** Describe a report in plain English or build one from a connected
    database, cloud account, REST endpoint, RSS feed, or MCP server. Preview it against the
    live source before scheduling it.

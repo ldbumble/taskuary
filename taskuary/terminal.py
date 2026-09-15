@@ -48,6 +48,7 @@ SEED_ARGV = {
     'claude': lambda s: [s],
     'codex': lambda s: [s],
     'gemini': lambda s: ['-i', s],
+    'qwen': lambda s: ['-i', s],
     'copilot': lambda s: ['--interactive', s],
     'devin': lambda s: ['--', s],
 }

@@ -235,6 +235,7 @@ _SIGNED_OUT = re.compile(r'OAuth session expired|Failed to authenticate|not logg
 _LOGIN_HOW = {'claude': "run `claude` and type `/login`", 'copilot': "run `copilot` and type `/login`",
               'codex': "run `codex login`", 'cursor': "run `cursor-agent login`",
               'gemini': "run `gemini` once and finish Google's sign-in",
+              'qwen': "run `qwen` and use `/auth` to configure your model provider",
               'muse': "run `muse` once and finish the browser sign-in at dev.meta.ai",
               'devin': "run `devin auth login` and finish the browser sign-in"}
 # Provider/plan exhaustion is different from an agent failing the work. Only this availability
@@ -386,12 +387,13 @@ def _cli_name(cmd: str) -> str:
 RESUME_ARGS = {'claude': ['--resume', '{id}'], 'codex': ['resume', '{id}'], 'copilot': ['--resume={id}'],
                # gemini and cursor were read from their docs, not from a machine that ran them:
                # each files its conversation and says nothing (sessionfiles.SOURCES finds it).
-               'gemini': ['--resume', '{id}'], 'cursor-agent': ['--resume={id}']}
-# ...and the two that let the CALLER name a NEW conversation, which beats learning one afterwards:
+               'gemini': ['--resume', '{id}'], 'qwen': ['--resume', '{id}'], 'cursor-agent': ['--resume={id}']}
+# ...and the CLIs that let the CALLER name a NEW conversation, which beats learning one afterwards:
 # the id exists before the CLI's first byte, so a pane killed in its first second is still
 # resumable and nothing has to be guessed from a working directory (hooks.py) or a log (witness).
 # claude verified by round trip - assigned, resumed, and its transcript filed under the id we gave.
-ASSIGN_ARGS = {'claude': ['--session-id', '{id}'], 'copilot': ['--session-id={id}']}
+ASSIGN_ARGS = {'claude': ['--session-id', '{id}'], 'copilot': ['--session-id={id}'],
+               'qwen': ['--session-id', '{id}']}
 
 
 def _with_id(args: list, sid: str) -> list:
@@ -630,6 +632,10 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     """
     name = profile.get('cmd', 'claude')
     cmd = _resolve_cmd(name) + list(profile.get('acp') or [])
+    if profile.get('model'):
+        from .climodels import split_pick
+        model, _ = split_pick(profile['model'])
+        cmd += [profile.get('model_arg') or '--model', model]
     cwd = profile.get('cwd')
     trace('prompt', 'prompt_sent_to_agent', prompt)
     trace('tool', 'cli', f'{name} over acp cwd={cwd or os.getcwd()}' + (f' resume={resume}' if resume else ''))

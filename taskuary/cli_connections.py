@@ -7,7 +7,7 @@ import copy
 import json
 import re
 
-COMMAND_FIELDS = ('cmd', 'args', 'resume', 'resume_args', 'timeout', 'model_arg')
+COMMAND_FIELDS = ('cmd', 'args', 'resume', 'resume_args', 'timeout', 'model_arg', 'acp')
 
 
 def cli_key(command):

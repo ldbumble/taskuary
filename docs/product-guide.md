@@ -348,10 +348,10 @@ related closed tasks so the agent starts with what Taskuary already knows.
 Open **Connections → AI CLI agents** to install, sign in to, and test your coding tools.
 Configure the connection once, then choose it when assigning or restarting an agent run.
 
-![AI CLI connections with installation, sign-in, and connection controls.](readme/07-coding-clis.png)
+![AI CLI connections including Qwen Code, with installation, sign-in, and connection controls.](readme/07-coding-clis-qwen.png)
 
 Every run can choose a configured CLI and, when supported, a model. Built-in presets cover
-Claude Code, Codex, Gemini, Cursor, Copilot, and Muse Code (macOS/Linux/WSL2 only — Meta's
+Claude Code, Codex, Qwen Code, Gemini, Cursor, Copilot, and Muse Code (macOS/Linux/WSL2 only — Meta's
 installer refuses Windows; the Meta Model API connector reaches Muse Spark there instead, though
 a Muse Code subscription covers only the CLI's own key and never a key you create yourself).
 Any CLI that accepts a prompt on stdin can
@@ -362,6 +362,10 @@ Headless agents need their noninteractive or auto-approval flag so they do not h
 for a click that cannot occur. The connector's **Test** action runs a small prompt through the
 CLI before it receives real work. Claude Code JSON output is parsed for resumable sessions;
 plain-text CLIs work as well.
+
+[Qwen Code setup](qwen-code.md) covers installing its standalone runtime, selecting a provider,
+and checking a task and its resumed session. Its structured output also supplies live progress
+and session IDs; general agents with tools can use its native ACP transport.
 
 ## What leaves your machine
 

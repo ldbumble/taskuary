@@ -1,5 +1,7 @@
 # Taskuary
 
+[English](README.md) · [简体中文](README.zh-CN.md)
+
 [![CI](https://github.com/ldbumble/taskuary/actions/workflows/ci.yml/badge.svg)](https://github.com/ldbumble/taskuary/actions/workflows/ci.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ldbumble/taskuary/badge)](https://scorecard.dev/viewer/?uri=github.com/ldbumble/taskuary)
 [![PyPI](https://img.shields.io/pypi/v/taskuary.svg?cacheSeconds=300&release=0.3.4.11&asof=2026-09-15e)](https://pypi.org/project/taskuary/)
@@ -74,11 +76,13 @@ The day's meetings sit above the digest, so Ruth's request has a clear deadline:
 
 ### Use your coding CLI
 
-Connect Claude Code, Codex, Gemini, Cursor, Copilot, Muse Code, or another CLI.
+Connect Claude Code, Codex, Qwen Code, Gemini, Cursor, Copilot, Muse Code, or another CLI.
 Set up the connection once, then give your agents profiles with their own instructions.
 Follow their sessions, answer questions, and review the result from Taskuary.
 
-![AI CLI connections in Taskuary, with installation, sign-in, and connection controls.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/07-coding-clis.png)
+For Qwen Code, see the [setup and compatibility guide](docs/qwen-code.md).
+
+![AI CLI connections including Qwen Code, with installation, sign-in, and connection controls.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/07-coding-clis-qwen.png)
 
 ### A shared Hub for what agents learn
 
@@ -202,6 +206,7 @@ Updated daily from PyPI with mirror traffic excluded. The raw series is
 ## Documentation
 
 - [Getting started](docs/getting-started.md)—installation, first-run setup, Docker, and data
+- [Qwen Code](docs/qwen-code.md)—installation, provider setup, and verified integration paths
 - [Product guide](docs/product-guide.md)—the workflow, learning loop, agents, and operator documents
 - [Integrations](docs/integrations.md)—channels, AI providers, work systems, and report sources
 - [Reports and proactive checks](docs/reports-and-assistant.md)—the report pipeline, AI-written source cards, and what Taskuary watches

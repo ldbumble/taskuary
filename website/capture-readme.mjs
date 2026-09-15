@@ -55,7 +55,7 @@ fixture['/api/feed'].data.unshift(digest);
 fixture['/api/messages/one'][939] = digest;
 fixture['/api/cli/connections'] = { data: [
   ...fixture['/api/cli/detect'].data.filter(c => ['claude', 'codex'].includes(c.name)).map(c => ({ ...c, configured: true, setup: c.name, config: { cmd: c.cmd, args: c.args, timeout: c.timeout } })),
-  ...[['gemini', 'Gemini CLI'], ['copilot', 'GitHub Copilot']].map(([name,label]) => ({ name, label, installed: false, configured: false, installable: true, install: name, config: { cmd: name, args: [], timeout: 1500 } })),
+  ...[['qwen', 'Qwen Code'], ['copilot', 'GitHub Copilot']].map(([name,label]) => ({ name, label, installed: false, configured: false, installable: true, install: name, config: { cmd: name, args: [], timeout: 1500 } })),
 ] };
 fixture['/api/board/notes'].data.forEach(n => { if (n.Agent === 'codex') n.ReadBy = 'coder'; if (n.Agent === 'coder') n.ReadBy = 'codex'; });
 fixture['/api/hub'].data[0].comments = [
@@ -163,12 +163,21 @@ const captureLearned = async () => {
   await shot('learned');
   await page.setViewport({width:1200,height:1000,deviceScaleFactor:2});
 };
+const captureCli = async () => {
+  await nav('Connections');
+  const search = await page.waitForSelector('input[placeholder^="Search connectors"]');
+  await search.type('AI CLI agents'); await click('AI CLI agents', 'p');
+  await page.waitForSelector('[data-connection="qwen"]');
+  await shot('cli');
+};
 try {
   await page.goto(origin + '/?workflow=numbers', { waitUntil: 'networkidle0', timeout: 120000 });
   await page.evaluate(() => document.fonts.ready);
   await page.evaluate(() => [...document.querySelectorAll('button')].find(e => e.textContent.trim() === 'Put it away')?.click());
   await delay(1000);
-  if (process.argv.includes('--timeline-only')) {
+  if (process.argv.includes('--cli-only')) {
+    await captureCli();
+  } else if (process.argv.includes('--timeline-only')) {
     await captureTimeline();
   } else if (process.argv.includes('--memory-update')) {
     await captureTimeline(); await captureLearned();
@@ -207,11 +216,7 @@ try {
     await page.evaluate(t => window.readmeAnimations.forEach(a => { a.currentTime = t; }), i * 80);
     await page.screenshot({ path: path.join(scratch, `morning-${String(i).padStart(2,'0')}.png`) });
   }
-  await nav('Connections');
-  const search = await page.waitForSelector('input[placeholder^="Search connectors"]');
-  await search.type('AI CLI agents'); await click('AI CLI agents', 'p');
-  await page.waitForSelector('[data-connection="claude"]');
-  await shot('cli');
+  await captureCli();
   await nav('Hub'); await delay(800); await click('2 comments'); await shot('hub');
   await nav('Board'); await click('Live handoffs', 'div'); await shot('handoffs');
   await captureLearned();

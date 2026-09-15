@@ -76,6 +76,7 @@ def test_the_newest_session_carrying_an_id_is_the_one_offered(tmp_path):
     ({'cmd': 'mycli', 'resume_args': ['--continue']}, ['--continue', 'S']),
     ({'cmd': 'mycli', 'resume_args': ['--pick={id}', '--go']}, ['--pick=S', '--go']),
     ({'cmd': 'gemini'}, ['--resume', 'S']),
+    ({'cmd': 'qwen'}, ['--resume', 'S']),
     ({'cmd': 'cursor-agent'}, ['--resume=S']),
     ({'cmd': 'muse'}, []),          # nothing verified for it yet, so it is offered nothing
 ])
@@ -86,6 +87,7 @@ def test_each_backend_spells_resume_in_its_own_words(profile, expected):
 @pytest.mark.parametrize('cmd,expected', [
     ('claude', ['--session-id', 'U']),        # verified 2026-09-15: assigned, then resumed, by round trip
     ('copilot', ['--session-id=U']),
+    ('qwen', ['--session-id', 'U']),
     ('codex', []),                            # codex names its own; the rollout tells us which
 ])
 def test_a_cli_that_lets_us_name_the_conversation_is_told_its_name(cmd, expected):

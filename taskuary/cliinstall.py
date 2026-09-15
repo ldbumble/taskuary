@@ -66,6 +66,14 @@ RECIPES = {
         {'how': 'binary', 'repo': 'openai/codex', 'stem': 'codex'},
     ],
     'gemini': [{'how': 'npm', 'pkg': '@google/gemini-cli'}],
+    # The standalone installer includes its runtime; npm requires Node 22+.
+    'qwen': [
+        {'how': 'script', 'os': 'nt', 'cmd': ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+            '-Command', powershell_installer('https://qwen-code-assets.oss-cn-hangzhou.aliyuncs.com/installation/install-qwen-standalone.ps1')]},
+        {'how': 'script', 'os': 'posix', 'cmd': ['bash', '-lc',
+            'curl -fsSL https://qwen-code-assets.oss-cn-hangzhou.aliyuncs.com/installation/install-qwen-standalone.sh | bash']},
+        {'how': 'npm', 'pkg': '@qwen-code/qwen-code'},
+    ],
     'copilot': [{'how': 'npm', 'pkg': '@github/copilot'}],
     # cursor-agent IS on npm but ships no bin, so npm is not a road; its installer is bash-only
     'cursor': [{'how': 'script', 'os': 'posix', 'cmd': ['bash', '-lc', 'curl https://cursor.com/install -fsS | bash']}],
@@ -92,7 +100,7 @@ RECIPES = {
 
 # what to look for once an installer says it is done - the bin name, not the profile's nickname
 BINARY = {'claude': 'claude', 'codex': 'codex', 'gemini': 'gemini', 'copilot': 'copilot', 'cursor': 'cursor-agent',
-          'muse': 'muse', 'devin': 'devin'}
+          'muse': 'muse', 'devin': 'devin', 'qwen': 'qwen'}
 CMD2NAME = {v: k for k, v in BINARY.items()}       # cursor-agent -> cursor: the bin is not the recipe
 
 
@@ -121,6 +129,7 @@ UPDATES = {
     'claude': [{'how': 'self', 'args': ['update']}, {'how': 'npm', 'pkg': '@anthropic-ai/claude-code@latest'}],
     'codex': [{'how': 'self', 'args': ['update']}, {'how': 'npm', 'pkg': '@openai/codex@latest'}],
     'gemini': [{'how': 'npm', 'pkg': '@google/gemini-cli@latest'}],
+    'qwen': [{'how': 'self', 'args': ['update']}],
     'copilot': [{'how': 'npm', 'pkg': '@github/copilot@latest'}],
 }
 
@@ -247,7 +256,8 @@ def find(name: str) -> str:
     # USER path - a path this long-running process will not see until it is restarted, so looking
     # there is the difference between "installed" and "the installer said yes and left nothing"
     if WINDOWS: roots += [Path(os.getenv('APPDATA', '')) / 'npm', home / '.local' / 'bin',
-                          Path(os.getenv('LOCALAPPDATA', '')) / 'devin' / 'cli' / 'bin']
+                          Path(os.getenv('LOCALAPPDATA', '')) / 'devin' / 'cli' / 'bin',
+                          Path(os.getenv('LOCALAPPDATA', '')) / 'qwen-code' / 'bin']
     else: roots += [Path('/usr/local/bin'), Path('/opt/homebrew/bin')]
     for d in roots:
         for ext in ('.exe', '.cmd', '.bat', '') if WINDOWS else ('',):

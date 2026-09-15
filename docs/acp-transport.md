@@ -1,6 +1,7 @@
 # ACP: one protocol where nobody is watching the terminal
 
-*Design, 2026-09-15. Not built.*
+*Design, 2026-09-15. Implemented in `taskuary/acp.py`; Qwen compatibility is recorded in
+[Qwen Code setup](qwen-code.md#compatibility-evidence).*
 
 Taskuary drives every AI CLI by writing argv and reading stdout. `clis.py` is that dialect,
 hand-maintained: claude takes `-p`, codex takes `exec`, devin spells its approval bypass as a
@@ -44,13 +45,14 @@ Only the ones that speak ACP natively, verified against each vendor's own docume
 | CLI | ACP | How |
 |---|---|---|
 | gemini | native | `gemini --acp` |
+| qwen | native | `qwen --acp`; Qwen Code 0.23.4 verified with a local mock model endpoint |
 | cursor | native | `cursor-agent acp` |
 | copilot | native | `copilot --acp` (stdio default; public preview since 2026-01-28) |
 | claude | adapter only | `@agentclientprotocol/claude-agent-acp` |
 | codex | adapter only | `codex-acp` |
 | muse, devin | none | — |
 
-For the three native ones, ACP is **the binary already installed, in another mode** — the Gemini
+For the four native ones, ACP is **the binary already installed, in another mode** — the Gemini
 docs: "In ACP mode, Gemini CLI listens for incoming JSON-RPC requests." Same process, same login,
 no new dependency and nothing new to authenticate.
 

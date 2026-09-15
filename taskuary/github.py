@@ -183,6 +183,23 @@ def list_issues(tok, repo, since=None, state='open', limit=25):
     return [i for i in list_items(tok, repo, since, state, limit=100) if 'pull_request' not in i][:limit]
 
 
+def issue_comments(tok, repo, number, since=None, limit=50):
+    """The conversation ON an issue or PR. An issue body is what somebody meant to say the day
+    they filed it; the answer to "what changed" is usually down here. `since` is an ISO stamp."""
+    p = {'per_page': min(limit, 100), 'sort': 'created', 'direction': 'asc'}
+    if since: p['since'] = since
+    r = requests.get(f'{GH}/repos/{repo}/issues/{number}/comments', headers=_h(tok), params=p, timeout=30)
+    r.raise_for_status()
+    return r.json()[:limit]
+
+
+def whoami(tok) -> str:
+    """The login this token acts as - so the hub can tell its OWN comments from a person's."""
+    r = requests.get(f'{GH}/user', headers=_h(tok), timeout=20)
+    r.raise_for_status()
+    return r.json().get('login') or ''
+
+
 def repo_tree(tok, repo, limit=3000) -> list:
     """Every file path on the default branch, in one call. What a repo COVERS is written in its own
     file names - app/routers/ap_invoice.py, sql/, reports/ - and a README is only what somebody meant

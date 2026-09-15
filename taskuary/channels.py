@@ -13,7 +13,7 @@ from loguru import logger
 
 from . import spawn
 from .github import _h as gh_headers, list_accessible_repos
-from .ingest import ingest_message
+from .ingest import ingest_message, rev_id, seen_before
 from .counsel import is_invite
 
 GRAPH = 'https://graph.microsoft.com/v1.0'
@@ -973,6 +973,111 @@ def gh_auto_ok(src: dict, association: str) -> bool:
     return allowed is None or (association or 'NONE').upper() in allowed
 
 
+def file_as_context(store, msg: dict, why: str) -> int:
+    """A tracker line nobody has to act on, kept as thread history under its OWN name.
+
+    ingest_own_message is for what YOU sent and stamps the row 'You' - which would put the
+    owner's name on a coverage bot's comment. A robot is not the owner; it is just not work."""
+    if store.message_exists(msg['external_id']): return 0
+    conv = msg.get('conversation_id')
+    tid = store.task_for_conversation(conv, msg.get('subject'))
+    mid = store.add_message({'TaskId': tid, 'ExternalId': msg['external_id'], 'ConversationId': conv,
+                             'Channel': msg['channel'], 'SourceName': msg.get('source_name'),
+                             'Subject': msg.get('subject'), 'FromName': msg.get('from_name'),
+                             'FromEmail': msg.get('from_email'), 'SentAt': msg.get('sent_at'),
+                             'BodyText': msg.get('body'), 'SourceLink': msg.get('source_link'),
+                             'Status': 'context'})
+    if tid: store.add_route(mid, tid, 'attach', None, why, [], 'router')
+    return 1
+
+
+def gh_login(store, tok: str) -> str:
+    """The login this token acts as, cached. Needed to tell Taskuary's OWN comments from a
+    person's: the hub posts on issues itself (outbound.comment_issue), so without this it reads
+    its own reply on the next poll, triages it, and can answer itself."""
+    me = str(store.get_settings().get('github_login') or '')
+    if me: return me
+    from . import github
+    try: me = github.whoami(tok)
+    except Exception as e:
+        logger.warning(f'github: could not read our own login ({e}) - own comments may read as a stranger')
+        return ''
+    if me: store.set_setting('github_login', me, 'github')
+    return me
+
+
+def close_upstream_ended(store, tid: int, said: str, final: str):
+    """Close a task whose upstream item is over - through the NORMAL ending, not a status flip.
+
+    wrap() is the same call the Done button makes: the report is written, the transcript becomes
+    an artifact, proposals become reviews and the sender gets their drafted reply. The cause
+    rides in as the LAST MESSAGE, so the task says what ended it in the place every other ending
+    is recorded. A task that never had a session has nothing to wrap ('nothing to wrap up') -
+    that refusal is expected, and must not leave the dead task sitting in the work list."""
+    from . import coder
+    store.add_comment(tid, 'router', 'agent', said)
+    try:
+        coder.wrap(store, tid, close=True, actor='router', final_message=final)
+    except ValueError as e:
+        logger.info(f'TQ-{tid:04d}: nothing to wrap up ({e}) - closing it plainly')
+        store.update_task(tid, {'Status': 'done'}, 'router')
+    except Exception as e:
+        logger.warning(f'TQ-{tid:04d}: the ending failed ({e}) - closing it plainly')
+        store.update_task(tid, {'Status': 'done'}, 'router')
+
+
+def _gh_ended(store, item: dict, base: str, repo: str) -> int:
+    """The item this task came from is over - it was closed or merged upstream.
+
+    The work is moot whatever state the task is in, so it leaves the work list rather than
+    waiting for somebody to notice (the owner: the work tab holds only LIVE work). The cause is
+    said on the task, because a task that closes itself and does not say why is worse than one
+    that stayed open. Deliberately deterministic: no model is asked to infer an ending from a
+    fact GitHub stated outright."""
+    tid = store.task_for_conversation(base)
+    if not tid: return 0
+    t = store.get_task(tid) or {}
+    if t.get('Status') in ('done', 'dropped'): return 0
+    what = 'merged' if item.get('merged_at') else 'closed'
+    kind = 'pull request' if 'pull_request' in item else 'issue'
+    said = (f"The {kind} this task came from was {what} on GitHub "
+            f"({repo}#{item['number']}), so there is nothing left to do here.")
+    close_upstream_ended(store, tid, said, f'{repo}#{item["number"]} was {what} on GitHub - {said}')
+    logger.info(f'github: {base} was {what} - closed TQ-{tid:04d}')
+    return 0
+
+
+def _gh_comments(store, src: dict, tok: str, repo: str, item: dict, base: str, llm, file_only: bool) -> int:
+    """Comments on one issue or PR, as messages on the ITEM's conversation - which is what makes
+    identity_route attach them to its task, re-judge them and rewrite a draft that is now behind.
+
+    Ours and a bot's ride along as history and never become work: CI, Dependabot and coverage
+    bots are the loudest commenters on any active repo and none of it is a person asking."""
+    from . import github
+    try: comments = github.issue_comments(tok, repo, item['number'])
+    except Exception as e:
+        logger.warning(f"github: comments on {base} could not be read ({e})")
+        return 0
+    me, n = gh_login(store, tok), 0
+    for c in comments:
+        u = c.get('user') or {}
+        who, ext = u.get('login') or 'github', f"{base}:c{c.get('id')}"
+        if store.message_exists(ext): continue
+        msg = {'external_id': ext, 'channel': 'github', 'subject': f"Re: {item.get('title') or base}",
+               'body': (c.get('body') or '')[:20000], 'from_name': who,
+               'from_email': f'{who}@users.noreply.github.com', 'conversation_id': base,
+               'sent_at': _local(c.get('created_at') or ''), 'source_link': c.get('html_url'),
+               'source_name': repo, 'no_auto': not gh_auto_ok(src, c.get('author_association'))}
+        if me and who == me:
+            n += ingest_own_message(store, msg, f'our own comment on {base} - history, not work')
+            continue
+        if (u.get('type') or '') == 'Bot':
+            n += file_as_context(store, msg, f'{who} is a bot - history, not work')
+            continue
+        n += ingest_message(store, msg, llm=llm, file_only=file_only)['status'] != 'duplicate'
+    return n
+
+
 def ingest_github_issues(store, src: dict, tok: str, since, llm=None, file_only=False) -> int:
     """GitHub as an INBOUND channel: new issues - and, per repo, pull requests - land on the
     Timeline and go through the same triage as mail. What each KIND does is the source's own
@@ -986,8 +1091,13 @@ def ingest_github_issues(store, src: dict, tok: str, since, llm=None, file_only=
     issues_mode, prs_mode = gh_modes(src, file_only)
     if issues_mode == 'off' and prs_mode == 'off': return 0
     n = 0
-    from .github import body_images, list_items
-    for i in reversed(list_items(tok, repo, since=since.astimezone().isoformat())):
+    from . import github
+    body_images, list_items = github.body_images, github.list_items
+    # state='all', because a CLOSURE IS SILENCE. With state='open' an item that closes simply
+    # stops being returned - there is no event, and the task it opened sat in the work list for
+    # good (the owner, 2026-09-15, on the closed PR behind TQ-0550). Asking for all of them is
+    # what makes the ending arrive; _gh_ended below is what acts on it.
+    for i in reversed(list_items(tok, repo, since=since.astimezone().isoformat(), state='all')):
         if TQ_ISSUE.match(i.get('title') or ''): continue
         is_pr = 'pull_request' in i
         mode = prs_mode if is_pr else issues_mode
@@ -995,12 +1105,33 @@ def ingest_github_issues(store, src: dict, tok: str, since, llm=None, file_only=
         who = (i.get('user') or {}).get('login') or 'github'
         # WHO is asking is part of the ask on a public repo - triage reads this line first
         head = f"[{'pull request' if is_pr else 'issue'} by {who} - association: {i.get('author_association') or 'NONE'}]"
+        base = f"gh:{repo}#{i['number']}"
+        subject = f"{repo}#{i['number']} {i.get('title') or ''}".strip()
+        body = f"{head}\n{(i.get('body') or '(no description)')[:20000]}"
+        known = store.message_by_external(base) or store.task_for_conversation(base)
+        if (i.get('state') or 'open') != 'open':
+            # an ending we never saw begin is history: a backfill reaches items closed long
+            # before Taskuary existed, and none of those is a job for anybody
+            if known: n += _gh_ended(store, i, base, repo)
+            continue
+        # a robot filing its own chore (a downloads chart, a dependency bump) is not somebody
+        # asking the owner for something - the same rule its comments get
+        if ((i.get('user') or {}).get('type') or '') == 'Bot':
+            n += file_as_context(store, {
+                'external_id': base, 'channel': 'github', 'conversation_id': base, 'subject': subject,
+                'body': body, 'from_name': who, 'from_email': f'{who}@users.noreply.github.com',
+                'sent_at': _local(i.get('updated_at') or ''), 'source_link': i.get('html_url'),
+                'source_name': repo}, f'{who} is a bot - history, not work')
+            continue
+        # the conversation on the item is where "what changed" usually lives; the body is only
+        # what somebody meant to say the day they filed it
+        n += _gh_comments(store, src, tok, repo, i, base, llm, mode == 'feed')
+        if seen_before(store, base, subject, body): continue
         out = ingest_message(store, {
-            'external_id': f"gh:{repo}#{i['number']}", 'channel': 'github',
-            'subject': f"{repo}#{i['number']} {i.get('title') or ''}".strip(),
-            'body': f"{head}\n{(i.get('body') or '(no description)')[:20000]}",
+            'external_id': rev_id(base, subject, body), 'channel': 'github',
+            'subject': subject, 'body': body,
             'from_name': who, 'from_email': f'{who}@users.noreply.github.com',
-            'conversation_id': f"gh:{repo}#{i['number']}", 'sent_at': _local(i.get('updated_at') or ''),
+            'conversation_id': base, 'sent_at': _local(i.get('updated_at') or ''),
             'source_link': i.get('html_url'), 'source_name': repo,
             # the screenshot IS the report: read it before the row exists, or the classifier
             # judges an issue template whose headings are empty (see images_for_triage above)

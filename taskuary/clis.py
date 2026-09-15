@@ -18,10 +18,13 @@ KNOWN = [
      'resume_args': ['--resume'], 'timeout': 1500},
     {'name': 'codex', 'cmd': 'codex', 'label': 'OpenAI Codex CLI',
      'args': ['exec', '--dangerously-bypass-approvals-and-sandbox'], 'timeout': 1500},
+    # gemini and cursor keep their sessions in files and hand out no id (sessionfiles.SOURCES goes
+    # and finds it): ~/.gemini/tmp/<sha256 of the project root>/chats, and ~/.cursor/chats/**/<id>.
+    # Read from their documentation, not from a machine that ran them - see sessionfiles.
     {'name': 'gemini', 'cmd': 'gemini', 'label': 'Gemini CLI',
-     'args': ['-p', '--yolo'], 'timeout': 1500},
+     'args': ['-p', '--yolo'], 'resume_args': ['--resume'], 'timeout': 1500},
     {'name': 'cursor', 'cmd': 'cursor-agent', 'label': 'Cursor CLI',
-     'args': ['-p', '--force', '--output-format', 'text'], 'timeout': 1500},
+     'args': ['-p', '--force', '--output-format', 'text'], 'resume_args': ['--resume={id}'], 'timeout': 1500},
     # --resume takes an OPTIONAL value, so the id has to be JOINED to it ({id}); its own help says
     # `copilot --resume=<session-id>`. It also takes --session-id=<uuid> for a NEW session, which is
     # how a pane names its conversation up front rather than learning it later (agents.ASSIGN_ARGS).

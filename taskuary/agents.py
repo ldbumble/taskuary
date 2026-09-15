@@ -383,7 +383,10 @@ def _cli_name(cmd: str) -> str:
 # takes it as the next argument. The joined form is not decoration: copilot's --resume takes an
 # OPTIONAL value, which a space-separated id is not read as. Verified 2026-09-15 from each CLI's
 # own --help on this machine; a CLI not named here resumes only if its profile says how.
-RESUME_ARGS = {'claude': ['--resume', '{id}'], 'codex': ['resume', '{id}'], 'copilot': ['--resume={id}']}
+RESUME_ARGS = {'claude': ['--resume', '{id}'], 'codex': ['resume', '{id}'], 'copilot': ['--resume={id}'],
+               # gemini and cursor were read from their docs, not from a machine that ran them:
+               # each files its conversation and says nothing (sessionfiles.SOURCES finds it).
+               'gemini': ['--resume', '{id}'], 'cursor-agent': ['--resume={id}']}
 # ...and the two that let the CALLER name a NEW conversation, which beats learning one afterwards:
 # the id exists before the CLI's first byte, so a pane killed in its first second is still
 # resumable and nothing has to be guessed from a working directory (hooks.py) or a log (witness).

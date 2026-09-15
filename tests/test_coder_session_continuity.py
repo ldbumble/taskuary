@@ -75,7 +75,9 @@ def test_the_newest_session_carrying_an_id_is_the_one_offered(tmp_path):
     ({'cmd': 'copilot'}, ['--resume=S']),
     ({'cmd': 'mycli', 'resume_args': ['--continue']}, ['--continue', 'S']),
     ({'cmd': 'mycli', 'resume_args': ['--pick={id}', '--go']}, ['--pick=S', '--go']),
-    ({'cmd': 'gemini'}, []),
+    ({'cmd': 'gemini'}, ['--resume', 'S']),
+    ({'cmd': 'cursor-agent'}, ['--resume=S']),
+    ({'cmd': 'muse'}, []),          # nothing verified for it yet, so it is offered nothing
 ])
 def test_each_backend_spells_resume_in_its_own_words(profile, expected):
     assert agents.resume_argv(profile, 'S') == expected

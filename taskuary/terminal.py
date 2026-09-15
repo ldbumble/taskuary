@@ -804,6 +804,11 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     if agent and task_id and 'codex' in os.path.basename(str(argv[0])).lower():
         from .witness import RolloutTail
         RolloutTail(t).start()
+    # ...and the CLIs that neither take an id nor stream one: watch for the file they write
+    if agent and task_id and not assigned:
+        from . import sessionfiles
+        cli = cli_of(argv)
+        if sessionfiles.watches(cli): sessionfiles.SessionWatch(t, cli).start()
     if seed:
         if extra: t.seeded, t.accepted = seed, True   # the CLI submits it itself; kept so harvest drops the echo
         else: t.seed(seed)               # no prompt argument on this CLI: type it in, verified

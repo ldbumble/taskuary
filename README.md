@@ -33,7 +33,7 @@ numbers through the real app, using fictional demo data.
 Mail, chats, issue trackers, alerts, and reports land on one Timeline. See what arrived,
 what became a task, and what needs you without opening every system in turn.
 
-![A close-up of the Timeline, with Ruth's vendor spend request alongside incoming mail, chats, and reports.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline.png)
+![An annotated Timeline: each item is labelled Email, Teams, WhatsApp, GitHub, SQL report, Assistant, Daily digest, or Calendar.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline.png?v=source-labels)
 
 ### 2. Turn incoming work into tasks
 
@@ -93,6 +93,39 @@ The Board's **Live handoffs** show what agents are working on, what is blocked, 
 An agent leaves a note; the next one reads it before picking up the work.
 
 ![Live handoff notes on the agent wall, showing progress, shared context, and who has read each note.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/09-handoffs.png)
+
+### Memory that learns how you work
+
+Every draft you edit and task you reclassify gives Taskuary evidence about your preferences.
+Repeated patterns become lessons in **LEARNED.md**: how you write, what you own, and what
+deserves a task. For example, repeatedly moving the numbers to the top of a reply can teach
+it to lead with the total next time.
+
+Open **Docs → LEARNED.md** to read, edit, or delete those lessons. Your written instructions
+in `SOUL.md` take precedence.
+
+![LEARNED.md open in the document editor, with evidence-backed preferences, hypotheses still being tested, and proposed rules awaiting the owner.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/11-learned-memory.png)
+
+<details>
+<summary>Technical details: how LEARNED.md becomes memory</summary>
+
+- **Learn from a correction.** A model call turns an explicit correction into a hypothesis.
+  Batched reflection compares multiple decisions; untouched approvals contribute here.
+- **Keep the evidence.** Each machine-written lesson carries `s` (strength), `ev` (evidence
+  IDs), and `seen` (last supporting date). A stable `k` identifies it across rewrites.
+- **Promote supported patterns.** A new hypothesis starts at strength 2. Reflection is
+  instructed to promote it at 4 or more, with at least three episodes across two people or
+  threads. Contradictions weaken it; stale hypotheses also decay across reflection cycles.
+- **Use active lessons.** The prompt builder excludes the Hypotheses, Proposed rules, and
+  raw Verdicts sections. Active lessons inform triage, drafts, and agent context.
+- **Keep the owner in charge.** Inferred rules that hide or file work wait in Proposed
+  rules. Two matching explicit owner verdicts can already supply that authorization.
+  Untagged lines you write are preserved, and learning can be disabled in Settings.
+
+See [Learning from your decisions](docs/product-guide.md#learning-from-your-decisions),
+or the implementation in [learn.py](taskuary/learn.py) and [learnedgraph.py](taskuary/learnedgraph.py).
+
+</details>
 
 ### What leaves your machine
 

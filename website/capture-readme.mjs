@@ -13,6 +13,36 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const scratch = path.join(root, '.codex-tmp/readme');
 await mkdir(scratch, { recursive: true });
 const fixture = JSON.parse(await readFile(path.join(root, 'website/src/demoFixtures.json'), 'utf8'));
+const learned = `# LEARNED.md — how Dana works
+
+Preferences learned from corrections, with evidence attached.
+Edit or delete any line. SOUL.md always takes precedence.
+
+## Voice & style
+- Lead with the number, then explain the change.
+  [s:5 | ev: rv12,rv15,rv31 | seen: 2026-09-03]
+- Keep replies brief; leave out the long greeting.
+  [s:4 | ev: rv18,rv22,rv34 | seen: 2026-09-03]
+
+## Role & responsibilities
+- Dana reviews vendor spend before the operations meeting.
+  [s:4 | ev: mem8,mem11,mem19 | seen: 2026-09-03]
+
+## Hypotheses — still being tested
+<!-- hypotheses:start -->
+- Include a category breakdown when comparing monthly spend.
+  [s:2 | ev: rv35 | seen: 2026-09-03]
+<!-- hypotheses:end -->
+
+## Proposed rules — your call
+<!-- proposed:start -->
+- File routine vendor maintenance notices as FYI.
+  [s:4 | ev: rv9,rv17,rv28 | seen: 2026-09-03]
+<!-- proposed:end -->
+`.replace(/\n  \[/g, ' [');
+// Authored sample memory; only the capture fixture receives these illustrative lessons.
+fixture['/api/doc'].learned.content = learned;
+fixture['/api/doc'].learned.rendered = learned;
 fixture['/api/tasks/detail'][17].comments = [];
 fixture['/api/tasks/detail'][17].transcript = null;
 fixture['/api/calendar/today'] = { date: '2026-09-03', now: '10:24', errors: [], events: [
@@ -84,16 +114,57 @@ const shot = async name => {
   await writeFile(path.join(scratch, name + '.txt'), content);
   console.log('Captured ' + name);
 };
+const captureTimeline = async () => {
+  await click('timeline', 'div');
+  await page.evaluate(rows => {
+    document.querySelector('[data-tq-timeline-stage]').parentElement.style.gridTemplateColumns = '720px minmax(0,1fr)';
+    const names = {email:'Email',teams:'Teams',github:'GitHub',whatsapp:'WhatsApp',assistant:'Assistant'};
+    for (const row of rows) {
+      const node = document.querySelector(`[data-processing-item="readme-${row.MessageId}"]`);
+      if (!node) continue;
+      const label = row.Channel === 'report' ? (row.MessageId === 939 ? 'Daily digest' : 'SQL report') : names[row.Channel] || row.Channel;
+      const clock = node.firstElementChild;
+      clock.dataset.readmeOriginal = clock.innerHTML;
+      clock.textContent = label;
+      Object.assign(clock.style,{fontFamily:'Segoe UI,sans-serif',fontSize:'11px',fontWeight:'700',color:row.Channel==='report'?'#89642d':'#426579',letterSpacing:'-.2px',paddingLeft:'0',paddingRight:'8px'});
+    }
+    // Calendar rows precede the message rows and have no processing item id.
+    for (const icon of document.querySelectorAll('[data-testid="EventIcon"]')) {
+      const row = icon.closest('[data-tq-timeline-stage]') ? null : icon.parentElement.parentElement.parentElement;
+      if (row?.firstElementChild && /^\d/.test(row.firstElementChild.textContent)) {
+        row.firstElementChild.dataset.readmeOriginal = row.firstElementChild.innerHTML;
+        row.firstElementChild.textContent='Calendar';
+        Object.assign(row.firstElementChild.style,{fontFamily:'Segoe UI,sans-serif',fontSize:'11px',fontWeight:'700',color:'#89642d'});
+      }
+    }
+  },timelineRows);
+  await shot('timeline');
+  await page.evaluate(() => {
+    document.querySelectorAll('[data-readme-original]').forEach(e=>{e.innerHTML=e.dataset.readmeOriginal;e.removeAttribute('style');delete e.dataset.readmeOriginal;});
+    document.querySelector('[data-tq-timeline-stage]').parentElement.style.gridTemplateColumns='';
+  });
+};
+const captureLearned = async () => {
+  await nav('Docs'); await click('LEARNED.md','p,span,div');
+  await page.waitForFunction(()=>[...document.querySelectorAll('textarea')].some(e=>e.value.includes('# LEARNED.md')));
+  await page.setViewport({width:1200,height:1160,deviceScaleFactor:2});
+  await page.evaluate(()=>{
+    const editor=[...document.querySelectorAll('textarea')].find(e=>e.value.includes('# LEARNED.md'));
+    editor.style.fontSize='14px'; editor.style.lineHeight='1.55';
+  });
+  await shot('learned');
+  await page.setViewport({width:1200,height:1000,deviceScaleFactor:2});
+};
 try {
   await page.goto(origin + '/?workflow=numbers', { waitUntil: 'networkidle0', timeout: 120000 });
   await page.evaluate(() => document.fonts.ready);
   await page.evaluate(() => [...document.querySelectorAll('button')].find(e => e.textContent.trim() === 'Put it away')?.click());
   await delay(1000);
+  if (process.argv.includes('--memory-update')) {
+    await captureTimeline(); await captureLearned();
+  } else {
   if (!process.argv.includes('--extras')) {
-  await click('timeline', 'div');
-  await page.evaluate(() => { document.querySelector('[data-tq-timeline-stage]').parentElement.style.gridTemplateColumns = '720px minmax(0,1fr)'; });
-  await shot('timeline');
-  await page.evaluate(() => { document.querySelector('[data-tq-timeline-stage]').parentElement.style.gridTemplateColumns = ''; });
+  await captureTimeline();
   await click('work', 'div');
   await click('Walk me through my tasks');
   await page.waitForFunction(() => document.body.innerText.includes('Open TQ-0018'));
@@ -133,6 +204,8 @@ try {
   await shot('cli');
   await nav('Hub'); await delay(800); await click('2 comments'); await shot('hub');
   await nav('Board'); await click('Live handoffs', 'div'); await shot('handoffs');
+  await captureLearned();
+  }
   assert.deepEqual(errors, []);
 } catch (error) {
   await shot('failure');

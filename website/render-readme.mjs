@@ -11,7 +11,7 @@ const scratch = path.join(root, '.codex-tmp/readme');
 const out = path.join(root, 'docs/readme');
 await mkdir(out, { recursive: true });
 const shots = [
-  ['01-timeline','timeline','Everything lands in one Timeline.',[14,61,720,626],'01 / ARRIVE'],
+  ['01-timeline','timeline','Everything lands in one Timeline.',[14,61,720,730],'01 / ARRIVE'],
   ['02-task','task','A request becomes a task.',[410,70,776,523],'02 / ORGANIZE'],
   ['03-agent','agent','The agent does the work.',[426,255,760,675],'03 / WORK'],
   ['04-review','review','The last word is yours.',[200,125,800,525],'04 / APPROVE'],
@@ -20,12 +20,14 @@ const shots = [
   ['07-coding-clis','cli','Your tools. Your choice.',[110,65,980,440],'KEY FEATURE / CODING CLIS'],
   ['08-hub','hub','Good discoveries stay useful.',[250,65,936,514],'KEY FEATURE / SHARED KNOWLEDGE'],
   ['09-handoffs','handoffs','Leave the next agent a head start.',[210,145,780,490],'KEY FEATURE / LIVE HANDOFFS'],
+  ['11-learned-memory','learned','Memory you can read and change.',[338,121,848,625],'KEY FEATURE / LEARNED.MD'],
 ];
 const browser = await launch();
 const page = await browser.newPage();
 const escape = text => text.replaceAll('&','&amp;').replaceAll('<','&lt;');
 try {
   for (const [name,source,title,clip,kicker] of shots) {
+    if (process.argv.includes('--memory-update') && !['timeline','learned'].includes(source)) continue;
     const data = (await readFile(path.join(scratch,source+'.png'))).toString('base64');
     const [x,y,w,h] = clip, scale = 1120/w, cropH = Math.round(h*scale);
     const height = cropH + 202;

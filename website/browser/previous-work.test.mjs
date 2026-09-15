@@ -37,7 +37,7 @@ test('Previous work shows saved recaps and only resumes after a click', { timeou
   assert.match(await page.$eval(shelf, (el) => el.innerText), /August figures collected/);
   assert.deepEqual(resumed, [], 'Loading the welcome card never starts an agent');
   const click = (text) => page.evaluate(({ shelf, text }) => [...document.querySelectorAll(`${shelf} button`)].find((b) => b.textContent === text).click(), { shelf, text });
-  await click('Resume');
+  await click('Continue');
   await page.waitForFunction(() => document.body.innerText.includes('Connect an AI provider to resume'));
   assert.equal(resumed.length, 1);
   await mkdir('../.codex-tmp', { recursive: true });
@@ -47,7 +47,7 @@ test('Previous work shows saved recaps and only resumes after a click', { timeou
   assert.deepEqual(pulled, ['review:21']);
   assert.equal(resumed.length, 1, 'Review does not start a session');
   fail = false;
-  await click('Resume');
+  await click('Continue');
   await page.waitForFunction(() => ![...document.querySelectorAll('[aria-label="Continue previous work"] button')].some((b) => b.disabled));
   await page.waitForFunction(() => document.body.innerText.split('The saved draft is ready for review.').length >= 3);
   assert.equal(resumed.length, 2);

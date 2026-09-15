@@ -131,8 +131,9 @@ or the implementation in [learn.py](taskuary/learn.py) and [learnedgraph.py](tas
 
 ![Task context passes through a credential check before reaching the chosen AI provider or CLI. Original mail stays unchanged.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/10-prompt-privacy.svg)
 
-Taskuary runs locally. The one thing that goes out is the prompt—whatever your AI provider or
-coding CLI needs to do the work you asked for.
+Taskuary runs locally. With a hosted AI provider or coding CLI, the prompt contains the context
+needed to do the work you asked for. **Use a model running on your machine, and those AI prompts
+stay local too.**
 
 Credentials are taken out of that prompt first. If a colleague mails an API key, a connection
 string, or a private key, it is replaced with a labelled placeholder (`[redacted:aws-key]`) at

@@ -22,6 +22,26 @@ from .categories import category_of, team_domains_of
 from .processing_order import feed_band
 
 
+def _preview(body, n: int) -> str:
+    """What the SENDER wrote, cut to n - not the wrapper it arrived in.
+
+    Every mail from outside the company opens with a security banner, so the Timeline's Message step
+    read "This email was sent from outside of MFA. ** Do not click links..." on every one of them and
+    never reached the message: the owner was looking at a CI failure whose summary said nothing about
+    CI (2026-09-15). triage.strip_boilerplate is already the app's one answer to this - assistant.py
+    imports the same pattern - so this reuses it rather than inventing a second rule.
+
+    Only the head of the body is scanned: a banner sits at the top, and running the stripper over
+    every full body would put that work on every row of a 400-row feed. Classification is deliberately
+    untouched - category_of re-reads the raw body below, because "unsubscribe" in a footer is how a
+    promo is recognised.
+    """
+    from .triage import strip_boilerplate
+    text = str(body or '')
+    if not text: return ''
+    return (strip_boilerplate(text[:n * 4]) or text)[:n]
+
+
 def idea_lane(idea: dict) -> str:
     """An idea's lane from its own triage - the same rule the unread pile applies (processing_unread.card_for)."""
     try: action = json.loads(idea.get('ActionJson') or '{}')
@@ -207,7 +227,7 @@ def message_row(message, item, threads, now, *, full=False):
     row = {key: message.get(key) for key in (
         'MessageId', 'Channel', 'SourceName', 'Subject', 'FromName', 'FromEmail', 'SentAt',
         'ConversationId', 'SourceLink', 'TaskId', 'Direction')}
-    row.update(IngestedAt=message.get('CreatedAt'), Preview=(message.get('BodyText') or '')[:4000 if full else 400],
+    row.update(IngestedAt=message.get('CreatedAt'), Preview=_preview(message.get('BodyText'), 4000 if full else 400),
                MsgStatus=message.get('Status'), Title=task.get('Title'), TaskStatus=task.get('Status'), Assignee=task.get('Assignee'),
                Priority=task.get('Priority'), TaskKind=task.get('Kind'), TaskTags=task.get('Tags'),
                NeedsYou=int(needs), ChainSize=sum(m.get('Status') not in {'context', 'history'}

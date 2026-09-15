@@ -1969,7 +1969,7 @@ const PanelLabel = ({ children }) => (
 //
 // A step with children cannot be a <button>: a button may not contain a textbox or another
 // button. So it becomes a row whose HEADER is the button and whose body is yours.
-const StoryTimelineStep = ({ title, status, summary, bullets, onOpen, first, last, state = "idle", children }) => {
+const StoryTimelineStep = ({ title, status, summary, bullets, lines = 2, onOpen, first, last, state = "idle", children }) => {
   const dot = state === "current" ? "#c7a258" : state === "done" ? "#718f74" : "#cfc8bc";
   const rail = (
     <Box sx={{ alignSelf: "stretch", position: "relative" }}>
@@ -1994,20 +1994,24 @@ const StoryTimelineStep = ({ title, status, summary, bullets, onOpen, first, las
           <Typography sx={{ ...mono, color: state === "idle" ? FAINT : dot, fontSize: 9.5,
             fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{status}</Typography>
         </Box>
-        {summary && <Typography sx={{ color: DIM, fontSize: 11.5, lineHeight: 1.38, overflow: "hidden",
-          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{summary}</Typography>}
+        {/* two lines is right for a step that only has a verdict to report. The MESSAGE step is the
+            one you actually read - at two lines it showed a sentence and a half of a mail and stopped,
+            with the rest of the pane empty below it (the owner, 2026-09-15: "just make the message
+            section bigger no?"), so it asks for room and the others do not. */}
+        {summary && <Typography sx={{ color: DIM, fontSize: 11.5, lineHeight: 1.45, overflow: "hidden",
+          whiteSpace: "pre-wrap", display: "-webkit-box", WebkitLineClamp: lines, WebkitBoxOrient: "vertical" }}>{summary}</Typography>}
         {/* what the body listed, still a list. A few lines only - the step is a summary, and the
             whole of it is one click away on the tab this row opens. */}
         {!!bullets?.length && (
           <Box sx={{ mt: 0.3 }}>
-            {bullets.slice(0, 3).map((line, i) => (
+            {bullets.slice(0, 6).map((line, i) => (
               <Box key={i} sx={{ display: "flex", gap: 0.6, color: DIM, fontSize: 11, lineHeight: 1.45 }}>
                 <Box component="span" sx={{ color: FAINT, flexShrink: 0 }}>·</Box>
                 <Box component="span" sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{line}</Box>
               </Box>
             ))}
-            {bullets.length > 3 && (
-              <Box sx={{ color: FAINT, fontSize: 10.5, mt: 0.15 }}>+{bullets.length - 3} more</Box>
+            {bullets.length > 6 && (
+              <Box sx={{ color: FAINT, fontSize: 10.5, mt: 0.15 }}>+{bullets.length - 6} more</Box>
             )}
           </Box>
         )}
@@ -2401,7 +2405,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
                   px: 0.75, pt: 0.45, pb: 0.75 }}>
                   <StoryTimelineStep title="Message" first state="done"
                     status={(detail?.messages || []).length > 1 ? `${detail.messages.length} messages` : "received"}
-                    summary={messageBody.lead} bullets={messageBody.bullets}
+                    summary={messageBody.lead} bullets={messageBody.bullets} lines={10}
                     onOpen={() => setTab("msg")} />
                   <StoryTimelineStep title="Triage" status={triageStatus} summary={roadLine}
                     state={failedTriage ? "current" : triageStatus !== "not routed" ? "done" : "idle"}

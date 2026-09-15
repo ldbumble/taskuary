@@ -32,6 +32,8 @@ os.environ.update({
     'APPDATA': str(_USER_HOME / 'AppData' / 'Roaming'),
     'LOCALAPPDATA': str(_USER_HOME / 'AppData' / 'Local'),
     'CODEX_HOME': str(_USER_HOME / '.codex'),
+    'QWEN_HOME': str(_USER_HOME / '.qwen'),
+    'KIMI_CODE_HOME': str(_USER_HOME / '.kimi-code'),
     'CLAUDE_CONFIG_DIR': str(_USER_HOME / '.claude'),
     'AGENT_BROWSER_HOME': str(_USER_HOME / '.agent-browser'),
     'TASKUARY_HOST': '127.0.0.1', 'TASKUARY_PORT': '0',

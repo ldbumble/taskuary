@@ -50,6 +50,19 @@ local-model configuration, and native ACP support.
 
 ## Roles and sessions
 
+Taskuary's model picker includes provider-specific suggestions. Qwen reads model IDs
+for the active protocol from `QWEN_HOME/settings.json` (normally `~/.qwen/settings.json`);
+its OAuth choice is `coder-model`. Kimi reads aliases from
+`KIMI_CODE_HOME/config.toml` (normally `~/.kimi-code/config.toml`), with its documented
+`/login` aliases as the fallback. Those files are re-read when the picker loads.
+OpenCode suggestions use exact `provider/model` IDs from its provider catalog;
+connect the corresponding provider before selecting one. A blank model still keeps
+the CLI's own default. Model choices never change your credentials or sign-in method.
+
+Identifier references: [Qwen model providers](https://qwenlm.github.io/qwen-code-docs/en/users/configuration/model-providers/),
+[Kimi model aliases](https://moonshotai.github.io/kimi-code/en/configuration/config-files#models),
+and [OpenCode models](https://opencode.ai/docs/cli/#models).
+
 - **OpenCode and Kimi:** coding tasks and general-agent tasks with tools enabled.
   Taskuary refuses to use these presets for message triage or read-only reports,
   because a per-run restriction on their inherited tools has not been verified.

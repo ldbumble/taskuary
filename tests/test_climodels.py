@@ -63,6 +63,56 @@ GPT-5.6 Sol (gpt-5.6-sol)
             missing = [row['name'] for row in clis.KNOWN if not climodels.catalog(row['name'])['choices']]
         self.assertEqual(missing, [])
 
+    def test_chinese_cli_fallbacks_use_their_own_identifier_formats(self):
+        with mock.patch.object(climodels, '_configured_models', return_value=([], {}, '')):
+            self.assertEqual(climodels.catalog('qwen')['choices'], ['coder-model'])
+            self.assertIn('kimi-code/kimi-for-coding', climodels.catalog('kimi')['choices'])
+        self.assertIn('deepseek/deepseek-v4-pro', climodels.catalog('opencode')['choices'])
+        self.assertIn('minimax/MiniMax-M3', climodels.catalog('opencode')['choices'])
+        for name in ('qwen', 'kimi', 'opencode'):
+            for model in climodels.STATIC[name]:
+                self.assertTrue(model['id'])
+                self.assertEqual(model['efforts'], [])  # do not send Codex's -c to another CLI
+
+    def test_qwen_picker_reads_the_active_protocols_configured_ids(self):
+        data = {'security': {'auth': {'selectedType': 'openai'}},
+                'model': {'name': 'local-coder'}, 'modelProviders': {
+                    'openai': [{'id': 'local-coder', 'name': 'Local coder', 'apiKey': 'private-key'}],
+                    'anthropic': [{'id': 'different-provider-model'}]}}
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict('os.environ', {'QWEN_HOME': d}):
+            Path(d, 'settings.json').write_text(json.dumps(data), encoding='utf-8')
+            cat = climodels.catalog('qwen')
+        self.assertEqual(cat['choices'], ['local-coder'])
+        self.assertEqual(cat['current'], {'model': 'local-coder'})
+        self.assertEqual(cat['models'][0]['label'], 'Local coder')
+        self.assertNotIn('private-key', json.dumps(cat))
+
+    def test_qwen_oauth_does_not_offer_ids_from_an_old_api_configuration(self):
+        data = {'security': {'auth': {'selectedType': 'qwen-oauth'}}, 'model': {'name': 'old-api-model'}}
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict('os.environ', {'QWEN_HOME': d}):
+            Path(d, 'settings.json').write_text(json.dumps(data), encoding='utf-8')
+            self.assertEqual(climodels.catalog('qwen')['choices'], ['coder-model'])
+
+    def test_kimi_picker_uses_aliases_and_updates_after_login_without_restart(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict('os.environ', {'KIMI_CODE_HOME': d}):
+            self.assertIn('kimi-code/k3', climodels.catalog('kimi')['choices'])
+            Path(d, 'config.toml').write_text(
+                'default_model = "my-coder"\n[models.my-coder]\nprovider = "local"\n'
+                'model = "raw-api-id"\ndisplay_name = "My coder"\n'
+                '[providers.local]\napi_key = "private-key"\n', encoding='utf-8')
+            cat = climodels.catalog('kimi')
+        self.assertEqual(cat['choices'], ['my-coder'])
+        self.assertEqual(cat['current'], {'model': 'my-coder'})
+        self.assertNotIn('raw-api-id', json.dumps(cat))
+        self.assertNotIn('private-key', json.dumps(cat))
+
+    def test_unreadable_or_malformed_cli_config_keeps_documented_fallbacks(self):
+        for name, env, filename in [('qwen', 'QWEN_HOME', 'settings.json'), ('kimi', 'KIMI_CODE_HOME', 'config.toml')]:
+            with tempfile.TemporaryDirectory() as d, mock.patch.dict('os.environ', {env: d}):
+                Path(d, filename).write_text('invalid{', encoding='utf-8')
+                cat = climodels.catalog(name)
+                self.assertEqual(cat['models'], climodels.STATIC[name])
+
     def test_a_model_at_effort_pick_becomes_model_plus_reasoning_flag(self):
         s = MemoryStore()
         s.upsert_agent('codex', 'coding', 'cli', json.dumps({'cmd': 'codex', 'args': ['exec'], 'light_model': 'gpt-5.4-mini@low'}))

@@ -10,10 +10,30 @@ agents turn the effort into codex's -c model_reasoning_effort=<effort>.
 import json, os, re, shutil, subprocess
 from functools import lru_cache
 from pathlib import Path
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
 
 STATIC = {'claude': [{'id': m, 'label': m, 'desc': '', 'efforts': [], 'default_effort': ''}
                      for m in ('opus', 'sonnet', 'haiku', 'claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5')],
           'gemini': [{'id': m, 'label': m, 'desc': '', 'efforts': [], 'default_effort': ''} for m in ('gemini-2.5-pro', 'gemini-2.5-flash')],
+          # Verified against Qwen Code 0.23.4's QWEN_OAUTH_MODELS. API-provider
+          # configurations replace this alias with their own model ids below.
+          'qwen': [{'id': 'coder-model', 'label': 'Qwen OAuth coding model',
+                    'desc': 'Requires Qwen OAuth sign-in', 'efforts': [], 'default_effort': ''}],
+          # OpenCode 1.18.31's provider catalog uses provider/model, including case.
+          # These are suggestions, not a change to the owner's selected provider.
+          'opencode': [{'id': m, 'label': m, 'desc': 'Connect this provider in OpenCode first',
+                        'efforts': [], 'default_effort': ''} for m in (
+                            'deepseek/deepseek-v4-pro', 'deepseek/deepseek-v4-flash',
+                            'zai/glm-5.3', 'zhipuai/glm-5.3',
+                            'minimax/MiniMax-M3', 'minimax-cn/MiniMax-M3')],
+          # Kimi Code 0.43.1 --model takes a CONFIG ALIAS. /login provisions
+          # these aliases; customized installations use their config.toml below.
+          'kimi': [{'id': m, 'label': m, 'desc': 'Provisioned by Kimi /login',
+                    'efforts': [], 'default_effort': ''} for m in (
+                        'kimi-code/kimi-for-coding', 'kimi-code/k3', 'kimi-code/kimi-for-coding-highspeed')],
           # Cursor's available set is plan-dependent. These are the CLI's documented portable
           # choices; `auto` remains valid as its account-aware router when a named model is not.
           'cursor-agent': [{'id': m, 'label': m, 'desc': '', 'efforts': [], 'default_effort': ''}
@@ -137,6 +157,35 @@ def codex_current() -> dict:
     return {k: v for k, v in (('model', m and m.group(1)), ('effort', e and e.group(1))) if v}
 
 
+def _configured_models(cli: str) -> tuple:
+    """Read only model identifiers/labels, never return provider keys or endpoints.
+
+    Re-read on each request so finishing /login or changing a model needs no restart.
+    These are user-level suggestions; a project or per-run override can still win.
+    """
+    try:
+        if cli == 'kimi':
+            path = Path(os.getenv('KIMI_CODE_HOME') or Path.home() / '.kimi-code') / 'config.toml'
+            data = tomllib.loads(path.read_text(encoding='utf-8'))
+            entries = data.get('models') or {}
+            ids = [alias for alias, m in entries.items() if isinstance(m, dict) and m.get('model') and m.get('provider')]
+            labels = {alias: entries[alias].get('display_name') for alias in ids}
+            current = data.get('default_model')
+        else:
+            path = Path(os.getenv('QWEN_HOME') or Path.home() / '.qwen') / 'settings.json'
+            data = json.loads(path.read_text(encoding='utf-8'))
+            auth = data.get('security', {}).get('auth', {}).get('selectedType')
+            if auth == 'qwen-oauth': return [], {}, ''
+            entries = (data.get('modelProviders') or {}).get(auth, [])
+            ids = [m['id'] for m in entries if isinstance(m, dict) and isinstance(m.get('id'), str)]
+            labels = {m['id']: m.get('name') for m in entries if isinstance(m, dict) and m.get('id') in ids}
+            current = (data.get('model') or {}).get('name')
+            if current and current not in ids: ids.append(current)
+        return _items(ids, labels), {'model': current} if current else {}, f'{cli} {path.name}'
+    except (OSError, ValueError, TypeError, AttributeError):
+        return [], {}, ''
+
+
 def catalog(cli: str) -> dict:
     """{models, current, choices} for one CLI. `choices` is the flat id list older pickers use."""
     if cli == 'codex':
@@ -150,6 +199,11 @@ def catalog(cli: str) -> dict:
     if cli == 'devin':
         models = devin_models()
         return {'models': models, 'current': {}, 'source': 'devin models list' if models else 'unavailable',
+                'choices': [m['id'] for m in models]}
+    if cli in ('qwen', 'kimi'):
+        models, current, source = _configured_models(cli)
+        if not models: models, source = STATIC[cli], 'built-in'
+        return {'models': models, 'current': current, 'source': source or 'built-in',
                 'choices': [m['id'] for m in models]}
     models = STATIC.get(cli, [])
     return {'models': models, 'current': {}, 'source': 'built-in', 'choices': [m['id'] for m in models]}

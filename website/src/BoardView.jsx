@@ -103,7 +103,7 @@ const LiveTail = ({ run, chat, name }) => {
   if (chat) return <ChatTail run={run} name={name} />;
   // a session reports what the agent HOLDS (ui.WorkPane); the raw-tail pane below stays only for
   // a run with no witness at all
-  if (run.work) return <WorkPane run={run} />;
+  if (run.work || run.promptPending) return <WorkPane run={run} />;
   return (
   <Box sx={{ mt: 0.6, bgcolor: CATPPUCCIN.bg, border: `1px solid ${CATPPUCCIN.surface}`, borderRadius: 1.25, px: 0.85, py: 0.5 }}>
     <FileChips files={run.files} />

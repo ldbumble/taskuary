@@ -116,7 +116,7 @@ export default function StudioView({ onOpenTask, refresh = 0, active = true }) {
                 </Box>
                 <Typography noWrap sx={{ fontSize: 12.5, fontWeight: 650, color: INK, pt: 0.35 }}>{task.Title}</Typography>
                 <Typography sx={{ fontSize: 10.5, color, pt: 0.2 }}>{state.label}</Typography>
-                {liveRow?.work && (
+                {(liveRow?.work || liveRow?.promptPending) && (
                   <Box sx={{ pt: 0.5 }}>
                     <WorkLine work={liveRow.work} who={state.agent} waiting={liveRow.kind === "session" && isWaiting(liveRow)}
                       asking={liveRow.asking} startedAt={liveRow.StartedAt} promptPending={liveRow.promptPending} />

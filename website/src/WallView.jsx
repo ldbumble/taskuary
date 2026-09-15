@@ -265,7 +265,7 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
                       <Tooltip title={wrapError}><Typography noWrap sx={{ ...mono, fontSize: 10, color: ROLES.bad.ink }}>
                         could not finish · {wrapError}
                       </Typography></Tooltip>
-                    ) : (statusWork || waiting) ? (
+                    ) : (statusWork || waiting || l?.promptPending || s.promptPending) ? (
                       <WorkLine work={statusWork} who={who} waiting={waiting}
                         asking={l?.asking ?? s.asking} startedAt={l?.StartedAt || s.started}
                         promptPending={l?.promptPending ?? s.promptPending} />

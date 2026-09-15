@@ -52,6 +52,12 @@ Only the ones that speak ACP natively, verified against each vendor's own docume
 | codex | adapter only | `codex-acp` |
 | muse, devin | none | — |
 
+OpenCode (`opencode acp`) and Kimi Code (`kimi acp`) also offer native ACP, but
+Taskuary's presets currently use their headless CLI interfaces. Model selection and
+session behavior over ACP have not been verified for those integrations. See
+[Chinese-model coding CLIs](chinese-coding-clis.md#compatibility-evidence) for the
+paths tested with real binaries.
+
 For the four native ones, ACP is **the binary already installed, in another mode** — the Gemini
 docs: "In ACP mode, Gemini CLI listens for incoming JSON-RPC requests." Same process, same login,
 no new dependency and nothing new to authenticate.

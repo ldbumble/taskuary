@@ -49,6 +49,7 @@ SEED_ARGV = {
     'codex': lambda s: [s],
     'gemini': lambda s: ['-i', s],
     'qwen': lambda s: ['-i', s],
+    'opencode': lambda s: ['--prompt', s],
     'copilot': lambda s: ['--interactive', s],
     'devin': lambda s: ['--', s],
 }
@@ -560,7 +561,7 @@ def default_shell():
 # in an interactive session too - dropping them all took --dangerously-skip-permissions with
 # them, so an unattended session stopped at the first approval prompt instead of working.
 PIPE_FLAGS = {'-p', '--print'}
-PIPE_OPTS = {'--output-format', '--input-format'}
+PIPE_OPTS = {'--output-format', '--input-format', '--format'}
 # codex spells its pipe mode as a SUBCOMMAND, not a flag: `codex exec` is one prompt in, one
 # result out, and a session launched with it just runs headless and exits. Bare `codex` is
 # the TUI, so a leading exec is dropped the same way claude's -p is - and exec-only flags are
@@ -570,7 +571,7 @@ PIPE_OPTS = {'--output-format', '--input-format'}
 # asked for. 'never' and not 'on-failure' because current codex builds dropped on-failure
 # (verified against the CLI: possible values are untrusted, on-request, never) - and the truly
 # dangerous modes still only ever come from the profile the owner wrote.
-PIPE_SUBCOMMANDS = {'exec', 'e'}
+PIPE_SUBCOMMANDS = {'exec', 'e', 'run'}
 PIPE_TRANSLATE = {'--full-auto': ['--sandbox', 'workspace-write', '--ask-for-approval', 'never']}
 
 def interactive_args(args) -> list:

@@ -75,6 +75,16 @@ RECIPES = {
         {'how': 'npm', 'pkg': '@qwen-code/qwen-code'},
     ],
     'copilot': [{'how': 'npm', 'pkg': '@github/copilot'}],
+    'opencode': [
+        {'how': 'script', 'os': 'posix', 'cmd': ['bash', '-lc', 'curl -fsSL https://opencode.ai/install | bash']},
+        {'how': 'npm', 'pkg': 'opencode-ai'},
+    ],
+    'kimi': [
+        {'how': 'script', 'os': 'nt', 'cmd': ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+            '-Command', powershell_installer('https://code.kimi.com/kimi-code/install.ps1')]},
+        {'how': 'script', 'os': 'posix', 'cmd': ['bash', '-lc', 'curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash']},
+        {'how': 'npm', 'pkg': '@moonshot-ai/kimi-code'},
+    ],
     # cursor-agent IS on npm but ships no bin, so npm is not a road; its installer is bash-only
     'cursor': [{'how': 'script', 'os': 'posix', 'cmd': ['bash', '-lc', 'curl https://cursor.com/install -fsS | bash']}],
     # muse is a static binary behind a shell installer - no npm package, and no release archive
@@ -100,7 +110,7 @@ RECIPES = {
 
 # what to look for once an installer says it is done - the bin name, not the profile's nickname
 BINARY = {'claude': 'claude', 'codex': 'codex', 'gemini': 'gemini', 'copilot': 'copilot', 'cursor': 'cursor-agent',
-          'muse': 'muse', 'devin': 'devin', 'qwen': 'qwen'}
+          'muse': 'muse', 'devin': 'devin', 'qwen': 'qwen', 'opencode': 'opencode', 'kimi': 'kimi'}
 CMD2NAME = {v: k for k, v in BINARY.items()}       # cursor-agent -> cursor: the bin is not the recipe
 
 
@@ -130,6 +140,8 @@ UPDATES = {
     'codex': [{'how': 'self', 'args': ['update']}, {'how': 'npm', 'pkg': '@openai/codex@latest'}],
     'gemini': [{'how': 'npm', 'pkg': '@google/gemini-cli@latest'}],
     'qwen': [{'how': 'self', 'args': ['update']}],
+    'opencode': [{'how': 'self', 'args': ['upgrade']}],
+    'kimi': [{'how': 'self', 'args': ['upgrade']}],
     'copilot': [{'how': 'npm', 'pkg': '@github/copilot@latest'}],
 }
 
@@ -251,7 +263,8 @@ def find(name: str) -> str:
     found = which(cmd)
     if found: return found
     home = Path.home()
-    roots = [bin_dir(), home / '.local' / 'bin', home / 'bin']
+    roots = [bin_dir(), home / '.local' / 'bin', home / 'bin',
+             home / '.opencode' / 'bin', home / '.kimi-code' / 'bin']
     # devin's own scheme: %LOCALAPPDATA%\devin\cli\bin on Windows, which its installer puts on the
     # USER path - a path this long-running process will not see until it is restarted, so looking
     # there is the difference between "installed" and "the installer said yes and left nothing"

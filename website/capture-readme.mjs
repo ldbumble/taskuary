@@ -54,8 +54,12 @@ const digest = { ...fixture['/api/feed'].data.find(r => r.Channel === 'report'),
 fixture['/api/feed'].data.unshift(digest);
 fixture['/api/messages/one'][939] = digest;
 fixture['/api/cli/connections'] = { data: [
-  ...fixture['/api/cli/detect'].data.filter(c => ['claude', 'codex'].includes(c.name)).map(c => ({ ...c, configured: true, setup: c.name, config: { cmd: c.cmd, args: c.args, timeout: c.timeout } })),
-  ...[['qwen', 'Qwen Code'], ['copilot', 'GitHub Copilot']].map(([name,label]) => ({ name, label, installed: false, configured: false, installable: true, install: name, config: { cmd: name, args: [], timeout: 1500 } })),
+  ...fixture['/api/cli/detect'].data.filter(c => c.name === 'claude').map(c => ({ ...c, configured: true, setup: c.name, config: { cmd: c.cmd, args: c.args, timeout: c.timeout } })),
+  ...[
+    ['qwen', 'Qwen Code', ['--yolo', '--output-format', 'stream-json'], ''],
+    ['opencode', 'OpenCode (DeepSeek, GLM, MiniMax)', ['run', '--format', 'json', '--auto'], 'Use /connect to add a provider, then /models to choose it. Task execution only; choose another provider for triage and reports.'],
+    ['kimi', 'Kimi Code (Moonshot AI)', ['--output-format', 'stream-json'], 'Use /login to connect Kimi or Moonshot. Windows requires Git Bash. Task execution only; choose another provider for triage and reports.'],
+  ].map(([name,label,args,description]) => ({ name, label, description, installed: false, configured: false, installable: true, install: name, config: { cmd: name, args, timeout: 1500 } })),
 ] };
 fixture['/api/board/notes'].data.forEach(n => { if (n.Agent === 'codex') n.ReadBy = 'coder'; if (n.Agent === 'coder') n.ReadBy = 'codex'; });
 fixture['/api/hub'].data[0].comments = [

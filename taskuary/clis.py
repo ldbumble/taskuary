@@ -31,6 +31,16 @@ KNOWN = [
     {'name': 'qwen', 'cmd': 'qwen', 'label': 'Qwen Code',
      'args': ['--yolo', '--output-format', 'stream-json'],
      'resume_args': ['--resume'], 'acp': ['--acp'], 'timeout': 1500},
+    {'name': 'opencode', 'cmd': 'opencode', 'label': 'OpenCode (DeepSeek, GLM, MiniMax)',
+     'description': 'Use /connect to add a provider, then /models to choose it. Task execution only; choose another provider for triage and reports.',
+     'args': ['run', '--format', 'json', '--auto'],
+     'resume_args': ['--session'], 'timeout': 1500},
+    # Kimi Code 0.43.1 requires an explicit --prompt string; run_cli supplies it.
+    # Print mode already grants tools and rejects --auto/--yolo alongside --prompt.
+    {'name': 'kimi', 'cmd': 'kimi', 'label': 'Kimi Code (Moonshot AI)',
+     'description': 'Use /login to connect Kimi or Moonshot. Windows requires Git Bash. Task execution only; choose another provider for triage and reports.',
+     'args': ['--output-format', 'stream-json'],
+     'resume_args': ['--session'], 'timeout': 1500},
     {'name': 'cursor', 'cmd': 'cursor-agent', 'label': 'Cursor CLI',
      'args': ['-p', '--force', '--output-format', 'text'], 'resume_args': ['--resume={id}'],
      'acp': ['acp'], 'timeout': 1500},
@@ -127,14 +137,24 @@ def _base(cmd: str) -> str:
 
 def readonly_args(cmd: str, args: list) -> list:
     """`args` with the permission bypass removed and the CLI's own no-tools flags added."""
+    _require_restricted_mode(cmd)
     drop, add = READONLY.get(_base(cmd), ((), ()))
     return [a for a in args if a not in drop] + list(add)
 
 
 def report_read_args(cmd: str, args: list) -> list:
     """CLI arguments for retrieving report data without command, edit, write, or MCP access."""
+    _require_restricted_mode(cmd)
     drop, add = REPORT_READ.get(_base(cmd), ((), ()))
     return [a for a in args if a not in drop] + list(add)
+
+
+def _require_restricted_mode(cmd: str):
+    # These CLIs inherit project/user tools and approval rules. Until we have a verified
+    # per-run restriction, incoming mail must never launch their coding permissions.
+    if _base(cmd) in ('opencode', 'kimi'):
+        raise ValueError(f'{_base(cmd)} is supported for task execution, not triage or reports. '
+                         'Choose Qwen Code, Ollama, or an API provider for that role.')
 
 
 def preset_args(cmd: str) -> list:

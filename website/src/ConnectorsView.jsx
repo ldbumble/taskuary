@@ -1108,8 +1108,8 @@ export default function ConnectorsView() {
 
   const groups = [
     { title: "AI — agents & models", cards: [
-      { key: "agents", title: "AI CLI agents", desc: "Claude / Codex / Qwen Code / Gemini / Muse — bring your own coding CLI, resumable sessions. WHICH one is the default, and on which model, is Settings → Configuration → Triage & agents",
-        channel: "cli", haystack: "ai cli agents claude codex qwen 通义千问 gemini command args resume", go: () => setOpen({ kind: "agents" }) },
+      { key: "agents", title: "AI CLI agents", desc: "Claude / Codex / Qwen Code / OpenCode / Kimi / Gemini — connect a coding CLI. Choose the default and model in Settings → Configuration → Triage & agents",
+        channel: "cli", haystack: "ai cli agents claude codex qwen 通义千问 opencode deepseek 深度求索 kimi moonshot 月之暗面 glm 智谱 minimax gemini command args resume", go: () => setOpen({ kind: "agents" }) },
       ...channelCards(["anthropic", "openai", "azure_openai", "openrouter", "meta", "ollama"]),
       ...catalogCards("AI — agents & models"),
     ]},

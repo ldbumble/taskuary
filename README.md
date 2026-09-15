@@ -76,13 +76,15 @@ The day's meetings sit above the digest, so Ruth's request has a clear deadline:
 
 ### Use your coding CLI
 
-Connect Claude Code, Codex, Qwen Code, Gemini, Cursor, Copilot, Muse Code, or another CLI.
+Connect Claude Code, Codex, Qwen Code, OpenCode, Kimi Code, Gemini, Cursor, Copilot, Muse Code, or another CLI.
 Set up the connection once, then give your agents profiles with their own instructions.
 Follow their sessions, answer questions, and review the result from Taskuary.
 
 For Qwen Code, see the [setup and compatibility guide](docs/qwen-code.md).
+Use DeepSeek, GLM, or MiniMax through OpenCode, or connect Moonshot's Kimi Code:
+[setup steps and supported roles](docs/chinese-coding-clis.md).
 
-![AI CLI connections including Qwen Code, with installation, sign-in, and connection controls.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/07-coding-clis-qwen.png)
+![AI CLI connections for Claude, Qwen, OpenCode with DeepSeek, and Kimi Code.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/07-coding-clis-chinese.png)
 
 ### A shared Hub for what agents learn
 

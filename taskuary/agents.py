@@ -236,6 +236,8 @@ _LOGIN_HOW = {'claude': "run `claude` and type `/login`", 'copilot': "run `copil
               'codex': "run `codex login`", 'cursor': "run `cursor-agent login`",
               'gemini': "run `gemini` once and finish Google's sign-in",
               'qwen': "run `qwen` and use `/auth` to configure your model provider",
+              'opencode': "run `opencode` and use `/connect` to configure your model provider",
+              'kimi': "run `kimi` and use `/login` to configure Kimi or Moonshot",
               'muse': "run `muse` once and finish the browser sign-in at dev.meta.ai",
               'devin': "run `devin auth login` and finish the browser sign-in"}
 # Provider/plan exhaustion is different from an agent failing the work. Only this availability
@@ -387,7 +389,8 @@ def _cli_name(cmd: str) -> str:
 RESUME_ARGS = {'claude': ['--resume', '{id}'], 'codex': ['resume', '{id}'], 'copilot': ['--resume={id}'],
                # gemini and cursor were read from their docs, not from a machine that ran them:
                # each files its conversation and says nothing (sessionfiles.SOURCES finds it).
-               'gemini': ['--resume', '{id}'], 'qwen': ['--resume', '{id}'], 'cursor-agent': ['--resume={id}']}
+               'gemini': ['--resume', '{id}'], 'qwen': ['--resume', '{id}'], 'cursor-agent': ['--resume={id}'],
+               'opencode': ['--session', '{id}'], 'kimi': ['--session', '{id}']}
 # ...and the CLIs that let the CALLER name a NEW conversation, which beats learning one afterwards:
 # the id exists before the CLI's first byte, so a pane killed in its first second is still
 # resumable and nothing has to be guessed from a working directory (hooks.py) or a log (witness).
@@ -696,6 +699,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     if profile.get('acp') and profile.get('acp_ok'):
         return run_acp(profile, prompt, trace, resume=resume, cancel=cancel, extra_env=extra_env)
     name = profile.get('cmd', 'claude')
+    family = _cli_name(name)
     args = list(profile.get('args') or preset_args(name) or ['-p'])
     # Codex's normal exec output is human prose with no boundary between commands, searches,
     # edits and the final answer. JSONL is an exec-only presentation flag, so add it here (not
@@ -720,6 +724,9 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         if eff: cmd += ['-c', f'model_reasoning_effort={eff}']
     # Keep exec's existing sandbox/config flags, and resume the exact thread.
     if resume: cmd += resume_argv(profile, resume) + (['--json', '-'] if is_codex else [])
+    # Kimi's current CLI does not read its prompt from stdin. --prompt is print mode
+    # and requires a value; keep it out of the profile shared with the interactive pane.
+    if family == 'kimi': cmd += ['--prompt', prompt]
     cwd = profile.get('cwd')
     head0 = _git(cwd, 'rev-parse', 'HEAD')
     trace('prompt', 'prompt_sent_to_agent', prompt)
@@ -755,10 +762,13 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     # stdin feed on its own thread: writing a big prompt while the child is already
     # emitting output can deadlock both pipes otherwise
     def _feed():
-        try: p.stdin.write(prompt); p.stdin.close()
+        try:
+            if family != 'kimi': p.stdin.write(prompt)
+            p.stdin.close()
         except Exception: pass
     threading.Thread(target=_feed, daemon=True).start()
     raw, final, streamed_out, streamed_sid, open_tools = [], None, '', None, set()
+    stream_error, structured_stream = None, False
     try:
         for line in p.stdout:
             line = line.rstrip('\n')
@@ -766,6 +776,44 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
             raw.append(line)
             try: j = json.loads(line)
             except ValueError: trace('live', name, line[:400]); continue
+            if isinstance(j, dict) and family == 'opencode':
+                structured_stream = True
+                streamed_sid = j.get('sessionID') or streamed_sid
+                part = j.get('part') or {}
+                if j.get('type') == 'text':
+                    text = str(part.get('text') or '')
+                    streamed_out += text
+                    trace('progress', 'text', text)
+                    trace('live', name, text[:400])
+                elif j.get('type') == 'tool_use':
+                    state = part.get('state') or {}
+                    iid = part.get('callID') or part.get('id') or f'tool-{len(raw)}'
+                    if iid not in open_tools:
+                        trace('tool_call', part.get('tool') or 'tool', {'tool_call_id': iid, 'args': state.get('input') or {}})
+                        open_tools.add(iid)
+                    if state.get('status') in ('completed', 'error'):
+                        trace('tool_result', iid, {'result': state.get('output') or state.get('error') or '',
+                                                   'is_error': state.get('status') == 'error'})
+                elif j.get('type') == 'error':
+                    stream_error = json.dumps(j.get('error') or j, ensure_ascii=False)
+                continue
+            if isinstance(j, dict) and family == 'kimi':
+                structured_stream = True
+                if j.get('type') == 'session.resume_hint': streamed_sid = j.get('session_id') or streamed_sid
+                if j.get('role') == 'assistant':
+                    text = str(j.get('content') or '')
+                    if text:
+                        streamed_out = text
+                        trace('progress', 'text', text)
+                        trace('live', name, text[:400])
+                    for call in j.get('tool_calls') or []:
+                        fn = call.get('function') or {}
+                        try: inputs = json.loads(fn.get('arguments') or '{}')
+                        except (ValueError, TypeError): inputs = {'input': fn.get('arguments')}
+                        trace('tool_call', fn.get('name') or 'tool', {'tool_call_id': call.get('id'), 'args': inputs})
+                elif j.get('role') == 'tool':
+                    trace('tool_result', j.get('tool_call_id') or 'tool', {'result': j.get('content') or ''})
+                continue
             if isinstance(j, dict) and (j.get('type') == 'result' or ('result' in j and 'type' not in j)):
                 final = j; continue
             # Preserve the CLI's structured work for visual clients. The existing readable
@@ -824,8 +872,11 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         if _DENIED.search(hay) and not raw: raise RuntimeError(denied_msg(name, cmd[0] if cmd else '', said))
         if _NO_HOME.search(hay): raise RuntimeError(no_home_msg(_cli_name(name) or name))
         raise RuntimeError(f'{name} exit {p.returncode}: {why}')
+    # OpenCode can report provider errors in JSON while its process exits successfully.
+    if stream_error: raise RuntimeError(f'{name}: {redact.scrub(stream_error)[:500]}')
     if final is not None: out, sid = str(final.get('result') or '').strip(), final.get('session_id')
     elif streamed_out: out, sid = streamed_out, streamed_sid
+    elif structured_stream: out, sid = '', streamed_sid
     else: out, sid = parse_cli_json('\n'.join(raw))
     trace('output', name, out[-1000:])
     diff = ''

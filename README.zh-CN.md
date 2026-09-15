@@ -81,11 +81,16 @@ Taskuary 创建任务，保留原始请求，并关联负责处理的智能体�
 
 ### 使用你选择的编程 CLI
 
-支持 Qwen Code、Claude Code、Codex、Gemini、Cursor、Copilot、Muse Code、Devin，
+支持 Qwen Code、OpenCode、Kimi Code、Claude Code、Codex、Gemini、Cursor、Copilot、Muse Code、Devin，
 也支持其他能够从标准输入接收提示词的 CLI。配置连接后，为不同智能体设置职责和指令，
 在 Taskuary 中跟进会话、回答问题和审核结果。
 
-![编程 CLI 的连接卡片，包含安装、配置、测试和登录入口。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/07-coding-clis-qwen.png)
+通过 OpenCode 可使用 DeepSeek、GLM 或 MiniMax；Kimi Code 则提供 Moonshot 的编程 CLI。
+在 **Connections → AI CLI agents** 中安装，OpenCode 用 `/connect` 配置服务，Kimi 用 `/login` 登录。
+这两个预设用于执行任务；消息分拣和只读报告请选择 Qwen Code、Ollama 或 API 服务。
+详见[安装步骤和验证范围（英文）](docs/chinese-coding-clis.md)。
+
+![Claude、Qwen、OpenCode（支持 DeepSeek）和 Kimi Code 的连接卡片。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/07-coding-clis-chinese.png)
 
 ### 用 Hub 保留共享知识
 

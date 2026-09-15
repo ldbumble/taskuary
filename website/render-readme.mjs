@@ -17,7 +17,7 @@ const shots = [
   ['04-review','review','The last word is yours.',[200,125,800,525],'04 / APPROVE'],
   ['05-assistant','assistant','One conversation. One next step.',[528,61,658,635],'05 / YOUR ASSISTANT'],
   ['06-morning','digest','Your day, before it gets busy.',[528,61,658,638],'06 / MORNING BRIEF'],
-  ['07-coding-clis-qwen','cli','Your tools. Your choice.',[110,65,980,440],'KEY FEATURE / CODING CLIS'],
+  ['07-coding-clis-chinese','cli','Your tools. Your choice.',[110,65,980,500],'KEY FEATURE / CODING CLIS'],
   ['08-hub','hub','Good discoveries stay useful.',[250,65,936,514],'KEY FEATURE / SHARED KNOWLEDGE'],
   ['09-handoffs','handoffs','Leave the next agent a head start.',[210,145,780,490],'KEY FEATURE / LIVE HANDOFFS'],
   ['11-learned-memory','learned','Memory you can read and change.',[338,121,848,625],'KEY FEATURE / LEARNED.MD'],

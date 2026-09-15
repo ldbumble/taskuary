@@ -67,6 +67,7 @@ export const CliConnectionsPage = ({ onBack }) => {
               fontWeight: 700, "& .MuiChip-icon": { color: "inherit" } } : undefined} />
           {cli.configured && <Chip size="small" label="Configured" />}
         </Box>
+        {cli.description && <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>{cli.description}</Typography>}
         <Typography sx={{ ...mono, fontSize: 12, overflowWrap: "anywhere", mb: 1 }}>{cli.config.cmd} {(cli.config.args || []).join(" ")}</Typography>
         <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
           <Button size="small" onClick={() => edit(cli)}>{cli.configured ? "Edit command" : "Configure"}</Button>

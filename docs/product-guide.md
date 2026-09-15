@@ -348,10 +348,10 @@ related closed tasks so the agent starts with what Taskuary already knows.
 Open **Connections → AI CLI agents** to install, sign in to, and test your coding tools.
 Configure the connection once, then choose it when assigning or restarting an agent run.
 
-![AI CLI connections including Qwen Code, with installation, sign-in, and connection controls.](readme/07-coding-clis-qwen.png)
+![AI CLI connections for Claude, Qwen, OpenCode with DeepSeek, and Kimi Code.](readme/07-coding-clis-chinese.png)
 
 Every run can choose a configured CLI and, when supported, a model. Built-in presets cover
-Claude Code, Codex, Qwen Code, Gemini, Cursor, Copilot, and Muse Code (macOS/Linux/WSL2 only — Meta's
+Claude Code, Codex, Qwen Code, OpenCode, Kimi Code, Gemini, Cursor, Copilot, and Muse Code (macOS/Linux/WSL2 only — Meta's
 installer refuses Windows; the Meta Model API connector reaches Muse Spark there instead, though
 a Muse Code subscription covers only the CLI's own key and never a key you create yourself).
 Any CLI that accepts a prompt on stdin can
@@ -366,6 +366,11 @@ plain-text CLIs work as well.
 [Qwen Code setup](qwen-code.md) covers installing its standalone runtime, selecting a provider,
 and checking a task and its resumed session. Its structured output also supplies live progress
 and session IDs; general agents with tools can use its native ACP transport.
+
+[Chinese-model coding CLIs](chinese-coding-clis.md) walks through DeepSeek, GLM, and MiniMax
+via OpenCode, plus Moonshot's Kimi Code. Both include installation, sign-in, headless
+progress and session resume. Their presets support task execution; choose Qwen Code,
+Ollama, or an API provider for message triage and read-only reports.
 
 ## What leaves your machine
 

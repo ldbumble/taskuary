@@ -140,9 +140,22 @@ class ConnectionSetupTests(unittest.TestCase):
         say(s, f'here, use {slack_token} for slack', composer(sort={'kind': 'connection', 'provider': 'slack'}))
         dock = general.dock_task(s)[0]['TaskId']
         bodies = ' '.join((c.get('Body') or '') for c in general.chat_rows(s, dock))
-        self.assertNotIn(slack_token, bodies); self.assertIn('[redacted]', bodies)
+        self.assertNotIn(slack_token, bodies); self.assertIn('[redacted:slack-token]', bodies)
         concierge.remember_fact(s, f'the github token is {gh_token}')
         self.assertNotIn('ghp_', s.list_memories()[0]['Note'])
+
+    def test_a_commit_hash_typed_into_the_chat_is_not_mistaken_for_a_secret(self):
+        """The old chat scrub ended in a catch-all for any long hex string, and a git SHA is 40 of
+        them: "revert da8dae00..." came back as "revert [redacted]", which is unreadable to the
+        owner and useless to any agent that reads the turn back."""
+        s = store()
+        sha = 'da8dae0012ab34cd56ef7890abcdef1234567890'
+        say(s, f'please revert {sha} - it broke the census', composer(sort={'kind': 'investigate', 'provider': None, 'why': 'a revert'}))
+        dock = general.dock_task(s)[0]['TaskId']
+        bodies = ' '.join((c.get('Body') or '') for c in general.chat_rows(s, dock))
+        self.assertIn(sha, bodies)
+        concierge.remember_fact(s, f'the regression landed in {sha}')
+        self.assertIn(sha, s.list_memories()[0]['Note'])
 
     def test_digging_is_a_walk_through_proposal_and_no_ai_says_so(self):
         s = store()

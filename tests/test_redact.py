@@ -9,8 +9,8 @@ So the message row keeps the owner's mail intact (it is their inbox; a portal co
 vendor has to stay readable) and the scrub happens at the three doors a prompt can leave by.
 
 The one rule that is easy to get wrong: a git SHA is 40 hex characters. A catch-all
-"long hex string" pattern - which is how `concierge._SECRETISH` ends - blanks out every commit
-hash in a coder prompt. Entropy only counts when the line says it holds a secret.
+"long hex string" pattern blanks out every commit hash in a coder prompt - which is what the
+chat scrub did until it came here. Entropy only counts when the line says it holds a secret.
 """
 import unittest
 

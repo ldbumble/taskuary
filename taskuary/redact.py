@@ -17,9 +17,9 @@ write "I've rotated the key you sent" without ever seeing it; a bare hole makes 
 what is missing. `MARK` is what outbound checks for: a placeholder in a draft is a bug, not a send.
 
 Over-redaction is a bug too. A git SHA is 40 hex characters, so there is deliberately no
-catch-all "long hex string" rule here (that is how `concierge._SECRETISH` ends, and it would
-blank every commit hash in a coder prompt). A random-looking value is taken only when its own
-line says it is a secret.
+catch-all "long hex string" rule here. The chat scrub used to have one and it stored
+"revert da8dae00..." as "revert [redacted]"; `concierge.redact` now comes here instead. A
+random-looking value is taken only when its own line says it is a secret.
 """
 import re
 

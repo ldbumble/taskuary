@@ -200,7 +200,8 @@ async def token_gate(request: Request, call_next):
         return JSONResponse({'detail': 'this request came from another site. Taskuary answers its own '
                                        'pages only.'}, status_code=403)
     tok = cfg['server'].get('token')
-    if tok and request.url.path.startswith('/api') and request.headers.get('X-Taskuary-Token') not in (tok, cfg['server'].get('agent_token')):
+    presented = request.headers.get('X-Taskuary-Token')
+    if tok and request.url.path.startswith('/api') and not guard.token_matches(presented, tok, cfg['server'].get('agent_token')):
         # an <img src> cannot carry a header, so attachment READS take the token in the query
         # string - the same concession websockets already needed
         # ...and an OAuth callback is a redirect from the provider's site: no header can ride on it.

@@ -18,8 +18,9 @@ def test_demo_terminal_reconnect_replays_and_reaches_ready_without_closing_recor
         with mock.patch.dict(terminal.SESSIONS, {replay.sid: replay}):
             for _ in range(2):
                 with client.websocket_connect(f'/api/terminals/{replay.sid}/ws') as ws:
-                    frame = ws.receive_json()
-                    assert frame['type'] == 'out' and frame['replay'] is True
+                    # the first OUTPUT frame: `geom` (which pane drives the PTY size) precedes it
+                    frame = next(m for m in (ws.receive_json() for _ in range(8)) if m['type'] == 'out')
+                    assert frame['replay'] is True
                     assert 'persisted fixture output' in frame['data']
                     ws.send_json({'type': 'resize', 'rows': replay.rows, 'cols': replay.cols})
                     assert ws.receive_json() == {'type': 'ready'}

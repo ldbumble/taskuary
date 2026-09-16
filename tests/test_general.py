@@ -38,7 +38,8 @@ class SharedSessionTests(unittest.TestCase):
         session = general.GeneralSession(store, tid)
         with mock.patch.dict(terminal.SESSIONS, {session.sid: session}, clear=True):
             with TestClient(server.app).websocket_connect(f'/api/terminals/{session.sid}/ws') as ws:
-                first = ws.receive_json()
+                # the first OUTPUT frame: `geom` (which pane drives the PTY size) precedes it
+                first = next(m for m in (ws.receive_json() for _ in range(8)) if m['type'] == 'out')
         self.assertEqual(first['type'], 'out')
         self.assertIn('Taskuary assistant', first['data'])
 

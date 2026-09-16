@@ -143,7 +143,20 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
     // No WebGL renderer here on purpose: it renders nothing at all on software-GL stacks
     // (WebView2 without a GPU, remote desktop, headless), and a blank terminal is a much
     // worse failure than a few dropped frames. The DOM renderer draws the same colors.
+    // ONE PTY, ONE GEOMETRY (server: Term.geom_owner). Several panes can watch one session - the
+    // task page, a Wall cell, the Feed preview - and each used to fit its own box and send that
+    // size to the shared pty. Whoever spoke last won, and every other pane was then rendering a
+    // child that wraps at a width its emulator does not have: absolute cursor moves land on the
+    // wrong rows and the pane shows two frames at once (the owner, 2026-09-16, on the Wall).
+    // A pane that does not own the geometry renders at the pty's size instead of its box.
+    let ownsGeometry = true, ptySize = null;
     const fitSafely = () => {
+      if (!ownsGeometry) {
+        if (ptySize && (term.cols !== ptySize.cols || term.rows !== ptySize.rows)) {
+          term.resize(ptySize.cols, ptySize.rows);
+        }
+        return;
+      }
       fit.fit();
       const rows = safeTerminalRows(term.rows);
       if (rows !== term.rows) term.resize(term.cols, rows);
@@ -186,7 +199,7 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
     const sendSize = () => {
       // A Timeline preview watches the same PTY as the task page. It must never resize that PTY
       // to its smaller card or make the real terminal redraw and reflow beneath the agent.
-      if (readOnly || ws.readyState !== 1) return;
+      if (readOnly || !ownsGeometry || ws.readyState !== 1) return;
       const sizeNow = changedTerminalSize(sentSize, term.rows, term.cols);
       if (!sizeNow) return;
       sentSize = sizeNow;
@@ -240,6 +253,15 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
         // Read-only viewers deliberately send no resize, so the server has no redraw barrier to
         // answer with `ready`. The replay itself is their complete initial screen.
         if (readOnly && m.replay) { output.flush(); readySeen = true; maybeLift(); }
+      }
+      else if (m.type === "geom") {
+        // Sent on attach, and again whenever a resize of ours was declined. Taking ownership back
+        // (the owning pane closed) means our box is authoritative again, so refit and say so.
+        const was = ownsGeometry;
+        ownsGeometry = m.owner !== false;
+        ptySize = { rows: m.rows, cols: m.cols };
+        fitSafely();
+        if (ownsGeometry && !was) { sentSize = ""; sendSize(); }
       }
       else if (m.type === "ready") { output.flush(); readySeen = true; maybeLift(); }
       else if (m.type === "exit") {

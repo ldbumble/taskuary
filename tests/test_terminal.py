@@ -377,7 +377,8 @@ class TerminalTests(unittest.TestCase):
         try:
             t._append('hello \x1b[6n world')
             with c.websocket_connect(f'/api/terminals/{t.sid}/ws') as ws:
-                first = ws.receive_json()
+                # the first OUTPUT frame: `geom` (which pane drives the PTY size) precedes it
+                first = next(m for m in (ws.receive_json() for _ in range(8)) if m['type'] == 'out')
             self.assertEqual(first['type'], 'out')
             self.assertNotIn('\x1b[6n', first['data'])           # the replay asks nothing
             self.assertIn('hello', first['data'])

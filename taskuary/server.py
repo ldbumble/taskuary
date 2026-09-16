@@ -5959,6 +5959,12 @@ async def terminal_ws(ws: WebSocket, sid: str):
     await ws.accept()
     q = asyncio.Queue()
     t.subscribe(asyncio.get_running_loop(), q)
+    # The first pane on this session drives its geometry; the rest render at what it chose.
+    # `q` is already a per-socket identity and is already dropped in `finally`, so it is the token.
+    # Three duck-typed classes serve this socket - Term, GeneralSession and demo.Replay - and they
+    # share no base, so the token is read tolerantly rather than declared on each of them.
+    if getattr(t, 'geom_owner', None) is None: t.geom_owner = q
+    owns_geometry = lambda: getattr(t, 'geom_owner', None) is q
     input_q = asyncio.Queue()
     send_lock = asyncio.Lock()
     delivered, inflight = 0, 0
@@ -6047,6 +6053,11 @@ async def terminal_ws(ws: WebSocket, sid: str):
         # counting it as output reset idle(): a session parked on a dialog read as working again
         # every time its card was opened (2026-09-03).
         t.quiet_for(ATTACH_QUIET)
+        # Say who owns the geometry BEFORE any output: a pane that is not the owner must render at
+        # the pty's width rather than fit its own box, or it wraps where the child did not - which
+        # is the same corruption by a different road.
+        await send_frame({'type': 'geom', 'rows': int(t.rows), 'cols': int(t.cols),
+                          'owner': owns_geometry()})
         if t.scrollback():
             snap = hub_term.replay_text(t)
             if snap: await send_frame({'type': 'out', 'replay': True, 'data': snap,
@@ -6058,6 +6069,18 @@ async def terminal_ws(ws: WebSocket, sid: str):
             if m.get('type') == 'in': input_q.put_nowait(m.get('data') or '')
             elif m.get('type') == 'resize':
                 rows, cols = m.get('rows') or 32, m.get('cols') or 110
+                # A free token is claimed by whoever asks next: close the task page and the Wall
+                # inherits the pty rather than being stuck at the size the task page left behind.
+                if getattr(t, 'geom_owner', None) is None: t.geom_owner = q
+                if not owns_geometry():
+                    # Not ours to change. Tell this pane what the geometry actually is - and lift
+                    # its curtain, which the owner's road does through the redraw barrier below.
+                    await send_frame({'type': 'geom', 'rows': int(t.rows), 'cols': int(t.cols),
+                                      'owner': False})
+                    if first_resize:
+                        first_resize = False
+                        await send_frame({'type': 'ready'})
+                    continue
                 if first_resize:
                     first_resize = False
                     # The rendered snapshot already hydrates a same-size reconnect. The old
@@ -6078,6 +6101,7 @@ async def terminal_ws(ws: WebSocket, sid: str):
     except (WebSocketDisconnect, RuntimeError, ValueError):
         pass
     finally:
+        if owns_geometry(): t.geom_owner = None        # the next pane to refit inherits the pty
         t.unsubscribe(q); pump.cancel(); input_pump.cancel()
         if redraw_quiet: redraw_quiet.cancel()
         if redraw_cap: redraw_cap.cancel()

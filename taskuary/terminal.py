@@ -179,6 +179,15 @@ class Term:
         self.store = store                                # so the pty can file its own transcript when it ends
         self.keep_transcript = True                       # off for a session the owner types secrets into (aisetup)
         self.subs = []                                    # (loop, asyncio.Queue)
+        # ONE PTY, ONE GEOMETRY. A session is on screen in several places at once - the task
+        # page, a Wall cell, the Feed preview, an assistant card - and each mounts its own
+        # xterm, fits it to its OWN box and sends that size here. Nothing arbitrated, so the
+        # last socket won: the Wall's grid cell resized the pty out from under the full-width
+        # task page, the child then painted with absolute cursor moves computed for a width
+        # the other emulator did not have, and both panes showed two frames at once (the
+        # owner, 2026-09-16). The first socket to attach holds this token and is the only one
+        # whose resize reaches the pty; it is released when that socket goes.
+        self.geom_owner = None                            # the subscriber queue that drives resize()
         self.taps = []                                    # plain callables, for server-side readers
         self.failover = None                              # availability-only replacement installed by start_on_task
         self._live_at = 0                                 # last run-tail emit; pty bursts fold into one

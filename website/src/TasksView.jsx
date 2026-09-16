@@ -120,8 +120,10 @@ const barBtn = { minHeight: 34, py: 0, px: 1.6, fontSize: 12.5, color: INK, bord
 // floating" (the owner, 2026-09-16). Same pill geometry as the facts beside them, in the slate
 // the app uses for every control: the colour says pressable, the border says where it ends.
 // Not filled - filled is Mark task done's, one strip up, and a live session has no primary.
-const liveCtl = { fontSize: 11, fontWeight: 650, height: 26, minHeight: 26, py: 0, px: 1.25,
-  borderRadius: 13, color: ACCENT, bgcolor: "#f1f4f7", borderColor: "#c7d2dc",
+// ...and SMALL, because every row this bar spends is a row the terminal does not get.
+const liveCtl = { fontSize: 10.5, fontWeight: 650, height: 23, minHeight: 23, py: 0, px: 0.9,
+  borderRadius: 11.5, color: ACCENT, bgcolor: "#f1f4f7", borderColor: "#c7d2dc", whiteSpace: "nowrap",
+  "& .MuiButton-startIcon": { mr: 0.5, ml: 0 },
   "&:hover": { borderColor: ACCENT, bgcolor: "#e7eef4" } };
 // the same pill as chipBtn, for a fact you read rather than a control you press
 const chipBtnStatic = { display: "inline-flex", alignItems: "center", height: 26, px: 1.25,
@@ -573,8 +575,16 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   });
   const diffRun = (detail?.runs || []).find((r) => r.DiffText);
   const liveRun = (detail?.runs || []).find((r) => r.Status === "running");
-  const liveCodingSession = !isGeneral && !!term?.alive;
-  const agentWaiting = liveCodingSession && isWaiting(term);
+  // TWO QUESTIONS, TWO FLAGS. `liveCodingSession` answered both "is a session live on this page"
+  // (so the whole page goes compact and the terminal gets the room) and "is this a coding CLI
+  // with a diff to review". A general session is live but not coding, so it failed the test and
+  // took the ROOMY block layout: a heading, then a near-empty band with one right-aligned
+  // button, then the brain pill under a rule - three stacked rows where the coder gets one, on
+  // the page where space is the whole point (the owner, 2026-09-16: "why is it so tall... you
+  // are taking away precious agent space"). Live is live, whoever is working.
+  const liveSession = !!term?.alive;
+  const liveCodingSession = !isGeneral && liveSession;
+  const agentWaiting = liveSession && isWaiting(term);
   // Proposals also live in Review and are usually newer than the reply. They have their own
   // action card; the Reply stage must show only communication intended for the sender.
   const pendingReview = pendingReplyReview(detail?.reviews || []);
@@ -670,7 +680,16 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // is the brain's - it is not a property of the task, so the card does not offer one. A live
   // session names the CLI it was ASKED to run; otherwise the roster says which brain the role uses.
   const runRole = assignedAgent(t?.Assignee) || (t?.Kind === "coding" ? "coder" : "");
-  const runBrain = term?.cli || term?.agent || (runRole && brains[runRole]) || "";
+  // NAME THE BRAIN, NOT THE PRODUCT. `term.cli` is hardcoded to the string "taskuary" on every
+  // general session (general.info), so the one card that could not say which brain was running
+  // read "brain taskuary" - the product's own name, on the row whose whole job is to answer that
+  // (the owner, 2026-09-16). A general session reports what it actually reached for instead:
+  // `provider` is the connector's or the CLI's own label, `model` the gear it runs on.
+  const runBrain = term?.provider || term?.cli || term?.agent || (runRole && brains[runRole]) || "";
+  // ...and on a general session that brain is ALREADY on screen, as the live picker in the
+  // workspace toolbar a few pixels below - the same two facts twice, one of them editable and one
+  // of them stale ("why is it there, the model is below it?"). The pill goes where the picker is.
+  const brainPill = runBrain && !(isGeneral && term?.alive) ? runBrain : "";
   // the envelope on the reply, read from the same Deliver blob Review reads
   const replyOf = pendingReview || sentReview;
   const replyCc = deliveryCc(replyOf), replyFiles = deliveryFiles(replyOf);
@@ -909,7 +928,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   - sitting directly above a second heading that said "Task · the job itself". The
                   provenance line moved into "Where this came from" inside the card, where you go
                   and look at it rather than read it every time. */}
-              <Box sx={{ px: liveCodingSession ? 1.5 : 1.75, py: liveCodingSession ? 0.7 : 1,
+              <Box sx={{ px: liveSession ? 1.5 : 1.75, py: liveSession ? 0.7 : 1,
                 bgcolor: "#fff", borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
                 <Box sx={{ display: "flex", gap: 0.9, alignItems: "center" }}>
                   <Box sx={{ width: 18, height: 18, borderRadius: "50%", bgcolor: "#55697a", color: "#fff",
@@ -917,7 +936,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   <Typography sx={{ color: "#41525f", fontVariantNumeric: "tabular-nums", flexShrink: 0,
                     letterSpacing: ".015em", fontWeight: 750, fontSize: 11.5 }}>{detail.ref}</Typography>
                   <Typography sx={{ color: INK, flex: 1, fontWeight: 650,
-                    fontSize: liveCodingSession ? 12.5 : 13,
+                    fontSize: liveSession ? 12.5 : 13,
                     minWidth: { xs: 90, sm: 180 }, letterSpacing: "-.005em" }} noWrap>
                     {t.Title}
                   </Typography>
@@ -962,7 +981,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
               </Box>
               {/* a flex column so the terminal takes exactly what is left between the strip above and the
                   waiting room below - a fixed-height formula clipped its bottom line on shorter screens */}
-              <Box sx={{ px: liveCodingSession ? 1 : 2, py: liveCodingSession ? 0.65 : 1.5,
+              <Box sx={{ px: liveSession ? 1 : 2, py: liveSession ? 0.65 : 1.5,
                 overflowY: "auto", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
                 {/* THE SESSION IS THE PAGE. Your CLI, in this task's repo, with the task in
                     its lap - you type into it like any other terminal. Everything below is
@@ -1211,12 +1230,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     </>}
                   </Box>
                 )}
-                <Box sx={{ ...card, mb: liveCodingSession ? 0.55 : 1.25,
-                  px: liveCodingSession ? 1 : 1.5, py: liveCodingSession ? 0.55 : stage === "agent" ? 1.5 : 1.1,
+                <Box sx={{ ...card, mb: liveSession ? 0.55 : 1.25,
+                  px: liveSession ? 1 : 1.5, py: liveSession ? 0.55 : stage === "agent" ? 1.5 : 1.1,
                   bgcolor: "#fff", flexShrink: 0, borderLeft: "4px solid #6f8a6e",
-                  display: liveCodingSession ? "flex" : "block", alignItems: "center",
-                  gap: liveCodingSession ? 1 : 0, flexWrap: "wrap" }}>
-                  <Box sx={{ minWidth: 0, flex: liveCodingSession ? "0 1 auto" : "initial" }}>
+                  display: liveSession ? "flex" : "block", alignItems: "center",
+                  gap: liveSession ? 1 : 0, flexWrap: "wrap" }}>
+                  <Box sx={{ minWidth: 0, flex: liveSession ? "0 1 auto" : "initial" }}>
                     {/* the agent by NAME, not by which binary is running: "Agent running · Claude Code
                         · coder (your CLI)" named a product and a profile (the owner, 2026-09-08) */}
                     {/* A LIVE SESSION IS NOT A WORKING ONE. This asked only whether a pty existed,
@@ -1260,14 +1279,14 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   {stage === "agent" && <>
                   {term?.alive && (
                     <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end",
-                      gap: 0.35, flexWrap: "wrap", flex: 1, minWidth: 0, mt: liveCodingSession ? 0 : 1 }}>
+                      gap: 0.35, flexWrap: "wrap", flex: 1, minWidth: 0, mt: liveSession ? 0 : 1 }}>
                       {/* A LIVE SESSION HAS NO PRIMARY. "Answer agent" / "Give new prompt" opened a
                           Dialog whose whole body was the SAME TellAgent that is already inline under
                           the terminal - a modal copy of a control on the page (the owner, 2026-09-16:
                           "answer agent really does nothing, it's just type into the prompt window").
                           While an agent is working the next move is typing, so nothing here is filled;
                           the notification stays on the chip and beside the waiting room. */}
-                      {liveCodingSession && <Button size="small" variant="outlined" sx={liveCtl} startIcon={<DifferenceIcon sx={{ fontSize: 14 }} />}
+                      {liveCodingSession && <Button size="small" variant="outlined" sx={liveCtl} startIcon={<DifferenceIcon sx={{ fontSize: 13 }} />}
                         title="A viewer of the agent's diff. Nothing is approved or committed here."
                         onClick={() => setDiffOpen(true)}>Review changes</Button>}
                       {/* ONE ENDING. Three buttons all ended the session and differed only in what they
@@ -1277,7 +1296,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           that is its result, and on one that did not it is where it got to, which is
                           what the handover note was for.
                           Task completion stays separate (PW-217/218): this ends the AGENT. */}
-                      <Button size="small" variant="outlined" sx={liveCtl} disabled={!!wrapping} startIcon={<DoneAllIcon sx={{ fontSize: 14 }} />}
+                      <Button size="small" variant="outlined" sx={liveCtl} disabled={!!wrapping} startIcon={<DoneAllIcon sx={{ fontSize: 13 }} />}
                         title="Writes up what this session did and ends it. The task stays open: Mark task done completes it and drafts the reply."
                         onClick={wrapUp}>Save and end session</Button>
 
@@ -1393,15 +1412,15 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   {/* folded onto the live bar these facts share a ROW with the controls, where a
                       rule above them is stray chrome - they get a rule beside them instead, so the
                       pills you press and the pills you read are two groups and not five in a line */}
-                  {(term?.alive || report || detail?.transcript) && !restartOpen && (runRole || runBrain || repoOf(t)) && (
+                  {(term?.alive || report || detail?.transcript) && !restartOpen && (runRole || brainPill || repoOf(t)) && (
                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.7, flexWrap: "wrap",
-                      ...(liveCodingSession
+                      ...(liveSession
                         ? { ml: 0.9, pl: 1.1, borderLeft: `1px solid ${BORDER}`, flexShrink: 0 }
                         : { mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }) }}>
                       {runRole && <Box sx={{ ...chipBtnStatic }} title="The role: which document this worker follows. Every coding task's role is `coder`.">
                         <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>role</Box>&nbsp;{runRole}</Box>}
-                      {runBrain && <Box sx={{ ...chipBtnStatic }} title="The brain: which CLI actually runs it. Chosen by the default_brain setting, or this role's override — not per task.">
-                        <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>brain</Box>&nbsp;{runBrain}</Box>}
+                      {brainPill && <Box sx={{ ...chipBtnStatic }} title="The brain: which CLI or API connector actually runs it. Chosen on Settings → Triage & agents, or by this role's override — not per task.">
+                        <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>brain</Box>&nbsp;{brainPill}</Box>}
                       {!isGeneral && <Button size="small" variant="outlined" sx={chipBtn}
                         startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}
                         title="Which checkout the session works in"

@@ -1134,6 +1134,19 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     drill(row || { MessageId: mid }, false, row?.ProcessingItemId ? { kind: "message", id: mid } : null);
     return true;
   };
+  // ...and the same door for a canonical item that has no message to open. An assistant idea that
+  // became a task is presented on the work rail as the TASK - its post is a container, not a row of
+  // its own (processing_all, the duplicate-Assistant regression of 2026-09-04) - so there was no mid
+  // to hand `openByMid` and a click in task mode fell through to the chat, while the Timeline showed
+  // the same thing perfectly well (the owner, 2026-09-16: "on the timeline assistant ideas still get
+  // a right side blurb no? why would on the work tab it would be different?").
+  // The canonical detail endpoint describes a task as readily as a message; this asks it for one.
+  const openByItem = (itemId, target) => {
+    if (!itemId || !processingTarget(null, target)) return false;   // the same kinds the endpoint serves
+    const row = (rows || []).find((r) => r.ProcessingItemId === itemId);
+    drill(row || { ProcessingItemId: itemId, OpenTarget: target }, false, target);
+    return true;
+  };
   // what a click on a row does: pull it into the chat (rowMode chat) or open it on the stage
   const openRow = (row) => (chatMode ? onPull(row) : drill(row));
   // #msg=<id> - a card in the chat pointing here. Opened once the row is on screen, and again whenever
@@ -1575,7 +1588,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
             boxShadow: "none !important", transition: "none !important", cursor: "default",
           } }}>
           {!top && <FunnelBar onOpenTask={onOpenTask} active={active} />}
-          {view === "unread" ? (typeof top === "function" ? top({ openByMid }) : top) : (
+          {view === "unread" ? (typeof top === "function" ? top({ openByMid, openByItem }) : top) : (
           <Box sx={{ position: "relative" }}>
             {syncing && (
               <Box sx={{ position: "absolute", inset: 0, zIndex: 4, display: "flex",

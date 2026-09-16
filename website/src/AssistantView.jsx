@@ -1116,9 +1116,27 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // task opens it on the stage the way a feed row does. Only a row with a message behind it can be
   // opened - a meeting, a wrapup or an agent has no message, so those still answer in the chat,
   // and pull() switches the stage there so the answer is not written somewhere invisible.
-  const pullOrOpen = (key, asUser, openByMid) => {
-    const it = (pile?.items || []).find((i) => i.key === key);
-    if (stageMode === "task" && it?.mid && openByMid?.(it.mid)) { setRailOpen(false); return; }
+  const pullOrOpen = (key, asUser, openByMid, openByItem) => {
+    // ...and an entry of the batch on the table, which is drawn on the rail but is not a pile row
+    const it = (pile?.items || []).find((i) => i.key === key)
+      || (currentItem?.items || []).find((i) => i.key === key);
+    if (stageMode === "task") {
+      // A MESSAGE opens on the stage. Anything else with a TASK behind it opens the task: an agent
+      // row, a meeting's prep, a proposal - none of them carry a mid (funnel.from_agents,
+      // from_calendar, from_proposals build items without one), so Task mode fell straight through
+      // to the chat and the owner got a conversation about the very thing they had just asked to
+      // open (the owner, 2026-09-16: "task button on the assistant, if i click it then hit a item
+      // the chat pops up not the actual task"). Only a row with neither - a bare meeting - has
+      // nothing to open, and talking about it is the right answer there.
+      if (it?.mid && openByMid?.(it.mid)) { setRailOpen(false); return; }
+      // no message, but the canonical item can still be asked about itself - a task, an idea, a
+      // review - and that is what the stage draws. It is the same pane the Timeline gives these.
+      const pid = it?.processing_id || (key.startsWith("processing:") ? key.slice("processing:".length) : "");
+      const target = it?.tid ? { kind: "task", id: it.tid } : it?.rid ? { kind: "review", id: it.rid } : null;
+      if (pid && target && openByItem?.(pid, target)) { setRailOpen(false); return; }
+      // ...and on a legacy install, where there is no canonical item to ask, the task itself
+      if (it?.tid && onOpenTask) { onOpenTask(it.tid); setRailOpen(false); return; }
+    }
     pull(key, asUser);
   };
 
@@ -1317,8 +1335,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   return (
     <FeedView onOpenTask={onOpenTask} onChanged={onChanged} active={active}
       onInventoryFilter={inventoryFilterChanged} unreadInventory={pile}
-      top={({ openByMid }) => <Pile pile={pile} current={old ? null : currentItem}
-        onPull={(key, asUser) => pullOrOpen(key, asUser, openByMid)} />}
+      top={({ openByMid, openByItem }) => <Pile pile={pile} current={old ? null : currentItem}
+        onPull={(key, asUser) => pullOrOpen(key, asUser, openByMid, openByItem)} />}
       stage={stageMode === "chat" ? chat : placeholder} rowMode={stageMode}
       onPull={(r) => pull(keyForRow(r), `Tell me about “${r.Subject || r.Title || "this"}”`)}
       railOnNarrow={railOpen} />

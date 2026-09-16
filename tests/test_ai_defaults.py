@@ -139,7 +139,10 @@ class ApplyTests(unittest.TestCase):
 class ApiTests(unittest.TestCase):
     def test_the_endpoint_returns_every_slot_with_its_owner(self):
         j = c.get('/api/ai/defaults').json()
-        self.assertEqual([s['key'] for s in j['slots']], ['triage_ai', 'default_agent', 'concierge_ai'])
+        # four workers, four rows: the general agent joined on 2026-09-16, because the page that
+        # exists to say what will run was silent about the brain half the board's tasks use
+        self.assertEqual([s['key'] for s in j['slots']],
+                         ['triage_ai', 'default_agent', 'concierge_ai', 'assistant_ai'])
         for s in j['slots']:
             self.assertTrue(s['label'] and s['desc'] and s['why'])     # every row explains itself
             for k in ('model', 'effort', 'choices', 'efforts', 'owner', 'note'): self.assertIn(k, s)

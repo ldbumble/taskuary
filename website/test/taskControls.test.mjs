@@ -37,13 +37,18 @@ test("the agent card names the role and the brain, and offers no model", () => {
   // not offer one. This is also a merge guard: b8c57823 resolved TasksView.jsx to its own side
   // and dropped this row entirely, and nothing failed, because nothing covered it.
   assert.match(tasks, /const runRole = assignedAgent\(t\?\.Assignee\) \|\| \(t\?\.Kind === "coding" \? "coder" : ""\);/);
-  assert.match(tasks, /const runBrain = term\?\.cli \|\| term\?\.agent \|\| \(runRole && brains\[runRole\]\) \|\| "";/);
+  // `term.cli` is the literal string "taskuary" on every general session (general.info), so the
+  // pill that exists to name the brain named the PRODUCT. The session's own provider leads now.
+  assert.match(tasks, /const runBrain = term\?\.provider \|\| term\?\.cli \|\| term\?\.agent \|\| \(runRole && brains\[runRole\]\) \|\| "";/);
+  assert.match(tasks, /const brainPill = runBrain && !\(isGeneral && term\?\.alive\) \? runBrain : "";/,
+    "a live general session shows the brain in its workspace picker - the pill would be the same fact twice");
   assert.ok(tasks.includes("const { agents, models, kinds, brains, brainList, brainModels } = useAgents();"),
     "the roster's role->brain map has to reach the card");
   const at = tasks.indexOf("{runRole && <Box");
   assert.notEqual(at, -1, "the role pill must be rendered");
   const row = tasks.slice(at, at + 1400);
   assert.ok(row.includes(">role</Box>") && row.includes(">brain</Box>"), "both pills are labelled");
+  assert.ok(row.includes("{brainPill &&"), "the brain pill renders brainPill, not runBrain");
   assert.ok(!/>model</.test(row), "and there is no model pill - the model is not the task's");
 });
 

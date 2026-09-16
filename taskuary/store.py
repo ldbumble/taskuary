@@ -85,6 +85,22 @@ def retoken_doc(text: str, old_name: str, old_email: str = '') -> str:
 def task_ref(task_id): return f'TQ-{int(task_id):04d}'
 def _now(): return datetime.now().isoformat(sep=' ', timespec='seconds')
 
+# The one sentence of TRIAGE.md that was wrong, and what replaces it on a doc that has stopped
+# tracking the shipped template (the migration in _ensure_schema). The canonical wording lives in
+# templates/triage.md; test_triage_pr_rule.py pins these two together so they cannot drift apart.
+_PR_RULE_WAS = ("A stranger's pull request or issue is fyi (or reply_only if it asks a real question) - never "
+                "task: the owner promotes what deserves work. ")
+_PR_RULE_NOW = (
+    "\n\nA PULL REQUEST is a task, and its kind is coding - whoever opened it. A PR exists for exactly one "
+    "reason: somebody is asking for a review and a merge of a diff on a repository you own. That is a request, "
+    "it names its own repository, and reading a diff is what the coding agent does; it is never fyi, and you do "
+    "not need to find an ask in the description - the PR IS the ask. Association does not change this, it changes "
+    "only how much the diff should be doubted, which is the reviewer's job and not yours. Nothing starts "
+    "unattended on a code-host item either way, so a stranger's PR costs the owner one glance at a queued task."
+    "\n\nA stranger's ISSUE is a different thing and keeps the skepticism: it is fyi (or reply_only if it asks a "
+    "real question) unless it reports something that plainly needs doing - the owner promotes what deserves work."
+    "\n\n")
+
 # conversation ids that name a CHAT rather than a topic - one id for every message ever exchanged
 # there, so an owner verdict on it covers an episode, not the relationship (owner_verdict_on_thread)
 CHAT_PREFIXES = ('teams:', 'slack:', 'telegram:', 'whatsapp:', 'imessage:')
@@ -878,6 +894,22 @@ class SQLiteStore:
                     # changes UpdatedBy and makes the document theirs, never overwritten again
                     self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name=? AND UpdatedBy='template' AND Content<>?",
                                     (txt, _now(), name, txt))
+            # A DOC THE OWNER HAS TOUCHED STOPS TRACKING THE TEMPLATE, which is right - and it means a
+            # WRONG shipped rule stays wrong forever on exactly the installs that use the product most.
+            # TRIAGE.md told the model "a stranger's pull request or issue is fyi - never task", so every
+            # PR on the owner's own repository was filed, and ingest carried a regex gate to override it;
+            # the gate named no `kind`, so all twelve went to the assistant instead of the coder. The gate
+            # is gone and the template says what a PR is - but a doc whose UpdatedBy is anything but
+            # 'template' would never see it. One surgical replacement of the sentence that was wrong,
+            # whoever owns the document: everything else in it stays exactly as the owner left it.
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='triage_pr_rule_fixed'").fetchone():
+                row = self.cx.execute("SELECT Content FROM doc WHERE Name='triage'").fetchone()
+                body = (row['Content'] or '') if row else ''
+                if _PR_RULE_WAS in body:
+                    self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name='triage'",
+                                    (body.replace(_PR_RULE_WAS, _PR_RULE_NOW), _now()))
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) "
+                                "VALUES ('triage_pr_rule_fixed', '1', 'migration')")
             # the Morning digest ships as a real REPORT (reports.run_digest): the brief lands
             # on the Timeline, its prompt is edited on the Reports tab, and deleting the
             # source turns it off - the sentinel keeps a deletion deleted across restarts.

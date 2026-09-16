@@ -160,21 +160,50 @@ class ChatIdentityTests(unittest.TestCase):
 
 
 class RepoWorkTests(unittest.TestCase):
-    """A pull request on the owner's repo, and an issue they filed themselves, are work by
-    construction: five of five contributor PRs the classifier filed as fyi were promoted by hand.
-    Other people's issues stay the model's call."""
+    """A github item is the CLASSIFIER's call - every one of them.
+
+    It used not to be. Five of five contributor PRs came back `fyi`, so a regex gate in
+    decided_intent answered "work by construction" before the model was asked. The gate named no
+    `kind`, an unnamed kind is `general`, and so the rescue routed every PR to the ASSISTANT
+    instead of the coder - #36 through #47, twelve in a row, until 2026-09-16. The rule the gate
+    was overriding was in TRIAGE.md all along ("a stranger's pull request or issue is fyi - never
+    task"): the document and the code said opposite things and the code won by running first.
+
+    TRIAGE.md now says what a pull request IS, the gate is gone, and the model reaches `coding`
+    itself. That is the only road on which the verdict is visible, correctable and learned from -
+    so what these tests pin is that nothing answers for the model any more."""
     def _gh(self, head):
         return {'external_id': f'gh-{head[:22]}', 'channel': 'github', 'conversation_id': 'gh:o/r#7', 'no_auto': True,
                 'from_email': 'who@users.noreply.github.com', 'subject': 'o/r#7 Crash on startup',
                 'body': head + chr(10) + 'Traceback ... KeyError'}
 
-    def test_a_pull_request_and_the_owners_own_issue_are_tasks_without_a_model(self):
-        for head in ('[pull request by priya-dev - association: CONTRIBUTOR]', '[pull request by new - association: FIRST_TIME_CONTRIBUTOR]',
-                     '[issue by ldbumble - association: OWNER]'):
-            asked = []
-            out = ingest.ingest_message(MemoryStore(), self._gh(head),
-                                        llm=lambda *a, **k: asked.append(1) or '{"intent": "fyi", "why": "a notification"}')
-            self.assertEqual((out['status'], asked), ('created', []), head)
+    HEADS = ('[pull request by priya-dev - association: CONTRIBUTOR]',
+             '[pull request by new - association: FIRST_TIME_CONTRIBUTOR]',
+             '[issue by ldbumble - association: OWNER]')
+
+    def test_no_gate_answers_for_the_classifier(self):
+        for head in self.HEADS:
+            self.assertIsNone(ingest.decided_intent(self._gh(head)), head)
+
+    def test_a_pull_request_the_model_calls_coding_reaches_the_coder(self):
+        """The verdict travels: kind -> Kind on the task -> the coder's own role."""
+        for head in self.HEADS:
+            store = MemoryStore()
+            out = ingest.ingest_message(
+                store, self._gh(head),
+                llm=lambda *a, **k: '{"intent": "task", "kind": "coding", "why": "a pull request asks for review"}')
+            self.assertEqual(out['status'], 'created', head)
+            t = store.get_task(out['task_id'])
+            self.assertEqual((t['Kind'], t['Assignee']), ('coding', 'agent:coder'), head)
+
+    def test_the_shipped_rule_tells_the_model_a_pr_is_coding(self):
+        """The gate is gone, so TRIAGE.md is the only thing left saying this - if the wording is
+        ever softened again, every PR silently goes back to the assistant."""
+        from pathlib import Path
+        import taskuary
+        doc = (Path(taskuary.__file__).parent / 'templates' / 'triage.md').read_text(encoding='utf-8')
+        self.assertIn('A PULL REQUEST is a task, and its kind is coding', doc)
+        self.assertNotIn("A stranger's pull request or issue is fyi", doc)
 
     def test_somebody_elses_issue_is_still_the_models_call(self):
         for head in ('[issue by kai - association: NONE]', '[issue by pat - association: MEMBER]'):

@@ -95,9 +95,6 @@ const KNOB_META = {
   concierge_model: { group: "Triage & agents", label: "Assistant tab model", type: "text",
     desc: "Override the quick gear for the brain above (e.g. sonnet, gpt-5.4-mini@low). Blank = the default.",
     help: "For a CLI this is its --model (Codex takes model@effort); for an API connector, its model or deployment name. Changing it starts a fresh CLI conversation." },
-  assistant_ai: { group: "Assistant", label: "Bubble & WhatsApp assistant brain", type: "brain",
-    desc: "Which AI answers the floating Taskuary bubble on the other tabs and the WhatsApp doorway. auto = the first API connector, else the default agent.",
-    help: "The full general-work assistant with the workspace snapshot: it plans, researches and writes on a task. Separate from the Assistant tab's voice above, which is the light one that walks the pipe." },
   assistant_max_lines: { group: "Assistant", label: "Lines per post, at most", type: "number",
     desc: "The assistant checks in every 30 minutes and on startup (the 'Assistant' report on the Reports tab — edit its prompt for what it watches for, change the cadence, delete it to turn it off) and posts only when it has something to say. How it SPEAKS is COUNSEL.md on the Docs tab: edit that to change its voice, how bold it is, what it takes a position on. This caps how much one post says. 5 by default.",
     help: "One AI call per post, and none when there is nothing new. Every line has a key and a state, so it never says the same thing twice. Talk back under a suggestion to correct it or ask a follow-up; the answer and your correction stay with the idea and inform later checks. 'Follow up' drafts the chase in your voice into Review — nothing is sent by itself; 'Make it a task' starts the agent. Voice: COUNSEL.md (Docs tab); what to watch for: the report's prompt. Without an AI connector the facts still post, in the hub's own words. 'Run now' on the Reports tab's Assistant row posts regardless of the schedule." },
@@ -236,7 +233,11 @@ const HIDDEN = new Set(["ingest_status", "agent_issues_enabled", "agent_push_ena
                         "auto_draft_enabled",   // replies are always drafted (PW-043); the old switch no longer gates anything
                         "last_pinged_review", "triage_last_error",                          // bookkeeping
                         "setup_dismissed", "task_id_mark", "learn_pending", "learn_last_reflect"]);
-const PANEL_OWNED = new Set(["triage_ai", "default_agent", "concierge_ai", "concierge_model"]);
+// the four AI defaults the panel at the top of this tab draws as cards - each would otherwise
+// also appear as a bare dropdown in the knob list, and `assistant_ai` appeared on a different
+// tab under a different name, which is how the general agent's brain went unfindable
+const PANEL_OWNED = new Set(["triage_ai", "default_agent", "concierge_ai", "concierge_model",
+                             "assistant_ai", "assistant_model"]);
 const hidden = (name) => HIDDEN.has(name) || name.startsWith("owner_") || name.endsWith("_seeded");   // owner_* = About you
 const meta = (name) => KNOB_META[name] || { group: "Other", label: name, type: "auto" };
 

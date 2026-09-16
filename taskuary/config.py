@@ -50,6 +50,12 @@ def home() -> Path:
     # one-time migration from the pre-rename data dir
     if not env and not p.exists() and old.exists(): old.rename(p)
     p.mkdir(parents=True, exist_ok=True)
+    # credentials live here in plaintext; the directory itself should not be group/world readable
+    # (audit 2026-09-16). mkdir inherits umask, so an existing 755 home stays 755 until this.
+    try:
+        if (p.stat().st_mode & 0o777) != 0o700: p.chmod(0o700)
+    except OSError:
+        pass
     return p
 
 def _read() -> dict:

@@ -31,6 +31,25 @@ test("each control carries the caption that names its effect on task versus agen
   assert.match(tasks, /const replyPrimary = pendingReview \? "Edit draft in Review" : sentReview \? "Write another" : "Write reply";/);
 });
 
+test("the agent card's bar is the same bar as the task's and the reply's", () => {
+  // It answered with a row of default-size buttons UNDER its body: a different size, a different
+  // order, no rule between the move and the alternatives, and its one fact left where the other
+  // two put theirs right (the owner, 2026-09-16: "this agent card is still weird and doesn't
+  // match ... it should match the other ones"). One grammar: [ primary ] | [ named ] [ named ] fact.
+  assert.match(tasks, /const primaryBtn = \{ minHeight: 34/, "the filled move's shape is one value");
+  const at = tasks.indexOf("{agentBar && (");
+  assert.notEqual(at, -1, "the agent bar must be rendered");
+  assert.ok(at < tasks.indexOf("Latest saved result"), "and it comes FIRST, above the result it acts on");
+  const bar = tasks.slice(at, tasks.indexOf("{report && !wrapped", at));
+  assert.ok(bar.includes("sx={primaryBtn}"), "it opens with the same filled primary");
+  assert.ok(bar.includes('<Divider orientation="vertical"'), "a rule divides this session from another one");
+  assert.ok(bar.includes("sx={canContinue ? barBtn : primaryBtn}"), "the named moves take barBtn");
+  assert.ok(bar.includes("sx={{ flex: 1, minWidth: 12 }}"), "and the fact is pushed right");
+  // whichever state it is in, exactly one move is filled: continue it, file it, or run another
+  assert.match(tasks, /const canContinue = !term\?\.alive && \(isGeneral \? generalStarted : !!detail\?\.resumable\);/);
+  assert.match(tasks, /const canSave = !report && !wrapped;/);
+});
+
 test("the agent card names the role and the brain, and offers no model", () => {
   // A role picks the document; a brain is the CLI that runs it. The model is the brain's -
   // brain_for(): "what it names is a brain - never a model, never an effort" - so the card must

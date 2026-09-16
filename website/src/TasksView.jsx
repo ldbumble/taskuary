@@ -114,6 +114,8 @@ const chipBtn = { fontSize: 11.5, fontWeight: 600, height: 26, minHeight: 26, py
   borderRadius: 13, bgcolor: "#f4f1ec", color: INK, borderColor: BORDER,
   "&:hover": { borderColor: "#d8cfbe", bgcolor: "#f4f1ec" } };
 const barBtn = { minHeight: 34, py: 0, px: 1.6, fontSize: 12.5, color: INK, borderColor: BORDER };
+// ...and the one filled move beside them. Every card's bar reads [ primaryBtn ] | [ barBtn ] [ barBtn ].
+const primaryBtn = { minHeight: 34, py: 0, px: 1.75, fontSize: 12.5 };
 // A LIVE SESSION'S CONTROLS LOOK LIKE CONTROLS. These were bare text buttons sitting next to
 // the outlined role/brain/repo pills, so the two things you could press had less edge than the
 // three facts you can only read - "buttons are still not clear what they are. and they are
@@ -706,6 +708,14 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     t?.Assignee ? assigneeLabel(t.Assignee) : "", repoOf(t) || ""].filter(Boolean).join(" · ");
   const generalStarted = isGeneral && (!!term?.alive || hasGeneralHistory
     || String(t?.Tags || "").split(/[\s,]+/).includes(ASK_TAG));
+  // ONE BAR, THE SAME BAR. The Task and Reply cards both open with [ primary ] | [ named ]
+  // [ named ] ... fact, and the Agent card alone answered with a row of default-size buttons UNDER
+  // its body, in a different order, with no rule between the move and the alternatives (the owner,
+  // 2026-09-16: "this agent card is still weird and doesn't match ... it should match the other
+  // ones"). Coding and general differ only in WHICH session is picked back up, so it is one bar.
+  const canContinue = !term?.alive && (isGeneral ? generalStarted : !!detail?.resumable);
+  const canSave = !report && !wrapped;            // nothing filed yet, so this session is still worth writing up
+  const agentBar = !term?.alive && !restartOpen && (isGeneral ? generalStarted : !!(report || detail?.transcript));
   const agentState = agentPhase({
     session: term?.alive ? { ...term, waiting: isWaiting(term) } : null,
     run: liveRun, transcript: detail?.transcript, report,
@@ -1032,7 +1042,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     {!["done", "dropped"].includes(t.Status) ? (
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
                         <Button size="small" variant="contained" disableElevation startIcon={<DoneAllIcon sx={{ fontSize: 16 }} />}
-                          sx={{ minHeight: 34, py: 0, px: 1.75, fontSize: 12.5 }}
+                          sx={primaryBtn}
                           title="Closes the task and ends the live agent session with it."
                           onClick={() => finish("done")}>Mark task done</Button>
                         <Button size="small" variant="outlined" startIcon={<BlockIcon sx={{ fontSize: 15 }} />}
@@ -1302,6 +1312,48 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
 
                     </Box>
                   )}
+                  {/* the conversation IS the record, so it can be filed as the result once its
+                      provider session is gone - the only road out of a finished chat used to be
+                      typing into it again. Group one is THIS session, group two is another one. */}
+                  {agentBar && (
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap", mb: 1.3 }}>
+                      {canContinue && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent} sx={primaryBtn}
+                        startIcon={startingAgent === "resume" ? <CircularProgress size={12} /> : <HistoryIcon sx={{ fontSize: 16 }} />}
+                        title={isGeneral
+                          ? "Reopens the saved provider conversation and continues from its existing context."
+                          : `Reopens ${detail?.resumable?.agent}'s own session in ${detail?.resumable?.cwd}. It still has what it read, changed and asked.`}
+                        onClick={isGeneral ? resumeGeneralAgent : continueSession}>
+                        {startingAgent === "resume" ? "Continuing…" : "Continue this session"}</Button>}
+                      {canSave && <Button size="small" variant={canContinue ? "outlined" : "contained"} disableElevation
+                        disabled={!!wrapping} sx={canContinue ? barBtn : primaryBtn}
+                        startIcon={<DoneAllIcon sx={{ fontSize: 16, color: canContinue ? "#6f8a6e" : undefined }} />}
+                        title="Writes up what this session did and files it as the task's result. The task stays open: Mark task done completes it and drafts the reply."
+                        onClick={wrapUp}>{isGeneral ? "Save this conversation's result" : "Save stopped run result"}</Button>}
+                      {!isGeneral && <>
+                        {(canContinue || canSave) && <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />}
+                        <Button size="small" variant={canContinue || canSave ? "outlined" : "contained"} disableElevation
+                          sx={canContinue || canSave ? barBtn : primaryBtn}
+                          startIcon={<RefreshIcon sx={{ fontSize: 16, color: canContinue || canSave ? "#6f8a6e" : undefined }} />}
+                          title="A fresh session with a different harness, model or prompt. It receives the saved result, not the old conversation."
+                          onClick={() => setRestartOpen(true)}>Run another agent</Button>
+                      </>}
+                      {report && <>
+                        {isGeneral && <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />}
+                        <Button size="small" variant="outlined" sx={barBtn}
+                          startIcon={<ForwardToInboxIcon sx={{ fontSize: 16, color: "#55697a" }} />}
+                          title="Forwards the saved result to a person. The AI writes it, you send it."
+                          onClick={() => setHandoff(true)}>Send this result to someone</Button>
+                      </>}
+                      <Box sx={{ flex: 1, minWidth: 12 }} />
+                      <Typography variant="caption" sx={{ color: FAINT, textAlign: "right", maxWidth: 320 }}>
+                        {taskState === "done" && canContinue
+                          ? "This task is done - continuing puts it back in progress."
+                          : isGeneral
+                            ? "Or send a message in the workspace below to pick it back up."
+                            : "Continuing keeps what it read and changed. Another agent starts clean."}
+                      </Typography>
+                    </Box>
+                  )}
                   {report && !wrapped && !term?.alive && (
                     <Box sx={{ mt: 1.1, pt: 1.1, borderTop: `1px solid ${BORDER}` }}>
                       <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.35,
@@ -1314,32 +1366,6 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         Finished by {report.Actor || "the coding agent"}{report.CreatedAt ? ` · ${fmtDateTime(report.CreatedAt)}` : ""}
                       </Typography>
                       {diffRun && <Box sx={{ mt: 0.75 }}><DiffBlock text={diffRun.DiffText} /></Box>}
-                      {!liveCodingSession && <Button size="small" variant="outlined" sx={{ mt: 0.9 }}
-                        startIcon={<ForwardToInboxIcon sx={{ fontSize: 15 }} />} onClick={() => setHandoff(true)}>
-                        Send this result to someone
-                      </Button>}
-                    </Box>
-                  )}
-                  {!term?.alive && !isGeneral && !restartOpen && (report || detail?.transcript) && (
-                    <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}`,
-                      display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
-                      {/* the conversation the agent actually had, reopened by its own id - not a new
-                          agent reading a handover note about it. Offered only when the session, its
-                          coder and its checkout are all still there (server: _resumable). */}
-                      {detail?.resumable && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent}
-                        startIcon={startingAgent === "resume" ? <CircularProgress size={12} /> : <HistoryIcon sx={{ fontSize: 15 }} />}
-                        title={`Reopens ${detail.resumable.agent}'s own session in ${detail.resumable.cwd}. It still has what it read, changed and asked.`}
-                        onClick={continueSession}>{startingAgent === "resume" ? "Continuing…" : "Continue this session"}</Button>}
-                      <Button size="small" variant={detail?.resumable ? "text" : "outlined"} startIcon={<RefreshIcon sx={{ fontSize: 15 }} />}
-                        onClick={() => setRestartOpen(true)}>Run another agent</Button>
-                      {!report && <Button size="small" variant="text" disabled={!!wrapping}
-                        title="Saves the stopped session's result and report. The task stays open."
-                        startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>Save stopped run result</Button>}
-                      <Typography variant="caption" sx={{ color: FAINT }}>
-                        {taskState === "done" && detail?.resumable
-                          ? "This task is done - continuing puts it back in progress."
-                          : "Choose a different harness, model, or prompt on the next run."}
-                      </Typography>
                     </Box>
                   )}
                   {!term?.alive && !isGeneral && (restartOpen || (!report && !detail?.transcript)) && (
@@ -1387,25 +1413,6 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       </Button>
                       <Typography variant="caption" sx={{ color: FAINT, ml: 1 }}>
                         Starts the regular assistant with this task and its messages.
-                      </Typography>
-                    </Box>
-                  )}
-                  {/* the conversation IS the record, so it can be filed as the result once its provider
-                      session is gone - the only road out of a finished chat used to be typing into it again */}
-                  {isGeneral && generalStarted && !term?.alive && (
-                    <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${BORDER}`, display: "flex",
-                      alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
-                      <Button size="small" variant="contained" disableElevation disabled={!!startingAgent}
-                        startIcon={startingAgent === "resume" ? <CircularProgress size={12} /> : <RefreshIcon sx={{ fontSize: 15 }} />}
-                        title="Reopens the saved provider conversation and continues from its existing context."
-                        onClick={resumeGeneralAgent}>{startingAgent === "resume" ? "Continuing…" : "Continue this session"}</Button>
-                      <Button size="small" variant="outlined" disabled={!!wrapping} startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />}
-                        title="Files this conversation's last answer as the task's result and ends its session. The task stays open until you mark it done."
-                        onClick={wrapUp}>Save this conversation's result</Button>
-                      <Typography variant="caption" sx={{ color: FAINT }}>
-                        {taskState === "done"
-                          ? "This task is done - continuing puts it back in progress."
-                          : "Or send a message in the workspace below to pick it back up."}
                       </Typography>
                     </Box>
                   )}
@@ -1568,12 +1575,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       {/* the bar comes FIRST, above the letter it acts on */}
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
                         {pendingReview && onGoReview ? (
-                          <Button size="small" variant="contained" disableElevation sx={{ minHeight: 34, py: 0, px: 1.75, fontSize: 12.5 }}
+                          <Button size="small" variant="contained" disableElevation sx={primaryBtn}
                             startIcon={<ForwardToInboxIcon sx={{ fontSize: 16 }} />} onClick={onGoReview}>Edit draft in Review</Button>
                         ) : (
                           <>
                             <Button size="small" variant="contained" disableElevation disabled={!!openingReply}
-                              sx={{ minHeight: 34, py: 0, px: 1.75, fontSize: 12.5 }}
+                              sx={primaryBtn}
                               startIcon={openingReply === "write" ? <CircularProgress size={12} /> : <ForwardToInboxIcon sx={{ fontSize: 16 }} />}
                               title="Opens a draft in Review. Nothing is sent until you approve it."
                               onClick={() => openReply(false)}>{replyPrimary}</Button>

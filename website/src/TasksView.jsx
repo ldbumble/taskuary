@@ -115,6 +115,10 @@ const chipBtn = { fontSize: 11.5, fontWeight: 600, height: 26, minHeight: 26, py
   borderRadius: 13, bgcolor: "#f4f1ec", color: INK, borderColor: BORDER,
   "&:hover": { borderColor: "#d8cfbe", bgcolor: "#f4f1ec" } };
 const barBtn = { minHeight: 34, py: 0, px: 1.6, fontSize: 12.5, color: INK, borderColor: BORDER };
+// the same pill as chipBtn, for a fact you read rather than a control you press
+const chipBtnStatic = { display: "inline-flex", alignItems: "center", height: 26, px: 1.25,
+  borderRadius: 13, bgcolor: "#f4f1ec", border: `1px solid ${BORDER}`, color: INK,
+  fontSize: 11.5, fontWeight: 600 };
 
 // ── the list rail's row ──────────────────────────────────────────────────────────────────
 // One word for the kind: the agent's own name follows it on the same line, so "agent · coding ·
@@ -171,7 +175,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // fired on return. Only the newest request is allowed to repaint the list.
   const taskLoadSeq = useRef(0);
   const stale = (id) => selRef.current !== id;
-  const { agents, models, kinds, brainList, brainModels } = useAgents();
+  const { agents, models, kinds, brains, brainList, brainModels } = useAgents();
   const pickerTask = useRef(null);          // initialize each task from its durable worker once
   const [err, setErr] = useState("");
   const [newOpen, setNewOpen] = useState(false);
@@ -679,6 +683,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const taskState = taskPhase(t?.Status);
   // the triage verdict behind THIS task, for "Where this came from"
   const sourceRoute = (detail?.routes || []).find((r) => r.MessageId === sourceMessage?.MessageId);
+  // WHAT RUNS THIS, in the vocabulary the brain layer landed on 2026-09-16: a ROLE picks the
+  // document (every coding task's role is `coder`), a BRAIN is the CLI that runs it, and the model
+  // is the brain's - it is not a property of the task, so the card does not offer one. A live
+  // session names the CLI it was ASKED to run; otherwise the roster says which brain the role uses.
+  const runRole = assignedAgent(t?.Assignee) || (t?.Kind === "coding" ? "coder" : "");
+  const runBrain = term?.cli || term?.agent || (runRole && brains[runRole]) || "";
   // the envelope on the reply, read from the same Deliver blob Review reads
   const replyOf = pendingReview || sentReview;
   const replyCc = deliveryCc(replyOf), replyFiles = deliveryFiles(replyOf);
@@ -1397,6 +1407,21 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           ? "This task is done - continuing puts it back in progress."
                           : "Or send a message in the workspace below to pick it back up."}
                       </Typography>
+                    </Box>
+                  )}
+                  {(term?.alive || report || detail?.transcript) && !restartOpen && (runRole || runBrain || repoOf(t)) && (
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.7, flexWrap: "wrap",
+                      mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
+                      {runRole && <Box sx={{ ...chipBtnStatic }} title="The role: which document this worker follows. Every coding task's role is `coder`.">
+                        <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>role</Box>&nbsp;{runRole}</Box>}
+                      {runBrain && <Box sx={{ ...chipBtnStatic }} title="The brain: which CLI actually runs it. Chosen by the default_brain setting, or this role's override — not per task.">
+                        <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>brain</Box>&nbsp;{runBrain}</Box>}
+                      {!isGeneral && <Button size="small" variant="outlined" sx={chipBtn}
+                        startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}
+                        title="Which checkout the session works in"
+                        onClick={() => setRepoPick(true)}>{repoOf(t) || "pick a repo"}</Button>}
+                      <Box sx={{ flex: 1, minWidth: 12 }} />
+                      <Typography variant="caption" sx={{ color: FAINT }}>the model is the brain&rsquo;s, not the task&rsquo;s</Typography>
                     </Box>
                   )}
                   </>}

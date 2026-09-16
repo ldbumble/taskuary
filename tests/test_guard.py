@@ -52,9 +52,11 @@ class DenyListTests(unittest.TestCase):
                              ('POST', '/api/reports/preview'), ('POST', '/api/reports/compose'), ('POST', '/api/workflows/compose'),
                              ('POST', '/api/reports/3/invoice-batches'), ('PATCH', '/api/invoice-batches/2/items/8'),
                              ('POST', '/api/invoice-batches/2/prepare'),
-                             ('POST', '/api/semantic/metrics'), ('DELETE', '/api/semantic/metrics/3'), ('POST', '/api/semantic/metrics/3/try')):
+                             ('POST', '/api/semantic/metrics'), ('DELETE', '/api/semantic/metrics/3'), ('POST', '/api/semantic/metrics/3/try'),
+                             ('POST', '/api/terminals')):
             self.assertTrue(guard.denied(method, path), f'{method} {path} must be refused')
-        for method, path in (('GET', '/api/semantic/metrics'), ('GET', '/api/reports'), ('POST', '/api/tools/run')):
+        for method, path in (('GET', '/api/semantic/metrics'), ('GET', '/api/reports'), ('POST', '/api/tools/run'),
+                             ('GET', '/api/terminals'), ('GET', '/api/terminals/abc/screen')):
             self.assertFalse(guard.denied(method, path), f'{method} {path} must be allowed')
 
     def test_the_list_is_not_configurable(self):

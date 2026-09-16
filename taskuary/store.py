@@ -2821,14 +2821,35 @@ class SQLiteStore:
                 AND (c.CommentId IS NOT NULL OR tr.TranscriptId IS NOT NULL)
             ORDER BY LastWorkedAt DESC, t.TaskId DESC LIMIT 100''')
 
-    def scan_messages(self, limit=20000):
-        """Just enough of every message to re-run a policy over the history (bodies capped)."""
+    def scan_messages(self, limit=20000, since=None, statuses=None, from_email=None, from_domains=None,
+                      include_body=True):
+        """Just enough message history, with the common filters pushed into SQLite.
+
+        Every filter here is a PRE-filter: policy.matches() still judges each row it returns, so a
+        clause may over-fetch but must never be narrower than the Python predicate it stands in for -
+        a row SQLite drops is a row the owner silently never sees again.
+        """
         # ConversationId rides along so a history reader can pair inbound mail with what the owner
         # SENT back (histgen: "answered" is the ground truth TRIAGE.md is distilled from, and on an
-        # IMAP install this store is the only place the inbound half lives)
-        return self._rows('SELECT MessageId, TaskId, ConversationId, FromEmail, Subject, Status, SentAt, '
-                          'substr(BodyText, 1, 2000) BodyText '
-                          'FROM message ORDER BY MessageId DESC LIMIT ?', (limit,))
+        # IMAP install this store is the only place the inbound half lives). Most callers only want a
+        # date/status/envelope slice; do that before Python ever sees the back catalogue.
+        where, args = [], []
+        if since is not None:
+            where.append('SentAt>=?'); args.append(since)
+        if statuses:
+            where.append('Status IN (' + ','.join('?' * len(statuses)) + ')'); args += list(statuses)
+        if from_email:
+            vals = [x.lower() for x in from_email]
+            where.append('lower(FromEmail) IN (' + ','.join('?' * len(vals)) + ')'); args += vals
+        if from_domains:
+            # '%@'||domain, not substr-after-the-first-'@': matches() splits on the LAST '@', and a
+            # quoted local part ('"a@b"@vendor.com') puts an earlier one in the way
+            where.append('(' + ' OR '.join(["lower(FromEmail) LIKE '%@'||?"] * len(from_domains)) + ')')
+            args += [x.lower() for x in from_domains]
+        body = 'substr(BodyText, 1, 2000) BodyText' if include_body else "'' BodyText"
+        sql = ('SELECT MessageId, TaskId, ConversationId, FromEmail, Subject, Status, SentAt, ' + body + ' FROM message'
+               + ((' WHERE ' + ' AND '.join(where)) if where else '') + ' ORDER BY MessageId DESC LIMIT ?')
+        return self._rows(sql, (*args, limit))
     def set_message_status(self, mid, status):
         self._exec('UPDATE message SET Status=? WHERE MessageId=?', (status, mid))
         self._poke('feed-changed', message_id=mid)

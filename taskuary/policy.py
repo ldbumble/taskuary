@@ -55,9 +55,15 @@ def apply_retroactively(store, policy: dict) -> int:
     if policy.get('Action') != 'skip': return 0
     on = bool(policy.get('Active', 1))
     froms = ('routed', 'ignored', 'filed') if on else ('skipped',)
+    kind = policy.get('Kind')
+    scan = {'statuses': froms}
+    # only the kinds whose SQL is EXACTLY matches() get an envelope pre-filter - 'noreply' is a regex
+    # no LIKE list reproduces faithfully, and a prefilter that misses is a row stranded off the timeline
+    if kind == 'sender': scan['from_email'] = _split(policy.get('Pattern'))
+    elif kind == 'sender_domain': scan['from_domains'] = _split(policy.get('Pattern'))
+    if kind in BODYLESS: scan['include_body'] = False      # judged on the envelope: never pay for the body
     n = 0
-    for m in store.scan_messages():
-        if m['Status'] not in froms: continue
+    for m in store.scan_messages(**scan):
         if not matches(policy, {'from_email': m.get('FromEmail'), 'subject': m.get('Subject'), 'body': m.get('BodyText')}):
             continue
         store.set_message_status(m['MessageId'], 'skipped' if on else ('routed' if m.get('TaskId') else 'ignored'))

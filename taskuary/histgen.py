@@ -155,7 +155,7 @@ def sent_mail(store, days):
 
 def _db_window(store, days):
     since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
-    return [m for m in store.scan_messages() if str(m.get('SentAt') or '') >= since]
+    return store.scan_messages(since=since)
 
 
 def gen_style(store, llm, days):

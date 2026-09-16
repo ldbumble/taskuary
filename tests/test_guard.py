@@ -89,6 +89,12 @@ class ScopeTests(unittest.TestCase):
         guard.ensure_tokens(dict, lambda d: None, srv)
         self.assertEqual(srv['agent_token'], first)                     # stable across restarts
 
+    def test_a_wrong_length_token_is_just_wrong(self):
+        self.assertFalse(guard.token_matches('short', 'much-longer-secret'))
+        self.assertTrue(guard.token_matches('secret', 'secret'))
+        self.assertFalse(guard.token_matches('secret', 'secretX'))
+        self.assertTrue(guard.token_matches('agent', 'nope', 'agent'))
+
 
 class OverTheWireTests(unittest.TestCase):
     """...and the same thing through the actual middleware, which is what a curl in a session hits."""

@@ -229,6 +229,12 @@ class DoorTests(unittest.TestCase):
                    headers={'X-Taskuary-Token': server.cfg['server']['agent_token']})
         self.assertEqual(r.status_code, 200)
 
+    def test_sqlite_cannot_open_the_taskuary_database(self):
+        from taskuary import config
+        db = config.db_path()
+        with self.assertRaisesRegex(RuntimeError, 'not a report source'):
+            reports.run_sqlite({'db': db, 'query': 'SELECT 1'})
+
     def test_f03_the_events_socket_refuses_another_sites_page(self):
         from starlette.websockets import WebSocketDisconnect
         tok = server.cfg['server']['token']

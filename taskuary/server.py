@@ -5760,9 +5760,10 @@ def ingest_status():
 # And one socket for the rest of the UI: Timeline/Board/Studio subscribe instead of polling.
 @app.websocket('/api/events/ws')
 async def events_ws(ws: WebSocket):
-    """feed-changed, task-changed, run-tail. Same token-on-query as the terminal socket."""
-    tok = cfg['server'].get('token')
-    if tok and ws.query_params.get('token') != tok: return await ws.close(code=4401)
+    """feed-changed, task-changed, run-tail. Same Host/Origin/token questions as the terminal
+    socket: a websocket is exempt from the same-origin policy, so a page that learned the token
+    used to subscribe from anywhere (audit 2026-09-16)."""
+    if not _ws_ok(ws): return await ws.close(code=4401)
     await ws.accept()
     try:
         await live_bus.serve(ws)

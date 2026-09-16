@@ -79,6 +79,12 @@
    palette's INK, not the darker-than-INK grey this had: #191814 was a shade invented for this one
    rule, and the whole point of theme.jsx is that nothing invents its own. */
 .tq-pile-row .t b { flex: 1 1 auto; min-width: 0; font-size: 11.5px; font-weight: 500; color: #262521; letter-spacing: -.1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* which task a row is. Sans, not mono - the rail carries no mono anywhere - and quiet enough that
+   the subject still leads the line. */
+.tq-pile-ref { flex: 0 0 auto; font: 600 9.5px 'IBM Plex Sans', system-ui, sans-serif; color: #a09889; letter-spacing: .02em; }
+/* ...and, in YOUR TASK only, what is holding it up: "waiting to start", "asked you". A right-aligned
+   column you can read down, not a pill - a pill on every row is what made the old rail a wall. */
+.tq-pile-word { flex: 0 0 auto; font: 600 10px 'IBM Plex Sans', system-ui, sans-serif; color: #6e685f; white-space: nowrap; }
 .tq-pile-tag { flex: 0 0 auto; display: inline-block; padding: 0 6px; border-radius: 99px; border: 1px solid #ddd6cb; background: #eee9e1; color: #6f6960; font: 600 9px/15px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .01em; white-space: nowrap; }
 /* the waving agent and the draft waiting for a yes: the two lanes where work has STOPPED until the
    owner answers, and the only rows left carrying colour of their own */

@@ -901,6 +901,21 @@ class MemoryTests(unittest.TestCase):
         # under ("Import broken") - funnel.says prefers Title now (the owner, 2026-09-16)
         self.assertEqual([(i['title'], i['kind'], i['lane']) for i in items], [('Re: budget 0', 'fyi', 'fyi'), ('Fix the import', 'todo', 'working')])
 
+    def test_a_pty_worker_that_ran_and_left_leaves_a_transcript_not_a_run(self):
+        """A coder started from the terminal writes a TRANSCRIPT on its way out and no run row at
+        all - the same row the task card reads to offer "Continue previous work". not_started_why
+        only consulted runs, so a task an agent had actually worked and walked away from reported
+        "it was handed to coder and nothing has started it" (TQ-0588/0589, 2026-09-16: six hours of
+        it, with transcripts from copilot and from coder sitting right there)."""
+        s = store()
+        tid = s.create_task({'Title': 'Run the August audit', 'Kind': 'coding', 'Assignee': 'agent:coder'}, 'o')
+        before = funnel.not_started_why(s, tid)
+        self.assertNotIn('ran on this', before)                    # nothing has run yet, whatever the reason
+        s.add_transcript(tid, 'sess-1', 'the agent said things', agent='coder')
+        # ...and a transcript outranks every softer reason below it: "auto-start is off" is not why
+        # this one is sitting there, because it plainly did start
+        self.assertIn('ran on this and left without finishing it', funnel.not_started_why(s, tid))
+
     def test_unknown_verbs_are_refused(self):
         with self.assertRaises(ValueError): funnel.settle(store(), 'x', 'burn')
 

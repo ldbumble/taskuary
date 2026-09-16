@@ -69,6 +69,50 @@ class AutomaticRoadTests(unittest.TestCase):
         for gone in ('Penn Forest', 'confidential', 'From: Uri'):
             self.assertNotIn(gone, task['Summary'], gone)
 
+    def test_an_fyi_keeps_the_verdict_s_own_line_although_it_has_no_task(self):
+        """The whole point of asking for a title on every verdict: an fyi never becomes a task, so
+        there was nowhere to keep the one sentence triage had already written, and the rail fell
+        back to the mail header - "MFA - PCC Report Error Check - 0 rows returned for period ending
+        09/15" over a row whose job is to say what a thing is (the owner, 2026-09-16)."""
+        from taskuary import funnel
+        s = MemoryStore()
+        llm = mock.Mock(return_value=json.dumps({
+            'intent': 'fyi', 'why': 'a scheduled error report; nothing is asked',
+            'title': 'Nightly PCC error check returned no rows',
+            'summary': 'The scheduled PCC error check ran and returned nothing for the period ending 09/15.'}))
+        with mock.patch.object(ingest, '_spawn'):
+            r = ingest.ingest_message(s, {'external_id': 'pcc', 'channel': 'email', 'from_email': 'rrdbreports@mfa.example',
+                                          'conversation_id': 'c-pcc', 'from_name': 'RRDB Reports',
+                                          'subject': 'MFA - PCC Report Error Check - 0 rows returned for period ending 09/15',
+                                          'body': 'Rows returned: 0', 'sent_at': '2026-09-15 07:10:00'}, llm=llm)
+        self.assertEqual(r['status'], 'filed')
+        self.assertIsNone(r['task_id'])                                     # an fyi is not work...
+        row = s.get_message(r['message_id'])
+        self.assertEqual(row['TriageTitle'], 'Nightly PCC error check returned no rows')   # ...and still has a line
+        # ...which is what the work rail actually reads, in place of the header it arrived under
+        self.assertEqual(funnel.says(dict(row) | {'Title': None}), 'Nightly PCC error check returned no rows')
+
+    def test_a_verdict_that_names_no_title_leaves_the_row_as_it_was(self):
+        """A policy ignore and a failed call name nothing, and neither may invent a line."""
+        from taskuary import funnel
+        s = MemoryStore()
+        llm = mock.Mock(return_value=json.dumps({'intent': 'fyi', 'why': 'a newsletter'}))
+        with mock.patch.object(ingest, '_spawn'):
+            r = ingest.ingest_message(s, {'external_id': 'n', 'channel': 'email', 'from_email': 'news@vendor.example',
+                                          'conversation_id': 'c-n', 'subject': 'Our October newsletter',
+                                          'body': 'Read on.', 'sent_at': '2026-09-15 07:10:00'}, llm=llm)
+        row = s.get_message(r['message_id'])
+        self.assertIsNone(row['TriageTitle'])
+        self.assertEqual(funnel.says(dict(row) | {'Title': None}), 'Our October newsletter')
+
+    def test_a_task_keeps_its_own_title_over_a_follow_up_s(self):
+        """The row for a task is about the JOB. A follow-up's own verdict line describes only the
+        latest thing said on it, so Title outranks TriageTitle and the rail does not rename a task
+        every time somebody writes to it."""
+        from taskuary import funnel
+        self.assertEqual(funnel.says({'Title': 'Fix the census sync', 'TriageTitle': 'Marcus adds a detail',
+                                      'Subject': 'RE: RE: sync'}), 'Fix the census sync')
+
     def test_a_verdict_that_names_its_own_summary_still_wins(self):
         """The fallback never overrides the brain - it is only what stands in for it."""
         s = MemoryStore()

@@ -99,8 +99,14 @@ def _parent_deferring() -> bool:
 
 
 def _land(store, msg: dict, task_id, status: str) -> int:
-    """Where the judged message goes: the row deferred() already showed, or a new one."""
-    if msg.get('_mid'): store.place_message(msg['_mid'], task_id, status); return msg['_mid']
+    """Where the judged message goes: the row deferred() already showed, or a new one.
+
+    `_title` is the verdict's own line for THIS message (triage.TASK_FIELDS answers one whatever the
+    verdict). It rides the msg dict rather than a parameter because every branch below lands through
+    here, and a verdict that named nothing - a policy ignore, a failed call - simply carries none."""
+    if msg.get('_mid'):
+        store.place_message(msg['_mid'], task_id, status, title=msg.get('_title'))
+        return msg['_mid']
     return store.add_message({**_fields(msg, task_id), 'Status': status})
 
 
@@ -711,6 +717,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                     return {'status': 'error', 'task_id': None, 'message_id': mid}
         else:
             intent = {'intent': 'task', 'why': ''}
+        # ...and whatever it decided, it also said what this IS in twelve words. A task keeps that
+        # on the task; an fyi or a triaged report has no task, so it is kept on the message and the
+        # rail reads it instead of the mail header (funnel.says).
+        if intent.get('title'): msg['_title'] = str(intent['title']).strip()[:140] or None
         if intent['intent'] == 'fyi':
             mid = _land(store, msg, None, 'filed')
             store.add_route(mid, None, 'file', None,
@@ -1646,7 +1656,9 @@ def _fields(msg, task_id):
             'MailMetaJson': json.dumps(msg.get('mail_meta')) if msg.get('mail_meta') else None,
             # kept so a verdict can be replayed against the lines that decided it (evalset.py)
             'RecipientsJson': json.dumps({'to': list(msg.get('to') or []), 'cc': list(msg.get('cc') or [])})
-                              if (msg.get('to') or msg.get('cc')) else None}
+                              if (msg.get('to') or msg.get('cc')) else None,
+            # what triage called it, for the rows that never become a task and so have no Title
+            'TriageTitle': (msg.get('_title') or None)}
 
 
 # HOW MANY OF THE STRANDED ROWS ONE SYNC WILL TRY. The sweep stops at the first failure anyway, so

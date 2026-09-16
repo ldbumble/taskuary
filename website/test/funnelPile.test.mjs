@@ -176,6 +176,10 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.match(view, /!pile \? \(/);                  // loading is not a false empty Timeline
   assert.match(view, /Loading timeline/);
   assert.match(view, /const sharedFilter = useRef\("\{\}"\)/); // default filter must not force a duplicate mount rebuild
+  // a row with no message - an assistant idea that became a task - still opens on the stage: the
+  // canonical item describes a task as readily as a message (2026-09-16)
+  assert.match(view, /openByItem\?\.\(pid, target\)/);
+  assert.match(read("FeedView.jsx"), /const openByItem = \(itemId, target\) =>/);
   const feedSource = read("FeedView.jsx");
   assert.match(feedSource, /view === "unread" && top && !unreadInventory/); // wait for canonical Unread; do not race it with legacy feed reads
   assert.match(feedSource, /\{!top && <FunnelBar/); // Assistant's pile replaces the legacy funnel query
@@ -200,8 +204,8 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.match(view, /fillCaps\(room - \(curKey \? CUR_H - ROW_H : 0\), bands\)/);
   // Unread is the ranked pipe again: it is the only source for CURRENT/NEXT and for what the chat
   // will actually ask about. All remains FeedView's chronological history.
-  assert.match(view, /<FeedView[^]*top=\{\(\{ openByMid \}\) => <Pile/);
-  assert.match(read("FeedView.jsx"), /typeof top === "function" \? top\(\{ openByMid \}\) : top/);
+  assert.match(view, /<FeedView[^]*top=\{\(\{ openByMid, openByItem \}\) => <Pile/);
+  assert.match(read("FeedView.jsx"), /typeof top === "function" \? top\(\{ openByMid, openByItem \}\) : top/);
   // The rail's kind/source filters narrow the rail's OWN rows and nothing else: the pile and the
   // walk are asked for over everything, so the assistant processes the whole pipe whatever the
   // rail is showing (the owner, 2026-09-04: "how the assistant works on filtered tasks - does it

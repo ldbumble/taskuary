@@ -5,6 +5,12 @@
 //
 //   node website/task_mode_check.mjs <url>      # against a `taskuary --demo --port N` server
 //
+// RUN IT ON BOTH READ PATHS. A fresh --demo is LEGACY, and this check passed on it for months
+// while task mode was broken on the canonical one - where a row can have no message at all and the
+// stage has to ask the item about itself instead (2026-09-16). To cover the real configuration,
+// activate canonical reads on the demo's home first:
+//   python -c "from taskuary.store import SQLiteStore; from datetime import datetime; //     SQLiteStore(r'<home>/taskuary.db').activate_processing_reads(//       fixed_now=datetime.now().strftime('%Y-%m-%d %H:%M:%S'), live_state=[])"
+//
 // Invisible to pytest and to node --test: the click crosses two components and lands on a stage
 // that only exists in a browser. (Whether a rail FILTER reaches the walk is a source-level fact
 // instead - funnelPile.test.mjs pins it.)
@@ -13,6 +19,8 @@ import { launch } from "./browser.mjs";
 const url = process.argv[2] || "http://127.0.0.1:7911/";
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const STAGE_TABS = ["Summary", "Message", "Triage"];      // FeedView's own detail panel
+// ...and what a row with NO message opens instead: the item's own pane, which names what it is
+const TASK_PANE = ["TASK", "Open TQ-"];
 
 const state = (page) => page.evaluate((tabs) => {
   const btn = (label) => [...document.querySelectorAll(".tq-stage-mode button")].find((b) => b.textContent.trim() === label);
@@ -23,6 +31,7 @@ const state = (page) => page.evaluate((tabs) => {
     pileTitles: [...document.querySelectorAll(".tq-pile-row .card b")].map((b) => b.textContent.trim().slice(0, 40)),
     placeholder: text.includes("Pick anything on the left"),
     onStage: tabs.every((t) => text.includes(t)),         // the row opened on the task stage
+    onItemPane: ["TASK", "Open TQ-"].every((t) => text.includes(t)),   // ...or its item's own pane
     chatTurns: document.querySelectorAll(".tq-msg").length,
   };
 }, STAGE_TABS);
@@ -65,7 +74,7 @@ try {
   // chat is now only right for a row with neither, because "open it" answered with a conversation
   // about it for every agent row on the rail (the owner, 2026-09-16: "task button on the assistant,
   // if i click it then hit a item the chat pops up not the actual task").
-  const opened = s.onStage && !s.placeholder;
+  const opened = (s.onStage || s.onItemPane) && !s.placeholder;
   const wentToTask = await page.evaluate(() => !document.querySelector(".tq-stage-mode"));
   const fellBack = s.mode === "chat" && s.chatTurns > before.chatTurns;
   check(opened || wentToTask || fellBack,

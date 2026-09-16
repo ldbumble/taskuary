@@ -298,8 +298,11 @@ def _index_response(index_file: Path):
 <meta http-equiv="refresh" content="1"><title>Taskuary is updating</title></head>
 <body style="font:14px system-ui;margin:4rem;color:#4d4a43">Taskuary is updating&hellip;</body></html>'''
         return HTMLResponse(html, status_code=503, headers={
-            'Cache-Control': 'no-store, must-revalidate', 'Retry-After': '1'})
-    return HTMLResponse(_seed_token(html), headers={'Cache-Control': 'no-store, must-revalidate'})
+            'Cache-Control': 'no-store, must-revalidate', 'Retry-After': '1',
+            'X-Content-Type-Options': 'nosniff'})
+    return HTMLResponse(_seed_token(html), headers={
+        'Cache-Control': 'no-store, must-revalidate',
+        'X-Content-Type-Options': 'nosniff'})
 
 
 def _seed_token(html: str) -> str:

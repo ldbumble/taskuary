@@ -229,6 +229,20 @@ class DoorTests(unittest.TestCase):
                    headers={'X-Taskuary-Token': server.cfg['server']['agent_token']})
         self.assertEqual(r.status_code, 200)
 
+    def test_winrm_does_not_interpolate_host_or_script(self):
+        seen = {}
+        def fake_run(argv, **kw):
+            seen['argv'] = argv; seen['env'] = kw.get('env') or {}
+            return SimpleNamespace(returncode=0, stdout='BOX\n', stderr='')
+        with mock.patch.object(reports.spawn, 'run', fake_run):
+            head, out = reports.run_winrm({'host': 'box; calc.exe', 'script': '}; calc.exe'})
+        cmd = seen['argv'][-1]
+        self.assertNotIn('box; calc.exe', cmd)
+        self.assertNotIn('}; calc.exe', cmd)
+        self.assertEqual(seen['env']['TQ_WINRM_HOST'], 'box; calc.exe')
+        self.assertEqual(seen['env']['TQ_WINRM_SCRIPT'], '}; calc.exe')
+        self.assertIn('BOX', out)
+
     def test_sqlite_cannot_open_the_taskuary_database(self):
         from taskuary import config
         db = config.db_path()

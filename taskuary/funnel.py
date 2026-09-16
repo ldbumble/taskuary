@@ -415,6 +415,13 @@ def not_started_why(store, tid) -> str:
         return f'Taskuary closed while {who} had this, so the session went with it. Nothing restarts by itself.' + old
     if any(r.get('Status') in ('stopped', 'failed', 'error') for r in (store.list_runs(tid) or [])):
         return f'{who} ran on this and stopped without finishing it.' + old
+    # ...and a pty worker leaves NO run row at all - it writes a transcript on the way out, which is
+    # the very thing the task card reads to offer "Continue previous work". Only runs were consulted
+    # here, so two tasks a coder had actually worked and walked away from reported "it was handed to
+    # coder and nothing has started it" for six hours (TQ-0588/0589, 2026-09-16: transcripts from
+    # copilot and from coder, no run rows, no live session). A transcript IS proof that it ran.
+    if store.last_transcript(tid):
+        return f'{who} ran on this and left without finishing it. Continue the session, or hand it on.' + old
     msg = store.last_inbound_on_task(tid) or {}
     for r in reversed(store.message_routes(msg.get('MessageId')) or []) if msg.get('MessageId') else []:
         reason = str(r.get('Reason') or '')

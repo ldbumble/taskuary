@@ -234,10 +234,15 @@ function Pile({ pile, current, onPull }) {
                 const inBatch = batchKeys.has(i.key);
                 const cls = ["tq-pile-row", landing.has(i.key) ? "landing" : "", i.settling ? "settling" : "",
                   isCur ? "current" : inBatch ? "inbatch" : i.key === nextKey ? "next" : ""].filter(Boolean).join(" ");
-                // the one pill a row can still wear: work has STOPPED until you answer it. Every
-                // other thing a row used to carry - the lane word, the road word, the sender, the
-                // ref, the promoted arrow - is on the row you open, and the heading says the rest.
+                // the one pill a row can still wear: work has STOPPED until you answer it.
                 const loud = i.lane === "blocked" || i.lane === "approve";
+                // ...and inside YOUR TASK, the lane word comes back quietly beside it. Stripping it
+                // from every row cost the one distinction that band exists to make: "handed to the
+                // coder and never started" and "nobody has ever touched this" both sat there
+                // looking identical, and the only way to tell was to hover (the owner, 2026-09-16,
+                // asking why two queued tasks were not in the rail - they were, saying nothing).
+                // Every other band's heading already answers the question, so they stay bare.
+                const word = !loud && !i.settling && level === "task" ? meta.word : "";
                 return (
                   <div key={i.key} className={cls} style={{ top: landing.has(i.key) ? -ROW_H : top }}>
                     <span className="when">{railAge(i.kind === "meeting" ? i.when : (i.since || i.when))}</span>
@@ -249,12 +254,16 @@ function Pile({ pile, current, onPull }) {
                       <div className="t">
                         <span className="logo"><SourceMark item={i} size={15} /></span>
                         <b>{i.title}</b>
+                        {/* which task this IS. It is how you say "TQ-0588" to the assistant, how you
+                            match a row to the Tasks tab, and it was only ever in the tooltip. */}
+                        {!!i.ref && <span className="tq-pile-ref">{i.ref}</span>}
                         {i.settling && <span className="tq-pile-tag">triaging…</span>}
                         {loud && !i.settling && (
                           <span className="tq-pile-tag loud"
                             style={{ color: ROLES.you.ink, background: ROLES.you.tint, borderColor: ROLES.you.bd }}>
                             {meta.mark} {meta.word}</span>
                         )}
+                        {!!word && <span className="tq-pile-word">{word}</span>}
                       </div>
                       {isCur && <div className="sub">{[i.why, i.kind === "meeting" ? ageText(i.when) : agoText(i.since || i.when)].filter(Boolean).join(" · ")}</div>}
                     </div>

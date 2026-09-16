@@ -210,6 +210,9 @@ def token() -> str:
         p.write_text(secrets.token_urlsafe(24), encoding='utf-8')
         try: p.chmod(0o600)
         except OSError: pass
+    else:
+        try: p.chmod(0o600)
+        except OSError: pass
     return p.read_text(encoding='utf-8').strip()
 
 

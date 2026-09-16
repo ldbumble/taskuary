@@ -63,7 +63,10 @@ def _read() -> dict:
     return tomllib.loads(f.read_text(encoding='utf-8')) if f.exists() else {}
 
 def _write(d: dict):
-    (home() / 'config.toml').write_text(dumps_toml(d) + '\n', encoding='utf-8')
+    p = home() / 'config.toml'
+    p.write_text(dumps_toml(d) + '\n', encoding='utf-8')
+    try: p.chmod(0o600)
+    except OSError: pass
 
 def _env_server() -> dict:
     """Non-empty TASKUARY_* overlays. Empty is unset — an injected '' must not disable a stored token."""

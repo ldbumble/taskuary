@@ -1,6 +1,6 @@
 """The 2026-09-02 backend audit, pinned. Each test is one finding that was reproduced before the fix;
 the number is the finding's in the audit report."""
-import sqlite3, tempfile, threading, time, unittest
+import os, sqlite3, tempfile, threading, time, unittest
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -45,6 +45,11 @@ class PerimeterTests(unittest.TestCase):
         self.assertIn('1', reports.run_sqlite({'db': p, 'query': 'SELECT v FROM t'})[1])
         with self.assertRaises(sqlite3.OperationalError): reports.run_sqlite({'db': p, 'query': 'DROP TABLE t'})
         self.assertEqual(sqlite3.connect(p).execute('SELECT count(*) FROM t').fetchone()[0], 1)
+
+    @unittest.skipIf(os.name == 'nt', 'POSIX mode bits')
+    def test_the_data_dir_is_owner_only(self):
+        from taskuary import config
+        self.assertEqual(config.home().stat().st_mode & 0o777, 0o700)
 
 
 class BrainTests(unittest.TestCase):

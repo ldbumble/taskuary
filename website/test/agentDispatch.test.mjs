@@ -41,15 +41,21 @@ test("opening a general task reads state without starting an agent", () => {
   assert.doesNotMatch(mount.slice(0, mount.indexOf("const chooseView")), /assistant\/session/);
 });
 
-test("every live agent has the same pause, finish, and stop controls", () => {
+test("every live agent ends the same way, and never without being written up", () => {
   const tasks = src("TasksView.jsx");
   const start = tasks.indexOf("{term?.alive && (", tasks.indexOf("Agent running"));
   const controls = tasks.slice(start, tasks.indexOf("{report &&", start));
   assert.ok(start >= 0);
-  assert.match(controls, />Save result & end session<\/Button>/);      // relabelled: saving a result is not completing the task (PW-218)
-  assert.match(controls, />End session & save handover<\/Button>/);    // relabelled: nothing is paused in place (PW-219)
-  assert.match(controls, />Stop session<\/Button>/);
-  assert.doesNotMatch(controls, /liveCodingSession && <Button[^>]*>Save result & end session/);
+  // Three controls all ended the session and differed only in what they wrote down - a result, a
+  // handover note, or nothing - which is unreadable as three labels (the owner, 2026-09-16: "save
+  // result vs end session vs stop session???"). One ending now, and it writes up either way.
+  assert.match(controls, />Save and end session<\/Button>/);
+  // and NO way to end one without that write-up (the owner: "meaning no stop without saving")
+  assert.doesNotMatch(controls, />Stop session<\/Button>/);
+  assert.doesNotMatch(controls, /handover<\/Button>/);
+  // the parity this has always guarded: the ending is not gated on a coding session, so a general
+  // agent ends exactly as a coding one does
+  assert.doesNotMatch(controls, /liveCodingSession && <Button[^>]*>Save and end session/);
 });
 
 test("task references use readable sans-serif digits", () => {

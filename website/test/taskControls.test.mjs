@@ -13,10 +13,9 @@ test("each control carries the caption that names its effect on task versus agen
   for (const [label, title] of [
     ["Mark task done", "Closes the task and ends the live agent session with it."],
     ["Reopen task", "Reopens the task only. No agent starts until you choose one."],
-    ["Save result & end session", "The task stays open: Mark task done completes it and drafts the reply."],
+    // one ending, and it writes the session up either way (2026-09-16)
+    ["Save and end session", "The task stays open: Mark task done completes it and drafts the reply."],
     ["Save stopped run result", "Saves the stopped session's result and report. The task stays open."],
-    ["End session & save handover", "Nothing keeps running."],
-    ["Stop session", "Ends the session without a report or handover. The task keeps its state."],
     // its label varies - "Write another" once a reply has already gone - but the caption does not
     ["{replyPrimary}", "Nothing is sent until you approve it."],
     ["Generate reply", "Nothing is sent until you approve it."],
@@ -77,7 +76,10 @@ test("complete, reopen, coding start and stop run the shared operations road, ne
   assert.match(tasks, /runOperation\(api, "task\.complete", selected\)/);
   assert.match(tasks, /runOperation\(api, "task\.reopen", selected\)/);
   assert.match(tasks, /runOperation\(api, "dispatch\.prepare", id, \{ kind: "coding"/);
-  assert.match(tasks, /runOperation\(api, "agent\.stop", id\)/);
+  // there is no stop in this view any more, so there is no second path to guard - a session ends by
+  // being written up, and that is the rule (the owner, 2026-09-16: "meaning no stop without saving").
+  // Marking the task done still ends a live session, which is the way out of a wedged one.
+  assert.doesNotMatch(tasks, /runOperation\(api, "agent\.stop"/);
   const start = tasks.slice(tasks.indexOf("const startCodingAgent"), tasks.indexOf("const startGeneralAgent"));
   assert.doesNotMatch(start, /Kind: "coding"/, "no Kind PATCH before a terminal");
   assert.doesNotMatch(start, /openTerm\(/, "the terminal comes from dispatch");

@@ -33,7 +33,6 @@ import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
-import PauseCircleIcon from "@mui/icons-material/PauseCircleOutline";
 import HistoryIcon from "@mui/icons-material/History";
 import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
@@ -364,32 +363,6 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // Pausing is not finishing: no report, no reply draft, the task stays open. What it worked
   // out becomes a handover note that gets typed into the NEXT session, because a pty has no
   // resumable id - killing the session used to throw all of that away.
-  const pause = async () => {
-    if (!canWrap) return;
-    const id = selected;
-    setWrapping("pause"); setErr("");
-    try {
-      const { data } = await api.post(`/api/tasks/${id}/pause`, {});
-      loadTasks(); onChanged?.();
-      if (stale(id)) return;
-      setWrapped({ note: data.note });
-      setTerm(null); loadDetail(id);
-    } catch (e) { if (!stale(id)) setErr(e?.response?.data?.detail || "Could not pause the session"); }
-    if (!stale(id)) setWrapping(false);
-  };
-  const stopAgent = async () => {
-    if (!selected || wrapping) return;
-    const id = selected;
-    setWrapping("stop"); setErr("");
-    try {
-      await runOperation(api, "agent.stop", id);          // the shared road (PW-215)
-      if (stale(id)) return;
-      setTerm(null);
-      await Promise.all([loadDetail(id), loadTasks()]);
-      onChanged?.();
-    } catch (e) { if (!stale(id)) setErr(e?.response?.data?.detail || "Could not stop the agent session"); }
-    if (!stale(id)) setWrapping(false);
-  };
   useEffect(() => {
     setWrapping(false); setWrapped(null);
     setAskSenderOpen(false); setSenderQuestion(""); setAskingSender(false); setOpeningReply(false);
@@ -1247,7 +1220,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         : `${agentName(t)} is working`}
                     description={term?.alive
                       ? ""
-                      : "Run, pause, stop, or restart an agent. None of these actions completes the task."}
+                      : "Run it, end it, or start another. None of these completes the task."}
                     chip={<LifecycleChip kind="agent" phase={agentState} compact />} tone="#6f8a6e" {...stageProps("agent")}
                     /* folded, this heading carried NOTHING - it passed no action at all, so the one
                        card that can actually be picked back up was the one row you could not act on.
@@ -1288,18 +1261,17 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       {liveCodingSession && <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.7 }} startIcon={<DifferenceIcon sx={{ fontSize: 14 }} />}
                         title="A viewer of the agent's diff. Nothing is approved or committed here."
                         onClick={() => setDiffOpen(true)}>Review changes</Button>}
-                      {/* task completion and agent completion are two things (PW-217/218): saving a result ends the
-                          session and keeps the task open; Mark task done is the step that completes and drafts */}
+                      {/* ONE ENDING. Three buttons all ended the session and differed only in what they
+                          wrote down - a result, a handover note, or nothing - and the labels buried the
+                          half they shared (the owner, 2026-09-16: "save result vs end session vs stop
+                          session???"). It writes the session up either way now: on a run that finished
+                          that is its result, and on one that did not it is where it got to, which is
+                          what the handover note was for.
+                          Task completion stays separate (PW-217/218): this ends the AGENT. */}
                       <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.7 }} disabled={!!wrapping} startIcon={<DoneAllIcon sx={{ fontSize: 14 }} />}
-                        title="Saves the agent's result and report and ends the session. The task stays open: Mark task done completes it and drafts the reply."
-                        onClick={wrapUp}>Save result & end session</Button>
-                      <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.5, borderColor: BORDER }} />
-                      <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.7 }} disabled={!!wrapping} startIcon={<PauseCircleIcon sx={{ fontSize: 14 }} />}
-                        title="Ends the session and saves a handover note for the next one. Nothing keeps running."
-                        onClick={pause}>End session & save handover</Button>
-                      <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.7, color: "#7a2f3c" }} disabled={!!wrapping}
-                        title="Ends the session without a report or handover. The task keeps its state."
-                        startIcon={<BlockIcon sx={{ fontSize: 14 }} />} onClick={stopAgent}>Stop session</Button>
+                        title="Writes up what this session did and ends it. The task stays open: Mark task done completes it and drafts the reply."
+                        onClick={wrapUp}>Save and end session</Button>
+
                     </Box>
                   )}
                   {report && !wrapped && !term?.alive && (
@@ -1420,8 +1392,6 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}
                         title="Which checkout the session works in"
                         onClick={() => setRepoPick(true)}>{repoOf(t) || "pick a repo"}</Button>}
-                      <Box sx={{ flex: 1, minWidth: 12 }} />
-                      <Typography variant="caption" sx={{ color: FAINT }}>the model is the brain&rsquo;s, not the task&rsquo;s</Typography>
                     </Box>
                   )}
                   </>}
@@ -1461,33 +1431,29 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                       <CircularProgress size={15} />
                       <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5 }}>
-                        {wrapping === "pause" ? "Saving what this session found…" : wrapping === "stop" ? "Stopping this session…" : "Finishing this agent run…"}
+                        {wrapping === "stop" ? "Stopping this session…" : "Writing up this session…"}
                       </Typography>
                     </Box>
                     <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.5 }}>
-                      {wrapping === "pause"
-                        ? "Reading the transcript and writing the handover note for the next session. The agent is not asked anything."
-                        : wrapping === "stop" ? "The session is ending. The task and reply are not changed."
-                        : "Reading the transcript and writing the agent result. The task and reply remain separate — this takes a few seconds."}
+                      {wrapping === "stop" ? "The session is ending. The task and reply are not changed."
+                        : "Reading the transcript and writing up what this session did. The task and reply remain separate — this takes a few seconds."}
                     </Typography>
                     <LinearProgress sx={{ mt: 1, borderRadius: 1, height: 3 }} />
                   </Box>
                 ) : workspaceMode === "wrapped" ? (
-                  <Box sx={{ ...card, bgcolor: wrapped.note ? "#dfeade" : "#e3e6e1",
-                    border: `1px solid ${wrapped.note ? "#d8cfbe" : "#d2d6cf"}` }}>
+                  <Box sx={{ ...card, bgcolor: "#e3e6e1", border: "1px solid #d2d6cf" }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
-                      {wrapped.note ? <PauseCircleIcon sx={{ fontSize: 17, color: "#55697a" }} />
-                        : <DoneAllIcon sx={{ fontSize: 17, color: "#47654a" }} />}
+                      <DoneAllIcon sx={{ fontSize: 17, color: "#47654a" }} />
                       <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5, flex: 1 }}>
-                        {wrapped.note ? "Paused — here is where it got to" : "Session closed — here is what it did"}
+                        Session closed — here is what it did
                       </Typography>
                       <Button size="small" sx={{ fontSize: 11 }} onClick={() => setWrapped(null)}>dismiss</Button>
                     </Box>
-                    <CoderReport body={wrapped.report || wrapped.note} artifacts={wrapped.artifacts || []} />
+                    <CoderReport body={wrapped.report} artifacts={wrapped.artifacts || []} />
                     <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 1 }}>
-                      {wrapped.note
-                        ? "Nothing was sent and nothing closed — the task is still open. Start a session again and the agent is handed this note, so it carries on instead of starting over."
-                        : "The agent run ended and its result was saved. The task stays open until you mark it done; reply separately if someone is waiting."}
+                      The session ended and its write-up was saved. The task stays open until you mark it done;
+                      reply separately if someone is waiting. Start another session and the agent is handed this,
+                      so it carries on instead of starting over.
                     </Typography>
                     {/* the card used to name Review without offering a way to get there */}
                     {wrapped.drafting && onGoReview && (
@@ -1530,8 +1496,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     </Box>}
                     {wrapping && (
                       <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block", mt: 0.5 }}>
-                        {wrapping === "pause" ? "Writing the handover note from what is on screen, then stopping."
-                          : "Closing the session and writing up what is on screen — the agent is not asked anything."}
+                        Closing the session and writing up what is on screen — the agent is not asked anything.
                       </Typography>
                     )}
                   </>

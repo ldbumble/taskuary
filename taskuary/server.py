@@ -302,7 +302,8 @@ def _index_response(index_file: Path):
             'X-Content-Type-Options': 'nosniff'})
     return HTMLResponse(_seed_token(html), headers={
         'Cache-Control': 'no-store, must-revalidate',
-        'X-Content-Type-Options': 'nosniff'})
+        'X-Content-Type-Options': 'nosniff',
+        'Referrer-Policy': 'same-origin'})
 
 
 def _seed_token(html: str) -> str:

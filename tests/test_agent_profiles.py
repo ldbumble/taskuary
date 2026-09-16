@@ -176,14 +176,18 @@ class ProfileEditingTests(unittest.TestCase):
         self.assertNotIn('- researcher:', hub_agents.roster(self.s))
         self.assertIsNotNone(self.s.get_agent('researcher'))
 
-    def test_a_routed_general_task_uses_the_named_workers_cli_and_instructions(self):
+    def test_a_routed_general_task_uses_the_named_workers_instructions(self):
+        """The role owns the INSTRUCTIONS - which is what stops it being "only a label on the
+        task" - and no longer owns the CLI. It used to answer both, so naming a worker named a
+        brain; that fusion is what routed TQ-0588's coding work to Copilot (the 2026-09-16 spec)."""
         from taskuary import general
         self.s.save_doc('researcher', 'Research rule: compare independent public sources.', 'owner')
         self.s.save_doc('coder', 'CODE-ONLY SENTINEL: edit repository files.', 'owner')
         task_id = self.s.create_task({'Title': 'Compare vendors', 'Kind': 'general', 'Status': 'open',
                                      'Assignee': 'agent:researcher'}, 'owner')
         task = self.s.get_task(task_id)
-        self.assertEqual(general.default_pick(self.s, task), 'cli:researcher')
+        self.assertEqual(general.assigned_role(self.s, task), 'researcher')
+        self.assertNotEqual(general.default_pick(self.s, task), 'cli:researcher')
         system, _ = general._prompt(self.s, task_id)
         self.assertIn('RESEARCHER.md', system)
         self.assertIn('compare independent public sources', system)

@@ -5947,7 +5947,8 @@ def _ws_ok(ws: WebSocket) -> bool:
     if not guard.host_ok(ws.headers.get('host'), cfg['server']): return False
     if not guard.origin_ok(ws.headers): return False
     tok = cfg['server'].get('token')
-    return not tok or tok in (ws.query_params.get('token'), ws.headers.get('x-taskuary-token'))
+    return not tok or guard.token_matches(ws.query_params.get('token'), tok) \
+        or guard.token_matches(ws.headers.get('x-taskuary-token'), tok)
 
 
 @app.websocket('/api/terminals/{sid}/ws')

@@ -28,6 +28,7 @@ UNKNOWN_NEEDS = 'write'          # an unclassified verb is never merely a read
 ACTIONS = {
     # ── read: the connection is a window, nothing upstream moves ──────────────────────
     'poll': 'read', 'fetch': 'read', 'search': 'read', 'list': 'read', 'discover': 'read',
+    'image_generate': 'read',      # draws a picture: it spends, but nothing upstream moves
     'sqlite': 'read', 'mssql': 'read', 'database': 'read',
     'intacct': 'read', 'intacct_fields': 'read',      # readByQuery and lookup; nothing posts
     # QuickBooks: the reads are reads. The two writes post to the books, which is exactly what the

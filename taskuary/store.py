@@ -516,7 +516,11 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  'notion': 'feed', 'discord': 'trigger,tool',
                  'sentry': 'trigger', 'pagerduty': 'trigger',
                  # speech to text: no role - the funnel and the prompt box ask the first active one
-                 'gemini_stt': '', 'groq_stt': '', 'openai_stt': '', 'deepgram': '', 'elevenlabs_stt': '', 'stt_server': '', 'local_whisper': ''}
+                 'gemini_stt': '', 'groq_stt': '', 'openai_stt': '', 'deepgram': '', 'elevenlabs_stt': '', 'stt_server': '', 'local_whisper': '',
+                 # image models (images.py): a tool, never a poll - a picture is drawn when
+                 # something asks for one, and lands as an attachment where the owner can see it
+                 'openai_image': 'tool', 'azure_openai_image': 'tool', 'xai_image': 'tool', 'image_server': 'tool',
+                 'gemini_image': 'tool', 'stability_image': 'tool', 'openrouter_image': 'tool', 'replicate_image': 'tool'}
 ROLES = ('trigger', 'feed', 'report', 'tool', 'notify')
 
 def roles_of(c) -> set: return {r for r in (c.get('Roles') or '').split(',') if r}

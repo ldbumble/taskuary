@@ -23,7 +23,7 @@ import { sizeText } from "./replyFiles.js";
 import { completionTransition, filterForSelectedState } from "./taskFilter.js";
 import { onLive } from "./live.js";
 import { pollWhileActive } from "./visible.js";
-import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, ACCENT2, PILL_COLORS } from "./theme.jsx";
+import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS } from "./theme.jsx";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { RepoPicker } from "./RepoPicker.jsx";
@@ -114,6 +114,15 @@ const chipBtn = { fontSize: 11.5, fontWeight: 600, height: 26, minHeight: 26, py
   borderRadius: 13, bgcolor: "#f4f1ec", color: INK, borderColor: BORDER,
   "&:hover": { borderColor: "#d8cfbe", bgcolor: "#f4f1ec" } };
 const barBtn = { minHeight: 34, py: 0, px: 1.6, fontSize: 12.5, color: INK, borderColor: BORDER };
+// A LIVE SESSION'S CONTROLS LOOK LIKE CONTROLS. These were bare text buttons sitting next to
+// the outlined role/brain/repo pills, so the two things you could press had less edge than the
+// three facts you can only read - "buttons are still not clear what they are. and they are
+// floating" (the owner, 2026-09-16). Same pill geometry as the facts beside them, in the slate
+// the app uses for every control: the colour says pressable, the border says where it ends.
+// Not filled - filled is Mark task done's, one strip up, and a live session has no primary.
+const liveCtl = { fontSize: 11, fontWeight: 650, height: 26, minHeight: 26, py: 0, px: 1.25,
+  borderRadius: 13, color: ACCENT, bgcolor: "#f1f4f7", borderColor: "#c7d2dc",
+  "&:hover": { borderColor: ACCENT, bgcolor: "#e7eef4" } };
 // the same pill as chipBtn, for a fact you read rather than a control you press
 const chipBtnStatic = { display: "inline-flex", alignItems: "center", height: 26, px: 1.25,
   borderRadius: 13, bgcolor: "#f4f1ec", border: `1px solid ${BORDER}`, color: INK,
@@ -1258,7 +1267,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           "answer agent really does nothing, it's just type into the prompt window").
                           While an agent is working the next move is typing, so nothing here is filled;
                           the notification stays on the chip and beside the waiting room. */}
-                      {liveCodingSession && <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.7 }} startIcon={<DifferenceIcon sx={{ fontSize: 14 }} />}
+                      {liveCodingSession && <Button size="small" variant="outlined" sx={liveCtl} startIcon={<DifferenceIcon sx={{ fontSize: 14 }} />}
                         title="A viewer of the agent's diff. Nothing is approved or committed here."
                         onClick={() => setDiffOpen(true)}>Review changes</Button>}
                       {/* ONE ENDING. Three buttons all ended the session and differed only in what they
@@ -1268,7 +1277,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           that is its result, and on one that did not it is where it got to, which is
                           what the handover note was for.
                           Task completion stays separate (PW-217/218): this ends the AGENT. */}
-                      <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.7 }} disabled={!!wrapping} startIcon={<DoneAllIcon sx={{ fontSize: 14 }} />}
+                      <Button size="small" variant="outlined" sx={liveCtl} disabled={!!wrapping} startIcon={<DoneAllIcon sx={{ fontSize: 14 }} />}
                         title="Writes up what this session did and ends it. The task stays open: Mark task done completes it and drafts the reply."
                         onClick={wrapUp}>Save and end session</Button>
 
@@ -1381,9 +1390,14 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       </Typography>
                     </Box>
                   )}
+                  {/* folded onto the live bar these facts share a ROW with the controls, where a
+                      rule above them is stray chrome - they get a rule beside them instead, so the
+                      pills you press and the pills you read are two groups and not five in a line */}
                   {(term?.alive || report || detail?.transcript) && !restartOpen && (runRole || runBrain || repoOf(t)) && (
                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.7, flexWrap: "wrap",
-                      mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
+                      ...(liveCodingSession
+                        ? { ml: 0.9, pl: 1.1, borderLeft: `1px solid ${BORDER}`, flexShrink: 0 }
+                        : { mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }) }}>
                       {runRole && <Box sx={{ ...chipBtnStatic }} title="The role: which document this worker follows. Every coding task's role is `coder`.">
                         <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>role</Box>&nbsp;{runRole}</Box>}
                       {runBrain && <Box sx={{ ...chipBtnStatic }} title="The brain: which CLI actually runs it. Chosen by the default_brain setting, or this role's override — not per task.">

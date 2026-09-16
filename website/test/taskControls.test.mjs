@@ -17,7 +17,8 @@ test("each control carries the caption that names its effect on task versus agen
     ["Save stopped run result", "Saves the stopped session's result and report. The task stays open."],
     ["End session & save handover", "Nothing keeps running."],
     ["Stop session", "Ends the session without a report or handover. The task keeps its state."],
-    ["Write reply", "Nothing is sent until you approve it."],
+    // its label varies - "Write another" once a reply has already gone - but the caption does not
+    ["{replyPrimary}", "Nothing is sent until you approve it."],
     ["Generate reply", "Nothing is sent until you approve it."],
     ["Ask sender", "nothing is sent now."],
     ["Review changes", "Nothing is approved or committed here."],
@@ -27,6 +28,33 @@ test("each control carries the caption that names its effect on task versus agen
     const opening = tasks.lastIndexOf("<Button", at);
     assert.ok(tasks.slice(opening, at).includes(title), `${label}: caption "${title}"`);
   }
+  // and the one dynamic label still says what it does in every state it can take
+  assert.match(tasks, /const replyPrimary = pendingReview \? "Edit draft in Review" : sentReview \? "Write another" : "Write reply";/);
+});
+
+test("a live session still lets you act on the TASK", () => {
+  // The task card is gated on !term?.alive, so while a session runs it is not on the page at all.
+  // When its four controls lived behind the header's dots that did not matter; once the dots went
+  // (2026-09-16) a live session had no way to complete, hand off, split or reject the task. The
+  // header carries them for exactly that window.
+  const at = tasks.indexOf('{term?.alive && !["done", "dropped"].includes(t.Status) && (');
+  assert.notEqual(at, -1, "the header must carry the task controls while a session is live");
+  const bar = tasks.slice(at, at + 2200);
+  for (const [what, hook] of [["Mark task done", 'finish("done")'], ["Not a task", "setConfirmNAT(true)"],
+                              ["Hand it to a person", "setHandoff(true)"], ["Split or merge", "setReshape(true)"]]) {
+    assert.ok(bar.includes(hook), `${what} must be reachable during a live session`);
+  }
+  assert.ok(tasks.includes("{!term?.alive && ("), "and the full card is still what you get when nothing is running");
+});
+
+test("the rail says a task's state once, and puts its title first", () => {
+  // The row used to carry LifecycleChip ("task · in progress") beside StateChip ("agent working"),
+  // the same duplication the detail header had, with the title read last under both.
+  const from = tasks.indexOf("shown.map((task) => {"), to = tasks.indexOf("</Empty> : shown.map", from + 1);
+  const row = tasks.slice(from, to === -1 ? from + 4200 : to);
+  assert.ok(row.includes("<StateChip task={task} />"), "the row keeps one state chip");
+  assert.ok(!row.includes("<LifecycleChip"), "and must not say the same state a second way");
+  assert.ok(row.indexOf("{task.Title}") < row.indexOf("data-tq-task-ref"), "the title comes before the ref");
 });
 
 test("complete, reopen, coding start and stop run the shared operations road, never a second path", () => {

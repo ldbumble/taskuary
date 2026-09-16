@@ -9,6 +9,7 @@ import { onLive } from "./live.js";
 import { proposalPresentation, reviewStatusLabel, reviewText } from "./reviewProposal.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, PILL_COLORS } from "./theme.jsx";
 import { CcRow, ChannelIcon, RefChip, timeAgo, Empty, FilterPills, cleanText, splitQuoted } from "./ui.jsx";
+import { deliveryCc, deliveryFiles, deliveryMeta, replyContext } from "./replyDelivery.js";
 import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
 import { interruptOf, resolveInterrupt } from "./approvalInterrupt.js";
 
@@ -47,35 +48,6 @@ const FILTERS = [
   { key: "no_reply", label: "no reply", c: PILL_COLORS.gray }, { key: "rejected", label: "rejected", c: PILL_COLORS.bad },
   { key: "", label: "all" },
 ];
-
-const deliveryTo = (review) => {
-  try {
-    const raw = JSON.parse(review.Deliver || "null")?.to;
-    const to = Array.isArray(raw) ? raw.filter(Boolean).join(", ") : String(raw || "").trim();
-    if (to) return to;
-  } catch { /* replies to inbound messages do not carry Deliver */ }
-  if (review.FromName && review.FromEmail) return `${review.FromName} <${review.FromEmail}>`;
-  return review.FromName || review.FromEmail || review.ConversationId || "this conversation";
-};
-const deliveryMeta = (review) => {
-  try { return JSON.parse(review.Deliver || "null") || {}; } catch { return {}; }
-};
-const deliveryFiles = (review) => {
-  const raw = deliveryMeta(review).attachments;
-  return Array.isArray(raw) ? raw.filter((f) => f && f.name) : [];
-};
-const deliveryCc = (review) => {
-  const raw = deliveryMeta(review).cc;
-  return Array.isArray(raw) ? raw.filter(Boolean) : [];
-};
-
-const replyContext = (review) => {
-  const channel = String(review.Channel || "").toLowerCase();
-  if (["whatsapp", "teams", "slack", "telegram", "discord", "imessage"].includes(channel)) {
-    return `${deliveryTo(review)} in ${review.SourceName || (channel === "whatsapp" ? "the chat" : channel)}`;
-  }
-  return deliveryTo(review);
-};
 
 export default function ReviewView({ onOpenTask, onChanged }) {
   const [rows, setRows] = useState(null);

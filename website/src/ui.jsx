@@ -932,12 +932,18 @@ export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, r
 /* Task status, review status and run status were three ladders the reader had to combine
    in their head ("in_progress + reviewed·rejected" — so is it mine or not?). This is the
    one answer: what does this task need from ME, right now. Everything shows this. */
+// `solid` is the one colour that carries the state on its own - the rail down a list row, a dot.
+// The c-triple cannot supply it: needs-you's fg is now the colour of text ON alert, not the alert.
+//
+// And needs-you finally wears ALERT. theme.jsx has always called it "the needs-you pill" and this
+// table handed it the same beige as `queued`, so the single row in the rail that had stopped and
+// was waiting on the owner looked exactly like the rows that were merely parked (2026-09-16).
 export const TASK_STATES = [
-  { key: "needs_you", label: "needs you", c: { bg: "#eae4d8", fg: "#55697a", bd: "#d8cfbe" } },
-  { key: "working", label: "agent working", c: { bg: "#e3e6e1", fg: "#6f8a6e", bd: "#d2d6cf" } },
-  { key: "queued", label: "queued", c: { bg: "#eae4d8", fg: "#55697a", bd: "#d8cfbe" } },
-  { key: "done", label: "done", c: { bg: "#dfeade", fg: "#47654a", bd: "#c8d9c7" } },
-  { key: "dropped", label: "dropped", c: { bg: "#e9e3d8", fg: "#867f74", bd: "#e1dcd5" } },
+  { key: "needs_you", label: "needs you", solid: ALERT, c: { bg: ALERT, fg: "#fffdfb", bd: ALERT } },
+  { key: "working", label: "agent working", solid: "#6f8a6e", c: { bg: "#e3e6e1", fg: "#6f8a6e", bd: "#d2d6cf" } },
+  { key: "queued", label: "queued", solid: "#a09787", c: { bg: "#eae4d8", fg: "#55697a", bd: "#d8cfbe" } },
+  { key: "done", label: "done", solid: "#47654a", c: { bg: "#dfeade", fg: "#47654a", bd: "#c8d9c7" } },
+  { key: "dropped", label: "dropped", solid: "#a09787", c: { bg: "#e9e3d8", fg: "#867f74", bd: "#e1dcd5" } },
 ];
 const ST = Object.fromEntries(TASK_STATES.map((x) => [x.key, x]));
 // A CLI that has printed nothing for this long is parked at its own prompt - the next move

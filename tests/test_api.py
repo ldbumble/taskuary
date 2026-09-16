@@ -317,6 +317,18 @@ class ApiTests(unittest.TestCase):
         c.patch(f'/api/tasks/{tid}', json={'Status': 'done'})
         self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], 'done')
 
+    def test_the_list_row_carries_its_checklist(self):
+        """The sidebar draws each row's progress, and list_tasks' SELECT t.* already ships the
+        column - so the bar costs no extra request and no wider payload. Pinned here because the
+        rail would silently lose its progress line if the list ever narrowed its columns."""
+        tid = c.post('/api/tasks', json={'Title': 'three steps'}).json()['taskId']
+        items = c.put(f'/api/tasks/{tid}/checklist', json={'items': ['read the log', 'find the cause', 'say what to rerun']}).json()['checklist']
+        self.assertEqual(len(items), 3)
+        c.patch(f'/api/tasks/{tid}/checklist/{items[0]["id"]}', json={'done': True})
+        row = next(t for t in c.get('/api/tasks').json()['data'] if t['TaskId'] == tid)
+        drawn = json.loads(row['Checklist'])
+        self.assertEqual((len(drawn), sum(1 for i in drawn if i.get('done'))), (3, 1))
+
     def test_active_tasks_omit_old_done(self):
         """Board/Studio ask ?active=1 so they do not ship every finished task ever."""
         fx = Factory(server.store)

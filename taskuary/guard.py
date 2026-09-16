@@ -106,10 +106,10 @@ def scope_of(cfg: dict, headers) -> str:
     treated as the owner, which is the honest description of a localhost app - see the module
     docstring on what that does and does not buy."""
     tok = str(headers.get('X-Taskuary-Token') or '')
-    if tok and tok == str(cfg.get('agent_token') or ''): return AGENT
+    if token_matches(tok, cfg.get('agent_token')): return AGENT
     owner = str(cfg.get('token') or '')
     if not owner: return OWNER                     # no token configured: the old, open behaviour
-    return OWNER if tok == owner else ANON
+    return OWNER if token_matches(tok, owner) else ANON
 
 
 # ── WHO IS ON THE OTHER END OF THE SOCKET ──────────────────────────────────

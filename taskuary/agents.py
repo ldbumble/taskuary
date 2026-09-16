@@ -573,6 +573,9 @@ def ensure_profile_document(store, name: str) -> str:
 
 # The kinds that mean "works a repository". `cli` is the legacy spelling older databases use.
 CODING_KINDS = ('coding', 'cli')
+# Work that can still be dispatched. An allowlist rather than a list of endings, so a status added
+# later cannot quietly make a repair start rewriting finished tasks (the store also has `dropped`).
+LIVE_STATUSES = ('open', 'in_progress')
 
 
 def roster(store) -> str:
@@ -613,23 +616,48 @@ def coding_role(store) -> str:
 
 
 def routed_role(store, kind: str, profile: str) -> str:
-    """Which role to WRITE on the task - never which brain runs it.
+    """Which ROLE a verdict lands on - never which brain runs it.
 
-    Coding writes nothing. Its role is implied by the kind (`terminal.profile_of` already falls
-    back to the coding role, and the card reads "Coder" off Kind), so the stamp adds no fact - and
-    `Assignee` has a second job, saying the work is the OWNER's. Stamping every coding task with
-    `agent:coder` silently broke "this one is mine", which claims a task only when nobody is on it
-    (`server.mine_message`): the owner said they would do it themselves and nothing moved.
+    Coding has exactly one role and triage does not choose it, so whatever it named is discarded:
+    TQ-0588 drew `copilot` and TQ-0586 drew `analyst`, and neither may reach a coding task. The
+    role is still WRITTEN rather than left implied, because `Assignee` does a third job beyond
+    naming a worker and seeding its document: an `agent:` prefix is what puts the row in the pipe's
+    `queued` lane - "handed to coder, not started yet" (processing_unread, processing_all). An
+    unstamped coding task reads as one that needs the owner.
 
     General takes the specialist triage named, if it names a general one that exists. Naming none
     is a real answer and leaves the task unassigned for the owner to pick at start. `kind: task`
     leaves the job on the owner's list, so no worker at all."""
+    if str(kind or '') == 'coding': return coding_role(store)
     name = str(profile or '').strip()
     if str(kind or '') != 'general' or not name: return ''
     row = store.get_agent(name)
     # the two groups never mix: a coding role reaching general work means triage invented a name
     # the roster could not have offered, and an invented worker must not route anything
     return name if row and str(row.get('Kind') or '').lower() not in CODING_KINDS else ''
+
+
+def repair_role_assignees(store) -> int:
+    """Tasks routed to a BRAIN before roles and brains were separated. `Assignee` holds a role, so
+    a coding task pointed at anything else is corrected to the coding role - TQ-0585 held
+    `agent:copilot` and TQ-0586 held `agent:analyst` on coding work. A person owning a task
+    outranks any routing (`mine` put them there) and general work keeps its specialist, so both are
+    left alone. A second run corrects nothing.
+
+    CLOSED work is history, not a routing decision to fix: `transcript.Agent` says copilot or devin
+    actually worked those, and rewriting the stamp to `coder` would make the task claim otherwise.
+    Only tasks still open can still be dispatched, so only they are corrected."""
+    role, fixed = coding_role(store), 0
+    # search=False: list_tasks otherwise builds seven GROUP_CONCAT blobs over the whole message
+    # table - 34ms of a 35ms query on a real store, and a boot repair searches nothing
+    for t in store.list_tasks(search=False):
+        who = str(t.get('Assignee') or '')
+        if str(t.get('Status') or '').lower() not in LIVE_STATUSES: continue
+        if str(t.get('Kind') or '').lower() != 'coding' or not who.startswith('agent:'): continue
+        if who == f'agent:{role}': continue
+        store.update_task(t['TaskId'], {'Assignee': f'agent:{role}'}, 'migration')
+        fixed += 1
+    return fixed
 
 
 def agent_chain(store, primary: str = None) -> list[str]:

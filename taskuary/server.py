@@ -54,6 +54,15 @@ except Exception as _e:
     _log.warning(f'could not seed the shipped agent profiles: {_e}')
 cli_connections.sync(cfg, store)
 try:
+    # tasks routed to a CLI back when naming a worker named a brain (the 2026-09-16 spec)
+    _repaired = hub_agents.repair_role_assignees(store)
+    if _repaired:
+        from loguru import logger as _log
+        _log.info(f'corrected {_repaired} task(s) routed to a CLI rather than to a role')
+except Exception as _e:
+    from loguru import logger as _log
+    _log.warning(f'could not correct routed roles: {_e}')
+try:
     _adopted = cli_connections.adopt_installed(cfg, store)
     if _adopted:
         config.save(cfg)
@@ -2286,7 +2295,12 @@ def mine_message(mid: int, body: MineBody = None, background: BackgroundTasks = 
     _reclassify(tid, want, background)
     from . import selfclose
     selfclose.claim(store, tid, ACTOR)
-    if not (store.get_task(tid) or {}).get('Assignee'): store.update_task(tid, {'Assignee': ACTOR}, ACTOR)
+    # "mine" takes it off the AGENT's hands, so a worker on the task is precisely what it overrides
+    # - the guard used to skip whenever ANY assignee existed, which meant every task triage had
+    # routed (they all carry `agent:<role>`) silently ignored the owner claiming it. Only a person
+    # already owning it is left alone.
+    _who = str((store.get_task(tid) or {}).get('Assignee') or '')
+    if not _who or _who.startswith('agent:'): store.update_task(tid, {'Assignee': ACTOR}, ACTOR)
     operations.record_direct(store, 'task.create_from_message', mid, {'kind': (body.kind if body else None) or 'task'}, ACTOR, {'taskId': tid}, verdict=verdict, route_id=route_id)
     if body and (body.title or '').strip(): store.update_task(tid, {'Title': body.title.strip()[:200]}, ACTOR)
     store.audit('task', tid, 'mine', ACTOR, detail={'message_id': mid, 'subject': m.get('Subject')})

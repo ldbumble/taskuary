@@ -42,20 +42,16 @@ class TheRosterTests(unittest.TestCase):
 
 
 class WhichRoleTests(unittest.TestCase):
-    def test_coding_writes_no_assignee(self):
-        """Its role is implied by the kind, and the field's other job is saying the work is the
-        OWNER's - `mine` claims a task only when nobody is on it (server.mine_message)."""
-        self.assertEqual(hub_agents.routed_role(store(), 'coding', ''), '')
+    def test_coding_always_takes_the_coding_role(self):
+        """Written, not left implied: the `agent:` prefix is what puts the row in the pipe's
+        `queued` lane - "handed to coder, not started yet" (processing_unread:76)."""
+        self.assertEqual(hub_agents.routed_role(store(), 'coding', ''), 'coder')
 
     def test_coding_ignores_a_profile_triage_named(self):
         """TQ-0588 drew `copilot`, TQ-0586 drew `analyst`. Neither reaches the task."""
         s = store()
-        self.assertEqual(hub_agents.routed_role(s, 'coding', 'analyst'), '')
-        self.assertEqual(hub_agents.routed_role(s, 'coding', 'copilot'), '')
-
-    def test_the_coding_role_is_still_what_dispatch_falls_back_to(self):
-        """Writing nothing is safe only because the dispatcher asks for the default every time."""
-        self.assertEqual(hub_agents.coding_role(store()), 'coder')
+        self.assertEqual(hub_agents.routed_role(s, 'coding', 'analyst'), 'coder')
+        self.assertEqual(hub_agents.routed_role(s, 'coding', 'copilot'), 'coder')
 
     def test_general_takes_the_named_specialist(self):
         self.assertEqual(hub_agents.routed_role(store(), 'general', 'analyst'), 'analyst')
@@ -79,6 +75,54 @@ class WhichRoleTests(unittest.TestCase):
 
     def test_an_unknown_profile_names_nobody(self):
         self.assertEqual(hub_agents.routed_role(store(), 'general', 'nobody'), '')
+
+
+class RepairTests(unittest.TestCase):
+    def rows(self, s):
+        return {t['TaskId']: t.get('Assignee') for t in s.list_tasks(search=False)}
+
+    def test_a_coding_task_routed_to_a_cli_is_corrected(self):
+        """TQ-0585 held agent:copilot; TQ-0586 held agent:analyst on coding work."""
+        s = store()
+        a = s.create_task({'Title': 'copilot one', 'Kind': 'coding', 'Status': 'open', 'Assignee': 'agent:copilot'}, 'test')
+        b = s.create_task({'Title': 'analyst one', 'Kind': 'coding', 'Status': 'in_progress', 'Assignee': 'agent:analyst'}, 'test')
+        self.assertEqual(hub_agents.repair_role_assignees(s), 2)
+        self.assertEqual(self.rows(s)[a], 'agent:coder')
+        self.assertEqual(self.rows(s)[b], 'agent:coder')
+
+    def test_finished_work_is_history_and_is_left_alone(self):
+        """transcript.Agent says copilot actually worked TQ-0585. Rewriting a done task's stamp to
+        `coder` would make the row claim otherwise - and the repair did exactly that, once."""
+        s = store()
+        for status in ('done', 'dropped'):
+            t = s.create_task({'Title': status, 'Kind': 'coding', 'Status': status, 'Assignee': 'agent:copilot'}, 'test')
+            self.assertEqual(hub_agents.repair_role_assignees(s), 0)
+            self.assertEqual(self.rows(s)[t], 'agent:copilot')
+
+    def test_general_assignees_are_left_alone(self):
+        s = store()
+        g = s.create_task({'Title': 'general one', 'Kind': 'general', 'Assignee': 'agent:analyst'}, 'test')
+        hub_agents.repair_role_assignees(s)
+        self.assertEqual(self.rows(s)[g], 'agent:analyst')
+
+    def test_a_human_assignee_is_left_alone(self):
+        """A person owning a task outranks any routing - `mine` put them there."""
+        s = store()
+        h = s.create_task({'Title': 'mine', 'Kind': 'coding', 'Assignee': 'owner'}, 'test')
+        hub_agents.repair_role_assignees(s)
+        self.assertEqual(self.rows(s)[h], 'owner')
+
+    def test_an_unassigned_task_is_left_alone(self):
+        s = store()
+        u = s.create_task({'Title': 'nobody', 'Kind': 'coding'}, 'test')
+        hub_agents.repair_role_assignees(s)
+        self.assertFalse(self.rows(s)[u])
+
+    def test_it_is_idempotent(self):
+        s = store()
+        s.create_task({'Title': 'copilot one', 'Kind': 'coding', 'Assignee': 'agent:copilot'}, 'test')
+        self.assertEqual(hub_agents.repair_role_assignees(s), 1)
+        self.assertEqual(hub_agents.repair_role_assignees(s), 0)
 
 
 class GeneralRoleTests(unittest.TestCase):

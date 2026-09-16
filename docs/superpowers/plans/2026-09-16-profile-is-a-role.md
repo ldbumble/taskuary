@@ -1,5 +1,21 @@
 # Profile Is A Role — Implementation Plan (step 1 of 3)
 
+> **EXECUTED 2026-09-16.** Whole suite: 4204 passed, 1 skipped. Three things went differently
+> from the plan below, each forced by something the plan had not seen; the commits carry the
+> detail.
+>
+> - **Task 2 wrote no assignee for coding, then went back to writing one.** The suite caught that
+>   stamping `agent:coder` broke "this one is mine"; removing the stamp then turned out to drop
+>   coding tasks out of the pipe's `queued` lane (`processing_unread:76`, `processing_all:400`),
+>   which the suite did *not* catch. The stamp stays, and the real culprit — `mine_message`'s guard
+>   claiming a task only when nobody was on it — is fixed instead. `Assignee` turned out to do
+>   three jobs, not two.
+> - **Task 4 gained a fourth fused site.** `general.assigned_pick` was found during plan research,
+>   not spec writing, and reverses an explicitly stated principle. See the spec.
+> - **Task 5 corrects OPEN work only.** Run once against the live store it rewrote eleven finished
+>   tasks whose transcripts say codex, analyst, copilot and devin actually worked them. A closed
+>   task's stamp is history. The status guard is an allowlist.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Move the profile question from coding to general work, so triage names a *role* and never a brain.

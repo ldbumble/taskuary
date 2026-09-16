@@ -207,7 +207,7 @@ async def token_gate(request: Request, call_next):
         # ...and an OAuth callback is a redirect from the provider's site: no header can ride on it.
         # It proves itself with the one-time state it was issued (quickbooks_authorize), not the token.
         file_read = request.url.path.startswith(('/api/attachments/', '/api/task-artifacts/'))
-        if not (file_read and request.query_params.get('token') == tok) \
+        if not (file_read and guard.token_matches(request.query_params.get('token'), tok)) \
                 and request.url.path not in ('/api/quickbooks/callback', '/api/zoho/callback'):
             # In JSON, like every other refusal: an HTML body left `detail` undefined, so a tab that
             # was open across a token change answered every click with whichever screen's generic

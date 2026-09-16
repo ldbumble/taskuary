@@ -23,8 +23,7 @@ def gather(store, days: int = 30) -> str:
     untouched, and the policies that already exist (never propose those again)."""
     since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
     by = {}
-    for m in store.scan_messages():
-        if str(m.get('SentAt') or '') < since or m.get('Status') == 'context': continue
+    for m in store.scan_messages(since=since, statuses=('routed', 'ignored', 'skipped', 'filed'), include_body=False):
         who = (m.get('FromEmail') or '?').lower()
         d = by.setdefault(who, {'n': 0, 'ignored': 0, 'filed': 0, 'tasks': 0, 'subjects': []})
         d['n'] += 1

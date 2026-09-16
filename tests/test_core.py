@@ -527,6 +527,24 @@ class CoreTests(unittest.TestCase):
         # only 'skip' rewrites history - an ignore rule leaves it alone
         self.assertEqual(apply_retroactively(s, {**pol, 'Action': 'ignore'}), 0)
 
+    def test_retroactive_sender_policy_uses_sql_envelope_filter(self):
+        from taskuary.policy import apply_retroactively
+        class SeenScan(MemoryStore):
+            def scan_messages(self, *args, **kwargs):
+                self.scan_kwargs = kwargs
+                return super().scan_messages(*args, **kwargs)
+        s = SeenScan()
+        s.add_message({'ExternalId': 'hit', 'Channel': 'email', 'Subject': 'Provisioning notice',
+                       'BodyText': 'x' * 10000, 'FromEmail': 'flood@vendor.com', 'SentAt': '2026-08-17 10:00',
+                       'Status': 'routed'})
+        s.add_message({'ExternalId': 'miss', 'Channel': 'email', 'Subject': 'real mail', 'BodyText': 'x' * 10000,
+                       'FromEmail': 'human@client.com', 'SentAt': '2026-08-17 10:00', 'Status': 'routed'})
+        pol = {'Name': 'skip:flood@vendor.com', 'Kind': 'sender', 'Pattern': 'flood@vendor.com',
+               'Action': 'skip', 'Reason': 'flood', 'SortOrder': 10, 'Active': 1}
+        self.assertEqual(apply_retroactively(s, pol), 1)
+        self.assertEqual(s.scan_kwargs.get('statuses'), ('routed', 'ignored', 'filed'))
+        self.assertEqual(s.scan_kwargs.get('from_email'), ['flood@vendor.com'])
+
     def test_run_cli_appends_the_model_flag(self):
         from unittest import mock
         import sys

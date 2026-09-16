@@ -10,6 +10,7 @@ Within one action tier, lowest SortOrder wins. 'draft' policies act like targete
 default overrides and are considered in the task_only tier's place when matched.
 """
 import re
+from typing import Any
 
 PRECEDENCE = ('skip', 'ignore', 'escalate', 'auto_answer', 'draft', 'task_only')
 _NOREPLY = re.compile(r'(no-?reply|do-?not-?reply|donotreply|notifications?@|automated|mailer-daemon|postmaster)', re.I)
@@ -55,9 +56,14 @@ def apply_retroactively(store, policy: dict) -> int:
     if policy.get('Action') != 'skip': return 0
     on = bool(policy.get('Active', 1))
     froms = ('routed', 'ignored', 'filed') if on else ('skipped',)
+    kind = policy.get('Kind')
+    scan: dict[str, Any] = {'statuses': froms}
+    if kind == 'sender': scan['from_email'] = _split(policy.get('Pattern'))
+    elif kind == 'sender_domain': scan['from_domains'] = _split(policy.get('Pattern'))
+    elif kind == 'noreply': scan['noreply'] = True
+    elif kind in BODYLESS: scan['include_body'] = False
     n = 0
-    for m in store.scan_messages():
-        if m['Status'] not in froms: continue
+    for m in store.scan_messages(**scan):
         if not matches(policy, {'from_email': m.get('FromEmail'), 'subject': m.get('Subject'), 'body': m.get('BodyText')}):
             continue
         store.set_message_status(m['MessageId'], 'skipped' if on else ('routed' if m.get('TaskId') else 'ignored'))

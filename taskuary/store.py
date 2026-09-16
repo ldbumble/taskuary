@@ -2789,14 +2789,34 @@ class SQLiteStore:
                 AND (c.CommentId IS NOT NULL OR tr.TranscriptId IS NOT NULL)
             ORDER BY LastWorkedAt DESC, t.TaskId DESC LIMIT 100''')
 
-    def scan_messages(self, limit=20000):
-        """Just enough of every message to re-run a policy over the history (bodies capped)."""
+    def scan_messages(self, limit=20000, since=None, statuses=None, from_email=None, from_domains=None,
+                      noreply=False, include_body=True):
+        """Just enough message history, with the common filters pushed into SQLite."""
         # ConversationId rides along so a history reader can pair inbound mail with what the owner
         # SENT back (histgen: "answered" is the ground truth TRIAGE.md is distilled from, and on an
-        # IMAP install this store is the only place the inbound half lives)
-        return self._rows('SELECT MessageId, TaskId, ConversationId, FromEmail, Subject, Status, SentAt, '
-                          'substr(BodyText, 1, 2000) BodyText '
-                          'FROM message ORDER BY MessageId DESC LIMIT ?', (limit,))
+        # IMAP install this store is the only place the inbound half lives). Most callers only want a
+        # date/status/envelope slice; do that before Python ever sees the back catalogue.
+        where, args = [], []
+        if since is not None:
+            where.append('SentAt>=?'); args.append(since)
+        if statuses:
+            where.append('Status IN (' + ','.join('?' * len(statuses)) + ')'); args += list(statuses)
+        if from_email:
+            vals = [x.lower() for x in from_email]
+            where.append('lower(FromEmail) IN (' + ','.join('?' * len(vals)) + ')'); args += vals
+        if from_domains:
+            vals = [x.lower() for x in from_domains]
+            where.append("lower(substr(FromEmail, instr(FromEmail, '@') + 1)) IN (" + ','.join('?' * len(vals)) + ')')
+            args += vals
+        if noreply:
+            where.append("(lower(FromEmail) LIKE '%noreply%' OR lower(FromEmail) LIKE '%no-reply%' "
+                         "OR lower(FromEmail) LIKE '%do-not-reply%' OR lower(FromEmail) LIKE '%donotreply%' "
+                         "OR lower(FromEmail) LIKE 'notifications@%' OR lower(FromEmail) LIKE '%automated%' "
+                         "OR lower(FromEmail) LIKE '%mailer-daemon%' OR lower(FromEmail) LIKE '%postmaster%')")
+        body = 'substr(BodyText, 1, 2000) BodyText' if include_body else "'' BodyText"
+        sql = ('SELECT MessageId, TaskId, ConversationId, FromEmail, Subject, Status, SentAt, ' + body + ' FROM message'
+               + ((' WHERE ' + ' AND '.join(where)) if where else '') + ' ORDER BY MessageId DESC LIMIT ?')
+        return self._rows(sql, (*args, limit))
     def set_message_status(self, mid, status):
         self._exec('UPDATE message SET Status=? WHERE MessageId=?', (status, mid))
         self._poke('feed-changed', message_id=mid)

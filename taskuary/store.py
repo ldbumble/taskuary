@@ -2960,6 +2960,13 @@ class SQLiteStore:
         """Every task an agent has ever touched - a live-session transcript or a headless run. The
         Board is the agents' board: a reply the owner answered by hand is finished work, not board work."""
         return {r['TaskId'] for r in self._rows('SELECT DISTINCT TaskId FROM transcript UNION SELECT DISTINCT TaskId FROM run') if r['TaskId']}
+    def report_runs_before(self, conversation_id, mid):
+        """Earlier runs of the SAME report, newest first. One report is one conversation
+        (reports.py writes `report:<SourceId>` on every run), so this is what "the previous one"
+        means without matching on titles that the owner is free to change."""
+        return self._rows("SELECT MessageId, TaskId, Status FROM message "
+                          "WHERE ConversationId=? AND MessageId<>? AND Direction<>'out' "
+                          "ORDER BY MessageId DESC", (conversation_id, mid))
     def last_transcript(self, task_id):
         return self._one('SELECT * FROM transcript WHERE TaskId=? ORDER BY TranscriptId DESC LIMIT 1', (task_id,))
 

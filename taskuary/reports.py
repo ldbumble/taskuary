@@ -1341,6 +1341,8 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
                                  'SourceLink': cfg.get('link'), 'Status': 'feed'})
         store.add_route(mid, None, 'feed', None,
                         'scheduled report - informational, never a task' + ('' if not cfg.get('triage') else ' (this run failed, so it was not triaged)'), [], 'report')
+    # ...and the run this one replaces stops waiting for the owner (expire_previous_runs)
+    expire_previous_runs(store, src, cfg, mid)
     # the rows are the report: hand back the spreadsheet to open and the chart to look at, not
     # just prose about them. Prose-only reports (an AI summary, a failure) produce neither.
     try:
@@ -1455,6 +1457,39 @@ def send_alert(store, src: dict, cfg: dict, why: str, head: str, body: str) -> d
     store.add_route(mid, None, 'send', None, f'alert - {why}; sent to {", ".join(to) or "nobody"} on {ch}', [], 'report')
     store.audit('message', mid, 'alert_sent', 'report', 'agent', {'to': to, 'channel': ch, 'why': why})
     return {'message_id': mid, 'why': why, 'sent': sent}
+
+
+def expire_previous_runs(store, src: dict, cfg: dict, mid: int) -> list:
+    """A report supersedes itself. By the time tonight's "Process Error Check - 0 rows" has run,
+    last night's is not news, and seven of them stacked up in the reports band say nothing that the
+    newest one does not (the owner, 2026-09-16: "by the time the next one runs we don't need past
+    one"). The same is true of the morning digest: yesterday's brief is not this morning's.
+
+    NOTHING IS DELETED. The earlier run is settled `done` - off the work rail, still on the Timeline
+    with its rows and its chart - which is exactly what pressing Done on it would have done.
+
+    The one that is kept is the one that became WORK. A run triage turned into a task, or that the
+    owner promoted, is not a stale copy of the newest run: it is a job with something still owed on
+    it, and a job does not expire because a schedule fired. Off switches it per report.
+    """
+    if not cfg.get('expire', True): return []
+    from . import funnel
+    cid = f'report:{src["SourceId"]}'
+    retired = []
+    # ONE wake-up for the batch. Every settle empties the pile cache and fires the live event each
+    # open Assistant answers with a forced rebuild - and the first run after this ships has a
+    # hundred and fifty backlogged runs to retire, which would be a hundred and fifty rebuilds of a
+    # sixty-item pile racing each other.
+    with store.one_poke():
+        for r in store.report_runs_before(cid, mid):
+            tid = r.get('TaskId')
+            if tid and (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'): continue
+            key = f"report:{r['MessageId']}"
+            try: funnel.settle(store, key, 'done', 'report')
+            except Exception as e: logger.debug(f'reports: could not retire {key} - {e}')
+            else: retired.append(r['MessageId'])
+    if retired: logger.info(f"reports: {cfg.get('title') or src['Address']} superseded {len(retired)} earlier run(s)")
+    return retired
 
 
 def deliver_report(store, src: dict, cfg: dict, subject: str, body: str) -> dict:

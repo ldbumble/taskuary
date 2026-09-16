@@ -1058,6 +1058,25 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 </>
               )}
             </Box>
+            {/* A report supersedes itself. Seven "Process Error Check - 0 rows" stacked up in the
+                reports band say nothing the newest one does not, and yesterday's brief is not this
+                morning's (the owner, 2026-09-16). Nothing is deleted - the earlier run is marked
+                done, exactly as pressing Done on it would, and stays on the Timeline with its rows
+                and its chart. On by default; the run that became WORK is never retired. */}
+            <Box sx={{ mt: 2, ...card, p: 1.5, maxWidth: 720 }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10, flex: 1 }}>
+                  RETIRE THE PREVIOUS RUN
+                </Typography>
+                <Switch size="small" checked={cfg.expire !== false}
+                  onChange={(e) => setCfg({ ...cfg, expire: e.target.checked })} />
+              </Box>
+              <Typography variant="caption" sx={{ color: FAINT }}>
+                {cfg.expire !== false
+                  ? "On — when this runs, the run before it is marked done and leaves your work rail. Nothing is deleted: it stays on the Timeline with its rows and its chart. A run that became a task is left alone."
+                  : "Off — every run waits for you separately, and they stack up in the reports band until you clear them by hand."}
+              </Typography>
+            </Box>
             <Box sx={{ mt: 1.5 }}><Button variant="contained" disableElevation onClick={() => setStep(1)}>Continue</Button></Box>
           </StepContent>
         </Step>

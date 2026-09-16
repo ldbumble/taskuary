@@ -23,6 +23,51 @@ class ReportTriageTests(unittest.TestCase):
         self.assertEqual((m['Status'], m['TaskId']), ('feed', None))
         self.assertIn('never a task', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
 
+    def test_a_new_run_retires_the_one_before_it(self):
+        """Seven "Process Error Check - 0 rows" stacked up in the reports band say nothing the
+        newest one does not (the owner, 2026-09-16). NOTHING IS DELETED: the earlier run is settled
+        done, off the work rail and still on the Timeline with its rows."""
+        from taskuary import funnel
+        s = MemoryStore()
+        src = self._src(s, {'type': 'agent', 'title': 'Process Error Check'})
+        with mock.patch.object(reports, 'render_report', return_value=('ran', '# Check - 0 rows')):
+            reports.run_report_source(s, src)
+            first = s._rows("SELECT * FROM message WHERE Channel='report' ORDER BY MessageId DESC")[0]['MessageId']
+            self.assertEqual(funnel.build(s)['items'][0]['mid'], first)      # it is on the rail
+            reports.run_report_source(s, src)
+        rows = s._rows("SELECT * FROM message WHERE Channel='report' ORDER BY MessageId")
+        self.assertEqual(len(rows), 2, 'the old run is kept, not deleted')
+        # ...and only the newest is still waiting on the owner
+        self.assertEqual([i['mid'] for i in funnel.build(s)['items']], [rows[-1]['MessageId']])
+        self.assertEqual(s.funnel_states()[f'report:{first}']['Status'], 'done')
+
+    def test_a_run_that_became_work_is_never_retired(self):
+        """A job does not expire because a schedule fired."""
+        from taskuary import funnel
+        s = MemoryStore()
+        src = self._src(s, {'type': 'agent', 'title': 'Process Error Check'})
+        with mock.patch.object(reports, 'render_report', return_value=('ran', '# Check - 0 rows')):
+            reports.run_report_source(s, src)
+            first = s._rows("SELECT * FROM message WHERE Channel='report' ORDER BY MessageId DESC")[0]['MessageId']
+            tid = s.create_task({'Title': 'Chase the failing check', 'Kind': 'coding', 'Status': 'open'}, 'o')
+            s.place_message(first, tid, 'routed')                 # the owner promoted it
+            reports.run_report_source(s, src)
+        self.assertNotIn(f'report:{first}', s.funnel_states(), 'work is not a stale copy of the newest run')
+
+    def test_the_owner_can_turn_it_off_per_report(self):
+        from taskuary import funnel
+        s = MemoryStore()
+        src = self._src(s, {'type': 'agent', 'title': 'Process Error Check', 'expire': False})
+        with mock.patch.object(reports, 'render_report', return_value=('ran', '# Check - 0 rows')):
+            reports.run_report_source(s, src)
+            first = s._rows("SELECT * FROM message WHERE Channel='report' ORDER BY MessageId DESC")[0]['MessageId']
+            reports.run_report_source(s, src)
+        # nothing was settled: both runs are still waiting on the owner. (The rail may still fold
+        # them into one row with a +N - one report is one conversation - but that is grouping, and
+        # grouping is not the same as being marked done.)
+        self.assertNotIn(f'report:{first}', s.funnel_states())
+        self.assertEqual(len(s._rows("SELECT * FROM message WHERE Channel='report'")), 2)
+
     def test_with_triage_on_the_brain_decides_and_a_task_can_open(self):
         s = MemoryStore()
         s.save_connector({'ConnectorId': s.get_connector_by_type('anthropic')['ConnectorId'], 'Active': 1, 'Secret': 'k'}, 't')   # triage needs a brain card

@@ -60,14 +60,19 @@ try {
   const title = await clickPileRow(page);
   await wait(2500);
   s = await state(page);
-  // Either it opened on the stage, or - a pipe row with no message behind it - it answered in the
-  // chat and the toggle followed so the answer is not written somewhere invisible. Never nothing.
+  // A MESSAGE opens on the stage; a row with only a task behind it - an agent, a proposal, a
+  // meeting's prep - opens THE TASK, which means leaving for the Tasks tab. Falling back to the
+  // chat is now only right for a row with neither, because "open it" answered with a conversation
+  // about it for every agent row on the rail (the owner, 2026-09-16: "task button on the assistant,
+  // if i click it then hit a item the chat pops up not the actual task").
   const opened = s.onStage && !s.placeholder;
+  const wentToTask = await page.evaluate(() => !document.querySelector(".tq-stage-mode"));
   const fellBack = s.mode === "chat" && s.chatTurns > before.chatTurns;
-  check(opened || fellBack,
+  check(opened || wentToTask || fellBack,
     opened ? `a task-mode click opened "${title}" on the stage`
-      : fellBack ? `"${title}" has no message behind it, so it answered in the chat`
-        : `a task-mode click on "${title}" did nothing visible`, s);
+      : wentToTask ? `"${title}" has no message, so it opened its task`
+        : fellBack ? `"${title}" has neither a message nor a task, so it answered in the chat`
+          : `a task-mode click on "${title}" did nothing visible`, s);
 
 } finally { await browser.close(); }
 process.exit(bad ? 1 : 0);

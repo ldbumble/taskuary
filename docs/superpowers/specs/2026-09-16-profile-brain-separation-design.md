@@ -47,6 +47,30 @@ routed brain beats the default too. `default_agent` is reached only when
 `Assignee` is empty, which for a triaged task it never is. Copilot did not win a
 fight with the default; the default was never asked.
 
+*On general work* — `general.assigned_pick` (`general.py:152`) turns the same
+field into a provider:
+
+```python
+def assigned_pick(store, task: dict) -> str:
+    who = str((task or {}).get('Assignee') or '')
+    name = who.split(':', 1)[1] if who.startswith('agent:') else ''
+    return f'cli:{name}' if name and store.get_agent(name) else ''
+```
+
+Four call sites use it — the session's provider (`general.py:179`), its saved-pick
+reconciliation (`:169`), the profile rules it seeds (`:421`) and a workflow repeat
+(`:616`). The comment above the third states the principle being overturned here:
+
+> Triage's named worker also owns general work: **its instructions and CLI must
+> travel together**, otherwise a research profile is only a label on the task.
+
+That is the inverse of this design, and it is deliberate, not accidental. The
+worry behind it is real and is answered rather than dismissed: a role is *not*
+only a label, because it still selects the rules document the session is seeded
+with (`general.py:421`). What it stops selecting is the executable. So
+`assigned_pick` splits in two — the role keeps choosing the document, and the
+provider comes from settings like everywhere else.
+
 ### Where the clone profiles came from
 
 `cli_connections.adopt_installed` mints one coding worker per installed CLI:

@@ -1133,10 +1133,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           title="Which checkout the session works in"
                           onClick={() => setRepoPick(true)}>{repoOf(t) || "pick a repo"}</Button>}
                       </>}
+                      {/* a finished task still says what it WAS - the settings read as the record,
+                          not as controls. Reopen is the only thing you can do to it, and it lives
+                          in the action row above with everything else you can do. */}
                       {["done", "dropped"].includes(t.Status) && (
-                        <Button size="small" variant="outlined" startIcon={<RefreshIcon sx={{ fontSize: 15 }} />}
-                          title="Reopens the task only. No agent starts until you choose one."
-                          onClick={reopen}>Reopen task</Button>
+                        <Typography variant="caption" sx={{ color: FAINT }}>{foldedFacts}</Typography>
                       )}
                       <Box sx={{ flex: 1, minWidth: 12 }} />
                       <Typography variant="caption" sx={{ color: FAINT, textAlign: "right", maxWidth: 340 }}>

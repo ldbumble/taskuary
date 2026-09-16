@@ -28,7 +28,7 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
 
   const started = performance.now();
   await page.goto(harness.ui, { waitUntil: "domcontentloaded", timeout: 20000 });
-  await page.waitForSelector(".tq-pile-row.next .tq-pile-next", { timeout: limits.firstVisibleMs });
+  await page.waitForSelector(".tq-pile-row.next .card", { timeout: limits.firstVisibleMs });
   await page.waitForSelector(".tq-compose textarea:not([disabled])", { timeout: limits.firstVisibleMs });
   const firstVisibleMs = Math.round(performance.now() - started);
 
@@ -61,15 +61,17 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
     button.click();
     button.click();
   });
-  await page.waitForSelector(".tq-pile-row.current .tq-pile-next.cur", { timeout: 15000 });
+  await page.waitForSelector(".tq-pile-row.current .card", { timeout: 15000 });
   await page.waitForFunction(() => !document.querySelector(".tq-typing"), { timeout: 15000 });
-  await page.waitForSelector(".tq-pile-row.next .tq-pile-next", { timeout: limits.navigationMs });
+  await page.waitForSelector(".tq-pile-row.next .card", { timeout: limits.navigationMs });
   assert.equal(turnRequests, 1, "a same-tick double click must create exactly one assistant turn");
   assert.equal(await page.$$eval(".tq-msg.you", (rows) => rows.filter((row) => row.textContent.includes("Walk me through my tasks.")).length), 1);
   assert.equal(await page.$$eval(".tq-pile-row.current", (rows) => rows.length), 1);
   assert.equal(await page.$$eval(".tq-pile-row.next", (rows) => rows.length), 1);
-  assert.equal(await page.$eval(".tq-pile-row.current .tq-pile-next", (node) => node.textContent.trim().toLowerCase()), "current");
-  assert.equal(await page.$eval(".tq-pile-row.next .tq-pile-next", (node) => node.textContent.trim().toLowerCase()), "next");
+  // CURRENT and NEXT are rings on the row now, not pills inside it: the row already says what it
+  // is with its border, and a word repeating that was one more thing on a line meant to carry one
+  // (the owner, 2026-09-16: "maybe just subject should be there to clean it up").
+  assert.equal(await page.$(".tq-pile-next"), null, "the NEXT/current pills are gone from the row");
   const expectedNext = await page.$eval(".tq-pile-row.next .card b", (node) => node.textContent.trim());
   await page.evaluate(() => [...document.querySelectorAll(".tq-msg .tq-verbs .tq-verb")]
     .find((button) => button.innerText === "Next")?.click());
@@ -113,12 +115,12 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
   }
 
   await clickNav(page, "Assistant");
-  await page.waitForSelector(".tq-pile-row.current .tq-pile-next.cur", { timeout: limits.navigationMs });
+  await page.waitForSelector(".tq-pile-row.current .card", { timeout: limits.navigationMs });
   assert.equal(await page.$eval(".tq-pile-row.current .card b", (node) => node.textContent.trim()), advancedCurrent,
     "tab navigation must retain Current");
 
   await page.reload({ waitUntil: "domcontentloaded", timeout: 20000 });
-  await page.waitForSelector(".tq-pile-row.current .tq-pile-next.cur", { timeout: limits.firstVisibleMs });
+  await page.waitForSelector(".tq-pile-row.current .card", { timeout: limits.firstVisibleMs });
   assert.equal(await page.$eval(".tq-pile-row.current .card b", (node) => node.textContent.trim()), advancedCurrent,
     "durable replay must restore Current");
   assert.equal(await page.$$eval(".tq-chat-inner > .tq-msg", (rows, title) => rows.filter((row) => row.textContent.includes(title)).length,

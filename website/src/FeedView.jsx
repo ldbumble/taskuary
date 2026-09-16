@@ -141,6 +141,7 @@ function FilterButton({ cat, pick, channels, srcByChannel, srcQ, setSrcQ, onChan
   return (
     <>
       <Button size="small" onClick={(e) => setEl(e.currentTarget)}
+        data-tq-filter="true" aria-label="What this rail is showing"
         title="What this rail is showing"
         startIcon={<FilterAltIcon sx={{ fontSize: 13, color: narrowed ? ACCENT : FAINT }} />}
         endIcon={<ChevronRightIcon sx={{ fontSize: 13, transform: "rotate(90deg)", color: FAINT }} />}
@@ -158,7 +159,8 @@ function FilterButton({ cat, pick, channels, srcByChannel, srcQ, setSrcQ, onChan
         <Typography sx={{ fontSize: 9.5, fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", color: FAINT, mb: 0.75 }}>Kind</Typography>
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.6, mb: 1.25 }}>
           {CATEGORIES.map((o) => (
-            <Chip key={o.key} size="small" label={o.label} onClick={() => onChange(o.key, pick)}
+            <Chip key={o.key} size="small" label={o.label} data-tq-kind={o.key || "all"}
+              onClick={() => onChange(o.key, pick)}
               sx={{ height: 24, fontSize: 11, fontWeight: 600, borderRadius: 99,
                 bgcolor: cat === o.key ? "#e4e9ee" : PANEL2, color: cat === o.key ? "#41525f" : DIM,
                 border: `1px solid ${cat === o.key ? "#cbd4dc" : BORDER}` }} />

@@ -55,19 +55,27 @@ test('All and Unread share 507 fresh roots, including ignored and pending triage
   });
   try {
   await page.goto(h.ui, { waitUntil: 'domcontentloaded', timeout: 20000 });
+  // The rail KNOWS about all 507; it does not paint all 507. urgent, your task and agents working
+  // draw in full and reports/fyi take the height that is left (funnelPile.fillCaps), so the honest
+  // assertion is the band headings' own totals, which are the full counts.
+  await page.waitForFunction(() => {
+    const heads = [...document.querySelectorAll('.tq-pile-head em')];
+    return heads.length > 0 && heads.reduce((n, el) => n + Number(el.textContent.trim() || 0), 0) >= 507;
+  }, { timeout: 30000 });
   await page.waitForFunction(() => [...document.querySelectorAll('.tq-pile-row .card b')]
-    .filter(n => n.textContent.startsWith('Shared arrival')).length === 507, { timeout: 30000 });
+    .some(n => n.textContent.startsWith('Shared arrival')), { timeout: 30000 });
   const scopedRequests = [];
   page.on('request', req => {
     const url = new URL(req.url());
     if (url.pathname === '/api/funnel/pile') scopedRequests.push(url.searchParams.get('only'));
   });
-  await page.click('[aria-label="Timeline category"]');
-  await page.waitForSelector('[role="option"]', { visible: true, timeout: 5000 });
-  for (const candidate of await page.$$('[role="option"]')) {
-    if (await candidate.evaluate(n => n.textContent.trim() === 'email')) { await candidate.click(); break; }
-  }
-  await page.waitForFunction(() => document.querySelector('[aria-label="Timeline category"]')?.textContent.includes('email'));
+  // one control for both filters now: it opens on the kinds and the sources together, and its own
+  // label says what it is filtering to
+  await page.click('[data-tq-filter]');
+  await page.waitForSelector('[data-tq-kind="email"]', { visible: true, timeout: 5000 });
+  await page.click('[data-tq-kind="email"]');
+  await page.waitForFunction(() => document.querySelector('[data-tq-filter]')?.textContent.includes('email'));
+  await page.keyboard.press('Escape');
   await page.waitForNetworkIdle({ idleTime: 200, timeout: 20000 });
   const walk = (await page.$$('button')).filter(Boolean);
   for (const candidate of walk) {

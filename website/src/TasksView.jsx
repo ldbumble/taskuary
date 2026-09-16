@@ -21,7 +21,7 @@ import { progressLine } from "./checklist.js";
 import { completionTransition, filterForSelectedState } from "./taskFilter.js";
 import { onLive } from "./live.js";
 import { pollWhileActive } from "./visible.js";
-import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, selSx, ACCENT2, PILL_COLORS } from "./theme.jsx";
+import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, ACCENT2, PILL_COLORS } from "./theme.jsx";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { RepoPicker } from "./RepoPicker.jsx";
@@ -31,17 +31,13 @@ import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
-import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import PauseCircleIcon from "@mui/icons-material/PauseCircleOutline";
 import HistoryIcon from "@mui/icons-material/History";
 import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
 import AccountTreeIcon from "@mui/icons-material/AccountTree";
-import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
-import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
-import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
-import { Divider, ListItemIcon, ListItemText, Menu } from "@mui/material";
+import { Divider, ListItemText } from "@mui/material";
 import { TerminalPane } from "./TerminalView.jsx";
 
 // An open tab can still hold yesterday's entry bundle after a local upgrade. Vite names lazy
@@ -98,6 +94,24 @@ const KIND_OPTIONS = [
 ];
 const KINDS = KIND_OPTIONS.map((o) => o.key);
 const kindLabel = (kind) => KIND_OPTIONS.find((o) => o.key === kind)?.label || kind;
+
+// The task's settings read as FACTS you can change, not as a form: pill-shaped, label-less,
+// sitting on the card's bottom edge. Stacked "Type / Task status / Priority" labels over boxed
+// selects made a four-field form out of four words, and put the one button that completes the
+// task at the end of it (the owner, 2026-09-16: "on bottom the filters agent·coding, waiting").
+const chipSel = {
+  fontSize: 11.5, fontWeight: 600, height: 26, bgcolor: "#f4f1ec", borderRadius: 13, color: INK,
+  "& .MuiSelect-select": { py: 0, pl: 1.25, pr: "24px !important", minHeight: 0, display: "flex", alignItems: "center" },
+  "& .MuiOutlinedInput-notchedOutline": { borderColor: BORDER },
+  "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: "#d8cfbe" },
+  "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: "#55697a" },
+  "& .MuiSelect-icon": { right: 2, fontSize: 18, color: "rgba(0,0,0,.45)" },
+};
+// the repo is a filter like the others, but it opens a picker rather than a menu of values
+const chipBtn = { fontSize: 11.5, fontWeight: 600, height: 26, minHeight: 26, py: 0, px: 1.25,
+  borderRadius: 13, bgcolor: "#f4f1ec", color: INK, borderColor: BORDER,
+  "&:hover": { borderColor: "#d8cfbe", bgcolor: "#f4f1ec" } };
+const barBtn = { minHeight: 34, py: 0, px: 1.6, fontSize: 12.5, color: INK, borderColor: BORDER };
 
 export default function TasksView({ selected, onSelect, onChanged, autostart, onAutostarted, onGoReview, onGoReports, active = true }) {
   const [tasks, setTasks] = useState(null);
@@ -359,8 +373,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const [reshape, setReshape] = useState(false);
   const [repoPick, setRepoPick] = useState(false);
   const [resumeAfterRepo, setResumeAfterRepo] = useState(null);
-  const [menuEl, setMenuEl] = useState(null);
-  useEffect(() => { setHandoff(false); setReshape(false); setRepoPick(false); setResumeAfterRepo(null); setDiffOpen(false); }, [selected]);
+  const [sourceOpen, setSourceOpen] = useState(false);
+  useEffect(() => { setHandoff(false); setReshape(false); setRepoPick(false); setResumeAfterRepo(null); setDiffOpen(false); setSourceOpen(false); }, [selected]);
   // asked when the drawer opens, and only then: shelling out to git on every task poll would
   // spend a subprocess a second on an answer nobody is looking at
   const loadDiff = useCallback(async (id) => {
@@ -640,6 +654,18 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const completionIsManual = ownerControlsCompletion(t);
   const interruptedTask = String(t?.Tags || "").split(/[\s,]+/).includes("interrupted");
   const taskState = taskPhase(t?.Status);
+  // the triage verdict behind THIS task, for "Where this came from"
+  const sourceRoute = (detail?.routes || []).find((r) => r.MessageId === sourceMessage?.MessageId);
+  const checklist = detail?.checklist || [];
+  const checklistPct = checklist.length ? (checklist.filter((i) => i.done).length / checklist.length) * 100 : 0;
+  const tickItem = async (i) => {
+    try { await api.patch(`/api/tasks/${t.TaskId}/checklist/${i.id}`, { done: !i.done }); loadDetail(t.TaskId); }
+    catch { /* the list reloads on the next refresh */ }
+  };
+  // what the folded strip says on its left: the header already has the id, title and state, so
+  // this carries the two things it cannot - how far the list got, and what the task is
+  const foldedFacts = [checklist.length ? progressLine(checklist) : "", kindLabel(t?.Kind || "task"),
+    t?.Assignee ? assigneeLabel(t.Assignee) : "", repoOf(t) || ""].filter(Boolean).join(" · ");
   const generalStarted = isGeneral && (!!term?.alive || hasGeneralHistory
     || String(t?.Tags || "").split(/[\s,]+/).includes(ASK_TAG));
   const agentState = agentPhase({
@@ -841,65 +867,34 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
             </Box>
           ) : (
             <>
-              {/* header strip: identity + controls. Calm on purpose - white ground, one quiet
-                  outlined action, ghost icons: the loud green block + boxed dots read as three
-                  alarms where nothing was wrong */}
-              <Box sx={{ px: liveCodingSession ? 1.5 : 2.5, py: liveCodingSession ? 0.7 : 1.5,
+              {/* header strip: ONE LINE, and it is the Task card's heading too. It used to be a
+                  tall block - id, title, dots, close, then "from email · created 10h ago by router"
+                  - sitting directly above a second heading that said "Task · the job itself". The
+                  provenance line moved into "Where this came from" inside the card, where you go
+                  and look at it rather than read it every time. */}
+              <Box sx={{ px: liveCodingSession ? 1.5 : 1.75, py: liveCodingSession ? 0.7 : 1,
                 bgcolor: "#fff", borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
-                {/* one primary action, everything else behind one tidy menu - six buttons in a
-                    row read as none of them mattering */}
-                <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-                  <Typography sx={{ color: "#41525f",
-                    fontFamily: "'IBM Plex Sans', 'Segoe UI', Arial, sans-serif", fontVariantNumeric: "tabular-nums",
-                    letterSpacing: ".015em", fontWeight: 750,
-                    fontSize: liveCodingSession ? 12.5 : 13.5 }}>{detail.ref}</Typography>
+                <Box sx={{ display: "flex", gap: 0.9, alignItems: "center" }}>
+                  <Box sx={{ width: 18, height: 18, borderRadius: "50%", bgcolor: "#55697a", color: "#fff",
+                    display: "grid", placeItems: "center", flexShrink: 0, fontSize: 9.5, fontWeight: 800 }}>1</Box>
+                  <Typography sx={{ color: "#41525f", fontVariantNumeric: "tabular-nums", flexShrink: 0,
+                    letterSpacing: ".015em", fontWeight: 750, fontSize: 11.5 }}>{detail.ref}</Typography>
                   <Typography sx={{ color: INK, flex: 1, fontWeight: 650,
-                    fontSize: liveCodingSession ? 13.5 : 15,
-                    minWidth: { xs: 110, sm: 200 }, letterSpacing: "-.01em" }} noWrap>
+                    fontSize: liveCodingSession ? 12.5 : 13,
+                    minWidth: { xs: 90, sm: 180 }, letterSpacing: "-.005em" }} noWrap>
                     {t.Title}
-                  </Typography>
-                  <Tooltip title="Hand off, split or merge, pick the repo, not a task…">
-                    <IconButton size="small" onClick={(e) => setMenuEl(e.currentTarget)}>
-                      <MoreHorizIcon sx={{ fontSize: 18 }} />
-                    </IconButton>
-                  </Tooltip>
-                  <Menu anchorEl={menuEl} open={!!menuEl} onClose={() => setMenuEl(null)}
-                    slotProps={{ paper: { sx: { minWidth: 280 } } }}>
-                    <MenuItem onClick={() => { setMenuEl(null); setHandoff(true); }}>
-                      <ListItemIcon><ForwardToInboxIcon sx={{ fontSize: 17, color: "#55697a" }} /></ListItemIcon>
-                      <ListItemText primary="Hand it to a person"
-                        secondary="not ours to do — the AI writes the forward, you send it" />
-                    </MenuItem>
-                    <MenuItem onClick={() => { setMenuEl(null); setReshape(true); }}>
-                      <ListItemIcon><CallSplitIcon sx={{ fontSize: 17, color: "#6f8a6e" }} /></ListItemIcon>
-                      <ListItemText primary="Two jobs in here, or a duplicate?"
-                        secondary="break it in two, or fold it into the task it repeats" />
-                    </MenuItem>
-                    {!isGeneral && <MenuItem onClick={() => { setMenuEl(null); setRepoPick(true); }}>
-                      <ListItemIcon><AccountTreeIcon sx={{ fontSize: 17, color: "#55697a" }} /></ListItemIcon>
-                      <ListItemText primary={repoOf(t) ? `Repo: ${repoOf(t)}` : "Pick the repository"}
-                        secondary="which checkout the session works in" />
-                    </MenuItem>}
-                    <Divider />
-                    <MenuItem onClick={() => { setMenuEl(null); setConfirmNAT(true); }} sx={{ color: "#6b2733" }}>
-                      <ListItemIcon><BlockIcon sx={{ fontSize: 16, color: "#6b2733" }} /></ListItemIcon>
-                      <ListItemText primary="Not a task" secondary="delete it and teach triage why — the sender keeps writing to you" />
-                    </MenuItem>
-                  </Menu>
-                  <Tooltip title="Close — back to the list (the task stays)">
-                    <IconButton size="small" onClick={() => onSelect(null)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
-                  </Tooltip>
-                </Box>
-                <Box sx={{ display: liveCodingSession ? "none" : "flex", alignItems: "center", gap: 0.7, mt: 0.75, flexWrap: "wrap" }}>
-                  <Typography variant="caption" sx={{ color: FAINT }}>
-                    from {t.Source || "manual"} · created {timeAgo(t.CreatedAt)} by {t.CreatedBy}
                   </Typography>
                   {/* the list row said this and the task page did not, so a held task looked merely open */}
                   {interruptedTask && <Chip size="small" label="interrupted"
                     title="Taskuary closed while an agent was working this. Nothing restarts until you choose one."
-                    sx={{ height: 17, fontSize: 9.5, bgcolor: "#eee7d6", color: "#7a5c1e" }} />}
+                    sx={{ height: 17, fontSize: 9.5, bgcolor: "#eee7d6", color: "#7a5c1e", flexShrink: 0 }} />}
+                  <LifecycleChip kind="task" phase={taskState} compact sx={{ flexShrink: 0 }} />
+                  <Tooltip title="Close — back to the list (the task stays)">
+                    <IconButton size="small" onClick={() => onSelect(null)}><CloseIcon sx={{ fontSize: 15 }} /></IconButton>
+                  </Tooltip>
                 </Box>
-                {workContext && <Typography variant="caption" sx={{ color: "#6b5f45", display: "block", mt: 0.35, fontWeight: 650 }}>
+                {workContext && <Typography variant="caption" sx={{ color: "#6b5f45", display: "block",
+                  mt: 0.15, ml: 3.4, fontWeight: 650, fontSize: 10 }}>
                   {workContext}
                 </Typography>}
               </Box>
@@ -915,42 +910,75 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 {/* The checkout, and why. A wrong guess means an agent editing the wrong tree in
                     good faith, so it is stated on the page rather than buried in the prompt. */}
                 {!term?.alive && (
-                  <Box sx={{ ...card, mb: 1.25, p: stage === "task" ? 1.5 : 1.1, bgcolor: "#fff", flexShrink: 0,
-                    borderLeft: "4px solid #55697a" }}>
-                    <WorkflowHeading number="1" title="Task" description="The job itself — ownership and completion live here."
-                      chip={<LifecycleChip kind="task" phase={taskState} compact />} tone="#55697a" {...stageProps("task")}
-                      action={!["done", "dropped"].includes(t.Status) && stage !== "task"
-                        ? <Box sx={{ display: "flex", gap: 0.7 }}>
-                            {t.Kind !== "task" && (
-                              <Button size="small" variant="outlined" startIcon={<PersonOutlineIcon sx={{ fontSize: 14 }} />}
-                                sx={{ fontSize: 10.5, minHeight: 25, py: 0, px: 0.9, color: DIM, borderColor: BORDER }}
-                                title="Real work, but not the agent's. It goes on your list and triage learns from it."
-                                onClick={() => setMineOpen(true)}>Mine, not the agent's</Button>)}
-                            <Button size="small" variant="outlined" startIcon={<DoneAllIcon sx={{ fontSize: 14 }} />}
-                              sx={{ fontSize: 10.5, minHeight: 25, py: 0, px: 0.9 }}
-                              title="Closes the task. Its agent and its reply stay separate decisions."
-                              onClick={() => finish("done")}>Mark done</Button>
+                  <Box sx={{ ...card, mb: 1.25, px: 1.5, py: stage === "task" ? 1.5 : 0.85,
+                    bgcolor: "#fff", flexShrink: 0, borderLeft: "4px solid #55697a" }}>
+                    {/* FOLDED - the same controls the open card has, in the same order, with their
+                        labels dropped. The left half carries what the header cannot: how far the
+                        checklist got, and what the task is. The whole strip reopens the task. */}
+                    {stage !== "task" && (
+                      <Box onClick={() => setOpenStage("task")}
+                        sx={{ display: "flex", alignItems: "center", gap: 0.85, minWidth: 0, cursor: "pointer" }}>
+                        <Typography sx={{ color: FAINT, fontSize: 9, fontWeight: 750, letterSpacing: 1.35, flexShrink: 0 }}>TASK</Typography>
+                        <Typography noWrap sx={{ color: DIM, fontSize: 11.5, flex: 1, minWidth: 0 }}>{foldedFacts}</Typography>
+                        {!["done", "dropped"].includes(t.Status) && (
+                          <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35, flexShrink: 0 }}>
+                            <Button size="small" variant="contained" disableElevation startIcon={<DoneAllIcon sx={{ fontSize: 14 }} />}
+                              sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
+                              title="Closes the task and ends the live agent session with it."
+                              onClick={() => finish("done")}>Mark task done</Button>
+                            <Tooltip title="Not a task — delete it and teach triage why">
+                              <IconButton size="small" sx={{ color: "#7a2f3c" }} onClick={() => setConfirmNAT(true)}>
+                                <BlockIcon sx={{ fontSize: 16 }} /></IconButton>
+                            </Tooltip>
+                            <Divider orientation="vertical" flexItem sx={{ mx: 0.25, my: 0.5, borderColor: BORDER }} />
+                            <Tooltip title="Hand it to a person — the AI writes the forward, you send it">
+                              <IconButton size="small" sx={{ color: "#55697a" }} onClick={() => setHandoff(true)}>
+                                <ForwardToInboxIcon sx={{ fontSize: 16 }} /></IconButton>
+                            </Tooltip>
+                            <Tooltip title="Split or merge — break it in two, or fold it into the task it repeats">
+                              <IconButton size="small" sx={{ color: "#6f8a6e" }} onClick={() => setReshape(true)}>
+                                <CallSplitIcon sx={{ fontSize: 16 }} /></IconButton>
+                            </Tooltip>
                           </Box>
-                        : null} />
+                        )}
+                        <ExpandMoreIcon sx={{ fontSize: 18, color: FAINT, flexShrink: 0, transform: "rotate(-90deg)" }} />
+                      </Box>
+                    )}
                     {stage === "task" && <>
-                    <Divider sx={{ my: 1.2, borderColor: BORDER }} />
-                    <Box sx={{ display: "flex", gap: 1.15, alignItems: "flex-start" }}>
-                      <Tooltip title={t.Status === "done" ? "Completed" : "Mark this task done"}>
-                        <span>
-                          <IconButton size="small" disabled={["done", "dropped"].includes(t.Status)}
-                            onClick={() => finish("done")} sx={{ mt: -0.35, color: "#6f8a6e" }}>
-                            {t.Status === "done"
-                              ? <CheckCircleOutlineIcon sx={{ fontSize: 22 }} />
-                              : <RadioButtonUncheckedIcon sx={{ fontSize: 22 }} />}
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                      <Box sx={{ minWidth: 0, flex: 1 }}>
+                    {/* 1 - WHAT YOU CAN DO. The two endings first, grouped, then a rule, then the two
+                        reroutes. Nothing behind a menu: "no one knows where the other buttons were
+                        unless you click the 3 options" (the owner, 2026-09-16). */}
+                    {!["done", "dropped"].includes(t.Status) ? (
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
+                        <Button size="small" variant="contained" disableElevation startIcon={<DoneAllIcon sx={{ fontSize: 16 }} />}
+                          sx={{ minHeight: 34, py: 0, px: 1.75, fontSize: 12.5 }}
+                          title="Closes the task and ends the live agent session with it."
+                          onClick={() => finish("done")}>Mark task done</Button>
+                        <Button size="small" variant="outlined" startIcon={<BlockIcon sx={{ fontSize: 15 }} />}
+                          sx={{ ...barBtn, color: "#7a2f3c", borderColor: "#e0c6cb" }}
+                          title="Delete it and teach triage why — the sender keeps writing to you."
+                          onClick={() => setConfirmNAT(true)}>Not a task</Button>
+                        <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />
+                        <Button size="small" variant="outlined" sx={barBtn}
+                          startIcon={<ForwardToInboxIcon sx={{ fontSize: 16, color: "#55697a" }} />}
+                          title="Not ours to do — the AI writes the forward, you send it."
+                          onClick={() => setHandoff(true)}>Hand it to a person</Button>
+                        <Button size="small" variant="outlined" sx={barBtn}
+                          startIcon={<CallSplitIcon sx={{ fontSize: 16, color: "#6f8a6e" }} />}
+                          title="Two jobs in here, or a duplicate? Break it in two, or fold it into the task it repeats."
+                          onClick={() => setReshape(true)}>Split or merge</Button>
+                      </Box>
+                    ) : (
+                      <Button size="small" variant="outlined" startIcon={<RefreshIcon sx={{ fontSize: 15 }} />}
+                        title="Reopens the task only. No agent starts until you choose one."
+                        onClick={reopen}>Reopen task</Button>
+                    )}
+                    <Divider sx={{ my: 1.4, borderColor: BORDER }} />
+                    {/* 2 - WHAT THERE IS TO DO. The title is in the header now; repeating it here was
+                        the same words twice, an inch apart. */}
+                    <Box sx={{ minWidth: 0 }}>
                         <Typography variant="overline" sx={{ color: FAINT, fontSize: 9,
-                          fontWeight: 750, letterSpacing: 1.35, lineHeight: 1.2 }}>What needs doing</Typography>
-                        <Typography sx={{ color: INK, fontSize: 14, fontWeight: 700, lineHeight: 1.35 }}>
-                          {t.Title}
-                        </Typography>
+                          fontWeight: 750, letterSpacing: 1.35, lineHeight: 1.2, display: "block" }}>What needs doing</Typography>
                         {taskAsk && (
                           <Typography variant="body2" sx={{ color: DIM, mt: 0.45, lineHeight: 1.55,
                             whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxWidth: 900,
@@ -959,22 +987,28 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           </Typography>
                         )}
                         {/* the checklist triage drew from the ask (PW-075): boxes are progress on the list,
-                            never task completion - closing the task stays the owner's separate decision */}
+                            never task completion - closing the task stays the owner's separate decision.
+                            The WHOLE LINE is the target, not the 16px box: on a manual task ticking these
+                            off IS the work (the owner, 2026-09-16), and a box that small did not look
+                            like something you were meant to click. */}
                         {(detail?.checklist || []).length > 0 && (
-                          <Box sx={{ mt: 0.75, maxWidth: 900 }}>
+                          <Box sx={{ mt: 0.85, maxWidth: 900 }}>
                             {detail.checklist.map((i) => (
-                              <Box key={i.id} sx={{ display: "flex", alignItems: "flex-start", gap: 0.5 }}>
-                                <Checkbox size="small" checked={!!i.done} sx={{ p: 0.25 }}
-                                  onChange={async (e) => {
-                                    try { await api.patch(`/api/tasks/${t.TaskId}/checklist/${i.id}`, { done: e.target.checked }); loadDetail(t.TaskId); }
-                                    catch { /* the list reloads on the next refresh */ }
-                                  }} />
-                                <Typography variant="body2" sx={{ color: i.done ? FAINT : INK, textDecoration: i.done ? "line-through" : "none", lineHeight: 1.7 }}>
+                              <Box key={i.id} onClick={() => tickItem(i)}
+                                sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 0.75, ml: -0.75, py: 0.15,
+                                  borderRadius: 1, cursor: "pointer", "&:hover": { bgcolor: "#faf8f4" } }}>
+                                <Checkbox size="small" checked={!!i.done} onChange={() => {}} tabIndex={-1}
+                                  sx={{ p: 0.25, pointerEvents: "none", color: "rgba(0,0,0,.54)", "&.Mui-checked": { color: "#6f8a6e" } }} />
+                                <Typography variant="body2" sx={{ color: i.done ? FAINT : INK, textDecoration: i.done ? "line-through" : "none", lineHeight: 1.6 }}>
                                   {i.text}
                                 </Typography>
                               </Box>
                             ))}
-                            <Typography variant="caption" sx={{ color: FAINT, pl: 0.5 }}>{progressLine(detail.checklist)}</Typography>
+                            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.6 }}>
+                              <LinearProgress variant="determinate" value={checklistPct} sx={{ width: 120, height: 4,
+                                borderRadius: 2, bgcolor: PANEL2, "& .MuiLinearProgress-bar": { bgcolor: "#6f8a6e" } }} />
+                              <Typography variant="caption" sx={{ color: FAINT }}>{progressLine(detail.checklist)}</Typography>
+                            </Box>
                           </Box>
                         )}
                         {/* the rest of what they said, in order - indented so it reads as the same
@@ -991,80 +1025,126 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                             </Typography>
                           </Box>
                         ))}
-                        <Box sx={{ display: "flex", gap: 0.8, alignItems: "center", flexWrap: "wrap", mt: 0.7 }}>
-                          {/* "from whatsapp, created by router" named the machinery, not the thing.
-                              Who said it, where, and how many times they said it. */}
-                          {sourceMessage && <Typography variant="caption" sx={{ color: FAINT }}>
-                            from {sourceMessage.FromName || sourceMessage.FromEmail || sourceMessage.Channel}
-                            {sourceMessage.Channel ? ` on ${sourceMessage.Channel}` : ""}
-                            {inbound.length > 1 ? ` · ${inbound.length} messages` : ""}
-                          </Typography>}
+                        {/* WHERE THIS CAME FROM - the header's old "from email · created 10h ago by
+                            router" caption, turned into something worth reading: the message, what
+                            triage decided about it and why, then the task it made. At the END of the
+                            task list, because it is the last thing in the task's story. */}
+                        <Box sx={{ display: "flex", gap: 0.8, alignItems: "center", flexWrap: "wrap", mt: 1 }}>
+                          <Button size="small" variant="outlined" onClick={() => setSourceOpen((v) => !v)}
+                            startIcon={<AltRouteIcon sx={{ fontSize: 15 }} />}
+                            endIcon={<ExpandMoreIcon sx={{ fontSize: 16, transition: "transform .15s",
+                              transform: sourceOpen ? "rotate(180deg)" : "none" }} />}
+                            sx={{ minHeight: 26, py: 0, px: 1, fontSize: 11.5, color: DIM, borderColor: BORDER }}>
+                            Where this came from
+                          </Button>
                           {!!detail.attachments?.length && <Chip size="small" icon={<AttachFileIcon sx={{ fontSize: 13 }} />}
                             label={`${detail.attachments.length} attachment${detail.attachments.length === 1 ? "" : "s"}`}
                             sx={{ height: 19, fontSize: 10, bgcolor: PANEL2 }} />}
                         </Box>
-                      </Box>
+                        {sourceOpen && (
+                          <Box sx={{ mt: 0.85, maxWidth: 900, border: `1px solid ${BORDER}`, borderRadius: 1.5, overflow: "hidden" }}>
+                            {sourceMessage && (
+                              <Box sx={{ p: 1.1, display: "flex", gap: 1.1, alignItems: "flex-start" }}>
+                                <ChannelIcon channel={sourceMessage.Channel} sx={{ color: "#55697a", mt: 0.25 }} />
+                                <Box sx={{ minWidth: 0, flex: 1 }}>
+                                  <Box sx={{ display: "flex", gap: 0.75, alignItems: "baseline", flexWrap: "wrap" }}>
+                                    <Typography sx={{ color: INK, fontSize: 11.5, fontWeight: 650 }}>
+                                      {sourceMessage.FromName || sourceMessage.FromEmail || sourceMessage.Channel}
+                                    </Typography>
+                                    <Typography variant="caption" sx={{ color: FAINT }}>
+                                      {sourceMessage.SentAt ? `· ${fmtDateTime(sourceMessage.SentAt)}` : ""}
+                                      {inbound.length > 1 ? ` · ${inbound.length} messages` : ""}
+                                    </Typography>
+                                    {sourceMessage.SourceLink && <Link href={sourceMessage.SourceLink} target="_blank"
+                                      rel="noopener" sx={{ fontSize: 11 }}>open the original</Link>}
+                                  </Box>
+                                  {sourceMessage.Subject && <Typography variant="body2" sx={{ color: INK, fontWeight: 600, mt: 0.1 }}>
+                                    {sourceMessage.Subject}</Typography>}
+                                  <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap",
+                                    overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 3,
+                                    WebkitBoxOrient: "vertical", overflow: "hidden" }}>{cleanText(sourceMessage.BodyText)}</Typography>
+                                </Box>
+                              </Box>
+                            )}
+                            {sourceRoute && (
+                              <Box sx={{ p: 1.1, bgcolor: PANEL2, borderTop: `1px solid ${BORDER}`,
+                                display: "flex", gap: 1.1, alignItems: "flex-start" }}>
+                                <AltRouteIcon sx={{ fontSize: 16, color: ACCENT2, mt: 0.3 }} />
+                                <Box sx={{ minWidth: 0, flex: 1 }}>
+                                  <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", flexWrap: "wrap" }}>
+                                    <Typography variant="overline" sx={{ color: FAINT, fontSize: 8.5,
+                                      fontWeight: 750, letterSpacing: 1.25 }}>Triage</Typography>
+                                    <Chip size="small" label={sourceRoute.Decision}
+                                      sx={{ height: 17, fontSize: 9.5, fontWeight: 700, bgcolor: "#e4e9ee", color: "#41525f" }} />
+                                  </Box>
+                                  {sourceRoute.Reason && <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55 }}>
+                                    {sourceRoute.Reason}</Typography>}
+                                </Box>
+                              </Box>
+                            )}
+                            <Box sx={{ p: 1.1, borderTop: `1px solid ${BORDER}`, display: "flex", gap: 1.1, alignItems: "center" }}>
+                              <DoneAllIcon sx={{ fontSize: 16, color: "#55697a" }} />
+                              <Typography variant="caption" sx={{ color: FAINT }}>
+                                {detail.ref} · from {t.Source || "manual"} · created {timeAgo(t.CreatedAt)} by {t.CreatedBy}
+                                {detail.comments?.length ? ` · ${detail.comments.length} note${detail.comments.length === 1 ? "" : "s"}` : ""}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        )}
                     </Box>
-                    {!["done", "dropped"].includes(t.Status) && (
-                      <Box sx={{ display: "flex", alignItems: "flex-end", gap: 0.9, flexWrap: "wrap",
-                        mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
-                        <LabeledControl label="Type">
-                          <Select value={t.Kind || "task"} onChange={(e) => patch({ Kind: e.target.value })} sx={selSx}
-                            renderValue={kindLabel} title="What kind of work this task contains">
-                            {(KINDS.includes(t.Kind || "task") ? KIND_OPTIONS
-                              : [{ key: t.Kind, label: t.Kind, hint: "legacy task type" }, ...KIND_OPTIONS]).map((o) =>
-                              <MenuItem key={o.key} value={o.key} sx={{ py: 0.6 }}>
-                                <ListItemText primary={o.label} secondary={o.hint}
-                                  primaryTypographyProps={{ fontSize: 12 }} secondaryTypographyProps={{ fontSize: 10.5 }} />
-                              </MenuItem>)}
-                          </Select>
-                        </LabeledControl>
-                        <LabeledControl label="Task status">
-                          <Select value={t.Status || "open"} onChange={(e) => patch({ Status: e.target.value })} sx={selSx}
-                            renderValue={statusLabel} title="Task status — independent of its agent and reply">
-                            {STATUSES.filter((s) => !["done", "dropped"].includes(s) || s === t.Status)
-                              .map((s) => <MenuItem key={s} value={s} sx={{ fontSize: 12 }}>{statusLabel(s)}</MenuItem>)}
-                          </Select>
-                        </LabeledControl>
-                        <LabeledControl label="Priority">
-                          <Select value={t.Priority || "normal"} onChange={(e) => patch({ Priority: e.target.value })} sx={selSx}>
-                            {PRIORITIES.map((p) => <MenuItem key={p} value={p} sx={{ fontSize: 12 }}>{p}</MenuItem>)}
-                          </Select>
-                        </LabeledControl>
-                        <LabeledControl label="Assigned to">
-                          <Select value={t.Assignee || ""} onChange={(e) => {
-                            const assignee = e.target.value, worker = assignedAgent(assignee);
-                            patch({ Assignee: assignee });
-                            if (worker && agents.includes(worker)) setRun((r) => ({ ...r, agent: worker, model: "" }));
-                          }} sx={selSx}
-                            displayEmpty renderValue={assigneeLabel}>
-                            <MenuItem value="" sx={{ fontSize: 12 }}>unassigned</MenuItem>
-                            <MenuItem value="owner" sx={{ fontSize: 12 }}>you</MenuItem>
-                            {agents.map((name) => <MenuItem key={name} value={agentAssignee(name)} sx={{ fontSize: 12 }}>
-                              <TaskuaryMark size={12} />&nbsp; {name}
+                    {/* 3 - WHAT THE TASK IS. Settings, not actions: pills on the bottom edge, and the
+                        repo is one of them now instead of an item in a menu. */}
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.7, flexWrap: "wrap",
+                      mt: 1.4, pt: 1.2, borderTop: `1px solid ${BORDER}` }}>
+                      {!["done", "dropped"].includes(t.Status) && <>
+                        <Select value={t.Kind || "task"} onChange={(e) => patch({ Kind: e.target.value })} sx={chipSel}
+                          renderValue={kindLabel} title="What kind of work this task contains">
+                          {(KINDS.includes(t.Kind || "task") ? KIND_OPTIONS
+                            : [{ key: t.Kind, label: t.Kind, hint: "legacy task type" }, ...KIND_OPTIONS]).map((o) =>
+                            <MenuItem key={o.key} value={o.key} sx={{ py: 0.6 }}>
+                              <ListItemText primary={o.label} secondary={o.hint}
+                                primaryTypographyProps={{ fontSize: 12 }} secondaryTypographyProps={{ fontSize: 10.5 }} />
                             </MenuItem>)}
-                            {t.Assignee && t.Assignee !== "owner" && !assignedAgent(t.Assignee)
-                              && <MenuItem value={t.Assignee} sx={{ fontSize: 12 }}>{t.Assignee}</MenuItem>}
-                          </Select>
-                        </LabeledControl>
-                        <Box sx={{ flex: 1 }} />
-                        <Button size="small" variant="contained" disableElevation startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />}
-                          title="Closes the task and ends the live agent session with it."
-                          onClick={() => finish("done")}>Mark task done</Button>
-                      </Box>
-                    )}
-                    {["done", "dropped"].includes(t.Status) && (
-                      <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
+                        </Select>
+                        <Select value={t.Status || "open"} onChange={(e) => patch({ Status: e.target.value })} sx={chipSel}
+                          renderValue={statusLabel} title="Task status — independent of its agent and reply">
+                          {STATUSES.filter((s) => !["done", "dropped"].includes(s) || s === t.Status)
+                            .map((s) => <MenuItem key={s} value={s} sx={{ fontSize: 12 }}>{statusLabel(s)}</MenuItem>)}
+                        </Select>
+                        <Select value={t.Priority || "normal"} onChange={(e) => patch({ Priority: e.target.value })}
+                          sx={chipSel} title="Priority">
+                          {PRIORITIES.map((p) => <MenuItem key={p} value={p} sx={{ fontSize: 12 }}>{p}</MenuItem>)}
+                        </Select>
+                        <Select value={t.Assignee || ""} onChange={(e) => {
+                          const assignee = e.target.value, worker = assignedAgent(assignee);
+                          patch({ Assignee: assignee });
+                          if (worker && agents.includes(worker)) setRun((r) => ({ ...r, agent: worker, model: "" }));
+                        }} sx={chipSel} title="Who works it" displayEmpty renderValue={assigneeLabel}>
+                          <MenuItem value="" sx={{ fontSize: 12 }}>unassigned</MenuItem>
+                          <MenuItem value="owner" sx={{ fontSize: 12 }}>you</MenuItem>
+                          {agents.map((name) => <MenuItem key={name} value={agentAssignee(name)} sx={{ fontSize: 12 }}>
+                            <TaskuaryMark size={12} />&nbsp; {name}
+                          </MenuItem>)}
+                          {t.Assignee && t.Assignee !== "owner" && !assignedAgent(t.Assignee)
+                            && <MenuItem value={t.Assignee} sx={{ fontSize: 12 }}>{t.Assignee}</MenuItem>}
+                        </Select>
+                        {!isGeneral && <Button size="small" variant="outlined" sx={chipBtn}
+                          startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}
+                          title="Which checkout the session works in"
+                          onClick={() => setRepoPick(true)}>{repoOf(t) || "pick a repo"}</Button>}
+                      </>}
+                      {["done", "dropped"].includes(t.Status) && (
                         <Button size="small" variant="outlined" startIcon={<RefreshIcon sx={{ fontSize: 15 }} />}
                           title="Reopens the task only. No agent starts until you choose one."
                           onClick={reopen}>Reopen task</Button>
-                      </Box>
-                    )}
-                    <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.65 }}>
-                      {completionIsManual
-                        ? "You control completion. Ending an agent run or sending a reply leaves this task open."
-                        : "Automatic task. When its triaged work finishes, Taskuary may close it and prepare the reply."}
-                    </Typography>
+                      )}
+                      <Box sx={{ flex: 1, minWidth: 12 }} />
+                      <Typography variant="caption" sx={{ color: FAINT, textAlign: "right", maxWidth: 340 }}>
+                        {completionIsManual
+                          ? "You control completion. Ending an agent run or sending a reply leaves this task open."
+                          : "Automatic task. When its triaged work finishes, Taskuary may close it and prepare the reply."}
+                      </Typography>
+                    </Box>
                     </>}
                   </Box>
                 )}
@@ -1702,10 +1782,3 @@ const WorkflowHeading = ({ number, title, description, chip, tone, folded, onTog
   </Box>
 );
 
-const LabeledControl = ({ label, children }) => (
-  <Box sx={{ display: "flex", flexDirection: "column", gap: 0.3 }}>
-    <Typography variant="caption" sx={{ color: FAINT, fontSize: 9.5, fontWeight: 700,
-      letterSpacing: 0.35, pl: 0.25 }}>{label}</Typography>
-    {children}
-  </Box>
-);

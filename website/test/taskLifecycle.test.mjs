@@ -73,10 +73,15 @@ test("the task page opens exactly one stage and lets you open the others by hand
   assert.match(source, /const stage = term\?\.alive \? "agent" : \(openStage \|\| focusStage\(/);
   assert.match(source, /setOpenStage\(null\)/);
   assert.match(source, /onToggle: stage === name \? null : \(\) => setOpenStage\(name\)/);   // the open one is not a control                                     // a new task recomputes its own focus
-  for (const name of ["task", "agent", "reply"]) {
+  for (const name of ["agent", "reply"]) {
     assert.ok(source.includes(`{...stageProps("${name}")}`), `stage ${name} must fold and open by hand`);
     assert.ok(source.includes(`stage === "${name}" &&`), `stage ${name} body must be gated`);
   }
+  // the Task card has no WorkflowHeading of its own since the page header became its heading
+  // (2026-09-16): folded, it renders its own strip, and that strip is what opens it again
+  assert.ok(source.includes(`stage !== "task" && (`), "the task card must render a folded strip");
+  assert.ok(source.includes(`onClick={() => setOpenStage("task")}`), "stage task must open by hand");
+  assert.ok(source.includes(`stage === "task" &&`), "stage task body must be gated");
 });
 
 test("a general chat that has answered is agent state, not \"not started\"", () => {
@@ -88,8 +93,11 @@ test("a general chat that has answered is agent state, not \"not started\"", () 
 
 test("closing the task never hides behind a fold, and a finished chat can be closed out", () => {
   const source = readFileSync(fileURLToPath(new URL("../src/TasksView.jsx", import.meta.url)), "utf8");
-  // the completion control rides on the heading, so it is there whether the card is open or folded
-  assert.ok(source.includes('action={!["done", "dropped"].includes(t.Status) && stage !== "task"'), "the Task heading must carry the done control");
+  // the completion control rides on the folded strip too, so it is there whether the card is open
+  // or folded - the strip is the Task card's whole presence when the agent or reply has the focus
+  const folded = source.slice(source.indexOf('stage !== "task" && ('), source.indexOf('{stage === "task" && <>'));
+  assert.ok(folded.includes(">Mark task done</Button>"), "the folded Task strip must carry the done control");
+  assert.ok(folded.includes('finish("done")'), "and it must run the same completion road");
   assert.match(source, /const WorkflowHeading = \(\{ number, title, description, chip, tone, folded, onToggle, action \}\)/);
   // ...and a general conversation is wrappable once its provider session is gone (server.py/coder.py, 2026-09-07)
   assert.match(source, /const canWrap = !!term \|\| !!detail\?\.transcript \|\| hasGeneralHistory/);

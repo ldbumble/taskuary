@@ -638,6 +638,11 @@ class SQLiteStore:
             tcols = {r[1] for r in self.cx.execute('PRAGMA table_info(task)')}
             if 'Checklist' not in tcols:
                 self.cx.execute('ALTER TABLE task ADD COLUMN Checklist TEXT')
+            # WHICH BRAIN ran a session, beside the role that owned it. A role is always the same
+            # for coding work, so the session is the only place the actual CLI is recorded
+            # (docs/superpowers/specs/2026-09-16-profile-brain-separation-design.md)
+            trcols = {r[1] for r in self.cx.execute('PRAGMA table_info(transcript)')}
+            if 'Brain' not in trcols: self.cx.execute('ALTER TABLE transcript ADD COLUMN Brain TEXT')
             # how complete each email conversation is (chains.py, PW-010): listed at the provider, added
             # here, and the error when it could not be completed - never guessed from what is stored
             self.cx.execute('CREATE TABLE IF NOT EXISTS chain (Mailbox TEXT NOT NULL DEFAULT "", ConversationId TEXT NOT NULL, Channel TEXT, '
@@ -2913,12 +2918,14 @@ class SQLiteStore:
         return self._one('SELECT * FROM task_artifact WHERE ArtifactId=?', (aid,))
     # A pty is not storage: the session's readable transcript is written here when it ends, so
     # "Done - wrap it up" still works an hour later, on a task whose CLI has long since exited.
-    def add_transcript(self, task_id, sid, text, agent=None, cwd=None, ext_id=None):
+    def add_transcript(self, task_id, sid, text, agent=None, cwd=None, ext_id=None, brain=None):
+        # `brain` is WHICH CLI ran it, beside `agent` - the role. The task is never stamped with a
+        # brain (it would go stale the moment the default changed), so the session is the record.
         if not (text or '').strip(): return None
         prev = self._one('SELECT ExtId FROM transcript WHERE Sid=?', (sid,)) or {}
         self._exec('DELETE FROM transcript WHERE Sid=?', (sid,))      # one row per session, always the latest
-        return self._exec('INSERT INTO transcript (TaskId,Sid,Agent,Cwd,Text,ExtId,CreatedAt) VALUES (?,?,?,?,?,?,?)',
-                          (task_id, sid, agent, cwd, text, ext_id or prev.get('ExtId') or '', _now()))
+        return self._exec('INSERT INTO transcript (TaskId,Sid,Agent,Cwd,Text,ExtId,Brain,CreatedAt) VALUES (?,?,?,?,?,?,?,?)',
+                          (task_id, sid, agent, cwd, text, ext_id or prev.get('ExtId') or '', brain, _now()))
     def note_session_id(self, task_id, sid, ext_id, agent=None, cwd=None):
         """The CLI's OWN conversation id, filed the moment a hook or a rollout names it - NOT when
         the pane closes. keep() runs only on a clean exit, so a killed Taskuary (or a rebooted box)

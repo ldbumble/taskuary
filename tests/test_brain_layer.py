@@ -62,6 +62,51 @@ class DefaultBrainTests(unittest.TestCase):
         self.assertEqual(hub_agents.default_brain(s), 'claude')
 
 
+class SessionBrainTests(unittest.TestCase):
+    def setup(self, brain: str):
+        s = MemoryStore()
+        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'provider': 'cli:claude'}))
+        s.set_setting('default_brain', brain, 'owner')
+        cfg = {'cli_connections': {'claude': {'cmd': 'claude'}, 'codex': {'cmd': 'codex', 'args': ['exec']}}}
+        return s, cfg
+
+    def test_the_command_comes_from_the_brain_settings_name(self):
+        """The profile still says claude; settings say codex, and settings win. A profile has
+        nothing to do with which brain runs it."""
+        s, cfg = self.setup('codex')
+        self.assertEqual(hub_agents.brain_command(s, 'coder', cfg).get('cmd'), 'codex')
+
+    def test_an_unconfigured_brain_leaves_the_profile_alone(self):
+        """A half-migrated install must still be able to start an agent at all."""
+        s, cfg = self.setup('nobody-has-this')
+        self.assertEqual(hub_agents.brain_command(s, 'coder', cfg), {})
+
+    def test_no_brain_chosen_leaves_the_profile_alone(self):
+        """Blank means the owner has not moved to the brain layer, and brain_for would be GUESSING
+        from the legacy default_agent. Overriding an explicit profile command with a guess is how
+        "start a session with codex" would quietly have run claude."""
+        s, cfg = self.setup('')
+        s.upsert_agent('codex', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
+        self.assertEqual(hub_agents.brain_command(s, 'codex', cfg), {})
+
+    def test_a_role_override_alone_is_enough_to_choose(self):
+        s, cfg = self.setup('')
+        s.set_setting('profile_brains', json.dumps({'coder': 'codex'}), 'owner')
+        self.assertEqual(hub_agents.brain_command(s, 'coder', cfg).get('cmd'), 'codex')
+
+    def test_the_brain_brings_its_own_headless_flags(self):
+        s, cfg = self.setup('codex')
+        self.assertIn('exec', hub_agents.brain_command(s, 'coder', cfg).get('args') or [])
+
+    def test_the_transcript_records_which_brain_ran(self):
+        """Which brain ran is a fact of the SESSION - the task is never stamped with one."""
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'x', 'Kind': 'coding', 'Status': 'open'}, 'owner')
+        s.add_transcript(tid, 'sid1', 'some output', agent='coder', cwd='C:/repo', brain='copilot')
+        row = s.resumable_session(tid) or s._one('SELECT * FROM transcript WHERE Sid=?', ('sid1',))
+        self.assertEqual((row['Agent'], row['Brain']), ('coder', 'copilot'))
+
+
 class GearTests(unittest.TestCase):
     """`model_arg` (the FLAG) already lived on the connection; `model` and `light_model` (the
     VALUES) were stranded on the profile behind a patch that scrubbed them whenever the provider

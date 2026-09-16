@@ -629,6 +629,31 @@ def brain_for(store, role: str) -> str:
     return key or default_brain(store)
 
 
+def brain_command(store, role: str, cfg: dict = None) -> dict:
+    """The COMMAND a role's brain runs - cmd, args, resume flags, timeout, gears.
+
+    Empty unless a brain was CHOSEN - `default_brain`, or this role's override. Blank means the
+    owner has not moved to the brain layer yet, and `brain_for` would then be guessing from the
+    legacy `default_agent` profile; overriding an explicit profile command with a guess is how
+    "start a session with codex" would have quietly run claude.
+
+    Empty too when the chosen brain names no configured connection: a half-migrated install must
+    still be able to start an agent at all."""
+    from . import config
+    from .cli_connections import COMMAND_FIELDS, with_defaults
+    settings = store.get_settings()
+    try: over = json.loads(settings.get('profile_brains') or '{}')
+    except ValueError: over = {}
+    key = (str(over.get(str(role or '')) or '').strip() if isinstance(over, dict) else '') \
+        or str(settings.get('default_brain') or '').strip()
+    if not key: return {}
+    cfg = config.load() if cfg is None else cfg
+    conn = (cfg.get('cli_connections') or {}).get(key)
+    if not conn: return {}
+    full = with_defaults(conn)
+    return {k: full[k] for k in COMMAND_FIELDS if k in full}
+
+
 def coding_role(store) -> str:
     """The one role a coding task takes. Triage does not choose it: `kind: coding` names the job,
     and the job names the worker. Reads `default_agent` while that setting is still a PROFILE name;

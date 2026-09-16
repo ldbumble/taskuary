@@ -270,7 +270,7 @@ class Term:
         buttons had nothing to read and quietly disappeared. Written on exit AND on close, because
         either can come first."""
         if not (self.store and self.task_id and self.keep_transcript): return
-        try: self.store.add_transcript(self.task_id, self.sid, harvest(self), self.agent, self.cwd, self.ext_id)
+        try: self.store.add_transcript(self.task_id, self.sid, harvest(self), self.agent, self.cwd, self.ext_id, brain=self.cli)
         except Exception as e: logger.warning(f'could not file the transcript for {self.sid}: {e}')
 
     def settle(self, cap: float) -> bool:
@@ -721,6 +721,12 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         row = store.get_agent(agent)
         if not row: raise ValueError(f'unknown agent: {agent}')
         profile = json.loads(row.get('Config') or '{}')
+        # WHICH BRAIN runs this role is a setting, not a field on the profile: the profile keeps
+        # saying what the worker is FOR, and the connection says what runs it. Empty when the brain
+        # names no configured connection, and then the profile's own command stands - a
+        # half-migrated install must still be able to start an agent at all.
+        from . import agents as _hub
+        profile = {**profile, **(_hub.brain_command(store, agent) or {})}
         label = agent
     else:
         label = 'shell'

@@ -52,10 +52,14 @@ def home() -> Path:
     p.mkdir(parents=True, exist_ok=True)
     # credentials live here in plaintext; the directory itself should not be group/world readable
     # (audit 2026-09-16). mkdir inherits umask, so an existing 755 home stays 755 until this.
-    try:
-        if (p.stat().st_mode & 0o777) != 0o700: p.chmod(0o700)
-    except OSError:
-        pass
+    # Windows chmod only toggles the read-only flag, and st_mode never reads back as 0700, so
+    # without this skip every home() call would SetFileAttributes on the live data dir — including
+    # while sqlite has taskuary.db open. The matching test is already skipped on nt.
+    if os.name != 'nt':
+        try:
+            if (p.stat().st_mode & 0o777) != 0o700: p.chmod(0o700)
+        except OSError:
+            pass
     return p
 
 def _read() -> dict:
@@ -65,8 +69,9 @@ def _read() -> dict:
 def _write(d: dict):
     p = home() / 'config.toml'
     p.write_text(dumps_toml(d) + '\n', encoding='utf-8')
-    try: p.chmod(0o600)
-    except OSError: pass
+    if os.name != 'nt':
+        try: p.chmod(0o600)
+        except OSError: pass
 
 def _env_server() -> dict:
     """Non-empty TASKUARY_* overlays. Empty is unset — an injected '' must not disable a stored token."""

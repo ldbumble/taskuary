@@ -208,9 +208,10 @@ def token() -> str:
     p = config.home() / 'wa-bridge.token'
     if not p.exists():
         p.write_text(secrets.token_urlsafe(24), encoding='utf-8')
-        try: p.chmod(0o600)
-        except OSError: pass
-    else:
+        if os.name != 'nt':
+            try: p.chmod(0o600)
+            except OSError: pass
+    elif os.name != 'nt':
         try: p.chmod(0o600)
         except OSError: pass
     return p.read_text(encoding='utf-8').strip()

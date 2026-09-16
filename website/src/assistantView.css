@@ -11,40 +11,71 @@
 .tq-pile { position: relative; padding: 4px 0 8px; }
 /* how close the pipe is to empty - said once the count is small enough to be encouraging */
 .tq-pile-cheer { text-align: center; color: #6e685f; font: 600 10.5px 'IBM Plex Sans', system-ui, sans-serif; padding: 10px 0 2px; }
-.tq-pile-note { text-align: center; color: #8a847a; font: 500 10px 'IBM Plex Mono', Consolas, monospace; padding: 3px 0; }
+.tq-pile-note { text-align: center; color: #8a847a; font: 500 10px 'IBM Plex Sans', system-ui, sans-serif; padding: 3px 0; }
+
+/* ── the categories ───────────────────────────────────────────────────────────────────────────
+   Each band is its own block with its own stack, so the heading can FREEZE at the top of the rail
+   until the next one pushes it out - you always know which category you are standing in, and the
+   dock above the rail no longer needs a dropdown to tell you (the owner, 2026-09-16: "maybe there
+   should be freeze on the type until you get to next category?").
+   Rows keep their absolute `top` WITHIN a band, so the pipe's glide is unchanged; only a row that
+   changes category jumps, and that is rare. */
+.tq-pile-band { position: relative; }
+.tq-pile-head { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px 7px 58px; margin-top: 7px; background: #fffdfb; border-bottom: 1px solid #ece7e0; }
+.tq-pile-band:first-child .tq-pile-head { margin-top: 0; }
+/* importance lives on the CATEGORY and nowhere else, so this word is the only coloured thing on
+   the rail; the ink is set inline from theme.jsx ROLES (funnelPile.LEVEL_ROLE) */
+.tq-pile-head span { font: 800 10px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
+.tq-pile-head hr { flex: 1 1 auto; border: 0; border-top: 1px solid #ece7e0; margin: 0; }
+.tq-pile-head em { font: 700 10px 'IBM Plex Sans', system-ui, sans-serif; font-style: normal; color: #a09889; font-variant-numeric: tabular-nums; }
+/* what a capped band leaves behind. Only reports and fyi can ever show one (funnelPile.CAPPED) */
+.tq-pile-more { display: block; margin: 5px 0 2px 70px; padding: 3px 11px; border: 1px solid #dcd5cb; border-radius: 99px;
+  background: #fffdfb; color: #55697a; font: 600 11px 'IBM Plex Sans', system-ui, sans-serif; cursor: pointer; }
+.tq-pile-more:hover { border-color: #b9c3cb; background: #f5f8f9; }
+
 .tq-pile-stack { position: relative; }
-.tq-pile-row { position: absolute; left: 0; right: 0; height: 30px; display: grid; grid-template-columns: 70px 14px minmax(0, 1fr); align-items: stretch;
+.tq-pile-row { position: absolute; left: 0; right: 0; height: 30px; display: grid; grid-template-columns: 58px 14px minmax(0, 1fr); align-items: stretch;
   transition: top .55s cubic-bezier(.2,.8,.2,1), opacity .3s ease, transform .3s ease; }
 .tq-pile-row.landing { opacity: 0; transform: translateY(-6px) scale(.98); }
-.tq-pile-row .when { font: 500 10px 'IBM Plex Mono', Consolas, monospace; color: #a09b92; text-align: right; padding: 5px 12px 0 8px; white-space: nowrap; letter-spacing: -.2px; font-variant-numeric: tabular-nums; line-height: 1.25; }
-/* the day under the clock, for a row that is not from today - quieter than the time, and it
-   takes no width from the title: the gutter is already 70px wide for "11:53 AM" */
-.tq-pile-row .when i.day { display: block; font-style: normal; font-size: 9px; color: #b8b2a8; letter-spacing: 0; }
+/* HOW LONG IT HAS WAITED, not what o'clock it arrived: the rail is ranked, not dated. No mono -
+   at 10px its figures were the hardest thing on the rail to read (the owner, 2026-09-16). */
+.tq-pile-row .when { font: 600 11px 'IBM Plex Sans', system-ui, sans-serif; color: #6e685f; text-align: right; padding: 8px 12px 0 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .tq-pile-row .rail { position: relative; }
 .tq-pile-row .rail::before { content: ""; position: absolute; left: 6px; top: -5px; bottom: -5px; width: 1px; background: #e1dcd5; }
-.tq-pile-row .rail i { position: absolute; left: 2.5px; top: 9px; width: 8px; height: 8px; border-radius: 50%; background: #d3ccc1; box-shadow: 0 0 0 3px #fffdfb; }
-.tq-pile-row .card { margin-left: 8px; min-width: 0; overflow: hidden; border: 1px solid #e1dcd5; border-left: 2px solid var(--edge, #d3ccc1); border-radius: 8px; padding: 3px 10px 4px; background: #fffdfb; cursor: pointer; transition: box-shadow .18s, border-color .18s; }
-.tq-pile-row .card:hover { border-color: #d8cfbe; border-left-color: var(--edge, #d3ccc1); box-shadow: 0 2px 8px rgba(47,107,79,.10); }
+/* the dot is the SOURCE (assistantCards.sourceColor) - one size for every row, because importance
+   is not a per-row fact in this product */
+.tq-pile-row .rail i { position: absolute; left: 2.5px; top: 10px; width: 8px; height: 8px; border-radius: 50%; background: #d3ccc1; box-shadow: 0 0 0 3px #fffdfb; }
+.tq-pile-row .card { margin-left: 8px; min-width: 0; overflow: hidden; border: 1px solid #dcd5cb; border-radius: 8px; padding: 4px 10px 5px; background: #fffdfb; cursor: pointer; transition: box-shadow .18s, border-color .18s; }
+.tq-pile-row .card:hover { border-color: #b9c3cb; box-shadow: 0 2px 8px rgba(47,107,79,.10); }
 .tq-pile-row.settling .card { border-style: dashed; }
 /* NEXT wears a ring in the working colour; CURRENT (on the table in the chat) the deeper one */
 .tq-pile-row.next .card { border-color: #7d9a7c; box-shadow: inset 0 0 0 1px #7d9a7c, 0 2px 10px rgba(47,107,79,.14); }
 .tq-pile-row.current { height: 54px; }
-.tq-pile-row.current .card { border-color: #55697a; background: #f7f9fa; box-shadow: inset 0 0 0 1px #55697a, 0 2px 10px rgba(69,79,70,.14); cursor: default; }
-/* one line, like the Timeline: [next] ↑ TQ-0012 sender  subject ……… [tag] */
-.tq-pile-row .t { display: flex; align-items: center; gap: 7px; min-width: 0; min-height: 22px; }
+.tq-pile-row.current .card { border-color: #55697a; background: #f5f8f9; box-shadow: inset 0 0 0 1px #55697a, 0 2px 10px rgba(69,79,70,.14); cursor: default; }
+/* ONE BRACKET for a batch on the table. It is drawn behind its rows and spans them where they
+   already sit: no row moves, no height changes, and ten fyi read as the one thing the assistant is
+   holding rather than as ten separate rings or as a single condensed line. */
+.tq-pile-batch { position: absolute; left: 66px; right: 0; z-index: 0; border: 1px solid #55697a; border-radius: 10px;
+  background: #f5f8f9; box-shadow: inset 0 0 0 1px #55697a, 0 2px 12px rgba(69,79,70,.14); }
+.tq-pile-batch b { position: absolute; top: -8px; right: 10px; background: #fffdfb; padding: 0 6px; border-radius: 99px;
+  font: 800 8.5px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #41525f; white-space: nowrap; }
+.tq-pile-row.inbatch { z-index: 1; }
+.tq-pile-row.inbatch .card { border-color: transparent; background: transparent; box-shadow: none; }
+.tq-pile-row.inbatch .rail i { box-shadow: 0 0 0 3px #f5f8f9; }
+.tq-pile-row.inbatch .card:hover { border-color: #b9c3cb; background: #fffdfb; }
+/* ONE LINE: where it came from, and what it is. The sender, the ref, the lane word, the road word
+   and the promoted arrow are all on the row you open (the owner, 2026-09-16: "maybe just subject
+   should be there to clean it up"). */
+.tq-pile-row .t { display: flex; align-items: center; gap: 9px; min-width: 0; min-height: 22px; }
 .tq-pile-row .logo { display: flex; flex-shrink: 0; }
-.tq-pile-row .who { flex: 0 0 auto; max-width: 118px; font-size: 12px; font-weight: 600; color: #262521; letter-spacing: -.1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tq-pile-row .t b { flex: 1 1 auto; min-width: 0; font-size: 11.5px; font-weight: 500; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tq-pile-row .up { flex: 0 0 auto; color: #526b53; font-weight: 800; font-size: 11px; }
-.tq-pile-ref { flex: 0 0 auto; font: 500 9px 'IBM Plex Mono', Consolas, monospace; color: #a09889; letter-spacing: .02em; }
-.tq-pile-tag { flex: 0 0 auto; display: inline-block; padding: 0 6px; border-radius: 99px; border: 1px solid; font: 600 9px/15px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .01em; white-space: nowrap; }
-/* the waving agent: the one lane where work has STOPPED until the owner answers, so it is
-   the one pill sized to be seen rather than read (the owner, 2026-09-11) */
+.tq-pile-row .t b { flex: 1 1 auto; min-width: 0; font-size: 12.5px; font-weight: 600; color: #191814; letter-spacing: -.1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-pile-tag { flex: 0 0 auto; display: inline-block; padding: 0 6px; border-radius: 99px; border: 1px solid #ddd6cb; background: #eee9e1; color: #6f6960; font: 600 9px/15px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .01em; white-space: nowrap; }
+/* the waving agent and the draft waiting for a yes: the two lanes where work has STOPPED until the
+   owner answers, and the only rows left carrying colour of their own */
 .tq-pile-tag.loud { padding: 1px 9px; font-size: 11px; line-height: 17px; font-weight: 700; letter-spacing: .005em; }
-.tq-pile-next { flex: 0 0 auto; font: 800 8.5px/1 'IBM Plex Mono', Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; color: #fff; background: linear-gradient(90deg, #55697a, #7d9a7c); padding: 3px 6px; border-radius: 99px; }
-.tq-pile-next.cur { background: linear-gradient(90deg, #41525f, #55697a); }
 /* the current one opens up: the second line says why it is here */
-.tq-pile-row .sub { font-size: 10.5px; line-height: 1.5; padding: 2px 0 0 24px; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-pile-row .sub { font-size: 10.5px; line-height: 1.5; padding: 2px 0 0 25px; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-pile-empty { padding: 56px 24px 24px; text-align: center; color: #6e685f; font-size: 11.5px; line-height: 1.5; }
 .tq-pile-empty .mark { display: block; font-size: 30px; line-height: 1; color: #3c5740; }
 .tq-pile-empty b { display: block; color: #3c5740; font-size: 15px; margin: 6px 0 4px; }
@@ -107,6 +138,12 @@
 .tq-fyi-line b { flex: 0 0 auto; font-size: 12px; color: #262521; }
 .tq-fyi-line .t { flex: 1 1 auto; min-width: 0; font-size: 12px; line-height: 1.5; color: #262521;
   overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+/* a FOLDED batch: one line each, the gist and the doors only on the one you opened. The line is
+   the click target, so nothing is cut off and nothing needs a button to read. */
+.tq-fyi.lean { padding: 3px 0; }
+.tq-fyi.lean .tq-fyi-line { cursor: pointer; }
+.tq-fyi.lean .tq-fyi-line .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #4d4a43; }
+.tq-fyi-line .chev { flex: 0 0 auto; color: #b8b2a8; font-size: 10px; }
 .tq-fyi-doors { display: flex; justify-content: flex-end; gap: 2px; margin-top: 1px; }
 .tq-fyi-doors button { text-transform: none; font-size: 10.5px; min-width: 0; padding: 1px 6px; }
 .tq-fyi-gist { margin: 2px 0 0 20px; font-size: 11px; color: #6e685f; line-height: 1.45;

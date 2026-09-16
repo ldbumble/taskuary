@@ -687,7 +687,8 @@ class SweepPronounTests(unittest.TestCase):
                        'BodyText': 'please re-run it', 'Status': 'routed'})
         funnel.invalidate()
         asked = [(i['title'], i['lane']) for i in funnel.build(s)['items'] if i.get('tid') == t]
-        self.assertEqual(asked, [('MFA Financial Report - can you re-run .02?', 'asked')])
+        # ...and it reads as the work, not as the subject line it arrived under (funnel.says)
+        self.assertEqual(asked, [('Re-run .02', 'asked')])
 
 
 class ClosingTests(unittest.TestCase):

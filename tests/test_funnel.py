@@ -897,7 +897,9 @@ class MemoryTests(unittest.TestCase):
         live = [{'taskId': t, 'agent': 'claude', 'label': 'claude', 'started': ago(minutes=5), 'idle': 3, 'waiting': False, 'tail': ['editing…']}]
         with mock.patch('taskuary.terminal.live_sessions', return_value=live):
             items = funnel.build(s)['items']
-        self.assertEqual([(i['title'], i['kind'], i['lane']) for i in items], [('Re: budget 0', 'fyi', 'fyi'), ('Import broken', 'todo', 'working')])
+        # the row reads triage's own title ("Fix the import") rather than the mail header it arrived
+        # under ("Import broken") - funnel.says prefers Title now (the owner, 2026-09-16)
+        self.assertEqual([(i['title'], i['kind'], i['lane']) for i in items], [('Re: budget 0', 'fyi', 'fyi'), ('Fix the import', 'todo', 'working')])
 
     def test_unknown_verbs_are_refused(self):
         with self.assertRaises(ValueError): funnel.settle(store(), 'x', 'burn')

@@ -9,7 +9,7 @@
 // rows go to the conversation) or TASK (rows open on the stage the way the Timeline always did:
 // hover previews, click pins). Past chats slide over; New chat starts a fresh conversation.
 // Everything durable lives on the server; this file only draws and pushes buttons.
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Box, CircularProgress, IconButton, MenuItem, Popover, Select, Tooltip, Typography } from "@mui/material";
 import HistoryIcon from "@mui/icons-material/History";
 import EditNoteIcon from "@mui/icons-material/EditNote";
@@ -27,14 +27,14 @@ import { pollWhileActive } from "./visible.js";
 import { onLive } from "./live.js";
 import PreviousWork from "./PreviousWork.jsx";
 import { Md, looksMd } from "./md.jsx";
-import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12, localDay } from "./ui.jsx";
+import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime } from "./ui.jsx";
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
 import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf } from "./proposalCard.js";
-import { ageText, agoText, arrivals, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, followsItem, hasNextSelection, interactiveCardIndex, keysOf, laneCounted, lastSaidIndex, chipsOf, nextMarkerKey, nextSelectionBody, nextSelectionScope, pendingAlerts, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, levelOf, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, hasNextSelection, interactiveCardIndex, keysOf, laneCounted, lastSaidIndex, chipsOf, levelLabel, nextMarkerKey, nextSelectionBody, nextSelectionScope, pendingAlerts, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
-import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WrapupCard } from "./assistantCards.jsx";
+import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WrapupCard, sourceColor } from "./assistantCards.jsx";
 import FeedView from "./FeedView.jsx";
 import GeneralWorkspace from "./GeneralWorkspace.jsx";
 import { ROADS, roadOfCard } from "./timelineState.js";
@@ -60,6 +60,8 @@ const waitingLine = (items) => {
 };
 
 const ROW_H = 33, CUR_H = 57;   // a Timeline row (30px + its 3px gap); the current one opens up to two lines
+// what sits UNDER the bands and still has to fit: the cheer line and the two quiet notes
+const PILE_FOOT = 46;
 const EMOJI_REPLIES = [
   ["👍", "Sounds good"], ["❤️", "Love it"], ["😂", "Funny"], ["🎉", "Celebrate"],
   ["👏", "Well done"], ["🙏", "Thank you"], ["✅", "Confirmed"], ["👀", "Looking"],
@@ -91,14 +93,6 @@ function greeting() {
   const h = new Date().getHours();
   return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
 }
-
-const shortDay = (value) => {
-  const at = new Date(String(value || "").replace(" ", "T"));
-  if (!Number.isFinite(at.getTime())) return "";
-  const opts = at.getFullYear() === new Date().getFullYear()
-    ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "2-digit" };
-  return at.toLocaleDateString("en-US", opts);
-};
 
 function Pile({ pile, current, onPull }) {
   const items = pile?.items || [];
@@ -132,9 +126,22 @@ function Pile({ pile, current, onPull }) {
     return () => cancelAnimationFrame(frame);
   }, [displayRevision(pile)]);                                     // eslint-disable-line react-hooks/exhaustive-deps
   const visibleItems = items.slice(0, revealed);
-  // the one on the table sits at the TOP as CURRENT - it slides up there from wherever it was in the
-  // pile (same key, same element), and a task named in the chat lands there from nowhere
-  const drawn = [...(current ? [{ ...current, current: true }] : []), ...drawOrder(visibleItems).filter((i) => i.key !== current?.key)];
+  // WHAT IS ON THE TABLE STAYS WHERE IT IS. The current item used to be lifted out of the pile and
+  // redrawn at the top of one flat stack. The rail is grouped by category now, so hoisting would
+  // tear a row out of its band on every Next - and an fyi BATCH would tear out ten. Nothing is
+  // reordered: the row wears the ring where it already sits, and a batch draws ONE bracket around
+  // all of its members (the owner, 2026-09-16: "when the fyi is showing in assistant the work
+  // timeline should highlight all 4 or 10 ... now i think it condenses"). Every row's `top` is
+  // still computed by the same running sum, so the glide the pile has always had is untouched.
+  const batch = current?.kind === "fyis" ? current : null;
+  const batchKeys = new Set(batch ? (batch.members || []) : []);
+  const curKey = current && !batch ? current.key : null;
+  // a task named in the chat is on the table without being in the pile: it joins its own band
+  const known = curKey && visibleItems.some((i) => i.key === curKey);
+  const drawn = [
+    ...(curKey && !known ? [{ ...current }] : []),
+    ...drawOrder(visibleItems).map((i) => (i.key === curKey ? { ...i, ...current } : i)),
+  ];
   const prev = useRef(null);
   const [landing, setLanding] = useState(new Set());
   useEffect(() => {
@@ -145,8 +152,8 @@ function Pile({ pile, current, onPull }) {
     const t = setTimeout(() => setLanding(new Set()), 40);       // one frame above the pipe, then it falls to its slot
     return () => clearTimeout(t);
   }, [displayRevision(pile)]);                                     // eslint-disable-line react-hooks/exhaustive-deps
-  // The NEXT pill has to be what the Next button will actually bring up. The server skips what an
-  // agent has in hand and what this walk already showed (funnel.next_item); the pill did not, so a
+  // The NEXT ring has to be what the Next button will actually bring up. The server skips what an
+  // agent has in hand and what this walk already showed (funnel.next_item); the marker did not, so a
   // coder parked on a question wore NEXT while two fyi about lunch came out instead (2026-09-03).
   // New servers capture the selection from the same snapshot as this pile. FYI batches have a
   // composite selected key, so their first ordered member wears the visible NEXT marker.
@@ -156,81 +163,113 @@ function Pile({ pile, current, onPull }) {
   const left = items.filter((i) => !i.settling && i.lane !== "working").length;
   const cheer = !left || left > 15 ? "" : left === 1 ? "One more and the pipe is clear."
     : left <= 5 ? `${left} to go, then the pipe is clear.` : `${left} away from a clear pipe.`;
-  // Position the stack in one pass. Re-summing every preceding row for every card was quadratic
-  // on each progressive render and starved refresh requests on large accounts.
-  const today = localDay(new Date().toISOString());
-  let stackHeight = 0;
-  const positioned = drawn.map((item) => {
-    const top = stackHeight;
-    stackHeight += item.current ? CUR_H : ROW_H;
-    return { item, top };
-  });
+
+  // ── how much of each band fits ──────────────────────────────────────────────────────────────
+  // urgent, your task and agents working draw in full; reports and fyi divide what is left of the
+  // rail's height, floor of two (funnelPile.fillCaps). It is MEASURED from the scroller, so the
+  // answer follows the window instead of being a number somebody picked.
+  const bands = bandsOf(drawn);
+  const sig = bands.map((b) => `${b.level}:${b.items.length}`).join(",");
+  const wrapRef = useRef(null);
+  const [room, setRoom] = useState(0);
+  useLayoutEffect(() => {
+    const el = wrapRef.current;
+    const scroller = el?.closest("[data-tq-rail]");
+    if (!el || !scroller) return undefined;
+    // only the SCROLLER is observed. Watching the pile too would be a feedback loop, because the
+    // pile's own height is the thing this measurement decides.
+    const measure = () => {
+      const top = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+      const next = Math.max(0, scroller.clientHeight - top - PILE_FOOT);
+      setRoom((was) => (Math.abs(was - next) > 4 ? next : was));
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(measure);
+    ro.observe(scroller);
+    return () => ro.disconnect();
+  }, [sig]);
+  const [opened, setOpened] = useState(() => new Set());        // bands the owner opened by hand
+  const caps = fillCaps(room, bands);
+
   return (
-    <div className="tq-pile" data-tq-keep>
+    <div className="tq-pile" data-tq-keep ref={wrapRef}>
       {!pile ? (
         <div className="tq-pile-empty" role="status"><CircularProgress size={18} /><b>Loading timeline</b>Reading what arrived and what still needs you.</div>
       ) : !drawn.length ? (
         <div className="tq-pile-empty"><span className="mark">✓</span><b>All done</b>Nothing is waiting on you. New things land here as they arrive, and Taskuary speaks up.</div>
-      ) : (
-        <div className="tq-pile-stack" style={{ height: stackHeight }}>
-          {positioned.map(({ item: i, top }) => {
-            const meta = rowMeta(i);
-            const role = meta.role ? ROLES[meta.role].solid : "#d3ccc1";
-            const cls = ["tq-pile-row", landing.has(i.key) ? "landing" : "", i.settling ? "settling" : "", i.current ? "current" : i.key === nextKey ? "next" : ""].filter(Boolean).join(" ");
-            const stamp = i.kind === "meeting" ? i.when : (i.since || i.when);
-            const who = i.who && !i.title.toLowerCase().startsWith(i.who.toLowerCase()) ? i.who : "";
-            // triaging while the AI is deciding, then WHAT IT DECIDED - the same word the Timeline row
-            // and the Triage tab show (the owner, 2026-09-07). The lane is the level heading over the
-            // rail now, so a lane word here only repeated it. An agent's own question is not a
-            // verdict about the message, so it keeps saying so.
-            const road = ROADS.find((r) => r.key === roadOfCard(i));
-            // ...and a report you set up, or an agent's own result, was judged by nobody: it keeps
-            // the word for what it IS (the owner, 2026-09-07: "report should say report")
-            // The mark is drawn for what is on the owner. "approve" was missing from this list, so
-            // every pending reply lost the ✉️ LANE_META already gives it and read like an ordinary
-            // coding row - the one thing actually waiting on them, unmarked (the owner, 2026-09-10:
-            // "it's missing emoji task"). timelineState.STATES calls the same two states loud.
-            const loud = i.lane === "blocked" || i.lane === "approve" || i.lane === "time";
-            // ...and when something is WAITING ON YOU, what it is waiting for outranks what triage
-            // called the job. A reply drafted and waiting wore "coding" beside its own ✉️, because
-            // the road won here unconditionally - and the lane heading above the rail says "your
-            // task", which does not say a reply is ready (the owner, 2026-09-14: "still says coding
-            // not reply waiting?"). For every other row the road stays the word: it is the verdict
-            // the Timeline row and the Triage tab show, and repeating a quiet lane is repeating the
-            // heading.
-            const tag = i.settling ? "triaging…" : i.kind === "agent" && i.asking ? "asked you"
-              : loud ? meta.word : road ? road.label : meta.word;
-            const promoted = !!i.promoted;                                  // triage moved it up: a server fact, never a lane
-            return (
-              <div key={i.key} className={cls} data-tq-day={localDay(i.kind === "meeting" ? i.when : (i.since || i.when)) || "undated"}
-                data-tq-run={levelOf(i)}
-                style={{ top: landing.has(i.key) ? -ROW_H : top, "--edge": role }}>
-                <span className="when">{fmtTime12(stamp)}
-                  {/* work is ranked, not chronological, so a row can be days old with only a clock on
-                      it - and the heading above the rail is its level now, not its day (the owner,
-                      2026-09-07: "for work don't we need date and time if it's not from today"). The
-                      date only appears when it is not today's, so today's rows are unchanged. */}
-                  {localDay(stamp) && localDay(stamp) !== today && <i className="day">{shortDay(stamp)}</i>}</span>
-                <span className="rail"><i style={{ background: role }} /></span>
-                <div className="card" onClick={() => !i.settling && !i.current && onPull(i.key, `Show me “${i.title}”`)}
-                  title={`${meta.word}${promoted ? " · triage moved it up" : ""}${i.surfaced && !i.current ? " · shown already, still waiting on you" : ""} — ${i.why || ""}`}>
-                  <div className="t">
-                    <span className="logo"><SourceMark item={i} size={15} /></span>
-                    {i.current ? <span className="tq-pile-next cur">current</span> : i.key === nextKey ? <span className="tq-pile-next">next</span> : null}
-                    {promoted && !i.current && <span className="up" title="triage moved it up">↑</span>}
-                    {!!i.ref && <span className="tq-pile-ref" title="the task this belongs to">{i.ref}</span>}
-                    {!!i.more && <span className="tq-pile-ref" title={`${i.more} more on this thread - the newest speaks for it`}>+{i.more}</span>}
-                    {who && <span className="who">{who}</span>}<b>{i.title}</b>
-                    <span className="tq-pile-tag" style={{ color: meta.role ? ROLES[meta.role].ink : "#6f6960", background: meta.role ? ROLES[meta.role].tint : "#eee9e1", borderColor: meta.role ? ROLES[meta.role].bd : "#ddd6cb" }}>
-                      {loud ? `${meta.mark} ` : ""}{tag}</span>
-                  </div>
-                  {i.current && <div className="sub">{[i.why, i.kind === "meeting" ? ageText(i.when) : agoText(i.since || i.when)].filter(Boolean).join(" · ")}</div>}
+      ) : bands.map(({ level, items: rows }) => {
+        const cap = opened.has(level) ? rows.length : (caps[level] ?? rows.length);
+        // what is on the table is never capped away, wherever in its band it sits
+        const shown = rows.filter((i, n) => n < cap || i.key === curKey || batchKeys.has(i.key));
+        const hidden = rows.length - shown.length;
+        let stackHeight = 0;
+        const positioned = shown.map((item) => {
+          const top = stackHeight;
+          stackHeight += item.key === curKey ? CUR_H : ROW_H;
+          return { item, top };
+        });
+        // the bracket spans its members where they already are: it adds no height and moves no row
+        const mem = positioned.filter(({ item }) => batchKeys.has(item.key));
+        const bracket = mem.length
+          ? { top: mem[0].top - 4, height: mem[mem.length - 1].top + ROW_H - mem[0].top + 5 } : null;
+        return (
+          <div className="tq-pile-band" key={level} data-tq-run={level}>
+            {/* the category, said once, in the one place importance exists in this product - and
+                the reason the dock above the rail no longer carries a level dropdown saying it */}
+            <div className="tq-pile-head" title={LEVEL_META[level]?.hint || ""}>
+              <span style={{ color: ROLES[LEVEL_ROLE[level]]?.solid }}>{levelLabel(level)}</span>
+              <hr /><em>{rows.length}</em>
+            </div>
+            <div className="tq-pile-stack" style={{ height: stackHeight }}>
+              {bracket && (
+                <div className="tq-pile-batch" style={{ top: bracket.top, height: bracket.height }}>
+                  <b>on the table · {mem.length} fyi</b>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+              )}
+              {positioned.map(({ item: i, top }) => {
+                const meta = rowMeta(i);
+                const isCur = i.key === curKey;
+                const inBatch = batchKeys.has(i.key);
+                const cls = ["tq-pile-row", landing.has(i.key) ? "landing" : "", i.settling ? "settling" : "",
+                  isCur ? "current" : inBatch ? "inbatch" : i.key === nextKey ? "next" : ""].filter(Boolean).join(" ");
+                // the one pill a row can still wear: work has STOPPED until you answer it. Every
+                // other thing a row used to carry - the lane word, the road word, the sender, the
+                // ref, the promoted arrow - is on the row you open, and the heading says the rest.
+                const loud = i.lane === "blocked" || i.lane === "approve";
+                return (
+                  <div key={i.key} className={cls} style={{ top: landing.has(i.key) ? -ROW_H : top }}>
+                    <span className="when">{railAge(i.kind === "meeting" ? i.when : (i.since || i.when))}</span>
+                    {/* the dot is WHERE IT CAME FROM. The logo says the same at reading size; the
+                        dot says it at scanning size, down a column you can run an eye along. */}
+                    <span className="rail"><i style={{ background: sourceColor(i) }} /></span>
+                    <div className="card" onClick={() => !i.settling && !isCur && onPull(i.key, `Show me “${i.title}”`)}
+                      title={[i.who, meta.word, i.ref, i.promoted ? 'triage moved it up' : '', i.why].filter(Boolean).join(" · ")}>
+                      <div className="t">
+                        <span className="logo"><SourceMark item={i} size={15} /></span>
+                        <b>{i.title}</b>
+                        {i.settling && <span className="tq-pile-tag">triaging…</span>}
+                        {loud && !i.settling && (
+                          <span className="tq-pile-tag loud"
+                            style={{ color: ROLES.you.ink, background: ROLES.you.tint, borderColor: ROLES.you.bd }}>
+                            {meta.mark} {meta.word}</span>
+                        )}
+                      </div>
+                      {isCur && <div className="sub">{[i.why, i.kind === "meeting" ? ageText(i.when) : agoText(i.since || i.when)].filter(Boolean).join(" · ")}</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {hidden > 0 && (
+              <button type="button" className="tq-pile-more"
+                onClick={() => setOpened((cur) => new Set(cur).add(level))}>
+                {hidden} more {level === "reports" ? "reports" : "fyi"}
+              </button>
+            )}
+          </div>
+        );
+      })}
       {!!cheer && <div className="tq-pile-cheer">{cheer}</div>}
       {!!pile?.hidden && <div className="tq-pile-note">+{pile.hidden} more wait behind these</div>}
       {/* nothing disappears silently: what the owner's own standing rules held back is said here */}
@@ -238,7 +277,6 @@ function Pile({ pile, current, onPull }) {
     </div>
   );
 }
-
 // the two ways to use the stage - shown in the chat's header and on the task view's empty stage,
 // so whichever one you are in, the other is one click away
 const StageMode = ({ mode, setMode }) => (

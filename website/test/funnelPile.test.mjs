@@ -175,7 +175,15 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.match(view, /count \+ 24/);                                     // large accounts finish promptly
   assert.match(view, /By the way/);
   assert.doesNotMatch(view, /tq-pipe-walls/);             // no funnel: what comes out next is the FIRST row
-  assert.match(view, /current: true \}\] : \[\]\), \.\.\.drawOrder/);   // what is on the table sits at the TOP as CURRENT
+  // What is on the table STAYS WHERE IT IS. Hoisting it to the top of one flat stack would tear a
+  // row out of its category on every Next now that the rail is grouped - and an fyi batch would
+  // tear out ten (the owner, 2026-09-16: "it should highlight all 4 or 10 ... now i think it
+  // condenses"). One bracket, drawn behind the rows, moving none of them.
+  assert.doesNotMatch(view, /current: true \}\] : \[\]\), \.\.\.drawOrder/);
+  assert.match(view, /const batchKeys = new Set\(batch \? \(batch\.members \|\| \[\]\) : \[\]\)/);
+  assert.match(view, /className="tq-pile-batch"/);
+  assert.match(view, /const bands = bandsOf\(drawn\)/);          // grouped by category, headings freeze
+  assert.match(view, /const caps = fillCaps\(room, bands\)/);    // and each band takes the room it has
   // Unread is the ranked pipe again: it is the only source for CURRENT/NEXT and for what the chat
   // will actually ask about. All remains FeedView's chronological history.
   assert.match(view, /<FeedView[^]*top=\{\(\{ openByMid \}\) => <Pile/);
@@ -226,10 +234,17 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.doesNotMatch(view, /left: side, right: side/);    // no taper: every row is a Timeline row's width
   assert.doesNotMatch(view, /<Drawer/);                    // no reader drawer: reading happens in the card
   const css = read("assistantView.css");
-  assert.match(css, /\.tq-pile-row \{[^}]*grid-template-columns: 70px 14px minmax\(0, 1fr\)/);   // the Timeline row's gutter, rail and card
-  assert.match(read("FeedView.jsx"), /const GUTTER = 70;/);
+  // The work rail's gutter carries an AGE, not a clock, so it needs less width than the dated
+  // Timeline's - the two rails are separate views now and their gutters say different things.
+  assert.match(css, /\.tq-pile-row \{[^}]*grid-template-columns: 58px 14px minmax\(0, 1fr\)/);
+  assert.match(read("FeedView.jsx"), /const GUTTER = 70;/);   // ...and the dated Timeline keeps its own
   assert.doesNotMatch(css, /tq-pipe-/);                    // the funnel's CSS is gone with it
-  assert.doesNotMatch(view, /tq-pile-head/);               // no "The pipe · N" header over the rows (the owner, 2026-09-03)
+  // Still no "The pipe · N" banner over the whole rail (the owner, 2026-09-03). The per-CATEGORY
+  // heading that freezes as you scroll is a different thing, and it is what replaced the dock's
+  // level dropdown (the owner, 2026-09-16: "freeze on the type until you get to next category").
+  assert.doesNotMatch(view, /The pipe ·/);
+  assert.match(view, /className="tq-pile-head"/);
+  assert.match(css, /\.tq-pile-head \{[^}]*position: sticky/);
   assert.match(view, /One more and the pipe is clear/);    // ...the count is the encouragement, at the bottom, from fifteen
   const feed = read("FeedView.jsx");
   assert.match(feed, /useState\(top \? "unread" : ""\)/);   // the Assistant rail opens on unread

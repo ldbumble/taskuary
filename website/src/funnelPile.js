@@ -273,6 +273,23 @@ export const ageText = (iso, now = Date.now()) => {
   return `${Math.round(a / 1440)}d`;
 };
 
+// ...and the age as the WORK RAIL's gutter reads it. The rail is ranked, not dated, so the column's
+// only job is "which of these has been sitting too long" - and an exact "22 min" invites arithmetic
+// instead of an answer. Anything inside the first half hour is simply new, then hour by hour, then
+// days (the owner, 2026-09-16: "within a half an hour say 30 min <, then per hour bands of time").
+export const railAge = (iso, now = Date.now()) => {
+  if (!iso) return "";
+  const t = new Date(String(iso).replace(" ", "T")).getTime();
+  if (Number.isNaN(t)) return "";
+  const m = Math.round((t - now) / 60000);
+  if (m > 0) return m < 60 ? `in ${m}m` : m < 1440 ? `in ${Math.floor(m / 60)}h` : `in ${Math.round(m / 1440)}d`;
+  const a = -m;
+  if (a < 30) return "< 30m";
+  if (a < 60) return "< 1h";
+  if (a < 1440) return `${Math.floor(a / 60)}h`;
+  return `${Math.floor(a / 1440)}d`;
+};
+
 // ...and the same age as a SENTENCE. `ageText` answers "how far", which is why four cards appended
 // " ago" to it and read "now ago" on anything under two minutes - and "in 3 min ago" on a stamp the
 // server clocked a moment ahead of the browser (2026-09-10 audit).
@@ -321,6 +338,50 @@ export const levelOf = (item) => LEVEL_OF_BAND[attentionBand(item)] || "fyi";
 export const levelLabel = (level) => LEVEL_META[level]?.word || "";
 // the levels actually present, in the order the rail draws them - the jump menu's entries
 export const levelsOf = (items) => LEVEL_ORDER.filter((level) => (items || []).some((i) => levelOf(i) === level));
+
+// The ink each level's heading takes. Importance exists on the CATEGORY and nowhere else in this
+// product (the owner, 2026-09-16: "we don't have importance besides for the 4 categories"), so the
+// heading is the only thing on the rail that carries a role colour - the dot beside a row is its
+// SOURCE, and a row's own word is gone. theme.jsx ROLES, named rather than copied.
+export const LEVEL_ROLE = { urgent: "you", task: "you", reports: "info", fyi: "muted", agents: "working" };
+
+// ── how the rail divides the height it has ────────────────────────────────────────────────────
+// urgent, your task and agents working are NEVER capped: a task behind a "4 more" button is a task
+// you do not do, and the agents band is bounded by how many agents you run. Whatever is left over
+// goes to reports, then fyi, each keeping a floor of two - below that a band is a heading and a
+// button, which is worse than absent. If that still overflows nothing is crushed further and the
+// rail scrolls, so the only thing ever below the fold is work, in rank order.
+// the rail's own geometry, in one place: a row and its gap, a band heading, a "more" button
+export const ROW_PX = 33, HEAD_PX = 31, MORE_PX = 30;
+export const CAPPED = ["reports", "fyi"];
+export const FLOOR = 2;
+export const bandsOf = (items) => LEVEL_ORDER
+  .map((level) => ({ level, items: (items || []).filter((i) => levelOf(i) === level) }))
+  .filter((b) => b.items.length);
+
+// avail: pixels the rail can paint without scrolling. Returns {level: rows to draw} for the capped
+// bands only; everything else draws in full. Pure, so test/funnelPile.test.mjs can pin the rule.
+export function fillCaps(avail, bands, { row = ROW_PX, head = HEAD_PX, more = MORE_PX } = {}) {
+  const caps = {};
+  const capped = (bands || []).filter((b) => CAPPED.includes(b.level));
+  if (!capped.length) return caps;
+  // the cost of a band drawn n deep - the "N more" button goes away once nothing is left hidden
+  const cost = (b, n) => n * row + (n < b.items.length ? more : 0);
+  let used = bands.length * head
+    + bands.filter((b) => !CAPPED.includes(b.level)).reduce((n, b) => n + b.items.length * row, 0);
+  for (const b of capped) { caps[b.level] = Math.min(FLOOR, b.items.length); used += cost(b, caps[b.level]); }
+  // ...then reports, then fyi, a row at a time while a row still fits
+  for (const b of capped) {
+    for (;;) {
+      const n = caps[b.level];
+      if (n >= b.items.length) break;
+      const next = used - cost(b, n) + cost(b, n + 1);
+      if (next > avail) break;
+      used = next; caps[b.level] = n + 1;
+    }
+  }
+  return caps;
+}
 
 // The strip's queue (PW-165/166): a NOTICE (the watcher's word about an agent, a newer message on Current) is
 // always pending until Open or Later, whatever is on the table; an alert the pile derives from its own rows

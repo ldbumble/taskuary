@@ -73,9 +73,11 @@ FIELDS = {
 # title and two sentences on a call already being made, and it is the same question the model has
 # just answered for itself in `why`. The checklist stays the task's: what a reply owes is the reply.
 TASK_FIELDS = (
-    'For a task OR a reply_only, also answer "title" (what the work is, 12 words max) and "summary" (what was '
-    'asked and by whom, two sentences - the ask itself, never the signature, the confidentiality footer or quoted '
-    'earlier mail). A reply_only becomes a row the owner reads from those two exactly as a task does. '
+    'WHATEVER the verdict, also answer "title" (what this IS, 12 words max, in your own words - never the '
+    'subject line handed back) and "summary" (what was said and by whom, two sentences - the point itself, never '
+    'the signature, the confidentiality footer or quoted earlier mail). Every row the owner reads is drawn from '
+    'those two, and an fyi or a report needs a readable line exactly as much as a task does: '
+    '"RE: RE: FW: 0 rows returned for period ending 09/15" is a mail header, not a sentence. '
     'For a task, also answer "checklist": ["<one distinct requested outcome each>"] - drawn only from what the '
     'message and exchange actually ask for; never invent a requirement, never list anything as already done.')
 

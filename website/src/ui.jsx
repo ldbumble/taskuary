@@ -56,6 +56,11 @@ export const CHANNEL_COLORS = { teams: "#6264A7", email: "#41525f", github: "#2b
   gitlab: "#fc6d26", azdo: "#0078d4", linear: "#5e6ad2", trello: "#0079bf", notion: "#37352f",
   discord: "#5865F2", sentry: "#7b6bc9", pagerduty: "#048a24",
   aws: "#ff9900", azure: "#0078d4", database: "#6b6459", smb_file: "#6b6459", own: "#8a7a5c" };
+// ...and the ONE colour that stands for a source, for the dot on the work rail. A channel with its
+// own brand mark is not in the table above (the mark colours itself), so its logo's colour is named
+// here rather than falling through to the grey everything-else takes.
+const BRAND_COLORS = { outlook: "#0F6CBD", gmail: "#EA4335", imap: "#41525f", calendar: "#55697a" };
+export const channelColor = (ch) => BRAND_COLORS[ch] || CHANNEL_COLORS[ch] || "#a9a294";
 const CHANNEL_ICONS = { teams: GroupsIcon, github: GitHubIcon, report: AssessmentIcon,
   followup: SendIcon, promise: ChecklistIcon, prep: GroupsIcon, cold: ErrorOutlineIcon, idea: AutoAwesomeIcon,
   email: MailOutlineIcon, slack: TagIcon, telegram: SendIcon, whatsapp: WhatsAppIcon, imessage: SendIcon,

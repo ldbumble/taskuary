@@ -1674,7 +1674,7 @@ def card_for(item: dict) -> dict:
                                        # the agent's own question and the answers it offered: what a chat numbers, and
                                        # the request an answer is bound to (funnel.from_agents, workerstate PW-228)
                                        'choices', 'request_id', 'request_kind',
-                                       'presentation_revision', 'order_band', 'processing_id', 'member_ids', 'aliases', 'unread', 'deferred', 'actionable', 'paused',
+                                       'presentation_revision', 'order_band', 'processing_id', 'member_ids', 'members', 'aliases', 'unread', 'deferred', 'actionable', 'paused',
                                        'brief_today')}
 
 
@@ -1764,28 +1764,26 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
     # clicked on the Timeline still opens by itself (`key` is set); only Next/Walk batches them.
     if not key and item['lane'] == 'fyi':
         batch = item.get('items') if selection is not None and item.get('kind') == 'fyis' else funnel.fyi_batch(store, item)
-        llm = _brain_for(store, tid, llm, trace, cancel, fast=True) if (llm is not None or INTRO_AI) else None
-        say, gists, remember_llm = '', {}, False
-        if llm:
-            try:
-                # the shape is code's (one numbered line per entry, so each gets its own summary - PW-151); the words are COUNSEL's
-                fx = '\n'.join(f"{n}. {i.get('who') or '?'}: \"{i['title']}\" - {i.get('preview') or ''}" for n, i in enumerate(batch, 1))
-                user = (f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'])}\n\n"
-                        f"FYI - {len(batch)} thing{'s' if len(batch) != 1 else ''} people told the owner, nothing to do with any of them:\n{fx}\n\n"
-                        f"Answer with exactly {len(batch)} numbered line{'s' if len(batch) != 1 else ''}, in that order, one sentence each: who said what, and the gist. No options line.")
-                say, _options = parse_options(str(llm(_system(store, llm), user, max_tokens=MAX_TOKENS) or '').strip())
-                if not in_character(say): say = ''
-                gists = _numbered(say, len(batch))
-                remember_llm = True
-            except Exception as e: logger.warning(f'concierge: the fyi pass failed - {e}')
-        if not say:
-            say = (f"{len(batch)} thing{'s' if len(batch) != 1 else ''} people told you, nothing to do: "
-                   + '; '.join(f"{i.get('who') or 'someone'} - {i['title']}" for i in batch) + '.')
+        # NO MODEL CALL HERE. An fyi batch is the one card with nothing to decide - the entries are
+        # already written, and a pass that only restates them in the assistant's voice bought a
+        # paraphrase at the cost of the wait before the next four appear (the owner, 2026-09-16:
+        # "all read, next on fyi still takes a while ... no need to run through ai model, just
+        # present next ones"). The sentence below was already the fallback for a failed call; it is
+        # the whole of it now, and each entry keeps its own gist (fyiRow.gistFor).
+        gists, remember_llm = {}, False
+        say = (f"{len(batch)} thing{'s' if len(batch) != 1 else ''} people told you, nothing to do: "
+               + '; '.join(f"{i.get('who') or 'someone'} - {i['title']}" for i in batch) + '.')
         batch = [i | {'summary': gists.get(n) or i.get('summary') or i.get('preview') or ''} for n, i in enumerate(batch, 1)]
         card = {'key': 'fyis:' + ','.join(i['key'] for i in batch), 'kind': 'fyis', 'lane': 'fyi',
                 'title': f"{len(batch)} fyi", 'who': '', 'when': batch[0].get('when'),
                 'since': batch[0].get('since'), 'channel': batch[0].get('channel'),
                 'why': 'people told you things; nothing to do', 'items': [card_for(i) for i in batch],
+                # ...and the keys themselves, so the work rail can draw ONE bracket round the very
+                # rows that are on the table. card_for is a whitelist and never carried them, so the
+                # batch went up with nothing the rail could match and the rows simply vanished from
+                # it (the owner, 2026-09-16: "it does not highlight the ones in the feed but removes
+                # them ... just show them all as current as we normally do").
+                'members': [i['key'] for i in batch],
                 'presentation_revision': item.get('presentation_revision')}
         with guarded():
             put_down()

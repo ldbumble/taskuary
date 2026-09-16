@@ -141,12 +141,20 @@ function Pile({ pile, current, onPull }) {
   // timeline should highlight all 4 or 10 ... now i think it condenses"). Every row's `top` is
   // still computed by the same running sum, so the glide the pile has always had is untouched.
   const batch = current?.kind === "fyis" ? current : null;
-  const batchKeys = new Set(batch ? (batch.members || []) : []);
+  // `members` is the server's word for them; `items` is the same list as cards, and is what an
+  // older server sends - read either, so the bracket cannot go missing on a version skew.
+  const batchKeys = new Set(batch ? (batch.members || (batch.items || []).map((i) => i.key)) : []);
   const curKey = current && !batch ? current.key : null;
   // a task named in the chat is on the table without being in the pile: it joins its own band
   const known = curKey && visibleItems.some((i) => i.key === curKey);
+  // SHOWN IS READ, so the moment a batch goes up its rows leave the pile - and the rail had
+  // nothing left to ring. While the batch is ON THE TABLE its entries are put back, in their own
+  // band, so you can see the four things being talked about instead of watching them disappear.
+  const have = new Set(visibleItems.map((i) => i.key));
+  const onTable = batch ? (batch.items || []).filter((i) => i.key && !have.has(i.key)) : [];
   const drawn = [
     ...(curKey && !known ? [{ ...current }] : []),
+    ...onTable,
     ...drawOrder(visibleItems).map((i) => (i.key === curKey ? { ...i, ...current } : i)),
   ];
   const prev = useRef(null);

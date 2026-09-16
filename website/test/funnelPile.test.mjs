@@ -189,7 +189,10 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   // tear out ten (the owner, 2026-09-16: "it should highlight all 4 or 10 ... now i think it
   // condenses"). One bracket, drawn behind the rows, moving none of them.
   assert.doesNotMatch(view, /current: true \}\] : \[\]\), \.\.\.drawOrder/);
-  assert.match(view, /const batchKeys = new Set\(batch \? \(batch\.members \|\| \[\]\) : \[\]\)/);
+  assert.match(view, /const batchKeys = new Set\(batch \? \(batch\.members \|\| \(batch\.items \|\| \[\]\)\.map/);
+  // ...and the rows the batch holds are put BACK on the rail while it is on the table: shown is
+  // read, so they leave the pile the moment the batch goes up and there was nothing left to ring
+  assert.match(view, /const onTable = batch \? \(batch\.items \|\| \[\]\)\.filter/);
   assert.match(view, /className="tq-pile-batch"/);
   assert.match(view, /const bands = bandsOf\(drawn\)/);          // grouped by category, headings freeze
   // ...each band taking the room it has, less the extra height of the row on the table - which is

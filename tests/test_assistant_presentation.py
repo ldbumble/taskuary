@@ -53,27 +53,31 @@ def client(s):
 
 
 class FyiHandfulTests(unittest.TestCase):
-    def test_four_come_together_each_with_its_own_summary_from_the_model(self):
-        s = store(); got = five_fyi(s)
-        seen = {}
+    def test_four_come_together_and_no_model_is_asked_about_them(self):
+        """An fyi batch is the one card with nothing to decide, so it costs no model call. A pass
+        that only restated the entries in the assistant's voice bought a paraphrase at the price of
+        the wait before the next four appear (the owner, 2026-09-16: "all read, next on fyi still
+        takes a while ... no need to run through ai model, just present next ones")."""
+        s = store(); five_fyi(s)
+        asked = []
         def model(system, user, **kw):
-            seen['system'], seen['user'] = system, user
-            return '1. Chana says Rebecca is back Tuesday.\n2. Chana moved lunch to Thursday.\n3. Chana says the printer is fixed.\n4. Chana warns the lot is closed Friday.'
+            asked.append(user)
+            return '1. Chana says Rebecca is back Tuesday.'
         with quiet(): out = concierge.surface(s, llm=model)
         card = out['item']
         self.assertEqual((card['kind'], len(card['items']), out['left']), ('fyis', 4, 1))
-        self.assertEqual([i['summary'] for i in card['items']],
-                         ['Chana says Rebecca is back Tuesday.', 'Chana moved lunch to Thursday.', 'Chana says the printer is fixed.', 'Chana warns the lot is closed Friday.'])
-        self.assertIn('I am Taskuary', seen['system'])                                          # COUNSEL is the voice
-        self.assertIn('exactly 4 numbered lines', seen['user'])                                   # the shape is code's
-        # the summaries survive a refresh: the pile's own batch carries them (they ride on the shown-state)
+        self.assertEqual(asked, [], 'the handful is handed over without asking a model anything')
+        # each entry keeps its OWN gist, which is what the card shows under the line (fyiRow.gistFor)
+        self.assertTrue(all(i['summary'] == i['preview'] for i in card['items']))
+        self.assertIn('4 things people told you', out['say'])
+        # ...and the keys travel with it, so the work rail can ring the very rows on the table
+        self.assertEqual(card['members'], [i['key'] for i in card['items']])
+        # ...and the batch still reads after a refresh. The model's lines used to ride on the
+        # shown-state's note because only the model knew them; each entry's own preview IS the gist
+        # now, so it is already on the item and there is nothing to carry.
         again = funnel.batch_item(s, card['key'])
-        self.assertEqual([i['summary'] for i in again['items']], [i['summary'] for i in card['items']])
-        # ...and without a model, or with an answer the shape does not fit, each entry keeps its gist
-        s2 = store(); five_fyi(s2)
-        with quiet(), mock.patch.object(concierge, 'brain', return_value=None): out2 = concierge.surface(s2)
-        self.assertTrue(all(i['summary'] == i['preview'] for i in out2['item']['items']))
-        self.assertIn('4 things people told you', out2['say'])
+        self.assertEqual([i['key'] for i in again['items']], [i['key'] for i in card['items']])
+        self.assertTrue(all(i.get('preview') for i in again['items']))
 
     def test_an_action_on_one_entry_reaches_that_one_and_its_siblings_stay_unread(self):
         s = store(); got = five_fyi(s)

@@ -236,8 +236,13 @@ def test_validation_reports_the_fresh_selection_and_recheck_never_replaces_the_c
 
 
 def test_late_drift_guard_runs_after_model_but_before_sid_settle_or_record():
+    # The drift has to be driven from inside the MODEL call, so the item must be one the model is
+    # actually asked about. An fyi handful is handed over without asking a model anything now
+    # (concierge.surface, 2026-09-16), so a bare message would never reach the callback below.
     value = store()
     mid = message(value)
+    tid = value.create_task({"Title": "Handle selection 1", "Kind": "coding", "Status": "open"}, "o")
+    value.place_message(mid, tid, "routed")
     with mock.patch("taskuary.terminal.live_sessions", return_value=[]):
         cap = capture_selection(value, now=NOW)
 

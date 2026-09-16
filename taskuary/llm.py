@@ -55,7 +55,7 @@ MAX_TOKENS = 400
 
 def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, trace=None, cancel=None,
                  resume=None, cli_tools: bool = False, extra_env: dict = None, read_only: bool = None,
-                 research: bool = False):
+                 research: bool = False, gear: str = 'light'):
     """A CLI agent as the classifier: prompt in on stdin, JSON out. The repo working dir
     is dropped - triage is about the message, not about any checkout.
 
@@ -87,7 +87,12 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     # The ACP road is for the general agent's tool-using runs only. `no_hands` is exactly the
     # classifier - triage and the drafter, one verdict with every tool off - and it keeps argv.
     if not no_hands: prof['acp_ok'] = True
-    light = str(prof.get('light_model') or '')
+    # WHICH GEAR this job rides. Session work - coding and general alike - takes the MAIN model;
+    # the light gear is for the one-message jobs (triage, drafts, summaries, the digest). A
+    # general worker session used to fall through to light whenever no main model was set, so
+    # the analyst answered on the classifier's cheap model (the owner, 2026-09-16: general agents
+    # use the same brain on high level like coding by default).
+    light = str(prof.get('light_model') or '') if gear != 'main' else ''
     if light.startswith('effort:'):
         # codex on a ChatGPT plan serves ONLY the plan's models - no mini/nano tier exists -
         # so its cheap gear is reasoning effort on the same model (verified: -c
@@ -124,14 +129,15 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
 
 
 def build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None,
-              cli_tools: bool = False, extra_env: dict = None, research: bool = False, fallback_user=None):
+              cli_tools: bool = False, extra_env: dict = None, research: bool = False, fallback_user=None,
+              gear: str = 'light'):
     """The brain, or the demo's script. Everything in the app asks for its brain here, which is
     the one place a demo can be told to answer without a key, a CLI, or a request that leaves
     the machine (demo.py)."""
     from . import demo
     # the demo answers from a script: no key, no CLI, no request leaving the machine
     if demo.enabled(): return demo.brain()
-    brain = _build_llm(store, pick, model, trace, cancel, resume, cli_tools, extra_env, research, fallback_user)
+    brain = _build_llm(store, pick, model, trace, cancel, resume, cli_tools, extra_env, research, fallback_user, gear)
     return _Scrubbed(brain) if brain else brain
 
 
@@ -153,7 +159,8 @@ class _Scrubbed:
 
 
 def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None,
-               cli_tools: bool = False, extra_env: dict = None, research: bool = False, fallback_user=None):
+               cli_tools: bool = False, extra_env: dict = None, research: bool = False, fallback_user=None,
+               gear: str = 'light'):
     """The brain named by `pick` ('' = first active AI connector, 'connector:<id>',
     'cli:<agent>'), defaulting to the triage_ai setting - callers like reports may name
     their OWN brain and model per job instead of riding the triage tier. The owner's ordered
@@ -182,7 +189,7 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
         if candidate.startswith('cli:'):
             return make_cli_llm(store, candidate[4:], chosen_model, trace=trace, cancel=cancel,
                                 resume=chosen_resume, cli_tools=cli_tools, extra_env=extra_env,
-                                research=research)
+                                research=research, gear=gear)
         want = candidate[10:] if candidate.startswith('connector:') else None
         want_id = int(want) if want and want.isdigit() else None
         for c in store.list_connectors():

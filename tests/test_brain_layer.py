@@ -107,6 +107,40 @@ class SessionBrainTests(unittest.TestCase):
         self.assertEqual((row['Agent'], row['Brain']), ('coder', 'copilot'))
 
 
+class GearByJobTests(unittest.TestCase):
+    """Session work - coding and general alike - takes the MAIN model. The light gear is for the
+    one-message jobs: triage, drafts, summaries, the digest."""
+
+    def store(self):
+        s = MemoryStore()
+        s.upsert_agent('analyst', 'analysis', 'cli', json.dumps({'cmd': 'claude', 'light_model': 'haiku'}))
+        return s
+
+    def ran_with(self, **kw):
+        """The profile make_cli_llm actually hands to run_cli."""
+        from unittest import mock
+        from taskuary import llm as llm_mod
+        seen = {}
+
+        def fake_run_cli(prof, prompt, trace, **_):
+            seen.update(prof); return 'ok', None, None
+
+        brain = llm_mod.make_cli_llm(self.store(), 'analyst', **kw)
+        with mock.patch('taskuary.agents.run_cli', fake_run_cli): brain('sys', 'user')
+        return seen
+
+    def test_a_one_message_job_takes_the_light_gear(self):
+        self.assertEqual(self.ran_with().get('model'), 'haiku')
+
+    def test_session_work_does_not_fall_through_to_the_light_gear(self):
+        """The analyst was answering on the classifier's cheap model whenever no main model was
+        set - the whole point of naming the gear rather than inferring it."""
+        self.assertNotEqual(self.ran_with(gear='main').get('model'), 'haiku')
+
+    def test_an_explicit_model_still_outranks_everything(self):
+        self.assertEqual(self.ran_with(model='opus').get('model'), 'opus')
+
+
 class GearTests(unittest.TestCase):
     """`model_arg` (the FLAG) already lived on the connection; `model` and `light_model` (the
     VALUES) were stranded on the profile behind a patch that scrubbed them whenever the provider

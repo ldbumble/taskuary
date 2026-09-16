@@ -881,6 +881,10 @@ class GeneralSession:
             # shell and the browser brief ride only for a task that asked for a browser
             if browser_env: build_args.update(extra_env=browser_env)
             if browser_tools: build_args.update(cli_tools=True)
+            # WHICH GEAR: session work takes the MAIN model - a general worker is doing a job, not
+            # classifying one message. The dock is the Assistant's own chat and keeps the quick
+            # gear it shares with triage (aidefaults). See the 2026-09-16 spec.
+            build_args['gear'] = 'light' if is_dock(self.store.get_task(self.task_id)) else 'main'
             brain = llm_mod.build_llm(self.store, **build_args)
             if not brain: raise RuntimeError('the selected AI connector is unavailable')
             if self.cli_sid:
@@ -922,6 +926,7 @@ class GeneralSession:
                                   trace=visible, cancel=cancel)
                 if browser_tools:
                     build_args.update(cli_tools=True, extra_env=browser_env)
+                build_args['gear'] = 'light' if is_dock(self.store.get_task(self.task_id)) else 'main'
                 brain = llm_mod.build_llm(self.store, **build_args)
                 limit = DOCK_REPLY_TOKENS if is_dock(self.store.get_task(self.task_id)) else MAX_REPLY_TOKENS
                 reply = str(brain(system, user, max_tokens=limit, images=_images(paths)) or '').strip()

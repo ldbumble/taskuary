@@ -130,6 +130,27 @@ class OverTheWireTests(unittest.TestCase):
         self.assertEqual(c.delete('/api/terminals/nope', headers=AGENT).status_code, 403)
         self.assertEqual(c.get('/api/terminals', headers=AGENT).status_code, 200)
 
+    def test_a_session_does_not_see_oauth_secrets_on_the_connector_list(self):
+        import json
+        from taskuary import server
+        qb = next(x for x in server.store.list_connectors() if x['Type'] == 'quickbooks')
+        before = qb.get('ConfigJson')
+        server.store.save_connector({'ConnectorId': qb['ConnectorId'],
+                                     'ConfigJson': json.dumps({'client_id': 'id', 'client_secret': 'super-secret-app',
+                                                               'realm_id': '123'})}, 't')
+        try:
+            shown = next(x for x in c.get('/api/connectors').json()['data'] if x['ConnectorId'] == qb['ConnectorId'])
+            self.assertIn('super-secret-app', shown['ConfigJson'])          # the card the owner edits
+            hidden = next(x for x in c.get('/api/connectors', headers=AGENT).json()['data']
+                          if x['ConnectorId'] == qb['ConnectorId'])
+            cfg = json.loads(hidden['ConfigJson'])
+            self.assertNotIn('super-secret-app', hidden['ConfigJson'])
+            self.assertEqual(cfg.get('client_id'), 'id')
+            self.assertEqual(cfg.get('realm_id'), '123')
+            self.assertNotIn('client_secret', cfg)
+        finally:
+            server.store.save_connector({'ConnectorId': qb['ConnectorId'], 'ConfigJson': before or '{}'}, 't')
+
 
 if __name__ == '__main__':
     unittest.main()

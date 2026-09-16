@@ -75,7 +75,9 @@ class TheRosterTests(unittest.TestCase):
         seeded(s)
         menu = hub_agents.roster(s)
         self.assertIn('- researcher: ', menu)
-        self.assertIn('- coder: ', menu)                      # the coding profile is on it too
+        # ...and the coding profile is NOT: a coding task has one role and triage does not choose
+        # it (agents.routed_role). Offering it here is how `copilot` was named on TQ-0588.
+        self.assertNotIn('- coder: ', menu)
         for line in menu.splitlines():
             self.assertRegex(line, r'^- [a-z0-9-]+: .+')      # what triage validates against
 

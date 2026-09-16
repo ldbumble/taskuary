@@ -571,13 +571,22 @@ def ensure_profile_document(store, name: str) -> str:
     return doc
 
 
+# The kinds that mean "works a repository". `cli` is the legacy spelling older databases use.
+CODING_KINDS = ('coding', 'cli')
+
+
 def roster(store) -> str:
     """The workers triage may choose between: one line each, name and purpose. Same shape as the
     playbook menu (playbooks.menu) because triage validates the answer against these very lines -
-    the roster is DATA the owner controls, never a vocabulary baked into the prompt."""
+    the roster is DATA the owner controls, never a vocabulary baked into the prompt.
+
+    GENERAL roles only. A coding task has exactly one role and triage does not choose it
+    (routed_role), so offering the coding profiles here is what let `copilot` - a CLI, not a
+    worker - be named on TQ-0588's coding work."""
     out = []
     for a in store.list_agents():
         if not a.get('Active', 1): continue
+        if str(a.get('Kind') or '').lower() in CODING_KINDS: continue
         try: prof = json.loads(a.get('Config') or '{}')
         except ValueError: prof = {}
         if prof.get('triage_enabled') is False: continue

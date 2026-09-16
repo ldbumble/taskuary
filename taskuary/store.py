@@ -12,7 +12,7 @@ GENESIS = '0' * 64
 TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Source', 'SourceRef', 'Tags')
 MSG_COLS = ('TaskId', 'ExternalId', 'ConversationId', 'Channel', 'SourceName', 'Subject',
             'FromName', 'FromEmail', 'SentAt', 'BodyText', 'SourceLink', 'Status', 'Direction', 'RecipientsJson',
-            'MailMetaJson')
+            'MailMetaJson', 'TriageTitle')
 RUN_COLS = ('Status', 'TraceJson', 'Result', 'LastError', 'SessionId', 'DiffText')
 REVIEW_COLS = ('TaskId', 'MessageId', 'RunId', 'Kind', 'DraftText', 'FinalText', 'Status', 'Reason', 'Deliver')
 POLICY_COLS = ('Name', 'Kind', 'Pattern', 'Action', 'Reason', 'SortOrder', 'Active')
@@ -666,6 +666,13 @@ class SQLiteStore:
             # the assistant's private read on the message (counsel.py) - JSON, shown on the panel
             if 'Brief' not in mcols:
                 self.cx.execute('ALTER TABLE message ADD COLUMN Brief TEXT')
+            # WHAT TRIAGE CALLED IT, in its own words (triage.TASK_FIELDS answers a title on every
+            # verdict). A task keeps its title on the task, but an fyi or a triaged report has no
+            # task to hold one - so the rail fell back to the mail header and a row read
+            # "rrdbreports@mfa.net - MFA - PCC ..." (the owner, 2026-09-16). This is where the
+            # verdict's line lives for a message that never became work.
+            if 'TriageTitle' not in mcols:
+                self.cx.execute('ALTER TABLE message ADD COLUMN TriageTitle TEXT')
             # WHERE an approved outbound draft goes. A reply knows its recipient from the
             # message it answers; an outbound report has no such message, so the review has to
             # carry the address itself or approving it would have nowhere to send.
@@ -2505,7 +2512,7 @@ class SQLiteStore:
                 for idea_rows in linked.values(): idea_rows.sort(key=lambda x: x['IdeaId'], reverse=True)
                 q = f'''SELECT m.MessageId,m.Channel,m.SourceName,m.Subject,m.FromName,m.FromEmail,
                     m.SentAt,m.CreatedAt IngestedAt,m.ConversationId,substr(m.BodyText,1,4000) Preview,
-                    m.Status MsgStatus,m.SourceLink,m.TaskId,m.Direction,m.Brief,
+                    m.Status MsgStatus,m.SourceLink,m.TaskId,m.Direction,m.Brief,m.TriageTitle,
                     t.Title,t.Status TaskStatus,t.Priority,t.Kind TaskKind,t.Tags TaskTags,
                     IFNULL(ch.n,0) ChainSize,rt.Decision,rt.Reason RouteReason,
                     rv.ReviewId,rv.Status ReviewStatus,rv.Kind ReviewKind,
@@ -2781,9 +2788,15 @@ class SQLiteStore:
         self._poke('feed-changed', message_id=mid)
     def update_message_body(self, mid, body): self._exec('UPDATE message SET BodyText=? WHERE MessageId=?', (body, mid))   # a voice note, transcribed later
     def get_message(self, mid): return self._one('SELECT * FROM message WHERE MessageId=?', (mid,))
-    def place_message(self, mid, task_id, status):
-        """A row that was shown first and judged later lands where the judgement puts it (ingest.drain)."""
-        self._exec('UPDATE message SET TaskId=?, Status=? WHERE MessageId=?', (task_id, status, mid))
+    def place_message(self, mid, task_id, status, title=None):
+        """A row that was shown first and judged later lands where the judgement puts it (ingest.drain).
+
+        `title` is the verdict's own line, which did not exist when the row was first shown: a
+        deferred row is written before triage has said anything about it."""
+        if title:
+            self._exec('UPDATE message SET TaskId=?, Status=?, TriageTitle=? WHERE MessageId=?', (task_id, status, title, mid))
+        else:
+            self._exec('UPDATE message SET TaskId=?, Status=? WHERE MessageId=?', (task_id, status, mid))
         if task_id is not None:
             self._bump_snapshots()
             self._poke('feed-changed', 'task-changed', message_id=mid, task_id=task_id)
@@ -3716,7 +3729,7 @@ class SQLiteStore:
              live_state=_LIVE_UNSET):
         q = f'''SELECT m.MessageId, m.Channel, m.SourceName, m.Subject, m.FromName, m.FromEmail, m.SentAt, m.CreatedAt IngestedAt,
                        m.ConversationId,
-                       substr(m.BodyText, 1, 4000) Preview, m.Status MsgStatus, m.SourceLink, m.TaskId, m.Direction, m.Brief,
+                       substr(m.BodyText, 1, 4000) Preview, m.Status MsgStatus, m.SourceLink, m.TaskId, m.Direction, m.Brief, m.TriageTitle,
                        t.Title, t.Status TaskStatus, t.Priority, t.Kind TaskKind, t.Tags TaskTags, {self.NEEDS_YOU} NeedsYou,
                        IFNULL(ch.n, 0) ChainSize,
                        rt.Decision, rt.Reason RouteReason,

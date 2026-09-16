@@ -545,15 +545,17 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 if candidates is not None: out.update(relationship_of(j, candidates))
                 if repos and out['intent'] == 'task': out.update(repo_choice_of(j, repos))
                 # the work, named (PW-074): a title and summary of what was asked - validated, never
-                # trusted; the router falls back when absent. A reply_only is named too: it lands as a
-                # row the owner reads exactly like a task, and keeping the pair for 'task' alone is how
-                # a question triage answered came to wear a lowercased subject line over the whole mail
-                # (the owner, 2026-09-14). The CHECKLIST stays the task's - what a reply owes is the reply.
-                if out['intent'] in ('task', 'reply_only'):
-                    title = ' '.join(str(j.get('title') or '').split())[:120]
-                    summary = str(j.get('summary') or '').strip()[:1000]
-                    if title: out['title'] = title
-                    if summary: out['summary'] = summary
+                # trusted; the router falls back when absent. Kept on EVERY verdict now, not only on
+                # the two that become work: an fyi and a triaged report are rows the owner reads too,
+                # and they have no task to hold a title, so the rail fell back to the mail header
+                # (the owner, 2026-09-16; ingest writes it to message.TriageTitle, funnel.says reads
+                # it). Gating the pair on the verdict is the same bug twice - it is how a question
+                # triage answered came to wear a lowercased subject over the whole mail (2026-09-14).
+                # The CHECKLIST stays the task's: what a reply owes is the reply, and an fyi owes nothing.
+                title = ' '.join(str(j.get('title') or '').split())[:120]
+                summary = str(j.get('summary') or '').strip()[:1000]
+                if title: out['title'] = title
+                if summary: out['summary'] = summary
                 if out['intent'] == 'task' and isinstance(j.get('checklist'), list):
                     out['checklist'] = [x for x in j['checklist'] if isinstance(x, str)]
                 return out

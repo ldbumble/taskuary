@@ -218,7 +218,8 @@ function Pile({ pile, current, onPull }) {
             {/* the category, said once, in the one place importance exists in this product - and
                 the reason the dock above the rail no longer carries a level dropdown saying it */}
             <div className="tq-pile-head" title={LEVEL_META[level]?.hint || ""}>
-              <span style={{ color: ROLES[LEVEL_ROLE[level]]?.solid }}>{levelLabel(level)}</span>
+              <span style={{ color: ROLES[LEVEL_ROLE[level]]?.ink, background: ROLES[LEVEL_ROLE[level]]?.tint,
+                borderColor: ROLES[LEVEL_ROLE[level]]?.bd }}>{levelLabel(level)}</span>
               <hr /><em>{rows.length}</em>
             </div>
             <div className="tq-pile-stack" style={{ height: stackHeight }}>

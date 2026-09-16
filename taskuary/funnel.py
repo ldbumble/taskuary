@@ -139,7 +139,9 @@ def says(r: dict) -> str:
     # work triage had already named in a sentence went out wearing a mail header instead, and the
     # rail's one line was the least readable thing on the screen (the owner, 2026-09-16: a row
     # reading "rrdbreports@mfa.net - MFA - PCC ..."). Only the agent rows ever preferred it.
-    title = _short(r.get('Title') or '', 140)
+    # the TASK's title first - it is the whole job, where a follow-up's own line is only the latest
+    # thing said about it - then this message's own verdict line, for the rows that never became work
+    title = _short(r.get('Title') or r.get('TriageTitle') or '', 140)
     if title and not _CHAT_TITLE.match(title): return title
     subj = _short(r.get('Subject') or '', 140)
     said = f"{r.get('FromName') or ''} in {r.get('SourceName') or ''}"

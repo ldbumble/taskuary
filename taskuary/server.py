@@ -3716,12 +3716,16 @@ def problem_dismiss(key: str):
     except ValueError as e: raise HTTPException(404, str(e))
 
 @app.get('/api/connectors')
-def connectors():
+def connectors(request: Request):
     """Channel connector cards (outlook / teams / github). Secrets are write-only.
     ScopeDefault rides along so the card can show what an unset Authority actually means -
-    which is per type (winrm starts at admin, a tracker at read), not one global floor."""
+    which is per type (winrm starts at admin, a tracker at read), not one global floor.
+    Agents still list cards (they have to pick a tool) but ConfigJson drops credential keys."""
     from . import scopes
-    return {'data': [c | {'ScopeDefault': scopes.default_scope(c['Type'])} for c in store.list_connectors()]}
+    rows = [c | {'ScopeDefault': scopes.default_scope(c['Type'])} for c in store.list_connectors()]
+    if guard.scope_of(cfg['server'], request.headers) == guard.AGENT:
+        rows = [guard.without_config_secrets(c) for c in rows]
+    return {'data': rows}
 
 @app.get('/api/scopes')
 def scope_catalog():

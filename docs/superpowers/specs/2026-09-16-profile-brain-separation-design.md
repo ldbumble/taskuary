@@ -82,6 +82,28 @@ Triage is told to pick one and to leave the key out only when none fits *better
 than the others*. Six byte-identical lines never trip that clause, so the choice
 is a coin flip: TQ-0585 and TQ-0588 drew copilot, TQ-0587 and TQ-0589 drew coder.
 
+### The question is asked on the wrong kind
+
+`triage.py:468` binds the profile question to coding:
+
+> When an agent will start on this **(kind: coding)**, add `"profile": "<exactly
+> one name below>"` to say WHICH one.
+
+Every profile choice in the owner's store landed on a coding task, and general
+work got none at all:
+
+| Task | Kind | Profile chosen | Assignee |
+| --- | --- | --- | --- |
+| TQ-0580, TQ-0582 | general | — | `None` |
+| TQ-0585 | coding | copilot | `agent:copilot` |
+| TQ-0586 | coding | **analyst** | `agent:analyst` |
+| TQ-0587 | coding | coder | `agent:coder` |
+| TQ-0589 | coding | coder | `agent:coder` |
+
+So the choice is offered exactly where it should not exist and withheld exactly
+where it should be made. TQ-0586 is the second half of the bug: an **analyst on a
+coding task**, which the rule below forbids as firmly as it forbids copilot.
+
 ### The model value has the same problem one level down
 
 When commands were split onto connections, `model_arg` — the *flag* — moved.
@@ -135,6 +157,14 @@ main model. `claude-main` and `claude-light` are not two brains.
 **DECIDED: triage names profiles only.** Never a brain, never a model, never an
 effort level.
 
+**DECIDED: coding implies `coder`; the profile question belongs to general work.**
+If triage decides `kind: coding`, the profile is `coder` and there is nothing to
+choose. The roster triage is shown holds only the general roles — `researcher`,
+`analyst`, `coordinator`, `marketer`, `trader` — so a coding worker cannot be
+named on general work and a general worker cannot be named on coding work. This
+is the inverse of today's prompt and closes the bug class structurally rather
+than by validation: the wrong answer is not in the menu.
+
 **DECIDED: the brain is never stamped on the task.** `Assignee` keeps holding a
 role. The brain is resolved at session start, every time, from settings. A brain
 frozen onto a task at routing time would go stale the moment the default changed,
@@ -148,8 +178,12 @@ older dispatch path — so the transcript is the record that has to carry it.)
 
 ### Profile
 
-`kind`, `purpose`, `rules_doc`, `cwd_map`. Nothing else. Six roles survive:
-`coder`, `researcher`, `analyst`, `coordinator`, `marketer`, `trader`.
+`kind`, `purpose`, `rules_doc`, `cwd_map`. Nothing else. Six roles survive, in two
+groups that never mix:
+
+- **the coding role** — `coder`. Implied by `kind: coding`, never on the roster.
+- **the general roles** — `researcher`, `analyst`, `coordinator`, `marketer`,
+  `trader`. These are the roster, and the only thing triage ever names.
 
 ### Brain
 
@@ -198,8 +232,25 @@ Assistant should move to main too, say so and this table changes.
 
 ### Routing
 
-Triage is shown a roster of six roles and names one. `ingest.py:776` — the single
-place a verdict becomes an assignee — is unchanged:
+| Triage says | Profile | Chosen by |
+| --- | --- | --- |
+| `kind: coding` | always `coder` | nobody — implied |
+| `kind: general` | one of the five general roles | triage, from the roster |
+| `kind: general`, none fits | none — `Assignee` stays empty | nobody — key left out |
+
+The last row is today's behaviour and stays: TQ-0580 and TQ-0582 carry no
+assignee, and the owner picks a role when they start a session. There is no
+"default general role", and this design does not invent one — that would be a
+third default to keep in step with the other two.
+
+`agents.roster` stops emitting coding profiles: the menu is the five general
+roles, and `triage.py`'s prompt moves the question from "(kind: coding)" to
+general work. Validation at `triage.py:541` keeps rejecting any name not on the
+menu, so a hallucinated `copilot` routes nowhere — but now it is also not a name
+the menu could have offered.
+
+`ingest.py:776` — the single place a verdict becomes an assignee — is unchanged
+in shape, gaining only the coding implication:
 
 ```python
 **({'Assignee': f"agent:{intent['profile']}"} if intent.get('profile') else {})
@@ -231,7 +282,7 @@ On the owner's live install:
 | Profiles | 11 rows | 6 roles; `codex`, `copilot`, `devin`, `opencode`, `qwen` become brains only |
 | `default_agent` | `coder` | `default_brain = claude` |
 | `backup_agents` | `''` | `backup_brains = ''` |
-| Tasks | TQ-0585, TQ-0588 hold `Assignee = agent:copilot` | `agent:coder` |
+| Tasks | TQ-0585 holds `agent:copilot`; TQ-0586 holds `agent:analyst` on a `coding` task | `agent:coder` for both (TQ-0588 was already reassigned by hand on 2026-09-16) |
 | `[cli_connections.*]` | commands only | commands plus gears, inheriting each profile's `model`/`light_model` |
 
 `adopt_installed` stops minting profiles and registers connections only. The
@@ -256,8 +307,10 @@ and need real rework are smaller in number and larger in each:
 
 Landing order, so the owner-visible bug is fixed before the structural work:
 
-1. **Stop triage naming brains.** The roster offers roles only; the five clone
-   profiles leave it. Fixes TQ-0588's class of bug on its own, touches little.
+1. **Move the profile question from coding to general.** The roster becomes the
+   five general roles; `kind: coding` implies `coder`. Fixes both halves of the
+   bug — copilot on TQ-0588 and analyst on TQ-0586 — on its own, and touches
+   little: `agents.roster`, the prompt in `triage.py`, and a data migration.
 2. **Add the brain layer.** Gears onto connections, `default_brain` and
    `profile_brains` into settings, brain resolved at session start.
 3. **Remove `provider`/`model` from profiles**, delete the three patches, rework
@@ -278,8 +331,13 @@ Each step is shippable and leaves the suite green.
 
 New coverage, beyond reworking what exists:
 
-- a triage verdict naming a CLI (`profile: "copilot"`) is rejected by roster
-  validation, and the task falls to the default role
+- the roster holds only the five general roles: no CLI name and no `coder`
+- `kind: coding` yields `Assignee = agent:coder` whatever the verdict's `profile`
+  said — the TQ-0586 case, an `analyst` named on coding work
+- a verdict naming a CLI (`profile: "copilot"`) is rejected by roster validation,
+  and the task falls to the default role
+- `kind: general` with no profile named leaves `Assignee` empty — it must never
+  fall through to `coder`
 - `_auto_code` consults `default_brain` on every dispatch, including when
   `Assignee` names a role
 - a coding session and a general session both take the main gear; triage, the

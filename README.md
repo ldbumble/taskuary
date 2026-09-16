@@ -208,7 +208,6 @@ Updated daily from PyPI with mirror traffic excluded. The raw series is
 ## Documentation
 
 - [Getting started](docs/getting-started.md)—installation, first-run setup, Docker, and data
-- [Qwen Code](docs/qwen-code.md)—installation, provider setup, and verified integration paths
 - [Product guide](docs/product-guide.md)—the workflow, learning loop, agents, and operator documents
 - [Integrations](docs/integrations.md)—channels, AI providers, work systems, and report sources
 - [Reports and proactive checks](docs/reports-and-assistant.md)—the report pipeline, AI-written source cards, and what Taskuary watches

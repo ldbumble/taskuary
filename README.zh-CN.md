@@ -227,7 +227,6 @@ taskuary --demo
 
 - [入门指南](docs/getting-started.md)：安装、初始配置、Docker 和数据存储。
 - [产品指南](docs/product-guide.md)：完整流程、学习机制、智能体和配置文档。
-- [Qwen Code](docs/qwen-code.md)：安装、认证和兼容性验证。
 - [集成列表](docs/integrations.md)：消息渠道、AI、业务系统和报表来源。
 - [报表与主动检查](docs/reports-and-assistant.md)：报表处理流程及助手的检查范围。
 - [状态与路线图](docs/roadmap.md)：当前能力和后续计划。

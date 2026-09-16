@@ -412,6 +412,11 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     'waitroom_drip': '1',         # queued notes land one per stop (a funnel of prompts), not all at once
                     # which CLI agent works tasks when nothing names one - pickers list it first
                     'default_agent': 'coder',
+                    # WHICH CLI runs a worker session - coding and general alike. Blank derives
+                    # it from default_agent's profile, so an upgrade changes nothing until the
+                    # owner picks one. `profile_brains` is an optional {role: brain} override:
+                    # a setting keyed by a profile, never a field on one (the 2026-09-16 spec).
+                    'default_brain': '', 'profile_brains': '',
                     # ordered CSV of alternate CLI profiles; * means every other configured
                     # agent in roster order. A quota/login outage should move the same task to
                     # another CLI instead of leaving a dead terminal as its only outcome.

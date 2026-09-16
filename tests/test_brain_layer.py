@@ -26,6 +26,42 @@ class CliNameTests(unittest.TestCase):
         self.assertEqual(terminal.cli_named({}, ['/usr/bin/codex', 'exec']), 'codex')
 
 
+class DefaultBrainTests(unittest.TestCase):
+    def store(self):
+        s = MemoryStore()
+        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+        s.upsert_agent('analyst', 'analysis', 'cli', json.dumps({'cmd': 'claude'}))
+        return s
+
+    def test_one_brain_serves_coding_and_general_alike(self):
+        """The owner's rule: general agents use the same brain as coding by default."""
+        s = self.store()
+        s.set_setting('default_brain', 'claude', 'owner')
+        self.assertEqual(hub_agents.brain_for(s, 'coder'), 'claude')
+        self.assertEqual(hub_agents.brain_for(s, 'analyst'), 'claude')
+
+    def test_a_role_may_be_overridden_in_settings(self):
+        """Configurable - but it is a SETTING keyed by a profile, never a field on the profile,
+        and what it names is a brain, never a model."""
+        s = self.store()
+        s.set_setting('default_brain', 'claude', 'owner')
+        s.set_setting('profile_brains', json.dumps({'analyst': 'codex'}), 'owner')
+        self.assertEqual(hub_agents.brain_for(s, 'analyst'), 'codex')
+        self.assertEqual(hub_agents.brain_for(s, 'coder'), 'claude')
+
+    def test_a_broken_override_falls_back_rather_than_failing(self):
+        s = self.store()
+        s.set_setting('default_brain', 'claude', 'owner')
+        s.set_setting('profile_brains', 'not json', 'owner')
+        self.assertEqual(hub_agents.brain_for(s, 'analyst'), 'claude')
+
+    def test_an_unset_default_falls_back_to_the_legacy_profile_setting(self):
+        """Nothing regresses on upgrade: blank means "whatever default_agent was already running"."""
+        s = self.store()
+        s.set_setting('default_agent', 'coder', 'owner')
+        self.assertEqual(hub_agents.default_brain(s), 'claude')
+
+
 class GearTests(unittest.TestCase):
     """`model_arg` (the FLAG) already lived on the connection; `model` and `light_model` (the
     VALUES) were stranded on the profile behind a patch that scrubbed them whenever the provider

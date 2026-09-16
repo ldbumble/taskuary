@@ -608,6 +608,27 @@ def default_agent(store) -> str:
     return str(store.get_settings().get('default_agent') or 'coder').strip()
 
 
+def default_brain(store) -> str:
+    """The CLI every worker session runs on - coding and general alike (the owner, 2026-09-16:
+    "general agents use the same brain on high level like coding by default").
+
+    Blank falls back to the CLI behind the legacy `default_agent` profile, so an install that has
+    not been migrated keeps running exactly what it ran yesterday."""
+    key = str(store.get_settings().get('default_brain') or '').strip()
+    if key: return key
+    legacy = default_agent(store)
+    return cli_of(profiles(store).get(legacy) or {}, legacy)
+
+
+def brain_for(store, role: str) -> str:
+    """The brain that runs one role. A profile never PINS a brain: this is a setting keyed BY a
+    profile, and what it names is a brain - never a model, never an effort."""
+    try: over = json.loads(store.get_settings().get('profile_brains') or '{}')
+    except ValueError: over = {}
+    key = str(over.get(str(role or '')) or '').strip() if isinstance(over, dict) else ''
+    return key or default_brain(store)
+
+
 def coding_role(store) -> str:
     """The one role a coding task takes. Triage does not choose it: `kind: coding` names the job,
     and the job names the worker. Reads `default_agent` while that setting is still a PROFILE name;

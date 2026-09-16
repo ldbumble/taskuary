@@ -125,6 +125,11 @@ class OverTheWireTests(unittest.TestCase):
         env = terminal.session_env('coder', 41, 'C:/repo')
         self.assertEqual(env[guard.AGENT_ENV], config.load()['server']['agent_token'])
 
+    def test_a_session_cannot_open_or_kill_a_live_pty(self):
+        self.assertEqual(c.post('/api/terminals', json={'cwd': '.'}, headers=AGENT).status_code, 403)
+        self.assertEqual(c.delete('/api/terminals/nope', headers=AGENT).status_code, 403)
+        self.assertEqual(c.get('/api/terminals', headers=AGENT).status_code, 200)
+
 
 if __name__ == '__main__':
     unittest.main()

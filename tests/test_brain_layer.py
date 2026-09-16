@@ -13,10 +13,20 @@ class CliNameTests(unittest.TestCase):
         """copilot resolves to `cmd /c ...copilot.BAT` and qwen is launched through node.EXE, so
         argv[0] names the LAUNCHER. The card said `cmd` and `node`, and the task page's `by:` chip
         named the wrong product outright - `by: claude` over a Copilot session."""
+        seen = 0
         for cmd in ('copilot', 'qwen', 'claude', 'codex'):
-            argv = terminal.agent_argv({'cmd': cmd})
+            # agent_argv RESOLVES the launcher, so it needs the CLI on PATH. A machine that has none
+            # of them is not evidence of anything - CI installs no agents and failed every run on a
+            # FileNotFoundError for 'copilot' (2026-09-16). Assert on the ones that are here, and
+            # say so if none were, rather than reporting a green run over nothing tested.
+            try:
+                argv = terminal.agent_argv({'cmd': cmd})
+            except FileNotFoundError:
+                continue
+            seen += 1
             self.assertEqual(terminal.cli_named({'cmd': cmd}, argv), cmd,
                              f'{cmd} is what runs; argv[0] is {argv[0]!r}')
+        if not seen: self.skipTest('no agent CLI on PATH - nothing to resolve a launcher for')
 
     def test_cli_of_still_reads_a_plain_argv(self):
         """The fallback for a bare shell, which has no profile to ask."""

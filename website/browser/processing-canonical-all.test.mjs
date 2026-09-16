@@ -57,27 +57,34 @@ const clickItem = async (page, itemId) => {
 // unmounted by then ("Node is detached from document") or have moved, putting the real mouse
 // click on the row that took its place - both seen in CI. Match and click inside one evaluation,
 // the way the level dock picker does, and there is no window for either.
-// The trigger moves for the same reason the options do. Choosing a category re-slices the feed and
-// re-renders the source picker beside it, and both pickers share one wrapping toolbar row, so the
-// point page.click measured can be stale by the time the mouse event lands: it drops on bare
-// toolbar, no menu opens, and the wait expires (CI, at "Timeline category" -> "all kinds", which is
-// the press right after the "email" one moved the row). Re-press until the listbox is really up -
-// MUI Select opens on mousedown, so this has to stay a real click and cannot be a DOM .click().
-const chooseOption = async (page, ariaLabel, label) => {
+// The two pickers are ONE control now: it opens on the kinds and the sources together, so choosing
+// either is "open the filter, click the thing, close it". The re-press loop stays for the reason it
+// was written - choosing a kind re-slices the feed under the toolbar, so the point page.click
+// measured can be stale by the time the mouse event lands and the press drops on bare toolbar.
+const openFilter = async (page) => {
   let open = null;
   for (let attempt = 1; attempt <= 4 && !open; attempt += 1) {
-    await page.click(`[aria-label="${ariaLabel}"]`).catch(() => {});
-    open = await page.waitForSelector('[role="option"]', { visible: true, timeout: 2500 }).catch(() => null);
+    await page.click('[data-tq-filter]').catch(() => {});
+    open = await page.waitForSelector('[data-tq-kind]', { visible: true, timeout: 2500 }).catch(() => null);
   }
-  assert.ok(open, `${ariaLabel} never opened its list`);
-  const chosen = await page.$$eval('[role="option"]', (nodes, wanted) => {
+  assert.ok(open, "the filter never opened");
+};
+
+const chooseKind = async (page, key) => {
+  await openFilter(page);
+  await page.click(`[data-tq-kind="${key}"]`);
+  await page.keyboard.press("Escape");
+};
+
+const chooseSource = async (page, label) => {
+  await openFilter(page);
+  const chosen = await page.$$eval('[role="menuitem"], li', (nodes, wanted) => {
     const option = nodes.find((node) => node.textContent.trim() === wanted);
     option?.click(); return Boolean(option);
   }, label);
-  assert.ok(chosen, `${ariaLabel} option ${label} was not found`);
+  assert.ok(chosen, `the filter had no source ${label}`);
+  await page.keyboard.press("Escape");
 };
-
-const chooseSource = (page, label) => chooseOption(page, "Timeline source", label);
 
 const rowIds = (page) => page.$$eval("[data-processing-item]", (rows) => rows.map((row) => row.dataset.processingItem));
 
@@ -180,10 +187,10 @@ test("canonical All renders every root once with truthful details and frozen pag
       || /^\/api\/(messages|reviews)\//.test(path)));
 
   await page.goto(harness.ui, { waitUntil: "domcontentloaded", timeout: 20000 });
-  await page.waitForSelector(".tq-pile-row.next .tq-pile-next", { timeout: 10000 });
+  await page.waitForSelector(".tq-pile-row.next .card", { timeout: 10000 });
   await page.evaluate(() => [...document.querySelectorAll("button")]
     .find((button) => button.innerText === "Walk me through my tasks")?.click());
-  await page.waitForSelector(".tq-pile-row.current .tq-pile-next.cur", { timeout: 15000 });
+  await page.waitForSelector(".tq-pile-row.current .card", { timeout: 15000 });
   await page.waitForFunction(() => !document.querySelector(".tq-typing"), { timeout: 15000 });
   const current = await page.$eval(".tq-pile-row.current .card b", (node) => node.textContent.trim());
   const seed = await request(harness, "/api/fixture/processing/canonical-all", "POST", { count: 507 });
@@ -191,7 +198,7 @@ test("canonical All renders every root once with truthful details and frozen pag
   // Reload so the real source and calendar discovery requests observe the new fixture, while
   // proving that a canonical reconciliation cannot replace the already established Current.
   await page.reload({ waitUntil: "domcontentloaded", timeout: 20000 });
-  await page.waitForSelector(".tq-pile-row.current .tq-pile-next.cur", { timeout: 10000 });
+  await page.waitForSelector(".tq-pile-row.current .card", { timeout: 10000 });
   assert.equal(await page.$eval(".tq-pile-row.current .card b", (node) => node.textContent.trim()), current,
     "canonical fixture reconciliation must preserve the durable Current across reload");
 
@@ -295,12 +302,12 @@ test("canonical All renders every root once with truthful details and frozen pag
   const writesAfterIntentionalDraft = automaticWrites().length;
   assert.ok(writesAfterIntentionalDraft >= writesAtAll, "the explicit draft edit may save when its field loses focus");
 
-  await chooseOption(page, "Timeline category", "email");
+  await chooseKind(page, "email");
   await page.waitForFunction((itemId) => [...document.querySelectorAll("[data-processing-item]")]
     .some((node) => node.dataset.processingItem === itemId), { timeout: 10000 }, seed.grouped.item_id);
   assert.equal((await rowIds(page)).includes(seed.standalone.idea.item_id), false,
     "the server category filter must not leak an assistant idea into email");
-  await chooseOption(page, "Timeline category", "all kinds");
+  await chooseKind(page, "all");
   await page.waitForFunction((itemId) => [...document.querySelectorAll("[data-processing-item]")]
     .some((node) => node.dataset.processingItem === itemId), { timeout: 10000 }, seed.standalone.idea.item_id);
 
@@ -361,7 +368,7 @@ test("canonical All renders every root once with truthful details and frozen pag
     "ignored and standing-rule-muted roots must remain visible in All");
 
   await clickState(page, "work");
-  await page.waitForSelector(".tq-pile-row.current .tq-pile-next.cur", { timeout: 10000 });
+  await page.waitForSelector(".tq-pile-row.current .card", { timeout: 10000 });
   assert.equal(await page.$eval(".tq-pile-row.current .card b", (node) => node.textContent.trim()), current,
     "canonical All must not change Current");
   assert.equal(automaticWrites().length, writesAfterIntentionalDraft,
@@ -374,8 +381,7 @@ test("canonical All renders every root once with truthful details and frozen pag
     .find((node) => node.dataset.processingItem === itemId)?.dataset.processingTarget === `message:${mid}`,
     { timeout: 10000 }, seed.grouped.item_id, seed.grouped.message_ids[0]).catch(async error => {
       console.error(JSON.stringify({ filterReturn: await page.evaluate(itemId => ({
-        source: document.querySelector('[aria-label="Timeline source"]')?.textContent,
-        category: document.querySelector('[aria-label="Timeline category"]')?.textContent,
+        filter: document.querySelector('[data-tq-filter]')?.textContent,
         row: [...document.querySelectorAll('[data-processing-item]')].find(n => n.dataset.processingItem === itemId)?.dataset,
         text: document.body.innerText.slice(-5000),
       }), seed.grouped.item_id), traffic: traffic.slice(-20) }));

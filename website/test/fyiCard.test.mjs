@@ -13,7 +13,11 @@ test("each fyi entry shows its own summary and acts alone through the proposal r
   const fyis = cards.slice(cards.indexOf("export function FyisCard"), cards.indexOf("export function WrapupCard"));
   // the gist rides through gistFor now: it is dropped when it only restates the line above it,
   // which is every assistant idea (fyiRow.js, and test/fyiRow.test.mjs)
-  assert.match(fyis, /\{open !== i\.key && gistFor\(i\) && <div className="tq-fyi-gist">\{gistFor\(i\)\}<\/div>\}/);
+  assert.match(fyis, /\{open !== i\.key && !folded && gistFor\(i\) && <div className="tq-fyi-gist">\{gistFor\(i\)\}<\/div>\}/);
+  // ...and past a handful every line folds to one, so ten fyi is a list you skim rather than a card
+  // you scroll past with twenty doors on it (the owner, 2026-09-16: "4 fyi or 10 fyis at one time")
+  assert.match(fyis, /const folded = items\.length > FOLD_AT/);
+  assert.match(fyis, /\{\(!folded \|\| open === i\.key\) && \(\s*<div className="tq-fyi-doors">/);
   for (const label of ["Reply", "Make task", "Coding agent", "Regular agent"]) assert.match(fyis, new RegExp(`>${label}</Button>`));
   assert.match(fyis, /propose\("mine", i\)/); assert.match(fyis, /propose\("coder", i\)/); assert.match(fyis, /propose\("regular_agent", i\)/);
   assert.match(fyis, /onPropose\?\.\(verb, i\.key\)/);                               // the entry's own key, never the handful's

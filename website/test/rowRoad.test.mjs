@@ -48,12 +48,15 @@ test("what is WAITING outranks what triage called the job", () => {
   // say a reply is ready (the owner, 2026-09-14: "still says coding not reply waiting?"). The three
   // lanes that are ON the owner say their own word; every other row keeps the road, which is the
   // verdict the Timeline row and the Triage tab show.
+  // The row says NOTHING but what it is now (the owner, 2026-09-16: "maybe just subject should be
+  // there to clean it up"): the category heading above it carries the band, the dot carries the
+  // source, and the only word left on a row is the lane where work has STOPPED until the owner
+  // answers. So the road word is not outranked any more - it is gone from the row entirely.
   const view = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
-  assert.ok(view.includes('const loud = i.lane === "blocked" || i.lane === "approve" || i.lane === "time";'));
-  assert.ok(view.includes(": loud ? meta.word : road ? road.label : meta.word;"),
-    "what is waiting on you wins; everything else keeps the road");
+  assert.ok(view.includes('const loud = i.lane === "blocked" || i.lane === "approve";'));
+  assert.doesNotMatch(view, /road \? road\.label : meta\.word/);
   // loud is read by the tag, so it has to be computed before it
-  assert.ok(view.indexOf('const loud = i.lane === "blocked"') < view.indexOf("const tag = i.settling"));
+  assert.ok(view.indexOf('const loud = i.lane === "blocked"') < view.indexOf("loud && !i.settling"));
 });
 
 // ...and the rows triage never reached a verdict on. Your own standing rule turns a sender away

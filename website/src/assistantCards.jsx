@@ -14,7 +14,7 @@ import TerminalIcon from "@mui/icons-material/Terminal";
 import api from "./api.js";
 import { gistFor } from "./fyiRow.js";
 import { runOperation } from "./taskOps.js";
-import { ChannelIcon, TaskuaryMark, cleanText, fmtDateTime } from "./ui.jsx";
+import { ChannelIcon, TaskuaryMark, channelColor, cleanText, fmtDateTime } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import DigestText from "./DigestText.jsx";
 import TodayMeetingsStrip from "./TodayMeetingsStrip.jsx";
@@ -42,6 +42,18 @@ export function SourceMark({ item, size = 14 }) {
   if (item.kind === "setup" || item.kind === "brief" || (item.kind === "idea" && !item.channel)) return <TaskuaryMark size={size} />;
   if (item.kind === "fyis" && !item.channel) return <TaskuaryMark size={size} />;
   return <ChannelIcon channel={item.channel || "email"} sx={{ fontSize: size }} />;
+}
+
+// ...and the same answer as ONE COLOUR, for the dot on the work rail's spine. It mirrors SourceMark
+// branch for branch on purpose: the dot and the logo beside it must never disagree about where a row
+// came from (the owner, 2026-09-16: "the timeline dots should be the color of the source").
+export function sourceColor(item) {
+  if (!item) return "#a9a294";
+  if (item.kind === "meeting") return "#55697a";
+  if (item.kind === "agent" || item.kind === "agentdone") return "#41525f";
+  if (item.kind === "setup" || item.kind === "brief" || (item.kind === "idea" && !item.channel)) return ASSISTANT.solid;
+  if (item.kind === "fyis" && !item.channel) return ASSISTANT.solid;
+  return channelColor(item.channel || "email");
 }
 
 // the link every card carries: the task when there is one, else the row on the Timeline
@@ -617,11 +629,20 @@ export function TaskCard({ card, onDone, onOpenTask }) {
 
 // a handful of fyi's: a summary for each; read any in place; act on ONE of them through the same proposal
 // road the words take (PW-151) - never on the handful, never marking its siblings - or let them all go
+// how many fyi a card can show whole before every line folds to one (FyisCard)
+const FOLD_AT = 6;
+
 export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
   const [open, setOpen] = useState(null);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
   const items = card.items || [];
+  // A batch of four is read whole: every line carries its gist and its two doors, and you never
+  // open anything. A batch of ten drawn the same way is a card you scroll past, with twenty doors
+  // on the one thing whose whole point is that none of it needs you (the owner, 2026-09-16: "when
+  // it does 4 fyi or 10 fyis at one time"). So past FOLD_AT the lines fold: one apiece, and the
+  // gist and the doors appear on the one you open.
+  const folded = items.length > FOLD_AT;
   // a reply is the one immediate road (PW-126): the draft is written now, nothing is sent, nothing is marked
   const reply = async (i) => {
     setBusy(i.key); setErr("");
@@ -637,23 +658,28 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
   return (
     <CardShell card={card} kicker={`${items.length} fyi · nothing to do`} title={null} err={err}>
       {items.map((i) => (
-        <div key={i.key} className="tq-fyi">
+        <div key={i.key} className={`tq-fyi${folded && open !== i.key ? " lean" : ""}`}>
           {/* The LINE is the item: it wraps rather than being cut, and it is said once - an
               assistant's idea files the same sentence as title and gist (fyiRow.gistFor). */}
-          <div className="tq-fyi-line">
+          <div className="tq-fyi-line" onClick={folded ? () => setOpen((o) => (o === i.key ? null : i.key)) : undefined}>
             <SourceMark item={i} size={13} />
             <b>{i.who || "someone"}</b>
             <span className="t">{i.title}</span>
+            {folded && <span className="chev">{open === i.key ? "\u25be" : "\u25b8"}</span>}
           </div>
-          {open !== i.key && gistFor(i) && <div className="tq-fyi-gist">{gistFor(i)}</div>}
+          {open !== i.key && !folded && gistFor(i) && <div className="tq-fyi-gist">{gistFor(i)}</div>}
+          {open === i.key && folded && gistFor(i) && <div className="tq-fyi-gist">{gistFor(i)}</div>}
           {open === i.key && i.mid && <FullText mid={i.mid} revision={i.presentation_revision || card.presentation_revision} />}
           {/* two doors, each named for what it does: one unfolds the message under this line, the
-              other takes the item into the conversation. "Read" and "Dig in" said one thing twice. */}
+              other takes the item into the conversation. "Read" and "Dig in" said one thing twice.
+              On a folded batch they belong to the line you opened - twenty of them is the problem. */}
+          {(!folded || open === i.key) && (
           <div className="tq-fyi-doors">
             {i.mid && <Button size="small" onClick={() => setOpen((o) => (o === i.key ? null : i.key))} sx={faint}>
               {open === i.key ? "Hide" : "Full message"}</Button>}
             <Button size="small" onClick={() => onSurface?.(i.key)} sx={faint}>Talk about it</Button>
           </div>
+          )}
           {/* ...and acting on it belongs to the ONE you opened. Four buttons on every row is twelve
               on a three-fyi card, and the card's whole point is that none of them needs you. */}
           {open === i.key && i.mid && (

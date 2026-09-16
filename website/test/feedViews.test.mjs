@@ -16,7 +16,15 @@ test("the Timeline exposes exactly All and Unread when the Assistant supplies it
 
   const source = feedSource();
   assert.doesNotMatch(source, /NeedsMe|pending_only|label:\s*["']needs me["']|view === ["']pending["']/);
-  assert.match(source, /role="group" aria-label="Feed views"[^]*<FilterPills options=\{views\} value=\{view\} onChange=\{setView\} \/>/);
+  // The switch between the two rails is a SWITCH - a sunk track with a raised thumb - and not a
+  // fourth pill of the same shape as the filters beside it; and the two pickers are one control
+  // that says what it is filtering to (the owner, 2026-09-16: "the work/timeline vs all
+  // kinds/all sources filters look weird").
+  assert.match(source, /role="group" aria-label="Feed views"[^]*views\.map\(\(v\) =>[^]*onClick=\{\(\) => setView\(v\.key\)\}/);
+  assert.match(source, /<FilterButton cat=\{cat\} pick=/);
+  assert.doesNotMatch(source, /"aria-label": "Timeline category"/);
+  assert.doesNotMatch(source, /"aria-label": "Timeline source"/);
+  assert.match(source, /filterLabel\(cat, pick\)/);
 });
 
 test("All rows can only open detail while Unread keeps the existing chat pull", () => {

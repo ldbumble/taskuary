@@ -53,7 +53,7 @@ test("acting on it belongs to the one you opened", () => {
   // four buttons on every row is twelve on a three-fyi card, in a card whose point is that
   // nothing here needs you
   assert.match(card, /\{open === i\.key && i\.mid && \(\s*<div className="tq-card-actions"/);
-  assert.match(card, /\{open !== i\.key && gistFor\(i\) &&/);
+  assert.match(card, /\{open !== i\.key && !folded && gistFor\(i\) &&/);
 });
 
 test("the line wraps instead of being cut", () => {

@@ -68,7 +68,7 @@ test("PW-107 exposes only All and Unread without All creating assistant state", 
     && (path.startsWith("/api/concierge") || path === "/api/funnel/settle"));
 
   await page.goto(harness.ui, { waitUntil: "domcontentloaded", timeout: 20000 });
-  await page.waitForSelector(".tq-pile-row.next .tq-pile-next", { timeout: 10000 });
+  await page.waitForSelector(".tq-pile-row.next .card", { timeout: 10000 });
   assert.deepEqual(await stateControls(page), ["timeline", "work"]);   // what each view is FOR, not a mail state
   assert.equal(await visibleExact(page, "needs me"), 0, "Needs me must be absent from controls and statistics");
   await new Promise((resolve) => setTimeout(resolve, 500));
@@ -76,9 +76,9 @@ test("PW-107 exposes only All and Unread without All creating assistant state", 
 
   await page.evaluate(() => [...document.querySelectorAll("button")]
     .find((button) => button.innerText === "Walk me through my tasks")?.click());
-  await page.waitForSelector(".tq-pile-row.current .tq-pile-next.cur", { timeout: 15000 });
+  await page.waitForSelector(".tq-pile-row.current .card", { timeout: 15000 });
   await page.waitForFunction(() => !document.querySelector(".tq-typing"), { timeout: 15000 });
-  await page.waitForSelector(".tq-pile-row.next .tq-pile-next", { timeout: 10000 });
+  await page.waitForSelector(".tq-pile-row.next .card", { timeout: 10000 });
   const established = await pileTitles(page);
   assert.equal(assistantWrites().length, 1, "the one intentional Walk should be the only assistant write");
   const afterWalk = assistantWrites().length;
@@ -118,17 +118,17 @@ test("PW-107 exposes only All and Unread without All creating assistant state", 
     "All/Unread views must not revive the removed pending_only filter");
 
   await clickState(page, "work");
-  await page.waitForSelector(".tq-pile-row.current .tq-pile-next.cur", { timeout: 10000 });
+  await page.waitForSelector(".tq-pile-row.current .card", { timeout: 10000 });
   assert.deepEqual(await pileTitles(page), established, "All to Unread must retain Current and Next");
   await clickNav(page, "Board");
   await page.waitForFunction(() => document.body.innerText.includes("Agent board"), { timeout: 5000 });
   await clickNav(page, "Assistant");
-  await page.waitForSelector(".tq-pile-row.current .tq-pile-next.cur", { timeout: 5000 });
+  await page.waitForSelector(".tq-pile-row.current .card", { timeout: 5000 });
   assert.deepEqual(await pileTitles(page), established, "outer tabs must retain Current and Next");
 
   await page.reload({ waitUntil: "domcontentloaded", timeout: 20000 });
-  await page.waitForSelector(".tq-pile-row.current .tq-pile-next.cur", { timeout: 10000 });
-  await page.waitForSelector(".tq-pile-row.next .tq-pile-next", { timeout: 10000 });
+  await page.waitForSelector(".tq-pile-row.current .card", { timeout: 10000 });
+  await page.waitForSelector(".tq-pile-row.next .card", { timeout: 10000 });
   assert.deepEqual(await pileTitles(page), established, "reload must restore the same Current and Next");
   assert.equal(assistantWrites().length, afterWalk, "view changes, outer tabs and reload must not start Walk");
   assert.deepEqual(await durableTurns(page, harness.token), turnsAfterWalk,
@@ -148,7 +148,7 @@ test("PW-107 exposes only All and Unread without All creating assistant state", 
     }
   });
   await race.goto(harness.ui, { waitUntil: "domcontentloaded", timeout: 20000 });
-  await race.waitForSelector(".tq-pile-row.current .tq-pile-next.cur", { timeout: 10000 });
+  await race.waitForSelector(".tq-pile-row.current .card", { timeout: 10000 });
   await clickState(race, "timeline");
   await race.waitForSelector(".tqRow [data-tq-open='false']", { timeout: 10000 });
   const raceTarget = await race.$(".tqRow [data-tq-open='false']");
@@ -172,7 +172,7 @@ test("PW-107 exposes only All and Unread without All creating assistant state", 
   const detailResponse = race.waitForResponse((response) => response.url() === pendingDetail.url(), { timeout: 10000 });
   await new Promise((resolve) => setTimeout(resolve, 120)); // let the hover commit its pending selection
   await clickState(race, "work");
-  await race.waitForSelector(".tq-pile-row.current .tq-pile-next.cur", { timeout: 10000 });
+  await race.waitForSelector(".tq-pile-row.current .card", { timeout: 10000 });
   const completedDetail = await detailResponse;
   await completedDetail.buffer();
   await race.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -206,7 +206,7 @@ test("PW-107 exposes only All and Unread without All creating assistant state", 
   });
   await narrow.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
   await narrow.goto(harness.ui, { waitUntil: "domcontentloaded", timeout: 20000 });
-  await narrow.waitForSelector(".tq-pile-row.current .tq-pile-next.cur", { timeout: 10000 });
+  await narrow.waitForSelector(".tq-pile-row.current .card", { timeout: 10000 });
   await narrow.click('[aria-label="The Timeline"]');
   await narrow.waitForFunction(() => {
     const group = document.querySelector('[role="group"][aria-label="Feed views"]');
@@ -241,8 +241,8 @@ test("PW-107 exposes only All and Unread without All creating assistant state", 
     });
   }, { timeout: 5000 });
   await clickState(narrow, "work");
-  await narrow.waitForSelector(".tq-pile-row.current .tq-pile-next.cur", { timeout: 10000 });
-  await narrow.waitForSelector(".tq-pile-row.next .tq-pile-next", { timeout: 10000 });
+  await narrow.waitForSelector(".tq-pile-row.current .card", { timeout: 10000 });
+  await narrow.waitForSelector(".tq-pile-row.next .card", { timeout: 10000 });
   assert.deepEqual(await pileTitles(narrow), established, "narrow All to Unread must retain Current and Next");
   assert.deepEqual(narrowWrites, [], "narrow view selection must not create or settle assistant state");
   assert.deepEqual(await durableTurns(narrow, harness.token), turnsAfterWalk,

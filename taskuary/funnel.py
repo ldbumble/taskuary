@@ -133,8 +133,15 @@ PILL = 90                        # one line in a pill; the rest is an ellipsis, 
 
 
 def says(r: dict) -> str:
-    """What a row is ABOUT: its subject when it has a real one, else the message's opening line."""
-    subj = _short(r.get('Subject') or r.get('Title') or '', 140)
+    """What a row is ABOUT: triage's own title when it wrote one, else the subject, else the opening line."""
+    # TRIAGE'S TITLE FIRST. It answers "what the work is, 12 words max" (triage.TASK_FIELDS) and is
+    # already stored as the task's Title (ingest), but this read Subject BEFORE it - so a row whose
+    # work triage had already named in a sentence went out wearing a mail header instead, and the
+    # rail's one line was the least readable thing on the screen (the owner, 2026-09-16: a row
+    # reading "rrdbreports@mfa.net - MFA - PCC ..."). Only the agent rows ever preferred it.
+    title = _short(r.get('Title') or '', 140)
+    if title and not _CHAT_TITLE.match(title): return title
+    subj = _short(r.get('Subject') or '', 140)
     said = f"{r.get('FromName') or ''} in {r.get('SourceName') or ''}"
     if subj and subj != said and not _CHAT_TITLE.match(subj): return subj
     return _cut(_gist(r.get('Preview') or r.get('BodyText') or '', 240), PILL) or subj

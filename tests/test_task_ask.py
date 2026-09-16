@@ -46,8 +46,13 @@ class AutomaticRoadTests(unittest.TestCase):
 
     def test_a_reply_only_verdict_carries_the_ask_too(self):
         """reply_only lands as a row of its own, so it is asked for a title and a summary like any
-        other - it used to answer intent/why alone and fall through to the raw body."""
-        self.assertIn('reply_only', triage.TASK_FIELDS)
+        other - it used to answer intent/why alone and fall through to the raw body.
+
+        The shape is asked for on EVERY verdict now (2026-09-16), which is strictly stronger: an fyi
+        and a report are rows the owner reads too, and a mail header is not a sentence."""
+        self.assertIn('WHATEVER the verdict', triage.TASK_FIELDS)
+        self.assertIn('"title"', triage.TASK_FIELDS)
+        self.assertIn('"summary"', triage.TASK_FIELDS)
         s = MemoryStore()
         llm = mock.Mock(return_value=json.dumps({
             'intent': 'reply_only', 'why': 'Dvora asks which documentation you meant',

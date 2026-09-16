@@ -4,12 +4,13 @@
 // socket pushes new rows in; the list is not on a timer.
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert, Box, Button, Chip, CircularProgress, Drawer, IconButton, ListSubheader, MenuItem, Select, TextField, Typography, useMediaQuery,
+  Alert, Box, Button, Chip, CircularProgress, Drawer, IconButton, ListSubheader, MenuItem, Popover, Select, TextField, Typography, useMediaQuery,
 } from "@mui/material";
 import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
 import { interruptOf, captureInterruptedReply, interruptedReplyTarget, restoreInterruptedReply } from "./approvalInterrupt.js";
 import CloseIcon from "@mui/icons-material/Close";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import FilterAltIcon from "@mui/icons-material/FilterAlt";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
 import CheckIcon from "@mui/icons-material/Check";
 import ForumOutlinedIcon from "@mui/icons-material/ForumOutlined";
@@ -36,7 +37,7 @@ import SyncIcon from "@mui/icons-material/Sync";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { AgentPicker, ChannelIcon, LifecycleChip, RefChip, CcRow, ChoiceRow, CoderReport, Confirm, DiffBlock, Empty, FilterPills, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, tsMs, cleanText, splitQuoted, IDLE_WAITING, TellAgent, TellAgentButton, LiveConsole, useAgents, useVoiceReady, TaskuaryMark } from "./ui.jsx";
+import { AgentPicker, ChannelIcon, LifecycleChip, RefChip, CcRow, ChoiceRow, CoderReport, Confirm, DiffBlock, Empty, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, tsMs, cleanText, splitQuoted, IDLE_WAITING, TellAgent, TellAgentButton, LiveConsole, useAgents, useVoiceReady, TaskuaryMark } from "./ui.jsx";
 import MicIcon from "@mui/icons-material/Mic";
 import MicOffIcon from "@mui/icons-material/MicOff";
 import { Md, looksMd } from "./md.jsx";
@@ -50,19 +51,8 @@ import { extraTriageFields, intentLabel, kindLabel, latestTriageVerdict, legacyT
 import ReplyFiles from "./ReplyFiles.jsx";
 import { timelinePhases } from "./taskLifecycle.js";
 import StateMark, { edgeOf } from "./StateMark.jsx";
-import { LEVEL_META, laneMeta, levelLabel, levelsOf } from "./funnelPile.js";
+import { laneMeta } from "./funnelPile.js";
 
-// Where each pile row BELONGS, run by run, for the dock's scroll spy. It reads the row's own inline
-// top rather than its rectangle: a row still sliding into place is somewhere between the two, and a
-// cache taken during that .55s never expires, because the rail's scrollHeight does not change while
-// rows move inside a fixed-height stack. One rect is measured (the stack's), not one per row.
-export const pileBandTops = (rail, railTop) => {
-  const stack = rail.querySelector(".tq-pile-stack");
-  if (!stack) return [];
-  const base = stack.getBoundingClientRect().top - railTop + rail.scrollTop;
-  return [...stack.querySelectorAll(".tq-pile-row[data-tq-run]")]
-    .map((el) => ({ day: el.dataset.tqRun, top: base + (parseFloat(el.style.top) || 0) }));
-};
 
 // the same word the unread pile uses for this item, in the same pill (the owner, 2026-09-07: All said
 // "fyi" where unread said "a check failed")
@@ -129,6 +119,93 @@ const CHANNEL_LABELS = { email: "Mailboxes", teams: "Teams chats", slack: "Slack
   trello: "Trello cards", notion: "Notion pages", azdo: "Azure DevOps items",
   sentry: "Sentry errors", pagerduty: "PagerDuty incidents",
   aws: "AWS buckets & log groups", azure: "Azure containers & workspaces" };
+
+
+// ONE control for BOTH filters. A switch and two pickers of identical shape sat in a row, so four
+// controls read as one undifferentiated strip and none of them said what it was for (the owner,
+// 2026-09-16: "the work/timeline vs all kinds/all sources filters look weird"). This one says what
+// it is filtering TO - "All items", "Email", "Email - rrdbreports" - and opens on both lists at once.
+export const filterLabel = (cat, pick, cats = CATEGORIES, labels = CHANNEL_LABELS) => {
+  const kind = cat ? (cats.find((o) => o.key === cat)?.label || cat) : "";
+  const src = !pick ? ""
+    : pick.startsWith("channel:") ? `all ${labels[pick.slice(8)] || pick.slice(8)}`.toLowerCase()
+      : String(pick.split(":").slice(2).join(":")).split("@")[0];
+  return [kind, src].filter(Boolean).join(" \u00b7 ") || "All items";
+};
+
+function FilterButton({ cat, pick, channels, srcByChannel, srcQ, setSrcQ, onChange }) {
+  const [el, setEl] = useState(null);
+  const close = () => { setEl(null); setSrcQ(""); };
+  const narrowed = !!cat || !!pick;
+  const q = srcQ.trim().toLowerCase();
+  return (
+    <>
+      <Button size="small" onClick={(e) => setEl(e.currentTarget)}
+        data-tq-filter="true" aria-label="What this rail is showing"
+        title="What this rail is showing"
+        startIcon={<FilterAltIcon sx={{ fontSize: 13, color: narrowed ? ACCENT : FAINT }} />}
+        endIcon={<ChevronRightIcon sx={{ fontSize: 13, transform: "rotate(90deg)", color: FAINT }} />}
+        sx={{ flexShrink: 0, minWidth: 0, height: 28, px: 1.25, borderRadius: 99,
+          border: `1px solid ${narrowed ? "#b9c3cb" : BORDER}`, bgcolor: PANEL,
+          fontSize: 11.5, fontWeight: 600, color: narrowed ? INK : DIM, textTransform: "none",
+          "& .MuiButton-startIcon": { mr: 0.6 }, "& .MuiButton-endIcon": { ml: 0.4 },
+          "&:hover": { borderColor: "#b9c3cb", bgcolor: PANEL } }}>
+        {filterLabel(cat, pick)}
+      </Button>
+      <Popover open={!!el} anchorEl={el} onClose={close}
+        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+        transformOrigin={{ vertical: "top", horizontal: "left" }}
+        slotProps={{ paper: { sx: { width: 320, maxHeight: 460, p: 1.25 } } }}>
+        <Typography sx={{ fontSize: 9.5, fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", color: FAINT, mb: 0.75 }}>Kind</Typography>
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.6, mb: 1.25 }}>
+          {CATEGORIES.map((o) => (
+            <Chip key={o.key} size="small" label={o.label} data-tq-kind={o.key || "all"}
+              onClick={() => onChange(o.key, pick)}
+              sx={{ height: 24, fontSize: 11, fontWeight: 600, borderRadius: 99,
+                bgcolor: cat === o.key ? "#e4e9ee" : PANEL2, color: cat === o.key ? "#41525f" : DIM,
+                border: `1px solid ${cat === o.key ? "#cbd4dc" : BORDER}` }} />
+          ))}
+        </Box>
+        <Typography sx={{ fontSize: 9.5, fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", color: FAINT, mb: 0.75 }}>Source</Typography>
+        <TextField fullWidth placeholder="search sources…" value={srcQ} onChange={(e) => setSrcQ(e.target.value)}
+          sx={{ bgcolor: "#fff", mb: 0.5 }} inputProps={{ style: { fontSize: 12, padding: "5px 8px" } }} />
+        <Box sx={{ maxHeight: 220, overflowY: "auto", mx: -0.5 }}>
+          <MenuItem selected={!pick} onClick={() => onChange(cat, "")} sx={{ fontSize: 12, borderRadius: 1 }}>all sources</MenuItem>
+          {/* 96 discovered buckets turned this into a page-long wall. It is a bounded, searchable
+              list: type to narrow, and each channel shows a few with a count for the rest. */}
+          {channels.flatMap((ch) => {
+            const all = (srcByChannel[ch] || []).filter((n) => !q || String(n).toLowerCase().includes(q));
+            const label = CHANNEL_LABELS[ch] || ch;
+            if (q && !all.length && !label.toLowerCase().includes(q)) return [];
+            const shown = q ? all.slice(0, 12) : all.slice(0, 6);
+            return [
+              <ListSubheader key={`h${ch}`} sx={{ fontSize: 9.5, lineHeight: 1.9, color: FAINT, letterSpacing: 1,
+                textTransform: "uppercase", bgcolor: PANEL, px: 1 }}>
+                {label}{all.length > shown.length ? ` \u00b7 ${all.length}` : ""}
+              </ListSubheader>,
+              <MenuItem key={`c${ch}`} selected={pick === `channel:${ch}`} onClick={() => onChange(cat, `channel:${ch}`)}
+                sx={{ fontSize: 12, borderRadius: 1 }}>all {label.toLowerCase()}</MenuItem>,
+              ...shown.map((n) => (
+                <MenuItem key={`${ch}:${n}`} selected={pick === `src:${ch}:${n}`} onClick={() => onChange(cat, `src:${ch}:${n}`)}
+                  sx={{ fontSize: 11.5, pl: 2.5, borderRadius: 1 }}>
+                  <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n}</Box>
+                </MenuItem>
+              )),
+              ...(all.length > shown.length ? [
+                <MenuItem key={`m${ch}`} disabled sx={{ fontSize: 10.5, pl: 2.5, color: FAINT, opacity: 1 }}>
+                  +{all.length - shown.length} more — type to find one
+                </MenuItem>] : []),
+            ];
+          })}
+        </Box>
+        {narrowed && (
+          <Button size="small" onClick={() => { onChange("", ""); close(); }}
+            sx={{ mt: 0.75, fontSize: 11, textTransform: "none", color: ACCENT }}>Show everything</Button>
+        )}
+      </Popover>
+    </>
+  );
+}
 
 const ref = (id) => `TQ-${String(id).padStart(4, "0")}`;
 
@@ -531,33 +608,29 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   // Unread is ranked by attention band, so its dock names the BAND the rail is crossing; All is
   // chronological and keeps its date. Same spy, same dock, different axis (the owner, 2026-09-07:
   // "the date on top makes no sense on the unread tab since we don't sort by date").
-  const [curRun, setCurRun] = useState("");
+
   // ...and which runs the dock offers comes from the rail as DRAWN, in draw order. Reading it off
   // the inventory instead put the wrong word over the rail: the pile draws [current, ...items], so
   // the row pinned on top is not necessarily in `items` at all, and with nothing scrolled the label
   // fell back to the inventory's first run - "reports" over a row saying asked you (the owner,
   // 2026-09-07: "it says reports when there is ask you?").
-  const [railRuns, setRailRuns] = useState([]);
+
   const spy = useCallback(() => {
     const rail = railRef.current; if (!rail) return;
-    const ranked = view === "unread";
-    const put = (value) => (ranked ? setCurRun(String(value || "")) : setCurDay(value));
-    if (dateJump.current) { put(dateJump.current); return; }
+    // WORK is ranked and its categories are headings inside the rail that freeze as you scroll,
+    // so there is nothing above the rail left for a spy to label. Only the Timeline's date moves.
+    if (view === "unread") return;
+    if (dateJump.current) { setCurDay(dateJump.current); return; }
     // ...and re-measure whenever the rail has grown since the last look: rows arriving after the
     // first measurement left every group at top 0, and the last of those ties is the wrong day
     if (dayLayoutDirty.current || rail.scrollHeight !== dayLayoutAt.current) {
       // Measure once after the rows/layout change. Reading every group's bounding box on every
       // wheel frame made Chromium synchronously lay out the whole rail while it was scrolling.
       const railTop = rail.getBoundingClientRect().top;
-      // All has one wrapper per chronological day. Unread has no wrappers at all - it is a ranked
-      // pile - so read the band carried by every pile row and let whichever row is currently
-      // crossing the dock own the label. Rows of one band are contiguous because the band IS the
-      // sort, so the runs the owner scrolls through are exactly the bands.
-      dayLayout.current = (view === "unread"
-        ? pileBandTops(rail, railTop)
-        : Object.entries(dayRefs.current).flatMap(([day, el]) => el
-          ? [{ day, top: el.getBoundingClientRect().top - railTop + rail.scrollTop }]
-          : [])).sort((a, b) => a.top - b.top);
+      // one wrapper per chronological day
+      dayLayout.current = Object.entries(dayRefs.current).flatMap(([day, el]) => el
+        ? [{ day, top: el.getBoundingClientRect().top - railTop + rail.scrollTop }]
+        : []).sort((a, b) => a.top - b.top);
       dayLayoutDirty.current = false; dayLayoutAt.current = rail.scrollHeight;
     }
     const edge = rail.scrollTop + 1;
@@ -572,12 +645,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     // edge): the label is the FIRST group's day, not whatever day the owner last scrolled through in the
     // other view (2026-09-07: "Saturday, Sep 5" over Monday's rows)
     const crossing = cur || dayLayout.current[0]?.day || "";
-    if (ranked) {
-      setCurRun((was) => crossing || was);                          // the updater form keeps this
-      const drawn = [];                                             // callback off the scroll listener's deps
-      for (const entry of dayLayout.current) if (entry.day && !drawn.includes(entry.day)) drawn.push(entry.day);
-      setRailRuns((was) => (was.length === drawn.length && was.every((run, i) => run === drawn[i]) ? was : drawn));
-    } else setCurDay((was) => crossing || was);
+    setCurDay((was) => crossing || was);   // the updater form keeps this callback off the deps
   }, [view]);
   useEffect(() => {
     const rail = railRef.current; if (!rail) return undefined;
@@ -1280,12 +1348,10 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   const dateEntries = dayEntries.length ? dayEntries : [[today, []]];
   // the same dock on Unread, on the axis Unread is actually sorted by: the bands the pile holds,
   // in the order it draws them, and the one the rail is crossing is the label
-  const pileRuns = view === "unread" ? (railRuns.length ? railRuns : levelsOf(unreadInventory?.items)) : [];
-  const shownRun = pileRuns.includes(curRun) ? curRun : (pileRuns[0] || "");
   const jumpToDay = (day) => {
     dateJump.current = String(day);
     clearTimeout(dateJumpTimer.current);
-    if (view === "unread") setCurRun(String(day || "")); else setCurDay(day);
+    setCurDay(day);
     requestAnimationFrame(() => {
       const rail = railRef.current;
       const group = view === "unread"
@@ -1364,109 +1430,68 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
             </Box>
           ))}
 
-          {/* filters: one segmented control for STATE, one quiet picker for WHERE FROM. Two
-              rows of loose pills of two different kinds read as a settings panel, not a filter. */}
-          {/* wraps: on a phone the pickers and New drop to a second row as one group, under the
-              pill, instead of the whole row scrolling sideways */}
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: "wrap" }}>
-            <Box role="group" aria-label="Feed views" sx={{ display: "inline-flex", maxWidth: "100%" }}>
-              <FilterPills options={views} value={view} onChange={setView} />
-            </Box>
-            {/* on a phone the pickers take a full second line and New sits beside the pill; from md
-                up the three share one line, right-aligned */}
-            {/* the pickers sit BESIDE the view pills, not across the width from them: ml:auto pushed
-                them to the far right and left a hole in the middle of the toolbar, which longer view
-                names only make worse (the owner, 2026-09-07: "too much space between the unread/all
-                and the 2 filters"). New keeps the right edge. */}
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1, ml: { md: 1 }, minWidth: 0,
-              order: { xs: 3, md: 2 }, flex: { xs: "1 1 100%", md: "0 0 auto" },
-              "& > .MuiInputBase-root": { flex: { xs: 1, md: "0 0 auto" } } }}>
-            <Select size="small" value={cat} displayEmpty onChange={(e) => {
-              allRequest.current += 1; detailEpoch.current += 1; want.current = null; setCat(e.target.value);
-            }}
-              inputProps={{ "aria-label": "Timeline category" }}
-              renderValue={(v) => CATEGORIES.find((o) => o.key === v)?.label || "all kinds"}
-              sx={{ height: 34, fontSize: 11.5, fontWeight: 600, borderRadius: 2, bgcolor: PANEL2,
-                color: cat ? INK : DIM, flexShrink: 0,
-                "& .MuiSelect-select": { py: 0.25, px: 1.15 },
-                "& .MuiOutlinedInput-notchedOutline": { borderColor: BORDER } }}>
-              {CATEGORIES.map((o) => <MenuItem key={o.key} value={o.key} sx={{ fontSize: 12 }}>{o.label}</MenuItem>)}
-            </Select>
-            <Select size="small" value={pickerChannels.length ? pick : ""} displayEmpty
-              onChange={(e) => {
-                allRequest.current += 1; detailEpoch.current += 1; want.current = null; setPick(e.target.value);
-              }}
-              onClose={() => setSrcQ("")}
-              inputProps={{ "aria-label": "Timeline source" }}
-              MenuProps={{ PaperProps: { sx: { maxHeight: 440, maxWidth: 420 } } }}
-              renderValue={(v) => (!v ? "all sources"
-                : v.startsWith("channel:") ? `all ${CHANNEL_LABELS[v.slice(8)] || v.slice(8)}`.toLowerCase()
-                  : String(v.split(":").slice(2).join(":")).split("@")[0])}
-              sx={{ height: 34, fontSize: 11.5, fontWeight: 600, borderRadius: 2, bgcolor: PANEL2,
-                color: pick ? INK : DIM, flex: { xs: 1, md: "0 0 104px" }, width: { md: 104 }, minWidth: 104, maxWidth: { md: 104 },
-                "& .MuiSelect-select": { py: 0.25, px: 1.15 },
-                "& .MuiOutlinedInput-notchedOutline": { borderColor: BORDER } }}>
-              {/* 96 discovered buckets turned this into a page-long wall. It is a bounded,
-                  searchable list: type to narrow, and each channel shows a few with a count
-                  for the rest rather than every object it has ever seen. */}
-              <Box sx={{ px: 1, pt: 0.5, pb: 0.75, position: "sticky", top: 0, bgcolor: PANEL, zIndex: 2 }}
-                onKeyDown={(e) => e.stopPropagation()}>
-                <TextField autoFocus fullWidth placeholder="search sources…" value={srcQ}
-                  onChange={(e) => setSrcQ(e.target.value)} sx={{ bgcolor: "#fff" }}
-                  inputProps={{ style: { fontSize: 12, padding: "5px 8px" } }} />
-              </Box>
-              <MenuItem value="" sx={{ fontSize: 12 }}>all sources</MenuItem>
-              {pickerChannels.flatMap((ch) => {
-                const q = srcQ.trim().toLowerCase();
-                const all = (srcByChannel[ch] || []).filter((n) => !q || String(n).toLowerCase().includes(q));
-                const label = CHANNEL_LABELS[ch] || ch;
-                if (q && !all.length && !label.toLowerCase().includes(q)) return [];
-                const shown = q ? all.slice(0, 12) : all.slice(0, 6);
-                return [
-                  <ListSubheader key={`h${ch}`} sx={{ fontSize: 9.5, lineHeight: 1.9, color: FAINT, letterSpacing: 1,
-                    textTransform: "uppercase", bgcolor: PANEL }}>
-                    {label}{all.length > shown.length ? ` · ${all.length}` : ""}
-                  </ListSubheader>,
-                  <MenuItem key={`c${ch}`} value={`channel:${ch}`} sx={{ fontSize: 12 }}>
-                    all {label.toLowerCase()}
-                  </MenuItem>,
-                  ...shown.map((n) => (
-                    <MenuItem key={`${ch}:${n}`} value={`src:${ch}:${n}`} sx={{ fontSize: 11.5, pl: 2.5, maxWidth: 400 }}>
-                      <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n}</Box>
-                    </MenuItem>
-                  )),
-                  ...(all.length > shown.length ? [
-                    <MenuItem key={`m${ch}`} disabled sx={{ fontSize: 10.5, pl: 2.5, color: FAINT, opacity: 1 }}>
-                      +{all.length - shown.length} more — type to find one
-                    </MenuItem>] : []),
-                ];
-              })}
-            </Select>
-            {/* New starts work, so it stays visually distinct, but it belongs on this toolbar —
-                not alone on a wasteful row above it. */}
-            </Box>
-            <Button size="small" variant="contained" disableElevation onClick={() => setNewOpen(true)}
-              startIcon={<AddIcon sx={{ fontSize: 15 }} />}
-              sx={{ flexShrink: 0, height: 34, minWidth: 68, py: 0.25, px: 1.1, borderRadius: 2,
-                fontSize: 11.5, background: GRADIENT, order: { xs: 2, md: 3 }, ml: "auto" }}>New</Button>
-          </Box>
-
-          {/* The counts describe what is in the rail. The date and sync clock belong together
-              below them: date first, centered over the quieter sync status/action. */}
-          {rows && (
-            <Box sx={{ display: "flex", alignItems: "baseline", gap: 1.5, flexWrap: "wrap", justifyContent: "center" }}>
-              {stats.map((s) => (
-                <Box key={s.label} onClick={() => s.f && setView(s.f)}
-                  sx={{ display: "flex", alignItems: "baseline", gap: 0.4, cursor: s.f ? "pointer" : "default",
-                    ...(s.f ? { "&:hover .thubStatLbl": { color: ALERT_INK } } : {}) }}>
-                  <Typography sx={{ fontWeight: 700, fontSize: 11.5,
-                    color: s.hot && s.n ? ALERT_INK : INK }}>{s.n}</Typography>
-                  <Typography className="thubStatLbl" variant="caption" sx={{ color: FAINT, fontSize: 10.5, transition: "color .15s" }}>{s.label}</Typography>
-                </Box>
+          {/* ONE ROW, three kinds of thing, each shaped like what it is: a SWITCH between the two
+              rails (sunk track, raised thumb - the shape everything uses for "pick one of two"), a
+              hairline divider, one FILTER that says what it is filtering to, and New on the right
+              edge. It used to be four pills of identical shape doing two unrelated jobs. */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0, flexWrap: "wrap" }}>
+            <Box role="group" aria-label="Feed views" sx={{ display: "inline-flex", flexShrink: 0,
+              p: "2px", borderRadius: 99, bgcolor: PANEL2 }}>
+              {views.map((v) => (
+                <Box key={v.key} component="button" type="button" onClick={() => setView(v.key)}
+                  aria-pressed={view === v.key}
+                  sx={{ border: 0, cursor: "pointer", height: 24, px: 1.5, borderRadius: 99,
+                    fontFamily: "inherit", fontSize: 11.5, fontWeight: view === v.key ? 700 : 600,
+                    color: view === v.key ? INK : DIM, bgcolor: view === v.key ? PANEL : "transparent",
+                    boxShadow: view === v.key ? "0 1px 2px rgba(30,50,38,.12)" : "none" }}>{v.label}</Box>
               ))}
             </Box>
-          )}
-          {!rows && <Typography variant="caption" sx={{ color: FAINT, textAlign: "center", fontSize: 10.5 }}>Loading item counts…</Typography>}
+            <Box aria-hidden sx={{ width: "1px", height: 18, bgcolor: BORDER, mx: 0.4, flexShrink: 0 }} />
+            <FilterButton cat={cat} pick={pickerChannels.length ? pick : ""} channels={pickerChannels}
+              srcByChannel={srcByChannel} srcQ={srcQ} setSrcQ={setSrcQ}
+              onChange={(nextCat, nextPick) => {
+                allRequest.current += 1; detailEpoch.current += 1; want.current = null;
+                if (nextCat !== cat) setCat(nextCat);
+                if (nextPick !== pick) setPick(nextPick);
+              }} />
+            <Button size="small" variant="contained" disableElevation onClick={() => setNewOpen(true)}
+              startIcon={<AddIcon sx={{ fontSize: 15 }} />}
+              sx={{ flexShrink: 0, height: 28, minWidth: 68, py: 0, px: 1.25, borderRadius: 99,
+                fontSize: 11.5, background: GRADIENT, ml: "auto" }}>New</Button>
+          </Box>
+
+          {/* ONE centred line, not two. The counts and the sync clock were separate rows justified
+              to different edges, which is most of why the dock read as scattered - and centring is
+              what kills a ragged edge, because there is no second edge to fail to line up with. */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap", justifyContent: "center", minHeight: 20 }}>
+            {rows && stats.map((s2) => (
+              <Box key={s2.label} onClick={() => s2.f && setView(s2.f)}
+                sx={{ display: "flex", alignItems: "baseline", gap: 0.4, cursor: s2.f ? "pointer" : "default",
+                  ...(s2.f ? { "&:hover .thubStatLbl": { color: ALERT_INK } } : {}) }}>
+                <Typography sx={{ fontWeight: 700, fontSize: 11.5,
+                  color: s2.hot && s2.n ? ALERT_INK : INK }}>{s2.n}</Typography>
+                <Typography className="thubStatLbl" variant="caption" sx={{ color: FAINT, fontSize: 10.5, transition: "color .15s" }}>{s2.label}</Typography>
+              </Box>
+            ))}
+            {!rows && <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>Loading item counts…</Typography>}
+            <Typography variant="caption" noWrap sx={{ color: syncing || bgSync ? ACCENT : FAINT, fontSize: 10.5 }}>
+              {syncUnknown ? "Sync status unavailable — rechecking"
+                : <NextIn atRef={nextAtRef} render={(nextIn) => syncFace({ busy: syncing || bgSync, what: syncWhat, every, lastAt: lastSync, nextIn, checked: true, started: syncStarted, failed: syncFailed })} />}
+            </Typography>
+            <Button size="small" variant="text" disabled={!syncUnknown && (syncing || bgSync)} onClick={() => syncNow(false)}
+              title={syncing || bgSync ? syncWhat : "read the mailboxes, chats and repos now"}
+              startIcon={<SyncIcon data-tq-sync-icon sx={{ fontSize: 12,
+                color: syncing || bgSync ? ACCENT : "inherit",
+                ...(!syncUnknown && (syncing && !bgSync || bgSync && (!syncPhase || syncPhase === "fetching"))
+                  ? { animation: "tqSyncSpin .8s linear infinite" } : {}) }} />}
+              sx={{ minWidth: 0, minHeight: { xs: 30, md: 20 }, py: 0, px: { xs: 1, md: 0.6 }, fontSize: 10.5,
+                lineHeight: 1.2, whiteSpace: "nowrap", color: DIM,
+                "@keyframes tqSyncSpin": { to: { transform: "rotate(360deg)" } },
+                "&.Mui-disabled": { color: DIM, opacity: 1 },
+                "& .MuiButton-startIcon": { mr: 0.35 }, "&:hover": { bgcolor: PANEL2 } }}>
+              {syncUnknown ? "Check status" : syncing || bgSync ? syncPhaseLabel(syncPhase) : "Sync now"}
+            </Button>
+          </Box>
           {/* a brain that errors on every call used to look like slow triage: rows parked on
               "triaging…" and nothing saying why. The last error stays until it answers again. */}
           {triageErr && (
@@ -1487,56 +1512,31 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
               {err}
             </Alert>
           )}
-          {/* Sync belongs to the controls above. The moving date is the label for the rows, so it
-              must be the final thing in the dock — otherwise scrolling changes a heading that
-              appears to describe the sync line beneath it. */}
-          <Box sx={{ minHeight: 20, display: "flex", justifyContent: "center", alignItems: "center", gap: 0.25 }}>
-            <Typography variant="caption" noWrap sx={{ color: syncing || bgSync ? ACCENT : FAINT, fontSize: 10.5 }}>
-              {syncUnknown ? "Sync status unavailable — rechecking"
-                : <NextIn atRef={nextAtRef} render={(nextIn) => syncFace({ busy: syncing || bgSync, what: syncWhat, every, lastAt: lastSync, nextIn, checked: true, started: syncStarted, failed: syncFailed })} />}
-            </Typography>
-            <Button size="small" variant="text" disabled={!syncUnknown && (syncing || bgSync)} onClick={() => syncNow(false)}
-              title={syncing || bgSync ? syncWhat : "read the mailboxes, chats and repos now"}
-              startIcon={<SyncIcon data-tq-sync-icon sx={{ fontSize: 12,
-                color: syncing || bgSync ? ACCENT : "inherit",
-                ...(!syncUnknown && (syncing && !bgSync || bgSync && (!syncPhase || syncPhase === "fetching"))
-                  ? { animation: "tqSyncSpin .8s linear infinite" } : {}) }} />}
-              sx={{ minWidth: 0, minHeight: { xs: 30, md: 20 }, py: 0, px: { xs: 1, md: 0.6 }, ml: 0.35, fontSize: 10.5,
-                lineHeight: 1.2, whiteSpace: "nowrap", color: DIM,
-                "@keyframes tqSyncSpin": { to: { transform: "rotate(360deg)" } },
-                "&.Mui-disabled": { color: DIM, opacity: 1 },
-                "& .MuiButton-startIcon": { mr: 0.35 }, "&:hover": { bgcolor: PANEL2 } }}>
-              {syncUnknown ? "Check status" : syncing || bgSync ? syncPhaseLabel(syncPhase) : "Sync now"}
-            </Button>
-          </Box>
-          {/* The heading is also navigation: choose any day already in this Timeline - or, on
-              Unread, any band the pile holds - and the rail glides to its first item. It stays
-              typographically a heading, not another pill. */}
-          <Select value={view === "unread" ? shownRun : shownDay} onChange={(e) => jumpToDay(e.target.value)}
+          {/* The heading is also navigation: choose any day already in this Timeline and the rail
+              glides to its first item. It stays typographically a heading, not another pill.
+              WORK has no dropdown any more - its categories are headings inside the rail that
+              freeze as you scroll, so a second control naming the same band was saying it twice
+              (the owner, 2026-09-16: "we no longer need the your task drop down on top"). */}
+          {view !== "unread" && (
+          <Select value={shownDay} onChange={(e) => jumpToDay(e.target.value)}
             variant="standard" disableUnderline
-            displayEmpty title={view === "unread" ? (LEVEL_META[shownRun]?.hint || "") : ""}
-            inputProps={{ "aria-label": view === "unread" ? "Pipe run" : "Timeline date" }}
-            SelectDisplayProps={view === "unread" ? { "data-tq-run-dock": "true" } : undefined}
+            displayEmpty inputProps={{ "aria-label": "Timeline date" }}
             IconComponent={(props) => <ChevronRightIcon {...props} sx={{ ...props.sx, fontSize: 14,
               transform: "rotate(90deg)", color: `${FAINT} !important`, right: 1 }} />}
-            renderValue={(value) => (view === "unread" ? levelLabel(value) : fmtDay(value))}
+            renderValue={(value) => fmtDay(value)}
             sx={{ ...mono, color: INK, fontWeight: 700, fontSize: 11.5, letterSpacing: 0.3,
               minWidth: 0, maxWidth: "100%", height: 22, textAlign: "center", cursor: "pointer",
               "& .MuiSelect-select": { py: 0, pl: 2, pr: "22px !important", textAlign: "center" },
               "&:hover": { color: ACCENT } }}>
-            {view === "unread"
-              ? pileRuns.map((run) => (
-                <MenuItem key={run} value={run} title={LEVEL_META[run]?.hint || ""} sx={{ ...mono, fontSize: 11.5 }}>
-                  {levelLabel(run)}</MenuItem>
-              ))
-              : dateEntries.map(([day]) => (
-                <MenuItem key={day} value={day} sx={{ ...mono, fontSize: 11.5 }}>{fmtDay(day)}</MenuItem>
-              ))}
+            {dateEntries.map(([day]) => (
+              <MenuItem key={day} value={day} sx={{ ...mono, fontSize: 11.5 }}>{fmtDay(day)}</MenuItem>
+            ))}
           </Select>
+          )}
         </Box>
 
         {/* ── the scroller ── */}
-        <Box ref={railRef} data-processing-all-rail={!view ? "true" : undefined}
+        <Box ref={railRef} data-tq-rail="true" data-processing-all-rail={!view ? "true" : undefined}
           onPointerMoveCapture={() => {
             // Capture runs before the row's mousemove. The first real pointer move after the rail
             // settles arms that row; wheel movement by itself never does.

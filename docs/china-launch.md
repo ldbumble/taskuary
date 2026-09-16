@@ -1,6 +1,24 @@
-# Chinese developer launch draft
+# Chinese developer launch
 
-Prepared 2026-09-15. Submission copy and routes; nothing has been submitted or posted.
+Updated 2026-09-15. The author authorized an early feedback launch through GitHub-based
+communities, with real-provider and mainland network verification still pending.
+
+## Submitted
+
+| Community | Public submission | Saved submission copy | Status |
+| --- | --- | --- | --- |
+| HelloGitHub | [#3711](https://github.com/521xueweihan/HelloGitHub/issues/3711) | [Chinese introduction and screenshots](launch/2026-09-15-hellogithub.md) | Submitted; curator review pending |
+| 科技爱好者周刊 | [#11726](https://github.com/ruanyf/weekly/issues/11726) | [Workflow introduction](launch/2026-09-15-ruanyf-weekly.md) | Submitted; curator review pending |
+| GitHubDaily | [#1096](https://github.com/GitHubDaily/GitHubDaily/issues/1096) | [Short introduction and screenshots](launch/2026-09-15-githubdaily.md) | Submitted; curator review pending |
+
+All three submissions identify this as an author self-submission, link the Chinese README
+and fictional-data demo, and explain the CLI verification limits. Submitted does not mean
+accepted, featured, or distributed by the curators. Duplicate searches and the current
+submission rules were checked before posting.
+
+V2EX, OSChina, and Juejin have not been posted to. The author chose GitHub-based communities
+for now and has no accounts to use on those platforms. The routes and draft below are for
+a later phase. Follow up on feedback in the submitted issues before expanding distribution.
 
 ## Positioning
 
@@ -10,15 +28,19 @@ Lead with one workflow and the local-app architecture. Offer Qwen Code plus Olla
 that does not require Claude Code, Codex, or Gemini. Describe the actual model provider separately:
 Qwen Code can call a cloud model, and installing it does not make inference local.
 
-The Chinese README and integration are ready in source. Before a wider launch, publish a release
-containing the preset and have a mainland-based user verify installation, authentication, a real
-coding task, session continuation, and the chosen inbound channel. The current compatibility
-check used the real Qwen binary with a local mock endpoint; it did not establish regional access
-or model quality. Record those results in [Qwen Code compatibility](qwen-code.md#compatibility-evidence).
+The Chinese README and Qwen Code, OpenCode, and Kimi Code integrations are available in source.
+The first submissions invite early feedback; they do not claim verified mainland availability.
+Current compatibility checks used the real CLI binaries with local mock model endpoints;
+they did not establish real-provider authentication, regional access, or model quality.
+A useful next validation is installation, authentication, a real task, session continuation,
+and the chosen inbound channel with a mainland-based user. Record actual results in
+[Qwen Code compatibility](qwen-code.md#compatibility-evidence) and
+[OpenCode / Kimi compatibility](chinese-coding-clis.md).
 
 ## Distribution order
 
-This order is a proposed launch sequence, not a claim about guaranteed reach:
+These are available routes, not a claim about guaranteed reach. GitHub submissions above
+were chosen for the first phase because the author already has a GitHub account:
 
 1. **HelloGitHub.** Use its [project submission form](https://github.com/521xueweihan/HelloGitHub/issues/new?template=submit-en.yaml).
    Its [current template](https://github.com/521xueweihan/HelloGitHub/blob/master/.github/ISSUE_TEMPLATE/submit-en.yaml)
@@ -36,12 +58,14 @@ This order is a proposed launch sequence, not a claim about guaranteed reach:
    Use a short first-person post with the working demo and specific questions for feedback.
    Posting eligibility must be checked in the actual account; no account-age requirement or
    launch date was established by this research.
-5. **Curators and newsletters.** After the first users confirm the workflow, adapt the short
-   description for GitHubDaily, Zhihu, or ruanyf's weekly. Check each current submission route
-   before sending anything. Add a Gitee mirror only if actual users report download friction
+5. **Curators and newsletters.** GitHubDaily and ruanyf's weekly received tailored submissions
+   with the testing limitations disclosed. Zhihu remains a possible later route. Check its
+   current submission route before posting. Add a Gitee mirror only if users report download friction
    and someone will maintain the mirror.
 
-## HelloGitHub submission copy
+## Reusable submission draft
+
+The exact published HelloGitHub copy is [saved separately](launch/2026-09-15-hellogithub.md).
 
 **Project URL:** https://github.com/ldbumble/taskuary
 
@@ -68,7 +92,7 @@ Taskuary 是一个本地运行的开源任务工作台。它把邮件、工单�
 **Chinese README:** https://github.com/ldbumble/taskuary/blob/master/README.zh-CN.md
 
 **Suggested screenshots:** the [Timeline](readme/01-timeline-sources-and-times.png),
-[Qwen connection](readme/07-coding-clis-qwen.png), and [Review](readme/04-review.png).
+[CLI connections](readme/07-coding-clis-chinese.png), and [Review](readme/04-review.png).
 
 ## Short community post
 

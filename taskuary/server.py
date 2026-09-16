@@ -6279,8 +6279,16 @@ def build():
 
 @app.get('/api/settings')
 def settings():
-    return {'data': [s for s in store.list_settings() if s['Name'] not in ('ingest_status', 'assistant_last_run', 'assistant_notes', 'assistant_notes_at')
-                     and not s['Name'].startswith('report_last_run:')]}
+    """Every knob, with the value it SHIPS with beside the value it has.
+
+    "Explain them better" starts with the one fact no description contained: what this was before
+    you touched it (the owner, 2026-09-16). Writing that into 55 description strings would be 55
+    places to drift out of step with store.DEFAULT_SETTINGS; the page reads it from the same dict
+    the install was seeded from, so it cannot disagree with what actually shipped."""
+    from .store import DEFAULT_SETTINGS
+    rows = [s for s in store.list_settings() if s['Name'] not in ('ingest_status', 'assistant_last_run', 'assistant_notes', 'assistant_notes_at')
+            and not s['Name'].startswith('report_last_run:')]
+    return {'data': [{**r, 'Default': DEFAULT_SETTINGS.get(r['Name'])} for r in rows]}
 
 @app.patch('/api/settings')
 def set_setting(body: SettingBody):

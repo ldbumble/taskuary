@@ -123,8 +123,8 @@ const KNOB_META = {
     help: "Automatic (the default) tries every other configured CLI in roster order. Or select one or more explicit backups to control the chain. The task, incoming messages, attachments, repository, and seed prompt all travel to the replacement.\n\nA normal agent error does not silently switch authors halfway through work. Failover is for availability failures: session/usage/rate limits, quota or capacity, expired login, a missing executable, or a CLI that cannot start." },
   answer_to_agent: { group: "Coder agent", label: "Hand answers to the working agent", type: "select",
     options: ["ask", "auto", "off"],
-    desc: "When someone answers a question on a task an agent is sitting on, their answer can go straight into the live session.",
-    help: "The classic round trip: the agent asks something mid-task, the hub asks the person, the person replies by mail or chat — and the reply attaches to the same task.\n\nask (default) = the review panel offers one click: 'Type this into the agent's session'. auto = the answer is typed into the live session the moment it arrives, as if you relayed it. off = it just lands on the task; you paste it yourself.\n\nOnly a LIVE session is ever typed into — if the agent already exited, nothing happens and the thread simply waits on the task." },
+    desc: "An agent asks a question mid-task, Taskuary asks the person, and their reply lands back on the same task. This is what happens next. ask = Review offers one click, 'Type this into the agent's session'. auto = it is typed in the moment it arrives, as if you relayed it. off = it just sits on the task.",
+    help: "Only a LIVE session is ever typed into. If the agent already exited nothing happens and the answer simply waits on the task, so `auto` cannot lose anything.\n\nThe reason this is a choice rather than always-on: `auto` puts someone else's words into your agent's session without you reading them first. That is usually what you want on your own team's mail and rarely what you want from a stranger's reply, and Taskuary cannot tell the difference well enough to decide for you." },
   git_flow: { group: "Coder agent", label: "How finished work lands", type: "select", options: ["pr", "direct"],
     desc: "A draft pull request, or the commits pushed straight onto the default branch.",
     help: "pr (default) = a DRAFT pull request from the task's branch; you review and merge it yourself, and Taskuary never merges. direct = the commits already in the checkout are pushed straight onto the default branch — no PR, no review ceremony, which is usually what you want on your own repository.\n\nDirect mode is deliberately narrow: it pushes commits that ALREADY EXIST. A dirty checkout is refused rather than committed for you (Taskuary will not write a commit message over work nobody has read), nothing ahead of the remote is simply 'nothing to do', and a rejected push is reported for you to pull and rebase — it never force-pushes.\n\nEither way 'Agents may push / deploy' on the GitHub card is what allows anything to leave the machine at all, and CI watching follows the work to wherever it landed." },
@@ -156,9 +156,9 @@ const KNOB_META = {
   coder_context_file: { group: "Coder agent", label: "Write the agent a context file", type: "switch",
     desc: "Each session gets ~/.taskuary/context/TQ-xxxx.md: this sender's recent mail and what you last wrote them, the topic elsewhere, your calendar, the assistant's read, the learned profile, the whole thread - and the reports of closed tasks on the same sender, subject or repo. The seed says 'read it first'.",
     help: "The seed prompt is one command line (Windows caps it at 32,767 characters, and when it overflows the ask is what gets cut), so the two-line read rides in the prompt and the rest lives in this file. It is written under Taskuary's own home, never inside a checkout - a stray file in a shared checkout gets staged. Off: the seed carries what it always did and no file is written." },
-  agent_hooks: { group: "Coder agent", label: "Let Claude Code tell the Board what it is doing", type: "switch",
-    desc: "A Claude Code hook in each checkout a session opens reports every tool call and stop to Taskuary - the Board card reads 'Edit server.py · 4s' and the agent's own list instead of a scrollback.",
-    help: "How: Taskuary adds PostToolUse, Stop and UserPromptSubmit entries to the checkout's .claude/settings.local.json (the project-local file Claude Code itself keeps out of git). Each entry pipes the event's JSON to this server on localhost with curl; nothing leaves the machine and nothing changes what the agent does. Existing hooks in that file are kept.\n\nCodex needs no hook: Taskuary follows the session log Codex writes as it works. Other CLIs show the last screen line and the files git says they touched.\n\nOff: no file is written; cards fall back to files only." },
+  agent_hooks: { group: "Coder agent", label: "Write Claude Code hooks into your checkouts", type: "switch",
+    desc: "Taskuary adds four hook entries to .claude/settings.local.json in each repository a session opens, so the Board reads the agent's real tool calls instead of guessing from the screen. Switch it off to leave your checkouts untouched \u2014 the Board then falls back to reading the terminal.",
+    help: "The decision here is whether Taskuary may WRITE to your repositories, not whether the Board should be accurate \u2014 it should, which is why this ships on.\n\nThe file is the project-LOCAL settings Claude itself gitignores, so nothing is committed. Existing hooks are kept and only Taskuary's own entries (marked by the /api/hooks/claude endpoint) are replaced. Removing them by hand is safe; they are rewritten the next time a session opens.\n\nCLAUDE CODE ONLY. The hook format is Claude's, so on codex, copilot, qwen, devin or any other CLI this switch does nothing at all \u2014 those sessions are read from the terminal whatever it says." },
   agent_self_close: { group: "Coder agent", label: "Let a finished agent close its own task", type: "select",
     options: ["1", "ask", "0"], optionLabels: { 1: "yes - and judge a silent ending too", ask: "only when it says so", 0: "never - I press Done" },
     desc: "An agent that has finished wraps itself up: the report is written from its transcript and the reply to whoever asked is drafted for your approval.",
@@ -237,6 +237,20 @@ const GROUPS = ["Triage & agents", "Triage & routing", "Replies", "Assistant", "
 const HIDDEN = new Set(["ingest_status", "agent_issues_enabled", "agent_push_enabled",   // github card decisions
                         "funnel_hours", "funnel_max", // retained values; All and Unread now share history without an item cap
                         "auto_draft_enabled",   // replies are always drafted (PW-043); the old switch no longer gates anything
+                        // A KNOB NOBODY READS IS NOT A KNOB. Four rows on this page changed
+                        // nothing at all - verified by reading every Python module for the key,
+                        // not by trusting the label (the owner, 2026-09-16: "make sure they change
+                        // things"). Two of them were the dangerous kind, a switch about sending and
+                        // a failover chain, both of which you would reasonably believe you had set:
+                        //   send_enabled, outlook_drafts_enabled - no reader anywhere, ever
+                        //   attach_threshold        - routing.route() takes it as a default ARGUMENT
+                        //                             and nobody passes the setting (docstring fixed)
+                        //   backup_agents           - superseded by backup_brains in the 2026-09-16
+                        //                             brain split; store.py says so in as many words
+                        // The rows stay in the table (deleting a stored value is a migration, and
+                        // `backup_agents` is still the pre-split value an old install may want to
+                        // read back); they are simply not offered as something you can set.
+                        "send_enabled", "outlook_drafts_enabled", "attach_threshold", "backup_agents",
                         "last_pinged_review", "triage_last_error",                          // bookkeeping
                         "setup_dismissed", "task_id_mark", "learn_pending", "learn_last_reflect"]);
 // the four AI defaults the panel at the top of this tab draws as cards - each would otherwise
@@ -256,6 +270,23 @@ const STATE = new Set(["app_sessions", "assistant_dock_task_id", "assistant_hand
   "ingest_last_fetch_completed_at", "learn_reflect_log", "problems_dismissed", "wa_log_trimmed_at",
   "wall_rolled_on"]);
 const isState = (name) => name.includes(":") || STATE.has(name);
+// WHAT IT WAS BEFORE YOU TOUCHED IT. No description carried its own default, so a page of knobs
+// could not tell you which ones you had actually changed, or what the shipped answer had been -
+// and a default written into 55 strings is 55 places to drift. The server sends `Default` straight
+// from store.DEFAULT_SETTINGS; this only decides how to say it.
+const showValue = (v, type) => {
+  if (v === null || v === undefined) return "";
+  const s = String(v);
+  if (type === "switch") return s === "1" ? "on" : "off";
+  return s === "" ? "blank" : s;
+};
+const defaultNote = (s, type) => {
+  const d = showValue(s.Default, type);
+  if (!d) return "";
+  const now = showValue(s.Value, type);
+  return now === d ? `Default: ${d} \u2014 unchanged.` : `Default: ${d}. Yours: ${now}.`;
+};
+
 const hidden = (name) => HIDDEN.has(name) || isState(name)
   || name.startsWith("owner_") || name.endsWith("_seeded");   // owner_* = About you
 const meta = (name) => KNOB_META[name] || { group: "Other", label: name, type: "auto" };
@@ -519,6 +550,13 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
                   {m.help && <HelpOutlineIcon sx={{ fontSize: 15, color: "#cfc9bf" }} />}
                 </Typography>
                 <Typography variant="body2" sx={{ color: DIM, mt: 0.25 }}>{m.desc || s.Description}</Typography>
+                {/* the line every description was missing: what shipped, and whether this is
+                    still it. Quiet on purpose - it is a fact you check, not a thing to read. */}
+                {defaultNote(s, m.type) && (
+                  <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.3 }}>
+                    {defaultNote(s, m.type)}
+                  </Typography>
+                )}
               </Box>
               <Box sx={{ flexShrink: 0 }}>{control(s)}</Box>
             </Box>

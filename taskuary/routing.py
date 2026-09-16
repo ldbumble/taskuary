@@ -95,7 +95,9 @@ def route(msg, tasks, threshold=ATTACH_THRESHOLD):
     Args:
         msg: message dict (see score_candidate).
         tasks: list of task snapshot dicts.
-        threshold: attach floor (configurable via hubSetting attach_threshold).
+        threshold: attach floor. NOT configurable - every caller takes the default. The
+            `attach_threshold` setting this once read has never been passed since, so the row
+            on the settings page did nothing; it is hidden rather than left there lying.
     Returns:
         dict: {decision: 'attach'|'create', task_id, score, reason, candidates:
                [{task_id, score, signals}] sorted best-first} - the full routing trail.

@@ -434,7 +434,13 @@ class GeneralApiTests(unittest.TestCase):
         with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True):
             self.assertEqual(TestClient(server.app).post(f'/api/tasks/{tid}/assistant/session', json={}).status_code, 422)
 
-    def test_wall_wrap_closes_general_work_without_a_coder_report(self):
+    def test_wall_wrap_files_the_answer_itself_never_a_summary_of_it(self):
+        """General work keeps its record in the conversation, so nothing is asked of a model here and
+        no transcript is boiled down - but the answer IS filed, under the marker every reader of a
+        task's outcome shares. Returning it to the caller and writing nothing meant "Save this
+        conversation's result" left the card reading `in conversation` with the button still on
+        offer and no result on the task at all (the owner, 2026-09-17: "save the conversation result
+        does nothing?")."""
         store = MemoryStore(); tid = general_task(store); connect_openai(store)
         with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
              mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: 'The finished plan'):
@@ -442,7 +448,18 @@ class GeneralApiTests(unittest.TestCase):
             result = TestClient(server.app).post(f'/api/tasks/{tid}/wrap', json={'close': True}).json()
         self.assertEqual((result['wrap'], result['report']), ('done', 'The finished plan'))
         self.assertEqual(store.get_task(tid)['Status'], 'done')
-        self.assertFalse(any(str(c['Body']).startswith('CODER REPORT') for c in store.list_comments(tid)))
+        filed = [str(c['Body']) for c in store.list_comments(tid) if str(c['Body']).startswith('CODER REPORT')]
+        self.assertEqual(filed, ['CODER REPORT\nThe finished plan'])      # verbatim: not a paraphrase of it
+
+    def test_saving_the_same_conversation_twice_files_one_result(self):
+        """The button is offered until a result exists, and a stale page can press it twice."""
+        store = MemoryStore(); tid = general_task(store); connect_openai(store)
+        store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The finished plan')
+        with mock.patch.object(responder, 'write_draft'):
+            coder.wrap(store, tid, close=False, actor='owner')
+            coder.wrap(store, tid, close=False, actor='owner')
+        filed = [c for c in store.list_comments(tid) if str(c['Body']).startswith('CODER REPORT')]
+        self.assertEqual(len(filed), 1)
 
     def test_a_general_task_that_ends_drafts_the_reply_the_sender_gets(self):
         """The assistant is TOLD that ending the task drafts the answer the person who asked will get
@@ -485,7 +502,10 @@ class GeneralApiTests(unittest.TestCase):
                 self.assertEqual((wrapped.json()['wrap'], wrapped.json()['report']), ('done', 'The finished plan'))
                 self.assertEqual(paused.json()['note'], 'The finished plan')
                 self.assertEqual(store.get_task(tid)['Status'], 'done')
-                self.assertFalse(any(str(c['Body']).startswith('CODER REPORT') for c in store.list_comments(tid)))
+                # the answer itself is the filed result, whichever backend gave it - and only once,
+                # though the pause before it wrote a note of its own
+                filed = [str(c['Body']) for c in store.list_comments(tid) if str(c['Body']).startswith('CODER REPORT')]
+                self.assertEqual(filed, ['CODER REPORT\nThe finished plan'])
 
     def test_pause_closes_a_general_session_and_keeps_its_conversation(self):
         store = MemoryStore(); tid = general_task(store); connect_openai(store)

@@ -35,19 +35,29 @@ test("the agent card's bar is the same bar as the task's and the reply's", () =>
   // It answered with a row of default-size buttons UNDER its body: a different size, a different
   // order, no rule between the move and the alternatives, and its one fact left where the other
   // two put theirs right (the owner, 2026-09-16: "this agent card is still weird and doesn't
-  // match ... it should match the other ones"). One grammar: [ primary ] | [ named ] [ named ] fact.
+  // match ... it should match the other ones"). One grammar: [ primary ] | [ named ] [ named ].
   assert.match(tasks, /const primaryBtn = \{ minHeight: 34/, "the filled move's shape is one value");
-  const at = tasks.indexOf("{agentBar && (");
-  assert.notEqual(at, -1, "the agent bar must be rendered");
-  assert.ok(at < tasks.indexOf("Latest saved result"), "and it comes FIRST, above the result it acts on");
-  const bar = tasks.slice(at, tasks.indexOf("{report && !wrapped", at));
+  const at = tasks.indexOf("const agentBarRow = (");
+  assert.notEqual(at, -1, "the bar is one element the heading can carry");
+  const bar = tasks.slice(at, tasks.indexOf("\n  );", at));
   assert.ok(bar.includes("sx={primaryBtn}"), "it opens with the same filled primary");
   assert.ok(bar.includes('<Divider orientation="vertical"'), "a rule divides this session from another one");
   assert.ok(bar.includes("sx={canContinue ? barBtn : primaryBtn}"), "the named moves take barBtn");
-  assert.ok(bar.includes("sx={{ flex: 1, minWidth: 12 }}"), "and the fact is pushed right");
   // whichever state it is in, exactly one move is filled: continue it, file it, or run another
   assert.match(tasks, /const canContinue = !term\?\.alive && \(isGeneral \? generalStarted : !!detail\?\.resumable\);/);
   assert.match(tasks, /const canSave = !report && !wrapped;/);
+});
+
+test("the agent heading is one short line, live or not", () => {
+  // A running session has always been a single strip - heading, chip, controls - and the stopped
+  // card answered with a heading, a sentence under it, and a row of buttons under that (the owner,
+  // 2026-09-17: "can we also keep the agent header simple and short like it is when coder is
+  // active"). The bar rides IN the heading, so both extra lines go.
+  const head = tasks.slice(tasks.indexOf('<WorkflowHeading number="2"'), tasks.indexOf('<WorkflowHeading number="3"'));
+  assert.ok(head.includes("action={stage === \"agent\" && agentBar ? agentBarRow :"),
+    "the expanded card's bar is the heading's action, not a row of its own");
+  assert.ok(!head.includes("description="), "and nothing is said under the title");
+  assert.ok(!/None of these completes the task/.test(tasks), "the sentence it used to carry is gone");
 });
 
 test("the agent card names the role and the brain, and offers no model", () => {

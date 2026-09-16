@@ -278,6 +278,20 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
         if session: term.close(session.sid)
         store.audit('terminal', tid, 'wrap', actor, detail={'sid': sid or getattr(session, 'sid', None), 'close': close, 'mode': 'assistant'})
         last = next((m['content'][0]['text'] for m in reversed(general.history(store, tid)) if m['role'] == 'assistant'), '')
+        # THE RESULT IS FILED, NOT JUST HANDED BACK. This branch returned `report: last` to whoever
+        # called it and wrote nothing but a human note, so pressing "Save this conversation's result"
+        # left no result anywhere: the card still read `in conversation`, the button was still on
+        # offer, and every reader of a task's outcome - the pipe's line, the responder's draft, the
+        # next session's context - looks for a CODER REPORT comment and found none (the owner,
+        # 2026-09-17: "save the conversation result does nothing?").
+        # It is still not a SUMMARY: nothing is asked of a model here, and no transcript is boiled
+        # down. The answer the assistant already gave is filed verbatim, under the one marker every
+        # reader shares, which is exactly what the button's words promise.
+        if last.strip():
+            body = f'CODER REPORT\n{last.strip()}'
+            filed = next((str(c.get('Body') or '') for c in reversed(store.list_comments(tid))
+                          if str(c.get('Body') or '').startswith('CODER REPORT')), '')
+            if filed.strip() != body: store.add_comment(tid, 'assistant', 'agent', body)
         # ...and then the SAME ending every other worker gets. This branch used to return
         # `drafting: False` without ever calling finish(), so a task somebody WROTE IN about closed
         # with them unanswered - while selfclose.CHAT_LINE promises the assistant that ending it

@@ -797,6 +797,41 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       if (!stale(id)) setErr(e?.response?.data?.detail || "Could not resume this conversation");
     } finally { if (!stale(id)) setStartingAgent(""); }
   };
+  // THE BAR THE AGENT CARD ACTS THROUGH, built here so it can ride inside the heading beside the
+  // chip - where the Task and Reply strips keep theirs. Group one is THIS session, group two is
+  // another one, and exactly one move is filled. It is an element, not a component: the handlers
+  // it calls are declared just above, and a component defined mid-render remounts on every keystroke.
+  const agentBarRow = (
+    <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
+      {canContinue && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent} sx={primaryBtn}
+        startIcon={startingAgent === "resume" ? <CircularProgress size={12} /> : <HistoryIcon sx={{ fontSize: 16 }} />}
+        title={isGeneral
+          ? "Reopens the saved provider conversation and continues from its existing context."
+          : `Reopens ${detail?.resumable?.agent}'s own session in ${detail?.resumable?.cwd}. It still has what it read, changed and asked.`}
+        onClick={isGeneral ? resumeGeneralAgent : continueSession}>
+        {startingAgent === "resume" ? "Continuing…" : "Continue this session"}</Button>}
+      {canSave && <Button size="small" variant={canContinue ? "outlined" : "contained"} disableElevation
+        disabled={!!wrapping} sx={canContinue ? barBtn : primaryBtn}
+        startIcon={<DoneAllIcon sx={{ fontSize: 16, color: canContinue ? "#6f8a6e" : undefined }} />}
+        title="Writes up what this session did and files it as the task's result. The task stays open: Mark task done completes it and drafts the reply."
+        onClick={wrapUp}>{isGeneral ? "Save this conversation's result" : "Save stopped run result"}</Button>}
+      {!isGeneral && <>
+        {(canContinue || canSave) && <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />}
+        <Button size="small" variant={canContinue || canSave ? "outlined" : "contained"} disableElevation
+          sx={canContinue || canSave ? barBtn : primaryBtn}
+          startIcon={<RefreshIcon sx={{ fontSize: 16, color: canContinue || canSave ? "#6f8a6e" : undefined }} />}
+          title="A fresh session with a different harness, model or prompt. It receives the saved result, not the old conversation."
+          onClick={() => setRestartOpen(true)}>Run another agent</Button>
+      </>}
+      {report && <>
+        {isGeneral && <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />}
+        <Button size="small" variant="outlined" sx={barBtn}
+          startIcon={<ForwardToInboxIcon sx={{ fontSize: 16, color: "#55697a" }} />}
+          title="Forwards the saved result to a person. The AI writes it, you send it."
+          onClick={() => setHandoff(true)}>Send this result to someone</Button>
+      </>}
+    </Box>
+  );
   return (
     <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
       {/* ── list: one anchored panel - filter header on top, rows scroll inside ── */}
@@ -1240,8 +1275,14 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     </>}
                   </Box>
                 )}
+                {/* ONE SHORT LINE, LIVE OR NOT. A running session has always been a single strip -
+                    heading, chip, controls - while the stopped card answered with a heading, a
+                    sentence under it, and a row of buttons under that: three lines for the same
+                    question (the owner, 2026-09-17: "can we also keep the agent header simple and
+                    short like it is when coder is active"). The bar rides IN the heading now, so
+                    the sentence and the row that held it both go. */}
                 <Box sx={{ ...card, mb: liveSession ? 0.55 : 1.25,
-                  px: liveSession ? 1 : 1.5, py: liveSession ? 0.55 : stage === "agent" ? 1.5 : 1.1,
+                  px: liveSession ? 1 : 1.5, py: liveSession ? 0.55 : stage === "agent" ? (agentBar ? 0.8 : 1.5) : 1.1,
                   bgcolor: "#fff", flexShrink: 0, borderLeft: "4px solid #6f8a6e",
                   display: liveSession ? "flex" : "block", alignItems: "center",
                   gap: liveSession ? 1 : 0, flexWrap: "wrap" }}>
@@ -1256,14 +1297,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     <WorkflowHeading number="2" title={!term?.alive ? "Agent work"
                       : agentState === "needs you" ? `${agentName(t)} needs you`
                         : `${agentName(t)} is working`}
-                    description={term?.alive
-                      ? ""
-                      : "Run it, end it, or start another. None of these completes the task."}
                     chip={<LifecycleChip kind="agent" phase={agentState} compact />} tone="#6f8a6e" {...stageProps("agent")}
                     /* folded, this heading carried NOTHING - it passed no action at all, so the one
                        card that can actually be picked back up was the one row you could not act on.
                        It gets the move that matches its state, the way the Task strip does. */
-                    action={stage !== "agent" && !term?.alive && !["done", "dropped"].includes(t.Status)
+                    action={stage === "agent" && agentBar ? agentBarRow :
+                      stage !== "agent" && !term?.alive && !["done", "dropped"].includes(t.Status)
                       ? <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35 }}>
                           {detail?.resumable ? (
                             <Button size="small" variant="contained" disableElevation disabled={!!startingAgent}
@@ -1310,48 +1349,6 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         title="Writes up what this session did and ends it. The task stays open: Mark task done completes it and drafts the reply."
                         onClick={wrapUp}>Save and end session</Button>
 
-                    </Box>
-                  )}
-                  {/* the conversation IS the record, so it can be filed as the result once its
-                      provider session is gone - the only road out of a finished chat used to be
-                      typing into it again. Group one is THIS session, group two is another one. */}
-                  {agentBar && (
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap", mb: 1.3 }}>
-                      {canContinue && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent} sx={primaryBtn}
-                        startIcon={startingAgent === "resume" ? <CircularProgress size={12} /> : <HistoryIcon sx={{ fontSize: 16 }} />}
-                        title={isGeneral
-                          ? "Reopens the saved provider conversation and continues from its existing context."
-                          : `Reopens ${detail?.resumable?.agent}'s own session in ${detail?.resumable?.cwd}. It still has what it read, changed and asked.`}
-                        onClick={isGeneral ? resumeGeneralAgent : continueSession}>
-                        {startingAgent === "resume" ? "Continuing…" : "Continue this session"}</Button>}
-                      {canSave && <Button size="small" variant={canContinue ? "outlined" : "contained"} disableElevation
-                        disabled={!!wrapping} sx={canContinue ? barBtn : primaryBtn}
-                        startIcon={<DoneAllIcon sx={{ fontSize: 16, color: canContinue ? "#6f8a6e" : undefined }} />}
-                        title="Writes up what this session did and files it as the task's result. The task stays open: Mark task done completes it and drafts the reply."
-                        onClick={wrapUp}>{isGeneral ? "Save this conversation's result" : "Save stopped run result"}</Button>}
-                      {!isGeneral && <>
-                        {(canContinue || canSave) && <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />}
-                        <Button size="small" variant={canContinue || canSave ? "outlined" : "contained"} disableElevation
-                          sx={canContinue || canSave ? barBtn : primaryBtn}
-                          startIcon={<RefreshIcon sx={{ fontSize: 16, color: canContinue || canSave ? "#6f8a6e" : undefined }} />}
-                          title="A fresh session with a different harness, model or prompt. It receives the saved result, not the old conversation."
-                          onClick={() => setRestartOpen(true)}>Run another agent</Button>
-                      </>}
-                      {report && <>
-                        {isGeneral && <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />}
-                        <Button size="small" variant="outlined" sx={barBtn}
-                          startIcon={<ForwardToInboxIcon sx={{ fontSize: 16, color: "#55697a" }} />}
-                          title="Forwards the saved result to a person. The AI writes it, you send it."
-                          onClick={() => setHandoff(true)}>Send this result to someone</Button>
-                      </>}
-                      <Box sx={{ flex: 1, minWidth: 12 }} />
-                      <Typography variant="caption" sx={{ color: FAINT, textAlign: "right", maxWidth: 320 }}>
-                        {taskState === "done" && canContinue
-                          ? "This task is done - continuing puts it back in progress."
-                          : isGeneral
-                            ? "Or send a message in the workspace below to pick it back up."
-                            : "Continuing keeps what it read and changed. Another agent starts clean."}
-                      </Typography>
                     </Box>
                   )}
                   {report && !wrapped && !term?.alive && (

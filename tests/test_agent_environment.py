@@ -71,19 +71,19 @@ class TheEnvironmentAChildGetsTests(unittest.TestCase):
 
 
 class WhichAgentWorkTests(unittest.TestCase):
-    def test_default_backup_chain_uses_every_other_configured_agent(self):
+    def test_default_backup_chain_uses_every_other_configured_brain(self):
         s = MemoryStore()
         _agent(s, 'coder', 'claude')
-        _agent(s, 'codex', 'codex')
-        _agent(s, 'gemini', 'gemini')
-        s.set_setting('default_agent', 'coder', 'o')
-        self.assertEqual(agents.agent_chain(s), ['coder', 'codex', 'gemini'])
+        s.set_setting('default_brain', 'claude', 'o')
+        s.set_setting('backup_brains', '*', 'o')
+        cfg = {'cli_connections': {'claude': {'cmd': 'claude'}, 'codex': {'cmd': 'codex'}, 'gemini': {'cmd': 'gemini'}}}
+        self.assertEqual(agents.brain_chain(s, cfg=cfg), ['claude', 'codex', 'gemini'])
 
     def test_explicit_backup_chain_keeps_the_owners_order(self):
         s = MemoryStore()
-        for name in ('coder', 'codex', 'gemini'): _agent(s, name, name)
-        s.set_setting('backup_agents', 'gemini,codex', 'o')
-        self.assertEqual(agents.agent_chain(s, 'coder'), ['coder', 'gemini', 'codex'])
+        _agent(s, 'coder', 'claude')
+        s.set_setting('backup_brains', 'gemini,codex', 'o')
+        self.assertEqual(agents.brain_chain(s, 'claude', cfg={}), ['claude', 'gemini', 'codex'])
 
     def test_session_and_usage_limits_are_availability_failures(self):
         self.assertTrue(agents.availability_failure(RuntimeError("You've hit your session limit; resets 11:50am")))
@@ -105,15 +105,17 @@ class WhichAgentWorkTests(unittest.TestCase):
         with mock.patch.object(agents, 'runs_here', side_effect=lambda p: p.get('cmd') == 'codex'):
             self.assertEqual(agents.default_agent(s), 'coder')
 
-    def test_backup_chain_contains_distinct_coding_clis_not_general_profiles(self):
+    def test_a_chain_of_brains_needs_no_dedupe(self):
+        """agent_chain had to skip candidates whose cli_of it had already seen, because a list of
+        ROLES was really a list of brains - trying claude three times under coder/researcher/analyst
+        is not failover. Brains are distinct by construction, so the patch went with them."""
         s = MemoryStore()
         _agent(s, 'coder', 'claude')
-        s.upsert_agent('researcher', 'research', 'cli', json.dumps({'cmd': 'claude'}))
-        s.upsert_agent('copilot', 'coding', 'cli', json.dumps({'cmd': 'copilot'}))
-        s.upsert_agent('claude-copy', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
-        s.set_setting('default_agent', 'coder', 'o')
-        s.set_setting('backup_agents', '*', 'o')
-        self.assertEqual(agents.agent_chain(s), ['coder', 'copilot'])
+        s.set_setting('default_brain', 'claude', 'o')
+        s.set_setting('backup_brains', '*', 'o')
+        cfg = {'cli_connections': {'claude': {'cmd': 'claude'}, 'copilot': {'cmd': 'copilot'}}}
+        self.assertEqual(agents.brain_chain(s, cfg=cfg), ['claude', 'copilot'])
+        self.assertFalse(hasattr(agents, 'agent_chain'))
 
     def test_coding_cli_options_name_the_tool_and_collapse_profile_aliases(self):
         s = MemoryStore()

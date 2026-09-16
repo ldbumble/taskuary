@@ -55,6 +55,11 @@ except Exception as _e:
 cli_connections.sync(cfg, store)
 try:
     # tasks routed to a CLI back when naming a worker named a brain (the 2026-09-16 spec)
+    # name the brain this install is already running, once - the line that moves it onto the
+    # brain layer, and onto exactly what it ran yesterday
+    if hub_agents.adopt_brain_setting(store):
+        from loguru import logger as _log
+        _log.info(f"the brain layer is on: default_brain = {store.get_settings().get('default_brain')}")
     _repaired = hub_agents.repair_role_assignees(store)
     if _repaired:
         from loguru import logger as _log
@@ -4659,8 +4664,9 @@ def test_cli_connection(name: str):
 def agents():
     """data = store rows (for dispatch pickers); config = the editable profiles;
     models = the quick-pick model list per agent, keyed by agent name."""
+    from . import climodels
+
     def _models(a):
-        from . import climodels
         prof = json.loads(a.get('Config') or '{}')
         cli = cli_base(prof.get('cmd'))
         cat = climodels.catalog(cli)                       # codex: its own /model list off disk; others: the built-in aliases
@@ -4684,6 +4690,13 @@ def agents():
             # coding AGENT (2026-09-16). A brain is not a property of the task, so it is served
             # once per role here rather than stamped on every row.
             'brains': {a['Name']: hub_agents.brain_for(store, a['Name']) for a in rows},
+            # every brain that can be picked, and the models each offers. A coding picker chooses
+            # the BRAIN: the role is `coder` for every coding task, so offering roles there would
+            # be one choice with one entry (the 2026-09-16 spec).
+            'brain_list': sorted(cfg.get('cli_connections') or {}),
+            'brain_models': {k: {'choices': climodels.catalog(k)['choices'],
+                                 'default': (cli_connections.gears(cfg, k) or {}).get('model') or ''}
+                             for k in (cfg.get('cli_connections') or {})},
             'work': _agent_work(store)}
 
 @app.post('/api/agents/{name}/test')

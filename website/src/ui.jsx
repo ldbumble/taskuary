@@ -649,6 +649,8 @@ export const useAgents = () => {
   const [cmds, setCmds] = useState({});
   const [kinds, setKinds] = useState({});
   const [brains, setBrains] = useState({});
+  const [brainList, setBrainList] = useState([]);
+  const [brainModels, setBrainModels] = useState({});
   useEffect(() => {
     api.get("/api/agents").then(({ data }) => {
       setAgents((data.data || []).map((a) => a.Name));
@@ -662,9 +664,11 @@ export const useAgents = () => {
       // ...and WHICH BRAIN each role runs on. A role no longer says which CLI runs it - every
       // coding task's role is `coder` - so the card asks this instead (the owner, 2026-09-16).
       setBrains(data.brains || {});
+      setBrainList(data.brain_list || []);
+      setBrainModels(data.brain_models || {});
     }).catch(() => {});
   }, []);
-  return { agents, models, cmds, kinds, brains };
+  return { agents, models, cmds, kinds, brains, brainList, brainModels };
 };
 
 // CODING IS THE PROFILE. Both shipped coding workers carry rules_doc "coder", so `coder` and
@@ -672,33 +676,33 @@ export const useAgents = () => {
 // repository dialog asks is which CLI runs it (the owner, 2026-09-14: "for coding there is no need
 // to choose profile. That's for general. Coding is the profile for coding sessions"). So in coding
 // mode the menu says the CLI, and the five general profiles are not offered at all.
-export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, size = 30, coding = false, kinds = {} }) => {
-  const cliOf = (a) => models[a]?.cli || models[a]?.cmd || a;
-  const shown = coding && Object.keys(kinds).length
-    ? agents.filter((a) => ["coding", "cli"].includes(String(kinds[a] || "").toLowerCase())) : agents;
-  // A coding picker chooses the executable, not one of several instruction profiles backed by it.
-  // The server sends the configured default first, so that profile represents its CLI here.
-  const distinct = coding ? [...new Map(shown.map((a) => [cliOf(a), a])).values()] : shown;
-  const list = distinct.length ? distinct : [agent];
-  const selected = list.includes(agent) ? agent : (list[0] || agent);
-  const info = models[selected] || {};
+export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, size = 30, coding = false, kinds = {},
+                             brains = [], brain = "", onBrain, brainModels = {} }) => {
+  // A coding picker chooses the BRAIN - which CLI runs the work. It always did in spirit ("chooses
+  // the executable, not one of several instruction profiles backed by it") but it named a profile
+  // to say so; the role is `coder` for every coding task now, so that list would be one entry
+  // repeated (the 2026-09-16 spec). General work still picks a ROLE: there the role IS the choice.
+  const list = coding ? (brains.length ? brains : [brain].filter(Boolean))
+    : (Object.keys(kinds).length ? agents.filter((a) => !["coding", "cli"].includes(String(kinds[a] || "").toLowerCase())) : agents);
+  const value = coding ? brain : agent;
+  const selected = list.includes(value) ? value : (list[0] || value);
+  const info = (coding ? brainModels[selected] : models[selected]) || {};
   const choices = info.choices || [];
   return (
     <>
-      <Select size="small" value={selected}
-        onChange={(e) => onAgent(e.target.value)}
+      <Select size="small" value={selected || ""}
+        onChange={(e) => (coding ? onBrain : onAgent)(e.target.value)}
         sx={{ fontSize: 12.5, height: size, bgcolor: "#fff", minWidth: 120 }}>
         {list.map((a) => (
           <MenuItem key={a} value={a} sx={{ fontSize: 12.5 }}>
-            {coding ? cliOf(a) : a}
-            {!coding && (models[a]?.cmd ? ` · ${models[a].cmd}` : "")}
+            {a}{!coding && (models[a]?.cmd ? ` · ${models[a].cmd}` : "")}
           </MenuItem>
         ))}
       </Select>
       <Select size="small" displayEmpty value={model || ""} onChange={(e) => onModel(e.target.value)}
         sx={{ fontSize: 12.5, height: size, bgcolor: "#fff", minWidth: 150 }}>
         <MenuItem value="" sx={{ fontSize: 12.5 }}>
-          {info.default ? `default · ${info.default}` : "the agent's default model"}
+          {info.default ? `default · ${info.default}` : `the ${coding ? "brain" : "agent"}'s default model`}
         </MenuItem>
         {choices.map((m) => <MenuItem key={m} value={m} sx={{ fontSize: 12.5 }}>{m}</MenuItem>)}
       </Select>
@@ -842,8 +846,9 @@ export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, r
   const [agentKind, setAgentKind] = useState("");
   const coding = agentKind === "coding";
   const [open, setOpen] = useState(false);
-  const { agents, models } = useAgents();
+  const { agents, models, brainList, brainModels } = useAgents();
   const [agent, setAgent] = useState("coder");
+  const [brain, setBrain] = useState("");          // WHICH CLI runs it; blank = the brain settings name
   const [model, setModel] = useState("");
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
@@ -856,7 +861,7 @@ export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, r
     setBusy(true); setErr("");
     try {
       const { data } = await api.post(`/api/messages/${messageId}/dispatch`,
-        { kind: agentKind, agent: coding ? agent : null,
+        { kind: agentKind, agent: coding ? agent : null, brain: coding ? (brain || null) : null,
           model: model || null, instruction: prompt.trim() || null });
       const outcome = outcomeOf(data);
       if (outcome.state === "needs_repo") { setRepoAsk({ taskId: data.taskId, agent: data.agent || agent }); }
@@ -905,7 +910,8 @@ export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, r
         <TaskuaryMark size={17} />
         <Typography variant="caption" sx={{ color: DIM, fontWeight: 700 }}>Which kind of agent?</Typography>
         <Box sx={{ flex: 1, minWidth: 8 }} />
-        {coding && <AgentPicker agents={agents} models={models} agent={agent} model={model}
+        {coding && <AgentPicker agents={agents} models={models} agent={agent} model={model} coding
+          brains={brainList} brainModels={brainModels} brain={brain} onBrain={(b) => { setBrain(b); setModel(""); }}
           onAgent={setAgent} onModel={setModel} size={26} />}
       </Box>
       <Box sx={{ display: "flex", gap: 0.75, mb: agentKind ? 0.75 : 0, flexWrap: "wrap" }}>

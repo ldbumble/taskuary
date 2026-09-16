@@ -112,8 +112,9 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
   const aboutRef = useRef(null);
   const [mode, setMode] = useState("draft");
   // agent
-  const { agents, models, kinds } = useAgents();
+  const { agents, models, kinds, brainList, brainModels } = useAgents();
   const [agent, setAgent] = useState("coder");
+  const [brain, setBrain] = useState("");   // WHICH CLI runs it; blank = the brain settings name
   const [model, setModel] = useState("");
   // "terminal" = a CLI on a keyboard, "chat" = the assistant's own thread. Held here rather
   // than inferred from the words: a question landing in a terminal by ACCIDENT is exactly what
@@ -165,7 +166,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
           // planTask put on the task (GeneralWorkspace), which is why the words are not passed as a prop
           setOk(`${data.ref} — open on Tasks; the assistant already has the question.`);
         } else {
-          await api.post(`/api/tasks/${data.taskId}/dispatch`, { agent, model: model || null });
+          await api.post(`/api/tasks/${data.taskId}/dispatch`, { agent, brain: brain || null, model: model || null });
           setOk(`${data.ref} — ${agent} is on it in a live session.`);
         }
         aboutRef.current?.clear(); setHasAbout(false); onDone?.(); onOpenTask?.(data.taskId);
@@ -176,7 +177,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
       }
     } catch (e) { setErr(e?.response?.data?.detail || "That did not go through"); }
     setBusy(false);
-  }, [kind, channel, to, emailTo, cc, mode, how, agent, model, when, onDone, onOpenTask]);
+  }, [kind, channel, to, emailTo, cc, mode, how, agent, brain, model, when, onDone, onOpenTask]);
 
   const canGo = hasAbout && (kind !== "send" || (channel && (channel === "email" ? emailTo.length : to.trim())));
   const verb = kind === "send" ? (mode === "task" ? "Send an agent" : "Draft it")
@@ -284,6 +285,8 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
                 <Label>Agent</Label>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap" }}>
                   <AgentPicker agents={agents} models={models} kinds={kinds} coding agent={agent} model={model}
+                    brains={brainList} brainModels={brainModels} brain={brain}
+                    onBrain={(b) => { setBrain(b); setModel(""); }}
                     onAgent={(a) => { setAgent(a); setModel(""); }} onModel={setModel} size={30} />
                   {/* no repository picker here on purpose: guess_repo ranks the checkouts against
                       what you just typed (SOUL.md's repo map), and a session that opens in the wrong

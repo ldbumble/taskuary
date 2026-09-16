@@ -1525,33 +1525,30 @@ def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, inst
         if t.get('Status') != 'in_progress': store.update_task(tid, {'Status': 'in_progress'}, actor)
         return {**live, 'existing': True}
     from . import agents as hub_agents
-    chain = list(_chain or hub_agents.agent_chain(store, agent))
-    if not chain: chain = [agent]
+    # The chain is of BRAINS, not of workers: the ROLE stays `agent` throughout, because failing
+    # over is about which CLI can start, never about what the job is (the 2026-09-16 spec).
+    chain = list(_chain or hub_agents.brain_chain(store, brain))
+    if not chain: chain = [brain or '']
     # a saved conversation belongs to the CLI that held it: a backup harness handed an id it has
     # never heard of would either refuse to start or quietly begin a blank session under its name
-    if resume: chain = [agent]
+    if resume: chain = chain[:1]
+    row = store.get_agent(agent or '')
+    if not row: raise ValueError(f'unknown agent: {agent}')
     term = repo = why = None
     chosen = None
     last_error = None
+    repo, why = guess_repo(store, tid, json.loads(row.get('Config') or '{}'))
+    # A continuation names the exact checkout from the saved transcript. Use it when it still
+    # exists; a moved/deleted checkout falls back through the normal guarded repo resolution.
+    continued_cwd = cwd if cwd and os.path.isdir(cwd) else None
     for i, candidate in enumerate(chain):
-        row = store.get_agent(candidate or '')
-        if not row:
-            last_error = ValueError(f'unknown agent: {candidate}')
-            if i + 1 < len(chain): continue
-            raise last_error
-        repo, why = guess_repo(store, tid, json.loads(row.get('Config') or '{}'))
-        # A continuation names the exact checkout from the saved transcript. Use it when it still
-        # exists; a moved/deleted checkout falls back through the normal guarded repo resolution.
-        continued_cwd = cwd if cwd and os.path.isdir(cwd) else None
         try:
-            term = open_session(store, candidate, tid, repo, continued_cwd, 32, 110, actor,
+            term = open_session(store, agent, tid, repo, continued_cwd, 32, 110, actor,
                                 model if i == 0 else None, resume=resume,
-                                # the owner's own pick rides only on the FIRST try - a failover
-                                # to another brain is the whole point of the chain
-                                brain=brain if i == 0 else None,
+                                brain=candidate or None,
                                 seed_fn=(lambda here: resume_seed(instruction)) if resume else
                                         (lambda here, r=repo: seed_text(store, tid, instruction, r, here)))
-            chosen = candidate
+            chosen = candidate or cli_named(json.loads(row.get('Config') or '{}'))
             chain = chain[i:]
             break
         except Exception as e:
@@ -1569,7 +1566,8 @@ def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, inst
             nxt = remaining[0]
             store.add_comment(tid, 'router', 'agent',
                               f'{chosen} became unavailable; continuing with backup {nxt}.')
-            start_on_task(store, tid, nxt, None, instruction, actor, cwd, _chain=remaining)
+            # same ROLE, next BRAIN - the job did not change because a CLI fell over
+            start_on_task(store, tid, agent, None, instruction, actor, cwd, _chain=remaining, brain=nxt)
         term.failover = replace
     store.clear_dispatch(tid)          # started (by whatever road): it is no longer waiting
     if repo and why != 'tagged on the task':

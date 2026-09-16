@@ -8,12 +8,14 @@ from taskuary import agents, cli_connections, cliinstall, clis, clisetup, llm, t
 from taskuary.store import MemoryStore
 
 
-def test_installed_qwen_becomes_a_worker_with_resumable_native_acp_connection():
+def test_installed_qwen_becomes_a_brain_with_resumable_native_acp_connection():
+    """A CLI is a brain, not a worker named after one (the 2026-09-16 spec) - so what adopting
+    leaves behind is a CONNECTION carrying everything needed to run it."""
     cfg, store = {'agents': {}, 'cli_connections': {}}, MemoryStore()
     with mock.patch.object(cliinstall, 'find', side_effect=lambda n: '/bin/qwen' if n == 'qwen' else ''):
-        assert cli_connections.adopt_installed(cfg, store) == ['qwen']
-    resolved = json.loads(store.get_agent('qwen')['Config'])
-    assert resolved['provider'] == 'cli:qwen'
+        assert cli_connections.adopt_installed(cfg, store) == []
+    assert store.get_agent('qwen') is None
+    resolved = cli_connections.with_defaults(cfg['cli_connections']['qwen'])
     assert resolved['acp'] == ['--acp']
     assert agents.resume_argv(resolved, 'session-123') == ['--resume', 'session-123']
     assert terminal.seed_argv(resolved, 'Fix the test') == ['-i', 'Fix the test']

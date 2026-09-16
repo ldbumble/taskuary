@@ -6,9 +6,9 @@ ran and never again, so Devin and Copilot, installed later and detected by /api/
 since, appeared in no picker and could not be started at all (the owner, 2026-09-14: "any ai cli
 agents should be possible to start no? isn't that the whole idea of it").
 
-Coding is the profile, so a new CLI needs no new one: it gets a coding worker carrying CODER.md and
-the repositories the other coding workers already know. What varies between `coder`, `codex` and
-`devin` is which CLI runs the same job.
+A CLI is a BRAIN, not a worker named after one: adopting registers its CONNECTION and stops there,
+and the picker offers brains directly. Minting a clone worker per CLI is what put `copilot` on
+triage's menu and sent TQ-0588's coding work to it (the 2026-09-16 spec).
 """
 import json
 import unittest
@@ -37,30 +37,26 @@ def installed(*names):
 
 
 class AdoptTests(unittest.TestCase):
-    def test_a_cli_installed_after_setup_becomes_a_worker_of_its_own(self):
+    def test_a_cli_installed_after_setup_becomes_a_brain_of_its_own(self):
         cfg, store = config_with('claude', 'codex'), MemoryStore()
         _, find = installed('claude', 'codex', 'devin')
         with find:
             made = cli_connections.adopt_installed(cfg, store)
-        self.assertEqual(made, ['devin'])
-        worker = cfg['agents']['devin']
-        self.assertEqual((worker['kind'], worker['rules_doc'], worker['provider']), ('coding', 'coder', 'cli:devin'))
-        # ...in the same checkouts as the workers that were already there
-        self.assertEqual(worker['cwd_map'], {'acme/app': 'C:/work/app'})
-        # ...and it can actually be run: the connection carries the flags clis.KNOWN names for it
+        self.assertEqual(made, [])                       # no worker is invented for it
+        self.assertNotIn('devin', cfg['agents'])
+        # it can actually be run: the connection carries the flags clis.KNOWN names for it, and the
+        # picker offers every configured connection as a brain
         self.assertEqual(cfg['cli_connections']['devin']['cmd'], 'devin')
         self.assertIn('--permission-mode', cfg['cli_connections']['devin']['args'])
-        # ...and it reached the store, which is what every picker reads
-        row = store.get_agent('devin')
-        self.assertEqual(row['Kind'], 'coding')
-        self.assertEqual(json.loads(row['Config'])['cmd'], 'devin')
 
     def test_it_adds_nothing_twice(self):
         cfg, store = config_with('claude'), MemoryStore()
         _, find = installed('claude', 'devin')
         with find:
-            self.assertEqual(cli_connections.adopt_installed(cfg, store), ['devin'])
-            self.assertEqual(cli_connections.adopt_installed(cfg, store), [])
+            cli_connections.adopt_installed(cfg, store)
+            before = dict(cfg['cli_connections'])
+            cli_connections.adopt_installed(cfg, store)
+        self.assertEqual(cfg['cli_connections'], before)
 
     def test_a_cli_that_is_not_installed_is_not_offered(self):
         cfg, store = config_with('claude'), MemoryStore()
@@ -85,7 +81,6 @@ class AdoptTests(unittest.TestCase):
         with find:
             cli_connections.adopt_installed(cfg, store)
         self.assertEqual(cfg['cli_connections']['devin']['args'], ['--my-own-flag'])   # not overwritten
-        self.assertEqual(cfg['agents']['devin']['provider'], 'cli:devin')              # but now usable
 
 
 if __name__ == '__main__':

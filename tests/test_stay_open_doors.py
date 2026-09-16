@@ -48,18 +48,21 @@ class TheMarkIsSetByTheDoor(unittest.TestCase):
             else:
                 self.assertIn('taskuary --done', seeds[0]); self.assertNotIn('THE OWNER OPENED', seeds[0])
 
-    def test_a_session_limit_hands_the_same_task_to_the_backup_agent(self):
+    def test_a_session_limit_hands_the_same_task_to_the_backup_brain(self):
+        """The ROLE does not change because a CLI fell over - the job is the same job. What the
+        chain moves through is BRAINS (the 2026-09-16 spec)."""
         s = MemoryStore(); tid = _task(s)
         s.upsert_agent('coder', 'coding', 'cli', '{}')
-        s.upsert_agent('codex', 'coding', 'cli', '{}')
-        s.set_setting('backup_agents', 'codex', 'owner')
+        s.set_setting('default_brain', 'claude', 'owner')
+        s.set_setting('backup_brains', 'codex', 'owner')
         opened = []
 
         def fake_open(store, agent, task_id, *args, **kwargs):
+            brain = kwargs.get('brain')
             term = Fake(task_id)
-            term.sid, term.label, term.agent = f'{agent}-session', agent, agent
+            term.sid, term.label, term.agent = f'{brain}-session', agent, agent
             term.failover = None
-            opened.append((agent, term))
+            opened.append((brain, term))
             return term
 
         with mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
@@ -70,7 +73,8 @@ class TheMarkIsSetByTheDoor(unittest.TestCase):
             self.assertTrue(callable(opened[0][1].failover))
             opened[0][1].failover(opened[0][1], "You've hit your session limit")
 
-        self.assertEqual([agent for agent, _term in opened], ['coder', 'codex'])
+        self.assertEqual([brain for brain, _term in opened], ['claude', 'codex'])
+        self.assertTrue(all(term.agent == 'coder' for _brain, term in opened))   # one role throughout
         self.assertIn('continuing with backup codex', '\n'.join(x['Body'] for x in s.list_comments(tid)))
 
     def test_the_terminals_route_marks_it_too(self):

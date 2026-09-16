@@ -169,13 +169,16 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
     settings = store.get_settings()
     primary = str(pick if pick is not None else settings.get('triage_ai') or '').strip()
     backups = [x.strip() for x in str(settings.get('triage_backup_ai') or '').split(',') if x.strip()]
+    # This dedupe SURVIVES the role/brain split, unlike its twin in agent_chain. A session's chain
+    # is of brains now, so that one went; but `triage_ai` and `triage_backup_ai` still spell a
+    # brain as `cli:<agent>` - the classifier is built from an agent ROW (make_cli_llm) - so two
+    # settings can still name two profiles backed by one executable, and trying claude twice is
+    # not failover: it repeats the same paid failure. It can go when the brain settings name
+    # brains, which is a change beyond the 2026-09-16 spec.
     picks, identities = [], set()
     for candidate in [primary, *backups]:
         identity = candidate
         if candidate.startswith('cli:'):
-            # Brain menus select CLI tools, not job profiles. Older settings may still name
-            # several profiles backed by the same executable; trying Claude three times under
-            # coder/researcher/analyst is not failover and can repeat the same paid failure.
             from . import agents as hub_agents
             row = store.get_agent(candidate[4:])
             try: prof = json.loads((row or {}).get('Config') or '{}')

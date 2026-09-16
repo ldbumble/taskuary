@@ -629,6 +629,29 @@ def brain_for(store, role: str) -> str:
     return key or default_brain(store)
 
 
+def brain_chain(store, first: str = None, cfg: dict = None) -> list:
+    """The brains to try, in order: the chosen one, then the configured backups.
+
+    A chain of BRAINS needs no dedupe. `agent_chain` had to skip candidates whose `cli_of` it had
+    already seen, because a list of roles was really a list of brains and trying claude three times
+    under coder/researcher/analyst is not failover. Brains are distinct by construction.
+
+    `backup_brains=*` is the resilient default: every other configured connection, in the owner's
+    own order. A CSV narrows and orders it explicitly."""
+    from . import config
+    cfg = config.load() if cfg is None else cfg
+    known = list(cfg.get('cli_connections') or {})
+    head = str(first or default_brain(store) or '').strip()
+    setting = str(store.get_settings().get('backup_brains') or '').strip()
+    backups = known if setting == '*' else [x.strip() for x in setting.split(',') if x.strip()]
+    # `*` expands from what is configured; a CSV is the owner naming brains outright, and is taken
+    # at its word - one that turns out not to start just fails over like any other.
+    out = []
+    for key in [head, *backups]:
+        if key and key not in out: out.append(key)
+    return out
+
+
 def adopt_brain_setting(store) -> bool:
     """Name the brain this install is already running, once.
 
@@ -721,32 +744,6 @@ def repair_role_assignees(store) -> int:
         store.update_task(t['TaskId'], {'Assignee': f'agent:{role}'}, 'migration')
         fixed += 1
     return fixed
-
-
-def agent_chain(store, primary: str = None) -> list[str]:
-    """Primary plus ordered configured fallbacks, once each.
-
-    `backup_agents=*` is the out-of-box resilient choice: every other roster entry, in the
-    stable order the owner sees. Naming a CSV narrows and orders the chain explicitly.
-    """
-    rows = list(store.list_agents())
-    names = [str(a.get('Name') or '').strip() for a in rows
-             if a.get('Name') and str(a.get('Kind') or '').lower() in ('coding', 'cli')]
-    head = str(primary or default_agent(store) or '').strip()
-    setting = str(store.get_settings().get('backup_agents') or '').strip()
-    backups = names if setting == '*' else [x.strip() for x in setting.split(',') if x.strip()]
-    by_name = {}
-    for row in rows:
-        try: by_name[str(row.get('Name') or '')] = json.loads(row.get('Config') or '{}')
-        except ValueError: by_name[str(row.get('Name') or '')] = {}
-    out, clis = [], set()
-    for name in [head, *backups]:
-        if not name or name in out: continue
-        if name != head and name not in names: continue
-        cli = cli_of(by_name.get(name) or {}, name)
-        if cli in clis: continue
-        out.append(name); clis.add(cli)
-    return out
 
 
 def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, extra_env: dict = None):

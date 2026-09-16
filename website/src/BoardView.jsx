@@ -277,7 +277,7 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feedOpen]);
   const [repos, setRepos] = useState([]);
-  const { agents, models, cmds, kinds, brains } = useAgents();
+  const { agents, models, cmds, kinds, brains, brainList, brainModels } = useAgents();
   const [live, setLive] = useState({});                // TaskId -> {tail, AgentName} while a run works
   // how = does an agent start on it now, or does it just get filed. There is no third
   // option: work always happens in a session you can watch and talk to.
@@ -349,7 +349,7 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
     }
     if (plan.start) {
       try {
-        await api.post("/api/terminals", { agent: nt.agent, model: nt.model || null, task_id: data.taskId, repo, seed: true });
+        await api.post("/api/terminals", { agent: nt.agent, brain: nt.brain || null, model: nt.model || null, task_id: data.taskId, repo, seed: true });
         setBoardTick((n) => n + 1);
       } catch (e) {
         // The task was created successfully, so keep it visible on the Board and explain only
@@ -599,7 +599,9 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
               Which CLI works it — and which model that CLI runs
             </Typography>
             <Box sx={{ display: "flex", gap: 1 }}>
-              <AgentPicker agents={agents} models={models} kinds={kinds} coding agent={nt.agent} model={nt.model}
+              <AgentPicker agents={agents} models={models} kinds={kinds} coding agent={nt.brain || nt.agent} model={nt.model}
+                brains={brainList} brainModels={brainModels} brain={nt.brain || ""}
+                onBrain={(b) => setNt({ ...nt, brain: b, model: "" })}
                 onAgent={(a) => setNt({ ...nt, agent: a, model: "" })} onModel={(m) => setNt({ ...nt, model: m })} />
             </Box>
             {agents.length < 2 && (
@@ -613,14 +615,14 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
               How it gets worked — one agent, one way
             </Typography>
             <Select fullWidth size="small" value={nt.how} onChange={(e) => setNt({ ...nt, how: e.target.value })}
-              renderValue={(v) => v === "file" ? "Just file it" : v === "terminal" ? `Start ${nt.agent} in a terminal`
-                : noRepo ? "Ask the assistant" : `Start ${nt.agent} on it`}>
+              renderValue={(v) => v === "file" ? "Just file it" : v === "terminal" ? `Start ${nt.brain || nt.agent} in a terminal`
+                : noRepo ? "Ask the assistant" : `Start ${nt.brain || nt.agent} on it`}>
               <MenuItem value="live" sx={{ fontSize: 12.5 }}>{noRepo
                 ? "Ask the assistant — opens the chat on the Tasks tab with your prompt as the first message"
-                : `Start ${nt.agent} on it — stays on the board with the prompt typed in`}</MenuItem>
+                : `Start ${nt.brain || nt.agent} on it — stays on the board with the prompt typed in`}</MenuItem>
               {/* a question you would rather work in a CLI: the old behaviour, now asked for */}
               {noRepo && <MenuItem value="terminal" sx={{ fontSize: 12.5 }}>
-                Start {nt.agent} in a terminal instead — no repository, its own folder
+                Start {nt.brain || nt.agent} in a terminal instead — no repository, its own folder
               </MenuItem>}
               <MenuItem value="file" sx={{ fontSize: 12.5 }}>Just file it — nobody starts working yet</MenuItem>
             </Select>

@@ -23,12 +23,13 @@ def test_connections_lists_new_options_even_before_installation():
 
 
 @pytest.mark.parametrize('name', ['opencode', 'kimi'])
-def test_installation_creates_a_worker_that_can_resume(name):
+def test_installation_creates_a_brain_that_can_resume(name):
+    """A CLI is a brain, not a worker named after one (the 2026-09-16 spec)."""
     cfg, store = {'agents': {}, 'cli_connections': {}}, MemoryStore()
     with mock.patch.object(cliinstall, 'find', side_effect=lambda n: f'/bin/{n}' if n == name else ''):
-        assert cli_connections.adopt_installed(cfg, store) == [name]
-    resolved = json.loads(store.get_agent(name)['Config'])
-    assert resolved['provider'] == f'cli:{name}'
+        assert cli_connections.adopt_installed(cfg, store) == []
+    assert store.get_agent(name) is None
+    resolved = cli_connections.with_defaults(cfg['cli_connections'][name])
     assert agents.resume_argv(resolved, 'session-123') == ['--session', 'session-123']
     assert terminal.interactive_args(resolved['args']) == (['--auto'] if name == 'opencode' else [])
     assert terminal.seed_argv(resolved, 'Fix it') == (['--prompt', 'Fix it'] if name == 'opencode' else None)

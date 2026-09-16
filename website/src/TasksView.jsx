@@ -171,7 +171,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // fired on return. Only the newest request is allowed to repaint the list.
   const taskLoadSeq = useRef(0);
   const stale = (id) => selRef.current !== id;
-  const { agents, models, kinds } = useAgents();
+  const { agents, models, kinds, brainList, brainModels } = useAgents();
   const pickerTask = useRef(null);          // initialize each task from its durable worker once
   const [err, setErr] = useState("");
   const [newOpen, setNewOpen] = useState(false);
@@ -483,7 +483,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     onAutostarted?.();
     // a general task asks its own question, off the tag the Board put on it (GeneralWorkspace)
     if (plan.do === "chat") return;
-    openTerm({ agent: autostart.agent || run.agent, model: autostart.model || run.model || null,
+    openTerm({ agent: autostart.agent || run.agent, brain: autostart.brain || run.brain || null, model: autostart.model || run.model || null,
       task_id: selected, repo: repoOf(detail.task), seed: true });
   }, [autostart, selected, term, detail, openTerm, onAutostarted, run.agent]);
 
@@ -719,7 +719,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       // one shared dispatch for coding too (PW-216): the kind switch, the live-worker check (409), the unknown
       // agent (422) and the repository come from the same road the general button and the assistant use -
       // no Kind PATCH before a terminal, so a failed start never leaves a relabelled, unstarted task
-      const data = await runOperation(api, "dispatch.prepare", id, { kind: "coding", agent: run.agent,
+      const data = await runOperation(api, "dispatch.prepare", id, { kind: "coding", agent: run.agent, brain: run.brain || null,
         model: run.model || null, instructions: run.instruction.trim() || null });
       if (!stale(id)) setTerm(data?.session || null);
       if (!stale(id)) {
@@ -1339,6 +1339,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       </Typography>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
                         <AgentPicker agents={agents} models={models} kinds={kinds} coding agent={run.agent} model={run.model}
+                          brains={brainList} brainModels={brainModels} brain={run.brain || ""}
+                          onBrain={(b) => setRun({ ...run, brain: b, model: "" })}
                           onAgent={(a) => setRun({ ...run, agent: a, model: "" })}
                           onModel={(m) => setRun({ ...run, model: m })} size={28} />
                         <Typography variant="caption" sx={{ color: FAINT }}>

@@ -916,6 +916,27 @@ class MemoryTests(unittest.TestCase):
         # this one is sitting there, because it plainly did start
         self.assertIn('ran on this and left without finishing it', funnel.not_started_why(s, tid))
 
+    def test_answering_the_thread_does_not_finish_the_work(self):
+        """NeedsYou is zeroed once the owner has answered or the ball is in the sender's court, which
+        is right for a message waiting on a reply and wrong for an open task with work in it. TQ-0588
+        was an open coding task assigned to the coder, nothing ticked off, and it left the rail the
+        moment the owner replied to the mail that started it - filed into fyi behind seventy rows
+        (2026-09-16). A reply is not the work."""
+        s = store()
+        tid = s.create_task({'Title': 'Run the August audit', 'Kind': 'coding',
+                             'Assignee': 'agent:coder', 'Status': 'open'}, 'o')
+        mid = mail(s, 'August audit', who='Dana', email='dana@vendor.com', hours=2, tid=tid)
+        s.add_route(mid, tid, 'route', 1.0, 'triage: coding', [], 'triage')
+        on_rail = lambda: [(i['lane'], i['tid']) for i in funnel.build(s)['items'] if i.get('tid') == tid]
+        self.assertTrue(on_rail(), 'the task is on the rail before anyone replies')
+        # the owner answers the thread from their own mailbox: the conversation is settled...
+        s.add_message({'TaskId': tid, 'ExternalId': 'reply', 'ConversationId': 'August audit',
+                       'Channel': 'email', 'FromEmail': 'owner@ours.com', 'Direction': 'out',
+                       'SentAt': ago(hours=1), 'BodyText': 'looking at it', 'Status': 'context'})
+        funnel.invalidate()
+        # ...and the WORK is not. It stays where the owner can see it.
+        self.assertTrue(on_rail(), 'an open coding task must not leave the rail because a reply went out')
+
     def test_unknown_verbs_are_refused(self):
         with self.assertRaises(ValueError): funnel.settle(store(), 'x', 'burn')
 

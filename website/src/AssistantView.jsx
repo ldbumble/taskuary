@@ -27,7 +27,7 @@ import { pollWhileActive } from "./visible.js";
 import { onLive } from "./live.js";
 import PreviousWork from "./PreviousWork.jsx";
 import { Md, looksMd } from "./md.jsx";
-import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime } from "./ui.jsx";
+import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
 import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf } from "./proposalCard.js";
@@ -277,7 +277,14 @@ function Pile({ pile, current, onPull }) {
                 const loud = i.lane === "blocked" || i.lane === "approve";
                 // ...and every other row says its lane - mark and word - unless that is the very
                 // thing the heading above it already said (BAND_SAYS).
-                const word = !i.settling && meta.word !== BAND_SAYS[level] ? meta.word : "";
+                // A MEETING says its clock time instead. "coming up" is what the urgent heading and
+                // the age already tell you; what it does not tell you is when to be there (the
+                // owner, 2026-09-16: "for calendar invite you need to say the actual time of the
+                // meeting"). It goes on the card rather than in the gutter, which is an age column
+                // for every row and too narrow for a time.
+                const word = i.settling ? ""
+                  : i.kind === "meeting" ? `invite · ${fmtTime12(i.when)}`
+                    : meta.word !== BAND_SAYS[level] ? meta.word : "";
                 return (
                   <div key={i.key} className={cls} style={{ top: landing.has(i.key) ? -ROW_H : top }}>
                     <span className="when">{railAge(i.kind === "meeting" ? i.when : (i.since || i.when))}</span>

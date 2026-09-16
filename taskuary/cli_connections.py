@@ -7,7 +7,18 @@ import copy
 import json
 import re
 
-COMMAND_FIELDS = ('cmd', 'args', 'resume', 'resume_args', 'timeout', 'model_arg', 'acp')
+COMMAND_FIELDS = ('cmd', 'args', 'resume', 'resume_args', 'timeout', 'model_arg', 'acp', 'model', 'light_model')
+# The two GEARS, which are the half of COMMAND_FIELDS clis.KNOWN ships no preset for: what a brain
+# runs, as opposed to how it is invoked.
+GEAR_FIELDS = ('model', 'light_model')
+
+
+def gears(cfg, key: str) -> dict:
+    """A brain's two gears. MAIN runs the sessions - coding and general alike; LIGHT runs the
+    one-message jobs (triage, drafts, summaries, the digest). One brain, two gears, and still ONE
+    brain: `claude-main` and `claude-light` are not two providers (the owner, 2026-09-16)."""
+    c = cfg.get('cli_connections', {}).get(str(key or '')) or {}
+    return {f: str(c.get(f) or '') for f in GEAR_FIELDS}
 
 
 def cli_key(command):
@@ -38,8 +49,26 @@ def migrate(cfg):
         key = cli_key(profile['cmd']) or name
         if key not in connections:
             connections[key] = {k: copy.deepcopy(profile[k]) for k in COMMAND_FIELDS if k in profile}
+        # ...and when the connection already exists, its GEARS still have to be filled from this
+        # profile before the pop below destroys them - `ordered` puts coder first, so the coding
+        # profile's model is the one a shared brain keeps. Two profiles on one brain wanting two
+        # different models is precisely what a brain having its own gears stops being expressible.
+        for field in GEAR_FIELDS:
+            if profile.get(field) and not connections[key].get(field): connections[key][field] = profile[field]
         profile['provider'] = f'cli:{key}'
         for field in COMMAND_FIELDS: profile.pop(field, None)
+    # The GEARS move too, for installs already carrying a provider - which the loop above skips.
+    # They were left on the profile when the commands moved (with a patch scrubbing them whenever
+    # the provider changed), and `model`/`light_model` are COMMAND_FIELDS now, so resolve() would
+    # drop them and the owner would silently lose the models they chose. A connection the owner has
+    # already set keeps what it has: the profile is the older, weaker copy.
+    for name, profile in profiles.items():
+        key = str(profile.get('provider') or '')[4:]
+        if not key: continue
+        for field in GEAR_FIELDS:
+            if profile.get(field) and not (connections.get(key) or {}).get(field):
+                connections.setdefault(key, {})[field] = profile[field]
+            profile.pop(field, None)
     for key, connection in connections.items():
         connections[key] = with_defaults(connection)
     return cfg != before
@@ -47,7 +76,13 @@ def migrate(cfg):
 
 def resolve(cfg, profile):
     provider = str(profile.get('provider') or '')
-    if not provider: return dict(profile)  # old callers remain compatible during upgrades
+    if not provider:
+        # Old callers remain compatible during upgrades - but the GEARS belong to the brain now, so
+        # a profile still naming only its command takes them from the connection that command points
+        # at. Without this a model set on the AI defaults screen was written to the brain and the
+        # store row this mirrors to never saw it, which reads to the owner as a model that did not save.
+        conn = cfg.get('cli_connections', {}).get(cli_key(profile.get('cmd'))) or {}
+        return {**profile, **{f: conn[f] for f in GEAR_FIELDS if conn.get(f)}}
     if not provider.startswith('cli:'): raise ValueError('Choose a configured CLI provider')
     connection = cfg.get('cli_connections', {}).get(provider[4:])
     if not connection: raise ValueError(f'CLI connection {provider[4:]!r} is not configured')
@@ -118,11 +153,13 @@ def set_profile(cfg, store, name, body):
         cfg.setdefault('cli_connections', {}).setdefault(key, with_defaults({k: body[k] for k in COMMAND_FIELDS if k in body}))
     if provider:
         resolve(cfg, profile)  # reject dangling provider references before saving
-        old_provider = current.get('provider') or (f"cli:{cli_key(current['cmd'])}" if current.get('cmd') else '')
-        if old_provider and provider != old_provider:
-            # Model names belong to their provider; a Claude override cannot follow a worker to Codex.
-            for field in ('model', 'light_model'):
-                if field not in body: profile.pop(field, None)
+        # A model named through the profile editor is a choice about the BRAIN, so it is written
+        # where brains keep their gears. The scrub that used to live here is gone with the thing it
+        # worked around: its comment was right - "model names belong to their provider" - and now
+        # they are stored there, so a Claude model cannot follow a worker to Codex because it was
+        # never on the worker to begin with.
+        for field in GEAR_FIELDS:
+            if field in body: cfg.setdefault('cli_connections', {}).setdefault(provider[4:], {})[field] = body[field]
         for key in COMMAND_FIELDS: profile.pop(key, None)
     cfg['agents'][name] = profile
     return profile

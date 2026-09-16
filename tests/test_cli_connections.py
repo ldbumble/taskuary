@@ -15,14 +15,19 @@ def legacy():
     }}
 
 
-def test_migration_shares_commands_preserves_roles_and_models_and_is_idempotent():
+def test_migration_shares_commands_lifts_models_onto_the_brain_and_is_idempotent():
+    """The models move to the CONNECTION rather than staying on the worker. A profile has nothing
+    to do with which brain runs it or on which model (the owner, 2026-09-16), so two profiles
+    sharing one brain can no longer ask it for two different models: `ordered` puts the coding
+    profile first, and the first gear named is the one the shared brain keeps."""
     cfg = legacy()
     assert cli_connections.migrate(cfg)
     assert set(cfg['cli_connections']) == {'claude', 'codex'}
     assert cfg['cli_connections']['claude']['args'] == ['-p', '--verbose']
     assert cfg['agents']['researcher']['provider'] == 'cli:claude'
-    assert cfg['agents']['researcher']['model'] == 'sonnet'
-    assert cfg['agents']['researcher']['light_model'] == 'haiku'
+    # analyst's opus and researcher's haiku both land on the one claude brain; researcher's sonnet
+    # loses to the model already there rather than silently replacing it
+    assert cli_connections.gears(cfg, 'claude') == {'model': 'opus', 'light_model': 'haiku'}
     assert all(not set(p).intersection(cli_connections.COMMAND_FIELDS) for p in cfg['agents'].values())
     assert not cli_connections.migrate(cfg)
     assert cfg['agents']['codex']['rules_doc'] == 'coder'
@@ -79,7 +84,9 @@ def test_settings_model_edit_keeps_shared_command_reference():
     with mock.patch('taskuary.config.save'):
         result = aidefaults.apply(store, cfg, 'default_agent', value='researcher', model='opus')
     assert result['cli'] == 'claude'
-    assert cfg['agents']['researcher']['model'] == 'opus'
+    # the model names the BRAIN's gear, so it lands on the connection rather than the worker
+    assert cli_connections.gears(cfg, 'claude')['model'] == 'opus'
+    assert 'model' not in cfg['agents']['researcher']
     assert 'cmd' not in cfg['agents']['researcher']
     assert json.loads(store.get_agent('researcher')['Config'])['cmd'] == 'claude'
 

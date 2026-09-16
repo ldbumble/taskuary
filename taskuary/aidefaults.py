@@ -84,7 +84,7 @@ def resolve(store, cfg, slot_key: str) -> dict:
         prof = _prof(cfg, store, name)
         cli = _cli_of(cfg, store, name) if name else ''
         cat = climodels.catalog(cli)
-        model, effort = climodels.split_pick(prof.get('model') or '')
+        model, effort = climodels.split_pick(_gears(cfg, store, name).get('model') or '')
         out.update(model=model, effort=effort, choices=cat['choices'], efforts=_efforts(cat, model),
                    owner=f'the {cli} coding profile' if cli else '', owner_link='agents', cli=cli,
                    display=cli,
@@ -97,7 +97,7 @@ def resolve(store, cfg, slot_key: str) -> dict:
         name = value[4:]
         prof, cli = _prof(cfg, store, name), _cli_of(cfg, store, name)
         cat = climodels.catalog(cli)
-        light = str(prof.get('light_model') or '')
+        light = str(_gears(cfg, store, name).get('light_model') or '')
         model, effort = ('', light[7:]) if light.startswith('effort:') else climodels.split_pick(light)
         out.update(model=model, effort=effort, choices=cat['choices'], efforts=_efforts(cat, model),
                    default_hint=f'same as the coding model ({cli})',
@@ -150,13 +150,48 @@ def state(store, cfg) -> dict:
             'agent_options': hub_agents.cli_agent_options(store, preferred=preferred, coding_only=True)}
 
 
+def _brain_key(cfg, store, name: str) -> str:
+    """The cli_connections key behind a worker - its provider, which is the brain's own name.
+    Not `_cli_of`: that is the executable's basename, and cursor's connection is keyed `cursor`
+    while its command is `cursor-agent`."""
+    from .cli_connections import cli_key
+    prof = _prof(cfg, store, name)
+    provider = str(prof.get('provider') or '')
+    return provider[4:] if provider.startswith('cli:') else cli_key(prof.get('cmd') or name)
+
+
+def _gears(cfg, store, name: str) -> dict:
+    """The brain's gears, falling back to the worker's own while an install is mid-upgrade.
+
+    `migrate` lifts them onto the connection at boot, but a config handed in before that has run -
+    or by an older API caller - still carries them on the profile, and reading nothing would look
+    to the owner like their model had been forgotten. Step 3 of the spec removes the fallback with
+    the field itself."""
+    from .cli_connections import GEAR_FIELDS, gears
+    on_brain, prof = gears(cfg, _brain_key(cfg, store, name)), _prof(cfg, store, name)
+    return {f: on_brain.get(f) or str(prof.get(f) or '') for f in GEAR_FIELDS}
+
+
 def _save_profile(store, cfg, name: str, prof: dict) -> None:
     """Mirror put_agent exactly - config.toml AND the store row, or the two drift and whichever
-    is read first wins."""
+    is read first wins.
+
+    A GEAR set here belongs to the BRAIN, not to the worker, so it is written on the connection the
+    profile points at. Left on the profile it would be dropped by resolve() the moment anything
+    read it back - model and light_model are command fields now (the 2026-09-16 spec)."""
     from . import config
+    from .cli_connections import GEAR_FIELDS, sync
+    key = _brain_key(cfg, store, name)
+    for field in GEAR_FIELDS:
+        # a key PRESENT and empty means "clear it" - which is why apply no longer pops it: popped,
+        # a cleared gear was indistinguishable from one nobody set, and the brain kept the old model
+        if key and field in prof:
+            conns = cfg.setdefault('cli_connections', {})
+            if prof[field]: conns.setdefault(key, {})[field] = prof[field]
+            elif key in conns: conns[key].pop(field, None)
+        prof.pop(field, None)
     cfg.setdefault('agents', {})[name] = prof
     config.save(cfg)
-    from .cli_connections import sync
     sync(cfg, store, name)
 
 
@@ -178,7 +213,6 @@ def apply(store, cfg, slot_key: str, value=None, model=None, effort=None, actor:
         if not now: raise ValueError('no coding agent is configured to set a model on')
         prof = _prof(cfg, store, now)
         prof['model'] = f'{model}@{effort}' if (model and effort) else model
-        if not prof['model']: prof.pop('model', None)
         _save_profile(store, cfg, now, prof)
     elif now.startswith('cli:'):
         name = now[4:]
@@ -187,7 +221,6 @@ def apply(store, cfg, slot_key: str, value=None, model=None, effort=None, actor:
         # that is what `effort:<level>` spells, and llm.make_cli_llm turns it into the flag.
         light = f'effort:{effort}' if (effort and not model) else (f'{model}@{effort}' if (model and effort) else model)
         prof['light_model'] = light
-        if not light: prof.pop('light_model', None)
         _save_profile(store, cfg, name, prof)
     else:
         setting = s.get('model_setting')

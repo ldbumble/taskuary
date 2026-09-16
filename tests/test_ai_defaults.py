@@ -96,8 +96,11 @@ class ApplyTests(unittest.TestCase):
         s.set_setting('triage_ai', 'cli:coder', 'o')
         out = aidefaults.apply(s, cfg, 'triage_ai', model='haiku')
         self.assertEqual(out['model'], 'haiku')
-        self.assertEqual(cfg['agents']['coder']['light_model'], 'haiku')
-        self.assertEqual(cfg['agents']['coder']['model'], 'opus')      # untouched
+        # the GEARS live on the brain now, not on the worker - a profile has nothing to do with
+        # which model runs it (the owner, 2026-09-16). Coding is still left alone, on the brain.
+        self.assertEqual(cfg['cli_connections']['claude']['light_model'], 'haiku')
+        self.assertEqual(cfg['cli_connections']['claude']['model'], 'opus')      # untouched
+        self.assertNotIn('light_model', cfg['agents']['coder'])
         self.assertEqual(json.loads(s.get_agent('coder')['Config'])['light_model'], 'haiku')  # and mirrored
 
     def test_effort_without_a_model_is_written_as_codex_spells_it(self):
@@ -105,7 +108,7 @@ class ApplyTests(unittest.TestCase):
         s.upsert_agent('x', 'coding', 'cli', json.dumps(cfg['agents']['x']))
         s.set_setting('triage_ai', 'cli:x', 'o')
         aidefaults.apply(s, cfg, 'triage_ai', model='', effort='low')
-        self.assertEqual(cfg['agents']['x']['light_model'], 'effort:low')
+        self.assertEqual(cfg['cli_connections']['codex']['light_model'], 'effort:low')
 
     def test_setting_a_connector_brains_model_writes_the_connector_card(self):
         s = _store()
@@ -121,13 +124,13 @@ class ApplyTests(unittest.TestCase):
         s, cfg = _store(), {'agents': {'coder': {'cmd': 'claude', 'light_model': 'haiku'}}}
         s.set_setting('triage_ai', 'cli:coder', 'o')
         aidefaults.apply(s, cfg, 'triage_ai', model='')
-        self.assertNotIn('light_model', cfg['agents']['coder'])
+        self.assertNotIn('light_model', cfg.get('cli_connections', {}).get('claude', {}))
 
     def test_the_brain_and_the_model_can_be_set_in_one_call(self):
         s, cfg = _store(), {'agents': {'coder': {'cmd': 'claude'}}}
         aidefaults.apply(s, cfg, 'triage_ai', value='cli:coder', model='haiku')
         self.assertEqual(s.get_settings()['triage_ai'], 'cli:coder')
-        self.assertEqual(cfg['agents']['coder']['light_model'], 'haiku')
+        self.assertEqual(cfg['cli_connections']['claude']['light_model'], 'haiku')
 
     def test_an_unknown_slot_is_refused(self):
         with self.assertRaises(ValueError): aidefaults.apply(_store(), {}, 'not_a_slot', model='x')

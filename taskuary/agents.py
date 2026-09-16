@@ -605,6 +605,33 @@ def default_agent(store) -> str:
     return str(store.get_settings().get('default_agent') or 'coder').strip()
 
 
+def coding_role(store) -> str:
+    """The one role a coding task takes. Triage does not choose it: `kind: coding` names the job,
+    and the job names the worker. Reads `default_agent` while that setting is still a PROFILE name;
+    step 2 of the spec splits it into a brain and this becomes the fixed 'coder'."""
+    return default_agent(store)
+
+
+def routed_role(store, kind: str, profile: str) -> str:
+    """Which role to WRITE on the task - never which brain runs it.
+
+    Coding writes nothing. Its role is implied by the kind (`terminal.profile_of` already falls
+    back to the coding role, and the card reads "Coder" off Kind), so the stamp adds no fact - and
+    `Assignee` has a second job, saying the work is the OWNER's. Stamping every coding task with
+    `agent:coder` silently broke "this one is mine", which claims a task only when nobody is on it
+    (`server.mine_message`): the owner said they would do it themselves and nothing moved.
+
+    General takes the specialist triage named, if it names a general one that exists. Naming none
+    is a real answer and leaves the task unassigned for the owner to pick at start. `kind: task`
+    leaves the job on the owner's list, so no worker at all."""
+    name = str(profile or '').strip()
+    if str(kind or '') != 'general' or not name: return ''
+    row = store.get_agent(name)
+    # the two groups never mix: a coding role reaching general work means triage invented a name
+    # the roster could not have offered, and an invented worker must not route anything
+    return name if row and str(row.get('Kind') or '').lower() not in CODING_KINDS else ''
+
+
 def agent_chain(store, primary: str = None) -> list[str]:
     """Primary plus ordered configured fallbacks, once each.
 

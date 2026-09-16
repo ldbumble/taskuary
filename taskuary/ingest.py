@@ -766,14 +766,17 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             if intent.get('checklist'): store.merge_task_checklist(twin, intent['checklist'], 'triage')
             logger.info(f"ingest: a repeat of {task_ref(twin)} - {msg.get('subject') or ''}")
             return {'status': 'routed', 'task_id': twin, 'message_id': mid}
+        # WHICH ROLE works this - a different question from which brain runs it. Coding has one
+        # role and triage does not choose it; a specialist is named only on general work. The
+        # session is seeded from THIS role's document (terminal.profile_of), so a researcher is
+        # never handed CODER.md's "work only in the repository".
+        from . import agents as hub_agents
+        role = hub_agents.routed_role(store, f['kind'], intent.get('profile') or '')
         tid = store.create_task({'Title': f['title'], 'Summary': f['summary'], 'Kind': f['kind'],
                                  'Priority': f['priority'], 'Source': msg.get('channel') or 'api',
                                  'SourceRef': msg.get('source_link'),
                                  **({'Tags': _pb.tag(intent['playbook'])} if intent.get('playbook') else {}),
-                                 # the worker triage named, on the field that has always carried one. The
-                                 # session is seeded from THIS profile's document (terminal.profile_of), so a
-                                 # researcher is never handed CODER.md's "work only in the repository".
-                                 **({'Assignee': f"agent:{intent['profile']}"} if intent.get('profile') else {})}, actor)
+                                 **({'Assignee': f'agent:{role}'} if role else {})}, actor)
         store.audit('task', tid, 'create', actor, 'agent', {'from': msg.get('from_email'), 'reason': r['reason']})
         if intent.get('checklist'): store.set_task_checklist(tid, intent['checklist'], 'triage')
         # the repository, decided here and written down, so startup uses it instead of guessing again

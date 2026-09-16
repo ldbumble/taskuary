@@ -39,3 +39,43 @@ class TheRosterTests(unittest.TestCase):
         s = store()
         s.upsert_agent('opencode', 'cli', 'cli', json.dumps({'cmd': 'opencode', 'purpose': 'Write code.'}))
         self.assertNotIn('opencode', hub_agents.roster(s))
+
+
+class WhichRoleTests(unittest.TestCase):
+    def test_coding_writes_no_assignee(self):
+        """Its role is implied by the kind, and the field's other job is saying the work is the
+        OWNER's - `mine` claims a task only when nobody is on it (server.mine_message)."""
+        self.assertEqual(hub_agents.routed_role(store(), 'coding', ''), '')
+
+    def test_coding_ignores_a_profile_triage_named(self):
+        """TQ-0588 drew `copilot`, TQ-0586 drew `analyst`. Neither reaches the task."""
+        s = store()
+        self.assertEqual(hub_agents.routed_role(s, 'coding', 'analyst'), '')
+        self.assertEqual(hub_agents.routed_role(s, 'coding', 'copilot'), '')
+
+    def test_the_coding_role_is_still_what_dispatch_falls_back_to(self):
+        """Writing nothing is safe only because the dispatcher asks for the default every time."""
+        self.assertEqual(hub_agents.coding_role(store()), 'coder')
+
+    def test_general_takes_the_named_specialist(self):
+        self.assertEqual(hub_agents.routed_role(store(), 'general', 'analyst'), 'analyst')
+
+    def test_general_with_no_profile_names_nobody(self):
+        """No 'default general role' exists, by design - the owner picks at start."""
+        self.assertEqual(hub_agents.routed_role(store(), 'general', ''), '')
+
+    def test_general_never_falls_through_to_coder(self):
+        self.assertNotEqual(hub_agents.routed_role(store(), 'general', ''), 'coder')
+
+    def test_general_refuses_a_coding_role(self):
+        """The two groups never mix. The roster cannot offer `coder` and triage validates against
+        it, so this takes a hallucination to reach - which is exactly when it must not land."""
+        for cli in ('coder', 'codex', 'copilot'):
+            self.assertEqual(hub_agents.routed_role(store(), 'general', cli), '')
+
+    def test_kind_task_names_nobody(self):
+        """kind 'task' leaves the job on the owner's list - no agent, so no role."""
+        self.assertEqual(hub_agents.routed_role(store(), 'task', 'analyst'), '')
+
+    def test_an_unknown_profile_names_nobody(self):
+        self.assertEqual(hub_agents.routed_role(store(), 'general', 'nobody'), '')

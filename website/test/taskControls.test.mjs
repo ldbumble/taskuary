@@ -32,6 +32,22 @@ test("each control carries the caption that names its effect on task versus agen
   assert.match(tasks, /const replyPrimary = pendingReview \? "Edit draft in Review" : sentReview \? "Write another" : "Write reply";/);
 });
 
+test("the agent card names the role and the brain, and offers no model", () => {
+  // A role picks the document; a brain is the CLI that runs it. The model is the brain's -
+  // brain_for(): "what it names is a brain - never a model, never an effort" - so the card must
+  // not offer one. This is also a merge guard: b8c57823 resolved TasksView.jsx to its own side
+  // and dropped this row entirely, and nothing failed, because nothing covered it.
+  assert.match(tasks, /const runRole = assignedAgent\(t\?\.Assignee\) \|\| \(t\?\.Kind === "coding" \? "coder" : ""\);/);
+  assert.match(tasks, /const runBrain = term\?\.cli \|\| term\?\.agent \|\| \(runRole && brains\[runRole\]\) \|\| "";/);
+  assert.ok(tasks.includes("const { agents, models, kinds, brains, brainList, brainModels } = useAgents();"),
+    "the roster's role->brain map has to reach the card");
+  const at = tasks.indexOf("{runRole && <Box");
+  assert.notEqual(at, -1, "the role pill must be rendered");
+  const row = tasks.slice(at, at + 1400);
+  assert.ok(row.includes(">role</Box>") && row.includes(">brain</Box>"), "both pills are labelled");
+  assert.ok(!/>model</.test(row), "and there is no model pill - the model is not the task's");
+});
+
 test("a live session still lets you act on the TASK", () => {
   // The task card is gated on !term?.alive, so while a session runs it is not on the page at all.
   // When its four controls lived behind the header's dots that did not matter; once the dots went

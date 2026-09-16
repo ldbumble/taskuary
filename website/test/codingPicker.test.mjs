@@ -16,11 +16,14 @@ test("the coding picker filters to coding workers and names them by their CLI", 
   const picker = ui.slice(ui.indexOf("export const AgentPicker"), ui.indexOf("export const timeAgo"));
   assert.match(picker, /coding = false, kinds = \{\}/);
   assert.match(picker, /\["coding", "cli"\]\.includes\(String\(kinds\[a\] \|\| ""\)\.toLowerCase\(\)\)/);
-  assert.match(picker, /const cliOf = \(a\) => models\[a\]\?\.cli \|\| models\[a\]\?\.cmd \|\| a/);
-  assert.match(picker, /\{coding \? cliOf\(a\) : a\}/);
-  assert.match(picker, /new Map\(shown\.map\(\(a\) => \[cliOf\(a\), a\]\)\)/);
+  // The brain layer (33e452f5) answered this question at the source instead of translating at the
+  // menu: a coding picker now lists BRAINS, which already are CLIs, so the `cliOf` map this used to
+  // assert on has nothing left to do. Same promise, one fewer indirection - and the choice it
+  // writes is the brain, never the role, because every coding task's role is `coder`.
+  assert.match(picker, /const list = coding \? \(brains\.length \? brains : \[brain\]\.filter\(Boolean\)\)/);
+  assert.match(picker, /const value = coding \? brain : agent;/);
+  assert.match(picker, /onChange=\{\(e\) => \(coding \? onBrain : onAgent\)\(e\.target\.value\)\}/);
   assert.doesNotMatch(picker, /<em/);
-  assert.match(picker, /onChange=\{\(e\) => onAgent\(e\.target\.value\)\}/);
 });
 
 test("the hook carries what each worker is for", () => {

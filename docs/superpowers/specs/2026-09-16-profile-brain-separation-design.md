@@ -1,8 +1,20 @@
 # A profile is a role; a brain is what runs it
 
 **Date:** 2026-09-16
-**Status:** design approved, unimplemented
+**Status:** IMPLEMENTED — steps 1-3 shipped 2026-09-16 (`6d2ded64`, `e0d0b619`, `b8c57823`)
 **Owner decisions:** recorded inline as `DECIDED`
+
+> **What shipped, and what did not.** Triage names a role and never a brain; a coding task's role
+> is always `coder`; the brain is a CLI connection carrying its own gears, chosen by
+> `default_brain` with a per-role override and by the picker at start; failover walks brains;
+> sessions record which brain ran; the card names the brain, and names it correctly (`cli_of` read
+> the *wrapper*, so Copilot reported `cmd` and Qwen `node`).
+>
+> Three things in this document did NOT ship, deliberately, each with its reason in the step-3
+> plan: the `_build_llm` dedupe survives because `triage_ai` still spells a brain as `cli:<agent>`;
+> existing clone profile rows are not deleted; and `provider`/`cmd` remain on the profile row as a
+> compatibility source for display data, no longer deciding what runs. The Assistant's gear stays
+> light — still the one `ASSUMPTION` below, never confirmed.
 
 ## The problem
 

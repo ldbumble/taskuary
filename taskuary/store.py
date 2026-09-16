@@ -421,6 +421,10 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     # agent in roster order. A quota/login outage should move the same task to
                     # another CLI instead of leaving a dead terminal as its only outcome.
                     'backup_agents': '*',
+                    # ...and the same for BRAINS, which is what a session's chain actually walks
+                    # now. `backup_agents` named profiles and cannot be reused as brain keys, so
+                    # an existing install starts with no backups until the owner names them.
+                    'backup_brains': '*',
                     # ordered alternate brains for triage, drafts, summaries and assistant chat.
                     # Blank is deliberately opt-in: a cloud-to-CLI fallback may change cost and
                     # privacy, so the owner names the alternatives explicitly in Settings.

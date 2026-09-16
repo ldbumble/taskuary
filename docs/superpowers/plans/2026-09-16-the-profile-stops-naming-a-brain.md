@@ -1,5 +1,23 @@
 # The Profile Stops Naming A Brain — Implementation Plan (step 3 of 3)
 
+> **EXECUTED 2026-09-16.** Whole suite: 4234 passed, 1 skipped. Tasks 1, 2, 3 and half of 4
+> shipped. Three departures from the plan, each forced by something it had not seen:
+>
+> - **The `_build_llm` dedupe was restored after being deleted.** Its twin in `agent_chain` went
+>   with the fusion, but `triage_ai` still spells a brain as `cli:<agent>` — the classifier is
+>   built from an agent ROW — so two settings can still name two profiles backed by one
+>   executable, and trying claude twice is not failover. The suite caught it. It can go when the
+>   brain *settings* name brains, which is beyond this spec.
+> - **Existing clone profile rows are not deleted.** `adopt_installed` mints no new ones, and the
+>   old ones are already off triage's roster and unnecessary to the picker. Deleting live rows the
+>   owner may have edited is not something to do unasked; it is one call whenever they want it.
+> - **Task 5 was not done: `provider`/`cmd` still sit on the profile row.** They no longer decide
+>   anything — `brain_command` overrides them at every session start — but they still feed display
+>   data (`provider_options`, the model catalogues). Removing them means rebuilding those from
+>   connections, which is a wide ripple for tidiness rather than behaviour. The fusion is gone
+>   from what RUNS; the field remains as a compatibility source. Stated plainly rather than
+>   claimed as finished.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:executing-plans (or subagent-driven-development).
 
 **Goal:** Take `provider`/`cmd` off the worker profile for good, retire the five CLI-clone profiles, and delete the patches that only existed because a role was a brain.

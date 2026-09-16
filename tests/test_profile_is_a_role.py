@@ -9,7 +9,7 @@ Spec: docs/superpowers/specs/2026-09-16-profile-brain-separation-design.md
 """
 import json, unittest
 
-from taskuary import agents as hub_agents
+from taskuary import agents as hub_agents, triage
 from taskuary.store import MemoryStore
 
 
@@ -79,3 +79,33 @@ class WhichRoleTests(unittest.TestCase):
 
     def test_an_unknown_profile_names_nobody(self):
         self.assertEqual(hub_agents.routed_role(store(), 'general', 'nobody'), '')
+
+
+class TheWorkersBlockTests(unittest.TestCase):
+    def prompt(self, **kw):
+        """The system prompt classify_intent builds, without calling a model."""
+        seen = []
+
+        def fake(system, user, **_):
+            seen.append(system)
+            return '{"intent": "fyi", "why": "x"}'
+
+        triage.classify_intent({'subject': 's', 'body': 'b'}, llm=fake, profiles='- analyst: our figures', **kw)
+        return seen[0]
+
+    def test_the_block_asks_on_general_not_coding(self):
+        p = self.prompt()
+        self.assertIn('THE WORKERS', p)
+        self.assertNotIn('(kind: coding)', p)
+        self.assertIn('"kind": "general"', p)
+
+    def test_the_block_says_coding_needs_no_profile(self):
+        self.assertRegex(self.prompt(), r'[Cc]oding needs no profile')
+
+    def test_the_block_survives_an_operator_document(self):
+        """The owner's store holds a TRIAGE.md that REPLACES INTENT_SYSTEM (triage.py:408). The
+        rule has to ride in the appended block or it never reaches that install."""
+        p = self.prompt(system='My own triage document. Answer JSON with intent, kind, checklist, "summary".')
+        self.assertIn('My own triage document', p)
+        self.assertIn('THE WORKERS', p)
+        self.assertNotIn('(kind: coding)', p)

@@ -81,7 +81,7 @@ TASK_FIELDS = (
 
 INTENT_SYSTEM = (
     'Classify one inbound work message. Answer JSON only: '
-    '{"intent": "task|reply_only|fyi", "kind": "coding|general|task", "profile": "<a name from THE WORKERS, when any are listed>", '
+    '{"intent": "task|reply_only|fyi", "kind": "coding|general|task", "profile": "<on kind general only: a name from THE WORKERS>", '
     '"why": "<one concrete sentence: what you saw in the message '
     'and which rule it hit - the owner reads this to judge the verdict, 25 words max>"}.\n'
     'Almost everything that asks for anything is a task, and almost every task goes to the coding agent '
@@ -464,12 +464,12 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                            'playbook. A message that only mentions the same systems is not an instance - the `when` line '
                            'must fit. Otherwise leave the key out.\n' + str(playbooks)[:3000])
             if profiles:
-                system += ('\n\nTHE WORKERS - the agents this install has, each with what it is for. When an agent will '
-                           'start on this (kind: coding), add "profile": "<exactly one name below>" to say WHICH one. '
-                           'This is a different question from kind: kind decides whether an agent works it at all, '
-                           'profile decides who. Pick on the WORK the message asks for, not on who sent it. Unsure, or '
-                           'none of them fits it better than the others? Leave the key out and the default worker takes '
-                           'it.\n' + str(profiles)[:2000])
+                system += ('\n\nTHE WORKERS - the specialists this install has for NON-CODING work, each with what it '
+                           'is for. When you answer "kind": "general" and one of them plainly fits the job, add '
+                           '"profile": "<exactly one name below>" to say WHICH one. Coding needs no profile: a coding '
+                           'task always goes to the coding worker, so leave the key out. Pick on the WORK the message '
+                           'asks for, not on who sent it. Unsure, or none of them fits it better than the others? '
+                           'Leave the key out and nobody is named.\n' + str(profiles)[:2000])
             if repos:
                 system += ('\n\nKNOWN REPOSITORIES are listed in known_repositories (owner/name and what each is). For a task an agent '
                            'could work from a keyboard, add "repository": "<exactly one listed owner/name>" or null, '

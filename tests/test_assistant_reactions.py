@@ -125,7 +125,10 @@ class ArrivalsTests(unittest.TestCase):
         self.assertEqual((t['Kind'], t['Status']), ('coding', 'open'))
         self.assertFalse(spawn.called)                                  # …held on purpose: nobody has ever written to them
         self.assertIn('first message from', s.list_routes(out['task_id'])[-1]['Reason'])
-        self.assertEqual(lanes(s), [('todo', 'asked')])                 # it waits on the owner instead
+        # handed to the coder and held, so it is WAITING TO START - not "asked you", which claimed a
+        # person had asked for something (the owner, 2026-09-16). The owner's own tasks, which no
+        # agent is assigned, keep the asked lane and their kind says "on you".
+        self.assertEqual(lanes(s), [('todo', 'queued')])
         # …and a colleague's ask does start one
         with mock.patch.object(ingest, '_spawn') as spawn:
             arrive(s, subject='Fix the payroll import', body='It crashes on every file.', who='Chana',
@@ -180,7 +183,7 @@ class ArrivalsTests(unittest.TestCase):
                          who='HR', email='hr@ours.com', llm=brain('task', 'task'))
         self.assertEqual(s.get_task(out['task_id'])['Kind'], 'task')
         self.assertFalse(spawn.called)
-        self.assertEqual(lanes(s), [('todo', 'asked')])
+        self.assertEqual(lanes(s), [('todo', 'yours')])   # nobody is on it and no agent was asked
 
     def test_an_urgent_sender_jumps_the_queue(self):
         s = store()
@@ -312,7 +315,7 @@ class ArrivalsTests(unittest.TestCase):
         with mock.patch.object(ingest, '_spawn'):
             arrive(s, subject='MFA Financial Report - can you re-run .02?', body='please re-run it',
                    who='Nechama Ozur', email='nozur@hrtgcs.com', hours=0, llm=brain('task', 'coding'))
-        self.assertEqual([i['lane'] for i in pile(s)], ['asked'])
+        self.assertEqual([i['lane'] for i in pile(s)], ['queued'])   # a coding ask reached the coder
 
 
 # ── what the owner says back, and what actually happens ──────────────────────────────────────
@@ -1129,7 +1132,7 @@ class WalkOrderTests(unittest.TestCase):
             # came in six hours ago, the ask four, and the agent asked its question just now. Results
             # come after all of it, and an fyi last.
             self.assertEqual([i['lane'] for i in funnel.build(s)['items']],
-                             ['approve', 'asked', 'blocked', 'report', 'fyi'])
+                             ['approve', 'queued', 'blocked', 'report', 'fyi'])
             # …and one at a time out of the mouth, in that order, each one read as it is shown
             seen = []
             for _ in range(5):
@@ -1137,7 +1140,7 @@ class WalkOrderTests(unittest.TestCase):
                 if not out.get('item'): break
                 seen.append(out['item']['lane'])
                 funnel.settle(s, out['item']['key'], 'done', 'owner')
-        self.assertEqual(seen, ['approve', 'asked', 'blocked', 'report', 'fyi'])
+        self.assertEqual(seen, ['approve', 'queued', 'blocked', 'report', 'fyi'])
 
     def test_start_with_what_came_in_walks_only_what_a_person_sent(self):
         s = store()
@@ -1260,7 +1263,7 @@ class TellingItInAdvanceTests(unittest.TestCase):
             arrive(s, subject='MFA Financial Report - can you re-run .02 for me?', body='please re-run it',
                    who='Nechama Ozur', email='nozur@hrtgcs.com', conv='c:rerun', hours=0, llm=brain('task', 'coding'))
         funnel.invalidate()
-        self.assertEqual([i['lane'] for i in pile(s)], ['asked'])           # a rule only reaches the quiet lanes
+        self.assertEqual([i['lane'] for i in pile(s)], ['queued'])          # a rule only reaches the quiet lanes
 
     def test_the_rule_is_the_owners_to_take_off_again(self):
         s = store()

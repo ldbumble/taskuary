@@ -20,7 +20,7 @@ const PTO_ROW = { MessageId: 6955, TaskId: 526, FromName: "Gitty Weichbrod", Msg
 
 test("a drafted reply waiting for a yes says so, and never says coding", () => {
   assert.equal(rowLane(PTO_ROW), "approve");
-  assert.equal(laneMeta(rowLane(PTO_ROW)).word, "needs your yes");
+  assert.equal(laneMeta(rowLane(PTO_ROW)).word, "reply ready");
   assert.equal(laneMeta(rowLane(PTO_ROW)).mark, "✉️");
 });
 
@@ -29,7 +29,7 @@ test("an agent that stopped is waving, and one still going says it is working", 
   assert.equal(laneMeta("blocked").word, "agent waving");
   assert.equal(laneMeta("blocked").mark, "👋");
   assert.equal(rowLane({ TaskKind: "coding", Working: "coder", AgentWaiting: false }), "working");
-  assert.equal(laneMeta("working").word, "agent working");
+  assert.equal(laneMeta("working").word, "working");
   // a parked agent reaches the row as NeedsYou when its session is not live in this window
   assert.equal(rowLane({ TaskKind: "coding", NeedsYou: 1 }), "blocked");
 });

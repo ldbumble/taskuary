@@ -1,5 +1,5 @@
 {
-  "_": "The lane vocabulary, once. Python (funnel.py) and the desktop (funnelPile.js) both build their tables from this file, so a word cannot mean one thing on the rail and another in chat. `counted` is the plural-counting form for prose and defaults to `word`.",
+  "_": "THE vocabulary, once. Python (funnel.py), the work rail (funnelPile.js) and the Timeline (timelineState.js) all build their tables from this file, so a word cannot mean one thing on the rail, another in chat and a third on the Timeline. Three groups by PURPOSE, not three vocabularies: `lanes` is what is happening to a piece of live work (it also carries the funnel's ordering, so nothing may be added here that is not live work); `kinds` overrides a lane where the lane is not enough; `states` is what the Timeline says about a row that is no longer live work. A word lives in exactly one of them. `counted` is the plural-counting form for prose and defaults to `word`.",
   "lanes": [
     {
       "key": "blocked",
@@ -18,10 +18,11 @@
     },
     {
       "key": "approve",
-      "word": "needs your yes",
+      "word": "reply ready",
       "role": "you",
       "mark": "✉️",
-      "hint": "a reply or an action is drafted and waits for you"
+      "hint": "a reply or an action is drafted and waits for your yes",
+      "loud": true
     },
     {
       "key": "asked",
@@ -31,11 +32,25 @@
       "hint": "a person asked you for something and nobody is on it"
     },
     {
+      "key": "yours",
+      "word": "on you",
+      "role": "working",
+      "mark": "📋",
+      "hint": "real work with nobody on it - do it yourself, or send it to an agent"
+    },
+    {
       "key": "queued",
       "word": "waiting to start",
       "role": "working",
       "mark": "⏳",
       "hint": "handed to an agent and not started yet"
+    },
+    {
+      "key": "stopped",
+      "word": "agent stopped",
+      "role": "working",
+      "mark": "⏹",
+      "hint": "an agent worked this and left without finishing - continue the session, or hand it on"
     },
     {
       "key": "broken",
@@ -75,7 +90,7 @@
     },
     {
       "key": "working",
-      "word": "agent working",
+      "word": "working",
       "role": "working",
       "mark": "⚙️",
       "hint": "an agent has it — nothing for you until it stops or asks; it moves up when it needs your input"
@@ -84,15 +99,61 @@
   "kinds": [
     {
       "key": "agentdone",
-      "word": "agent finished",
-      "role": "working",
-      "mark": "✅"
+      "word": "done",
+      "role": "done",
+      "mark": "✅",
+      "hint": "the agent finished and its result is ready to read"
     },
     {
       "key": "wrapup",
       "word": "close it?",
       "role": "info",
-      "mark": "🗂"
+      "mark": "🗂",
+      "hint": "the reply went out and the agent is finished, but the task is still open"
+    }
+  ],
+  "states": [
+    {
+      "key": "triaging",
+      "word": "triaging",
+      "role": "working",
+      "mark": "spinner",
+      "hint": "the message has arrived — triage is deciding where it belongs"
+    },
+    {
+      "key": "held",
+      "word": "new sender",
+      "role": "muted",
+      "mark": "🔒",
+      "hint": "first message from this address — nothing was started; release it if it is real"
+    },
+    {
+      "key": "mine",
+      "word": "your note",
+      "role": "info",
+      "mark": "💡",
+      "hint": "a note you left yourself — nothing is working it, and nothing will"
+    },
+    {
+      "key": "withdrawn",
+      "word": "withdrawn",
+      "role": "muted",
+      "mark": "🚫",
+      "hint": "the sender deleted this where it came from — kept here, with whatever was done about it"
+    },
+    {
+      "key": "answered",
+      "word": "you answered",
+      "role": "done",
+      "mark": "↩️",
+      "hint": "you replied to this yourself, outside Taskuary — nothing here is waiting on you"
+    },
+    {
+      "key": "theirs",
+      "word": "waiting on them",
+      "role": "muted",
+      "mark": "📤",
+      "hint": "the last word is yours — a reply went out and nothing has come back. The ball is in their court, not yours"
     }
   ]
 }

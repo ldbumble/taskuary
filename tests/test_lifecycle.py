@@ -37,7 +37,7 @@ class LifecycleTests(unittest.TestCase):
         s.add_route(m, t, 'create', .9, 'a concrete ask', [], 'router')
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             p = funnel.pile(s, force=True)
-        self.assertEqual([(i['kind'], i['lane'], i['coding']) for i in p['items']], [('todo', 'asked', True)])
+        self.assertEqual([(i['kind'], i['lane'], i['coding']) for i in p['items']], [('todo', 'yours', True)])
         # 2. the chat opens with the day, nothing on the table yet
         opened = concierge.open_day(s)
         self.assertTrue(opened['opened']); self.assertEqual(opened['card']['n'], 1)

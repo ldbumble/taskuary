@@ -315,7 +315,15 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
         if not canonical and (r.get('TheirTurn') or r.get('AnsweredAt')): continue
         urgent = priority_rank(r.get('Priority')) == 0
         if cat in ('coding', 'todo') and (r.get('NeedsYou') or r.get('Working')):   # a worked row is kept, tagged, and let go in build()
-            out.append(_item(f"msg:{r['MessageId']}", 'todo', 'time' if urgent else 'asked', subj, coding=cat == 'coding',
+            # WHOSE it is decides the word. Work triage handed to an agent that has not run is
+            # QUEUED - waiting to start; work with nobody on it is the owner's own, and its kind
+            # ('todo') carries the word for that. Both used to say "asked you", which claimed a
+            # person had asked for something on rows triage derived from a report (the owner,
+            # 2026-09-16: "i don't like this asked you, it's queued, working on it, or agent
+            # waiting on you").
+            handed = str((store.get_task(r['TaskId']) or {}).get('Assignee') or '').startswith('agent:')
+            lane = 'time' if urgent else ('queued' if handed and not r.get('Working') else 'yours')
+            out.append(_item(f"msg:{r['MessageId']}", 'todo', lane, subj, coding=cat == 'coding',
                              why=('an urgent sender - ' if urgent else '') + (r.get('RouteReason') or ('a coding task with no agent on it' if cat == 'coding' else 'real work with nobody on it')), **base))
             if group and threads.get(group) is None: threads[group] = out[-1]
             continue
@@ -657,9 +665,13 @@ def _band(item):
     if item.get('kind') == 'meeting':
         return attention_band(urgent=not _not_yet(item), actionable=True)
     # a landed result is its own level; 'slipped' is an idea nobody judged, which is an fyi, not work
-    return attention_band(urgent=lane == 'time' or (lane == 'asked' and bool(item.get('urgent_request'))),
+    # 'yours' is the owner's own work and 'stopped' is an agent that left mid-job: both are the
+    # owner's to move, so both are actionable - a lane this function does not know falls to the fyi
+    # band and is buried among the newsletters, which is how work disappears.
+    return attention_band(urgent=lane == 'time' or (lane in ('asked', 'yours') and bool(item.get('urgent_request'))),
                           owner_wait=lane in ('blocked', 'approve'),
-                          working=lane == 'working', actionable=lane in ('broken', 'asked', 'queued'),
+                          working=lane == 'working',
+                          actionable=lane in ('broken', 'asked', 'yours', 'queued', 'stopped'),
                           result=lane == 'report')
 
 

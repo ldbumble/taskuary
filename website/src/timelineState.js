@@ -1,49 +1,31 @@
-// What a Timeline row IS, in one word — and the one place that decides it.
+// What a Timeline row IS, in one word — and the one place that DECIDES it. The words themselves
+// are not here any more: they live in taskuary/lanes.json with the work rail's and the chat's, so
+// one situation cannot be "agent waving" on one tab and something else on another (the owner,
+// 2026-09-16: "we need this unified and the timeline should have this as well"). This file still
+// owns stateOf - which state a row is in - because that is a judgement about a row, not a word.
 //
-// The row used to answer this with three overlapping controls: a dot for state, a chip for the
-// verdict, and a "needs you" pill that outranked both. Two rows in the same situation could
-// therefore read differently depending on which of the three happened to win, and the column as
-// a whole was a wall of coloured pills with no single loud thing in it.
+// A Timeline row reads triage's CATEGORY first (roadOf/verdictOf below); the state is what it says
+// when the category is not enough.
 //
-// So: ONE state per row, from the seven below. It renders as a small mark, its word in quiet
-// type, and the card's left edge in the state's colour — colour identifies, it never tints a
-// surface, and oxblood is still spent on nothing but "this is on you".
-//
-// Pure and dependency-free — no theme import, so it runs under bare node
-// (test/timelineState.test.mjs) and the Board can read the same table later. Colour is named by
-// ROLE, not by hex: theme.jsx stays the only place a colour is chosen and this file cannot drift
-// from it. `role: null` is a state that takes no colour at all.
-//
-// mark: the glyph. word: what it says. role: the theme role its edge and its word take.
-// loud: genuinely on you — at most two states may ever be loud, or none of them are.
-export const STATES = {
-  triaging: { mark: "spinner", word: "triaging", role: "working",
-              hint: "the message has arrived — triage is deciding where it belongs" },
-  error:   { mark: "⚠️", word: "triage failed", role: "muted",
-             hint: "triage could not classify this — nothing was started; open it and retry, or choose what it is" },
-  waving:  { mark: "👋", word: "agent waving",  role: "you",     loud: true,
-             hint: "the agent stopped and asked you something — open it and answer" },
-  working: { mark: "taskuary", word: "agent working", role: "working",
-             hint: "a session has this open right now" },
-  reply:   { mark: "✉️", word: "reply ready",   role: "you",     loud: true,
-             hint: "the agent finished and drafted the answer — read it and send" },
-  held:    { mark: "🔒", word: "new sender",    role: "muted",
-             hint: "first message from this address — nothing was started; release it if it is real" },
-  mine:    { mark: "💡", word: "your note",     role: "info",
-             hint: "a note you left yourself — nothing is working it, and nothing will" },
-  done:    { mark: "✅", word: "done",          role: "done",
-             hint: "closed out — kept for the record" },
-  withdrawn: { mark: "🚫", word: "withdrawn",  role: "muted",
-             hint: "the sender deleted this where it came from — kept here, with whatever was done about it" },
-  answered: { mark: "↩️", word: "you answered", role: "done",
-             hint: "you replied to this yourself, outside Taskuary — nothing here is waiting on you" },
-  theirs:  { mark: "⏳", word: "waiting on them", role: "muted",
-             hint: "the last word is yours — a reply went out and nothing has come back. The ball is in their court, not yours" },
-  todo:    { mark: "📋", word: "on your list",  role: "working",
-             hint: "real work with nobody on it — send it to an agent, or do it yourself" },
-  fyi:     { mark: "👀", word: "fyi",           role: null,
-             hint: "read it or don't — nothing was started and nothing is owed" },
+// Colour is named by ROLE, not by hex: theme.jsx stays the only place a colour is chosen.
+// `role: null` is a state that takes no colour at all.
+// loud: genuinely on you — at most two may ever be loud, or none of them are.
+import vocab from "../../taskuary/lanes.json" with { type: "json" };
+
+// the shared table, flattened: a lane, a kind and a Timeline-only state are three PURPOSES, not
+// three vocabularies, and a word lives in exactly one of them.
+const WORDS = Object.fromEntries([...vocab.lanes, ...vocab.kinds, ...vocab.states]
+  .map(({ key, counted, ...meta }) => [key, meta]));
+
+// Which shared word each Timeline state wears. The six on the right of this map exist only here -
+// a row that is no longer live work - and live in lanes.json's `states`; the rest are the very
+// same situations the work rail names, pointed at the one entry that owns the word.
+const OF = {
+  triaging: "triaging", error: "unjudged", waving: "blocked", working: "working",
+  reply: "approve", held: "held", mine: "mine", done: "agentdone", withdrawn: "withdrawn",
+  answered: "answered", theirs: "theirs", todo: "yours", fyi: "fyi",
 };
+export const STATES = Object.fromEntries(Object.entries(OF).map(([key, word]) => [key, WORDS[word]]));
 
 // the categories that mean "somebody told you something and there is nothing to do"
 const QUIET = new Set(["info", "automated", "promo", "filed", "ignored", "report", "feed", "yours", "triaging", "assistant"]);

@@ -104,7 +104,7 @@ class FollowUpTests(unittest.TestCase):
         s.add_message({'TaskId': t, 'ExternalId': 'x:own3', 'ConversationId': 'c:pto2', 'Channel': 'email', 'Subject': 'RE: PTO', 'FromName': 'You',
                        'FromEmail': 'owner@ours.com', 'SentAt': ago(3), 'BodyText': 'Done.', 'Status': 'context'})
         mail(s, 'RE: PTO', who='Chana', email='chana@hrtgcs.com', body='Thanks! Can you also do the M44 period?', hours=1, tid=t, conv='c:pto2')
-        self.assertEqual([(i['kind'], i['lane']) for i in funnel.build(s)['items']], [('todo', 'asked')])
+        self.assertEqual([(i['kind'], i['lane']) for i in funnel.build(s)['items']], [('todo', 'yours')])
 
     def test_the_wrap_up_counts_a_reply_typed_in_your_own_mail_client(self):
         s = store()
@@ -372,7 +372,7 @@ class MutedTests(unittest.TestCase):
         mail(s, 'MFA Financial Report - can you re-run .02?', who='Nechama Ozur', email='nozur@hrtgcs.com',
              body='please re-run it', hours=0, tid=t)
         funnel.invalidate()
-        self.assertIn('asked', [i['lane'] for i in funnel.build(s)['items'] if i.get('tid') == t])
+        self.assertIn('yours', [i['lane'] for i in funnel.build(s)['items'] if i.get('tid') == t])
         # ...and it is the owner's to take off again
         funnel.remember_mute(s, {'sender': 'nozur@hrtgcs.com', 'words': ['mfa', 'financials'], 'why': 'x'}, 'o')
         self.assertEqual(len(funnel.mutes(s)), 1)              # rewritten, not stacked
@@ -625,7 +625,7 @@ class LanesTests(unittest.TestCase):
         self.assertEqual([i['kind'] for i in funnel.more_urgent(p['items'], fyi['key'])], ['review'])
         self.assertEqual(funnel.more_urgent(p['items'], f'review:{s.list_reviews("pending")[0]["ReviewId"]}'), [])
         line = concierge._urgent_line(p['items'], fyi)
-        self.assertIn('MORE URGENT WAITING', line); self.assertIn('Craig Neiswanger - RE: T&E Portal (needs your yes)', line)
+        self.assertIn('MORE URGENT WAITING', line); self.assertIn('Craig Neiswanger - RE: T&E Portal (reply ready)', line)
         funnel.settle(s, f'review:{s.list_reviews("pending")[0]["ReviewId"]}', 'surfaced')
         self.assertEqual(funnel.alerts(s), [])                            # once shown, it is no longer news
 
@@ -940,8 +940,8 @@ class MemoryTests(unittest.TestCase):
     def test_summary_names_the_lanes_and_what_comes_next(self):
         s = self._two()
         text = funnel.summary(funnel.build(s)['items'])
-        self.assertIn('LEFT IN THE PIPE: 2 - 2 needs your yes', text)
-        self.assertIn('Coming next: Dana - one (needs your yes)', text)
+        self.assertIn('LEFT IN THE PIPE: 2 - 2 reply ready', text)
+        self.assertIn('Coming next: Dana - one (reply ready)', text)
         self.assertEqual(funnel.summary([]), 'THE PIPE IS EMPTY - nothing else needs the owner right now.')
 
     def test_the_pile_is_cached_briefly_and_carries_a_revision(self):

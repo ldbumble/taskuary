@@ -650,7 +650,13 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   useEffect(() => {
     const rail = railRef.current; if (!rail) return undefined;
     let raf = 0;
-    const onScroll = () => { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; spy(); }); };
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0; spy();
+        setMore(rail.scrollTop + rail.clientHeight < rail.scrollHeight - 4);
+      });
+    };
     rail.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onScroll, { passive: true });
     onScroll();
@@ -668,7 +674,10 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     let settle = 0, frame = 0;
     const remeasure = () => {
       if (frame) return;
-      frame = requestAnimationFrame(() => { frame = 0; dayLayoutDirty.current = true; spy(); });
+      frame = requestAnimationFrame(() => {
+        frame = 0; dayLayoutDirty.current = true; spy();
+        setMore(rail.scrollTop + rail.clientHeight < rail.scrollHeight - 4);
+      });
     };
     // All groups its rows by day in wrappers that do not move: one measure per response is enough,
     // and observing that list would watch every row of a 500-row history for nothing.
@@ -892,6 +901,13 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   // uses (next - serverNow) and never trusts the two machines to agree on the hour
   const [triageErr, setTriageErr] = useState("");    // the brain's last failure, until it answers again
   const [fade, setFade] = useState("normal");        // Settings > Display; height of the viewport's bottom fade
+  // ...drawn only while something is actually BELOW it. The band means "rows are passing behind the
+  // bottom edge" (timelineFade.js): true of the Timeline's endless history, and true of work only
+  // when a band has been opened wide enough to overflow. Painted unconditionally it dimmed the
+  // agents-working band at the foot of a list that fits, which is the one thing nothing was hiding
+  // (the owner, 2026-09-16: "if fyi overlaps past the bottom and there is a scroll then fade is
+  // okay. but if bottom is agent working then we want to see them").
+  const [more, setMore] = useState(false);
   const bottomFade = fadeBand(fade);
   const nextAtRef = useRef(null);                     // Date.now() when the server's next poll is due
   const seenPollAt = useRef(null);
@@ -1734,7 +1750,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
           </Box>
           )}
         </Box>
-        {bottomFade && (
+        {bottomFade && more && (
           <Box data-tq-bottom-fade={fade} aria-hidden sx={{
             position: "absolute", left: "1px", right: "1px", bottom: "1px", zIndex: 6,
             height: bottomFade.height, pointerEvents: "none",

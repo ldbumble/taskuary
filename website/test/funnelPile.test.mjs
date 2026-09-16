@@ -16,7 +16,16 @@ test('Current follows only an explicit canonical migration or lineage alias', ()
 });
 
 test("every lane the server knows has a word, a mark and a role the theme can colour", () => {
-  assert.deepStrictEqual(LANES, ["blocked", "time", "approve", "asked", "queued", "broken", "unjudged", "forgotten", "report", "fyi", "working"]);
+  // `stopped` is inserted, never a reorder: lane_index IS the rail's sort order (funnel._order).
+  assert.deepStrictEqual(LANES, ["blocked", "time", "approve", "asked", "yours", "queued", "stopped", "broken", "unjudged", "forgotten", "report", "fyi", "working"]);
+  // the owner's OWN work is a lane, not a kind override: a kind beats its lane (rowMeta), which is
+  // right when the kind says more and wrong here - "on you" would have beaten "waiting to start" on
+  // every queued row, because both carry kind 'todo' (the owner, 2026-09-16: "shouldn't this show
+  // an emoji as well? queued or something").
+  assert.strictEqual(LANE_META.yours.word, "on you");
+  // an agent that ran and LEFT is neither waiting to start nor waving - it has its own word, taken
+  // from taskLifecycle.agentPhase, which has named this correctly for the Tasks tab all along
+  assert.strictEqual(LANE_META.stopped.word, "agent stopped");
   // ...and a row NOTHING judged is not an fyi: `fyi` claims a verdict was reached, and the whole
   // point of the error state is that none was (the owner, 2026-09-15: "that's a bad bug")
   assert.strictEqual(LANE_META.unjudged.word, "triage failed");
@@ -183,7 +192,9 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.match(view, /const batchKeys = new Set\(batch \? \(batch\.members \|\| \[\]\) : \[\]\)/);
   assert.match(view, /className="tq-pile-batch"/);
   assert.match(view, /const bands = bandsOf\(drawn\)/);          // grouped by category, headings freeze
-  assert.match(view, /const caps = fillCaps\(room, bands\)/);    // and each band takes the room it has
+  // ...each band taking the room it has, less the extra height of the row on the table - which is
+  // 24px taller than the rest and drawn inside one of those bands
+  assert.match(view, /fillCaps\(room - \(curKey \? CUR_H - ROW_H : 0\), bands\)/);
   // Unread is the ranked pipe again: it is the only source for CURRENT/NEXT and for what the chat
   // will actually ask about. All remains FeedView's chronological history.
   assert.match(view, /<FeedView[^]*top=\{\(\{ openByMid \}\) => <Pile/);
@@ -243,7 +254,9 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   // heading that freezes as you scroll is a different thing, and it is what replaced the dock's
   // level dropdown (the owner, 2026-09-16: "freeze on the type until you get to next category").
   assert.doesNotMatch(view, /The pipe ·/);
-  assert.match(view, /className="tq-pile-head"/);
+  assert.match(view, /className={`tq-pile-head\$\{folds \? " folds" : ""\}`}/);
+  // ...and a band you can open is shut the same way: the heading is the control (2026-09-16)
+  assert.match(view, /const folds = CAPPED\.includes\(level\) && rows\.length > FLOOR/);
   assert.match(css, /\.tq-pile-head \{[^}]*position: sticky/);
   assert.match(view, /One more and the pipe is clear/);    // ...the count is the encouragement, at the bottom, from fifteen
   const feed = read("FeedView.jsx");
@@ -285,8 +298,11 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
 test("a few kinds say more than their lane does", async () => {
   const { rowMeta, laneMeta } = await import("../src/funnelPile.js");
   // an agent's finished job and a report you set up share the 'report' lane; they do not read alike
-  assert.equal(rowMeta({ kind: "agentdone", lane: "report" }).word, "agent finished");
-  assert.equal(rowMeta({ kind: "agentdone", lane: "report" }).role, "working");
+  assert.equal(rowMeta({ kind: "agentdone", lane: "report" }).word, "done");
+  assert.equal(rowMeta({ kind: "agentdone", lane: "report" }).role, "done");
+  // ...and a kind never beats a lane that is MORE specific: both of these carry kind 'todo'
+  assert.equal(rowMeta({ kind: "todo", lane: "yours" }).word, "on you");
+  assert.equal(rowMeta({ kind: "todo", lane: "queued" }).word, "waiting to start");
   assert.equal(rowMeta({ kind: "wrapup", lane: "report" }).word, "close it?");
   assert.equal(rowMeta({ kind: "report", lane: "report" }).word, laneMeta("report").word);
   assert.equal(rowMeta({ kind: "fyi", lane: "fyi" }).word, "fyi");
@@ -342,8 +358,11 @@ test("the waving agent is the one lane sized to be seen", () => {
   assert.equal(meta.word, "agent waving");          // ...the same word timelineState.waving uses
   assert.equal(meta.mark, "👋");
   assert.equal(meta.loud, true);
-  // and it is the ONLY loud lane - a rail where everything shouts says nothing
-  assert.deepEqual(Object.entries(LANE_META).filter(([, m]) => m.loud).map(([k]) => k), ["blocked"]);
+  // LOUD IS EXACTLY "this is on you". The two tables disagreed while they were two - the Timeline
+  // shouted a ready reply and the rail did not - and unifying them had to pick one (2026-09-16).
+  // Tying it to the role rather than listing keys is what stops it drifting again.
+  assert.deepEqual(Object.entries(LANE_META).filter(([, m]) => m.loud).map(([k]) => k).sort(),
+                   Object.entries(LANE_META).filter(([, m]) => m.role === "you").map(([k]) => k).sort());
   // still the owner's own level, not a new one
   assert.equal(attentionBand({ lane: "blocked" }), attentionBand({ lane: "approve" }));
 });

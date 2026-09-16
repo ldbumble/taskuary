@@ -309,7 +309,7 @@ export const statusLine = (items, busy) => {
 
 // New cards and alerts carry the server's band. Old persisted cards use the same
 // five-band fallback until their current presentation is refreshed.
-const BAND = { blocked: 2, time: 1, approve: 2, broken: 2, asked: 2, queued: 2, forgotten: 4, report: 3, fyi: 4, working: 5 };
+const BAND = { blocked: 2, time: 1, approve: 2, broken: 2, asked: 2, yours: 2, queued: 2, stopped: 2, forgotten: 4, report: 3, fyi: 4, working: 5 };
 export const attentionBand = (item) => {
   if (Number.isInteger(item?.order_band) && item.order_band >= 1 && item.order_band <= 5) return item.order_band;
   // a meeting that is not imminent, and any row whose lane this build does not know, are the
@@ -351,8 +351,11 @@ export const LEVEL_ROLE = { urgent: "you", task: "you", reports: "info", fyi: "m
 // goes to reports, then fyi, each keeping a floor of two - below that a band is a heading and a
 // button, which is worse than absent. If that still overflows nothing is crushed further and the
 // rail scrolls, so the only thing ever below the fold is work, in rank order.
-// the rail's own geometry, in one place: a row and its gap, a band heading, a "more" button
-export const ROW_PX = 33, HEAD_PX = 31, MORE_PX = 30;
+// The rail's own geometry, in one place - and it has to be what is actually PAINTED, or the rail
+// overflows the screen it was measured against. Read off assistantView.css: a row is 30px + its 3px
+// gap; a heading is 7 margin + 9/7 padding + its line + a 1px rule; a "more" button is 5 + 3/3 + its
+// line + 2. FOOT is what sits under the last band - the pile's own padding and the scroller's.
+export const ROW_PX = 33, HEAD_PX = 36, MORE_PX = 28, FOOT_PX = 64;
 export const CAPPED = ["reports", "fyi"];
 export const FLOOR = 2;
 export const bandsOf = (items) => LEVEL_ORDER
@@ -361,6 +364,25 @@ export const bandsOf = (items) => LEVEL_ORDER
 
 // avail: pixels the rail can paint without scrolling. Returns {level: rows to draw} for the capped
 // bands only; everything else draws in full. Pure, so test/funnelPile.test.mjs can pin the rule.
+// ...and what to give back when the guess was still too generous. The cost model above is an
+// estimate of what the browser will paint, and an estimate is always a little wrong - fonts, a
+// wrapped heading, a scrollbar appearing and taking width. `trim` is the REAL overflow, measured
+// after layout and converted to rows, taken off the noisiest band first (the owner, 2026-09-16:
+// "why do i still see a scroll bar on the work tab").
+export function trimCaps(caps, bands, rows) {
+  const out = { ...caps };
+  let left = Math.max(0, rows);
+  for (const level of [...CAPPED].reverse()) {
+    if (!left) break;
+    const have = out[level];
+    if (!Number.isInteger(have)) continue;
+    const give = Math.min(left, Math.max(0, have - FLOOR));
+    out[level] = have - give;
+    left -= give;
+  }
+  return out;
+}
+
 export function fillCaps(avail, bands, { row = ROW_PX, head = HEAD_PX, more = MORE_PX } = {}) {
   const caps = {};
   const capped = (bands || []).filter((b) => CAPPED.includes(b.level));

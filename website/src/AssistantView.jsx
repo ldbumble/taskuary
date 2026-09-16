@@ -31,7 +31,7 @@ import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime } from "./ui.jsx";
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
 import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, hasNextSelection, interactiveCardIndex, keysOf, laneCounted, lastSaidIndex, chipsOf, levelLabel, nextMarkerKey, nextSelectionBody, nextSelectionScope, pendingAlerts, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, hasNextSelection, interactiveCardIndex, keysOf, laneCounted, lastSaidIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, pendingAlerts, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
 import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WrapupCard, sourceColor } from "./assistantCards.jsx";
@@ -59,9 +59,16 @@ const waitingLine = (items) => {
     + " I'll take you through them one at a time.";
 };
 
+// WHAT THE HEADING ALREADY SAID. A row speaks only when its own word ADDS something: "slipped"
+// under fyi does, "fyi" under fyi does not, and "agent finished" under agents working does -
+// because the band says they are still going (the owner, 2026-09-16: "show emoji if it says
+// something besides for what lane it's in"). Compared on the WORD, not the lane, so a kind that
+// overrides its lane's word - agentdone, wrapup - is judged on the word it actually shows.
+const BAND_SAYS = { reports: "report", fyi: "fyi", agents: "agent working" };
 const ROW_H = 33, CUR_H = 57;   // a Timeline row (30px + its 3px gap); the current one opens up to two lines
-// what sits UNDER the bands and still has to fit: the cheer line and the two quiet notes
-const PILE_FOOT = 46;
+// what sits UNDER the bands and still has to fit: the pile's own padding, the cheer line and the
+// two quiet notes, and the scroller's bottom padding (funnelPile.FOOT_PX)
+const PILE_FOOT = FOOT_PX;
 const EMOJI_REPLIES = [
   ["👍", "Sounds good"], ["❤️", "Love it"], ["😂", "Funny"], ["🎉", "Celebrate"],
   ["👏", "Well done"], ["🙏", "Thank you"], ["✅", "Confirmed"], ["👀", "Looking"],
@@ -190,7 +197,24 @@ function Pile({ pile, current, onPull }) {
     return () => ro.disconnect();
   }, [sig]);
   const [opened, setOpened] = useState(() => new Set());        // bands the owner opened by hand
-  const caps = fillCaps(room, bands);
+  // WHAT THE ESTIMATE MISSED. fillCaps costs what it expects the browser to paint; this is the
+  // overflow it actually painted, measured once per change and given back in rows. Bounded by the
+  // guard below so a band that cannot shrink any further can never spin.
+  const [trim, setTrim] = useState(0);
+  useLayoutEffect(() => { setTrim(0); }, [sig]);
+  // the row on the table is 24px taller than the rest, and it is drawn inside one of these bands
+  const base = fillCaps(room - (curKey ? CUR_H - ROW_H : 0), bands);
+  // how many rows the capped bands could still give back before they are at their floor. Past that
+  // the rail genuinely does not fit and scrolls: your task and agents working are never trimmed.
+  const headroom = CAPPED.reduce((n, level) => n + Math.max(0, (base[level] ?? 0) - FLOOR), 0);
+  const caps = trimCaps(base, bands, trim);
+  useLayoutEffect(() => {
+    const el = wrapRef.current;
+    const scroller = el?.closest("[data-tq-rail]");
+    if (!el || !scroller || trim >= headroom) return;
+    const over = scroller.scrollHeight - scroller.clientHeight;
+    if (over > 4) setTrim((was) => Math.min(headroom, was + Math.ceil(over / ROW_PX)));
+  });
 
   return (
     <div className="tq-pile" data-tq-keep ref={wrapRef}>
@@ -199,7 +223,11 @@ function Pile({ pile, current, onPull }) {
       ) : !drawn.length ? (
         <div className="tq-pile-empty"><span className="mark">✓</span><b>All done</b>Nothing is waiting on you. New things land here as they arrive, and Taskuary speaks up.</div>
       ) : bands.map(({ level, items: rows }) => {
-        const cap = opened.has(level) ? rows.length : (caps[level] ?? rows.length);
+        const open = opened.has(level);
+        const cap = open ? rows.length : (caps[level] ?? rows.length);
+        // only the two bands the rail is allowed to cap can be folded; urgent, your task and agents
+        // working are never hidden, so a chevron on them would offer nothing
+        const folds = CAPPED.includes(level) && rows.length > FLOOR;
         // what is on the table is never capped away, wherever in its band it sits
         const shown = rows.filter((i, n) => n < cap || i.key === curKey || batchKeys.has(i.key));
         const hidden = rows.length - shown.length;
@@ -216,10 +244,21 @@ function Pile({ pile, current, onPull }) {
         return (
           <div className="tq-pile-band" key={level} data-tq-run={level}>
             {/* the category, said once, in the one place importance exists in this product - and
-                the reason the dock above the rail no longer carries a level dropdown saying it */}
-            <div className="tq-pile-head" title={LEVEL_META[level]?.hint || ""}>
+                the reason the dock above the rail no longer carries a level dropdown saying it.
+                A band that can be opened is also the way to shut it again: opening one had no way
+                back at all (the owner, 2026-09-16: "clicking on fyi or reports should close it
+                back up or a tiny arrow"). */}
+            <div className={`tq-pile-head${folds ? " folds" : ""}`} title={folds
+              ? (open ? `Collapse ${levelLabel(level)}` : `Show all ${rows.length}`)
+              : (LEVEL_META[level]?.hint || "")}
+              onClick={folds ? () => setOpened((cur) => {
+                const next = new Set(cur);
+                if (next.has(level)) next.delete(level); else next.add(level);
+                return next;
+              }) : undefined}>
               <span style={{ color: ROLES[LEVEL_ROLE[level]]?.ink, background: ROLES[LEVEL_ROLE[level]]?.tint,
                 borderColor: ROLES[LEVEL_ROLE[level]]?.bd }}>{levelLabel(level)}</span>
+              {folds && <i className="fold">{open ? "▾" : "▸"}</i>}
               <hr /><em>{rows.length}</em>
             </div>
             <div className="tq-pile-stack" style={{ height: stackHeight }}>
@@ -236,13 +275,9 @@ function Pile({ pile, current, onPull }) {
                   isCur ? "current" : inBatch ? "inbatch" : i.key === nextKey ? "next" : ""].filter(Boolean).join(" ");
                 // the one pill a row can still wear: work has STOPPED until you answer it.
                 const loud = i.lane === "blocked" || i.lane === "approve";
-                // ...and inside YOUR TASK, the lane word comes back quietly beside it. Stripping it
-                // from every row cost the one distinction that band exists to make: "handed to the
-                // coder and never started" and "nobody has ever touched this" both sat there
-                // looking identical, and the only way to tell was to hover (the owner, 2026-09-16,
-                // asking why two queued tasks were not in the rail - they were, saying nothing).
-                // Every other band's heading already answers the question, so they stay bare.
-                const word = !loud && !i.settling && level === "task" ? meta.word : "";
+                // ...and every other row says its lane - mark and word - unless that is the very
+                // thing the heading above it already said (BAND_SAYS).
+                const word = !i.settling && meta.word !== BAND_SAYS[level] ? meta.word : "";
                 return (
                   <div key={i.key} className={cls} style={{ top: landing.has(i.key) ? -ROW_H : top }}>
                     <span className="when">{railAge(i.kind === "meeting" ? i.when : (i.since || i.when))}</span>
@@ -263,7 +298,11 @@ function Pile({ pile, current, onPull }) {
                             style={{ color: ROLES.you.ink, background: ROLES.you.tint, borderColor: ROLES.you.bd }}>
                             {meta.mark} {meta.word}</span>
                         )}
-                        {!!word && <span className="tq-pile-word">{word}</span>}
+                        {!loud && !!word && (
+                          <span className="tq-pile-word"
+                            style={meta.role === "bad" ? { color: ROLES.bad.ink } : undefined}>
+                            <i>{meta.mark}</i>{word}</span>
+                        )}
                       </div>
                       {isCur && <div className="sub">{[i.why, i.kind === "meeting" ? ageText(i.when) : agoText(i.since || i.when)].filter(Boolean).join(" · ")}</div>}
                     </div>

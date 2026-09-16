@@ -29,6 +29,10 @@
    are inside, where bare coloured type read as another word in the list (the owner, 2026-09-16:
    "more a circle pill around the your task word and more obvious coloring"). tint / ink / border
    are set inline from theme.jsx ROLES (funnelPile.LEVEL_ROLE). */
+/* a band that can be opened is shut the same way - the heading is the control */
+.tq-pile-head.folds { cursor: pointer; }
+.tq-pile-head.folds:hover span { border-color: #b9c3cb; }
+.tq-pile-head .fold { font-style: normal; font-size: 9px; color: #a09889; margin-left: -4px; }
 .tq-pile-head span { font: 700 10px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase;
   white-space: nowrap; padding: 2px 10px; border-radius: 99px; border: 1px solid; }
 .tq-pile-head hr { flex: 1 1 auto; border: 0; border-top: 1px solid #ece7e0; margin: 0; }
@@ -85,6 +89,8 @@
 /* ...and, in YOUR TASK only, what is holding it up: "waiting to start", "asked you". A right-aligned
    column you can read down, not a pill - a pill on every row is what made the old rail a wall. */
 .tq-pile-word { flex: 0 0 auto; font: 600 10px 'IBM Plex Sans', system-ui, sans-serif; color: #6e685f; white-space: nowrap; }
+/* the lane's own mark, at the size it is READ at rather than the size the loud pill shouts at */
+.tq-pile-word i { font-style: normal; font-size: 11px; line-height: 1; margin-right: 4px; filter: saturate(.9); }
 .tq-pile-tag { flex: 0 0 auto; display: inline-block; padding: 0 6px; border-radius: 99px; border: 1px solid #ddd6cb; background: #eee9e1; color: #6f6960; font: 600 9px/15px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .01em; white-space: nowrap; }
 /* the waving agent and the draft waiting for a yes: the two lanes where work has STOPPED until the
    owner answers, and the only rows left carrying colour of their own */

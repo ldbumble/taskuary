@@ -82,7 +82,7 @@ class FollowUpVerdictTests(unittest.TestCase):
         saved = json.loads(s.list_routes(t)[-1]['VerdictJson'])
         self.assertEqual((saved['intent'], saved['kind']), ('task', 'coding'))
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
-            self.assertEqual([(i['kind'], i['lane']) for i in funnel.build(s)['items']], [('todo', 'asked')])
+            self.assertEqual([(i['kind'], i['lane']) for i in funnel.build(s)['items']], [('todo', 'yours')])
 
     def test_the_round_trip_an_agent_is_waiting_for_is_never_second_guessed(self):
         s = store(); t = opened(s)

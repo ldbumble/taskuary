@@ -1274,13 +1274,13 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
     peekTimer.current = setTimeout(() => setShowQ(false), 3000);
   };
   const stateLine = wait.state === "working" ? "agent is working — this waits for its next stop"
-    : wait.state === "asking" ? "agent is asking you something — answer it first; this goes in after"
+    : wait.state === "asking" ? "agent is asking you something — what you write here IS the answer, and goes in at once"
     : wait.state === "parked" ? "agent is parked — this goes straight in"
     : wait.state === "no_session" ? "no live session — this reopens one with your note as the ask" : "";
   // compact has no room for a header line, so the placeholder carries the state instead
   const ph = many ? "One prompt per line — twenty is fine. Bullets and numbers are stripped; they drip in one per stop, in this order."
     : !compact ? "Anything you think of while it works — queued, typed in when it stops. Enter to queue, Shift+Enter for a new line. Paste a screenshot to send it along."
-    : wait.state === "asking" ? "It asked you something — answer that first; this goes in after"
+    : wait.state === "asking" ? "It asked you something — answer here and it goes straight in"
     : wait.state === "parked" ? "Tell the agent — goes straight in. Enter to send, paste a screenshot to attach it"
     : wait.state === "no_session" ? "Tell the agent — reopens a session with this as the ask"
     : "Tell the agent — queued, typed in when it stops. Enter to send, paste a screenshot to attach it";

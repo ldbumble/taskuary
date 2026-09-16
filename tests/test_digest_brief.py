@@ -2,21 +2,15 @@
 names what slipped (their ask, nobody answered), and speaks in COUNSEL.md's voice - not the
 report summarizer's. All offline: the model is a lambda, the calendar is off."""
 import unittest
+from contextlib import contextmanager
 from datetime import datetime, timedelta
+from unittest import mock
 
 from taskuary import assistant, digest, reports
 from taskuary.store import MemoryStore
 
 ME, DANA = 'owner@ours.com', 'dana@vendor.com'
 def _ago(days=0, hours=0): return (datetime.now() - timedelta(days=days, hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
-
-
-def _earlier_today():
-    """A stamp that is definitely TODAY and definitely past. An hour ago is YESTERDAY between
-    midnight and 01:00, which is when CI happened to run - "already ran today" then read as never
-    (2026-09-04 00:53 UTC)."""
-    now = datetime.now()
-    return max(now - timedelta(hours=1), now.replace(hour=0, minute=0, second=1)).strftime('%Y-%m-%d %H:%M:%S')
 
 
 def _store():
@@ -113,32 +107,49 @@ class BriefMemoryTests(unittest.TestCase):
         self.assertNotIn('Retired rule', text)
 
 
-def _slot_ahead() -> str:
-    """A daily_at that has NOT come round yet today, so is_due's answer is about once_per_day
-    and nothing else. Hard-coding '08:00' made these two tests pass only before breakfast: after
-    08:00 the daily clock made the report due on its own and 'already ran today' looked broken."""
-    when = datetime.now() + timedelta(hours=1)
-    return '23:59' if when.day != datetime.now().day else when.strftime('%H:%M')
+@contextmanager
+def _at(h, m, day=16):
+    """A frozen local clock. A scheduler test that reads the wall clock only asserts what the hour
+    happens to allow - these ones ran green before breakfast and skipped after it. Every stamp below
+    is a literal, so the whole morning of TQ-0589 is one readable walk."""
+    class Now(datetime):
+        @classmethod
+        def now(cls, tz=None): return cls(2026, 9, day, h, m)
+    with mock.patch.object(reports, 'datetime', Now): yield
+
+
+YESTERDAY, SLOT_RUN = '2026-09-15 08:00:00', '2026-09-16 08:08:00'
 
 
 class OnceADayTests(unittest.TestCase):
-    """A brief that lands again on every app launch is the noise that made it unreadable."""
+    """A brief that lands twice in a morning is the noise that made it unreadable. The cap belongs
+    to the REPORT, not to the launch - and when both a launch and a slot could serve the day, the
+    SLOT wins (the owner, 2026-09-14: "we should only have the latest one")."""
     CFG = {'type': 'digest', 'daily_at': '08:00', 'on_startup': True, 'once_per_day': True}
 
-    def test_the_first_launch_of_the_day_files_the_brief_and_the_next_nine_do_not(self):
-        cfg = {**self.CFG, 'daily_at': _slot_ahead()}
-        self.assertTrue(reports.is_due(cfg, None, startup=True))                    # never run
-        self.assertTrue(reports.is_due(cfg, _ago(days=1, hours=2), startup=True))   # yesterday's
-        self.assertFalse(reports.is_due(cfg, _earlier_today(), startup=True))       # already today
+    def test_an_early_launch_waits_for_the_slot_instead_of_pre_empting_it(self):
+        """TQ-0589: opening the app at 07:07 filed a brief at 07:10, and 08:00 filed another."""
+        with _at(7, 10): self.assertFalse(reports.is_due(self.CFG, YESTERDAY, startup=True))
 
-    def test_without_the_flag_every_launch_still_fires(self):
-        cfg = {k: v for k, v in self.CFG.items() if k != 'once_per_day'} | {'daily_at': _slot_ahead()}
-        self.assertTrue(reports.is_due(cfg, _earlier_today(), startup=True))             # the Assistant's cadence
+    def test_the_slot_files_the_day_and_nothing_else_does(self):
+        with _at(8, 8):  self.assertTrue(reports.is_due(self.CFG, YESTERDAY))
+        with _at(9, 0):  self.assertFalse(reports.is_due(self.CFG, SLOT_RUN))
+        with _at(20, 0): self.assertFalse(reports.is_due(self.CFG, SLOT_RUN, startup=True))
+
+    def test_a_launch_after_a_missed_slot_files_at_once(self):
+        """Shut all morning: 08:00 came and went unserved, so opening at 10:00 IS the brief."""
+        with _at(10, 0): self.assertTrue(reports.is_due(self.CFG, YESTERDAY, startup=True))
 
     def test_the_daily_clock_still_fires_while_the_app_stays_open(self):
-        due = datetime.now().replace(hour=8, minute=0, second=0, microsecond=0)
-        if datetime.now() < due: self.skipTest('before 08:00 - the daily slot has not passed today')
-        self.assertTrue(reports.is_due(self.CFG, (due - timedelta(hours=2)).strftime('%Y-%m-%d %H:%M:%S')))
+        """Left running since yesterday, nothing has served today - 08:00 is still its moment."""
+        with _at(8, 0): self.assertTrue(reports.is_due(self.CFG, YESTERDAY))
+
+    def test_a_never_run_brief_does_not_wait_a_day_for_its_slot(self):
+        with _at(7, 10): self.assertTrue(reports.is_due(self.CFG, None, startup=True))
+
+    def test_without_the_flag_every_launch_still_fires(self):
+        cfg = {k: v for k, v in self.CFG.items() if k != 'once_per_day'}
+        with _at(7, 10): self.assertTrue(reports.is_due(cfg, '2026-09-16 06:00:00', startup=True))
 
     def test_the_seeded_digest_ships_once_a_day(self):
         import json

@@ -1134,7 +1134,37 @@ def schedule_words(cfg: dict) -> str:
     return ' + '.join(p for p in parts if p) or 'no schedule - run it by hand'
 
 
+def _daily_slot(cfg: dict, now: datetime):
+    """Today's `daily_at` moment, or None when it is absent or unreadable. Tolerant of what people
+    type: '8' and '8:30' both parse, and garbage is a report on the daily default rather than an
+    unpack error killing the WHOLE poll thread (it did)."""
+    try:
+        hh, mm = (str(cfg['daily_at']).strip() + ':0').split(':')[:2]
+        return now.replace(hour=int(hh), minute=int(mm or 0), second=0, microsecond=0)
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _slot_ahead_today(cfg: dict, now: datetime) -> bool:
+    """Is this report's own clock going to serve it again before midnight? A capped report defers
+    to its slot rather than pre-empting it on a launch. `every_minutes` has no slot - it is an
+    interval, and an overdue one fires on this very poll anyway."""
+    due = _daily_slot(cfg, now)
+    if due is not None: return now < due
+    if cfg.get('cron'):
+        # the last cron minute of TODAY: later than now means one is still coming (no cron_next needed)
+        last_today = cron_prev(cfg['cron'], now.replace(hour=23, minute=59, second=0, microsecond=0))
+        return last_today is not None and last_today > now
+    return False
+
+
 def is_due(cfg: dict, last_polled, startup: bool = False) -> bool:
+    now = datetime.now()
+    # once_per_day/week is the REPORT's cap, not the launch's. It used to be read only inside the
+    # startup arm below, so the Morning digest greeted a 07:07 launch and then ran AGAIN at its
+    # 08:00 slot - "at most once a day" printed on a clock that fired twice (TQ-0589).
+    if ((cfg.get('once_per_day') and _ran_today(last_polled))
+            or (cfg.get('once_per_week') and _ran_this_week(last_polled))): return False
     # on_startup is local-first scheduling: the app is a window you open, so "when I open
     # it" is a real schedule. Due exactly once per launch - never on the 10-minute auto-sync,
     # and a cron time it would have missed while closed is not its problem.
@@ -1143,22 +1173,21 @@ def is_due(cfg: dict, last_polled, startup: bool = False) -> bool:
     # ...but a BRIEF is once a day. on_startup on the Morning digest filed a fresh copy on every
     # launch - ten identical briefs in two days, which is the noise that made it unreadable (the
     # owner, 2026-08-30). once_per_day keeps the "you opened the app, here is today's" behaviour
-    # and drops every repeat: a launch fires it only when today has not had one yet.
+    # and drops every repeat.
     if cfg.get('on_startup'):
-        stale = not ((cfg.get('once_per_day') and _ran_today(last_polled))
-                     or (cfg.get('once_per_week') and _ran_this_week(last_polled)))
-        if startup and stale: return True
+        # When a launch and a slot could both serve today, the SLOT wins: the later brief reads
+        # the same day from further along it (the owner, 2026-09-14: "we should only have the
+        # latest one"). So a capped report whose own time is still ahead today sits the launch
+        # out. Uncapped, "on app start" still means every start; and a slot that already passed
+        # unserved makes the launch the catch-up it always was.
+        capped = cfg.get('once_per_day') or cfg.get('once_per_week')
+        if startup and not (capped and last_polled and _slot_ahead_today(cfg, now)): return True
         if not any(cfg.get(k) for k in ('cron', 'every_minutes', 'daily_at')): return False
-    now = datetime.now()
     # A first-run dashboard report is useful immediately; a time-specific ritual is not. The
     # seeded evening brief uses this flag so installing at 9am does not file an "evening" report
     # before breakfast, while installing after its local slot still runs it that day.
-    if not last_polled and cfg.get('first_run_at_schedule') and cfg.get('daily_at'):
-        try:
-            hh, mm = (str(cfg['daily_at']).strip() + ':0').split(':')[:2]
-            return now >= now.replace(hour=int(hh), minute=int(mm or 0), second=0, microsecond=0)
-        except (TypeError, ValueError):
-            pass
+    if not last_polled and cfg.get('first_run_at_schedule') and (due := _daily_slot(cfg, now)):
+        return now >= due
     if not last_polled: return True
     try: last = datetime.fromisoformat(str(last_polled)[:19].replace(' ', 'T'))
     except ValueError: return True
@@ -1171,15 +1200,7 @@ def is_due(cfg: dict, last_polled, startup: bool = False) -> bool:
     if cfg.get('every_minutes'):
         try: return (now - last).total_seconds() >= float(cfg['every_minutes']) * 60
         except (TypeError, ValueError): pass               # 'every 30' typed as words: daily default
-    if cfg.get('daily_at'):
-        # tolerant of what people type: '8' and '8:30' both parse; garbage falls back to the
-        # daily default instead of an unpack error killing the WHOLE poll thread (it did)
-        try:
-            hh, mm = (str(cfg['daily_at']).strip() + ':0').split(':')[:2]
-            due = now.replace(hour=int(hh), minute=int(mm or 0), second=0, microsecond=0)
-            return now >= due and last < due
-        except (TypeError, ValueError):
-            pass
+    if (due := _daily_slot(cfg, now)) is not None: return now >= due and last < due
     return (now - last).total_seconds() >= 24 * 3600
 
 

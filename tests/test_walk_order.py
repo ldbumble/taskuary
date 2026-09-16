@@ -173,9 +173,9 @@ class TodaysBriefLeadsTests(unittest.TestCase):
         self.assertEqual(brief['order_band'], 3)
 
     def test_only_the_latest_brief_of_the_day_leads_and_the_earlier_one_lands(self):
-        """The digest is "daily at 08:00 + on app start (at most once a day)", so opening the app
-        at 07:20 and the 08:00 slot both produced one - and two identical rows led the work rail
-        (the owner, 2026-09-14: "we should only have the latest one")."""
+        """Two identical rows led the work rail (the owner, 2026-09-14: "we should only have the
+        latest one"). The schedule no longer makes a pair - a launch defers to the slot since
+        TQ-0589 - but "Run now" on the Reports tab bypasses is_due, so a second brief still can."""
         s = store()
         report_source(s)
         report_run(s, hours=today_ago(3), body='THE WINDOW IN NUMBERS: the 07:20 one')

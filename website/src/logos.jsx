@@ -440,5 +440,34 @@ export const LOGOS = {
 };
 
 LOGOS.sharepoint = LOGOS.sharepoint_list;      // the card is "SharePoint"; the list mark is the brand mark
+// Image models. Four of these cards talk to a product that already has a mark on this page, so
+// they wear it rather than a second drawing of the same logo; the other four are new brands.
+LOGOS.gemini_image = (p) => (
+  <S {...p}>
+    <rect x="2" y="2" width="20" height="20" rx="5" fill="#fff" stroke="#e3e6ea" />
+    <path fill="#4285F4" d="M12 4.2c.5 3.4 1.9 5.6 4.9 6.4v2.8c-3 .8-4.4 3-4.9 6.4-.5-3.4-1.9-5.6-4.9-6.4v-2.8c3-.8 4.4-3 4.9-6.4z" />
+  </S>
+);
+LOGOS.stability_image = (p) => <T p={p} bg="#8b5cf6" text="S" />;
+LOGOS.replicate_image = (p) => (
+  <S {...p}>
+    <rect x="2" y="2" width="20" height="20" rx="5" fill="#0f0f0f" />
+    <path fill="#fff" d="M6.5 6.2h11v2.2h-8.6v9.6H6.5z" />
+    <path fill="#fff" d="M9.6 9.6h7.9v2.2h-5.5v6.2H9.6z" />
+    <path fill="#fff" d="M12.7 13h4.8v2.2h-2.4v2.8h-2.4z" />
+  </S>
+);
+LOGOS.xai_image = (p) => (
+  <S {...p}>
+    <rect x="2" y="2" width="20" height="20" rx="5" fill="#0f0f0f" />
+    <path fill="#fff" d="M7 6.6h2.9l3.1 4.3 3.1-4.3H19l-4.6 6.2L19 19h-2.9l-3.1-4.4L9.9 19H7l4.6-6.2z" />
+  </S>
+);
+// the same product, a second card: one drawing, two keys
+LOGOS.openai_image = LOGOS.openai;
+LOGOS.azure_openai_image = LOGOS.azure_openai;
+LOGOS.openrouter_image = LOGOS.openrouter;
+LOGOS.image_server = LOGOS.stt_server;     // "a server you run yourself", same idea as the Whisper one
+
 export const hasLogo = (k) => !!LOGOS[k];
 export const Logo = ({ name, sx }) => (LOGOS[name] ? LOGOS[name]({ sx }) : null);

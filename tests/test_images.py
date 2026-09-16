@@ -58,6 +58,25 @@ class TheCardsAgreeEverywhereTests(unittest.TestCase):
             self.assertIn(f'{t}: {{', page, f'{t} has no card in ConnectorsView')
         self.assertIn('AI — images', page)
 
+    def test_every_type_is_seeded_so_the_group_is_not_empty(self):
+        """The Connections page renders from connector ROWS, not from the type table -
+        channelCards filters the rows it was given by Type. A type with no seeded row is a group
+        with no cards in it, which is exactly what the owner got: an "AI - images" tab with
+        nothing under it (2026-09-15). The roles table is not what puts a card on the page."""
+        s = MemoryStore()
+        have = {c['Type'] for c in s.list_connectors()}
+        for t in images.IMAGE_TYPES:
+            self.assertIn(t, have, f'{t} is not seeded, so its card never appears')
+
+    def test_every_card_wears_a_brand_mark_rather_than_the_generic_sparkle(self):
+        """chanCard falls back to the channel glyph when hasLogo is false, so eight image cards
+        would all wear the same AI sparkle and tell you nothing about which is which - the exact
+        thing logos.jsx was written to stop."""
+        marks = open('website/src/logos.jsx', encoding='utf-8').read()
+        for t in images.IMAGE_TYPES:
+            self.assertTrue(f'LOGOS.{t} =' in marks or f'  {t}: (p)' in marks,
+                            f'{t} has no brand mark, so its card gets the generic glyph')
+
     def test_every_type_can_be_tested_from_the_card(self):
         branch = open('taskuary/channels.py', encoding='utf-8').read()
         self.assertIn('images.test', branch)

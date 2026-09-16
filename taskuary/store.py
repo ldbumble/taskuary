@@ -779,7 +779,14 @@ class SQLiteStore:
                          ('exa', 'Exa search'), ('tavily', 'Tavily search'),
                          ('firecrawl', 'Firecrawl'), ('reader', 'Jina Reader'),
                          ('gemini_stt', 'Google Gemini transcription'), ('groq_stt', 'Groq (Whisper)'), ('openai_stt', 'OpenAI transcription'), ('deepgram', 'Deepgram'),
-                         ('elevenlabs_stt', 'ElevenLabs Scribe'), ('stt_server', 'Any Whisper server'), ('local_whisper', 'Local Whisper')):
+                         ('elevenlabs_stt', 'ElevenLabs Scribe'), ('stt_server', 'Any Whisper server'), ('local_whisper', 'Local Whisper'),
+                         # image models (images.py). Seeded like every other card: DEFAULT_ROLES
+                         # says what a type IS, but the Connections page renders from ROWS, and a
+                         # type with no row is a group with nothing in it (2026-09-15).
+                         ('openai_image', 'OpenAI images'), ('azure_openai_image', 'Azure OpenAI images'),
+                         ('gemini_image', 'Google Gemini images'), ('stability_image', 'Stability AI'),
+                         ('openrouter_image', 'OpenRouter images'), ('replicate_image', 'Replicate'),
+                         ('xai_image', 'xAI Grok images'), ('image_server', 'Any image server')):
                 # Type is intentionally not unique anymore. Seed only when a type has no card;
                 # INSERT OR IGNORE would now insert another blank copy on every startup.
                 self.cx.execute('''INSERT INTO connector (Type, Name, Roles)

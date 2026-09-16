@@ -558,6 +558,8 @@ def run_local_file(cfg):
     A folder lists what is in it, newest first, which answers "did today's export arrive?"."""
     import json as _json
     p = _newest(cfg['path'], cfg.get('pick'))
+    if is_taskuary_private(p):
+        raise RuntimeError('the Taskuary home is not a report source')
     lim, mine = row_limit(cfg)
     if p.is_dir():
         rows = sorted(({'name': f.name, 'bytes': f.stat().st_size,

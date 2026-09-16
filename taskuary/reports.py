@@ -7,7 +7,7 @@ REGISTRY: type -> executor(config) -> (headline, summary). Implemented: sqlite, 
 timeline instead of silently absent. Adding a type = one ~15-line function + a REGISTRY
 entry - PRs welcome.
 """
-import io, json, re, sqlite3, time
+import io, json, os, re, sqlite3, time
 from datetime import datetime, timedelta
 from loguru import logger
 from . import spawn

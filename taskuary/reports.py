@@ -343,16 +343,31 @@ def run_rss(cfg):
     return f'{len(titles)} new items', '\n'.join(f'- {t}' for t in titles)[:4000]
 
 
+def winrm_argv(host, script=None):
+    """PowerShell argv + env so host/script never sit inside -Command (audit 2026-09-16).
+
+    The remote ScriptBlock is still the owner's script - that is the point of the card. What
+    this stops is a host like `box; calc` or a script that closes `}}` and runs locally."""
+    env = {**os.environ, 'TQ_WINRM_HOST': str(host or '')}
+    if script is None:
+        cmd = ('Test-WSMan -ComputerName $env:TQ_WINRM_HOST -ErrorAction Stop | Out-Null; '
+               'Invoke-Command -ComputerName $env:TQ_WINRM_HOST -ScriptBlock { $env:COMPUTERNAME }')
+    else:
+        env['TQ_WINRM_SCRIPT'] = str(script)
+        cmd = ('Invoke-Command -ComputerName $env:TQ_WINRM_HOST '
+               '-ScriptBlock ([scriptblock]::Create($env:TQ_WINRM_SCRIPT))')
+    return ['powershell', '-NoProfile', '-NonInteractive', '-Command', cmd], env
+
+
 def run_winrm(cfg):
     """{"host", "script"} - run PowerShell ON a remote Windows box (WinRM / PS remoting,
     your current Windows credentials) and report its output. A box you can RDP into is
     usually domain-joined and WinRM-reachable already; if not, run Enable-PSRemoting on
     it once (elevated)."""
-    import subprocess
     host, script = cfg['host'], cfg['script']
-    p = spawn.run(['powershell', '-NoProfile', '-NonInteractive', '-Command',
-                        f'Invoke-Command -ComputerName {host} -ScriptBlock {{ {script} }}'],
-                       capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=180)
+    argv, env = winrm_argv(host, script)
+    p = spawn.run(argv, env=env, capture_output=True, text=True, encoding='utf-8',
+                  errors='replace', timeout=180)
     if p.returncode != 0: raise RuntimeError((p.stderr or p.stdout or 'remote run failed')[:500])
     out = (p.stdout or '').strip()
     return f'{len(out.splitlines())} lines from {host}', out[:BODY_CHARS]

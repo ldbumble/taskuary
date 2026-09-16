@@ -251,6 +251,21 @@ class DoorTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'not a report source'):
             reports.run_local_file({'path': str(config.home() / 'config.toml')})
 
+    def test_a_copy_of_a_private_file_is_private_too(self):
+        """Blocking four exact names left the same secrets readable under a neighbouring name:
+        the -wal companion, the .bak-* copies, the older config and the rotated logs are all
+        on a live install today (review of #47)."""
+        from taskuary import config
+        h = config.home()
+        for name in ('taskuary.db', 'taskuary.db-wal', 'taskuary.db-shm',
+                     'taskuary.db.bak-20260907-repair', 'config.toml',
+                     'config.before-cli-connections.toml', 'wa-bridge.token',
+                     'taskuary.log', 'taskuary.2026-09-07_07-09-55_247371.log'):
+            self.assertTrue(reports.is_taskuary_private(h / name), f'{name} must not be a report source')
+        # ...and the owner's own data, which is the whole point of the local_file type, still reads
+        for name in ('sales-2026-09-01.csv', 'notes.md', 'scratch/export.json', 'attachments/a.pdf'):
+            self.assertFalse(reports.is_taskuary_private(h / name), f'{name} must stay readable')
+
     def test_f03_the_events_socket_refuses_another_sites_page(self):
         from starlette.websockets import WebSocketDisconnect
         tok = server.cfg['server']['token']

@@ -55,11 +55,17 @@ def ro_sqlite(path: str):
 
 # Files that ARE the install: a sqlite/local_file tool pointed here dumps connector.Secret.
 # Subfolders (scratch, attachments, exports) are ordinary data and stay readable.
-_PRIVATE_HOME = frozenset({'taskuary.db', 'config.toml', 'wa-bridge.token', 'taskuary.log'})
+#
+# PATTERNS, not names. Exact names blocked taskuary.db while `taskuary.db-wal` (the same rows,
+# mid-write), four `taskuary.db.bak-*` copies, `config.before-cli-connections.toml` and the
+# rotated `taskuary.<date>.log` files sat open beside it - every one of those is on a live
+# install today, and each holds what the blocked name holds (review of #47).
+_PRIVATE_HOME = ('taskuary.db*', 'config*.toml', '*.token', 'taskuary*.log')
 
 
 def is_taskuary_private(path) -> bool:
     """True for the install's own credential files, not for a file the owner dropped alongside them."""
+    from fnmatch import fnmatch
     from pathlib import Path
     from . import config
     p = Path(path).expanduser().resolve()
@@ -67,7 +73,7 @@ def is_taskuary_private(path) -> bool:
     if p == root: return True
     try: rel = p.relative_to(root)
     except ValueError: return False
-    return rel.parts[0] in _PRIVATE_HOME or p.name in _PRIVATE_HOME
+    return any(fnmatch(rel.parts[0], pat) or fnmatch(p.name, pat) for pat in _PRIVATE_HOME)
 
 
 # What a request body may NOT override on a saved card: where the credentials go. resolve_cfg lets

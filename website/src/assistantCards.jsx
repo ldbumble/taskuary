@@ -318,21 +318,10 @@ export function AgentCard({ card, onDone, onOpenTask }) {
     } catch (e) { setErr(errText(e)); }
     setBusy(false);
   };
-  // ...and the two ways an agent ENDS, in the chat, where the owner is looking (2026-09-03: "we need
-  // to button to close down agent in the chat. it's finished.."). Wrapping up is the whole ending -
-  // the transcript becomes the report, proposals become reviews, the reply gets drafted, the task
-  // closes; stopping just ends the session and leaves the task where it is.
-  const [ending, setEnding] = useState("");
-  const finish = async (wrap) => {
-    setEnding(wrap ? "wrap" : "stop"); setErr("");
-    try {
-      if (wrap) await api.post(`/api/tasks/${card.tid}/wrap`, { close: true });
-      else await api.post(`/api/tasks/${card.tid}/agent/stop`);
-      onDone?.(wrap ? `${card.ref || "The task"} wrapped up - the report is on it and the task is closed.`
-                    : `${card.agent || "The agent"} stopped. ${card.ref || "The task"} is still open.`);
-    } catch (e) { setErr(errText(e)); }
-    setEnding("");
-  };
+  // The two ways an agent ends - wrap up (transcript becomes the report, proposals become reviews,
+  // the task closes) and stop - were written here and never rendered, so nothing on this card could
+  // reach either. Both roads are alive where they ARE offered: /api/tasks/{id}/wrap from the task
+  // page, the Wall and the Agents panel. Removed rather than left looking like a feature.
   return (
     <CardShell card={card} kicker={working ? `the ${who} is working again` : card.paused ? "conversation paused" : card.asking ? `the ${who} asked` : `the ${who} stopped`} title={card.paused ? null : card.title}
       sub={`${card.working || card.agent || who} · ${working ? "back at it - nothing for you until it stops" : card.paused ? "saved after Taskuary stopped - ready to resume" : card.asking ? "waiting on your answer" : chat ? "waiting on you" : "parked at its prompt"}`} err={err}>

@@ -47,7 +47,27 @@ def ro_sqlite(path: str):
     """A report READS a database, so open it so that it can do nothing else: the query is whatever
     the spec says, and DDL autocommits - a metric spec that said DROP TABLE dropped it (audit 2026-09-02)."""
     from pathlib import Path
-    return sqlite3.connect(f'{Path(path).resolve().as_uri()}?mode=ro', uri=True)
+    p = Path(path).expanduser().resolve()
+    if is_taskuary_private(p):
+        raise RuntimeError('the Taskuary database is not a report source')
+    return sqlite3.connect(f'{p.as_uri()}?mode=ro', uri=True)
+
+
+# Files that ARE the install: a sqlite/local_file tool pointed here dumps connector.Secret.
+# Subfolders (scratch, attachments, exports) are ordinary data and stay readable.
+_PRIVATE_HOME = frozenset({'taskuary.db', 'config.toml', 'wa-bridge.token', 'taskuary.log'})
+
+
+def is_taskuary_private(path) -> bool:
+    """True for the install's own credential files, not for a file the owner dropped alongside them."""
+    from pathlib import Path
+    from . import config
+    p = Path(path).expanduser().resolve()
+    root = config.home().resolve()
+    if p == root: return True
+    try: rel = p.relative_to(root)
+    except ValueError: return False
+    return rel.parts[0] in _PRIVATE_HOME or p.name in _PRIVATE_HOME
 
 
 # What a request body may NOT override on a saved card: where the credentials go. resolve_cfg lets

@@ -34,6 +34,7 @@ not built, and until it is, an agent that goes looking for the file can find the
 built is that no prompt, no API response and no tool result ever hands them over, and that the
 one road from "an agent wants this sent" to "it is sent" runs through a person.
 """
+import hmac
 import re
 import secrets as _secrets
 from loguru import logger
@@ -88,6 +89,16 @@ def denied(method: str, path: str) -> str:
     for m, p, why in _DENIED:
         if m.match(method or '') and p.match(path or ''): return why
     return ''
+
+
+def token_matches(got, *want) -> bool:
+    """True if `got` is one of the secrets in `want`. Length mismatch is a miss, not an exception
+    (hmac.compare_digest raises on some Python versions when the strings differ in length)."""
+    got = str(got or '')
+    for w in want:
+        w = str(w or '')
+        if w and len(got) == len(w) and hmac.compare_digest(got, w): return True
+    return False
 
 
 def scope_of(cfg: dict, headers) -> str:

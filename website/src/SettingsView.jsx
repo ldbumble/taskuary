@@ -95,6 +95,12 @@ const KNOB_META = {
   concierge_model: { group: "Triage & agents", label: "Assistant tab model", type: "text",
     desc: "Override the quick gear for the brain above (e.g. sonnet, gpt-5.4-mini@low). Blank = the default.",
     help: "For a CLI this is its --model (Codex takes model@effort); for an API connector, its model or deployment name. Changing it starts a fresh CLI conversation." },
+  assistant_ai: { group: "Triage & agents", label: "General agent brain", type: "brain",
+    desc: "Which AI works every general task - research, planning, writing, a job with no repository - and answers the floating bubble and the WhatsApp doorway.",
+    help: "Normally set on the General agent card at the top of this tab; this row is the fallback if that panel cannot load. A CLI here can run tools, drive a browser and post to the wall; an API connector has no shell, so it can only read and write - quicker, and enough for chat. Blank = the first active API connector, else the default agent." },
+  assistant_model: { group: "Triage & agents", label: "General agent model", type: "text",
+    desc: "Override the model for the brain above. Blank = the provider's own default.",
+    help: "For an API connector this is its model or deployment name; for a CLI it is the profile's light model. Changing it starts a fresh CLI conversation." },
   assistant_max_lines: { group: "Assistant", label: "Lines per post, at most", type: "number",
     desc: "The assistant checks in every 30 minutes and on startup (the 'Assistant' report on the Reports tab — edit its prompt for what it watches for, change the cadence, delete it to turn it off) and posts only when it has something to say. How it SPEAKS is COUNSEL.md on the Docs tab: edit that to change its voice, how bold it is, what it takes a position on. This caps how much one post says. 5 by default.",
     help: "One AI call per post, and none when there is nothing new. Every line has a key and a state, so it never says the same thing twice. Talk back under a suggestion to correct it or ask a follow-up; the answer and your correction stay with the idea and inform later checks. 'Follow up' drafts the chase in your voice into Review — nothing is sent by itself; 'Make it a task' starts the agent. Voice: COUNSEL.md (Docs tab); what to watch for: the report's prompt. Without an AI connector the facts still post, in the hub's own words. 'Run now' on the Reports tab's Assistant row posts regardless of the schedule." },
@@ -238,7 +244,20 @@ const HIDDEN = new Set(["ingest_status", "agent_issues_enabled", "agent_push_ena
 // tab under a different name, which is how the general agent's brain went unfindable
 const PANEL_OWNED = new Set(["triage_ai", "default_agent", "concierge_ai", "concierge_model",
                              "assistant_ai", "assistant_model"]);
-const hidden = (name) => HIDDEN.has(name) || name.startsWith("owner_") || name.endsWith("_seeded");   // owner_* = About you
+// MACHINE STATE IS NOT CONFIGURATION. The settings table is also where the app keeps its own
+// bookkeeping - which CLI session a chat is on, where a per-task cursor got to, when a sweep last
+// ran - and every row without a KNOB_META entry fell through to the "Other" tab as an editable
+// text box. On a real install that was 185 of 249 rows, 162 of them per-entity ids and
+// timestamps: a page of machine state you can type over (the owner, 2026-09-16: "does not feel
+// useful"). A per-entity key is `name:<id>` and is state by construction; the scalars are named.
+// Nothing here is deleted or stopped being written - it just is not offered as a knob.
+const STATE = new Set(["app_sessions", "assistant_dock_task_id", "assistant_handoff", "assistant_last_run",
+  "assistant_notes", "assistant_notes_at", "auto_start_upgraded", "chat_cleanup_at", "github_login",
+  "ingest_last_fetch_completed_at", "learn_reflect_log", "problems_dismissed", "wa_log_trimmed_at",
+  "wall_rolled_on"]);
+const isState = (name) => name.includes(":") || STATE.has(name);
+const hidden = (name) => HIDDEN.has(name) || isState(name)
+  || name.startsWith("owner_") || name.endsWith("_seeded");   // owner_* = About you
 const meta = (name) => KNOB_META[name] || { group: "Other", label: name, type: "auto" };
 
 const SECTION_HELP = {
@@ -472,8 +491,13 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
 
   /* ── detail pages ─────────────────────────────────────────────────────── */
   if (page === "config") {
+    // ...and the panel's own keys are suppressed wherever they would otherwise land. Scoping this
+    // to the panel's tab was fine while every owned key had a KNOB_META entry in that group -
+    // then `assistant_ai` lost its entry when it became a card, fell to "Other" by default, and
+    // came back as a bare unlabelled text box (d3bde8bd). `panelOk` still puts the plain rows
+    // back if the panel fails to load, which is why they keep their KNOB_META entries.
     const rows = settings.filter((s) => !hidden(s.Name) && meta(s.Name).group === cfgTab
-      && !(cfgTab === "Triage & agents" && panelOk && PANEL_OWNED.has(s.Name)));
+      && !(panelOk && PANEL_OWNED.has(s.Name)));
     const tabs = GROUPS.filter((g) => settings.some((s) => meta(s.Name).group === g));
     return (
       <Box>

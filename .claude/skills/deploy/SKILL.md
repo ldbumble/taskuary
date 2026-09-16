@@ -1,7 +1,7 @@
 ---
 name: deploy
 description: >
-  Cut and publish a Taskuary release: bump the version in all five places, run the three
+  Cut and publish a Taskuary release: bump the version in all six places, run the three
   gates, rebuild the committed UI, push, wait for CI on that exact commit, then tag so the
   publish workflow uploads to PyPI. Use when asked to deploy, release, ship, publish, "push
   to PyPI", cut a version, or bump the tag. Encodes the ordering that keeps a permanent PyPI
@@ -50,7 +50,7 @@ git reset -q                                # ALWAYS: refreshes the shared index
 Skipping that last `git reset -q` leaves the shared index showing your own files as modified and
 your new test file as deleted. It is confusing, not harmful — but fix it, do not commit over it.
 
-## 2. Bump the version in all five places
+## 2. Bump the version in all six places
 
 `pyproject.toml` is the one source of truth (`taskuary/__init__._version()` reads it), but four
 other places *announce* the number and drift if you forget them. `docs/roadmap.md` sat three
@@ -61,6 +61,7 @@ releases behind this way, and the public demo sat on v0.3.3.2 through four.
 | `pyproject.toml` | `version = "X.Y.Z.W"` |
 | `README.md` | `currently **vX.Y.Z.W**` |
 | `README.md` | the badge's `release=X.Y.Z.W` cache-buster (and `asof=` — see below) |
+| `README.zh-CN.md` | `目前为 **vX.Y.Z.W**`, and its own `release=`/`asof=` buster |
 | `docs/roadmap.md` | `currently vX.Y.Z.W` |
 | `website/src/demoFixtures.json` | `/api/version.version`, `/api/build.version`, `/api/build.disk_version` |
 
@@ -71,7 +72,7 @@ Patch exactly those three fields and leave the rest byte-identical: it is a real
 not a document. Three occurrences of the old number, no more.
 
 Two tests guard this, both in `tests/test_promptmap_and_catalog.py`:
-`test_no_shipped_doc_advertises_an_older_version` (README and roadmap against `pyproject`) and
+`test_no_shipped_doc_advertises_an_older_version` (both READMEs and the roadmap against `pyproject`) and
 `test_the_demo_does_not_advertise_an_older_version` (the recording). The badge buster is covered by
 neither: shields caches per-URL, so without bumping it the README shows the previous number for up
 to an hour.

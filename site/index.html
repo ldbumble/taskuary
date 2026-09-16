@@ -20,6 +20,7 @@
   /* Beacon - the app's own palette: oat paper, slate-blue brand, sage second, one oxblood for "on you" */
   :root{--bg:#f6f4f1;--panel:#fffdfb;--panel2:#e9e3d8;--bd:#e1dcd5;--ink:#262521;--dim:#4d4a43;--faint:#6e685f;
         --accent:#55697a;--accent-ink:#41525f;--sage:#6f8a6e;--sage-ink:#4c6450;--alert:#8a3646;--alert-tint:#f3e6e8;--alert-bd:#e0c6cb;
+        --gold:#d4a72c;
         --sans:'IBM Plex Sans','Segoe UI',system-ui,sans-serif;--mono:'IBM Plex Mono',Consolas,monospace}
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
@@ -48,6 +49,22 @@
   .btn.ghost:hover{background:#fff}
   .btn.sm{padding:7px 12px;font-size:13.5px}
   .btn svg{width:16px;height:16px;flex:none}
+
+  /* THE ONE ASK. Gold is GitHub's own star colour, so the glyph reads as the thing you press
+     over there rather than as decoration (the owner, 2026-09-17: "the star should be gold like
+     in github (its yellow) but want it more prominent"). Every project that gets starred asks in
+     the same places: beside the logo, once near the top while people are still reading, and in
+     the community block at the end - one line each, with the reason, never a second time. */
+  .star{color:var(--gold);line-height:1;font-size:1.05em}
+  .btn.primary .star{color:#f3c74a}
+  .starline{margin:20px 0 0;font-size:14.5px;color:var(--dim)}
+  .starline a{color:var(--ink);font-weight:650;border-bottom:1px solid var(--bd)}
+  .starline a:hover{color:var(--accent);border-color:var(--accent);text-decoration:none}
+  .starline .n{font-family:var(--mono);font-size:13px;color:var(--faint)}
+  .starchip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:8px;
+            border:1px solid var(--bd);background:var(--panel);font-weight:600;font-size:13.5px;color:var(--ink)}
+  .starchip:hover{text-decoration:none;border-color:var(--gold);background:#fff}
+  .starchip .n{font-family:var(--mono);color:var(--faint)}
 
   /* hero: the whole first screen is the room. The words sit on top of it, top-left, small
      enough to leave the floor alone; the inbox rail on the right feeds it; the door is the way
@@ -166,7 +183,9 @@
       <a class="hide" href="#how">How it works</a>
       <a class="hide" href="#features">Features</a>
       <a class="hide" href="https://github.com/ldbumble/taskuary#readme">Docs</a>
-      <a href="https://github.com/ldbumble/taskuary" title="Source on GitHub">GitHub</a>
+      <a class="hide" href="https://github.com/ldbumble/taskuary" title="Source on GitHub">GitHub</a>
+      <a class="starchip" href="https://github.com/ldbumble/taskuary"
+         title="Star Taskuary on GitHub - it is how other people find it"><span class="star">★</span> Star <span class="n" id="starnav"></span></a>
       <a href="https://github.com/ldbumble/taskuary/issues/new/choose" title="Get help or report a problem">Support</a>
       <a class="hide" href="/demo/">Try it</a>
       <a class="btn primary sm" href="#download">Download</a>
@@ -196,6 +215,9 @@
       <a class="btn ghost" href="https://github.com/ldbumble/taskuary">View source</a>
     </div>
     <div class="fine">Free and open source (MIT) · your data never leaves the machine</div>
+    <p class="starline"><span class="star">⭐</span>
+      <a href="https://github.com/ldbumble/taskuary">Please star Taskuary on GitHub if you find it helpful</a>
+      — it is how other people find it<span class="n" id="starcount"></span></p>
   </div>
   <div class="wrap after">
     <div class="flow">
@@ -305,7 +327,7 @@ docker compose up -d</div>
         <h3>Get involved</h3>
         <p>Star it so others find it. Open an issue for what is wrong. The contributing guide is short.</p>
         <div class="stars">
-          <a class="btn ghost sm" href="https://github.com/ldbumble/taskuary/stargazers">★ Star on GitHub</a>
+          <a class="btn primary sm" href="https://github.com/ldbumble/taskuary"><span class="star">★</span> Star on GitHub <span class="n" id="starcard"></span></a>
           <a class="btn ghost sm" href="https://github.com/ldbumble/taskuary/issues/new/choose">Report an issue</a>
           <a class="btn ghost sm" href="https://github.com/ldbumble/taskuary/blob/master/CONTRIBUTING.md">Contributing</a>
         </div>
@@ -407,6 +429,21 @@ docker compose up -d</div>
         if (ex) ex.textContent = 'latest release: v' + v + (when ? ' · ' + when.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '');
       })
       .catch(function(){ var ex = document.getElementById('exever'); if (ex) ex.textContent = 'latest release on GitHub'; });
+  })();
+  // the star count, the same way: a number nobody has to remember to update, and nothing at all
+  // when GitHub does not answer - an ask that shows "0 stars" asks you not to bother
+  (function(){
+    fetch('https://api.github.com/repos/ldbumble/taskuary', { headers: { Accept: 'application/vnd.github+json' } })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(repo){
+        var n = repo && repo.stargazers_count;
+        if (!n) return;
+        var short = n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : String(n);
+        ['starnav', 'starcard'].forEach(function(id){ var e = document.getElementById(id); if (e) e.textContent = short; });
+        var line = document.getElementById('starcount');
+        if (line) line.textContent = ' \u00b7 ' + n + (n === 1 ? ' star so far' : ' stars so far');
+      })
+      .catch(function(){});
   })();
 </script>
 </body>

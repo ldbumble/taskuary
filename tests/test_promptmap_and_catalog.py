@@ -131,11 +131,13 @@ class VersionTests(unittest.TestCase):
         """It said v0.2.0 through the whole of 0.2.1 - the same second-copy problem as
         __init__.py, in the first thing anybody reads about the project. The README alone was
         guarded, so docs/roadmap.md sat three releases behind at v0.3.2.9 while the README said
-        0.3.3.2 (the owner, 2026-09-04: "pypi version is wrong"). Both announce the number, so
-        both are checked. RELEASING.md and site/COPY.md are left out on purpose: their versions
-        are worked examples, not a claim about what is current."""
+        0.3.3.2 (the owner, 2026-09-04: "pypi version is wrong"). Every doc that announces the
+        number is checked - the Chinese README went the same way, sitting on v0.3.4.11 through
+        three releases because the list here was written before it existed (2026-09-17).
+        RELEASING.md and site/COPY.md are left out on purpose: their versions are worked examples,
+        not a claim about what is current."""
         root = Path(__file__).parent.parent
-        for name in ('README.md', 'docs/roadmap.md'):
+        for name in ('README.md', 'README.zh-CN.md', 'docs/roadmap.md'):
             # every component, or 'v0.3.2.1' reads as a stale 'v0.3.2' plus a stray '.1'
             stale = {v for v in re.findall(r'v(\d+(?:\.\d+)+)', (root / name).read_text(encoding='utf-8'))
                      if v != taskuary.__version__}

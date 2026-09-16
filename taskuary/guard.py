@@ -80,6 +80,9 @@ DENIED = (
     (r'POST', r'^/api/(reports/(preview|compose|compose-sources)|workflows/compose)$',
      'the report/workflow composer may read a connected system with the card\'s credentials'),
     (r'POST|PUT|PATCH|DELETE', r'^/api/semantic(/|$)', 'a metric spec is SQL run against a database of its choosing'),
+    # a live pty is a shell as the owner. Agents already dispatch through terminal.start_on_task;
+    # this HTTP door is the one the owner sits in (server.open_terminal). GET listing/screen stay.
+    (r'POST', r'^/api/terminals$', 'opening a live session is the owner\'s door'),
 )
 _DENIED = tuple((re.compile(f'^({m})$', re.I), re.compile(p), why) for m, p, why in DENIED)
 

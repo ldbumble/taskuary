@@ -224,4 +224,12 @@ class DoorTests(unittest.TestCase):
                    headers={'X-Taskuary-Token': server.cfg['server']['agent_token']})
         self.assertEqual(r.status_code, 200)
 
+    def test_f03_the_events_socket_refuses_another_sites_page(self):
+        from starlette.websockets import WebSocketDisconnect
+        tok = server.cfg['server']['token']
+        with self.assertRaises(WebSocketDisconnect):
+            with c.websocket_connect(f'/api/events/ws?token={tok}',
+                                     headers={'Origin': 'http://evil.example'}) as ws:
+                ws.receive_json()
+
 if __name__ == '__main__': unittest.main()

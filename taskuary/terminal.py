@@ -165,9 +165,10 @@ class Term:
     """One live pty session. The reader thread fans output out to every attached socket
     and keeps a scrollback so reopening the tab shows the session as it stands."""
 
-    def __init__(self, argv, cwd, label, task_id=None, agent=None, rows=32, cols=110, store=None):
+    def __init__(self, argv, cwd, label, task_id=None, agent=None, rows=32, cols=110, store=None, cli=''):
         self.sid = uuid.uuid4().hex[:12]
         self.argv, self.cwd, self.label, self.task_id, self.agent = argv, cwd, label, task_id, agent
+        self.cli = cli                                    # what RUNS this, named by the profile - never argv[0]'s wrapper
         self.rows, self.cols = rows, cols                 # replaying the stream needs the real geometry
         self.started = datetime.now().isoformat(sep=' ', timespec='seconds')
         self.started_ts = time.time()                     # the same instant a clock can subtract (selfclose's age gate)
@@ -463,7 +464,7 @@ class Term:
         phase = stable_phase_of(self)          # compute once: every field in this payload tells one truth
         word = worker_fields(getattr(self, 'store', None), self)      # the run's own word outranks the screen (PW-228)
         base = {'sid': self.sid, 'label': self.label, 'cwd': self.cwd, 'taskId': self.task_id,
-                'agent': self.agent, 'cli': cli_of(self.argv), 'alive': self.alive, 'started': self.started,
+                'agent': self.agent, 'cli': self.cli or cli_of(self.argv), 'alive': self.alive, 'started': self.started,
                 'idle': self.idle(), 'phase': phase, 'waiting': word['waiting'], 'request': word['request'], 'accepted': getattr(self, 'accepted', None),
                 'promptPending': prompt_pending(self),
                 'cmd': ' '.join(self.argv), **({'tail': self.tail(tail)} if tail else {})}
@@ -510,6 +511,17 @@ def cli_of(argv) -> str:
     """'claude' for C:\\...\\claude.exe or claude.cmd - the CLI a session runs, whatever the profile is
     called. A profile named codex that runs claude showed 'codex' on the card next to a 'claude' badge."""
     return re.split(r'[\\/]', str((argv or [''])[0]))[-1].lower().rsplit('.', 1)[0] if argv else ''
+
+
+def cli_named(profile: dict, argv=None) -> str:
+    """The CLI this session RUNS, by the name the profile asked for.
+
+    `cli_of` reads argv[0], which is the WRAPPER wherever a CLI resolves to a .BAT (`cmd /c
+    ...copilot.BAT`) or is launched through node (qwen) - so the Board said `cmd` and `node`, and
+    the task page's `by:` chip named the wrong product entirely. The profile's own `cmd` is the
+    answer wherever there is one; argv stays the fallback for a bare shell, which has no profile."""
+    from .agents import cli_of as _family
+    return _family(profile or {}) or cli_of(argv)
 
 
 def prompt_pending(t) -> bool:
@@ -782,7 +794,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
             # the Board went dark the moment the owner did the recommended thing (audit 2026-09-02)
             if _hooks.wanted(store, profile): _hooks.install(cwd, token=session_env(agent, task_id, cwd).get('TASKUARY_TOKEN', ''), cmd=str(profile.get('cmd') or 'claude'))
         except Exception as e: logger.debug(f'claude hooks not installed in {cwd}: {e}')
-    t = Term(argv, cwd, label, task_id, agent, rows, cols, store)
+    t = Term(argv, cwd, label, task_id, agent, rows, cols, store, cli=cli_named(profile, argv))
     SESSIONS[t.sid] = t
     if assigned: bind_ext(t, assigned)     # resumable before it has drawn a single character
     # the agents already here learn a newcomer arrived (PW-173): a line in their waiting room, typed when they park

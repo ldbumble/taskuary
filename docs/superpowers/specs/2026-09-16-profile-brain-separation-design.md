@@ -198,6 +198,40 @@ ran is a fact of the *session*: live, it is already served as `cli` from
 its existing `Agent`. (A pty session writes no `run` row — `run` belongs to the
 older dispatch path — so the transcript is the record that has to carry it.)
 
+**DECIDED (owner, 2026-09-16): the list names the BRAIN, and it must be right.**
+*"On the task list it says which coding agent owns it — make sure the task has
+the correct coding agent."*
+
+Once a coding task's role is always `coder`, the role is no longer worth showing:
+every coding row would read the same. What the owner wants named is which coding
+agent actually has it. Two places show it today and both name the role:
+
+| Where | Reads | Says after step 1 |
+| --- | --- | --- |
+| `BoardView.jsx:484` — the chip titled *"X owns this task"* | `assignedAgent(t.Assignee)` | always `coder` |
+| `BoardView.jsx:464` — the live badge | `live.AgentName` / `t.RunAgent` | the role |
+
+So both switch to the brain: the one resolved for the task when nothing is
+running, and the one actually running when something is.
+
+### …and the name it shows is currently wrong
+
+`terminal.cli_of` takes `argv[0]`'s basename, which is the *wrapper* whenever a
+CLI resolves to a `.BAT`/`.CMD` or is launched through node:
+
+| Profile `cmd` | `argv[0]` | `cli_of` reports |
+| --- | --- | --- |
+| claude | `…\claude.exe` | `claude` ✓ |
+| codex | `…\codex.EXE` | `codex` ✓ |
+| copilot | `cmd` (`cmd /c …\copilot.BAT`) | **`cmd`** |
+| qwen | `…\node.EXE` | **`node`** |
+
+This is served straight to the UI as `session.cli` (`server.py:2566`,
+`terminal.py:466`) and is what the `by:` chip on the task page renders — it read
+`by: claude` on a Copilot session in the owner's own screenshot. Naming the brain
+is worth nothing if the name is `cmd`, so step 2 fixes `cli_of` to report the CLI
+the profile names rather than whatever launched it.
+
 ## The model
 
 ### Profile

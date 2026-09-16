@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createChatGate, nextReconnect, RECONNECT_DELAYS_MS, STABLE_CONNECTION_MS } from "./policy.mjs";
+import { createChatGate, nextReconnect, wantsMedia, RECONNECT_DELAYS_MS, STABLE_CONNECTION_MS } from "./policy.mjs";
 
 test("Baileys decrypts only chats Taskuary explicitly authorizes", () => {
   const gate = createChatGate(() => 1_750_000_000_000);
@@ -34,4 +34,23 @@ test("reconnects back off, stop after the budget, and reset after a stable conne
   assert.deepEqual(nextReconnect(attempt, STABLE_CONNECTION_MS), {
     paused: false, attempt: 1, delayMs: RECONNECT_DELAYS_MS[0]
   });
+});
+
+// A NOTE TO YOURSELF IS STILL A NOTE. Media was skipped for every `fromMe` message, so the owner's
+// own voice note arrived with no text and no audio and messengers.py dropped it on the floor - no
+// task, and no thumbs-up, because the reaction rides on ingest (the owner, 2026-09-15: "i left
+// voice note to create new task on the whatsapp channel myself but it was not picked up").
+// What must NOT be fetched is the echo of Taskuary's own outgoing media, which the bridge already
+// tracks by message id.
+test("your own voice note is fetched; Taskuary's own echo is not", () => {
+  const node = { mimetype: "audio/ogg; codecs=opus" };
+  assert.equal(wantsMedia(node, { fromMe: true, echo: false }), true, "a note to yourself is a message");
+  assert.equal(wantsMedia(node, { fromMe: false, echo: false }), true);
+  assert.equal(wantsMedia(node, { fromMe: true, echo: true }), false, "never re-download what we just sent");
+  assert.equal(wantsMedia(node, { fromMe: false, echo: true }), false);
+});
+
+test("nothing to fetch is not something to fetch", () => {
+  assert.equal(wantsMedia(null, { fromMe: false, echo: false }), false);
+  assert.equal(wantsMedia(undefined, {}), false);
 });

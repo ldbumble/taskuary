@@ -13,7 +13,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import makeWASocket, { useMultiFileAuthState, DisconnectReason, downloadMediaMessage } from "@whiskeysockets/baileys";
-import { createChatGate, nextReconnect } from "./policy.mjs";
+import { createChatGate, nextReconnect, wantsMedia } from "./policy.mjs";
 import { createChatRoster } from "./roster.mjs";
 
 // Voice notes are saved beside the bridge and handed to Taskuary as a PATH (same machine); it
@@ -168,7 +168,7 @@ async function connect() {
       // caption or as nothing at all - "on my laptop, words look weird" with the picture of the
       // broken words dropped on the floor, and triage ruling on a sentence about nothing.
       const grab = async (node, fallbackMime, ext) => {
-        if (!node || m.key.fromMe) return ["", ""];
+        if (!wantsMedia(node, { echo: taskuarySent.has(m.key.id) })) return ["", ""];
         try {
           const buf = await downloadMediaMessage(m, "buffer", {}, { reuploadRequest: thisSock.updateMediaMessage });
           fs.mkdirSync(MEDIA_DIR, { recursive: true });

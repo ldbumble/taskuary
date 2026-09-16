@@ -106,6 +106,10 @@ async def _lifespan(_app):
         from . import retention
         retention.tick(store)
     except Exception as e: logger.warning(f'chat retention skipped: {e}')
+    try:                           # ...and the WhatsApp bridge's own log, which loguru never sees
+        from . import wabridge
+        wabridge.trim_log(store)
+    except Exception as e: logger.warning(f'whatsapp log trim skipped: {e}')
     _heal_owner_docs()
     _refresh_soul_connections()
     learn.note_verdicts(store)     # the evidence block in LEARNED.md tracks the verdict table
@@ -5518,6 +5522,11 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
             retention.tick(target_store)
         except Exception as e:
             logger.warning(f'chat retention skipped: {e}')
+        try:                                            # the bridge's log is on the same daily clock
+            from . import wabridge
+            wabridge.trim_log(target_store)
+        except Exception as e:
+            logger.warning(f'whatsapp log trim skipped: {e}')
         run_due_reports(target_store, startup)          # ...the seeded 'Assistant' report among them (assistant.py)
         return added
     finally:

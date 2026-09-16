@@ -10,6 +10,7 @@ missing, spawns `node bridge.mjs` detached with its output in a log, and state()
 it is in. The bridge outlives the request and the browser tab; only the machine rebooting stops it.
 """
 import json, os, secrets, shutil, subprocess, threading, time
+from datetime import datetime, timedelta
 from pathlib import Path
 from loguru import logger
 from . import spawn
@@ -21,6 +22,44 @@ _LOCK = threading.Lock()
 
 
 def state() -> dict: return dict(_STATE)
+
+
+# Baileys logs every protocol frame it handles and the bridge appends all of it to one file. Nothing
+# rotated it: on the owner's machine it reached 205 MB (2026-09-15). logs.py has given the app's own
+# log rotation for a long time; loguru never sees this one, because a Node subprocess writes it.
+LOG_KEEP_DAYS, LOG_MAX_BYTES = 3, 25 * 1024 * 1024
+LOG_RAN_KEY = 'wa_log_trimmed_at'
+
+
+def _stamp(value):
+    try: return datetime.strptime(str(value)[:19], '%Y-%m-%d %H:%M:%S')
+    except (TypeError, ValueError): return None
+
+
+def trim_log(store, now: datetime = None) -> dict | None:
+    """Empty the bridge's log once it is big, or a few days old. Looked at once a day, like retention.
+
+    TRUNCATED IN PLACE, never renamed or deleted: the running bridge holds this file open in append
+    mode, and on Windows a held-open file cannot be moved. An append handle always writes at the end,
+    so the bridge keeps logging across the truncation without noticing.
+    """
+    now = now or datetime.now()
+    if not LOG.exists(): return None
+    last = str(store.get_settings().get(LOG_RAN_KEY) or '')
+    if last[:10] == now.strftime('%Y-%m-%d'): return None          # already looked today
+    size = LOG.stat().st_size
+    since = _stamp(last)
+    aged = bool(last) and (since is None or since <= now - timedelta(days=LOG_KEEP_DAYS))
+    trimmed = size > LOG_MAX_BYTES or aged
+    if trimmed:
+        try:
+            with open(LOG, 'r+b') as f: f.truncate(0)
+            logger.info(f'whatsapp bridge log: emptied {size / 1e6:.1f} MB')
+        except OSError as e:
+            logger.debug(f'could not empty the bridge log: {e}')
+            trimmed = False
+    store.set_setting(LOG_RAN_KEY, now.strftime('%Y-%m-%d %H:%M:%S'), 'wabridge')
+    return {'trimmed': trimmed, 'bytes': size}
 
 
 def _set(phase, detail='', pid=None): _STATE.update(phase=phase, detail=detail[:300], pid=pid, at=time.time())

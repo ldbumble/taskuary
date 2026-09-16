@@ -49,3 +49,13 @@ export function createChatGate(now = () => Date.now()) {
   const blockedChats = () => [...seenBlocked.values()].sort((a, b) => b.last - a.last);
   return { configure, shouldIgnore, snapshot, blockedChats };
 }
+
+// WHICH MEDIA THE BRIDGE FETCHES. This was `if (!node || m.key.fromMe) return` inline in bridge.mjs,
+// which read as "don't re-download our own outgoing media" but said "never download anything the
+// owner sent" - including a voice note they left themselves. That message then reached messengers.py
+// with no text and no audio and was dropped by the "one of text/audio/image/doc" rule: no task, and
+// no thumbs-up, because the reaction rides on ingest (the owner, 2026-09-15: "i left voice note to
+// create new task on the whatsapp channel myself but it was not picked up ... why not?").
+//
+// The echo it meant to skip is tracked exactly, by message id, in bridge.mjs's taskuarySent.
+export const wantsMedia = (node, { echo = false } = {}) => !!node && !echo;

@@ -999,23 +999,20 @@ def relevant_notes(store, senders, text: str, cap: int = NOTE_CAP, budget: int =
     return out, len(hits) - len(out)
 
 
-# Work by construction on the owner's repo (channels.ingest_github_issues writes the author line
-# first): a PULL REQUEST - somebody is asking for a review and a merge, which is the only reason
-# a PR exists - and an issue the owner filed themselves. Asked whether a contributor's PR was
-# work, the classifier said 'fyi' for five of five and the owner promoted every one by hand.
-# Other people's ISSUES stay the classifier's call: a drive-by question is a reply, and whether
-# the repo takes replies at all is decided downstream. A repo whose PR picker says 'feed' never
-# reaches this at all (file_only).
-_GH_WORK = re.compile(r'^\[(pull request by [^\]]*|issue by [^\]]*? - association: OWNER)\]', re.I)
-
-
 def decided_intent(msg: dict, mine=()) -> dict | None:
-    """The verdicts no model is needed for: the owner's own issue is a task, and obvious automated
-    noise is fyi (heuristic_intent's short-circuit). None means: ask. Shared with evalset.evaluate
-    so the measured accuracy is the funnel's, not the bare model's."""
-    if msg.get('channel') == 'github' and _GH_WORK.match(str(msg.get('body') or '')):
-        what = 'a pull request' if 'pull request' in str(msg.get('body') or '')[:16].lower() else 'an issue you filed'
-        return {'intent': 'task', 'why': f'{what} on your own repository is work by construction - no classifier needed'}
+    """The verdicts no model is needed for: obvious automated noise is fyi (heuristic_intent's
+    short-circuit). None means: ask. Shared with evalset.evaluate so the measured accuracy is
+    the funnel's, not the bare model's.
+
+    A github PULL REQUEST used to short-circuit here too, because the classifier called five of
+    five contributor PRs `fyi`. That gate returned a verdict naming no `kind`, and an unnamed
+    kind is `general` (routing.draft_task_fields) - so the rescue sent every PR to the ASSISTANT
+    instead of the coder: #36 through #47, twelve in a row. The rule it was overriding lived in
+    TRIAGE.md ("a stranger's pull request or issue is fyi - never task"), so the document and the
+    code said opposite things and the code won by running first. TRIAGE.md now says what a PR is
+    (a request for review and a merge, coding, whoever opened it) and the model reaches that
+    itself - which is the only road on which the verdict is visible, correctable and learned
+    from. Never re-add a channel gate here: a regex that routes is a rule nobody can edit."""
     h = heuristic_intent(msg, mine)
     return h if h['intent'] == 'fyi' else None
 

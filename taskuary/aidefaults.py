@@ -35,6 +35,18 @@ SLOTS = [
      'model_setting': 'concierge_model',
      'desc': 'Speaks on the Assistant tab and walks you through the pipe.',
      'why': 'Turn by turn and conversational, so it rides the same quick gear as triage.'},
+    # The fourth worker had no row here, so the page that exists to say "what will actually run"
+    # was silent about half the tasks on the board. `assistant_ai` was buried on the Assistant tab
+    # calling itself the bubble's brain, and with it blank general._selected quietly prefers an API
+    # connector over a CLI - so a general task ran on Azure gpt-5.4 while `default_brain` said
+    # claude, and the owner could not see why (2026-09-16). Same picker as the others: a CLI or a
+    # connector, whichever this work needs.
+    {'key': 'assistant_ai', 'label': 'General agent', 'pick': 'brain', 'gear': 'light',
+     'model_setting': 'assistant_model',
+     'desc': 'Works every general task: research, planning, writing, a job with no repository. Also the '
+             'floating bubble and the WhatsApp doorway.',
+     'why': 'A CLI here can run tools, drive a browser and post to the wall; an API brain has no shell, '
+            'so it can only read and write - quicker, and enough for chat.'},
 ]
 SLOT = {s['key']: s for s in SLOTS}
 
@@ -111,9 +123,13 @@ def resolve(store, cfg, slot_key: str) -> dict:
         return out
     try: conf = json.loads(c.get('ConfigJson') or '{}')
     except ValueError: conf = {}
-    out.update(model=str(conf.get('model') or ''), choices=_conn_models(c['Type']),
-               default_hint=_conn_default(c['Type']),
-               owner=f"the {c['Name']} card", owner_link=f"connector:{c['ConnectorId']}",
+    # A slot with its own model setting OWNS its model - save wrote it there (see `save` below),
+    # so reading the connector's back showed the wrong box and an override you set looked lost.
+    own = str(settings.get(s['model_setting']) or '') if s.get('model_setting') else ''
+    out.update(model=own or str(conf.get('model') or ''), choices=_conn_models(c['Type']),
+               default_hint=str(conf.get('model') or '') or _conn_default(c['Type']),
+               owner=('this page' if s.get('model_setting') else f"the {c['Name']} card"),
+               owner_link='' if s.get('model_setting') else f"connector:{c['ConnectorId']}",
                connector=c['ConnectorId'])
     if not value: out['note'] = f"auto — currently {c['Name']}"
     if not out['model']: out['note'] = (out['note'] + '; ' if out['note'] else '') + f"blank = {_conn_default(c['Type'])}"

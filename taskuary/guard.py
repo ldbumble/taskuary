@@ -97,12 +97,15 @@ def denied(method: str, path: str) -> str:
 
 
 def token_matches(got, *want) -> bool:
-    """True if `got` is one of the secrets in `want`. Length mismatch is a miss, not an exception
-    (hmac.compare_digest raises on some Python versions when the strings differ in length)."""
-    got = str(got or '')
+    """True if `got` is one of the secrets in `want`. Compared as BYTES, which is the only form
+    hmac.compare_digest takes for arbitrary input: handed str it refuses anything non-ASCII, and a
+    header is decoded latin-1, so one high byte on the wire raised TypeError and the middleware
+    turned a wrong token into a 500 instead of a refusal. Bytes also make a length mismatch an
+    ordinary miss, so there is no length test to get wrong."""
+    g = str(got or '').encode('utf-8', 'surrogateescape')
     for w in want:
-        w = str(w or '')
-        if w and len(got) == len(w) and hmac.compare_digest(got, w): return True
+        w = str(w or '').encode('utf-8', 'surrogateescape')
+        if w and hmac.compare_digest(g, w): return True
     return False
 
 

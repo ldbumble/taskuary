@@ -97,6 +97,16 @@ class ScopeTests(unittest.TestCase):
         self.assertFalse(guard.token_matches('secret', 'secretX'))
         self.assertTrue(guard.token_matches('agent', 'nope', 'agent'))
 
+    def test_a_token_of_the_right_length_but_the_wrong_alphabet_is_just_wrong(self):
+        """A header is decoded latin-1, so one byte >= 0x80 reaches here as a non-ASCII str.
+        compare_digest refuses those outright, and the middleware answered a junk token with a
+        500 and a traceback instead of a refusal (review of #47)."""
+        same_length = 'abcdefg' + chr(0xFF)
+        self.assertEqual(len(same_length), len('abcdefgh'))
+        self.assertFalse(guard.token_matches(same_length, 'abcdefgh'))
+        self.assertFalse(guard.token_matches(chr(0xFF) * 8, 'abcdefgh'))
+        self.assertTrue(guard.token_matches(same_length, same_length))
+
 
 class OverTheWireTests(unittest.TestCase):
     """...and the same thing through the actual middleware, which is what a curl in a session hits."""

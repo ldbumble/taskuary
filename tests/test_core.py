@@ -544,6 +544,29 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(apply_retroactively(s, pol), 1)
         self.assertEqual(s.scan_kwargs.get('statuses'), ('routed', 'ignored', 'filed'))
         self.assertEqual(s.scan_kwargs.get('from_email'), ['flood@vendor.com'])
+        self.assertIs(s.scan_kwargs.get('include_body'), False)   # judged on the envelope: no body fetched
+
+    def test_the_sql_prefilter_never_drops_a_row_matches_would_keep(self):
+        """scan_messages' filters only PRE-select; matches() still judges. A clause narrower than the
+        Python predicate strands mail off the timeline with nothing on screen to say so - so for every
+        address and every skip kind, what SQL returns must cover what matches() accepts."""
+        from taskuary.policy import apply_retroactively, matches
+        addrs = ['flood@vendor.com', 'FLOOD@Vendor.Com', '"a@b"@vendor.com', 'b@sub.vendor.com',
+                 'notification@vendor.com', 'jira-notifications@atlassian.net', 'do-notreply@bank.com',
+                 'donot-reply@acme.com', 'noreply@github.com', 'postmaster@x.com', 'human@client.com']
+        pols = [{'Kind': 'sender', 'Pattern': 'flood@vendor.com'}, {'Kind': 'sender_domain', 'Pattern': 'vendor.com'},
+                {'Kind': 'noreply', 'Pattern': ''}, {'Kind': 'keyword', 'Pattern': 'invoice'}]
+        for base in pols:
+            pol = {'Name': 'p', 'Action': 'skip', 'Reason': 'r', 'SortOrder': 10, 'Active': 1, **base}
+            s = MemoryStore()
+            for i, a in enumerate(addrs):
+                s.add_message({'ExternalId': f'm{i}', 'Channel': 'email', 'Subject': 'invoice attached',
+                               'BodyText': 'body', 'FromEmail': a, 'SentAt': '2026-08-17 10:00', 'Status': 'routed'})
+            want = sum(1 for a in addrs if matches(pol, {'from_email': a, 'subject': 'invoice attached', 'body': 'body'}))
+            self.assertEqual(apply_retroactively(s, pol), want, base['Kind'])
+            # ...and back again: every row the rule hid comes out of hiding when it is switched off
+            self.assertEqual(apply_retroactively(s, {**pol, 'Active': 0}), want, base['Kind'])
+            self.assertEqual([m for m in s.scan_messages() if m['Status'] == 'skipped'], [], base['Kind'])
 
     def test_run_cli_appends_the_model_flag(self):
         from unittest import mock

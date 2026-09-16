@@ -23,7 +23,10 @@ def gather(store, days: int = 30) -> str:
     untouched, and the policies that already exist (never propose those again)."""
     since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
     by = {}
-    for m in store.scan_messages(since=since, statuses=('routed', 'ignored', 'skipped', 'filed'), include_body=False):
+    # the window and the bodies go to SQLite; 'context' stays a Python test - an allow-list here would
+    # silently drop every status nobody listed ('sent', 'history', 'feed'), i.e. the mail you ANSWERED
+    for m in store.scan_messages(since=since, include_body=False):
+        if m.get('Status') == 'context': continue
         who = (m.get('FromEmail') or '?').lower()
         d = by.setdefault(who, {'n': 0, 'ignored': 0, 'filed': 0, 'tasks': 0, 'subjects': []})
         d['n'] += 1

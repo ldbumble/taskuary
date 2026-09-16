@@ -35,6 +35,19 @@ class AutomateReportTests(unittest.TestCase):
         self.assertIn('noise@vendor.com: 3 msgs', txt)
         self.assertNotIn('Old', txt)
 
+    def test_gather_still_counts_the_mail_you_answered(self):
+        """Only 'context' (your own replies) is excluded. 'sent' is an inbound message you ANSWERED
+        and 'history' the other half of an imported thread - drop those and the report's evidence is
+        the noise only, which is the one thing it exists to weigh against."""
+        from taskuary.toil import gather
+        from datetime import datetime, timedelta
+        recent = (datetime.now() - timedelta(days=2)).strftime('%Y-%m-%d %H:%M:%S')
+        s = MemoryStore()
+        for i, st in enumerate(['sent'] * 2 + ['history'] * 2 + ['feed', 'context']):
+            s.add_message({'ExternalId': f'e{i}', 'Channel': 'email', 'FromEmail': 'client@real.com',
+                           'Subject': f'Thread {i}', 'SentAt': recent, 'Status': st})
+        self.assertIn('client@real.com: 5 msgs', gather(s, days=30))     # all but the one 'context' row
+
     def test_seeded_weekly(self):
         s = MemoryStore()
         src = next(x for x in s.list_sources() if x['Address'] == 'Automation ideas')

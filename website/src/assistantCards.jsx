@@ -345,18 +345,24 @@ export function AgentCard({ card, onDone, onOpenTask }) {
           </React.Suspense>
         </div>
       ) : card.sid && live ? (
-        <div className="tq-card-term" style={{ height: big ? 640 : 340 }}>
-          <TerminalPane sid={card.sid} height={big ? "640px" : "340px"} autoFocus={false} />
+        // A SCREEN IS SHOWN WHOLE OR NOT AT ALL. Folded, this was 340px of a terminal mid-redraw -
+        // wrapped escape codes and half a spinner - which said nothing anyone could read (the owner,
+        // 2026-09-16: "no point of showing the coding window. You can't see anythign... either show
+        // the whole thing or let them open task to see it"). So there is ONE size now, the one
+        // Bigger used to reach, and the closed state draws nothing at all - the agent's last
+        // terminal lines went with it, because raw pyte output is the same unreadable thing.
+        <div className="tq-card-term" style={{ height: 640 }}>
+          <TerminalPane sid={card.sid} height="640px" autoFocus={false} />
         </div>
-      ) : !!card.tail?.length && <div className="tq-card-tail">{card.tail.join("\n")}</div>}
+      ) : chat && !!card.tail?.length && <div className="tq-card-tail">{card.tail.join("\n")}</div>}
       {(chat || card.sid) && !card.paused && (
         <div className="tq-card-note" style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <span>{!live ? (chat ? "Conversation folded." : "Screen folded.")
+          <span>{!live ? (chat ? "Conversation folded." : "Its screen is not here — show the whole thing, or open the workspace.")
             : chat ? "This is the conversation — answer it here." : "This is the agent's own screen — click in and type to answer it there."}</span>
           <span className="sp" />
-          <Button size="small" onClick={() => setBig((b) => !b)} sx={faint}>{big ? "Smaller" : "Bigger"}</Button>
+          {chat && live && <Button size="small" onClick={() => setBig((b) => !b)} sx={faint}>{big ? "Smaller" : "Bigger"}</Button>}
           <Button size="small" onClick={() => setLive((l) => !l)} sx={faint}>
-            {live ? "Fold" : chat ? "Show the conversation" : "Show the screen"}</Button>
+            {live ? (chat ? "Fold" : "Hide the screen") : chat ? "Show the conversation" : "Show the screen"}</Button>
         </div>
       )}
       {/* the chat above already has a composer, and it talks to the assistant. This box queues into

@@ -44,3 +44,13 @@ test("the workspace and the agent card use those readings", () => {
     "the chat branch must be reached before the terminal one, so an assistant is never drawn as a screen");
   assert.match(body, /!\(chat && live\) && <TextField/, "the waiting-room box is not offered beside a live chat composer");
 });
+
+test("a coding screen is shown whole or not at all", () => {
+  const body = read("../src/assistantCards.jsx").slice(read("../src/assistantCards.jsx").indexOf("export function AgentCard"));
+  const term = body.slice(body.indexOf("tq-card-term"), body.indexOf("tq-card-note"));
+  // one size, and it is the expanded one - a 340px peek at a terminal mid-redraw is escape codes
+  assert.match(term, /height: 640/);
+  assert.doesNotMatch(term, /340/);
+  // ...and folded, a terminal card draws NOTHING: the raw last lines were the same unreadable thing
+  assert.match(body, /: chat && !!card\.tail\?\.length && <div className="tq-card-tail">/);
+});

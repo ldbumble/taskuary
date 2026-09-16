@@ -9,7 +9,7 @@ Spec: docs/superpowers/specs/2026-09-16-profile-brain-separation-design.md
 """
 import json, unittest
 
-from taskuary import agents as hub_agents, triage
+from taskuary import agents as hub_agents, general, triage
 from taskuary.store import MemoryStore
 
 
@@ -79,6 +79,33 @@ class WhichRoleTests(unittest.TestCase):
 
     def test_an_unknown_profile_names_nobody(self):
         self.assertEqual(hub_agents.routed_role(store(), 'general', 'nobody'), '')
+
+
+class GeneralRoleTests(unittest.TestCase):
+    """On general work the role chose the EXECUTABLE too: assigned_pick turned
+    `Assignee = agent:analyst` into the provider pick `cli:analyst`. The comment above one of its
+    call sites stated the principle outright - "its instructions and CLI must travel together,
+    otherwise a research profile is only a label on the task". The worry is answered rather than
+    dismissed: the role still picks the rules document, so it is not only a label."""
+
+    def task(self, assignee):
+        return {'TaskId': 1, 'Kind': 'general', 'Assignee': assignee}
+
+    def test_the_role_is_a_bare_name_not_a_provider(self):
+        self.assertEqual(general.assigned_role(store(), self.task('agent:analyst')), 'analyst')
+
+    def test_no_assignee_names_no_role(self):
+        self.assertEqual(general.assigned_role(store(), self.task(None)), '')
+
+    def test_an_unknown_name_names_no_role(self):
+        self.assertEqual(general.assigned_role(store(), self.task('agent:ghost')), '')
+
+    def test_assigned_pick_is_gone(self):
+        """A role must never reach a provider picker again - that IS the bug."""
+        self.assertFalse(hasattr(general, 'assigned_pick'))
+
+    def test_a_named_role_does_not_choose_the_provider(self):
+        self.assertNotIn('analyst', general.default_pick(store(), self.task('agent:analyst')))
 
 
 class TheWorkersBlockTests(unittest.TestCase):

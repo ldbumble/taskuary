@@ -149,10 +149,16 @@ def walk_pick(store) -> str:
     return next((o['pick'] for o in clis if o.get('cmd') == WALK_CLI), '') or (clis[0]['pick'] if clis else '')
 
 
-def assigned_pick(store, task: dict) -> str:
+def assigned_role(store, task: dict) -> str:
+    """The ROLE triage handed this task - 'analyst' from 'agent:analyst'.
+
+    It chooses the rules document the session is seeded with. It does NOT choose the executable:
+    a role and a brain are different questions, and answering both with one name is what routed
+    TQ-0588's coding work to Copilot (the 2026-09-16 spec). This used to return `cli:<name>`, so
+    naming a worker named a CLI."""
     who = str((task or {}).get('Assignee') or '')
-    name = who.split(':', 1)[1] if who.startswith('agent:') else ''
-    return f'cli:{name}' if name and store.get_agent(name) else ''
+    name = who.split(':', 1)[1].strip() if who.startswith('agent:') else ''
+    return name if name and store.get_agent(name) else ''
 
 
 def default_pick(store, task: dict = None) -> str:
@@ -166,8 +172,9 @@ def default_pick(store, task: dict = None) -> str:
     not, so the strip named the API brain while codex was driving the browser, and the owner's first
     typed reply would have handed the walk to a brain that cannot click (the owner, 2026-09-14)."""
     saved = store.saved_session((task or {}).get('TaskId')) or {}
-    assigned = assigned_pick(store, task)
-    if saved.get('Pick') and (not assigned or assigned == saved['Pick']):
+    # a saved pick is the owner's own choice of BRAIN and nothing about the role contradicts it:
+    # the role no longer nominates a provider, so there is nothing left to reconcile it against
+    if saved.get('Pick'):
         if any(o['pick'] == saved['Pick'] for o in provider_options(store)): return saved['Pick']
     # ...and the same is true of any task with a BROWSER, whoever opened it. A workflow's repeat run
     # carried its browser and its brief and answered "opening the secure area cannot be done from
@@ -176,7 +183,7 @@ def default_pick(store, task: dict = None) -> str:
     if str((task or {}).get('SourceRef') or '') == SETUP_REF or _browser_task(task):
         walk = walk_pick(store)
         if walk: return walk
-    return assigned_pick(store, task) or _selected(store)[0]
+    return _selected(store)[0]
 
 
 def _selected(store, connector_id=None, model=None, pick=None) -> tuple[str, str, str]:
@@ -416,12 +423,13 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         + (f'{layer}\n\n{TEACH_ME}\n\n' if layer else f'{TEACH_ME}\n\n')
         + f"RULES (AGENT.md - every worker)\n{agent_rules}\n\nASSISTANT STYLE\n{counsel}"
     )
-    # Triage's named worker also owns general work: its instructions and CLI must travel
-    # together, otherwise a research profile is only a label on the task.
-    chosen = assigned_pick(store, task)
-    if chosen:
+    # The role triage named owns the INSTRUCTIONS for general work - which is what stops it being
+    # "only a label on the task". Which brain runs them is a separate question, answered from
+    # settings: the two no longer travel together (the 2026-09-16 spec).
+    role = assigned_role(store, task)
+    if role:
         from .agents import ensure_profile_document
-        doc = ensure_profile_document(store, chosen.split(':', 1)[1])
+        doc = ensure_profile_document(store, role)
         profile_rules = _brief.rules(store, doc, 4_000)
         if profile_rules: system += f'\n\nPROFILE RULES ({doc.upper()}.md)\n{profile_rules}'
     # the procedure triage selected for this job rides here exactly as it rides in a coding brief
@@ -613,9 +621,8 @@ class GeneralSession:
         self.store, self.task_id = store, task_id
         saved = store.saved_session(task_id) or {}
         if connector_id is None and not pick:
-            pick = assigned_pick(store, store.get_task(task_id)) or None
-            if not pick and any(o['pick'] == saved.get('Pick') for o in provider_options(store)):
-                pick = saved['Pick']
+            # the task's ROLE is not a candidate here - it names the instructions, never the brain
+            if any(o['pick'] == saved.get('Pick') for o in provider_options(store)): pick = saved['Pick']
         if model is None and (pick or (f'connector:{connector_id}' if connector_id else '')) == saved.get('Pick'):
             model = saved.get('Model') or None
         self.pick, self.provider, self.model = _selected(store, connector_id, model, pick)

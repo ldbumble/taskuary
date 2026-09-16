@@ -3676,10 +3676,21 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
       })}
       {/* ...and when nothing is hanging, In flight still belongs on the post */}
       {!bySection("loose").length && <InFlight rows={brief.flight} onOpenTask={onOpenTask} />}
-      {/* "What it read is below" is a PROMISE, and the block it points at is the `rv` one below -
-          which a post without a brief does not have. Said unconditionally, a quiet post ended on a
-          sentence pointing at nothing at all (the owner, 2026-09-16). Promise only what is there. */}
-      {!ideas.length && (
+      {/* THE ASSISTANT'S OWN WORDS, when the structured post cannot show them. Every line here is
+          drawn from `brief.ideas`, so a post whose brief did not reach the page rendered as an
+          empty card - while the very sentence it wrote sat in the message all along, unused
+          (the owner, 2026-09-16: "it should show the message underneath it that the assistant
+          says"). The ideas are richer when they are there (they carry the actions); this is what
+          it SAID, which is never nothing. */}
+      {!ideas.length && cleanText(sel.Preview) && (
+        <Typography variant="body2" sx={{ color: INK, mt: 1, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+          {cleanText(sel.Preview)}
+        </Typography>
+      )}
+      {/* ...and only when it truly said nothing. "What it read is below" is a PROMISE, and the
+          block it points at is the `rv` one; said unconditionally it ended the post pointing at
+          nothing at all. Promise only what is actually there. */}
+      {!ideas.length && !cleanText(sel.Preview) && (
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1, lineHeight: 1.7 }}>
           Nothing worth saying this time — which is most checks.{rv ? " What it read is below." : ""}
         </Typography>

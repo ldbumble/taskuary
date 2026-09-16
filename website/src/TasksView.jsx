@@ -680,7 +680,16 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // is the brain's - it is not a property of the task, so the card does not offer one. A live
   // session names the CLI it was ASKED to run; otherwise the roster says which brain the role uses.
   const runRole = assignedAgent(t?.Assignee) || (t?.Kind === "coding" ? "coder" : "");
-  const runBrain = term?.cli || term?.agent || (runRole && brains[runRole]) || "";
+  // NAME THE BRAIN, NOT THE PRODUCT. `term.cli` is hardcoded to the string "taskuary" on every
+  // general session (general.info), so the one card that could not say which brain was running
+  // read "brain taskuary" - the product's own name, on the row whose whole job is to answer that
+  // (the owner, 2026-09-16). A general session reports what it actually reached for instead:
+  // `provider` is the connector's or the CLI's own label, `model` the gear it runs on.
+  const runBrain = term?.provider || term?.cli || term?.agent || (runRole && brains[runRole]) || "";
+  // ...and on a general session that brain is ALREADY on screen, as the live picker in the
+  // workspace toolbar a few pixels below - the same two facts twice, one of them editable and one
+  // of them stale ("why is it there, the model is below it?"). The pill goes where the picker is.
+  const brainPill = runBrain && !(isGeneral && term?.alive) ? runBrain : "";
   // the envelope on the reply, read from the same Deliver blob Review reads
   const replyOf = pendingReview || sentReview;
   const replyCc = deliveryCc(replyOf), replyFiles = deliveryFiles(replyOf);
@@ -1403,15 +1412,15 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   {/* folded onto the live bar these facts share a ROW with the controls, where a
                       rule above them is stray chrome - they get a rule beside them instead, so the
                       pills you press and the pills you read are two groups and not five in a line */}
-                  {(term?.alive || report || detail?.transcript) && !restartOpen && (runRole || runBrain || repoOf(t)) && (
+                  {(term?.alive || report || detail?.transcript) && !restartOpen && (runRole || brainPill || repoOf(t)) && (
                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.7, flexWrap: "wrap",
                       ...(liveSession
                         ? { ml: 0.9, pl: 1.1, borderLeft: `1px solid ${BORDER}`, flexShrink: 0 }
                         : { mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }) }}>
                       {runRole && <Box sx={{ ...chipBtnStatic }} title="The role: which document this worker follows. Every coding task's role is `coder`.">
                         <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>role</Box>&nbsp;{runRole}</Box>}
-                      {runBrain && <Box sx={{ ...chipBtnStatic }} title="The brain: which CLI actually runs it. Chosen by the default_brain setting, or this role's override — not per task.">
-                        <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>brain</Box>&nbsp;{runBrain}</Box>}
+                      {brainPill && <Box sx={{ ...chipBtnStatic }} title="The brain: which CLI or API connector actually runs it. Chosen on Settings → Triage & agents, or by this role's override — not per task.">
+                        <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>brain</Box>&nbsp;{brainPill}</Box>}
                       {!isGeneral && <Button size="small" variant="outlined" sx={chipBtn}
                         startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}
                         title="Which checkout the session works in"

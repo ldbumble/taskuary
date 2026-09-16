@@ -122,22 +122,13 @@ def route(msg, tasks, threshold=ATTACH_THRESHOLD):
     return {'decision':'create', 'task_id':None, 'score':best['score'] if best else 0.0,
             'reason': f'new task - nothing similar already open{near}', 'candidates':cands[:5]}
 
-# KIND decides who works the task, and 'coding' is the one that starts an agent on a
-# checkout - so it has to mean "there is software in here", not "a word appeared". A single
-# keyword in flowing prose used to be enough: a Teams message about someone's job scope
-# ("I own the deployment system, production/uptime, and support") hit 'deploy' and became a
-# CODING task with a CLI session opened on a repository. Prose is not a bug report.
-#
-# HARD = something only a real technical report contains. Any one of these is enough.
-_CODE_HARD = re.compile(
-    r'traceback \(most recent call last\)|stack ?trace|^\s+at [\w$.]+\(|'          # a trace
-    r'\b[\w./-]+\.(py|js|jsx|ts|tsx|java|cs|go|rs|rb|php|sql|ya?ml|sh|ps1|css|html)\b|'   # a source file
-    r'(github|gitlab|bitbucket)\.com/|\bpull request\b|\bmerge request\b|\bPR ?#\d+|'     # a repo
-    r'\bhttp \d{3}\b|\b[45]\d{2} (error|response|status)\b|```', re.I | re.M)
-# SOFT = words that DO show up in ordinary prose. Two of them together is a signal; one is
-# somebody talking about their week.
-_CODE_SOFT = ('bug', 'error', 'exception', 'crash', 'broken', 'regression', 'timeout',
-              'deploy', 'endpoint', 'fix the', 'not working', 'fails', 'failing')
+# NOTHING HERE SCANS FOR CODE ANY MORE. `_CODE_HARD` / `_CODE_SOFT` used to decide `kind` from
+# the words in a message; 8b89e26a (2026-09-06) made an unnamed kind `general` outright and left
+# the two patterns behind, referenced by nobody, with the docstring below still calling them "the
+# keyword scan". They read as live for ten days - and they were the reason a pull request LOOKED
+# handled here (`_CODE_HARD` matches `pull request` and `github.com/`) while every PR was in fact
+# going to the assistant. Dead code that describes the behaviour you expect is worse than none:
+# `kind` is the model's, against TRIAGE.md, and this file no longer has an opinion about it.
 _ASKS = ('can you', 'could you', 'please send', 'let me know', 'would you mind', 'any chance')
 
 
@@ -145,9 +136,10 @@ def draft_task_fields(msg, urgent: bool = False, kind: str = None):
     """Title/summary/kind/priority for a task created from a message. `kind` routes the work:
     coding = an agent on a checkout, reply = the responder and Review, general = the assistant's
     chat, task = the owner's own list with nothing working it.
-    Pass `kind` when the classifier named one (triage.classify_intent) - it read the whole
-    message against TRIAGE.md's definition and outranks the keyword scan below, which is the
-    fallback for a brain that did not say.
+    Pass `kind` when the classifier named one (triage.classify_intent): it read the whole message
+    against TRIAGE.md's definition, and it is the ONLY thing that ever says `coding`. A kind
+    nobody named falls to `reply` or `general` below - never to coding, because no coding session
+    starts on a guess made here.
 
     `urgent` is DECIDED BY A RULE, never guessed here. Priority used to come from a keyword
     scan for urgent/asap/immediately/outage/down, which flagged mail nobody had called

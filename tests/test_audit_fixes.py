@@ -234,6 +234,8 @@ class DoorTests(unittest.TestCase):
         db = config.db_path()
         with self.assertRaisesRegex(RuntimeError, 'not a report source'):
             reports.run_sqlite({'db': db, 'query': 'SELECT 1'})
+        with self.assertRaisesRegex(RuntimeError, 'not a report source'):
+            reports.run_local_file({'path': str(config.home() / 'config.toml')})
 
     def test_f03_the_events_socket_refuses_another_sites_page(self):
         from starlette.websockets import WebSocketDisconnect

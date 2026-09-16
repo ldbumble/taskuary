@@ -314,7 +314,16 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
         # still incoming rows; the owner's explicit funnel state is what later removes them.
         if not canonical and (r.get('TheirTurn') or r.get('AnsweredAt')): continue
         urgent = priority_rank(r.get('Priority')) == 0
-        if cat in ('coding', 'todo') and (r.get('NeedsYou') or r.get('Working')):   # a worked row is kept, tagged, and let go in build()
+        # A REPLY IS NOT THE WORK. NeedsYou is zeroed once the owner has answered the thread or the
+        # ball is in the sender's court (store.NEEDS_YOU) - true of a message waiting on a reply, and
+        # false of an open task with work still in it. TQ-0588 was an open coding task assigned to
+        # the coder with nothing ticked off, and it left the rail completely the moment the owner
+        # replied to the mail that started it: not in your task, not in agents working, filed into
+        # fyi behind seventy rows (the owner, 2026-09-16: "2 tasks on in progress ... only showing
+        # one"). Real work standing open is its own reason to be on the rail.
+        open_work = (r.get('TaskStatus') not in ('done', 'dropped')
+                     and str(r.get('TaskKind') or '') in ('coding', 'general', 'task'))
+        if cat in ('coding', 'todo') and (r.get('NeedsYou') or r.get('Working') or open_work):   # a worked row is kept, tagged, and let go in build()
             # WHOSE it is decides the word. Work triage handed to an agent that has not run is
             # QUEUED - waiting to start; work with nobody on it is the owner's own, and its kind
             # ('todo') carries the word for that. Both used to say "asked you", which claimed a

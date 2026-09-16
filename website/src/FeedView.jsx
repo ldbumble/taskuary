@@ -3676,9 +3676,12 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
       })}
       {/* ...and when nothing is hanging, In flight still belongs on the post */}
       {!bySection("loose").length && <InFlight rows={brief.flight} onOpenTask={onOpenTask} />}
+      {/* "What it read is below" is a PROMISE, and the block it points at is the `rv` one below -
+          which a post without a brief does not have. Said unconditionally, a quiet post ended on a
+          sentence pointing at nothing at all (the owner, 2026-09-16). Promise only what is there. */}
       {!ideas.length && (
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1, lineHeight: 1.7 }}>
-          Nothing worth saying this time — which is most checks. What it read is below.
+          Nothing worth saying this time — which is most checks.{rv ? " What it read is below." : ""}
         </Typography>
       )}
       {rv && (

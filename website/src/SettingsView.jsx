@@ -57,9 +57,6 @@ const KNOB_META = {
   default_action: { group: "Triage & routing", label: "When no rule matches", type: "select", options: ["draft", "task_only", "escalate"],
     desc: "The fallback when no routing policy claims a message.",
     help: "draft = reply-only questions get an AI draft waiting in Review; task_only = file a task, draft nothing; escalate = always put it in front of you undecided.\n\nThis is only the FALLBACK: your routing policies (Settings → Routing policies) always win, and messages triaged as real tasks go to the coder regardless." },
-  attach_threshold: { group: "Triage & routing", label: "Attach threshold", type: "number",
-    desc: "How similar a message must be (0–1) to join an existing task instead of opening a new one.",
-    help: "Lower = more messages glued onto existing tasks (risk: unrelated asks pile onto one task). Higher = more new tasks (risk: one conversation splinters). 0.42 is a sane default.\n\nTrue thread continuations — same email conversation, RE: replies — attach regardless of this number, so this only decides the borderline cases." },
   learn_enabled: { group: "Triage & routing", label: "Learn from your verdicts", type: "switch",
     desc: "Your corrections teach LEARNED.md — style, responsibilities, what deserves a task.",
     help: "Every correction you make — editing a draft before sending, rejecting one, reclassifying a task as a question, promoting something triage filed, 'Not a task' / 'Not our task' — is distilled into LEARNED.md (Docs tab): first as a hypothesis with a strength counter and the evidence behind it, promoted into the active profile only once it keeps holding across separate episodes. The active sections ride into every triage call, draft and agent run; SOUL.md always outranks them.\n\nRules that would HIDE mail (treat as fyi, never a task) never activate themselves — they wait in the doc's 'Proposed rules' for you to adopt or delete. Off: nothing new is learned; the doc stays as it is and is still injected." },
@@ -81,14 +78,6 @@ const KNOB_META = {
   chat_ack_text: { group: "Replies", label: "The acknowledgement", type: "text",
     desc: "The one line that goes back. Keep it honest - it is sent before anything has been looked at.",
     help: "Written in your voice, since it arrives from your account. Something like \"On it - I'll get back to you here.\" A question mark invites an answer you are not there to read yet." },
-  outlook_drafts_enabled: { group: "Replies", label: "Outlook drafts on approve", type: "switch",
-    desc: "Approved Outlook replies are also saved as reply-all DRAFTS in the mailbox.",
-    help: "For the belt-and-braces workflow: on approval, the reply is additionally created as a reply-all draft inside the source mailbox via Graph (needs the Mail.ReadWrite consent), so you can give it one last look in Outlook and hit Send there. Failures land in the audit log, never block the approval." },
-  send_enabled: { group: "Replies", label: "(legacy, unused)", type: "switch",
-    desc: "Kept only for old databases — has no effect. Leave off.",
-    help: "An earlier design had a separate send gate. Sending is now simply what Approve & send does, so this switch controls nothing." },
-
-  // ── Assistant: the voice on the Timeline (assistant.py) ──
   concierge_ai: { group: "Triage & agents", label: "Assistant tab brain", type: "brain",
     desc: "Which AI speaks on the Assistant tab and walks you through the pipe. auto = your default coding agent's CLI on its quick gear.",
     help: "THREE DEFAULTS, one place each: the triage brain (Triage & routing), the default coding agent (Coder agent), and this one.\n\nA CLI agent here can ACT - read a task or message, rerun a report, run a data tool - because it has a shell; it runs in its own scratch folder on a light model (Claude: haiku, Codex: low effort, Gemini: flash, or the agent's own 'light model' from Docs → Profiles) and picks its conversation back up turn to turn, so only the first turn pays the start-up. An API connector answers faster but can only talk. Sending, approving and pushing are your buttons whichever speaks." },
@@ -115,12 +104,21 @@ const KNOB_META = {
     help: "Switch a kind off and it never appears in a post again; lines already posted keep their actions and conversation. 'idea' is the only one that needs an AI connector — the others are read straight off the hub's own tables and your calendar. With 'idea' off no model is called at all: the facts post in the hub's own words." },
 
   // ── Coder agent: who works the tasks, and how eagerly ──
+  // THE BRAIN LAYER (2026-09-16). These three landed with the role/brain split and never got
+  // rows, so they sat on "Other" labelled with their own keys - next to the cards that set the
+  // same kind of thing (the owner, 2026-09-16: "update the other to explain what they are").
+  default_brain: { group: "Triage & agents", label: "Default brain", type: "text",
+    desc: "Which CLI actually executes a worker when its role names none. A ROLE picks the document a session is seeded with (coder, researcher, analyst); a BRAIN is the executable that runs it. Blank = each profile's own command.",
+    help: "Set from the cards above in normal use — this is the raw value they write. Naming a brain here is what stops a role name being read as a CLI name, which is how TQ-0588's coding work was once routed to Copilot.\n\nA role and a brain are different questions and one name cannot answer both." },
+  backup_brains: { group: "Triage & agents", label: "Backup brains", type: "text",
+    desc: "Ordered alternates when the first brain is out of sessions, signed out, or cannot start. * = every other configured one, in roster order. This is the live successor to the old 'Backup coding CLIs', which named profiles and no longer does anything.",
+    help: "Failover is for AVAILABILITY failures only — session/usage/rate limits, quota, expired login, a missing executable — never for an agent that simply erred. The task, its messages, attachments, repository and seed prompt all travel to the replacement, which starts a fresh conversation with its own model." },
+  profile_brains: { group: "Triage & agents", label: "Per-role brain overrides", type: "text",
+    desc: "JSON, e.g. {\"researcher\": \"codex\"} — one role that should run on a different brain from the default above. Blank (the default) means every role uses the default brain.",
+    help: "The escape hatch for 'the analyst should run on codex but everything else on claude'. An unknown role name is ignored rather than guessed at. Edited here because it is rare enough not to earn a picker." },
   default_agent: { group: "Triage & agents", label: "Default coding CLI", type: "agent",
     desc: "The CLI agent that works tasks when nothing names one.",
     help: "Start session, Send to coding agent and auto-dispatch all use this agent unless you pick another in the moment; every agent picker lists it first. The roster itself lives under Docs → Profiles → Manage profiles, where the default row wears the star.\n\nGitHub-specific permissions (may agents open issues? push?) are on the GitHub connector card, because they are decisions about how your team uses GitHub, not about Taskuary." },
-  backup_agents: { group: "Triage & agents", label: "Backup coding CLIs", type: "agents",
-    desc: "If the first CLI is out of sessions, signed out, unavailable, or cannot start, continue the same task with another configured agent.",
-    help: "Automatic (the default) tries every other configured CLI in roster order. Or select one or more explicit backups to control the chain. The task, incoming messages, attachments, repository, and seed prompt all travel to the replacement.\n\nA normal agent error does not silently switch authors halfway through work. Failover is for availability failures: session/usage/rate limits, quota or capacity, expired login, a missing executable, or a CLI that cannot start." },
   answer_to_agent: { group: "Coder agent", label: "Hand answers to the working agent", type: "select",
     options: ["ask", "auto", "off"],
     desc: "An agent asks a question mid-task, Taskuary asks the person, and their reply lands back on the same task. This is what happens next. ask = Review offers one click, 'Type this into the agent's session'. auto = it is typed in the moment it arrives, as if you relayed it. off = it just sits on the task.",
@@ -144,15 +142,14 @@ const KNOB_META = {
   general_auto_enabled: { group: "Coder agent", label: "Auto-start the assistant on general tasks", type: "switch",
     desc: "Every new general task (research, a question to think through, a job with no keyboard) opens its own assistant session with the ask already put. Off: the task waits for you to open it.",
     help: "Both worker kinds start by themselves by default; each has its own switch. The same holds apply to both: a first-time sender waits for your click (release it from the task), a coding job whose repository is unclear waits for your choice, and a missing AI provider is said on the task instead of failing quietly. A hold never hides the task - it is still triaged and on the Board." },
-  trust_own_domain: { group: "Coder agent", label: "Trust senders on your own domains", type: "switch",
-    desc: "Mail from an address on one of your connected mailboxes' domains may start a worker unattended.",
-    help: "Who may start a worker without you is three visible rules, each its own switch. This one: your own domains (every connected mailbox and the owner address in Settings). A sender outside them who fails every rule still gets triaged and a task on the Board - only the unattended start waits for your click (release it from the task)." },
-  trust_sent_history: { group: "Coder agent", label: "Trust people this mailbox has written to", type: "switch",
-    desc: "Verified Sent Items evidence: the receiving mailbox itself has sent this exact address something before. The matched reason is shown on the task.",
-    help: "Checked in your own records first, then asked of the mail server once per address and remembered. Earlier INCOMING mail from an address is never evidence - a stranger's second message is still a stranger's. A lookup that fails is not proof either way: the task says so and waits for a manual start." },
-  trust_non_email: { group: "Coder agent", label: "Trust chat channels (Teams, Slack, ...)", type: "switch",
-    desc: "Senders inside a workspace you control may start a worker unattended without a Sent Items check.",
-    help: "Off: a chat ask still becomes a task and is triaged; the worker waits for your click." },
+  trust_own_domain: { group: "Coder agent", label: "Who may start a worker without you", type: "flags",
+    flags: {
+      trust_own_domain: { label: "your own domains", help: "Every connected mailbox's domain, plus the owner address in Settings." },
+      trust_sent_history: { label: "people you have written to", help: "Verified Sent Items evidence: this mailbox has sent that exact address something before." },
+      trust_non_email: { label: "chat channels", help: "Teams, Slack, WhatsApp and the rest - a chat channel you connected is a room you chose." },
+    },
+    desc: "An inbound message can open a task AND start the agent on it unattended. These are the three rules that allow it; a sender matching none of them still gets triaged and lands on the Board, and only the unattended start waits for your click.",
+    help: "Three separate switches until 2026-09-16, which meant reading all three to know the answer to one question.\n\nyour own domains — every connected mailbox's domain and the owner address.\n\npeople you have written to — checked in your own records first, then asked of the mail server once per address and remembered. Earlier INCOMING mail is never evidence: a stranger's second message is still a stranger's. A lookup that fails is not proof either way, so the task says so and waits.\n\nchat channels — Teams, Slack, Telegram, WhatsApp, iMessage, Discord.\n\nTurn all three off and nothing ever starts by itself; every task waits on the Board for you. Turning them off does not stop triage, drafting or filing - only the unattended start." },
   coder_context_file: { group: "Coder agent", label: "Write the agent a context file", type: "switch",
     desc: "Each session gets ~/.taskuary/context/TQ-xxxx.md: this sender's recent mail and what you last wrote them, the topic elsewhere, your calendar, the assistant's read, the learned profile, the whole thread - and the reports of closed tasks on the same sender, subject or repo. The seed says 'read it first'.",
     help: "The seed prompt is one command line (Windows caps it at 32,767 characters, and when it overflows the ask is what gets cut), so the two-line read rides in the prompt and the rest lives in this file. It is written under Taskuary's own home, never inside a checkout - a stray file in a shared checkout gets staged. Off: the seed carries what it always did and no file is written." },
@@ -265,7 +262,22 @@ const PANEL_OWNED = new Set(["triage_ai", "default_agent", "concierge_ai", "conc
 // timestamps: a page of machine state you can type over (the owner, 2026-09-16: "does not feel
 // useful"). A per-entity key is `name:<id>` and is state by construction; the scalars are named.
 // Nothing here is deleted or stopped being written - it just is not offered as a knob.
-const STATE = new Set(["app_sessions", "assistant_dock_task_id", "assistant_handoff", "assistant_last_run",
+// Two more that READ like settings and are not: `handbook_on_by_default` is a one-shot marker
+// ("flip it once and remember that we did", store.py) and `processing_membership_rules` is a
+// stamp of the grouping-rule version that triggers one reconcile when it changes. Typing in
+// either does nothing useful and re-running a migration is the best case.
+// `voice_vocabulary` is real, but it is a list of up to 100 terms that /api/voice/vocabulary
+// sanitises with voice.normalize_vocabulary on save - a raw text box here writes straight past
+// that validation, which is worse than not offering it.
+// `assistant_card` and `counsel_enabled` have NO reader anywhere: two more dead knobs found the
+// same way as the other four (grep every module for the key, do not trust the label).
+// ...and the two the combined "who may start a worker" row now owns: they are still the
+// settings senders.py reads, they just are not their own rows any more. Plus a one-shot
+// migration sentinel that ends in _fixed rather than _seeded and so slipped the suffix rule.
+const STATE = new Set(["trust_sent_history", "trust_non_email", "triage_pr_rule_fixed",
+  "handbook_on_by_default", "processing_membership_rules", "voice_vocabulary",
+  "assistant_card", "counsel_enabled",
+  "app_sessions", "assistant_dock_task_id", "assistant_handoff", "assistant_last_run",
   "assistant_notes", "assistant_notes_at", "auto_start_upgraded", "chat_cleanup_at", "github_login",
   "ingest_last_fetch_completed_at", "learn_reflect_log", "problems_dismissed", "wa_log_trimmed_at",
   "wall_rolled_on"]);
@@ -451,6 +463,32 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
     }
     // a csv of channels: chips you toggle, which is what "which of these" actually is -
     // a comma-separated text field asked the owner to spell channel names correctly
+    // ONE QUESTION, ONE ROW. Three switches asked one thing - who may start a worker without
+    // you - and a reader had to hold all three in their head to know the answer (the owner,
+    // 2026-09-16). This draws them as one set of pills over the SAME three settings: no new key,
+    // no migration, and senders.py still reads exactly what it always read.
+    if (m.type === "flags") {
+      const keys = Object.keys(m.flags);
+      const val = (k) => (settings.find((x) => x.Name === k)?.Value ?? "1") === "1";
+      const none = keys.every((k) => !val(k));
+      return (
+        <Box sx={{ display: "flex", gap: 0.6, flexWrap: "wrap", justifyContent: "flex-end", maxWidth: 360 }}>
+          {keys.map((k) => (
+            <Box key={k} title={m.flags[k].help} onClick={() => saveSetting(k, val(k) ? "0" : "1")}
+              sx={{ display: "inline-flex", alignItems: "center", px: 0.9, py: 0.35, borderRadius: 99,
+                cursor: "pointer", fontSize: 11.5, fontWeight: val(k) ? 700 : 500, userSelect: "none",
+                bgcolor: val(k) ? "#eae4d8" : "#e9e3d8", color: val(k) ? "#55697a" : DIM,
+                border: `1px solid ${val(k) ? "#d8cfbe" : BORDER}`, "&:hover": { borderColor: "#d8cfbe" } }}>
+              {m.flags[k].label}
+            </Box>
+          ))}
+          {/* all three off is a real choice, not a broken row - say what it means */}
+          {none && <Typography variant="caption" sx={{ color: FAINT, alignSelf: "center", ml: 0.5 }}>
+            nobody — every task waits for your click
+          </Typography>}
+        </Box>
+      );
+    }
     if (m.type === "channels") {
       const on = new Set(String(s.Value || "").split(",").map((x) => x.trim()).filter(Boolean));
       const toggle = (ch) => {

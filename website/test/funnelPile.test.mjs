@@ -198,6 +198,11 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   // read, so they leave the pile the moment the batch goes up and there was nothing left to ring
   assert.match(view, /const onTable = batch \? \(batch\.items \|\| \[\]\)\.filter/);
   assert.match(view, /className="tq-pile-batch"/);
+  // ...and ONE item on the table says the same word on the same border. Both wear the identical
+  // slate ring, so without it the ring on a single row had to be read rather than known (the
+  // owner, 2026-09-17: "isn't there a current word on the border around chosen task?").
+  assert.match(view, /\{isCur && <b className="tq-pile-now">on the table<\/b>\}/);
+  assert.match(read("assistantView.css"), /\.tq-pile-batch b, \.tq-pile-now \{/);
   assert.match(view, /const bands = bandsOf\(drawn\)/);          // grouped by category, headings freeze
   // ...each band taking the room it has, less the extra height of the row on the table - which is
   // 24px taller than the rest and drawn inside one of those bands

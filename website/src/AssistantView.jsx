@@ -321,6 +321,13 @@ function Pile({ pile, current, onPull }) {
                       </div>
                       {isCur && <div className="sub">{[i.why, i.kind === "meeting" ? ageText(i.when) : agoText(i.since || i.when)].filter(Boolean).join(" · ")}</div>}
                     </div>
+                    {/* THE SAME WORD ON THE SAME BORDER. A handful on the table says so on its
+                        bracket ("on the table · 4 fyi"); one item on the table wore the identical
+                        slate ring and said nothing, so the ring had to be read rather than known
+                        (the owner, 2026-09-17: "isn't there a current word on the border around
+                        chosen task by the assistant?"). It is a sibling of the card, not a child:
+                        the card clips its overflow so the title can ellipse. */}
+                    {isCur && <b className="tq-pile-now">on the table</b>}
                   </div>
                 );
               })}

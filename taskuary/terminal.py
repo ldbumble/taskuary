@@ -709,7 +709,7 @@ def pretrust(cwd: str, agent: str = '', home: str = None) -> bool:
 
 def open_session(store, agent: str = None, task_id: int = None, repo: str = None, cwd: str = None,
                  rows: int = 32, cols: int = 110, actor: str = 'owner', model: str = None,
-                 seed_fn=None, resume: str = None) -> Term:
+                 seed_fn=None, resume: str = None, brain: str = None) -> Term:
     """Start a terminal: a configured agent CLI, or a plain shell when agent is None.
 
     `seed_fn(cwd) -> str` builds the first prompt once the working directory is known. CLIs
@@ -726,7 +726,8 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         # names no configured connection, and then the profile's own command stands - a
         # half-migrated install must still be able to start an agent at all.
         from . import agents as _hub
-        profile = {**profile, **(_hub.brain_command(store, agent) or {})}
+        # an explicit brain is the OWNER's choice at the picker and outranks the setting
+        profile = {**profile, **(_hub.brain_command(store, agent, want=brain) or {})}
         label = agent
     else:
         label = 'shell'
@@ -1507,7 +1508,8 @@ def guess_repo(store, tid: int, profile: dict) -> tuple:
 
 
 def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, instruction: str = None,
-                  actor: str = 'owner', cwd: str = None, _chain: list = None, resume: str = None) -> dict:
+                  actor: str = 'owner', cwd: str = None, _chain: list = None, resume: str = None,
+                  brain: str = None) -> dict:
     """Put a CLI on a task, in a REAL terminal - the only way an agent starts work here. An
     agent you cannot watch, interrupt or answer is the thing this app exists to replace."""
     import json
@@ -1544,6 +1546,9 @@ def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, inst
         try:
             term = open_session(store, candidate, tid, repo, continued_cwd, 32, 110, actor,
                                 model if i == 0 else None, resume=resume,
+                                # the owner's own pick rides only on the FIRST try - a failover
+                                # to another brain is the whole point of the chain
+                                brain=brain if i == 0 else None,
                                 seed_fn=(lambda here: resume_seed(instruction)) if resume else
                                         (lambda here, r=repo: seed_text(store, tid, instruction, r, here)))
             chosen = candidate

@@ -629,10 +629,25 @@ def brain_for(store, role: str) -> str:
     return key or default_brain(store)
 
 
-def brain_command(store, role: str, cfg: dict = None) -> dict:
+def adopt_brain_setting(store) -> bool:
+    """Name the brain this install is already running, once.
+
+    While `default_brain` is blank, `brain_command` stays out of the way and the profile's own
+    command still decides - so this is the line that actually moves an install onto the brain
+    layer, and it moves it onto exactly what it ran yesterday. Returns whether it wrote anything."""
+    if str(store.get_settings().get('default_brain') or '').strip(): return False
+    key = default_brain(store)
+    if not key: return False
+    store.set_setting('default_brain', key, 'migration')
+    return True
+
+
+def brain_command(store, role: str, cfg: dict = None, want: str = None) -> dict:
     """The COMMAND a role's brain runs - cmd, args, resume flags, timeout, gears.
 
-    Empty unless a brain was CHOSEN - `default_brain`, or this role's override. Blank means the
+    `want` is the owner's own pick at the dialog and outranks everything below it.
+
+    Empty unless a brain was CHOSEN - `want`, `default_brain`, or this role's override. Blank means the
     owner has not moved to the brain layer yet, and `brain_for` would then be guessing from the
     legacy `default_agent` profile; overriding an explicit profile command with a guess is how
     "start a session with codex" would have quietly run claude.
@@ -644,7 +659,9 @@ def brain_command(store, role: str, cfg: dict = None) -> dict:
     settings = store.get_settings()
     try: over = json.loads(settings.get('profile_brains') or '{}')
     except ValueError: over = {}
-    key = (str(over.get(str(role or '')) or '').strip() if isinstance(over, dict) else '') \
+    # the owner picking a brain at the dialog outranks both the role's override and the default
+    key = str(want or '').strip() \
+        or (str(over.get(str(role or '')) or '').strip() if isinstance(over, dict) else '') \
         or str(settings.get('default_brain') or '').strip()
     if not key: return {}
     cfg = config.load() if cfg is None else cfg

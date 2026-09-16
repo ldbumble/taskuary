@@ -35,7 +35,7 @@ class TheMarkIsSetByTheDoor(unittest.TestCase):
         for actor, marked in (('owner', True), ('router', False)):
             s = MemoryStore(); s.upsert_agent('coder', 'coding', 'cli', '{}'); tid = _task(s)
             seeds = []
-            def fake_open(store, agent, task_id, repo, cwd, rows, cols, act, model, seed_fn=None, resume=None):
+            def fake_open(store, agent, task_id, repo, cwd, rows, cols, act, model, seed_fn=None, resume=None, **kw):
                 seeds.append(seed_fn(cwd) if seed_fn else ''); return Fake(task_id)
             with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(terminal, 'open_session', side_effect=fake_open), \
                  mock.patch.object(terminal, 'guess_repo', return_value=(None, '')), \

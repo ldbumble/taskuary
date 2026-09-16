@@ -252,7 +252,10 @@ class SourceBody(BaseModel):
     SourceId: int | None = None; ConnectorId: int | None = None; Channel: str | None = None
     Address: str | None = None; ConfigJson: str | None = None; Active: bool | None = None
 class DispatchBody(BaseModel):
-    agent: str | None = None; instruction: str | None = None; model: str | None = None
+    # `agent` is the ROLE that works it; `brain` is WHICH CLI runs it. Two questions, and
+    # answering both with one name is what sent TQ-0588's coding work to Copilot.
+    agent: str | None = None; brain: str | None = None
+    instruction: str | None = None; model: str | None = None
     # The button says "Send to agent".  The task's Kind remains authoritative once a task
     # exists; this hint is only how an unpromoted message says which kind of task to create.
     kind: str | None = None
@@ -1132,7 +1135,8 @@ def code(task_id: int, background: BackgroundTasks, body: CodeBody = None):
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     agent = (body.agent if body else None) or hub_agents.default_agent(store)
     if not store.get_agent(agent): raise HTTPException(422, f'unknown agent: {agent}')
-    ses = start_session(store, task_id, agent, (body.model if body else None), (body.instruction if body else None))
+    ses = start_session(store, task_id, agent, (body.model if body else None), (body.instruction if body else None),
+                        brain=getattr(body, 'brain', None))
     return {'coder': 'session', 'agent': agent, 'model': (body.model if body else None), 'session': ses}
 
 @app.post('/api/tasks/{task_id}/continue')
@@ -1158,6 +1162,7 @@ def continue_task(task_id: int, body: CodeBody):
         raise HTTPException(422, f'the previous coder "{agent}" is no longer configured; choose a coder from Start session')
     try:
         session = hub_term.start_on_task(store, task_id, agent, body.model, instruction, ACTOR,
+                                         brain=getattr(body, 'brain', None),
                                          cwd=previous.get('Cwd') or None)
     except (ValueError, RuntimeError, FileNotFoundError) as e:
         raise HTTPException(422, str(e))
@@ -1334,7 +1339,7 @@ def set_task_repo(task_id: int, body: RepoBody, background: BackgroundTasks = No
     if body.restart:
         live = hub_term.session_for(task_id)
         if live: hub_term.close(live.sid)
-        out['session'] = start_session(store, task_id, body.agent)
+        out['session'] = start_session(store, task_id, body.agent, brain=getattr(body, 'brain', None))
     return out
 
 class NotATaskBody(BaseModel):
@@ -1991,10 +1996,13 @@ def ignore_sender(mid: int, body: IgnoreSenderBody, background: BackgroundTasks 
     return {'ok': True, 'how': 'rule', 'policyId': pid, 'affected': hidden, 'sender': em,
             'quieted': quieted}
 
-def start_session(store_, tid: int, agent: str = None, model: str = None, instruction: str = None) -> dict:
+def start_session(store_, tid: int, agent: str = None, model: str = None, instruction: str = None,
+                  brain: str = None) -> dict:
     try:
         _refresh_chat_context(task_id=tid)
-        return hub_term.start_on_task(store_, tid, agent or hub_agents.default_agent(store_), model, instruction, ACTOR)
+        # `agent` is the ROLE, `brain` is which CLI runs it - two questions, two arguments
+        return hub_term.start_on_task(store_, tid, agent or hub_agents.default_agent(store_), model, instruction,
+                                      ACTOR, brain=brain)
     except (ValueError, RuntimeError, FileNotFoundError) as e:
         raise HTTPException(422, str(e))
 
@@ -2127,7 +2135,8 @@ ROAD_VERDICT = {'fyi': 'FILE IT: not work', 'reply': 'REPLY ONLY: answering it I
 
 class ReclassifyBody(BaseModel):
     road: str                       # fyi | reply | coding | general | task
-    agent: str | None = None        # coding only: which CLI, default the usual one
+    agent: str | None = None        # the ROLE that works it
+    brain: str | None = None        # WHICH CLI runs it - blank means the brain settings name
 
 
 def _teach_reclassify(m: dict, was: str, road: str, background) -> int:
@@ -5748,7 +5757,7 @@ async def events_ws(ws: WebSocket):
 
 
 class TermBody(BaseModel):
-    agent: str | None = None; task_id: int | None = None; repo: str | None = None
+    agent: str | None = None; brain: str | None = None; task_id: int | None = None; repo: str | None = None
     cwd: str | None = None; rows: int = 32; cols: int = 110; seed: bool = False
     model: str | None = None; instruction: str | None = None
 

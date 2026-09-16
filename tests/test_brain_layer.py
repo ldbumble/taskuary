@@ -89,6 +89,13 @@ class SessionBrainTests(unittest.TestCase):
         s.upsert_agent('codex', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
         self.assertEqual(hub_agents.brain_command(s, 'codex', cfg), {})
 
+    def test_the_owners_own_pick_outranks_the_setting(self):
+        """What the picker chooses is a BRAIN now, and it beats both the role override and the
+        default - otherwise "start a session with codex" would resolve the default and run claude."""
+        s, cfg = self.setup('claude')
+        s.set_setting('profile_brains', json.dumps({'coder': 'claude'}), 'owner')
+        self.assertEqual(hub_agents.brain_command(s, 'coder', cfg, want='codex').get('cmd'), 'codex')
+
     def test_a_role_override_alone_is_enough_to_choose(self):
         s, cfg = self.setup('')
         s.set_setting('profile_brains', json.dumps({'coder': 'codex'}), 'owner')
@@ -139,6 +146,34 @@ class GearByJobTests(unittest.TestCase):
 
     def test_an_explicit_model_still_outranks_everything(self):
         self.assertEqual(self.ran_with(model='opus').get('model'), 'opus')
+
+
+class SwitchTests(unittest.TestCase):
+    """Step 2 left the brain layer opt-in - brain_command acts only on a brain the owner chose, so
+    nothing regressed. This is the line that moves an install onto it, naming exactly what it was
+    already running."""
+
+    def store(self):
+        s = MemoryStore()
+        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+        s.set_setting('default_agent', 'coder', 'owner')
+        return s
+
+    def test_an_upgrade_writes_the_brain_it_was_already_running(self):
+        s = self.store()
+        self.assertTrue(hub_agents.adopt_brain_setting(s))
+        self.assertEqual(s.get_settings()['default_brain'], 'claude')
+
+    def test_it_does_not_overwrite_a_brain_the_owner_chose(self):
+        s = self.store()
+        s.set_setting('default_brain', 'codex', 'owner')
+        self.assertFalse(hub_agents.adopt_brain_setting(s))
+        self.assertEqual(s.get_settings()['default_brain'], 'codex')
+
+    def test_it_is_idempotent(self):
+        s = self.store()
+        self.assertTrue(hub_agents.adopt_brain_setting(s))
+        self.assertFalse(hub_agents.adopt_brain_setting(s))
 
 
 class GearTests(unittest.TestCase):

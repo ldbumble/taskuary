@@ -464,7 +464,7 @@ class Term:
         phase = stable_phase_of(self)          # compute once: every field in this payload tells one truth
         word = worker_fields(getattr(self, 'store', None), self)      # the run's own word outranks the screen (PW-228)
         base = {'sid': self.sid, 'label': self.label, 'cwd': self.cwd, 'taskId': self.task_id,
-                'agent': self.agent, 'cli': self.cli or cli_of(self.argv), 'alive': self.alive, 'started': self.started,
+                'agent': self.agent, 'cli': getattr(self, 'cli', '') or cli_of(self.argv), 'alive': self.alive, 'started': self.started,
                 'idle': self.idle(), 'phase': phase, 'waiting': word['waiting'], 'request': word['request'], 'accepted': getattr(self, 'accepted', None),
                 'promptPending': prompt_pending(self),
                 'cmd': ' '.join(self.argv), **({'tail': self.tail(tail)} if tail else {})}

@@ -4670,6 +4670,11 @@ def agents():
                      for a in rows],
             'config': cfg.get('agents', {}), 'default': head,
             'models': {a['Name']: _models(a) for a in store.list_agents()},
+            # WHICH BRAIN each role runs on. The card used to name the role, and after the roles
+            # and brains were split every coding row would read `coder` - the owner asked for the
+            # coding AGENT (2026-09-16). A brain is not a property of the task, so it is served
+            # once per role here rather than stamped on every row.
+            'brains': {a['Name']: hub_agents.brain_for(store, a['Name']) for a in rows},
             'work': _agent_work(store)}
 
 @app.post('/api/agents/{name}/test')

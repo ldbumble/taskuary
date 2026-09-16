@@ -277,7 +277,7 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feedOpen]);
   const [repos, setRepos] = useState([]);
-  const { agents, models, cmds, kinds } = useAgents();
+  const { agents, models, cmds, kinds, brains } = useAgents();
   const [live, setLive] = useState({});                // TaskId -> {tail, AgentName} while a run works
   // how = does an agent start on it now, or does it just get filed. There is no third
   // option: work always happens in a session you can watch and talk to.
@@ -461,7 +461,11 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                 // a chat session reports its agent as the literal string "assistant" - the name of
                 // the thing that helps you run Taskuary, not of the agent working this task
                 const chat = isGeneralKind(t.Kind);
-                const badge = agentBadge(chat ? agentName(t) : (live[t.TaskId]?.AgentName || t.RunAgent),
+                // WHICH CODING AGENT has it, which is no longer the role: every coding task's
+                // role is `coder`, so the name worth showing is the BRAIN. A live session knows
+                // exactly what it launched (`cli`); an idle one takes the brain settings name.
+                const brain = live[t.TaskId]?.cli || brains[assignedAgent(t.Assignee) || "coder"] || "";
+                const badge = agentBadge(chat ? agentName(t) : (brain || live[t.TaskId]?.AgentName || t.RunAgent),
                   t.RunStatus, !!live[t.TaskId], cmds);
                 return (
                 <Box key={t.TaskId} draggable onDragStart={() => setDragId(t.TaskId)} onDragEnd={() => setDragId(null)}
@@ -482,7 +486,9 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                       whiteSpace: "nowrap", flexShrink: 0 }}>{t.ref}</Typography>
                     <ChannelIcon channel={t.Source} sx={{ fontSize: 12 }} />
                     {assignedAgent(t.Assignee) && !badge && <Chip size="small" icon={<TaskuaryMark size={10} />}
-                      label={assignedAgent(t.Assignee)} title={`${assignedAgent(t.Assignee)} owns this task`}
+                      label={chat ? assignedAgent(t.Assignee) : (brain || assignedAgent(t.Assignee))}
+                      title={chat ? `${assignedAgent(t.Assignee)} owns this task`
+                        : `${brain || assignedAgent(t.Assignee)} works this task`}
                       sx={{ height: 15, fontSize: 8.5, bgcolor: "#e3e6e1", color: "#47654a",
                         "& .MuiChip-label": { px: 0.55 }, "& .MuiChip-icon": { ml: 0.35 } }} />}
                     {t.RunStatus && (

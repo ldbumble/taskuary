@@ -648,6 +648,7 @@ export const useAgents = () => {
   const [models, setModels] = useState({});
   const [cmds, setCmds] = useState({});
   const [kinds, setKinds] = useState({});
+  const [brains, setBrains] = useState({});
   useEffect(() => {
     api.get("/api/agents").then(({ data }) => {
       setAgents((data.data || []).map((a) => a.Name));
@@ -658,9 +659,12 @@ export const useAgents = () => {
       // profile name -> the CLI it actually runs ('coder' is usually claude) - the Board
       // tints a working card by the BRAND, and the name alone doesn't say which one it is
       setCmds(Object.fromEntries(Object.entries(data.config || {}).map(([k, v]) => [k, (v || {}).cmd || k])));
+      // ...and WHICH BRAIN each role runs on. A role no longer says which CLI runs it - every
+      // coding task's role is `coder` - so the card asks this instead (the owner, 2026-09-16).
+      setBrains(data.brains || {});
     }).catch(() => {});
   }, []);
-  return { agents, models, cmds, kinds };
+  return { agents, models, cmds, kinds, brains };
 };
 
 // CODING IS THE PROFILE. Both shipped coding workers carry rules_doc "coder", so `coder` and

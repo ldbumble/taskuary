@@ -479,9 +479,13 @@ class ApiTests(unittest.TestCase):
                 'purpose': 'writes and changes code, in a repository'}
         self.assertEqual(c.put('/api/agents/uitest', json=prof).json(),
                          {'ok': True, 'rules_doc': 'coder', 'triage_available': True})
-        self.assertEqual(c.get('/api/agents').json()['config']['uitest'], prof)
+        # the model names the BRAIN's gear, so it lands on the connection and leaves the worker:
+        # a profile has nothing to do with which model runs it (the 2026-09-16 spec)
+        role = {k: v for k, v in prof.items() if k != 'model'}
+        self.assertEqual(c.get('/api/agents').json()['config']['uitest'], role)
         self.assertTrue(any(a['Name'] == 'uitest' for a in c.get('/api/agents').json()['data']))
-        self.assertEqual(config.load()['agents']['uitest'], prof)  # written to config.toml
+        self.assertEqual(config.load()['agents']['uitest'], role)  # written to config.toml
+        self.assertEqual(config.load()['cli_connections']['uitest-cli']['model'], 'sonnet')
         self.assertEqual(c.put('/api/agents/bad', json={'args': []}).status_code, 422)
         self.assertEqual(c.delete('/api/agents/uitest').json(), {'ok': True})
         self.assertNotIn('uitest', config.load().get('agents', {}))

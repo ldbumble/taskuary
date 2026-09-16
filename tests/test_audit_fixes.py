@@ -1,6 +1,6 @@
 """The 2026-09-02 backend audit, pinned. Each test is one finding that was reproduced before the fix;
 the number is the finding's in the audit report."""
-import sqlite3, tempfile, threading, time, unittest
+import os, sqlite3, tempfile, threading, time, unittest
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -45,6 +45,11 @@ class PerimeterTests(unittest.TestCase):
         self.assertIn('1', reports.run_sqlite({'db': p, 'query': 'SELECT v FROM t'})[1])
         with self.assertRaises(sqlite3.OperationalError): reports.run_sqlite({'db': p, 'query': 'DROP TABLE t'})
         self.assertEqual(sqlite3.connect(p).execute('SELECT count(*) FROM t').fetchone()[0], 1)
+
+    @unittest.skipIf(os.name == 'nt', 'POSIX mode bits')
+    def test_the_data_dir_is_owner_only(self):
+        from taskuary import config
+        self.assertEqual(config.home().stat().st_mode & 0o777, 0o700)
 
 
 class BrainTests(unittest.TestCase):
@@ -223,5 +228,35 @@ class DoorTests(unittest.TestCase):
         r = c.post('/api/hooks/claude', json={'hook_event_name': 'Stop', 'session_id': 'nope'},
                    headers={'X-Taskuary-Token': server.cfg['server']['agent_token']})
         self.assertEqual(r.status_code, 200)
+
+    def test_winrm_does_not_interpolate_host_or_script(self):
+        seen = {}
+        def fake_run(argv, **kw):
+            seen['argv'] = argv; seen['env'] = kw.get('env') or {}
+            return SimpleNamespace(returncode=0, stdout='BOX\n', stderr='')
+        with mock.patch.object(reports.spawn, 'run', fake_run):
+            head, out = reports.run_winrm({'host': 'box; calc.exe', 'script': '}; calc.exe'})
+        cmd = seen['argv'][-1]
+        self.assertNotIn('box; calc.exe', cmd)
+        self.assertNotIn('}; calc.exe', cmd)
+        self.assertEqual(seen['env']['TQ_WINRM_HOST'], 'box; calc.exe')
+        self.assertEqual(seen['env']['TQ_WINRM_SCRIPT'], '}; calc.exe')
+        self.assertIn('BOX', out)
+
+    def test_sqlite_cannot_open_the_taskuary_database(self):
+        from taskuary import config
+        db = config.db_path()
+        with self.assertRaisesRegex(RuntimeError, 'not a report source'):
+            reports.run_sqlite({'db': db, 'query': 'SELECT 1'})
+        with self.assertRaisesRegex(RuntimeError, 'not a report source'):
+            reports.run_local_file({'path': str(config.home() / 'config.toml')})
+
+    def test_f03_the_events_socket_refuses_another_sites_page(self):
+        from starlette.websockets import WebSocketDisconnect
+        tok = server.cfg['server']['token']
+        with self.assertRaises(WebSocketDisconnect):
+            with c.websocket_connect(f'/api/events/ws?token={tok}',
+                                     headers={'Origin': 'http://evil.example'}) as ws:
+                ws.receive_json()
 
 if __name__ == '__main__': unittest.main()

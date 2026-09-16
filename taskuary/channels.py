@@ -297,13 +297,12 @@ def test_connector(store, cid: int) -> dict:
                 raise RuntimeError(f'Datadog rejected the API key ({r.status_code})')
             detail = f'API key valid on {site}' + ('' if dd.get('app_key') else ' - add the application key for monitor reads')
         elif c['Type'] == 'winrm':
-            import subprocess
             host = cfg.get('host')
             if not host: raise RuntimeError('no host set - enter the machine name (e.g. AZWEB01)')
-            p = spawn.run(['powershell', '-NoProfile', '-NonInteractive', '-Command',
-                                f'Test-WSMan -ComputerName {host} -ErrorAction Stop | Out-Null; '
-                                f'Invoke-Command -ComputerName {host} -ScriptBlock {{ $env:COMPUTERNAME }}'],
-                               capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=60)
+            from .reports import winrm_argv
+            argv, env = winrm_argv(host)
+            p = spawn.run(argv, env=env, capture_output=True, text=True, encoding='utf-8',
+                          errors='replace', timeout=60)
             if p.returncode != 0:
                 raise RuntimeError((p.stderr or p.stdout or 'WinRM unreachable')[:400]
                                    + ' - if this is a box you RDP into, PS remoting may need enabling: '

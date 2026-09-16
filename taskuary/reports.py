@@ -7,7 +7,7 @@ REGISTRY: type -> executor(config) -> (headline, summary). Implemented: sqlite, 
 timeline instead of silently absent. Adding a type = one ~15-line function + a REGISTRY
 entry - PRs welcome.
 """
-import io, json, re, sqlite3, time
+import io, json, os, re, sqlite3, time
 from datetime import datetime, timedelta
 from loguru import logger
 from . import spawn
@@ -47,7 +47,27 @@ def ro_sqlite(path: str):
     """A report READS a database, so open it so that it can do nothing else: the query is whatever
     the spec says, and DDL autocommits - a metric spec that said DROP TABLE dropped it (audit 2026-09-02)."""
     from pathlib import Path
-    return sqlite3.connect(f'{Path(path).resolve().as_uri()}?mode=ro', uri=True)
+    p = Path(path).expanduser().resolve()
+    if is_taskuary_private(p):
+        raise RuntimeError('the Taskuary database is not a report source')
+    return sqlite3.connect(f'{p.as_uri()}?mode=ro', uri=True)
+
+
+# Files that ARE the install: a sqlite/local_file tool pointed here dumps connector.Secret.
+# Subfolders (scratch, attachments, exports) are ordinary data and stay readable.
+_PRIVATE_HOME = frozenset({'taskuary.db', 'config.toml', 'wa-bridge.token', 'taskuary.log'})
+
+
+def is_taskuary_private(path) -> bool:
+    """True for the install's own credential files, not for a file the owner dropped alongside them."""
+    from pathlib import Path
+    from . import config
+    p = Path(path).expanduser().resolve()
+    root = config.home().resolve()
+    if p == root: return True
+    try: rel = p.relative_to(root)
+    except ValueError: return False
+    return rel.parts[0] in _PRIVATE_HOME or p.name in _PRIVATE_HOME
 
 
 # What a request body may NOT override on a saved card: where the credentials go. resolve_cfg lets
@@ -323,16 +343,31 @@ def run_rss(cfg):
     return f'{len(titles)} new items', '\n'.join(f'- {t}' for t in titles)[:4000]
 
 
+def winrm_argv(host, script=None):
+    """PowerShell argv + env so host/script never sit inside -Command (audit 2026-09-16).
+
+    The remote ScriptBlock is still the owner's script - that is the point of the card. What
+    this stops is a host like `box; calc` or a script that closes `}}` and runs locally."""
+    env = {**os.environ, 'TQ_WINRM_HOST': str(host or '')}
+    if script is None:
+        cmd = ('Test-WSMan -ComputerName $env:TQ_WINRM_HOST -ErrorAction Stop | Out-Null; '
+               'Invoke-Command -ComputerName $env:TQ_WINRM_HOST -ScriptBlock { $env:COMPUTERNAME }')
+    else:
+        env['TQ_WINRM_SCRIPT'] = str(script)
+        cmd = ('Invoke-Command -ComputerName $env:TQ_WINRM_HOST '
+               '-ScriptBlock ([scriptblock]::Create($env:TQ_WINRM_SCRIPT))')
+    return ['powershell', '-NoProfile', '-NonInteractive', '-Command', cmd], env
+
+
 def run_winrm(cfg):
     """{"host", "script"} - run PowerShell ON a remote Windows box (WinRM / PS remoting,
     your current Windows credentials) and report its output. A box you can RDP into is
     usually domain-joined and WinRM-reachable already; if not, run Enable-PSRemoting on
     it once (elevated)."""
-    import subprocess
     host, script = cfg['host'], cfg['script']
-    p = spawn.run(['powershell', '-NoProfile', '-NonInteractive', '-Command',
-                        f'Invoke-Command -ComputerName {host} -ScriptBlock {{ {script} }}'],
-                       capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=180)
+    argv, env = winrm_argv(host, script)
+    p = spawn.run(argv, env=env, capture_output=True, text=True, encoding='utf-8',
+                  errors='replace', timeout=180)
     if p.returncode != 0: raise RuntimeError((p.stderr or p.stdout or 'remote run failed')[:500])
     out = (p.stdout or '').strip()
     return f'{len(out.splitlines())} lines from {host}', out[:BODY_CHARS]
@@ -538,6 +573,8 @@ def run_local_file(cfg):
     A folder lists what is in it, newest first, which answers "did today's export arrive?"."""
     import json as _json
     p = _newest(cfg['path'], cfg.get('pick'))
+    if is_taskuary_private(p):
+        raise RuntimeError('the Taskuary home is not a report source')
     lim, mine = row_limit(cfg)
     if p.is_dir():
         rows = sorted(({'name': f.name, 'bytes': f.stat().st_size,

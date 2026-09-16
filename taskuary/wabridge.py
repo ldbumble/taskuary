@@ -206,7 +206,14 @@ def token() -> str:
     could send WhatsApp as the owner (audit 2026-09-02)."""
     from . import config
     p = config.home() / 'wa-bridge.token'
-    if not p.exists(): p.write_text(secrets.token_urlsafe(24), encoding='utf-8')
+    if not p.exists():
+        p.write_text(secrets.token_urlsafe(24), encoding='utf-8')
+        if os.name != 'nt':
+            try: p.chmod(0o600)
+            except OSError: pass
+    elif os.name != 'nt':
+        try: p.chmod(0o600)
+        except OSError: pass
     return p.read_text(encoding='utf-8').strip()
 
 

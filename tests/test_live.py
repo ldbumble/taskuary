@@ -429,10 +429,14 @@ class EventsSocketTests(unittest.TestCase):
         try:
             with TestClient(server.app) as c:
                 with self.assertRaises(WebSocketDisconnect):
-                    with c.websocket_connect('/api/events/ws') as ws:
+                    with c.websocket_connect('/api/events/ws', headers={'X-Taskuary-Token': ''}) as ws:
                         ws.receive_json()
                 with c.websocket_connect('/api/events/ws?token=s3cret') as ws:
                     self.assertEqual(ws.receive_json()['type'], 'hello')
+                with self.assertRaises(WebSocketDisconnect):
+                    with c.websocket_connect('/api/events/ws?token=s3cret',
+                                             headers={'Origin': 'http://evil.example'}) as ws:
+                        ws.receive_json()
         finally:
             server.cfg['server'].pop('token', None)
 

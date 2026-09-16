@@ -50,6 +50,13 @@ class WhatCountsAsACredentialTests(unittest.TestCase):
             self.assertIn('[redacted:', out)
             self.assertNotIn(line.split(maxsplit=1)[-1].lstrip(':= '), out)
 
+    def test_a_json_client_secret_goes(self):
+        raw = '{"client_id": "visible-app", "client_secret": "super-secret-app"}'
+        out = redact.scrub(raw)
+        self.assertNotIn('super-secret-app', out)
+        self.assertIn('visible-app', out)
+        self.assertIn('[redacted:secret]', out)
+
     def test_a_jwt_goes(self):
         jwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBjftJeZ4CVPmB92K27u'
         self.assertNotIn(jwt, redact.scrub(f'Authorization: Bearer {jwt}'))

@@ -52,9 +52,11 @@ class DenyListTests(unittest.TestCase):
                              ('POST', '/api/reports/preview'), ('POST', '/api/reports/compose'), ('POST', '/api/workflows/compose'),
                              ('POST', '/api/reports/3/invoice-batches'), ('PATCH', '/api/invoice-batches/2/items/8'),
                              ('POST', '/api/invoice-batches/2/prepare'),
-                             ('POST', '/api/semantic/metrics'), ('DELETE', '/api/semantic/metrics/3'), ('POST', '/api/semantic/metrics/3/try')):
+                             ('POST', '/api/semantic/metrics'), ('DELETE', '/api/semantic/metrics/3'), ('POST', '/api/semantic/metrics/3/try'),
+                             ('POST', '/api/terminals'), ('DELETE', '/api/terminals/abc')):
             self.assertTrue(guard.denied(method, path), f'{method} {path} must be refused')
-        for method, path in (('GET', '/api/semantic/metrics'), ('GET', '/api/reports'), ('POST', '/api/tools/run')):
+        for method, path in (('GET', '/api/semantic/metrics'), ('GET', '/api/reports'), ('POST', '/api/tools/run'),
+                             ('GET', '/api/terminals'), ('GET', '/api/terminals/abc/screen')):
             self.assertFalse(guard.denied(method, path), f'{method} {path} must be allowed')
 
     def test_the_list_is_not_configurable(self):
@@ -89,6 +91,12 @@ class ScopeTests(unittest.TestCase):
         guard.ensure_tokens(dict, lambda d: None, srv)
         self.assertEqual(srv['agent_token'], first)                     # stable across restarts
 
+    def test_a_wrong_length_token_is_just_wrong(self):
+        self.assertFalse(guard.token_matches('short', 'much-longer-secret'))
+        self.assertTrue(guard.token_matches('secret', 'secret'))
+        self.assertFalse(guard.token_matches('secret', 'secretX'))
+        self.assertTrue(guard.token_matches('agent', 'nope', 'agent'))
+
 
 class OverTheWireTests(unittest.TestCase):
     """...and the same thing through the actual middleware, which is what a curl in a session hits."""
@@ -116,6 +124,32 @@ class OverTheWireTests(unittest.TestCase):
         from taskuary import terminal
         env = terminal.session_env('coder', 41, 'C:/repo')
         self.assertEqual(env[guard.AGENT_ENV], config.load()['server']['agent_token'])
+
+    def test_a_session_cannot_open_or_kill_a_live_pty(self):
+        self.assertEqual(c.post('/api/terminals', json={'cwd': '.'}, headers=AGENT).status_code, 403)
+        self.assertEqual(c.delete('/api/terminals/nope', headers=AGENT).status_code, 403)
+        self.assertEqual(c.get('/api/terminals', headers=AGENT).status_code, 200)
+
+    def test_a_session_does_not_see_oauth_secrets_on_the_connector_list(self):
+        import json
+        from taskuary import server
+        qb = next(x for x in server.store.list_connectors() if x['Type'] == 'quickbooks')
+        before = qb.get('ConfigJson')
+        server.store.save_connector({'ConnectorId': qb['ConnectorId'],
+                                     'ConfigJson': json.dumps({'client_id': 'id', 'client_secret': 'super-secret-app',
+                                                               'realm_id': '123'})}, 't')
+        try:
+            shown = next(x for x in c.get('/api/connectors').json()['data'] if x['ConnectorId'] == qb['ConnectorId'])
+            self.assertIn('super-secret-app', shown['ConfigJson'])          # the card the owner edits
+            hidden = next(x for x in c.get('/api/connectors', headers=AGENT).json()['data']
+                          if x['ConnectorId'] == qb['ConnectorId'])
+            cfg = json.loads(hidden['ConfigJson'])
+            self.assertNotIn('super-secret-app', hidden['ConfigJson'])
+            self.assertEqual(cfg.get('client_id'), 'id')
+            self.assertEqual(cfg.get('realm_id'), '123')
+            self.assertNotIn('client_secret', cfg)
+        finally:
+            server.store.save_connector({'ConnectorId': qb['ConnectorId'], 'ConfigJson': before or '{}'}, 't')
 
 
 if __name__ == '__main__':

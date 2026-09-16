@@ -200,13 +200,14 @@ async def token_gate(request: Request, call_next):
         return JSONResponse({'detail': 'this request came from another site. Taskuary answers its own '
                                        'pages only.'}, status_code=403)
     tok = cfg['server'].get('token')
-    if tok and request.url.path.startswith('/api') and request.headers.get('X-Taskuary-Token') not in (tok, cfg['server'].get('agent_token')):
+    presented = request.headers.get('X-Taskuary-Token')
+    if tok and request.url.path.startswith('/api') and not guard.token_matches(presented, tok, cfg['server'].get('agent_token')):
         # an <img src> cannot carry a header, so attachment READS take the token in the query
         # string - the same concession websockets already needed
         # ...and an OAuth callback is a redirect from the provider's site: no header can ride on it.
         # It proves itself with the one-time state it was issued (quickbooks_authorize), not the token.
         file_read = request.url.path.startswith(('/api/attachments/', '/api/task-artifacts/'))
-        if not (file_read and request.query_params.get('token') == tok) \
+        if not (file_read and guard.token_matches(request.query_params.get('token'), tok)) \
                 and request.url.path not in ('/api/quickbooks/callback', '/api/zoho/callback'):
             # In JSON, like every other refusal: an HTML body left `detail` undefined, so a tab that
             # was open across a token change answered every click with whichever screen's generic
@@ -297,8 +298,13 @@ def _index_response(index_file: Path):
 <meta http-equiv="refresh" content="1"><title>Taskuary is updating</title></head>
 <body style="font:14px system-ui;margin:4rem;color:#4d4a43">Taskuary is updating&hellip;</body></html>'''
         return HTMLResponse(html, status_code=503, headers={
-            'Cache-Control': 'no-store, must-revalidate', 'Retry-After': '1'})
-    return HTMLResponse(_seed_token(html), headers={'Cache-Control': 'no-store, must-revalidate'})
+            'Cache-Control': 'no-store, must-revalidate', 'Retry-After': '1',
+            'X-Content-Type-Options': 'nosniff'})
+    return HTMLResponse(_seed_token(html), headers={
+        'Cache-Control': 'no-store, must-revalidate',
+        'X-Content-Type-Options': 'nosniff',
+        'Referrer-Policy': 'same-origin',
+        'X-Frame-Options': 'DENY'})
 
 
 def _seed_token(html: str) -> str:
@@ -3715,12 +3721,16 @@ def problem_dismiss(key: str):
     except ValueError as e: raise HTTPException(404, str(e))
 
 @app.get('/api/connectors')
-def connectors():
+def connectors(request: Request):
     """Channel connector cards (outlook / teams / github). Secrets are write-only.
     ScopeDefault rides along so the card can show what an unset Authority actually means -
-    which is per type (winrm starts at admin, a tracker at read), not one global floor."""
+    which is per type (winrm starts at admin, a tracker at read), not one global floor.
+    Agents still list cards (they have to pick a tool) but ConfigJson drops credential keys."""
     from . import scopes
-    return {'data': [c | {'ScopeDefault': scopes.default_scope(c['Type'])} for c in store.list_connectors()]}
+    rows = [c | {'ScopeDefault': scopes.default_scope(c['Type'])} for c in store.list_connectors()]
+    if guard.scope_of(cfg['server'], request.headers) == guard.AGENT:
+        rows = [guard.without_config_secrets(c) for c in rows]
+    return {'data': rows}
 
 @app.get('/api/scopes')
 def scope_catalog():
@@ -5759,9 +5769,10 @@ def ingest_status():
 # And one socket for the rest of the UI: Timeline/Board/Studio subscribe instead of polling.
 @app.websocket('/api/events/ws')
 async def events_ws(ws: WebSocket):
-    """feed-changed, task-changed, run-tail. Same token-on-query as the terminal socket."""
-    tok = cfg['server'].get('token')
-    if tok and ws.query_params.get('token') != tok: return await ws.close(code=4401)
+    """feed-changed, task-changed, run-tail. Same Host/Origin/token questions as the terminal
+    socket: a websocket is exempt from the same-origin policy, so a page that learned the token
+    used to subscribe from anywhere (audit 2026-09-16)."""
+    if not _ws_ok(ws): return await ws.close(code=4401)
     await ws.accept()
     try:
         await live_bus.serve(ws)
@@ -5946,7 +5957,8 @@ def _ws_ok(ws: WebSocket) -> bool:
     if not guard.host_ok(ws.headers.get('host'), cfg['server']): return False
     if not guard.origin_ok(ws.headers): return False
     tok = cfg['server'].get('token')
-    return not tok or tok in (ws.query_params.get('token'), ws.headers.get('x-taskuary-token'))
+    return not tok or guard.token_matches(ws.query_params.get('token'), tok) \
+        or guard.token_matches(ws.headers.get('x-taskuary-token'), tok)
 
 
 @app.websocket('/api/terminals/{sid}/ws')

@@ -34,6 +34,8 @@ not built, and until it is, an agent that goes looking for the file can find the
 built is that no prompt, no API response and no tool result ever hands them over, and that the
 one road from "an agent wants this sent" to "it is sent" runs through a person.
 """
+import hmac
+import json
 import re
 import secrets as _secrets
 from loguru import logger
@@ -79,6 +81,10 @@ DENIED = (
     (r'POST', r'^/api/(reports/(preview|compose|compose-sources)|workflows/compose)$',
      'the report/workflow composer may read a connected system with the card\'s credentials'),
     (r'POST|PUT|PATCH|DELETE', r'^/api/semantic(/|$)', 'a metric spec is SQL run against a database of its choosing'),
+    # a live pty is a shell as the owner. Agents already dispatch through terminal.start_on_task;
+    # this HTTP door is the one the owner sits in (server.open_terminal). GET listing/screen stay.
+    (r'POST', r'^/api/terminals$', 'opening a live session is the owner\'s door'),
+    (r'DELETE', r'^/api/terminals/', 'closing a live session is the owner\'s door'),
 )
 _DENIED = tuple((re.compile(f'^({m})$', re.I), re.compile(p), why) for m, p, why in DENIED)
 
@@ -90,15 +96,25 @@ def denied(method: str, path: str) -> str:
     return ''
 
 
+def token_matches(got, *want) -> bool:
+    """True if `got` is one of the secrets in `want`. Length mismatch is a miss, not an exception
+    (hmac.compare_digest raises on some Python versions when the strings differ in length)."""
+    got = str(got or '')
+    for w in want:
+        w = str(w or '')
+        if w and len(got) == len(w) and hmac.compare_digest(got, w): return True
+    return False
+
+
 def scope_of(cfg: dict, headers) -> str:
     """Who is calling. The agent token is the only thing that says 'agent'; everything else is
     treated as the owner, which is the honest description of a localhost app - see the module
     docstring on what that does and does not buy."""
     tok = str(headers.get('X-Taskuary-Token') or '')
-    if tok and tok == str(cfg.get('agent_token') or ''): return AGENT
+    if token_matches(tok, cfg.get('agent_token')): return AGENT
     owner = str(cfg.get('token') or '')
     if not owner: return OWNER                     # no token configured: the old, open behaviour
-    return OWNER if tok == owner else ANON
+    return OWNER if token_matches(tok, owner) else ANON
 
 
 # ── WHO IS ON THE OTHER END OF THE SOCKET ──────────────────────────────────
@@ -194,3 +210,29 @@ def ensure_tokens(read, write, server: dict) -> dict:
         # in memory only: still enforced for this run, just regenerated on the next start
         logger.warning(f'could not persist {sorted(fresh)} ({e}) - they hold for this run only')
     return server
+
+
+# ConfigJson is returned on list/get (the Secret column is not). OAuth client secrets and
+# refresh tokens used to ride along, so an agent allowed to GET /api/connectors could read
+# them without opening the database. Strip only the secret-shaped keys; host/client_id stay
+# so a tool call can still name the card it is using. Owner GETs are not passed through this.
+_CONFIG_SECRETS = frozenset({
+    'password', 'token', 'api_key', 'app_key', 'client_secret', 'secret_key', 'secret_access_key',
+    'sender_password', 'user_password', 'connection_string', 'private_key', 'google_client_secret',
+    'google_refresh_token', 'refresh_token', 'access_key', 'bot_token',
+})
+
+
+def without_config_secrets(row: dict) -> dict:
+    """A connector row an agent may see: ConfigJson minus the keys that are credentials."""
+    out = dict(row)
+    raw = out.get('ConfigJson')
+    if not raw: return out
+    try: cfg = json.loads(raw)
+    except (TypeError, ValueError): return out
+    if not isinstance(cfg, dict): return out
+    cleaned = {k: v for k, v in cfg.items()
+               if str(k).lower() not in _CONFIG_SECRETS
+               and not str(k).lower().endswith(('_secret', '_password', '_token'))}
+    if cleaned != cfg: out['ConfigJson'] = json.dumps(cleaned)
+    return out

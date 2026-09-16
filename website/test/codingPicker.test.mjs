@@ -26,7 +26,9 @@ test("the coding picker filters to coding workers and names them by their CLI", 
 test("the hook carries what each worker is for", () => {
   const ui = read("ui.jsx");
   assert.match(ui, /setKinds\(Object\.fromEntries\(\(data\.data \|\| \[\]\)\.map\(\(a\) => \[a\.Name, a\.Kind\]\)\)\)/);
-  assert.match(ui, /return \{ agents, models, cmds, kinds \};/);
+  // the hook may carry MORE than these - it grew a "brains" member with the brain-layer
+  // work - but "kinds" has to stay on it, which is what this guard is actually for
+  assert.match(ui, /return \{ agents, models, cmds, kinds[^}]*\};/);
 });
 
 test("the new-task dialog asks the question it means, and passes the kinds", () => {
@@ -34,7 +36,7 @@ test("the new-task dialog asks the question it means, and passes the kinds", () 
   assert.match(board, /Which CLI works it — and which model that CLI runs/);
   assert.doesNotMatch(board, /Agent and model — which CLI works it/);
   assert.match(board, /<AgentPicker agents=\{agents\} models=\{models\} kinds=\{kinds\} coding/);
-  assert.match(board, /const \{ agents, models, cmds, kinds \} = useAgents\(\)/);
+  assert.match(board, /const \{ agents, models, cmds, kinds[^}]*\} = useAgents\(\)/);
   for (const name of ["NewSheet.jsx", "TasksView.jsx"]) {
     const src = read(name);
     assert.match(src, /<AgentPicker agents=\{agents\} models=\{models\} kinds=\{kinds\} coding/);

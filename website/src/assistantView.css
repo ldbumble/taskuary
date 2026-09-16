@@ -73,10 +73,12 @@
    should be there to clean it up"). */
 .tq-pile-row .t { display: flex; align-items: center; gap: 9px; min-width: 0; min-height: 22px; }
 .tq-pile-row .logo { display: flex; flex-shrink: 0; }
-/* 500, not 600: at 600 every row shouted equally and the column read as a wall of bold (the
-   owner, 2026-09-16: "it's all too bold"). The near-black ink is what makes it the loudest thing
-   on the line; the weight does not have to as well. */
-.tq-pile-row .t b { flex: 1 1 auto; min-width: 0; font-size: 12.5px; font-weight: 500; color: #191814; letter-spacing: -.1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 500, not 600: at 600 every row shouted equally and the column read as a wall of bold (the owner,
+   2026-09-16: "it's all too bold"). 11.5px is the size the TIMELINE tab sets its own subjects in
+   (FeedView), and the two rails are the same list read two ways, so they read at one size. And the
+   palette's INK, not the darker-than-INK grey this had: #191814 was a shade invented for this one
+   rule, and the whole point of theme.jsx is that nothing invents its own. */
+.tq-pile-row .t b { flex: 1 1 auto; min-width: 0; font-size: 11.5px; font-weight: 500; color: #262521; letter-spacing: -.1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-pile-tag { flex: 0 0 auto; display: inline-block; padding: 0 6px; border-radius: 99px; border: 1px solid #ddd6cb; background: #eee9e1; color: #6f6960; font: 600 9px/15px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .01em; white-space: nowrap; }
 /* the waving agent and the draft waiting for a yes: the two lanes where work has STOPPED until the
    owner answers, and the only rows left carrying colour of their own */

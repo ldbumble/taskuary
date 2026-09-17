@@ -384,3 +384,47 @@ class TheCatchAllIsRefusedAtTheDoorTests(unittest.TestCase):
         from taskuary import server
         r = TestClient(server.app).post('/api/sources', json={'Channel': 'telegram', 'Address': '*', 'Active': False})
         self.assertEqual(r.status_code, 200)
+
+
+class TheDeadCatchAllRowTests(unittest.TestCase):
+    """Making the poller ignore '*' was not enough: the row stayed on the card with a switch beside
+    it, and the toggle sends {SourceId, Active} and nothing else - so the guard never saw a channel
+    and the owner could turn a dead source back on (2026-09-17: "still see the * option? why?")."""
+
+    def test_an_existing_row_cannot_be_switched_back_on(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        c = TestClient(server.app)
+        cid = server.store.get_connector_by_type('whatsapp')['ConnectorId']
+        sid = server.store.save_source({'Channel': 'whatsapp', 'Address': '*', 'ConnectorId': cid,
+                                        'Active': 0, 'Owner': 'test'}, 'test')
+        r = c.post('/api/sources', json={'SourceId': sid, 'Active': True})
+        self.assertEqual(r.status_code, 422)
+        self.assertEqual(server.store.get_source(sid)['Active'], 0)
+
+    def test_a_named_chat_is_still_perfectly_editable(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        c = TestClient(server.app)
+        cid = server.store.get_connector_by_type('whatsapp')['ConnectorId']
+        sid = server.store.save_source({'Channel': 'whatsapp', 'Address': '4242@g.us', 'ConnectorId': cid,
+                                        'Active': 0, 'Owner': 'test'}, 'test')
+        self.assertEqual(c.post('/api/sources', json={'SourceId': sid, 'Active': True}).status_code, 200)
+        self.assertEqual(server.store.get_source(sid)['Active'], 1)
+
+    def test_the_row_is_dropped_once_on_the_way_in(self):
+        """A database that predates this opens without it - and Telegram's keeps its own."""
+        import tempfile, os
+        from taskuary.store import SQLiteStore
+        path = os.path.join(tempfile.mkdtemp(), 'star.db')
+        first = SQLiteStore(path)
+        first.cx.execute("DELETE FROM setting WHERE Name='whatsapp_star_dropped'")
+        first.cx.execute("INSERT INTO source (Channel, Address, Owner, Active) VALUES ('whatsapp','*','o',0)")
+        first.cx.execute("INSERT INTO source (Channel, Address, Owner, Active) VALUES ('telegram','*','o',1)")
+        first.cx.commit(); first.cx.close()
+
+        reopened = SQLiteStore(path)                      # the migration runs on the way in
+        left = {(r['Channel'], r['Address']) for r in
+                reopened.cx.execute("SELECT Channel, Address FROM source WHERE Address='*'")}
+        self.assertNotIn(('whatsapp', '*'), left)
+        self.assertIn(('telegram', '*'), left, 'a bot only hears the chats it was added to')

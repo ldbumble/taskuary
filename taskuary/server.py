@@ -3610,8 +3610,15 @@ def save_source(body: SourceBody):
     # A paired WhatsApp account sees everything its owner does - forty groups and every DM - so
     # there is no catch-all for it; each chat is listed or it does not come in (the owner,
     # 2026-09-17). Telegram keeps its '*': a bot only hears the chats it was added to.
+    #
+    # Read it off the EXISTING row when the body does not say. The toggle sends {SourceId, Active}
+    # and nothing else, so a guard that only read the body let an old '*' be switched back on - a
+    # switch that says "on" over a source the poller ignores is worse than the source was.
+    was = store.get_source(fields['SourceId']) if fields.get('SourceId') else None
     from .messengers import WA_ALL
-    if str(fields.get('Channel') or '') == 'whatsapp' and str(fields.get('Address') or '') == WA_ALL:
+    channel = str(fields.get('Channel') or (was or {}).get('Channel') or '')
+    address = str(fields.get('Address') or (was or {}).get('Address') or '')
+    if channel == 'whatsapp' and address == WA_ALL:
         raise HTTPException(422, 'WhatsApp takes named chats only - add the person or the group you want, '
                                  'not every chat on the account')
     was = store.get_source(fields['SourceId']) if fields.get('SourceId') else None

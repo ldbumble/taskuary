@@ -910,6 +910,17 @@ class SQLiteStore:
                                     (body.replace(_PR_RULE_WAS, _PR_RULE_NOW), _now()))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) "
                                 "VALUES ('triage_pr_rule_fixed', '1', 'migration')")
+            # THE WHATSAPP CATCH-ALL IS GONE, so the row for it goes too. '*' admitted every direct
+            # chat on an account that is the owner's own phone; nothing honours it now (messengers
+            # .poll_whatsapp skips it, the door refuses a new one), and a dead row with a live-looking
+            # switch beside it is worse than the setting was - the owner asked why it was still
+            # there, which is the whole problem with leaving it (2026-09-17). Telegram's '*' is a
+            # different thing and is left alone: a bot only hears the chats it was added to.
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='whatsapp_star_dropped'").fetchone():
+                gone = self.cx.execute("DELETE FROM source WHERE Channel='whatsapp' AND Address='*'").rowcount
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) "
+                                "VALUES ('whatsapp_star_dropped', '1', 'migration')")
+                if gone: logger.info(f'whatsapp: dropped the {gone} catch-all source row - named chats only now')
             # the Morning digest ships as a real REPORT (reports.run_digest): the brief lands
             # on the Timeline, its prompt is edited on the Reports tab, and deleting the
             # source turns it off - the sentinel keeps a deletion deleted across restarts.

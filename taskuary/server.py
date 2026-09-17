@@ -5932,7 +5932,13 @@ def open_terminal(body: TermBody):
     # seeding only makes sense for an agent CLI - a bare shell would just try to RUN the text.
     # This used to build its own thin prompt (title + summary, no message), which is exactly why
     # an agent started here went back to the API for the mail: it had not been given it.
-    seed_fn = ((lambda cwd: hub_term.seed_text(store, body.task_id, body.instruction, repo, cwd)[:8000])
+    # It also used to slice the result to a flat 8000 characters - a second, silent cut on top of
+    # seed_text's own (seed_text already bounds itself at SEED_CEILING and says so when it cuts).
+    # One prompt builder, both doors: terminal.start_on_task (the dispatch door) never had this
+    # slice, so raising DOC_CHARS made this door alone start chopping "Do NOT call the Taskuary
+    # API" off the end, unmarked (test_start_session_seeds_the_same_full_prompt_as_dispatch,
+    # 2026-09-17).
+    seed_fn = ((lambda cwd: hub_term.seed_text(store, body.task_id, body.instruction, repo, cwd))
                if body.seed and body.agent and tk else None)
     # this is the owner's door (agents dispatch through terminal.start_on_task): a session opened
     # here is one they sit in, so the task is theirs to end - whichever dialog or button it came from

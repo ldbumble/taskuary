@@ -38,7 +38,12 @@ SEED_CHUNK, SEED_CHUNK_GAP = 160, .03
 # 1800 it delivered 1,800 of coder.md's 4,884 characters to every coding session, cut mid-sentence,
 # under an instruction saying these are your rules. This is the same fix ASK_CHARS got (3000 ->
 # 12000) for the same reason, on the same day somebody noticed the message body had it too.
-DOC_CHARS = 6000
+# 6000 blew the ceiling: a coding seed also carries AGENT_CHARS (2600, AGENT.md, every worker's
+# shared rules) on top of this document, and the worst case (ASK 12,000 + CONTEXT 4,000 + AGENT.md
+# 2,600 + this 6,000 + a playbook block) ran past SEED_CEILING's 24,000. 4900 still clears
+# coder.md's measured 4,884 - the whole point of raising this - while leaving that ceiling reachable
+# only in a genuinely maximal seed.
+DOC_CHARS = 4900
 AGENT_CHARS = 2600                  # ...and of AGENT.md, the rules both worker kinds share (PW-182); its boundaries lead
 SOUL_CHARS = 1200                   # legacy budget; SOUL.md no longer rides in a worker prompt (PW-184)
 # The fastest way to type a prompt is not to type it at all: these CLIs take the first prompt
@@ -1299,12 +1304,19 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     out = ' '.join(' '.join(parts).split())
     # A command line has a hard limit (32767 on Windows) and the OS does not warn - it refuses
     # or clips. If we are over, the ASK is what gives, never the rules that keep an agent
-    # inside its checkout, and it gives out loud.
+    # inside its checkout, and it gives out loud. `tail` used to run from FROM to the end of the
+    # WHOLE prompt - rules, playbook and the closing WHAT TO DO along with it - so a genuinely
+    # over-ceiling ask cut those instead of itself, contradicting the comment above it
+    # (test_the_trim_cuts_only_the_message_never_the_rules_or_the_closing_instructions, 2026-09-17).
+    # RULES (AGENT.md - every worker) always follows the ask directly (agent.md is seeded for every
+    # store and rides in both the coding and the general shape), so that is where the ask ends and
+    # what must not be touched begins.
     if len(out) > SEED_CEILING:
         over = len(out) - SEED_CEILING
         head, sep, tail = out.partition('FROM ')
-        if sep and len(tail) > over + 400:
-            out = head + sep + _cut(tail, len(tail) - over - 200, 'message')
+        ask, rsep, rest = tail.partition(' RULES (')
+        if sep and rsep and len(ask) > over + 400:
+            out = head + sep + _cut(ask, len(ask) - over - 200, 'message') + rsep + rest
         else:
             out = _cut(out, SEED_CEILING, 'prompt')
         logger.warning(f'seed for task {tid} trimmed to fit the command line ({len(out)} chars)')

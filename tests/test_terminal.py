@@ -1227,6 +1227,21 @@ class SeedCompletenessTests(unittest.TestCase):
         for must in ('WHAT TO DO', 'Do NOT push', 'CODING RULES (CODER.md)', 'RULES (AGENT.md'):   # PW-185 labels
             self.assertIn(must, seed, must)
 
+    def test_the_trim_cuts_only_the_message_never_the_rules_or_the_closing_instructions(self):
+        """R4: `tail` used to run from FROM to the end of the WHOLE prompt, so a long ask trimmed
+        the rules and the closing WHAT TO DO instead of itself - a seed could end mid-word at
+        "Do NOT " with the rest of that sentence gone. The cut must land in the message, before
+        RULES (AGENT.md, and everything after it must survive whole, not just present."""
+        s, tid = self._task('z' * 200000)
+        seed = terminal.seed_text(s, tid)
+        self.assertIn('truncated here', seed)                          # it did trim something
+        # the closing instructions and the rules survive WHOLE, not clipped mid-sentence
+        self.assertIn('Do NOT call the Taskuary API, read its database or hunt for this task elsewhere', seed)
+        self.assertIn('Missing required detail? Change nothing: ask one concrete question here, '
+                      'say if the sender must answer, and wait.', seed)
+        # the cut is IN the message, strictly ahead of the rules it must never reach
+        self.assertLess(seed.index('truncated here'), seed.index('RULES (AGENT.md'))
+
     def test_the_NEWEST_message_is_the_ask(self):
         """Ordering decided this, and a stale stamp format used to put a three-day-old line
         last - so that was the one handed over. See StampTests in test_core."""

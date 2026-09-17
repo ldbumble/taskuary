@@ -4527,9 +4527,30 @@ def setup_seen(body: SetupSeenBody):
     from . import setup as setup_mod
     key = {'models': setup_mod.SEEN_MODELS}.get(str(body.step or ''))
     if not key: raise HTTPException(422, f'{body.step!r} is not a step that records being seen')
-    store.set_setting(key, '1', ACTOR)
-    store.audit('setting', 0, 'setup_seen', ACTOR, detail={'step': body.step})
+    # AiDefaults posts this on every mount of the models page, so the write and its audit row must
+    # be idempotent - otherwise every visit logs a duplicate event that means nothing new.
+    if str(store.get_settings().get(key) or '') != '1':
+        store.set_setting(key, '1', ACTOR)
+        store.audit('setting', 0, 'setup_seen', ACTOR, detail={'step': body.step})
     return setup_mod.state(store)
+
+class SetupAdoptBrainBody(BaseModel): cli: str
+
+@app.post('/api/setup/adopt-brain')
+def setup_adopt_brain(body: SetupAdoptBrainBody):
+    """The first CLI that proves it works becomes the triage brain - but only when none is chosen
+    yet. CliPicker's `asBrain` branch used to be the only thing that ever wrote `triage_ai`; the
+    checklist's "Set up an AI" row now points at the AI CLI agents page instead, and nothing there
+    ever wrote it, so installing and testing a CLI there left that row stubbornly grey. Checking
+    and setting here, server-side, is what keeps a brain the owner already picked from being
+    stomped by a second CLI's test running moments later."""
+    from . import setup as setup_mod
+    current = str(store.get_settings().get('triage_ai') or '')
+    adopted = not current
+    if adopted:
+        store.set_setting('triage_ai', f'cli:{body.cli}', ACTOR)
+        store.audit('setting', 0, 'setup_adopt_brain', ACTOR, detail={'cli': body.cli})
+    return {'ok': True, 'adopted': adopted, **setup_mod.state(store)}
 
 class WalkBody(BaseModel): at: int
 

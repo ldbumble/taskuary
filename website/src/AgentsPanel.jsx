@@ -45,8 +45,15 @@ export const CliConnectionsPage = ({ onBack }) => {
   };
   const runTest = async (name) => {
     setTests((t) => ({ ...t, [name]: { busy: true } }));
-    try { const { data } = await api.post(`/api/cli/connections/${encodeURIComponent(name)}/test`); setTests((t) => ({ ...t, [name]: data })); }
-    catch (e) { setTests((t) => ({ ...t, [name]: { ok: false, error: failure(e) } })); }
+    try {
+      const { data } = await api.post(`/api/cli/connections/${encodeURIComponent(name)}/test`);
+      setTests((t) => ({ ...t, [name]: data }));
+      // The first CLI that proves it works becomes the triage brain, because otherwise the setup
+      // checklist's "Set up an AI" row sends you here and nothing you can do on this page ticks it.
+      // Only when nothing is chosen yet - a brain the owner picked is never stomped by a test run.
+      // The check-and-set happens server-side so two tests landing close together can't both win.
+      if (data.ok) await api.post('/api/setup/adopt-brain', { cli: name }).catch(() => {});
+    } catch (e) { setTests((t) => ({ ...t, [name]: { ok: false, error: failure(e) } })); }
   };
   return <Box sx={{ maxWidth: 980, mx: "auto" }}>
     <Crumb section="Connections" title="AI CLI agents" onBack={onBack} />

@@ -325,6 +325,61 @@ class TheOneStoredStepTests(unittest.TestCase):
         c.post('/api/setup/seen', json={'step': 'models'})
         self.assertTrue(any(r['Action'] == 'setup_seen' for r in server.store.list_audit(limit=20)))
 
+    def test_seeing_it_again_writes_nothing_new(self):
+        """AiDefaults posts this on every mount of the models page - a second, third, hundredth
+        visit must not keep appending audit rows for a fact that has not changed."""
+        self._clear()
+        c.post('/api/setup/seen', json={'step': 'models'})
+        before = len(server.store.list_audit(limit=200))
+        c.post('/api/setup/seen', json={'step': 'models'})
+        c.post('/api/setup/seen', json={'step': 'models'})
+        self.assertEqual(len(server.store.list_audit(limit=200)), before)
+
+
+class TheAiRowCanBeTickedFromThePageItSendsYouToTests(unittest.TestCase):
+    """The checklist's "Set up an AI" row links to the AI CLI agents page. CliPicker's `asBrain`
+    branch was the only thing that ever wrote `triage_ai`, and it lived inside the wizard - so
+    once that duplicate was deleted, installing and testing a CLI on the real page left the row
+    grey with nothing on that page able to tick it. The first CLI that proves it works there
+    becomes the brain, and only when none is chosen yet."""
+    def _was(self):
+        return server.store.get_settings().get('triage_ai') or ''
+
+    def _restore(self, was):
+        server.store.set_setting('triage_ai', was, 't')
+
+    def test_the_first_working_cli_becomes_the_brain_when_none_is_chosen(self):
+        was = self._was()
+        try:
+            server.store.set_setting('triage_ai', '', 't')
+            out = c.post('/api/setup/adopt-brain', json={'cli': 'claude'})
+            self.assertEqual(out.status_code, 200)
+            self.assertTrue(out.json()['adopted'])
+            self.assertEqual(self._was(), 'cli:claude')
+        finally:
+            self._restore(was)
+
+    def test_a_second_clis_test_does_not_steal_the_brain_from_the_first(self):
+        was = self._was()
+        try:
+            server.store.set_setting('triage_ai', '', 't')
+            c.post('/api/setup/adopt-brain', json={'cli': 'claude'})
+            out = c.post('/api/setup/adopt-brain', json={'cli': 'codex'})
+            self.assertFalse(out.json()['adopted'])
+            self.assertEqual(self._was(), 'cli:claude')      # the first one, untouched
+        finally:
+            self._restore(was)
+
+    def test_a_brain_the_owner_already_picked_is_never_stomped(self):
+        was = self._was()
+        try:
+            server.store.set_setting('triage_ai', 'connector:anthropic-42', 't')
+            out = c.post('/api/setup/adopt-brain', json={'cli': 'claude'})
+            self.assertFalse(out.json()['adopted'])
+            self.assertEqual(self._was(), 'connector:anthropic-42')
+        finally:
+            self._restore(was)
+
 
 if __name__ == '__main__':
     unittest.main()

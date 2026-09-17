@@ -57,3 +57,15 @@ test("the agents page offers it on a row Taskuary can set up", () => {
   assert.match(src, /SetupButton/);
   assert.match(src, /useCliSetup\(\)/);
 });
+
+test("the sign-in pane has no closer - a pane must not vanish mid-OAuth", () => {
+  const src = read("AgentsPanel.jsx");
+  // The INSTALL pane deliberately has a "Close terminal" button that calls /wrap. The SIGN-IN pane
+  // deliberately does not: the owner may be mid-browser-round-trip, and Done is theirs on the task.
+  // This asymmetry was guarded inside SetupWizard.jsx until the panel stopped carrying a CLI picker.
+  const at = src.indexOf("{pane &&");
+  assert.notEqual(at, -1);                     // the marker must actually have matched something
+  const signin = src.slice(at);
+  assert.doesNotMatch(signin, /\/wrap/);
+  assert.match(signin, /<CliPane pane=\{pane\}/);
+});

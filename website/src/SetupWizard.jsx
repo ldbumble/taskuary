@@ -133,7 +133,7 @@ const Step = ({ s, n, open, onOpen, onGo, onDone }) => {
         )}
         {!s.done && !Form && (
           <Button size="small" endIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />} onClick={() => onGo(s.goto)}
-            sx={{ alignSelf: "center", whiteSpace: "nowrap", fontSize: 12 }}>{s.goto.tab}</Button>
+            sx={{ alignSelf: "center", whiteSpace: "nowrap", fontSize: 12 }}>{s.goto?.tab}</Button>
         )}
         {s.done && (Form
           ? <Typography variant="caption" onClick={onOpen}
@@ -165,7 +165,7 @@ export const SetupPanel = ({ open, state, onClose, onGo, onDismiss, onRefresh })
   // one road for every row: the tab, then the position inside it
   const go = (goto) => {
     if (goto?.hash) window.location.hash = goto.hash;
-    onGo(goto.tab);
+    onGo(goto?.tab);
     onClose();
   };
   const done = async () => { setOpenKey(null); await onRefresh(); };

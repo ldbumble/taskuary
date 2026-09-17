@@ -116,5 +116,30 @@ class KeepingYourPlaceTests(unittest.TestCase):
         self.assertEqual(walk.state(s)['at'], 0)
 
 
+class TheEndpointsTests(unittest.TestCase):
+    def tearDown(self):
+        c.post('/api/setup/walk/reset')
+
+    def test_it_answers_the_shape_the_card_reads(self):
+        d = c.get('/api/setup/walk').json()
+        for k in ('stops', 'at', 'total'):
+            self.assertIn(k, d)
+        for stop in d['stops']:
+            for k in ('key', 'title', 'blurb', 'can', 'goto', 'n'):
+                self.assertIn(k, stop, stop.get('key'))
+
+    def test_moving_sticks(self):
+        self.assertEqual(c.post('/api/setup/walk', json={'at': 7}).json()['at'], 7)
+        self.assertEqual(c.get('/api/setup/walk').json()['at'], 7)
+
+    def test_finishing_clears_the_place(self):
+        total = c.get('/api/setup/walk').json()['total']
+        self.assertEqual(c.post('/api/setup/walk', json={'at': total}).json()['at'], 0)
+
+    def test_reset_is_its_own_door(self):
+        c.post('/api/setup/walk', json={'at': 3})
+        self.assertEqual(c.post('/api/setup/walk/reset').json()['at'], 0)
+
+
 if __name__ == '__main__':
     unittest.main()

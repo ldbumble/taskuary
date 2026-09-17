@@ -4531,6 +4531,28 @@ def setup_seen(body: SetupSeenBody):
     store.audit('setting', 0, 'setup_seen', ACTOR, detail={'step': body.step})
     return setup_mod.state(store)
 
+class WalkBody(BaseModel): at: int
+
+@app.get('/api/setup/walk')
+def setup_walk():
+    """Every stop on the scripted walk, with this install's own facts in it. No AI is involved: the
+    chip this sits behind used to open an AI-led walk-through, which could not run before an AI was
+    connected - which is when it gets pressed."""
+    from . import walk
+    return walk.state(store)
+
+@app.post('/api/setup/walk')
+def setup_walk_go(body: WalkBody):
+    """Next, or a jump. Walking off the end is finishing, and `walk.go` clears the place so the next
+    press starts over rather than reopening the last card forever."""
+    from . import walk
+    return walk.go(store, body.at, ACTOR)
+
+@app.post('/api/setup/walk/reset')
+def setup_walk_reset():
+    from . import walk
+    return walk.reset(store, ACTOR)
+
 @app.get('/api/aws/catalog')
 def aws_catalog(service: str = None):
     """The services and operations a report source can name, read off botocore's own models -

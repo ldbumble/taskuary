@@ -243,17 +243,28 @@ const KNOB_META = {
 const PhoneDoorways = ({ settings, onSet, onLoaded }) => {
   const [rows, setRows] = useState(null);
   const [busy, setBusy] = useState("");
-  const [err, setErr] = useState("");
+  const [err, setErr] = useState("");     // could not READ the channels
+  const [wErr, setWErr] = useState("");   // could not WRITE a choice
   const standing = (settings.find((x) => x.Name === "phone_assistant") || {}).Value === "1";
+  // A REQUEST THAT FAILED IS NOT AN EMPTY ANSWER. Catching the error into an empty list made a
+  // 404 - the app still running the Python from before this shipped - read as "you have no WhatsApp
+  // or Telegram connection", which is a lie about the owner's own setup, and the one thing a
+  // settings page must never tell you (2026-09-17: "don't see anything there just one setting?").
   const load = useCallback(async () => {
-    try { setRows((await api.get("/api/assistant/doorways")).data.data || []); onLoaded?.(true); }
-    catch { setRows([]); onLoaded?.(false); }
+    try { setRows((await api.get("/api/assistant/doorways")).data.data || []); setErr(""); onLoaded?.(true); }
+    catch (e) {
+      setRows(null);
+      setErr(e?.response?.status === 404
+        ? "This page needs a newer Taskuary than the one running — restart the app and it appears."
+        : (e?.response?.data?.detail || "could not read your channels just now"));
+      onLoaded?.(false);
+    }
   }, [onLoaded]);
   useEffect(() => { load(); }, [load]);
   const choose = async (channel, chat) => {
-    setBusy(channel); setErr("");
+    setBusy(channel); setWErr("");
     try { await api.post("/api/assistant/doorways", { channel, chat }); await load(); }
-    catch (e) { setErr(e?.response?.data?.detail || "could not set that chat"); }
+    catch (e) { setWErr(e?.response?.data?.detail || "could not set that chat"); }
     setBusy("");
   };
   const connected = (rows || []).filter((r) => r.chat);
@@ -298,14 +309,18 @@ const PhoneDoorways = ({ settings, onSet, onLoaded }) => {
           </Box>
         );
       })}
+      {err && (
+        <Typography variant="body2" sx={{ color: "#6b2733", py: 2 }}>{err}</Typography>
+      )}
       {rows && !rows.length && (
         <Typography variant="body2" sx={{ color: DIM, py: 2 }}>
           No WhatsApp or Telegram connection yet. Add one under Connections and it appears here.
         </Typography>
       )}
+      {rows === null && !err && <Typography variant="body2" sx={{ color: FAINT, py: 2 }}>reading your channels…</Typography>}
       {/* the standing permission, which is the OTHER half of the question and used to live a tab away */}
       <Box sx={{ display: "flex", gap: 3, alignItems: "center", py: 2.5, borderBottom: `1px solid ${BORDER}`,
-        opacity: connected.length ? 1 : 0.5 }}>
+        opacity: connected.length || err ? 1 : 0.5 }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5 }}>Listen any time I message it</Typography>
           <Typography variant="body2" sx={{ color: DIM, mt: 0.25 }}>
@@ -313,10 +328,11 @@ const PhoneDoorways = ({ settings, onSet, onLoaded }) => {
               ? (standing
                 ? "Anything you type there runs the same walk the Assistant tab runs — and may include private mail, tasks, reviews and agent output."
                 : "It stays quiet until you hand a walk over to it from the Assistant tab. The hand-over works either way.")
-              : "Connect a chat above first."}
+              : err ? "The switch still works; the list above is what could not be read."
+                : "Connect a chat above first."}
           </Typography>
         </Box>
-        <Switch checked={standing} disabled={!connected.length}
+        <Switch checked={standing} disabled={!connected.length && !err}
           onChange={(e) => onSet("phone_assistant", e.target.checked ? "1" : "0")} />
       </Box>
       <Typography variant="body2" sx={{ color: FAINT, mt: 2 }}>
@@ -324,7 +340,7 @@ const PhoneDoorways = ({ settings, onSet, onLoaded }) => {
         about your mail must not land where other people are reading. This is separate from the
         Notifications role — the assistant chat is not subscribed to ordinary Taskuary alerts.
       </Typography>
-      {err && <Typography variant="body2" sx={{ color: "#6b2733", mt: 1 }}>✗ {err}</Typography>}
+      {wErr && <Typography variant="body2" sx={{ color: "#6b2733", mt: 1 }}>✗ {wErr}</Typography>}
     </Box>
   );
 };

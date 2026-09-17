@@ -315,6 +315,9 @@ KB_FTS = 'CREATE VIRTUAL TABLE IF NOT EXISTS kb_fts USING fts5(Text, ChunkId UNI
 # so a second open (desktop + web, or a restart) does not raise. Named so EXPLAIN QUERY
 # PLAN tests can see them, and so a DROP INDEX in a test is not a mystery.
 INDEXES = (
+    # Board / funnel / assistant filter on live Status (+ today's done via ClosedAt).
+    # Without this, active_only is a full task-table scan (301 ms COUNT at 1M rows).
+    'CREATE INDEX IF NOT EXISTS idx_task_status ON task(Status, ClosedAt, TaskId)',
     'CREATE INDEX IF NOT EXISTS idx_message_external ON message(ExternalId)',
     'CREATE INDEX IF NOT EXISTS idx_message_conversation ON message(ConversationId, SentAt)',
     'CREATE INDEX IF NOT EXISTS idx_message_task ON message(TaskId)',

@@ -125,6 +125,11 @@ export default function AiDefaults({ brains, agents, onGo, onLoaded }) {
     }
   }, []);
   useEffect(() => { load(); }, [load]);
+  // The checklist's models row is the one step with nothing to derive - a fresh install already
+  // ships working brain and model defaults, so "the defaults are fine" and "I never looked" are the
+  // same state. Arriving here is the evidence, so arriving here is what records it. Failure is
+  // ignored on purpose: a checklist row is a nicety and this page is the point.
+  useEffect(() => { api.post("/api/setup/seen", { step: "models" }).catch(() => {}); }, []);
 
   const save = async (slot, patch) => {
     try { setErr(""); await api.post("/api/ai/defaults", { slot: slot.key, ...patch }); load(); }

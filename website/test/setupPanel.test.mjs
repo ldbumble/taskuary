@@ -29,3 +29,11 @@ test("the counter is finished rather than hidden", () => {
   assert.doesNotMatch(w, /guide_done|guide_total/);
   assert.doesNotMatch(w, /state\.ready/);
 });
+
+test("opening the models page is what reports it seen", () => {
+  const panel = read("AiDefaults.jsx");
+  assert.match(panel, /\/api\/setup\/seen/);
+  assert.match(panel, /step: "models"/);
+  // it must not block the page: the row is a nicety, the page is the point
+  assert.match(panel, /catch \(\) \{|\.catch\(/);
+});

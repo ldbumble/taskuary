@@ -35,26 +35,13 @@ test("nothing is typed into the CLI for the owner", () => {
   assert.doesNotMatch(read("../../taskuary/clisetup.py"), /\.seed\(/);   // nor server-side
 });
 
-test("installing a CLI opens its setup instead of testing a CLI that has never been run", () => {
-  const src = read("SetupWizard.jsx");
-  assert.match(src, /canSetup\(/);
-  assert.match(src, /<CliPane/);
-  assert.match(src, /useCliSetup\(\)/);
-});
-
-test("the test after a sign-in saves the absolute path, not the bare name", () => {
-  // cliinstall puts the CLI on PATH in three places, and the profile's own `cmd` is the one that
-  // makes the app independent of PATH. detect's row for an unconfigured CLI carries the bare bin
-  // name, so this route saved "claude" and worked only because the install had patched os.environ.
-  assert.match(read("SetupWizard.jsx"), /use\(\{ \.\.\.cli, cmd: cli\.path \|\| cli\.cmd \}\)/);
-});
-
-test("a passing test moves the wizard on, and leaves Done to the owner", () => {
-  const src = read("SetupWizard.jsx");
-  assert.match(src, /api\.post\(`\/api\/agents\/\$\{encodeURIComponent\(cli\.name\)\}\/test`/);
-  // nothing closes the pane or the task from here - a pane must not vanish mid-setup
-  assert.doesNotMatch(src, /\/wrap/);
-});
+// The three tests that used to live here ("installing a CLI opens its setup instead of testing a
+// CLI that has never been run", "the test after a sign-in saves the absolute path, not the bare
+// name", "a passing test moves the wizard on, and leaves Done to the owner") checked CliPicker's
+// install/sign-in/test sequence *inside SetupWizard.jsx*. The onboarding-walk rewrite deleted that
+// duplicate from the panel on purpose (Task 8: "point instead of pretend") - the AI CLI agents
+// page (AgentsPanel.jsx) is the only place that sequence runs now, and "the agents page offers it
+// on a row Taskuary can set up" below already covers it.
 
 test("the theme note rides with the pane, and Claude Code's own /theme stays claude-only", () => {
   // ThemeHint was exported and rendered NOWHERE from 2026-08-18 (the Terminal tab that carried it

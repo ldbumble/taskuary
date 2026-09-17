@@ -22,7 +22,9 @@ class ShippedSkillTests(unittest.TestCase):
         for needed in ('/api/setup',                                   # inspect what is already configured
                        'Prerequisites',                                # the five, in order
                        'GET /api/cli/detect',
-                       'Secrets never pass through this chat'):
+                       'Secrets never pass through this chat',
+                       'never rerun it',                               # a done step is finished - do not ask its questions again
+                       'Never create a second connector'):             # amend the existing card, never duplicate it
             self.assertIn(needed, text)
 
     def test_the_skill_names_the_steps_that_actually_exist(self):
@@ -33,7 +35,8 @@ class ShippedSkillTests(unittest.TestCase):
         text = general.setup_skill()
         keys = [x['key'] for x in setup.state(MemoryStore())['steps']]
         self.assertIn('`, `'.join(keys), text)          # the list, in order, as the skill prints it
-        for gone in ('`ready`', '`where`', '`soul`, `sync`'):
+        for gone in ('`ready`', '`where`', '`guide_done`', '`guide_total`',
+                     '`soul`', '`style`', '`triage`', '`agent`'):
             self.assertNotIn(gone, text)
 
     def test_a_setup_task_carries_the_skill_as_its_procedure_and_other_work_does_not(self):

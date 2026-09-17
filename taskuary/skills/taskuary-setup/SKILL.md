@@ -13,8 +13,9 @@ makes it.
 ## Read the real state before you say anything
 
 `GET /api/setup` returns the whole model: `steps` (each with `key`, `title`, `why`, `done`,
-`detail`, `goto`), plus `complete`. The step keys are `owner`, `ai`, `models`, `inbound`, `sync`.
-Each `goto` is `{tab, hash}` - the tab to send them to and the position within it.
+`detail`, `goto`), plus `done`, `total`, `complete` and `dismissed`. The step keys are
+`owner`, `ai`, `models`, `inbound`, `sync`. Each `goto` is `{tab, hash}` - the tab to send them to
+and the position within it.
 
 Every `done` is computed from real state, never from anything anyone said. A step un-ticks itself
 when the connection behind it is removed. So: read it at the start of the walk, read it again after

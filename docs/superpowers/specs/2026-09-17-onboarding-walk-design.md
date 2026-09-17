@@ -229,6 +229,43 @@ One amendment: `fallback`'s no-model line currently points at "Connections → A
 (`concierge.py:626`). Now that `#cli-agents` exists it points at the AI CLI agents page, which is
 where somebody with no AI actually needs to go.
 
+## Two things that describe the old step model and must move with it
+
+### The shipped skill
+
+`taskuary/skills/taskuary-setup/SKILL.md` is the procedure the **AI-led** concierge walk reads
+(`general.setup_skill()`, appended to a setup task's worker prompt). `/api/concierge/setup` survives
+this change, so the skill survives with it — but the skill hardcodes the model this spec rewrites:
+
+- it names all eight step keys (`owner, ai, inbound, soul, sync, style, triage, agent`)
+- it describes `ready` as "the three required steps are done"
+- it reads `where` off each step
+
+After this change there are five keys, `ready` is gone, and `where` is `goto`. Left alone, the AI
+walk would confidently describe a checklist that no longer exists. The skill is rewritten in the same
+commit: five prerequisites in the new order, `goto` instead of `where`, `complete` instead of
+`ready`, and the four displaced steps described as stops on the scripted walk rather than as rows.
+
+`tests/test_setup_skill.py` asserts on that text and moves with it.
+
+This is the reason the skill is a shipped document rather than branching code, and it is also the
+reason it can rot quietly — nothing fails when it goes stale, the AI just says something untrue. The
+test is what makes it fail loudly.
+
+### The demo
+
+`taskuary/demo.py` allowlists the POSTs a public visitor may make (`ALLOWED_WRITES`), and
+`/api/setup/dismiss` is on it. The walk's endpoints are POSTs and would be refused with the demo's
+generic refusal sentence.
+
+The walk is exactly what a demo visitor should be able to try — it is a tour of the app that touches
+nothing real — so `^/api/setup/(seen|walk)(/reset)?$` joins the allowlist. Its writes are a setting
+in the demo's own database, which is what everything else on that list has in common.
+
+The panel is a different matter: `TaskHubPage.jsx:404` already hides `SetupChip` in demo mode
+(`!DEMO && !demo`), and it stays hidden — a checklist of connections nobody can make is not a demo of
+anything. The chip in the assistant header stays visible, and the walk behind it works.
+
 ## Deep links
 
 Three routes do not exist and are needed before any row can point anywhere.
@@ -253,6 +290,8 @@ within-tab position.
 - `taskuary/concierge.py` — `fallback`'s no-model line points at `#cli-agents`
 - `taskuary/server.py` — `POST /api/setup/seen`, `GET/POST /api/setup/walk`,
   `POST /api/setup/walk/reset`
+- `taskuary/skills/taskuary-setup/SKILL.md` — realigned to the five-step model
+- `taskuary/demo.py` — the walk's POSTs join `ALLOWED_WRITES`
 
 **Web**
 
@@ -284,6 +323,13 @@ within-tab position.
 - an off-script turn does not move the position
 - reaching the last stop clears the stored position; reset returns to the first
 - no code path in `walk.py` imports or calls `llm`
+
+`tests/test_setup_skill.py`, moved with the skill: the assertions name the five keys, `complete`
+rather than `ready`, and `goto` rather than `where`. A new one: every step key the skill names exists
+in `setup.state()`, so the two can never drift apart silently again.
+
+`tests/test_demo.py` (or wherever `ALLOWED_WRITES` is covered): the walk's endpoints are allowed and
+`/api/connectors` is still refused.
 
 Web: the existing gates — `npm run lint:undef`, the esbuild syntax check, and a rebuilt committed
 bundle.

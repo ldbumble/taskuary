@@ -3,7 +3,7 @@
 A skill says HOW a job is done. A playbook is the owner's own workflow against the owner's own
 systems, drafted from work that happened - so nothing here ever writes one.
 """
-import unittest
+import json, unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import mock
@@ -221,6 +221,37 @@ class CollisionTests(unittest.TestCase):
         self.assertEqual(row['Kind'], 'research')                              # untouched
         self.assertEqual(s.get_doc(doc), '# Researcher\n\nOriginal, hand-written rules.\n')
 
+    def test_it_refuses_to_rewrite_an_operator_document(self):
+        """The worse half of the same hole: soul, triage, agent, style, counsel, digest and learned
+        have no agent row at all, so the profile check waved them straight through and the body of
+        somebody else's skill became TRIAGE.md. The doc table is one row per name with no history."""
+        s = MemoryStore()
+        before = "# Triage\n\nThe owner's own rules, edited over months.\n"
+        s.save_doc('triage', before, 'owner')
+        with self.assertRaises(skillimport.ProfileCollision) as caught:
+            skillimport.save(s, self._got(name='triage'), enabled=True)
+        self.assertIn('TRIAGE.md', str(caught.exception))       # the wizard can say WHICH document
+        self.assertEqual(s.get_doc('triage'), before)           # byte for byte, not merely 'it raised'
+        self.assertIsNone(s.get_agent('triage'))                # and no half-written profile behind it
+
+    def test_a_shipped_document_is_refused_before_anyone_has_saved_it(self):
+        """A name with a template in taskuary/templates IS an operator document even when the row
+        does not exist yet - blank one and the shipped text flows back in, so writing it is a hijack
+        either way."""
+        s = MemoryStore()
+        for name in ('soul', 'agent', 'style', 'counsel', 'digest', 'learned', 'coder'):
+            before = s.get_doc(name)
+            with self.assertRaises(skillimport.ProfileCollision, msg=name):
+                skillimport.save(s, self._got(name=name))
+            self.assertEqual(s.get_doc(name), before, name)
+            self.assertIsNone(s.get_agent(name), name)
+
+    def test_the_owner_may_still_say_overwrite(self):
+        s = MemoryStore()
+        s.save_doc('triage', 'the owner', 'owner')
+        skillimport.save(s, self._got(name='triage'), replace=True)
+        self.assertIn('should never land', s.get_doc('triage'))
+
     def test_replace_true_goes_through(self):
         s = MemoryStore()
         doc = self._hand_made(s)
@@ -230,11 +261,12 @@ class CollisionTests(unittest.TestCase):
 
     def test_reimporting_your_own_import_needs_no_flag(self):
         """The idempotent case already covered elsewhere: a profile carrying `imported: True`
-        updates in place with no `replace` needed."""
+        updates in place with no `replace` needed. The name is one with no shipped role or document
+        behind it, which is the only kind a first import ever gets."""
         s = MemoryStore()
-        skillimport.save(s, self._got(), enabled=True)
-        skillimport.save(s, self._got(purpose='changed'), enabled=True)   # no replace=True
-        self.assertEqual(s.get_agent('researcher')['Kind'], 'analysis')
+        skillimport.save(s, self._got(name='nda-triage'), enabled=True)
+        skillimport.save(s, self._got(name='nda-triage', purpose='changed'), enabled=True)   # no replace=True
+        self.assertEqual(s.get_agent('nda-triage')['Kind'], 'analysis')
 
     def test_a_fresh_name_is_unaffected(self):
         s = MemoryStore()
@@ -253,7 +285,7 @@ class CollisionTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         body = resp.json()
         self.assertEqual(body['imported'], ['nda-triage'])
-        self.assertEqual(body['clashed'], [{'name': 'researcher', 'kind': 'research'}])
+        self.assertEqual(body['clashed'], [{'name': 'researcher', 'kind': 'research', 'doc': ''}])
         self.assertEqual(s.get_agent('researcher')['Kind'], 'research')        # untouched
 
 
@@ -319,6 +351,136 @@ class SavingTests(unittest.TestCase):
         row = s.get_agent('nda-triage')
         prof = __import__('json').loads(row['Config'])
         self.assertEqual(len(prof['purpose']), 900)
+
+
+class OrdinaryProfileTests(unittest.TestCase):
+    """The load-bearing claim - an imported profile is ordinary - measured where it failed: the
+    Agents page reads config.toml's table, and DELETE /api/agents 404s on a name absent from it, so a
+    profile written only as a store row could be neither edited nor removed anywhere in the UI."""
+    GOT = {'name': 'nda-triage', 'purpose': 'decides whether an NDA can be signed as-is',
+           'body': 'Read the indemnity clause.', 'kind': 'analysis', 'enabled': True}
+
+    def _cfg(self, **over):
+        # conftest reads the running app's token off server.cfg['server'], so a stand-in keeps that row
+        return {'server': server.cfg.get('server', {}), 'agents': {}, **over}
+
+    def _import(self, s, cfg):
+        with mock.patch.object(server, 'store', s), mock.patch.object(server, 'cfg', cfg), \
+             mock.patch.object(server.config, 'save') as saved:
+            resp = TestClient(server.app).post('/api/skills/import', json={'skills': [self.GOT]})
+        self.assertEqual(resp.status_code, 200, resp.text)
+        return saved
+
+    def test_an_import_lands_in_the_config_table_the_agents_page_reads(self):
+        s, cfg = MemoryStore(), self._cfg(agents={'coder': {'provider': 'cli:claude', 'kind': 'coding'}},
+                                          cli_connections={'claude': {'cmd': 'claude', 'args': ['-p']}})
+        saved = self._import(s, cfg)
+        prof = cfg['agents']['nda-triage']
+        self.assertEqual((prof['kind'], prof['purpose'], prof['triage_enabled'], prof['imported']),
+                         ('analysis', self.GOT['purpose'], True, True))
+        self.assertEqual(prof['provider'], 'cli:claude')       # starts from the coding agent's CLI, like a shipped role
+        self.assertTrue(saved.called)                          # and it is on disk, not only in memory
+        self.assertEqual(s.get_agent('nda-triage')['Kind'], 'analysis')   # the store row still says what save() said
+
+    def test_and_can_then_be_deleted_through_the_same_door_as_any_profile(self):
+        s, cfg = MemoryStore(), self._cfg()
+        self._import(s, cfg)
+        with mock.patch.object(server, 'store', s), mock.patch.object(server, 'cfg', cfg), \
+             mock.patch.object(server.config, 'save'):
+            resp = TestClient(server.app).delete('/api/agents/nda-triage')
+        self.assertEqual(resp.status_code, 200, resp.text)
+        self.assertNotIn('nda-triage', cfg['agents'])
+        self.assertIsNone(s.get_agent('nda-triage'))
+        self.assertIsNone(s.get_doc('nda-triage'))            # the import's own document goes with it
+
+    def test_deleting_a_hand_made_profile_keeps_the_owners_document(self):
+        s, cfg = MemoryStore(), self._cfg(agents={'mine': {'kind': 'general', 'purpose': 'p'}})
+        s.upsert_agent('mine', 'general', 'cli', '{"purpose": "p"}')
+        s.save_doc('mine', 'written by hand\n', 'owner')
+        with mock.patch.object(server, 'store', s), mock.patch.object(server, 'cfg', cfg), \
+             mock.patch.object(server.config, 'save'):
+            self.assertEqual(TestClient(server.app).delete('/api/agents/mine').status_code, 200)
+        self.assertEqual(s.get_doc('mine'), 'written by hand\n')   # deleting a worker is not deleting its rules
+
+    def test_a_clash_writes_nothing_to_the_config_table_either(self):
+        s, cfg = MemoryStore(), self._cfg()
+        s.save_doc('triage', 'the owner', 'owner')
+        with mock.patch.object(server, 'store', s), mock.patch.object(server, 'cfg', cfg), \
+             mock.patch.object(server.config, 'save') as saved:
+            resp = TestClient(server.app).post('/api/skills/import', json={'skills': [{**self.GOT, 'name': 'triage'}]})
+        self.assertEqual(resp.json()['clashed'][0]['doc'], 'triage')
+        self.assertEqual(cfg['agents'], {}); self.assertFalse(saved.called)
+
+
+class WhatTriageSeesTests(unittest.TestCase):
+    """The router reads ONE LINE per worker; the session it picks receives the whole document. The
+    Docs page shows that line, or the reason there is none, from the SAME function roster() is built
+    from - the chip used to count `triage_enabled` in JSX and called CODER.md "on the roster"."""
+    def _rows(self):
+        s = MemoryStore()
+        s.upsert_agent('coder', 'coding', 'cli', '{}')
+        s.upsert_agent('quiet', 'general', 'cli', '{"purpose": "handles the mail", "triage_enabled": false}')
+        s.upsert_agent('blank', 'general', 'cli', '{"purpose": ""}')
+        s.upsert_agent('loud', 'general', 'cli', json.dumps({'purpose': 'x' * 500}))
+        skillimport.save(s, {'name': 'nda-triage', 'purpose': 'signs NDAs', 'body': 'b', 'kind': 'analysis'}, enabled=True)
+        return s, {a['Name']: a for a in s.list_agents()}
+
+    def test_each_reason_is_named_and_a_seen_worker_has_its_exact_line(self):
+        from taskuary import agents
+        s, rows = self._rows()
+        line, why = agents.roster_line(s, rows['nda-triage'])
+        self.assertEqual((line, why), ('- nda-triage: signs NDAs', ''))
+        for name, word in (('coder', 'coding'), ('quiet', 'Available to triage'), ('blank', 'no purpose')):
+            line, why = agents.roster_line(s, rows[name])
+            self.assertEqual(line, '', name); self.assertIn(word, why, name)
+        line, why = agents.roster_line(s, {**rows['nda-triage'], 'Active': 0})
+        self.assertEqual((line, why), ('', 'switched off'))
+
+    def test_the_shown_line_is_the_truncated_one_the_router_gets(self):
+        from taskuary import agents
+        s, rows = self._rows()
+        line, _ = agents.roster_line(s, rows['loud'])
+        self.assertTrue(line.endswith('…')); self.assertLess(len(line), 230)
+        self.assertIn(line, agents.roster(s))                  # byte for byte what the router reads
+
+    def test_roster_is_exactly_the_lines_this_gives(self):
+        from taskuary import agents
+        s, rows = self._rows()
+        lines = [l for l, _ in (agents.roster_line(s, a) for a in s.list_agents()) if l]
+        self.assertEqual(agents.roster(s), '\n'.join(lines))
+        self.assertEqual(len(lines), 2)                        # loud and nda-triage; not coder, quiet or blank
+
+    def test_the_agents_endpoint_carries_it(self):
+        s, rows = self._rows()
+        with mock.patch.object(server, 'store', s):
+            data = TestClient(server.app).get('/api/agents').json()['data']
+        by = {r['Name']: r['roster'] for r in data}
+        self.assertEqual(by['nda-triage'], {'line': '- nda-triage: signs NDAs', 'reason': ''})
+        self.assertEqual(by['coder']['line'], ''); self.assertIn('coding', by['coder']['reason'])
+
+
+class ReadReportsTheCutTests(unittest.TestCase):
+    """The wizard warned "large" at 20,000 bytes while the seed cuts a rules document at DOC_CHARS
+    flattened - eleven of the fifteen skills on the machine this was built on arrived truncated with
+    nothing on screen saying so. The read now measures the body the way the seed will."""
+    def test_flat_and_doc_chars_travel_with_each_proposal(self):
+        from taskuary import terminal
+        with TemporaryDirectory() as d:
+            p = Path(d) / 'SKILL.md'
+            p.write_text(SKILL, encoding='utf-8')
+            with mock.patch.object(server, 'store', MemoryStore()), \
+                 mock.patch('taskuary.llm.build_llm', side_effect=RuntimeError('no brain')):
+                body = TestClient(server.app).post('/api/skills/read', json={'path': str(p)}).json()
+        self.assertEqual(body['doc_chars'], terminal.DOC_CHARS)
+        got = body['data'][0]
+        self.assertEqual(got['flat'], len(terminal.flatten_rules(got['body'])))
+        self.assertLess(got['flat'], got['bytes'])             # a flattened body is shorter than the file, never equal to it
+
+    def test_flatten_is_the_seeds_own_rule(self):
+        from taskuary import terminal
+        s = MemoryStore()
+        s.save_doc('coder', '# Heading\n\n- one  two\n\nthree\n', 'owner')
+        self.assertEqual(terminal.rules_text(s, 10_000, 'coder'), terminal.flatten_rules(s.get_doc('coder')))
 
 
 if __name__ == '__main__':

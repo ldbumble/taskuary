@@ -151,13 +151,30 @@ def convert(entry: dict, llm=None) -> dict:
 
 
 class ProfileCollision(Exception):
-    """Raised by `save` when a name lands on a profile it did not create. The shipped roles
-    (researcher, analyst, coordinator, marketer, trader) and any hand-written profile all slugify
-    into ordinary names, and a wizard handing out arbitrary names WILL land on one eventually - this
-    is the difference between updating your own import and quietly destroying somebody's worker."""
-    def __init__(self, name: str, kind: str):
-        self.name, self.kind = name, kind
-        super().__init__(f"'{name}' is an existing profile this import did not make - not overwriting it")
+    """Raised by `save` when a name lands on a profile, or on a document, it did not create. The
+    shipped roles (researcher, analyst, coordinator, marketer, trader) and any hand-written profile
+    all slugify into ordinary names, and a wizard handing out arbitrary names WILL land on one
+    eventually - this is the difference between updating your own import and quietly destroying
+    somebody's worker.
+
+    `doc` is set when the DOCUMENT is what was in the way. That is the worse half: soul, triage,
+    agent, style, counsel, digest and learned have no agent row at all, so a name check against
+    profiles waved them straight through - a skill called `triage` replaced TRIAGE.md, silently, and
+    the doc table is one row per name with no history to restore from."""
+    def __init__(self, name: str, kind: str, doc: str = ''):
+        self.name, self.kind, self.doc = name, kind, doc or ''
+        super().__init__(f"'{name}' would rewrite {doc.upper()}.md, a document this import did not write"
+                         ' - not overwriting it' if doc else
+                         f"'{name}' is an existing profile this import did not make - not overwriting it")
+
+
+def _free_to_write(store, doc: str) -> bool:
+    """Is `doc` this importer's to write? Only if it wrote it, or if there is no document and no
+    shipped template of that name waiting to flow back in (profile_template reads the templates
+    folder, so a name with one there IS an operator document even before it is first saved)."""
+    who = store.doc_owner(doc)
+    if who is not None: return who == 'import'
+    return not (Path(__file__).parent / 'templates' / f'{doc}.md').is_file()
 
 
 def save(store, got: dict, enabled: bool = False, replace: bool = False) -> str:
@@ -171,7 +188,10 @@ def save(store, got: dict, enabled: bool = False, replace: bool = False) -> str:
     A name that already belongs to a profile THIS FUNCTION did not write (no `imported` flag in its
     config) is refused unless `replace=True` - re-importing your own import is still one update in
     place, but a bare name collision is not consent to overwrite a hand-made worker's kind and
-    rules document."""
+    rules document. The DOCUMENT is checked the same way and separately, because the operator
+    documents have no agent row to collide with.
+
+    Nothing is written before both checks pass: a refusal must not leave an agent row behind."""
     from . import agents as hub_agents
     name = re.sub(r'[^a-z0-9-]+', '-', str(got.get('name') or '').strip().lower()).strip('-')
     if not name: raise ValueError('a profile needs a name')
@@ -182,7 +202,8 @@ def save(store, got: dict, enabled: bool = False, replace: bool = False) -> str:
     if row and not prof.get('imported') and not replace: raise ProfileCollision(name, row.get('Kind') or kind)
     prof.update({'kind': kind, 'purpose': str(got.get('purpose') or '').strip(),
                  'triage_enabled': bool(enabled), 'imported': True})
-    store.upsert_agent(name, kind, (row or {}).get('Runner') or 'cli', json.dumps(prof))
     doc = hub_agents.profile_document(store, name, prof)
+    if not replace and not _free_to_write(store, doc): raise ProfileCollision(name, (row or {}).get('Kind') or kind, doc)
+    store.upsert_agent(name, kind, (row or {}).get('Runner') or 'cli', json.dumps(prof))
     store.save_doc(doc, str(got.get('body') or '').strip() + '\n', 'import')
     return name

@@ -19,7 +19,7 @@ import SoulInterview from "./SoulInterview.jsx";
 import NewPlaybookDialog from "./NewPlaybookDialog.jsx";
 import SkillImport from "./SkillImport.jsx";
 import { FAINT, INK, ROLES, mono } from "./theme.jsx";
-import { TaskuaryMark } from "./ui.jsx";
+import { ConfirmDelete, TaskuaryMark } from "./ui.jsx";
 
 const DOCS = {
   soul: { label: "SOUL.md", icon: <AutoStoriesIcon sx={{ fontSize: 19, color: "#55697a" }} />,
@@ -77,6 +77,8 @@ const PROF_BLURB = "Instructions for the workers listed under this profile, adde
 // so "on the roster" can mean all, none, or some of that row's members. An imported skill is 1:1, so
 // its chip is never ambiguous; a shared shipped document says the split rather than picking a side,
 // because collapsing "3 of 5 coders route" to either word would misstate the other members.
+// `onRoster` counts members the SERVER reports a roster line for (agents.roster_line) - not a count
+// of triage_enabled done here, which called CODER.md "on the roster" when triage can never pick it.
 const rosterChip = (pr) => (pr.onRoster === 0 ? "not routed"
   : pr.onRoster === pr.members.length ? "on the roster"
   : `on the roster (${pr.onRoster}/${pr.members.length})`);
@@ -165,6 +167,7 @@ export default function DocsView() {
   const [pbFilter, setPbFilter] = useState("");
   const [newPlaybook, setNewPlaybook] = useState(null);
   const [deletePlaybook, setDeletePlaybook] = useState(null);
+  const [deleteProf, setDeleteProf] = useState(null);       // the profile whose Delete is waiting on a confirm
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   // the generation is inspectable, not a vibe: poll its status while it runs so the button
@@ -208,10 +211,13 @@ export default function DocsView() {
         const kind = prof.kind || r.Kind || "coding";
         const name = r.rules_doc || prof.rules_doc || (kind === "coding" ? "coder" : r.Name);
         if (!grouped.has(name)) grouped.set(name, { name, purpose: r.purpose || prof.purpose ||
-          (kind === "coding" ? "Write, review and test code in a repository." : ""), members: [], onRoster: 0 });
+          (kind === "coding" ? "Write, review and test code in a repository." : ""), members: [], onRoster: 0, seen: [] });
         const g = grouped.get(name);
         g.members.push(r.Name);
-        if (prof.triage_enabled !== false) g.onRoster += 1;   // config default is ON unless a save said otherwise
+        // what triage actually reads for this member, or why nothing - the server's answer, not a guess
+        const seen = r.roster || { line: "", reason: "this server does not report it" };
+        g.seen.push({ name: r.Name, ...seen });
+        if (seen.line) g.onRoster += 1;
       }
       const profiles = [...grouped.values()];
       setProfs(profiles);
@@ -332,6 +338,10 @@ export default function DocsView() {
     const q = pbFilter.trim().toLowerCase();
     return !q || [b.title, b.when, b.slug, ...(b.uses || [])].some((v) => String(v || "").toLowerCase().includes(q));
   });
+  const cur = isProf(docName) ? profs.find((p) => p.name === profName(docName)) : null;
+  // its own document, one member, named after itself: the shape an import (or Add profile) makes.
+  // A shared document (CODER.md) is deleted by removing its workers on Manage profiles, not here.
+  const ownProfile = cur && cur.members.length === 1 && cur.members[0] === cur.name && cur.name !== "coder";
   const meta = isProf(docName)
     ? { label: `${profName(docName).toUpperCase()}.md`, blurb: PROF_BLURB }
     : isPb(docName)
@@ -531,6 +541,10 @@ export default function DocsView() {
               try { await api.post("/api/learn/reflect"); await load(); } catch { /* no AI connected */ }
             }}>Reflect now</Button>
           )}
+          {isProf(docName) && ownProfile && (
+            <Button size="small" variant="outlined" color="error" onClick={() => setDeleteProf(cur.name)}
+              title="Delete this profile - triage stops offering it and its rules document goes with it">Delete</Button>
+          )}
           {isPb(docName) && (
             <Button size="small" variant="outlined" color="error" onClick={removePb}
               title={docName === "pb:new" ? "Discard this draft" : "Delete this playbook - triage stops matching it and the cards stop listing it"}>
@@ -541,6 +555,22 @@ export default function DocsView() {
             {docs[docName] === saved[docName] ? "Saved" : "Save"}
           </Button>
         </Box>
+        {/* the distinction the profiles rest on: the router reads ONE LINE per worker when it picks;
+            the session it picks receives the WHOLE document below. This is that line, as served -
+            truncated where the roster truncates it - or the reason there is none. */}
+        {cur && (
+          <Box sx={{ mb: 1.5, p: 1.25, bgcolor: "#fff", border: "1px solid #e1dcd5", borderRadius: 2, flexShrink: 0 }}>
+            <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 700, letterSpacing: 1, display: "block", mb: 0.5 }}>
+              WHAT TRIAGE SEES
+            </Typography>
+            {cur.seen.map((m) => (m.line
+              ? <Typography key={m.name} sx={{ ...mono, fontSize: 11.5, color: INK, whiteSpace: "pre-wrap" }}>{m.line}</Typography>
+              : <Typography key={m.name} sx={{ fontSize: 11.5, color: FAINT }}>{m.name}: not on the roster — {m.reason}</Typography>))}
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", pt: 0.75 }}>
+              The router reads this one line per worker when it picks. The session it picks is given the whole document below.
+            </Typography>
+          </Box>
+        )}
         {pbMsg && isPb(docName) && (
           <Typography variant="caption" sx={{ display: "block", mb: 1, color: pbMsg.startsWith("saved") ? "#47654a" : "#6b2733" }}>{pbMsg}</Typography>
         )}
@@ -590,6 +620,14 @@ export default function DocsView() {
     </Box>
     )}
     {importSkills && <SkillImport onClose={() => setImportSkills(false)} onImported={loadProfs} />}
+    <ConfirmDelete open={!!deleteProf} what={`the profile "${deleteProf}"`} onClose={() => setDeleteProf(null)}
+      consequence="Triage stops offering it, its row goes, and its rules document goes with it - a document has no history to restore from."
+      onConfirm={async () => {
+        await api.delete(`/api/agents/${encodeURIComponent(deleteProf)}`);
+        const left = (await loadProfs()) || [];
+        const next = left.find((p) => p.name !== deleteProf);
+        if (next) await openProf(next.name); else { setSection("documents"); setDocName(NAMES[0]); }
+      }} />
     {newPlaybook && <NewPlaybookDialog {...newPlaybook}
       onClose={() => { setNewPlaybook(null); loadBooks(); }}
       onManual={() => { openPb("new", newPlaybook.connectorType); setNewPlaybook(null); }} />}

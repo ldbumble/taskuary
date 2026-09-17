@@ -3746,6 +3746,7 @@ class SQLiteStore:
     def save_doc(self, name, content, actor):
         self._exec('INSERT INTO doc (Name, Content, UpdatedBy, UpdatedAt) VALUES (?,?,?,?) ON CONFLICT(Name) DO UPDATE SET Content=?, UpdatedBy=?, UpdatedAt=?',
                    (name, content, actor, _now(), content, actor, _now()))
+    def delete_doc(self, name): self._exec('DELETE FROM doc WHERE Name=?', (name,))
     def doc(self, name):
         """The document as the AI should read it: {{owner}} and friends filled in. The name used to
         be typed into six places across SOUL.md and three more in CODER.md, so changing it changed

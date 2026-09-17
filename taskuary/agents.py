@@ -508,6 +508,16 @@ DEFAULT_PROFILES = {
 }
 
 
+def cli_inheritance(cfg: dict) -> dict:
+    """The coding agent's CLI setup - command AND flags - for a new general profile to start from.
+    Empty when no coding profile has one yet. Shared by the shipped roles and an imported skill, so a
+    worker made either way is runnable and editable on the Agents page the same day."""
+    have = cfg.get('agents') or {}
+    base = have.get('coder') or next((p for p in have.values() if p.get('kind', 'coding') == 'coding'), None)
+    if not ((base or {}).get('cmd') or (base or {}).get('provider')): return {}
+    return {k: v for k, v in base.items() if k in ('provider', 'cmd', 'args', 'resume', 'resume_args', 'timeout')}
+
+
 def seed_profiles(cfg: dict) -> list:
     """Add any shipped profile this install does not have yet to the CONFIG, and never touch one it
     already has. Returns the names added, so the caller knows whether to save.
@@ -521,9 +531,8 @@ def seed_profiles(cfg: dict) -> list:
     a command called `researcher`; and a claude profile without --dangerously-skip-permissions hangs
     headless, which is exactly the trap the presets exist to avoid."""
     have = cfg.setdefault('agents', {})
-    base = have.get('coder') or next((p for p in have.values() if p.get('kind', 'coding') == 'coding'), None)
-    if not ((base or {}).get('cmd') or (base or {}).get('provider')): return []
-    keep = {k: v for k, v in base.items() if k in ('provider', 'cmd', 'args', 'resume', 'resume_args', 'timeout')}
+    keep = cli_inheritance(cfg)
+    if not keep: return []
     added = []
     for name, prof in DEFAULT_PROFILES.items():
         if name in have: continue
@@ -593,17 +602,25 @@ def roster(store) -> str:
     GENERAL roles only. A coding task has exactly one role and triage does not choose it
     (routed_role), so offering the coding profiles here is what let `copilot` - a CLI, not a
     worker - be named on TQ-0588's coding work."""
-    out = []
-    for a in store.list_agents():
-        if not a.get('Active', 1): continue
-        if str(a.get('Kind') or '').lower() in CODING_KINDS: continue
-        try: prof = json.loads(a.get('Config') or '{}')
-        except ValueError: prof = {}
-        if prof.get('triage_enabled') is False: continue
-        purpose = profile_purpose(a['Name'], prof, a.get('Kind') or 'coding')
-        if len(purpose) > ROSTER_PURPOSE_MAX: purpose = purpose[:ROSTER_PURPOSE_MAX - 1].rstrip() + '…'
-        if purpose: out.append(f"- {a['Name']}: {purpose}")
-    return '\n'.join(out)
+    return '\n'.join(l for l, _ in (roster_line(store, a) for a in store.list_agents()) if l)
+
+
+def roster_line(store, a: dict) -> tuple:
+    """(line, reason) for one agent row: the EXACT line triage reads for it, or '' and why there is
+    none. roster() is assembled from this and the Docs page shows it per profile, so "does triage see
+    this worker" has one implementation. It used to have two - this rule here and a count of
+    `triage_enabled` in JSX - and the JSX one said "on the roster" for CODER.md, which triage can never
+    choose. The router reads this ONE LINE per worker; the session it picks gets the whole document."""
+    if not a.get('Active', 1): return '', 'switched off'
+    if str(a.get('Kind') or '').lower() in CODING_KINDS:
+        return '', 'a coding worker - coding tasks have one role and triage does not choose it'
+    try: prof = json.loads(a.get('Config') or '{}')
+    except ValueError: prof = {}
+    if prof.get('triage_enabled') is False: return '', 'not offered to the router - "Available to triage" is off'
+    purpose = profile_purpose(a['Name'], prof, a.get('Kind') or 'coding')
+    if not purpose: return '', 'no purpose set - triage has nothing to choose it by'
+    if len(purpose) > ROSTER_PURPOSE_MAX: purpose = purpose[:ROSTER_PURPOSE_MAX - 1].rstrip() + '…'
+    return f"- {a['Name']}: {purpose}", ''
 
 
 def default_agent(store) -> str:

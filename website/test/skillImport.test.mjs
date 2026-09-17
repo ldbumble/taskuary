@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { buildPayload, reconcileImport, slug } from "../src/skillImport.js";
+import { buildPayload, clashText, cutBy, reconcileImport, slug } from "../src/skillImport.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 const wizard = read("SkillImport.jsx");
@@ -27,15 +27,41 @@ test("nothing reaches the router unless it is ticked, and the label says what th
 });
 
 test("a name clash offers a rename or a confirmed overwrite, and neither is silent", () => {
-  assert.match(wizard, /clashes with an existing/);
+  assert.match(wizard, /clashText\(r\.clash\)/);
   assert.match(wizard, /Rename/);
   assert.match(wizard, /Overwrite it/);
-  assert.match(wizard, /replace: true/);
+  // Overwrite ASKS FIRST: a rules document has no history, so a mis-click is unrecoverable. The button
+  // opens the confirm; only the confirm's onConfirm flags the row.
+  assert.match(wizard, /onClick=\{\(\) => setOverwrite\(i\)\}>Overwrite it/);
+  assert.match(wizard, /<Confirm open=\{overwrite !== null\}/);
+  assert.match(wizard, /onConfirm=\{\(\) => \{ setRow\(overwrite, \{ replace: true, clash: null \}\); \}\}/);
+  assert.doesNotMatch(wizard, /onClick=\{\(\) => setRow\(i, \{ replace: true/);   // no unconfirmed road left
 });
 
-test("each row shows its byte size, so a large harness-shaped skill is visibly different", () => {
+test("a clash on an operator document is named as one, not as a profile", () => {
+  assert.equal(clashText({ kind: "research", doc: "" }), 'clashes with an existing "research" profile');
+  assert.equal(clashText({ kind: "general", doc: "triage" }), "would rewrite TRIAGE.md - an operator document, not a profile");
+  const rows = [row({ name: "triage" })];
+  const after = reconcileImport(rows, { imported: [], clashed: [{ name: "triage", kind: "general", doc: "triage" }] });
+  assert.equal(after[0].clash.doc, "triage");
+  assert.match(wizard, /Overwrite \$\{rows\[overwrite\]\.clash\.doc\.toUpperCase\(\)\}\.md\?/);   // the confirm names the document
+});
+
+test("the size warning is the seed's own cut, reported by the server - not a byte count", () => {
+  // /api/skills/read sends `flat` (the body as a session receives it) and `doc_chars` (where the seed
+  // cuts a rules document). The old rule warned "large" at 20,000 bytes while the real cut was under
+  // 5,000 flattened, so most skills arrived truncated with nothing on screen saying so.
+  assert.equal(cutBy({ flat: 6100 }, 5600), 500);
+  assert.equal(cutBy({ flat: 5600 }, 5600), 0);
+  assert.equal(cutBy({ flat: 9000 }, 0), 0);                // an older server sends no cut: no warning invented
+  assert.match(wizard, /setDocChars\(data\.doc_chars/);
+  assert.match(wizard, /past what a session is given - the end is cut/);
+  assert.doesNotMatch(wizard, /LARGE|20000/);
   assert.match(wizard, /kb\(r\.bytes\)/);
-  assert.match(wizard, /large - may name tools this CLI lacks/);
+});
+
+test("the wizard does not promise a link door that was never built", () => {
+  assert.doesNotMatch(wizard, /fetched from a link/);
 });
 
 test("Docs opens the wizard from Profiles, beside Add profile", () => {
@@ -72,7 +98,7 @@ test("a human-friendly name imports, matches the response, and reaches Done", ()
 test("a clash is matched on the slug too, and stays reported rather than silently resolved", () => {
   const rows = [row({ name: "Researcher", kind: "research" })];
   const after = reconcileImport(rows, { imported: [], clashed: [{ name: "researcher", kind: "research" }] });
-  assert.equal(after[0].clash, "research");
+  assert.equal(after[0].clash.kind, "research");
   assert.equal(after[0].imported, false);
 });
 
@@ -80,6 +106,24 @@ test("slug matches the server's own rule (taskuary/skillimport.py's save())", ()
   assert.equal(slug("My Skill"), "my-skill");
   assert.equal(slug("  --Weird__Name!! "), "weird-name");
   assert.equal(slug(""), "");
+});
+
+test("a profile row's roster state comes from the server, and the open profile shows the line triage reads", () => {
+  // ONE implementation of "does triage see this worker" (agents.roster_line): the row counts members
+  // the server gave a line, and the card shows that line - or the reason there is none - verbatim.
+  assert.match(docs, /const seen = r\.roster \|\| /);
+  assert.match(docs, /if \(seen\.line\) g\.onRoster \+= 1;/);
+  assert.doesNotMatch(docs, /triage_enabled !== false\) g\.onRoster/);
+  assert.match(docs, /WHAT TRIAGE SEES/);
+  assert.match(docs, /not on the roster — \{m\.reason\}/);
+});
+
+test("an own profile can be deleted from Docs, and it asks first", () => {
+  assert.match(docs, /setDeleteProf\(cur\.name\)/);
+  assert.match(docs, /<ConfirmDelete open=\{!!deleteProf\}/);
+  assert.match(docs, /api\.delete\(`\/api\/agents\/\$\{encodeURIComponent\(deleteProf\)\}`\)/);
+  // never for the shared coding document: its workers are removed on Manage profiles
+  assert.match(docs, /cur\.name !== "coder"/);
 });
 
 test("renaming out of a clash also clears replace, defensively", () => {

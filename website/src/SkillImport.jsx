@@ -5,14 +5,12 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Alert, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
   DialogTitle, FormControlLabel, TextField, Typography } from "@mui/material";
 import api from "./api";
-import { buildPayload, reconcileImport, slug } from "./skillImport.js";
+import { buildPayload, clashText, cutBy, reconcileImport, slug } from "./skillImport.js";
 import { BORDER, FAINT, INK, ROLES, mono } from "./theme.jsx";
+import { Confirm } from "./ui.jsx";
 
 const failure = (e) => e?.response?.data?.detail || e?.message || "Something went wrong";
 const kb = (n) => (n >= 1024 ? `${(n / 1024).toFixed(1)} KB` : `${n || 0} B`);
-// A skill written for one harness runs to tens of KB naming tools another CLI does not have - the
-// size alone cannot say whether that matters, but it is the visible tell that makes the owner look.
-const LARGE = 20000;
 
 const STEPS = ["Where from", "What is in it", "Import"];
 
@@ -25,6 +23,8 @@ export default function SkillImport({ onClose, onImported }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [done, setDone] = useState(null); // the last import's receipt: {imported: [...names]}
+  const [docChars, setDocChars] = useState(0);   // where a session's seed cuts a rules document - the server's number
+  const [overwrite, setOverwrite] = useState(null); // index of the row whose Overwrite is waiting on a confirm
 
   useEffect(() => {
     let live = true;
@@ -49,6 +49,7 @@ export default function SkillImport({ onClose, onImported }) {
     setBusy(true); setErr("");
     try {
       const { data } = await api.post("/api/skills/read", { path: target });
+      setDocChars(data.doc_chars || 0);
       // enabled defaults OFF: reading a skill only proposes it, it does not offer it to the router.
       // name is slugged up front so what the owner sees is already what the server will store.
       setRows((data.data || []).map((r) => ({ ...r, name: slug(r.name), enabled: false, replace: false, clash: null, imported: false })));
@@ -121,8 +122,8 @@ export default function SkillImport({ onClose, onImported }) {
         {step === 1 && (
           <>
             <Typography variant="body2" sx={{ color: FAINT }}>
-              A skill fetched from a link is text that becomes a worker's instructions - that is why the
-              body is shown here, before anything is written.
+              This text becomes a worker's instructions - that is why the body is shown here, before
+              anything is written.
             </Typography>
             <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
               {rows.map((r, i) => (
@@ -135,7 +136,9 @@ export default function SkillImport({ onClose, onImported }) {
                     <TextField size="small" label="Purpose - when should triage choose this?" value={r.purpose}
                       sx={{ flex: "1 1 260px" }} onChange={(e) => setRow(i, { purpose: e.target.value })} />
                     <Chip size="small" variant="outlined" label={kb(r.bytes)} />
-                    {r.bytes >= LARGE && <Chip size="small" label="large - may name tools this CLI lacks" />}
+                    {cutBy(r, docChars) > 0 && <Chip size="small" sx={{ color: ROLES.you.ink, borderColor: ROLES.you.bd }} variant="outlined"
+                      title="A session is given the rules flattened and cut at a fixed length. The router still sees the whole purpose."
+                      label={`${cutBy(r, docChars).toLocaleString()} characters past what a session is given - the end is cut`} />}
                   </Box>
                   <FormControlLabel sx={{ mt: 0.25, display: "flex" }}
                     control={<Checkbox checked={!!r.enabled} onChange={(e) => setRow(i, { enabled: e.target.checked })} />}
@@ -168,9 +171,10 @@ export default function SkillImport({ onClose, onImported }) {
                   {r.clash && (
                     <>
                       <Chip size="small" sx={{ bgcolor: ROLES.you.tint, color: ROLES.you.ink, border: `1px solid ${ROLES.you.bd}` }}
-                        label={`clashes with an existing "${r.clash}" profile`} />
+                        label={clashText(r.clash)} />
                       <Button size="small" onClick={() => setRow(i, { name: slug(`${r.name}-imported`), clash: null, replace: false })}>Rename</Button>
-                      <Button size="small" color="error" onClick={() => setRow(i, { replace: true, clash: null })}>Overwrite it</Button>
+                      {/* asks first: a rules document has no history, so this cannot be undone */}
+                      <Button size="small" color="error" onClick={() => setOverwrite(i)}>Overwrite it</Button>
                     </>
                   )}
                 </Box>
@@ -191,6 +195,12 @@ export default function SkillImport({ onClose, onImported }) {
           </Button>
         )}
       </DialogActions>
+      <Confirm open={overwrite !== null} confirmLabel="Overwrite" onClose={() => setOverwrite(null)}
+        title={rows[overwrite]?.clash?.doc ? `Overwrite ${rows[overwrite].clash.doc.toUpperCase()}.md?` : `Overwrite the "${rows[overwrite]?.name}" profile?`}
+        text={rows[overwrite]?.clash?.doc
+          ? "That is an operator document the assistant reads on every message, not a worker profile. Its current text has no history to restore from, so this cannot be undone. Rename the import instead unless you mean it."
+          : "Its kind and its whole rules document are replaced by this skill's. A profile's document has no history to restore from, so this cannot be undone."}
+        onConfirm={() => { setRow(overwrite, { replace: true, clash: null }); }} />
     </Dialog>
   );
 }

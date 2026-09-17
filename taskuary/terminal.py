@@ -40,10 +40,11 @@ SEED_CHUNK, SEED_CHUNK_GAP = 160, .03
 # 12000) for the same reason, on the same day somebody noticed the message body had it too.
 # 6000 blew the ceiling: a coding seed also carries AGENT_CHARS (2600, AGENT.md, every worker's
 # shared rules) on top of this document, and the worst case (ASK 12,000 + CONTEXT 4,000 + AGENT.md
-# 2,600 + this 6,000 + a playbook block) ran past SEED_CEILING's 24,000. 4900 still clears
-# coder.md's measured 4,884 - the whole point of raising this - while leaving that ceiling reachable
-# only in a genuinely maximal seed.
-DOC_CHARS = 4900
+# 2,600 + this 6,000 + a playbook block) ran past SEED_CEILING's 24,000. 5600 clears coder.md's
+# measured 4,884 - the whole point of raising this - with room for an edit (4900 cleared it by 16
+# characters, a trap for whoever next touches that doc), while the ceiling stays reachable only in a
+# genuinely maximal seed, where the trim below cuts the ask and nothing else.
+DOC_CHARS = 5600
 AGENT_CHARS = 2600                  # ...and of AGENT.md, the rules both worker kinds share (PW-182); its boundaries lead
 SOUL_CHARS = 1200                   # legacy budget; SOUL.md no longer rides in a worker prompt (PW-184)
 # The fastest way to type a prompt is not to type it at all: these CLIs take the first prompt
@@ -1082,10 +1083,16 @@ def rules_text(store, chars: int = DOC_CHARS, profile: str = 'coder') -> str:
     in Taskuary's own database, nowhere the agent can read, so the rules only reach a session if the
     prompt carries them."""
     from .agents import ensure_profile_document
-    doc = str(store.doc(ensure_profile_document(store, profile)) or '')
+    return _cut(flatten_rules(str(store.doc(ensure_profile_document(store, profile)) or '')), chars, 'rules')
+
+
+def flatten_rules(doc: str) -> str:
+    """A rules document as a session receives it: headings unmarked, one space between everything.
+    The skill-import wizard measures a body with this before it is written, so its "too long" warning
+    is about the SAME text and the SAME cut (DOC_CHARS) as the seed - not a byte count of the file."""
     keep = [l.strip(' #*-').strip() if l.lstrip().startswith('#') else l.strip()
             for l in doc.splitlines() if l.strip()]
-    return _cut(' '.join(' '.join(keep).split()), chars, 'rules')
+    return ' '.join(' '.join(keep).split())
 
 
 # The ask travels as ONE command-line argument now (see agents._shim_target), so the old
@@ -1310,11 +1317,13 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # (test_the_trim_cuts_only_the_message_never_the_rules_or_the_closing_instructions, 2026-09-17).
     # RULES (AGENT.md - every worker) always follows the ask directly (agent.md is seeded for every
     # store and rides in both the coding and the general shape), so that is where the ask ends and
-    # what must not be touched begins.
+    # what must not be touched begins. The FULL label, not ' RULES (': only one producer writes it,
+    # and a mail body containing the shorter literal split early and fell to the branch that cuts
+    # the rules - the very thing this exists to prevent.
     if len(out) > SEED_CEILING:
         over = len(out) - SEED_CEILING
         head, sep, tail = out.partition('FROM ')
-        ask, rsep, rest = tail.partition(' RULES (')
+        ask, rsep, rest = tail.partition(' RULES (AGENT.md')
         if sep and rsep and len(ask) > over + 400:
             out = head + sep + _cut(ask, len(ask) - over - 200, 'message') + rsep + rest
         else:

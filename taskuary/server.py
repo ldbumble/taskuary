@@ -4805,8 +4805,14 @@ def skills_read(body: SkillPathBody):
     if not entries: raise HTTPException(422, 'no SKILL.md there')
     try: brain = llm_mod.build_llm(store)
     except Exception: brain = None
-    return {'data': [dict(skillimport.convert(e, brain), path=e['path'], bytes=e['bytes'],
-                          plugin=e.get('plugin') or '') for e in entries]}
+    # `flat` is the body's length AS A SESSION RECEIVES IT and `doc_chars` is where the seed cuts a
+    # rules document: the wizard warns from these, not from a byte count of the file. Of the fifteen
+    # skills on the machine this was built on, eleven were over the cut and nine of those were under
+    # the old 20KB "large" mark - they arrived truncated with nothing on screen saying so.
+    return {'doc_chars': hub_term.DOC_CHARS,
+            'data': [dict(skillimport.convert(e, brain), path=e['path'], bytes=e['bytes'],
+                          flat=len(hub_term.flatten_rules(e.get('body') or '')), plugin=e.get('plugin') or '')
+                     for e in entries]}
 
 
 @app.post('/api/skills/import')
@@ -4820,8 +4826,22 @@ def skills_import(body: SkillImportBody):
     made, clashed = [], []
     for s in (body.skills or []):
         try: made.append(skillimport.save(store, s, bool(s.get('enabled')), replace=bool(s.get('replace'))))
-        except skillimport.ProfileCollision as e: clashed.append({'name': e.name, 'kind': e.kind})
+        except skillimport.ProfileCollision as e: clashed.append({'name': e.name, 'kind': e.kind, 'doc': e.doc})
         except (ValueError, OSError) as e: raise HTTPException(422, f'{s.get("name")!r}: {e}')
+    # The profile goes into config.toml's table TOO, the way put_agent and seed_profiles write one:
+    # the Agents page reads that table, and DELETE /api/agents 404s on a name absent from it - so a
+    # profile living only in its store row could be neither edited nor removed anywhere in the UI
+    # (seed_profiles' docstring records fixing exactly this once before). It starts from the coding
+    # agent's CLI setup, as the shipped roles do, so it is runnable and editable on day one.
+    if made:
+        keep = hub_agents.cli_inheritance(cfg)
+        for name in made:
+            try: prof = json.loads((store.get_agent(name) or {}).get('Config') or '{}')
+            except ValueError: prof = {}
+            cfg.setdefault('agents', {})[name] = {**keep, **cfg['agents'].get(name, {}), **prof}
+            try: cli_connections.sync(cfg, store, name)
+            except ValueError: pass                # a dangling provider: the store row stands as save() wrote it
+        config.save(cfg)
     store.audit('agent', 0, 'skills_imported', ACTOR, detail={'names': made, 'clashed': [c['name'] for c in clashed]})
     return {'imported': made, 'clashed': clashed}
 
@@ -4845,8 +4865,11 @@ def agents():
     head = hub_agents.default_agent(store)
     rows = sorted(store.list_agents(), key=lambda a: a['Name'] != head)
     profs = hub_agents.profiles(store)
+    # `roster` is the line triage actually reads for this worker, or why there is none - answered
+    # HERE so the Docs page shows the router's real view instead of re-deriving it from Config.
     return {'data': [{**a, 'installed': hub_agents.runs_here(profs.get(a['Name']) or {}),
                       'rules_doc': hub_agents.profile_document(store, a['Name']),
+                      'roster': dict(zip(('line', 'reason'), hub_agents.roster_line(store, a))),
                       'purpose': hub_agents.profile_purpose(a['Name'], profs.get(a['Name']) or {}, a.get('Kind') or 'coding')}
                      for a in rows],
             'config': cfg.get('agents', {}), 'default': head,
@@ -4912,9 +4935,15 @@ def put_agent(name: str, body: dict):
 @app.delete('/api/agents/{name}')
 def delete_agent(name: str):
     if name not in cfg.get('agents', {}): raise HTTPException(404, 'agent not found')
+    # An IMPORTED profile's document goes with it: the import wrote it, nothing else shares it, and
+    # left behind it would be the body a later profile of the same name silently inherits. A document
+    # anyone else wrote (the owner, a template) stays - deleting a worker is not deleting its rules.
+    doc = hub_agents.profile_document(store, name)
+    orphan = doc == name and store.doc_owner(doc) == 'import'
     cfg['agents'].pop(name)
     config.save(cfg)
     store.delete_agent(name)
+    if orphan: store.delete_doc(doc)
     store.audit('agent', 0, 'delete', ACTOR, detail=name)
     return {'ok': True}
 

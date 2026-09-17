@@ -1,34 +1,26 @@
-// Getting started, done here rather than described here.
+// Getting started, pointed at the places that do it.
 //
 // A fresh install opens on an empty Timeline that looks exactly like a working install on a quiet
 // morning, and the few things standing between those two states live on different tabs.
-// The first version of this pointed at those tabs. Pointing is not setting up: it hands the work
-// back with directions attached.
 //
-// So every step that CAN be done in one or two fields is done here, against the same endpoints
-// the Connections tab uses, and then TESTED - a key that is saved but wrong is not a connected
-// brain, and finding that out later, from an empty Timeline, is the failure this exists to
-// prevent. What genuinely cannot be (Outlook and Teams need an app registration; Slack needs a
-// bot token) says so plainly and opens the card.
+// The first version of this pointed at those tabs, and the second decided that pointing was not
+// setting up - so every step grew a form. That held while a step was one field. It stopped holding
+// when the AI row grew a CLI picker, an installer, a sign-in pane and an API-key form: a worse copy
+// of the page that owns those things, kept in step with it by hand. A second source of truth loses.
+//
+// So the rows point again, at real positions rather than at tabs - the AI CLI agents page, the
+// group inside Settings where the models are chosen, the name field inside Docs. One form survives,
+// because two text boxes have nowhere better to be. And the whole thing is gone once it is done:
+// the counter is finished, not hidden. The walk on the Assistant header is the way back.
 import React, { useCallback, useEffect, useState } from "react";
-import {
-  Alert, Box, Button, Chip, CircularProgress, Dialog, DialogContent, MenuItem, Select, TextField,
-  Tooltip, Typography,
-} from "@mui/material";
+import { Alert, Box, Button, CircularProgress, Dialog, DialogContent, TextField, Tooltip, Typography } from "@mui/material";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 import CloseIcon from "@mui/icons-material/Close";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api";
-import SoulInterview from "./SoulInterview.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL2 } from "./theme.jsx";
-import { useCliInstall, InstallLine } from "./cliInstall.jsx";
-import { useCliSetup, SetupButton, CliPane, canSetup } from "./cliSetup.jsx";
 
-// "Three things and Taskuary works" was prose. Steps were added to the wizard and it went on
-// saying three, because a number written as a word is a number nobody updates. Counted now -
-// and counted over the SAME list the panel shows and the top-bar pill tracks (the guided steps),
-// so the headline, the pill and the rows can never disagree again.
 const COUNT = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
 const spell = (n) => COUNT[n] || String(n);
 
@@ -41,17 +33,14 @@ export const useSetup = (tick) => {
   return [state, load];
 };
 
-/* The counter covers the three essentials plus the recommended first sync and personalization.
-   "Ready" means the funnel works; "complete" means its first drafts and triage have also learned
-   from the owner's history. A dismissed checklist stays as a quiet way back until it is complete. */
+/* Gone for good once the five are done - there is no "show it again", because the walk on the
+   Assistant header is always there and covers more than this ever did. */
 export const SetupChip = ({ state, onOpen }) => {
   if (!state || state.complete) return null;
-  const done = state.guide_done ?? state.done;
-  const total = state.guide_total ?? state.total;
-  const pct = total ? (done / total) * 100 : 0;
+  const left = state.total - state.done;
+  const pct = state.total ? (state.done / state.total) * 100 : 0;
   return (
-    <Tooltip title={state.dismissed ? "Setup — put away, click to reopen"
-      : state.ready ? "Finish personalizing Taskuary" : "Finish setting Taskuary up"}>
+    <Tooltip title={state.dismissed ? "Setting up — put away, click to reopen" : "Finish setting Taskuary up"}>
       <Box onClick={onOpen}
         sx={{ display: "flex", alignItems: "center", gap: 0.75, cursor: "pointer", ml: 1,
           px: 1, py: 0.35, borderRadius: 99, border: `1px solid ${state.dismissed ? BORDER : "#d8cfbe"}`,
@@ -63,58 +52,18 @@ export const SetupChip = ({ state, onOpen }) => {
           <CircularProgress variant="determinate" value={pct} size={16} thickness={6} sx={{ color: "#55697a" }} />
         </Box>
         <Typography variant="caption" sx={{ fontWeight: 700, color: state.dismissed ? DIM : "#55697a" }}>
-          {done}/{total}
+          {left} left
         </Typography>
       </Box>
     </Tooltip>
   );
 };
 
-/* AI providers that are genuinely one field. Azure needs an endpoint AND a deployment name, and
-   Ollama needs the name of a model you have actually pulled - both belong on the card, where
-   there is room to say so. Offering them here as "paste a key" would be a lie. */
-const BRAINS = [
-  { type: "anthropic", label: "Anthropic", hint: "console.anthropic.com → API keys", ph: "sk-ant-…" },
-  { type: "openai", label: "OpenAI", hint: "platform.openai.com → API keys", ph: "sk-…" },
-  { type: "openrouter", label: "OpenRouter", hint: "one key, most models", ph: "sk-or-…" },
-  { type: "meta", label: "Meta Muse Spark", hint: "dev.meta.ai → API keys", ph: "…" },
-];
-/* Mailboxes that connect with an address and a password. Outlook and Teams need an Entra app
-   registration (three values and an admin consent screen); Slack needs a bot token from an app
-   you create. Those are card work, and saying so is kinder than a form that cannot finish. */
-const BOXES = [
-  { type: "gmail", label: "Gmail", hint: "needs an App Password, not your Google password — myaccount.google.com → Security → App passwords" },
-  { type: "outlook", label: "Outlook / Microsoft 365", card: true,
-    hint: "Microsoft stopped accepting mailbox passwords, so this one signs in instead — its card does the sign-in and remembers it" },
-  { type: "imap", label: "Any other mailbox", hint: "IMAP — your provider's host, address and password" },
-];
-
 const Field = (p) => <TextField size="small" fullWidth sx={{ bgcolor: "#fff" }} {...p} />;
 
-/* Every inline form ends the same way: save, then TEST, and say which of the two failed. A key
-   that saved and does not work is the exact state this wizard exists to prevent. */
-const useConnect = (onDone) => {
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-  const [ok, setOk] = useState("");
-  const run = async (fields) => {
-    setBusy(true); setErr(""); setOk("");
-    try {
-      const { data: list } = await api.get("/api/connectors");
-      const existing = (list.data || []).find((c) => c.Type === fields.Type);
-      const body = { ...fields, Active: true, ...(existing ? { ConnectorId: existing.ConnectorId } : { Name: fields.Name || fields.Type }) };
-      const { data } = await api.post("/api/connectors", body);
-      const { data: t } = await api.post(`/api/connectors/${data.connectorId}/test`, {});
-      if (t.ok) { setOk(t.detail || "connected"); await onDone(); }
-      else setErr(t.detail || t.error || "it saved, but the test call failed");
-    } catch (e) {
-      setErr(e?.response?.data?.detail || e?.message || "that did not work");
-    }
-    setBusy(false);
-  };
-  return { run, busy, err, ok };
-};
-
+/* The one step still done here. Everything else has a page with more on it than this dialog can
+   hold; this one is two text boxes, and sending somebody to Docs to type their own name is exactly
+   the pointing that is worth complaining about. */
 const OwnerForm = ({ onDone }) => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -144,359 +93,28 @@ const OwnerForm = ({ onDone }) => {
   );
 };
 
-/* Add a CLI agent and prove it runs, in one button. `asBrain` also points triage at it.
-   The test is a real one-line run through the CLI, which is the only thing that distinguishes
-   "installed" from "works": a headless agent missing its permission flag looks fine and then
-   hangs forever on an approval nobody can click. */
-const CliPicker = ({ asBrain, onDone }) => {
-  const [list, setList] = useState(null);
-  const [busy, setBusy] = useState("");
-  const [msg, setMsg] = useState(null);
-  const { install, busy: installing, note } = useCliInstall();
-  const { openSetup, opening, pane, note: setupNote } = useCliSetup();
-  const reload = () => api.get("/api/cli/detect").then(({ data }) => setList(data.data || [])).catch(() => setList([]));
-  useEffect(() => { reload(); }, []);
-  // Install, then keep going. Stopping at "installed" would leave the owner to find the second
-  // button, and the cmd handed on is the ABSOLUTE path the installer reported: this server's PATH
-  // predates the install, so a profile saved as bare "claude" would need a restart to run.
-  //
-  // ...but a CLI installed ten seconds ago has NO CREDENTIALS, and running the test on it landed
-  // the owner on "signed out - open a terminal" at the exact step this wizard exists to remove.
-  // So a CLI whose sign-in Taskuary can host hands off to the pane instead, and the test waits.
-  const getAndUse = async (cli) => {
-    const done = await install(cli);
-    if (!done) return;
-    await reload();
-    const fresh = { ...cli, cmd: done.path || cli.cmd, installed: true };
-    if (canSetup(fresh)) { await openSetup(fresh); return; }
-    await use(fresh);
-  };
-  const use = async (cli) => {
-    setBusy(cli.name); setMsg(null);
-    try {
-      if (cli.cmd) await api.put(`/api/agents/${encodeURIComponent(cli.name)}`,
-        { cmd: cli.cmd, args: cli.args, ...(cli.resume_args ? { resume_args: cli.resume_args } : {}), timeout: cli.timeout || 1500 });
-      const { data } = await api.post(`/api/agents/${encodeURIComponent(cli.name)}/test`, {});
-      if (!data.ok) { setMsg({ bad: true, text: data.error || "the CLI did not answer" }); setBusy(""); return; }
-      if (asBrain) await api.patch("/api/settings", { name: "triage_ai", value: `cli:${cli.name}` });
-      setMsg({ text: `${cli.label} answered — ${asBrain ? "it is your triage brain now" : "ready for coding tasks"}` });
-      await onDone();
-    } catch (e) {
-      setMsg({ bad: true, text: e?.response?.data?.detail || e?.message || "that did not work" });
-    }
-    setBusy("");
-  };
-  if (list === null) return <Typography variant="caption" sx={{ color: FAINT }}>looking for CLIs on your PATH…</Typography>;
-  return (
-    <Box>
-      {list.length === 0 ? (
-        <Typography variant="caption" sx={{ color: FAINT }}>
-          No AI CLI found on your PATH, and none that Taskuary can install for you here.
-        </Typography>
-      ) : list.map((cli) => (
-        <Box key={cli.name} sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.5 }}>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: INK }}>
-              {cli.label}{cli.profile && cli.profile !== cli.label ? <Typography component="span" variant="caption" sx={{ color: FAINT, ml: 0.75 }}>profile “{cli.profile}”</Typography> : null}
-            </Typography>
-            <Typography variant="caption" sx={{ color: cli.configured && !cli.installed ? "#8a3646" : FAINT, overflowWrap: "anywhere" }}>
-              {cli.path ? cli.path
-                : cli.configured ? `configured here${cli.cmd ? ` as “${cli.cmd}”` : ""}, but not found on this machine — Install puts it here, or fix the command in Connections → AI CLI agents`
-                : cli.installable ? `${cli.cmd} — not on this machine yet`
-                : cli.why_not ? `${cli.cmd} — ${cli.why_not}`
-                : cli.cmd}
-            </Typography>
-            {/* found, runnable by hand, and still refused from a background process - so it is
-                said here rather than at 6am as "Access is denied." */}
-            {cli.store && (
-              <Typography variant="caption" sx={{ color: "#8a3646", display: "block", fontWeight: 600 }}>
-                This is the Microsoft Store copy. Taskuary cannot start it in the background
-                (“Access is denied.”) — install the ordinary build from the vendor and it will be picked up here.
-              </Typography>
-            )}
-          </Box>
-          {cli.installed ? (<>
-            {/* installed and signed out look identical from here, so Sign in is offered rather
-                than guessed at - the CLI itself is what says whether it was needed */}
-            <SetupButton cli={cli} opening={opening} onOpen={openSetup} />
-            <Button size="small" variant="outlined" disabled={!!busy || !!installing} onClick={() => use(cli)}
-              sx={{ fontSize: 11.5, whiteSpace: "nowrap" }}>
-              {busy === cli.name ? "testing…" : asBrain ? "Use & test" : "Add & test"}
-            </Button>
-          </>) : <InstallLine cli={cli} busy={installing} onInstall={() => getAndUse(cli)} />}
-        </Box>
-      ))}
-      {/* The sign-in itself, in the same session the Board is showing. Nothing here closes it:
-          a pane must not vanish while its owner is mid-OAuth, and Done is theirs on the task. */}
-      {pane && (
-        <Box sx={{ mt: 1 }}>
-          <CliPane pane={pane} />
-          {/* `path` over `cmd` on the way into the test: detect's row for a CLI that has no profile
-              yet carries the BARE bin name, and the profile is meant to hold the absolute path so
-              nothing the app does depends on PATH (cliinstall's second of three). This route saved
-              "claude" and leaned on the environ patch the install had just done. */}
-          <Button size="small" variant="outlined" sx={{ mt: 0.75, fontSize: 11.5 }} disabled={!!busy}
-            title="Check whether the sign-in landed. The pane stays open either way — closing it is yours."
-            onClick={() => { const cli = (list || []).find((o) => o.setup === pane.name); if (cli) use({ ...cli, cmd: cli.path || cli.cmd }); }}>
-            {busy ? "testing…" : "I have signed in — test it"}
-          </Button>
-        </Box>
-      )}
-      {(msg || note || setupNote) && <Alert severity={(msg || note || setupNote).bad ? "error" : "success"} sx={{ mt: 1, fontSize: 12.5 }}>{(msg || note || setupNote).text}</Alert>}
-    </Box>
-  );
-};
+const FORMS = { owner: OwnerForm };
 
-const AgentForm = ({ onDone }) => (
-  <Box sx={{ mt: 1 }}>
-    <CliPicker onDone={onDone} />
-  </Box>
-);
-
-const BrainForm = ({ onDone, onGo }) => {
-  const [type, setType] = useState("anthropic");
-  const [key, setKey] = useState("");
-  const { run, busy, err, ok } = useConnect(onDone);
-  const brain = BRAINS.find((b) => b.type === type);
-  return (
-    <Box sx={{ mt: 1 }}>
-      {/* the CLI first: most people arriving here already pay for one and have no separate key,
-          and asking them for a key they do not have was the wrong first question */}
-      <Typography variant="caption" sx={{ color: DIM, fontWeight: 700, display: "block", mb: 0.5 }}>
-        Use a coding CLI you already have
-      </Typography>
-      <CliPicker asBrain onDone={onDone} />
-      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1.5, mb: 0.5, fontWeight: 700 }}>
-        …or paste an API key
-      </Typography>
-      <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", mb: 1 }}>
-        {BRAINS.map((b) => (
-          <Chip key={b.type} label={b.label} size="small" onClick={() => setType(b.type)}
-            sx={{ fontSize: 11.5, fontWeight: 600, cursor: "pointer",
-              bgcolor: type === b.type ? "#eae4d8" : "transparent",
-              color: type === b.type ? "#55697a" : DIM, border: `1px solid ${type === b.type ? "#d8cfbe" : BORDER}` }} />
-        ))}
-      </Box>
-      <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-        <Field label={`${brain.label} API key`} placeholder={brain.ph} type="password" value={key}
-          onChange={(e) => setKey(e.target.value)} helperText={brain.hint}
-          sx={{ bgcolor: "#fff", flex: 1, minWidth: 220 }} />
-        <Button variant="contained" disableElevation size="small" sx={{ height: 40 }}
-          disabled={busy || !key.trim()} onClick={() => run({ Type: type, Name: brain.label, Secret: key.trim() })}>
-          {busy ? "testing…" : "Connect"}
-        </Button>
-      </Box>
-      {ok && <Alert severity="success" sx={{ mt: 1, fontSize: 12.5 }}>{ok}</Alert>}
-      {err && <Alert severity="error" sx={{ mt: 1, fontSize: 12.5 }}>{err}</Alert>}
-      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>
-        Running a local model, or on Azure OpenAI?{" "}
-        <Box component="span" sx={{ color: "#55697a", cursor: "pointer" }} onClick={() => onGo("Connections")}>
-          Set those up on the Connections tab
-        </Box>{" "}— they need a model name or an endpoint, not just a key.
-      </Typography>
-    </Box>
-  );
-};
-
-const MailboxForm = ({ onDone, onGo }) => {
-  const [type, setType] = useState("gmail");
-  const [f, setF] = useState({ address: "", password: "", imap_host: "" });
-  const { run, busy, err, ok } = useConnect(onDone);
-  const box = BOXES.find((b) => b.type === type);
-  const ready = f.address.trim() && f.password.trim() && (type === "gmail" || f.imap_host.trim());
-  const go = () => run({
-    Type: type, Name: box.label, Secret: f.password.trim(),
-    ConfigJson: JSON.stringify(type === "gmail"
-      ? { address: f.address.trim() }
-      : { address: f.address.trim(), imap_host: f.imap_host.trim() }),
-  });
-  return (
-    <Box sx={{ mt: 1 }}>
-      <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", mb: 1 }}>
-        {BOXES.map((b) => (
-          <Chip key={b.type} label={b.label} size="small" onClick={() => setType(b.type)}
-            sx={{ fontSize: 11.5, fontWeight: 600, cursor: "pointer",
-              bgcolor: type === b.type ? "#eae4d8" : "transparent",
-              color: type === b.type ? "#55697a" : DIM, border: `1px solid ${type === b.type ? "#d8cfbe" : BORDER}` }} />
-        ))}
-      </Box>
-      {box.card ? (
-        <Box>
-          <Button variant="contained" disableElevation size="small" onClick={() => {
-            window.location.hash = `connector=${box.type}`;
-            onGo("Connections");
-          }}>Set up {box.label}</Button>
-          <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>{box.hint}</Typography>
-        </Box>
-      ) : (<>
-      <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-        {type === "imap" && (
-          <Field label="IMAP host" placeholder="imap.yourdomain.com" value={f.imap_host}
-            onChange={(e) => setF({ ...f, imap_host: e.target.value })} sx={{ bgcolor: "#fff", flex: 1, minWidth: 170 }} />
-        )}
-        <Field label="Mailbox address" placeholder="you@example.com" value={f.address}
-          onChange={(e) => setF({ ...f, address: e.target.value })} sx={{ bgcolor: "#fff", flex: 1, minWidth: 170 }} />
-        <Field label="Password" type="password" value={f.password}
-          onChange={(e) => setF({ ...f, password: e.target.value })} sx={{ bgcolor: "#fff", flex: 1, minWidth: 150 }} />
-        <Button variant="contained" disableElevation size="small" sx={{ height: 40 }}
-          disabled={busy || !ready} onClick={go}>{busy ? "testing…" : "Connect"}</Button>
-      </Box>
-      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>{box.hint}</Typography>
-      {ok && <Alert severity="success" sx={{ mt: 1, fontSize: 12.5 }}>{ok}</Alert>}
-      {err && <Alert severity="error" sx={{ mt: 1, fontSize: 12.5 }}>{err}
-        {/* the server's own words for a Microsoft address on IMAP - make the way out clickable */}
-        {/no longer accept IMAP|Outlook connector/i.test(err) && <>{" "}
-          <Box component="span" sx={{ color: "#55697a", cursor: "pointer", fontWeight: 600 }}
-            onClick={() => { window.location.hash = "connector=outlook"; onGo("Connections"); }}>
-            Set up Outlook instead
-          </Box>.
-        </>}
-      </Alert>}
-      </>)}
-      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>
-        Outlook, Teams, Slack, GitHub and the trackers need an app registration or a bot token —{" "}
-        <Box component="span" sx={{ color: "#55697a", cursor: "pointer" }} onClick={() => onGo("Connections")}>
-          their cards walk you through it
-        </Box>.
-      </Typography>
-    </Box>
-  );
-};
-
-const SyncForm = ({ onDone }) => {
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState("");
-  const run = async () => {
-    setBusy(true); setMsg("Reading your mailboxes…");
-    try {
-      await api.post("/api/ingest/poll", {});
-      // the poll runs in the background, so watch its own status rather than guessing at a wait
-      for (let i = 0; i < 90; i++) {
-        await new Promise((r) => setTimeout(r, 2000));
-        const { data } = await api.get("/api/ingest/status");
-        if (data.status?.state !== "running") break;
-        setMsg(data.status.what || "Reading…");
-      }
-      await onDone();
-      setMsg("");
-    } catch { setMsg("the sync could not be started — check the Connections tab"); }
-    setBusy(false);
-  };
-  return (
-    <Box sx={{ mt: 1 }}>
-      <Button variant="contained" disableElevation size="small" disabled={busy} onClick={run}>
-        {busy ? "syncing…" : "Sync now"}
-      </Button>
-      {msg && <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.75 }}>{msg}</Typography>}
-    </Box>
-  );
-};
-
-const HISTORY = {
-  style: {
-    button: "Generate my reply style",
-    working: "Reading messages you sent…",
-    note: "This writes only inside STYLE.md's generated section. Anything you add yourself stays untouched when you regenerate.",
-  },
-  triage: {
-    button: "Learn my triage habits",
-    working: "Comparing what you answered and skipped…",
-    note: "This writes only inside TRIAGE.md's generated section. You can inspect and edit every conclusion afterward.",
-  },
-};
-
-/* The Docs page already owns the safe history generators. Onboarding gives them the missing
-   sequence and context: sync first, then one click for writing voice and one for attention. */
-const HistoryForm = ({ name, onDone, onGo }) => {
-  const [busy, setBusy] = useState(false);
-  const [what, setWhat] = useState("");
-  const [msg, setMsg] = useState(null);
-  const copy = HISTORY[name];
-  useEffect(() => {
-    if (!busy) return undefined;
-    const t = setInterval(async () => {
-      try { setWhat((await api.get("/api/doc/generate/status")).data.what || ""); }
-      catch { /* progress is a nicety; the generate call remains authoritative */ }
-    }, 1200);
-    return () => clearInterval(t);
-  }, [busy]);
-  const generate = async () => {
-    setBusy(true); setWhat(copy.working); setMsg(null);
-    try {
-      const { data } = await api.post(`/api/doc/${name}/generate`);
-      setMsg({ text: data.detail || "Generated from your history." });
-      await onDone();
-    } catch (e) {
-      setMsg({ bad: true, text: e?.response?.data?.detail || "Could not generate from history." });
-    }
-    setBusy(false); setWhat("");
-  };
-  return (
-    <Box sx={{ mt: 1 }}>
-      <Button variant="contained" disableElevation size="small" disabled={busy} onClick={generate}
-        startIcon={busy ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : null}>
-        {busy ? (what || copy.working) : copy.button}
-      </Button>
-      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75, lineHeight: 1.5 }}>
-        {copy.note}{" "}
-        <Box component="span" onClick={() => onGo("Docs")} sx={{ color: "#55697a", cursor: "pointer" }}>
-          Open Docs
-        </Box>
-      </Typography>
-      {msg && <Alert severity={msg.bad ? "error" : "success"} sx={{ mt: 1, fontSize: 12.5 }}>{msg.text}</Alert>}
-    </Box>
-  );
-};
-
-const StyleForm = (props) => <HistoryForm name="style" {...props} />;
-const TriageForm = (props) => <HistoryForm name="triage" {...props} />;
-const SoulForm = ({ onDone, onGo }) => {
-  const [open, setOpen] = useState(false);
-  return (
-    <Box sx={{ mt: 1 }}>
-      <Button variant="contained" disableElevation size="small" onClick={() => setOpen(true)}>
-        Answer seven questions
-      </Button>
-      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75, lineHeight: 1.5 }}>
-        Your current SOUL.md remains in force until the new version is written. You can inspect and edit the result in{" "}
-        <Box component="span" onClick={() => onGo("Docs")} sx={{ color: "#55697a", cursor: "pointer" }}>
-          Docs
-        </Box>.
-      </Typography>
-      <SoulInterview open={open} onClose={() => setOpen(false)} onWritten={() => onDone()} />
-    </Box>
-  );
-};
-const FORMS = { owner: OwnerForm, ai: BrainForm, inbound: MailboxForm, sync: SyncForm,
-  soul: SoulForm, style: StyleForm, triage: TriageForm, agent: AgentForm };
-
-/* A done step collapses to ONE line. Its reason mattered while you were deciding whether to do
-   it; afterwards it is six lines of history pushing the thing you are actually working on below
-   the fold. Only the open step carries its full text, and only one is ever open - so the panel
-   is the size of the work left rather than the size of the whole list. */
+/* A done step collapses to ONE line. Its reason mattered while you were deciding whether to do it;
+   afterwards it is six lines of history pushing the thing you are actually working on below the
+   fold. Only the open step carries its full text, and only one is ever open. */
 const Step = ({ s, n, open, onOpen, onGo, onDone }) => {
   const Form = FORMS[s.key];
   const active = open && !s.done;
   return (
     <Box sx={{ borderTop: n ? `1px solid ${BORDER}` : "none",
-      // the open step is lifted out of the list rather than merely indented
       bgcolor: active ? "#fff" : "transparent",
       boxShadow: active ? "inset 3px 0 0 #55697a" : "none",
-      px: active ? 1.5 : 0, py: s.done ? 1 : 1.5,
-      transition: "background-color .15s" }}>
+      px: active ? 1.5 : 0, py: s.done ? 1 : 1.5, transition: "background-color .15s" }}>
       <Box sx={{ display: "flex", gap: 1.5, alignItems: s.done ? "center" : "flex-start" }}>
         <Box sx={{ pt: s.done ? 0 : 0.25, display: "flex" }}>
-          {s.done
-            ? <CheckCircleIcon sx={{ fontSize: 18, color: "#47654a" }} />
-            : <RadioButtonUncheckedIcon sx={{ fontSize: 20, color: s.optional ? "#cfc9bf" : "#55697a" }} />}
+          {s.done ? <CheckCircleIcon sx={{ fontSize: 18, color: "#47654a" }} />
+            : <RadioButtonUncheckedIcon sx={{ fontSize: 20, color: "#55697a" }} />}
         </Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap" }}>
             <Typography sx={{ fontWeight: s.done ? 600 : 700, fontSize: s.done ? 12.5 : 13.5,
               color: s.done ? DIM : INK }}>{s.title}</Typography>
-            {s.optional && !s.done && (
-              <Typography variant="caption" sx={{ color: FAINT }}>{s.recommended ? "recommended" : "optional"}</Typography>
-            )}
             {s.done && s.detail && (
               <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>{s.detail}</Typography>
             )}
@@ -507,81 +125,49 @@ const Step = ({ s, n, open, onOpen, onGo, onDone }) => {
               {s.why}
             </Typography>
           )}
-          {active && Form && <Form onDone={onDone} onGo={onGo} />}
+          {active && Form && <Form onDone={onDone} />}
         </Box>
         {!s.done && !open && Form && (
           <Button size="small" variant="outlined" onClick={onOpen}
-            sx={{ alignSelf: "center", whiteSpace: "nowrap", fontSize: 12 }}>
-            {s.key === "sync" ? "Sync" : s.key === "soul" ? "Personalize"
-              : ["style", "triage"].includes(s.key) ? "Generate" : "Set up"}
-          </Button>
+            sx={{ alignSelf: "center", whiteSpace: "nowrap", fontSize: 12 }}>Set up</Button>
         )}
         {!s.done && !Form && (
-          <Button size="small" endIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />} onClick={() => onGo(s.where)}
-            sx={{ alignSelf: "center", whiteSpace: "nowrap", fontSize: 12 }}>{s.where}</Button>
+          <Button size="small" endIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />} onClick={() => onGo(s.goto)}
+            sx={{ alignSelf: "center", whiteSpace: "nowrap", fontSize: 12 }}>{s.goto.tab}</Button>
         )}
-        {/* a finished step can still be reopened - "done" is not "never again" */}
-        {s.done && Form && !open && (
-          <Typography variant="caption" onClick={onOpen}
-            sx={{ color: FAINT, cursor: "pointer", whiteSpace: "nowrap", "&:hover": { color: "#55697a" } }}>
-            change
-          </Typography>
-        )}
+        {s.done && (Form
+          ? <Typography variant="caption" onClick={onOpen}
+              sx={{ color: FAINT, cursor: "pointer", whiteSpace: "nowrap", "&:hover": { color: "#55697a" } }}>change</Typography>
+          : <Typography variant="caption" onClick={() => onGo(s.goto)}
+              sx={{ color: FAINT, cursor: "pointer", whiteSpace: "nowrap", "&:hover": { color: "#55697a" } }}>change</Typography>)}
       </Box>
-      {/* A reopened DONE step used to put its form inside the header row, as a flex sibling with
-          width:100% - so the form overflowed its track and sat on top of the step's own title and
-          reason (owner, 2026-09-02: "now it looks weird"). It belongs UNDER the row, indented to
-          line up with the text column, the same place the open-step form appears. */}
+      {/* A reopened DONE step puts its form UNDER the row, indented to the text column - inside the
+          header row it overflowed its track and sat on the step's own title (owner, 2026-09-02). */}
       {s.done && open && Form && (
-        <Box sx={{ pl: 4.5, pt: 1 }}><Form onDone={onDone} onGo={onGo} /></Box>
+        <Box sx={{ pl: 4.5, pt: 1 }}><Form onDone={onDone} /></Box>
       )}
     </Box>
   );
 };
 
-/* What actually happens once it is connected. Somebody who has just pasted a key has no model of
-   the funnel yet, and "you're all set" tells them nothing about where to look next. */
-const NextSteps = ({ onGo }) => (
-  <Box sx={{ mt: 2, p: 1.5, bgcolor: "#f2f7f4", border: "1px solid #cfe6d9", borderRadius: 1.5 }}>
-    <Typography sx={{ fontWeight: 700, fontSize: 13, color: "#47654a", mb: 0.75 }}>What happens now</Typography>
-    {[
-      ["Timeline", "Every message lands here as it arrives, with the verdict triage gave it and why."],
-      ["Review", "Questions get a reply drafted in your voice. Nothing sends until you approve it."],
-      ["Board", "Real work becomes a task. Coding tasks can go to your CLI agent; the rest waits on your list."],
-      ["Docs", "SOUL.md is the funnel's constitution — what counts as a task, how you answer. Edit it and triage changes."],
-    ].map(([tab, text]) => (
-      <Box key={tab} sx={{ display: "flex", gap: 1, mb: 0.5 }}>
-        <Box component="span" onClick={() => onGo(tab)}
-          sx={{ fontWeight: 700, fontSize: 12, color: "#55697a", cursor: "pointer", minWidth: 62 }}>{tab}</Box>
-        <Typography variant="caption" sx={{ color: DIM, flex: 1, lineHeight: 1.5 }}>{text}</Typography>
-      </Box>
-    ))}
-    <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
-      Say “Not our task” on anything that is not yours and triage remembers it — that is how it learns your job.
-    </Typography>
-  </Box>
-);
-
 export const SetupPanel = ({ open, state, onClose, onGo, onDismiss, onRefresh }) => {
   const [openKey, setOpenKey] = useState(null);
   const steps = state?.steps || [];
-  // the first thing left to do is already open: a wizard whose every step needs a click first is
-  // a list of buttons
+  // the first thing left to do is already open: a list whose every step needs a click first is a
+  // list of buttons
   useEffect(() => {
     if (!open || !steps.length) return;
     if (state.complete) { setOpenKey(null); return; }
-    // whatever is left, in order - so a completed step advances to the next one by itself
-    // A genuinely optional extra such as the coding agent never springs open after the guided
-    // path is complete; it remains one explicit Set up click for people who want it.
-    setOpenKey((k) => k || (steps.find((s) => !s.done && FORMS[s.key]
-      && (!s.optional || s.recommended)) || {}).key || null);
+    setOpenKey((k) => k || (steps.find((s) => !s.done && FORMS[s.key]) || {}).key || null);
   }, [open, steps, state?.complete]);
   if (!state) return null;
-  const guideTotal = state.guide_total ?? state.total;
-  const guideDone = state.guide_done ?? state.done;
-  const guideLeft = guideTotal - guideDone;
-  // finishing hands you the next thing to do: closing to nothing makes you hunt for the button
-  // you were always going to press
+  const left = state.total - state.done;
+  // one road for every row: the tab, then the position inside it
+  const go = (goto) => {
+    if (goto?.hash) window.location.hash = goto.hash;
+    onGo(goto.tab);
+    onClose();
+  };
   const done = async () => { setOpenKey(null); await onRefresh(); };
   return (
     <Dialog open={!!open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -589,19 +175,13 @@ export const SetupPanel = ({ open, state, onClose, onGo, onDismiss, onRefresh })
         <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
           <Box sx={{ flex: 1 }}>
             <Typography sx={{ fontWeight: 800, fontSize: 17, color: INK }}>
-              {state.complete ? "Taskuary is ready for you"
-                : state.ready ? "The essentials work — make it yours"
-                  : `${spell(guideTotal)} steps and Taskuary is yours`}
+              {state.complete ? "Taskuary is yours" : `${spell(left)} ${left === 1 ? "thing" : "things"} left`}
             </Typography>
             <Typography variant="body2" sx={{ color: DIM, mt: 0.5 }}>
               {state.complete
-                ? "Connections and personalization are complete. It will keep learning from your verdicts."
-                : state.ready
-                  ? `${guideLeft} recommended ${guideLeft === 1 ? "step" : "steps"} left to personalize Taskuary. They use your answers or your own history, and remain editable.`
-                : `${guideDone} of ${guideTotal} done${guideLeft ? ` — ${guideLeft} to go` : ""}. `
-                  + `The first ${state.total} are what make the funnel work at all: without them the `
-                  + "Timeline stays empty and looks like a quiet day."
-                  + (steps.length > guideTotal ? ` The ${steps.length - guideTotal === 1 ? "last one is" : "rest are"} optional.` : "")}
+                ? "This list is finished and will not come back. “Set up Taskuary” on the Assistant walks the rest of the app whenever you want it."
+                : "Each one opens the page that actually does it. They tick themselves from what is really connected, "
+                  + "so anything you set up anywhere shows up here."}
             </Typography>
           </Box>
           <CloseIcon onClick={onClose} sx={{ fontSize: 18, color: FAINT, cursor: "pointer", mt: 0.5 }} />
@@ -610,25 +190,19 @@ export const SetupPanel = ({ open, state, onClose, onGo, onDismiss, onRefresh })
         <Box sx={{ mt: 2, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 2 }}>
           {steps.map((s, i) => (
             <Step key={s.key} s={s} n={i} open={openKey === s.key} onOpen={() => setOpenKey(s.key)}
-              onGo={onGo} onDone={done} />
+              onGo={go} onDone={done} />
           ))}
         </Box>
 
-        {state.complete && <NextSteps onGo={onGo} />}
-
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 2 }}>
           <Typography variant="caption" sx={{ color: FAINT, flex: 1 }}>
-            {state.dismissed
-              ? "Put away — the quiet counter in the top bar brings it back."
-              : state.complete
-                ? "Revisit any of these choices later from Connections, Docs, or Settings."
-              : state.ready && !state.complete
-                ? "These are recommendations, not gates. Finish later and the counter keeps your place."
+            {state.dismissed ? "Put away — the quiet counter in the top bar brings it back."
+              : state.complete ? "Revisit any of these later from Connections, Docs or Settings."
                 : "Not now? Put it away; the counter in the top bar brings it back."}
           </Typography>
           {!state.complete && (
             <Button size="small" sx={{ color: DIM, fontSize: 12 }} onClick={() => onDismiss(!state.dismissed)}>
-              {state.dismissed ? "Show it again" : state.ready ? "Finish later" : "Put it away"}
+              {state.dismissed ? "Show it again" : "Put it away"}
             </Button>
           )}
           <Button size="small" variant="contained" disableElevation onClick={onClose} sx={{ fontSize: 12 }}>

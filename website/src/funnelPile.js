@@ -414,3 +414,13 @@ export const pendingAlerts = (alerts, acked, current = null, shown = null) => {
     && (a.notice || (a.item !== current?.key && !shown?.has(a.item) && attentionBand(a) < band)));
 };
 export const topAlert = (alerts, acked, current = null, shown = null) => pendingAlerts(alerts, acked, current, shown)[0] || null;
+
+// A live event says "something was written". If a FORCED pile load STARTED after the newest event
+// of the burst arrived, that load read the database after the write committed (the event is sent
+// on commit), so a second reload would fetch the same rows again. A press of Next did exactly that:
+// the turn's own reload landed the fresh rows, and the settle's feed-changed still fired a fourth
+// full build 1.5s later - the visible gap between the old rows vanishing and the next four appearing
+// (2026-09-17). Compared against the load's START, never its end: a load that began before the
+// write and finished after it read stale rows and must not be counted.
+export const coveredByReload = (meta, forcedStartedAt) =>
+  !!(meta && meta.lastAt && forcedStartedAt && meta.lastAt <= forcedStartedAt);

@@ -197,3 +197,34 @@ test("without a wait, onLive still calls straight through", async () => {
     stop();
   });
 });
+
+// The listener that refetches on a burst is told when the burst happened, so it can decline a
+// refetch that a forced load which began after the newest event has already made redundant.
+test("a coalesced callback is told when its burst began and when its newest event arrived", async () => {
+  await withSocket(async () => {
+    globalThis.document = { visibilityState: "visible", addEventListener: () => {}, removeEventListener: () => {} };
+    const seen = [];
+    const t0 = Date.now();
+    const stop = onLive("feed-changed", (ev, meta) => { seen.push(meta); }, { wait: 20, max: 200 });
+    __testFanout({ type: "feed-changed" });
+    await new Promise((r) => setTimeout(r, 8));
+    __testFanout({ type: "feed-changed" });
+    await new Promise((r) => setTimeout(r, 40));
+    assert.equal(seen.length, 1);
+    const meta = seen[0];
+    assert.ok(meta.firstAt >= t0 && meta.lastAt >= meta.firstAt && meta.lastAt <= Date.now(), JSON.stringify(meta));
+    stop();
+  });
+});
+
+test("without a wait the callback still gets a meta, and hello gets none", async () => {
+  await withSocket(async () => {
+    globalThis.document = { visibilityState: "visible", addEventListener: () => {}, removeEventListener: () => {} };
+    const metas = [];
+    const stop = onLive("feed-changed", (ev, meta) => { metas.push(meta); });
+    __testFanout({ type: "feed-changed" });
+    assert.equal(metas.length, 1);
+    assert.ok(metas[0].lastAt > 0 && metas[0].firstAt === metas[0].lastAt);
+    stop();
+  });
+});

@@ -75,12 +75,18 @@ export function holdLive() {
 export function onLive(kinds, fn, opts) {
   const want = new Set(!kinds ? [] : (typeof kinds === "string" ? [kinds] : kinds));
   const wait = Number(opts?.wait) || 0, max = Number(opts?.max) || 0;
-  let dirty = false, coalesce = 0, waitingSince = 0;
-  const fire = (ev) => { clearTimeout(coalesce); coalesce = 0; waitingSince = 0; fn(ev); };
+  let dirty = false, coalesce = 0, waitingSince = 0, lastAt = 0;
+  // the callback is told when its burst began and when its newest event arrived, so a listener
+  // that already refetched after the newest event can tell it has nothing left to fetch
+  const fire = (ev) => {
+    const meta = { firstAt: waitingSince || lastAt, lastAt };
+    clearTimeout(coalesce); coalesce = 0; waitingSince = 0; fn(ev, meta);
+  };
   const got = (ev) => {
     if (!visible()) { dirty = true; return; }
     dirty = false;
-    if (!wait) return fn(ev);
+    lastAt = Date.now();
+    if (!wait) return fn(ev, { firstAt: lastAt, lastAt });
     if (!waitingSince) waitingSince = Date.now();
     if (max && Date.now() - waitingSince >= max) return fire(ev);
     clearTimeout(coalesce);

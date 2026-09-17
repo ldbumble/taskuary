@@ -32,6 +32,7 @@ import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
 import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, hasNextSelection, interactiveCardIndex, keysOf, laneCounted, lastSaidIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, pendingAlerts, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
+import { coveredByReload } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
 import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WalkCard, WrapupCard, sourceColor } from "./assistantCards.jsx";
@@ -493,6 +494,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const pileFlight = useRef(null);
   const pileForcePending = useRef(false);
   const loadPileRef = useRef(null);
+  const forcedLoadStartedAt = useRef(0);       // when the last forced pile load began (funnelPile.coveredByReload)
   const currentRef = useRef(null); const surfaceRef = useRef(null); const speakRef = useRef(null);
   const noticedRef = useRef(null);      // the context notice the stream already showed this turn
   const only = useRef(null);                                       // "mail" once the owner chose to start with the mail
@@ -592,6 +594,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // must never replace or clear B.
     const requestedCurrentKey = currentRef.current?.key || null;
     const requestedScope = nextSelectionScope(only.current, requestedCurrentKey);
+    if (force) forcedLoadStartedAt.current = Date.now();
     const request = (async () => { try {
       // the key we are holding rides along, so the server can say whether it is still a thing
       const { data } = await api.get("/api/funnel/pile", { params: {
@@ -703,7 +706,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // left the pile on its 30-second safety poll (2026-09-10 audit).
   useEffect(() => {
     if (!active) return undefined;
-    return onLive(["feed-changed", "task-changed"], () => loadPile(true), { wait: 1500, max: 5000 });
+    // ...and not at all when a forced load already began after the newest event: the turn that
+    // caused the write reloaded the rows itself, and this was the fourth full build of one press
+    return onLive(["feed-changed", "task-changed"], (ev, meta) => { if (!coveredByReload(meta, forcedLoadStartedAt.current)) loadPile(true); }, { wait: 1500, max: 5000 });
   }, [active, loadPile]);
   useEffect(() => { const el = bodyRef.current; if (el) el.scrollTop = el.scrollHeight; }, [msgs, busy]);
   // ...and again whenever the thread GROWS - a card that loaded its draft, a report that unfolded - so the

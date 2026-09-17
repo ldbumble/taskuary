@@ -52,7 +52,10 @@ ALLOWED_WRITES = (
     r'^/api/board/notes',                              # the wall
     r'^/api/(hub|handbook)',                           # durable Hub posts and compatibility route
     r'^/api/settings$',                                # display preferences
-    r'^/api/setup/dismiss$',
+    # the checklist's "leave me alone", and the scripted walk - a tour of the app that touches
+    # nothing real, which is what a visitor is here for. Its writes are two settings in the demo's
+    # own database, which is what everything else on this list has in common.
+    r'^/api/setup/(dismiss|seen|walk(/reset)?)$',
     r'^/api/terminals/\d+/resize$',
     # the Assistant page: the pipe's own memory and the concierge's turns - the demo's database,
     # the demo's canned brain, nothing real behind either (funnel.py, concierge.py)

@@ -86,6 +86,18 @@ class TheDemoStillWorksTests(unittest.TestCase):
                          '/api/board/notes', '/api/tasks/3/comments'):
                 self.assertEqual(demo.refuse('POST', path), '', path)
 
+    def test_the_walk_is_something_a_visitor_can_actually_take(self):
+        """It is a tour of the app that touches nothing real - which is the entire demo. The
+        checklist stays hidden there (TaskHubPage hides SetupChip), because a list of connections
+        nobody can make is not a demo of anything."""
+        with on():
+            for path in ('/api/setup/walk', '/api/setup/walk/reset', '/api/setup/seen'):
+                self.assertEqual(demo.refuse('POST', path), '', path)
+
+    def test_the_walk_being_open_does_not_open_the_connectors(self):
+        with on():
+            self.assertNotEqual(demo.refuse('POST', '/api/connectors'), '')
+
 
 class TheScriptedBrainTests(unittest.TestCase):
     def test_it_answers_without_a_key_a_cli_or_a_network(self):

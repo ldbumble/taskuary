@@ -308,6 +308,13 @@ def test_connector(store, cid: int) -> dict:
                                    + ' - if this is a box you RDP into, PS remoting may need enabling: '
                                      'run Enable-PSRemoting -Force on it once (elevated)')
             detail = f"remote run OK on {(p.stdout or '').strip() or host} (your Windows credentials)"
+        elif c['Type'] == 'typesafe':
+            # not llm.test_ai: that asks for a completion, and this model has no completions. One
+            # real typed question is the only proof the key works.
+            from . import jev
+            got = jev.ask(c['Secret'] or '', 'A scheduled check ran and came back clean.',
+                          {'ok': ('is this a clean result?', 'nothing is wrong in it')})
+            detail = f"Jev answered: {got['ok'][1]:.2f} confident"
         elif c['Type'] in ('anthropic', 'openai', 'azure_openai', 'openrouter', 'ollama', 'meta'):
             from .llm import test_ai
             detail = test_ai(store, cid)

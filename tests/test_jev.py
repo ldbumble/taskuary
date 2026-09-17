@@ -77,5 +77,49 @@ class TheCallTests(unittest.TestCase):
         post.assert_not_called()
 
 
+class ItIsNotABrainTests(unittest.TestCase):
+    """The load-bearing omission. AI_TYPES is what populates every brain picker, and a decision
+    model chosen as the Assistant's brain would have nothing to say."""
+
+    def test_typesafe_is_not_an_ai_type(self):
+        from taskuary import llm
+        self.assertNotIn('typesafe', llm.AI_TYPES)
+
+    def test_the_card_exists_so_a_key_can_be_saved(self):
+        from taskuary.store import MemoryStore
+        self.assertTrue(MemoryStore().get_connector_by_type('typesafe'), 'no TypeSafe card to paste a key into')
+
+    def test_it_never_reaches_the_brain_pickers(self):
+        """The test that stops the assistant going mute."""
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        c = TestClient(server.app)
+        cid = server.store.get_connector_by_type('typesafe')['ConnectorId']
+        was = server.store.get_connector(cid)
+        try:
+            server.store.save_connector({'ConnectorId': cid, 'Secret': 'sk-x', 'Active': 1}, 't')
+            values = [str(b.get('value') or '') for b in c.get('/api/brains').json()['data']]
+            self.assertFalse([v for v in values if str(cid) in v],
+                             f'the decision model is offered as a brain: {values}')
+        finally:
+            server.store.save_connector({'ConnectorId': cid, 'Secret': '',
+                                         'Active': int(was['Active'] or 0)}, 't')
+
+    def test_its_test_button_asks_jev_a_question_instead_of_for_a_completion(self):
+        """A card that tests green through the wrong road is the exact failure the wizard exists to
+        prevent: llm.test_ai asks for a completion, and this model has none to give."""
+        from taskuary import channels
+        from taskuary.store import MemoryStore
+        s = MemoryStore()
+        cid = s.get_connector_by_type('typesafe')['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Secret': 'sk-x', 'Active': 1}, 't')
+        with mock.patch('taskuary.jev.ask', return_value={'ok': (True, 0.83)}) as ask:
+            with mock.patch('taskuary.llm.test_ai', side_effect=AssertionError('no completion may be asked for')):
+                out = channels.test_connector(s, cid)
+        self.assertTrue(out['ok'], out)
+        self.assertEqual(ask.call_args[0][0], 'sk-x')
+        self.assertIn('0.83', out['detail'])
+
+
 if __name__ == '__main__':
     unittest.main()

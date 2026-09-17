@@ -800,6 +800,9 @@ class SQLiteStore:
                          ('anthropic', 'Anthropic API'), ('openai', 'OpenAI API'),
                          ('azure_openai', 'Azure OpenAI'), ('openrouter', 'OpenRouter'),
                          ('ollama', 'Local models (Ollama)'), ('meta', 'Meta Model API (Muse Spark)'),
+                         # answers typed questions and emits no text at all, so it is a card you can
+                         # paste a key on but never a brain - see the comment on llm.AI_TYPES
+                         ('typesafe', 'TypeSafe Jev (decisions only)'),
                          ('mssql', 'Microsoft SQL Server'),
                          ('telegram', 'Telegram'), ('whatsapp', 'WhatsApp'),
                          ('imessage', 'Apple Messages'),

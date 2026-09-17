@@ -18,6 +18,9 @@ from time import sleep
 
 from . import redact
 
+# Everything that can answer a PROMPT. This list is what populates every brain picker, so a model
+# that cannot emit text does not belong in it however good it is: `typesafe` (Jev) answers typed
+# questions and would have nothing to say as the Assistant's brain. It is chosen on its own card.
 AI_TYPES = ('anthropic', 'openai', 'azure_openai', 'openrouter', 'ollama', 'meta')
 
 # What a vision model will look at. "See below." is half the mail this app reads, and below was

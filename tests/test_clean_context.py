@@ -174,5 +174,36 @@ class PayloadTests(unittest.TestCase):
         self.assertLessEqual(len(seen['usr']['body']), triage.BODY_BUDGET + 100)
 
 
+class IncrementalKnownTests(unittest.TestCase):
+    """exchange_lines walks a chain with ONE set of already-said lines, grown a body at a time. It
+    must reach exactly what rebuilding that set from every prior body per message reached - the
+    quadratic rebuild cost 241,491 regex calls to keep 10 lines of a 200-message thread."""
+
+    NL = chr(10)
+    CHAIN = [
+        NL.join(['Can we move the release to Thursday?', 'The QA run is still going.']),
+        NL.join(['Thursday works for me.', '', '> Can we move the release to Thursday?', '> The QA run is still going.']),
+        NL.join(['Approved - Thursday it is.', '', 'On Tue, Sep 16, 2026, Ray wrote:', '> Thursday works for me.',
+                 '> > Can we move the release to Thursday?']),
+        NL.join(['One more thing: the changelog is not updated yet.', '> Approved - Thursday it is.']),
+        NL.join(['Done, changelog pushed.', '', '> One more thing: the changelog is not updated yet.', '> > Approved - Thursday it is.']),
+    ]
+
+    def test_growing_the_set_matches_rebuilding_it_every_time(self):
+        rebuilt, grown, priors, known = [], [], [], set()
+        for body in self.CHAIN:
+            rebuilt.append(triage.dedupe_quoted(body, priors))          # the old road: priors -> set, per call
+            grown.append(triage.dedupe_quoted(body, (), known=known))   # the new road: one set, extended
+            priors.append(body)
+            known |= triage.known_lines((body,))
+        self.assertEqual(grown, rebuilt)
+        self.assertNotEqual(rebuilt[1], self.CHAIN[1], 'the fixture must actually exercise a quote drop')
+
+    def test_a_caller_passing_no_set_is_unchanged(self):
+        """extract_ask and every test above pass `priors` alone; that road builds the set itself."""
+        self.assertEqual(triage.dedupe_quoted(self.CHAIN[1], [self.CHAIN[0]]),
+                         triage.dedupe_quoted(self.CHAIN[1], (), known=triage.known_lines([self.CHAIN[0]])))
+
+
 if __name__ == '__main__':
     unittest.main()

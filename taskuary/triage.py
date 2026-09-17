@@ -244,13 +244,23 @@ def _norm_line(l: str) -> str:
     return text.strip()
 
 
-def dedupe_quoted(body: str, priors) -> str:
+def known_lines(bodies) -> set:
+    """The normalised lines of these cleaned bodies - what dedupe_quoted treats as already said."""
+    return {_norm_line(l) for p in bodies for l in str(p or '').splitlines() if _norm_line(l)}
+
+
+def dedupe_quoted(body: str, priors, known: set = None) -> str:
     """Each message's own words once (PW-028). A quoted block - '> ' lines, or everything under an
     'On ... wrote:' / 'Original Message' / 'Forwarded message' head - is dropped only when its lines
     are already in `priors` (the cleaned bodies of the chain so far); unique forwarded material and
     a quote of something the chain does not hold stay, and inline answers keep their own lines with
-    the quoted questions they answer removed. The stored message is never edited."""
-    known = {_norm_line(l) for p in priors for l in str(p or '').splitlines() if _norm_line(l)}
+    the quoted questions they answer removed. The stored message is never edited.
+
+    `known` is those same lines already normalised, for a caller walking a whole chain: rebuilding
+    the set from every prior body on every call normalised each line once per LATER message -
+    241,491 regex calls to keep 10 lines of a 200-message conversation, 773ms before the model was
+    even asked (the owner's assistant thread, 2026-09-17). The set is only ever read here."""
+    if known is None: known = known_lines(priors)
     lines, out, i = str(body or '').splitlines(), [], 0
     while i < len(lines):
         l = lines[i]

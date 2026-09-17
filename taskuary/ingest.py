@@ -1190,9 +1190,11 @@ def exchange_lines(store, msg: dict, budget: int = None, limit: int = 200) -> li
     de-quoted words are kept whole under a character budget (triage.EXCHANGE_BUDGET); when the
     budget is exceeded the OLDEST go first and the first line says how many were dropped - the
     model is never left to assume it saw the whole thread."""
-    from .triage import strip_boilerplate, dedupe_quoted, EXCHANGE_BUDGET
+    from .triage import strip_boilerplate, dedupe_quoted, known_lines, EXCHANGE_BUDGET
     budget = EXCHANGE_BUDGET if budget is None else budget
-    out, priors = [], []
+    # one set of already-said lines, grown a body at a time - never rebuilt from the whole chain per
+    # message, which is what made a 200-line conversation cost 773ms of regex before any model ran
+    out, known = [], set()
     for m in store.thread_messages(msg.get('conversation_id'), msg.get('subject'), limit=limit):
         # ...never the line being judged, and never the ones AFTER it. Under deferred() a whole
         # poll is on the timeline as 'triaging' before any of it is judged, so without this the
@@ -1201,8 +1203,8 @@ def exchange_lines(store, msg: dict, budget: int = None, limit: int = 200) -> li
         if msg.get('sent_at') and str(m.get('SentAt') or '') > str(msg['sent_at']): continue
         who = 'you' if is_ours(m) else (m.get('FromName') or m.get('FromEmail') or 'them')
         clean = strip_boilerplate(str(m.get('BodyText') or ''))
-        body = ' '.join(dedupe_quoted(clean, priors).split())
-        priors.append(clean)
+        body = ' '.join(dedupe_quoted(clean, (), known=known).split())
+        known |= known_lines((clean,))
         if body: out.append(f"{who} · {str(m.get('SentAt') or '')[5:16]}: {body}")
     dropped = 0
     while len(out) > 1 and sum(len(l) for l in out) > budget:

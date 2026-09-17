@@ -150,7 +150,7 @@ test("a profile row's roster state comes from the server, and the open profile s
   assert.match(docs, /if \(seen\.line\) g\.onRoster \+= 1;/);
   assert.doesNotMatch(docs, /triage_enabled !== false\) g\.onRoster/);
   assert.match(docs, /WHAT TRIAGE SEES/);
-  assert.match(docs, /not on the roster — \{m\.reason\}/);
+  assert.match(docs, /not on the roster — \{why\}/);   // one line per REASON, however many members share it
 });
 
 test("an own profile can be deleted from Docs, and it asks first", () => {

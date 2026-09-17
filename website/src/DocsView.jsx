@@ -390,7 +390,8 @@ export default function DocsView() {
         {section === "profiles" ? (
           <>
             <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16, mb: 0.5 }}>Profiles</Typography>
-            <Box sx={{ display: "flex", gap: 0.5, mb: 1 }}>
+            {/* whole buttons wrap onto the next line; a label never breaks in the middle of itself */}
+            <Box sx={{ display: "flex", gap: 0.5, mb: 1, flexWrap: "wrap", "& .MuiButton-root": { whiteSpace: "nowrap", flexShrink: 0 } }}>
               <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => { setCreateProfile(true); setManageProfiles(true); }}>Add profile</Button>
               <Button size="small" onClick={() => { setCreateProfile(false); setManageProfiles(true); }}>Manage profiles</Button>
               <Button size="small" onClick={() => setImportSkills(true)}>Import skills</Button>
@@ -563,9 +564,13 @@ export default function DocsView() {
             <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 700, letterSpacing: 1, display: "block", mb: 0.5 }}>
               WHAT TRIAGE SEES
             </Typography>
-            {cur.seen.map((m) => (m.line
-              ? <Typography key={m.name} sx={{ ...mono, fontSize: 11.5, color: INK, whiteSpace: "pre-wrap" }}>{m.line}</Typography>
-              : <Typography key={m.name} sx={{ fontSize: 11.5, color: FAINT }}>{m.name}: not on the roster — {m.reason}</Typography>))}
+            {cur.seen.filter((m) => m.line).map((m) => (
+              <Typography key={m.name} sx={{ ...mono, fontSize: 11.5, color: INK, whiteSpace: "pre-wrap" }}>{m.line}</Typography>))}
+            {/* members kept off for the same reason share one line - six coders is one fact, not six */}
+            {[...new Set(cur.seen.filter((m) => !m.line).map((m) => m.reason))].map((why) => (
+              <Typography key={why} sx={{ fontSize: 11.5, color: FAINT }}>
+                {cur.seen.filter((m) => !m.line && m.reason === why).map((m) => m.name).join(", ")}: not on the roster — {why}
+              </Typography>))}
             <Typography variant="caption" sx={{ color: FAINT, display: "block", pt: 0.75 }}>
               The router reads this one line per worker when it picks. The session it picks is given the whole document below.
             </Typography>

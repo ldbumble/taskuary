@@ -220,6 +220,19 @@
 .tq-btw .txt { flex: 1; min-width: 0; font-size: 12px; color: #262521; }
 .tq-btw .txt b { color: #41525f; margin-right: 4px; }
 
+/* ...and UNFINISHED WORK under it: the same bottom edge, none of the urgency. No pulse, no shadow,
+   no entrance - nothing here is news, it is work waiting where it was left, and it is shut until
+   you ask for it. The list opens UPWARD and is capped, so four saved recaps can never take the
+   window away from the walk again (the owner, 2026-09-17). */
+.tq-prev { margin: 0 20px 8px; }
+.tq-prev-bar { width: 100%; display: flex; align-items: center; gap: 8px; padding: 5px 10px; text-align: left;
+  border: 1px solid #e1dcd5; border-radius: 9px; background: #fffdfb; cursor: pointer;
+  font: 600 11.5px 'IBM Plex Sans', system-ui, sans-serif; color: #41525f; transition: border-color .15s; }
+.tq-prev-bar:hover { border-color: #b9c3cb; }
+.tq-prev-bar .refs { flex: 1; min-width: 0; font-weight: 500; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-prev-bar .caret { flex: 0 0 auto; color: #a09889; font-size: 11px; line-height: 1; }
+.tq-prev-list { max-height: 42vh; overflow-y: auto; padding-top: 8px; }
+
 /* the composer */
 .tq-compose { padding: 6px 20px 10px; border-top: 1px solid #e4e0d9; background: #fffdfb; }
 .tq-compose-box { width: min(900px, 100%); margin: 0 auto; display: flex; align-items: center; gap: 5px; padding: 6px 7px; border: 1px solid #d5d0c7; background: #fff; border-radius: 13px; box-shadow: 0 2px 8px #39352d0b; }
@@ -257,4 +270,5 @@
   .tq-msg.you .body { max-width: 92%; }
   .tq-chat-body { padding: 12px 12px 6px; }
   .tq-compose, .tq-btw, .tq-handed { padding-left: 12px; padding-right: 12px; margin-left: 12px; margin-right: 12px; }
+  .tq-prev { margin-left: 12px; margin-right: 12px; }
 }

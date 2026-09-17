@@ -1315,13 +1315,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       <div className="tq-chat-body" ref={bodyRef}>
         <div className="tq-chat-inner">
           {!state && !err && <Box sx={{ display: "grid", placeItems: "center", py: 6 }}><CircularProgress size={22} /></Box>}
-          {/* Unfinished work from before, with its own recap - listed, never resumed by arriving here
-              (previous-work.test.mjs: "Loading the welcome card never starts an agent"). It sits
-              OUTSIDE the welcome card: that card unmounts the moment a line lands in the chat, and
-              reviewing one saved draft puts a line there - which took the shelf away with the rest
-              of the list still on it. It draws nothing when there is nothing saved. */}
-          {state && <PreviousWork active={active} onOpenTask={onOpenTask}
-            onReview={(rid) => surfaceRef.current?.(`review:${rid}`)} />}
           {state && !shown.length && !busy && (
             <div className="tq-welcome">
               <TaskuaryMark size={30} />
@@ -1365,6 +1358,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         </div>
       </div>
       )}
+      {/* Unfinished work from before, with its own recap - listed, never resumed by arriving here
+          (previous-work.test.mjs: "Loading the welcome card never starts an agent"). It is a LABEL
+          along the bottom, not a shelf above the conversation: on top it pushed the walk off the
+          screen (the owner, 2026-09-17), and inside the welcome card it would unmount the moment a
+          line lands in the chat - reviewing one saved draft puts a line there, which took the shelf
+          away with the rest of the list still on it. It draws nothing when there is nothing saved. */}
+      {state && !old && !handoff && !walk && <PreviousWork active={active} onOpenTask={onOpenTask}
+        onReview={(rid) => surfaceRef.current?.(`review:${rid}`)} />}
       {/* ONE bottom strip for every unsolicited update (PW-165), kept until Open or Later (PW-166); the rest of
           the queue waits behind it and comes up as each is put down */}
       {/* while the walk is in a chat the interruption is SENT there (remote_assistant.push_alerts);

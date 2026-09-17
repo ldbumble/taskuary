@@ -25,29 +25,31 @@ def _goto(tab, hash_=''): return {'tab': tab, 'hash': hash_}
 def _can(text, tab=None, hash_=''): return {'text': text, 'goto': _goto(tab, hash_) if tab else None}
 
 
-# The five the checklist also shows, then every part of the app. The first five carry no `title`
-# or `blurb` of their own - `setup.state` owns their words, and repeating them here is the drift
-# this avoids.
+# The five the checklist also shows, then every part of the app. The first five carry no `title`,
+# `blurb` or `goto` of their own - `setup.state` owns their words AND where the button lands, and
+# repeating either here is the drift this avoids.
 STOPS = [
-    {'key': 'owner', 'goto': _goto('Docs', 'owner'), 'can': [
+    {'key': 'owner', 'can': [
         _can('type your name and email right here'),
         _can('see every document that uses it', 'Docs')]},
-    {'key': 'ai', 'goto': _goto('Connections', 'cli-agents'), 'can': [
+    {'key': 'ai', 'can': [
         _can('install a coding CLI and sign in to it, in a terminal right here', 'Connections', 'cli-agents'),
         _can('use a CLI you already pay for', 'Connections', 'cli-agents'),
         _can('paste an API key on a provider card instead', 'Connections')]},
-    {'key': 'models',
-     'goto': _goto('Settings', 'settings=config&group=Triage%20%26%20agents'), 'can': [
+    {'key': 'models', 'can': [
         _can('choose the brain that triages your mail', 'Settings', 'settings=config&group=Triage%20%26%20agents'),
         _can('choose what the assistant here speaks on', 'Settings', 'settings=config&group=Triage%20%26%20agents'),
         _can('choose the general agent and the coding CLI', 'Settings', 'settings=config&group=Triage%20%26%20agents'),
         _can('name a model, or leave it on the provider default')]},
-    {'key': 'inbound', 'goto': _goto('Connections'), 'can': [
+    {'key': 'inbound', 'can': [
         _can('connect a mailbox - Outlook, Gmail, or any IMAP host', 'Connections'),
         _can('connect a chat - Teams, Slack, WhatsApp, Telegram', 'Connections'),
         _can('test a card before waiting on a schedule', 'Connections')]},
-    {'key': 'sync', 'goto': _goto('Assistant'), 'can': [
-        _can('pull your mail in and let triage read it', 'Connections'),
+    {'key': 'sync', 'can': [
+        # Sync now lives on the Assistant tab as well as on each connection card, and this stop's
+        # own goto is the checklist's - so sending the first line anywhere else was a stop arguing
+        # with the button above it
+        _can('pull your mail in and let triage read it', 'Assistant'),
         _can('watch it land on the Timeline', 'Assistant')]},
 
     {'key': 'connections', 'title': 'Connections', 'image': '/walk/connections.png',
@@ -126,17 +128,26 @@ STOPS = [
         _can('search across everything Taskuary has read', 'Hub')]},
 ]
 
-# What THIS install has done, for the stops where a number is worth more than a sentence. Keyed by
-# stop; a stop with no entry simply carries no `facts`.
-FACTS = {
-    'connections': lambda s: (f'{len(_live(s))} connected: ' + ', '.join(_live(s)[:3])) if _live(s) else 'none yet',
-    'tasks': lambda s: f'{len(s.list_tasks())} here so far' if s.list_tasks() else 'none yet',
-}
-
-
 def _live(store) -> list:
     return [c['Name'] or c['Type'] for c in store.list_connectors()
             if c['Active'] and c['Type'] in setup.INBOUND]
+
+
+# One read per fact: each of these used to be a lambda that called its source three times, so
+# drawing a single stop swept the connector table three times over.
+def _fact_connections(s) -> str:
+    live = _live(s)
+    return f'{len(live)} connected: ' + ', '.join(live[:3]) if live else 'none yet'
+
+
+def _fact_tasks(s) -> str:
+    tasks = s.list_tasks()
+    return f'{len(tasks)} here so far' if tasks else 'none yet'
+
+
+# What THIS install has done, for the stops where a number is worth more than a sentence. Keyed by
+# stop; a stop with no entry simply carries no `facts`.
+FACTS = {'connections': _fact_connections, 'tasks': _fact_tasks}
 
 
 def state(store, at=None) -> dict:
@@ -149,7 +160,9 @@ def state(store, at=None) -> dict:
         o = dict(stop, n=n)
         row = steps.get(stop['key'])
         # the checklist owns these words; a copy here would be the second one that goes stale
-        if row: o.update(done=row['done'], detail=row['detail'], blurb=row['why'], title=row['title'])
+        # `goto` is here too: a hand-written copy beside the checklist's is the one field of the
+        # five that could drift without a word of the stop changing
+        if row: o.update(done=row['done'], detail=row['detail'], blurb=row['why'], title=row['title'], goto=row['goto'])
         fact = FACTS.get(stop['key'])
         if fact: o['facts'] = fact(store)
         stops.append(o)

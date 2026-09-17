@@ -31,6 +31,18 @@ class TheStopsTests(unittest.TestCase):
         self.assertEqual(st['total'], len(walk.STOPS))
         self.assertGreaterEqual(st['total'], 14)
 
+    def test_the_first_five_stops_land_where_the_checklist_lands(self):
+        """`goto` is the fifth field the checklist owns. It was the one copied into STOPS by hand,
+        which made the button on a stop and the button on its own checklist row two answers to the
+        same question - identical that day, and nothing keeping them so."""
+        s = _fresh()
+        rows = {x['key']: x['goto'] for x in setup.state(s)['steps']}
+        for stop in walk.state(s)['stops'][:5]:
+            self.assertEqual(stop['goto'], rows[stop['key']], stop['key'])
+        # and STOPS does not carry its own copy to drift back to
+        for stop in walk.STOPS[:5]:
+            self.assertNotIn('goto', stop, stop['key'])
+
     def test_every_stop_says_what_you_can_do_there(self):
         """The point of a stop is the list of real things, not a paragraph about the tab."""
         for stop in walk.state(_fresh())['stops']:

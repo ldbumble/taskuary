@@ -732,6 +732,12 @@ export function WrapupCard({ card, onDone, onOpenTask }) {
 
 // "set something up": your words open a guided Assistant task. It may drive an embedded browser,
 // but no coding session or checkout is involved unless the owner explicitly asks for one later.
+//
+// NOTHING PRODUCES `kind: "setup"` ANY MORE. The "Set up Taskuary" chip was its only caller and it
+// now opens the scripted walk (`kind: "walk"`, WalkCard); the concierge's own `setup` verb renders
+// a proposal. AssistantView still maps the kind, so a card carrying it renders - this is kept
+// against that and against browserWalkthrough.test.mjs, which pins the prose below to prove the
+// walkthrough is not described as coding work. Delete it and that guarantee goes with it.
 export function SetupCard({ card, onNavigate, onHandOff }) {
   const [text, setText] = useState("");
   return (

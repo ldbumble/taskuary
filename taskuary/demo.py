@@ -55,6 +55,9 @@ ALLOWED_WRITES = (
     # the checklist's "leave me alone", and the scripted walk - a tour of the app that touches
     # nothing real, which is what a visitor is here for. Its writes are two settings in the demo's
     # own database, which is what everything else on this list has in common.
+    # /api/setup/adopt-brain is DELIBERATELY not here and must not be added: it picks the triage
+    # brain, and a visitor changing which AI reads the mail is not a tour of the app. The demo has
+    # no CLI to test, so nothing on the visitor's screen can even reach it.
     r'^/api/setup/(dismiss|seen|walk(/reset)?)$',
     r'^/api/terminals/\d+/resize$',
     # the Assistant page: the pipe's own memory and the concierge's turns - the demo's database,

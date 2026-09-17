@@ -982,6 +982,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // Setting Taskuary up: the scripted walk, one stop per message so the conversation keeps the
   // trail. Nothing here reaches a model - a question typed during it is an ordinary turn, answered
   // beside the walk, and Next picks the script back up where it was.
+  // TWO THINGS ARE CALLED "walk" IN THIS FILE. This set - pushStop/setup/walkTo/walking/
+  // walkAdvances - is the SCRIPTED TOUR of the app: static stops, no AI, no task behind it.
+  // `enterWalk`/`setWalk`/`walk` further down is the AI-LED WALK-THROUGH of one task, which opens
+  // GeneralWorkspace on a real session. They share nothing but the word.
   const pushStop = (data) => {
     const stop = (data.stops || [])[data.at];
     if (!stop) return;
@@ -990,19 +994,25 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   };
   const [walking, setWalking] = useState(false);        // guards the chip against a double-click
   const setup = async () => {
+    if (walking) return;
     setWalking(true);
     try { pushStop((await api.get("/api/setup/walk")).data); }
     catch { setMsgs((m) => [...m, { id: `w${Date.now()}`, role: "receipt", text: "The walk could not be loaded." }]); }
     finally { setWalking(false); }
   };
   // -1 is Finish: walking off the end clears the place server-side, so the next press starts over.
+  // The same guard as the chip: Next is a POST, so a double-press moved the place twice and pushed
+  // two stop cards into the conversation.
   const walkTo = async (at) => {
+    if (walking) return;
+    setWalking(true);
     try {
       const { data } = await api.post("/api/setup/walk", { at });
       if (walkAdvances(at, data.total)) pushStop(data);
       else setMsgs((m) => [...m, { id: `w${Date.now()}`, role: "receipt",
         text: "Walk finished — “Set up Taskuary” starts it again any time." }]);
     } catch { /* the card stays where it is; nothing was lost */ }
+    finally { setWalking(false); }
   };
   // The walk's task, fetched once so GeneralWorkspace has the row it needs (it owns everything
   // after that: the session, the provider, the browser beside the thread).

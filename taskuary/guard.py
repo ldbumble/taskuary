@@ -61,6 +61,11 @@ DENIED = (
     (r'POST|PUT|PATCH', r'^/api/settings', 'the settings decide what agents may do'),
     (r'POST|PUT|PATCH|DELETE', r'^/api/(policies|agents)', 'the rules and the agent profiles'),
     (r'POST|PUT|PATCH|DELETE', r'^/api/(docs?|playbooks)(/|$)', 'SOUL.md, the playbooks and the rest are the owner\'s word, not an agent\'s - propose, do not write'),
+    # importing a skill does BOTH of the two above - an agent row and a rules document - through a
+    # prefix neither one covers. GET /api/skills/found is not here: it lists files on this disk that
+    # a session's own shell can already read, and writes nothing.
+    (r'POST', r'^/api/skills/import$', 'importing a skill makes a worker and writes its rules - an agent does not get to hire itself'),
+    (r'POST', r'^/api/skills/read$', 'turning a file on this machine into a proposed worker is the first half of hiring one'),
     (r'POST', r'^/api/update$', 'replacing the program is the owner\'s decision'),
     (r'POST|PUT|PATCH|DELETE', r'^/api/(invoice-batches|reports/\d+/invoice-batches)(/|$)',
      'preparing or changing an invoice batch is the owner\'s decision'),

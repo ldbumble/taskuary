@@ -33,6 +33,15 @@ class DenyListTests(unittest.TestCase):
                              ('GET', '/api/send-targets')):
             self.assertTrue(guard.denied(method, path), f'{method} {path} must be refused')
 
+    def test_importing_a_skill_is_hiring_and_an_agent_may_not(self):
+        """/api/skills/import does exactly what the two rows above forbid - it writes an agent row
+        (upsert_agent) and an operator document (save_doc) - under a third prefix. /read is the half
+        of it that turns a file on this disk into the text a worker would then follow."""
+        for method, path in (('POST', '/api/skills/import'), ('POST', '/api/skills/read')):
+            self.assertTrue(guard.denied(method, path), f'{method} {path} must be refused')
+        self.assertFalse(guard.denied('GET', '/api/skills/found'),
+                         'listing what is installed writes nothing and reads nothing a session cannot')
+
     def test_the_work_an_agent_is_here_to_do_is_untouched(self):
         for method, path in (('GET', '/api/tasks'), ('GET', '/api/feed'),
                              ('POST', '/api/board/notes'),              # the wall

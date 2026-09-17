@@ -58,6 +58,17 @@ class ParsingTests(unittest.TestCase):
         self.assertEqual(len(got), 1)
         self.assertEqual(got[0]['name'], 'nda-triage')
 
+    def test_only_a_file_called_SKILL_md_is_ever_read(self):
+        """Any absolute path used to come back as a proposed worker's body, which made the endpoint
+        in front of read_path an arbitrary local-file read."""
+        with TemporaryDirectory() as td:
+            secret = Path(td) / 'config.toml'
+            secret.write_text('[server]\ntoken = "hunter2"\n', encoding='utf-8')
+            self.assertEqual(skillimport.read_path(str(secret)), [])
+            good = Path(td) / 'SKILL.md'
+            good.write_text(SKILL, encoding='utf-8')
+            self.assertEqual(len(skillimport.read_path(str(good))), 1)
+
     def test_the_connector_manifest_is_never_opened(self):
         """Taskuary's connectors are tested cards behind scopes.py. Importing MCP servers would hand
         a worker a second way out of the building."""

@@ -78,9 +78,13 @@ def _entry(path: Path, plugin: str = '', plugin_desc: str = '', name: str = None
 
 def read_path(p: str) -> list:
     """One entry for a SKILL.md, or one per skill for a plugin folder. `commands/` is not read: a
-    command is a thing invoked by name, which an attached playbook already is."""
+    command is a thing invoked by name, which an attached playbook already is.
+
+    A single file must actually BE named SKILL.md. Accepting any readable path made the endpoint in
+    front of this an arbitrary local-file read - point it at a key, a database or a config file and
+    the contents come back as a proposed worker's body."""
     root = Path(p)
-    if root.is_file(): return [_entry(root)]
+    if root.is_file(): return [_entry(root)] if root.name == 'SKILL.md' else []
     if not root.is_dir(): return []
     pname, pdesc = _plugin_of(root)
     return sorted((_entry(f, pname, pdesc, f.parent.name) for f in root.glob('skills/*/SKILL.md')),

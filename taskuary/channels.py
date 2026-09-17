@@ -1368,9 +1368,15 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
                         conv = m.get('conversationId')
                         fresh_thread = bool(conv) and chains.needs_history(store, conv, s['Address'])
                         # the screenshot IS the ask in a "see below" mail, so it is fetched BEFORE
-                        # triage and handed to it - then saved once the message row exists
+                        # triage and handed to it - then saved once the message row exists.
+                        # ...but only for mail we do not already have. The overlap window is re-read on
+                        # purpose and ingest_message drops a repeat on its first line - with this fetch
+                        # sitting ABOVE that line, every re-read mail pulled its attachments over the wire
+                        # again to discard them: 32.7 MB of P&L spreadsheets on one startup, base64'd to
+                        # ~43 MB, which WAS the catch-up (the owner's mailbox, 2026-09-17). message_exists
+                        # is the same indexed question ingest asks, and costs nothing to ask here first.
                         atts = []
-                        if m.get('hasAttachments'):
+                        if m.get('hasAttachments') and not store.message_exists(f"graph:{m['id']}"):
                             try: atts = mail_attachments(tok, s['Address'], m['id'])
                             except Exception as e: logger.warning(f"attachments for {m['id']} failed: {e}")
                         out = ingest_message(store, file_only=file_only, msg={

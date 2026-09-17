@@ -104,6 +104,44 @@ def poll_transport(s, get, backfill_hours=0):
 def inbox_rows(s): return s._rows("SELECT * FROM message WHERE Channel='email' AND FromEmail='v@vendor.example' ORDER BY MessageId")
 
 
+class AttachmentReReadTests(unittest.TestCase):
+    """The overlap window is re-read on purpose and dedupe drops it on ingest's FIRST line - but
+    the attachment fetch sat above that line, so every re-read mail pulled its attachments across
+    the wire again to throw them away: 32.7 MB of P&L spreadsheets on one startup (the owner's
+    mailbox, 2026-09-17). Bodies (_hydrate's drop) and chain history already ask first; this did not."""
+
+    def _rewind(self, s, sid):
+        s._exec('UPDATE source SET LastPolledAt=? WHERE SourceId=?',
+                ((T0 - timedelta(hours=1)).astimezone().strftime('%Y-%m-%d %H:%M:%S'), sid))
+
+    def test_a_mail_we_already_have_does_not_re_download_its_attachments(self):
+        s, sid = outlook_store()
+        m = {**graph_mail(1, T0), 'hasAttachments': True}
+        fetched = []
+        def atts(tok, upn, gid):
+            fetched.append(gid)
+            return [{'id': 'a1', 'name': 'P&L.xlsx', 'size': 5 << 20, 'contentBytes': 'QUFB',
+                     'contentType': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}]
+        with mock.patch.object(channels, 'mail_attachments', side_effect=atts),              mock.patch.object(channels, 'save_attachments', return_value=0):
+            poll(s, FakeGraph({'inbox': [m]}))
+            self.assertEqual(fetched, ['inbox-1'])       # first sighting pays for them, as it must
+            self._rewind(s, sid)
+            poll(s, FakeGraph({'inbox': [m]}))
+        self.assertEqual(fetched, ['inbox-1'])           # re-read: dedupe drops it, nothing re-downloaded
+        self.assertEqual(len(inbox_rows(s)), 1)          # ...and it is still exactly one message
+
+    def test_a_mail_never_seen_still_fetches_them(self):
+        """The guard must not starve the path it protects: a fresh mail's screenshot IS the ask."""
+        s, sid = outlook_store()
+        first = {**graph_mail(1, T0), 'hasAttachments': True}
+        second = {**graph_mail(2, T0 + timedelta(minutes=1)), 'hasAttachments': True}
+        fetched = []
+        with mock.patch.object(channels, 'mail_attachments', side_effect=lambda tok, upn, gid: fetched.append(gid) or []),              mock.patch.object(channels, 'save_attachments', return_value=0):
+            poll(s, FakeGraph({'inbox': [first, second]}))
+        self.assertEqual(fetched, ['inbox-1', 'inbox-2'])
+
+
+
 class MailMsgsTests(unittest.TestCase):
     def test_repeated_internal_nextlink_fails_after_two_responses_instead_of_looping(self):
         calls = []

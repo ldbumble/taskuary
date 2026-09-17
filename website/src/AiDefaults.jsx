@@ -32,13 +32,18 @@ const Model = ({ slot, onSave }) => {
 // One default = one card. Colour only IDENTIFIES (the sage rule) - the emphasis is
 // typographic, and the line that matters most, "what will actually run", is the loudest thing
 // in the card rather than a caption under two dropdowns.
-const Slot = ({ slot, brains, agents, onSave, onGo }) => {
+const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
   const isAgent = slot.key === "default_agent";
+  // The judge is the one slot that may be pointed at a model which cannot write, so it is the one
+  // picker that shows them. Its own blank row already means "auto" (the report's own brain), so
+  // the brains' auto entry — same empty value — is dropped rather than offered twice.
+  const isJudge = slot.key === "judge_ai";
   const options = isAgent ? (agents || []).map((a) => typeof a === "string"
     ? { value: a, label: a, ready: true }
-    : a) : brains;
+    : a) : isJudge ? [...(judgeOptions || []), ...(brains || []).filter((o) => o.value)] : brains;
   const picked = options.find((o) => o.value === slot.value);
-  const runs = slot.model || slot.default_hint || "the provider default";
+  // the judge names no model of its own, so RUNS is the thing itself rather than "· the provider default"
+  const runs = isJudge ? (slot.default_hint || "") : (slot.model || slot.default_hint || "the provider default");
   return (
     <Box sx={{ ...card, p: 2, mb: 1.5, bgcolor: "#fff" }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.25 }}>
@@ -51,7 +56,7 @@ const Slot = ({ slot, brains, agents, onSave, onGo }) => {
       <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "flex-start" }}>
         <Box>
           <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.4, fontWeight: 700 }}>
-            {isAgent ? "which CLI" : "which brain"}
+            {isAgent ? "which CLI" : isJudge ? "what decides" : "which brain"}
           </Typography>
           <Select size="small" displayEmpty value={picked ? slot.value : ""}
             onChange={(e) => onSave({ value: e.target.value })}
@@ -64,10 +69,14 @@ const Slot = ({ slot, brains, agents, onSave, onGo }) => {
             {!options.length && <MenuItem value="" disabled sx={{ fontSize: 12.5 }}>nothing configured yet</MenuItem>}
           </Select>
         </Box>
-        <Box>
-          <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.4, fontWeight: 700 }}>model</Typography>
-          <Model slot={slot} onSave={onSave} />
-        </Box>
+        {/* four yes/nos do not get better on a bigger model, and this slot owns no model setting
+            to write one to - a box that saved nowhere would be worse than no box */}
+        {!isJudge && (
+          <Box>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.4, fontWeight: 700 }}>model</Typography>
+            <Model slot={slot} onSave={onSave} />
+          </Box>
+        )}
         {/* effort only where the CLI can actually be told one - climodels leaves it empty for
             the CLIs whose flag we cannot spell, and a dead dropdown would imply otherwise */}
         {!!(slot.efforts || []).length && (
@@ -86,7 +95,7 @@ const Slot = ({ slot, brains, agents, onSave, onGo }) => {
         alignItems: "baseline", flexWrap: "wrap" }}>
         <Typography variant="caption" sx={{ color: FAINT, fontWeight: 700 }}>RUNS</Typography>
         <Typography sx={{ ...mono, fontSize: 12.5, color: INK, fontWeight: 700 }}>
-          {picked ? picked.label : "—"}{slot.ready ? ` · ${runs}` : ""}{slot.effort ? ` · ${slot.effort}` : ""}
+          {picked ? picked.label : "—"}{slot.ready && runs ? ` · ${runs}` : ""}{slot.effort ? ` · ${slot.effort}` : ""}
         </Typography>
         {slot.owner && (
           <Typography variant="caption" sx={{ color: FAINT }}>
@@ -155,7 +164,7 @@ export default function AiDefaults({ brains, agents, onGo, onLoaded }) {
       )}
       {state.slots.map((s) => (
         <Slot key={s.key} slot={s} brains={brains} agents={state.agent_options || agents || state.agents || []}
-          onSave={(patch) => save(s, patch)} onGo={onGo} />
+          judgeOptions={state.judge_options || []} onSave={(patch) => save(s, patch)} onGo={onGo} />
       ))}
     </Box>
   );

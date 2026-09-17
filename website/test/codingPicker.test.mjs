@@ -61,6 +61,7 @@ test("Settings defaults and backups offer coding CLIs rather than profile names"
   assert.match(settings, /\["coding", "cli"\]\.includes\(String\(a\.Kind \|\| ""\)\.toLowerCase\(\)\)/);
   assert.match(settings, /label: models\[a\.Name\]\?\.cli \|\| models\[a\.Name\]\?\.cmd \|\| a\.Name/);
   assert.match(settings, /automatic — any other coding CLI/);
-  assert.match(defaults, /\{isAgent \? "which CLI" : "which brain"\}/);
+  // the judge picks a thing that decides rather than a thing that speaks, so it gets its own word
+  assert.match(defaults, /\{isAgent \? "which CLI" : isJudge \? "what decides" : "which brain"\}/);
   assert.match(defaults, /state\.agent_options \|\| agents/);
 });

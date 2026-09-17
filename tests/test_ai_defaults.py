@@ -90,6 +90,62 @@ class ResolveTests(unittest.TestCase):
                          [('coder', 'claude'), ('copilot', 'copilot')])
 
 
+class TheFifthSlotTests(unittest.TestCase):
+    """Where runs go. The other four workers all have to be able to WRITE; this one answers four
+    yes/nos about text somebody else produced, so a decision model belongs here and nowhere else."""
+
+    def _with_jev(self):
+        s = _store()
+        cid = s.get_connector_by_type('typesafe')['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Secret': 'sk-x', 'Active': 1}, 't')
+        return s, cid
+
+    def test_the_fifth_slot_is_where_runs_go_and_it_defaults_to_today(self):
+        st = aidefaults.state(_store(), {})
+        self.assertIn('judge_ai', [x['key'] for x in st['slots']])
+        judge = next(x for x in st['slots'] if x['key'] == 'judge_ai')
+        self.assertEqual(judge['value'], '')                    # blank = the report's own brain
+        self.assertIn('own brain', judge['note'] + judge['desc'])
+        self.assertTrue(judge['ready'])                         # nothing to set up: it already works
+
+    def test_it_carries_no_model_field(self):
+        """The other four pair a brain with a model because the model changes how well the thing
+        writes. This one answers four booleans; the model belongs with the summariser."""
+        self.assertNotIn('model_setting', aidefaults.SLOT['judge_ai'])
+        self.assertEqual(aidefaults.resolve(_store(), {}, 'judge_ai')['model'], '')
+
+    def test_the_decision_model_is_offered_HERE_and_only_here(self):
+        s, cid = self._with_jev()
+        st = aidefaults.state(s, {})
+        self.assertTrue([o for o in st['judge_options'] if str(cid) in str(o.get('value'))],
+                        'the decision model cannot be chosen as the judge')
+        self.assertEqual(st['judge_options'][0]['value'], '')    # the report's own brain leads
+
+    def test_a_card_with_no_key_is_offered_but_not_ready(self):
+        """Same rule as every other picker: you can see it, and it tells you what is missing."""
+        s = _store()
+        cid = s.get_connector_by_type('typesafe')['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Active': 1}, 't')
+        got = next(o for o in aidefaults.state(s, {})['judge_options'] if str(cid) in str(o['value']))
+        self.assertFalse(got['ready'])
+
+    def test_choosing_it_says_what_will_run_and_says_when_it_cannot(self):
+        s, cid = self._with_jev()
+        aidefaults.apply(s, {}, 'judge_ai', f'connector:{cid}')
+        r = aidefaults.resolve(s, {}, 'judge_ai')
+        self.assertTrue(r['ready'])
+        self.assertIn('Jev', r['display'])
+        s.save_connector({'ConnectorId': cid, 'Secret': '', 'Active': 1}, 't')
+        self.assertFalse(aidefaults.resolve(s, {}, 'judge_ai')['ready'])
+
+    def test_an_ordinary_brain_is_still_a_legal_judge(self):
+        """Two settings, because only one of the two jobs needs a model that can write - not
+        because the judge stopped being allowed to be an ordinary brain."""
+        s = _store()
+        s.set_setting('judge_ai', 'cli:coder', 'o')
+        self.assertEqual(aidefaults.resolve(s, {'agents': {'coder': {'cmd': 'claude'}}}, 'judge_ai')['value'], 'cli:coder')
+
+
 class ApplyTests(unittest.TestCase):
     def test_setting_a_cli_brains_model_writes_the_light_model_and_leaves_coding_alone(self):
         s, cfg = _store(), {'agents': {'coder': {'cmd': 'claude', 'model': 'opus'}}}
@@ -139,10 +195,11 @@ class ApplyTests(unittest.TestCase):
 class ApiTests(unittest.TestCase):
     def test_the_endpoint_returns_every_slot_with_its_owner(self):
         j = c.get('/api/ai/defaults').json()
-        # four workers, four rows: the general agent joined on 2026-09-16, because the page that
-        # exists to say what will run was silent about the brain half the board's tasks use
+        # one worker, one row: the general agent joined on 2026-09-16, because the page that exists
+        # to say what will run was silent about the brain half the board's tasks use, and the judge
+        # on 2026-09-17, because where a finished run goes is a fifth thing an AI decides
         self.assertEqual([s['key'] for s in j['slots']],
-                         ['triage_ai', 'default_agent', 'concierge_ai', 'assistant_ai'])
+                         ['triage_ai', 'default_agent', 'concierge_ai', 'assistant_ai', 'judge_ai'])
         for s in j['slots']:
             self.assertTrue(s['label'] and s['desc'] and s['why'])     # every row explains itself
             for k in ('model', 'effort', 'choices', 'efforts', 'owner', 'note'): self.assertIn(k, s)

@@ -47,6 +47,15 @@ SLOTS = [
              'floating bubble and the WhatsApp doorway.',
      'why': 'A CLI here can run tools, drive a browser and post to the wall; an API brain has no shell, '
             'so it can only read and write - quicker, and enough for chat.'},
+    # The fifth worker, and the only one that does not have to be able to write. A report's own
+    # brain writes its summary; this decides where the finished run goes - four yes/nos about text
+    # somebody else produced. They were one setting while both were chat models; they are two now
+    # because a decision model can do the second job and not the first.
+    {'key': 'judge_ai', 'label': 'Where runs go', 'pick': 'judge', 'gear': 'light',
+     'desc': 'Decides whether a finished report lands on your Timeline, your work rail, reaches you '
+             'right away, or goes out - against the sentences you wrote on its card.',
+     'why': 'Four yes/nos about a result somebody else wrote. It does not need to be able to talk, '
+            'so a decision model belongs here and nowhere else.'},
 ]
 SLOT = {s['key']: s for s in SLOTS}
 
@@ -103,6 +112,23 @@ def resolve(store, cfg, slot_key: str) -> dict:
                    ready=bool(name))
         if not name: out['note'] = 'no coding agent configured yet'
         return out
+
+    # the judge: blank has a second meaning here (the report's own brain, which is what this did
+    # before there was a setting), and a decision model is a thing only this slot can be pointed at
+    if s['pick'] == 'judge':
+        if not value:
+            out.update(display="the report's own brain",
+                       note="the report's own brain judges it, which is how this worked before there "
+                            "was a setting")
+            return out
+        row = store.get_connector(int(value[10:])) if value.startswith('connector:') and value[10:].isdigit() else None
+        if row is not None and row['Type'] == 'typesafe':
+            out.update(display=row['Name'] or 'TypeSafe Jev', ready=bool(row['Active'] and row['HasSecret']),
+                       default_hint='jev-latest', owner=f"the {row['Name']} card",
+                       owner_link=f"connector:{row['ConnectorId']}",
+                       note='' if row['Active'] and row['HasSecret'] else 'paste a key on its card first')
+            return out
+        # anything else is an ordinary brain, so it falls through to the brain branches below
 
     # a brain: auto, one AI connector, or one of your CLI agents on its light gear
     if value.startswith('cli:'):
@@ -163,7 +189,22 @@ def state(store, cfg) -> dict:
     agents = [a['Name'] for a in store.list_agents()]
     preferred = [str(store.get_settings().get('default_agent') or 'coder')]
     return {'slots': [resolve(store, cfg, s['key']) for s in SLOTS], 'agents': agents,
+            'judge_options': judge_options(store),
             'agent_options': hub_agents.cli_agent_options(store, preferred=preferred, coding_only=True)}
+
+
+def judge_options(store) -> list:
+    """What the judge picker offers ON TOP OF the ordinary brains: blank, meaning the report's own
+    brain, and the decision models - which are offered HERE AND NOWHERE ELSE, because they cannot
+    answer a prompt and would leave any other slot with nothing to say.
+
+    The brains themselves are not repeated here: the page already has /api/brains and its values
+    are the ones `llm.build_llm` accepts, so a second builder is a second thing to keep in step."""
+    out = [{'value': '', 'label': "the report's own brain", 'kind': 'auto', 'ready': True}]
+    out += [{'value': f"connector:{c['ConnectorId']}", 'kind': 'decision', 'ready': bool(c['HasSecret']),
+             'label': f"{c['Name'] or 'TypeSafe Jev'} — decisions only, no text"}
+            for c in store.list_connectors() if c['Type'] == 'typesafe' and c['Active']]
+    return out
 
 
 def _brain_key(cfg, store, name: str) -> str:

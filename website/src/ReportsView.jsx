@@ -915,7 +915,15 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
   useEffect(() => { api.get("/api/send-targets").then(({ data }) => setTargets(data.data || [])).catch(() => {}); }, []);
   // switching one of these blocks on should leave a config that works: the first live channel,
   // addressed to your own notify chat - not an empty box beside a channel you never connected
-  const firstDest = () => ({ channel: targets[0]?.channel || "email", to: targets[0]?.to?.[0]?.to || "" });
+  // YOURS by default, not whatever chat spoke most recently. send_targets marks the chat Taskuary
+  // talks to you in (`mine`), and sorts it first; taking targets[0].to[0] blindly is how an alert on
+  // report #140 addressed itself to the WhatsApp group the report READS, and posted there every run
+  // once the alert started firing (the owner, 2026-09-17: "default should be the assistant channel").
+  const firstDest = () => {
+    const ch = targets.find((t) => t.to?.some((x) => x.mine)) || targets[0];
+    const to = ch?.to?.find((x) => x.mine) || ch?.to?.[0];
+    return { channel: ch?.channel || "email", to: to?.to || "" };
+  };
   const mssqlConn = connectors.find((c) => c.Type === "mssql");
   const mssqlOk = mssqlConn?.LastSyncAt && !mssqlConn?.LastError;
   const winrmConn = connectors.find((c) => c.Type === "winrm");

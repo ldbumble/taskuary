@@ -1,0 +1,69 @@
+"""A chat Taskuary READS is not a chat Taskuary writes to.
+
+Report #140 "Assistant for Backend Monitoring" was posting its alert into the WhatsApp group it
+takes its messages from. Nobody chose that: `send_targets` offered every input source as a
+destination ("a chat you already take messages from"), sorted the list by most recent activity - so
+a busy input group is always first and the owner's own chat, which has no timestamp, is always last
+- and flipping on "AND ALSO TELL ME ON" called firstDest(), which took the first one.
+
+It sat harmless for months because the alert block was DEAD for Assistant-sourced reports; when
+06447455 made it fire, the first thing it did was post into the group (the owner, 2026-09-17: "it
+should never send to input channels ... default should be the assistant channel").
+
+The loop that looks like it follows - our own message read back in as a question - never happened:
+the bridge stamps Taskuary's own sends and poll_whatsapp discards them before either interceptor.
+"""
+import json
+
+import pytest
+
+from taskuary import outbound, reports
+from taskuary.store import MemoryStore
+
+
+@pytest.fixture
+def store():
+    s = MemoryStore()
+    s.save_connector({'Type': 'whatsapp', 'Name': 'WhatsApp', 'Active': 1,
+                      'ConfigJson': json.dumps({'assistant_chat': '15551234567@s.whatsapp.net'})}, 'test')
+    s.save_source({'Channel': 'whatsapp', 'Address': '120363407840479752@g.us', 'Active': 1,
+                   'Owner': 'test', 'ConfigJson': '{}'}, 'test')
+    return s
+
+
+def test_a_source_chat_is_an_inbox(store):
+    assert outbound.input_chats(store)['whatsapp'] == {'120363407840479752@g.us'}
+
+
+def test_an_email_source_is_not_an_inbox_in_this_sense(store):
+    """Mailing yourself is an ordinary thing a report does - "Automation ideas" does it today."""
+    store.save_source({'Channel': 'email', 'Address': 'unussbaum@example.com', 'Active': 1,
+                       'Owner': 'test', 'ConfigJson': '{}'}, 'test')
+    assert 'email' not in outbound.input_chats(store)
+
+
+def test_the_group_it_reads_is_refused_as_a_destination(store):
+    why = outbound.refuse_input_chat(store, 'whatsapp', '120363407840479752@g.us')
+    assert 'inbox, not a destination' in why
+
+
+def test_the_owners_own_chat_is_not_refused(store):
+    assert outbound.refuse_input_chat(store, 'whatsapp', '15551234567@s.whatsapp.net') == ''
+
+
+def test_an_alert_addressed_at_an_inbox_does_not_send_and_says_why(store):
+    """At the DOOR, not only in the picker: #140 already holds the old address."""
+    cfg = {'title': 'Assistant for Backend Monitoring',
+           'alert': {'channel': 'whatsapp', 'to': '120363407840479752@g.us'}}
+    src = {'SourceId': 140, 'Address': 'Assistant for Backend Monitoring'}
+    with pytest.raises(RuntimeError, match='it is an inbox, not a destination'):
+        reports.send_alert(store, src, cfg, '1 came back', 'head', 'body')
+
+
+def test_nothing_was_filed_for_the_refused_alert(store):
+    """A send that never happened must not leave a receipt saying it did."""
+    cfg = {'title': 'x', 'alert': {'channel': 'whatsapp', 'to': '120363407840479752@g.us'}}
+    before = len(store.scan_messages())
+    with pytest.raises(RuntimeError):
+        reports.send_alert(store, {'SourceId': 140, 'Address': 'x'}, cfg, 'why', 'head', 'body')
+    assert len(store.scan_messages()) == before

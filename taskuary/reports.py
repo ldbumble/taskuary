@@ -1751,6 +1751,14 @@ def send_alert(store, src: dict, cfg: dict, why: str, head: str, body: str) -> d
     a = cfg.get('alert') or {}
     to = a['to'] if isinstance(a.get('to'), list) else [x.strip() for x in str(a.get('to') or '').split(',') if x.strip()]
     title = cfg.get('title') or src['Address']
+    # AN INBOX IS NOT A DESTINATION, checked at the door rather than only in the picker. A report
+    # addressed before the picker knew better still holds the old chat, and goes on posting into it
+    # every run - #140 "Assistant for Backend Monitoring" was alerting into the WhatsApp group it
+    # reads (the owner, 2026-09-17: "it should never send to input channels"). Delivery is not
+    # guarded here: it waits in Review, so a person chose to send that one.
+    from . import outbound
+    refuse = outbound.refuse_input_chat(store, a.get('channel') or 'whatsapp', to)
+    if refuse: raise RuntimeError(f'the alert was not sent: {refuse}. Point it at your own chat under Reports.')
     subj = (a.get('subject') or f'{title} — {why}').strip()
     note = str(a.get('note') or '').strip()
     text = '\n\n'.join(x for x in [f'{title}: {why}.', note, f'{head}', str(body or '')[:1500]] if x)

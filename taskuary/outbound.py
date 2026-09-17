@@ -376,6 +376,39 @@ def _chat_id(channel: str, cid) -> str:
     return cid[len(channel) + 1:] if cid.lower().startswith(f'{channel}:') else cid
 
 
+def input_chats(store) -> dict:
+    """{channel: {address}} for every chat this install READS - and therefore must never write to.
+
+    A source is an inbox. Offering one as a destination made "Assistant for Backend Monitoring" post
+    its alert into the group it takes messages from, because nobody chose that address: the picker
+    defaulted to the most recently active chat and a busy input group is always that (the owner,
+    2026-09-17: "it should never send to input channels").
+
+    EMAIL IS EXEMPT. An email source is the owner's own mailbox, and mailing yourself is an ordinary
+    thing a report does - one of them is doing it today. Only chat channels are inboxes in this sense.
+    """
+    out = {}
+    for src in store.list_sources():
+        ch = str(src.get('Channel') or '').strip().lower()
+        to = str(src.get('Address') or '').strip()
+        if not ch or not to or ch == 'email' or ch in MAILBOXES: continue
+        out.setdefault(ch, set()).add(to)
+    return out
+
+
+def refuse_input_chat(store, channel: str, to) -> str:
+    """Why this send must not happen, or '' if it may. Enforced at the DOOR, not only in the picker:
+    a report configured before the picker knew better still holds the old address, and would go on
+    posting into that group every run (report #140 did)."""
+    ch = str(channel or '').strip().lower()
+    reading = input_chats(store).get(ch) or set()
+    if not reading: return ''
+    tos = to if isinstance(to, (list, tuple, set)) else [x.strip() for x in str(to or '').split(',') if x.strip()]
+    bad = [x for x in tos if str(x).strip() in reading]
+    return (f"{', '.join(bad)} is a chat Taskuary READS on {ch} - it is an inbox, not a destination"
+            if bad else '')
+
+
 def send_targets(store) -> list:
     """[{'channel', 'to': [{'to', 'name', 'hint'}]}] - every destination known on every
     channel a report can go out on. Destinations with message history are newest first;
@@ -384,10 +417,15 @@ def send_targets(store) -> list:
     from .channels import _cfg
     seen = {ch: {} for ch in send_channels(store)}
 
-    def add(ch, to, name='', hint='', last=''):
+    reading = input_chats(store)
+
+    def add(ch, to, name='', hint='', last='', mine=False):
         to = str(to or '').strip()
         if not to or ch not in seen: return
-        r = seen[ch].setdefault(to, {'to': to, 'name': '', 'hint': '', '_last': ''})
+        # an inbox is not a destination, however much traffic it has seen
+        if to in (reading.get(ch) or set()): return
+        r = seen[ch].setdefault(to, {'to': to, 'name': '', 'hint': '', 'mine': False, '_last': ''})
+        if mine: r['mine'] = True
         if name and not r['name']: r['name'] = name
         if last and str(last) >= r['_last']:
             r['_last'] = str(last)
@@ -399,10 +437,11 @@ def send_targets(store) -> list:
         if not c['Active']: continue
         ch = 'email' if c['Type'] in MAILBOXES else c['Type']
         cfg = _cfg(c)
-        add(ch, cfg.get('notify_chat'), f'you — your own {ch}', f"the notify chat on the {c['Name']} card")
-        if ch == 'email': add(ch, cfg.get('address'), f"you — {cfg.get('address')}", f"the mailbox on the {c['Name']} card")
-    for s in store.list_sources():
-        add((s.get('Channel') or '').lower(), s.get('Address'), '', 'a chat you already take messages from')
+        # YOURS, and marked as such. The builder defaults to this rather than to whatever chat
+        # spoke most recently, which is how an alert addressed itself to an input group.
+        add(ch, cfg.get('assistant_chat') or cfg.get('notify_chat'), f'you — your own {ch}',
+            f"the chat Taskuary talks to you in, on the {c['Name']} card", mine=True)
+        if ch == 'email': add(ch, cfg.get('address'), f"you — {cfg.get('address')}", f"the mailbox on the {c['Name']} card", mine=True)
     # WhatsApp's paired account knows about reachable chats that have never entered Taskuary:
     # notably groups excluded by the inbound source filter. They still belong in compose. A
     # stopped/old bridge must not take the saved conversation list down with it.

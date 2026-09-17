@@ -95,13 +95,33 @@ class WhichDestinationsTests(unittest.TestCase):
         (tg,) = outbound.send_targets(s)
         self.assertEqual(tg['to'], [])
 
-    def test_a_chat_taskuary_takes_messages_from_is_offered_with_the_name_it_knows(self):
+    def test_a_chat_taskuary_takes_messages_from_is_not_a_destination(self):
+        """An inbox is not somewhere to write to.
+
+        It used to be offered, with the hint "a chat you already take messages from" - and because
+        the list is ordered by recent activity, a busy input group was always the first thing the
+        builder's default reached for. That is how report #140 came to post its alert into the
+        WhatsApp group it reads, every run (the owner, 2026-09-17: "it should never send to input
+        channels"). Its message history does not buy it back in: reading a room is what disqualifies
+        it, not how quiet it is.
+        """
         s = MemoryStore()
         cid = _conn(s, 'telegram')
         s.save_source({'Channel': 'telegram', 'Address': '778899', 'ConnectorId': cid, 'Active': 1}, 't')
         _chat(s, 'telegram', 'telegram:778899', 'Night shift')
         (tg,) = outbound.send_targets(s)
-        self.assertEqual([(t['to'], t['name']) for t in tg['to']], [('778899', 'Night shift')])
+        self.assertEqual([t['to'] for t in tg['to']], [])
+
+    def test_your_own_chat_is_marked_as_yours_so_the_default_can_find_it(self):
+        """The builder defaults to `mine` rather than to targets[0], which was whatever chat spoke
+        most recently. The ORDER is left alone - most recent first is right for browsing."""
+        s = MemoryStore()
+        _conn(s, 'whatsapp', cfg={'assistant_chat': '15551230000@s.whatsapp.net'})
+        _chat(s, 'whatsapp', 'whatsapp:15559999999@s.whatsapp.net', 'Dana')
+        (wa,) = outbound.send_targets(s)
+        mine = [t for t in wa['to'] if t['mine']]
+        self.assertEqual([t['to'] for t in mine], ['15551230000@s.whatsapp.net'])
+        self.assertFalse(next(t for t in wa['to'] if t['to'].startswith('15559999999'))['mine'])
 
     def test_destinations_are_ordered_by_most_recent_use(self):
         s = MemoryStore()

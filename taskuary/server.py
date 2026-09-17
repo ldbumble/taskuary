@@ -5537,7 +5537,7 @@ def quick_forever():
                 quick = _quick_due()
                 if quick: _poll_on_quick_clock(quick)
         except Exception as e:
-            logger.warning(f'chat poll failed: {e}')
+            logger.exception(f'chat poll failed: {e}')
         time.sleep(QUICK_TICK)
 
 
@@ -5566,7 +5566,7 @@ def _poll_on_quick_clock(types):
     def one(typ):
         _QUICK_TIMER.active = True
         try: _poll_reports(0, what='syncing', only=[typ])
-        except Exception as e: logger.warning(f'chat poll failed ({typ}): {e}')
+        except Exception as e: logger.exception(f'chat poll failed ({typ}): {e}')   # with the traceback: 'unhashable type: dict' twice, and no line to go to
         finally: _QUICK_TIMER.active = False
     threads = [threading.Thread(target=one, args=(t,), name=f'quick-{t}', daemon=True) for t in dict.fromkeys(types)]
     for th in threads: th.start()
@@ -5728,7 +5728,7 @@ def _poll_quick(only, what: str = 'syncing', wait: bool = False, timer: bool = F
                         except Exception as e: logger.warning(f'retriage notice failed: {e}')
                     ticket = _drain_worker(target_store).submit(fresh=fresh_channels, only_fresh=True)
                 except Exception as e:
-                    logger.warning(f"chat poll failed ({', '.join(types)}): {e}")
+                    logger.exception(f"chat poll failed ({', '.join(types)}): {e}")
                 finally:
                     now = time.time()
                     for t in types:

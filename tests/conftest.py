@@ -157,6 +157,19 @@ def no_background_lifespan_overlap():
         assert done.wait(15), 'P0-ISOLATION: a test server lifespan survived its test'
 
 
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_teardown(item):
+    """A Next answer asks the provider on a thread AFTER it is out (server._refresh_after, design C). A
+    test that closes its store while that thread is still reading it crashes the interpreter - SQLite
+    under a closing connection segfaulted the Ubuntu jobs on 2026-09-17 - and a thread that outlives
+    its test reads the NEXT test's store. So the threads are waited for here, before any fixture of the
+    test tears down: a hookwrapper runs ahead of the finalizers, which an autouse fixture cannot (it is
+    set up first, so it is torn down last)."""
+    srv = sys.modules.get('taskuary.server')
+    if srv is not None and hasattr(srv, 'wait_refresh_after'): srv.wait_refresh_after(10)
+    yield
+
+
 # The owner token is minted on first run now (guard.ensure_tokens), so every request the suite makes
 # has to carry it, exactly as the browser's does. Defaulting it HERE, once, means the 73 TestClients
 # in these files go THROUGH the new gate instead of around it; a test about the gate itself passes

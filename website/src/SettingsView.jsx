@@ -177,7 +177,7 @@ const KNOB_META = {
     desc: "Reply to a tagged ping to answer that live agent, approve a draft, reject it, or write the reply yourself.",
     help: "On: when a live coding agent stops or asks, its chat ping carries a [tqN] tag. Reply to that ping and your words go straight into that exact agent session. Pending-reply pings carry the DRAFT and an [rvN] tag: 'approve' sends the draft, 'reject' / 'no reply' land those verdicts, and ANY OTHER TEXT is sent instead of the draft. Confirmations come back into the chat.\n\nNeeds a Telegram or WhatsApp connector with the NOTIFY role and its notify chat set — and the connector polled (trigger or feed role on). Answers and verdicts are intercepted before triage, so they never become new work. Quoting the [tqN] ping is required for agent answers because several agents may be waiting at once.\n\nOff (default): pings stay read-only." },
   phone_assistant: { group: "Assistant on your phone", label: "Chat with the assistant in WhatsApp or Telegram", type: "switch",
-    desc: "Message the assistant from your private chat any time — the same walk, the same conversation as the tab.",
+    desc: "The default for a channel that has never been asked. Each channel above answers for itself once you set it.",
     help: "Name the Assistant chat on the WhatsApp or Telegram card under Connections first. Taskuary then listens only to messages you send in that exact private chat. Other people, other chats and groups cannot command it. This is separate from the Notifications role, so the Assistant chat is not subscribed to ordinary Taskuary alerts.\n\nIt is the SAME walk the Assistant tab runs, on the same conversation and the same pipe: the item on the table stays where it was, a reply you ask for is drafted, and a yes sends it. The choices arrive as words because a chat has no buttons.\n\nThis switch is the standing permission. The Assistant tab's own \"in WhatsApp\" button hands the walk over for a session whether or not it is on, and locks the tab while the walk is there.\n\nBecause answers can contain private workspace information, use a chat only you can read — WhatsApp's Message yourself, or your own private chat with the Telegram bot. Off (default) leaves your messages ignored as before." },
 
   // ── Attachments & images ──
@@ -240,12 +240,11 @@ const KNOB_META = {
 
    Only chats you are ALONE in are offered, and that is enforced again on the way in
    (remote_assistant.use_chat) - the picker is a convenience, not the guard. */
-const PhoneDoorways = ({ settings, onSet, onLoaded }) => {
+const PhoneDoorways = ({ onLoaded }) => {
   const [rows, setRows] = useState(null);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");     // could not READ the channels
   const [wErr, setWErr] = useState("");   // could not WRITE a choice
-  const standing = (settings.find((x) => x.Name === "phone_assistant") || {}).Value === "1";
   // A REQUEST THAT FAILED IS NOT AN EMPTY ANSWER. Catching the error into an empty list made a
   // 404 - the app still running the Python from before this shipped - read as "you have no WhatsApp
   // or Telegram connection", which is a lie about the owner's own setup, and the one thing a
@@ -267,7 +266,12 @@ const PhoneDoorways = ({ settings, onSet, onLoaded }) => {
     catch (e) { setWErr(e?.response?.data?.detail || "could not set that chat"); }
     setBusy("");
   };
-  const connected = (rows || []).filter((r) => r.chat);
+  const listen = async (channel, how) => {
+    setBusy(channel); setWErr("");
+    try { await api.post("/api/assistant/doorways/listens", { channel, listens: how }); await load(); }
+    catch (e) { setWErr(e?.response?.data?.detail || "could not change that"); }
+    setBusy("");
+  };
   return (
     <Box sx={{ mb: 2 }}>
       {(rows || []).map((r) => {
@@ -306,6 +310,23 @@ const PhoneDoorways = ({ settings, onSet, onLoaded }) => {
                 </>
               )}
             </Box>
+            {/* WHEN, asked of this channel. The answer differs by channel - your own phone is not
+                your bot - so a single switch under both rows was answering for both at once. */}
+            {r.live && r.chat && (
+              <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", mt: 1, ml: { sm: 12.5 }, flexWrap: "wrap" }}>
+                <Select size="small" value={r.listens || "walk"} disabled={busy === r.channel}
+                  sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 260 }}
+                  onChange={(e) => listen(r.channel, e.target.value)}>
+                  <MenuItem value="always" sx={{ fontSize: 12 }}>listens any time you message it</MenuItem>
+                  <MenuItem value="walk" sx={{ fontSize: 12 }}>listens only while a walk is handed over</MenuItem>
+                </Select>
+                <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 200 }}>
+                  {r.listens === "always"
+                    ? "Anything you type there runs the same walk the Assistant tab runs — and may include private mail, tasks, reviews and agent output."
+                    : "Quiet until you hand a walk over from the Assistant tab. The hand-over works either way."}
+                </Typography>
+              </Box>
+            )}
           </Box>
         );
       })}
@@ -318,23 +339,6 @@ const PhoneDoorways = ({ settings, onSet, onLoaded }) => {
         </Typography>
       )}
       {rows === null && !err && <Typography variant="body2" sx={{ color: FAINT, py: 2 }}>reading your channels…</Typography>}
-      {/* the standing permission, which is the OTHER half of the question and used to live a tab away */}
-      <Box sx={{ display: "flex", gap: 3, alignItems: "center", py: 2.5, borderBottom: `1px solid ${BORDER}`,
-        opacity: connected.length || err ? 1 : 0.5 }}>
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5 }}>Listen any time I message it</Typography>
-          <Typography variant="body2" sx={{ color: DIM, mt: 0.25 }}>
-            {connected.length
-              ? (standing
-                ? "Anything you type there runs the same walk the Assistant tab runs — and may include private mail, tasks, reviews and agent output."
-                : "It stays quiet until you hand a walk over to it from the Assistant tab. The hand-over works either way.")
-              : err ? "The switch still works; the list above is what could not be read."
-                : "Connect a chat above first."}
-          </Typography>
-        </Box>
-        <Switch checked={standing} disabled={!connected.length && !err}
-          onChange={(e) => onSet("phone_assistant", e.target.checked ? "1" : "0")} />
-      </Box>
       <Typography variant="body2" sx={{ color: FAINT, mt: 2 }}>
         Only chats you are alone in are offered. A group can never command the assistant, and an answer
         about your mail must not land where other people are reading. This is separate from the
@@ -705,7 +709,7 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
         {cfgTab === "Triage & agents" && <AiDefaults brains={brainOptions} agents={agentOptions} onGo={goFromPanel} onLoaded={setPanelOk} />}
         {cfgTab === "Notifications" && <NotifyStatus connectors={connectors} settings={settings} />}
         {cfgTab === "Assistant on your phone" && (
-          <PhoneDoorways settings={settings} onSet={saveSetting} onLoaded={setPanelOk} />
+          <PhoneDoorways onLoaded={setPanelOk} />
         )}
         {rows.map((s) => {
           const m = meta(s.Name);

@@ -89,6 +89,35 @@ def own_thread(store, connector, row, configured: str = '') -> bool:
     return int(people) <= 1
 
 
+LISTEN = ('always', 'walk')      # any time you message it | only while a walk is handed over
+
+
+def listens(store, connector) -> str:
+    """When this channel may listen: 'always', or 'walk' - only while a walk is handed to it.
+
+    PER CHANNEL, because the answer differs by channel: WhatsApp is the owner's own phone and they
+    may want it always; a Telegram bot they may want only during a hand-over (the owner, 2026-09-17:
+    "the listen any time should be per system?"). A global switch under two per-channel rows reads
+    as though it belonged to both equally.
+
+    `phone_assistant` remains the default for a channel that has never been asked, so nothing
+    changes for a setup made before this: one switch, still meaning what it meant.
+    """
+    how = str(_config(connector).get('assistant_listen') or '').strip().lower()
+    if how in LISTEN: return how
+    return 'always' if store.get_settings().get('phone_assistant') == '1' else 'walk'
+
+
+def set_listens(store, channel: str, how: str) -> dict:
+    """Say when that channel may listen. Written on the card, so the two channels can differ."""
+    how = str(how or '').strip().lower()
+    if how not in LISTEN: raise ValueError(f'unknown listening rule {how!r} - one of {", ".join(LISTEN)}')
+    c = next((x for x in (store.connectors_by_type(channel, with_secret=True) or []) if x and x.get('Active')), None)
+    if not c: raise ValueError(f'no {channel} connection is switched on')
+    store.set_connector_config(c['ConnectorId'], {**_config(c), 'assistant_listen': how})
+    return {'channel': channel, 'listens': how}
+
+
 def candidates(store, connector) -> list:
     """The chats on this connector that the assistant could be given, newest first.
 
@@ -136,7 +165,8 @@ def doorway_state(store) -> list:
             if not c: continue
             out.append({'channel': channel, 'connectorId': c.get('ConnectorId'),
                         'name': c.get('Name') or channel, 'live': bool(c.get('Active')),
-                        'chat': chat_of(c), 'options': candidates(store, c) if c.get('Active') else []})
+                        'chat': chat_of(c), 'listens': listens(store, c),
+                        'options': candidates(store, c) if c.get('Active') else []})
     return out
 
 
@@ -198,7 +228,8 @@ def enabled(store, channel: str, chat: str, connector=None) -> bool:
     c = connector_for_chat(store, channel, chat, connector)
     if c is None or not is_private(store, c, chat): return False
     h = handoff(store)
-    return (store.get_settings().get('phone_assistant') == '1'
+    # this channel's own standing permission, not one switch for every channel at once
+    return (listens(store, c) == 'always'
             or bool(h and h['channel'] == channel and h.get('chat') == str(chat).strip()))
 
 
@@ -208,7 +239,7 @@ def polls(store, connector) -> bool:
     ch = (connector or {}).get('Type')
     if ch not in CHANNELS or not chat_of(connector): return False
     h = handoff(store)
-    return store.get_settings().get('phone_assistant') == '1' or bool(h and h['channel'] == ch)
+    return listens(store, connector) == 'always' or bool(h and h['channel'] == ch)
 
 
 def start_handoff(store, channel: str, actor: str = 'owner') -> dict:

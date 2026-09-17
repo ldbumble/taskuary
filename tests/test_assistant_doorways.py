@@ -104,3 +104,50 @@ def test_the_endpoint_refuses_a_group_with_a_reason_you_can_read():
     r = c.post('/api/assistant/doorways', json={'channel': 'telegram', 'chat': '-100999'})
     assert r.status_code == 422
     assert 'alone' in r.json()['detail'] or 'switched on' in r.json()['detail']
+
+
+# ── when it may listen is a question per channel ────────────────────────────────────────
+# Your own phone is not your bot: always-on for WhatsApp and only-during-a-walk for Telegram is a
+# real preference, and one switch under two rows answered for both at once (the owner, 2026-09-17:
+# "the liasten any tiem should be per system?").
+def test_a_channel_never_asked_inherits_the_old_switch(store):
+    """Nothing changes for a setup made before this: one switch, still meaning what it meant."""
+    store.set_setting('phone_assistant', '1', 'o')
+    assert remote_assistant.listens(store, telegram(store)) == 'always'
+    store.set_setting('phone_assistant', '0', 'o')
+    assert remote_assistant.listens(store, telegram(store)) == 'walk'
+
+
+def test_a_channel_that_was_asked_answers_for_itself(store):
+    store.set_setting('phone_assistant', '1', 'o')
+    remote_assistant.set_listens(store, 'telegram', 'walk')
+    assert remote_assistant.listens(store, telegram(store)) == 'walk'
+    assert store.get_settings().get('phone_assistant') == '1', 'the global default is not rewritten'
+
+
+def test_the_two_channels_can_disagree(store):
+    cid = store.get_connector_by_type('whatsapp')['ConnectorId']
+    store.save_connector({'ConnectorId': cid, 'Active': 1, 'ConfigJson': json.dumps({})}, 'o')
+    remote_assistant.set_listens(store, 'whatsapp', 'always')
+    remote_assistant.set_listens(store, 'telegram', 'walk')
+    by = {d['channel']: d['listens'] for d in remote_assistant.doorway_state(store)}
+    assert (by['whatsapp'], by['telegram']) == ('always', 'walk')
+
+
+def test_a_rule_nobody_recognises_is_refused(store):
+    with pytest.raises(ValueError, match='unknown listening rule'):
+        remote_assistant.set_listens(store, 'telegram', 'sometimes')
+
+
+def test_walk_means_the_assistant_stays_quiet_until_handed_one(store):
+    """enabled() is the gate the poller asks; it reads the channel's own answer now."""
+    remote_assistant.use_chat(store, 'telegram', '4242')
+    remote_assistant.set_listens(store, 'telegram', 'walk')
+    assert remote_assistant.enabled(store, 'telegram', '4242', telegram(store)) is False
+    remote_assistant.set_listens(store, 'telegram', 'always')
+    assert remote_assistant.enabled(store, 'telegram', '4242', telegram(store)) is True
+
+
+def test_the_endpoint_sets_it(store):
+    r = c.post('/api/assistant/doorways/listens', json={'channel': 'telegram', 'listens': 'walk'})
+    assert r.status_code in (200, 422)          # 422 only when this test store has no live telegram

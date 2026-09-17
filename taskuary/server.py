@@ -6438,11 +6438,22 @@ class DoorwayBody(BaseModel):
     channel: str
     chat: str = ''
 
+class ListensBody(BaseModel):
+    channel: str
+    listens: str
+
 @app.post('/api/assistant/doorways')
 def set_assistant_doorway(body: DoorwayBody):
     """Give the assistant a chat on that channel, or '' to take it back."""
     from . import remote_assistant
     try: return remote_assistant.use_chat(store, body.channel, body.chat)
+    except ValueError as e: raise HTTPException(422, str(e))
+
+@app.post('/api/assistant/doorways/listens')
+def set_assistant_listens(body: ListensBody):
+    """When that channel may listen: any time, or only while a walk is handed to it."""
+    from . import remote_assistant
+    try: return remote_assistant.set_listens(store, body.channel, body.listens)
     except ValueError as e: raise HTTPException(422, str(e))
 
 @app.get('/api/ai/defaults')

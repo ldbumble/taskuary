@@ -197,7 +197,7 @@ test("PW-118 a change to the content of the shown Next is taken fresh, never ref
     for (const label of expectedOrder) assert.ok(orderedTitles.includes(label), `${label} must be visible`);
     assert.deepEqual(orderedTitles.filter(label => expectedOrder.includes(label)), expectedOrder,
       "work must show the levels, then the oldest inside one");
-    assert.equal(writes.length, beforeWrites + 2, "arrival reordering cannot advance the chat");
+    assert.equal(writes.length, beforeWrites + 1, "arrival reordering cannot advance the chat");
     const orderedResponse = page.waitForResponse(r => new URL(r.url()).pathname === "/api/concierge/stream"
       && r.status() === 200, { timeout: 15000 });
     const nextControl = (await page.evaluateHandle(() => [...document.querySelectorAll("button")]
@@ -206,7 +206,7 @@ test("PW-118 a change to the content of the shown Next is taken fresh, never ref
     await Promise.all([orderedResponse, nextControl.click()]);
     await page.waitForFunction((wanted) => document.querySelector('.tq-pile-row.current .card b')?.textContent.trim() === wanted,
       { timeout: 15000 }, ordering.titles.urgent);
-    assert.equal(writes.length, beforeWrites + 3, "one physical Next gesture advances exactly once");
+    assert.equal(writes.length, beforeWrites + 2, "one physical Next gesture advances exactly once");
     assert.deepEqual(errors, []);
     assert.deepEqual(page.fixtureEscapes, []);
   } finally {

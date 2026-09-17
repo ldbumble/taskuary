@@ -2,7 +2,7 @@
 // open beside it - these six are read against each other, so hiding five behind a landing
 // grid cost a round trip every time you wanted to compare two.
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, TextField, Typography } from "@mui/material";
 import AutoStoriesIcon from "@mui/icons-material/AutoStories";
 import HistoryEduIcon from "@mui/icons-material/HistoryEdu";
 import PsychologyIcon from "@mui/icons-material/Psychology";
@@ -17,7 +17,8 @@ import LearnedView from "./LearnedView.jsx";
 import { AgentsPage } from "./AgentsPanel.jsx";
 import SoulInterview from "./SoulInterview.jsx";
 import NewPlaybookDialog from "./NewPlaybookDialog.jsx";
-import { FAINT, INK, mono } from "./theme.jsx";
+import SkillImport from "./SkillImport.jsx";
+import { FAINT, INK, ROLES, mono } from "./theme.jsx";
 import { TaskuaryMark } from "./ui.jsx";
 
 const DOCS = {
@@ -72,6 +73,13 @@ const isPb = (n) => n.startsWith("pb:");
 const isProf = (n) => n.startsWith("prof:");
 const profName = (n) => n.slice(5);
 const PROF_BLURB = "Instructions for the workers listed under this profile, added to AGENT.md for each task. Define how they work and what they deliver. Workers using different CLIs can share these instructions. Blank the document to restore its starter version.";
+// A row is a rules DOCUMENT, and several agents can share one (every coding worker shares `coder`) -
+// so "on the roster" can mean all, none, or some of that row's members. An imported skill is 1:1, so
+// its chip is never ambiguous; a shared shipped document says the split rather than picking a side,
+// because collapsing "3 of 5 coders route" to either word would misstate the other members.
+const rosterChip = (pr) => (pr.onRoster === 0 ? "not routed"
+  : pr.onRoster === pr.members.length ? "on the roster"
+  : `on the roster (${pr.onRoster}/${pr.members.length})`);
 const pbSlug = (n) => n.slice(3);
 const PB_BLURB = "How THIS company does one kind of job, for the agent that will do it: when it starts, which connections it uses, the steps, what it may do alone, what to ask first, and what counts as done. Triage matches new messages against `when`; the connector cards list the playbooks that name them.";
 
@@ -137,6 +145,7 @@ const OwnerCard = () => {
 export default function DocsView() {
   const [manageProfiles, setManageProfiles] = useState(false);
   const [createProfile, setCreateProfile] = useState(false);
+  const [importSkills, setImportSkills] = useState(false);
   const [docName, setDocName] = useState(NAMES[0]);
   const [section, setSection] = useState("documents");
   const [docs, setDocs] = useState(Object.fromEntries(NAMES.map((n) => [n, ""])));
@@ -199,8 +208,10 @@ export default function DocsView() {
         const kind = prof.kind || r.Kind || "coding";
         const name = r.rules_doc || prof.rules_doc || (kind === "coding" ? "coder" : r.Name);
         if (!grouped.has(name)) grouped.set(name, { name, purpose: r.purpose || prof.purpose ||
-          (kind === "coding" ? "Write, review and test code in a repository." : ""), members: [] });
-        grouped.get(name).members.push(r.Name);
+          (kind === "coding" ? "Write, review and test code in a repository." : ""), members: [], onRoster: 0 });
+        const g = grouped.get(name);
+        g.members.push(r.Name);
+        if (prof.triage_enabled !== false) g.onRoster += 1;   // config default is ON unless a save said otherwise
       }
       const profiles = [...grouped.values()];
       setProfs(profiles);
@@ -372,6 +383,7 @@ export default function DocsView() {
             <Box sx={{ display: "flex", gap: 0.5, mb: 1 }}>
               <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => { setCreateProfile(true); setManageProfiles(true); }}>Add profile</Button>
               <Button size="small" onClick={() => { setCreateProfile(false); setManageProfiles(true); }}>Manage profiles</Button>
+              <Button size="small" onClick={() => setImportSkills(true)}>Import skills</Button>
             </Box>
             <Typography sx={{ fontSize: 11.5, color: FAINT, mb: 1.5 }}>
               The workers. Triage picks one per task and its session is seeded with that worker’s rules.
@@ -391,6 +403,9 @@ export default function DocsView() {
                   <Typography noWrap sx={{ ...mono, fontSize: 12, fontWeight: 600, color: INK, flex: 1, minWidth: 0 }}>
                     {pr.name.toUpperCase()}.md
                   </Typography>
+                  {/* quiet chip, not a colour wash - it identifies a state, it does not tint the row */}
+                  <Chip size="small" variant="outlined" label={rosterChip(pr)}
+                    sx={pr.onRoster === 0 ? { color: ROLES.muted.ink, borderColor: ROLES.muted.bd } : undefined} />
                   {`prof:${pr.name}` === docName && (
                     <Box component="span" sx={{ px: 0.7, height: 17, display: "inline-flex", alignItems: "center",
                       borderRadius: 1.25, bgcolor: "#55697a", color: "#fff", fontSize: 9.5, fontWeight: 700 }}>open</Box>
@@ -574,6 +589,7 @@ export default function DocsView() {
         }} />
     </Box>
     )}
+    {importSkills && <SkillImport onClose={() => setImportSkills(false)} onImported={loadProfs} />}
     {newPlaybook && <NewPlaybookDialog {...newPlaybook}
       onClose={() => { setNewPlaybook(null); loadBooks(); }}
       onManual={() => { openPb("new", newPlaybook.connectorType); setNewPlaybook(null); }} />}

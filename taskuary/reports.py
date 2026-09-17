@@ -1045,7 +1045,7 @@ def render_report(store, cfg: dict, llm=None):
             if len(summary) > AI_CHARS: data += '\n…(data truncated here - later rows were NOT shown to you)'
             charts = str(store.get_settings().get('report_images_enabled') or '1') == '1'
             ai = (llm(report_system(store, cfg, charts),
-                      f"Instruction: {cfg['ai_prompt']}{VERDICT_CONTRACT}\n\nData ({head}):\n{data}",
+                      f"Instruction: {cfg['ai_prompt']}{contract_for(cfg)}\n\nData ({head}):\n{data}",
                       max_tokens=SUMMARY_TOKENS) or '').strip()
             # an empty answer used to file as a bare '--- raw data ---' wall, which reads
             # like the prompt was never run. Say what happened instead.
@@ -1343,14 +1343,15 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
                             watch_source_ids=watched_ids, watch_sources=watched_sources,
                             systems_only=bool(watched_ids or watched_sources),
                             report_id=src.get('SourceId'), report_title=title,
-                            always_post=reach_of(cfg) == 'always')
+                            always_post=route_of(cfg, 'timeline')[0] == 'always' if routed(cfg) else reach_of(cfg) == 'always')
         # THE PUSH REACHES THIS KIND TOO. Everything below - delivery, the alert, the whole tail -
         # sits after this early return, so the "tell me when it looks wrong" panel was dead for
         # every Assistant-sourced check: the owner filled it in and nothing ever read it
         # (2026-09-17). A check that found something is exactly what a phone is for.
         said = int(out.get('said') or 0)
         lines = '\n'.join(str((l or {}).get('text') or '') for l in (out.get('lines') or []))
-        speak, why = reaches(cfg, title, lines, failed=False, found=said)
+        d = decide(cfg, read_result(title, lines, False, said), report_llm(store, cfg, llm))
+        speak, why = d['alert'], d['why']
         if speak and str((cfg.get('alert') or {}).get('to') or '').strip():
             try: send_alert(store, src, cfg, why or f'{said} thing(s) to look at', f'{title} - {said} line(s)', lines)
             except Exception as e: logger.warning(f'alert for {title} failed: {e}')
@@ -1371,8 +1372,8 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
     # something the reader should ever see. A quiet run is not a lost one - it is in the run
     # history with what it read, which is where "it ran and found nothing" belongs.
     res = read_result(subject.split('—', 1)[-1].strip(), strip_directive(body), failed)
-    speak, said_why = rule_fires(reach_of(cfg), cfg.get('alert') or {}, res)
-    send, _ = delivers(cfg, res)
+    d = decide(cfg, res, report_llm(store, cfg, llm))
+    speak, said_why, send = d['timeline'] or d['work'], d['why'], d['send']
     body = verdict_of(body)[2]
     if not speak:
         # quiet for the OWNER is not quiet for the recipients: a report that goes somewhere still
@@ -1384,7 +1385,12 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
             err = _deliver(store, src, cfg, title, subject, strip_directive(body), mid=None)
             if err: out['deliver_error'] = err
         return out
-    if cfg.get('triage') and not failed:
+    # A FAILED RUN IS WORK when the card says so. The old switch refused to triage a failure - it
+    # had no sentence to judge one against, so every failure came out fyi - and a monitor that could
+    # not run then filed itself as news, which is the quietest possible way to break. `decide` fires
+    # every line but `never` on a failure; a report set up before the card keeps the old refusal
+    # (_decided_by_the_old_rules), so nothing already running starts making tasks out of outages.
+    if d['work']:
         # the report is a MESSAGE like any other: triage reads it under TRIAGE.md, and a task is what
         # TRIAGE.md says - so an agent's research report can hand its findings to the coding agent.
         # A failed run is never work; it files with its error like before.
@@ -1399,7 +1405,7 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
                                          'subject': subject, 'body': strip_directive(body), 'from_name': title,
                                          'conversation_id': f'report:{src["SourceId"]}', 'sent_at': stamp,
                                          'source_link': cfg.get('link'), 'source_name': title,
-                                         'watch_for': str(cfg.get('watch_for') or '').strip() or None}, llm=llm)
+                                         'watch_for': work_brief(cfg) or None}, llm=llm)
         mid = out.get('message_id')
         if not mid:
             mid = store.add_message({'TaskId': None, 'ExternalId': f'report:{src["SourceId"]}:{stamp}:feed', 'ConversationId': f'report:{src["SourceId"]}',
@@ -1412,7 +1418,8 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
                                  'SentAt': stamp, 'BodyText': strip_directive(body),
                                  'SourceLink': cfg.get('link'), 'Status': 'feed'})
         store.add_route(mid, None, 'feed', None,
-                        'scheduled report - informational, never a task' + ('' if not cfg.get('triage') else ' (this run failed, so it was not triaged)'), [], 'report')
+                        'scheduled report - informational, never a task'
+                        + (' (this run failed, so it was not triaged)' if failed and cfg.get('triage') else ''), [], 'report')
     # ...and the run this one replaces stops waiting for the owner (expire_previous_runs)
     expire_previous_runs(store, src, cfg, mid)
     # the rows are the report: hand back the spreadsheet to open and the chart to look at, not
@@ -1434,10 +1441,9 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
     # an alarm that quietly could not reach you is the worst of both worlds.
     if cfg.get('alert', {}).get('to'):
         try:
-            # the reach rule already judged this run; a second reading of the same result is how the
-            # two of them come to disagree. On `always` there is no rule to name, so the run itself is the reason.
-            why = said_why or ('the report ran' if reach_of(cfg) == 'always' else '')
-            if why: send_alert(store, src, cfg, why, subject, strip_directive(body))
+            # the run was judged ONCE, above; a second reading of the same result is how the phone
+            # and the Timeline come to disagree. With no rule to name, the run itself is the reason.
+            if d['alert']: send_alert(store, src, cfg, said_why or 'the report ran', subject, strip_directive(body))
         except Exception as e:
             logger.warning(f'alert for {title} failed: {e}')
             store.add_route(mid, None, 'feed', None, f'the report ran; its alert could not be sent: {str(e)[:200]}',
@@ -1553,6 +1559,138 @@ def deliver_how(cfg: dict) -> str:
 def delivers(cfg: dict, res: dict) -> tuple:
     """(does this run leave the building, in what words), on the deliver block's own rule."""
     return rule_fires(deliver_how(cfg), cfg.get('deliver') or {}, res)
+
+
+# ── ...or the AI decides all of it, which is a prompt and not a condition ────────────────
+# You cannot write an `if` against prose you have not seen. The conditions above tried anyway:
+# `contains` matched substrings in an LLM's wording, `fewer_than` compared LINES of a summary, and
+# a model that skipped the VERDICT line fell through to counting non-blank lines - which turned
+# "only when something is wrong" into "every run" without ever saying so.
+#
+# So the model that can read the result answers where the run goes, one line per destination,
+# against sentences the owner wrote on the card (2026-09-17: "make the UI clear that it's ai
+# deciding it, so it's a prompt on the report for routing"). Code compares yes to no, which is
+# always one of two things.
+#
+# Three stages, each optional and each feeding the next: the rows always run, a prompt over them
+# is the summary, and the judge exists only because a line asked for it. A straight report with
+# everything on `every run` costs no model call at all, and a plain SQL report with no prompt of
+# its own can still have an AI rule - the judge reads the rows.
+ROUTE = ('always', 'ai', 'never')
+LINES = ('timeline', 'work', 'alert', 'send')
+# What a line nobody set means. A report you set up is work you wanted done, so it lands on the
+# Timeline AND on the work rail every run unless you say otherwise (the owner, 2026-09-17: "default
+# should be on timeline/work rail every run"). Delivery has always gone out every run, and a setting
+# nobody chose must never be why recipients stop getting their report. Only the interruption stays
+# off until it is asked for: nothing Taskuary was not told to shout about gets to shout.
+LINE_DEFAULT = {'timeline': 'always', 'send': 'always', 'work': 'always', 'alert': 'never'}
+# ...and what each line is, in the words the judge is given. `alert` is NOT "the phone": it goes to
+# whichever live channel the owner picked, which is as often email as it is WhatsApp (2026-09-17:
+# "why does this say phone if it can go to email?"). What makes it an alert is that it is immediate
+# and skips Review, not the device it lands on.
+LINE_SAYS = {'timeline': "post it on the owner's timeline as news to read",
+             'work': "put it on the owner's work rail, as something they have to do",
+             'alert': "reach the owner right away, on whichever channel they chose",
+             'send': 'send the report out to the people it is addressed to'}
+JUDGE_TOKENS = 300                # four yes/nos and a sentence each - nothing to think about at length
+
+
+def routed(cfg: dict) -> bool:
+    """Does this report route itself with the card, or with the rules that predate it? Every report
+    that exists predates it, and not one of them may change behaviour."""
+    r = cfg.get('route')
+    return isinstance(r, dict) and any(str((r.get(l) or {}).get('how') or '').strip().lower() in ROUTE for l in LINES)
+
+
+def route_of(cfg: dict, line: str) -> tuple:
+    """(how, the sentence) for one destination. A line asking the AI with nothing to judge by is a
+    question the model cannot answer, so it means the line is simply on."""
+    r = (cfg.get('route') or {}).get(line) or {}
+    how, when = str(r.get('how') or '').strip().lower(), str(r.get('when') or '').strip()
+    if how not in ROUTE: how = LINE_DEFAULT[line]
+    return ('always' if how == 'ai' and not when else how), when
+
+
+def asks_ai(cfg: dict) -> bool: return any(route_of(cfg, l)[0] == 'ai' for l in LINES)
+
+
+def work_brief(cfg: dict) -> str:
+    """The report's standing brief for triage - why it exists and what would count as off
+    (classify_intent's `watch`). The work line's own sentence is exactly that, so a routed report
+    says it once instead of twice; `watch_for` is where it used to live."""
+    return (route_of(cfg, 'work')[1] if routed(cfg) else '') or str(cfg.get('watch_for') or '').strip()
+
+
+JUDGE_SYSTEM = (
+    'A scheduled report has just run. Decide where its result goes. You are not summarizing it and '
+    'nobody reads what you write here except as one short reason on a row.\n\n'
+    'Answer EVERY question below, one per line, in exactly this form:\n'
+    'NAME: yes|no - one short sentence saying why\n\n'
+    'Judge only what the run actually came back with. If it does not say a thing, that thing did not '
+    'happen. Write nothing else - no preamble, no summary, no closing line.\n\nThe questions:\n')
+
+
+def judge_prompt(cfg: dict) -> str:
+    """The questions this report's judge is asked - the same text the card shows under `see the
+    prompt`, because a rule you cannot read is a rule you cannot trust."""
+    return '\n'.join(f'{l.upper()}: yes|no — {LINE_SAYS[l]}, but only if: {w}'
+                     for l in LINES for h, w in [route_of(cfg, l)] if h == 'ai')
+
+
+_FLAG = re.compile(r'^[ \t>*_\-]*(TIMELINE|WORK|ALERT|SEND)\s*:\s*(yes|no)\b[ \t:.\-—]*(.*)$', re.I | re.M)
+
+
+def judge_run(cfg: dict, res: dict, llm) -> dict:
+    """Ask this report's own brain where the run goes: {line: bool} for the lines it was asked
+    about, plus the sentence it gave.
+
+    A line it did not answer - or a judge that would not run at all - is a run nobody judged, and
+    an unjudged run REACHES the owner. The rule this replaces failed the other way, and a monitor
+    that silently stops speaking is worse than one that speaks too often.
+    """
+    ask = [l for l in LINES if route_of(cfg, l)[0] == 'ai']
+    unjudged = dict({l: True for l in ask}, why='the AI was asked where this run goes and did not judge it')
+    if not llm: return unjudged
+    try:
+        out = llm(JUDGE_SYSTEM + judge_prompt(cfg),
+                  f"What the run came back with:\n\n{res['head']}\n\n{res['body']}"[:AI_CHARS],
+                  max_tokens=JUDGE_TOKENS) or ''
+    except Exception as e:
+        logger.warning(f'the routing judge failed, so the run reaches the owner: {e}')
+        return unjudged
+    said = {m.group(1).lower(): (m.group(2).lower() == 'yes', m.group(3).strip()) for m in _FLAG.finditer(out)}
+    if any(l not in said for l in ask):
+        logger.warning(f'the routing judge answered {sorted(said) or "nothing"} of {sorted(ask)}')
+        return unjudged
+    return dict({l: said[l][0] for l in ask}, why=next((said[l][1] for l in ask if said[l][0]), ''))
+
+
+def decide(cfg: dict, res: dict, llm=None) -> dict:
+    """Where this run goes: one bool per destination and the sentence that says why.
+
+    ONE reading of one result for the Timeline, the work rail, the phone and the post out alike -
+    two readings of the same run is how they come to disagree (06447455).
+    """
+    if not routed(cfg): return _decided_by_the_old_rules(cfg, res)
+    how = {l: route_of(cfg, l)[0] for l in LINES}
+    # a failed run has nothing to judge and is not a clear one - but `never` is still never: a line
+    # the owner switched off does not come back on because the report broke.
+    if res['failed']: return dict({l: how[l] != 'never' for l in LINES}, why='the report failed to run')
+    said = judge_run(cfg, res, llm) if 'ai' in how.values() else {}
+    return dict({l: said.get(l, how[l] == 'always') for l in LINES}, why=str(said.get('why') or ''))
+
+
+def _decided_by_the_old_rules(cfg: dict, res: dict) -> dict:
+    """`reach` for the owner, the deliver block for the recipients, the `triage` switch for work."""
+    speak, why = rule_fires(reach_of(cfg), cfg.get('alert') or {}, res)
+    return {'timeline': speak, 'alert': speak, 'send': delivers(cfg, res)[0],
+            'work': bool(speak and cfg.get('triage') and not res['failed']), 'why': why}
+
+
+def contract_for(cfg: dict) -> str:
+    """The VERDICT line exists only because code had to read prose it could not understand. A
+    routed report has a judge that reads it properly, so its prompt stays the owner's own."""
+    return '' if routed(cfg) else VERDICT_CONTRACT
 
 
 def result_count(head: str, body: str) -> int:

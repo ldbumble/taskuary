@@ -70,6 +70,65 @@ def test_grouping_is_unchanged_by_the_trim(store):
     assert len(items) == 1, 'one thread, one item - as before'
 
 
+# --- rows, not just columns: mail the app will never show ---
+
+
+def _skipped(store, ext='flood1'):
+    return store.add_message({'TaskId': None, 'ExternalId': ext, 'Channel': 'email',
+                              'Subject': 'nightly log', 'BodyText': 'x', 'FromEmail': 'logs@example.net',
+                              'SentAt': '2026-09-17 06:00:00', 'Status': 'skipped'})
+
+
+def test_flood_mail_is_never_given_an_identity(store):
+    """A skip policy's mail is stored so dedupe recognises it and is hidden from every surface. It
+    has no task, groups with nothing, and merges with nothing - so it needs no durable item. It was
+    5,631 of 8,065 items on the owner's database (2026-09-17), all of them re-derived every pass."""
+    mid = _skipped(store)
+    kept = store.add_message({'TaskId': None, 'ExternalId': 'real1', 'Channel': 'email',
+                              'Subject': 'a real one', 'SentAt': '2026-09-17 06:01:00', 'Status': 'routed'})
+    store.reconcile_processing_membership()
+    live = {r[0] for r in store.cx.execute(
+        "SELECT LocalId FROM processing_member WHERE EntityKind='message' AND RetiredAt IS NULL")}
+    assert str(mid) not in live, 'flood mail must not get a processing item'
+    assert str(kept) in live, '...and everything else still does'
+
+
+def test_the_pile_does_not_go_degraded_over_mail_it_never_shows(store):
+    """The trap: `uncatalogued` counts every message with no member row, and compact_inventory
+    REFUSES while any is non-zero. Leaving flood mail out of the census without leaving it out of
+    that count turns the whole Timeline degraded, permanently."""
+    _skipped(store)
+    store.reconcile_processing_membership()
+    snap = store.processing_inventory_snapshot(fixed_now='2026-09-17T07:00:00', display_only=True,
+                                               live_state=[], history_days=14)
+    assert snap['coverage']['uncatalogued']['message'] == 0
+
+
+def test_mail_that_stops_being_skipped_is_grouped_on_the_next_pass(store):
+    """Nothing re-statuses flood mail today, but the exclusion must not be a one-way door: the
+    status change is a write, so the next census simply finds it qualifying."""
+    mid = _skipped(store)
+    store.reconcile_processing_membership()
+    store.cx.execute("UPDATE message SET Status='routed' WHERE MessageId=?", (mid,))
+    store.cx.commit()
+    store.reconcile_processing_membership()
+    live = {r[0] for r in store.cx.execute(
+        "SELECT LocalId FROM processing_member WHERE EntityKind='message' AND RetiredAt IS NULL")}
+    assert str(mid) in live
+
+
+def test_an_attachment_on_flood_mail_is_not_reported_as_dangling(store):
+    """Its message is ungrouped on purpose, which is not the same as its message being GONE - the
+    real dangling case still has to report."""
+    mid = _skipped(store)
+    store.add_attachment({'MessageId': mid, 'Name': 'log.txt', 'ContentType': 'text/plain', 'Size': 9})
+    store.add_attachment({'MessageId': 999999, 'Name': 'orphan.txt', 'ContentType': 'text/plain', 'Size': 9})
+    result = store.reconcile_processing_membership()
+    codes = [(d.get('code'), d.get('detail', {}).get('message_id')) for d in result['diagnostics']]
+    assert ('dangling_attachment_message', str(mid)) not in codes
+    assert ('dangling_attachment_message', '999999') in codes, 'a truly orphaned one still reports'
+
+
 # --- the warning, kept executable so it argues back ---
 
 UNREAD_BY_THE_CENSUS = ('route', 'funnel_state', 'comment', 'task_artifact', 'transcript')

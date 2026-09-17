@@ -2101,6 +2101,16 @@ def _propose_raw(store, dock_tid: int, kind: str, target: int, params: dict, lab
     return {**op, 'verb': 'setup', 'label': label, 'summary': summary, 'settles': False, 'key': None, 'ref': None, 'tid': None, 'say': text}
 
 
+def _routing_words(cfg: dict) -> str:
+    """Where this report's runs go, in the words the card uses - the AI decides a line only where
+    the owner wrote a sentence for it to judge (reports.route_of)."""
+    from .reports import LINES, route_of, routed
+    if not routed(cfg): return 'triage reads it' if cfg.get('triage') else 'informational - filed on the Timeline, not triaged'
+    said = [f'{l}: {"every run" if h == "always" else "never" if h == "never" else f"the AI decides - {w}"}'
+            for l in LINES for h, w in [route_of(cfg, l)]]
+    return '; '.join(said)
+
+
 def _schedule_words(cfg: dict) -> str:
     from . import reports
     return reports.schedule_words(cfg)
@@ -2113,7 +2123,7 @@ def report_facts(cfg: dict) -> dict:
     return {'title': str(cfg.get('title') or ''), 'source': src, 'inputs': _cut(str(cfg.get('query') or cfg.get('object') or cfg.get('url') or cfg.get('path') or cfg.get('prompt') or ''), 160),
             'summary_instructions': _cut(str(cfg.get('ai_prompt') or ''), 160) or 'none - the raw result is filed',
             'schedule': _schedule_words(cfg) + (f" ({cfg['tz']})" if cfg.get('tz') else ''),
-            'enabled': 'yes - it runs on its schedule once created', 'triage': 'triage reads it' if cfg.get('triage') else 'informational - filed on the Timeline, not triaged',
+            'enabled': 'yes - it runs on its schedule once created', 'triage': _routing_words(cfg),
             'delivery': str((cfg.get('deliver') or {}).get('to') or '') or 'the Timeline only'}
 
 

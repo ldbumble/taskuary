@@ -3701,6 +3701,26 @@ def prepare_invoice_batch(bid: int):
     except KeyError as e: raise HTTPException(404, str(e))
     except Exception as e: raise HTTPException(422, str(e)[:500])
 
+@app.post('/api/reports/{sid}/replay')
+def report_replay(sid: int, body: dict = None, limit: int = 5):
+    """What the card's routing WOULD have done to the runs already in the history.
+
+    A rule you have never seen fire is a rule you cannot trust, and waiting for tomorrow's run to
+    find out the AI reads your sentence differently is not a way to set one up (2026-09-17). Same
+    judge, same prompt, on results that already happened - nothing is posted, sent or filed.
+    """
+    from .reports import asks_ai, decide, judge_prompt, read_result, report_llm
+    if not store.get_source(sid): raise HTTPException(404, 'report not found')
+    cfg = body or {}
+    llm = report_llm(store, cfg, _llm()) if asks_ai(cfg) else None
+    out = []
+    for r in store.report_runs(sid, min(max(1, limit), 20)):
+        whole = store.get_report_run(r['runId']) or r
+        text = str(whole.get('summary') or '') or '\n'.join(str((l or {}).get('text') or '') for l in (whole.get('lines') or []))
+        res = read_result(str(r.get('subject') or '').split('—', 1)[-1].strip(), text, bool(r.get('failed')), r.get('said'))
+        out.append({'runId': r['runId'], 'at': r['at'], **decide(cfg, res, llm)})
+    return {'data': out, 'asksAi': asks_ai(cfg), 'prompt': judge_prompt(cfg)}
+
 @app.get('/api/reports/runs/{rid}')
 def report_run(rid: int):
     r = store.get_report_run(rid)

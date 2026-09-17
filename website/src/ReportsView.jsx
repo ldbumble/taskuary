@@ -278,6 +278,77 @@ const CONDITIONS = [
   { v: "failed", rows: "the report failed to run", prose: "the check failed to run" },
 ];
 
+// ── WHERE A RUN GOES, which is a prompt and not a condition ────────────────────────────
+// The same reading the server does (reports.routed / route_of). You cannot write an `if` against
+// prose you have not seen, so the model that read the result answers where it goes - one line per
+// destination, against a sentence the owner wrote (2026-09-17: "make the UI clear that it's ai
+// deciding it, so it's a prompt on the report for routing").
+export const ROUTE_LINES = ["timeline", "work", "alert", "send"];
+const ROUTE_HOW = ["always", "ai", "never"];
+// What a line nobody set means: a report you set up is work you wanted done, so it lands on the
+// Timeline AND the work rail every run until you say otherwise (2026-09-17: "default should be on
+// timeline/work rail every run"). Only the interruption stays off until it is asked for.
+const LINE_DEFAULT = { timeline: "always", send: "always", work: "always", alert: "never" };
+// `alert` is not "the phone" - it goes to whichever live channel you picked, as often email as
+// WhatsApp (2026-09-17: "why does this say phone if it can go to email?"). What makes it an alert
+// is that it goes the moment the run lands and skips Review, not the device it arrives on.
+export const LINE_SAYS = {
+  timeline: ["post it on my Timeline", "news to read — it does not wait for me"],
+  work: ["put it on my Work rail", "something I have to deal with"],
+  alert: ["reach me right away", "the moment it lands, with no Review step"],
+  send: ["send it out", "to the people it is addressed to"],
+};
+// ...and what the model is literally asked, word for word as reports.LINE_SAYS and judge_prompt
+// build it. `see the prompt` showing a paraphrase of the real prompt would be worse than showing
+// nothing: a rule you cannot read is a rule you cannot trust.
+const PROMPT_SAYS = {
+  timeline: "post it on the owner's timeline as news to read",
+  work: "put it on the owner's work rail, as something they have to do",
+  alert: "reach the owner right away, on whichever channel they chose",
+  send: "send the report out to the people it is addressed to",
+};
+export const judgePrompt = (c, lines = ROUTE_LINES) => lines
+  .filter((l) => routeOf(c, l)[0] === "ai")
+  .map((l) => `${l.toUpperCase()}: yes|no — ${PROMPT_SAYS[l]}, but only if: ${routeOf(c, l)[1]}`)
+  .join("\n");
+// ...and the short name a replayed run wears, so that reading down the strip the DIFFERENCE
+// between two runs is what stands out, not the same sentence four times
+const LINE_CHIP = { timeline: "Timeline", work: "Work rail", alert: "reached you", send: "sent out" };
+export const isRouted = (c) => ROUTE_LINES.some((l) => ROUTE_HOW.includes(c?.route?.[l]?.how));
+export const routeOf = (c, line) => {
+  const r = (c?.route || {})[line] || {}, when = (r.when || "").trim();
+  const how = ROUTE_HOW.includes(r.how) ? r.how : LINE_DEFAULT[line];
+  // a line asking the AI with nothing to judge by is a question the model cannot answer
+  return [how === "ai" && !when ? "always" : how, when];
+};
+export const asksAi = (c) => ROUTE_LINES.some((l) => routeOf(c, l)[0] === "ai");
+
+// The old rules, said as sentences, so that converting a report that predates this card does not
+// silently change what any of its lines meant. The owner can then edit them like any other.
+const asSentence = (a) => ({
+  something_came_back: "anything at all came back",
+  nothing_came_back: "nothing came back",
+  fewer_than: `fewer than ${a?.count ?? 0} things came back`,
+  more_than: `more than ${a?.count ?? 0} things came back`,
+  contains: `the result mentions "${(a?.text || "").trim()}"`,
+  missing: `the result never mentions "${(a?.text || "").trim()}"`,
+  failed: "the report failed to run",
+}[a?.when] || "something in it is wrong, or needs me");
+export const seedRoute = (c) => {
+  const from = (how, cond) => (how === "always" ? { how: "always" }
+    : { how: "ai", when: how === "wrong" ? "something in it is wrong, or needs me" : asSentence(cond) });
+  return {
+    timeline: from(reachOf(c), c?.alert),
+    // ...and the work rail follows the DEFAULT, not the old `triage` switch. That switch was off on
+    // every report that exists - it needed a sentence nobody had been asked for - so inheriting it
+    // would mean "every report you already have stays news forever", which is the opposite of what
+    // the card is for (2026-09-17: "default should be on timeline/work rail every run").
+    work: (c?.watch_for || "").trim() ? { how: "ai", when: c.watch_for.trim() } : { how: "always" },
+    alert: c?.alert?.to ? from(reachOf(c), c?.alert) : { how: "never" },
+    send: c?.deliver?.to ? from(deliverSendOf(c), c?.deliver) : { how: "always" },
+  };
+};
+
 export default function ReportsView() {
   const [sources, setSources] = useState(null);
   const [types, setTypes] = useState([]);
@@ -668,6 +739,161 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
   );
 }
 
+/* WHERE EACH RUN GOES. One card, in the same grammar as the prompt card above it, because it IS a
+   prompt: the model that read the result answers a yes/no per destination against sentences the
+   owner wrote. It replaces three separate judgements of one run - "when should this reach you"
+   (a three-way switch plus a row-shaped condition), "move it up in the pipe if" (a sentence) and
+   delivery's own copy of the same three words - which used a different vocabulary each and could
+   disagree about the same result.
+
+   The conditions they replace could not do this job: `contains` matched substrings in an LLM's
+   wording, `fewer_than` compared LINES of a summary, and a model that skipped the VERDICT line
+   fell through to counting non-blank lines - so "only when something is wrong" quietly became
+   "every run" (reports.rule_fires, 06447455).
+
+   `never` is not offered on the Timeline unless the report has somewhere else to go: a report that
+   reaches nobody at all is not a setting, it is a report that does nothing. */
+function RoutingCard({ cfg, setCfg, targets, brains, firstDest, sourceId }) {
+  const [replay, setReplay] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [showPrompt, setShowPrompt] = useState(false);
+  const routed = isRouted(cfg);
+  // WHAT THE CONTROL SHOWS IS WHAT YOU PICKED, not what the rule currently evaluates to. routeOf
+  // answers "what will this run do", and an `ask the AI` line with no sentence yet does what it
+  // did before - so reading the control off it made picking `ask the AI` snap back to `every run`
+  // and the sentence box could never appear. And an unconverted report shows the sentences its old
+  // rules already mean (seedRoute), so the card never claims it does something else.
+  const view = routed ? (cfg.route || {}) : seedRoute(cfg);
+  const shownAs = (line) => {
+    const r = view[line] || {};
+    return [ROUTE_HOW.includes(r.how) ? r.how : LINE_DEFAULT[line], (r.when || "").trim()];
+  };
+  // an unconverted report keeps answering to the rules it was set up with; the moment a line is
+  // touched, ALL of them are written down as sentences that mean the same thing (seedRoute)
+  const set = (line, patch) => setCfg({ ...cfg, route: { ...(routed ? cfg.route : seedRoute(cfg)), [line]: { ...(routed ? cfg.route?.[line] : seedRoute(cfg)[line]), ...patch } } });
+  const shown = ROUTE_LINES.filter((l) => l !== "send" || cfg.deliver?.to);
+  const ask = shown.some((l) => shownAs(l)[0] === "ai");
+  const canSilenceTimeline = !!cfg.deliver?.to;
+  const runReplay = async () => {
+    setBusy(true);
+    try {
+      const body = routed ? cfg : { ...cfg, route: seedRoute(cfg) };
+      setReplay((await api.post(`/api/reports/${sourceId}/replay`, body)).data);
+    } catch (e) { setReplay({ error: e?.response?.data?.detail || "the last runs could not be replayed" }); }
+    setBusy(false);
+  };
+  return (
+    <Box sx={{ mt: 2, ...card, p: 1.5, maxWidth: 720, bgcolor: "#fffdf7", borderColor: "#d8cfbe" }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.25 }}>
+        <AutoAwesomeIcon sx={{ fontSize: 15, color: "#55697a" }} />
+        <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 700, flex: 1 }}>ONE PROMPT THAT ROUTES EACH RUN</Typography>
+      </Box>
+      {shown.map((line) => {
+        const [how, when] = shownAs(line);
+        const [label, hint] = LINE_SAYS[line];
+        return (
+          <Box key={line} sx={{ mt: 1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
+            <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+              <Box sx={{ flex: 1, minWidth: 180 }}>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>{label}</Typography>
+                <Typography variant="caption" sx={{ color: FAINT }}>{hint}</Typography>
+              </Box>
+              <Select size="small" value={how} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 150 }}
+                onChange={(e) => set(line, { how: e.target.value, ...(e.target.value === "ai" && !when ? { when: "" } : {}) })}>
+                <MenuItem value="always" sx={{ fontSize: 12 }}>every run</MenuItem>
+                <MenuItem value="ai" sx={{ fontSize: 12 }}>ask the AI</MenuItem>
+                <MenuItem value="never" sx={{ fontSize: 12 }} disabled={line === "timeline" && !canSilenceTimeline}>
+                  {line === "timeline" && !canSilenceTimeline ? "never — needs a destination under “Send it somewhere”" : "never"}</MenuItem>
+              </Select>
+            </Box>
+            {how === "ai" && (
+              <TextField fullWidth multiline minRows={1} size="small" sx={{ bgcolor: "#fff", mt: 0.8, "& .MuiInputBase-root": { fontSize: 13 } }}
+                placeholder={line === "work" ? "any error at all, or a job that did not run when it should have"
+                  : line === "alert" ? "a job has not run in over two hours"
+                    : "anything happened that is worth my knowing about"}
+                value={when} onChange={(e) => set(line, { when: e.target.value })} />
+            )}
+            {how === "ai" && !when && (
+              <Typography variant="caption" sx={{ color: "#8c6d3b", display: "block", mt: 0.5 }}>
+                Say what to look for — until you do, this line happens on every run.
+              </Typography>
+            )}
+            {line === "timeline" && how === "never" && (
+              <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
+                This report is for whoever it is sent to, not for you. Turning “Send it somewhere” off puts it back on your Timeline.
+              </Typography>
+            )}
+            {line === "alert" && how !== "never" && (
+              <Box sx={{ display: "flex", gap: 1, mt: 0.8, flexWrap: "wrap" }}>
+                <Destination dest={cfg.alert?.to ? cfg.alert : { ...firstDest() }} targets={targets}
+                  onChange={(d) => setCfg({ ...cfg, alert: { ...(cfg.alert || {}), ...firstDest(), ...d } })} />
+                <TextField size="small" sx={{ bgcolor: "#fff", flex: 1, minWidth: 180 }} label="what to say (optional)"
+                  value={cfg.alert?.note || ""} onChange={(e) => setCfg({ ...cfg, alert: { ...(cfg.alert || {}), note: e.target.value } })} />
+              </Box>
+            )}
+          </Box>
+        );
+      })}
+      {/* A judge nobody chose a brain for is the report's own brain - the same setting the summary
+          above uses (reports.report_llm), not a second one that could quietly differ. */}
+      {ask ? (
+        <Box sx={{ mt: 1.2, pt: 1.2, borderTop: `1px solid ${BORDER}` }}>
+          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+            <Select size="small" displayEmpty value={cfg.ai_brain || ""} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 220 }}
+              onChange={(e) => setCfg({ ...cfg, ai_brain: e.target.value, ai_model: "" })}>
+              <MenuItem value="" sx={{ fontSize: 12 }}>the triage brain (default)</MenuItem>
+              {brains.map((b) => <MenuItem key={b.value} value={b.value} sx={{ fontSize: 12 }}>{b.label}</MenuItem>)}
+            </Select>
+            <Button size="small" onClick={() => setShowPrompt(!showPrompt)} sx={{ fontSize: 12, color: INK }}>
+              {showPrompt ? "hide the prompt ⌃" : "see the prompt ⌄"}</Button>
+            <Box sx={{ flex: 1 }} />
+            {!!sourceId && (
+              <Button size="small" disableElevation variant="outlined" disabled={busy} onClick={runReplay}
+                sx={{ fontSize: 12, color: INK, borderColor: BORDER }}>
+                {busy ? "reading the last runs…" : "try it on the last 5 runs"}</Button>
+            )}
+          </Box>
+          <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.8 }}>
+            Which AI decides where each run goes. It reads what came back and answers yes or no to each
+            line above, in one sentence each — and a run it does not answer for reaches you anyway.
+          </Typography>
+          {showPrompt && (
+            <Box component="pre" sx={{ mt: 0.8, p: 1, bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 1,
+              fontSize: 11.5, whiteSpace: "pre-wrap", color: INK, maxHeight: 220, overflow: "auto" }}>
+              {judgePrompt(cfg, shown) || "nothing is asked — every line is set to every run or never"}
+            </Box>
+          )}
+        </Box>
+      ) : (
+        <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1.2, pt: 1.2, borderTop: `1px solid ${BORDER}` }}>
+          No AI is asked — this report routes itself, and a run costs nothing but the query.
+        </Typography>
+      )}
+      {replay && (
+        <Box sx={{ mt: 1.2, pt: 1.2, borderTop: `1px solid ${BORDER}` }}>
+          <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10, display: "block" }}>
+            ON THE LAST RUNS THIS WOULD HAVE
+          </Typography>
+          {replay.error ? <Typography variant="caption" sx={{ color: "#8c3b3b" }}>{replay.error}</Typography>
+            : !replay.data?.length ? <Typography variant="caption" sx={{ color: FAINT }}>This report has not run yet — there is nothing to replay.</Typography>
+              : replay.data.map((r) => {
+                const went = ROUTE_LINES.filter((l) => r[l] && (l !== "send" || cfg.deliver?.to)).map((l) => LINE_CHIP[l]);
+                return (
+                  <Box key={r.runId} sx={{ display: "flex", gap: 1, mt: 0.4, alignItems: "baseline", flexWrap: "wrap" }}>
+                    <Typography variant="caption" sx={{ color: FAINT, minWidth: 108, fontVariantNumeric: "tabular-nums" }}>{String(r.at || "").slice(5, 16)}</Typography>
+                    <Typography variant="caption" sx={{ color: went.length ? INK : FAINT, fontWeight: went.length ? 600 : 400, minWidth: 148 }}>
+                      {went.length ? `● ${went.join(" · ")}` : "— quiet, nowhere at all"}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 160 }}>{r.why}</Typography>
+                  </Box>
+                );
+              })}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, onSaved, draft, workflow = false }) {
   const cur = sources.find((s) => s.SourceId === sourceId);
   // a composed draft is a STARTING POINT, not a saved report: it lands in the same boxes the
@@ -975,47 +1201,8 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                       label="subject (blank = the report's headline)" value={cfg.deliver.subject || ""}
                       onChange={(e) => setCfg({ ...cfg, deliver: { ...cfg.deliver, subject: e.target.value } })} />
                   </Box>
-                  {/* Its OWN rule, on the same verdict the reach rule reads. reach=wrong with
-                      send=always is "do not bother me, but mail it out every month". */}
-                  <Box sx={{ display: "flex", gap: 0.6, mt: 1.2, flexWrap: "wrap", alignItems: "center" }}>
-                    <Typography variant="caption" sx={{ color: DIM, mr: 0.4 }}>Send it</Typography>
-                    {[["always", "every run"], ["wrong", "only when something is wrong"], ["rule", "only when…"]].map(([v, label]) => (
-                      <Button key={v} size="small" disableElevation
-                        variant={deliverSendOf(cfg) === v ? "contained" : "outlined"}
-                        sx={{ fontSize: 12, minHeight: 28, py: 0, px: 1.4,
-                          ...(deliverSendOf(cfg) === v ? {} : { color: INK, borderColor: BORDER }) }}
-                        onClick={() => setCfg({ ...cfg, deliver: { ...cfg.deliver, send: v,
-                          ...(v === "rule" && !cfg.deliver.when ? { when: answersInProse(cfg) ? "something_came_back" : "nothing_came_back" } : {}) } })}>
-                        {label}</Button>
-                    ))}
-                  </Box>
-                  {deliverSendOf(cfg) === "rule" && (
-                    <Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap", alignItems: "center" }}>
-                      <Select size="small" value={cfg.deliver.when || "nothing_came_back"} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 250 }}
-                        onChange={(e) => setCfg({ ...cfg, deliver: { ...cfg.deliver, when: e.target.value } })}>
-                        {CONDITIONS.filter((c) => !answersInProse(cfg) || c.prose).map((c) => (
-                          <MenuItem key={c.v} value={c.v} sx={{ fontSize: 12 }}>
-                            {(answersInProse(cfg) && c.prose) || c.rows}</MenuItem>
-                        ))}
-                      </Select>
-                      {["fewer_than", "more_than"].includes(cfg.deliver.when) && (
-                        <TextField size="small" type="number" sx={{ bgcolor: "#fff", width: 120 }} label="how many"
-                          value={cfg.deliver.count ?? ""}
-                          onChange={(e) => setCfg({ ...cfg, deliver: { ...cfg.deliver, count: e.target.value } })} />
-                      )}
-                      {["contains", "missing"].includes(cfg.deliver.when) && (
-                        <TextField size="small" sx={{ bgcolor: "#fff", flex: 1, minWidth: 160 }} label="the words to look for"
-                          value={cfg.deliver.text || ""}
-                          onChange={(e) => setCfg({ ...cfg, deliver: { ...cfg.deliver, text: e.target.value } })} />
-                      )}
-                    </Box>
-                  )}
                   <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.8 }}>
-                    {deliverSendOf(cfg) === "always"
-                      ? "It goes out on every run, whatever it found — and whether or not the run reaches you below."
-                      : deliverSendOf(cfg) === "wrong"
-                        ? "A clear run is not sent anywhere. If it cannot be sent, that lands on your work rail."
-                        : "It is only sent when this is true of the result."}
+                    Whether a given run actually goes out is one of the lines under “one prompt that routes each run”, below.
                   </Typography>
                   <Box sx={{ display: "flex", gap: 1, mt: 1, alignItems: "center", flexWrap: "wrap" }}>
                     <Select size="small" value={cfg.deliver.gate || "review"} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 260 }}
@@ -1032,128 +1219,9 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 </>
               )}
             </Box>
-            {/* WHEN SHOULD THIS REACH YOU? One question, asked once, for every kind of report.
-                It used to be two: "send it somewhere" (every run, to a channel) and "tell me when it
-                looks wrong" (a condition, to a channel) - and neither of them governed the TIMELINE,
-                so a monitor that found nothing still posted "All clear" every hour and the owner had
-                to write that sentence into the prompt to get it (2026-09-17: "if no errors then don't
-                show up at all ... make this better for all use cases").
-                Silence that still leaves a row to read is not silence, so this rule governs the post
-                as well as the push. The run itself is never lost: it is in the run history either way. */}
-            <Box sx={{ mt: 2, ...card, p: 1.5, maxWidth: 720 }}>
-              <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10, display: "block" }}>
-                WHEN SHOULD THIS REACH YOU?
-              </Typography>
-              <Box sx={{ display: "flex", gap: 0.6, mt: 0.8, flexWrap: "wrap" }}>
-                {[["always", "every run"], ["wrong", "only when something is wrong"], ["rule", "only when\u2026"]].map(([v, label]) => (
-                  <Button key={v} size="small" disableElevation
-                    variant={reachOf(cfg) === v ? "contained" : "outlined"}
-                    sx={{ fontSize: 12, minHeight: 28, py: 0, px: 1.4,
-                      ...(reachOf(cfg) === v ? {} : { color: INK, borderColor: BORDER }) }}
-                    onClick={() => setCfg({ ...cfg, reach: v,
-                      ...(v === "rule" ? { alert: { when: answersInProse(cfg) ? "something_came_back" : "nothing_came_back", ...(cfg.alert || {}) } } : {}) })}>
-                    {label}</Button>
-                ))}
-              </Box>
-              <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>
-                {reachOf(cfg) === "always"
-                  ? "Every run lands on your Timeline, whatever it found."
-                  : reachOf(cfg) === "wrong"
-                    ? (answersInProse(cfg)
-                      ? "A clear run posts nothing at all \u2014 you do not need to ask for that in the prompt, and asking for an \u201call clear\u201d line is what makes it post one. The run is still in the history below, with what it read."
-                      : "A run that comes back empty posts nothing at all. The run is still in the history below, with what it read.")
-                    : "Nothing is posted or sent unless this is true of the result."}
-              </Typography>
-              {reachOf(cfg) === "rule" && (
-                <Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap", alignItems: "center" }}>
-                  <Select size="small" value={cfg.alert?.when || "nothing_came_back"} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 250 }}
-                    onChange={(e) => setCfg({ ...cfg, alert: { ...cfg.alert, when: e.target.value } })}>
-                    {CONDITIONS.filter((c) => !answersInProse(cfg) || c.prose).map((c) => (
-                      <MenuItem key={c.v} value={c.v} sx={{ fontSize: 12 }}>
-                        {(answersInProse(cfg) && c.prose) || c.rows}</MenuItem>
-                    ))}
-                  </Select>
-                  {["fewer_than", "more_than"].includes(cfg.alert?.when) && (
-                    <TextField size="small" type="number" sx={{ bgcolor: "#fff", width: 120 }} label="how many"
-                      value={cfg.alert?.count ?? ""}
-                      onChange={(e) => setCfg({ ...cfg, alert: { ...cfg.alert, count: e.target.value } })} />
-                  )}
-                  {["contains", "missing"].includes(cfg.alert?.when) && (
-                    <TextField size="small" sx={{ bgcolor: "#fff", flex: 1, minWidth: 160 }} label="the words to look for"
-                      value={cfg.alert?.text || ""}
-                      onChange={(e) => setCfg({ ...cfg, alert: { ...cfg.alert, text: e.target.value } })} />
-                  )}
-                </Box>
-              )}
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1.4, pt: 1.2, borderTop: `1px solid ${BORDER}` }}>
-                <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10, flex: 1 }}>
-                  AND ALSO TELL ME ON (OPTIONAL)
-                </Typography>
-                <Switch size="small" checked={!!cfg.alert?.to}
-                  onChange={(e) => setCfg({ ...cfg, alert: e.target.checked
-                    ? { ...(cfg.alert || {}), ...firstDest() }
-                    : (cfg.alert?.when ? { when: cfg.alert.when, count: cfg.alert.count, text: cfg.alert.text } : undefined) })} />
-              </Box>
-              {!cfg.alert?.to ? (
-                <Typography variant="caption" sx={{ color: FAINT }}>
-                  Off — whatever reaches you reaches you on the Timeline, and nowhere else.
-                </Typography>
-              ) : (
-                <>
-                  <Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap" }}>
-                    <Destination dest={cfg.alert} targets={targets}
-                      onChange={(d) => setCfg({ ...cfg, alert: { ...cfg.alert, ...d } })} />
-                    <TextField size="small" sx={{ bgcolor: "#fff", flex: 1, minWidth: 200 }}
-                      label="what to say (optional)" value={cfg.alert.note || ""}
-                      onChange={(e) => setCfg({ ...cfg, alert: { ...cfg.alert, note: e.target.value } })} />
-                  </Box>
-                  <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>
-                    Sent the moment it reaches you — no Review step, because an alert waiting for approval is not an alert.
-                    Only channels with a live connection and replies on (Settings → Replies) are offered, and only chats Taskuary has already seen.
-                  </Typography>
-                </>
-              )}
-            </Box>
+            <RoutingCard cfg={cfg} setCfg={setCfg} targets={targets} brains={brains}
+              firstDest={firstDest} sourceId={sourceId} />
 
-            {/* MOVE IT UP IF. The third of the three conditional sections, beside "send it somewhere"
-                and "tell me when it looks wrong" - because the owner asked for it here, where the other
-                two conditions already are (2026-09-04: "we should add on bottom of reports and workflows,
-                what we should promote meaning the pipe should move it up if x happens").
-
-                The sentence IS the switch. There used to be a `triage` toggle in step 3 with this text
-                hidden behind it, and a toggle with no sentence behind it did nothing at all - the
-                classifier was reading a table of numbers with no idea which numbers would be bad
-                (triage.classify_intent(watch=)). Off by default, so none of the owner's seven reports
-                had one. A run that MATCHES becomes work and the pipe ranks it as work; a run that FAILS
-                is promoted whatever this says, since a check that cannot run says what it is. */}
-            <Box sx={{ mt: 2, ...card, p: 1.5, maxWidth: 720 }}>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10, flex: 1 }}>
-                  MOVE IT UP IN THE PIPE IF (OPTIONAL)
-                </Typography>
-                <Switch size="small" checked={!!cfg.watch_for}
-                  onChange={(e) => setCfg({ ...cfg, watch_for: e.target.checked ? (cfg.watch_for || " ") : "", triage: e.target.checked })} />
-              </Box>
-              {!cfg.watch_for ? (
-                <Typography variant="caption" sx={{ color: FAINT }}>
-                  Off — every run is news on the Timeline and never interrupts you. A run that fails is
-                  still moved up.
-                </Typography>
-              ) : (
-                <>
-                  <TextField fullWidth multiline minRows={2} size="small" sx={{ bgcolor: "#fff", mt: 1, "& .MuiInputBase-root": { fontSize: 13 } }}
-                    label="what would be worth interrupting you for"
-                    placeholder="any row at all comes back — or: a unit is under 70, a bill over $10k, a vendor we have not paid before"
-                    value={cfg.watch_for.trim() === "" ? "" : cfg.watch_for}
-                    onChange={(e) => setCfg({ ...cfg, watch_for: e.target.value, triage: !!e.target.value.trim() })} />
-                  <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
-                    Each run is judged against this sentence. A match becomes work and the pipe moves it up
-                    past the ordinary reports; anything else stays quiet. Say it in your own words — it is
-                    the only thing this report gets to say about its own verdict.
-                  </Typography>
-                </>
-              )}
-            </Box>
             {/* A report supersedes itself. Seven "Process Error Check - 0 rows" stacked up in the
                 reports band say nothing the newest one does not, and yesterday's brief is not this
                 morning's (the owner, 2026-09-16). Nothing is deleted - the earlier run is marked

@@ -99,7 +99,15 @@ def state(store) -> dict:
                 'untriaged - the app runs, and does nothing for you. A coding CLI you already '
                 'pay for will do it; so will an API key.',
          'done': bool(ai), 'detail': ai.get('Name') or '',
-         'goto': {'tab': 'Connections', 'hash': 'cli-agents', 'label': 'Open AI CLI agents'}},
+         # WHERE IT SENDS YOU DEPENDS ON WHAT YOU HAVE. "Open AI CLI agents" is the right door when
+         # there is no brain yet, or when the brain IS a CLI. It is the wrong one for a key provider:
+         # Azure OpenAI is not a CLI tool and cannot be set up in a terminal, so pointing an install
+         # that already runs on Azure at a CLI installer read as "this is how you do it" (the owner,
+         # 2026-09-17: "you cant setup azure ai from here. It's not a cli tool").
+         'goto': ({'tab': 'Connections', 'hash': 'cli-agents', 'label': 'Open AI CLI agents'}
+                  if not ai or ai.get('Type') == 'cli'
+                  else {'tab': 'Connections', 'hash': f"connector={ai.get('Type')}",
+                        'label': f"Open the {ai.get('Name') or 'provider'} card"})},
         {'key': 'models', 'title': 'Choose what runs on which model',
          'why': 'Triage, the assistant, the general agent and the coding CLI each run on a brain '
                 'and a model, and the defaults are a guess at your budget. One page shows all four '

@@ -32,10 +32,16 @@ STOPS = [
     {'key': 'owner', 'can': [
         _can('type your name and email right here'),
         _can('see every document that uses it', 'Docs')]},
+    # TWO ROADS, and neither is the other. A key provider - Azure OpenAI, OpenAI, Anthropic - is a
+    # card you paste a key on; it is not a CLI and there is nothing to sign in to in a terminal. The
+    # CLI road was listed first and twice, so the whole stop read as "install a CLI", which is not
+    # how most of these get set up (the owner, 2026-09-17: "you cant setup azure ai from here").
     {'key': 'ai', 'can': [
-        _can('install a coding CLI and sign in to it, in a terminal right here', 'Connections', 'cli-agents'),
-        _can('use a CLI you already pay for', 'Connections', 'cli-agents'),
-        _can('paste an API key on a provider card instead', 'Connections')]},
+        _can('paste an API key on a provider card - Azure OpenAI, OpenAI, Anthropic, OpenRouter', 'Connections'),
+        _can('or sign in to a coding CLI you already pay for - Claude Code, Codex - in a terminal right here',
+             'Connections', 'cli-agents'),
+        _can('either one is enough; triage reads your mail on whichever you pick', 'Settings',
+             'settings=config&group=Triage%20%26%20agents')]},
     {'key': 'models', 'can': [
         _can('choose the brain that triages your mail', 'Settings', 'settings=config&group=Triage%20%26%20agents'),
         _can('choose what the assistant here speaks on', 'Settings', 'settings=config&group=Triage%20%26%20agents'),

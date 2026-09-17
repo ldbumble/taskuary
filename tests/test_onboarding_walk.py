@@ -180,5 +180,41 @@ class TheEndpointsTests(unittest.TestCase):
         self.assertEqual(c.post('/api/setup/walk/reset').json()['at'], 0)
 
 
+class TheAiStopKnowsWhatYouAlreadyHaveTests(unittest.TestCase):
+    """Azure OpenAI is not a CLI tool, and you cannot sign in to it in a terminal.
+
+    The stop offered "install a coding CLI and sign in to it" first and twice, and the checklist
+    row sent everyone to the AI CLI agents page - so an install already running on Azure was told
+    both that it needed a CLI and that a terminal was how its own provider got set up (the owner,
+    2026-09-17: "you cant setup azure ai from here. It's not a cli tool").
+    """
+
+    def _ai_step(self, store):
+        from taskuary import setup
+        return next(r for r in setup.state(store)['steps'] if r['key'] == 'ai')
+
+    def test_a_key_provider_sends_you_to_its_own_card(self):
+        s = MemoryStore()
+        cid = s.get_connector_by_type('azure_openai')['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Active': 1, 'Secret': 'k', 'Name': 'Azure OpenAI'}, 'o')
+        step = self._ai_step(s)
+        self.assertTrue(step['done'])
+        self.assertEqual(step['goto']['hash'], 'connector=azure_openai')
+        self.assertIn('Azure OpenAI', step['goto']['label'])
+        self.assertNotIn('CLI', step['goto']['label'])
+
+    def test_with_nothing_connected_the_cli_page_is_still_the_door(self):
+        """It is a real way in, and the one most people arrive with something for."""
+        self.assertEqual(self._ai_step(MemoryStore())['goto']['hash'], 'cli-agents')
+
+    def test_the_api_key_road_is_not_an_afterthought(self):
+        """Both roads exist; the stop used to list the CLI one first and again second."""
+        can = [c['text'] for c in next(st for st in walk.STOPS if st['key'] == 'ai')['can']]
+        self.assertIn('API key', can[0])
+        self.assertIn('Azure OpenAI', can[0])
+        self.assertTrue(any('coding CLI' in t for t in can), 'the CLI road is still offered')
+        self.assertEqual(sum('coding CLI' in t for t in can), 1, 'and offered once')
+
+
 if __name__ == '__main__':
     unittest.main()

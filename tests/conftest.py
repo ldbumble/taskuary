@@ -5,7 +5,7 @@ config and opens SQLite at import time.  The guards below are deliberately test-
 code does not gain a pytest switch and a unit test can still replace a guarded boundary with its
 own fake.  Real local services are reachable only after a test registers its ephemeral port.
 """
-import hashlib, os, platform, shutil, socket, subprocess, sys, tempfile, uuid
+import hashlib, os, platform, shutil, socket, subprocess, sys, tempfile, threading, uuid
 from contextlib import asynccontextmanager
 from contextlib import ExitStack
 from pathlib import Path
@@ -167,6 +167,11 @@ def pytest_runtest_teardown(item):
     set up first, so it is torn down last)."""
     srv = sys.modules.get('taskuary.server')
     if srv is not None and hasattr(srv, 'wait_refresh_after'): srv.wait_refresh_after(10)
+    # ...and every other short-lived thread that reads the store behind a request: the assistant's
+    # calendar prefetch (assistant._refresh_agenda) outlived its test the same way and took the Windows
+    # 3.12 job down with an access violation in the test after it (the run for d37aaa37).
+    for t in threading.enumerate():
+        if t is not threading.current_thread() and t.name in ('taskuary-agenda', 'refresh-after'): t.join(10)
     yield
 
 

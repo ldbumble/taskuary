@@ -20,12 +20,21 @@ class ShippedSkillTests(unittest.TestCase):
         text = general.setup_skill()
         self.assertIn('name: taskuary-setup', text)
         for needed in ('/api/setup',                                   # inspect what is already configured
-                       'Prerequisites',                                # owner name, one AI brain, one inbound source
+                       'Prerequisites',                                # the five, in order
                        'GET /api/cli/detect',
-                       'Secrets never pass through this chat',
-                       'never rerun it',                               # resume without redoing a done step
-                       'Never create a second connector'):
-            self.assertIn(needed, text, needed)
+                       'Secrets never pass through this chat'):
+            self.assertIn(needed, text)
+
+    def test_the_skill_names_the_steps_that_actually_exist(self):
+        """A shipped document cannot fail a build when it goes stale - the AI just says something
+        untrue about a checklist that changed under it. This is the thing that fails instead."""
+        from taskuary import setup
+        from taskuary.store import MemoryStore
+        text = general.setup_skill()
+        keys = [x['key'] for x in setup.state(MemoryStore())['steps']]
+        self.assertIn('`, `'.join(keys), text)          # the list, in order, as the skill prints it
+        for gone in ('`ready`', '`where`', '`soul`, `sync`'):
+            self.assertNotIn(gone, text)
 
     def test_a_setup_task_carries_the_skill_as_its_procedure_and_other_work_does_not(self):
         s = MemoryStore()

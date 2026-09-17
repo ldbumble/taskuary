@@ -13,8 +13,8 @@ makes it.
 ## Read the real state before you say anything
 
 `GET /api/setup` returns the whole model: `steps` (each with `key`, `title`, `why`, `done`,
-`detail`, `where`), plus `ready` (the three required steps are done) and `complete`. The step keys
-are `owner`, `ai`, `inbound`, `soul`, `sync`, `style`, `triage`, `agent`.
+`detail`, `goto`), plus `complete`. The step keys are `owner`, `ai`, `models`, `inbound`, `sync`.
+Each `goto` is `{tab, hash}` - the tab to send them to and the position within it.
 
 Every `done` is computed from real state, never from anything anyone said. A step un-ticks itself
 when the connection behind it is removed. So: read it at the start of the walk, read it again after
@@ -28,15 +28,23 @@ read; the Reports screen (report sources) lists scheduled work.
 
 1. **The owner's name** (`owner`). It signs every reply and fills `{{owner}}` in the operator
    documents. Docs screen.
-2. **One AI brain** (`ai`). Either an AI coding CLI already installed and signed in on this machine
-   (`GET /api/cli/detect` detects them) or an API key on a provider card. Without it nothing is triaged:
-   the app runs and does nothing. A CLI they already pay for is the cheaper answer; say so.
-3. **One inbound source** (`inbound`). A mailbox, a chat, a tracker - anything that brings work in.
+2. **One AI** (`ai`). Either an AI coding CLI installed and signed in on this machine
+   (`GET /api/cli/detect` detects them, and Taskuary can install and sign in to one in a pane it
+   hosts) or an API key on a provider card. Without it nothing is triaged: the app runs and does
+   nothing. A CLI they already pay for is the cheaper answer; say so.
+3. **A look at the models** (`models`). Triage, the assistant, the general agent and the coding CLI
+   each run on a brain and a model. Settings → Configuration → Triage & agents shows all four and
+   what will actually run. This is the one step that records being SEEN rather than being derived,
+   because the shipped defaults already work - looking is the whole ask.
+4. **Somewhere work arrives** (`inbound`). A mailbox or a chat. A tracker is a real source but does
+   not satisfy this step: an install with GitHub and no mailbox has a Timeline with no mail in it.
    Connections screen.
+5. **The first messages** (`sync`). One sync pulls their mail in and triage reads it.
 
-Those three are what `ready` means. Everything below is recommended, not required: personalising
-SOUL.md, a first sync, STYLE.md from sent mail, TRIAGE.md from what they answered, and a coding
-agent that has actually finished a run.
+All five are what `complete` means. There is no second tier and no optional row: personalising
+SOUL.md, generating STYLE.md and TRIAGE.md from history, and putting a coding agent to work are
+stops on the scripted walk (`GET /api/setup/walk`), not steps on this list. Recommend them when the
+five are done; never report them as outstanding setup.
 
 If a prerequisite cannot be met, say exactly what is missing and what it costs them - do not leave
 them in a chat with no usable AI and no explanation.
@@ -68,10 +76,8 @@ document or a task, and tell them to rotate it. A secret in a transcript is a le
 - Reading is proved by the first sync putting real rows on the Timeline (`sync` ticks off actual
   messages, not a sample count).
 - A report is proved by a run - use its preview or Run now, then look at what it filed.
-- A coding agent is proved by a finished run. The shipped default points at the `claude` CLI and a
-  default that has never run proves nothing about this machine.
 
-State readiness as the numbers: which required steps are done, which recommended ones remain.
+State readiness as the numbers: how many of the five are done, and which remain.
 
 ## Resuming, and never doing it twice
 

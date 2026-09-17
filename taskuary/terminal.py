@@ -1794,6 +1794,40 @@ _TUI_FURNITURE = re.compile(r'^[\s─-╿▀-▟\-=_~*.·•]+$'                
                             r'|^\s*\d+%?\s*(context|tokens?) (left|used)\b|^\s*(tokens?|context):', re.I)
 
 
+# A numbered option, as every CLI chooser draws one: "❯ 1. Fillable for the one that is ready".
+_OPTION = re.compile(r'^\s*[❯>▸→]?\s*(\d{1,2})[.)]\s+(\S.*)$')
+# ...and the gutter a TUI puts in front of the question above them
+_ASK_GUTTER = re.compile(r'^\s*[|│┃>❯]\s*')
+
+
+def screen_question(t, n: int = 40) -> dict | None:
+    """The CHOOSER a CLI is standing on, read off its rendered screen: {text, choices}, or None when
+    the screen is not offering a list.
+
+    A CLI that reports through hooks hands us the question and its answers itself, and every surface
+    can then offer them as buttons (workerstate). Claude does not report the ones it asks INSIDE a
+    turn, so the owner was left reading four options off a terminal and typing a digit back at it by
+    hand - the screen is the only copy of that question there is. Read only where the screen is
+    already the reason we know it is waiting (`screen_asking`), so an ordinary numbered list in an
+    agent's prose can never be mistaken for a question.
+    """
+    snap = screen(getattr(t, 'sid', t), n)
+    if not snap: return None
+    lines = [l.rstrip() for l in snap['lines'] if l.strip() and not _TUI_FURNITURE.search(l) and not _CHROME.search(l)]
+    opts = []
+    for i, l in enumerate(lines):
+        m = _OPTION.match(l)
+        if not m: continue
+        if int(m.group(1)) == 1: opts = []                       # a list that starts over IS a new list
+        if int(m.group(1)) == len(opts) + 1: opts.append((i, ' '.join(m.group(2).split())[:160]))
+    if len(opts) < 2: return None
+    # the question is the last line of prose above the first option - the options' own wrapped
+    # descriptions are indented continuations and match nothing
+    ask = next((_ASK_GUTTER.sub('', l).strip() for l in reversed(lines[:opts[0][0]])
+                if not _OPTION.match(l) and len(_ASK_GUTTER.sub('', l).strip()) > 8), '')
+    return {'text': ask[:300], 'choices': [o[1] for o in opts]}
+
+
 def asking_lines(sid: str, n: int = 4) -> list:
     """The last lines of the agent's RENDERED screen that could be a question - the same pyte
     render the reopened pane seeds from, with the chrome dropped. [] when there is no session."""

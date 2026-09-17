@@ -202,6 +202,15 @@
 .tq-card-actions button { text-transform: none; font-size: 11px; min-height: 28px; }
 .tq-card-actions .sp { flex: 1; }
 .tq-card-note { font-size: 10.5px; color: #8a847a; margin-top: 6px; }
+/* THE QUESTION AND ITS ANSWERS. Same amber family as the general workspace's own raised hand
+   (generalWorkspace.css .tq-aui-asking), because it is the same event: an agent has stopped and
+   named what it needs. The options stack rather than truncate - a chooser's options are sentences,
+   and half of one is not a thing anybody can pick. */
+.tq-card-ask { margin-top: 8px; padding: 8px 10px; border: 1px solid #d8c9a8; border-left: 3px solid #b08b4f;
+  border-radius: 9px; background: #fbf7ee; }
+.tq-card-ask > span { display: block; font-size: 11.5px; line-height: 1.5; color: #4d4a43; margin-bottom: 7px; }
+.tq-card-picks { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
+.tq-card-picks button { text-transform: none; font-size: 11.5px; line-height: 1.4; text-align: left; padding: 4px 10px; }
 /* a stop of the set-up walk you have already passed: a step in a trail, not a thing that was said.
    No avatar track, no second mark, and the counter is what tells six of them apart. The tick is the
    only colour and it is the checklist's own done-green - it identifies a finished step. */

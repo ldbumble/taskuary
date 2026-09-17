@@ -85,7 +85,39 @@ def open_requests(evs: list) -> list:
 def _public_request(e: dict) -> dict:
     try: choices = json.loads(e['ChoicesJson']) if e.get('ChoicesJson') else []
     except ValueError: choices = []
-    return {'request_id': e['RequestId'], 'kind': e['Kind'], 'text': e['Text'], 'choices': choices, 'sid': e['Sid'], 'at': e['CreatedAt']}
+    # `source` travels with it because it changes what an ANSWER is: a request read off a chooser is
+    # answered by picking, not by typing the option's words back at it (see `answer`)
+    return {'request_id': e['RequestId'], 'kind': e['Kind'], 'text': e['Text'], 'choices': choices,
+            'sid': e['Sid'], 'at': e['CreatedAt'], 'source': e.get('Source') or 'api'}
+
+
+def reconcile_screen_request(store, t, asking: bool) -> dict | None:
+    """Keep a request READ OFF THE SCREEN in step with the screen. Returns the open request, if any.
+
+    A CLI that reports its questions leaves nothing for this to do. Claude, asking inside a turn,
+    reports nothing at all - so its chooser had a question, four answers and no way to click any of
+    them: the card could only say "waiting on you" and point at the pane (the owner, 2026-09-17).
+    Recording it as an ordinary `input_needed` gives it what every other question has - the text, the
+    options, and an id an answer binds to - and every surface then works unchanged.
+
+    Both directions matter. Choosing an option in the pane submits no prompt and fires no hook, so
+    NOTHING else would ever close this request and the card would say "asked you" for the rest of the
+    run. When the chooser leaves the screen, the pane answered it.
+    """
+    from . import terminal as term
+    tid, sid = getattr(t, 'task_id', None), str(getattr(t, 'sid', '') or '')
+    if not tid or not sid: return None
+    open_ = asking_of(store, t)
+    if asking and not open_:
+        q = term.screen_question(t)
+        if not q or len(q['choices']) < 2: return None
+        record(store, int(tid), sid, 'input_needed', text=q['text'] or 'Choose how to go on.',
+               choices=q['choices'], source='screen')
+        return asking_of(store, t)
+    if not asking and open_ and open_.get('source') == 'screen':
+        record(store, int(tid), sid, 'answered', request_id=open_['request_id'], text='answered in the pane', source='screen')
+        return None
+    return open_
 
 
 def status(store, tid: int) -> dict:
@@ -133,9 +165,17 @@ def answer(store, tid: int, request_id: str, text: str, actor: str = 'owner') ->
         store.add_comment(tid, actor, 'human', f'Answer to "{req["text"][:160]}": {text[:500]} - not delivered: the run that asked ({req["sid"]}) is gone and a different worker has the task.')
         return {'delivered': False, 'state': 'stale', 'why': 'the run that asked is no longer the one on the task'}
     who = getattr(sess, 'agent', None) or getattr(sess, 'label', None) or 'the agent'
+    # A CHOOSER IS ANSWERED BY ITS NUMBER. A request read off the screen belongs to a list the pane
+    # is standing on, where the option's own words are not an answer at all - they would land in
+    # whatever "type something" field the list offers last. The owner's words stay the owner's words
+    # everywhere they are READ (the comment below, the audit); only the keystroke changes.
+    send = text
+    if req.get('source') == 'screen':
+        pick = next((i + 1 for i, c in enumerate(req.get('choices') or []) if str(c).strip().lower() == text.strip().lower()), None)
+        if pick: send = str(pick)
     try:
-        if hasattr(sess, 'send_prompt'): sess.send_prompt(text)
-        else: term.type_into(sess, text)
+        if hasattr(sess, 'send_prompt'): sess.send_prompt(send)
+        else: term.type_into(sess, send)
     except Exception as e:
         store.add_comment(tid, actor, 'human', f'Answer to "{req["text"][:160]}": {text[:500]} - could not be delivered to {who}: {str(e)[:200]}')
         return {'delivered': False, 'state': 'failed', 'why': str(e)[:200]}

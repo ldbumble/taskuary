@@ -35,6 +35,10 @@ def tick(store) -> int:
         # none however quiet its screen; a run whose word is silent - it never reported, or its turn just
         # ended - keeps the screen heuristic, and a question ON the screen raises a hand whatever the word
         # says (terminal.worker_fields). One rule, so the ping and the card never disagree.
+        # ...and a chooser the CLI never reported becomes a real request first, so the hand that goes
+        # up carries the question and its answers rather than four lines of screen (workerstate)
+        try: ws.reconcile_screen_request(store, term, terminal.screen_asking(term))
+        except Exception as e: logger.debug(f'screen question for {sid}: {e}')
         fields = terminal.worker_fields(store, term)
         waiting, req = fields['waiting'], fields['request']
         current[ident] = bool(waiting)

@@ -322,6 +322,19 @@ export function AgentCard({ card, onDone, onOpenTask }) {
     catch (e) { setErr(errText(e)); }
     setBusy(false);
   };
+  // THE ANSWERS IT OFFERED, as answers. The question and its choices have ridden on this card since
+  // PW-228 and nothing drew them, so a four-option chooser could only be answered by reading the
+  // terminal and typing a digit into it (the owner, 2026-09-17). A pick goes to the exact request
+  // that asked - never to the waiting room, which is a letterbox for a pane that is not asking
+  // anything - and the agent's own screen is right above, still the way to say something else.
+  const pick = async (c) => {
+    setBusy(true); setErr("");
+    try {
+      await api.post(`/api/tasks/${card.tid}/worker/answer`, { request_id: card.request_id, text: c });
+      onDone?.(`Answered ${card.agent || "the agent"}: “${String(c).slice(0, 80)}”`);
+    } catch (e) { setErr(errText(e)); }
+    setBusy(false);
+  };
   const working = card.lane === "working";
   const who = chat ? "assistant" : "agent";
   const resume = async () => {
@@ -365,6 +378,18 @@ export function AgentCard({ card, onDone, onOpenTask }) {
           {chat && live && <Button size="small" onClick={() => setBig((b) => !b)} sx={faint}>{big ? "Smaller" : "Bigger"}</Button>}
           <Button size="small" onClick={() => setLive((l) => !l)} sx={faint}>
             {live ? (chat ? "Fold" : "Hide the screen") : chat ? "Show the conversation" : "Show the screen"}</Button>
+        </div>
+      )}
+      {/* what it asked, and the answers it named - the question first, because the buttons under it
+          are unreadable without it */}
+      {!card.paused && !!(card.choices || []).length && !!card.request_id && (
+        <div className="tq-card-ask">
+          {!!card.why && <span>{card.why}</span>}
+          <div className="tq-card-picks">
+            {card.choices.map((c) => (
+              <Button key={c} size="small" variant="outlined" disabled={busy} onClick={() => pick(c)}>{c}</Button>
+            ))}
+          </div>
         </div>
       )}
       {/* the chat above already has a composer, and it talks to the assistant. This box queues into

@@ -246,6 +246,11 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   // a rerun is the chat line's word now, not a second button on the card (2026-09-07: "only one place")
   assert.doesNotMatch(cardsSrc(), /Run it again/);
   assert.match(cardsSrc(), /Open walkthrough/);             // set-up opens the Assistant operator, not a coding checkout
+  // the answers an agent NAMED are answers you can click, bound to the request that asked - the
+  // waiting room is for a pane that is not asking anything (the owner, 2026-09-17)
+  assert.match(cardsSrc(), /className="tq-card-picks"/);
+  assert.match(cardsSrc(), /\/api\/tasks\/\$\{card\.tid\}\/worker\/answer/);
+  assert.match(cardsSrc(), /card\.choices \|\| \[\]\)\.length && !!card\.request_id/);
   assert.doesNotMatch(view, /onClick=\{\(\) => settle\("done"\)\}/);   // Done is a suggestion, not a button that settles
   assert.match(read("FeedView.jsx"), /\/api\/ingest\/poll/);            // sync now, on the rail's header
   assert.match(view, /new ResizeObserver\(\(\) => \{ if \(el\.scrollHeight/);   // the chat keeps its bottom in view as it grows

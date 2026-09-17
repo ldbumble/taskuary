@@ -92,6 +92,68 @@ class AskedOnScreenTests(unittest.TestCase):
             self.assertIs(terminal.worker_fields(self.s, t)['waiting'], False)
 
 
+class ScreenChooserTests(unittest.TestCase):
+    """The question a CLI never reported, made answerable (the owner, 2026-09-17: a chooser with four
+    options and no way to click any of them).
+
+    The screen is the only copy of it, so it is recorded as an ordinary `input_needed` - text,
+    choices, an id - and every surface that already draws a raised hand works unchanged.
+    """
+    SCREEN = ['| How should the fillable-form half be scoped for the first build?',
+              '> 1. Fillable for the one that is ready (Recommended)',
+              '     Build the form engine and wire up the 42-field proof.',
+              '  2. Upload-only for now, no form engine',
+              '  3. Hand-author all 6 forms now',
+              'Enter to select · Tab/Arrow keys to navigate · Esc to cancel']
+
+    def setUp(self):
+        self.s = MemoryStore(); handraise.reset()
+        self.tid = self.s.create_task({'Title': 'Ashley confirmed PDF links', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
+        self.t = FakeTerm(self.tid, 'run1', waiting=False, tail=self.SCREEN[-3:])
+        terminal.stable_phase_of(self.t, now=0); terminal.stable_phase_of(self.t, now=terminal.PHASE_DWELL + 1)
+
+    def _showing(self, lines):
+        return mock.patch.object(terminal, 'screen', lambda sid, n=32: {'lines': list(lines)})
+
+    def test_the_chooser_becomes_a_request_with_its_options(self):
+        with mock.patch.dict(terminal.SESSIONS, {'run1': self.t}, clear=True), self._showing(self.SCREEN):
+            ws.record(self.s, self.tid, 'run1', 'working', source='hook')
+            req = ws.reconcile_screen_request(self.s, self.t, True)
+        self.assertEqual(req['kind'], 'input_needed'); self.assertEqual(req['source'], 'screen')
+        self.assertIn('fillable-form half', req['text'])
+        self.assertEqual(req['choices'], ['Fillable for the one that is ready (Recommended)',
+                                          'Upload-only for now, no form engine', 'Hand-author all 6 forms now'])
+        self.assertEqual(ws.status(self.s, self.tid)['state'], 'input_needed')
+
+    def test_the_same_chooser_redrawn_is_one_request_and_the_pane_closes_it(self):
+        with mock.patch.dict(terminal.SESSIONS, {'run1': self.t}, clear=True), self._showing(self.SCREEN):
+            for _ in range(3): ws.reconcile_screen_request(self.s, self.t, True)
+            self.assertEqual(len(ws.status(self.s, self.tid)['requests']), 1)
+            # the option was picked IN the pane: no prompt is submitted and no hook fires, so nothing
+            # else would ever take this request off the books
+            self.assertIsNone(ws.reconcile_screen_request(self.s, self.t, False))
+            self.assertEqual(ws.status(self.s, self.tid)['requests'], [])
+
+    def test_a_pick_is_delivered_as_its_number(self):
+        typed = []
+        with mock.patch.dict(terminal.SESSIONS, {'run1': self.t}, clear=True), self._showing(self.SCREEN), \
+             mock.patch.object(terminal, 'type_into', side_effect=lambda t, text: typed.append(text)):
+            req = ws.reconcile_screen_request(self.s, self.t, True)
+            out = ws.answer(self.s, self.tid, req['request_id'], 'Upload-only for now, no form engine')
+        self.assertTrue(out['delivered'])
+        self.assertEqual(typed, ['2'], 'the pane is a chooser: it takes the option, not its words')
+        # ...and what the owner CHOSE is what the task's discussion says they chose
+        self.assertTrue(any('Upload-only for now' in c['Body'] for c in self.s.list_comments(self.tid)))
+
+    def test_prose_that_merely_contains_a_list_is_not_a_question(self):
+        prose = ['Here is what I found:', '  1. the export is stale', '  2. the job never ran',
+                 'Levitating… (3s · esc to interrupt)']
+        with mock.patch.dict(terminal.SESSIONS, {'run1': self.t}, clear=True), self._showing(prose):
+            # the screen is not asking, so nothing is read off it in the first place
+            self.assertIsNone(ws.reconcile_screen_request(self.s, self.t, False))
+            self.assertEqual(ws.status(self.s, self.tid)['requests'], [])
+
+
 class HandRaiseTests(unittest.TestCase):
     def setUp(self):
         self.s = MemoryStore(); handraise.reset()

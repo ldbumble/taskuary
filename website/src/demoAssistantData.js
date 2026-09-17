@@ -47,6 +47,9 @@ const pileItems = [
     key: "agent:7", kind: "agent", lane: "blocked", title: "Census sync fails when a site has no manager",
     who: "Marcus Reed", when: "2026-09-03 09:35:19", why: "the coder needs a choice before changing skip behavior",
     mid: 17, tid: 7, ref: "TQ-0007", agent: "coder", working: "coder", asking: true,
+    // the answers it named, and the request they bind to: a raised hand is answered by picking one
+    request_id: "q7", request_kind: "input_needed",
+    choices: ["Skip only that site and log it", "Fail the whole sync", "Ask me each time"],
     channel: "github", preview: "Should a missing manager skip only that site, or fail the entire sync?",
     tail: ["I reproduced the null manager case.", "Should a missing manager skip only that site, or fail the entire sync?"],
   },

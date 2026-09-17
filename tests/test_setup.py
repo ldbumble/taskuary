@@ -341,22 +341,78 @@ class TheAiRowCanBeTickedFromThePageItSendsYouToTests(unittest.TestCase):
     branch was the only thing that ever wrote `triage_ai`, and it lived inside the wizard - so
     once that duplicate was deleted, installing and testing a CLI on the real page left the row
     grey with nothing on that page able to tick it. The first CLI that proves it works there
-    becomes the brain, and only when none is chosen yet."""
+    becomes the brain, and only when none is chosen yet.
+
+    EVERY TEST HERE ASSERTS THE OUTCOME, never the string that was written. The first version of
+    this endpoint stored the CLI CONNECTION name (`cli:claude`) where every reader - `setup._ai`,
+    `llm._build_llm`, `llm.make_cli_llm` - resolves an agent PROFILE with `get_agent`. Three tests
+    that only compared the setting to `'cli:claude'` all passed while the row they exist to tick
+    stayed grey and an install with a working API key lost its brain outright."""
     def _was(self):
         return server.store.get_settings().get('triage_ai') or ''
 
     def _restore(self, was):
         server.store.set_setting('triage_ai', was, 't')
 
-    def test_the_first_working_cli_becomes_the_brain_when_none_is_chosen(self):
+    def _ai_row(self):
+        return _step(setup.state(server.store), 'ai')
+
+    def _profile_of(self, cli):
+        """The worker the Settings brain picker would offer for this connection - '' if none."""
+        from taskuary import agents as hub_agents
+        return next((o['value'] for o in hub_agents.cli_agent_options(server.store) if o['cli'] == cli), '')
+
+    def test_a_cli_with_a_profile_behind_it_actually_ticks_the_ai_row(self):
+        """The whole point of the endpoint. `claude` is a connection; `coder` is the profile that
+        runs it, and only the profile name resolves to anything."""
         was = self._was()
         try:
             server.store.set_setting('triage_ai', '', 't')
             out = c.post('/api/setup/adopt-brain', json={'cli': 'claude'})
             self.assertEqual(out.status_code, 200)
             self.assertTrue(out.json()['adopted'])
-            self.assertEqual(self._was(), 'cli:claude')
+            self.assertEqual(self._was(), f'cli:{self._profile_of("claude")}')
+            self.assertTrue(server.store.get_agent(self._was()[4:]), 'the stored name resolves')
+            self.assertTrue(self._ai_row()['done'])
+            self.assertTrue(_step(out.json(), 'ai')['done'], 'and the answer says so on the spot')
         finally:
+            self._restore(was)
+
+    def test_a_cli_no_profile_uses_stores_nothing_at_all(self):
+        """gemini is a real connection with no seeded worker behind it. A dangling `cli:gemini`
+        would be worse than the grey row: nothing resolves it, so it is not a brain, and it stops
+        the auto-pick from finding the connector that was working."""
+        was = self._was()
+        try:
+            server.store.set_setting('triage_ai', '', 't')
+            self.assertEqual(self._profile_of('gemini'), '', 'this test needs a CLI with no profile')
+            before = self._ai_row()['done']
+            out = c.post('/api/setup/adopt-brain', json={'cli': 'gemini'})
+            self.assertEqual(out.status_code, 200)
+            self.assertFalse(out.json()['adopted'])
+            self.assertEqual(self._was(), '', 'nothing was written')
+            self.assertEqual(self._ai_row()['done'], before)
+        finally:
+            self._restore(was)
+
+    def test_pressing_test_never_costs_an_install_the_brain_it_already_had(self):
+        """The regression this endpoint shipped with: an API key that worked, `triage_ai` unset so
+        the auto-pick found it, and one press of Test on the CLI page left `_build_llm` returning
+        None - no brain at all. Press it on both kinds of connection; both must still build."""
+        from taskuary import llm
+        was, had = self._was(), server.store.get_connector_by_type('anthropic')
+        try:
+            server.store.save_connector({'ConnectorId': had['ConnectorId'], 'Secret': 'sk-x', 'Active': 1}, 't')
+            for cli in ('gemini', 'claude'):
+                server.store.set_setting('triage_ai', '', 't')
+                self.assertIsNotNone(llm._build_llm(server.store, 'triage_ai'), f'before {cli}')
+                self.assertTrue(self._ai_row()['done'], f'before {cli}')
+                c.post('/api/setup/adopt-brain', json={'cli': cli})
+                self.assertIsNotNone(llm._build_llm(server.store, 'triage_ai'), f'after {cli}')
+                self.assertTrue(self._ai_row()['done'], f'after {cli}')
+        finally:
+            server.store.save_connector({'ConnectorId': had['ConnectorId'], 'Secret': '',
+                                         'Active': int(had['Active'] or 0)}, 't')
             self._restore(was)
 
     def test_a_second_clis_test_does_not_steal_the_brain_from_the_first(self):
@@ -364,9 +420,11 @@ class TheAiRowCanBeTickedFromThePageItSendsYouToTests(unittest.TestCase):
         try:
             server.store.set_setting('triage_ai', '', 't')
             c.post('/api/setup/adopt-brain', json={'cli': 'claude'})
+            first = self._was()
             out = c.post('/api/setup/adopt-brain', json={'cli': 'codex'})
             self.assertFalse(out.json()['adopted'])
-            self.assertEqual(self._was(), 'cli:claude')      # the first one, untouched
+            self.assertEqual(self._was(), first)             # the first one, untouched
+            self.assertTrue(self._ai_row()['done'])
         finally:
             self._restore(was)
 

@@ -4525,7 +4525,7 @@ def setup_seen(body: SetupSeenBody):
     The map is closed: a typo'd step is a 422 rather than a setting nobody can find sitting behind a
     row that can never tick."""
     from . import setup as setup_mod
-    key = {'models': setup_mod.SEEN_MODELS}.get(str(body.step or ''))
+    key = {'models': setup_mod.SEEN_MODELS}.get(body.step)
     if not key: raise HTTPException(422, f'{body.step!r} is not a step that records being seen')
     # AiDefaults posts this on every mount of the models page, so the write and its audit row must
     # be idempotent - otherwise every visit logs a duplicate event that means nothing new.
@@ -4541,15 +4541,26 @@ def setup_adopt_brain(body: SetupAdoptBrainBody):
     """The first CLI that proves it works becomes the triage brain - but only when none is chosen
     yet. CliPicker's `asBrain` branch used to be the only thing that ever wrote `triage_ai`; the
     checklist's "Set up an AI" row now points at the AI CLI agents page instead, and nothing there
-    ever wrote it, so installing and testing a CLI there left that row stubbornly grey. Checking
-    and setting here, server-side, is what keeps a brain the owner already picked from being
-    stomped by a second CLI's test running moments later."""
+    ever wrote it, so installing and testing a CLI there left that row stubbornly grey.
+
+    `body.cli` names a CLI CONNECTION (`claude`, `codex`); `cli:<x>` in `triage_ai` names an agent
+    PROFILE, because every reader of it - `setup._ai`, `llm._build_llm`, `llm.make_cli_llm` - looks
+    the suffix up with `get_agent`. Writing the connection name stored an id nothing could resolve:
+    the row stayed grey AND an install that was happily auto-picking an API key lost its brain
+    entirely. So resolve the connection to a worker first, off the same list the Settings brain
+    picker is built from, and store nothing at all when no profile runs that CLI - a dangling
+    `triage_ai` is worse than an unticked row.
+
+    First writer wins, decided server-side. It is not a compare-and-set: `get_settings` and
+    `set_setting` each take and release the store lock and sync routes run in a threadpool, so two
+    tests landing together can race - and the loser's only cost is that the other valid CLI won."""
     from . import setup as setup_mod
+    worker = next((o['value'] for o in hub_agents.cli_agent_options(store) if o['cli'] == body.cli), '')
     current = str(store.get_settings().get('triage_ai') or '')
-    adopted = not current
+    adopted = bool(worker) and not current
     if adopted:
-        store.set_setting('triage_ai', f'cli:{body.cli}', ACTOR)
-        store.audit('setting', 0, 'setup_adopt_brain', ACTOR, detail={'cli': body.cli})
+        store.set_setting('triage_ai', f'cli:{worker}', ACTOR)
+        store.audit('setting', 0, 'setup_adopt_brain', ACTOR, detail={'cli': body.cli, 'agent': worker})
     return {'ok': True, 'adopted': adopted, **setup_mod.state(store)}
 
 class WalkBody(BaseModel): at: int

@@ -51,7 +51,11 @@ export const CliConnectionsPage = ({ onBack }) => {
       // The first CLI that proves it works becomes the triage brain, because otherwise the setup
       // checklist's "Set up an AI" row sends you here and nothing you can do on this page ticks it.
       // Only when nothing is chosen yet - a brain the owner picked is never stomped by a test run.
-      // The check-and-set happens server-side so two tests landing close together can't both win.
+      // First writer wins, decided server-side (not a compare-and-set - two tests landing together
+      // can race, and either winner is a working brain). `name` is a CONNECTION; the setting names
+      // a worker profile, so the server resolves one and adopts nothing when no profile runs this
+      // CLI. Nothing here reads the answer on purpose: the alert below reports the TEST, and saying
+      // "adopted" for a false reply is exactly how the row it exists to tick stayed grey.
       if (data.ok) await api.post('/api/setup/adopt-brain', { cli: name }).catch(() => {});
     } catch (e) { setTests((t) => ({ ...t, [name]: { ok: false, error: failure(e) } })); }
   };

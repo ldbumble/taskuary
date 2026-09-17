@@ -52,7 +52,10 @@ test("PW-003/PW-004/PW-005 render the six chat clocks and global off help read-o
   page.on("pageerror", (error) => pageErrors.push(error.message));
   page.on("request", (request) => {
     const url = new URL(request.url());
-    if (url.origin === harness.ui && !["GET", "HEAD", "OPTIONS"].includes(request.method())) {
+    // the models page's "you have looked at the defaults" mark (AiDefaults -> /api/setup/seen) is the
+    // visit recording itself, not a save, sync, test or edit - see fixtureState above
+    if (url.origin === harness.ui && !["GET", "HEAD", "OPTIONS"].includes(request.method())
+      && url.pathname !== "/api/setup/seen") {
       writes.push(`${request.method()} ${url.pathname}`);
     }
   });

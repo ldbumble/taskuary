@@ -180,7 +180,7 @@ test("PW-118 a change to the content of the shown Next is taken fresh, never ref
     assert.equal(await title(page, "current"), currentAfterRetry,
       "restoring tagged passive history must retain the explicit owner subject");
     assert.deepEqual(await activeCard(), originalControls, 'restored controls must still target Current');
-    assert.equal(writes.length, beforeWrites + 2, "passive notice and reload must not navigate");
+    assert.equal(writes.length, beforeWrites + 1, "passive notice and reload must not navigate");
     const ordering = await request(h, "/api/fixture/processing/ordering", "POST", {});
     await page.waitForFunction((wanted) => document.querySelector('.tq-pile-row.next .card b')?.textContent.trim() === wanted,
       { timeout: 15000 }, ordering.titles.urgent);

@@ -139,6 +139,44 @@ the py-spy sampler including idle threads (recipe in memory `batch-key-full-hist
 numbers above are the acceptance test; if a step does not deliver its number, stop and look before
 the next.
 
+## Landed (2026-09-17, evening)
+
+All four steps are on master. What each turned out to be, and what the measurement said:
+
+**A** (7b10e3a2) as designed. **B**: `funnel.pile` serves its cache only while the store's dirty-row
+top (`Store.rail_top`, cross-process) and the live-worker signature stand still, and takes a `quiet`
+flag so a turn's admission never reaches the watcher; `capture_from_rail` (funnel_selection) is the
+one road `reserve` and the commit recheck take - a cache hit, not a build; a Next answer and a `done`
+settle carry the rail (`pile`, read after their writes, with `generated_at`) and the page holds it
+(`holdPile`: capture + `forcedLoadStartedAt`), falling back to its own load only when nothing rode
+along. The stale contract narrowed to **the pick**: a press whose shown next is still the server's
+pick is taken fresh, whatever else moved (body, draft, chat); the 409 stays for a pick that moved.
+**C**: `_refresh_after` polls the provider on a thread once `done` is out; a named pull keeps its
+up-front refresh. **D**: `funnel_presentation` keeps a book of stamps per store, valid while the
+dirty-row top stands still; `waitroom` and `connector` joined the dirty tables and `reply_channels`
+the dirty settings so "nothing written" really means "no backing row changed".
+
+**The fifth thing, found by measuring:** `concierge.set_current` writes a setting on every press, and
+`Store.set_setting` dropped the WHOLE rail cache on any setting write - so the rail read after every
+turn was a cold build (1.4 s of a 1.5 s press on the DB copy). Only a setting in
+`PROCESSING_DIRTY_SETTINGS` colds the rail now; the rest count as ignored writes.
+
+**On the owner's DB copy (213 unread, no model, no provider):**
+
+| step | before (live, 15:53) | after (copy) |
+|---|---|---|
+| admission (capture + compare) | rebuild ~500 ms | 25-55 ms |
+| surface (put down, take, write) | in the turn | 40-75 ms |
+| the rail after the turn | reload 1.5-2 s (client) | 330-520 ms, carried in `done` |
+| **Next, click to rows** | **~4 s** | **~0.45-0.65 s** |
+| All read, Next: settle + its rail + press | ~5.5 s | 0.2 + 0.35 + ~0.5 ≈ **1.0-1.2 s** |
+
+What is left in the rail read is `processing_unread.build` (~290 ms: `card_for` deep-copies ~105 ms,
+`compact_inventory` ~100 ms, the rail snapshot's reader copies ~65 ms) - none of it in these four
+steps. The settle's 220 ms is `_processing_validate_settlement_census` running the census inline
+when the worker is behind (always, in the harness). Live numbers are the acceptance test still:
+the request log after the next restart.
+
 ## Out of scope
 
 - Making the membership census itself incremental (separate design; A gives it the dirty rows it

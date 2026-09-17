@@ -111,6 +111,74 @@ def found(home: Path = None) -> list:
     return out
 
 
+# The link door. Three shapes are understood, all read-only and all over https:
+#   a raw SKILL.md            https://raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>/SKILL.md
+#   a GitHub page of one      https://github.com/<owner>/<repo>/blob/<ref>/<path>/SKILL.md
+#   a GitHub repo or folder   https://github.com/<owner>/<repo>[/tree/<ref>[/<path>]]  -> every SKILL.md under it
+# and any other https URL only if it names a SKILL.md outright. Nothing else is fetched: a link is a
+# stranger's text about to become a worker's instructions, so what it can point at is narrow and the
+# body arrives untouched for the owner to read before any of it is written.
+GITHUB_API = 'https://api.github.com'
+RAW_HOST = 'raw.githubusercontent.com'
+FETCH_MAX = 60          # skills per link; a repo with more is a catalogue, not an import
+_FETCH_HEADERS = {'User-Agent': 'taskuary-skill-import', 'Accept': 'application/vnd.github+json'}
+
+
+def _http_get(url: str) -> str:
+    import requests
+    r = requests.get(url, headers=_FETCH_HEADERS, timeout=20)
+    if r.status_code == 404: raise ValueError(f'nothing at {url}')
+    if r.status_code == 403 and 'rate limit' in r.text.lower(): raise ValueError('GitHub is rate-limiting anonymous reads - try again in a while')
+    r.raise_for_status()
+    return r.text
+
+
+def _skill_at(url: str, text: str, name: str, plugin: str = '') -> dict:
+    got = parse(text)
+    return {**got, 'name': name or got['name'], 'path': url, 'plugin': plugin, 'plugin_desc': '', 'bytes': len(text)}
+
+
+def fetch_url(url: str, get=None) -> list:
+    """Entries for every skill a link names - see the shapes above. `get` is the text fetcher, so a
+    test can hand in a fake without the network. Raises ValueError with a plain reason for anything
+    this does not read, which the endpoint shows as written."""
+    from urllib.parse import urlsplit, unquote
+    get = get or _http_get
+    u = urlsplit(str(url or '').strip())
+    if u.scheme != 'https' or not u.netloc: raise ValueError('a skill link starts with https://')
+    parts = [unquote(p) for p in u.path.strip('/').split('/') if p]
+    host = u.netloc.lower()
+    if host == RAW_HOST:
+        if not parts or parts[-1] != 'SKILL.md': raise ValueError('a raw link must name a SKILL.md')
+        name = parts[-2] if len(parts) >= 5 else parts[1]                  # <owner>/<repo>/<ref>/.../<folder>/SKILL.md
+        return [_skill_at(url, get(url), name, plugin=parts[1] if len(parts) > 1 else '')]
+    if host in ('github.com', 'www.github.com'):
+        if len(parts) < 2: raise ValueError('a GitHub link needs an owner and a repository')
+        owner, repo = parts[0], parts[1].removesuffix('.git')
+        kind, ref, sub = (parts[2], parts[3], parts[4:]) if len(parts) >= 4 and parts[2] in ('tree', 'blob') else ('', '', [])
+        if kind == 'blob':
+            if not sub or sub[-1] != 'SKILL.md': raise ValueError('a GitHub file link must point at a SKILL.md')
+            raw = f'https://{RAW_HOST}/{owner}/{repo}/{ref}/{"/".join(sub)}'
+            return [_skill_at(raw, get(raw), sub[-2] if len(sub) > 1 else repo, plugin=repo)]
+        if not ref:
+            ref = str(json.loads(get(f'{GITHUB_API}/repos/{owner}/{repo}')).get('default_branch') or 'main')
+        tree = json.loads(get(f'{GITHUB_API}/repos/{owner}/{repo}/git/trees/{ref}?recursive=1'))
+        prefix = '/'.join(sub) + '/' if sub else ''
+        paths = sorted(t['path'] for t in tree.get('tree', [])
+                       if t.get('type') == 'blob' and t['path'].startswith(prefix) and t['path'].rsplit('/', 1)[-1] == 'SKILL.md')
+        if not paths: raise ValueError(f'no SKILL.md under {url}')
+        if len(paths) > FETCH_MAX: raise ValueError(f'{len(paths)} skills there - point at a folder with at most {FETCH_MAX}')
+        out = []
+        for p in paths:
+            raw = f'https://{RAW_HOST}/{owner}/{repo}/{ref}/{p}'
+            folder = p.rsplit('/', 2)[-2] if '/' in p else repo
+            out.append(_skill_at(raw, get(raw), folder, plugin=repo))
+        return out
+    if parts and parts[-1] == 'SKILL.md':
+        return [_skill_at(url, get(url), parts[-2] if len(parts) > 1 else host)]
+    raise ValueError('that link is not a SKILL.md, a GitHub file, or a GitHub repository or folder')
+
+
 # A `description` is written for a harness deciding whether to load a skill; a `purpose` is written
 # for a roster of workers triage picks between. Same sentence, different reader - so a model rewrites
 # it. It does NOT touch the body: that is the expertise being imported, and summarising it would

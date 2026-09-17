@@ -5,7 +5,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Alert, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
   DialogTitle, FormControlLabel, TextField, Typography } from "@mui/material";
 import api from "./api";
-import { buildPayload, clashText, cutBy, reconcileImport, slug } from "./skillImport.js";
+import { buildPayload, chosen, clashText, cutBy, isLink, reconcileImport, slug, toRows } from "./skillImport.js";
 import { BORDER, FAINT, INK, ROLES, mono } from "./theme.jsx";
 import { Confirm } from "./ui.jsx";
 
@@ -48,11 +48,13 @@ export default function SkillImport({ onClose, onImported }) {
     if (!target) return;
     setBusy(true); setErr("");
     try {
-      const { data } = await api.post("/api/skills/read", { path: target });
+      // a link is fetched (raw SKILL.md, GitHub file, or a whole GitHub repo/folder); anything else is
+      // a path on this machine. Both only PROPOSE - nothing is written until step 3.
+      const { data } = isLink(target)
+        ? await api.post("/api/skills/fetch", { url: target })
+        : await api.post("/api/skills/read", { path: target });
       setDocChars(data.doc_chars || 0);
-      // enabled defaults OFF: reading a skill only proposes it, it does not offer it to the router.
-      // name is slugged up front so what the owner sees is already what the server will store.
-      setRows((data.data || []).map((r) => ({ ...r, name: slug(r.name), enabled: false, replace: false, clash: null, imported: false })));
+      setRows(toRows(data.data));    // include: on for a single skill, off for a catalogue; enabled: always off
       setStep(1);
     } catch (e) { setErr(failure(e)); }
     setBusy(false);
@@ -73,8 +75,9 @@ export default function SkillImport({ onClose, onImported }) {
     setBusy(false);
   };
 
-  const pending = rows.filter((r) => !r.imported);
-  const allNamed = rows.every((r) => r.name.trim());
+  const pending = chosen(rows);
+  const allNamed = pending.every((r) => r.name.trim());
+  const setAll = (include) => setRows((rs) => rs.map((r) => (r.imported ? r : { ...r, include })));
 
   return (
     <Dialog open onClose={busy ? undefined : onClose} fullWidth maxWidth="md" PaperProps={{ sx: { minHeight: "62vh" } }}>
@@ -86,12 +89,12 @@ export default function SkillImport({ onClose, onImported }) {
           <>
             <Typography variant="body2" sx={{ color: FAINT }}>
               A skill is somebody else's SKILL.md - a rules document written for one coding harness, not
-              access to anything. Point at a single SKILL.md, or a plugin folder to bring over everything
-              inside it at once.
+              access to anything. Paste a link (a SKILL.md, or a GitHub repository or folder holding several)
+              or a path on this machine (one SKILL.md, or a plugin folder). You choose which ones to bring in.
             </Typography>
             <Box sx={{ display: "flex", gap: 1 }}>
-              <TextField fullWidth size="small" label="Path" placeholder="~/.claude/skills/researcher/SKILL.md"
-                value={path} onChange={(e) => setPath(e.target.value)} />
+              <TextField fullWidth size="small" label="Link or path" placeholder="https://github.com/anthropics/skills/tree/main/skills"
+                value={path} onChange={(e) => setPath(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") read(); }} />
               <Button variant="contained" disableElevation disabled={busy || !path.trim()} onClick={read}>
                 {busy ? <CircularProgress size={16} sx={{ color: "#fff" }} /> : "Read"}
               </Button>
@@ -122,13 +125,22 @@ export default function SkillImport({ onClose, onImported }) {
         {step === 1 && (
           <>
             <Typography variant="body2" sx={{ color: FAINT }}>
-              This text becomes a worker's instructions - that is why the body is shown here, before
-              anything is written.
+              Tick the skills to bring in. Each becomes a worker's instructions - that is why the body is
+              shown here, before anything is written.
             </Typography>
+            {rows.length > 1 && (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <Typography variant="caption" sx={{ color: FAINT, flex: 1 }}>{pending.length} of {rows.length} chosen</Typography>
+                <Button size="small" onClick={() => setAll(true)}>Select all</Button>
+                <Button size="small" onClick={() => setAll(false)}>None</Button>
+              </Box>
+            )}
             <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
               {rows.map((r, i) => (
-                <Box key={r.path || i} sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, p: 1.25, mb: 1 }}>
+                <Box key={r.path || i} sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, p: 1.25, mb: 1, opacity: r.include ? 1 : 0.6 }}>
                   <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
+                    <Checkbox checked={!!r.include} onChange={(e) => setRow(i, { include: e.target.checked })}
+                      inputProps={{ "aria-label": `bring in ${r.name}` }} sx={{ p: 0.5 }} />
                     <TextField size="small" label="Name" value={r.name} sx={{ minWidth: 160 }}
                       helperText="Saved in this shape - lowercase, hyphenated"
                       onChange={(e) => setRow(i, { name: e.target.value })}
@@ -163,7 +175,7 @@ export default function SkillImport({ onClose, onImported }) {
               {pending.length} skill{pending.length === 1 ? "" : "s"} ready to write as {pending.length === 1 ? "a profile" : "profiles"}.
             </Typography>}
             <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-              {rows.map((r, i) => (
+              {rows.map((r, i) => r.include && (
                 <Box key={r.path || i} sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.6, flexWrap: "wrap" }}>
                   <Typography sx={{ ...mono, fontSize: 12.5, flex: 1, minWidth: 120 }}>{r.name}</Typography>
                   <Typography variant="caption" sx={{ color: FAINT }}>{r.enabled ? "on the roster" : "not routed"}</Typography>
@@ -188,7 +200,7 @@ export default function SkillImport({ onClose, onImported }) {
         <Button disabled={busy} onClick={onClose}>{done && !pending.length ? "Done" : "Close"}</Button>
         <Box sx={{ flex: 1 }} />
         {step > 0 && <Button disabled={busy} onClick={() => setStep(step - 1)}>Back</Button>}
-        {step === 1 && <Button variant="contained" disableElevation disabled={busy || !rows.length || !allNamed} onClick={() => setStep(2)}>Next</Button>}
+        {step === 1 && <Button variant="contained" disableElevation disabled={busy || !pending.length || !allNamed} onClick={() => setStep(2)}>Next</Button>}
         {step === 2 && pending.length > 0 && (
           <Button variant="contained" disableElevation disabled={busy} onClick={runImport}>
             {busy ? <CircularProgress size={16} sx={{ color: "#fff" }} /> : "Import"}

@@ -541,6 +541,47 @@ def seed_profiles(cfg: dict) -> list:
     return added
 
 
+def drop_cli_clones(cfg: dict, store) -> list:
+    """Remove the coding workers named after a CLI - codex, copilot, devin, opencode... - leaving
+    `coder`. Returns the names dropped, so the caller knows whether to save.
+
+    There is ONE coding role and one CODER.md; a brain is chosen per session from the CLI
+    connections. An older setup minted a coding worker per installed CLI, each pointing at CODER.md
+    and differing only in which CLI ran it. That minting stopped on 2026-09-14 (adopt_installed's
+    docstring), but the rows it had already written stayed on the Manage profiles page - five
+    "coders" for one document (the owner, 2026-09-17: "there should be one coder.md for all cli's").
+
+    Only a row that IS such a clone goes: coding kind, named after a known CLI, using the shared
+    document. A coding profile with its own name or its own rules document is the owner's and stays.
+    A clone's cwd_map (repository -> checkout) is folded into coder's so no path mapping is lost."""
+    from .clis import KNOWN
+    from .cli_connections import cli_key
+    clis = {k['name'] for k in KNOWN} | {cli_key(k['cmd']) for k in KNOWN}
+    have = cfg.get('agents') or {}
+    def is_clone(name, prof):
+        if name == 'coder' or name not in clis: return False
+        if str(prof.get('kind') or 'coding').lower() not in CODING_KINDS: return False
+        return str(prof.get('rules_doc') or 'coder') == 'coder'
+    rows = {a['Name']: a for a in store.list_agents(active_only=False)}
+    gone = []
+    for name in sorted(set(have) | set(rows)):
+        prof = have.get(name)
+        if prof is None:
+            try: prof = json.loads(rows[name].get('Config') or '{}')
+            except ValueError: prof = {}
+            prof.setdefault('kind', rows[name].get('Kind') or 'coding')
+        if not is_clone(name, prof): continue
+        if prof.get('cwd_map') and 'coder' in have:
+            have['coder'].setdefault('cwd_map', {})
+            have['coder']['cwd_map'] = {**prof['cwd_map'], **have['coder']['cwd_map']}
+        have.pop(name, None)
+        if name in rows: store.delete_agent(name)
+        gone.append(name)
+    if gone and str(store.get_settings().get('default_agent') or '') in gone:
+        store.set_setting('default_agent', 'coder', 'system')      # the role, which is what that setting names now
+    return gone
+
+
 def profile_purpose(name: str, prof: dict, kind: str = 'coding') -> str:
     return str(prof.get('purpose') or DEFAULT_PROFILES.get(name, {}).get('purpose')
                or ('writes and changes code, in a repository' if kind == 'coding' else '')).strip()

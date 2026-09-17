@@ -8,6 +8,7 @@ import { BORDER, DIM, ROLES, card, mono } from "./theme.jsx";
 import { Crumb, Empty, ConfirmDelete, TaskuaryMark } from "./ui.jsx";
 import { useCliInstall, InstallLine, UpdateLine } from "./cliInstall.jsx";
 import { useCliSetup, SetupButton, CliPane } from "./cliSetup.jsx";
+import SkillImport from "./SkillImport.jsx";
 
 const lines = (v) => String(v || "").split("\n").map((x) => x.trim()).filter(Boolean);
 const failure = (e) => e?.response?.data?.detail || e?.message || "Could not save changes";
@@ -130,6 +131,7 @@ export const AgentsPage = ({ onBack, section = "Docs", title = "Manage profiles"
   const [agents, setAgents] = useState(null), [connections, setConnections] = useState([]);
   const [draft, setDraft] = useState(initialCreate ? { ...BLANK_PROFILE } : null);
   const [err, setErr] = useState(""), [saving, setSaving] = useState(false), [confirmDel, setConfirmDel] = useState(null);
+  const [importSkills, setImportSkills] = useState(false);   // the same wizard Docs -> Profiles opens
   const load = useCallback(async () => {
     try {
       const [a, c] = await Promise.all([api.get("/api/agents"), api.get("/api/cli/connections")]);
@@ -167,7 +169,9 @@ export const AgentsPage = ({ onBack, section = "Docs", title = "Manage profiles"
     <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
       <Typography variant="body2" sx={{ color: DIM, flex: 1 }}>Give each worker a purpose and instructions, then choose its provider and model. Triage uses the purpose to assign new tasks.</Typography>
       <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDraft({ ...BLANK_PROFILE })}>Add profile</Button>
+      <Button variant="outlined" onClick={() => setImportSkills(true)} title="Bring in somebody else's SKILL.md - from a link or this machine - as a worker profile">Import skills</Button>
     </Box>
+    {importSkills && <SkillImport onClose={() => setImportSkills(false)} onImported={load} />}
     {!agents && !err && <CircularProgress size={22} />}
     {agents && !Object.keys(agents).length && <Empty>Add a profile to create your first worker.</Empty>}
     {Object.entries(agents || {}).map(([name, a]) => <Box key={name} data-profile={name} sx={{ py: 2, borderBottom: `1px solid ${BORDER}` }}>

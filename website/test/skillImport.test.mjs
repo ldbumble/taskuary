@@ -2,14 +2,47 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { buildPayload, clashText, cutBy, reconcileImport, slug } from "../src/skillImport.js";
+import { buildPayload, chosen, clashText, cutBy, isLink, reconcileImport, slug, toRows } from "../src/skillImport.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 const wizard = read("SkillImport.jsx");
 const docs = read("DocsView.jsx");
+const agents = read("AgentsPanel.jsx");
+
+test("a link goes to /fetch and a path to /read, decided in one place", () => {
+  assert.equal(isLink("https://github.com/anthropics/skills"), true);
+  assert.equal(isLink(" HTTP://x/SKILL.md"), true);
+  assert.equal(isLink("~/.claude/skills/x/SKILL.md"), false);
+  assert.equal(isLink("C:/Users/me/SKILL.md"), false);
+  assert.match(wizard, /isLink\(target\)/);
+  assert.match(wizard, /"\/api\/skills\/fetch", \{ url: target \}/);
+  assert.match(wizard, /"\/api\/skills\/read", \{ path: target \}/);
+});
+
+test("you choose which ones: one skill starts chosen, a catalogue starts unchosen, only chosen rows are sent", () => {
+  const one = toRows([{ name: "A", body: "b" }]);
+  assert.equal(one[0].include, true); assert.equal(one[0].enabled, false);
+  const many = toRows([{ name: "A" }, { name: "B" }, { name: "C" }]);
+  assert.deepEqual(many.map((r) => r.include), [false, false, false]);
+  many[1].include = true;
+  assert.deepEqual(chosen(many).map((r) => r.name), ["b"]);
+  assert.deepEqual(buildPayload(many).map((r) => r.name), ["b"]);       // A and C are never written
+  assert.deepEqual(chosen([{ include: true, imported: true }, { include: true, imported: false }]).length, 1);
+  // the markup: a tick per row, select all / none, Next needs at least one chosen
+  assert.match(wizard, /<Checkbox checked=\{!!r\.include\}/);
+  assert.match(wizard, /Select all/); assert.match(wizard, />None</);
+  assert.match(wizard, /disabled=\{busy \|\| !pending\.length \|\| !allNamed\}/);
+  assert.match(wizard, /rows\.map\(\(r, i\) => r\.include && \(/);     // step 3 lists only the chosen
+});
+
+test("Manage profiles can import skills too, beside Add profile", () => {
+  assert.match(agents, /import SkillImport from "\.\/SkillImport\.jsx"/);
+  assert.match(agents, /Add profile<\/Button>\s*<Button variant="outlined" onClick=\{\(\) => setImportSkills\(true\)\}/);
+  assert.match(agents, /<SkillImport onClose=\{\(\) => setImportSkills\(false\)\} onImported=\{load\} \/>/);
+});
 
 const row = (over) => ({ name: "My Skill", purpose: "p", body: "b", kind: "general", path: "/x",
-  bytes: 10, enabled: true, replace: false, clash: null, imported: false, ...over });
+  bytes: 10, include: true, enabled: true, replace: false, clash: null, imported: false, ...over });
 
 test("nothing is imported without the owner reading it", () => {
   // /read proposes, /import writes - a remote skill is a draft until a human says otherwise
@@ -21,7 +54,7 @@ test("nothing is imported without the owner reading it", () => {
 });
 
 test("nothing reaches the router unless it is ticked, and the label says what the tick does", () => {
-  assert.match(wizard, /enabled: false/);   // /read's proposals start unticked
+  assert.equal(toRows([{ name: "x" }])[0].enabled, false);   // a proposal starts unticked, whatever door it came through
   assert.match(wizard, /Offer this worker to the router/);
   assert.match(wizard, /triage never picks it/);
 });
@@ -60,8 +93,10 @@ test("the size warning is the seed's own cut, reported by the server - not a byt
   assert.match(wizard, /kb\(r\.bytes\)/);
 });
 
-test("the wizard does not promise a link door that was never built", () => {
-  assert.doesNotMatch(wizard, /fetched from a link/);
+test("the wizard names both doors - a link or a path - and the field takes either", () => {
+  assert.match(wizard, /Paste a link/);
+  assert.match(wizard, /label="Link or path"/);
+  assert.doesNotMatch(wizard, /fetched from a link/);   // the old copy promised a door before it existed
 });
 
 test("Docs opens the wizard from Profiles, beside Add profile", () => {

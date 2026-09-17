@@ -459,6 +459,126 @@ class WhatTriageSeesTests(unittest.TestCase):
         self.assertEqual(by['coder']['line'], ''); self.assertIn('coding', by['coder']['reason'])
 
 
+class FetchByLinkTests(unittest.TestCase):
+    """The link door reads three shapes and nothing else. `get` is faked, so these prove which URLs
+    are asked for - the whole safety story of a fetch is WHAT it fetches."""
+    RAW = 'https://raw.githubusercontent.com/acme/skills/main/skills/nda-triage/SKILL.md'
+
+    def _get(self, tree_paths=(), default_branch='main'):
+        asked = []
+        def get(url):
+            asked.append(url)
+            if url.endswith('/repos/acme/skills'): return json.dumps({'default_branch': default_branch})
+            if '/git/trees/' in url:
+                return json.dumps({'tree': [{'path': p, 'type': 'blob'} for p in tree_paths] + [{'path': 'skills', 'type': 'tree'}]})
+            if url.endswith('SKILL.md'): return SKILL.replace('nda-triage', url.rsplit('/', 2)[-2])
+            raise AssertionError(f'unexpected fetch {url}')
+        return get, asked
+
+    def test_a_raw_skill_md_is_one_skill_named_after_its_folder(self):
+        get, asked = self._get()
+        got = skillimport.fetch_url(self.RAW, get)
+        self.assertEqual([g['name'] for g in got], ['nda-triage'])
+        self.assertEqual(got[0]['plugin'], 'skills'); self.assertEqual(got[0]['path'], self.RAW)
+        self.assertIn('indemnity clause', got[0]['body'])
+        self.assertEqual(asked, [self.RAW])
+
+    def test_a_github_file_page_is_read_raw(self):
+        get, asked = self._get()
+        got = skillimport.fetch_url('https://github.com/acme/skills/blob/main/skills/nda-triage/SKILL.md', get)
+        self.assertEqual(got[0]['name'], 'nda-triage')
+        self.assertEqual(asked, [self.RAW])                 # the page itself is never fetched, only the file
+
+    def test_a_repository_lists_every_skill_under_it(self):
+        get, asked = self._get(tree_paths=['README.md', 'skills/a/SKILL.md', 'skills/b/SKILL.md', 'skills/b/notes.md'])
+        got = skillimport.fetch_url('https://github.com/acme/skills', get)
+        self.assertEqual([g['name'] for g in got], ['a', 'b'])
+        self.assertTrue(all(g['plugin'] == 'skills' for g in got))
+        self.assertEqual(asked[0], 'https://api.github.com/repos/acme/skills')                 # default branch
+        self.assertEqual(asked[1], 'https://api.github.com/repos/acme/skills/git/trees/main?recursive=1')
+        self.assertEqual(asked[2:], ['https://raw.githubusercontent.com/acme/skills/main/skills/a/SKILL.md',
+                                     'https://raw.githubusercontent.com/acme/skills/main/skills/b/SKILL.md'])
+
+    def test_a_folder_link_reads_only_beneath_it_on_that_branch(self):
+        get, asked = self._get(tree_paths=['skills/a/SKILL.md', 'other/c/SKILL.md'])
+        got = skillimport.fetch_url('https://github.com/acme/skills/tree/dev/skills', get)
+        self.assertEqual([g['name'] for g in got], ['a'])
+        self.assertNotIn('https://api.github.com/repos/acme/skills', asked)   # the branch was named, so not asked
+        self.assertIn('/git/trees/dev?', asked[0])
+
+    def test_what_it_refuses(self):
+        get, _ = self._get()
+        for url, why in (('http://github.com/acme/skills', 'https'),
+                         ('https://example.com/anything.md', 'not a SKILL.md'),
+                         ('https://github.com/acme', 'owner and a repository'),
+                         ('https://github.com/acme/skills/blob/main/README.md', 'SKILL.md'),
+                         ('https://raw.githubusercontent.com/acme/skills/main/README.md', 'SKILL.md')):
+            with self.assertRaises(ValueError, msg=url) as c: skillimport.fetch_url(url, get)
+            self.assertIn(why, str(c.exception), url)
+        get, _ = self._get(tree_paths=['skills/x/SKILL.md'])
+        with self.assertRaises(ValueError) as c: skillimport.fetch_url('https://github.com/acme/skills/tree/main/nothing', get)
+        self.assertIn('no SKILL.md', str(c.exception))
+        get, _ = self._get(tree_paths=[f'skills/s{i}/SKILL.md' for i in range(skillimport.FETCH_MAX + 1)])
+        with self.assertRaises(ValueError) as c: skillimport.fetch_url('https://github.com/acme/skills', get)
+        self.assertIn('at most', str(c.exception))
+
+    def test_any_other_https_host_only_for_a_file_called_skill_md(self):
+        get = lambda url: SKILL
+        got = skillimport.fetch_url('https://skills.example.org/legal/nda/SKILL.md', get)
+        self.assertEqual(got[0]['name'], 'nda')
+
+    def test_the_endpoint_proposes_and_writes_nothing(self):
+        s = MemoryStore()
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.llm.build_llm', side_effect=RuntimeError('no brain')), \
+             mock.patch.object(skillimport, '_http_get', lambda url: SKILL):
+            body = TestClient(server.app).post('/api/skills/fetch', json={'url': self.RAW}).json()
+        self.assertEqual(body['data'][0]['name'], 'nda-triage'); self.assertIn('doc_chars', body)
+        self.assertEqual(s.list_agents(), [])
+        with mock.patch.object(server, 'store', s):
+            resp = TestClient(server.app).post('/api/skills/fetch', json={'url': 'http://x'})
+        self.assertEqual(resp.status_code, 422); self.assertIn('https', resp.json()['detail'])
+
+    def test_an_agent_token_cannot_use_the_link_door(self):
+        from taskuary import guard
+        for path in ('/api/skills/fetch', '/api/skills/read', '/api/skills/import'):
+            self.assertTrue(guard.denied('POST', path), path)
+        self.assertFalse(guard.denied('GET', '/api/skills/found'))
+
+
+class OneCoderTests(unittest.TestCase):
+    """There is one coding role and one CODER.md; a brain is picked per session. An older setup minted
+    a coding worker per installed CLI, all pointing at CODER.md, and the rows outlived the minting."""
+    def _cfg(self):
+        return {'agents': {
+            'coder':      {'kind': 'coding', 'rules_doc': 'coder', 'provider': 'cli:claude', 'cwd_map': {'repo-a': 'C:/a'}},
+            'codex':      {'kind': 'coding', 'rules_doc': 'coder', 'provider': 'cli:codex', 'cwd_map': {'repo-b': 'C:/b', 'repo-a': 'C:/old'}},
+            'copilot':    {'kind': 'coding', 'provider': 'cli:copilot'},
+            'researcher': {'kind': 'research', 'purpose': 'outside information', 'provider': 'cli:claude'},
+            'frontend':   {'kind': 'coding', 'rules_doc': 'frontend', 'provider': 'cli:codex'},     # the owner's own coding role
+        }}
+
+    def test_the_clones_go_and_the_owners_profiles_stay(self):
+        from taskuary import agents
+        s, cfg = MemoryStore(), self._cfg()
+        for n in cfg['agents']: s.upsert_agent(n, cfg['agents'][n]['kind'], 'cli', json.dumps(cfg['agents'][n]))
+        s.upsert_agent('devin', 'coding', 'cli', '{"rules_doc": "coder"}')       # a store-only leftover
+        s.set_setting('default_agent', 'codex', 'owner')
+        gone = agents.drop_cli_clones(cfg, s)
+        self.assertEqual(gone, ['codex', 'copilot', 'devin'])
+        self.assertEqual(sorted(cfg['agents']), ['coder', 'frontend', 'researcher'])
+        self.assertEqual(sorted(a['Name'] for a in s.list_agents()), ['coder', 'frontend', 'researcher'])
+        self.assertEqual(cfg['agents']['coder']['cwd_map'], {'repo-a': 'C:/a', 'repo-b': 'C:/b'})  # folded in, coder's own wins
+        self.assertEqual(s.get_settings()['default_agent'], 'coder')
+        self.assertEqual(agents.drop_cli_clones(cfg, s), [])                         # idempotent
+
+    def test_a_clean_install_is_untouched(self):
+        from taskuary import agents
+        s, cfg = MemoryStore(), {'agents': {'coder': {'kind': 'coding', 'provider': 'cli:claude'}}}
+        s.upsert_agent('coder', 'coding', 'cli', '{}')
+        self.assertEqual(agents.drop_cli_clones(cfg, s), [])
+        self.assertIn('coder', cfg['agents'])
+
+
 class ReadReportsTheCutTests(unittest.TestCase):
     """The wizard warned "large" at 20,000 bytes while the seed cuts a rules document at DOC_CHARS
     flattened - eleven of the fifteen skills on the machine this was built on arrived truncated with

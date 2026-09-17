@@ -76,6 +76,16 @@ try:
 except Exception as _e:
     from loguru import logger as _log
     _log.warning(f'could not adopt the installed CLIs: {_e}')
+try:
+    # one coding role, one CODER.md: the per-CLI coding clones an older setup minted go
+    _dropped = hub_agents.drop_cli_clones(cfg, store)
+    if _dropped:
+        config.save(cfg)
+        from loguru import logger as _log
+        _log.info(f"one coder for every CLI: dropped the coding clones {', '.join(_dropped)}")
+except Exception as _e:
+    from loguru import logger as _log
+    _log.warning(f'could not drop the per-CLI coding clones: {_e}')
 @asynccontextmanager
 async def _lifespan(_app):
     live_bus.bind(asyncio.get_running_loop())
@@ -4799,10 +4809,29 @@ def skills_found():
 def skills_read(body: SkillPathBody):
     """A path (a SKILL.md, or a plugin folder) turned into proposals. WRITES NOTHING: the owner reads
     the purpose and the body before any of it becomes a worker's instructions."""
-    from . import skillimport, llm as llm_mod
+    from . import skillimport
     try: entries = skillimport.read_path(body.path)
     except OSError as e: raise HTTPException(422, f'could not read that: {e}')
     if not entries: raise HTTPException(422, 'no SKILL.md there')
+    return _skill_proposals(entries)
+
+
+class SkillUrlBody(BaseModel): url: str
+
+@app.post('/api/skills/fetch')
+def skills_fetch(body: SkillUrlBody):
+    """A link - a raw SKILL.md, a GitHub file, or a GitHub repository or folder holding several -
+    turned into proposals, the same shape as /read. WRITES NOTHING, and fetches only what the link
+    names (skillimport.fetch_url says which shapes)."""
+    from . import skillimport
+    try: entries = skillimport.fetch_url(body.url)
+    except ValueError as e: raise HTTPException(422, str(e))
+    except Exception as e: raise HTTPException(422, f'could not fetch that: {str(e)[:200]}')
+    return _skill_proposals(entries)
+
+
+def _skill_proposals(entries: list) -> dict:
+    from . import skillimport, llm as llm_mod
     try: brain = llm_mod.build_llm(store)
     except Exception: brain = None
     # `flat` is the body's length AS A SESSION RECEIVES IT and `doc_chars` is where the seed cuts a

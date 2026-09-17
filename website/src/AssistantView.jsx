@@ -34,7 +34,7 @@ import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf } fro
 import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, hasNextSelection, interactiveCardIndex, keysOf, laneCounted, lastSaidIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, pendingAlerts, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
-import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WrapupCard, sourceColor } from "./assistantCards.jsx";
+import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WalkCard, WrapupCard, sourceColor } from "./assistantCards.jsx";
 import FeedView from "./FeedView.jsx";
 import GeneralWorkspace from "./GeneralWorkspace.jsx";
 import { ROADS, roadOfCard } from "./timelineState.js";
@@ -381,7 +381,7 @@ function Line({ m, live, last, actions, fresh }) {
   // ``fresh`` is a complete presentation, not a patch. Exact replacement clears source fields
   // that disappeared while retaining the durable conversation line and the card's local UI state.
   const c = follows ? fresh : m.card;                     // the live card follows the pile
-  const kind = c?.kind === "setup" ? "setup" : (m.proposal || c?.kind === "proposal") ? "proposal" : cardFor(c);
+  const kind = c?.kind === "setup" ? "setup" : c?.kind === "walk" ? "walk" : (m.proposal || c?.kind === "proposal") ? "proposal" : cardFor(c);
   // From the DURABLE turn, never from `fresh`: the vocabulary was chosen when the line was written and
   // is recorded with it, while a pile refresh rebuilds the live item WITHOUT chips - reading them off
   // `fresh` made the words vanish on the next poll. A verb that has since stopped applying is refused
@@ -398,6 +398,8 @@ function Line({ m, live, last, actions, fresh }) {
     idea: <IdeaCard card={c} onAct={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} />,
     message: <MessageCard card={c} onDone={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} onSurface={actions.surface} />,
     setup: <SetupCard card={m.card} onNavigate={actions.navigate} onHandOff={actions.handOff} />,
+    walk: <WalkCard card={m.card} at={m.card.n} total={m.card.total} onNavigate={actions.navigate}
+      onNext={() => actions.walk(m.card.n + 1)} onFinish={() => actions.walk(-1)} />,
     brief: <BriefCard card={m.card} onStart={actions.start} />,
     task: <TaskCard card={c} onDone={actions.done} onOpenTask={actions.openTask} />,
     fyis: <FyisCard card={c} onDone={actions.done} onSurface={actions.surface} onTimeline={actions.timeline} onPropose={actions.propose} />,
@@ -409,7 +411,7 @@ function Line({ m, live, last, actions, fresh }) {
         <div className="avatar"><TaskuaryMark size={18} /></div>
         <div className="body">
           {m.text ? (looksMd(m.text) ? <Md text={m.text} /> : m.text.split("\n").map((p, i) => <p key={i}>{p}</p>)) : null}
-          {!live && m.card && kind && kind !== "setup" && kind !== "brief" && (
+          {!live && m.card && kind && kind !== "setup" && kind !== "walk" && kind !== "brief" && (
             <div className="tq-card-note" style={{ display: "flex", alignItems: "center", gap: 5 }}>
               <SourceMark item={m.card} size={12} /> {m.card.title}
               {m.card.tid && <a href={`#task=${m.card.tid}`} style={{ color: "#55697a", marginLeft: 4 }}>{m.card.ref}</a>}
@@ -976,8 +978,28 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (current) { try { await api.post("/api/funnel/settle", { key: current, verb: "done" }); } catch { /* it may already be gone */ } }
     advance();
   };
-  const setup = () => setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: "Tell me what to set up - a report, a connection, an automation - in a sentence. I open it as a walk-through with the assistant: it takes you through it here, nothing is built and no repository is touched. If something does have to be built, say send it to the coding agent.",
-    card: { key: "setup", kind: "setup", lane: "report", title: "Set something up" }, options: [] }]);
+  // Setting Taskuary up: the scripted walk, one stop per message so the conversation keeps the
+  // trail. Nothing here reaches a model - a question typed during it is an ordinary turn, answered
+  // beside the walk, and Next picks the script back up where it was.
+  const pushStop = (data) => {
+    const stop = (data.stops || [])[data.at];
+    if (!stop) return;
+    setMsgs((m) => [...m, { id: `w${Date.now()}`, role: "assistant",
+      card: { ...stop, kind: "walk", lane: "report", total: data.total }, options: [] }]);
+  };
+  const setup = async () => {
+    try { pushStop((await api.get("/api/setup/walk")).data); }
+    catch { setMsgs((m) => [...m, { id: `w${Date.now()}`, role: "receipt", text: "the walk could not be loaded" }]); }
+  };
+  // -1 is Finish: walking off the end clears the place server-side, so the next press starts over.
+  const walkTo = async (at) => {
+    try {
+      const { data } = await api.post("/api/setup/walk", { at });
+      if (at >= 0 && at < data.total) pushStop(data);
+      else setMsgs((m) => [...m, { id: `w${Date.now()}`, role: "receipt",
+        text: "Walk finished — “Set up Taskuary” starts it again any time." }]);
+    } catch { /* the card stays where it is; nothing was lost */ }
+  };
   // The walk's task, fetched once so GeneralWorkspace has the row it needs (it owns everything
   // after that: the session, the provider, the browser beside the thread).
   const enterWalk = async ({ tid, ref, title }) => {
@@ -1148,7 +1170,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   };
 
   const actions = { done, start, handOff, openTask: onOpenTask, timeline, navigate: onNavigate,
-    chip: runChip, busy: busy || resetting || !!handoff,
+    walk: walkTo, chip: runChip, busy: busy || resetting || !!handoff,
     confirm: confirmProposal, cancel: cancelProposal, propose: proposeDirect, preview: previewProposal,
     surface: (key, note) => {
       if (note) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: note }]);
@@ -1166,9 +1188,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         <div className="who" style={{ minWidth: 0 }}><b>Taskuary</b><span>{old ? `An earlier chat · ${fmtDateTime(old.at)}` : resetting ? "new chat" : !pile ? "Loading your items…" : statusLine(items, busy)}</span></div>
         <div className="grow" />
         {/* Setting Taskuary up is not a first-run-only wizard (PW-189): the entry stays on the header, and it
-            opens the same AI-led walk-through in THIS conversation - nothing is navigated away from, and the
-            click carries no phrase for anything to interpret. */}
-        <Tooltip title="Walk through setting Taskuary up — the AI brain, where work arrives, your documents and reports">
+            opens the scripted walk in THIS conversation - nothing is navigated away from, and nothing here
+            is a phrase for an AI to interpret, since none may be connected yet when this gets pressed. */}
+        <Tooltip title="A walk through every part of Taskuary — one step at a time, no AI needed">
           <button type="button" className="tq-chip tq-phone-hide" disabled={busy || resetting} onClick={setup}>Set up Taskuary</button></Tooltip>
         <StageMode mode={stageMode} setMode={setStageMode} />
         <Tooltip title="The Timeline"><IconButton size="small" onClick={() => setRailOpen(true)} sx={{ display: { xs: "inline-flex", md: "none" } }}><ViewSidebarIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>

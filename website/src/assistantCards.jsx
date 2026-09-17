@@ -26,6 +26,7 @@ import { TerminalPane } from "./TerminalView.jsx";
 import { agentCardView } from "./agentCardView.js";
 import { lazyGeneral } from "./lazyGeneral.js";
 import { RepoPicker } from "./RepoPicker.jsx";
+import { useCliSetup, SetupButton, CliPane, canSetup } from "./cliSetup.jsx";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "That did not work";
 const edge = (lane) => { const r = laneMeta(lane).role; return r ? ROLES[r].solid : "#d3ccc1"; };
@@ -744,6 +745,69 @@ export function SetupCard({ card, onNavigate, onHandOff }) {
         <span className="sp" />
         <Button size="small" onClick={() => { window.location.hash = "report=new"; onNavigate?.("Reports"); }} sx={faint}>Reports tab</Button>
         <Button size="small" onClick={() => onNavigate?.("Connections")} sx={faint}>Connections tab</Button>
+      </div>
+    </CardShell>
+  );
+}
+
+/* One stop of the scripted walk. Deterministic: the text is shipped, the buttons are code, and
+   nothing here asks a model anything - the chip this sits behind used to open an AI-led walk-through,
+   which could not run before an AI was connected, which is when it gets pressed.
+
+   `can` is what the APP can do here, shipped and identical on every install. `facts` is what THIS
+   install has done, read off the same tables the checklist reads - so a stop can never claim
+   something the checklist contradicts. `image` is a shot of the tab, and it is decoration with a
+   caption's job: a card whose image fails to load is still a complete stop, which is why it is
+   rendered with onError rather than reserved space. */
+export function WalkCard({ card, at, total, onNavigate, onNext, onFinish }) {
+  const { openSetup, opening, pane, note } = useCliSetup();
+  const [cli, setCli] = useState(null);
+  useEffect(() => {
+    if (card?.key !== "ai") return;
+    api.get("/api/cli/detect").then(({ data }) => setCli((data.data || []).find((o) => canSetup(o)) || null)).catch(() => {});
+  }, [card?.key]);
+  const go = (goto) => {
+    if (!goto) return;
+    if (goto.hash) window.location.hash = goto.hash;
+    onNavigate?.(goto.tab);
+  };
+  const last = at >= total - 1;
+  return (
+    <CardShell card={{ ...card, lane: "report" }} kicker={`setting up · ${at + 1} of ${total}`}
+      title={card.title} sub={card.blurb}>
+      {/* the tab itself. A broken image removes itself rather than leaving a torn box in the middle
+          of the card - the words above and below already carry the stop. */}
+      {card.image && (
+        <img src={card.image} alt={`The ${card.title} tab`} loading="lazy"
+          onError={(e) => { e.currentTarget.style.display = "none"; }}
+          style={{ width: "100%", display: "block", borderRadius: 6, border: "1px solid #e1dcd5", margin: "8px 0 2px" }} />
+      )}
+      {card.facts && <div className="tq-card-excerpt">{card.facts}</div>}
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#867f74", margin: "8px 0 4px" }}>You can</div>
+      <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, lineHeight: 1.75 }}>
+        {card.can.map((o, i) => (
+          <li key={i}>
+            {o.goto ? <span role="button" tabIndex={0} onClick={() => go(o.goto)}
+              onKeyDown={(e) => { if (e.key === "Enter") go(o.goto); }}
+              style={{ color: "#55697a", cursor: "pointer" }}>{o.text}</span> : o.text}
+          </li>
+        ))}
+      </ul>
+      {/* The one stop that does the work in place: what it opens is a terminal, and a terminal has
+          no page of its own to visit. */}
+      {card.key === "ai" && cli && (
+        <div style={{ marginTop: 8 }}>
+          <SetupButton cli={cli} opening={opening} onOpen={openSetup} />
+          {note && <div className="tq-card-note">{note.text}</div>}
+          {pane && <CliPane pane={pane} height="38vh" />}
+        </div>
+      )}
+      <div className="tq-card-actions">
+        {card.goto && <Button size="small" variant="contained" disableElevation onClick={() => go(card.goto)}
+          sx={primary}>Open {card.goto.tab}</Button>}
+        {!last && <Button size="small" onClick={onNext} sx={faint}>Next ›</Button>}
+        <span className="sp" />
+        <Button size="small" onClick={onFinish} sx={faint}>Finish</Button>
       </div>
     </CardShell>
   );

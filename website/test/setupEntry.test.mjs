@@ -18,7 +18,8 @@ test("the Assistant header carries the setup entry and it calls the chat's own s
 });
 
 test("setup() opens the conversation in place - no wizard route, no phrase to interpret", () => {
-  const fn = view.slice(view.indexOf("const setup = ()"), view.indexOf("const setup = ()") + 900);
+  // setup() now awaits /api/setup/walk (task 10 - the scripted walk), so it is declared async.
+  const fn = view.slice(view.indexOf("const setup = "), view.indexOf("const setup = ") + 900);
   assert.match(fn, /setMsgs\(\(m\) => \[\.\.\.m,/, "the existing conversation is kept, not replaced");
   assert.doesNotMatch(fn, /navigate\(|location\.hash|SetupWizard/, "it does not leave for a wizard");
   assert.doesNotMatch(head, /onClick=\{\(\) => send\("[^"]*set ?up/i, "the entry is not a typed phrase");

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { walkAdvances } from "../src/walkStep.js";
 
@@ -66,4 +66,23 @@ test("walkAdvances lands on every real stop and ends on Finish or past the end",
   assert.equal(walkAdvances(total - 1, total), true);  // last stop
   assert.equal(walkAdvances(total, total), false);     // one past the end
   assert.equal(walkAdvances(-1, total), false);        // Finish
+});
+
+test("every tab stop has a picture that actually shipped", () => {
+  // walk.py names these; a stop whose image 404s degrades to a stop with no image, which is
+  // survivable - but it should not happen because nobody ran the capture.
+  const dir = fileURLToPath(new URL("../public/walk/", import.meta.url));
+  for (const key of ["connections", "docs", "settings", "board", "tasks", "review", "reports", "assistant", "hub"]) {
+    assert.ok(existsSync(`${dir}${key}.png`), `missing walk image: ${key}.png`);
+  }
+});
+
+test("the capture script shoots all nine in one run", () => {
+  const src = readFileSync(fileURLToPath(new URL("../capture-walk.mjs", import.meta.url)), "utf8");
+  for (const key of ["connections", "docs", "settings", "board", "tasks", "review", "reports", "assistant", "hub"]) {
+    assert.match(src, new RegExp(`"${key}"`), key);
+  }
+  // one viewport for all nine, or they read as nine different apps
+  assert.match(src, /setViewport/);
+  assert.equal(src.match(/setViewport/g).length, 1);
 });

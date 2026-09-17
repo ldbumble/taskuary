@@ -96,7 +96,9 @@ class WhatsAppTests(unittest.TestCase):
         s = MemoryStore()
         cid = s.get_connector_by_type('whatsapp')['ConnectorId']
         s.save_connector({'ConnectorId': cid, 'Active': 1}, 'o')
-        s.save_source({'Channel': 'whatsapp', 'Address': '*', 'ConnectorId': cid, 'Active': 1}, 'o')
+        # WhatsApp has no catch-all - a paired account sees every chat its owner is in - so the
+        # chat this test feeds is named, the way a real install names one (2026-09-17)
+        s.save_source({'Channel': 'whatsapp', 'Address': '155@s.whatsapp.net', 'ConnectorId': cid, 'Active': 1}, 'o')
         return s, s.get_connector_by_type('whatsapp', with_secret=True)
 
     def test_poll_keeps_own_messages_as_context_and_keeps_the_sequence(self):
@@ -126,20 +128,24 @@ class WhatsAppTests(unittest.TestCase):
         intercept.assert_called_once_with(s, 'whatsapp', '155@s.whatsapp.net', 'yes',
                                           '[tq0251] reply to this message')
 
-    def test_star_covers_direct_chats_and_groups_are_opt_in(self):
-        """Both earlier readings went wrong: '*' silently dropped meant one listed group muted every
-        DM; '*' as admit-everything flooded the timeline with every group the owner is in. The rule:
-        '*' = every DIRECT chat; a group only once its JID is a source."""
+    def test_only_the_chats_you_named_come_in_and_there_is_no_catch_all(self):
+        """A paired account is the owner's OWN WhatsApp: it sees every group they are in and every
+        DM they get. '*' used to admit all the direct ones, which on a real phone is far too much
+        (the owner, 2026-09-17: "we should not allow * all as incoming ... specific channels only").
+        So a chat is listed or it does not come in - and a leftover '*' row does not bring it back.
+        """
         s, c = self._store()
         s.save_source({'Channel': 'whatsapp', 'Address': '4242@g.us', 'ConnectorId': c['ConnectorId'], 'Active': 1}, 'o')
-        feed = {'seq': 4, 'messages': [
-            {'seq': 1, 'id': 'a', 'jid': '155@s.whatsapp.net', 'name': 'Marcus', 'text': 'dm comes in', 'ts': 1755700000},
+        s.save_source({'Channel': 'whatsapp', 'Address': '*', 'ConnectorId': c['ConnectorId'], 'Active': 1}, 'o')
+        feed = {'seq': 5, 'messages': [
+            {'seq': 1, 'id': 'a', 'jid': '155@s.whatsapp.net', 'name': 'Marcus', 'text': 'listed dm comes in', 'ts': 1755700000},
             {'seq': 2, 'id': 'b', 'jid': '4242@g.us', 'group': True, 'name': 'Rita', 'text': 'picked group comes in', 'ts': 1755700001},
-            {'seq': 3, 'id': 'c', 'jid': '9999@g.us', 'group': True, 'name': 'Rick', 'text': 'unpicked group stays out', 'ts': 1755700002}]}
+            {'seq': 3, 'id': 'c', 'jid': '9999@g.us', 'group': True, 'name': 'Rick', 'text': 'unpicked group stays out', 'ts': 1755700002},
+            {'seq': 4, 'id': 'd', 'jid': '777@s.whatsapp.net', 'name': 'a stranger', 'text': 'unlisted dm stays out', 'ts': 1755700003}]}
         with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: feed):
             n = messengers.poll_whatsapp(s, c, s.list_sources(), llm=None)
         got = {m['BodyText'] for m in s._rows("SELECT * FROM message WHERE Channel='whatsapp'")}
-        self.assertEqual((n, got), (2, {'dm comes in', 'picked group comes in'}))
+        self.assertEqual((n, got), (2, {'listed dm comes in', 'picked group comes in'}))
 
     def test_poll_sets_the_baileys_pre_decryption_filter_before_reading(self):
         s, c = self._store()
@@ -155,8 +161,11 @@ class WhatsAppTests(unittest.TestCase):
             return {'ok': True} if path == '/filter' else {'seq': 0, 'messages': []}
         with mock.patch.object(messengers, '_wa', fake):
             self.assertEqual(messengers.poll_whatsapp(s, c, s.list_sources(), llm=None), 0)
+        # allDirect is False now and stays False: the bridge decrypts and downloads media for the
+        # named chats and nothing else, which is the point of telling it before reading
         self.assertEqual(calls[0], ('/filter', {
-            'allDirect': True, 'jids': ['4242@g.us', 'alerts@s.whatsapp.net', 'me@s.whatsapp.net']}))
+            'allDirect': False, 'jids': ['155@s.whatsapp.net', '4242@g.us', 'alerts@s.whatsapp.net',
+                                         'me@s.whatsapp.net']}))
         self.assertTrue(calls[1][0].startswith('/messages?after='))
 
     def test_the_pairing_qr_is_drawn_for_the_card_and_a_down_bridge_is_a_state(self):
@@ -215,7 +224,9 @@ class WhatsAppTests(unittest.TestCase):
             rows = messengers.wa_chats(c)
         self.assertEqual(rows[0]['jid'], 'new-group@g.us')
         self.assertEqual((rows[0]['name'], rows[0]['n']), ('', 0))
-        self.assertIn('not authorized', rows[0]['snippet'])
+        # ...and it carries NOTHING about what was said, not even the bridge's reason for not
+        # looking. That sentence was printed against most rows on a real account (2026-09-17).
+        self.assertEqual(rows[0]['snippet'], '')
 
     def test_the_bridge_being_down_reads_as_instructions_not_a_stack_trace(self):
         s, c = self._store()
@@ -353,3 +364,23 @@ class NotifyTests(unittest.TestCase):
         self.assertEqual(len(sent), 1)
         self.assertIn('waiting on', sent[0]['text'])
         self.assertIn('export writes empty files', sent[0]['text'])
+
+
+class TheCatchAllIsRefusedAtTheDoorTests(unittest.TestCase):
+    """Stopping the poller honouring '*' is not enough if the card can still create one - it would
+    sit there looking switched on and doing nothing, which is worse than refusing it."""
+
+    def test_a_whatsapp_catch_all_cannot_be_saved(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        r = TestClient(server.app).post('/api/sources', json={'Channel': 'whatsapp', 'Address': '*', 'Active': True})
+        self.assertEqual(r.status_code, 422)
+        self.assertIn('named chats only', r.json()['detail'])
+
+    def test_telegram_keeps_its_own(self):
+        """A Telegram bot only ever hears the chats it was added to, so there the catch-all is the
+        whole roster rather than the world - and poll_telegram creates it on its own."""
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        r = TestClient(server.app).post('/api/sources', json={'Channel': 'telegram', 'Address': '*', 'Active': False})
+        self.assertEqual(r.status_code, 200)

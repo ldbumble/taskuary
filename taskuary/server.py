@@ -3607,6 +3607,13 @@ def sources():
 def save_source(body: SourceBody):
     fields = {k: (int(v) if k == 'Active' else v) for k, v in body.dict().items() if v is not None}
     fields.setdefault('Owner', ACTOR)
+    # A paired WhatsApp account sees everything its owner does - forty groups and every DM - so
+    # there is no catch-all for it; each chat is listed or it does not come in (the owner,
+    # 2026-09-17). Telegram keeps its '*': a bot only hears the chats it was added to.
+    from .messengers import WA_ALL
+    if str(fields.get('Channel') or '') == 'whatsapp' and str(fields.get('Address') or '') == WA_ALL:
+        raise HTTPException(422, 'WhatsApp takes named chats only - add the person or the group you want, '
+                                 'not every chat on the account')
     was = store.get_source(fields['SourceId']) if fields.get('SourceId') else None
     sid = store.save_source(fields, ACTOR)
     # SWITCHING SOMETHING ON MUST LOOK BACK. The watermark advances on every poll, including

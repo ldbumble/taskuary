@@ -216,6 +216,9 @@ def wa_status(c) -> dict:
     return out
 
 
+WA_ALL = '*'        # the catch-all WhatsApp no longer honours; Telegram's '*' is a different thing
+
+
 def wa_self_number(store, c) -> str:
     """The paired account's own number, cached on the card.
 
@@ -277,8 +280,12 @@ def wa_chats(c) -> list:
     for m in out.get('blockedChats', []):
         jid = m.get('jid') or ''
         if not jid or jid.endswith('@broadcast') or jid in by: continue
+        # NO SNIPPET. "not opened - chat is not authorized" is the bridge explaining itself, and it
+        # was printed against most rows on a real account - a wall of the same sentence next to every
+        # chat the owner has not listed (2026-09-17: "the words ... is not needed"). It is not
+        # information: the row being here at all already says the chat exists and is not a source.
         by[jid] = {'jid': jid, 'group': bool(m.get('group')), 'name': '', 'n': 0,
-                   'last': m.get('last') or 0, 'snippet': 'not opened - chat is not authorized'}
+                   'last': m.get('last') or 0, 'snippet': ''}
     rows = sorted(by.values(), key=lambda r: -r['last'])
     for r in rows: r['last'] = datetime.fromtimestamp(r['last']).strftime('%Y-%m-%d %H:%M') if r['last'] else ''
     return rows
@@ -304,13 +311,18 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     from .channels import images_for_triage, ingest_own_message, save_attachments
     from . import voice
     cfg = _cfg(c)
-    # '*' means every DIRECT chat and is itself opt-in (never created by default); a GROUP comes in
-    # only when its JID is added as a source. Both earlier readings were wrong ways: '*' silently
-    # dropped meant a listed group muted every DM, and '*' as admit-everything flooded the timeline
-    # with every group the owner is in.
-    srcs = [s for s in sources if s.get('Channel', 'whatsapp') == 'whatsapp' and s.get('Address')]
-    star = any(s['Address'] == '*' for s in srcs)
-    want = {s['Address'] for s in srcs if s['Address'] != '*'}
+    # NAMED CHATS ONLY. Every chat that comes in is one somebody listed: a person by their number,
+    # a group by its JID. There is no catch-all - a paired account sees everything its owner does,
+    # and on a real phone that is forty groups and every DM (the owner, 2026-09-17: "we should not
+    # allow * all as incoming. it will be too big. it should be specific channels only").
+    #
+    # A '*' row left over from before is inert: it is skipped here and `allDirect` goes to the
+    # bridge as False, so Baileys stops decrypting and downloading media for chats nobody asked for.
+    # Telegram keeps its own '*' - a bot only ever hears the chats it has been added to, so there
+    # the catch-all is the whole roster, not the world.
+    srcs = [s for s in sources if s.get('Channel', 'whatsapp') == 'whatsapp'
+            and s.get('Address') and s['Address'] != WA_ALL]
+    want = {s['Address'] for s in srcs}
     notify_chat = str(cfg.get('notify_chat') or '').strip()
     assistant_chat = str(cfg.get('assistant_chat') or '').strip()
     # Control chats do not have to be inbound sources. Notification replies and Assistant
@@ -318,7 +330,7 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     bridge_want = want | ({notify_chat} if notify_chat else set()) | ({assistant_chat} if assistant_chat else set())
     # Filtering here alone was too late: Baileys had already decrypted and downloaded media from
     # every chat. Give the same policy to its pre-decryption hook before asking for messages.
-    try: _wa(c, '/filter', {'allDirect': star, 'jids': sorted(bridge_want)})
+    try: _wa(c, '/filter', {'allDirect': False, 'jids': sorted(bridge_want)})
     except RuntimeError as e:
         if '(404)' not in str(e): raise                     # an older detached bridge: keep polling until its next restart
     out = _wa(c, f"/messages?after={int(cfg.get('wa_seq') or 0)}")
@@ -344,7 +356,7 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
             continue
         if m.get('group') or jid.endswith('@g.us'):
             if jid not in want: continue                      # groups are opt-in, always
-        elif not (star or jid in want): continue              # direct chats ride on '*'
+        elif jid not in want: continue                        # a direct chat is listed too, or it does not come in
         if m.get('fromMe'):
             # the owner's OWN line in a chat the funnel reads - typed on their phone, not here. It
             # used to be dropped, so a WhatsApp thread the owner had answered still read as waiting

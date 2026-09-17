@@ -5,8 +5,8 @@
 // OpenAI - wired into intent triage), AI CLI agents, and scheduled report connections.
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert, Box, Button, Chip, CircularProgress, IconButton, InputAdornment, MenuItem, Popover, Radio, Select, Step, StepButton,
-  StepContent, Stepper, Switch, TextField, Typography,
+  Alert, Autocomplete, Box, Button, Chip, CircularProgress, IconButton, InputAdornment, MenuItem, Popover, Radio, Select, Step,
+  StepButton, StepContent, Stepper, Switch, TextField, Typography,
 } from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import AddIcon from "@mui/icons-material/Add";
@@ -143,7 +143,7 @@ const META = {
       "Chat ids are discovered, never typed: ask the owner to send any message to the bot (or add it to the group and post there), then run a sync yourself with POST {base}/api/ingest/poll{hdr} and GET {base}/api/sources{hdr} - the chat appears as a telegram source, switched OFF.",
       "Read the new sources back to the owner and ask which are theirs; flip those on with POST {base}/api/sources{hdr} and JSON {\"SourceId\": <id>, \"Active\": true}. Never flip on a chat the owner did not name - a bot is public and strangers must not be able to put tasks on the board.",
       "For a group, remind them to disable the bot's privacy mode (@BotFather > /setprivacy) or it will not see messages. Turn the connector on and say SETUP DONE."] },
-  whatsapp: { group: "Messaging", channel: "whatsapp", srcLabel: "Chat JIDs — only the chats listed here come in (a person by number@s.whatsapp.net, a group by its @g.us JID; add * to take every direct chat)", srcPh: "15551234567@s.whatsapp.net",
+  whatsapp: { group: "Messaging", channel: "whatsapp", srcLabel: "Chat JIDs — only the chats listed here come in (a person by number@s.whatsapp.net, a group by its @g.us JID). There is no catch-all: a paired account sees every chat you are in, which is far too much to take.", srcPh: "15551234567@s.whatsapp.net",
     fields: [["bridge URL (blank = http://127.0.0.1:8977)", "bridge_url"],
       ["Assistant chat JID", "assistant_chat", "15551234567@s.whatsapp.net",
        "Your private Message yourself chat; this does not turn on ordinary Taskuary notifications"],
@@ -2582,6 +2582,7 @@ const WaChats = ({ conn, mine, reload }) => {
   // "there are too many .. where is the myself one")
   const [q, setQ] = useState("");
   const [all, setAll] = useState(false);
+  const [standing, setStanding] = useState(null);   // the phone_assistant setting
   const SHOWN = 8;
   const guideJid = String(parse(conn.ConfigJson).assistant_chat || parse(conn.ConfigJson).notify_chat || "");
   const load = useCallback(async () => {
@@ -2589,20 +2590,35 @@ const WaChats = ({ conn, mine, reload }) => {
     catch (e) { setRows([]); setErr(e?.response?.data?.detail || "could not reach the bridge"); }
   }, [conn.ConnectorId]);
   useEffect(() => { load(); }, [load]);
+  const loadStanding = useCallback(async () => {
+    try {
+      const { data } = await api.get("/api/settings");
+      setStanding((data.data || []).find((r) => r.Name === "phone_assistant")?.Value === "1");
+    } catch { setStanding(null); }
+  }, []);
+  useEffect(() => { loadStanding(); }, [loadStanding]);
   const have = new Set(mine.map((s) => s.Address));
   const add = async (jid) => {
     await api.post("/api/sources", { Channel: "whatsapp", Address: jid, ConnectorId: conn.ConnectorId, Active: true }); reload();
   };
+  /* Choosing the chat and granting the standing permission used to be ONE click - the button wrote
+     assistant_chat and switched phone_assistant on behind it - so "which chat is it" and "when may
+     it listen" could not be answered or changed separately (the owner, 2026-09-17: "we should make
+     it separate section to choose what is connected to assistant and how it's connected"). */
   const useForGuide = async (jid) => {
-    setGuideBusy(jid); setErr("");
+    setGuideBusy(jid || "clear"); setErr("");
     try {
       const current = parse(conn.ConfigJson);
       await api.post("/api/connectors", { ConnectorId: conn.ConnectorId,
-        ConfigJson: JSON.stringify({ ...current, assistant_chat: jid, poll_seconds: current.poll_seconds || 30 }) });
-      await api.patch("/api/settings", { name: "phone_assistant", value: "1" });
+        ConfigJson: JSON.stringify({ ...current, assistant_chat: jid || "", poll_seconds: current.poll_seconds || 30 }) });
       reload();
-    } catch (e) { setErr(e?.response?.data?.detail || "could not enable the WhatsApp guide"); }
+    } catch (e) { setErr(e?.response?.data?.detail || "could not set the assistant chat"); }
     setGuideBusy("");
+  };
+  const setStandingTo = async (on) => {
+    setStanding(on);
+    try { await api.patch("/api/settings", { name: "phone_assistant", value: on ? "1" : "0" }); }
+    catch (e) { setErr(e?.response?.data?.detail || "could not change that"); loadStanding(); }
   };
   // yours, then the one already in the funnel, then the rest as they come
   const needle = q.trim().toLowerCase();
@@ -2611,29 +2627,69 @@ const WaChats = ({ conn, mine, reload }) => {
   const ranked = [...found].sort((a, b) => (b.self ? 1 : 0) - (a.self ? 1 : 0)
     || (b.jid === guideJid ? 1 : 0) - (a.jid === guideJid ? 1 : 0));
   const shown = all || needle ? ranked : ranked.slice(0, SHOWN);
+  // only a chat that is the owner ALONE may be the assistant's: a group must never be able to
+  // command it, and an answer about the owner's mail must never land where others are reading
+  // (remote_assistant.is_private, which the server has already applied to `self`)
+  const eligible = (rows || []).filter((r) => !r.group || r.self);
+  const chosen = eligible.find((r) => r.jid === guideJid) || (guideJid ? { jid: guideJid, name: guideJid, self: true } : null);
   return (
     <Box sx={{ mb: 1.5, maxWidth: 620 }}>
+      {/* ── WHAT IS CONNECTED TO THE ASSISTANT, AND HOW ──────────────────────────────────
+          Its own section, because it is its own decision. It used to be a button on a row in
+          the inbound list, which answered neither question: you could not see which chat was
+          chosen without scrolling for a tick, and the same click silently granted the standing
+          permission (the owner, 2026-09-17: "we should make it separate section to choose what
+          is connected to assistant and how it's connected"). */}
+      <Box sx={{ p: 1, mb: 1.25, border: `1px solid ${guideJid ? "#c3d2c5" : BORDER}`, borderRadius: 1,
+        bgcolor: guideJid ? "#f2f7f2" : "transparent" }}>
+        <Typography variant="overline" sx={{ color: DIM, letterSpacing: 1.4, fontSize: 10, fontWeight: 700 }}>
+          THE ASSISTANT ON WHATSAPP
+        </Typography>
+        <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap", mt: 0.5 }}>
+          <Typography variant="caption" sx={{ color: DIM, minWidth: 62 }}>in this chat</Typography>
+          <Autocomplete size="small" sx={{ flex: 1, minWidth: 240 }} autoHighlight disabled={!!guideBusy}
+            options={eligible} value={chosen}
+            getOptionLabel={(o) => o?.name || o?.jid || ""}
+            isOptionEqualToValue={(o, v) => o.jid === v.jid}
+            onChange={(_e, v) => useForGuide(v?.jid || "")}
+            noOptionsText="no private chat here yet — message yourself on WhatsApp and refresh"
+            renderOption={(props, o) => (
+              <li {...props} key={o.jid} style={{ display: "block", paddingTop: 4, paddingBottom: 4 }}>
+                <Typography variant="body2" sx={{ fontSize: 12.5, color: INK, fontWeight: 600 }}>
+                  {o.name || o.jid}
+                  {o.self && <Chip size="small" label="Myself" sx={{ ml: 0.75, height: 16, fontSize: 9.5 }} />}
+                </Typography>
+                <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10 }}>{o.jid}</Typography>
+              </li>
+            )}
+            renderInput={(params) => <TextField {...params} sx={{ bgcolor: "#fff" }}
+              placeholder="not set — nothing you send on WhatsApp reaches the assistant" />} />
+          {guideJid && <Button size="small" disabled={!!guideBusy} onClick={() => useForGuide("")}
+            sx={{ fontSize: 11.5 }}>disconnect</Button>}
+        </Box>
+        <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap", mt: 0.75 }}>
+          <Typography variant="caption" sx={{ color: DIM, minWidth: 62 }}>listens</Typography>
+          <Select size="small" value={standing === null ? "" : standing ? "always" : "walk"} disabled={standing === null || !guideJid}
+            sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 260 }}
+            onChange={(e) => setStandingTo(e.target.value === "always")}>
+            <MenuItem value="always" sx={{ fontSize: 12 }}>any time you message it</MenuItem>
+            <MenuItem value="walk" sx={{ fontSize: 12 }}>only while a walk is handed over</MenuItem>
+          </Select>
+        </Box>
+        <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
+          {!guideJid ? "Pick your private Message yourself chat. Only chats that are you alone are offered — a group can never command the assistant, and an answer about your mail must not land where others are reading."
+            : standing ? "Anything you type there runs the same walk the Assistant tab runs, and may include private mail, tasks, reviews and agent output."
+              : "It stays quiet until you hand a walk over to it from the Assistant tab."}
+        </Typography>
+      </Box>
+      <Typography variant="overline" sx={{ color: DIM, letterSpacing: 1.4, fontSize: 10, fontWeight: 700, display: "block" }}>
+        WHAT COMES IN
+      </Typography>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}>
         Chats reachable through this paired account. Groups are loaded from WhatsApp; direct chats appear once Taskuary or the
         bridge has seen them. A <b>group</b> joins the funnel only when you add it here.
         <Button size="small" onClick={load} sx={{ ml: 1, fontSize: 11, textTransform: "none", py: 0 }}>refresh</Button>
       </Typography>
-      <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 0.75, p: 0.8, bgcolor: PANEL2, borderRadius: 1 }}>
-        For remote help, choose your private <b>Message yourself</b> chat below — it is the row marked <b>Myself</b>, and WhatsApp
-        gives that thread a group-shaped id, which is fine: the bridge checks it is your own number. Messages you send there run the
-        same walk the Assistant tab runs; it may include private mail, tasks, reviews, and agent output. Real groups cannot be used.
-      </Typography>
-      {/* WHICH CHAT IS IT, said before the list rather than hidden as a tick somewhere down it. The
-          question this answers is the owner's own: "where is that configured? how do i see the
-          assistant channel?" (2026-09-17) */}
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75, py: 0.6, px: 0.8,
-        border: `1px solid ${guideJid ? "#c3d2c5" : BORDER}`, borderRadius: 1, bgcolor: guideJid ? "#f2f7f2" : "transparent" }}>
-        <Typography variant="caption" sx={{ color: DIM, fontWeight: 700 }}>Assistant chat</Typography>
-        <Typography variant="caption" sx={{ ...mono, color: guideJid ? INK : FAINT, flex: 1, fontSize: 10.5 }} noWrap>
-          {guideJid || "not set — nothing you send on WhatsApp reaches the assistant"}
-        </Typography>
-        {guideJid && <Button size="small" sx={{ fontSize: 11 }} onClick={() => { setQ(guideJid); setAll(true); }}>find it below</Button>}
-      </Box>
       <TextField size="small" fullWidth value={q} onChange={(e) => setQ(e.target.value)} sx={{ mb: 0.75, bgcolor: "#fff" }}
         placeholder="search your chats by name or number" />
       {err && <Typography variant="caption" sx={{ color: "#6b2733", display: "block" }}>✗ {err}</Typography>}
@@ -2648,13 +2704,7 @@ const WaChats = ({ conn, mine, reload }) => {
             <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>{r.name || r.jid}</Typography>
             <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10.5 }} noWrap>{r.jid} · {r.n} msg · {r.last}{r.snippet ? ` · “${r.snippet}”` : ""}</Typography>
           </Box>
-          {/* your own "Message yourself" thread is a GROUP jid on WhatsApp (r.self says the bridge
-              proved it is your own number), and it is exactly the chat this is for */}
-          {(!r.group || r.self) && (guideJid === r.jid
-            ? <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 700 }}>✓ assistant chat</Typography>
-            : <Button size="small" variant="contained" disableElevation disabled={!!guideBusy}
-                onClick={() => useForGuide(r.jid)} sx={{ fontSize: 11.5, whiteSpace: "nowrap" }}>
-                {guideBusy === r.jid ? "Enabling…" : "Use for assistant"}</Button>)}
+          {guideJid === r.jid && <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 700 }}>✓ assistant chat</Typography>}
           {have.has(r.jid) ? <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>✓ source</Typography>
             : <Button size="small" variant="outlined" onClick={() => add(r.jid)} sx={{ fontSize: 11.5, whiteSpace: "nowrap" }}>Add as source</Button>}
         </Box>

@@ -26,7 +26,9 @@ def _store():
     s = MemoryStore()
     cid = s.get_connector_by_type('whatsapp')['ConnectorId']
     s.save_connector({'ConnectorId': cid, 'Active': 1}, 'o')
-    s.save_source({'Channel': 'whatsapp', 'Address': '*', 'ConnectorId': cid, 'Active': 1}, 'o')
+    # WhatsApp has no catch-all - a paired account sees every chat its owner is in - so the
+    # chat this test feeds is named, the way a real install names one (2026-09-17)
+    s.save_source({'Channel': 'whatsapp', 'Address': '155@s.whatsapp.net', 'ConnectorId': cid, 'Active': 1}, 'o')
     return s, s.get_connector_by_type('whatsapp', with_secret=True)
 
 

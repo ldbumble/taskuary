@@ -19,7 +19,7 @@ import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 import CloseIcon from "@mui/icons-material/Close";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api";
-import { BORDER, DIM, FAINT, INK, PANEL2 } from "./theme.jsx";
+import { BORDER, DIM, FAINT, INK, PANEL2, ROLES } from "./theme.jsx";
 
 const COUNT = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
 const spell = (n) => COUNT[n] || String(n);
@@ -46,10 +46,16 @@ export const SetupChip = ({ state, onOpen }) => {
           px: 1, py: 0.35, borderRadius: 99, border: `1px solid ${state.dismissed ? BORDER : "#d8cfbe"}`,
           bgcolor: state.dismissed ? "transparent" : "#eae4d8",
           opacity: state.dismissed ? 0.75 : 1, "&:hover": { opacity: 1 } }}>
+        {/* The track has to be WARM. It was #e6e9ef - a cool grey-blue on this warm tan pill, 1.04:1,
+            the same lightness - so the ring was invisible. And on a fresh install nothing is done, so
+            the arc has zero length and that track is the ONLY thing drawn: the counter showed "5 left"
+            beside a blank gap at exactly the moment it matters most. Both colours come from the roles
+            table now rather than being typed here: muted is the part not done, done is the part that is,
+            which is the same green the panel ticks a finished row with. */}
         <Box sx={{ position: "relative", display: "flex", width: 16, height: 16 }}>
           <CircularProgress variant="determinate" value={100} size={16} thickness={6}
-            sx={{ color: "#e6e9ef", position: "absolute" }} />
-          <CircularProgress variant="determinate" value={pct} size={16} thickness={6} sx={{ color: "#55697a" }} />
+            sx={{ color: ROLES.muted.solid, position: "absolute" }} />
+          <CircularProgress variant="determinate" value={pct} size={16} thickness={6} sx={{ color: ROLES.done.solid }} />
         </Box>
         <Typography variant="caption" sx={{ fontWeight: 700, color: state.dismissed ? DIM : "#55697a" }}>
           {left} left

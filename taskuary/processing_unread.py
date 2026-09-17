@@ -148,9 +148,20 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     back = bool(tid and active and not read.get('deferred') and read_at
                 and read_at <= now - timedelta(minutes=quiet))
     if back: card['why_open'] = 'Nothing has closed this since you last looked. If it is done, close it.'
+    # OUR OWN SEND IS A RECEIPT, NOT AN ARRIVAL. A report's alert files the message it just sent so
+    # you can see that it went (reports.send_alert) - Taskuary writing to you, on WhatsApp or
+    # Telegram. It arrived on the table wearing a sender's face: "Ignore this sender", "Block them
+    # in Settings", offered on Taskuary's own outbound line, where blocking the sender would mean
+    # blocking yourself (the owner, 2026-09-17). The funnel has always known this - _feed_skip drops
+    # `Direction == 'out'` - but the canonical road asks from_feed to RENDER a row whose membership
+    # was already decided, so the rule has to be said again here, where Unread is decided.
+    #
+    # Only when nothing else is going on: a send on a live task is part of that task's story, and a
+    # draft still waiting for a yes is the owner's move whichever way the last line pointed.
+    receipt = bool(not tid and not review and row.get('Direction') == 'out')
     # Worker attention is not a read operation. An active worker remains visible.
-    unread = not closed and bool((read['unread'] and not read.get('deferred')) or back or
-                                 (active and (worker or row.get('Working') or persisted_working or card.get('paused'))))
+    unread = not closed and not receipt and bool((read['unread'] and not read.get('deferred')) or back or
+                                                 (active and (worker or row.get('Working') or persisted_working or card.get('paused'))))
     # the arrow means triage moved it up: an idea or a task raised to "asked you", or an urgent ask
     card['promoted'] = bool(card.get('urgent_request')) or (card['lane'] == 'asked' and (card['kind'] in ('idea', 'todo') or row.get('Channel') == 'assistant'))
     card.update(key='processing:' + item['item_id'], processing_id=item['item_id'],

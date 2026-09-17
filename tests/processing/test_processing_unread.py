@@ -505,3 +505,24 @@ def test_named_lookup_reads_the_unread_window_first_and_only_then_the_whole_hist
     item = funnel.next_item(store, f'msg:{old}')
     assert item and item['mid'] == old
     assert 36500 in windows
+
+
+def test_an_interrupted_agent_task_is_stopped_work_that_a_look_does_not_clear(store):
+    """A restart killed the coder's session on TQ-0616. The task list said interrupted / needs you; the
+    rail said `queued` "handed to coder, not started yet", and one look in chat cleared it from work for
+    an hour (2026-09-17). An agent that had it and is gone is `stopped`: the owner's to handle, on the
+    rail until they do - a look is not handling it."""
+    tid = store.create_task({'Title': 'User Management', 'Assignee': 'agent:coder', 'Kind': 'coding'}, 'fixture')
+    store.add_transcript(tid, 'sid-1', 'worked on it for a while', agent='coder')
+    store.tag_task(tid, terminal.INTERRUPTED, True, 'shutdown')
+    _, unread = both(store)
+    card = next(i for i in unread['items'] if i.get('tid') == tid)
+    assert card['lane'] == 'stopped' and 'closed while coder had this' in card['why'], card
+    funnel.settle(store, card['key'], 'surfaced', read=True)
+    _, after = both(store)
+    kept = next(i for i in after['items'] if i.get('tid') == tid)
+    assert kept['unread'] and kept['surfaced'], 'shown, marked so Next moves on, and still on the rail'
+    # ...and a task nothing ever started is still the queue it always was
+    fresh = store.create_task({'Title': 'Never started', 'Assignee': 'agent:coder', 'Kind': 'coding'}, 'fixture')
+    _, more = both(store)
+    assert next(i for i in more['items'] if i.get('tid') == fresh)['lane'] == 'queued'

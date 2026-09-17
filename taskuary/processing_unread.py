@@ -125,6 +125,10 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
         card['why_idle'] = funnel.not_started_why(store, card['tid'])
         if not card.get('why'):
             card['why'] = f"handed to {str(task.get('Assignee') or '').split(':', 1)[-1] or 'an agent'}, not started yet"
+        # ...unless an agent HAD it and is gone. That is not a queue that will clear itself, it is work
+        # that stopped, and the owner is the only one who moves it: `stopped`, wearing the cause as its
+        # word (the owner, 2026-09-17: "stopped should stay on stopped and shown to user to handle").
+        if funnel.agent_left(store, card['tid']): card.update(lane='stopped', why=card['why_idle'])
     if worker and active:
         agent_cards = funnel.from_agents(store, live_state=[worker], now=now)
         if agent_cards:
@@ -160,7 +164,10 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # draft still waiting for a yes is the owner's move whichever way the last line pointed.
     receipt = bool(not tid and not review and row.get('Direction') == 'out')
     # Worker attention is not a read operation. An active worker remains visible.
-    unread = not closed and not receipt and bool((read['unread'] and not read.get('deferred')) or back or
+    # ...and stopped work is on the rail however often it was looked at - a look is not handling it;
+    # only the owner's own Later holds it (same decision, 2026-09-17).
+    stopped = active and card['lane'] == 'stopped' and not read.get('deferred')
+    unread = not closed and not receipt and bool((read['unread'] and not read.get('deferred')) or back or stopped or
                                                  (active and (worker or row.get('Working') or persisted_working or card.get('paused'))))
     # the arrow means triage moved it up: an idea or a task raised to "asked you", or an urgent ask
     card['promoted'] = bool(card.get('urgent_request')) or (card['lane'] == 'asked' and (card['kind'] in ('idea', 'todo') or row.get('Channel') == 'assistant'))
@@ -182,7 +189,7 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # holds it; it is simply no longer the thing the walk offers next. A new chat clears the mark.
     card.pop('surfaced', None); card.pop('surfaced_at', None)
     shown = next((st for k in [card['key'], *card['aliases']] for st in [(states or {}).get(k)] if st and st.get('Status') == 'surfaced'), None)
-    if shown and card['lane'] in ('approve', 'blocked', 'queued'): card.update(surfaced=True, surfaced_at=shown.get('At'))
+    if shown and card['lane'] in ('approve', 'blocked', 'queued', 'stopped'): card.update(surfaced=True, surfaced_at=shown.get('At'))
     if card['lane'] == 'fyi' and not card.get('sig'):
         summaries = [r for r in view.get('processing_summaries', [])
                      if r.get('ContextRevision') == item['context_revision'] and r.get('Summary')

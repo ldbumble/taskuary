@@ -68,10 +68,11 @@
   background: #f5f8f9; box-shadow: inset 0 0 0 1px #55697a, 0 2px 12px rgba(69,79,70,.14); }
 .tq-pile-batch b, .tq-pile-now { position: absolute; top: -8px; right: 10px; background: #fffdfb; padding: 0 6px; border-radius: 99px;
   font: 800 8.5px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #41525f; white-space: nowrap; }
-/* one item on the table wears the batch's own label, on the same ring - but on its BOTTOM edge:
-   the band heading above is sticky and opaque (z-index 3), and it sliced the pill in half when the
-   current row was the first in its band, which it usually is. */
-.tq-pile-now { top: auto; bottom: -7px; right: 10px; z-index: 2; pointer-events: none; }
+/* ...and both pills sit on the ring's BOTTOM edge: the band heading above is sticky and opaque
+   (z-index 3), and it sliced a top-edge pill in half whenever the ring started its band, which it
+   usually does - first the single item's, then the batch's (the owner, 2026-09-17: "you can't see
+   the blue circle or the word current"). */
+.tq-pile-batch b, .tq-pile-now { top: auto; bottom: -7px; right: 10px; z-index: 2; pointer-events: none; }
 .tq-pile-row.inbatch { z-index: 1; }
 .tq-pile-row.inbatch .card { border-color: transparent; background: transparent; box-shadow: none; }
 .tq-pile-row.inbatch .rail i { box-shadow: 0 0 0 3px #f5f8f9; }

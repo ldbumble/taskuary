@@ -449,6 +449,18 @@ def not_started_why(store, tid) -> str:
     return f'It was handed to {who} and nothing has started it.' + old
 
 
+def agent_left(store, tid) -> bool:
+    """An agent HAD this and is gone: the interrupted tag, a run that stopped, or a transcript with nothing
+    live behind it - the first three causes not_started_why names, in its order. The lane word for that
+    is `stopped`, never `queued`: a restart killed the coder's session on TQ-0616, the task list said
+    interrupted / needs you, and the rail said "handed to coder, not started yet" (2026-09-17)."""
+    from . import terminal
+    t = store.get_task(tid) or {}
+    if terminal.INTERRUPTED in [x.strip() for x in str(t.get('Tags') or '').split(',')]: return True
+    if any(r.get('Status') in ('stopped', 'failed', 'error') for r in (store.list_runs(tid) or [])): return True
+    return bool(store.last_transcript(tid))
+
+
 def report_failed(store, subject: str, mid=None) -> bool:
     """Did the run that produced THIS row fail? The run linked to this very message says so
     (report_run.MessageId); otherwise the subject's own convention ('- FAILED'). Never a word found

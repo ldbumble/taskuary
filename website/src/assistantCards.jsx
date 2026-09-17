@@ -813,8 +813,10 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onFinish }) {
         </div>
       )}
       <div className="tq-card-actions">
+        {/* the checklist's five stops carry the label the panel's own row uses, so the walk and the
+            panel name the same destination the same way; a tab stop is its tab and needs none */}
         {card.goto && <Button size="small" variant="contained" disableElevation onClick={() => go(card.goto)}
-          sx={primary}>Open {card.goto.tab}</Button>}
+          sx={primary}>{card.goto.label || `Open ${card.goto.tab}`}</Button>}
         {!last && <Button size="small" onClick={onNext} sx={faint}>Next ›</Button>}
         <span className="sp" />
         <Button size="small" onClick={onFinish} sx={faint}>Finish</Button>

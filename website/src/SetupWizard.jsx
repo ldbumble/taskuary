@@ -106,12 +106,15 @@ const Step = ({ s, n, open, onOpen, onGo, onDone }) => {
       bgcolor: active ? "#fff" : "transparent",
       boxShadow: active ? "inset 3px 0 0 #55697a" : "none",
       px: active ? 1.5 : 0, py: s.done ? 1 : 1.5, transition: "background-color .15s" }}>
-      <Box sx={{ display: "flex", gap: 1.5, alignItems: s.done ? "center" : "flex-start" }}>
+      {/* the button WRAPS below the text rather than squeezing it: naming the destination makes it
+          a phrase, and a nowrap phrase beside a shrinkable column left the reason reading one word
+          per line at 390px (photographed) */}
+      <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: s.done ? "center" : "flex-start" }}>
         <Box sx={{ pt: s.done ? 0 : 0.25, display: "flex" }}>
           {s.done ? <CheckCircleIcon sx={{ fontSize: 18, color: "#47654a" }} />
             : <RadioButtonUncheckedIcon sx={{ fontSize: 20, color: "#55697a" }} />}
         </Box>
-        <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Box sx={{ flex: "1 1 150px", minWidth: 0 }}>
           <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap" }}>
             <Typography sx={{ fontWeight: s.done ? 600 : 700, fontSize: s.done ? 12.5 : 13.5,
               color: s.done ? DIM : INK }}>{s.title}</Typography>
@@ -132,8 +135,10 @@ const Step = ({ s, n, open, onOpen, onGo, onDone }) => {
             sx={{ alignSelf: "center", whiteSpace: "nowrap", fontSize: 12 }}>Set up</Button>
         )}
         {!s.done && !Form && (
+          /* what it OPENS, not which tab it lives on: two rows both read "Connections" and went to
+             the AI CLI agents page and the connector list (setup.state owns the words) */
           <Button size="small" endIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />} onClick={() => onGo(s.goto)}
-            sx={{ alignSelf: "center", whiteSpace: "nowrap", fontSize: 12 }}>{s.goto?.tab}</Button>
+            sx={{ alignSelf: "center", whiteSpace: "nowrap", fontSize: 12 }}>{s.goto?.label || s.goto?.tab}</Button>
         )}
         {s.done && (Form
           ? <Typography variant="caption" onClick={onOpen}

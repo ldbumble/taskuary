@@ -69,7 +69,13 @@ def _inbound(store, types=INBOUND) -> list:
 
 
 def state(store) -> dict:
-    """The wizard's whole model: ordered steps, each with what it is for and whether it is done."""
+    """The wizard's whole model: ordered steps, each with what it is for and whether it is done.
+
+    `goto` carries a `label` as well as the tab and the position inside it, and the label is what the
+    button SAYS. Naming the tab instead put "Connections" on two different rows going to two
+    different places - the AI CLI agents page and the connector list - which a first-time owner
+    cannot tell apart. It lives here rather than in either surface so the walk's stop and the
+    checklist's row name the same destination with the same words."""
     who = (store.owner() or {}).get('owner') or ''
     ai, inbound = _ai(store), _inbound(store, MESSAGING)
     seen_models = str(store.get_settings().get(SEEN_MODELS) or '') == '1'
@@ -86,33 +92,34 @@ def state(store) -> dict:
          # install and the checklist sends nobody to the one field that signs their mail
          'done': bool(who) and who != 'the owner',
          'detail': who if who != 'the owner' else '',
-         'goto': {'tab': 'Docs', 'hash': 'owner'}},
+         'goto': {'tab': 'Docs', 'hash': 'owner', 'label': 'Open your name in Docs'}},
         {'key': 'ai', 'title': 'Set up an AI',
          'why': 'This is what reads each message and decides whether it is work, a question, or '
                 'noise. Until it exists every message just files itself onto the Timeline, '
                 'untriaged - the app runs, and does nothing for you. A coding CLI you already '
                 'pay for will do it; so will an API key.',
          'done': bool(ai), 'detail': ai.get('Name') or '',
-         'goto': {'tab': 'Connections', 'hash': 'cli-agents'}},
+         'goto': {'tab': 'Connections', 'hash': 'cli-agents', 'label': 'Open AI CLI agents'}},
         {'key': 'models', 'title': 'Choose what runs on which model',
          'why': 'Triage, the assistant, the general agent and the coding CLI each run on a brain '
                 'and a model, and the defaults are a guess at your budget. One page shows all four '
                 'and what will actually run. Looking is enough - the defaults are a real answer.',
          'done': seen_models, 'detail': 'you have seen the defaults' if seen_models else '',
-         'goto': {'tab': 'Settings', 'hash': 'settings=config&group=Triage%20%26%20agents'}},
+         'goto': {'tab': 'Settings', 'hash': 'settings=config&group=Triage%20%26%20agents',
+          'label': 'Open Triage & agents'}},
         {'key': 'inbound', 'title': 'Connect where work arrives',
          'why': 'A mailbox or a chat - somewhere people actually write to you. Without one the '
                 'Timeline is empty because nothing is being read, not because nothing happened. '
                 'Trackers and report sources come later; they file work, they do not bring it in.',
          'done': bool(inbound), 'detail': ', '.join(inbound[:3]),
-         'goto': {'tab': 'Connections', 'hash': ''}},
+         'goto': {'tab': 'Connections', 'hash': '', 'label': 'Add a mailbox or chat'}},
         {'key': 'sync', 'title': 'Read your first messages',
          'why': 'With the four above in place, one sync pulls your mail in and the AI triages it. '
                 'The assistant then has a pile to take you through, which is the whole point.',
          # no count: this samples the feed, so any number it printed would be the sample size
          # rather than the truth ("2 read" on an install holding thousands)
          'done': bool(inbox), 'detail': 'messages are arriving' if inbox else '',
-         'goto': {'tab': 'Assistant', 'hash': ''}},
+         'goto': {'tab': 'Assistant', 'hash': '', 'label': 'Open the Assistant'}},
     ]
     done = sum(1 for s in steps if s['done'])
     return {'steps': steps, 'done': done, 'total': len(steps), 'complete': done == len(steps),

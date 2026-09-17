@@ -67,9 +67,21 @@ class WhatCountsAsSetUpTests(unittest.TestCase):
             self.assertIn(x['goto']['tab'], tabs, x['key'])
             self.assertIsInstance(x['goto']['hash'], str)
         by = {x['key']: x['goto'] for x in setup.state(_fresh())['steps']}
-        self.assertEqual(by['owner'], {'tab': 'Docs', 'hash': 'owner'})
-        self.assertEqual(by['ai'], {'tab': 'Connections', 'hash': 'cli-agents'})
-        self.assertEqual(by['models'], {'tab': 'Settings', 'hash': 'settings=config&group=Triage%20%26%20agents'})
+        self.assertEqual(by['owner'], {'tab': 'Docs', 'hash': 'owner', 'label': 'Open your name in Docs'})
+        self.assertEqual(by['ai'], {'tab': 'Connections', 'hash': 'cli-agents', 'label': 'Open AI CLI agents'})
+        self.assertEqual(by['models'], {'tab': 'Settings', 'hash': 'settings=config&group=Triage%20%26%20agents',
+                                        'label': 'Open Triage & agents'})
+
+    def test_no_two_rows_wear_the_same_button(self):
+        """The button says what it OPENS. Labelled by tab, rows 2 and 4 both read "Connections" and
+        went to the AI CLI agents page and the connector list - a first-time owner cannot tell those
+        apart, and they are the two rows most likely to be pressed in the wrong order."""
+        steps = setup.state(_fresh())['steps']
+        labels = [x['goto']['label'] for x in steps]
+        self.assertTrue(all(labels), 'every row names its destination')
+        self.assertEqual(len(set(labels)), len(labels), labels)
+        # ...and a label that is only the tab name is the defect wearing a new field
+        self.assertFalse([x['key'] for x in steps if x['goto']['label'] == x['goto']['tab']])
 
     def test_the_owner_step_is_not_fooled_by_the_fallback_name(self):
         """store.owner() answers the literal string "the owner" when nothing is set, so a naive
@@ -234,6 +246,8 @@ class PuttingItAwayTests(unittest.TestCase):
         for x in d['steps']:
             for k in ('key', 'title', 'why', 'done', 'goto'):
                 self.assertIn(k, x)
+            for k in ('tab', 'hash', 'label'):        # the label is the button's words, over the wire
+                self.assertIn(k, x['goto'], x['key'])
 
 
 class TheWizardActuallySetsUpTests(unittest.TestCase):
@@ -405,10 +419,10 @@ class TheAiRowCanBeTickedFromThePageItSendsYouToTests(unittest.TestCase):
             server.store.save_connector({'ConnectorId': had['ConnectorId'], 'Secret': 'sk-x', 'Active': 1}, 't')
             for cli in ('gemini', 'claude'):
                 server.store.set_setting('triage_ai', '', 't')
-                self.assertIsNotNone(llm._build_llm(server.store, 'triage_ai'), f'before {cli}')
+                self.assertIsNotNone(llm._build_llm(server.store), f'before {cli}')
                 self.assertTrue(self._ai_row()['done'], f'before {cli}')
                 c.post('/api/setup/adopt-brain', json={'cli': cli})
-                self.assertIsNotNone(llm._build_llm(server.store, 'triage_ai'), f'after {cli}')
+                self.assertIsNotNone(llm._build_llm(server.store), f'after {cli}')
                 self.assertTrue(self._ai_row()['done'], f'after {cli}')
         finally:
             server.store.save_connector({'ConnectorId': had['ConnectorId'], 'Secret': '',

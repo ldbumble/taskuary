@@ -335,6 +335,17 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
   const [help, setHelp] = useState(null);
   const [panelOk, setPanelOk] = useState(false);   // the AI defaults panel is standing up; until it is, the plain rows stay
   const [cfgTab, setCfgTab] = useState(GROUPS[0]);   // the leading tab, whatever it is - a hardcoded name here went stale the moment a group was added in front of it
+  // ...and &group=<name> picks the tab within Configuration. The group names contain a `&` ("Triage
+  // & agents"), so the link carries them encoded and they are decoded exactly once here.
+  useEffect(() => {
+    const hash = window.location.hash || "";
+    const m = /group=([^&]+)/.exec(hash);
+    if (m) {
+      const want = decodeURIComponent(m[1]);
+      if (GROUPS.includes(want)) setCfgTab(want);
+    }
+    if (/settings=/.test(hash)) window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  }, []);
   const [err, setErr] = useState("");
 
   const [brains, setBrains] = useState([{ value: "", label: "auto — first active AI connector", ready: true }]);
@@ -812,6 +823,14 @@ const NAV = ["about", "config", "policies", "memory", "audit", "updates"];
 
 export default function SettingsView({ onNavigate }) {
   const [page, setPage] = useState(NAV[0]);      // the rail's first entry is where Settings opens - About you
+  // #settings=<page> lands on one of the rail's pages. The checklist's "what runs on which model"
+  // row points here, and Settings had no hash routing at all - `page` and `cfgTab` were state-only,
+  // so every link into it arrived on About you. Consumed once, so Back does not reopen it.
+  useEffect(() => {
+    const m = /settings=([\w-]+)/.exec(window.location.hash || "");
+    if (!m || !NAV.includes(m[1])) return;
+    setPage(m[1]);
+  }, []);
   const [q, setQ] = useState("");
   return (
     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "236px minmax(0,1fr)" },

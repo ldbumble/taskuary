@@ -1,7 +1,7 @@
 // Operator documents: the markdown the agents actually read. A list on the left, the file
 // open beside it - these six are read against each other, so hiding five behind a landing
 // grid cost a round trip every time you wanted to compare two.
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, TextField, Typography } from "@mui/material";
 import AutoStoriesIcon from "@mui/icons-material/AutoStories";
 import HistoryEduIcon from "@mui/icons-material/HistoryEdu";
@@ -91,6 +91,7 @@ const OwnerCard = () => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [msg, setMsg] = useState("");
+  const box = useRef(null);
   useEffect(() => {
     api.get("/api/owner").then(({ data }) => {
       setWho(data);
@@ -98,6 +99,13 @@ const OwnerCard = () => {
       setEmail(data.owner_email || "");
     }).catch(() => setWho({}));
   }, []);
+  // #owner brings you to this field rather than to the top of a page of documents - the checklist's
+  // first row points here, and Docs is long enough that landing at the top is landing nowhere.
+  useEffect(() => {
+    if (!who || !/(^|#|&)owner(&|$)/.test(window.location.hash || "")) return;
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    box.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [who]);
   const save = async () => {
     setMsg("");
     try {
@@ -107,7 +115,7 @@ const OwnerCard = () => {
   };
   if (!who) return null;
   return (
-    <Box sx={{ mb: 2.5, p: 1.75, bgcolor: "#fff", border: "1px solid #e1dcd5", borderRadius: 2,
+    <Box ref={box} sx={{ mb: 2.5, p: 1.75, bgcolor: "#fff", border: "1px solid #e1dcd5", borderRadius: 2,
       display: "flex", gap: 1.25, alignItems: "center", flexWrap: "wrap" }}>
       <Box sx={{ minWidth: 260, flex: 1 }}>
         <Typography variant="body2" sx={{ color: INK, fontWeight: 700 }}>Who the documents speak for</Typography>

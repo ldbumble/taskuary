@@ -1099,12 +1099,17 @@ export default function ConnectorsView() {
   const byType = Object.fromEntries([...new Set((connectors || []).map((c) => c.Type))]
     .map((type) => [type, allOf(type).find((c) => c.Active) || allOf(type)[0]]));
   // #connector=<type> opens that card on arrival - the bell's Fix button lands here, and so can any
-  // link. Consumed once, so Back does not reopen it.
+  // link. #cli-agents opens the AI CLI agents page, which is where the checklist's "Set up an AI"
+  // row goes: the agents page had no door of its own, only a button on this one.
+  // Consumed once, so Back does not reopen it.
   useEffect(() => {
-    const m = /connector=([\w-]+)/.exec(window.location.hash || "");
-    if (!m || !connectors) return;
-    const t = m[1];
+    const hash = window.location.hash || "";
+    const m = /connector=([\w-]+)/.exec(hash);
+    if (!m && !/cli-agents/.test(hash)) return;
+    if (!connectors) return;
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    if (!m) { setOpen({ kind: "agents" }); return; }
+    const t = m[1];
     const direct = /^\d+$/.test(t) ? connectors.find((c) => c.ConnectorId === Number(t)) : byType[t];
     if (direct) setOpen({ kind: "connector", id: direct.ConnectorId });
     // eslint-disable-next-line react-hooks/exhaustive-deps

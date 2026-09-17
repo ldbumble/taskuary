@@ -18,7 +18,32 @@ from pathlib import Path
 SKILL_GLOBS = ('.claude/skills/*/SKILL.md',
                '.claude/plugins/cache/*/*/*/skills/*/SKILL.md')
 _FM = re.compile(r'^---\s*\n(.*?)\n---\s*\n?(.*)$', re.S)
-_KEY = re.compile(r'^(name|description)\s*:\s*(.*)$', re.M)
+_KEY = re.compile(r'^(name|description)\s*:\s*(.*)$')
+
+
+def _fm_fields(head: str) -> dict:
+    """name/description out of the frontmatter, including YAML's folded (`>`) and literal (`|`) block
+    scalars. A third-party SKILL.md may write `description: >` with the sentence on the indented lines
+    below; reading only that first line turned the purpose into the literal word '>' - which becomes
+    a profile's stated purpose, so garbage there is worse than a crash. Fold joins continuation lines
+    with a space; literal keeps them as separate lines. The distinction barely matters for a one-line
+    purpose, but it costs nothing to keep."""
+    lines, out, i = head.splitlines(), {}, 0
+    n = len(lines)
+    while i < n:
+        m = _KEY.match(lines[i])
+        if not m: i += 1; continue
+        key, rest = m.group(1), m.group(2).strip()
+        i += 1
+        if rest[:1] in ('>', '|'):
+            fold, cont = rest[0] == '>', []
+            while i < n and (not lines[i].strip() or lines[i][:1] in (' ', '\t')):
+                cont.append(lines[i].strip()); i += 1
+            while cont and cont[-1] == '': cont.pop()          # chomp trailing blank lines
+            out[key] = ' '.join(c for c in cont if c) if fold else '\n'.join(cont)
+        else:
+            out[key] = rest.strip('"\'')
+    return out
 
 
 def parse(text: str) -> dict:
@@ -26,7 +51,7 @@ def parse(text: str) -> dict:
     part of the rules a worker follows, so it does not travel into the body."""
     m = _FM.match(str(text or ''))
     head, body = (m.group(1), m.group(2)) if m else ('', str(text or ''))
-    found = {k: v.strip().strip('"\'') for k, v in _KEY.findall(head)}
+    found = _fm_fields(head)
     return {'name': found.get('name', ''), 'description': found.get('description', ''),
             'body': body.strip()}
 
@@ -71,8 +96,12 @@ def found(home: Path = None) -> list:
     cache's own layout, not an assumption about how deep `home` itself is nested."""
     home = home or Path.home()
     out = [_entry(f, name=f.parent.name) for f in sorted(home.glob(SKILL_GLOBS[0]))]
+    manifests = {}  # <version-dir> -> (plugin name, plugin desc); 14 skills often share one plugin dir
     for f in sorted(home.glob(SKILL_GLOBS[1])):
         rel = f.relative_to(home).parts  # .claude/plugins/cache/<mkt>/<plugin>/<ver>/skills/<name>/SKILL.md
         plugin = rel[4] if len(rel) > 4 else ''
-        out.append(_entry(f, plugin, name=f.parent.name))
+        root = f.parents[2]  # .../<mkt>/<plugin>/<ver>, same shape read_path's root already reads
+        if root not in manifests: manifests[root] = _plugin_of(root)
+        pdesc = manifests[root][1]
+        out.append(_entry(f, plugin, pdesc, name=f.parent.name))
     return out

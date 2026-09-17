@@ -70,6 +70,29 @@ class ParsingTests(unittest.TestCase):
             got = skillimport.read_path(td)
         self.assertEqual([g['name'] for g in got], ['a'])
 
+    def test_a_folded_description_joins_its_lines_with_spaces(self):
+        text = ('---\nname: nda-triage\ndescription: >\n  a counterparty sends an NDA\n'
+                 '  and somebody must decide\n---\n\nbody\n')
+        got = skillimport.parse(text)
+        self.assertEqual(got['description'], 'a counterparty sends an NDA and somebody must decide')
+
+    def test_a_literal_description_keeps_its_newlines(self):
+        text = ('---\nname: nda-triage\ndescription: |\n  first line\n  second line\n---\n\nbody\n')
+        got = skillimport.parse(text)
+        self.assertEqual(got['description'], 'first line\nsecond line')
+
+    def test_a_single_line_description_still_works(self):
+        got = skillimport.parse(SKILL)
+        self.assertEqual(got['description'],
+                          'Use when a counterparty sends an NDA and somebody has to decide '
+                          'whether it can be signed as-is.')
+
+    def test_a_bare_block_indicator_with_no_continuation_is_empty_not_the_symbol(self):
+        # the failure this closes: a bad/truncated frontmatter parsing to the literal word '>'
+        text = '---\nname: nda-triage\ndescription: >\n---\n\nbody\n'
+        got = skillimport.parse(text)
+        self.assertEqual(got['description'], '')
+
 
 class FoundTests(unittest.TestCase):
     """found() walks a home directory for the two install shapes Claude Code uses. The plugin name
@@ -98,6 +121,20 @@ class FoundTests(unittest.TestCase):
         self.assertEqual(len(got), 1)
         self.assertEqual(got[0]['name'], 'nda-triage')
         self.assertEqual(got[0]['plugin'], 'legal')
+
+    def test_a_cached_plugin_skill_carries_its_plugin_description(self):
+        with TemporaryDirectory() as td:
+            home = Path(td)
+            pdir = home / '.claude' / 'plugins' / 'cache' / 'some-marketplace' / 'legal' / '1.0.0'
+            d = pdir / 'skills' / 'nda-triage'
+            d.mkdir(parents=True)
+            (d / 'SKILL.md').write_text(SKILL, encoding='utf-8')
+            (pdir / '.claude-plugin').mkdir()
+            (pdir / '.claude-plugin' / 'plugin.json').write_text(
+                '{"name": "legal", "description": "contract work"}', encoding='utf-8')
+            got = skillimport.found(home=home)
+        self.assertEqual(got[0]['plugin'], 'legal')
+        self.assertEqual(got[0]['plugin_desc'], 'contract work')
 
     def test_both_shapes_found_together(self):
         with TemporaryDirectory() as td:

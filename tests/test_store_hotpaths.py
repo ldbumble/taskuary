@@ -133,7 +133,7 @@ class RelatedIndexTests(unittest.TestCase):
     def test_indexes_exist(self):
         s, _ = _file_store()
         names = _index_names(s)
-        for ix in ('idx_route_message', 'idx_review_message', 'idx_review_task',
+        for ix in ('idx_task_status', 'idx_route_message', 'idx_review_message', 'idx_review_task',
                    'idx_run_task', 'idx_attachment_message', 'idx_comment_task',
                    'idx_audit_entity', 'idx_dispatchq_task', 'idx_waitroom_task'):
             self.assertIn(ix, names, ix)
@@ -155,6 +155,30 @@ class RelatedIndexTests(unittest.TestCase):
         self.assertEqual(row['Decision'], 'file')
         self.assertEqual(row['ReviewStatus'], 'pending')
         self.assertEqual(row['Attachments'], 1)
+        s.cx.close()
+
+
+class TaskStatusIndexTests(unittest.TestCase):
+    """Board / funnel / list_tasks(active_only=True) filter on Status. History is
+    the growing table; live work is a Status predicate. Without this index that
+    predicate is a full scan (301 ms COUNT at 1M task rows)."""
+
+    def test_index_exists_on_a_fresh_and_a_reopened_db(self):
+        s, path = _file_store()
+        self.assertIn('idx_task_status', _index_names(s))
+        s.cx.close()
+        s2 = SQLiteStore(path)
+        self.assertIn('idx_task_status', _index_names(s2))
+        s2.cx.close()
+
+    def test_status_lookup_uses_the_index(self):
+        s, _ = _file_store()
+        s.create_task({'Title': 'live', 'Status': 'open'}, 't')
+        s.create_task({'Title': 'old', 'Status': 'done', 'ClosedAt': '2026-01-01 00:00:00'}, 't')
+        plan = _plan(s, "SELECT TaskId FROM task WHERE Status IN ('open','in_progress','waiting')")
+        self.assertIn('idx_task_status', plan)
+        rows = s.list_tasks(active_only=True, search=False)
+        self.assertEqual([r['Title'] for r in rows], ['live'])
         s.cx.close()
 
 

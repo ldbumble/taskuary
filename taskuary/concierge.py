@@ -622,8 +622,11 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None) -> str:
         # the answer to every typed word in a fresh install - true, and no use to anybody (2026-09-03).
         left = [i for i in (pile_items or []) if not i.get('settling')]
         if left:
+            # the tab was as far as this went, and the page that fixes it had no door of its
+            # own until the checklist needed one. Now it does, so say it.
             return (f"{funnel.summary(left)} Say next and I'll take you through them, or name the one you mean. "
-                    '(No AI is connected, so I speak in facts rather than sentences - Connections → AI.)')
+                    '(No AI is connected, so I speak in facts rather than sentences - '
+                    'Connections → AI CLI agents: #cli-agents.)')
         return ALL_DONE
     if opening and item.get('mid') and item['kind'] in ('review', 'action', 'asked', 'todo', 'fyi'):
         frm = f"{item.get('who') or 'Someone'} wrote on {item.get('channel') or 'email'}" + (f" ({funnel_age(item)})" if funnel_age(item) else '') + f": \"{item['title']}\""

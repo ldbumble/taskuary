@@ -95,11 +95,12 @@ class SetupInChatTests(unittest.TestCase):
         import io, os
         view = io.open(os.path.join('website', 'src', 'AssistantView.jsx'), encoding='utf-8').read()
         self.assertIn('Set up a report or workflow', view)     # the welcome block's own button
-        self.assertIn('const setup = ()', view)                # ...and it still opens the SetupCard
+        self.assertIn('const setup = ', view)                  # ...and it opens the scripted walk now (was
+                                                                 # the SetupCard - loose enough to survive async)
         self.assertNotIn('tq-quick', view)                     # the strip over the composer is gone
         cards = io.open(os.path.join('website', 'src', 'assistantCards.jsx'), encoding='utf-8').read()
         self.assertIn('export function SetupCard', cards)
-        self.assertIn('Open walkthrough', cards)               # the card still has its own road
+        self.assertIn('Open walkthrough', cards)               # the card kept its own road below, separately
         self.assertIn('setup', concierge.VERBS)                # and the words reach it
 
     def test_the_composer_gets_the_stream_so_twelve_seconds_are_not_silent(self):

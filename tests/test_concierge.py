@@ -618,6 +618,13 @@ class SetupAndTroubleTests(unittest.TestCase):
         block = concierge.trouble(s, 'why is my github report not working?')
         self.assertIn('WHAT IS FAILING RIGHT NOW', block); self.assertIn('Report failed: GitHub Trending', block)
 
+    def test_the_no_model_line_points_at_the_page_that_fixes_it(self):
+        """"No AI is connected - Connections → AI" named a tab, and the AI CLI agents page inside it
+        had no door of its own. Now it has one, and this is the sentence somebody reads at the exact
+        moment they need it."""
+        said = concierge.fallback(None, False, pile_items=[{'key': 'k', 'lane': 'fyi', 'title': 't'}])
+        self.assertIn('cli-agents', said)
+
 
 class SweepTests(unittest.TestCase):
     def test_remove_all_the_reports_from_a_sender_is_a_proposal_that_sweeps_them_read_on_the_click(self):

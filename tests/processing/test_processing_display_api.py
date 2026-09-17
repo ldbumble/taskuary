@@ -121,6 +121,9 @@ def test_multiple_card_backing_reads_share_snapshot_during_external_write(tmp_pa
             return rows
 
         monkeypatch.setattr(funnel_presentation, '_rows', update_other_after_first_table)
+        # nothing was written since `initial`, so its stamps would simply be reused (design D) and no
+        # table read would happen: this test is about the read, so it starts from an empty book
+        funnel_presentation.forget_stamps()
         during = funnel.present(db, payload)
         assert wrote
         assert during == initial

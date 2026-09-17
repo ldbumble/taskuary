@@ -380,6 +380,7 @@ PROCESSING_DIRTY_TABLES = (
 )
 PROCESSING_DIRTY_SETTINGS = (
     'feed_days', 'funnel_hours', 'funnel_mutes', 'owner_email', 'team_domains', 'processing_membership_rules',
+    'reply_channels',            # read into a reply card's display backing (funnel_presentation): a change must move the stamp
 )
 
 # Out of the box Taskuary WORKS the mail: a job goes to the coding agent, a question gets a

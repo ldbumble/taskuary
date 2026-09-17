@@ -10,6 +10,8 @@ import contextlib
 import copy
 import hashlib
 import json
+import threading
+import weakref
 
 
 _ITEM_SCHEMA = "taskuary.funnel.presentation.v1"
@@ -291,6 +293,52 @@ def _backing(cur, item: dict) -> dict:
     return _backings(cur, [item])[id(item)]
 
 
+# ---- the stamps made since the last write anywhere (design D, 2026-09-17) -------------------------
+# A card's stamp is a pure function of the card and its backing rows, and the backing rows can only
+# have changed if SOMETHING was written: every table the backing reads carries a dirty trigger
+# (processing_rail.DIRTY_ROWS - message, task, review, attachment, comment, run, waitroom, idea,
+# connector, funnel_state; the setting reply_channels is in PROCESSING_DIRTY_SETTINGS). So while the
+# store's dirty-row top stands still, a card whose own fields are unchanged has the same stamp, and
+# its backing is neither fetched nor hashed again. That fetch-and-hash of every card's full backing,
+# message bodies included, was ~300 ms of every rail read - and a press reads the rail several times.
+_STAMPS = weakref.WeakKeyDictionary()      # store -> {'top': dirty-row top, 'by': {card fingerprint: presentation_revision}}
+_STAMPS_LOCK = threading.Lock()
+
+
+def _top(cur):
+    """The store's dirty-row top - "has anything at all been written?" - or None when it cannot be asked."""
+    try:
+        return cur.execute("SELECT COALESCE(MAX(Id),0) FROM processing_dirty_row").fetchone()[0]
+    except Exception:
+        return None
+
+
+def _stamps(store, top):
+    """The book of stamps for this store at this top. A write - any table, any process - opens an empty
+    one: every card is fetched and hashed once more, then reused until the next write."""
+    if store is None or top is None:
+        return None
+    with _STAMPS_LOCK:
+        book = _STAMPS.get(store)
+        if book is None or book["top"] != top:
+            book = {"top": top, "by": {}}
+            try:
+                _STAMPS[store] = book
+            except TypeError:
+                return None                    # a store that cannot be weakly referenced keeps no book
+        return book
+
+
+def _fingerprint(item: dict) -> str:
+    return _digest({key: value for key, value in item.items() if key not in _SELF_FIELDS})
+
+
+def forget_stamps():
+    """Tests: start every store with an empty book."""
+    with _STAMPS_LOCK:
+        _STAMPS.clear()
+
+
 def present(store, payload: dict) -> dict:
     """Return a detached funnel payload with strong item and display revisions."""
     if not isinstance(payload, dict):
@@ -310,16 +358,23 @@ def present(store, payload: dict) -> dict:
             collect(child)
         every.append(item)
 
-    def stamp(item, backings):
+    def stamp(item, backings, known):
         for child in _children(item):
-            stamp(child, backings)
-        item["presentation_revision"] = item_revision(item, backings[id(item)])
+            stamp(child, backings, known)
+        item["presentation_revision"] = known[id(item)] if id(item) in known else item_revision(item, backings[id(item)])
 
     with _snapshot_cursor(store) as cur:
         for item in targets:
             collect(item)
-        backings = _backings(cur, every)
+        book = _stamps(store, _top(cur) if cur is not None else None)
+        # a batch card's stamp covers its children's; it is one card per payload at most and is hashed fresh
+        leaves = [item for item in every if not _children(item)] if book is not None else []
+        prints = {id(item): _fingerprint(item) for item in leaves}
+        known = {sid: book["by"][fp] for sid, fp in prints.items() if fp in book["by"]}
+        backings = _backings(cur, [item for item in every if id(item) not in known])
         for item in targets:
-            stamp(item, backings)
+            stamp(item, backings, known)
+        for item in leaves:
+            book["by"][prints[id(item)]] = item["presentation_revision"]
     out["display_revision"] = display_revision(out)
     return out

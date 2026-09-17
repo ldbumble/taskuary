@@ -25,6 +25,10 @@ DIRTY_ROWS = {
     'run': [("'task'", 'TaskId')],
     'route': [("'message'", 'MessageId'), ("'task'", 'TaskId')],
     'comment': [("'task'", 'TaskId')],
+    # ...and the two tables only the card's display backing reads (funnel_presentation): the stamp cache
+    # is valid exactly while no backing table has been written, so every one of them must leave a row here
+    'waitroom': [("'task'", 'TaskId')],
+    'connector': [("'connector'", 'ConnectorId')],
     'task_artifact': [("'task'", 'TaskId')],
     'transcript': [("'task'", 'TaskId')],
     'report_run': [("'message'", 'MessageId')],

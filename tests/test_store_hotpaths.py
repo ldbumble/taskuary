@@ -441,3 +441,51 @@ class InventoryCacheIsolationTests(unittest.TestCase):
         Factory(s).message(task=tid, subject='brand new', body='brand new')
         s.reconcile_processing_membership()
         self.assertGreater(len(self._snap(s)['items']), before)
+
+
+class TaskListPageTests(unittest.TestCase):
+    """list_tasks used to return every matching row. A million of those is a multi-GB JSON
+    payload. limit/before page the id set first so the message GROUP_CONCAT only covers the
+    page; q is the Tasks-tab search, in SQL, so the browser does not need the archive."""
+
+    def test_limit_and_before_walk_newest_first(self):
+        s, _ = _file_store()
+        ids = [s.create_task({'Title': f't{i}'}, 't') for i in range(5)]
+        page = s.list_tasks(search=False, limit=2)
+        self.assertEqual([r['TaskId'] for r in page], [ids[4], ids[3]])
+        nxt = s.list_tasks(search=False, limit=2, before=page[-1]['TaskId'])
+        self.assertEqual([r['TaskId'] for r in nxt], [ids[2], ids[1]])
+        s.cx.close()
+
+    def test_search_ands_terms_across_title_and_mail_the_way_the_tab_did(self):
+        s, _ = _file_store()
+        hit = s.create_task({'Title': 'Fix validation', 'Summary': 'Contributor updated the branch',
+                             'Kind': 'coding', 'Status': 'done', 'Source': 'github',
+                             'SourceRef': 'https://github.com/org/app/pull/31',
+                             'Tags': 'repo:org/app'}, 't')
+        miss = s.create_task({'Title': 'Unrelated invoice'}, 't')
+        s.add_message({'TaskId': hit, 'Channel': 'github', 'SourceName': 'org/app',
+                       'Subject': 'org/app#31 Fix validation', 'FromName': 'Octo Cat',
+                       'FromEmail': 'octocat@users.noreply.github.com',
+                       'ExternalId': 'gh:org/app#31',
+                       'SourceLink': 'https://github.com/org/app/pull/31', 'Status': 'routed'})
+        found = {r['TaskId'] for r in s.list_tasks(search=True, q='GITHUB contributor 31')}
+        self.assertEqual(found, {hit})
+        self.assertNotIn(miss, found)
+        by_ref = {r['TaskId'] for r in s.list_tasks(search=False, q=f'TQ-{hit:04d}')}
+        self.assertEqual(by_ref, {hit})
+        s.cx.close()
+
+    def test_a_limited_page_still_carries_searchsources_for_those_ids_only(self):
+        s, _ = _file_store()
+        a = s.create_task({'Title': 'report a', 'Source': 'report'}, 't')
+        b = s.create_task({'Title': 'report b', 'Source': 'report'}, 't')
+        s.add_message({'TaskId': a, 'Channel': 'report', 'SourceName': 'Inbox brief', 'Status': 'routed'})
+        s.add_message({'TaskId': b, 'Channel': 'report', 'SourceName': 'Cash rollup', 'Status': 'routed'})
+        page = s.list_tasks(search=False, limit=1)
+        self.assertEqual(len(page), 1)
+        self.assertEqual(page[0]['TaskId'], b)
+        self.assertIn('Cash rollup', page[0]['SearchSources'] or '')
+        self.assertNotIn('Inbox brief', page[0]['SearchSources'] or '')
+        s.cx.close()
+

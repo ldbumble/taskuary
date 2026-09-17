@@ -1395,19 +1395,103 @@ class SQLiteStore:
 
     def task_has_tag(self, task_id, tag) -> bool:
         return tag in re.split(r'[\s,]+', str((self.get_task(task_id) or {}).get('Tags') or ''))
-    def list_tasks(self, status=None, active_only=False, search=True):
+
+    @staticmethod
+    def _like_pat(term):
+        """A LIKE pattern for one search word. % and _ in the query are literals, not wildcards."""
+        t = (term or '').lower().replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+        return f'%{t}%'
+
+    def _task_list_where(self, status=None, active_only=False, q=None, before=None):
+        """WHERE pieces shared by the id page and the row fetch. Dock chrome is never a task."""
+        where, p = ["IFNULL(t.SourceRef,'') <> 'assistant:dock'"], []
+        if status:
+            where.append('t.Status=?'); p.append(status)
+        if active_only:
+            # the Board's Done column is today only; older finished work lives on Tasks
+            where.append("(t.Status IN ('open','in_progress','waiting') "
+                         "OR (t.Status='done' AND IFNULL(t.ClosedAt, t.UpdatedAt) >= date('now','localtime')))")
+        if before is not None:
+            where.append('t.TaskId < ?'); p.append(int(before))
+        for term in re.split(r'\s+', str(q or '').strip()) if q else []:
+            if not term:
+                continue
+            pat = self._like_pat(term)
+            where.append("""(
+                LOWER(IFNULL(t.Title,'')) LIKE ? ESCAPE '\\'
+                OR LOWER(IFNULL(t.Summary,'')) LIKE ? ESCAPE '\\'
+                OR LOWER(IFNULL(t.Kind,'')) LIKE ? ESCAPE '\\'
+                OR LOWER(IFNULL(t.Status,'')) LIKE ? ESCAPE '\\'
+                OR LOWER(IFNULL(t.Priority,'')) LIKE ? ESCAPE '\\'
+                OR LOWER(IFNULL(t.Assignee,'')) LIKE ? ESCAPE '\\'
+                OR LOWER(IFNULL(t.Source,'')) LIKE ? ESCAPE '\\'
+                OR LOWER(IFNULL(t.SourceRef,'')) LIKE ? ESCAPE '\\'
+                OR LOWER(IFNULL(t.Tags,'')) LIKE ? ESCAPE '\\'
+                OR LOWER(printf('TQ-%04d', t.TaskId)) LIKE ? ESCAPE '\\'
+                OR CAST(t.TaskId AS TEXT) LIKE ? ESCAPE '\\'
+                OR EXISTS (
+                    SELECT 1 FROM message m WHERE m.TaskId=t.TaskId AND (
+                        LOWER(IFNULL(m.Channel,'')) LIKE ? ESCAPE '\\'
+                        OR LOWER(IFNULL(m.SourceName,'')) LIKE ? ESCAPE '\\'
+                        OR LOWER(IFNULL(m.Subject,'')) LIKE ? ESCAPE '\\'
+                        OR LOWER(IFNULL(m.FromName,'')) LIKE ? ESCAPE '\\'
+                        OR LOWER(IFNULL(m.FromEmail,'')) LIKE ? ESCAPE '\\'
+                        OR LOWER(IFNULL(m.ExternalId,'')) LIKE ? ESCAPE '\\'
+                        OR LOWER(IFNULL(m.SourceLink,'')) LIKE ? ESCAPE '\\'
+                    )
+                )
+            )""")
+            p.extend([pat] * 18)
+        return where, p
+
+    def task_counts(self):
+        """Pill sizes for the Tasks tab: live work, done (all / today), dropped today, everything."""
+        dock = "IFNULL(SourceRef,'') <> 'assistant:dock'"
+        today = "IFNULL(ClosedAt, UpdatedAt) >= date('now','localtime')"
+        def n(extra, p=()):
+            return int(self._one(f'SELECT COUNT(*) n FROM task WHERE {dock} AND ({extra})', p)['n'])
+        live = n("Status IN ('open','in_progress','waiting')")
+        done = n("Status='done'")
+        done_today = n(f"Status='done' AND {today}")
+        dropped_today = n(f"Status='dropped' AND {today}")
+        all_n = n('1=1')
+        return {'live': live, 'done': done, 'done_today': done_today,
+                'dropped_today': dropped_today, 'all': all_n}
+
+    def list_tasks(self, status=None, active_only=False, search=True, q=None, limit=None, before=None):
         """Task rows, each carrying its latest review, run and handover note.
 
-        `search` builds the message-search blobs the Tasks tab filters on locally. They are seven
-        GROUP_CONCAT(DISTINCT) columns over the WHOLE message table - seven temp B-trees and an
-        automatic index over the materialised result - and on a real store (270 tasks, 5,275
-        messages) they were 34ms of a 35ms query. Everything else in this row costs under 7ms, so
-        a caller that is not searching should not pay for them. SearchSources is not optional:
-        Board and Tasks both draw "Report - <source>" from it.
+        `search` builds the message-search blobs the Tasks tab used to filter on locally. They are
+        seven GROUP_CONCAT(DISTINCT) columns - seven temp B-trees - and on a real store (270 tasks,
+        5,275 messages) they were 34ms of a 35ms query. Callers that are not searching should not
+        pay for them. SearchSources is not optional: Board and Tasks both draw "Report - <source>"
+        from it.
+
+        `q` is the same AND-of-terms the tab used to apply in the browser, evaluated in SQL so a
+        million-row archive is not shipped to find one PR. `limit` / `before` (TaskId DESC cursor)
+        page the id set FIRST, then the message aggregate only covers those ids - without that
+        order a LIMIT still grouped every mail in the store.
         """
+        where, p = self._task_list_where(status, active_only, q, before)
+        clause = ' AND '.join(where)
+        id_sql = f'SELECT t.TaskId FROM task t WHERE {clause} ORDER BY t.TaskId DESC'
+        id_params = list(p)
+        if limit is not None:
+            id_sql += ' LIMIT ?'
+            id_params.append(int(limit))
+        ids = [r['TaskId'] for r in self._rows(id_sql, id_params)]
+        if not ids:
+            return []
+        ph = ','.join('?' * len(ids))
         blobs = ('''ms.SearchChannels, ms.SearchSubjects, ms.SearchPeople,
                        ms.SearchEmails, ms.SearchExternalIds, ms.SearchLinks,''' if search else '')
-        q = f'''SELECT t.*, rv.Status ReviewStatus, rv.Kind ReviewKind,
+        agg = ('''GROUP_CONCAT(DISTINCT Channel) SearchChannels,
+                          GROUP_CONCAT(DISTINCT Subject) SearchSubjects,
+                          GROUP_CONCAT(DISTINCT FromName) SearchPeople,
+                          GROUP_CONCAT(DISTINCT FromEmail) SearchEmails,
+                          GROUP_CONCAT(DISTINCT ExternalId) SearchExternalIds,
+                          GROUP_CONCAT(DISTINCT SourceLink) SearchLinks,''' if search else '')
+        sql = f'''SELECT t.*, rv.Status ReviewStatus, rv.Kind ReviewKind,
                        rn.Status RunStatus, rn.AgentName RunAgent,
                        ho.Body HandoverNote,
                        {blobs} ms.SearchSources
@@ -1425,34 +1509,17 @@ class SQLiteStore:
                    WHERE CommentId IN (
                        SELECT MAX(CommentId) FROM comment WHERE Body LIKE 'HANDOVER NOTE%' GROUP BY TaskId
                    )
-                ) ho ON ho.TaskId=t.TaskId'''
-        agg = ('''GROUP_CONCAT(DISTINCT Channel) SearchChannels,
-                          GROUP_CONCAT(DISTINCT Subject) SearchSubjects,
-                          GROUP_CONCAT(DISTINCT FromName) SearchPeople,
-                          GROUP_CONCAT(DISTINCT FromEmail) SearchEmails,
-                          GROUP_CONCAT(DISTINCT ExternalId) SearchExternalIds,
-                          GROUP_CONCAT(DISTINCT SourceLink) SearchLinks,''' if search else '')
-        q += f'''
+                ) ho ON ho.TaskId=t.TaskId
                LEFT JOIN (
                    SELECT TaskId,
                           {agg}
                           GROUP_CONCAT(DISTINCT SourceName) SearchSources
-                   FROM message GROUP BY TaskId
-               ) ms ON ms.TaskId=t.TaskId'''
-        where, p = [], []
-        # The hovering guide persists its conversation in a task-shaped record so it can reuse
-        # the assistant session machinery, but it is application chrome, not work. Keep it out
-        # of every task consumer (Board, digests, cold-task checks, setup statistics).
-        where.append("IFNULL(t.SourceRef,'') <> 'assistant:dock'")
-        if status:
-            where.append('t.Status=?'); p.append(status)
-        if active_only:
-            # the Board's Done column is today only; older finished work lives on Tasks
-            where.append("(t.Status IN ('open','in_progress','waiting') "
-                         "OR (t.Status='done' AND IFNULL(t.ClosedAt, t.UpdatedAt) >= date('now','localtime')))")
-        if where:
-            q += ' WHERE ' + ' AND '.join(where)
-        return self._rows(q + ' ORDER BY t.TaskId DESC', p)
+                   FROM message WHERE TaskId IN ({ph})
+                   GROUP BY TaskId
+               ) ms ON ms.TaskId=t.TaskId
+               WHERE t.TaskId IN ({ph})
+               ORDER BY t.TaskId DESC'''
+        return self._rows(sql, ids + ids)
     def delete_task(self, task_id):
         for q in ("UPDATE message SET TaskId=NULL, Status='filed' WHERE TaskId=?", 'UPDATE route SET TaskId=NULL WHERE TaskId=?',
                   'DELETE FROM review WHERE TaskId=?', 'DELETE FROM comment WHERE TaskId=?',

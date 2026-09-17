@@ -25,7 +25,7 @@ def _line(term, waitroom) -> str:
 def tick(store) -> int:
     """Push newly waiting sessions to notify chats. Returns the number of events attempted;
     outbound.notify owns per-connector delivery errors and never lets this clock fail."""
-    from . import outbound, phone, terminal, waitroom
+    from . import outbound, phone, terminal, waitroom, workerstate as ws
     global _state
     current, events = {}, []
     for sid, term in list(terminal.SESSIONS.items()):
@@ -33,11 +33,10 @@ def tick(store) -> int:
         ident = _identity(sid, term)
         # the run's own word first (workerstate.py, PW-228): an open request is the hand, a working run raises
         # none however quiet its screen; a run whose word is silent - it never reported, or its turn just
-        # ended - keeps the screen heuristic
-        from . import workerstate as ws
-        word = ws.waiting_of(store, term)
-        waiting = word if word is not None else terminal.screen_waiting(term)
-        req = ws.asking_of(store, term) if word else None
+        # ended - keeps the screen heuristic, and a question ON the screen raises a hand whatever the word
+        # says (terminal.worker_fields). One rule, so the ping and the card never disagree.
+        fields = terminal.worker_fields(store, term)
+        waiting, req = fields['waiting'], fields['request']
         current[ident] = bool(waiting)
         if waiting and not _state.get(ident):
             if req: events.append((term, req.get('kind') == 'input_needed', ws.request_line(getattr(term, 'agent', None) or getattr(term, 'label', None) or 'agent', req)))

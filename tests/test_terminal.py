@@ -1363,3 +1363,28 @@ class PhaseRenderTests(unittest.TestCase):
         t._append('line of prior output - the quick brown fox jumps over the lazy dog\r\n' * 4000)
         self._paint(t, '\x1b[2m? for shortcuts\x1b[0m - esc to interrupt')
         self.assertEqual(terminal.phase_of(t.status_tail(8)), 'working')
+
+    def test_a_chooser_is_parked_however_it_offers_to_cancel(self):
+        """TQ-0621, the owner 2026-09-17: a coder stood on Claude's four-option question for half an
+        hour saying "coder is working". The footer under the options is
+        "Enter to select - Tab/Arrow keys to navigate - Esc to cancel", and `esc to cancel` was read
+        as a turn in flight - on the same line as the keys that pick an answer."""
+        t = self._dead()
+        for line in ('  1. Fillable for the one that is ready (Recommended)', '  2. Upload-only for now',
+                     '  3. Hand-author all 6 forms now', '  4. Type something.'):
+            t._append(line + '\r\n')
+        self._paint(t, 'Enter to select · Tab/Arrow keys to navigate · Esc to cancel')
+        self.assertEqual(terminal.phase_of(t.status_tail(8)), 'parked')
+        # ...and the two readings that must not move: a running tool may offer its own cancel, and
+        # Claude's one footer carrying both halves is still a working turn.
+        self.assertEqual(terminal.phase_of(['⠹ Running tool (esc to cancel, 12s)']), 'working')
+        self.assertEqual(terminal.phase_of(['bypass permissions on (shift+tab to cycle) · esc to interrupt']), 'working')
+
+    def test_a_chooser_the_next_frame_replaced_is_not_a_question(self):
+        """Newest line first, as everywhere else: an answered chooser is history the moment the
+        spinner is drawn over it."""
+        t = self._dead()
+        self._paint(t, 'Enter to select · Tab/Arrow keys to navigate · Esc to cancel')
+        self._paint(t, 'Levitating… (3s · esc to interrupt)')
+        self.assertEqual(terminal.phase_of(t.status_tail(8)), 'working')
+        self.assertIs(terminal.screen_asking(t), False)

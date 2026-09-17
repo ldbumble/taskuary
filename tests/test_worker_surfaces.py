@@ -44,6 +44,54 @@ class BlendTests(unittest.TestCase):
             self.assertIsNone(ws.asking_of(self.s, silent))
 
 
+class AskedOnScreenTests(unittest.TestCase):
+    """A run that says `working` and is standing on a question (TQ-0621, the owner 2026-09-17:
+    "why does coder say is working, when it's waiting for answer?").
+
+    Claude records `working` when the owner submits a prompt and reports nothing when it stops
+    mid-turn to ask - so its own last word stays `working` for as long as the chooser is up, and
+    every surface read it as busy. The screen is the only witness there is, and a QUESTION on it
+    outranks that word. A merely QUIET screen still does not: that is PW-228, and it stays.
+    """
+    CHOOSER = ['  1. Fillable for the one that is ready', '  2. Upload-only for now',
+               'Enter to select · Tab/Arrow keys to navigate · Esc to cancel']
+
+    def setUp(self):
+        self.s = MemoryStore(); handraise.reset()
+        self.tid = self.s.create_task({'Title': 'Ashley confirmed PDF links', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
+
+    def _term(self, tail):
+        t = FakeTerm(self.tid, 'run1', waiting=False, tail=tail)
+        terminal.stable_phase_of(t, now=0); terminal.stable_phase_of(t, now=terminal.PHASE_DWELL + 1)   # past the dwell
+        return t
+
+    def test_a_chooser_outranks_the_working_word_and_a_quiet_screen_does_not(self):
+        for tail, waiting, why in ((self.CHOOSER, True, 'the screen is asking'),
+                                   (['bypass permissions on (shift+tab to cycle)'], False, 'quiet is not a question (PW-228)'),
+                                   (['> '], False, 'a bare prompt is not a question either')):
+            with self.subTest(why):
+                t = self._term(tail)
+                with mock.patch.dict(terminal.SESSIONS, {'run1': t}, clear=True):
+                    ws.record(self.s, self.tid, 'run1', 'working', source='hook')
+                    self.assertIs(ws.waiting_of(self.s, t), False, 'the run still says it is working')
+                    self.assertIs(terminal.worker_fields(self.s, t)['waiting'], waiting, why)
+
+    def test_the_hand_goes_up_once_and_the_ping_carries_the_question(self):
+        t, pings = self._term(self.CHOOSER), []
+        with mock.patch.dict(terminal.SESSIONS, {'run1': t}, clear=True), \
+             mock.patch.object(outbound, 'notify', side_effect=lambda st, text: pings.append(text)):
+            ws.record(self.s, self.tid, 'run1', 'working', source='hook')
+            self.assertEqual(handraise.tick(self.s), 1)
+            self.assertEqual(handraise.tick(self.s), 0, 'not announced twice')
+        self.assertIn('Ashley confirmed PDF links', pings[0])
+
+    def test_an_api_conversation_has_no_screen_to_be_asked_on(self):
+        t = self._term(self.CHOOSER); t.blocks_on_owner = False
+        with mock.patch.dict(terminal.SESSIONS, {'run1': t}, clear=True):
+            ws.record(self.s, self.tid, 'run1', 'working', source='hook')
+            self.assertIs(terminal.worker_fields(self.s, t)['waiting'], False)
+
+
 class HandRaiseTests(unittest.TestCase):
     def setUp(self):
         self.s = MemoryStore(); handraise.reset()

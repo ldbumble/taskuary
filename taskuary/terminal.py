@@ -525,6 +525,12 @@ def worker_fields(store, t) -> dict:
     except Exception as e:
         logger.debug(f'worker state unavailable for {getattr(t, "sid", "?")}: {e}'); w = None
     if w is None: w = screen_waiting(t)
+    # ...and a `working` word does not outrank a question the screen is actually SHOWING. PW-228 was
+    # written against a quiet screen, which is a different thing: a CLI that stops mid-turn to ask -
+    # a chooser, a permission prompt - reports nothing, so its own last word stays `working` for as
+    # long as it stands there (the owner, 2026-09-17, TQ-0621: "why does coder say is working, when
+    # it's waiting for answer?"). There is no request to bind an answer to; the pane is the answer.
+    elif w is False and not req and screen_asking(t): w = True
     return {'waiting': bool(w), 'request': req}
 
 
@@ -1650,6 +1656,15 @@ _WORKING = re.compile(r'esc to interrupt|esc to cancel|\(thinking\)|[⠋⠙⠹�
 _PARKED = re.compile(r'shift\+tab to cycle|\? for shortcuts|bypass permissions on|auto mode on|type your message|'
                      r'\?\s*$|\b(y/n|yes/no|do you want|would you like|should i|which (one|of these)|press enter|'
                      r'choose an option|select an option|enter to (confirm|select))\b|^\s*[›>❯](?:\s*\d+\.)?', re.I)
+# A QUESTION the owner has to answer, as opposed to a screen that is merely idle. A chooser names
+# its keys, and it is the one thing that outranks "working" within a line: Claude draws
+# "Enter to select - Tab/Arrow keys to navigate - Esc to cancel" under its options, and the cancel
+# there is the way out of the QUESTION, not a turn in flight the way "esc to interrupt" is. Working
+# won that line, so a coder parked on a choice read as busy on every surface at once (the owner,
+# 2026-09-17: "why does coder say is working, when it's waiting for answer?").
+_ASKING = re.compile(r'enter to (confirm|select)|(tab|arrow)[\w/ ]*keys? to navigate|[↑↓]+\s*to (select|navigate|choose)|'
+                     r'\b(y/n|yes/no|do you want|would you like|should i|which (one|of these)|'
+                     r'choose an option|select an option)\b', re.I)
 
 def _observed_phase(t) -> str:
     """One raw observation from the rendered screen, with a fallback for small test doubles."""
@@ -1708,12 +1723,42 @@ def phase_of(lines) -> str:
     2026-09-03: "it's stopped for a second that changed it's mind... very buggy").
 
     "esc to interrupt" is only ever on screen while a turn is in flight, so it is the strongest
-    thing the screen says: one sighting of it in the last few lines means the agent is busy."""
+    thing the screen says: one sighting of it in the last few lines means the agent is busy.
+
+    A CHOOSER beats it, and is the only thing that does. Its footer wears "esc to cancel" beside the
+    keys it offers, and a line that tells you which key picks an answer is asking you a question
+    whatever else it says (_ASKING)."""
     ls = [str(l) for l in (lines or []) if str(l).strip()]
     for l in reversed(ls):                      # newest first: the first line that says anything decides
-        if _WORKING.search(l): return 'working'   # ...and WITHIN a line, working wins: one footer, both halves
+        if _ASKING.search(l): return 'parked'     # ...and WITHIN a line a question outranks the cancel it offers
+        if _WORKING.search(l): return 'working'   # ...and otherwise working wins: one footer, both halves
         if _PARKED.search(l): return 'parked'
     return 'unknown'
+
+
+def screen_asking(t) -> bool:
+    """Is the screen showing an actual QUESTION - a chooser, a permission prompt, a yes/no?
+
+    Narrower than `screen_waiting`, which also says yes to an idle footer, and that difference is
+    the point. An idle screen must never outrank a run that says it is working: reading "quiet" as
+    "asking" is the flap the worker events were introduced to end (PW-228). A question is different
+    in kind - the turn is genuinely in flight AND it has stopped on the owner - and Claude asks
+    inside its turn without reporting it (hooks.py records `working` when the owner submits a prompt
+    and nothing at all when a chooser opens), so the screen is the only witness there is.
+    """
+    if not getattr(t, 'blocks_on_owner', True): return False
+    try: lines = t.status_tail(8)
+    except (AttributeError, TypeError):
+        try: lines = t.tail(4)
+        except Exception: return False
+    # newest-first, exactly as phase_of reads it: a chooser has to be what the screen says NOW, not
+    # a question still legible above the frame that replaced it
+    asking = False
+    for l in reversed([str(x) for x in (lines or []) if str(x).strip()]):
+        if _ASKING.search(l): asking = True; break
+        if _WORKING.search(l) or _PARKED.search(l): break
+    # ...and the latch, not the raw frame: one repaint of a menu must not become a hand raise
+    return asking and stable_phase_of(t) == 'parked'
 
 def for_task(task_id, tail=0, details=True):
     """The live session working a task, if any - what makes a task 'agent working' even

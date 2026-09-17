@@ -1137,6 +1137,11 @@ def next_item(store, key: str = None, only: str = None, include_surfaced: bool =
     not ready to be talked about."""
     # by key, whatever its state: read already, or with an agent on it now - the concierge decides what to say
     if key:
+        # A batch is not an item, so there is nothing to look for: the lookup below never found it and
+        # fell through to the FULL-HISTORY build (every root in the database, ~9 s live) just to return
+        # None before batch_item answered - on every "All read, Next", since the page sends the key it
+        # holds as `current` (the owner, 2026-09-17: "hitting all read next still takes forever").
+        if key.startswith('fyis:'): return batch_item(store, key)
         pool = items if items is not None else build(store, keep_surfaced=True)['items']
         item = next((i for i in pool if i['key'] == key or key in i.get('aliases', [])), None)
         if item is None and getattr(store, 'processing_reads_active', lambda: False)():

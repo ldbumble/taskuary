@@ -345,3 +345,21 @@ def test_watcher_events_write_no_chat_card_and_explicit_cards_carry_no_backgroun
         explicit = concierge.card_for(funnel.next_item(value, f"agent:{tid}", include_surfaced=True) or {})
     assert explicit.get("kind") == "agent"
     assert "background_event" not in explicit
+
+
+def test_a_batch_key_is_answered_by_batch_item_and_never_by_the_full_history_build():
+    """After "All read, Next" the page sends the batch key it holds as `current`. It is not an item,
+    so the by-key lookup failed and next_item fell through to build(full_history=True) - every root
+    in the database, ~9 s of the 11.6 s press measured live on 2026-09-17 - before batch_item got to
+    answer. A `fyis:` key goes to batch_item first; no build may be asked for full history."""
+    values = [item(f"msg:{n}", lane="fyi", kind="fyi", mid=n, channel="email") for n in range(1, 5)]
+    key = "fyis:" + ",".join(v["key"] for v in values)
+
+    class ReadsActive(NoStore):        # the branch only exists on a store with canonical reads
+        def processing_reads_active(self): return True
+    with mock.patch.object(funnel, "build", return_value={"rev": "legacy", "items": values, "hidden": 0,
+                                                          "muted": 0, "rules": [], "lanes": [], "events": []}) as built, \
+            mock.patch.object(funnel, "_present_one", side_effect=lambda s, i: i):
+        got = funnel.next_item(ReadsActive(), key, items=values)
+    assert got["key"] == key and [c["key"] for c in got["items"]] == [v["key"] for v in values]
+    assert not any(c.kwargs.get("full_history") for c in built.call_args_list), built.call_args_list

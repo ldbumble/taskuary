@@ -1248,6 +1248,39 @@ class SeedCompletenessTests(unittest.TestCase):
         self.assertIn('Missing required detail? Change nothing', seed)
         self.assertIn('if the sender must answer', seed)
 
+    def test_a_coding_agent_gets_the_whole_of_its_rules(self):
+        """coder.md flattens to ~4,884 chars and was delivered as 1,800 - every coding session ran on
+        37% of its own rules, cut mid-sentence, with nothing saying so. Measured, not hardcoded, so
+        the test still means something after the document is edited."""
+        from taskuary.store import MemoryStore
+        s = MemoryStore()
+        doc = s.get_doc('coder') or ''
+        self.assertGreater(len(doc), 2000, 'the shipped coder.md should be substantial')
+        got = terminal.rules_text(s, profile='coder')
+        self.assertNotIn('truncated here', got)
+        # every non-empty line of the document survives into the flattened rules
+        for line in [l.strip(' #*-').strip() for l in doc.splitlines() if l.strip()][-3:]:
+            self.assertIn(' '.join(line.split())[:60], got, 'the END of the document was dropped')
+
+    def test_a_profile_too_long_to_fit_says_so(self):
+        from taskuary.store import MemoryStore
+        s = MemoryStore()
+        s.save_doc('coder', 'x ' * 8000, 'test')
+        got = terminal.rules_text(s, profile='coder')
+        self.assertIn('truncated here', got)      # _cut's own words - silence is the expensive kind
+
+    def test_a_short_profile_is_returned_untouched(self):
+        from taskuary.store import MemoryStore
+        s = MemoryStore()
+        s.save_doc('coder', '# Rules\nBe careful.', 'test')
+        self.assertNotIn('truncated', terminal.rules_text(s, profile='coder'))
+
+    def test_the_ask_is_what_gives_when_the_whole_seed_is_over(self):
+        """The existing priority, asserted rather than assumed: raising DOC_CHARS must not change
+        WHICH component yields when the command line is full."""
+        self.assertGreater(terminal.ASK_CHARS, terminal.DOC_CHARS)
+        self.assertLess(terminal.DOC_CHARS, terminal.SEED_CEILING)
+
 
 # Phase detection is the hottest read in the app: /api/tasks, /api/runs/live and /api/funnel
 # each ask every live session whether it is working or parked, and BoardView polls one of them

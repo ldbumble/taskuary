@@ -32,7 +32,13 @@ SEED_RETRIES, SEED_BUDGET = 3, 180  # retype attempts after a boot dialog ate th
 # arrives faster than it drains - ~150 chars of a 2.4KB seed's FRONT vanished mid-stream in
 # live testing (Ink's long-paste dropping). Chunks with a breath between give it frames.
 SEED_CHUNK, SEED_CHUNK_GAP = 160, .03
-DOC_CHARS = 1800                    # how much of CODER.md rides along in the prompt
+# How much of a worker's rules document reaches the session that runs as it. 1800 was sized for a
+# delivery limit that no longer applies - the prompt goes over STDIN now (agents.py's header), and
+# what bounds it is SEED_CEILING, which already says the ASK is what gives, never the rules. Left at
+# 1800 it delivered 1,800 of coder.md's 4,884 characters to every coding session, cut mid-sentence,
+# under an instruction saying these are your rules. This is the same fix ASK_CHARS got (3000 ->
+# 12000) for the same reason, on the same day somebody noticed the message body had it too.
+DOC_CHARS = 6000
 AGENT_CHARS = 2600                  # ...and of AGENT.md, the rules both worker kinds share (PW-182); its boundaries lead
 SOUL_CHARS = 1200                   # legacy budget; SOUL.md no longer rides in a worker prompt (PW-184)
 # The fastest way to type a prompt is not to type it at all: these CLIs take the first prompt
@@ -1074,7 +1080,7 @@ def rules_text(store, chars: int = DOC_CHARS, profile: str = 'coder') -> str:
     doc = str(store.doc(ensure_profile_document(store, profile)) or '')
     keep = [l.strip(' #*-').strip() if l.lstrip().startswith('#') else l.strip()
             for l in doc.splitlines() if l.strip()]
-    return ' '.join(' '.join(keep).split())[:chars]
+    return _cut(' '.join(' '.join(keep).split()), chars, 'rules')
 
 
 # The ask travels as ONE command-line argument now (see agents._shim_target), so the old

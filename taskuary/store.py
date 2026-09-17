@@ -2328,16 +2328,25 @@ class SQLiteStore:
             member_count = cur.execute('''SELECT COUNT(*) FROM processing_member pm
                 JOIN processing_item pi ON pi.ItemId=pm.ItemId
                 WHERE pm.RetiredAt IS NULL AND pi.RedirectItemId IS NULL''').fetchone()[0]
+            # Mail the census deliberately never groups is not mail MISSING from it. Counting it
+            # here would stop the Timeline dead: compact_inventory refuses while any of these is
+            # non-zero, so a flood sender would degrade every read forever. This exclusion and
+            # processing_membership.UNGROUPED_MESSAGE_STATUS are one decision - move them together.
+            from .processing_membership import UNGROUPED_MESSAGE_STATUS
+            ungrouped = ','.join('?' * len(UNGROUPED_MESSAGE_STATUS))
             uncatalogued = {}
-            for entity_kind, table, column in (
-                    ('message', 'message', 'MessageId'), ('task', 'task', 'TaskId'),
-                    ('review', 'review', 'ReviewId'), ('idea', 'idea', 'IdeaId')):
+            for entity_kind, table, column, extra, extra_params in (
+                    ('message', 'message', 'MessageId',
+                     f" AND COALESCE(source.Status,'') NOT IN ({ungrouped})", UNGROUPED_MESSAGE_STATUS),
+                    ('task', 'task', 'TaskId', '', ()),
+                    ('review', 'review', 'ReviewId', '', ()),
+                    ('idea', 'idea', 'IdeaId', '', ())):
                 uncatalogued[entity_kind] = cur.execute(f'''SELECT COUNT(*) FROM {table} source
                     WHERE NOT EXISTS (SELECT 1 FROM processing_member pm
                         JOIN processing_item pi ON pi.ItemId=pm.ItemId
                         WHERE pm.EntityKind=? AND pm.LocalId=CAST(source.{column} AS TEXT)
-                          AND pm.RetiredAt IS NULL AND pi.RedirectItemId IS NULL)''',
-                    (entity_kind,)).fetchone()[0]
+                          AND pm.RetiredAt IS NULL AND pi.RedirectItemId IS NULL){extra}''',
+                    (entity_kind, *extra_params)).fetchone()[0]
             completed = [r[0] for r in cur.execute('''SELECT Version FROM processing_migration
                 WHERE Completion='complete' ORDER BY Version''').fetchall()]
             coverage = {

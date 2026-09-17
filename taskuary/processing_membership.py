@@ -51,6 +51,24 @@ def _active_item_for(cur, entity, follow_item):
 # tomorrow keeps arriving here, and only what is listed below can ever go missing.
 _UNREAD_COLUMNS = {'message': ('BodyText',)}
 
+# ...and the same subtraction applied to ROWS. A skip policy's mail is stored for one reason - so
+# dedupe recognises it the next time the overlap window is re-read - and is hidden from every
+# surface (processing_all.HIDDEN_MESSAGES). It never gets a task, so it groups with nothing, merges
+# with nothing and moves nowhere: a durable identity for it is an answer to a question no one asks.
+# It was 5,631 of 8,065 items on the owner's database (2026-09-17) - 70% of the census rebuilt every
+# pass only to be filtered out again at display - and it is the fastest-growing share by far, ~90 a
+# day against a handful of real items. Anything that has to be SHOWN is absent from this tuple.
+# Whoever adds to it: `uncatalogued` in store.processing_inventory_snapshot counts messages with no
+# member row and compact_inventory refuses while that is non-zero, so the two must agree.
+UNGROUPED_MESSAGE_STATUS = ('skipped',)
+
+
+def _grouped_messages_sql(cur):
+    """Every message the census groups - which is every message the app can ever show."""
+    holes = ','.join('?' * len(UNGROUPED_MESSAGE_STATUS))
+    return (f'SELECT {_columns(cur, "message")} FROM message '
+            f"WHERE COALESCE(Status,'') NOT IN ({holes}) ORDER BY MessageId", UNGROUPED_MESSAGE_STATUS)
+
 
 def _columns(cur, table):
     """Every column of `table` except the ones a census demonstrably does not read."""
@@ -62,12 +80,14 @@ def _columns(cur, table):
 def reconcile_membership(cur, *, stamp, new_item_id, follow_item):
     """Apply one uncapped raw-identity census inside ``cur``'s transaction."""
     tasks = {str(r['TaskId']): dict(r) for r in cur.execute('SELECT * FROM task ORDER BY TaskId')}
-    messages = {str(r['MessageId']): dict(r) for r in cur.execute(
-        f'SELECT {_columns(cur, "message")} FROM message ORDER BY MessageId')}
+    messages = {str(r['MessageId']): dict(r) for r in cur.execute(*_grouped_messages_sql(cur))}
     reviews = {str(r['ReviewId']): dict(r) for r in cur.execute('SELECT * FROM review ORDER BY ReviewId')}
     ideas = {str(r['IdeaId']): dict(r) for r in cur.execute('SELECT * FROM idea ORDER BY IdeaId')}
     attachments = {str(r['AttachmentId']): dict(r) for r in cur.execute(
-        'SELECT * FROM attachment ORDER BY AttachmentId')}
+        f"""SELECT a.* FROM attachment a LEFT JOIN message m ON m.MessageId=a.MessageId
+            WHERE m.MessageId IS NULL
+               OR COALESCE(m.Status,'') NOT IN ({','.join('?' * len(UNGROUPED_MESSAGE_STATUS))})
+            ORDER BY a.AttachmentId""", UNGROUPED_MESSAGE_STATUS)}
     runs = {str(r['RunId']): dict(r) for r in cur.execute('SELECT * FROM run ORDER BY RunId')}
 
     item_rows = {r['ItemId']: dict(r) for r in cur.execute(

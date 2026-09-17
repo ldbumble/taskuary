@@ -224,7 +224,7 @@ export default function TaskHubPage() {
   // a first run opens it once, unprompted: somebody who has just installed this should not have
   // to find the checklist. Once put away (or once required steps are done) it never opens itself.
   useEffect(() => {
-    if (DEMO || demo || greeted || !setup || setup.ready || setup.dismissed) return;
+    if (DEMO || demo || greeted || !setup || setup.complete || setup.dismissed) return;
     if (setup.done === 0) setSetupOpen(true);
     setGreeted(true);
   }, [setup, greeted, demo]);

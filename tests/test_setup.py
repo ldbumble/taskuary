@@ -41,62 +41,35 @@ def _step(st, key):
 
 
 class WhatCountsAsSetUpTests(unittest.TestCase):
-    def test_a_fresh_install_has_nothing_done_and_says_which_three(self):
+    def test_a_fresh_install_has_nothing_done_and_says_which_five(self):
         st = setup.state(_fresh())
-        self.assertEqual((st['done'], st['total'], st['ready']), (0, 3, False))
-        self.assertEqual([x['key'] for x in st['steps'] if not x.get('optional')],
-                         ['owner', 'ai', 'inbound'])
+        self.assertEqual((st['done'], st['total'], st['complete']), (0, 5, False))
+        self.assertEqual([x['key'] for x in st['steps']],
+                         ['owner', 'ai', 'models', 'inbound', 'sync'])
         # every step explains ITSELF - "go to Connections" is navigation, not a reason
         for x in st['steps']:
             self.assertGreater(len(x['why']), 40, f"{x['key']} has no reason to exist")
 
-    def test_personalization_is_recommended_after_the_three_working_gates(self):
-        s = _fresh()
-        st = setup.state(s)
-        self.assertEqual([x['key'] for x in st['steps'] if x.get('recommended')],
-                         ['soul', 'sync', 'style', 'triage'])
-        self.assertEqual((st['guide_done'], st['guide_total'], st['complete']), (0, 7, False))
-        # The templates already have history marker blocks. They are placeholders, not evidence
-        # that either generator ran.
-        self.assertFalse(_step(st, 'style')['done'])
-        self.assertFalse(_step(st, 'triage')['done'])
+    def test_there_is_no_second_tier_left_to_count(self):
+        """Eight rows in two tiers became five in one. A leftover guide_* counter would be a second
+        number nobody updates, which is how the headline and the pill disagreed before."""
+        st = setup.state(_fresh())
+        for gone in ('ready', 'guide_done', 'guide_total'):
+            self.assertNotIn(gone, st)
+        for x in st['steps']:
+            self.assertNotIn('optional', x)
+            self.assertNotIn('where', x)
 
-    def test_soul_keeps_its_full_default_until_the_owner_personalizes_it(self):
-        s = _fresh()
-        self.assertIn('## What counts as a task', s.get_doc('soul') or '')
-        self.assertIn('Nothing sends or ships without', s.get_doc('soul') or '')
-        self.assertFalse(_step(setup.state(s), 'soul')['done'])
-        s.save_doc('soul', '# SOUL.md\n\nMy real boundaries.', 'owner')
-        self.assertTrue(_step(setup.state(s), 'soul')['done'])
-
-    def test_an_accidentally_blank_saved_soul_is_repaired_from_the_full_default(self):
-        with tempfile.TemporaryDirectory() as td:
-            path = Path(td) / 'taskuary.db'
-            first = SQLiteStore(path)
-            first.save_doc('soul', '', 'test')
-            first.cx.close()
-            reopened = SQLiteStore(path)
-            self.assertIn('## What counts as a task', reopened.get_doc('soul') or '')
-            self.assertIn('Nothing sends or ships without', reopened.get_doc('soul') or '')
-            self.assertEqual(reopened.doc_owner('soul'), 'template')
-            reopened.cx.close()
-
-    def test_generated_personalization_is_derived_from_the_documents(self):
-        s = _fresh()
-        s.save_doc('style', (s.get_doc('style') or '') + '\n_generated 2026-08-30 — history_', 'histgen')
-        s.save_doc('triage', (s.get_doc('triage') or '') + '\n_generated 2026-08-30 — history_', 'histgen')
-        st = setup.state(s)
-        self.assertTrue(_step(st, 'style')['done'])
-        self.assertTrue(_step(st, 'triage')['done'])
-        self.assertIn('ready', _step(st, 'style')['detail'])
-
-    def test_manual_personalization_also_counts(self):
-        s = _fresh()
-        s.save_doc('style', '## Reply style\n- short, direct, no greeting', 'owner')
-        s.save_doc('triage', '## My triage rule\n- vendor newsletters are FYI', 'owner')
-        st = setup.state(s)
-        self.assertTrue(_step(st, 'style')['done'])
-        self.assertTrue(_step(st, 'triage')['done'])
+    def test_every_step_says_where_it_goes(self):
+        """A row that points nowhere is the old wizard's inline form with the form removed."""
+        tabs = {'Assistant', 'Board', 'Tasks', 'Review', 'Reports', 'Connections', 'Docs', 'Settings', 'Hub'}
+        for x in setup.state(_fresh())['steps']:
+            self.assertIn(x['goto']['tab'], tabs, x['key'])
+            self.assertIsInstance(x['goto']['hash'], str)
+        by = {x['key']: x['goto'] for x in setup.state(_fresh())['steps']}
+        self.assertEqual(by['owner'], {'tab': 'Docs', 'hash': 'owner'})
+        self.assertEqual(by['ai'], {'tab': 'Connections', 'hash': 'cli-agents'})
+        self.assertEqual(by['models'], {'tab': 'Settings', 'hash': 'settings=config&group=Triage%20%26%20agents'})
 
     def test_the_owner_step_is_not_fooled_by_the_fallback_name(self):
         """store.owner() answers the literal string "the owner" when nothing is set, so a naive
@@ -142,18 +115,16 @@ class WhatCountsAsSetUpTests(unittest.TestCase):
         s.save_source({'Channel': 'aws', 'Address': 's3://b', 'ConnectorId': cid, 'Active': 1}, 't')
         self.assertFalse(_step(setup.state(s), 'inbound')['done'])
 
-    def test_the_shipped_default_agent_does_not_tick_its_own_box(self):
-        """Found by RUNNING it, not by testing it: a fresh install seeds an agent called 'coder'
-        pointed at the claude CLI, so "an agent row exists" ticked on a machine where nothing was
-        installed. MemoryStore seeds none, which is exactly why the tests missed it."""
+    def test_a_tracker_alone_is_not_somewhere_work_arrives(self):
+        """GitHub brings issues in and it is a real source, but an install with GitHub and no
+        mailbox has a Timeline with no mail in it - and the row said it was done (2026-09-17)."""
         s = _fresh()
-        s.upsert_agent('coder', 'coding', 'cli', '{"cmd": "claude"}')
-        self.assertFalse(_step(setup.state(s), 'agent')['done'])
-        tid = s.create_task({'Title': 'x', 'Kind': 'coding', 'Source': 'manual'}, 't')
-        rid = s.start_run(tid, 'coder', 'go', 't')
-        self.assertFalse(_step(setup.state(s), 'agent')['done'])      # started is not finished
-        s.update_run(rid, {'Status': 'done'}, finished=True)
-        self.assertTrue(_step(setup.state(s), 'agent')['done'])
+        cid = s.get_connector_by_type('github')['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Secret': 'ghp_x', 'Active': 1}, 't')
+        s.save_source({'Channel': 'github', 'Address': 'ours/repo', 'ConnectorId': cid, 'Active': 1}, 't')
+        self.assertFalse(_step(setup.state(s), 'inbound')['done'])
+        _with_mailbox(s)
+        self.assertTrue(_step(setup.state(s), 'inbound')['done'])
 
     def test_the_seeded_reports_are_not_your_first_messages(self):
         """Also found by running it: the Morning digest and Automation ideas file their own rows
@@ -176,28 +147,15 @@ class WhatCountsAsSetUpTests(unittest.TestCase):
                            'FromEmail': 'a@b.com', 'BodyText': 'x', 'Status': 'filed'})
         self.assertEqual(_step(setup.state(s), 'sync')['detail'], 'messages are arriving')
 
-    def test_three_of_three_is_ready_and_the_rest_stay_optional(self):
+    def test_five_of_five_is_complete_and_the_counter_is_finished(self):
         s = _fresh()
         s.set_setting('owner_name', 'Dana Example', 't')
+        s.set_setting(setup.SEEN_MODELS, '1', 't')
         _with_ai(s); _with_mailbox(s)
-        st = setup.state(s)
-        self.assertEqual((st['done'], st['total'], st['ready']), (3, 3, True))
-        self.assertFalse(st['complete'])                  # working is not personalized yet
-        self.assertFalse(_step(st, 'agent')['done'])          # optional, and still not done
-        self.assertTrue(_step(st, 'agent')['optional'])
-
-    def test_recommended_steps_complete_without_a_coding_agent(self):
-        s = _fresh()
-        s.set_setting('owner_name', 'Dana Example', 't')
-        _with_ai(s); _with_mailbox(s)
-        s.save_doc('soul', '# SOUL.md\n\nDana owns this.', 'owner')
         s.add_message({'ExternalId': 'm1', 'Channel': 'email', 'Subject': 'hello',
                        'FromEmail': 'a@b.com', 'BodyText': 'x', 'Status': 'filed'})
-        s.save_doc('style', '_generated 2026-08-30 — history_', 'histgen')
-        s.save_doc('triage', '_generated 2026-08-30 — history_', 'histgen')
         st = setup.state(s)
-        self.assertEqual((st['guide_done'], st['guide_total'], st['complete']), (7, 7, True))
-        self.assertFalse(_step(st, 'agent')['done'])      # genuinely optional, never blocks completion
+        self.assertEqual((st['done'], st['total'], st['complete']), (5, 5, True))
 
     def test_it_un_does_itself_when_a_connection_is_removed(self):
         """The whole reason it is derived rather than stored."""
@@ -267,14 +225,14 @@ class PuttingItAwayTests(unittest.TestCase):
         c.post('/api/setup/dismiss', json={'dismissed': True})
         after = c.get('/api/setup').json()
         c.post('/api/setup/dismiss', json={'dismissed': False})
-        self.assertEqual((before['done'], before['ready']), (after['done'], after['ready']))
+        self.assertEqual((before['done'], before['complete']), (after['done'], after['complete']))
 
     def test_the_endpoint_answers_the_same_shape_the_panel_reads(self):
         d = c.get('/api/setup').json()
-        for k in ('steps', 'done', 'total', 'ready', 'guide_done', 'guide_total', 'complete', 'dismissed'):
+        for k in ('steps', 'done', 'total', 'complete', 'dismissed'):
             self.assertIn(k, d)
         for x in d['steps']:
-            for k in ('key', 'title', 'why', 'done', 'where'):
+            for k in ('key', 'title', 'why', 'done', 'goto'):
                 self.assertIn(k, x)
 
 

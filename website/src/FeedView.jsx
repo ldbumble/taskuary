@@ -37,7 +37,7 @@ import SyncIcon from "@mui/icons-material/Sync";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { AgentPicker, ChannelIcon, LifecycleChip, RefChip, CcRow, ChoiceRow, CoderReport, Confirm, DiffBlock, Empty, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, tsMs, cleanText, splitQuoted, IDLE_WAITING, TellAgent, TellAgentButton, LiveConsole, useAgents, useVoiceReady, TaskuaryMark } from "./ui.jsx";
+import { AgentPicker, ChannelIcon, channelColor, LifecycleChip, RefChip, CcRow, ChoiceRow, CoderReport, Confirm, DiffBlock, Empty, ProofCard, SendToAgent, NotMine, fmtTime12, fmtDateTime, localDay, tsMs, cleanText, splitQuoted, IDLE_WAITING, TellAgent, TellAgentButton, LiveConsole, useAgents, useVoiceReady, TaskuaryMark } from "./ui.jsx";
 import MicIcon from "@mui/icons-material/Mic";
 import MicOffIcon from "@mui/icons-material/MicOff";
 import { Md, looksMd } from "./md.jsx";
@@ -264,16 +264,19 @@ const blurb = (r) => {
 };
 
 // The time gutter. 58px broke "12:40 PM" onto two lines, which is what made the column look
-// unkempt - the number and its meridiem have to live on one line.
-const GUTTER = 70;
-// The rail dot says WHAT STATE it is in. Channel identity is already on the icon beside the
-// sender, and the old row said it three times over (stripe, dot, tinted tile).
-const dotOf = (r) => (needsYou(r) || r.ReviewStatus === "pending" ? ACCENT
-  : r.Channel === "assistant" ? ASSISTANT.solid             // the assistant speaking up
-  : r.Category === "info" ? "#6f8a6e"                      // a person told you something: worth the eye
-  : ["ignored", "filed", "triaging", "error", "withdrawn"].includes(r.MsgStatus) ? "#cfc9bf"
-    : r.ReviewStatus === "auto" || r.TaskStatus === "done" ? "#b8b2a9"
-      : r.TaskId ? ACCENT2 : "#a7b0a8");
+// unkempt - the number and its meridiem have to live on one line; 76 is what that costs now the
+// clock is read at the work rail's size rather than in 10px mono.
+const GUTTER = 76;
+// ...and the clock is set the way the work rail sets its age column (assistantView.css
+// .tq-pile-row .when): sans, not mono - at 10px its figures were the hardest thing on the rail to
+// read (the owner, 2026-09-16). Two rails reading the same list must read in one type.
+const gutterTime = { font: "600 11px 'IBM Plex Sans', system-ui, sans-serif", color: FAINT,
+  textAlign: "right", pt: "6px", pl: "8px", pr: "12px", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" };
+// The rail dot says WHERE IT CAME FROM, exactly as the work rail's does (assistantCards.sourceColor),
+// and it must never disagree with the logo drawn beside the sender (the owner, 2026-09-17: the
+// work rail's dots are the right ones). State is still on the row - the card's left edge carries
+// it, and the lane word says it in words.
+const dotOf = (r) => channelColor(r?.Channel || "email");
 
 // How much each state DEMANDS of you, most first - which is what a fold has to sort by to pick
 // the face it wears. Deliberately NOT stateOf's evaluation order: that reads withdrawn first,
@@ -378,14 +381,15 @@ const MeetingRow = ({ e, onPick, picked, preps = [], onOpenRow }) => {
   // message row now, subject only until it is the row you are on.
   return (
     <Box sx={{ display: "grid", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`, alignItems: "stretch", mb: "3px" }}>
-      <Typography sx={{ ...mono, fontSize: 10, color: FAINT, textAlign: "right",
-        pt: "6px", pl: "8px", pr: "12px", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+      <Typography sx={gutterTime}>
         {e.all_day ? "all day" : fmtTime12(e.start)}
       </Typography>
       <Box sx={{ position: "relative" }}>
         <Box sx={{ position: "absolute", left: "6px", top: "-5px", bottom: "-5px", width: "1px", bgcolor: BORDER }} />
+        {/* the calendar's own colour, like every other dot on this rail; how SOON it is stays on
+            the card's left edge and in the countdown, which is where you read it anyway */}
         <Box sx={{ position: "absolute", left: "2.5px", top: "9px", width: 8, height: 8, borderRadius: "50%",
-          bgcolor: u.hot ? ALERT : ROLES.info.solid, boxShadow: `0 0 0 3px ${PANEL}` }} />
+          bgcolor: channelColor("calendar"), boxShadow: `0 0 0 3px ${PANEL}` }} />
       </Box>
       <Box onClick={() => { clearTimeout(hover.current); onPick?.({ ...e, pinned: true }); }}
         onMouseEnter={() => { clearTimeout(hover.current); hover.current = setTimeout(() => onPick?.({ ...e, pinned: false }), 140); }}
@@ -397,8 +401,8 @@ const MeetingRow = ({ e, onPick, picked, preps = [], onOpenRow }) => {
           ...(open ? { borderColor: ACCENT, boxShadow: `inset 0 0 0 1px ${ACCENT}, 0 1px 3px rgba(30,50,38,.08)` } : {}),
           "&:hover": { borderColor: "#d8cfbe", boxShadow: "0 2px 8px rgba(47,107,79,.10)" } }}>
         <Box sx={{ display: "flex", gap: 0.85, alignItems: "center", minWidth: 0, minHeight: 22 }}>
-          <EventIcon sx={{ fontSize: 16, color: ROLES.info.solid, flexShrink: 0 }} />
-          <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: INK, fontSize: 12, flex: 1, minWidth: 0 }}>{e.subject}</Typography>
+          <EventIcon sx={{ fontSize: 16, color: channelColor("calendar"), flexShrink: 0 }} />
+          <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: INK, fontSize: 11.5, letterSpacing: "-.1px", flex: 1, minWidth: 0 }}>{e.subject}</Typography>
           {/* the countdown is the one thing that is only true right now, so it stays on the
               collapsed line - but quietly, unless the meeting is imminent */}
           <Typography variant="caption" sx={{ ...mono, fontSize: 9.5, fontWeight: u.hot ? 700 : 400, whiteSpace: "nowrap",
@@ -1659,16 +1663,15 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                           {/* the clock sits in its own gutter with air on BOTH sides - 8px off the
                               container edge, 12px off the rail - so it never reads as crushed
                               against the frame the way a flush-left column does */}
-                          <Typography sx={{ ...mono, fontSize: 10, color: FAINT, textAlign: "right",
-                            pt: "6px", pl: "8px", pr: "12px", whiteSpace: "nowrap", letterSpacing: "-.2px",
-                            fontVariantNumeric: "tabular-nums" }}>
+                          <Typography sx={gutterTime}>
                             {fmtTime12(r.SentAt)}
                           </Typography>
-                          {/* rail + dot: the dot repeats the state's colour at scanning size */}
+                          {/* rail + dot: the dot is the SOURCE at scanning size, the same answer
+                              the logo beside the sender gives at reading size (dotOf) */}
                           <Box sx={{ position: "relative" }}>
                             <Box sx={{ position: "absolute", left: "6px", top: "-5px", bottom: "-5px", width: "1px", bgcolor: BORDER }} />
                             <Box sx={{ position: "absolute", left: "2.5px", top: "9px", width: 8, height: 8, borderRadius: "50%",
-                              bgcolor: edgeOf(st), boxShadow: `0 0 0 3px ${PANEL}` }} />
+                              bgcolor: dotOf(r), boxShadow: `0 0 0 3px ${PANEL}` }} />
                           </Box>
                           {/* ONE LINE until this is the row you are on. Hover selects it after a
                               short rest and unfolds a second line; click pins it. It used to
@@ -1693,11 +1696,13 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                               <Box sx={{ display: "flex", flexShrink: 0 }}>
                                 <ChannelIcon channel={r.Channel} sx={{ fontSize: 16 }} />
                               </Box>
+                              {/* 11.5px, the size the work rail sets its subjects in: the two rails
+                                  are one list read two ways, so they read at one size. */}
                               <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: view !== "unread" && ["ignored", "filed", "withdrawn"].includes(r.MsgStatus) ? DIM : INK,
-                                fontSize: 12, letterSpacing: "-.1px", maxWidth: 118, minWidth: 0, flexShrink: 0 }}>
+                                fontSize: 11.5, letterSpacing: "-.1px", maxWidth: 118, minWidth: 0, flexShrink: 0 }}>
                                 {r.FromName || r.FromEmail || "unknown"}
                               </Typography>
-                              <Typography variant="body2" noWrap sx={{ color: view === "unread" ? INK : DIM, fontSize: 11.5, flex: 1, minWidth: 0 }}>
+                              <Typography variant="body2" noWrap sx={{ color: view === "unread" ? INK : DIM, fontSize: 11.5, fontWeight: 500, letterSpacing: "-.1px", flex: 1, minWidth: 0 }}>
                                 {subjectOf(r) || ""}
                               </Typography>
                               {r.Attachments > 0 && (
@@ -2837,15 +2842,14 @@ const ThreadFold = ({ entry, open, onToggle, onOpenRow, sel }) => {
   return (
     <Box sx={{ display: "grid", gridTemplateColumns: `${GUTTER}px 14px minmax(0,1fr)`,
       alignItems: "stretch", mb: "3px" }}>
-      <Typography sx={{ ...mono, fontSize: 10, color: FAINT, textAlign: "right",
-        pt: "6px", pl: "8px", pr: "12px", whiteSpace: "nowrap", letterSpacing: "-.2px",
-        fontVariantNumeric: "tabular-nums" }}>
+      <Typography sx={gutterTime}>
         {fmtTime12(head.SentAt)}
       </Typography>
       <Box sx={{ position: "relative" }}>
         <Box sx={{ position: "absolute", left: "6px", top: "-5px", bottom: "-5px", width: "1px", bgcolor: BORDER }} />
+        {/* one conversation, one source: the fold's dot is its channel, like every row it holds */}
         <Box sx={{ position: "absolute", left: "2.5px", top: "9px", width: 8, height: 8, borderRadius: "50%",
-          bgcolor: edgeOf(st), boxShadow: `0 0 0 3px ${PANEL}` }} />
+          bgcolor: dotOf(head), boxShadow: `0 0 0 3px ${PANEL}` }} />
       </Box>
       <Box onClick={onToggle} data-tq-keep
         title={open ? "fold this conversation back up" : `${rows.length} messages on one conversation - open it`}
@@ -2860,10 +2864,10 @@ const ThreadFold = ({ entry, open, onToggle, onOpenRow, sel }) => {
               strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6l4 4 4-4" /></svg>
           </Box>
           <Box sx={{ display: "flex", flexShrink: 0 }}><ChannelIcon channel={head.Channel} sx={{ fontSize: 16 }} /></Box>
-          <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: INK, fontSize: 12, flexShrink: 1, minWidth: 56, maxWidth: 150 }}>
+          <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: INK, fontSize: 11.5, letterSpacing: "-.1px", flexShrink: 1, minWidth: 56, maxWidth: 150 }}>
             {who.slice(0, 2).join(", ")}{who.length > 2 ? ` +${who.length - 2}` : ""}
           </Typography>
-          <Typography variant="body2" noWrap sx={{ color: DIM, fontSize: 11.5, flex: 1, minWidth: 0 }}>
+          <Typography variant="body2" noWrap sx={{ color: DIM, fontSize: 11.5, fontWeight: 500, letterSpacing: "-.1px", flex: 1, minWidth: 0 }}>
             {cleanText(String(head.Subject || "")) || "conversation"}
           </Typography>
           <Typography variant="caption" sx={{ ...mono, fontSize: 9.5, fontWeight: 600, color: ROLES.info.ink,

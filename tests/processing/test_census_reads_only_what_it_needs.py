@@ -33,19 +33,33 @@ def test_the_census_does_not_read_message_bodies(store):
     cur = store.cx.cursor()
     cols = processing_membership._columns(cur, 'message')
     assert 'BodyText' not in cols
+    assert 'RecipientsJson' not in cols and 'MailMetaJson' not in cols
     assert 'Subject' in cols and 'ConversationId' in cols, 'everything else still arrives'
     row = next(iter(cur.execute(f'SELECT {cols} FROM message')))
     assert 'SECRET-PROSE-NOBODY-NEEDS' not in str(tuple(row))
 
 
+def test_the_census_does_not_read_task_prose(store):
+    store.create_task({'Title': 'SECRET-TASK-TITLE', 'Summary': 'SECRET-TASK-SUMMARY',
+                       'Kind': 'general', 'Status': 'open'}, 'fixture')
+    cur = store.cx.cursor()
+    cols = processing_membership._columns(cur, 'task')
+    assert 'Title' not in cols and 'Summary' not in cols and 'Checklist' not in cols
+    assert 'TaskId' in cols and 'SourceRef' in cols
+    row = next(iter(cur.execute(f'SELECT {cols} FROM task')))
+    assert 'SECRET-TASK-TITLE' not in str(tuple(row))
+    assert 'SECRET-TASK-SUMMARY' not in str(tuple(row))
+
+
 def test_the_skip_list_is_a_subtraction_so_new_columns_keep_arriving(store):
     """Named as what is NOT read: a column added to `message` tomorrow reaches the census by
     default, and only what is listed here can ever go missing."""
-    assert processing_membership._UNREAD_COLUMNS == {'message': ('BodyText',)}
+    assert processing_membership._UNREAD_COLUMNS['message'] == ('BodyText', 'RecipientsJson', 'MailMetaJson')
+    assert processing_membership._UNREAD_COLUMNS['task'] == ('Title', 'Summary', 'Checklist')
     cur = store.cx.cursor()
     every = [r[1] for r in cur.execute('PRAGMA table_info(message)')]
     got = processing_membership._columns(cur, 'message')
-    assert len([c for c in every if f'"{c}"' in got]) == len(every) - 1
+    assert len([c for c in every if f'"{c}"' in got]) == len(every) - 3
 
 
 def test_nothing_the_census_skips_is_referenced_by_it():

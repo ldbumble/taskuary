@@ -47,9 +47,13 @@ def _active_item_for(cur, entity, follow_item):
 # What a census does NOT need to read. Membership is decided from ids, kinds and links; a message
 # BODY never moves an entity between items, and on a real mailbox it is most of the database - 8 MB
 # of prose dragged into Python on every pass, inside BEGIN IMMEDIATE, with readers waiting on it
-# (the owner, 2026-09-15). Named as a subtraction, not a whitelist: a column added to `message`
-# tomorrow keeps arriving here, and only what is listed below can ever go missing.
-_UNREAD_COLUMNS = {'message': ('BodyText',)}
+# (the owner, 2026-09-15). The same is true of other unused text columns at a million rows.
+# Named as a subtraction, not a whitelist: a column added to `message` tomorrow keeps arriving
+# here, and only what is listed below can ever go missing.
+_UNREAD_COLUMNS = {
+    'message': ('BodyText', 'RecipientsJson', 'MailMetaJson'),
+    'task': ('Title', 'Summary', 'Checklist'),
+}
 
 # ...and the same subtraction applied to ROWS. A skip policy's mail is stored for one reason - so
 # dedupe recognises it the next time the overlap window is re-read - and is hidden from every
@@ -92,7 +96,8 @@ def _columns(cur, table):
 
 def reconcile_membership(cur, *, stamp, new_item_id, follow_item):
     """Apply one uncapped raw-identity census inside ``cur``'s transaction."""
-    tasks = {str(r['TaskId']): dict(r) for r in cur.execute('SELECT * FROM task ORDER BY TaskId')}
+    tasks = {str(r['TaskId']): dict(r) for r in cur.execute(
+        f'SELECT {_columns(cur, "task")} FROM task ORDER BY TaskId')}
     messages = {str(r['MessageId']): dict(r) for r in cur.execute(*_grouped_messages_sql(cur))}
     reviews = {str(r['ReviewId']): dict(r) for r in cur.execute('SELECT * FROM review ORDER BY ReviewId')}
     ideas = {str(r['IdeaId']): dict(r) for r in cur.execute('SELECT * FROM idea ORDER BY IdeaId')}

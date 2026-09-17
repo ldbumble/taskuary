@@ -199,7 +199,7 @@ class ChainBeforeEvaluationTests(unittest.TestCase):
              mock.patch.object(channels, '_body', side_effect=lambda m: m['body']['content']), \
              mock.patch.object(channels, '_addrs', return_value=[]):
             with ingest.deferred():
-                channels.poll_channels(s, backfill_days=0)          # stores the arrival, then completes the chain
+                channels.poll_channels(s, backfill_hours=0)          # stores the arrival, then completes the chain
             self.assertTrue(chains.coverage(s, CONV, ME)['complete'], 'the chain is completed by the poll, not by triage')
             self.assertEqual(ingest.drain(s, llm=llm), 1)
         self.assertTrue(seen['coverage']['complete'])                # ...and it was already complete when the model was asked

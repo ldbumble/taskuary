@@ -5490,7 +5490,7 @@ def _quick_due() -> list:
             due.append(c['Type'])
     return due
 
-def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool = False,
+def _poll_reports(backfill_hours: float = 0, what: str = 'syncing', startup: bool = False,
                   only=None, wait: bool = False, on_fetched=None):
     """The full lane; `only` hands the call to the chat lane (_poll_quick) instead."""
     if only is not None:
@@ -5522,7 +5522,7 @@ def _poll_reports(backfill_days: int = 0, what: str = 'syncing', startup: bool =
         with _claim_fetch(mine, 'full') as types:
             try:
                 with ingest_mod.deferred():
-                    added = poll_channels(target_store, backfill_days, progress=_say, only=types) if types else 0
+                    added = poll_channels(target_store, backfill_hours, progress=_say, only=types) if types else 0
                 # "checked" means every source was read: a type the chat lane held this cycle was not,
                 # so the stamp waits for a cycle that read them all. Connector errors stay intact.
                 if types and set(types) == set(mine):
@@ -5650,16 +5650,23 @@ def _poll_quick(only, what: str = 'syncing', wait: bool = False, timer: bool = F
     return added
 
 
-def _catchup_days(ceiling: int) -> int:
+def _catchup_hours(ceiling_days: int) -> float:
     """How far past the watermark startup actually needs to reach: the time the app was CLOSED,
     not the full `startup_sync_days` ceiling. Reopening ten minutes after closing used to re-read
     three days of every mailbox (dedupe threw it all away, slowly - the whole timeline sat behind
-    a 'catching up' banner for it). Under an hour of gap is what the watermark already covers."""
+    a 'catching up' banner for it). Under an hour of gap is what the watermark already covers.
+
+    Hours, not days. Rounding the gap UP to a whole day and then measuring it from `now` reached
+    back behind the watermark by the rounding: closed 8.75h, it asked Graph for 24h and pulled 272
+    messages the database already had to keep 93 (the owner's mailbox, 2026-09-17). The gap plus
+    channels.STARTUP_OVERLAP is the whole question - the ceiling only ever caps it."""
     last = max((str(s.get('LastPolledAt') or '') for s in store.list_sources()), default='')
+    ceiling = ceiling_days * 24
     if not last: return ceiling
     try: gap_h = (datetime.now() - datetime.fromisoformat(last.replace(' ', 'T'))).total_seconds() / 3600
     except ValueError: return ceiling
-    return 0 if gap_h <= 1 else min(ceiling, int(gap_h // 24) + 1)
+    from .channels import STARTUP_OVERLAP
+    return 0 if gap_h <= 1 else min(ceiling, gap_h + STARTUP_OVERLAP.total_seconds() / 3600)
 
 
 def catch_up_on_startup():
@@ -5670,14 +5677,14 @@ def catch_up_on_startup():
     try: days = int(store.get_settings().get('startup_sync_days') or 0)
     except ValueError: days = 0
     if days <= 0: return
-    days = _catchup_days(days)
-    logger.info(f"startup: {'incremental poll (closed under an hour)' if days == 0 else f'catching up on the last {days} day(s)'}")
+    hours = _catchup_hours(days)
+    logger.info(f"startup: {'incremental poll (closed under an hour)' if hours == 0 else f'catching up on the {hours:.1f} hour(s) it was closed'}")
     def _catch_up():
         # the bridge's launch grace, spent here instead of in front of the owner's first request
         from . import wabridge
         try: wabridge.ready(8)
         except Exception as e: logger.debug(f'wa bridge grace skipped: {e}')
-        _poll_reports(days, what=f'catching up on the last {days} day(s)' if days else 'syncing', startup=True)
+        _poll_reports(hours, what=f'catching up on the {hours:.0f} hour(s) it was closed' if hours else 'syncing', startup=True)
         # the Morning digest needs no call of its own anymore: it is a seeded REPORT, run by
         # the poll above like every other one. Consolidate what the verdicts taught next,
         # on the same once-a-day rhythm.

@@ -86,19 +86,19 @@ def outlook_store(folders=('inbox',)):
     return s, sid
 
 
-def poll(s, fake, backfill_days=0):
+def poll(s, fake, backfill_hours=0):
     with mock.patch.object(channels, 'graph_token', return_value='T'), mock.patch.object(channels, '_mail_msgs', fake), \
          mock.patch.object(channels.requests, 'get', fake.history_get), \
          mock.patch.object(channels, '_body', side_effect=lambda m: m['body']['content']), mock.patch.object(channels, '_addrs', return_value=[]):
-        return channels.poll_channels(s, backfill_days=backfill_days)
+        return channels.poll_channels(s, backfill_hours=backfill_hours)
 
 
-def poll_transport(s, get, backfill_days=0):
+def poll_transport(s, get, backfill_hours=0):
     with mock.patch.object(channels, 'graph_token', return_value='T'), \
          mock.patch.object(channels.requests, 'get', get), \
          mock.patch.object(channels, '_body', side_effect=lambda m: m['body']['content']), \
          mock.patch.object(channels, '_addrs', return_value=[]):
-        return channels.poll_channels(s, backfill_days=backfill_days)
+        return channels.poll_channels(s, backfill_hours=backfill_hours)
 
 
 def inbox_rows(s): return s._rows("SELECT * FROM message WHERE Channel='email' AND FromEmail='v@vendor.example' ORDER BY MessageId")
@@ -407,7 +407,7 @@ class CatchUpTests(unittest.TestCase):
         with mock.patch.object(channels, '_mail_cutoff', side_effect=[cut1, cut2]):
             poll(s, FakeGraph({'inbox': recent}, fail_on_call=3))
             narrow = json.loads(s.get_source(sid)['ConfigJson'])['mail_cursor_basis']['since']
-            poll(s, FakeGraph({'inbox': [older, *recent]}), backfill_days=3)
+            poll(s, FakeGraph({'inbox': [older, *recent]}), backfill_hours=72)
         self.assertIn('graph:inbox-9999', {row['ExternalId'] for row in inbox_rows(s)})
         self.assertEqual(len(inbox_rows(s)), 511)
         self.assertNotIn('mail_cursor_basis', json.loads(s.get_source(sid)['ConfigJson']))

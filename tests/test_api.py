@@ -868,13 +868,16 @@ class ApiTests(unittest.TestCase):
         try:
             server.store._exec('UPDATE source SET LastPolledAt=NULL', ())     # only this source speaks
             server.store._exec('UPDATE source SET LastPolledAt=? WHERE SourceId=?', (stamp(0.2), src))
-            self.assertEqual(server._catchup_days(3), 0)      # closed ten minutes: plain incremental
+            self.assertEqual(server._catchup_hours(3), 0)     # closed ten minutes: plain incremental
+            server.store._exec('UPDATE source SET LastPolledAt=? WHERE SourceId=?', (stamp(8.75), src))
+            # closed 8.75h asks for 8.75h plus the overlap - NOT a rounded-up 24 (2026-09-17)
+            self.assertAlmostEqual(server._catchup_hours(3), 9.75, delta=0.2)
             server.store._exec('UPDATE source SET LastPolledAt=? WHERE SourceId=?', (stamp(30), src))
-            self.assertEqual(server._catchup_days(3), 2)      # overnight and change: two days
+            self.assertAlmostEqual(server._catchup_hours(3), 31, delta=0.2)   # overnight and change
             server.store._exec('UPDATE source SET LastPolledAt=? WHERE SourceId=?', (stamp(24 * 10), src))
-            self.assertEqual(server._catchup_days(3), 3)      # a long holiday still caps at the setting
+            self.assertEqual(server._catchup_hours(3), 72)    # a long holiday still caps at the setting
             server.store._exec('UPDATE source SET LastPolledAt=NULL', ())
-            self.assertEqual(server._catchup_days(3), 3)      # never polled: the full ceiling
+            self.assertEqual(server._catchup_hours(3), 72)    # never polled: the full ceiling
         finally:
             server.store.delete_source(src)
 

@@ -84,12 +84,12 @@ class StartupSyncTests(unittest.TestCase):
         # otherwise loses anything that arrived just before a poll)
         self.assertLess((datetime.now() - channels._since(src)).total_seconds(),
                         400 + channels.POLL_OVERLAP.total_seconds())
-        wide = channels._since(src, 3)
+        wide = channels._since(src, 72)                    # hours, not days (2026-09-17)
         self.assertGreater((datetime.now() - wide).total_seconds(), 2.9 * 86400)
         self.assertLess((datetime.now() - wide).total_seconds(), 3.1 * 86400)
         # a source last polled a month ago is NOT pulled forward - the backfill only ever widens
         old = {'LastPolledAt': (datetime.now() - timedelta(days=30)).isoformat(sep=' ', timespec='seconds')}
-        self.assertGreater((datetime.now() - channels._since(old, 3)).total_seconds(), 29 * 86400)
+        self.assertGreater((datetime.now() - channels._since(old, 72)).total_seconds(), 29 * 86400)
 
 
 class ReportChartTests(unittest.TestCase):

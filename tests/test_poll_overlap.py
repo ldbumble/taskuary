@@ -15,7 +15,7 @@ line, before policies and before any AI call.
 import unittest
 from datetime import datetime, timedelta
 
-from taskuary.channels import POLL_OVERLAP, _since
+from taskuary.channels import POLL_OVERLAP, STARTUP_OVERLAP, _since
 
 
 class OverlapTests(unittest.TestCase):
@@ -37,10 +37,24 @@ class OverlapTests(unittest.TestCase):
         self.assertAlmostEqual((datetime.now() - got).total_seconds(), 86400, delta=5)
 
     def test_a_backfill_still_widens_the_window_rather_than_narrowing_it(self):
-        """Startup catch-up asks for days; the overlap must never make that window smaller."""
+        """Startup catch-up asks for hours; the overlap must never make that window smaller."""
         polled = (datetime.now() - timedelta(minutes=1)).isoformat(sep=' ', timespec='seconds')
-        got = _since({'LastPolledAt': polled}, backfill_days=3)
+        got = _since({'LastPolledAt': polled}, backfill_hours=72)
         self.assertAlmostEqual((datetime.now() - got).days, 3, delta=1)
+
+    def test_the_catchup_asks_for_the_gap_and_not_a_rounded_up_day(self):
+        """The window must reach back past the watermark by the startup overlap and NO further.
+
+        Closed 8.75h, the day-granular catch-up asked Graph for 24h from now - 15 hours BEHIND
+        the watermark, into mail already stored. 272 of the 365 messages one such startup pulled
+        were dropped by dedupe (the owner's mailbox, 2026-09-17)."""
+        closed_h = 8.75
+        polled = datetime.now() - timedelta(hours=closed_h)
+        got = _since({'LastPolledAt': polled.isoformat(sep=' ', timespec='seconds')},
+                     backfill_hours=closed_h + STARTUP_OVERLAP.total_seconds() / 3600)
+        reach = (polled - got).total_seconds()
+        self.assertGreater(reach, 0)                                       # still past the watermark
+        self.assertAlmostEqual(reach, STARTUP_OVERLAP.total_seconds(), delta=120)
 
     def test_re_reading_the_overlap_costs_nothing(self):
         """The whole fix rests on this: a message seen twice is dropped on the FIRST line of

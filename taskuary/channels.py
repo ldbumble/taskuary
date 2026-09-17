@@ -4,7 +4,7 @@ live probe (token/chat-read/repo-discovery); poll_channels is the scheduled inge
 funnels mail and chats through the same triage as everything else. Credentials left blank
 fall back to AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET env vars.
 """
-import base64, contextlib, hashlib, json, os, queue, re, threading, time
+import base64, contextlib, hashlib, json, math, os, queue, re, threading, time
 from concurrent.futures import ThreadPoolExecutor
 from html import unescape
 from datetime import datetime, timedelta
@@ -1203,15 +1203,21 @@ def mark_slack_read(tok: str, channel: str, ts: str):
 # the same hole. Re-reading a few minutes is free: ingest_message dedupes on external_id in its
 # FIRST line, before policies and before any AI call.
 POLL_OVERLAP = timedelta(minutes=5)
+# The same hedge at startup scale. A watermark that jumped to `now` while the mail behind it was
+# still eventually-consistent hides that mail for good (the Richard Spencer case above), and a
+# shutdown is exactly when nobody is polling to catch it. So the catch-up reaches back PAST the
+# watermark - but by this, not by a rounded-up day: asking for 24h after 8.75h closed pulled 272
+# messages the database already had, to keep 93 (the owner's mailbox, 2026-09-17).
+STARTUP_OVERLAP = timedelta(hours=1)
 
 
-def _since(s, backfill_days: int = 0):
-    """How far back to ask this source for. `backfill_days` WIDENS the window without moving the
+def _since(s, backfill_hours: float = 0):
+    """How far back to ask this source for. `backfill_hours` WIDENS the window without moving the
     watermark - what the app does on startup, because whatever arrived while it was shut down was
     never polled by anyone, and 'since I last ran' is the wrong question after a weekend off."""
     last = (datetime.fromisoformat(s['LastPolledAt'].replace(' ', 'T')) - POLL_OVERLAP
             if s.get('LastPolledAt') else datetime.now() - timedelta(days=1))
-    return min(last, datetime.now() - timedelta(days=backfill_days)) if backfill_days else last
+    return min(last, datetime.now() - timedelta(hours=backfill_hours)) if backfill_hours else last
 
 
 class _Writer:
@@ -1283,7 +1289,7 @@ def _poll_jobs(store, only=None):
     return jobs
 
 
-def _poll_one(store, c, file_only, backfill_days, llm, read_it) -> int:
+def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
     """One connector. HTTP lives here; store writes go through whatever store was handed
     (the writer thread when polls overlap). Messages of one conversation still land in
     arrival order because a connector is one worker."""
@@ -1304,7 +1310,7 @@ def _poll_one(store, c, file_only, backfill_days, llm, read_it) -> int:
             mine = [x for x in store.list_sources()
                     if x['Channel'] == CH2SRC[c['Type']]
                     and (not x.get('ConnectorId') or x['ConnectorId'] == c['ConnectorId'])]
-            since = _since(mine[0] if mine else {}, backfill_days)
+            since = _since(mine[0] if mine else {}, backfill_hours)
             if c['Type'] in ('telegram', 'whatsapp'):
                 from . import messengers
                 poll = messengers.poll_telegram if c['Type'] == 'telegram' else messengers.poll_whatsapp
@@ -1327,7 +1333,7 @@ def _poll_one(store, c, file_only, backfill_days, llm, read_it) -> int:
             # channel 'email', and without this the Graph poller tried the Gmail address.
             # (Orphans are adopted at startup, so ownership is always present now.)
             if s.get('ConnectorId') and s['ConnectorId'] != c['ConnectorId']: continue
-            since = _since(s, backfill_days)
+            since = _since(s, backfill_hours)
             if c['Type'] == 'outlook':
                 since_iso = since.astimezone().isoformat()
                 identity = _mail_identity(s)
@@ -1445,7 +1451,7 @@ def _poll_one(store, c, file_only, backfill_days, llm, read_it) -> int:
                 # one poll per connector (the UID watermark lives there); its own source only
                 from . import imapmail
                 if s['ConnectorId'] != c['ConnectorId']: continue
-                n += imapmail.poll_imap(store, full, [s], llm, file_only, backfill_days)
+                n += imapmail.poll_imap(store, full, [s], llm, file_only, math.ceil(backfill_hours / 24))
             elif c['Type'] in CLOUD:
                 # per SOURCE: each discovered object carries its own mode, and 'report'
                 # (the default) means the Reports tab may use it but nothing is polled.
@@ -1489,11 +1495,11 @@ def _poll_one(store, c, file_only, backfill_days, llm, read_it) -> int:
     return n
 
 
-def poll_channels(store, backfill_days: int = 0, progress=None, only=None) -> int:
+def poll_channels(store, backfill_hours: float = 0, progress=None, only=None) -> int:
     """Ingest new items for every connection the owner marked as a TRIGGER, through the
     same triage funnel (incl. the configured AI, if any). A connection without the trigger
     role is still usable by agents and reports - it just never creates work on its own.
-    Failures land on the card. `backfill_days` reaches further back than the watermark - see
+    Failures land on the card. `backfill_hours` reaches further back than the watermark - see
     _since; it is how startup catches up on mail that arrived while the app was closed.
 
     Independent HTTP waits overlap. SQLite writes hop onto one writer thread. Drain of
@@ -1524,7 +1530,7 @@ def poll_channels(store, backfill_days: int = 0, progress=None, only=None) -> in
     if len(jobs) == 1:
         c, file_only = jobs[0]
         _say(c['Type'], 0, store)
-        return _poll_one(store, c, file_only, backfill_days, llm, read_it)
+        return _poll_one(store, c, file_only, backfill_hours, llm, read_it)
 
     # said as it happens, not at the end: the timeline is refreshing while this runs, so
     # "reading Outlook" beside rows that are already arriving beats a spinner and a wait
@@ -1538,7 +1544,7 @@ def poll_channels(store, backfill_days: int = 0, progress=None, only=None) -> in
             # inherit the poll thread's deferred(): our threading.local is off, and without
             # this wrap we would triage in parallel - the thing drain exists to prevent
             with ingest_mod.deferred() if ingest_mod._parent_deferring() else contextlib.nullcontext():
-                added = _poll_one(writer, c, file_only, backfill_days, llm, read_it)
+                added = _poll_one(writer, c, file_only, backfill_hours, llm, read_it)
             with tally_lock: tally[0] += added
             return added
         with ThreadPoolExecutor(max_workers=min(8, len(jobs)), thread_name_prefix='poll') as pool:

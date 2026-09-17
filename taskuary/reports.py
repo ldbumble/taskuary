@@ -1370,11 +1370,20 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
     # Read the verdict BEFORE it is stripped: the line is Taskuary's question to the model, not
     # something the reader should ever see. A quiet run is not a lost one - it is in the run
     # history with what it read, which is where "it ran and found nothing" belongs.
-    speak, said_why = reaches(cfg, subject.split('—', 1)[-1].strip(), strip_directive(body), failed)
+    res = read_result(subject.split('—', 1)[-1].strip(), strip_directive(body), failed)
+    speak, said_why = rule_fires(reach_of(cfg), cfg.get('alert') or {}, res)
+    send, _ = delivers(cfg, res)
     body = verdict_of(body)[2]
     if not speak:
-        return {'message_id': None, 'subject': f'{title} - nothing to report', 'files': 0, 'said': 0,
-                'quiet': True, 'summary': strip_directive(body)[:2000]}
+        # quiet for the OWNER is not quiet for the recipients: a report that goes somewhere still
+        # goes there. Everything below needs a `mid` this run does not have, so delivery - the one
+        # thing that does not - happens here (2026-09-17).
+        out = {'message_id': None, 'subject': f'{title} - nothing to report', 'files': 0, 'said': 0,
+               'quiet': True, 'summary': strip_directive(body)[:2000]}
+        if send and cfg.get('deliver', {}).get('to'):
+            err = _deliver(store, src, cfg, title, subject, strip_directive(body), mid=None)
+            if err: out['deliver_error'] = err
+        return out
     if cfg.get('triage') and not failed:
         # the report is a MESSAGE like any other: triage reads it under TRIAGE.md, and a task is what
         # TRIAGE.md says - so an agent's research report can hand its findings to the coding agent.
@@ -1417,12 +1426,9 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
     store.audit('message', mid, 'report', 'report', 'agent', title)
     # ...and if the report is meant to LEAVE, this is where it turns around. Same run, same row
     # on the timeline - it just travels the other way, and says so.
-    if cfg.get('deliver', {}).get('to'):
-        try: deliver_report(store, src, cfg, subject, strip_directive(body))
-        except Exception as e:
-            logger.warning(f'outbound delivery for {title} failed: {e}')
-            store.add_route(mid, None, 'feed', None, f'the report ran; sending it out failed: {str(e)[:200]}',
-                            [], 'report')
+    deliver_error = None
+    if send and cfg.get('deliver', {}).get('to'):
+        deliver_error = _deliver(store, src, cfg, title, subject, strip_directive(body), mid)
     # ...and the alert, which is the opposite of delivery: it says nothing at all unless the
     # result trips the rule. A failure to SEND an alert is itself worth seeing on the timeline -
     # an alarm that quietly could not reach you is the worst of both worlds.
@@ -1441,7 +1447,8 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
     if 'digest' in {cfg.get('type'), *(s.get('type') for s in cfg.get('sources') or [])}:
         from .digest import HEADER
         store.save_doc('digest', f'{HEADER}_refreshed {stamp[:16]}_\n\n{strip_directive(body)}\n', 'digest')
-    return {'message_id': mid, 'subject': subject, 'files': len(made), 'summary': strip_directive(body)}
+    return {'message_id': mid, 'subject': subject, 'files': len(made), 'summary': strip_directive(body),
+            **({'deliver_error': deliver_error} if deliver_error else {})}
 
 
 # ── alerts: the report that only speaks up when something is wrong ──────────────────────
@@ -1498,23 +1505,54 @@ def reach_of(cfg: dict) -> str:
     return 'wrong' if cfg.get('type') == 'assistant' else 'always'
 
 
-def reaches(cfg: dict, head: str, body: str, failed: bool = False, found: int = None) -> tuple:
-    """(does it reach the owner, in what words). `found` is the count when the source knows it
-    itself - the assistant's own findings - rather than something to read off the text.
+def read_result(head: str, body: str, failed: bool = False, found: int = None) -> dict:
+    """What this run found, read ONCE. Two rules judge a run - does it reach the OWNER, does it
+    LEAVE the building - and they both consume this, because two readings of one result is how
+    they come to disagree. `found` is the count when the source knows it itself (the assistant's
+    own findings) rather than something to read off the text."""
+    kind, why, _ = verdict_of(body)
+    return {'head': str(head or ''), 'body': str(body or ''), 'failed': bool(failed), 'verdict': kind,
+            'why': why, 'n': found if found is not None else result_count(head, body)}
 
-    A run that FAILED always reaches you: a check that could not run is not a clear one.
+
+def rule_fires(how: str, cond: dict, res: dict) -> tuple:
+    """(does this rule fire, in what words) for one of `always | wrong | rule`, against a result
+    already read. `cond` is that rule's OWN condition block - the alert's rule belongs to the alert.
+
+    A run that FAILED fires every rule: a check that could not run is not a clear one.
     """
-    how = reach_of(cfg)
-    if failed: return True, 'the report failed to run'
+    if res['failed']: return True, 'the report failed to run'
     if how == 'always': return True, ''
     if how == 'rule':
-        a = cfg.get('alert') or {}
-        why = condition_fires(a.get('when'), a.get('count'), a.get('text'), head, body, failed)
+        c = cond or {}
+        why = condition_fires(c.get('when'), c.get('count'), c.get('text'), res['head'], res['body'], False)
         return bool(why), why
-    kind, said, _ = verdict_of(body)
+    kind, said = res['verdict'], res['why']
     if kind: return kind == 'attention', (said or 'the check found something') if kind == 'attention' else ''
-    n = found if found is not None else result_count(head, body)
-    return n > 0, (f'{n} came back' if n else '')
+    return res['n'] > 0, (f"{res['n']} came back" if res['n'] else '')
+
+
+def reaches(cfg: dict, head: str, body: str, failed: bool = False, found: int = None) -> tuple:
+    """(does it reach the owner, in what words) - the Timeline row and the push alike."""
+    return rule_fires(reach_of(cfg), cfg.get('alert') or {}, read_result(head, body, failed, found))
+
+
+# ── ...and whether it LEAVES, which is a different question ─────────────────────────────
+# Delivery sends the result somewhere else entirely. It is not "reaching the owner" by another
+# route, and tying the two together meant picking "only when something is wrong" silently stopped
+# a monthly report going out to the people waiting for it (the owner, 2026-09-17: "deliver is to
+# push to somewhere not timeline, that is something else"). Same three words, same verdict, its
+# own answer: reach=wrong + send=always is "do not bother me, but mail it out every month".
+def deliver_how(cfg: dict) -> str:
+    """How a report leaves. Absent means every run - that is what delivery has always done, and a
+    setting nobody chose must never be why recipients stopped getting their report."""
+    how = str((cfg.get('deliver') or {}).get('send') or '').strip().lower()
+    return how if how in REACH else 'always'
+
+
+def delivers(cfg: dict, res: dict) -> tuple:
+    """(does this run leave the building, in what words), on the deliver block's own rule."""
+    return rule_fires(deliver_how(cfg), cfg.get('deliver') or {}, res)
 
 
 def result_count(head: str, body: str) -> int:
@@ -1622,6 +1660,42 @@ def expire_previous_runs(store, src: dict, cfg: dict, mid: int) -> list:
             else: retired.append(r['MessageId'])
     if retired: logger.info(f"reports: {cfg.get('title') or src['Address']} superseded {len(retired)} earlier run(s)")
     return retired
+
+
+def _deliver(store, src: dict, cfg: dict, title: str, subject: str, body: str, mid=None) -> str | None:
+    """Send it, and say what went wrong if it did not. Returns the error for the run history."""
+    try:
+        deliver_report(store, src, cfg, subject, body)
+        return None
+    except Exception as e:
+        logger.warning(f'outbound delivery for {title} failed: {e}')
+        file_delivery_failure(store, src, cfg, title, e)
+        if mid is not None:
+            store.add_route(mid, None, 'feed', None, f'the report ran; sending it out failed: {str(e)[:200]}',
+                            [], 'report')
+        return str(e)[:600]
+
+
+def file_delivery_failure(store, src: dict, cfg: dict, title: str, err) -> int:
+    """A send that did not happen is WORK, not an fyi.
+
+    It gets a row of its own, ending in FAILED, because that is what funnel.report_failed reads:
+    the row lands in the `broken` lane and therefore on the work rail, where a report nobody
+    received belongs. Its own row, rather than a note on the report's, because a quiet run has no
+    row to write on - and the silence is exactly when nobody would notice (2026-09-17).
+    """
+    to = (cfg.get('deliver') or {}).get('to')
+    who = ', '.join(to) if isinstance(to, list) else str(to or 'nobody')
+    stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    mid = store.add_message({
+        'TaskId': None, 'ExternalId': f'outfail:{src["SourceId"]}:{stamp}', 'ConversationId': f'report:{src["SourceId"]}',
+        'Channel': 'report', 'SourceName': title, 'FromName': title, 'SentAt': stamp,
+        'Subject': f'{title} — delivery FAILED',
+        'BodyText': f'The report ran, but it could not be sent to {who}.\n\n{str(err)[:500]}',
+        'SourceLink': cfg.get('link'), 'Status': 'feed'})
+    store.add_route(mid, None, 'feed', None, f'the report ran; sending it to {who} failed', [], 'report')
+    store.audit('message', mid, 'report_delivery_failed', 'report', 'agent', {'to': to, 'error': str(err)[:200]})
+    return mid
 
 
 def deliver_report(store, src: dict, cfg: dict, subject: str, body: str) -> dict:

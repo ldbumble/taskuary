@@ -49,3 +49,16 @@ test("the reading of an absent setting is the server's own, and prose is offered
   }
   assert.match(conditions, /v: "something_came_back", rows: "anything came back", prose: "it found something"/);
 });
+
+test("delivery has a rule of its own that reads the same verdict", () => {
+  // Reach is about the OWNER; delivery sends the result somewhere else entirely. Tying them
+  // together meant "only when something is wrong" silently stopped a monthly report going out to
+  // the people waiting for it (the owner, 2026-09-17: "deliver is to push to somewhere not
+  // timeline, that is something else"). Absent must keep meaning every run - reports.deliver_how.
+  assert.match(source, /export const deliverSendOf = \(c\) => \(\["always", "wrong", "rule"\]\.includes\(c\?\.deliver\?\.send\) \? c\.deliver\.send : "always"\)/);
+  const panel = source.slice(source.indexOf("SEND IT SOMEWHERE (OPTIONAL)"), source.indexOf("WHEN SHOULD THIS REACH YOU?"));
+  assert.match(panel, /\["always", "every run"\], \["wrong", "only when something is wrong"\], \["rule", "only when/);
+  // ...and it carries its OWN condition: the alert's rule belongs to the alert
+  assert.match(panel, /cfg\.deliver\.when/);
+  assert.doesNotMatch(panel, /cfg\.alert/);
+});

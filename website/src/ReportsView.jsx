@@ -261,6 +261,10 @@ const isWorkflowSource = (s) => isWorkflowConfig(parse(s?.ConfigJson));
 // was the only way to ask for quiet, and an assistant check was already quiet when it found nothing.
 export const reachOf = (c) => (["always", "wrong", "rule"].includes(c?.reach) ? c.reach
   : c?.alert?.when ? "rule" : c?.type === "assistant" ? "wrong" : "always");
+// ...and whether it LEAVES, which is a different question (reports.deliver_how). Delivery sends
+// the result somewhere else entirely, so it answers for itself - absent means every run, because
+// that is what delivery has always done and a setting nobody chose must not stop a report going out.
+export const deliverSendOf = (c) => (["always", "wrong", "rule"].includes(c?.deliver?.send) ? c.deliver.send : "always");
 // A prose answer cannot be counted - "fewer rows than 5" on an AI summary compared five LINES - so
 // a check that answers in words is offered the words, and a query that answers in rows the rows.
 export const answersInProse = (c) => c?.type === "assistant" || !!c?.ai_prompt;
@@ -513,7 +517,9 @@ function SavedReportSummary({ source, workflow = false }) {
       : "Assistant context — messages, tasks, calendar, and its configured checks")
     : labels.length > 1 ? `${labels.length} sources — ${labels.join(", ")}` : labels[0] || "one report source";
   const destinations = ["the Timeline"];
-  if (c.deliver?.to) destinations.push(`a draft to ${c.deliver.to} on ${c.deliver.channel || "email"}`);
+  if (c.deliver?.to) destinations.push(`a draft to ${c.deliver.to} on ${c.deliver.channel || "email"}`
+    + (deliverSendOf(c) === "always" ? "" : deliverSendOf(c) === "wrong" ? " when something is wrong"
+      : ` when ${String(c.deliver.when || "the rule matches").replaceAll("_", " ")}`));
   if (c.alert?.to) destinations.push(`an alert to ${c.alert.to} when ${String(c.alert.when || "the rule matches").replaceAll("_", " ")}`);
   return (
     <Box sx={{ ...card, ml: { xs: 0, sm: 4 }, mt: 2, p: 1.5, maxWidth: 720,
@@ -704,6 +710,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
     // same for the alert: switched on with nowhere to send is a rule that can only fail at 3am
     if (c.alert && !String(c.alert.to || "").trim()) delete c.alert;
     if (c.alert?.count != null && c.alert.count !== "") c.alert = { ...c.alert, count: Number(c.alert.count) };
+    if (c.deliver?.count != null && c.deliver.count !== "") c.deliver = { ...c.deliver, count: Number(c.deliver.count) };
     for (const k of SOURCE_KEYS) delete c[k];            // sources live in sources[] now
     for (const k of Object.keys(c)) if (c[k] === "" || c[k] == null) delete c[k];
     if (c.every_minutes) c.every_minutes = Number(c.every_minutes);
@@ -968,6 +975,48 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                       label="subject (blank = the report's headline)" value={cfg.deliver.subject || ""}
                       onChange={(e) => setCfg({ ...cfg, deliver: { ...cfg.deliver, subject: e.target.value } })} />
                   </Box>
+                  {/* Its OWN rule, on the same verdict the reach rule reads. reach=wrong with
+                      send=always is "do not bother me, but mail it out every month". */}
+                  <Box sx={{ display: "flex", gap: 0.6, mt: 1.2, flexWrap: "wrap", alignItems: "center" }}>
+                    <Typography variant="caption" sx={{ color: DIM, mr: 0.4 }}>Send it</Typography>
+                    {[["always", "every run"], ["wrong", "only when something is wrong"], ["rule", "only when…"]].map(([v, label]) => (
+                      <Button key={v} size="small" disableElevation
+                        variant={deliverSendOf(cfg) === v ? "contained" : "outlined"}
+                        sx={{ fontSize: 12, minHeight: 28, py: 0, px: 1.4,
+                          ...(deliverSendOf(cfg) === v ? {} : { color: INK, borderColor: BORDER }) }}
+                        onClick={() => setCfg({ ...cfg, deliver: { ...cfg.deliver, send: v,
+                          ...(v === "rule" && !cfg.deliver.when ? { when: answersInProse(cfg) ? "something_came_back" : "nothing_came_back" } : {}) } })}>
+                        {label}</Button>
+                    ))}
+                  </Box>
+                  {deliverSendOf(cfg) === "rule" && (
+                    <Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap", alignItems: "center" }}>
+                      <Select size="small" value={cfg.deliver.when || "nothing_came_back"} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 250 }}
+                        onChange={(e) => setCfg({ ...cfg, deliver: { ...cfg.deliver, when: e.target.value } })}>
+                        {CONDITIONS.filter((c) => !answersInProse(cfg) || c.prose).map((c) => (
+                          <MenuItem key={c.v} value={c.v} sx={{ fontSize: 12 }}>
+                            {(answersInProse(cfg) && c.prose) || c.rows}</MenuItem>
+                        ))}
+                      </Select>
+                      {["fewer_than", "more_than"].includes(cfg.deliver.when) && (
+                        <TextField size="small" type="number" sx={{ bgcolor: "#fff", width: 120 }} label="how many"
+                          value={cfg.deliver.count ?? ""}
+                          onChange={(e) => setCfg({ ...cfg, deliver: { ...cfg.deliver, count: e.target.value } })} />
+                      )}
+                      {["contains", "missing"].includes(cfg.deliver.when) && (
+                        <TextField size="small" sx={{ bgcolor: "#fff", flex: 1, minWidth: 160 }} label="the words to look for"
+                          value={cfg.deliver.text || ""}
+                          onChange={(e) => setCfg({ ...cfg, deliver: { ...cfg.deliver, text: e.target.value } })} />
+                      )}
+                    </Box>
+                  )}
+                  <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.8 }}>
+                    {deliverSendOf(cfg) === "always"
+                      ? "It goes out on every run, whatever it found — and whether or not the run reaches you below."
+                      : deliverSendOf(cfg) === "wrong"
+                        ? "A clear run is not sent anywhere. If it cannot be sent, that lands on your work rail."
+                        : "It is only sent when this is true of the result."}
+                  </Typography>
                   <Box sx={{ display: "flex", gap: 1, mt: 1, alignItems: "center", flexWrap: "wrap" }}>
                     <Select size="small" value={cfg.deliver.gate || "review"} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 260 }}
                       onChange={(e) => setCfg({ ...cfg, deliver: { ...cfg.deliver, gate: e.target.value } })}>

@@ -782,11 +782,15 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onFinish }) {
     <CardShell card={{ ...card, lane: "report" }} kicker={`setting up · ${at + 1} of ${total}`}
       title={card.title} sub={card.blurb}>
       {/* the tab itself. A broken image removes itself rather than leaving a torn box in the middle
-          of the card - the words above and below already carry the stop. */}
+          of the card - the words above and below already carry the stop. Capped and cropped to its
+          top-left: the job is recognition ("you'll know it when you get there"), not reading text off
+          a thumbnail, and an uncapped screenshot pushed the card's own buttons off the bottom of a
+          1440x900 screen. */}
       {card.image && (
         <img src={card.image} alt={`The ${card.title} tab`} loading="lazy"
           onError={(e) => { e.currentTarget.style.display = "none"; }}
-          style={{ width: "100%", display: "block", borderRadius: 6, border: "1px solid #e1dcd5", margin: "8px 0 2px" }} />
+          style={{ width: "100%", maxHeight: 130, objectFit: "cover", objectPosition: "top left",
+            display: "block", borderRadius: 6, border: "1px solid #e1dcd5", margin: "8px 0 2px" }} />
       )}
       {card.facts && <div className="tq-card-excerpt">{card.facts}</div>}
       {/* the five setup stops mirror the checklist's own done-ness (walk.state reads the same

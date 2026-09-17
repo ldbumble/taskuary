@@ -51,8 +51,13 @@ def is_private(store, connector, chat: str) -> bool:
     everything that ends in @g.us refused the very chat the pairing box tells people to use. Sending
     hid it, because a DM to your own address lands in that same thread; only the inbound half was
     wrong, and the walk Taskuary had just sent there could not be answered (the owner, 2026-09-07:
-    "whatsapp did not work, i said reply and nothing happened"). So: a group jid is accepted only
-    when it is the paired account's own self-chat, which its number-prefix is what proves.
+    "whatsapp did not work, i said reply and nothing happened"). So a group jid is accepted only
+    when it carries the paired account's number.
+
+    THAT PREFIX IS NECESSARY, NOT SUFFICIENT - every group the owner CREATED wears it too. This is
+    the shape check; `own_thread` is the one that counts the people in the room, and it is what the
+    card offers from. Nothing reaches the assistant on a chat that was not configured there
+    (connector_for_chat), so refusing to offer a real group is what keeps one out.
     """
     chat = str(chat or '').strip()
     if not chat: return False
@@ -61,6 +66,27 @@ def is_private(store, connector, chat: str) -> bool:
     from . import messengers
     me = messengers.wa_self_number(store, connector)
     return bool(me) and chat.split('-', 1)[0] == me
+
+
+def own_thread(store, connector, row, configured: str = '') -> bool:
+    """Is this roster row the owner's own thread - the one chat the assistant may live in?
+
+    The number prefix is NECESSARY and not sufficient. WhatsApp gives the "Message yourself" thread
+    a legacy group jid, `<their number>-<when it was made>@g.us`, and gives every group they created
+    the same shape - so a real group called "Jogging", with people in it, was offered as the
+    assistant's private chat, one click from answering questions about the owner's mail in front of
+    everyone in it (the owner, 2026-09-17). What settles it is how many people are in the group,
+    which the roster now carries.
+
+    A bridge too old to say reports None. That reads as UNKNOWN, not as "nobody": the chat already
+    configured keeps working, and nothing new is offered until the bridge can prove it.
+    """
+    jid = str((row or {}).get('jid') or '').strip()
+    if not jid or not is_private(store, connector, jid): return False
+    if not (row or {}).get('group'): return True
+    people = (row or {}).get('people')
+    if people is None: return jid == str(configured or '').strip()
+    return int(people) <= 1
 
 
 def doorway(store, channel: str):

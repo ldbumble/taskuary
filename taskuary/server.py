@@ -4008,9 +4008,11 @@ def wa_chats(cid: int):
     from . import remote_assistant
     try: rows = _chats(c)
     except RuntimeError as e: raise HTTPException(409, str(e))
-    # the owner's own "Message yourself" thread wears a legacy GROUP jid, so the card cannot tell it
-    # from a real group by its shape alone - the paired number can (remote_assistant.is_private)
-    for r in rows: r['self'] = bool(r.get('group')) and remote_assistant.is_private(store, c, r.get('jid'))
+    # The owner's own "Message yourself" thread wears a legacy GROUP jid, and so does every group
+    # they created - the shape and the number prefix cannot tell those apart, so the count of people
+    # in the room does (remote_assistant.own_thread).
+    guide = remote_assistant.chat_of(c)
+    for r in rows: r['self'] = bool(r.get('group')) and remote_assistant.own_thread(store, c, r, guide)
     return {'data': rows}
 
 # ── Get AI to set it up (taskuary/aisetup.py): the card's guide as the agent's prompt, live on the card ──

@@ -39,6 +39,13 @@ export function createChatRoster() {
   const upsertChat = (chat = {}) => {
     const row = ensure(chat.id || chat.jid);
     if (!row) return;
+    // HOW MANY PEOPLE ARE IN IT. WhatsApp gives the owner's own "Message yourself" thread a legacy
+    // GROUP jid - <their number>-<when it was made>@g.us - and gives every group they CREATED the
+    // same shape, so the number prefix cannot tell the two apart. A real group called "Jogging" was
+    // being offered as the assistant's private chat (2026-09-17). groupFetchAllParticipating already
+    // hands us the participant list; it was simply thrown away here. Absent stays absent, so an
+    // older roster reads as "unknown" rather than as "nobody".
+    if (Array.isArray(chat.participants)) row.people = chat.participants.length;
     const name = String(chat.name || chat.subject || names.get(row.jid) || "").trim();
     if (name) row.name = name;
     row.last = Math.max(row.last, timestamp(chat.conversationTimestamp),

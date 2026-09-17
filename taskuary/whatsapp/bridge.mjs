@@ -219,10 +219,11 @@ http.createServer(async (req, res) => {
     }
     if (req.method === "GET" && url.pathname === "/chats") {
       const blocked = chatGate.blockedChats();
-      return json(res, 200, { chats: chatRoster.list(blocked).map((chat) => ({
-        ...chat, snippet: blocked.some((x) => x.jid === chat.jid)
-          ? "not opened - chat is not authorized" : ""
-      })) });
+      // No snippet for a chat we never opened. It used to carry "not opened - chat is not
+      // authorized", which on a real account is printed beside almost every row - the same
+      // sentence forty times over, saying nothing the row does not already say by being there
+      // and having no source mark (the owner, 2026-09-17).
+      return json(res, 200, { chats: chatRoster.list(blocked).map((chat) => ({ ...chat, snippet: "" })) });
     }
     // blue ticks for what the hub has already taken in - ids come back from /messages, and
     // the key we kept with them is what Baileys needs. Unknown ids (rotated out of the

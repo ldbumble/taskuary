@@ -262,7 +262,12 @@ def wa_chats(c) -> list:
             last = item.get('last') or 0
             rows.append({'jid': jid, 'group': bool(item.get('group')), 'name': item.get('name') or '',
                          'n': int(item.get('n') or 0), 'last': last,
-                         'snippet': item.get('snippet') or ''})
+                         # the bridge writes "not opened - chat is not authorized" against every
+                         # chat that is not a source; on a real account that is most of them, the
+                         # same sentence over and over, and it says nothing the row does not
+                         'snippet': '' if 'not authorized' in str(item.get('snippet') or '') else (item.get('snippet') or ''),
+                         # how many people are in it - None when this bridge is too old to say
+                         'people': item.get('people')})
         rows.sort(key=lambda r: (-r['last'], (r['name'] or r['jid']).lower()))
         for r in rows:
             r['last'] = datetime.fromtimestamp(r['last']).strftime('%Y-%m-%d %H:%M') if r['last'] else ''
@@ -271,7 +276,7 @@ def wa_chats(c) -> list:
     for m in out.get('messages', []):
         jid = m.get('jid') or ''
         if not jid or jid.endswith('@broadcast'): continue
-        r = by.setdefault(jid, {'jid': jid, 'group': bool(m.get('group')), 'name': '', 'n': 0, 'last': 0, 'snippet': ''})
+        r = by.setdefault(jid, {'jid': jid, 'group': bool(m.get('group')), 'name': '', 'n': 0, 'last': 0, 'snippet': '', 'people': None})
         r['n'] += 1
         if not m.get('fromMe') and m.get('name'): r['name'] = m['name']     # the other side's push name, never ours
         if (m.get('ts') or 0) >= r['last']: r['last'], r['snippet'] = m.get('ts') or 0, (m.get('text') or '')[:80]
@@ -285,7 +290,7 @@ def wa_chats(c) -> list:
         # chat the owner has not listed (2026-09-17: "the words ... is not needed"). It is not
         # information: the row being here at all already says the chat exists and is not a source.
         by[jid] = {'jid': jid, 'group': bool(m.get('group')), 'name': '', 'n': 0,
-                   'last': m.get('last') or 0, 'snippet': ''}
+                   'last': m.get('last') or 0, 'snippet': '', 'people': m.get('people')}
     rows = sorted(by.values(), key=lambda r: -r['last'])
     for r in rows: r['last'] = datetime.fromtimestamp(r['last']).strftime('%Y-%m-%d %H:%M') if r['last'] else ''
     return rows

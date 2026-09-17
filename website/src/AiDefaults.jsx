@@ -110,6 +110,24 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
         )}
       </Box>
       {slot.note && <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>{slot.note}</Typography>}
+      {/* What it is actually asked. This slot is not a taste setting - it is four yes/nos, and
+          whichever thing answers them answers exactly these (the owner, 2026-09-17: "show the
+          wording for jev ... what are the decision choices it's going for"). The criterion in each
+          one is the sentence on the report's own card, which is why it is not repeated here. */}
+      {isJudge && !!(slot.decides || []).length && (
+        <Box sx={{ mt: 1.25, pt: 1, borderTop: `1px solid ${BORDER}` }}>
+          <Typography variant="caption" sx={{ color: FAINT, fontWeight: 700, display: "block", mb: 0.5 }}>
+            ASKED OF IT, ONCE PER RUN
+          </Typography>
+          {slot.decides.map((d) => (
+            <Typography key={d.line} sx={{ ...mono, fontSize: 11.5, color: INK, whiteSpace: "pre-wrap" }}>
+              {d.line.toUpperCase()}: {d.says} <Typography component="span" sx={{ ...mono, fontSize: 11.5, color: FAINT }}>
+                but only if: the sentence you wrote on that report&rsquo;s card</Typography>
+            </Typography>
+          ))}
+          {slot.evidence && <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>{slot.evidence}</Typography>}
+        </Box>
+      )}
     </Box>
   );
 };

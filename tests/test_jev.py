@@ -134,3 +134,31 @@ class ItIsNotABrainTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TheWordingItIsGivenTests(unittest.TestCase):
+    """A description weighed against its own negation is not a question.
+
+    `false` used to be the owner's sentence with "not this:" glued on, which describes no state at
+    all - and on real runs Jev answered 0.43 / 0.49 / 0.51 / 0.62 on lines the chat judge said yes to
+    every time, so the 0.5 cut was deciding coin flips (the owner, 2026-09-17: "fix the jev wording").
+    """
+
+    def _body(self, questions):
+        r = mock.Mock(status_code=200, text='')
+        r.json.return_value = {'answers': {n: {'noul': 0.9} for n in questions}}
+        with mock.patch('taskuary.llm.post_retrying', return_value=r) as post:
+            jev.ask('sk-x', 's', questions)
+        return post.call_args[0][2]
+
+    def test_the_false_side_describes_a_state_rather_than_negating_the_true_one(self):
+        q = self._body({'work': ('i', 'a job has not run in over two hours')})['questions']['work']
+        self.assertEqual(q['criteria']['true'], 'a job has not run in over two hours')
+        self.assertNotIn('not this:', q['criteria']['false'])
+        self.assertNotIn('a job has not run', q['criteria']['false'])
+        self.assertEqual(q['criteria']['false'], jev.FALSE)
+
+    def test_the_owners_sentence_is_sent_word_for_word(self):
+        """`see the prompt` is only worth having if the card and the call cannot drift."""
+        said = 'any unit under 70, and only on a weekday'
+        self.assertEqual(self._body({'w': ('i', said)})['questions']['w']['criteria']['true'], said)

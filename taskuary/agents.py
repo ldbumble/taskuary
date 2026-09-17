@@ -643,25 +643,33 @@ def roster(store) -> str:
     GENERAL roles only. A coding task has exactly one role and triage does not choose it
     (routed_role), so offering the coding profiles here is what let `copilot` - a CLI, not a
     worker - be named on TQ-0588's coding work."""
-    return '\n'.join(l for l, _ in (roster_line(store, a) for a in store.list_agents()) if l)
+    return '\n'.join(l for l, *_ in (roster_line(store, a) for a in store.list_agents()) if l)
 
 
 def roster_line(store, a: dict) -> tuple:
-    """(line, reason) for one agent row: the EXACT line triage reads for it, or '' and why there is
-    none. roster() is assembled from this and the Docs page shows it per profile, so "does triage see
-    this worker" has one implementation. It used to have two - this rule here and a count of
-    `triage_enabled` in JSX - and the JSX one said "on the roster" for CODER.md, which triage can never
-    choose. The router reads this ONE LINE per worker; the session it picks gets the whole document."""
-    if not a.get('Active', 1): return '', 'switched off'
+    """(line, reason, code) for one agent row: the EXACT line triage reads for it, or '' plus why
+    there is none. roster() is assembled from this and the Docs page shows it per profile, so "does
+    triage see this worker" has one implementation. It used to have two - this rule here and a count
+    of `triage_enabled` in JSX - and the JSX one said "on the roster" for CODER.md, which triage can
+    never choose. The router reads this ONE LINE per worker; the session it picks gets the document.
+
+    `code` is the same answer in a word a UI can switch on, because the four of these are NOT one
+    situation and a chip that called them all "not routed" said the opposite of the truth for the
+    commonest: every coding task goes to CODER.md, the router simply is not what sends it there
+    (the owner, 2026-09-17: "why does coder.md say not routed? it is but default for coding tasks").
+    Reading the prose to tell them apart would be a second implementation of this rule.
+    """
+    if not a.get('Active', 1): return '', 'switched off', 'off'
     if str(a.get('Kind') or '').lower() in CODING_KINDS:
-        return '', 'a coding worker - coding tasks have one role and triage does not choose it'
+        return '', 'a coding worker - coding tasks have one role and triage does not choose it', 'coding'
     try: prof = json.loads(a.get('Config') or '{}')
     except ValueError: prof = {}
-    if prof.get('triage_enabled') is False: return '', 'not offered to the router - "Available to triage" is off'
+    if prof.get('triage_enabled') is False:
+        return '', 'not offered to the router - "Available to triage" is off', 'not_offered'
     purpose = profile_purpose(a['Name'], prof, a.get('Kind') or 'coding')
-    if not purpose: return '', 'no purpose set - triage has nothing to choose it by'
+    if not purpose: return '', 'no purpose set - triage has nothing to choose it by', 'no_purpose'
     if len(purpose) > ROSTER_PURPOSE_MAX: purpose = purpose[:ROSTER_PURPOSE_MAX - 1].rstrip() + '…'
-    return f"- {a['Name']}: {purpose}", ''
+    return f"- {a['Name']}: {purpose}", '', ''
 
 
 def default_agent(store) -> str:

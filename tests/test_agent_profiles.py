@@ -111,6 +111,47 @@ class TheRosterTests(unittest.TestCase):
         self.assertEqual(cfg.get('agents'), {})
 
 
+class WhyAWorkerIsNotOnTheRosterTests(unittest.TestCase):
+    """"Not routed" was one word for four different situations, and for the commonest of them it was
+    the opposite of the truth: every coding task goes to CODER.md, the ROUTER just does not pick it
+    (the owner, 2026-09-17: "why does coder.md say not routed? it is but default for coding tasks").
+
+    The reason prose already distinguished them. The chip could not read prose, so the code says it.
+    """
+
+    def _code(self, s, name):
+        return hub_agents.roster_line(s, next(a for a in s.list_agents() if a['Name'] == name))[2]
+
+    def test_a_worker_the_router_can_pick_carries_no_code_at_all(self):
+        s = seeded(store())
+        line, reason, code = hub_agents.roster_line(s, next(a for a in s.list_agents() if a['Name'] == 'researcher'))
+        self.assertTrue(line)
+        self.assertEqual((reason, code), ('', ''))
+
+    def test_a_coding_worker_is_routed_by_kind_and_says_so(self):
+        """The one that read as an accusation. It is not off anything - it takes every coding task."""
+        self.assertEqual(self._code(store(), 'coder'), 'coding')
+
+    def test_a_worker_switched_off_is_its_own_case(self):
+        s = seeded(store())
+        row = next(a for a in s.list_agents() if a['Name'] == 'researcher')
+        self.assertEqual(hub_agents.roster_line(s, {**row, 'Active': 0})[2], 'off')
+
+    def test_a_worker_held_back_from_the_router_is_its_own_case(self):
+        s = seeded(store())
+        s.upsert_agent('researcher', 'research', 'cli',
+                       json.dumps({'cmd': 'claude', 'purpose': 'x', 'triage_enabled': False}))
+        self.assertEqual(self._code(s, 'researcher'), 'not_offered')
+
+    def test_a_worker_with_nothing_to_choose_it_by_is_its_own_case(self):
+        s = store()
+        s.upsert_agent('vague', 'general', 'cli', json.dumps({'cmd': 'claude', 'purpose': ''}))
+        self.assertEqual(self._code(s, 'vague'), 'no_purpose')
+
+    def test_the_four_codes_are_distinct_so_a_chip_can_say_four_things(self):
+        self.assertEqual(len({'coding', 'off', 'not_offered', 'no_purpose'}), 4)
+
+
 class ProfileEditingTests(unittest.TestCase):
     def setUp(self):
         from taskuary import server

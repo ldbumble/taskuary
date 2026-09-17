@@ -35,9 +35,9 @@ test("you choose which ones: one skill starts chosen, a catalogue starts unchose
   assert.match(wizard, /rows\.map\(\(r, i\) => r\.include && \(/);     // step 3 lists only the chosen
 });
 
-test("Manage profiles can import skills too, beside Add profile", () => {
+test("Manage profiles names both roads to a new worker", () => {
   assert.match(agents, /import SkillImport from "\.\/SkillImport\.jsx"/);
-  assert.match(agents, /Add profile<\/Button>\s*<Button variant="outlined" onClick=\{\(\) => setImportSkills\(true\)\}/);
+  assert.match(agents, /Add profile manually<\/Button>\s*<Button variant="outlined" onClick=\{\(\) => setImportSkills\(true\)\}/);
   assert.match(agents, /<SkillImport onClose=\{\(\) => setImportSkills\(false\)\} onImported=\{load\} \/>/);
 });
 
@@ -99,15 +99,19 @@ test("the wizard names both doors - a link or a path - and the field takes eithe
   assert.doesNotMatch(wizard, /fetched from a link/);   // the old copy promised a door before it existed
 });
 
-test("Docs opens the wizard from Profiles, beside Add profile", () => {
-  assert.match(docs, /Import skills/);
-  assert.match(docs, /setImportSkills\(true\)/);
-  assert.match(docs, /<SkillImport onClose=\{\(\) => setImportSkills\(false\)\}/);
+// The wizard moved rather than went: three buttons on the shelf, two of them bare text and one
+// wrapping mid-label, read as a menu of unrelated things (the owner, 2026-09-17: "just have 2
+// clear buttons .. make it look normal"). Both roads to a new worker now live on the screen
+// those buttons open, so importing is reachable from exactly one place instead of two.
+test("Docs sends you to the one screen that holds both roads", () => {
+  assert.match(docs, />Manage profiles<\/Button>/);
+  assert.doesNotMatch(docs, /setImportSkills\(true\)/);
+  assert.match(read("AgentsPanel.jsx"), /<SkillImport onClose=\{\(\) => setImportSkills\(false\)\}/);
 });
 
 test("the profiles list already scrolls, and a row says whether it reaches the router", () => {
   // R5: this list already had overflowY - this asserts it stayed, not that it was just added
-  assert.match(docs, /section === "profiles"[\s\S]{0,1200}overflowY: "auto"/);
+  assert.match(docs, /section === "profiles"[\s\S]{0,2400}overflowY: "auto"/);
   // a row not on the roster must say so where the list already is, not just inside the open document
   assert.match(docs, /const rosterChip = \(pr\) => /);
   assert.match(docs, /"not routed"/);
@@ -150,7 +154,7 @@ test("a profile row's roster state comes from the server, and the open profile s
   assert.match(docs, /if \(seen\.line\) g\.onRoster \+= 1;/);
   assert.doesNotMatch(docs, /triage_enabled !== false\) g\.onRoster/);
   assert.match(docs, /WHAT TRIAGE SEES/);
-  assert.match(docs, /not on the roster — \{why\}/);   // one line per REASON, however many members share it
+  assert.match(docs, /not on the roster — \$\{why\}/);   // one line per REASON, however many members share it
 });
 
 test("an own profile can be deleted from Docs, and it asks first", () => {

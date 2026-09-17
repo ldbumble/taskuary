@@ -210,9 +210,12 @@ def test_a_typesafe_judge_asks_jev_and_returns_booleans():
     assert out == {'work': True}
     state, questions = ask.call_args[0][1], ask.call_args[0][2]
     assert '0 rows' in state
-    # the owner's own sentence is the criterion and LINE_SAYS is the instruction - both already
-    # exist and are already what `see the prompt` shows
-    assert questions['work'] == (reports.LINE_SAYS['work'], 'a job has not run in over two hours')
+    # the owner's own sentence is the criterion, word for word, so the card shows what is sent...
+    assert questions['work'][1] == 'a job has not run in over two hours'
+    # ...and the instruction carries the same evidence rule the chat judge's prompt does, which the
+    # decision model was not being told at all
+    assert reports.LINE_SAYS['work'] in questions['work'][0]
+    assert reports.EVIDENCE_RULE in questions['work'][0]
 
 
 def test_a_jev_that_fails_says_it_did_not_answer_so_the_run_reaches_you():

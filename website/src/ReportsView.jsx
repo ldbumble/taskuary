@@ -311,6 +311,16 @@ export const judgePrompt = (c, lines = ROUTE_LINES) => lines
   .filter((l) => routeOf(c, l)[0] === "ai")
   .map((l) => `${l.toUpperCase()}: yes|no — ${PROMPT_SAYS[l]}, but only if: ${routeOf(c, l)[1]}`)
   .join("\n");
+// ...and a decision model is sent no prompt at all: one typed question per line, each with the two
+// sides of the judgement written out. These strings mirror jev.ask and reports.judge_for, for the
+// same reason PROMPT_SAYS mirrors LINE_SAYS - what the card shows has to be what is sent.
+export const JEV_FALSE = "Nothing in the state described above matches that.";
+export const JEV_EVIDENCE = "Judge only what the run actually came back with. If it does not say a thing, that thing did not happen.";
+export const judgeQuestions = (c, lines = ROUTE_LINES) => lines
+  .filter((l) => routeOf(c, l)[0] === "ai")
+  .map((l) => `${l}:\n  ask:   Decide whether to ${PROMPT_SAYS[l]}. ${JEV_EVIDENCE}\n`
+    + `  yes:   ${routeOf(c, l)[1]}\n  no:    ${JEV_FALSE}\n  answer: a probability 0–1; ≥ 0.50 is yes`)
+  .join("\n\n");
 // ...and the short name a replayed run wears, so that reading down the strip the DIFFERENCE
 // between two runs is what stands out, not the same sentence four times
 const LINE_CHIP = { timeline: "Timeline", work: "Work rail", alert: "reached you", send: "sent out" };
@@ -766,6 +776,15 @@ function RoutingCard({ cfg, setCfg, targets, brains, firstDest, sourceId }) {
   const [replay, setReplay] = useState(null);
   const [busy, setBusy] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
+  // WHICH judge answers is an install-wide setting, and a decision model is not sent a prompt at all
+  // - it is sent typed questions. Showing the chat prompt while Jev is the judge would make `see the
+  // prompt` a picture of something that is not happening (the owner, 2026-09-17).
+  const [judge, setJudge] = useState(null);
+  useEffect(() => {
+    api.get("/api/ai/defaults")
+      .then(({ data }) => setJudge((data.slots || []).find((s) => s.key === "judge_ai") || null))
+      .catch(() => {});
+  }, []);
   const routed = isRouted(cfg);
   // WHAT THE CONTROL SHOWS IS WHAT YOU PICKED, not what the rule currently evaluates to. routeOf
   // answers "what will this run do", and an `ask the AI` line with no sentence yet does what it
@@ -866,11 +885,13 @@ function RoutingCard({ cfg, setCfg, targets, brains, firstDest, sourceId }) {
             Which AI decides where each run goes. It reads what came back and answers yes or no to each
             line above — nothing else is asked of it, so this job can run on a model that only decides.
             A run it does not answer for reaches you anyway.
+            {judge?.kind === "decision" && ` Right now that is ${judge.display}, chosen under Triage & agents.`}
           </Typography>
           {showPrompt && (
             <Box component="pre" sx={{ mt: 0.8, p: 1, bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 1,
-              fontSize: 11.5, whiteSpace: "pre-wrap", color: INK, maxHeight: 220, overflow: "auto" }}>
-              {judgePrompt(cfg, shown) || "nothing is asked — every line is set to every run or never"}
+              fontSize: 11.5, whiteSpace: "pre-wrap", color: INK, maxHeight: 260, overflow: "auto" }}>
+              {(judge?.kind === "decision" ? judgeQuestions(cfg, shown) : judgePrompt(cfg, shown))
+                || "nothing is asked — every line is set to every run or never"}
             </Box>
           )}
         </Box>

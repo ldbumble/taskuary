@@ -79,9 +79,19 @@ const PROF_BLURB = "Instructions for the workers listed under this profile, adde
 // because collapsing "3 of 5 coders route" to either word would misstate the other members.
 // `onRoster` counts members the SERVER reports a roster line for (agents.roster_line) - not a count
 // of triage_enabled done here, which called CODER.md "on the roster" when triage can never pick it.
-const rosterChip = (pr) => (pr.onRoster === 0 ? "not routed"
+// ...and when NONE of them route, "not routed" was one word for four different situations - and for
+// the commonest it said the opposite of the truth. CODER.md takes every coding task; the router is
+// simply not what sends it there (the owner, 2026-09-17: "why does coder.md say not routed? it is
+// but default for coding tasks"). The server's `code` tells them apart; reading its prose would be
+// a second implementation of agents.roster_line.
+const NOT_ROUTED = { coding: "all coding tasks", off: "switched off",
+                     not_offered: "not offered to triage", no_purpose: "no purpose set" };
+const rosterChip = (pr) => (pr.onRoster === 0
+  ? NOT_ROUTED[(pr.seen.find((m) => m.code) || {}).code] || "not routed"
   : pr.onRoster === pr.members.length ? "on the roster"
   : `on the roster (${pr.onRoster}/${pr.members.length})`);
+// a worker routed a different way is not a worker in trouble, so it does not wear the muted grey
+const isRouted = (pr) => pr.onRoster > 0 || pr.seen.some((m) => m.code === "coding");
 const pbSlug = (n) => n.slice(3);
 const PB_BLURB = "How THIS company does one kind of job, for the agent that will do it: when it starts, which connections it uses, the steps, what it may do alone, what to ask first, and what counts as done. Triage matches new messages against `when`; the connector cards list the playbooks that name them.";
 
@@ -390,11 +400,16 @@ export default function DocsView() {
         {section === "profiles" ? (
           <>
             <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16, mb: 0.5 }}>Profiles</Typography>
-            {/* whole buttons wrap onto the next line; a label never breaks in the middle of itself */}
-            <Box sx={{ display: "flex", gap: 0.5, mb: 1, flexWrap: "wrap", "& .MuiButton-root": { whiteSpace: "nowrap", flexShrink: 0 } }}>
-              <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => { setCreateProfile(true); setManageProfiles(true); }}>Add profile</Button>
-              <Button size="small" onClick={() => { setCreateProfile(false); setManageProfiles(true); }}>Manage profiles</Button>
-              <Button size="small" onClick={() => setImportSkills(true)}>Import skills</Button>
+            {/* ONE door. Three buttons, two of them bare text, wrapped mid-label into something that
+                read as a menu of unrelated things (the owner, 2026-09-17: "just have 2 clear buttons
+                .. make them look like buttons.. make it look normal"). Adding a worker - by hand or
+                by importing a skill - is a thing you do ON the manage screen, which is where both
+                roads already live, so it is not a second entry point here. */}
+            <Box sx={{ display: "flex", gap: 1, mb: 1, "& .MuiButton-root": { whiteSpace: "nowrap" } }}>
+              <Button size="small" variant="contained" startIcon={<AddIcon />}
+                onClick={() => { setCreateProfile(true); setManageProfiles(true); }}>New profile</Button>
+              <Button size="small" variant="outlined"
+                onClick={() => { setCreateProfile(false); setManageProfiles(true); }}>Manage profiles</Button>
             </Box>
             <Typography sx={{ fontSize: 11.5, color: FAINT, mb: 1.5 }}>
               The workers. Triage picks one per task and its session is seeded with that worker’s rules.
@@ -416,7 +431,7 @@ export default function DocsView() {
                   </Typography>
                   {/* quiet chip, not a colour wash - it identifies a state, it does not tint the row */}
                   <Chip size="small" variant="outlined" label={rosterChip(pr)}
-                    sx={pr.onRoster === 0 ? { color: ROLES.muted.ink, borderColor: ROLES.muted.bd } : undefined} />
+                    sx={isRouted(pr) ? undefined : { color: ROLES.muted.ink, borderColor: ROLES.muted.bd }} />
                   {`prof:${pr.name}` === docName && (
                     <Box component="span" sx={{ px: 0.7, height: 17, display: "inline-flex", alignItems: "center",
                       borderRadius: 1.25, bgcolor: "#55697a", color: "#fff", fontSize: 9.5, fontWeight: 700 }}>open</Box>
@@ -566,10 +581,15 @@ export default function DocsView() {
             </Typography>
             {cur.seen.filter((m) => m.line).map((m) => (
               <Typography key={m.name} sx={{ ...mono, fontSize: 11.5, color: INK, whiteSpace: "pre-wrap" }}>{m.line}</Typography>))}
-            {/* members kept off for the same reason share one line - six coders is one fact, not six */}
+            {/* members kept off for the same reason share one line - six coders is one fact, not six.
+                A coding worker is not "not on the roster": it is routed, by kind rather than by the
+                router, and saying it the other way round read as a fault to go and fix. */}
             {[...new Set(cur.seen.filter((m) => !m.line).map((m) => m.reason))].map((why) => (
               <Typography key={why} sx={{ fontSize: 11.5, color: FAINT }}>
-                {cur.seen.filter((m) => !m.line && m.reason === why).map((m) => m.name).join(", ")}: not on the roster — {why}
+                {cur.seen.filter((m) => !m.line && m.reason === why).map((m) => m.name).join(", ")}
+                {cur.seen.find((m) => m.reason === why)?.code === "coding"
+                  ? ": every coding task comes here — the router does not choose it, the kind does"
+                  : `: not on the roster — ${why}`}
               </Typography>))}
             <Typography variant="caption" sx={{ color: FAINT, display: "block", pt: 0.75 }}>
               The router reads this one line per worker when it picks. The session it picks is given the whole document below.

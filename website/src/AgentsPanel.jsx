@@ -168,7 +168,9 @@ export const AgentsPage = ({ onBack, section = "Docs", title = "Manage profiles"
     {err && !draft && <Alert severity="error" sx={{ mb: 2 }}>{err}</Alert>}
     <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
       <Typography variant="body2" sx={{ color: DIM, flex: 1 }}>Give each worker a purpose and instructions, then choose its provider and model. Triage uses the purpose to assign new tasks.</Typography>
-      <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDraft({ ...BLANK_PROFILE })}>Add profile</Button>
+      {/* the two roads to a new worker, side by side and named as a choice: this screen IS the one
+          door, so Docs sends you here rather than offering either of them again (2026-09-17) */}
+      <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDraft({ ...BLANK_PROFILE })}>Add profile manually</Button>
       <Button variant="outlined" onClick={() => setImportSkills(true)} title="Bring in somebody else's SKILL.md - from a link or this machine - as a worker profile">Import skills</Button>
     </Box>
     {importSkills && <SkillImport onClose={() => setImportSkills(false)} onImported={load} />}

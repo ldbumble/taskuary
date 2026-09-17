@@ -116,18 +116,25 @@ def resolve(store, cfg, slot_key: str) -> dict:
     # the judge: blank has a second meaning here (the report's own brain, which is what this did
     # before there was a setting), and a decision model is a thing only this slot can be pointed at
     if s['pick'] == 'judge':
+        # What it is actually asked, from the one place that builds it - a rule you cannot read is a
+        # rule you cannot trust, and this slot's whole job is four questions somebody should be able
+        # to see (the owner, 2026-09-17: "show the wording for jev ... what are the decision choices").
+        from .reports import EVIDENCE_RULE, LINE_SAYS, LINES
+        out['decides'] = [{'line': l, 'says': f'Decide whether to {LINE_SAYS[l]}.'} for l in LINES]
+        out['evidence'] = EVIDENCE_RULE
         if not value:
-            out.update(display="the report's own brain",
+            out.update(display="the report's own brain", kind='brain',
                        note="the report's own brain judges it, which is how this worked before there "
                             "was a setting")
             return out
         row = store.get_connector(int(value[10:])) if value.startswith('connector:') and value[10:].isdigit() else None
         if row is not None and row['Type'] == 'typesafe':
             out.update(display=row['Name'] or 'TypeSafe Jev', ready=bool(row['Active'] and row['HasSecret']),
-                       default_hint='jev-latest', owner=f"the {row['Name']} card",
+                       default_hint='jev-latest', owner=f"the {row['Name']} card", kind='decision',
                        owner_link=f"connector:{row['ConnectorId']}",
                        note='' if row['Active'] and row['HasSecret'] else 'paste a key on its card first')
             return out
+        out['kind'] = 'brain'
         # anything else is an ordinary brain, so it falls through to the brain branches below
 
     # a brain: auto, one AI connector, or one of your CLI agents on its light gear

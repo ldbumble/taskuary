@@ -1038,7 +1038,9 @@ def judge_for(store, cfg: dict, default_llm):
         """None means this judge did not answer, which `decide` turns into an unjudged run."""
         from . import jev
         full = store.get_connector(row['ConnectorId'], with_secret=True)
-        qs = {l: (LINE_SAYS[l], route_of(cfg_, l)[1]) for l in ask}
+        # The instruction says what the decision IS and how to read the run; the criterion stays the
+        # owner's own sentence, word for word, so `see the prompt` shows what is actually sent.
+        qs = {l: (f'Decide whether to {LINE_SAYS[l]}. {EVIDENCE_RULE}', route_of(cfg_, l)[1]) for l in ask}
         try: got = jev.ask(full['Secret'] or '', state, qs)
         except Exception as e:
             logger.warning(f'the routing judge failed, so the run reaches the owner: {e}')
@@ -1677,12 +1679,19 @@ def work_brief(cfg: dict) -> str:
     return (route_of(cfg, 'work')[1] if routed(cfg) else '') or str(cfg.get('watch_for') or '').strip()
 
 
+# The one rule that keeps a judge honest, said ONCE for both roads. The chat judge had it in its
+# system prompt and the decision model was never told it at all - so one of the two was answering a
+# different question, and on a vague criterion it sat at a coin flip (measured 2026-09-17: 0.43,
+# 0.49, 0.51, 0.62 on lines the chat judge answered yes to every time).
+EVIDENCE_RULE = ('Judge only what the run actually came back with. If it does not say a thing, that '
+                 'thing did not happen.')
+
 JUDGE_SYSTEM = (
     'A scheduled report has just run. Decide where its result goes.\n\n'
     'Answer EVERY question below, one per line, in exactly this form:\n'
     'NAME: yes|no\n\n'
-    'Judge only what the run actually came back with. If it does not say a thing, that thing did not '
-    'happen. Write nothing else - no reason, no preamble, no summary, no closing line.\n\nThe questions:\n')
+    + EVIDENCE_RULE +
+    ' Write nothing else - no reason, no preamble, no summary, no closing line.\n\nThe questions:\n')
 
 
 def judge_prompt(cfg: dict) -> str:

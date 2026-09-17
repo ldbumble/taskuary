@@ -4924,7 +4924,7 @@ def agents():
     # HERE so the Docs page shows the router's real view instead of re-deriving it from Config.
     return {'data': [{**a, 'installed': hub_agents.runs_here(profs.get(a['Name']) or {}),
                       'rules_doc': hub_agents.profile_document(store, a['Name']),
-                      'roster': dict(zip(('line', 'reason'), hub_agents.roster_line(store, a))),
+                      'roster': dict(zip(('line', 'reason', 'code'), hub_agents.roster_line(store, a))),
                       'purpose': hub_agents.profile_purpose(a['Name'], profs.get(a['Name']) or {}, a.get('Kind') or 'coding')}
                      for a in rows],
             'config': cfg.get('agents', {}), 'default': head,

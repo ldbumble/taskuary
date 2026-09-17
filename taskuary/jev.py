@@ -16,6 +16,9 @@ from . import llm as llm_mod, redact
 API = 'https://api.typesafe.ai/v1/systemone'
 MODEL = 'jev-latest'
 YES = 0.5          # a probability is not a verdict until something picks a line; this is that line
+# What "no" looks like, described rather than negated. The caller supplies the `true` criterion; this
+# is the other side of it, and it has to describe a state the model can recognise on its own.
+FALSE = 'Nothing in the state described above matches that.'
 
 
 def ask(key: str, state: str, questions: dict, timeout: int = 20) -> dict:
@@ -34,9 +37,12 @@ def ask(key: str, state: str, questions: dict, timeout: int = 20) -> dict:
     state = redact.scrub(state)
     body = {'model': MODEL, 'state': state,
             'questions': {n: {'type': 'noul', 'instructions': i,
-                              # the owner's own sentence is the whole criterion; `false` is its
-                              # negation rather than a second rule nobody wrote
-                              'criteria': {'true': redact.scrub(c), 'false': f'not this: {redact.scrub(c)}'}}
+                              # the owner's own sentence is the whole `true` criterion, word for word,
+                              # so what the card shows is what is sent. `false` was once that sentence
+                              # with "not this:" glued in front, which describes nothing - and a model
+                              # asked to weigh a description against its own negation answers near 0.5
+                              # whatever the state says (measured on real runs, 2026-09-17).
+                              'criteria': {'true': redact.scrub(c), 'false': FALSE}}
                           for n, (i, c) in questions.items()}}
     r = llm_mod.post_retrying(API, {'Authorization': f'Bearer {key}',
                                     'Content-Type': 'application/json'}, body, timeout)

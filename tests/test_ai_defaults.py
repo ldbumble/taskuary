@@ -143,7 +143,28 @@ class TheFifthSlotTests(unittest.TestCase):
         because the judge stopped being allowed to be an ordinary brain."""
         s = _store()
         s.set_setting('judge_ai', 'cli:coder', 'o')
+        self.assertEqual(aidefaults.resolve(s, {'agents': {'coder': {'cmd': 'claude'}}}, 'judge_ai')['kind'], 'brain')
         self.assertEqual(aidefaults.resolve(s, {'agents': {'coder': {'cmd': 'claude'}}}, 'judge_ai')['value'], 'cli:coder')
+
+
+class WhatTheJudgeIsAskedTests(unittest.TestCase):
+    """A rule you cannot read is a rule you cannot trust, and this slot IS four questions (the owner,
+    2026-09-17: "show the wording for jev ... what are the decision choices it's going for")."""
+
+    def test_the_card_says_what_it_actually_decides(self):
+        from taskuary import reports
+        r = aidefaults.resolve(_store(), {}, 'judge_ai')
+        self.assertEqual([d['line'] for d in r['decides']], list(reports.LINES))
+        self.assertIn(reports.LINE_SAYS['work'], next(d['says'] for d in r['decides'] if d['line'] == 'work'))
+        self.assertEqual(r['evidence'], reports.EVIDENCE_RULE)
+
+    def test_a_decision_model_says_it_is_one_so_the_report_card_can_show_typed_questions(self):
+        s = _store()
+        cid = s.get_connector_by_type('typesafe')['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Secret': 'sk-x', 'Active': 1}, 't')
+        self.assertEqual(aidefaults.resolve(s, {}, 'judge_ai')['kind'], 'brain')
+        aidefaults.apply(s, {}, 'judge_ai', f'connector:{cid}')
+        self.assertEqual(aidefaults.resolve(s, {}, 'judge_ai')['kind'], 'decision')
 
 
 class ApplyTests(unittest.TestCase):

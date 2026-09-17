@@ -428,25 +428,25 @@ class WhatTriageSeesTests(unittest.TestCase):
     def test_each_reason_is_named_and_a_seen_worker_has_its_exact_line(self):
         from taskuary import agents
         s, rows = self._rows()
-        line, why = agents.roster_line(s, rows['nda-triage'])
+        line, why, _ = agents.roster_line(s, rows['nda-triage'])
         self.assertEqual((line, why), ('- nda-triage: signs NDAs', ''))
         for name, word in (('coder', 'coding'), ('quiet', 'Available to triage'), ('blank', 'no purpose')):
-            line, why = agents.roster_line(s, rows[name])
+            line, why, _ = agents.roster_line(s, rows[name])
             self.assertEqual(line, '', name); self.assertIn(word, why, name)
-        line, why = agents.roster_line(s, {**rows['nda-triage'], 'Active': 0})
+        line, why, _ = agents.roster_line(s, {**rows['nda-triage'], 'Active': 0})
         self.assertEqual((line, why), ('', 'switched off'))
 
     def test_the_shown_line_is_the_truncated_one_the_router_gets(self):
         from taskuary import agents
         s, rows = self._rows()
-        line, _ = agents.roster_line(s, rows['loud'])
+        line, _, _c = agents.roster_line(s, rows['loud'])
         self.assertTrue(line.endswith('…')); self.assertLess(len(line), 230)
         self.assertIn(line, agents.roster(s))                  # byte for byte what the router reads
 
     def test_roster_is_exactly_the_lines_this_gives(self):
         from taskuary import agents
         s, rows = self._rows()
-        lines = [l for l, _ in (agents.roster_line(s, a) for a in s.list_agents()) if l]
+        lines = [l for l, *_ in (agents.roster_line(s, a) for a in s.list_agents()) if l]
         self.assertEqual(agents.roster(s), '\n'.join(lines))
         self.assertEqual(len(lines), 2)                        # loud and nda-triage; not coder, quiet or blank
 
@@ -455,8 +455,10 @@ class WhatTriageSeesTests(unittest.TestCase):
         with mock.patch.object(server, 'store', s):
             data = TestClient(server.app).get('/api/agents').json()['data']
         by = {r['Name']: r['roster'] for r in data}
-        self.assertEqual(by['nda-triage'], {'line': '- nda-triage: signs NDAs', 'reason': ''})
+        self.assertEqual(by['nda-triage'], {'line': '- nda-triage: signs NDAs', 'reason': '', 'code': ''})
         self.assertEqual(by['coder']['line'], ''); self.assertIn('coding', by['coder']['reason'])
+        # the word a chip can switch on: "not routed" was wrong for exactly this row
+        self.assertEqual(by['coder']['code'], 'coding')
 
 
 class FetchByLinkTests(unittest.TestCase):

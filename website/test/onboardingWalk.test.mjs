@@ -7,7 +7,12 @@ import { walkAdvances } from "../src/walkStep.js";
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 // bounded, not open-ended: WalkCard is the file's last export today, but an open slice would drag
 // in whatever gets appended after it later (a later card containing "Skip" would fail test 3).
-const walkCard = (cards) => cards.slice(cards.indexOf("export function WalkCard"), cards.indexOf("export function WalkCard") + 4000);
+// the whole component, to its closing brace - a fixed 4,000 characters cut it off once its comments grew
+const walkCard = (cards) => {
+  const at = cards.indexOf("export function WalkCard");
+  const end = cards.indexOf("\n}\n", at);
+  return cards.slice(at, end < 0 ? undefined : end + 2);
+};
 
 // The chip used to open an AI-led walk-through, which could not run before an AI was connected -
 // which is exactly when somebody presses it.

@@ -798,7 +798,7 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onFinish, onSave
           tables) - a stop that has been done says so, the same green the checklist panel uses,
           rather than reading identically whether or not it has been. */}
       {card.done && card.detail && <div style={{ fontSize: 12.5, fontWeight: 600, color: "#47654a", margin: "4px 0" }}>
-        {/* a bare provider name in green, sitting directly above "You can install a coding CLI",
+        {/* a bare brain name in green, sitting directly above "You can install a coding CLI",
             read as a HEADING for the instructions rather than as "this is already done" */}
         {card.key === "ai" ? `Already set up \u2014 ${card.detail}` : card.detail}</div>}
       <div style={{ fontSize: 12, fontWeight: 700, color: "#867f74", margin: "8px 0 4px" }}>You can</div>
@@ -820,7 +820,7 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onFinish, onSave
           to visit. */}
       {/* ...and NOT when a brain already answers. Offering to install a coding CLI to an install
           running on Azure OpenAI told it the wrong thing twice: that it needed one, and that a
-          terminal is how its own provider gets set up (the owner, 2026-09-17). */}
+          terminal is how its own connection gets set up (the owner, 2026-09-17). */}
       {card.key === "ai" && cli && !card.done && (
         <div style={{ marginTop: 8 }}>
           <SetupButton cli={cli} opening={opening} onOpen={openSetup} />

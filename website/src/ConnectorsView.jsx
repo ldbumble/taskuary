@@ -1067,7 +1067,7 @@ const VoiceVocabulary = ({ onBack }) => {
   );
 };
 
-export default function ConnectorsView() {
+export default function ConnectorsView({ onNavigate }) {
   const [connectors, setConnectors] = useState(null);
   const [sources, setSources] = useState([]);
   const [types, setTypes] = useState([]);
@@ -1127,7 +1127,7 @@ export default function ConnectorsView() {
     if (conn.Type === "mssql") return <MssqlDetail key={conn.ConnectorId} {...shared} drivers={drivers} />;
     if (conn.Type === "winrm") return <WinrmDetail key={conn.ConnectorId} {...shared} />;
     if (DATA_META[conn.Type]) return <DataDetail key={conn.ConnectorId} {...shared} meta={DATA_META[conn.Type]} sources={sources} byType={byType} />;
-    return <ChannelDetail key={conn.ConnectorId} {...shared} sources={sources} />;
+    return <ChannelDetail key={conn.ConnectorId} {...shared} sources={sources} onNavigate={onNavigate} />;
   }
 
   /* ── landing: searchable grouped catalog ── */
@@ -1513,7 +1513,7 @@ function MacPermissions({ conn, test, busy, runTest }) {
 }
 
 /* ── channel / AI connector detail: setup wizard + sources ─────────────── */
-function ChannelDetail({ conn, sources, reload, onBack, onCreated }) {
+function ChannelDetail({ conn, sources, reload, onBack, onCreated, onNavigate }) {
   const m = META[conn.Type] || { fields: [], howto: [] };
   const isAI = m.channel === "ai";
   const [tab, setTab] = useState("Setup");
@@ -1628,7 +1628,7 @@ function ChannelDetail({ conn, sources, reload, onBack, onCreated }) {
             one place: the <b>Inbound — what becomes work</b> step below.
           </Typography>
         )}
-        {conn.Type === "whatsapp" && <WaChats conn={conn} mine={mine} reload={reload} />}
+        {conn.Type === "whatsapp" && <WaChats conn={conn} mine={mine} reload={reload} onNavigate={onNavigate} />}
         {conn.Type === "telegram" && (
           <>
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1, maxWidth: 560 }}>
@@ -2573,7 +2573,7 @@ const WaPair = ({ conn, reload }) => {
 
 /* ── WhatsApp: the paired account's reachable roster, offered as sources. The catch-all covers
    direct chats; a group only comes into Taskuary once its JID is explicitly added. ── */
-const WaChats = ({ conn, mine, reload }) => {
+const WaChats = ({ conn, mine, reload, onNavigate }) => {
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState("");
   const [guideBusy, setGuideBusy] = useState("");
@@ -2634,53 +2634,20 @@ const WaChats = ({ conn, mine, reload }) => {
   const chosen = eligible.find((r) => r.jid === guideJid) || (guideJid ? { jid: guideJid, name: guideJid, self: true } : null);
   return (
     <Box sx={{ mb: 1.5, maxWidth: 620 }}>
-      {/* ── WHAT IS CONNECTED TO THE ASSISTANT, AND HOW ──────────────────────────────────
-          Its own section, because it is its own decision. It used to be a button on a row in
-          the inbound list, which answered neither question: you could not see which chat was
-          chosen without scrolling for a tick, and the same click silently granted the standing
-          permission (the owner, 2026-09-17: "we should make it separate section to choose what
-          is connected to assistant and how it's connected"). */}
-      <Box sx={{ p: 1, mb: 1.25, border: `1px solid ${guideJid ? "#c3d2c5" : BORDER}`, borderRadius: 1,
-        bgcolor: guideJid ? "#f2f7f2" : "transparent" }}>
-        <Typography variant="overline" sx={{ color: DIM, letterSpacing: 1.4, fontSize: 10, fontWeight: 700 }}>
-          THE ASSISTANT ON WHATSAPP
+      {/* THE CHOICE LIVES IN ONE PLACE, and it is not here. "Which chat can the assistant reach me
+          in" is one question across WhatsApp and Telegram, and the standing permission is the other
+          half of it - so both are Settings -> Assistant on your phone. This card keeps what is
+          genuinely the connector's: the pairing, and what comes in (the owner, 2026-09-17). */}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.25, py: 0.6, px: 0.8, flexWrap: "wrap",
+        border: `1px solid ${guideJid ? "#c3d2c5" : BORDER}`, borderRadius: 1, bgcolor: guideJid ? "#f2f7f2" : "transparent" }}>
+        <Typography variant="caption" sx={{ color: DIM, fontWeight: 700 }}>Assistant chat</Typography>
+        <Typography variant="caption" sx={{ ...mono, color: guideJid ? INK : FAINT, flex: 1, minWidth: 180, fontSize: 10.5 }} noWrap>
+          {guideJid || "not connected"}
         </Typography>
-        <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap", mt: 0.5 }}>
-          <Typography variant="caption" sx={{ color: DIM, minWidth: 62 }}>in this chat</Typography>
-          <Autocomplete size="small" sx={{ flex: 1, minWidth: 240 }} autoHighlight disabled={!!guideBusy}
-            options={eligible} value={chosen}
-            getOptionLabel={(o) => o?.name || o?.jid || ""}
-            isOptionEqualToValue={(o, v) => o.jid === v.jid}
-            onChange={(_e, v) => useForGuide(v?.jid || "")}
-            noOptionsText="no private chat here yet — message yourself on WhatsApp and refresh"
-            renderOption={(props, o) => (
-              <li {...props} key={o.jid} style={{ display: "block", paddingTop: 4, paddingBottom: 4 }}>
-                <Typography variant="body2" sx={{ fontSize: 12.5, color: INK, fontWeight: 600 }}>
-                  {o.name || o.jid}
-                  {o.self && <Chip size="small" label="Myself" sx={{ ml: 0.75, height: 16, fontSize: 9.5 }} />}
-                </Typography>
-                <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10 }}>{o.jid}</Typography>
-              </li>
-            )}
-            renderInput={(params) => <TextField {...params} sx={{ bgcolor: "#fff" }}
-              placeholder="not set — nothing you send on WhatsApp reaches the assistant" />} />
-          {guideJid && <Button size="small" disabled={!!guideBusy} onClick={() => useForGuide("")}
-            sx={{ fontSize: 11.5 }}>disconnect</Button>}
-        </Box>
-        <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap", mt: 0.75 }}>
-          <Typography variant="caption" sx={{ color: DIM, minWidth: 62 }}>listens</Typography>
-          <Select size="small" value={standing === null ? "" : standing ? "always" : "walk"} disabled={standing === null || !guideJid}
-            sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 260 }}
-            onChange={(e) => setStandingTo(e.target.value === "always")}>
-            <MenuItem value="always" sx={{ fontSize: 12 }}>any time you message it</MenuItem>
-            <MenuItem value="walk" sx={{ fontSize: 12 }}>only while a walk is handed over</MenuItem>
-          </Select>
-        </Box>
-        <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
-          {!guideJid ? "Pick your private Message yourself chat. Only chats that are you alone are offered — a group can never command the assistant, and an answer about your mail must not land where others are reading."
-            : standing ? "Anything you type there runs the same walk the Assistant tab runs, and may include private mail, tasks, reviews and agent output."
-              : "It stays quiet until you hand a walk over to it from the Assistant tab."}
-        </Typography>
+        <Button size="small" sx={{ fontSize: 11 }} onClick={() => {
+          window.location.hash = `settings=config&group=${encodeURIComponent("Assistant on your phone")}`;
+          onNavigate?.("Settings");
+        }}>Settings → Assistant on your phone</Button>
       </Box>
       <Typography variant="overline" sx={{ color: DIM, letterSpacing: 1.4, fontSize: 10, fontWeight: 700, display: "block" }}>
         WHAT COMES IN

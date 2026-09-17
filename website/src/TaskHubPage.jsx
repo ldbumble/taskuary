@@ -455,7 +455,7 @@ export default function TaskHubPage() {
           )}
           {tab === "Review" && <ReviewView key={`r${tick}`} onOpenTask={openTask} onChanged={refreshPending} />}
           {tab === "Reports" && <ReportsView key={`rp${tick}-${reset}`} />}
-          {tab === "Connections" && <ConnectorsView key={`c${tick}-${reset}`} />}
+          {tab === "Connections" && <ConnectorsView key={`c${tick}-${reset}`} onNavigate={go} />}
           {tab === "Docs" && <DocsView key={`d${tick}-${reset}`} />}
           {tab === "Settings" && <SettingsView key={`s${tick}-${reset}`} onNavigate={go} />}
         </Box>

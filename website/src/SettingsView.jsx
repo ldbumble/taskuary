@@ -4,8 +4,8 @@
 // rules, memory, help text) and jumps straight to the right page + tab.
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
-  IconButton, InputAdornment, MenuItem, Select, Switch, TextField, Typography,
+  Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
+  DialogTitle, IconButton, InputAdornment, MenuItem, Select, Switch, TextField, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
@@ -176,7 +176,7 @@ const KNOB_META = {
   phone_approvals: { group: "Notifications", label: "Answer agents & approve from phone", type: "switch",
     desc: "Reply to a tagged ping to answer that live agent, approve a draft, reject it, or write the reply yourself.",
     help: "On: when a live coding agent stops or asks, its chat ping carries a [tqN] tag. Reply to that ping and your words go straight into that exact agent session. Pending-reply pings carry the DRAFT and an [rvN] tag: 'approve' sends the draft, 'reject' / 'no reply' land those verdicts, and ANY OTHER TEXT is sent instead of the draft. Confirmations come back into the chat.\n\nNeeds a Telegram or WhatsApp connector with the NOTIFY role and its notify chat set — and the connector polled (trigger or feed role on). Answers and verdicts are intercepted before triage, so they never become new work. Quoting the [tqN] ping is required for agent answers because several agents may be waiting at once.\n\nOff (default): pings stay read-only." },
-  phone_assistant: { group: "Notifications", label: "Chat with the assistant in WhatsApp or Telegram", type: "switch",
+  phone_assistant: { group: "Assistant on your phone", label: "Chat with the assistant in WhatsApp or Telegram", type: "switch",
     desc: "Message the assistant from your private chat any time — the same walk, the same conversation as the tab.",
     help: "Name the Assistant chat on the WhatsApp or Telegram card under Connections first. Taskuary then listens only to messages you send in that exact private chat. Other people, other chats and groups cannot command it. This is separate from the Notifications role, so the Assistant chat is not subscribed to ordinary Taskuary alerts.\n\nIt is the SAME walk the Assistant tab runs, on the same conversation and the same pipe: the item on the table stays where it was, a reply you ask for is drafted, and a yes sends it. The choices arrive as words because a chat has no buttons.\n\nThis switch is the standing permission. The Assistant tab's own \"in WhatsApp\" button hands the walk over for a session whether or not it is on, and locks the tab while the walk is there.\n\nBecause answers can contain private workspace information, use a chat only you can read — WhatsApp's Message yourself, or your own private chat with the Telegram bot. Off (default) leaves your messages ignored as before." },
 
@@ -227,7 +227,110 @@ const KNOB_META = {
     desc: "How many days the Timeline shows. Display only — nothing is deleted.",
     help: "Purely the Timeline's window. Older messages stay in the database, in task histories, and in search." },
 };
-const GROUPS = ["Triage & agents", "Triage & routing", "Replies", "Assistant", "Coder agent", "Notifications", "Attachments & images", "Sync & startup", "Display", "Other"];
+// "Assistant on your phone" is its own tab, not a row inside Assistant: the rest of that tab is
+// how the assistant BEHAVES (how many lines, how long a follow-up waits), and this is where you
+// can reach it at all - a different question, asked once, for every channel (the owner,
+// 2026-09-17: "make the assistant -> whatsapp/telegram section separate").
+/* ── WHERE YOU CAN TALK TO THE ASSISTANT ────────────────────────────────────────────────
+   One question - "where can I reach it, and when may it listen" - that used to be three places:
+   a bare text box asking for a chat id on the WhatsApp card, another on the Telegram card, and the
+   standing permission over here under Notifications, whose own help text had to end with "name the
+   Assistant chat on the WhatsApp or Telegram card under Connections first". A setting that tells
+   you to go somewhere else to finish is the split this replaces (the owner, 2026-09-17).
+
+   Only chats you are ALONE in are offered, and that is enforced again on the way in
+   (remote_assistant.use_chat) - the picker is a convenience, not the guard. */
+const PhoneDoorways = ({ settings, onSet, onLoaded }) => {
+  const [rows, setRows] = useState(null);
+  const [busy, setBusy] = useState("");
+  const [err, setErr] = useState("");
+  const standing = (settings.find((x) => x.Name === "phone_assistant") || {}).Value === "1";
+  const load = useCallback(async () => {
+    try { setRows((await api.get("/api/assistant/doorways")).data.data || []); onLoaded?.(true); }
+    catch { setRows([]); onLoaded?.(false); }
+  }, [onLoaded]);
+  useEffect(() => { load(); }, [load]);
+  const choose = async (channel, chat) => {
+    setBusy(channel); setErr("");
+    try { await api.post("/api/assistant/doorways", { channel, chat }); await load(); }
+    catch (e) { setErr(e?.response?.data?.detail || "could not set that chat"); }
+    setBusy("");
+  };
+  const connected = (rows || []).filter((r) => r.chat);
+  return (
+    <Box sx={{ mb: 2 }}>
+      {(rows || []).map((r) => {
+        const picked = r.options.find((o) => o.to === r.chat)
+          || (r.chat ? { to: r.chat, name: r.chat, mine: true } : null);
+        return (
+          <Box key={`${r.channel}-${r.connectorId}`} sx={{ py: 2, borderBottom: `1px solid ${BORDER}` }}>
+            <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
+              <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5, minWidth: 92, textTransform: "capitalize" }}>
+                {r.channel}
+              </Typography>
+              {!r.live ? (
+                <Typography variant="body2" sx={{ color: DIM }}>
+                  not switched on — turn it on under Connections first
+                </Typography>
+              ) : (
+                <>
+                  <Autocomplete size="small" sx={{ flex: 1, minWidth: 260 }} autoHighlight disabled={busy === r.channel}
+                    options={r.options} value={picked}
+                    getOptionLabel={(o) => o?.name || o?.to || ""}
+                    isOptionEqualToValue={(o, v) => o.to === v.to}
+                    onChange={(_e, v) => choose(r.channel, v?.to || "")}
+                    noOptionsText={r.channel === "whatsapp"
+                      ? "no private chat seen yet — message yourself on WhatsApp, then reopen this page"
+                      : "no private chat seen yet — send your bot a direct message, then reopen this page"}
+                    renderOption={(props, o) => (
+                      <li {...props} key={o.to} style={{ display: "block", paddingTop: 4, paddingBottom: 4 }}>
+                        <Typography variant="body2" sx={{ fontSize: 12.5, color: INK, fontWeight: 600 }}>{o.name}</Typography>
+                        <Typography variant="caption" sx={{ color: FAINT, fontSize: 10, fontFamily: "monospace" }}>{o.to}</Typography>
+                      </li>
+                    )}
+                    renderInput={(params) => <TextField {...params} sx={{ bgcolor: "#fff" }}
+                      placeholder="not connected — pick the chat that is only you" />} />
+                  {r.chat && <Button size="small" disabled={busy === r.channel}
+                    onClick={() => choose(r.channel, "")} sx={{ fontSize: 11.5 }}>disconnect</Button>}
+                </>
+              )}
+            </Box>
+          </Box>
+        );
+      })}
+      {rows && !rows.length && (
+        <Typography variant="body2" sx={{ color: DIM, py: 2 }}>
+          No WhatsApp or Telegram connection yet. Add one under Connections and it appears here.
+        </Typography>
+      )}
+      {/* the standing permission, which is the OTHER half of the question and used to live a tab away */}
+      <Box sx={{ display: "flex", gap: 3, alignItems: "center", py: 2.5, borderBottom: `1px solid ${BORDER}`,
+        opacity: connected.length ? 1 : 0.5 }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5 }}>Listen any time I message it</Typography>
+          <Typography variant="body2" sx={{ color: DIM, mt: 0.25 }}>
+            {connected.length
+              ? (standing
+                ? "Anything you type there runs the same walk the Assistant tab runs — and may include private mail, tasks, reviews and agent output."
+                : "It stays quiet until you hand a walk over to it from the Assistant tab. The hand-over works either way.")
+              : "Connect a chat above first."}
+          </Typography>
+        </Box>
+        <Switch checked={standing} disabled={!connected.length}
+          onChange={(e) => onSet("phone_assistant", e.target.checked ? "1" : "0")} />
+      </Box>
+      <Typography variant="body2" sx={{ color: FAINT, mt: 2 }}>
+        Only chats you are alone in are offered. A group can never command the assistant, and an answer
+        about your mail must not land where other people are reading. This is separate from the
+        Notifications role — the assistant chat is not subscribed to ordinary Taskuary alerts.
+      </Typography>
+      {err && <Typography variant="body2" sx={{ color: "#6b2733", mt: 1 }}>✗ {err}</Typography>}
+    </Box>
+  );
+};
+
+const GROUPS = ["Triage & agents", "Triage & routing", "Replies", "Assistant", "Assistant on your phone",
+                "Coder agent", "Notifications", "Attachments & images", "Sync & startup", "Display", "Other"];
 // Internal state, and settings that live on another page - never shown as knobs. The "Other" tab
 // used to catch every bookkeeping value the server ever wrote (digest_report_seeded, task_id_mark,
 // learn_pending, owner_bio...), each with a switch that did something nobody could predict.
@@ -254,7 +357,7 @@ const HIDDEN = new Set(["ingest_status", "agent_issues_enabled", "agent_push_ena
 // also appear as a bare dropdown in the knob list, and `assistant_ai` appeared on a different
 // tab under a different name, which is how the general agent's brain went unfindable
 const PANEL_OWNED = new Set(["triage_ai", "default_agent", "concierge_ai", "concierge_model",
-                             "assistant_ai", "assistant_model"]);
+                             "assistant_ai", "assistant_model", "phone_assistant"]);
 // MACHINE STATE IS NOT CONFIGURATION. The settings table is also where the app keeps its own
 // bookkeeping - which CLI session a chat is on, where a per-task cursor got to, when a sweep last
 // ran - and every row without a KNOB_META entry fell through to the "Other" tab as an editable
@@ -585,6 +688,9 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
         <Box sx={{ mb: 2 }}><FilterPills options={tabs} value={cfgTab} onChange={setCfgTab} /></Box>
         {cfgTab === "Triage & agents" && <AiDefaults brains={brainOptions} agents={agentOptions} onGo={goFromPanel} onLoaded={setPanelOk} />}
         {cfgTab === "Notifications" && <NotifyStatus connectors={connectors} settings={settings} />}
+        {cfgTab === "Assistant on your phone" && (
+          <PhoneDoorways settings={settings} onSet={saveSetting} onLoaded={setPanelOk} />
+        )}
         {rows.map((s) => {
           const m = meta(s.Name);
           return (

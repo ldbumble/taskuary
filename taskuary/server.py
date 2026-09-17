@@ -6427,6 +6427,24 @@ def set_setting(body: SettingBody):
     store.set_setting(body.name, body.value, ACTOR)
     return {'ok': True}
 
+@app.get('/api/assistant/doorways')
+def assistant_doorways():
+    """Where the assistant can be reached, per channel - for Settings -> Assistant on your phone."""
+    from . import remote_assistant
+    return {'data': remote_assistant.doorway_state(store),
+            'standing': store.get_settings().get('phone_assistant') == '1'}
+
+class DoorwayBody(BaseModel):
+    channel: str
+    chat: str = ''
+
+@app.post('/api/assistant/doorways')
+def set_assistant_doorway(body: DoorwayBody):
+    """Give the assistant a chat on that channel, or '' to take it back."""
+    from . import remote_assistant
+    try: return remote_assistant.use_chat(store, body.channel, body.chat)
+    except ValueError as e: raise HTTPException(422, str(e))
+
 @app.get('/api/ai/defaults')
 def ai_defaults():
     """The three AI defaults with the model each will ACTUALLY run, and which screen owns it."""

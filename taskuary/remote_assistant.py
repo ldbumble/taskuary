@@ -89,6 +89,74 @@ def own_thread(store, connector, row, configured: str = '') -> bool:
     return int(people) <= 1
 
 
+def candidates(store, connector) -> list:
+    """The chats on this connector that the assistant could be given, newest first.
+
+    Only chats the owner is ALONE in. WhatsApp knows that by counting the room (own_thread, over the
+    bridge's roster); Telegram cannot be asked - a bot never sees a fromMe - so the SHAPE of the id
+    says it: Telegram gives groups, supergroups and channels a NEGATIVE id and a person a positive
+    one, which is the only thing about a Telegram chat that cannot be faked by naming it.
+
+    Returns [{'to', 'name', 'mine'}]. A bridge that will not answer yields nothing rather than
+    raising: the panel still has to render, and the chat already chosen is shown whatever happens.
+    """
+    kind = (connector or {}).get('Type')
+    if kind == 'whatsapp':
+        from . import messengers
+        try: rows = messengers.wa_chats(connector)
+        except Exception as e:
+            logger.debug(f'whatsapp roster unavailable for the doorway picker: {e}')
+            return []
+        guide = chat_of(connector)
+        return [{'to': r['jid'], 'name': r.get('name') or r['jid'], 'mine': bool(r.get('self'))}
+                for r in rows if own_thread(store, connector, r, guide)]
+    if kind == 'telegram':
+        seen = {}
+        for src in store.list_sources(active_only=False):
+            if (src.get('Channel') or '') != 'telegram': continue
+            cid = str(src.get('Address') or '').strip()
+            if not cid or cid == '*' or cid.startswith('-') or not cid.lstrip('-').isdigit(): continue
+            # the poller writes "discovered: <the chat's title>" when it first sees one
+            name = str(src.get('Owner') or '')
+            seen[cid] = name.split(':', 1)[1].strip() if name.startswith('discovered:') else cid
+        return [{'to': cid, 'name': name, 'mine': True} for cid, name in seen.items()]
+    return []
+
+
+def doorway_state(store) -> list:
+    """Every channel the assistant can be reached on, whether it is set up, and what it could use.
+
+    One answer for every channel, because "where can I talk to it" is one question - it was two
+    screens and a text box asking for an id, one per connector card, with the standing permission
+    kept somewhere else again (the owner, 2026-09-17).
+    """
+    out = []
+    for channel in CHANNELS:
+        for c in store.connectors_by_type(channel, with_secret=True) or []:
+            if not c: continue
+            out.append({'channel': channel, 'connectorId': c.get('ConnectorId'),
+                        'name': c.get('Name') or channel, 'live': bool(c.get('Active')),
+                        'chat': chat_of(c), 'options': candidates(store, c) if c.get('Active') else []})
+    return out
+
+
+def use_chat(store, channel: str, chat: str) -> dict:
+    """Give the assistant a chat on this channel, or take it away with ''.
+
+    Refuses anything the owner is not alone in, for the same reason the picker does not offer it: a
+    group must never be able to command the assistant, and an answer about the owner's mail must
+    never be posted where other people are reading.
+    """
+    c = next((x for x in (store.connectors_by_type(channel, with_secret=True) or []) if x and x.get('Active')), None)
+    if not c: raise ValueError(f'no {channel} connection is switched on')
+    chat = str(chat or '').strip()
+    if chat and not any(o['to'] == chat for o in candidates(store, c)):
+        raise ValueError(f'{chat} is not a chat you are alone in - the assistant can only live in one of those')
+    cfg = _config(c)
+    store.set_connector_config(c['ConnectorId'], {**cfg, 'assistant_chat': chat})
+    return {'channel': channel, 'chat': chat}
+
+
 def doorway(store, channel: str):
     """The active connector of that channel whose card names an Assistant chat, if there is one."""
     return next((c for c in store.connectors_by_type(channel, with_secret=True)

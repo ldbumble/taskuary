@@ -53,21 +53,34 @@ _UNREAD_COLUMNS = {'message': ('BodyText',)}
 
 # ...and the same subtraction applied to ROWS. A skip policy's mail is stored for one reason - so
 # dedupe recognises it the next time the overlap window is re-read - and is hidden from every
-# surface (processing_all.HIDDEN_MESSAGES). It never gets a task, so it groups with nothing, merges
-# with nothing and moves nowhere: a durable identity for it is an answer to a question no one asks.
-# It was 5,631 of 8,065 items on the owner's database (2026-09-17) - 70% of the census rebuilt every
-# pass only to be filtered out again at display - and it is the fastest-growing share by far, ~90 a
-# day against a handful of real items. Anything that has to be SHOWN is absent from this tuple.
-# Whoever adds to it: `uncatalogued` in store.processing_inventory_snapshot counts messages with no
-# member row and compact_inventory refuses while that is non-zero, so the two must agree.
+# surface (processing_all.HIDDEN_MESSAGES). With no task it groups with nothing, merges with nothing
+# and moves nowhere: a durable identity for it is an answer to a question no one asks. It was 5,631
+# of 8,065 items on the owner's database (2026-09-17) - 70% of the census rebuilt every pass only to
+# be filtered out again at display - and the fastest-growing share by far, ~90 a day.
+#
+# The status alone is NOT the rule; ungrouped_message_sql is. "It never gets a task" was the first
+# draft's premise and it was false - four of 5,635 carried one, and one in CI carried a review. The
+# census dropped the message, the review's MessageId dangled into an item of its own, and
+# store.backfill_processing (which still read every message) put the same review with the task:
+# "review:13 belongs to another processing item", raised inside the lifespan, app never up.
+# THREE readers must agree on exactly which rows are ungrouped - this census, `uncatalogued` in
+# store.processing_inventory_snapshot (compact_inventory refuses while it is non-zero), and the
+# backfill - so all three call ungrouped_message_sql and none spells the predicate out itself.
 UNGROUPED_MESSAGE_STATUS = ('skipped',)
+
+
+def ungrouped_message_sql(col: str = ''):
+    """(predicate, params) naming the mail the census does not group: a skip status AND no task.
+    A skipped message that carries a TaskId belongs with that task, and so does everything on it."""
+    p = f'{col}.' if col else ''
+    holes = ','.join('?' * len(UNGROUPED_MESSAGE_STATUS))
+    return f"(COALESCE({p}Status,'') IN ({holes}) AND {p}TaskId IS NULL)", UNGROUPED_MESSAGE_STATUS
 
 
 def _grouped_messages_sql(cur):
     """Every message the census groups - which is every message the app can ever show."""
-    holes = ','.join('?' * len(UNGROUPED_MESSAGE_STATUS))
-    return (f'SELECT {_columns(cur, "message")} FROM message '
-            f"WHERE COALESCE(Status,'') NOT IN ({holes}) ORDER BY MessageId", UNGROUPED_MESSAGE_STATUS)
+    where, params = ungrouped_message_sql()
+    return f'SELECT {_columns(cur, "message")} FROM message WHERE NOT {where} ORDER BY MessageId', params
 
 
 def _columns(cur, table):
@@ -83,11 +96,11 @@ def reconcile_membership(cur, *, stamp, new_item_id, follow_item):
     messages = {str(r['MessageId']): dict(r) for r in cur.execute(*_grouped_messages_sql(cur))}
     reviews = {str(r['ReviewId']): dict(r) for r in cur.execute('SELECT * FROM review ORDER BY ReviewId')}
     ideas = {str(r['IdeaId']): dict(r) for r in cur.execute('SELECT * FROM idea ORDER BY IdeaId')}
+    ungrouped, ungrouped_params = ungrouped_message_sql('m')
     attachments = {str(r['AttachmentId']): dict(r) for r in cur.execute(
         f"""SELECT a.* FROM attachment a LEFT JOIN message m ON m.MessageId=a.MessageId
-            WHERE m.MessageId IS NULL
-               OR COALESCE(m.Status,'') NOT IN ({','.join('?' * len(UNGROUPED_MESSAGE_STATUS))})
-            ORDER BY a.AttachmentId""", UNGROUPED_MESSAGE_STATUS)}
+            WHERE m.MessageId IS NULL OR NOT {ungrouped}
+            ORDER BY a.AttachmentId""", ungrouped_params)}
     runs = {str(r['RunId']): dict(r) for r in cur.execute('SELECT * FROM run ORDER BY RunId')}
 
     item_rows = {r['ItemId']: dict(r) for r in cur.execute(

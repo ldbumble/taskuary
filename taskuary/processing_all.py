@@ -93,7 +93,8 @@ def row_lane(row: dict) -> str:
 
 
 SCHEMA = 'taskuary.processing.all.v1'
-MEMBERSHIP_RULES = 'idea-joins-task-1'     # bump when reconcile_membership groups entities differently
+MEMBERSHIP_RULES = 'skipped-without-task-ungrouped-1'   # bump when reconcile_membership groups entities differently -
+# reconcile returns already_current while nothing is dirty, so a RULE change leaves a graph nothing marks stale until this moves
 PRESENTATION_VERSION = 1
 HIDDEN_MESSAGES = {'context', 'history', 'skipped'}
 

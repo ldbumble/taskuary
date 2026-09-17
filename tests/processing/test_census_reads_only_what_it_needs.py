@@ -129,6 +129,28 @@ def test_an_attachment_on_flood_mail_is_not_reported_as_dangling(store):
     assert ('dangling_attachment_message', '999999') in codes, 'a truly orphaned one still reports'
 
 
+def test_skipped_mail_that_carries_a_task_stays_with_it(store):
+    """The premise was "a skip policy's mail never gets a task". Four of 5,635 did, and one with a
+    review on it took the app down: the census dropped the message, the review's MessageId dangled
+    into its own item, and store.backfill_processing - which still read every message - put the same
+    review with the task. Two builders, one table: "review:13 belongs to another processing item",
+    raised inside the lifespan (CI, 2026-09-17). Ungrouped means status AND no task, in both."""
+    tid = store.create_task({'Title': 'Desk', 'Kind': 'reply', 'Status': 'open'}, 'fixture')
+    mid = store.add_message({'TaskId': tid, 'ExternalId': 'skip-with-task', 'Channel': 'email',
+                             'Subject': 'Refresh succeeded with critical warnings',
+                             'SentAt': '2026-09-17 06:00:00', 'Status': 'skipped'})
+    rid = store.add_review({'MessageId': mid, 'TaskId': tid, 'Kind': 'reply', 'Status': 'pending', 'Draft': 'x'})
+    store.reconcile_processing_membership()
+    item_of = lambda kind, lid: (store.cx.execute(
+        'SELECT ItemId FROM processing_member WHERE EntityKind=? AND LocalId=? AND RetiredAt IS NULL',
+        (kind, str(lid))).fetchone() or [None])[0]
+    assert item_of('message', mid) == item_of('task', tid), 'it has a task, so it is grouped with it'
+    assert item_of('review', rid) == item_of('task', tid), 'and so is the review hanging off it'
+    # ...and the startup road that runs the OTHER builder over the same table must agree with it
+    from taskuary.processing_startup import initialize
+    initialize(store, live_state=[])                       # raised ValueError before the fix
+
+
 # --- the warning, kept executable so it argues back ---
 
 UNREAD_BY_THE_CENSUS = ('route', 'funnel_state', 'comment', 'task_artifact', 'transcript')

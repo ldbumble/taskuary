@@ -2332,12 +2332,11 @@ class SQLiteStore:
             # here would stop the Timeline dead: compact_inventory refuses while any of these is
             # non-zero, so a flood sender would degrade every read forever. This exclusion and
             # processing_membership.UNGROUPED_MESSAGE_STATUS are one decision - move them together.
-            from .processing_membership import UNGROUPED_MESSAGE_STATUS
-            ungrouped = ','.join('?' * len(UNGROUPED_MESSAGE_STATUS))
+            from .processing_membership import ungrouped_message_sql
+            ungrouped, ungrouped_params = ungrouped_message_sql('source')
             uncatalogued = {}
             for entity_kind, table, column, extra, extra_params in (
-                    ('message', 'message', 'MessageId',
-                     f" AND COALESCE(source.Status,'') NOT IN ({ungrouped})", UNGROUPED_MESSAGE_STATUS),
+                    ('message', 'message', 'MessageId', f' AND NOT {ungrouped}', ungrouped_params),
                     ('task', 'task', 'TaskId', '', ()),
                     ('review', 'review', 'ReviewId', '', ()),
                     ('idea', 'idea', 'IdeaId', '', ())):
@@ -2498,7 +2497,14 @@ class SQLiteStore:
                     if namespace == 'legacy_funnel': legacy_values.add(str(value))
 
                 tasks = [dict(r) for r in cur.execute('SELECT * FROM task ORDER BY TaskId').fetchall()]
-                messages = [dict(r) for r in cur.execute('SELECT * FROM message ORDER BY MessageId').fetchall()]
+                # the SAME rows the census groups. This builder and reconcile_membership both write
+                # processing_member; a message in one set and not the other is a collision waiting to
+                # happen, and it happened (see processing_membership.ungrouped_message_sql). Columns
+                # stay SELECT *: what the two must agree about is which ROWS exist.
+                from .processing_membership import ungrouped_message_sql
+                ungrouped, ungrouped_params = ungrouped_message_sql()
+                messages = [dict(r) for r in cur.execute(
+                    f'SELECT * FROM message WHERE NOT {ungrouped} ORDER BY MessageId', ungrouped_params).fetchall()]
                 messages_by_id = {r['MessageId']: r for r in messages}
                 reviews = [dict(r) for r in cur.execute('SELECT * FROM review ORDER BY ReviewId').fetchall()]
                 ideas = [dict(r) for r in cur.execute('SELECT * FROM idea ORDER BY IdeaId').fetchall()]

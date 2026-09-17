@@ -34,7 +34,11 @@ async function fixtureState(page) {
       fetch("/api/connectors", { headers }).then((response) => response.json()),
       fetch("/api/settings", { headers }).then((response) => response.json()),
     ]);
-    return { connectors: connectors.data, settings: settings.data };
+    // The models page records "you have looked at the defaults" the moment it mounts (AiDefaults ->
+    // /api/setup/seen, the checklist's one stored step, 5b5d4c33). That is a bookkeeping mark about the
+    // visit itself, not fixture state the help or a connector field could have changed - so it is not
+    // part of what "read-only" compares.
+    return { connectors: connectors.data, settings: settings.data.filter((s) => s.Name !== "setup_seen_models") };
   });
 }
 

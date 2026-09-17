@@ -75,7 +75,7 @@ test("PW-115 abandons a Walk validation when New chat replaces its conversation"
   }
 });
 
-test("PW-118 rejects a changed captured Next without advancing Current or retrying", { timeout: 150000 }, async t => {
+test("PW-118 a change to the content of the shown Next is taken fresh, never refused or retried", { timeout: 150000 }, async t => {
   const h = await startHarness();
   t.after(() => h.close());
   await settleDemoWatcher(h, await waitForDemoReplays(h));
@@ -132,31 +132,30 @@ test("PW-118 rejects a changed captured Next without advancing Current or retryi
     await request(h, "/api/fixture/processing/context", "POST", {
       task_id: advertised.tid, body: "Synthetic selected task context changed after the Next gesture",
     });
-    const stale = page.waitForResponse(r => new URL(r.url()).pathname === "/api/concierge/stream"
-      && r.status() === 409, { timeout: 15000 });
-    await cdp.send("Fetch.continueRequest", { requestId: releaseId });
-    await stale;
-    await cdp.send("Fetch.disable");
-    await page.waitForFunction(() => !document.querySelector(".tq-typing"), { timeout: 15000 });
-    await page.waitForFunction(() => [...document.querySelectorAll("button")]
-      .some(n => n.textContent.trim() === "Next" && !n.disabled), { timeout: 15000 });
-    assert.equal(await title(page, "current"), heldCurrent);
-    assert.deepEqual((await request(h, "/api/concierge")).messages, before);
-    assert.equal(writes.length, beforeWrites + 1, "stale stream must not retry plain or auto-advance");
-
-    const retryTitle = await title(page, "next");
+    // What moved is the CONTENT of the same pick: a comment landed on the task about to be shown. That
+    // is not a stale navigation. The pick the page shows is still the pick, so the turn takes it FRESH
+    // and speaks from the rail as it is now - refusing here failed a press with "the next item changed"
+    // when it had not (design B, 2026-09-17). The 409 is for a pick that moved (PW-050); the navigation
+    // API tests hold that one.
     const done = page.waitForResponse(r => new URL(r.url()).pathname === "/api/concierge/stream"
       && r.status() === 200, { timeout: 15000 });
-    await clickNext(page);
+    await cdp.send("Fetch.continueRequest", { requestId: releaseId });
     const response = await done;
+    await cdp.send("Fetch.disable");
     const result = JSON.parse((await response.text()).trim().split("\n").at(-1));
     assert.equal(result.type, "done", JSON.stringify(result));
     const first = result.item.kind === "fyis" ? result.item.items[0] : result.item;
-    assert.equal(first.title, retryTitle, "fresh explicit retry must consume the displayed Next");
+    assert.equal(first.title, shownNext, "the turn consumed the displayed Next");
+    assert.notEqual(first.presentation_revision, advertised.presentation_revision,
+      "...as it stands now, the new comment in its backing, not as the page had captured it");
     await page.waitForFunction(() => !document.querySelector(".tq-typing"), { timeout: 15000 });
-    assert.equal(writes.length, beforeWrites + 2);
+    await page.waitForFunction(() => [...document.querySelectorAll("button")]
+      .some(n => n.textContent.trim() === "Next" && !n.disabled), { timeout: 15000 });
+    assert.equal(writes.length, beforeWrites + 1, "one guarded stream: no plain retry, no auto-advance");
     assert.ok((await request(h, "/api/concierge")).messages.length > before.length);
     const currentAfterRetry = await title(page, "current");
+    assert.equal(currentAfterRetry, shownNext, "Current advanced to the item that was taken");
+    assert.notEqual(currentAfterRetry, heldCurrent);
     const activeCard = () => page.$eval('.tq-msg .tq-card', node => ({
       title: node.querySelector('.tq-card-title')?.textContent.trim(),
       buttons: [...node.querySelectorAll('button')].map(button => button.textContent.trim()),

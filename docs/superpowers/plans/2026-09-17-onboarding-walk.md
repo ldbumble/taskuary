@@ -407,7 +407,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `setup.state(store)` from Task 1.
-- Produces: `walk.AT` (the position setting name, `'setup_walk_at'`); `walk.STOPS` (list); `walk.state(store, at=None) -> {'stops': list, 'at': int, 'total': int}`. Each stop is `{'key', 'title', 'blurb', 'can', 'goto', 'n'}` plus `'done'`/`'detail'` on the first five and `'facts'` where a fact exists. `can` is a list of `{'text', 'goto'}` where `goto` may be `None`.
+- Produces: `walk.AT` (the position setting name, `'setup_walk_at'`); `walk.STOPS` (list); `walk.state(store, at=None) -> {'stops': list, 'at': int, 'total': int}`. Each stop is `{'key', 'title', 'blurb', 'can', 'goto', 'n'}` plus `'done'`/`'detail'` on the first five, `'facts'` where a fact exists, and `'image'` (`/walk/<key>.png`) on the nine tab stops. `can` is a list of `{'text', 'goto'}` where `goto` may be `None`. The image files themselves are Task 11 — the field is written now so `walk.py` is never touched twice.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -482,6 +482,16 @@ class TheStopsTests(unittest.TestCase):
         self.assertNotEqual(before, after)
         self.assertIn('connected', after)
         self.assertIn('Outlook', after)
+
+    def test_every_tab_stop_shows_the_tab_and_no_setup_step_does(self):
+        """A picture of a form you are filling in below it is noise. A picture of a tab you have
+        never opened is the whole reason the tour exists."""
+        by = {x['key']: x for x in walk.state(_fresh())['stops']}
+        for key in ('owner', 'ai', 'models', 'inbound', 'sync'):
+            self.assertIsNone(by[key].get('image'), key)
+        for key in ('connections', 'docs', 'settings', 'board', 'tasks', 'review', 'reports',
+                    'assistant', 'hub'):
+            self.assertEqual(by[key]['image'], f'/walk/{key}.png')
 
     def test_nothing_on_this_road_can_reach_a_model(self):
         """The whole reason the walk exists is that the old one needed an AI to explain how to
@@ -586,7 +596,7 @@ STOPS = [
         _can('pull your mail in and let triage read it', 'Connections'),
         _can('watch it land on the Timeline', 'Assistant')]},
 
-    {'key': 'connections', 'title': 'Connections',
+    {'key': 'connections', 'title': 'Connections', 'image': '/walk/connections.png',
      'blurb': 'Every mailbox, chat, tracker and report source Taskuary reads lives here. One card '
               'per system, and the card proves itself with its own Test before anything waits on a '
               'schedule.',
@@ -595,7 +605,7 @@ STOPS = [
         _can('connect a tracker - GitHub, Jira, Linear and the rest', 'Connections'),
         _can('add an AI CLI agent', 'Connections', 'cli-agents'),
         _can('test any connection and see what it answered', 'Connections')]},
-    {'key': 'docs', 'title': 'Docs',
+    {'key': 'docs', 'title': 'Docs', 'image': '/walk/docs.png',
      'blurb': 'The documents the funnel runs on. SOUL.md is its constitution - what counts as a '
               'task, how you answer, what it must never do. STYLE.md is how you write. Edit one and '
               'triage changes; blank one and the shipped default comes back, so nothing is lost by '
@@ -605,7 +615,7 @@ STOPS = [
         _can('generate STYLE.md from the messages you have sent', 'Docs'),
         _can('generate TRIAGE.md from what you answered and what you let sit', 'Docs'),
         _can('read COUNSEL.md, which is the voice the assistant speaks in', 'Docs')]},
-    {'key': 'settings', 'title': 'Settings',
+    {'key': 'settings', 'title': 'Settings', 'image': '/walk/settings.png',
      'blurb': 'The knobs. Most people change three and never come back: what drafts automatically, '
               'how finished work lands, and what reaches them.',
      'goto': _goto('Settings'), 'can': [
@@ -614,7 +624,7 @@ STOPS = [
         _can('write routing policies the AI can never override', 'Settings', 'settings=policies'),
         _can('see every verdict it learned from, and switch off the wrong ones', 'Settings', 'settings=memory'),
         _can('install an update in place', 'Settings', 'settings=updates')]},
-    {'key': 'board', 'title': 'Board',
+    {'key': 'board', 'title': 'Board', 'image': '/walk/board.png',
      'blurb': 'Work in flight, and the agents doing it. A coding task opens a real terminal session '
               'here, and you can watch it, take it over, or hand it a note mid-run.',
      'goto': _goto('Board'), 'can': [
@@ -622,7 +632,7 @@ STOPS = [
         _can('take over a pane and type in it yourself', 'Board'),
         _can('leave a note the agent picks up at its next stop', 'Board'),
         _can('put a coding agent to work on a task', 'Tasks')]},
-    {'key': 'tasks', 'title': 'Tasks',
+    {'key': 'tasks', 'title': 'Tasks', 'image': '/walk/tasks.png',
      'blurb': 'Everything that became work, open or closed. A task holds the thread it came from, '
               'every run against it, and the session you can pick back up.',
      'goto': _goto('Tasks'), 'can': [
@@ -630,14 +640,14 @@ STOPS = [
         _can('continue a coding session where it stopped', 'Tasks'),
         _can('hand a task to an agent, or take it back', 'Tasks'),
         _can('close it - which is yours, never the agent\'s', 'Tasks')]},
-    {'key': 'review', 'title': 'Review',
+    {'key': 'review', 'title': 'Review', 'image': '/walk/review.png',
      'blurb': 'Replies drafted in your voice, waiting on you. Nothing sends until you approve it - '
               'there is no setting that changes that.',
      'goto': _goto('Review'), 'can': [
         _can('approve a draft and send it', 'Review'),
         _can('edit it first, or ask for it again differently', 'Review'),
         _can('say it is not yours, which triage remembers', 'Review')]},
-    {'key': 'reports', 'title': 'Reports & workflows',
+    {'key': 'reports', 'title': 'Reports & workflows', 'image': '/walk/reports.png',
      'blurb': 'A report is a scheduled check that reads and summarises. A workflow is the one that '
               'writes. Both file what they find onto the Timeline on their own schedule.',
      'goto': _goto('Reports'), 'can': [
@@ -645,7 +655,7 @@ STOPS = [
         _can('build a workflow that writes back to a system', 'Reports'),
         _can('say whether a run reaches you every time, or only when it is wrong', 'Reports'),
         _can('preview one before it is saved', 'Reports')]},
-    {'key': 'assistant', 'title': 'The Assistant',
+    {'key': 'assistant', 'title': 'The Assistant', 'image': '/walk/assistant.png',
      'blurb': 'Where you actually work. Everything that arrived is a pile, oldest pressure first, '
               'and Next takes you through it one item at a time. This walk is happening in it.',
      'goto': _goto('Assistant'), 'can': [
@@ -653,7 +663,7 @@ STOPS = [
         _can('reply, or hand the item to an agent'),
         _can('say it is not ours - and triage remembers that'),
         _can('ask anything in your own words')]},
-    {'key': 'hub', 'title': 'Hub',
+    {'key': 'hub', 'title': 'Hub', 'image': '/walk/hub.png',
      'blurb': 'What the company knows, in one place - the durable posts, the people, the systems. '
               'It is where something goes when it outlives the thread it arrived in.',
      'goto': _goto('Hub'), 'can': [
@@ -1599,6 +1609,14 @@ test("a stop shows what you can do there, each with its own way in", () => {
   assert.doesNotMatch(card, /Skip/);          // with only a position stored, skip and next are one act
 });
 
+test("a tab stop shows the tab, and a missing image never leaves a torn box", () => {
+  const cards = read("assistantCards.jsx");
+  const card = cards.slice(cards.indexOf("export function WalkCard"));
+  assert.match(card, /card\.image &&/);
+  assert.match(card, /alt=\{`The \$\{card\.title\} tab`\}/);
+  assert.match(card, /onError/);
+});
+
 test("the AI stop opens the real terminal rather than describing one", () => {
   const cards = read("assistantCards.jsx");
   const card = cards.slice(cards.indexOf("export function WalkCard"));
@@ -1634,7 +1652,9 @@ In `website/src/assistantCards.jsx`, add after `SetupCard` (which ends at line 7
 
    `can` is what the APP can do here, shipped and identical on every install. `facts` is what THIS
    install has done, read off the same tables the checklist reads - so a stop can never claim
-   something the checklist contradicts. */
+   something the checklist contradicts. `image` is a shot of the tab, and it is decoration with a
+   caption's job: a card whose image fails to load is still a complete stop, which is why it is
+   rendered with onError rather than reserved space. */
 export function WalkCard({ card, at, total, onNavigate, onNext, onFinish }) {
   const { openSetup, opening, pane, note } = useCliSetup();
   const [cli, setCli] = useState(null);
@@ -1651,6 +1671,13 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onFinish }) {
   return (
     <CardShell card={{ ...card, lane: "report" }} kicker={`setting up · ${at + 1} of ${total}`}
       title={card.title} sub={card.blurb}>
+      {/* the tab itself. A broken image removes itself rather than leaving a torn box in the middle
+          of the card - the words above and below already carry the stop. */}
+      {card.image && (
+        <img src={card.image} alt={`The ${card.title} tab`} loading="lazy"
+          onError={(e) => { e.currentTarget.style.display = "none"; }}
+          style={{ width: "100%", display: "block", borderRadius: 6, border: "1px solid #e1dcd5", margin: "8px 0 2px" }} />
+      )}
       {card.facts && <div className="tq-card-excerpt">{card.facts}</div>}
       <div style={{ fontSize: 12, fontWeight: 700, color: "#867f74", margin: "8px 0 4px" }}>You can</div>
       <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, lineHeight: 1.75 }}>
@@ -1761,7 +1788,144 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 ---
 
-### Task 11: The no-model line points somewhere useful, and the whole thing ships
+### Task 11: Nine pictures of nine tabs
+
+**Files:**
+- Create: `website/capture-walk.mjs`
+- Create: `website/public/walk/*.png` (nine files, generated)
+- Test: `website/test/onboardingWalk.test.mjs`
+
+**Interfaces:**
+- Consumes: the `image` paths written in Task 3 (`/walk/<key>.png`).
+- Produces: nine PNGs served at `/walk/<key>.png`. Vite copies `website/public/` into the build output, so they ship inside `taskuary/web/walk/` with no endpoint to write.
+
+**Why a new script rather than the README's shots:** `docs/readme/*.png` are narrative crops at mixed viewports, annotated for a story, served from GitHub raw URLs. An install must not fetch its own onboarding over the network, and nine images shot at nine sizes read as nine different apps. One script, one viewport, one crop.
+
+- [ ] **Step 1: Write the failing test**
+
+Append to `website/test/onboardingWalk.test.mjs`:
+
+```javascript
+import { existsSync } from "node:fs";
+
+test("every tab stop has a picture that actually shipped", () => {
+  // walk.py names these; a stop whose image 404s degrades to a stop with no image, which is
+  // survivable - but it should not happen because nobody ran the capture.
+  const dir = fileURLToPath(new URL("../public/walk/", import.meta.url));
+  for (const key of ["connections", "docs", "settings", "board", "tasks", "review", "reports", "assistant", "hub"]) {
+    assert.ok(existsSync(`${dir}${key}.png`), `missing walk image: ${key}.png`);
+  }
+});
+
+test("the capture script shoots all nine in one run", () => {
+  const src = readFileSync(fileURLToPath(new URL("../capture-walk.mjs", import.meta.url)), "utf8");
+  for (const key of ["connections", "docs", "settings", "board", "tasks", "review", "reports", "assistant", "hub"]) {
+    assert.match(src, new RegExp(`"${key}"`), key);
+  }
+  // one viewport for all nine, or they read as nine different apps
+  assert.match(src, /setViewport/);
+  assert.equal(src.match(/setViewport/g).length, 1);
+});
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+```bash
+cd website && node --test test/onboardingWalk.test.mjs
+```
+
+Expected: FAIL — no `capture-walk.mjs`, no `public/walk/`.
+
+- [ ] **Step 3: Write the capture script**
+
+Read `website/capture-readme.mjs` first — it is the pattern being followed, and it already solves starting a vite server over the sealed demo fixtures. Create `website/capture-walk.mjs`:
+
+```javascript
+// The nine tab pictures the setup walk shows, one run, one viewport, one crop.
+//   npm exec --yes --package=node@22 -- node website/capture-walk.mjs
+//
+// These are NOT the README's shots. Those are narrative crops at mixed sizes on GitHub raw URLs,
+// and an install must not fetch its own onboarding over the network. These ship inside the wheel:
+// vite copies public/ into the build, so they land in taskuary/web/walk/ and serve at /walk/<key>.png.
+//
+// Re-run this when a tab's layout changes. That is the whole cost of shipping pictures, and it is
+// one command rather than nine judgement calls - which is why it is one script and not nine.
+import { createServer } from "vite";
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { launch } from "./browser.mjs";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const out = path.join(root, "website/public/walk");
+await mkdir(out, { recursive: true });
+
+// key -> the tab label to click. The walk's stop keys, so a rename breaks here rather than silently
+// shipping a picture of the wrong tab.
+const TABS = [
+  ["connections", "Connections"], ["docs", "Docs"], ["settings", "Settings"],
+  ["board", "Board"], ["tasks", "Tasks"], ["review", "Review"],
+  ["reports", "Reports"], ["assistant", "Assistant"], ["hub", "Hub"],
+];
+
+const server = await createServer({ root: path.join(root, "website"), mode: "demo",
+  server: { port: 5199 }, logLevel: "warn" });
+await server.listen();
+
+const b = await launch();
+const p = await b.newPage();
+// One viewport for all nine. The card is ~560px wide, so 1280 at 2x lands a crisp image that is not
+// a 4MB page in a wheel.
+await p.setViewport({ width: 1280, height: 860, deviceScaleFactor: 2 });
+await p.goto("http://localhost:5199/", { waitUntil: "networkidle0" });
+
+const clickTab = (label) => p.evaluate((l) =>
+  [...document.querySelectorAll("div,button,span")]
+    .find((d) => d.childElementCount === 0 && d.textContent.trim() === l)?.click(), label);
+
+for (const [key, label] of TABS) {
+  await clickTab(label);
+  await new Promise((r) => setTimeout(r, 2200));          // let the tab's own fetches land
+  await p.screenshot({ path: path.join(out, `${key}.png`),
+                       clip: { x: 0, y: 44, width: 1280, height: 760 } });
+  console.log(`walk shot ${key} ok`);
+}
+
+await b.close();
+await server.close();
+console.log(`nine walk shots in ${out}`);
+```
+
+- [ ] **Step 4: Run the capture, then the tests**
+
+```bash
+cd website && npm exec --yes --package=node@22 -- node capture-walk.mjs
+```
+
+Open the nine PNGs and look at them. A tab that did not finish loading produces a real image of a spinner, and no test can tell you that — check each one shows the tab it is named after, with content in it.
+
+```bash
+node --test test/onboardingWalk.test.mjs
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add website/capture-walk.mjs website/public/walk website/test/onboardingWalk.test.mjs
+git commit -m "feat: the walk shows each tab rather than describing it
+
+Not the README's shots: those are narrative crops at mixed sizes on
+GitHub raw URLs, and an install must not fetch its own onboarding over
+the network. One script, one viewport, nine pictures inside the wheel.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
+### Task 12: The no-model line points somewhere useful, and the whole thing ships
 
 **Files:**
 - Modify: `taskuary/concierge.py:626`
@@ -1822,7 +1986,7 @@ python -m pytest
 
 Expected: PASS, with a real test count. **"no tests ran" is a failure**, not a pass.
 
-Then rebuild the committed UI:
+Then rebuild the committed UI - this is also what copies `website/public/walk/` into `taskuary/web/walk/`, so the pictures only ship if the bundle is rebuilt after Task 11:
 
 ```bash
 cd website && npm run build
@@ -1843,7 +2007,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 ## Manual verification
 
-After Task 11, run the app and check the two surfaces by hand — the unit tests read source text, which cannot tell you whether a link lands.
+After Task 12, run the app and check the two surfaces by hand — the unit tests read source text, which cannot tell you whether a link lands.
 
 ```bash
 pip install -e . --no-deps --force-reinstall
@@ -1862,12 +2026,13 @@ netstat -ano | grep LISTEN | grep -E "799[0-9]|800[0-9]"
 - [ ] **Set up Taskuary** on the Assistant header walks all 14 stops, each showing its "You can" list, and Next keeps the previous cards in the conversation.
 - [ ] On stop 2, **Set it up** opens a real terminal pane inside the conversation and it looks like the panes on the Board.
 - [ ] With no AI connected: typing a question during the walk answers in facts and does not error, and the walk card above it still advances on Next.
+- [ ] Each of stops 6–14 shows a picture of the tab it names, and the picture matches what **Open ‹tab›** then lands on. A shot of a half-loaded page is the failure to look for — no test can see it.
 
 ---
 
 ## Self-review notes
 
-**Spec coverage.** Every section of the spec maps to a task: panel rows and counters (1), stored flag (2), `walk.py` (3), endpoints (4), demo (5), shipped skill (6), deep links (7), wizard strip (8), `AiDefaults` (9), `WalkCard` and the chip (10), `fallback` link plus the bundle (11).
+**Spec coverage.** Every section of the spec maps to a task: panel rows and counters (1), stored flag (2), `walk.py` (3), endpoints (4), demo (5), shipped skill (6), deep links (7), wizard strip (8), `AiDefaults` (9), `WalkCard` and the chip (10), `fallback` link plus the bundle (12); the nine tab pictures (11).
 
 **Two things the spec named that are worth re-checking during execution:**
 - `walk.state()` overwrites `title` and `blurb` for the first five stops from `setup.state()`. The `STOPS` entries for those five therefore carry no `blurb` key of their own, which is deliberate — but it means `test_every_stop_says_what_you_can_do_there` must not assert on `blurb`, and it does not.

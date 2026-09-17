@@ -122,6 +122,7 @@ Each stop carries:
 - `blurb` — one or two lines on what this part is for
 - `can` — **what you can do here**: a hard-coded list of capability lines, each with an optional
   `goto` of its own, so a stop is a menu of real things rather than a paragraph
+- `image` — `/walk/<key>.png`, a shot of the tab; absent on the five setup stops
 - `goto` — the deep link the stop's main button opens
 - `done` — filled from `setup.state(store)` where that module already knows, else absent
 - `facts` — a live line read off the store, e.g. "1 connected: Outlook"
@@ -204,6 +205,31 @@ same act, and two buttons for one act is a button that makes people think.
 
 The last stop's card has no **Next**. It closes with the `NextSteps` content inherited from the
 panel — what happens now, and where to look — and a single **Finish**.
+
+### Each tab stop shows the tab
+
+Stops 6–14 carry a picture of the tab they are about. The five setup stops do not — those are
+actions, and a photo of a form you are filling in below it is noise.
+
+The images ship with the package and are served locally. They are **not** the README's shots:
+`docs/readme/*.png` are narrative crops at mixed viewports, annotated for a story, and they live on
+GitHub raw URLs. An install must not fetch its own onboarding over the network, and nine images shot
+at nine different sizes read as nine different apps.
+
+So one new capture script, `website/capture-walk.mjs`, built on `website/capture-readme.mjs`'s exact
+pattern — a vite server over the sealed demo fixtures, one browser, one viewport, one crop — writes
+nine PNGs into `website/public/walk/`. Vite copies `public/` into the build, so they land in
+`taskuary/web/walk/` and serve at `/walk/<key>.png` with no endpoint to write.
+
+`walk.py`'s stops gain an `image` field holding that path, absent on the five setup stops. The
+picture is decoration with a caption's job: the stop's words still carry the meaning, and a card
+whose image fails to load is still a complete stop.
+
+**Staleness is the real cost and it is handled by regeneration, not discipline.** The script shoots
+all nine in one run from one command, so bringing them back into line is one command rather than
+nine judgement calls. It belongs in the release routine beside the bundle rebuild. (This is not the
+`docs/hero.gif` rule — that one says never re-shoot the hero for a UI change, because it is a
+composed animation. These are plain tab shots whose whole job is to match.)
 
 ### Stop 2 renders the terminal
 
@@ -295,6 +321,8 @@ within-tab position.
 
 **Web**
 
+- `website/capture-walk.mjs` — new; nine tab shots into `website/public/walk/`
+- `website/public/walk/*.png` — new; shipped by vite into `taskuary/web/walk/`
 - `website/src/SetupWizard.jsx` — forms deleted except `OwnerForm`; rows become links; counters
   collapsed; `NextSteps` removed
 - `website/src/AiDefaults.jsx` — post `/api/setup/seen` on mount

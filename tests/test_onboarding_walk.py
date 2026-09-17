@@ -101,6 +101,33 @@ class TheStopsTests(unittest.TestCase):
             self.assertNotIn(banned, src)
 
 
+class ThePicturesAreServedTests(unittest.TestCase):
+    """The files were on disk, in the vite output and in the wheel, and every one of the nine still
+    404ed: only /assets was mounted, and these are not build output. Three layers of "the file is
+    there" passed while the app was broken, so this asks the SERVER for them, over HTTP."""
+    def test_every_stop_with_a_picture_serves_it(self):
+        shots = [(x['key'], x['image']) for x in walk.state(_fresh())['stops'] if x.get('image')]
+        self.assertEqual(len(shots), 9)
+        for key, url in shots:
+            r = c.get(url)
+            self.assertEqual(r.status_code, 200, f'{key}: {url}')
+            self.assertTrue(r.headers['content-type'].startswith('image/'), f'{key}: {r.headers["content-type"]}')
+            self.assertTrue(r.content, key)
+
+    def test_a_picture_needs_no_token(self):
+        """An <img src> cannot carry a header. A shot that 401s is the same broken picture, so this
+        walks in with an empty token - the way the browser's image request arrives."""
+        anon = TestClient(server.app, headers={'X-Taskuary-Token': ''})
+        self.assertEqual(anon.get('/favicon.png').status_code, 200)   # the standard this has to meet
+        self.assertEqual(anon.get('/walk/docs.png').status_code, 200)
+
+    def test_nothing_else_under_web_is_reachable_through_it(self):
+        """A static mount is a hole in the shape of its directory. /walk holds nine pictures, so it
+        must not be a road to index.html or to anything above it."""
+        self.assertEqual(c.get('/walk/../index.html').status_code, 404)
+        self.assertEqual(c.get('/walk/nope.png').status_code, 404)
+
+
 class KeepingYourPlaceTests(unittest.TestCase):
     def test_the_position_survives_a_reload(self):
         s = _fresh()

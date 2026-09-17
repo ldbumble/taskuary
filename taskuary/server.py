@@ -331,6 +331,13 @@ def index():
 _assets = _web_root / 'assets'
 from fastapi.staticfiles import StaticFiles
 app.mount('/assets', StaticFiles(directory=str(_assets), check_dir=False), name='assets')
+# ...and the walk's shots of each tab. NOT under /assets: those are vite's hashed build output, and
+# these are files the repo ships and the page names by a fixed path (walk.STOPS holds `/walk/x.png`),
+# so mounting /assets never covered them. It was missing for a whole branch - the files were on disk,
+# in the bundle and in the wheel, and every one of the nine 404ed because no route served them.
+# check_dir=False for the same reason as /assets: a source checkout that has not been built yet has
+# no web/ at all, and the server must still start (it answers the self-healing 503 above).
+app.mount('/walk', StaticFiles(directory=str(_web_root / 'walk'), check_dir=False), name='walk')
 
 from fastapi.responses import FileResponse
 

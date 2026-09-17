@@ -1,5 +1,6 @@
-// Search the complete Tasks list client-side: /api/tasks already returns the full history, so a
-// query can reveal old completed work immediately without another request or the "today" cutoff.
+// Search a Tasks page in the browser while the SQL round-trip is in flight. /api/tasks?q=
+// is the real archive search; this is the same AND-of-terms so a keystroke still narrows
+// the rows already on screen.
 const FIELDS = [
   "ref", "TaskId", "Title", "Summary", "Kind", "Status", "Priority", "Assignee", "Source",
   "SourceRef", "Tags", "SearchChannels", "SearchSources", "SearchSubjects", "SearchPeople",

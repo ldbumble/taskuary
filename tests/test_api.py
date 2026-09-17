@@ -357,6 +357,24 @@ class ApiTests(unittest.TestCase):
         full = next(t for t in c.get('/api/tasks', params={'search': True}).json()['data'] if t['TaskId'] == tid)
         self.assertIn('the searchable subject', full['SearchSubjects'])
 
+    def test_tasks_page_and_search_do_not_require_the_full_archive(self):
+        """A limit of 2 on five tasks must return next, and q must find a mail subject without
+        the client holding every row. Omitting limit still returns the lot, which is the Board."""
+        ids = [c.post('/api/tasks', json={'Title': f'page-{i}'}).json()['taskId'] for i in range(5)]
+        first = c.get('/api/tasks', params={'limit': 2}).json()
+        self.assertEqual(len(first['data']), 2)
+        self.assertEqual(first['next'], first['data'][-1]['TaskId'])
+        self.assertIn('live', first['counts'])
+        rest = c.get('/api/tasks', params={'limit': 2, 'before': first['next']}).json()
+        self.assertEqual(len(rest['data']), 2)
+        self.assertTrue({r['TaskId'] for r in first['data']}.isdisjoint({r['TaskId'] for r in rest['data']}))
+        tid = c.post('/api/tasks', json={'Title': 'needle-in-archive'}).json()['taskId']
+        hit = c.get('/api/tasks', params={'q': 'needle-in-archive', 'limit': 10}).json()['data']
+        self.assertEqual([t['TaskId'] for t in hit], [tid])
+        unbounded = c.get('/api/tasks').json()
+        self.assertGreaterEqual(len(unbounded['data']), 6)
+        self.assertNotIn('next', unbounded)
+
     def test_feed_304s_when_nothing_changed(self):
         r1 = c.get('/api/feed')
         self.assertEqual(r1.status_code, 200)

@@ -79,9 +79,13 @@ class TheStopsTests(unittest.TestCase):
 
     def test_nothing_on_this_road_can_reach_a_model(self):
         """The whole reason the walk exists is that the old one needed an AI to explain how to
-        connect an AI."""
+        connect an AI. What is forbidden is REACHING one - importing or calling it. Naming it in a
+        comment is allowed on purpose: the first draft of this banned the bare word and so banned
+        the docstring that explained the design."""
         src = (__import__('pathlib').Path(walk.__file__)).read_text(encoding='utf-8')
-        for banned in ('import llm', 'from .llm', 'compose', 'concierge', 'build_llm'):
+        for banned in ('import llm', 'from .llm', 'import compose', 'from .compose',
+                       'import concierge', 'from .concierge',
+                       'llm.', 'compose.', 'concierge.', 'build_llm'):
             self.assertNotIn(banned, src)
 
 

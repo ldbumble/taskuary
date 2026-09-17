@@ -25,27 +25,28 @@ def _goto(tab, hash_=''): return {'tab': tab, 'hash': hash_}
 def _can(text, tab=None, hash_=''): return {'text': text, 'goto': _goto(tab, hash_) if tab else None}
 
 
-# The five the checklist also shows, then every part of the app. The first five carry no `blurb` of
-# their own - `setup.state` owns their words, and repeating them here is the drift this avoids.
+# The five the checklist also shows, then every part of the app. The first five carry no `title`
+# or `blurb` of their own - `setup.state` owns their words, and repeating them here is the drift
+# this avoids.
 STOPS = [
-    {'key': 'owner', 'title': 'Your name', 'goto': _goto('Docs', 'owner'), 'can': [
+    {'key': 'owner', 'goto': _goto('Docs', 'owner'), 'can': [
         _can('type your name and email right here'),
         _can('see every document that uses it', 'Docs')]},
-    {'key': 'ai', 'title': 'An AI', 'goto': _goto('Connections', 'cli-agents'), 'can': [
+    {'key': 'ai', 'goto': _goto('Connections', 'cli-agents'), 'can': [
         _can('install a coding CLI and sign in to it, in a terminal right here', 'Connections', 'cli-agents'),
         _can('use a CLI you already pay for', 'Connections', 'cli-agents'),
         _can('paste an API key on a provider card instead', 'Connections')]},
-    {'key': 'models', 'title': 'What runs on which model',
+    {'key': 'models',
      'goto': _goto('Settings', 'settings=config&group=Triage%20%26%20agents'), 'can': [
         _can('choose the brain that triages your mail', 'Settings', 'settings=config&group=Triage%20%26%20agents'),
         _can('choose what the assistant here speaks on', 'Settings', 'settings=config&group=Triage%20%26%20agents'),
         _can('choose the general agent and the coding CLI', 'Settings', 'settings=config&group=Triage%20%26%20agents'),
         _can('name a model, or leave it on the provider default')]},
-    {'key': 'inbound', 'title': 'Where work arrives', 'goto': _goto('Connections'), 'can': [
+    {'key': 'inbound', 'goto': _goto('Connections'), 'can': [
         _can('connect a mailbox - Outlook, Gmail, or any IMAP host', 'Connections'),
         _can('connect a chat - Teams, Slack, WhatsApp, Telegram', 'Connections'),
         _can('test a card before waiting on a schedule', 'Connections')]},
-    {'key': 'sync', 'title': 'Your first messages', 'goto': _goto('Assistant'), 'can': [
+    {'key': 'sync', 'goto': _goto('Assistant'), 'can': [
         _can('pull your mail in and let triage read it', 'Connections'),
         _can('watch it land on the Timeline', 'Assistant')]},
 

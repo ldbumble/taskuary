@@ -1045,7 +1045,7 @@ def render_report(store, cfg: dict, llm=None):
             if len(summary) > AI_CHARS: data += '\n…(data truncated here - later rows were NOT shown to you)'
             charts = str(store.get_settings().get('report_images_enabled') or '1') == '1'
             ai = (llm(report_system(store, cfg, charts),
-                      f"Instruction: {cfg['ai_prompt']}\n\nData ({head}):\n{data}",
+                      f"Instruction: {cfg['ai_prompt']}{VERDICT_CONTRACT}\n\nData ({head}):\n{data}",
                       max_tokens=SUMMARY_TOKENS) or '').strip()
             # an empty answer used to file as a bare '--- raw data ---' wall, which reads
             # like the prompt was never run. Say what happened instead.
@@ -1342,8 +1342,19 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
                             force=True, instruction=cfg.get('ai_prompt'),
                             watch_source_ids=watched_ids, watch_sources=watched_sources,
                             systems_only=bool(watched_ids or watched_sources),
-                            report_id=src.get('SourceId'), report_title=title)
-        return {'message_id': out.get('message_id'), 'subject': f"{title} - {out.get('said', 0)} line(s)", 'files': 0, **out}
+                            report_id=src.get('SourceId'), report_title=title,
+                            always_post=reach_of(cfg) == 'always')
+        # THE PUSH REACHES THIS KIND TOO. Everything below - delivery, the alert, the whole tail -
+        # sits after this early return, so the "tell me when it looks wrong" panel was dead for
+        # every Assistant-sourced check: the owner filled it in and nothing ever read it
+        # (2026-09-17). A check that found something is exactly what a phone is for.
+        said = int(out.get('said') or 0)
+        lines = '\n'.join(str((l or {}).get('text') or '') for l in (out.get('lines') or []))
+        speak, why = reaches(cfg, title, lines, failed=False, found=said)
+        if speak and str((cfg.get('alert') or {}).get('to') or '').strip():
+            try: send_alert(store, src, cfg, why or f'{said} thing(s) to look at', f'{title} - {said} line(s)', lines)
+            except Exception as e: logger.warning(f'alert for {title} failed: {e}')
+        return {'message_id': out.get('message_id'), 'subject': f"{title} - {said} line(s)", 'files': 0, **out}
     try:
         head, summary = render_report(store, cfg, llm)
         subject, body = f'{title} — {head}', summary
@@ -1355,6 +1366,15 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
     # artifacts reads it off `body`, and what gets filed is the summary without it
     from .artifacts import strip_directive
     failed = subject.endswith('— FAILED')
+    # ── does this run reach the owner at all? ────────────────────────────────────────────────
+    # Read the verdict BEFORE it is stripped: the line is Taskuary's question to the model, not
+    # something the reader should ever see. A quiet run is not a lost one - it is in the run
+    # history with what it read, which is where "it ran and found nothing" belongs.
+    speak, said_why = reaches(cfg, subject.split('—', 1)[-1].strip(), strip_directive(body), failed)
+    body = verdict_of(body)[2]
+    if not speak:
+        return {'message_id': None, 'subject': f'{title} - nothing to report', 'files': 0, 'said': 0,
+                'quiet': True, 'summary': strip_directive(body)[:2000]}
     if cfg.get('triage') and not failed:
         # the report is a MESSAGE like any other: triage reads it under TRIAGE.md, and a task is what
         # TRIAGE.md says - so an agent's research report can hand its findings to the coding agent.
@@ -1408,7 +1428,9 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
     # an alarm that quietly could not reach you is the worst of both worlds.
     if cfg.get('alert', {}).get('to'):
         try:
-            why = alert_fires(cfg, subject.split('—', 1)[-1].strip(), strip_directive(body), failed)
+            # the reach rule already judged this run; a second reading of the same result is how the
+            # two of them come to disagree. On `always` there is no rule to name, so the run itself is the reason.
+            why = said_why or ('the report ran' if reach_of(cfg) == 'always' else '')
             if why: send_alert(store, src, cfg, why, subject, strip_directive(body))
         except Exception as e:
             logger.warning(f'alert for {title} failed: {e}')
@@ -1434,6 +1456,66 @@ ALERT_WHEN = ('nothing_came_back', 'something_came_back', 'fewer_than', 'more_th
               'contains', 'missing', 'failed')
 _LEADING_COUNT = re.compile(r'\s*(\d[\d,]*)\b')
 
+# ── is anything wrong? The one question every report answers ────────────────────────────
+# A row source answers it by counting. PROSE cannot be counted: "fewer rows than 5" on an AI
+# summary compared five LINES, and an owner monitoring failures had to write "otherwise return
+# All clear" into the prompt - which is exactly what made an hourly check post an All-clear every
+# hour (2026-09-17: "if no errors then don't show up at all ... make this better for all use
+# cases"). So the model ends with a line that is Taskuary's, not the reader's, the same way the
+# assistant ends a turn with DECIDE. The prose above it stays the model's own.
+VERDICT_CONTRACT = (
+    '\n\nEnd with one final line, exactly one of:\nVERDICT: clear\nVERDICT: attention: <one short sentence '
+    'saying what is wrong>\nThat line is how Taskuary knows whether to bring this to the owner at all, and it '
+    'is removed before the report is filed. Do not write an "all clear" paragraph above it.')
+_VERDICT = re.compile(r'^[ \t>*_\-]*VERDICT\s*:\s*(clear|attention)\b[ \t:\-]*(.*)$', re.I | re.M)
+
+
+def verdict_of(text: str) -> tuple:
+    """(kind, why, the text without the line). kind is '' when the answer carries no verdict - an
+    older run, a source that returns rows, or a model that ignored the contract - and the caller
+    falls back to counting what came back."""
+    last = None
+    for last in _VERDICT.finditer(str(text or '')): pass      # the contract says FINAL line; take the last
+    if not last: return '', '', str(text or '')
+    rest = (str(text)[:last.start()] + str(text)[last.end():]).strip()
+    return last.group(1).lower(), last.group(2).strip(), rest
+
+
+# ── when a run reaches the owner at all ─────────────────────────────────────────────────
+# One question, in one place, whatever the source is: every run, only when something is wrong, or
+# only when a rule trips. It governs the TIMELINE as well as the push - silence that still leaves a
+# row to read is not silence.
+REACH = ('always', 'wrong', 'rule')
+
+
+def reach_of(cfg: dict) -> str:
+    """How this report reaches the owner. Absent means what the report did before the setting
+    existed: a condition was the only way to ask for quiet, and an assistant check was already
+    quiet when it found nothing."""
+    how = str(cfg.get('reach') or '').strip().lower()
+    if how in REACH: return how
+    if str((cfg.get('alert') or {}).get('when') or '').strip(): return 'rule'
+    return 'wrong' if cfg.get('type') == 'assistant' else 'always'
+
+
+def reaches(cfg: dict, head: str, body: str, failed: bool = False, found: int = None) -> tuple:
+    """(does it reach the owner, in what words). `found` is the count when the source knows it
+    itself - the assistant's own findings - rather than something to read off the text.
+
+    A run that FAILED always reaches you: a check that could not run is not a clear one.
+    """
+    how = reach_of(cfg)
+    if failed: return True, 'the report failed to run'
+    if how == 'always': return True, ''
+    if how == 'rule':
+        a = cfg.get('alert') or {}
+        why = condition_fires(a.get('when'), a.get('count'), a.get('text'), head, body, failed)
+        return bool(why), why
+    kind, said, _ = verdict_of(body)
+    if kind: return kind == 'attention', (said or 'the check found something') if kind == 'attention' else ''
+    n = found if found is not None else result_count(head, body)
+    return n > 0, (f'{n} came back' if n else '')
+
 
 def result_count(head: str, body: str) -> int:
     """How many things the report found. Row executors say it in the headline ("0 rows",
@@ -1444,16 +1526,16 @@ def result_count(head: str, body: str) -> int:
     return len([ln for ln in str(body or '').splitlines() if ln.strip()])
 
 
-def alert_fires(cfg: dict, head: str, body: str, failed: bool = False) -> str:
-    """Should this run speak up, and in what words? '' means stay quiet.
+def condition_fires(when, count, text, head: str, body: str, failed: bool = False) -> str:
+    """Does this result trip that condition, and in what words? '' means it does not.
 
-    Returns the reason, so what lands on the phone says which rule tripped rather than just
-    repeating the report.
+    Split out of alert_fires so the reach rule ("only when...") and the push read the result the
+    same way - two readings of one condition is how the two of them come to disagree.
     """
-    a = cfg.get('alert') or {}
-    when = str(a.get('when') or '').strip().lower()
-    if not when or not str(a.get('to') or '').strip(): return ''
+    when = str(when or '').strip().lower()
+    if not when: return ''
     if when not in ALERT_WHEN: raise ValueError(f'unknown alert condition {when!r} - one of {", ".join(ALERT_WHEN)}')
+    a = {'count': count, 'text': text}
     # A failed run is its own alarm: whatever the rule was, the report could not answer it, and
     # "no rows" from a query that never ran is not the same fact as "no rows" from one that did.
     if failed: return 'the report failed to run' if when == 'failed' else f'the report failed to run, so "{when}" could not be judged'
@@ -1472,6 +1554,13 @@ def alert_fires(cfg: dict, head: str, body: str, failed: bool = False) -> str:
     if when == 'contains': return f'the result mentions "{text}"' if text and text.lower() in hay else ''
     if when == 'missing': return f'the result never mentions "{text}"' if text and text.lower() not in hay else ''
     return ''
+
+
+def alert_fires(cfg: dict, head: str, body: str, failed: bool = False) -> str:
+    """Should this run speak up on the owner's phone, and in what words? '' means stay quiet."""
+    a = cfg.get('alert') or {}
+    if not str(a.get('when') or '').strip() or not str(a.get('to') or '').strip(): return ''
+    return condition_fires(a.get('when'), a.get('count'), a.get('text'), head, body, failed)
 
 
 def send_alert(store, src: dict, cfg: dict, why: str, head: str, body: str) -> dict:

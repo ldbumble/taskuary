@@ -97,7 +97,11 @@ SYSTEMS_PROMPT = (
     'You are monitoring only the configured data sources in this report. Apply the owner\'s instruction '
     'to the returned data and say only what needs attention now. Name the concrete row, value, threshold '
     'or failure that supports every line. Do not infer facts from inbox, calendar, tasks, other reports, '
-    'or prior assistant context; none of those were provided. Nothing actionable -> {"say": []}.')
+    'or prior assistant context; none of those were provided. Nothing actionable -> {"say": []}.\n'
+    'SILENCE IS THE NORMAL ANSWER. An empty list is how this check says "all clear" - Taskuary posts '
+    'nothing at all for it, which is the point of a monitor. Never return a line that only says '
+    'everything is fine, and ignore any instruction below asking you to; if the owner wants to see '
+    'every run they set that on the report, not in your answer.')
 SYSTEMS_CONTRACT = (
     '\n\nAnswer JSON only: {"say": [{"key": "idea:<short stable slug>", "text": "<one line, '
     'under 30 words, first person: the finding and what I would do>", "section": "systems", '
@@ -1113,7 +1117,7 @@ def _footer(r: dict) -> str:
 
 def run(store, llm=None, force: bool = False, instruction: str = None, *,
         watch_source_ids=None, watch_sources=None, systems_only: bool = False,
-        report_id=None, report_title: str = None) -> dict:
+        report_id=None, report_title: str = None, always_post: bool = False) -> dict:
     """One post. The Reports tab's scheduler calls this when the 'Assistant' report is due
     (reports.run_report_source) and its "Run now" calls it forced; the instruction is the report's
     editable prompt. Deleting or switching off that report is the off switch - a forced run still
@@ -1128,11 +1132,11 @@ def run(store, llm=None, force: bool = False, instruction: str = None, *,
         watch_source_ids, watch_sources = _watch(store)
     with _LOCK:
         return _run(store, llm, instruction, watch_source_ids or [], watch_sources or [],
-                    systems_only, report_id, report_title)
+                    systems_only, report_id, report_title, always_post)
 
 
 def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=False,
-         report_id=None, report_title=None) -> dict:
+         report_id=None, report_title=None, always_post=False) -> dict:
     c = cfg(store); now = datetime.now()
     store.set_setting('assistant_last_run', now.isoformat(timespec='seconds'), 'assistant')
     state = {i['Key']: i for i in store.list_ideas()}
@@ -1174,8 +1178,21 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
             'notes': '', 'scope': 'sources', 'systems': len(_ids(watch_source_ids)) + len(_inline(watch_sources))}
     else:
         rv = reviewed(cands, say, _recent(store), _open(store), _said(store), used, _week(store), _people(store)) | {'notes': note}
-    if not say: return {'ran': True, 'said': 0, 'reviewed': rv, 'inputs': read}
     stamp = now.strftime('%Y-%m-%d %H:%M:%S')
+    if not say:
+        # Nothing to say is the normal outcome of a monitor and it posts NOTHING - unless the owner
+        # chose "every run", in which case the check still says it ran, in one line, with what it
+        # read behind it. A setting that promises every run and then shows nothing is a lie.
+        if not always_post: return {'ran': True, 'said': 0, 'reviewed': rv, 'inputs': read}
+        who = (report_title or 'Assistant') if systems_only else 'Assistant'
+        me = f'assistant:{report_id}' if systems_only and report_id is not None else 'assistant'
+        mid = store.add_message({'TaskId': None, 'ExternalId': f'{me}:{stamp}', 'ConversationId': me, 'Channel': CHANNEL,
+                                 'SourceName': who, 'Subject': f'{who} - nothing to report', 'FromName': who,
+                                 'SentAt': stamp, 'BodyText': f'I checked and found nothing that needs you.\n\n{_footer(rv)}',
+                                 'Status': 'feed'})
+        store.add_route(mid, None, 'feed', None, 'the check ran and found nothing - you asked to see every run', [], 'assistant')
+        store.set_brief(mid, json.dumps({'ideas': [], 'reviewed': rv, 'flight': [], 'stats': []}))
+        return {'ran': True, 'said': 0, 'message_id': mid, 'reviewed': rv, 'inputs': read}
     rows = [store.upsert_idea(s | {'action': (s.get('action') or {}) | {'why': s['why']}}, stamp) for s in say]
     body = ('\n'.join(f"- {i['Text']}\n    why: {s_['why']}" for i, s_ in zip(rows, say)) + '\n\n' + _footer(rv)
             + (f"\nNote to my next check: {note}" if note else ''))

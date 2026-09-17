@@ -256,6 +256,24 @@ const BLANK = { type: "mssql", title: "", every_minutes: "", daily_at: "" };
 const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
 const isWorkflowSource = (s) => isWorkflowConfig(parse(s?.ConfigJson));
 
+// HOW A REPORT REACHES YOU - one question for every kind of report, and the same reading the
+// server does (reports.reach_of). Absent means what it did before the setting existed: a condition
+// was the only way to ask for quiet, and an assistant check was already quiet when it found nothing.
+export const reachOf = (c) => (["always", "wrong", "rule"].includes(c?.reach) ? c.reach
+  : c?.alert?.when ? "rule" : c?.type === "assistant" ? "wrong" : "always");
+// A prose answer cannot be counted - "fewer rows than 5" on an AI summary compared five LINES - so
+// a check that answers in words is offered the words, and a query that answers in rows the rows.
+export const answersInProse = (c) => c?.type === "assistant" || !!c?.ai_prompt;
+const CONDITIONS = [
+  { v: "something_came_back", rows: "anything came back", prose: "it found something" },
+  { v: "nothing_came_back", rows: "nothing came back", prose: "it found nothing at all" },
+  { v: "fewer_than", rows: "fewer rows than\u2026" },
+  { v: "more_than", rows: "more rows than\u2026" },
+  { v: "contains", rows: "the result mentions\u2026", prose: "it mentions\u2026" },
+  { v: "missing", rows: "the result never mentions\u2026", prose: "it never mentions\u2026" },
+  { v: "failed", rows: "the report failed to run", prose: "the check failed to run" },
+];
+
 export default function ReportsView() {
   const [sources, setSources] = useState(null);
   const [types, setTypes] = useState([]);
@@ -965,45 +983,74 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 </>
               )}
             </Box>
-            {/* The opposite of "send it somewhere": say NOTHING unless the result trips a rule.
-                A message that arrives whether or not anything is wrong is one you stop reading,
-                so silence is the normal outcome here and an alert means go and look. */}
+            {/* WHEN SHOULD THIS REACH YOU? One question, asked once, for every kind of report.
+                It used to be two: "send it somewhere" (every run, to a channel) and "tell me when it
+                looks wrong" (a condition, to a channel) - and neither of them governed the TIMELINE,
+                so a monitor that found nothing still posted "All clear" every hour and the owner had
+                to write that sentence into the prompt to get it (2026-09-17: "if no errors then don't
+                show up at all ... make this better for all use cases").
+                Silence that still leaves a row to read is not silence, so this rule governs the post
+                as well as the push. The run itself is never lost: it is in the run history either way. */}
             <Box sx={{ mt: 2, ...card, p: 1.5, maxWidth: 720 }}>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10, flex: 1 }}>
-                  TELL ME WHEN IT LOOKS WRONG (OPTIONAL)
-                </Typography>
-                <Switch size="small" checked={!!cfg.alert}
-                  onChange={(e) => setCfg({ ...cfg, alert: e.target.checked ? { when: "nothing_came_back", ...firstDest() } : undefined })} />
+              <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10, display: "block" }}>
+                WHEN SHOULD THIS REACH YOU?
+              </Typography>
+              <Box sx={{ display: "flex", gap: 0.6, mt: 0.8, flexWrap: "wrap" }}>
+                {[["always", "every run"], ["wrong", "only when something is wrong"], ["rule", "only when\u2026"]].map(([v, label]) => (
+                  <Button key={v} size="small" disableElevation
+                    variant={reachOf(cfg) === v ? "contained" : "outlined"}
+                    sx={{ fontSize: 12, minHeight: 28, py: 0, px: 1.4,
+                      ...(reachOf(cfg) === v ? {} : { color: INK, borderColor: BORDER }) }}
+                    onClick={() => setCfg({ ...cfg, reach: v,
+                      ...(v === "rule" ? { alert: { when: answersInProse(cfg) ? "something_came_back" : "nothing_came_back", ...(cfg.alert || {}) } } : {}) })}>
+                    {label}</Button>
+                ))}
               </Box>
-              {!cfg.alert ? (
+              <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>
+                {reachOf(cfg) === "always"
+                  ? "Every run lands on your Timeline, whatever it found."
+                  : reachOf(cfg) === "wrong"
+                    ? (answersInProse(cfg)
+                      ? "A clear run posts nothing at all \u2014 you do not need to ask for that in the prompt, and asking for an \u201call clear\u201d line is what makes it post one. The run is still in the history below, with what it read."
+                      : "A run that comes back empty posts nothing at all. The run is still in the history below, with what it read.")
+                    : "Nothing is posted or sent unless this is true of the result."}
+              </Typography>
+              {reachOf(cfg) === "rule" && (
+                <Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap", alignItems: "center" }}>
+                  <Select size="small" value={cfg.alert?.when || "nothing_came_back"} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 250 }}
+                    onChange={(e) => setCfg({ ...cfg, alert: { ...cfg.alert, when: e.target.value } })}>
+                    {CONDITIONS.filter((c) => !answersInProse(cfg) || c.prose).map((c) => (
+                      <MenuItem key={c.v} value={c.v} sx={{ fontSize: 12 }}>
+                        {(answersInProse(cfg) && c.prose) || c.rows}</MenuItem>
+                    ))}
+                  </Select>
+                  {["fewer_than", "more_than"].includes(cfg.alert?.when) && (
+                    <TextField size="small" type="number" sx={{ bgcolor: "#fff", width: 120 }} label="how many"
+                      value={cfg.alert?.count ?? ""}
+                      onChange={(e) => setCfg({ ...cfg, alert: { ...cfg.alert, count: e.target.value } })} />
+                  )}
+                  {["contains", "missing"].includes(cfg.alert?.when) && (
+                    <TextField size="small" sx={{ bgcolor: "#fff", flex: 1, minWidth: 160 }} label="the words to look for"
+                      value={cfg.alert?.text || ""}
+                      onChange={(e) => setCfg({ ...cfg, alert: { ...cfg.alert, text: e.target.value } })} />
+                  )}
+                </Box>
+              )}
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1.4, pt: 1.2, borderTop: `1px solid ${BORDER}` }}>
+                <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10, flex: 1 }}>
+                  AND ALSO TELL ME ON (OPTIONAL)
+                </Typography>
+                <Switch size="small" checked={!!cfg.alert?.to}
+                  onChange={(e) => setCfg({ ...cfg, alert: e.target.checked
+                    ? { ...(cfg.alert || {}), ...firstDest() }
+                    : (cfg.alert?.when ? { when: cfg.alert.when, count: cfg.alert.count, text: cfg.alert.text } : undefined) })} />
+              </Box>
+              {!cfg.alert?.to ? (
                 <Typography variant="caption" sx={{ color: FAINT }}>
-                  Off — the report never messages you, however its result looks.
+                  Off — whatever reaches you reaches you on the Timeline, and nowhere else.
                 </Typography>
               ) : (
                 <>
-                  <Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap", alignItems: "center" }}>
-                    <Select size="small" value={cfg.alert.when || "nothing_came_back"} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 250 }}
-                      onChange={(e) => setCfg({ ...cfg, alert: { ...cfg.alert, when: e.target.value } })}>
-                      <MenuItem value="nothing_came_back" sx={{ fontSize: 12 }}>nothing came back</MenuItem>
-                      <MenuItem value="something_came_back" sx={{ fontSize: 12 }}>anything came back</MenuItem>
-                      <MenuItem value="fewer_than" sx={{ fontSize: 12 }}>fewer rows than…</MenuItem>
-                      <MenuItem value="more_than" sx={{ fontSize: 12 }}>more rows than…</MenuItem>
-                      <MenuItem value="contains" sx={{ fontSize: 12 }}>the result mentions…</MenuItem>
-                      <MenuItem value="missing" sx={{ fontSize: 12 }}>the result never mentions…</MenuItem>
-                      <MenuItem value="failed" sx={{ fontSize: 12 }}>the report failed to run</MenuItem>
-                    </Select>
-                    {["fewer_than", "more_than"].includes(cfg.alert.when) && (
-                      <TextField size="small" type="number" sx={{ bgcolor: "#fff", width: 120 }} label="how many"
-                        value={cfg.alert.count ?? ""}
-                        onChange={(e) => setCfg({ ...cfg, alert: { ...cfg.alert, count: e.target.value } })} />
-                    )}
-                    {["contains", "missing"].includes(cfg.alert.when) && (
-                      <TextField size="small" sx={{ bgcolor: "#fff", flex: 1, minWidth: 160 }} label="the words to look for"
-                        value={cfg.alert.text || ""}
-                        onChange={(e) => setCfg({ ...cfg, alert: { ...cfg.alert, text: e.target.value } })} />
-                    )}
-                  </Box>
                   <Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap" }}>
                     <Destination dest={cfg.alert} targets={targets}
                       onChange={(d) => setCfg({ ...cfg, alert: { ...cfg.alert, ...d } })} />
@@ -1012,7 +1059,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                       onChange={(e) => setCfg({ ...cfg, alert: { ...cfg.alert, note: e.target.value } })} />
                   </Box>
                   <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>
-                    Sent the moment the rule trips — no Review step, because an alert waiting for approval is not an alert.
+                    Sent the moment it reaches you — no Review step, because an alert waiting for approval is not an alert.
                     Only channels with a live connection and replies on (Settings → Replies) are offered, and only chats Taskuary has already seen.
                   </Typography>
                 </>

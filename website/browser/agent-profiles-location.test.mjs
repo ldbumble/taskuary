@@ -70,7 +70,7 @@ test('Connections share CLI commands; Docs profiles choose only provider and mod
   assert.doesNotMatch(await page.$eval('[data-connection="muse"]', (el) => el.innerText), /Available/);
   assert.match(await page.$eval('[data-connection="devin"]', (el) => el.innerText), /Not installed/);
   assert.match(await page.$eval('[data-connection="codex"]', (el) => el.innerText), /Installed/);
-  assert.doesNotMatch(await page.evaluate(() => document.body.innerText), /researcher|Researcher|Add profile|make default/);
+  assert.doesNotMatch(await page.evaluate(() => document.body.innerText), /researcher|Researcher|New profile|Add profile|make default/);
   await page.click('[data-connection="claude"] button');
   await page.waitForSelector('[role="dialog"] textarea');
   await page.focus('[role="dialog"] textarea');
@@ -99,7 +99,7 @@ test('Connections share CLI commands; Docs profiles choose only provider and mod
   assert.match(await page.evaluate(() => document.body.innerText), /Used by coder, codex/);
   await clickText(page, 'RESEARCHER.md', 'p');
   await page.waitForFunction(() => [...document.querySelectorAll('textarea')].some((el) => el.value.includes('Read public sources')));
-  await clickText(page, 'Add profile', 'button');
+  await clickText(page, 'New profile', 'button');
   await page.waitForSelector('[role="dialog"] input', { visible: true });
   assert.equal(await page.$eval('[role="dialog"]', (el) => {
     const box = el.getBoundingClientRect(); return box.top >= 0 && box.bottom <= window.innerHeight && el.contains(document.activeElement);

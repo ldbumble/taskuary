@@ -201,6 +201,14 @@
 .tq-card-actions button { text-transform: none; font-size: 11px; min-height: 28px; }
 .tq-card-actions .sp { flex: 1; }
 .tq-card-note { font-size: 10.5px; color: #8a847a; margin-top: 6px; }
+/* a stop of the set-up walk you have already passed: a step in a trail, not a thing that was said.
+   No avatar track, no second mark, and the counter is what tells six of them apart. The tick is the
+   only colour and it is the checklist's own done-green - it identifies a finished step. */
+.tq-msg.tq-step { grid-template-columns: minmax(0, 1fr); margin-bottom: 7px; }
+.tq-msg.tq-step .body { padding-top: 0; }
+.tq-step-done { display: flex; align-items: baseline; gap: 5px; font-size: 11.5px; color: #8a847a; }
+.tq-step-done i { font-style: normal; color: #47654a; }
+.tq-step-done b { font-weight: 600; font-variant-numeric: tabular-nums; }
 .tq-card-err { font-size: 11px; color: #7a2f3c; margin-top: 6px; }
 
 /* the pinned "by the way": one line, above the composer, whatever the chat is on */

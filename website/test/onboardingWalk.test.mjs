@@ -94,3 +94,53 @@ test("one viewport shoots all nine, or they read as nine different apps", () => 
   assert.match(src, /setViewport/);
   assert.equal(src.match(/setViewport/g).length, 1);
 });
+
+// A FILE ON DISK IS NOT THE SAME CLAIM AS THE APP SERVING IT. The nine pictures were in the repo,
+// in the vite output and in the wheel, and every one 404ed because only /assets was mounted. The
+// route is proven over HTTP in tests/test_onboarding_walk.py; this keeps the mount from being read
+// as dead code by somebody looking at server.py alone.
+test("the pictures have a route of their own, because /assets is only the hashed build output", () => {
+  const server = readFileSync(fileURLToPath(new URL("../../taskuary/server.py", import.meta.url)), "utf8");
+  assert.match(server, /app\.mount\('\/walk', StaticFiles/);
+});
+
+// Six stops walked past drew six near-identical rows, each with the message avatar AND the card's
+// own mark, and nothing but the title - it read as six things the assistant had said.
+test("a stop you have walked past is a numbered step, not a message", () => {
+  const view = read("AssistantView.jsx");
+  assert.match(view, /const passed = !live && kind === "walk"/);
+  assert.match(view, /\{!passed && <div className="avatar">/, "no second mark beside the card's own");
+  assert.match(view, /tq-step-done/);
+  assert.match(view, /of \{m\.card\.total\}/, "it says which step of how many");
+  assert.match(read("assistantView.css"), /\.tq-step-done/);
+});
+
+// The header chip is tq-phone-hide, and it was the only door to the whole of this guidance.
+test("the walk is reachable on a phone", () => {
+  const view = read("AssistantView.jsx");
+  const welcome = view.slice(view.indexOf('className="tq-welcome"'), view.indexOf('className="tq-welcome"') + 2400);
+  const entry = welcome.slice(welcome.lastIndexOf("<button", welcome.indexOf("Set up Taskuary")), welcome.indexOf("Set up Taskuary"));
+  assert.ok(entry.includes("onClick={setup}"), "the welcome block opens the same scripted walk");
+  assert.doesNotMatch(entry, /tq-phone-hide/, "and it is not hidden on the device that needs it");
+});
+
+// The scripted walk took the identifier `setup`, and with it the welcome block's button - so the
+// chip reading "Set up a report or workflow" opened the fourteen-stop tour of the app instead.
+test("setting something up and walking the app are two different doors", () => {
+  const view = read("AssistantView.jsx");
+  const at = view.lastIndexOf("Set up a report or workflow");     // the button, not the comment above askSetup
+  const chip = view.slice(view.lastIndexOf("<button", at), at);
+  assert.ok(chip.includes("onClick={askSetup}"), "it asks what to set up");
+  assert.match(view, /const askSetup = \(\) =>/);
+  assert.match(view, /kind: "setup"/, "and the card it pushes still exists");
+});
+
+// Rows 2 and 4 both read "Connections" and went to the AI CLI agents page and the connector list.
+test("a row's button names what it opens, in words the server owns", () => {
+  assert.match(read("SetupWizard.jsx"), /s\.goto\?\.label \|\| s\.goto\?\.tab/);
+  assert.match(walkCard(read("assistantCards.jsx")), /card\.goto\.label \|\| `Open \$\{card\.goto\.tab\}`/);
+  const setupPy = readFileSync(fileURLToPath(new URL("../../taskuary/setup.py", import.meta.url)), "utf8");
+  const labels = [...setupPy.matchAll(/'label': '([^']+)'/g)].map((m) => m[1]);
+  assert.equal(labels.length, 5);
+  assert.equal(new Set(labels).size, 5, `two rows wear the same button: ${labels}`);
+});

@@ -406,13 +406,23 @@ function Line({ m, live, last, actions, fresh }) {
     fyis: <FyisCard card={c} onDone={actions.done} onSurface={actions.surface} onTimeline={actions.timeline} onPropose={actions.propose} />,
     wrapup: <WrapupCard card={c} onDone={actions.done} onOpenTask={actions.openTask} />,
   }[kind] : null;
+  // A STOP THE WALK HAS MOVED PAST is a finished step, not something the assistant said. Falling
+  // through to the title note below drew six near-identical rows, each carrying the message avatar
+  // AND the card's own mark - two snowflakes and a title, six times, with nothing saying they were
+  // one walk (the owner, running it). It keeps its place in the trail as one muted line that counts
+  // itself, so scrolling up reads as the steps already passed.
+  const passed = !live && kind === "walk" && !!m.card;
   return (
     <>
-      <div className="tq-msg">
-        <div className="avatar"><TaskuaryMark size={18} /></div>
+      <div className={passed ? "tq-msg tq-step" : "tq-msg"}>
+        {!passed && <div className="avatar"><TaskuaryMark size={18} /></div>}
         <div className="body">
           {m.text ? (looksMd(m.text) ? <Md text={m.text} /> : m.text.split("\n").map((p, i) => <p key={i}>{p}</p>)) : null}
-          {!live && m.card && kind && kind !== "setup" && kind !== "brief" && (
+          {passed && (
+            <div className="tq-step-done"><i>✓</i><b>{(m.card.n ?? 0) + 1} of {m.card.total}</b>
+              <span>·</span>{m.card.title}</div>
+          )}
+          {!passed && !live && m.card && kind && kind !== "setup" && kind !== "brief" && (
             <div className="tq-card-note" style={{ display: "flex", alignItems: "center", gap: 5 }}>
               <SourceMark item={m.card} size={12} /> {m.card.title}
               {m.card.tid && <a href={`#task=${m.card.tid}`} style={{ color: "#55697a", marginLeft: 4 }}>{m.card.ref}</a>}
@@ -992,6 +1002,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     setMsgs((m) => [...m, { id: `w${Date.now()}`, role: "assistant",
       card: { ...stop, kind: "walk", lane: "report", total: data.total }, options: [] }]);
   };
+  // ...and the OTHER door, which this walk took the name of: "set something up" - a report, a
+  // connection, an automation - is the assistant's own walk-through of a thing you describe. The
+  // scripted walk inherited the identifier `setup` and with it the welcome block's button, so the
+  // chip still reading "Set up a report or workflow" opened the fourteen-stop tour of the app.
+  const askSetup = () => setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: "Tell me what to set up - a report, a connection, an automation - in a sentence. I open it as a walk-through with the assistant: it takes you through it here, nothing is built and no repository is touched. If something does have to be built, say send it to the coding agent.",
+    card: { key: "setup", kind: "setup", lane: "report", title: "Set something up" }, options: [] }]);
   const [walking, setWalking] = useState(false);        // guards the chip against a double-click
   const setup = async () => {
     if (walking) return;
@@ -1278,7 +1294,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                   title="Everything in the pipe, most important first - mail, reports, agents, meetings">{starting ? "Reading your pipe..." : "Walk me through my tasks"}</button>
                 {!pile?.canonical && <button type="button" className="tq-chip" disabled={busy || resetting || starting || !incoming(ready).length} onClick={() => start("mail")}
                   title="Only what people sent you - mail and chat">Just what came in</button>}
-                <button type="button" className="tq-chip" disabled={resetting} onClick={setup}
+                {/* the same walk the header chip opens. It lives here as well because the header
+                    hides its chip on a phone, and this block is what a phone shows - without it the
+                    one door to the set-up guidance was absent on the device it is most needed on. */}
+                <button type="button" className="tq-chip" disabled={busy || resetting || walking} onClick={setup}
+                  title="A walk through every part of Taskuary — one step at a time, no AI needed">Set up Taskuary</button>
+                <button type="button" className="tq-chip" disabled={resetting} onClick={askSetup}
                   title="A scheduled check that reads and summarises, or a workflow that writes data">Set up a report or workflow</button>
                 {/* the same walk, on your phone - offered only for a chat that is already connected and
                     names an Assistant chat, because this talks to the assistant, it does not set one up */}

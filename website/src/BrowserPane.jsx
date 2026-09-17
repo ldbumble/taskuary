@@ -28,6 +28,8 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", onFold, overl
   const drivingRef = useRef(false);
   drivingRef.current = driving;
   const held = useRef(0);       // the newest frame's seq while this tab is hidden: acked on return
+  // null until the daemon says; false = it is up but holding no page, so no frame is coming
+  const [attached, setAttached] = useState(null);
   const shape = useRef(null), shapeTimer = useRef(null);
 
   /* THE PAGE IS GIVEN THIS PANE'S SHAPE, so there is nothing left to letterbox. Debounced, because
@@ -86,6 +88,15 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", onFold, overl
           };
           im.src = m.src;
         } else if (m.type === "url" && m.url) setUrl(m.url);
+        /* THE STREAM SAYS WHEN IT HAS NOTHING, and we used to drop that on the floor. An
+           agent-browser daemon answers its screencast port the moment it launches, whether or not
+           a page was ever opened in it - browserview.state() calls that "open", the relay
+           connects, and the daemon's first message is {"connected": false, "screencasting":
+           false}. No frame ever follows. The pane drew an empty canvas and nothing else, so a
+           browser that had simply never been navigated looked identical to a broken one (the
+           owner, 2026-09-16, after an agent gave up on `agent-browser open` and asked him to sign
+           in himself). Measured on his live session: one status message, zero frames. */
+        else if (m.type === "status") setAttached(m.connected !== false);
       };
       // the relay closes when the agent's browser goes; the parent polls and unmounts us. Until
       // then a dropped socket (server restart) comes back on its own.
@@ -156,6 +167,18 @@ Take over to drive it yourself; close the session to close it."
         <Box component="canvas" ref={canvas} tabIndex={0} onMouseDown={onMouse} onMouseUp={onMouse} onMouseMove={onMouse}
           onWheel={onWheel} onKeyDown={onKey} onKeyUp={onKey} onContextMenu={(e) => e.preventDefault()}
           sx={{ display: "block", outline: "none", position: "absolute", inset: 0 }} />
+        {/* Only before the first frame: once a page has painted, a momentary "not connected"
+            is the browser moving between pages, not an empty pane. */}
+        {attached === false && !live && (
+          <Box sx={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center", gap: 0.75, px: 3, textAlign: "center" }}>
+            <Typography sx={{ ...mono, fontSize: 11.5, color: "#c9c3b9" }}>the browser is running, with no page open</Typography>
+            <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT, lineHeight: 1.6 }}>
+              Nothing has been navigated to yet, so there is nothing to show. Ask the agent to open
+              a page — or take over and drive it yourself.
+            </Typography>
+          </Box>
+        )}
         {driving && (
           <Typography sx={{ ...mono, position: "absolute", left: 8, bottom: 6, fontSize: 10, color: CATPPUCCIN.yellow,
             bgcolor: "#000000aa", px: 0.75, py: 0.25, borderRadius: 1, pointerEvents: "none" }}>

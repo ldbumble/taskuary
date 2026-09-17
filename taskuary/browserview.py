@@ -257,6 +257,19 @@ def brief() -> str:
             'Drive the existing tab with `agent-browser` - it is already bound and restored, so '
             'NEVER use --session, --headed, profile listing, or launch Chrome separately. Navigate '
             'with `agent-browser open <url>`. '
+            # POWERSHELL CALLS A SUCCESS AN ERROR. agent-browser writes its progress to stderr
+            # ("[agent-browser] launched browser"), and Windows PowerShell 5.1 wraps any native
+            # command's stderr in a NativeCommandError and sets $? to false EVEN ON EXIT 0. A CLI
+            # shelling out through powershell.exe therefore reads a working `open` as a failure:
+            # on 2026-09-16 an agent gave up after three such "errors", told the owner "the browser
+            # connection failed", and left a daemon running with no page in it - which is exactly
+            # what the black pane was. Measured: exit code 0, "✓ Example Domain", $? false.
+            'ON WINDOWS, judge `agent-browser` by its EXIT CODE and its output, never by '
+            'PowerShell\'s error record: it writes progress to stderr, and PowerShell 5.1 reports '
+            'that as a NativeCommandError with $? false even when the command returned 0 and '
+            'worked. A line like "[agent-browser] launched browser" IS the success. If your shell '
+            'insists it failed, run `agent-browser get url` and believe what the browser '
+            'itself says over what the shell claims. '
             # LOOK, and look CHEAPLY. The accessibility tree is what the browser already knows about
             # its own page - every control's role, name and state, with a @ref to act on - and it is
             # an order of magnitude smaller than the same page as pixels. An agent that screenshots

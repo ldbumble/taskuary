@@ -117,3 +117,19 @@ test("an assistant post shows what the assistant said, even with no structured i
     "the 'nothing worth saying' line is only for a post that truly said nothing");
 });
 
+
+// ── the browser pane says when there is nothing to show ──────────────────────────────────
+test("a browser with no page open says so instead of painting black", () => {
+  // agent-browser answers its screencast port the moment the daemon launches, page or no page.
+  // browserview.state() calls that "open", the relay connects, and the daemon's first and only
+  // message is {"connected": false, "screencasting": false} - measured on a live session: one
+  // status message, zero frames. The pane dropped `status` on the floor and drew an empty canvas,
+  // so a browser nobody had navigated looked exactly like a broken one (the owner, 2026-09-16).
+  const pane = fs.readFileSync(path.join(process.cwd(), "src", "BrowserPane.jsx"), "utf8");
+  assert.match(pane, /m\.type === "status"\) setAttached\(m\.connected !== false\)/,
+    "the stream's own status is the answer - it must not be ignored");
+  assert.match(pane, /attached === false && !live &&/,
+    "say it only before the first frame: mid-navigation is not an empty pane");
+  assert.ok(pane.includes("the browser is running, with no page open"),
+    "and say which of the two it is, in words");
+});

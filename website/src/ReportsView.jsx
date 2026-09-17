@@ -864,7 +864,8 @@ function RoutingCard({ cfg, setCfg, targets, brains, firstDest, sourceId }) {
           </Box>
           <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.8 }}>
             Which AI decides where each run goes. It reads what came back and answers yes or no to each
-            line above, in one sentence each — and a run it does not answer for reaches you anyway.
+            line above — nothing else is asked of it, so this job can run on a model that only decides.
+            A run it does not answer for reaches you anyway.
           </Typography>
           {showPrompt && (
             <Box component="pre" sx={{ mt: 0.8, p: 1, bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 1,

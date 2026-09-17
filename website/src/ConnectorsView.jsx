@@ -373,6 +373,16 @@ const META = {
       "muse-spark-1.2-contributor costs about a twelfth as much — because you opt in to Meta using your prompts and completions to improve its products, and it is rate-limited to 100 requests/minute against 3,000. Do not point it at real work mail unless you mean to share it.",
       "Test runs a real round trip. Enable to wire it into triage, drafts and the digest — or pick it explicitly under Settings → Triage & routing.",
       "This is the TRIAGE road. For coding sessions on Muse Spark, install the muse CLI under AI CLI agents (macOS/Linux/WSL2 only)."] },
+  // A decision model, not a brain. It sits in this group because it is an AI card you paste a key
+  // on, but it is offered in exactly ONE picker (Settings → Triage & agents → Where runs go): it
+  // emits no text at all, so chosen as the Assistant's brain it would have nothing to say.
+  typesafe: { group: "AI — agents & models", channel: "ai", srcLabel: null,
+    fields: [], secretLabel: "API key",
+    desc: "TypeSafe's Jev — answers typed questions with calibrated probabilities instead of words. It can decide where a finished report goes; it cannot write one.",
+    howto: ["Create a key at typesafe.ai → API keys.",
+      "Paste it under Credentials. Test asks Jev one real question and reports the confidence it came back with — there is no completion to run.",
+      "Then pick it under Settings → Configuration → Triage & agents → Where runs go. It appears in no other brain picker, on purpose.",
+      "Before you trust it: open a report with an AI routing line and press try it on the last 5 runs, with and without this chosen. That replays both judges over the same real runs."] },
   ollama: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["base_url (default http://127.0.0.1:11434)", "base_url"], ["model — required, e.g. llama3.2 / qwen2.5", "model"]],
     secretLabel: "API key (optional — a local server rarely needs one)",
@@ -1182,7 +1192,7 @@ export default function ConnectorsView({ onNavigate }) {
     { title: "AI — agents & models", cards: [
       { key: "agents", title: "AI CLI agents", desc: "Claude / Codex / Qwen Code / OpenCode / Kimi / Gemini — connect a coding CLI. Choose the default and model in Settings → Configuration → Triage & agents",
         channel: "cli", haystack: "ai cli agents claude codex qwen 通义千问 opencode deepseek 深度求索 kimi moonshot 月之暗面 glm 智谱 minimax gemini command args resume", go: () => setOpen({ kind: "agents" }) },
-      ...channelCards(["anthropic", "openai", "azure_openai", "openrouter", "meta", "ollama"]),
+      ...channelCards(["anthropic", "openai", "azure_openai", "openrouter", "meta", "ollama", "typesafe"]),
       ...catalogCards("AI — agents & models"),
     ]},
     // speech to text: voice notes on the chat channels arrive as text, and the prompt boxes get a mic

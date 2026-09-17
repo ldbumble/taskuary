@@ -3,7 +3,7 @@
 It emits no text at all, which is exactly why it can be a routing judge and can never be a brain.
 This module owns the one HTTP call so reports.py never learns it.
 """
-import unittest
+import json, unittest
 from unittest import mock
 
 from taskuary import jev
@@ -70,6 +70,17 @@ class TheCallTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 jev.ask('', 's', {'a': ('i', 'c')})
         post.assert_not_called()
+
+    def test_a_credential_in_the_run_does_not_leave_the_building(self):
+        """Every other hosted call is scrubbed at one seam - llm.build_llm wraps the brain it hands
+        back. This road does not go through it, so it scrubs at its own door."""
+        reply = self._reply({'a': {'noul': 0.9}})
+        with mock.patch('taskuary.llm.post_retrying', return_value=reply) as post:
+            jev.ask('sk-x', 'the backup job logged password=hunter2xyz and stopped',
+                    {'a': ('i', 'anything with an api_key: abcdef123456 in it')})
+        body = post.call_args[0][2]
+        self.assertNotIn('hunter2xyz', body['state'])
+        self.assertNotIn('abcdef123456', json.dumps(body['questions']))
 
     def test_no_questions_is_no_call(self):
         with mock.patch('taskuary.llm.post_retrying') as post:

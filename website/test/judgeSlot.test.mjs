@@ -24,6 +24,15 @@ test("the judge picker does not offer auto twice", () => {
   assert.match(slot, /brains\s*\|\|\s*\[\]\)\.filter\(\(o\) => o\.value\)/);
 });
 
+test("there is a card to paste the key on, and it says what it is for", () => {
+  // Seeding the connector server-side is not enough: Connections renders from its own catalog and
+  // names the AI cards explicitly, so a card left out of both lists is a key with nowhere to go.
+  const view = read("ConnectorsView.jsx");
+  assert.match(view, /^ {2}typesafe: \{ group: "AI — agents & models"/m);
+  assert.match(view, /channelCards\(\["anthropic".*"typesafe"\]\)/);
+  assert.match(view, /Where runs go/);          // where it is picked, said on the card itself
+});
+
 test("the slot with no model of its own does not show a model box", () => {
   const panel = read("AiDefaults.jsx");
   const slot = panel.slice(panel.indexOf("const Slot"), panel.indexOf("export default"));

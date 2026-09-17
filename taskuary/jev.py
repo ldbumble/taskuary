@@ -11,7 +11,7 @@ ten - so the probability is worth recording even though the judge only needs the
 """
 import json
 
-from . import llm as llm_mod
+from . import llm as llm_mod, redact
 
 API = 'https://api.typesafe.ai/v1/systemone'
 MODEL = 'jev-latest'
@@ -27,11 +27,16 @@ def ask(key: str, state: str, questions: dict, timeout: int = 20) -> dict:
     """
     if not questions: return {}
     if not key: raise RuntimeError('no TypeSafe API key saved - paste one under Credentials')
+    # Every OTHER hosted call in the app is scrubbed at one seam - llm.build_llm wraps the brain it
+    # returns (_Scrubbed). This road does not go through it, so it scrubs at its own door: a report
+    # that came back carrying a password must not post one to a third party just because the thing
+    # reading it answers in probabilities rather than words.
+    state = redact.scrub(state)
     body = {'model': MODEL, 'state': state,
             'questions': {n: {'type': 'noul', 'instructions': i,
                               # the owner's own sentence is the whole criterion; `false` is its
                               # negation rather than a second rule nobody wrote
-                              'criteria': {'true': c, 'false': f'not this: {c}'}}
+                              'criteria': {'true': redact.scrub(c), 'false': f'not this: {redact.scrub(c)}'}}
                           for n, (i, c) in questions.items()}}
     r = llm_mod.post_retrying(API, {'Authorization': f'Bearer {key}',
                                     'Content-Type': 'application/json'}, body, timeout)

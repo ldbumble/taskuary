@@ -65,6 +65,15 @@ test("see the prompt shows the prompt, word for word as the server builds it", (
   assert.match(source, /\$\{l\.toUpperCase\(\)\}: yes\|no .* but only if: \$\{routeOf\(c, l\)\[1\]\}/);
 });
 
+test("the prompt shown is the prompt asked - no sentence anybody stopped asking for", () => {
+  // The judge answers four booleans and nothing else, so that a model which cannot write prose can
+  // be one of the things that answers. A card still promising a reason per line describes a prompt
+  // that is no longer sent - and `see the prompt` exists precisely so it cannot.
+  assert.doesNotMatch(source, /one short sentence saying why/);
+  assert.doesNotMatch(source, /in one sentence each/);
+  assert.match(source, /judgePrompt/);
+});
+
 test("converting a report written before the card says the old rules out loud", () => {
   // Touching one line must not silently change the others behind your back, so seedRoute writes the
   // old rules down AS SENTENCES, on the card, before anything is saved - the owner can then argue

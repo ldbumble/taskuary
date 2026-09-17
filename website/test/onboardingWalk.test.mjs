@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { walkAdvances } from "../src/walkStep.js";
 
@@ -68,21 +68,29 @@ test("walkAdvances lands on every real stop and ends on Finish or past the end",
   assert.equal(walkAdvances(-1, total), false);        // Finish
 });
 
-test("every tab stop has a picture that actually shipped", () => {
+// The nine keys used to be restated here, in capture-walk.mjs and in walk.py, with nothing tying
+// them together - a tenth stop added to walk.py would ship silently with no image. This derives
+// the truth from walk.py instead of repeating it, and checks capture-walk.mjs agrees.
+test("every image walk.py asks for is one the capture script shoots", () => {
+  const walkPy = readFileSync(fileURLToPath(new URL("../../taskuary/walk.py", import.meta.url)), "utf8");
+  const wanted = [...walkPy.matchAll(/'\/walk\/(\w+)\.png'/g)].map((m) => m[1]);
+  assert.equal(wanted.length, 9);
+  const script = readFileSync(fileURLToPath(new URL("../capture-walk.mjs", import.meta.url)), "utf8");
+  const shot = [...script.matchAll(/\["(\w+)",\s*"/g)].map((m) => m[1]);
+  assert.deepEqual(new Set(wanted), new Set(shot), "walk.py and capture-walk.mjs disagree about which tabs have pictures");
   // walk.py names these; a stop whose image 404s degrades to a stop with no image, which is
-  // survivable - but it should not happen because nobody ran the capture.
+  // survivable - but it should not happen because nobody ran the capture, or ran a truncated one.
+  // existsSync alone passes on a 0-byte file, so also floor the size well under the real ~180-400KB.
   const dir = fileURLToPath(new URL("../public/walk/", import.meta.url));
-  for (const key of ["connections", "docs", "settings", "board", "tasks", "review", "reports", "assistant", "hub"]) {
-    assert.ok(existsSync(`${dir}${key}.png`), `missing walk image: ${key}.png`);
+  for (const key of wanted) {
+    const f = `${dir}${key}.png`;
+    assert.ok(existsSync(f), `missing walk image: ${key}.png`);
+    assert.ok(statSync(f).size > 20000, `suspiciously small walk image: ${key}.png`);
   }
 });
 
-test("the capture script shoots all nine in one run", () => {
+test("one viewport shoots all nine, or they read as nine different apps", () => {
   const src = readFileSync(fileURLToPath(new URL("../capture-walk.mjs", import.meta.url)), "utf8");
-  for (const key of ["connections", "docs", "settings", "board", "tasks", "review", "reports", "assistant", "hub"]) {
-    assert.match(src, new RegExp(`"${key}"`), key);
-  }
-  // one viewport for all nine, or they read as nine different apps
   assert.match(src, /setViewport/);
   assert.equal(src.match(/setViewport/g).length, 1);
 });

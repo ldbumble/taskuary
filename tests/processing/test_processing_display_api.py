@@ -105,18 +105,22 @@ def test_multiple_card_backing_reads_share_snapshot_during_external_write(tmp_pa
                    'hidden': 0, 'alerts': [], 'events': []}
         untouched = copy.deepcopy(payload)
         initial = funnel.present(db, payload)
-        original = funnel_presentation._backing
+        # present() reads every card's backing table by table in ONE read transaction (_backings). An
+        # external WAL writer committing after the first table has been read must stay invisible to
+        # every later table read of the same stamp - the hook is the per-table read, which is the
+        # unit that exists now; the per-card function it replaced was only ever a sequence of these.
+        original = funnel_presentation._rows
         wrote = False
 
-        def update_other_after_first_backing(cur, item):
+        def update_other_after_first_table(cur, table, column, values):
             nonlocal wrote
-            backing = original(cur, item)
-            if not wrote:
+            rows = original(cur, table, column, values)
+            if not wrote and values:            # after a read that really queried, so the snapshot exists
                 wrote = True
                 writer.update_message_body(mids[1], 'Changed later source from external WAL writer')
-            return backing
+            return rows
 
-        monkeypatch.setattr(funnel_presentation, '_backing', update_other_after_first_backing)
+        monkeypatch.setattr(funnel_presentation, '_rows', update_other_after_first_table)
         during = funnel.present(db, payload)
         assert wrote
         assert during == initial

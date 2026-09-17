@@ -118,7 +118,9 @@ def _snapshot_cursor(store):
             cur.close()
 
 
-def _backing(cur, item: dict) -> dict:
+def _backing_one(cur, item: dict) -> dict:
+    """The per-card road: ~9 queries for one card. Kept as the SPECIFICATION of ``_backings``,
+    which must return exactly this for every card; the test holds them equal."""
     ids = _ids(item)
 
     # Reviews can introduce their message/task after the card was first created.
@@ -180,6 +182,115 @@ def _backing(cur, item: dict) -> dict:
     }
 
 
+
+
+def _backings(cur, items: list[dict]) -> dict[int, dict]:
+    """The display backing of every card at once: one query per table for the union of their
+    ids, sliced back per card - instead of the ~9 queries ``_backing_one`` makes per card. A stamp
+    of 356 cards was ~3,200 queries and 0.34 s on the owner's store, and a press of Next stamps
+    the pile several times (measured 2026-09-17). Keyed by ``id(item)``: a card dict has no other
+    stable identity here.
+
+    Every backing is byte-for-byte what ``_backing_one`` returns for the same card - the stages
+    run in the same order with the same dependencies (reviews name messages and tasks, messages
+    name tasks, only a taskless card expands its conversations), and every list is sorted by the
+    same ``_row_order`` that ``_rows`` sorts by. ``_backing_one`` stays as the specification and
+    the test holds the two equal.
+    """
+    state = {id(item): {"item": item, "ids": _ids(item)} for item in items}
+
+    def union(name):
+        return {value for st in state.values() for value in st["ids"][name]}
+
+    def index(rows, column):
+        out: dict = {}
+        for row in rows:
+            out.setdefault(row.get(column), []).append(row)
+        return out
+
+    def pick(idx, keys):
+        return sorted((row for key in set(keys) for row in idx.get(key, ())), key=_row_order)
+
+    # Reviews can introduce their message/task after the card was first created.
+    review_by_id = index(_rows(cur, "review", "ReviewId", union("review")), "ReviewId")
+    for st in state.values():
+        st["reviews"] = pick(review_by_id, st["ids"]["review"])
+        st["ids"]["message"].update(row.get("MessageId") for row in st["reviews"] if row.get("MessageId") is not None)
+        st["ids"]["task"].update(row.get("TaskId") for row in st["reviews"] if row.get("TaskId") is not None)
+    # A message can acquire a task without changing the legacy card key.
+    message_by_id = index(_rows(cur, "message", "MessageId", union("message")), "MessageId")
+    for st in state.values():
+        st["messages"] = pick(message_by_id, st["ids"]["message"])
+        st["ids"]["task"].update(row.get("TaskId") for row in st["messages"] if row.get("TaskId") is not None)
+    task_by_id = index(_rows(cur, "task", "TaskId", union("task")), "TaskId")
+    member_by_task = index(_rows(cur, "message", "TaskId", union("task")), "TaskId")
+    # Conversation expansion is only the taskless review freshness seam.
+    conversation_ids = {row.get("ConversationId") for st in state.values() if not st["ids"]["task"]
+                        for row in st["messages"] if row.get("ConversationId")}
+    conversation_by_id = index(_rows(cur, "message", "ConversationId", conversation_ids), "ConversationId")
+    for st in state.values():
+        ids = st["ids"]
+        st["tasks"] = pick(task_by_id, ids["task"])
+        members = pick(member_by_task, ids["task"])
+        conversations = [] if ids["task"] else pick(
+            conversation_by_id, [row.get("ConversationId") for row in st["messages"] if row.get("ConversationId")])
+        all_messages = {row.get("MessageId"): row for row in [*st["messages"], *members, *conversations]}
+        st["messages"] = sorted(all_messages.values(), key=_row_order)
+        st["message_ids"] = [row["MessageId"] for row in st["messages"] if row.get("MessageId") is not None]
+    # Drafts may be task- or message-linked.
+    all_message_ids = {mid for st in state.values() for mid in st["message_ids"]}
+    review_by_task = index(_rows(cur, "review", "TaskId", union("task")), "TaskId")
+    review_by_message = index(_rows(cur, "review", "MessageId", all_message_ids), "MessageId")
+    attachment_by_message = index(_rows(cur, "attachment", "MessageId", all_message_ids), "MessageId")
+    comment_by_task = index(_rows(cur, "comment", "TaskId", union("task")), "TaskId")
+    run_by_task = index(_rows(cur, "run", "TaskId", union("task")), "TaskId")
+    waitroom_by_task = index(_rows(cur, "waitroom", "TaskId", union("task")), "TaskId")
+    idea_by_id = index(_rows(cur, "idea", "IdeaId", union("idea")), "IdeaId")
+    keys_of = {sid: [value.get("key") for value in [st["item"], *(st["item"].get("items") or [])]
+                     if isinstance(value, dict) and value.get("key")] for sid, st in state.items()}
+    funnel_by_key = index(_rows(cur, "funnel_state", "Key", {k for keys in keys_of.values() for k in keys}), "Key")
+    reply_cards = {sid for sid, st in state.items()
+                   if st["item"].get("kind") in ("review", "action") or bool(st["ids"]["review"])}
+    github_capabilities = []
+    for row in _rows(cur, "connector", "Type", ["github"] if reply_cards else []):
+        try:
+            config = json.loads(row.get("ConfigJson") or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            config = {}
+        if not isinstance(config, dict):
+            config = {}
+        github_capabilities.append({
+            "connector_id": row.get("ConnectorId"),
+            "active": bool(row.get("Active")),
+            "reply_comments": bool(config.get("reply_comments")),
+        })
+    reply_settings = _rows(cur, "setting", "Name", ["reply_channels"] if reply_cards else [])
+    out = {}
+    for sid, st in state.items():
+        ids, reply_card = st["ids"], sid in reply_cards
+        review_rows = {row.get("ReviewId"): row for row in [
+            *st["reviews"], *pick(review_by_task, ids["task"]), *pick(review_by_message, st["message_ids"])]}
+        out[sid] = {
+            "messages": st["messages"],
+            "tasks": st["tasks"],
+            "reviews": sorted(review_rows.values(), key=_row_order),
+            "attachments": pick(attachment_by_message, st["message_ids"]),
+            "comments": pick(comment_by_task, ids["task"]),
+            "runs": pick(run_by_task, ids["task"]),
+            "waitroom": pick(waitroom_by_task, ids["task"]),
+            "ideas": pick(idea_by_id, ids["idea"]),
+            "reply_settings": list(reply_settings) if reply_card else [],
+            "github_reply_capabilities": list(github_capabilities) if reply_card else [],
+            "funnel_state": pick(funnel_by_key, keys_of[sid]),
+        }
+    return out
+
+
+def _backing(cur, item: dict) -> dict:
+    """One card's backing, through the batched road."""
+    return _backings(cur, [item])[id(item)]
+
+
 def present(store, payload: dict) -> dict:
     """Return a detached funnel payload with strong item and display revisions."""
     if not isinstance(payload, dict):
@@ -190,14 +301,25 @@ def present(store, payload: dict) -> dict:
         targets.append(out["current"])
     if any(not isinstance(item, dict) for item in targets):
         raise TypeError("funnel presentation items must be dictionaries")
+    # Children are stamped before their parent, whose hash covers their stamps - so the backings
+    # are fetched for every card first (they never depend on a stamp) and applied in that order.
+    every: list[dict] = []
 
-    def stamp(cur, item):
+    def collect(item):
         for child in _children(item):
-            stamp(cur, child)
-        item["presentation_revision"] = item_revision(item, _backing(cur, item))
+            collect(child)
+        every.append(item)
+
+    def stamp(item, backings):
+        for child in _children(item):
+            stamp(child, backings)
+        item["presentation_revision"] = item_revision(item, backings[id(item)])
 
     with _snapshot_cursor(store) as cur:
         for item in targets:
-            stamp(cur, item)
+            collect(item)
+        backings = _backings(cur, every)
+        for item in targets:
+            stamp(item, backings)
     out["display_revision"] = display_revision(out)
     return out

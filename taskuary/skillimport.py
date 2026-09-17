@@ -146,13 +146,28 @@ def convert(entry: dict, llm=None) -> dict:
     return out
 
 
-def save(store, got: dict, enabled: bool = False) -> str:
+class ProfileCollision(Exception):
+    """Raised by `save` when a name lands on a profile it did not create. The shipped roles
+    (researcher, analyst, coordinator, marketer, trader) and any hand-written profile all slugify
+    into ordinary names, and a wizard handing out arbitrary names WILL land on one eventually - this
+    is the difference between updating your own import and quietly destroying somebody's worker."""
+    def __init__(self, name: str, kind: str):
+        self.name, self.kind = name, kind
+        super().__init__(f"'{name}' is an existing profile this import did not make - not overwriting it")
+
+
+def save(store, got: dict, enabled: bool = False, replace: bool = False) -> str:
     """Write one converted skill as an ORDINARY profile - an agent row and the doc row of the same
     name, the same road Docs → Add profile takes. Nothing here is special-cased downstream, which is
     the measure of whether this was done right.
 
     `triage_enabled` defaults to OFF: an imported worker reaches the router when the owner says so,
-    not because a file was read."""
+    not because a file was read.
+
+    A name that already belongs to a profile THIS FUNCTION did not write (no `imported` flag in its
+    config) is refused unless `replace=True` - re-importing your own import is still one update in
+    place, but a bare name collision is not consent to overwrite a hand-made worker's kind and
+    rules document."""
     from . import agents as hub_agents
     name = re.sub(r'[^a-z0-9-]+', '-', str(got.get('name') or '').strip().lower()).strip('-')
     if not name: raise ValueError('a profile needs a name')
@@ -160,6 +175,7 @@ def save(store, got: dict, enabled: bool = False) -> str:
     row = store.get_agent(name)
     try: prof = json.loads((row or {}).get('Config') or '{}')
     except ValueError: prof = {}
+    if row and not prof.get('imported') and not replace: raise ProfileCollision(name, row.get('Kind') or kind)
     prof.update({'kind': kind, 'purpose': str(got.get('purpose') or '').strip(),
                  'triage_enabled': bool(enabled), 'imported': True})
     store.upsert_agent(name, kind, (row or {}).get('Runner') or 'cli', json.dumps(prof))

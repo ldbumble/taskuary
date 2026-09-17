@@ -6,8 +6,11 @@ systems, drafted from work that happened - so nothing here ever writes one.
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest import mock
 
-from taskuary import skillimport
+from starlette.testclient import TestClient
+
+from taskuary import server, skillimport
 from taskuary.store import MemoryStore
 
 SKILL = '''---
@@ -179,6 +182,68 @@ class ConvertingTests(unittest.TestCase):
         said = '{"name": "x", "purpose": "p", "kind": "coding"}'
         got = skillimport.convert(skillimport.parse(SKILL), llm=lambda *a, **k: said)
         self.assertNotEqual(got['kind'], 'coding')
+
+
+class CollisionTests(unittest.TestCase):
+    """A wizard hands out arbitrary names, and the shipped roles (researcher, analyst, coordinator,
+    marketer, trader) plus every hand-written profile all slugify into ordinary names - so a name
+    collision is not a corner case. `save` must never destroy a profile it did not create."""
+    def _got(self, **kw):
+        return {'name': 'researcher', 'purpose': 'overwritten by an import', 'kind': 'analysis',
+                'body': '# Overwritten\n\nThis should never land.', **kw}
+
+    def _hand_made(self, s):
+        """A profile that exists but carries no `imported` flag - the shape of both a shipped role
+        and anything the owner wrote by hand through Docs -> Add profile."""
+        from taskuary import agents
+        s.upsert_agent('researcher', 'research', 'cli', '{"purpose": "outside information"}')
+        doc = agents.profile_document(s, 'researcher')
+        s.save_doc(doc, '# Researcher\n\nOriginal, hand-written rules.\n', 'owner')
+        return doc
+
+    def test_it_refuses_to_overwrite_a_profile_it_did_not_create(self):
+        s = MemoryStore()
+        doc = self._hand_made(s)
+        with self.assertRaises(skillimport.ProfileCollision):
+            skillimport.save(s, self._got(), enabled=True)
+        row = s.get_agent('researcher')
+        self.assertEqual(row['Kind'], 'research')                              # untouched
+        self.assertEqual(s.get_doc(doc), '# Researcher\n\nOriginal, hand-written rules.\n')
+
+    def test_replace_true_goes_through(self):
+        s = MemoryStore()
+        doc = self._hand_made(s)
+        skillimport.save(s, self._got(), enabled=True, replace=True)
+        self.assertEqual(s.get_agent('researcher')['Kind'], 'analysis')
+        self.assertIn('should never land', s.get_doc(doc))
+
+    def test_reimporting_your_own_import_needs_no_flag(self):
+        """The idempotent case already covered elsewhere: a profile carrying `imported: True`
+        updates in place with no `replace` needed."""
+        s = MemoryStore()
+        skillimport.save(s, self._got(), enabled=True)
+        skillimport.save(s, self._got(purpose='changed'), enabled=True)   # no replace=True
+        self.assertEqual(s.get_agent('researcher')['Kind'], 'analysis')
+
+    def test_a_fresh_name_is_unaffected(self):
+        s = MemoryStore()
+        skillimport.save(s, self._got(name='nda-triage'), enabled=True)
+        self.assertTrue(s.get_agent('nda-triage'))
+
+    def test_the_endpoint_reports_a_clash_without_discarding_the_rest(self):
+        s = MemoryStore()
+        self._hand_made(s)
+        with mock.patch.object(server, 'store', s):
+            resp = TestClient(server.app).post('/api/skills/import', json={'skills': [
+                self._got(),                                    # clashes with the hand-made researcher
+                {'name': 'nda-triage', 'purpose': 'decides whether an NDA can be signed as-is',
+                 'body': 'Read the indemnity clause.', 'kind': 'analysis', 'enabled': True},
+            ]})
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(body['imported'], ['nda-triage'])
+        self.assertEqual(body['clashed'], [{'name': 'researcher', 'kind': 'research'}])
+        self.assertEqual(s.get_agent('researcher')['Kind'], 'research')        # untouched
 
 
 class SavingTests(unittest.TestCase):

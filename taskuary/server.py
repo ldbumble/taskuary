@@ -4811,14 +4811,19 @@ def skills_read(body: SkillPathBody):
 
 @app.post('/api/skills/import')
 def skills_import(body: SkillImportBody):
-    """Write the ones the owner confirmed. Each becomes an ordinary profile."""
+    """Write the ones the owner confirmed. Each becomes an ordinary profile.
+
+    A name that collides with a profile this import did not make is reported in `clashed`, not
+    written - one bad name must not discard the rest of a confirmed batch. The wizard offers the
+    owner a rename or a resend with that item's `replace: true`."""
     from . import skillimport
-    made = []
+    made, clashed = [], []
     for s in (body.skills or []):
-        try: made.append(skillimport.save(store, s, bool(s.get('enabled'))))
+        try: made.append(skillimport.save(store, s, bool(s.get('enabled')), replace=bool(s.get('replace'))))
+        except skillimport.ProfileCollision as e: clashed.append({'name': e.name, 'kind': e.kind})
         except (ValueError, OSError) as e: raise HTTPException(422, f'{s.get("name")!r}: {e}')
-    store.audit('agent', 0, 'skills_imported', ACTOR, detail={'names': made})
-    return {'imported': made}
+    store.audit('agent', 0, 'skills_imported', ACTOR, detail={'names': made, 'clashed': [c['name'] for c in clashed]})
+    return {'imported': made, 'clashed': clashed}
 
 
 @app.get('/api/agents')

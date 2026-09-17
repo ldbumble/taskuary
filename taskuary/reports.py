@@ -1739,6 +1739,16 @@ def alert_fires(cfg: dict, head: str, body: str, failed: bool = False) -> str:
     return condition_fires(a.get('when'), a.get('count'), a.get('text'), head, body, failed)
 
 
+def _echoes(head, title) -> bool:
+    """Is this headline just the report's own name back again?
+
+    "Assistant for Backend Monitoring - 1 line(s)" is, and printing it under a line that already
+    said the name is what made an alert read like a machine talking to itself.
+    """
+    h, t = str(head or '').strip().lower(), str(title or '').strip().lower()
+    return not h or not t or h.startswith(t)
+
+
 def send_alert(store, src: dict, cfg: dict, why: str, head: str, body: str) -> dict:
     """Put the alert on the owner's phone (or wherever they chose), and on the timeline.
 
@@ -1761,7 +1771,14 @@ def send_alert(store, src: dict, cfg: dict, why: str, head: str, body: str) -> d
     if refuse: raise RuntimeError(f'the alert was not sent: {refuse}. Point it at your own chat under Reports.')
     subj = (a.get('subject') or f'{title} — {why}').strip()
     note = str(a.get('note') or '').strip()
-    text = '\n\n'.join(x for x in [f'{title}: {why}.', note, f'{head}', str(body or '')[:1500]] if x)
+    # THE TITLE ONCE. It led with "<title>: <why>." and then carried the headline, which for an
+    # Assistant check is "<title> - 1 line(s)" - so the report's name arrived twice, with a plural
+    # nobody writes (the owner, 2026-09-17: "it looks terrible"). What is worth reading on a phone
+    # is the name, what is wrong, and the finding itself.
+    lead = f'{title}: {why}' if why else str(title)
+    if not lead.endswith(('.', '!', '?', ':')): lead += '.'
+    text = '\n\n'.join(x for x in [lead, note, '' if _echoes(head, title) else str(head or '').strip(),
+                                      str(body or '').strip()[:1500]] if x)
     stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     ch = a.get('channel') or 'whatsapp'
     mid = store.add_message({

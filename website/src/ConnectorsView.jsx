@@ -2577,6 +2577,12 @@ const WaChats = ({ conn, mine, reload }) => {
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState("");
   const [guideBusy, setGuideBusy] = useState("");
+  // a paired account knows every group its owner is in - around forty here - and all of them were
+  // rendered at once, unsorted, so the one row that matters was unfindable (the owner, 2026-09-17:
+  // "there are too many .. where is the myself one")
+  const [q, setQ] = useState("");
+  const [all, setAll] = useState(false);
+  const SHOWN = 8;
   const guideJid = String(parse(conn.ConfigJson).assistant_chat || parse(conn.ConfigJson).notify_chat || "");
   const load = useCallback(async () => {
     try { const { data } = await api.get(`/api/connectors/${conn.ConnectorId}/wa/chats`); setRows(data.data); setErr(""); }
@@ -2598,6 +2604,13 @@ const WaChats = ({ conn, mine, reload }) => {
     } catch (e) { setErr(e?.response?.data?.detail || "could not enable the WhatsApp guide"); }
     setGuideBusy("");
   };
+  // yours, then the one already in the funnel, then the rest as they come
+  const needle = q.trim().toLowerCase();
+  const found = (rows || []).filter((r) => !needle
+    || `${r.name || ""} ${r.jid}`.toLowerCase().includes(needle));
+  const ranked = [...found].sort((a, b) => (b.self ? 1 : 0) - (a.self ? 1 : 0)
+    || (b.jid === guideJid ? 1 : 0) - (a.jid === guideJid ? 1 : 0));
+  const shown = all || needle ? ranked : ranked.slice(0, SHOWN);
   return (
     <Box sx={{ mb: 1.5, maxWidth: 620 }}>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}>
@@ -2610,11 +2623,27 @@ const WaChats = ({ conn, mine, reload }) => {
         gives that thread a group-shaped id, which is fine: the bridge checks it is your own number. Messages you send there run the
         same walk the Assistant tab runs; it may include private mail, tasks, reviews, and agent output. Real groups cannot be used.
       </Typography>
+      {/* WHICH CHAT IS IT, said before the list rather than hidden as a tick somewhere down it. The
+          question this answers is the owner's own: "where is that configured? how do i see the
+          assistant channel?" (2026-09-17) */}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75, py: 0.6, px: 0.8,
+        border: `1px solid ${guideJid ? "#c3d2c5" : BORDER}`, borderRadius: 1, bgcolor: guideJid ? "#f2f7f2" : "transparent" }}>
+        <Typography variant="caption" sx={{ color: DIM, fontWeight: 700 }}>Assistant chat</Typography>
+        <Typography variant="caption" sx={{ ...mono, color: guideJid ? INK : FAINT, flex: 1, fontSize: 10.5 }} noWrap>
+          {guideJid || "not set — nothing you send on WhatsApp reaches the assistant"}
+        </Typography>
+        {guideJid && <Button size="small" sx={{ fontSize: 11 }} onClick={() => { setQ(guideJid); setAll(true); }}>find it below</Button>}
+      </Box>
+      <TextField size="small" fullWidth value={q} onChange={(e) => setQ(e.target.value)} sx={{ mb: 0.75, bgcolor: "#fff" }}
+        placeholder="search your chats by name or number" />
       {err && <Typography variant="caption" sx={{ color: "#6b2733", display: "block" }}>✗ {err}</Typography>}
       {rows && !rows.length && !err && <Typography variant="caption" sx={{ color: FAINT }}>no reachable chats loaded yet — refresh, or send a message in a direct chat</Typography>}
-      {(rows || []).map((r) => (
+      {shown.map((r) => (
         <Box key={r.jid} sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.5, borderBottom: `1px solid ${BORDER}` }}>
-          <Chip size="small" label={r.group ? "group" : "chat"} sx={{ height: 18, fontSize: 10 }} />
+          {/* the help text above promises "the row marked Myself" - it used to say "group", because
+              that is the shape of the jid WhatsApp gives your own thread */}
+          <Chip size="small" label={r.self ? "Myself" : r.group ? "group" : "chat"}
+            sx={{ height: 18, fontSize: 10, ...(r.self ? { bgcolor: "#dfe9e0", fontWeight: 700 } : {}) }} />
           <Box sx={{ minWidth: 0, flex: 1 }}>
             <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>{r.name || r.jid}</Typography>
             <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10.5 }} noWrap>{r.jid} · {r.n} msg · {r.last}{r.snippet ? ` · “${r.snippet}”` : ""}</Typography>
@@ -2630,6 +2659,14 @@ const WaChats = ({ conn, mine, reload }) => {
             : <Button size="small" variant="outlined" onClick={() => add(r.jid)} sx={{ fontSize: 11.5, whiteSpace: "nowrap" }}>Add as source</Button>}
         </Box>
       ))}
+      {!needle && !all && ranked.length > SHOWN && (
+        <Button size="small" onClick={() => setAll(true)} sx={{ fontSize: 11.5, mt: 0.5 }}>
+          show the other {ranked.length - SHOWN} chats
+        </Button>
+      )}
+      {needle && !ranked.length && rows?.length ? (
+        <Typography variant="caption" sx={{ color: FAINT }}>no chat matches “{q}”</Typography>
+      ) : null}
     </Box>
   );
 };

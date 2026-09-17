@@ -4,9 +4,9 @@
 // stay pure connections; this tab is where reports are built and managed.
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  Alert, Autocomplete, Box, Button, Checkbox, CircularProgress, Dialog, DialogContent, DialogTitle,
-  ListSubheader, MenuItem, Select, Step, StepButton, StepContent, Stepper, Switch, TextField,
-  Typography,
+  Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, createFilterOptions, Dialog,
+  DialogContent, DialogTitle, ListSubheader, MenuItem, Select, Step, StepButton, StepContent,
+  Stepper, Switch, TextField, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
@@ -523,10 +523,15 @@ export default function ReportsView() {
    the channels with a live connector and replies switched on, and the destinations already seen
    on each). Email is the one exception - an address you have never had mail from is still a real
    address - so there, and only there, you may type one as well. */
+const chatFilter = createFilterOptions({ limit: 8, stringify: (o) => `${o.name} ${o.to} ${o.hint || ""}` });
+
 function Destination({ dest, onChange, targets }) {
   const chans = targets.map((t) => t.channel);
   const ch = dest.channel || chans[0] || "";
   const opts = targets.find((t) => t.channel === ch)?.to || [];
+  // the chat Taskuary talks to you in comes first here - inside a picker, "the one you want" beats
+  // "the one that spoke last", which is the order the list itself is built in
+  const chatOpts = [...opts].sort((a, b) => (b.mine ? 1 : 0) - (a.mine ? 1 : 0));
   const picked = String(dest.to || "").split(",").map((x) => x.trim()).filter(Boolean);
   const named = (to) => opts.find((o) => o.to === to)?.name || to;
   const empty = ch ? `no ${ch} chat seen yet` : "connect a channel first";
@@ -548,26 +553,30 @@ function Destination({ dest, onChange, targets }) {
           renderInput={(params) => <TextField {...params} sx={{ bgcolor: "#fff" }} label="to — who gets it"
             placeholder={picked.length ? "" : "pick, or type an address"} />} />
       ) : (
-        <Select size="small" displayEmpty value={picked[0] || ""} sx={{ bgcolor: "#fff", flex: 1, minWidth: 240, fontSize: 12.5 }}
-          onChange={(e) => onChange({ to: e.target.value })}
-          renderValue={(v) => (v ? named(v) : <span style={{ color: FAINT }}>{opts.length ? "to — the chat it lands in" : empty}</span>)}>
-          {opts.map((o) => (
-            <MenuItem key={o.to} value={o.to} sx={{ fontSize: 12, display: "block", py: 0.5 }}>
-              <Typography variant="body2" sx={{ fontSize: 12.5, color: INK, fontWeight: 600 }}>{o.name}</Typography>
+        /* A paired WhatsApp account knows every group its owner is in - around forty here - and a
+           plain Select rendered all of them, unsorted, off the bottom of the screen (the owner,
+           2026-09-17: "it should only show a few and searchable"). So: yours first, eight at a
+           time, and type to reach the rest. */
+        <Autocomplete size="small" sx={{ flex: 1, minWidth: 240 }} autoHighlight
+          options={chatOpts} filterOptions={chatFilter}
+          value={chatOpts.find((o) => o.to === picked[0]) || (picked[0] ? { to: picked[0], name: named(picked[0]), hint: "saved, not seen lately" } : null)}
+          onChange={(_e, v) => onChange({ to: v?.to || "" })}
+          getOptionLabel={(o) => o?.name || o?.to || ""}
+          isOptionEqualToValue={(o, v) => o.to === v.to}
+          noOptionsText={opts.length ? "no chat matches that" : empty}
+          renderOption={(props, o) => (
+            <li {...props} key={o.to} style={{ display: "block", paddingTop: 4, paddingBottom: 4 }}>
+              <Typography variant="body2" sx={{ fontSize: 12.5, color: INK, fontWeight: 600 }}>
+                {o.name}
+                {o.mine && <Chip size="small" label="yours" sx={{ ml: 0.75, height: 16, fontSize: 9.5 }} />}
+              </Typography>
               <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10 }}>
                 {[o.name === o.to ? "" : o.to, o.hint].filter(Boolean).join(" · ")}
               </Typography>
-            </MenuItem>
-          ))}
-          {picked.filter((t) => !opts.some((o) => o.to === t)).map((t) => (
-            <MenuItem key={t} value={t} sx={{ fontSize: 12 }}>{t} &mdash; saved, not seen lately</MenuItem>
-          ))}
-          {!opts.length && (
-            <MenuItem value="" disabled sx={{ fontSize: 11.5, color: FAINT }}>
-              {empty} &mdash; write something in the chat you want and it appears here
-            </MenuItem>
+            </li>
           )}
-        </Select>
+          renderInput={(params) => <TextField {...params} sx={{ bgcolor: "#fff" }} label="to — the chat it lands in"
+            placeholder={opts.length ? "type to search your chats" : empty} />} />
       )}
     </>
   );

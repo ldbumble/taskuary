@@ -67,3 +67,39 @@ def test_nothing_was_filed_for_the_refused_alert(store):
     with pytest.raises(RuntimeError):
         reports.send_alert(store, {'SourceId': 140, 'Address': 'x'}, cfg, 'why', 'head', 'body')
     assert len(store.scan_messages()) == before
+
+
+# ── ...and what it says when it does send ───────────────────────────────────────────────
+# "Assistant for Backend Monitoring: 1 came back." then "Assistant for Backend Monitoring -
+# 1 line(s)" then the finding: the name twice and a plural nobody writes, on a phone screen.
+def sent_text(store, cfg, why, head, body):
+    from unittest import mock
+    with mock.patch('taskuary.outbound.send_out', return_value={'ok': True}):
+        reports.send_alert(store, {'SourceId': 140, 'Address': 'x'}, cfg, why, head, body)
+    return store.scan_messages()[0]['BodyText']
+
+
+def alerting(store):
+    return {'title': 'Assistant for Backend Monitoring',
+            'alert': {'channel': 'whatsapp', 'to': '15551234567@s.whatsapp.net'}}
+
+
+def test_the_report_names_itself_once(store):
+    text = sent_text(store, alerting(store), '1 came back',
+                     'Assistant for Backend Monitoring - 1 line(s)', 'the ledger job has not run')
+    assert text.count('Assistant for Backend Monitoring') == 1
+    assert 'line(s)' not in text
+    assert text.startswith('Assistant for Backend Monitoring: 1 came back.')
+    assert text.endswith('the ledger job has not run')
+
+
+def test_a_headline_that_says_something_new_is_kept(store):
+    """Only the ECHO goes. A row report's "12 rows" is news and stays."""
+    text = sent_text(store, alerting(store), 'more than expected', '12 rows (capped at 200)', 'a\nb')
+    assert '12 rows (capped at 200)' in text
+
+
+def test_a_note_you_wrote_still_rides_along(store):
+    cfg = alerting(store)
+    cfg['alert']['note'] = 'check the VPN first'
+    assert 'check the VPN first' in sent_text(store, cfg, 'x', 'Assistant for Backend Monitoring - 1 line(s)', 'y')

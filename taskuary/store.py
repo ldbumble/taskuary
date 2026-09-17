@@ -1120,7 +1120,13 @@ class SQLiteStore:
         """Wake the UI. A write that does not change what a tab is looking at stays quiet."""
         held = getattr(self, '_poke_held', None)
         if held is not None:
-            held[(kinds, tuple(sorted(payload.items())))] = (kinds, payload)
+            # Keyed by content so a batch shouts once per distinct wake-up - as a canonical
+            # string, because a payload can nest: the ingest-status poke carries a dict, and
+            # tuple(sorted(items)) made that dict a dict KEY. `_poke_held` is one attribute on
+            # the shared store, so the poke that hit it came from ANOTHER thread's batch - the
+            # chat lane, mid-poll, inside a settle's one_poke() - and died with
+            # "unhashable type: 'dict'" before reading WhatsApp or Telegram (2026-09-16/17).
+            held[(kinds, json.dumps(payload, sort_keys=True, default=str))] = (kinds, payload)
             return
         try:
             # The Assistant pile is expensive to assemble, so its normal reads use a long cache.

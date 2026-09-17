@@ -152,5 +152,33 @@ class FoundTests(unittest.TestCase):
         self.assertEqual(by_name['nda-triage']['plugin'], 'legal')
 
 
+class ConvertingTests(unittest.TestCase):
+    def test_the_description_becomes_the_purpose(self):
+        got = skillimport.convert(skillimport.parse(SKILL), llm=None)
+        self.assertEqual(got['name'], 'nda-triage')
+        self.assertIn('NDA', got['purpose'])
+        self.assertIn('indemnity clause', got['body'])
+
+    def test_a_model_may_sharpen_it_and_the_body_still_arrives_whole(self):
+        """The model rewrites a description written for a harness into a purpose written for a
+        roster. It must not summarise the BODY - that is the expertise being imported."""
+        said = '{"name": "nda-triage", "purpose": "decides whether an NDA can be signed as-is", "kind": "analysis"}'
+        got = skillimport.convert(skillimport.parse(SKILL), llm=lambda *a, **k: said)
+        self.assertEqual(got['purpose'], 'decides whether an NDA can be signed as-is')
+        self.assertIn('indemnity clause', got['body'])
+        self.assertEqual(got['kind'], 'analysis')
+
+    def test_a_model_that_answers_nonsense_falls_back_to_the_file(self):
+        got = skillimport.convert(skillimport.parse(SKILL), llm=lambda *a, **k: 'sorry, what?')
+        self.assertIn('counterparty sends an NDA', got['purpose'])
+
+    def test_the_kind_is_never_coding(self):
+        """A coding profile is chosen by routed_role, not by triage, and CODER.md's repository rules
+        apply to it. An imported skill must never land there by accident."""
+        said = '{"name": "x", "purpose": "p", "kind": "coding"}'
+        got = skillimport.convert(skillimport.parse(SKILL), llm=lambda *a, **k: said)
+        self.assertNotEqual(got['kind'], 'coding')
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -105,3 +105,42 @@ def found(home: Path = None) -> list:
         pdesc = manifests[root][1]
         out.append(_entry(f, plugin, pdesc, name=f.parent.name))
     return out
+
+
+# A `description` is written for a harness deciding whether to load a skill; a `purpose` is written
+# for a roster of workers triage picks between. Same sentence, different reader - so a model rewrites
+# it. It does NOT touch the body: that is the expertise being imported, and summarising it would
+# throw away the thing the import is for.
+CONVERT_SYSTEM = (
+    'You are turning one skill document into a WORKER PROFILE for a small company\'s assistant. '
+    'The profile is chosen by a router that sees one line per worker, so the purpose must say what '
+    'kind of work this worker is for, in one sentence, in the company\'s own plain words.\n\n'
+    'Answer ONLY with JSON: {"name": "<kebab-case, short>", "purpose": "<one sentence>", '
+    '"kind": "<research|analysis|coordination|marketing|general>"}.\n\n'
+    'Never answer "coding": a coding worker is chosen a different way and works a repository. '
+    'Never invent a system, a credential or a permission - the profile is knowledge, not access.')
+
+KINDS = ('research', 'analysis', 'coordination', 'marketing', 'general')
+
+
+def convert(entry: dict, llm=None) -> dict:
+    """{name, purpose, body, kind} for one skill. The body is passed through UNTOUCHED.
+
+    With no model - or one that answers nonsense - the frontmatter stands on its own: a description
+    is already a usable purpose, just written for a different reader. An import that works without a
+    brain is one the owner can do on a fresh install."""
+    from . import compose
+    out = {'name': entry.get('name') or '', 'purpose': entry.get('description') or '',
+           'body': entry.get('body') or '', 'kind': 'general'}
+    if not llm: return out
+    try:
+        said = compose._json(llm(CONVERT_SYSTEM, json.dumps(
+            {'name': entry.get('name'), 'description': entry.get('description'),
+             'body': (entry.get('body') or '')[:4000]}), max_tokens=300)) or {}
+    except Exception:
+        return out
+    if str(said.get('purpose') or '').strip(): out['purpose'] = said['purpose'].strip()
+    if str(said.get('name') or '').strip(): out['name'] = said['name'].strip()
+    kind = str(said.get('kind') or '').strip().lower()
+    if kind in KINDS: out['kind'] = kind
+    return out

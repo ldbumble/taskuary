@@ -503,14 +503,24 @@ def _playbook_brief(task, books=None):
             'uses': uses, 'missing': found is None}
 
 @app.get('/api/tasks')
-def tasks(status: str = None, active: bool = False, search: bool = False):
+def tasks(status: str = None, active: bool = False, search: bool = False, q: str = None,
+          limit: int = None, before: int = None):
     """An interactive session IS an agent working - the UI has to see it, or a task with a
     live CLI on it reads as 'queued' while the agent sits there asking a question.
 
-    `search` asks for the message-search blobs the Tasks tab filters on locally. They aggregate
-    the whole message table (see store.list_tasks) and were 34ms of a 35ms query plus 69KB of a
-    319KB payload on a real store, so opening a tab no longer pays for a search nobody ran."""
-    qs = {q['TaskId']: q for q in store.queued_dispatches()}
+    `search` asks for the message-search blobs the Tasks tab used to filter on locally. They
+    aggregate mail for the returned ids (see store.list_tasks) and were 34ms of a 35ms query
+    plus 69KB of a 319KB payload on a real store, so opening a tab no longer pays for a search
+    nobody ran.
+
+    `q` is that search, in SQL. `limit` (cap 500) and `before` (TaskId DESC cursor) page the
+    list; omit them and the payload is still the full match, which is what the tests and the
+    Board's live set rely on. The Tasks tab always sends a limit so a million-row archive
+    cannot land in the browser.
+    """
+    page = None if limit is None else min(max(int(limit), 1), 500)
+    extra = 1 if page is not None else 0
+    queued = {row['TaskId']: row for row in store.queued_dispatches()}
     wc = store.waiting_counts()
     agented = store.agented_task_ids()      # the Board's Done lane shows agent work only
     books = {b['slug']: b for b in playbooks.list_all()}
@@ -518,11 +528,21 @@ def tasks(status: str = None, active: bool = False, search: bool = False):
     # the FULL session payload (including git status and witness reconciliation) for every task;
     # with hundreds of tasks that made Tasks and Board wait behind repository I/O.
     sessions = {s['taskId']: s for s in hub_term.live_sessions(tail=0, details=False) if s.get('taskId')}
-    return {'data': [{**t, 'ref': task_ref(t['TaskId']), 'Playbook': _playbook_brief(t, books),
+    rows = store.list_tasks(status, active_only=active, search=search or bool(q),
+                            q=q, limit=(page + extra if page is not None else None), before=before)
+    nxt = None
+    if page is not None and len(rows) > page:
+        rows = rows[:page]
+        nxt = rows[-1]['TaskId'] if rows else None
+    body = {'data': [{**t, 'ref': task_ref(t['TaskId']), 'Playbook': _playbook_brief(t, books),
                       'Session': sessions.get(t['TaskId']),
-                      'Queued': _queued_info(qs.get(t['TaskId'])), 'Waiting': wc.get(t['TaskId'], 0),
+                      'Queued': _queued_info(queued.get(t['TaskId'])), 'Waiting': wc.get(t['TaskId'], 0),
                       'HadAgent': t['TaskId'] in agented}
-                     for t in store.list_tasks(status, active_only=active, search=search)]}
+                     for t in rows],
+            'counts': store.task_counts()}
+    if page is not None:
+        body['next'] = nxt
+    return body
 
 @app.post('/api/tasks')
 def create_task(body: TaskBody):

@@ -3756,16 +3756,19 @@ def report_replay(sid: int, body: dict = None, limit: int = 5):
     find out the AI reads your sentence differently is not a way to set one up (2026-09-17). Same
     judge, same prompt, on results that already happened - nothing is posted, sent or filed.
     """
-    from .reports import asks_ai, decide, judge_prompt, read_result, report_llm
+    from .reports import asks_ai, decide, judge_for, judge_prompt, read_result, report_llm, with_judge
     if not store.get_source(sid): raise HTTPException(404, 'report not found')
     cfg = body or {}
     llm = report_llm(store, cfg, _llm()) if asks_ai(cfg) else None
+    # resolved once for the whole replay: which judge answers is an install-wide setting, and this
+    # is the road the two of them are compared on
+    chosen = with_judge(judge_for(store, cfg, llm), llm)
     out = []
     for r in store.report_runs(sid, min(max(1, limit), 20)):
         whole = store.get_report_run(r['runId']) or r
         text = str(whole.get('summary') or '') or '\n'.join(str((l or {}).get('text') or '') for l in (whole.get('lines') or []))
         res = read_result(str(r.get('subject') or '').split('—', 1)[-1].strip(), text, bool(r.get('failed')), r.get('said'))
-        out.append({'runId': r['runId'], 'at': r['at'], **decide(cfg, res, llm)})
+        out.append({'runId': r['runId'], 'at': r['at'], **decide(cfg, res, **chosen)})
     return {'data': out, 'asksAi': asks_ai(cfg), 'prompt': judge_prompt(cfg)}
 
 @app.get('/api/reports/runs/{rid}')

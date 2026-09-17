@@ -1008,6 +1008,60 @@ def report_llm(store, cfg: dict, default_llm):
         return default_llm
 
 
+JUDGE_AI = 'judge_ai'       # the app-wide "where runs go" brain; blank means the report's own
+
+
+def judge_for(store, cfg: dict, default_llm):
+    """The judge THIS run gets, as a callable with the booleans contract, or the report's own brain.
+
+    The report's brain writes the summary; the judge answers four yes/nos ABOUT it. They were one
+    setting while both were chat models, because two settings could quietly differ. They are two now
+    because only one of the two jobs can be done by a model that cannot write - which is the whole
+    point of a decision model, not a shortcoming of one.
+    """
+    pick = str(store.get_settings().get(JUDGE_AI) or '').strip()
+    if not pick: return default_llm
+    cid = pick[10:] if pick.startswith('connector:') else ''
+    row = store.get_connector(int(cid)) if cid.isdigit() else None
+    if not row or row['Type'] != 'typesafe':
+        # An ordinary brain picked for this job answers the same booleans through the same prompt.
+        # It comes back wearing the judge's contract rather than as a raw brain, so `decide_for`
+        # never has to guess which of the two kinds of thing it was handed.
+        from .llm import build_llm
+        try: brain = build_llm(store, pick)
+        except Exception as e:
+            logger.warning(f"the routing judge brain is unavailable, using the report's own: {e}")
+            return default_llm
+        return chat_judge(brain) if brain else default_llm
+
+    def judge(state: str, ask: list, cfg_: dict):
+        """None means this judge did not answer, which `decide` turns into an unjudged run."""
+        from . import jev
+        full = store.get_connector(row['ConnectorId'], with_secret=True)
+        qs = {l: (LINE_SAYS[l], route_of(cfg_, l)[1]) for l in ask}
+        try: got = jev.ask(full['Secret'] or '', state, qs)
+        except Exception as e:
+            logger.warning(f'the routing judge failed, so the run reaches the owner: {e}')
+            return None
+        # the probability is recorded and not thresholded twice - jev.YES already picked the line,
+        # and a second knob here would be the confidence gate this deliberately does not have
+        logger.info('routing judge: ' + ', '.join(f'{l}={p:.2f}' for l, (_b, p) in got.items()))
+        return {l: b for l, (b, _p) in got.items()}
+
+    return judge
+
+
+def with_judge(chosen, default_llm) -> dict:
+    """The `decide` kwargs for an already-resolved judge - the one place that knows which road, so
+    a caller judging many runs resolves once instead of rebuilding a brain per run."""
+    return {'llm': default_llm} if chosen is default_llm else {'judge': chosen}
+
+
+def decide_for(store, cfg: dict, res: dict, default_llm) -> dict:
+    """`decide` with this install's judge already resolved."""
+    return decide(cfg, res, **with_judge(judge_for(store, cfg, default_llm), default_llm))
+
+
 def report_system(store, cfg: dict, charts: bool = False) -> str:
     """The system prompt of a report's AI pass. Rows from a database get the report summarizer;
     the Morning digest is the ASSISTANT speaking (digest.system: COUNSEL.md's voice and its honesty
@@ -1350,7 +1404,7 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
         # (2026-09-17). A check that found something is exactly what a phone is for.
         said = int(out.get('said') or 0)
         lines = '\n'.join(str((l or {}).get('text') or '') for l in (out.get('lines') or []))
-        d = decide(cfg, read_result(title, lines, False, said), report_llm(store, cfg, llm))
+        d = decide_for(store, cfg, read_result(title, lines, False, said), report_llm(store, cfg, llm))
         speak, why = d['alert'], d['why']
         if speak and str((cfg.get('alert') or {}).get('to') or '').strip():
             try: send_alert(store, src, cfg, why or f'{said} thing(s) to look at', f'{title} - {said} line(s)', lines)
@@ -1372,7 +1426,7 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
     # something the reader should ever see. A quiet run is not a lost one - it is in the run
     # history with what it read, which is where "it ran and found nothing" belongs.
     res = read_result(subject.split('—', 1)[-1].strip(), strip_directive(body), failed)
-    d = decide(cfg, res, report_llm(store, cfg, llm))
+    d = decide_for(store, cfg, res, report_llm(store, cfg, llm))
     speak, said_why, send = d['timeline'] or d['work'], d['why'], d['send']
     body = verdict_of(body)[2]
     if not speak:
@@ -1641,6 +1695,31 @@ def judge_prompt(cfg: dict) -> str:
 _FLAG = re.compile(r'^[ \t>*_\-]*(TIMELINE|WORK|ALERT|SEND)\s*:\s*(yes|no)\b[ \t:.\-—]*(.*)$', re.I | re.M)
 
 
+def judge_state(res: dict) -> str:
+    """What a judge reads: one finished run, as the text it came back with. Both roads get the same
+    thing, so a chat judge and a decision model can be compared on the same evidence."""
+    return f"{res['head']}\n\n{res['body']}"[:AI_CHARS]
+
+
+def chat_judge(llm):
+    """An ordinary brain, wearing the judge's contract: `judge(state, ask, cfg) -> {line: bool}`,
+    or None for "this judge did not answer"."""
+    def judge(state: str, ask: list, cfg: dict):
+        try: out = llm(JUDGE_SYSTEM + judge_prompt(cfg), f'What the run came back with:\n\n{state}',
+                       max_tokens=JUDGE_TOKENS) or ''
+        except Exception as e:
+            logger.warning(f'the routing judge failed, so the run reaches the owner: {e}')
+            return None
+        # _FLAG keeps its trailing group so a model that volunteers a reason still parses - the
+        # group is simply no longer read.
+        said = {m.group(1).lower(): m.group(2).lower() == 'yes' for m in _FLAG.finditer(out)}
+        if any(l not in said for l in ask):
+            logger.warning(f'the routing judge answered {sorted(said) or "nothing"} of {sorted(ask)}')
+            return None
+        return {l: said[l] for l in ask}
+    return judge
+
+
 def judge_run(cfg: dict, res: dict, llm) -> dict:
     """Where this run goes: {line: bool} for the lines the card asked the AI about. Nothing else.
 
@@ -1653,26 +1732,15 @@ def judge_run(cfg: dict, res: dict, llm) -> dict:
     that silently stops speaking is worse than one that speaks too often.
     """
     ask = [l for l in LINES if route_of(cfg, l)[0] == 'ai']
-    unjudged = {l: True for l in ask}
-    if not llm: return unjudged
-    try:
-        out = llm(JUDGE_SYSTEM + judge_prompt(cfg),
-                  f"What the run came back with:\n\n{res['head']}\n\n{res['body']}"[:AI_CHARS],
-                  max_tokens=JUDGE_TOKENS) or ''
-    except Exception as e:
-        logger.warning(f'the routing judge failed, so the run reaches the owner: {e}')
-        return unjudged
-    # _FLAG keeps its trailing group so a model that volunteers a reason still parses - the group is
-    # simply no longer read.
-    said = {m.group(1).lower(): m.group(2).lower() == 'yes' for m in _FLAG.finditer(out)}
-    if any(l not in said for l in ask):
-        logger.warning(f'the routing judge answered {sorted(said) or "nothing"} of {sorted(ask)}')
-        return unjudged
-    return {l: said[l] for l in ask}
+    said = chat_judge(llm)(judge_state(res), ask, cfg) if llm else None
+    return {l: True for l in ask} if said is None else said
 
 
-def decide(cfg: dict, res: dict, llm=None) -> dict:
+def decide(cfg: dict, res: dict, llm=None, judge=None) -> dict:
     """Where this run goes: one bool per destination and the sentence that says why.
+
+    The two roads are passed APART rather than sniffed apart: `llm` writes prose and `judge` answers
+    booleans, and this must never have to guess which kind of thing it was handed.
 
     ONE reading of one result for the Timeline, the work rail, the phone and the post out alike -
     two readings of the same run is how they come to disagree (06447455).
@@ -1682,7 +1750,12 @@ def decide(cfg: dict, res: dict, llm=None) -> dict:
     # a failed run has nothing to judge and is not a clear one - but `never` is still never: a line
     # the owner switched off does not come back on because the report broke.
     if res['failed']: return dict({l: how[l] != 'never' for l in LINES}, why='the report failed to run')
-    said = judge_run(cfg, res, llm) if 'ai' in how.values() else {}
+    ask = [l for l in LINES if how[l] == 'ai']
+    if not ask: said = {}
+    elif judge is not None:
+        said = judge(judge_state(res), ask, cfg)
+        if said is None: said = {l: True for l in ask}        # unjudged reaches the owner
+    else: said = judge_run(cfg, res, llm)
     # The one reason anybody reads: send_alert's text. An interrupt with no reason is a ping, so it
     # quotes the rule the owner wrote rather than a model's paraphrase of it - and no model is asked
     # for prose anywhere on this road.

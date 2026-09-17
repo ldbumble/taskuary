@@ -16,6 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from taskuary import reports, server
+from taskuary.store import MemoryStore
 
 c = TestClient(server.app)
 
@@ -182,6 +183,63 @@ def test_a_failed_run_reaches_you_without_asking_anyone():
     assert seen == []
     assert (d['timeline'], d['why']) == (True, 'the report failed to run')
     assert d['work'] is False        # ...but never still means never
+
+
+# ── which judge answers ─────────────────────────────────────────────────────────────────
+# The report's brain WRITES the summary; the judge answers four yes/nos ABOUT it. They were one
+# setting while both were chat models, because two could quietly differ. They are two now because
+# only one of the two jobs can be done by a model that cannot write.
+def _with_jev():
+    s = MemoryStore()
+    cid = s.get_connector_by_type('typesafe')['ConnectorId']
+    s.save_connector({'ConnectorId': cid, 'Secret': 'sk-x', 'Active': 1}, 't')
+    s.set_setting('judge_ai', f'connector:{cid}', 't')
+    return s
+
+
+def test_unset_is_the_reports_own_brain_which_is_today():
+    """The default has to be indistinguishable from the behaviour it replaces."""
+    sentinel = object()
+    assert reports.judge_for(MemoryStore(), {}, sentinel) is sentinel
+
+
+def test_a_typesafe_judge_asks_jev_and_returns_booleans():
+    cfg = {'route': {'work': {'how': 'ai', 'when': 'a job has not run in over two hours'}}}
+    with mock.patch('taskuary.jev.ask', return_value={'work': (True, 0.91)}) as ask:
+        out = reports.judge_for(_with_jev(), cfg, None)('0 rows\n\nnothing came back', ['work'], cfg)
+    assert out == {'work': True}
+    state, questions = ask.call_args[0][1], ask.call_args[0][2]
+    assert '0 rows' in state
+    # the owner's own sentence is the criterion and LINE_SAYS is the instruction - both already
+    # exist and are already what `see the prompt` shows
+    assert questions['work'] == (reports.LINE_SAYS['work'], 'a job has not run in over two hours')
+
+
+def test_a_jev_that_fails_says_it_did_not_answer_so_the_run_reaches_you():
+    cfg = {'route': {'work': {'how': 'ai', 'when': 'x'}}}
+    with mock.patch('taskuary.jev.ask', side_effect=RuntimeError('529')):
+        assert reports.judge_for(_with_jev(), cfg, None)('s', ['work'], cfg) is None
+
+
+def test_decide_routes_through_the_judge_when_given_one():
+    cfg = {'route': {'work': {'how': 'ai', 'when': 'x'}, 'timeline': {'how': 'never'}}}
+    d = reports.decide(cfg, res(), llm=None, judge=lambda *a: {'work': True})
+    assert d['work'] is True and d['timeline'] is False
+
+
+def test_a_judge_that_did_not_answer_leaves_the_run_unjudged_and_it_reaches_you():
+    cfg = {'route': {'work': {'how': 'ai', 'when': 'x'}, 'alert': {'how': 'ai', 'when': 'y'}}}
+    d = reports.decide(cfg, res(), llm=None, judge=lambda *a: None)
+    assert (d['work'], d['alert']) == (True, True)
+
+
+def test_the_one_place_that_knows_which_road_picks_the_decision_model_over_the_brain():
+    """Passed apart, never sniffed apart: `decide` must not have to guess what it was handed."""
+    cfg = {'route': {'work': {'how': 'ai', 'when': 'x'}}}
+    with mock.patch('taskuary.jev.ask', return_value={'work': (False, 0.04)}):
+        assert reports.decide_for(_with_jev(), cfg, res(), llm_saying('WORK: yes'))['work'] is False
+    # ...and with nothing chosen it is the brain that answers, exactly as before
+    assert reports.decide_for(MemoryStore(), cfg, res(), llm_saying('WORK: yes'))['work'] is True
 
 
 # ── what the model is actually shown ────────────────────────────────────────────────────

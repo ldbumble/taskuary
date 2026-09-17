@@ -22,7 +22,8 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", onFold, overl
   const [live, setLive] = useState(false);
   const [url, setUrl] = useState(url0);
   const [driving, setDriving] = useState(false);
-  const [note, setNote] = useState("");
+  // {t, bad}: a refusal must not read as a success - both used to come out in the same green
+  const [note, setNote] = useState(null);
   // they tried to use a page they are only watching - the keyboard went nowhere and said nothing
   const [asked, setAsked] = useState(false);
   const drivingRef = useRef(false);
@@ -120,6 +121,23 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", onFold, overl
   // must not click the agent's page out from under it
   const forward = (m) => m && drivingRef.current && sendRef.current?.(m);
   const takeOver = () => { setAsked(false); setDriving(true); requestAnimationFrame(() => canvas.current?.focus()); };
+  // THE OWNER CAN OPEN A PAGE. The pane had no address bar, so when the agent handed the keyboard
+  // over - which it is told to do for a password or a 2FA code - there was nowhere to hand it to:
+  // Take over only forwards clicks, and there is nothing to click on about:blank. The task the
+  // owner was watching could not be finished from the screen he was watching it on (2026-09-16).
+  const [typed, setTyped] = useState("");
+  const [going, setGoing] = useState(false);
+  const say = (t, bad = false, ms = 3000) => { setNote({ t, bad }); setTimeout(() => setNote(null), ms); };
+  const go = async () => {
+    const want = typed.trim();
+    if (!want || going) return;
+    setGoing(true); setNote(null);
+    try {
+      const r = await api.post(`/api/terminals/${sid}/browser/open`, { url: want });
+      setUrl(r.data.url); setTyped("");
+    } catch (e) { say(e?.response?.data?.detail || "could not open that page", true, 6000); }
+    setGoing(false);
+  };
   const onMouse = (e) => { if (!drivingRef.current) return void (e.type === "mousedown" && setAsked(true)); e.preventDefault(); forward(mouseMessage(e.type, e.nativeEvent, fit.current)); };
   const onWheel = (e) => { if (!drivingRef.current) return; e.preventDefault(); forward(wheelMessage(e.nativeEvent, fit.current)); };
   // the page asked for a password, the agent said to type it here, and the keystroke went nowhere
@@ -129,9 +147,8 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", onFold, overl
   const snapshot = async () => {
     try {
       const r = await api.post(`/api/terminals/${sid}/browser/snapshot`, { task_id: taskId || null });
-      setNote(`saved ${r.data.name} on the task`);
-    } catch (e) { setNote(e?.response?.data?.detail || "could not save the snapshot"); }
-    setTimeout(() => setNote(""), 3000);
+      say(`saved ${r.data.name} on the task`);
+    } catch (e) { say(e?.response?.data?.detail || "could not save the snapshot", true); }
   };
 
   return (
@@ -148,11 +165,23 @@ Take over to drive it yourself; close the session to close it."
           sx={{ ...mono, fontSize: 10.5, color: live ? "#c9c3b9" : FAINT, letterSpacing: 0.3, flexShrink: 0 }}>
           {live ? "LIVE" : "…"}
         </Typography>
-        <Typography title={url} sx={{ ...mono, fontSize: 11, color: "#a8a196", flex: 1, minWidth: 0, overflow: "hidden",
-          textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {shortUrl(url) || "the agent's browser"}
-        </Typography>
-        {note && <Typography sx={{ ...mono, fontSize: 10, color: CATPPUCCIN.green, flexShrink: 0 }}>{note}</Typography>}
+        {/* the URL is a FIELD, not a label: click it and type somewhere else. Blank shows where
+            the browser is, so it still reads as the address line when nobody is typing. */}
+        <Box component="input" value={typed} disabled={going}
+          onChange={(e) => setTyped(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") go(); if (e.key === "Escape") setTyped(""); e.stopPropagation(); }}
+          placeholder={shortUrl(url) || "the agent's browser \u2014 type an address to open one"}
+          title={url ? `${url}\n\ntype an address and press Enter to go somewhere else` : "type an address and press Enter to open a page"}
+          sx={{ ...mono, fontSize: 11, color: "#c9c3b9", flex: 1, minWidth: 0, bgcolor: "transparent",
+            border: "1px solid transparent", borderRadius: 1, px: 0.75, py: 0.25, outline: "none",
+            "&::placeholder": { color: "#a8a196", opacity: 1 },
+            "&:hover": { borderColor: BORDER }, "&:focus": { borderColor: CATPPUCCIN.yellow, bgcolor: "#1a1a1a" } }} />
+        {!!typed.trim() && (
+          <Box component="button" onClick={go} disabled={going} sx={{ ...btn, flexShrink: 0 }}>{going ? "opening…" : "Go"}</Box>
+        )}
+        {note && <Typography title={note.t} sx={{ ...mono, fontSize: 10, flexShrink: 1, minWidth: 0, maxWidth: "45%",
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          color: note.bad ? CATPPUCCIN.red : CATPPUCCIN.green }}>{note.t}</Typography>}
         <Box component="button" onClick={() => (driving ? setDriving(false) : takeOver())}
           title={driving ? "give the page back to the agent" : "drive the page yourself - for a password or a code the agent must not type"}
           sx={{ ...btn, ...(driving ? { color: CATPPUCCIN.yellow, borderColor: CATPPUCCIN.yellow } : {}) }}>
@@ -174,8 +203,8 @@ Take over to drive it yourself; close the session to close it."
             alignItems: "center", justifyContent: "center", gap: 0.75, px: 3, textAlign: "center" }}>
             <Typography sx={{ ...mono, fontSize: 11.5, color: "#c9c3b9" }}>the browser is running, with no page open</Typography>
             <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT, lineHeight: 1.6 }}>
-              Nothing has been navigated to yet, so there is nothing to show. Ask the agent to open
-              a page — or take over and drive it yourself.
+              Nothing has been navigated to yet, so there is nothing to show. Type an address up
+              there to open one — then take over to drive it yourself.
             </Typography>
           </Box>
         )}

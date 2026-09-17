@@ -21,7 +21,7 @@ what keeps a slow tab looking at the current page instead of ten seconds of hist
 proxy generating acks itself would leave frames queued on the far side (agent-browser's
 streaming notes say exactly this).
 """
-import base64, json, os, re, shutil, socket, subprocess, threading, time
+import base64, json, os, re, shutil, socket, subprocess, tempfile, threading, time
 from datetime import datetime
 from pathlib import Path
 from loguru import logger
@@ -38,6 +38,7 @@ _TTL = 2.0                      # state() is on the terminal-listing poll path: 
 # the browser is quick - this returns the moment it answers.
 LAUNCH_WAIT = 25.0
 LAUNCH_POLL = 0.25
+NAV_WAIT = 45.0                 # one page load on a browser that is already up, not a launch: a slow sign-in page, not a cold Chrome
 # Chrome's own launch flags. agent-browser leaves `navigator.webdriver` TRUE by default (measured
 # here 2026-09-14: true without this flag, false with it) - the cheapest tell a login page has, and
 # one it reads before any of the interesting signals. The other half of the 2026 detection advice is
@@ -153,6 +154,57 @@ def snapshot(store, sid: str, actor: str, tid: int = None) -> dict:
                                 'Inline': 0, 'Path': str(p)})
     store.add_comment(tid, actor, 'human', f"Browser snapshot of {last.get('url') or 'the page'} - {name}")
     return {'attachmentId': aid, 'name': name, 'url': f'/api/attachments/{aid}', 'page': last.get('url') or ''}
+
+
+def navigate(sid: str, url: str) -> str:
+    """Point this session's browser at a URL, on the owner's say-so.
+
+    The pane had no way to open anything. `start()` opens the browser on about:blank so there is
+    something to watch, the agent drives it from then on - and when the agent asks the OWNER to
+    take it from here ("open ADP in the browser pane and sign in yourself", 2026-09-16) there was
+    no address bar, nothing to click on a blank page, and Take over only forwards clicks. The task
+    could not be finished from the screen it was being watched on.
+
+    Run with an explicit --session and an argv LIST: no shell, so none of the PowerShell
+    stderr-is-an-error trouble that made the agent give up in the first place. The exit code is
+    what decides, never the stream.
+
+    AND NEVER capture_output HERE. The daemon this command leaves running inherits the pipe, so
+    the pipe never reaches EOF and we would be waiting on a process built to outlive us - and
+    `timeout` does not save you: TimeoutExpired kills the CLI and then blocks again draining that
+    same inherited pipe. Measured on this box, a piped `open` asked to give up after 45s came
+    back at 156.9s, when the browser was closed by hand. set_viewport meets this by never waiting
+    at all; here the owner is owed an answer, so the output goes to a FILE - inheritable, read
+    after the CLI exits, and never a reason to wait.
+    """
+    u = (url or '').strip()
+    if not u: raise ValueError('no address given')
+    if not re.match(r'^https?://', u, re.I):
+        if re.match(r'^[a-z][a-z0-9+.-]*:', u, re.I):
+            raise ValueError('only http:// and https:// addresses can be opened here')
+        u = 'https://' + u
+    exe = shutil.which('agent-browser')
+    if not exe: raise ValueError('agent-browser is not installed')
+    if not state(sid, fresh=True)['open']: raise ValueError('this session has no browser open')
+    # one log per session, overwritten each time: on Windows the daemon may still hold the handle,
+    # so this is never unlinked - a file per session is a bounded mess, a file per click is not
+    log = Path(tempfile.gettempdir()) / f'{session_name(sid)}-open.log'
+    try:
+        with open(log, 'wb') as f:
+            p = spawn.popen([exe, '--session', session_name(sid), 'open', u],
+                            stdout=f, stderr=f, stdin=subprocess.DEVNULL)
+            try: rc = p.wait(timeout=NAV_WAIT)
+            except subprocess.TimeoutExpired:
+                p.kill()
+                raise ValueError('the page did not finish loading in time - the browser still has it, so watch the pane')
+    except OSError as e:
+        raise ValueError(f'could not open that page: {e}')
+    if rc != 0:
+        try: said = log.read_text(encoding='utf-8', errors='replace').strip()
+        except OSError: said = ''
+        raise ValueError(said[-300:].strip() or 'agent-browser could not open that page')
+    _CACHE.pop(sid, None)
+    return u
 
 
 def close(sid: str):

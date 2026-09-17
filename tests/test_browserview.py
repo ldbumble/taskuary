@@ -169,4 +169,73 @@ class RelayTests(unittest.TestCase):
         self.assertEqual(c.post('/api/terminals/r1/browser/snapshot', json={}).status_code, 422)
 
 
+class NavigateTests(unittest.TestCase):
+    """The owner's own address bar. The agent is told to hand the keyboard over for a password or
+    a 2FA code, and until this there was nowhere to hand it to: Take over forwards clicks, and
+    about:blank has nothing to click."""
+    def setUp(self):
+        self.calls = []
+        self.open = mock.patch.object(bv, 'state', side_effect=lambda sid, fresh=False: {'open': sid != 'dead', 'url': '', 'port': 1})
+        self.which = mock.patch.object(bv.shutil, 'which', return_value='agent-browser')
+        self.open.start(); self.which.start()
+        def popen(argv, **kw):
+            self.calls.append((argv, kw))
+            return mock.Mock(wait=mock.Mock(return_value=0), kill=mock.Mock())
+        self.popen = mock.patch.object(bv.spawn, 'popen', side_effect=popen); self.popen.start()
+    def tearDown(self):
+        for p in (self.open, self.which, self.popen): p.stop()
+
+    def test_a_bare_host_is_https_and_the_argv_is_a_list(self):
+        self.assertEqual(bv.navigate('s', ' adp.com/login '), 'https://adp.com/login')
+        argv, _ = self.calls[0]
+        self.assertEqual(argv[:4], ['agent-browser', '--session', 'tq-s', 'open'])
+        self.assertEqual(argv[4], 'https://adp.com/login')
+
+    def test_only_http_addresses_are_opened(self):
+        """A pane that runs whatever is typed at it is a hole; http(s) is the whole job here."""
+        for bad in ('file:///c:/secrets.txt', 'javascript:alert(1)', 'data:text/html,<b>x', 'chrome://net-internals'):
+            with self.assertRaises(ValueError): bv.navigate('s', bad)
+        self.assertEqual(self.calls, [])
+
+    def test_nothing_typed_and_no_browser_are_both_refused(self):
+        with self.assertRaises(ValueError): bv.navigate('s', '   ')
+        with self.assertRaises(ValueError): bv.navigate('dead', 'example.com')
+        self.assertEqual(self.calls, [])
+
+    def test_the_output_never_goes_to_a_pipe(self):
+        """THE REGRESSION THIS GUARDS. `open` leaves a daemon running and the daemon INHERITS the
+        pipe, so a captured call waits for a process built to outlive it - and `timeout` does not
+        save you: TimeoutExpired kills the CLI, then blocks again draining the same pipe. Measured
+        on Windows: a piped open asked to give up after 45s returned after 156.9s, when the browser
+        was closed by hand. A request thread would hang there, and the owner would never be told
+        whether his page opened."""
+        bv.navigate('s', 'example.com')
+        _, kw = self.calls[0]
+        self.assertNotIn(bv.subprocess.PIPE, (kw.get('stdout'), kw.get('stderr')))
+        self.assertEqual(kw.get('stdin'), bv.subprocess.DEVNULL)
+
+    def test_a_refusal_says_what_agent_browser_said(self):
+        log = Path(bv.tempfile.gettempdir()) / 'tq-s-open.log'
+        def popen(argv, **kw):
+            log.write_bytes(b'noise\nError: net::ERR_NAME_NOT_RESOLVED\n')
+            return mock.Mock(wait=mock.Mock(return_value=1), kill=mock.Mock())
+        with mock.patch.object(bv.spawn, 'popen', side_effect=popen):
+            with self.assertRaises(ValueError) as e: bv.navigate('s', 'nope.test')
+        self.assertIn('ERR_NAME_NOT_RESOLVED', str(e.exception))
+
+    def test_a_page_that_never_loads_kills_the_cli_and_says_so(self):
+        killed = mock.Mock()
+        def popen(argv, **kw):
+            return mock.Mock(wait=mock.Mock(side_effect=bv.subprocess.TimeoutExpired(argv, 1)), kill=killed)
+        with mock.patch.object(bv.spawn, 'popen', side_effect=popen):
+            with self.assertRaises(ValueError) as e: bv.navigate('s', 'slow.test')
+        self.assertTrue(killed.called)
+        self.assertIn('watch the pane', str(e.exception))
+
+    def test_the_endpoint_answers_with_the_address_it_opened(self):
+        r = c.post('/api/terminals/s/browser/open', json={'url': 'adp.com'})
+        self.assertEqual((r.status_code, r.json()), (200, {'url': 'https://adp.com'}))
+        self.assertEqual(c.post('/api/terminals/s/browser/open', json={'url': 'file:///etc/passwd'}).status_code, 422)
+
+
 if __name__ == '__main__': unittest.main()

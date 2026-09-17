@@ -6229,6 +6229,17 @@ def terminal_browser_snapshot(sid: str, body: SnapBody):
     try: return browserview.snapshot(store, sid, ACTOR, body.task_id)
     except ValueError as e: raise HTTPException(422, str(e))
 
+class OpenUrlBody(BaseModel):
+    url: str
+
+@app.post('/api/terminals/{sid}/browser/open')
+def terminal_browser_open(sid: str, body: OpenUrlBody):
+    """Navigate the pane the owner is watching. Theirs to drive: the agent is told to hand the
+    keyboard over for a password or a 2FA code, and until now there was nowhere to hand it to."""
+    from . import browserview
+    try: return {'url': browserview.navigate(sid, body.url)}
+    except ValueError as e: raise HTTPException(422, str(e))
+
 class ViewportBody(BaseModel):
     w: int
     h: int

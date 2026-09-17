@@ -4514,6 +4514,23 @@ def setup_dismiss(body: SetupBody):
     store.audit('setting', 0, 'setup_dismiss' if body.dismissed else 'setup_reopen', ACTOR)
     return {'ok': True, **setup_mod.state(store)}
 
+class SetupSeenBody(BaseModel): step: str
+
+@app.post('/api/setup/seen')
+def setup_seen(body: SetupSeenBody):
+    """"I have seen that page." The models step asks you to look at where the four brains and their
+    models are chosen, and a fresh install already ships working defaults - so there is nothing to
+    derive and looking is the whole ask. The only stored step on the list.
+
+    The map is closed: a typo'd step is a 422 rather than a setting nobody can find sitting behind a
+    row that can never tick."""
+    from . import setup as setup_mod
+    key = {'models': setup_mod.SEEN_MODELS}.get(str(body.step or ''))
+    if not key: raise HTTPException(422, f'{body.step!r} is not a step that records being seen')
+    store.set_setting(key, '1', ACTOR)
+    store.audit('setting', 0, 'setup_seen', ACTOR, detail={'step': body.step})
+    return setup_mod.state(store)
+
 @app.get('/api/aws/catalog')
 def aws_catalog(service: str = None):
     """The services and operations a report source can name, read off botocore's own models -

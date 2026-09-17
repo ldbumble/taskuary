@@ -301,5 +301,30 @@ class TheWizardActuallySetsUpTests(unittest.TestCase):
         self._reset()
 
 
+class TheOneStoredStepTests(unittest.TestCase):
+    """Every other row reads real state. This one cannot: the defaults already work, so there is
+    nothing to detect. Opening the page is what it asks for and what it records."""
+    def _clear(self):
+        server.store.set_setting(setup.SEEN_MODELS, '0', 't')
+
+    def test_looking_at_the_page_is_what_ticks_it(self):
+        self._clear()
+        self.assertFalse(_step(c.get('/api/setup').json(), 'models')['done'])
+        out = c.post('/api/setup/seen', json={'step': 'models'})
+        self.assertEqual(out.status_code, 200)
+        self.assertTrue(_step(out.json(), 'models')['done'])
+        self.assertTrue(_step(c.get('/api/setup').json(), 'models')['done'])   # survives the next read
+
+    def test_a_step_nobody_defined_is_refused_rather_than_silently_stored(self):
+        """A typo'd step name that returns 200 is a row that can never tick and a setting nobody
+        can find."""
+        self.assertEqual(c.post('/api/setup/seen', json={'step': 'whatever'}).status_code, 422)
+
+    def test_it_is_recorded_in_the_audit_like_every_other_setting(self):
+        self._clear()
+        c.post('/api/setup/seen', json={'step': 'models'})
+        self.assertTrue(any(r['Action'] == 'setup_seen' for r in server.store.list_audit(limit=20)))
+
+
 if __name__ == '__main__':
     unittest.main()

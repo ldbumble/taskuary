@@ -38,6 +38,7 @@ import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, M
 import FeedView from "./FeedView.jsx";
 import GeneralWorkspace from "./GeneralWorkspace.jsx";
 import { ROADS, roadOfCard } from "./timelineState.js";
+import { walkAdvances } from "./walkStep.js";
 import "./assistantView.css";
 
 // Which walk-through this tab was in. Per-browser and deliberately thin - one task id - because the
@@ -411,7 +412,7 @@ function Line({ m, live, last, actions, fresh }) {
         <div className="avatar"><TaskuaryMark size={18} /></div>
         <div className="body">
           {m.text ? (looksMd(m.text) ? <Md text={m.text} /> : m.text.split("\n").map((p, i) => <p key={i}>{p}</p>)) : null}
-          {!live && m.card && kind && kind !== "setup" && kind !== "walk" && kind !== "brief" && (
+          {!live && m.card && kind && kind !== "setup" && kind !== "brief" && (
             <div className="tq-card-note" style={{ display: "flex", alignItems: "center", gap: 5 }}>
               <SourceMark item={m.card} size={12} /> {m.card.title}
               {m.card.tid && <a href={`#task=${m.card.tid}`} style={{ color: "#55697a", marginLeft: 4 }}>{m.card.ref}</a>}
@@ -987,15 +988,18 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     setMsgs((m) => [...m, { id: `w${Date.now()}`, role: "assistant",
       card: { ...stop, kind: "walk", lane: "report", total: data.total }, options: [] }]);
   };
+  const [walking, setWalking] = useState(false);        // guards the chip against a double-click
   const setup = async () => {
+    setWalking(true);
     try { pushStop((await api.get("/api/setup/walk")).data); }
-    catch { setMsgs((m) => [...m, { id: `w${Date.now()}`, role: "receipt", text: "the walk could not be loaded" }]); }
+    catch { setMsgs((m) => [...m, { id: `w${Date.now()}`, role: "receipt", text: "The walk could not be loaded." }]); }
+    finally { setWalking(false); }
   };
   // -1 is Finish: walking off the end clears the place server-side, so the next press starts over.
   const walkTo = async (at) => {
     try {
       const { data } = await api.post("/api/setup/walk", { at });
-      if (at >= 0 && at < data.total) pushStop(data);
+      if (walkAdvances(at, data.total)) pushStop(data);
       else setMsgs((m) => [...m, { id: `w${Date.now()}`, role: "receipt",
         text: "Walk finished — “Set up Taskuary” starts it again any time." }]);
     } catch { /* the card stays where it is; nothing was lost */ }
@@ -1191,7 +1195,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             opens the scripted walk in THIS conversation - nothing is navigated away from, and nothing here
             is a phrase for an AI to interpret, since none may be connected yet when this gets pressed. */}
         <Tooltip title="A walk through every part of Taskuary — one step at a time, no AI needed">
-          <button type="button" className="tq-chip tq-phone-hide" disabled={busy || resetting} onClick={setup}>Set up Taskuary</button></Tooltip>
+          <button type="button" className="tq-chip tq-phone-hide" disabled={busy || resetting || walking} onClick={setup}>Set up Taskuary</button></Tooltip>
         <StageMode mode={stageMode} setMode={setStageMode} />
         <Tooltip title="The Timeline"><IconButton size="small" onClick={() => setRailOpen(true)} sx={{ display: { xs: "inline-flex", md: "none" } }}><ViewSidebarIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
         <Tooltip title={speakOnState ? "Reading replies aloud — click to stop" : "Read replies aloud"}><IconButton size="small" className="tq-phone-hide" onClick={toggleSpeak}>{speakOnState ? <VolumeUpIcon sx={{ fontSize: 18, color: "#526b53" }} /> : <VolumeOffIcon sx={{ fontSize: 18, color: DIM }} />}</IconButton></Tooltip>

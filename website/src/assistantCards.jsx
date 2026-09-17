@@ -40,7 +40,7 @@ export function SourceMark({ item, size = 14 }) {
   if (!item) return null;
   if (item.kind === "meeting") return <EventIcon sx={{ fontSize: size, color: "#55697a" }} />;
   if (item.kind === "agent" || item.kind === "agentdone") return <TerminalIcon sx={{ fontSize: size, color: "#41525f" }} />;
-  if (item.kind === "setup" || item.kind === "brief" || (item.kind === "idea" && !item.channel)) return <TaskuaryMark size={size} />;
+  if (item.kind === "setup" || item.kind === "brief" || item.kind === "walk" || (item.kind === "idea" && !item.channel)) return <TaskuaryMark size={size} />;
   if (item.kind === "fyis" && !item.channel) return <TaskuaryMark size={size} />;
   return <ChannelIcon channel={item.channel || "email"} sx={{ fontSize: size }} />;
 }
@@ -52,7 +52,7 @@ export function sourceColor(item) {
   if (!item) return "#a9a294";
   if (item.kind === "meeting") return "#55697a";
   if (item.kind === "agent" || item.kind === "agentdone") return "#41525f";
-  if (item.kind === "setup" || item.kind === "brief" || (item.kind === "idea" && !item.channel)) return ASSISTANT.solid;
+  if (item.kind === "setup" || item.kind === "brief" || item.kind === "walk" || (item.kind === "idea" && !item.channel)) return ASSISTANT.solid;
   if (item.kind === "fyis" && !item.channel) return ASSISTANT.solid;
   return channelColor(item.channel || "email");
 }
@@ -783,9 +783,13 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onFinish }) {
           style={{ width: "100%", display: "block", borderRadius: 6, border: "1px solid #e1dcd5", margin: "8px 0 2px" }} />
       )}
       {card.facts && <div className="tq-card-excerpt">{card.facts}</div>}
+      {/* the five setup stops mirror the checklist's own done-ness (walk.state reads the same
+          tables) - a stop that has been done says so, the same green the checklist panel uses,
+          rather than reading identically whether or not it has been. */}
+      {card.done && card.detail && <div style={{ fontSize: 12.5, fontWeight: 600, color: "#47654a", margin: "4px 0" }}>{card.detail}</div>}
       <div style={{ fontSize: 12, fontWeight: 700, color: "#867f74", margin: "8px 0 4px" }}>You can</div>
       <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, lineHeight: 1.75 }}>
-        {card.can.map((o, i) => (
+        {(card.can || []).map((o, i) => (
           <li key={i}>
             {o.goto ? <span role="button" tabIndex={0} onClick={() => go(o.goto)}
               onKeyDown={(e) => { if (e.key === "Enter") go(o.goto); }}

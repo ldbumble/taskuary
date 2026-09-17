@@ -268,6 +268,9 @@ CREATE TABLE IF NOT EXISTS processing_reconcile_state (
   ConflictsJson TEXT NOT NULL DEFAULT '[]',
   DiagnosticsJson TEXT NOT NULL DEFAULT '[]');
 INSERT OR IGNORE INTO processing_reconcile_state (Singleton) VALUES (1);
+-- Which rows changed, for the rail (processing_rail): re-project those roots, reuse the rest.
+CREATE TABLE IF NOT EXISTS processing_dirty_row (
+  Id INTEGER PRIMARY KEY, Kind TEXT NOT NULL, LocalId TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS report_run (RunId INTEGER PRIMARY KEY, SourceId INTEGER, At TEXT, Type TEXT, Title TEXT, Ms INTEGER, Subject TEXT,
   MessageId INTEGER, Failed INTEGER DEFAULT 0, Error TEXT, Said INTEGER, LinesJson TEXT, ReviewedJson TEXT, Inputs TEXT, Summary TEXT);
 -- Stateful report workflows: a scheduled run opens one monthly batch, then each customer
@@ -595,6 +598,13 @@ class SQLiteStore:
         # nowhere to put the -wal file), so tests keep the default journal.
         self.cx = sqlite3.connect(path, check_same_thread=False, timeout=5.0)
         self.cx.row_factory = sqlite3.Row
+        # A second, read-only connection for the rail's "did anything change?" look (processing_rail):
+        # asked on the shared writer connection it would queue behind a running sync, and a cache HIT
+        # is the one read that must never wait. A memory database has nowhere to open a second one.
+        self._rail_cx = None
+        if path != ':memory:':
+            self._rail_cx = sqlite3.connect(path, check_same_thread=False, timeout=5.0)
+            self._rail_cx.row_factory = sqlite3.Row
         self.lock = threading.Lock()
         self.idlock = threading.Lock()     # create_task: allocate-and-insert as one step (self.lock is per statement)
         if path != ':memory:':
@@ -777,6 +787,8 @@ class SQLiteStore:
                 AFTER DELETE ON setting WHEN OLD.Name IN ({setting_names}) BEGIN
                   UPDATE processing_reconcile_state SET DirtyGeneration=DirtyGeneration+1 WHERE Singleton=1;
                 END''')
+            from . import processing_rail
+            for sql in processing_rail.triggers(PROCESSING_DIRTY_SETTINGS): self.cx.execute(sql)
             try: self.cx.execute(KB_FTS); self.kb_fts = True
             except sqlite3.OperationalError as e:
                 self.kb_fts = False; logger.warning(f'no FTS5 in this sqlite build - knowledge search falls back to LIKE: {e}')
@@ -1133,7 +1145,6 @@ class SQLiteStore:
             # Any durable feed/task change invalidates that cache before the websocket wakes the
             # views: new provider messages stay immediate without every open tab rebuilding it.
             if any(k in ('feed-changed', 'task-changed') for k in kinds):
-                self._processing_display_cache = {}
                 from . import funnel
                 funnel.invalidate()
             from . import live
@@ -1906,6 +1917,8 @@ class SQLiteStore:
                      json.dumps(result['conflicts'], sort_keys=True),
                      json.dumps(result['diagnostics'], sort_keys=True)))
                 after = self._processing_reconcile_status_cursor(cur)
+                from . import processing_rail
+                processing_rail.trim(self.cx)        # the rail needs only the recent dirty rows
                 self.cx.commit()
                 self._writes += 1
                 return {**after, **result, 'status': 'complete' if complete else 'conflicted'}
@@ -2254,20 +2267,14 @@ class SQLiteStore:
         # membership reconciler turns supported external inserts into a local generation change;
         # rebuilding merely because a timer ticked would recreate the periodic loading bug.
         # Include the date because the history cutoff moves at midnight even if nothing was written.
-        display_cache_key = None
+        from . import processing_rail
         if display_only:
-            display_cache_key = (history_days, frozen_live is not None,
-                                 self._writes - self._processing_ignored_writes,
-                                 as_of[:10])
-            cached = self._processing_display_cache.get(display_cache_key)
-            if cached is not None:
-                snapshot = apply_workers(_reader_copy(cached))
-                snapshot['as_of'] = as_of
-                snapshot.pop('snapshot_revision', None)
-                snapshot['snapshot_revision'] = hashlib.sha256(json.dumps(
-                    snapshot, ensure_ascii=False, sort_keys=True,
-                    separators=(',', ':'), allow_nan=False).encode()).hexdigest()
-                return snapshot
+            # the rail: re-project what a write touched, reuse the rest (processing_rail)
+            snapshot, hashes = self._rail_read(as_of=as_of, history_days=history_days, frozen_live=frozen_live,
+                                               worker_revision=worker_revision)
+            snapshot = apply_workers(snapshot)
+            snapshot['snapshot_revision'] = processing_rail.revision(snapshot, hashes)
+            return snapshot
 
         # The expensive relational projection is database-only. Worker telemetry is overlaid
         # afterwards, so a changing terminal tail re-hashes its one owned item instead of issuing
@@ -2295,47 +2302,6 @@ class SQLiteStore:
                 resolved = self._processing_follow(cur, row['ItemId'])
                 if resolved in lineage_by_root: lineage_by_root[resolved].append(row['ItemId'])
             selected_roots = set(roots)
-            if display_only and history_days is not None:
-                # The HTTP history window must constrain the expensive projection, not merely
-                # slice its result. Previously a 14-day, 100-row All page projected every one of
-                # 4,590 roots before pagination, which blanked the rail for seconds. A root with
-                # any message can only be represented by an in-window, non-history message;
-                # message-less roots use the same task/idea/review timestamps as compact_inventory.
-                try:
-                    cutoff = datetime.fromisoformat(fixed_now.replace('Z', '+00:00')) - timedelta(days=history_days)
-                    if cutoff.tzinfo is not None: cutoff = cutoff.astimezone().replace(tzinfo=None)
-                except ValueError:
-                    raise ValueError('fixed_now must be an ISO timestamp') from None
-
-                def in_window(value):
-                    if not value: return True       # compact_inventory deliberately retains unknown dates
-                    try:
-                        stamp = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
-                        if stamp.tzinfo is not None: stamp = stamp.astimezone().replace(tzinfo=None)
-                        return stamp >= cutoff
-                    except ValueError:
-                        return True
-
-                message_roots = {self._processing_follow(cur, row[0]) for row in cur.execute(
-                    '''SELECT DISTINCT ItemId FROM processing_member
-                       WHERE RetiredAt IS NULL AND EntityKind='message' ''')}
-                selected_roots = set()
-                sources = (
-                    ('message', 'message', 'MessageId', 'source.CreatedAt',
-                     "AND (source.Status IS NULL OR source.Status NOT IN ('context','history','skipped'))"),
-                    ('task', 'task', 'TaskId', 'source.CreatedAt', ''),
-                    ('review', 'review', 'ReviewId', 'source.CreatedAt', ''),
-                    ('idea', 'idea', 'IdeaId', 'COALESCE(source.LastSaid,source.FirstSeen)', ''),
-                )
-                for kind, table, column, stamp_expr, extra in sources:
-                    for row in cur.execute(f'''SELECT DISTINCT pm.ItemId,{stamp_expr} ActivityAt
-                        FROM processing_member pm JOIN {table} source
-                          ON pm.EntityKind=? AND pm.LocalId=CAST(source.{column} AS TEXT)
-                        WHERE pm.RetiredAt IS NULL {extra}''', (kind,)).fetchall():
-                        root = self._processing_follow(cur, row['ItemId'])
-                        if root not in roots or (kind != 'message' and root in message_roots):
-                            continue
-                        if in_window(row['ActivityAt']): selected_roots.add(root)
             items = [self._processing_snapshot_cursor(
                 cur, item_id, live_state=projection_live,
                 lineage=lineage_by_root[item_id], item=roots[item_id],
@@ -2387,14 +2353,6 @@ class SQLiteStore:
             'worker_input_revision': worker_revision,
         }
         if history_days is not None: snapshot['history_days'] = history_days
-        if display_cache_key is not None:
-            current_key = (history_days, frozen_live is not None,
-                           self._writes - self._processing_ignored_writes,
-                           as_of[:10])
-            if current_key == display_cache_key:
-                # Unread and an explicit named-history lookup alternate in one chat walk.
-                # Keep both current windows warm; substantive writes clear the whole cache.
-                self._processing_display_cache[display_cache_key] = _snapcopy(snapshot)
         snapshot = apply_workers(snapshot)
         snapshot['snapshot_revision'] = hashlib.sha256(json.dumps(
             snapshot, ensure_ascii=False, sort_keys=True,
@@ -2406,6 +2364,184 @@ class SQLiteStore:
             with self.lock:
                 self._processing_runtime_inventory_cache = (cache_key, copy.deepcopy(snapshot))
         return snapshot
+
+    # ---- the rail: re-project what a write touched, reuse the rest (processing_rail) ----------------
+    def _rail_read(self, *, as_of, history_days, frozen_live, worker_revision):
+        """The display snapshot from the rail cache, keyed by window and by whether workers were observed.
+        Returns (snapshot, per-root hashes); items are reader copies (item dict + view dict), the
+        projections under them are shared by reference and never written to."""
+        from . import processing_rail
+        key = (history_days, frozen_live is not None)
+        projection_live = [] if frozen_live is not None else None
+        rail = self._processing_display_cache.get(key)
+        if rail is not None and rail['day'] != as_of[:10]: rail = None          # the window moves at midnight
+        if rail is not None and self._rail_cx is not None:
+            # nothing new since the rail was read: serve it without the writer lock (see __init__)
+            cur = self._rail_cx.cursor()
+            try:
+                if processing_rail.dirty_since(cur, rail['mark'])[1] == ():
+                    return self._rail_snapshot(rail, as_of, history_days, projection_live, worker_revision,
+                                               self._processing_reconcile_status_cursor(cur))
+            finally:
+                cur.close()
+        with self._processing_read() as cur:
+            top, rows = (0, None) if rail is None else processing_rail.dirty_since(cur, rail['mark'])
+            if rail is None or rows is None:
+                rail = self._rail_build(cur, as_of, history_days, projection_live)
+                top = cur.execute('SELECT COALESCE(MAX(Id),0) FROM processing_dirty_row').fetchone()[0]
+            elif rows:
+                roots, structural = processing_rail.touched(cur, rows, lambda i: processing_rail.follow(rail['redirect'], i))
+                if roots is None: rail = self._rail_build(cur, as_of, history_days, projection_live)
+                else: self._rail_update(cur, rail, roots, structural, any(k in processing_rail.ENTITY_KINDS for k, _ in rows),
+                                        as_of, history_days, projection_live)
+            rail['mark'] = top
+            self._processing_display_cache[key] = rail
+            status = self._processing_reconcile_status_cursor(cur)
+        return self._rail_snapshot(rail, as_of, history_days, projection_live, worker_revision, status)
+
+    @staticmethod
+    def _rail_snapshot(rail, as_of, history_days, projection_live, worker_revision, status):
+        # one atomic read of the rail's view: an update in another thread swaps the tuple, never edits it
+        order, proj, hashes, coverage = rail['view']
+        items = [{**proj[r], 'view': dict(proj[r]['view'])} for r in order]
+        snapshot = {'schema_version': 'taskuary.processing.inventory.v1', 'as_of': as_of, 'items': items,
+                    'coverage': {**coverage, 'processing_reconciliation': status},
+                    'worker_attention_available': projection_live is not None, 'worker_input_revision': worker_revision}
+        if history_days is not None: snapshot['history_days'] = history_days
+        return snapshot, hashes
+
+    def _rail_roots(self, cur, rail):
+        """Every item, its redirect, the roots and each root's lineage - one query, followed in Python
+        (this used to be one SELECT per item, ~8,000 on the owner's store, on every build)."""
+        from . import processing_rail
+        item_rows = [dict(r) for r in cur.execute('SELECT * FROM processing_item ORDER BY ItemId')]
+        rail['redirect'] = {r['ItemId']: r['RedirectItemId'] for r in item_rows}
+        rail['roots'] = {r['ItemId']: r for r in item_rows if r['RedirectItemId'] is None}
+        lineage = {i: [] for i in rail['roots']}
+        for r in item_rows:
+            root = processing_rail.follow(rail['redirect'], r['ItemId'])
+            if root in lineage: lineage[root].append(r['ItemId'])
+        rail['lineage'] = lineage
+
+    def _rail_build(self, cur, as_of, history_days, projection_live):
+        rail = {'day': as_of[:10], 'mark': 0, 'proj': {}, 'hash': {}, 'selected': set(), 'order': [], 'coverage': {}}
+        self._rail_roots(cur, rail)
+        rail['selected'] = self._rail_selected(cur, rail, as_of, history_days)
+        for root in rail['selected']: self._rail_project(cur, rail, root, projection_live)
+        self._rail_publish(cur, rail)
+        return rail
+
+    def _rail_publish(self, cur, rail):
+        """The view readers take, swapped in whole: order, projections, hashes, coverage."""
+        rail['order'] = sorted(rail['selected'])
+        rail['coverage'] = self._rail_coverage(cur, rail)
+        rail['view'] = (rail['order'], rail['proj'], rail['hash'], rail['coverage'])
+
+    def _rail_project(self, cur, rail, root, projection_live):
+        from . import processing_rail
+        proj = self._processing_snapshot_cursor(cur, root, live_state=projection_live, lineage=rail['lineage'][root],
+                                                item=rail['roots'][root], include_history=False, display_only=True)
+        rail['proj'][root] = proj
+        rail['hash'][root] = processing_rail.root_hash(proj)
+
+    def _rail_update(self, cur, rail, roots, structural, reselect, as_of, history_days, projection_live):
+        """Re-project the touched roots; on a structural change (an item or member moved) re-derive roots and
+        lineage and re-project whatever lineage changed; on an entity change re-derive the window."""
+        rail['proj'], rail['hash'] = dict(rail['proj']), dict(rail['hash'])     # copy-on-write: readers hold the old view
+        if structural:
+            old = rail['lineage']
+            self._rail_roots(cur, rail)
+            roots = set(roots) | {r for r in rail['proj'] if rail['lineage'].get(r) != old.get(r)}
+        if structural or reselect:
+            rail['selected'] = self._rail_selected(cur, rail, as_of, history_days)
+        for root in roots:
+            if root in rail['selected']: self._rail_project(cur, rail, root, projection_live)
+        for root in rail['selected']:
+            if root not in rail['proj']: self._rail_project(cur, rail, root, projection_live)
+        for root in list(rail['proj']):
+            if root not in rail['selected']: rail['proj'].pop(root); rail['hash'].pop(root)
+        self._rail_publish(cur, rail)
+
+    def _rail_selected(self, cur, rail, as_of, history_days):
+        """The roots in the history window. The HTTP history window must constrain the expensive projection,
+        not merely slice its result: a 14-day, 100-row All page once projected every one of 4,590 roots before
+        pagination. A root with any message can only be represented by an in-window, non-history message;
+        message-less roots use the same task/idea/review timestamps as compact_inventory."""
+        from . import processing_rail
+        roots = rail['roots']
+        if history_days is None: return set(roots)
+        try:
+            cutoff = datetime.fromisoformat(as_of.replace('Z', '+00:00')) - timedelta(days=history_days)
+            if cutoff.tzinfo is not None: cutoff = cutoff.astimezone().replace(tzinfo=None)
+        except ValueError:
+            raise ValueError('fixed_now must be an ISO timestamp') from None
+
+        def in_window(value):
+            if not value: return True       # compact_inventory deliberately retains unknown dates
+            try:
+                stamp = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+                if stamp.tzinfo is not None: stamp = stamp.astimezone().replace(tzinfo=None)
+                return stamp >= cutoff
+            except ValueError:
+                return True
+
+        follow = lambda i: processing_rail.follow(rail['redirect'], i)
+        message_roots = {follow(row[0]) for row in cur.execute(
+            '''SELECT DISTINCT ItemId FROM processing_member WHERE RetiredAt IS NULL AND EntityKind='message' ''')}
+        selected = set()
+        sources = (
+            ('message', 'message', 'MessageId', 'source.CreatedAt',
+             "AND (source.Status IS NULL OR source.Status NOT IN ('context','history','skipped'))"),
+            ('task', 'task', 'TaskId', 'source.CreatedAt', ''),
+            ('review', 'review', 'ReviewId', 'source.CreatedAt', ''),
+            ('idea', 'idea', 'IdeaId', 'COALESCE(source.LastSaid,source.FirstSeen)', ''),
+        )
+        for kind, table, column, stamp_expr, extra in sources:
+            for row in cur.execute(f'''SELECT DISTINCT pm.ItemId,{stamp_expr} ActivityAt
+                FROM processing_member pm JOIN {table} source
+                  ON pm.EntityKind=? AND pm.LocalId=CAST(source.{column} AS TEXT)
+                WHERE pm.RetiredAt IS NULL {extra}''', (kind,)).fetchall():
+                root = follow(row['ItemId'])
+                if root not in roots or (kind != 'message' and root in message_roots): continue
+                if in_window(row['ActivityAt']): selected.add(root)
+        return selected
+
+    def _rail_coverage(self, cur, rail):
+        member_count = cur.execute('''SELECT COUNT(*) FROM processing_member pm
+            JOIN processing_item pi ON pi.ItemId=pm.ItemId
+            WHERE pm.RetiredAt IS NULL AND pi.RedirectItemId IS NULL''').fetchone()[0]
+        # Mail the census deliberately never groups is not mail MISSING from it. Counting it here would stop
+        # the Timeline dead: compact_inventory refuses while any of these is non-zero, so a flood sender would
+        # degrade every read forever. This exclusion and processing_membership.UNGROUPED_MESSAGE_STATUS are one
+        # decision - move them together.
+        from .processing_membership import ungrouped_message_sql
+        ungrouped, ungrouped_params = ungrouped_message_sql('source')
+        uncatalogued = {}
+        for entity_kind, table, column, extra, extra_params in (
+                ('message', 'message', 'MessageId', f' AND NOT {ungrouped}', ungrouped_params),
+                ('task', 'task', 'TaskId', '', ()),
+                ('review', 'review', 'ReviewId', '', ()),
+                ('idea', 'idea', 'IdeaId', '', ())):
+            uncatalogued[entity_kind] = cur.execute(f'''SELECT COUNT(*) FROM {table} source
+                WHERE NOT EXISTS (SELECT 1 FROM processing_member pm
+                    JOIN processing_item pi ON pi.ItemId=pm.ItemId
+                    WHERE pm.EntityKind=? AND pm.LocalId=CAST(source.{column} AS TEXT)
+                      AND pm.RetiredAt IS NULL AND pi.RedirectItemId IS NULL){extra}''',
+                (entity_kind, *extra_params)).fetchone()[0]
+        completed = [r[0] for r in cur.execute('''SELECT Version FROM processing_migration
+            WHERE Completion='complete' ORDER BY Version''').fetchall()]
+        items = [rail['proj'][r] for r in rail['selected']]
+        return {
+            'canonical_item_count': len(rail['roots']),
+            'visible_item_count': sum(bool(item['member_ids']) for item in items),
+            'tombstone_item_count': sum(not item['member_ids'] for item in items),
+            'member_count': member_count,
+            'uncatalogued': uncatalogued,
+            'completed_baselines': completed,
+            # Comments/artifacts are included as task-associated detail, not roots.
+            'unsupported': ['attachment_only_items', 'calendar', 'comment_only_items', 'task_artifact_only_items',
+                            'waitroom', 'worker_questions'],
+        }
 
     @staticmethod
     def _processing_backfill_summary(cur, version, status):

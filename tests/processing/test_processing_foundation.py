@@ -25,7 +25,9 @@ def test_additive_startup_and_getters_do_not_capture_or_change_owner_state(tmp_p
                       if name.startswith('processing_')}
         assert len(processing) >= 5
         assert len(processing['processing_reconcile_state']) == 1
-        assert all(not rows for name, rows in processing.items() if name != 'processing_reconcile_state')
+        # ...the reconcile state and the rail's dirty log are bookkeeping, not captured owner state
+        assert all(not rows for name, rows in processing.items()
+                   if name not in ('processing_reconcile_state', 'processing_dirty_row'))
         status = db.processing_reconcile_status()
         assert status['pending'] is True
         assert status['attempted_generation'] == status['reconciled_generation'] == 0

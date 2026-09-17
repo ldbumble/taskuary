@@ -80,20 +80,24 @@ class TheJudgeIsRefusedButNotTheAgent(unittest.TestCase):
         self.assertTrue(out['closed'])
         w.assert_called_once()
 
-    def test_taskuary_done_closes_the_run_but_not_the_task_on_a_stay_open_session(self):
-        """The old rule was "it SAID it was finished, so it is". TQ-0297 (2026-09-01) closed under the
-        owner mid-review that way. A session the owner opened to sit in is theirs to end - the TASK is.
-        Since PW-232 the agent's explicit word still closes its own RUN and saves its result (coder.wrap
-        with close=False); the task's closure never happens here."""
+    def test_taskuary_done_closes_the_task_even_on_a_stay_open_session(self):
+        """The stay-open tag is the JUDGE's veto and says so: "only an explicit ending counts".
+
+        This road had been reading it as a veto on itself, so an agent that did the work and said so
+        left the task open with nothing left to work and a heading still reading "coder is working"
+        (the owner, 2026-09-17: "if the agent did it's job and hit --done it should close it").
+
+        It reverses TQ-0297, where an explicit finish closed under the owner mid-review - and what
+        makes that survivable is that closing no longer takes anything away: the agent's sentence is
+        a comment, the report and any drafted reply wait in Review, and the task reopens.
+        """
         s = MemoryStore()
         tid = _task(s, selfclose.STAY_TAG)
-        with mock.patch.object(selfclose, '_wrap', return_value={'closed': True}) as w,              mock.patch('taskuary.coder.wrap', return_value={'wrap': 'done', 'artifacts': []}) as run_wrap:
+        with mock.patch.object(selfclose, '_wrap', return_value={'closed': True}) as w:
             out = selfclose.declare(s, tid, 'fixed the export', 'coder')
-        self.assertFalse(out['closed']); self.assertTrue(out['closed_run'])
-        w.assert_not_called(); run_wrap.assert_called_once()
-        self.assertEqual(run_wrap.call_args.kwargs.get('close'), False)
-        self.assertIn('The agent says it is finished: fixed the export', [c['Body'] for c in s.list_comments(tid)])
-        self.assertEqual(s.get_task(tid)['Status'], 'in_progress')      # untouched: still theirs
+        self.assertTrue(out['closed'])
+        w.assert_called_once()
+        self.assertIn('The agent closed this itself: fixed the export', [c['Body'] for c in s.list_comments(tid)])
 
     def test_the_reason_is_reported_rather_than_silently_swallowed(self):
         s = MemoryStore()

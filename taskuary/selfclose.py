@@ -189,25 +189,18 @@ def declare(store, tid: int, summary: str = '', agent: str = 'agent') -> dict:
     # an explicit declaration outranks "it looks like a question": the agent just said otherwise
     if why and 'question' not in why: return {'closed': False, 'why': why}
     line = ' '.join(str(summary or '').split())[:1200]
-    # A session the owner opened to SIT IN is theirs to end. `--done` used to close it anyway -
-    # "either way", the box said - and TQ-0297 (2026-09-01) closed under the owner mid-review
-    # because the agent decided it was finished. The agent's verdict is filed where the owner
-    # reads it; the session stays at its prompt, which raises its hand; the owner presses Done.
+    # `--done` CLOSES IT, whoever opened the session. The stay-open tag is the JUDGE's veto and says
+    # so in as many words - "only an explicit ending counts" - but this road had been reading it as
+    # a veto on itself: the agent said it was finished, the run closed, the result was filed, and
+    # the task stayed open wearing "coder is working" with nothing left to work (the owner,
+    # 2026-09-17: "if the agent did it's job and hit --done it should close it").
+    #
+    # This does reverse TQ-0297 (2026-09-01), where an explicit finish closed under the owner
+    # mid-review. What is different is that an ending now leaves the owner everything it used to
+    # take: the agent's sentence is a comment, the report and any drafted reply wait in Review, and
+    # a closed task reopens from the Timeline. The judge is still vetoed - it gets no word here.
     if not _mark(tid): return {'closed': False, 'why': 'a self-close already ran for this task'}
     result = _finished(store, tid, term.session_for(tid), line)
-    if stays_open(store, tid):
-        # an EXPLICIT finish closes the completed run and saves its result even when the owner opened the
-        # session (PW-232): the veto was for the judge, not for the agent's own word. The task's closure and
-        # any reply stay the owner's decisions, so close=False.
-        store.add_comment(tid, agent, 'agent', f'The agent says it is finished: {line}' if line else 'The agent says it is finished.')
-        try:
-            out = coder.wrap(store, tid, close=False, actor=agent or 'coder', final_message=result)
-        except Exception as e:
-            forget(tid)
-            store.add_comment(tid, 'router', 'agent', f'The agent finished but its result could not be saved ({str(e)[:200]}) - the session is still open; try again.')
-            return {'closed': False, 'why': str(e)[:200]}
-        store.audit('task', tid, 'agent_done_run_closed', agent, detail={'why': 'opened to work in - the run closed, the task stays'})
-        return {'closed': False, 'closed_run': True, 'why': 'the run closed and its result is on the task; you opened this task, so its closure is yours', **out}
     store.add_comment(tid, agent, 'agent',
                       f'The agent closed this itself: {line}' if line else 'The agent closed this itself.')
     return _wrap(store, tid, agent, 'the agent said it was finished' + (f' - {line}' if line else ''), result)

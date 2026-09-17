@@ -6,8 +6,8 @@ judge also stopped the explicit word; the terminal was closed before the report 
 failed save lost the session and still read as finished. Now the final answer is captured
 directly - the `--done` sentence and the Stop hook's last message, matched to the run - and
 persisted with the report and the reported checklist items BEFORE the run closes; only items the
-agent said it completed are ticked; an explicit finish closes the completed run even when the
-owner opened it, saving the result and leaving the task's own closure to the owner; a save that
+agent said it completed are ticked; an explicit finish ENDS a task even when the owner
+opened the session - the stay-open tag vetoes the judge, never the agent's own word (2026-09-17); a save that
 fails neither closes the session nor claims finalisation, and a second finish for the same run
 does nothing twice.
 """
@@ -79,14 +79,22 @@ class SaveBeforeCloseTests(Base):
 
 
 class ExplicitFinishTests(Base):
-    def test_an_owner_opened_session_still_closes_its_run_on_an_explicit_finish_and_leaves_the_task_to_the_owner(self):
+    def test_an_owner_opened_session_is_ended_by_an_explicit_finish_like_any_other(self):
+        """The stay-open tag vetoes the JUDGE - "only an explicit ending counts", as it says. It had
+        been vetoing the explicit road too, so an agent that did the work and said so left the task
+        open with nothing left to work (the owner, 2026-09-17: "if the agent did it's job and hit
+        --done it should close it"). The report, the artifacts and any drafted reply still land."""
         sess = live(self.tid); term.SESSIONS['run1'] = sess
         selfclose.claim(self.s, self.tid, 'owner')                                           # the owner opened it to sit in
         out = selfclose.declare(self.s, self.tid, 'cleared the stuck job', 'coder')
-        self.assertTrue(out.get('closed_run')); self.assertEqual(self.closed, ['run1'])       # the run closed and the result saved...
-        self.assertEqual(self.s.get_task(self.tid)['Status'], 'in_progress')                 # ...the task is the owner's to end
+        self.assertTrue(out.get('closed'))                       # the CLOSING road, not the run-only one
+        self.assertIsNone(out.get('closed_run'))
+        self.assertEqual(self.closed, ['run1'])
         self.assertEqual(ws.status(self.s, self.tid)['state'], 'finished')
         self.assertTrue(self.artifacts())
+        # the task's own Status is set inside coder.finish, which this harness stubs; that the task
+        # really ends is covered where finish is real (test_stay_open, test_stay_open_doors)
+        self.assertIn('The agent closed this itself', ' '.join(c['Body'] for c in self.s.list_comments(self.tid)))
 
     def test_a_second_finish_for_the_same_run_does_nothing_twice(self):
         term.SESSIONS['run1'] = live(self.tid)

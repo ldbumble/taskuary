@@ -243,9 +243,11 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
     // Compatibility with an older server: this marks the barrier seen, but still NEVER uncovers
     // an unfinished replay. The old escape hatch called lift() directly at four seconds.
     bail = setTimeout(() => { readySeen = true; maybeLift(); }, 4000);
+    let sawOutput = false;      // did this socket ever carry a screen? (see ws.onclose)
     ws.onmessage = (e) => {
       const m = JSON.parse(e.data);
       if (m.type === "out") {
+        sawOutput = true;
         if (typeof m.promptPending === "boolean") {
           setPromptState({ pending: m.promptPending, cli: m.cli || "agent" });
         }
@@ -269,7 +271,22 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
         write("\r\n\x1b[90m— process exited —\x1b[0m\r\n"); exit.current?.(); maybeLift();
       }
     };
-    ws.onclose = () => setState((s) => (s === "exited" ? s : "closed"));
+    // A SESSION THAT IS ALREADY GONE SENDS NO `exit` FRAME. The socket just closes, so nothing was
+    // ever written and the pane sat as a frozen black rectangle - while the page, never told, went
+    // on saying "coder is working" over a session that had ended (the owner, 2026-09-17: "it should
+    // never be frozen black screen", on a task whose run had closed twenty minutes earlier).
+    //
+    // So say it on the screen, lift the curtain that is waiting for a replay that will never come,
+    // and tell the page: onExit is what makes it re-read and fall back to the saved transcript.
+    ws.onclose = () => {
+      setState((s) => (s === "exited" ? s : "closed"));
+      if (!sawOutput) {
+        output.flush();
+        write(`\r\n\x1b[90m— this session is no longer running —\x1b[0m\r\n`);
+      }
+      readySeen = true; maybeLift();
+      exit.current?.();
+    };
     const input = readOnly ? null : term.onData((d) => send({ type: "in", data: d }));
     let resizeTimer = null;
     const onResize = () => {

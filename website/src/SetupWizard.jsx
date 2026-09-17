@@ -13,12 +13,13 @@
 // because two text boxes have nowhere better to be. And the whole thing is gone once it is done:
 // the counter is finished, not hidden. The walk on the Assistant header is the way back.
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, Box, Button, CircularProgress, Dialog, DialogContent, TextField, Tooltip, Typography } from "@mui/material";
+import { Box, Button, CircularProgress, Dialog, DialogContent, Tooltip, Typography } from "@mui/material";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 import CloseIcon from "@mui/icons-material/Close";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api";
+import OwnerForm from "./OwnerForm.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL2, ROLES } from "./theme.jsx";
 
 const COUNT = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
@@ -62,40 +63,6 @@ export const SetupChip = ({ state, onOpen }) => {
         </Typography>
       </Box>
     </Tooltip>
-  );
-};
-
-const Field = (p) => <TextField size="small" fullWidth sx={{ bgcolor: "#fff" }} {...p} />;
-
-/* The one step still done here. Everything else has a page with more on it than this dialog can
-   hold; this one is two text boxes, and sending somebody to Docs to type their own name is exactly
-   the pointing that is worth complaining about. */
-const OwnerForm = ({ onDone }) => {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-  useEffect(() => {
-    api.get("/api/owner").then(({ data }) => {
-      if (data.owner && data.owner !== "the owner") setName(data.owner);
-      if (data.owner_email) setEmail(data.owner_email);
-    }).catch(() => {});
-  }, []);
-  const save = async () => {
-    setBusy(true); setErr("");
-    try { await api.put("/api/owner", { name: name.trim(), email: email.trim() || null }); await onDone(); }
-    catch (e) { setErr(e?.response?.data?.detail || "could not save that"); }
-    setBusy(false);
-  };
-  return (
-    <Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap" }}>
-      <Field label="Your name" value={name} onChange={(e) => setName(e.target.value)} sx={{ bgcolor: "#fff", flex: 1, minWidth: 160 }} />
-      <Field label="Email" value={email} onChange={(e) => setEmail(e.target.value)} sx={{ bgcolor: "#fff", flex: 1, minWidth: 160 }} />
-      <Button variant="contained" disableElevation size="small" disabled={busy || !name.trim()} onClick={save}>
-        {busy ? "…" : "Save"}
-      </Button>
-      {err && <Alert severity="error" sx={{ width: "100%", fontSize: 12.5 }}>{err}</Alert>}
-    </Box>
   );
 };
 

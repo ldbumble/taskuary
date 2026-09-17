@@ -27,6 +27,7 @@ import { agentCardView } from "./agentCardView.js";
 import { lazyGeneral } from "./lazyGeneral.js";
 import { RepoPicker } from "./RepoPicker.jsx";
 import { useCliSetup, SetupButton, CliPane, canSetup } from "./cliSetup.jsx";
+import OwnerForm from "./OwnerForm.jsx";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "That did not work";
 const edge = (lane) => { const r = laneMeta(lane).role; return r ? ROLES[r].solid : "#d3ccc1"; };
@@ -765,7 +766,7 @@ export function SetupCard({ card, onNavigate, onHandOff }) {
    something the checklist contradicts. `image` is a shot of the tab, and it is decoration with a
    caption's job: a card whose image fails to load is still a complete stop, which is why it is
    rendered with onError rather than reserved space. */
-export function WalkCard({ card, at, total, onNavigate, onNext, onFinish }) {
+export function WalkCard({ card, at, total, onNavigate, onNext, onFinish, onSaved }) {
   const { openSetup, opening, pane, note } = useCliSetup();
   const [cli, setCli] = useState(null);
   useEffect(() => {
@@ -807,8 +808,13 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onFinish }) {
           </li>
         ))}
       </ul>
-      {/* The one stop that does the work in place: what it opens is a terminal, and a terminal has
-          no page of its own to visit. */}
+      {/* Two stops do the work in place rather than sending you somewhere. This one because its whole
+          content is two text boxes, and because the bullet above it says "type your name and email
+          right here" - a card that then offered only a button to Docs was making a promise it did not
+          keep (the owner, 2026-09-17). Saving refreshes the stop, so its tick appears where you are. */}
+      {card.key === "owner" && <OwnerForm onDone={async () => { await onSaved?.(); }} />}
+      {/* ...and this one because what it opens is a terminal, and a terminal has no page of its own
+          to visit. */}
       {card.key === "ai" && cli && (
         <div style={{ marginTop: 8 }}>
           <SetupButton cli={cli} opening={opening} onOpen={openSetup} />

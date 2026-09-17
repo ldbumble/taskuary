@@ -400,7 +400,8 @@ function Line({ m, live, last, actions, fresh }) {
     message: <MessageCard card={c} onDone={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} onSurface={actions.surface} />,
     setup: <SetupCard card={m.card} onNavigate={actions.navigate} onHandOff={actions.handOff} />,
     walk: <WalkCard card={m.card} at={m.card.n} total={m.card.total} onNavigate={actions.navigate}
-      onNext={() => actions.walk(m.card.n + 1)} onFinish={() => actions.walk(-1)} />,
+      onNext={() => actions.walk(m.card.n + 1)} onFinish={() => actions.walk(-1)}
+      onSaved={() => actions.walkSaved(m.id)} />,
     brief: <BriefCard card={m.card} onStart={actions.start} />,
     task: <TaskCard card={c} onDone={actions.done} onOpenTask={actions.openTask} />,
     fyis: <FyisCard card={c} onDone={actions.done} onSurface={actions.surface} onTimeline={actions.timeline} onPropose={actions.propose} />,
@@ -1002,6 +1003,19 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     setMsgs((m) => [...m, { id: `w${Date.now()}`, role: "assistant",
       card: { ...stop, kind: "walk", lane: "report", total: data.total }, options: [] }]);
   };
+  // A stop that did its work in place re-reads itself, so the tick lands on the card you are looking
+  // at rather than waiting for the next press. It patches THAT message by id and pushes nothing: a
+  // second card for a step you just finished would read as the walk going backwards.
+  const walkSaved = async (id) => {
+    try {
+      const { data } = await api.get("/api/setup/walk");
+      setMsgs((m) => m.map((x) => {
+        if (x.id !== id || !x.card) return x;
+        const fresh = (data.stops || []).find((s) => s.key === x.card.key);
+        return fresh ? { ...x, card: { ...fresh, kind: "walk", lane: "report", total: data.total } } : x;
+      }));
+    } catch { /* the card stays as it is; the save itself already succeeded */ }
+  };
   // ...and the OTHER door, which this walk took the name of: "set something up" - a report, a
   // connection, an automation - is the assistant's own walk-through of a thing you describe. The
   // scripted walk inherited the identifier `setup` and with it the welcome block's button, so the
@@ -1200,7 +1214,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   };
 
   const actions = { done, start, handOff, openTask: onOpenTask, timeline, navigate: onNavigate,
-    walk: walkTo, chip: runChip, busy: busy || resetting || !!handoff,
+    walk: walkTo, walkSaved, chip: runChip, busy: busy || resetting || !!handoff,
     confirm: confirmProposal, cancel: cancelProposal, propose: proposeDirect, preview: previewProposal,
     surface: (key, note) => {
       if (note) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: note }]);

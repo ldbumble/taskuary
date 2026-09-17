@@ -10,7 +10,10 @@ const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, impo
 // by hand. One form survives, because two text boxes have nowhere better to be.
 test("only the owner's two fields are still done in the panel", () => {
   const w = read("SetupWizard.jsx");
-  assert.match(w, /const OwnerForm/);
+  // the form itself lives in OwnerForm.jsx now - the walk's first stop needs the same two boxes, and
+  // its bullet promised them while the card offered only a button to Docs
+  assert.match(w, /import OwnerForm from ".\/OwnerForm.jsx"/);
+  assert.match(read("OwnerForm.jsx"), /api\.put\("\/api\/owner"/);
   for (const gone of ["BrainForm", "MailboxForm", "SyncForm", "HistoryForm", "SoulForm", "AgentForm", "CliPicker"]) {
     assert.doesNotMatch(w, new RegExp(`const ${gone}`), gone);
   }

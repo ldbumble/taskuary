@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Alert, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
   DialogTitle, FormControlLabel, TextField, Typography } from "@mui/material";
 import api from "./api";
+import { buildPayload, reconcileImport, slug } from "./skillImport.js";
 import { BORDER, FAINT, INK, ROLES, mono } from "./theme.jsx";
 
 const failure = (e) => e?.response?.data?.detail || e?.message || "Something went wrong";
@@ -48,8 +49,9 @@ export default function SkillImport({ onClose, onImported }) {
     setBusy(true); setErr("");
     try {
       const { data } = await api.post("/api/skills/read", { path: target });
-      // enabled defaults OFF: reading a skill only proposes it, it does not offer it to the router
-      setRows((data.data || []).map((r) => ({ ...r, enabled: false, replace: false, clash: null, imported: false })));
+      // enabled defaults OFF: reading a skill only proposes it, it does not offer it to the router.
+      // name is slugged up front so what the owner sees is already what the server will store.
+      setRows((data.data || []).map((r) => ({ ...r, name: slug(r.name), enabled: false, replace: false, clash: null, imported: false })));
       setStep(1);
     } catch (e) { setErr(failure(e)); }
     setBusy(false);
@@ -60,14 +62,10 @@ export default function SkillImport({ onClose, onImported }) {
   const runImport = async () => {
     setBusy(true); setErr(""); setDone(null);
     try {
-      const pending = rows.filter((r) => !r.imported);
-      const { data } = await api.post("/api/skills/import", { skills: pending.map((r) =>
-        ({ name: r.name, purpose: r.purpose, body: r.body, kind: r.kind, enabled: !!r.enabled, replace: !!r.replace })) });
-      const clashed = new Map((data.clashed || []).map((c) => [c.name, c.kind]));
-      const wrote = new Set(data.imported || []);
-      setRows((rs) => rs.map((r) => (r.imported ? r
-        : wrote.has(r.name) ? { ...r, imported: true, clash: null, replace: false }
-        : clashed.has(r.name) ? { ...r, clash: clashed.get(r.name) } : r)));
+      // buildPayload/reconcileImport both slug the name through the one shared rule (skillImport.js)
+      // - what is SENT and what is MATCHED against the response are the same string by construction.
+      const { data } = await api.post("/api/skills/import", { skills: buildPayload(rows) });
+      setRows((rs) => reconcileImport(rs, data));
       setDone({ imported: data.imported || [] });
       if (data.imported?.length) onImported?.();
     } catch (e) { setErr(failure(e)); }
@@ -131,7 +129,9 @@ export default function SkillImport({ onClose, onImported }) {
                 <Box key={r.path || i} sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, p: 1.25, mb: 1 }}>
                   <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
                     <TextField size="small" label="Name" value={r.name} sx={{ minWidth: 160 }}
-                      onChange={(e) => setRow(i, { name: e.target.value })} />
+                      helperText="Saved in this shape - lowercase, hyphenated"
+                      onChange={(e) => setRow(i, { name: e.target.value })}
+                      onBlur={(e) => setRow(i, { name: slug(e.target.value) })} />
                     <TextField size="small" label="Purpose - when should triage choose this?" value={r.purpose}
                       sx={{ flex: "1 1 260px" }} onChange={(e) => setRow(i, { purpose: e.target.value })} />
                     <Chip size="small" variant="outlined" label={kb(r.bytes)} />
@@ -169,7 +169,7 @@ export default function SkillImport({ onClose, onImported }) {
                     <>
                       <Chip size="small" sx={{ bgcolor: ROLES.you.tint, color: ROLES.you.ink, border: `1px solid ${ROLES.you.bd}` }}
                         label={`clashes with an existing "${r.clash}" profile`} />
-                      <Button size="small" onClick={() => setRow(i, { name: `${r.name}-imported`, clash: null })}>Rename</Button>
+                      <Button size="small" onClick={() => setRow(i, { name: slug(`${r.name}-imported`), clash: null, replace: false })}>Rename</Button>
                       <Button size="small" color="error" onClick={() => setRow(i, { replace: true, clash: null })}>Overwrite it</Button>
                     </>
                   )}

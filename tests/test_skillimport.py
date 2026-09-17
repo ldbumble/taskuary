@@ -8,6 +8,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from taskuary import skillimport
+from taskuary.store import MemoryStore
 
 SKILL = '''---
 name: nda-triage
@@ -178,6 +179,70 @@ class ConvertingTests(unittest.TestCase):
         said = '{"name": "x", "purpose": "p", "kind": "coding"}'
         got = skillimport.convert(skillimport.parse(SKILL), llm=lambda *a, **k: said)
         self.assertNotEqual(got['kind'], 'coding')
+
+
+class SavingTests(unittest.TestCase):
+    def _got(self, **kw):
+        return {'name': 'nda-triage', 'purpose': 'decides whether an NDA can be signed as-is',
+                'body': '# NDA triage\n\nRead the indemnity clause first.', 'kind': 'analysis', **kw}
+
+    def test_it_writes_an_ordinary_profile(self):
+        from taskuary import agents
+        s = MemoryStore()
+        skillimport.save(s, self._got(), enabled=True)
+        row = s.get_agent('nda-triage')
+        self.assertTrue(row)
+        self.assertEqual(row['Kind'], 'analysis')
+        self.assertIn('indemnity clause', s.get_doc(agents.profile_document(s, 'nda-triage')) or '')
+
+    def test_ticked_reaches_the_roster_as_ONE_line(self):
+        from taskuary import agents
+        s = MemoryStore()
+        skillimport.save(s, self._got(), enabled=True)
+        roster = agents.roster(s)
+        self.assertIn('nda-triage', roster)
+        self.assertEqual(len([l for l in roster.splitlines() if 'nda-triage' in l]), 1)
+        self.assertIn('signed as-is', roster)
+
+    def test_unticked_is_saved_and_never_offered_to_triage(self):
+        from taskuary import agents
+        s = MemoryStore()
+        skillimport.save(s, self._got(), enabled=False)
+        self.assertTrue(s.get_agent('nda-triage'))          # imported
+        self.assertNotIn('nda-triage', agents.roster(s))    # not offered
+
+    def test_importing_twice_does_not_make_two(self):
+        s = MemoryStore()
+        skillimport.save(s, self._got(), enabled=True)
+        skillimport.save(s, self._got(purpose='changed'), enabled=True)
+        self.assertEqual(len([a for a in s.list_agents() if a['Name'] == 'nda-triage']), 1)
+
+    def test_no_import_ever_creates_a_playbook(self):
+        """The load-bearing rule: a playbook is the owner's own workflow against the owner's own
+        systems, drafted from work that happened."""
+        from taskuary import playbooks
+        before = len(playbooks.list_all())
+        skillimport.save(MemoryStore(), self._got(), enabled=True)
+        self.assertEqual(len(playbooks.list_all()), before)
+
+    def test_a_verbose_purpose_does_not_eat_half_the_roster(self):
+        """A carry-forward from Task 3's review: with no model, `purpose` is the skill's raw
+        `description`, which can be a multi-sentence folded block. The 2000-char roster cap
+        (triage.py) is a budget shared by every worker, so one import must not crowd the rest
+        out - bounded at roster-ASSEMBLY time (agents.roster), not at save, since save has no
+        idea how many other workers are competing for that budget."""
+        from taskuary import agents
+        s = MemoryStore()
+        skillimport.save(s, self._got(purpose='x' * 900), enabled=True)
+        s.upsert_agent('another-worker', 'general', 'cli', '{"purpose": "handles the mail", "triage_enabled": true}')
+        roster = agents.roster(s)
+        self.assertLess(len(roster), 1000)
+        self.assertIn('another-worker', roster)             # still visible, not crowded off the end
+        # the full purpose is not lost - only the roster line is bounded - so a profile editor or
+        # the starter doc can still show it whole
+        row = s.get_agent('nda-triage')
+        prof = __import__('json').loads(row['Config'])
+        self.assertEqual(len(prof['purpose']), 900)
 
 
 if __name__ == '__main__':

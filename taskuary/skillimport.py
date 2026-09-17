@@ -144,3 +144,25 @@ def convert(entry: dict, llm=None) -> dict:
     kind = str(said.get('kind') or '').strip().lower()
     if kind in KINDS: out['kind'] = kind
     return out
+
+
+def save(store, got: dict, enabled: bool = False) -> str:
+    """Write one converted skill as an ORDINARY profile - an agent row and the doc row of the same
+    name, the same road Docs → Add profile takes. Nothing here is special-cased downstream, which is
+    the measure of whether this was done right.
+
+    `triage_enabled` defaults to OFF: an imported worker reaches the router when the owner says so,
+    not because a file was read."""
+    from . import agents as hub_agents
+    name = re.sub(r'[^a-z0-9-]+', '-', str(got.get('name') or '').strip().lower()).strip('-')
+    if not name: raise ValueError('a profile needs a name')
+    kind = got.get('kind') if got.get('kind') in KINDS else 'general'
+    row = store.get_agent(name)
+    try: prof = json.loads((row or {}).get('Config') or '{}')
+    except ValueError: prof = {}
+    prof.update({'kind': kind, 'purpose': str(got.get('purpose') or '').strip(),
+                 'triage_enabled': bool(enabled), 'imported': True})
+    store.upsert_agent(name, kind, (row or {}).get('Runner') or 'cli', json.dumps(prof))
+    doc = hub_agents.profile_document(store, name, prof)
+    store.save_doc(doc, str(got.get('body') or '').strip() + '\n', 'import')
+    return name

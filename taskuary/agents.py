@@ -571,6 +571,13 @@ def ensure_profile_document(store, name: str) -> str:
     return doc
 
 
+# One worker's purpose, on the roster line. Bounded HERE, not where it is saved: the 2000-char cap
+# on the whole roster (triage.py) is a budget shared by every worker in the loop, and only the code
+# assembling that shared list knows how many lines are competing for it. An imported skill's raw
+# `description` can be a multi-sentence folded block (skillimport.py) that would otherwise crowd
+# every other worker off the end of a prompt that just truncates.
+ROSTER_PURPOSE_MAX = 200
+
 # The kinds that mean "works a repository". `cli` is the legacy spelling older databases use.
 CODING_KINDS = ('coding', 'cli')
 # Work that can still be dispatched. An allowlist rather than a list of endings, so a status added
@@ -594,6 +601,7 @@ def roster(store) -> str:
         except ValueError: prof = {}
         if prof.get('triage_enabled') is False: continue
         purpose = profile_purpose(a['Name'], prof, a.get('Kind') or 'coding')
+        if len(purpose) > ROSTER_PURPOSE_MAX: purpose = purpose[:ROSTER_PURPOSE_MAX - 1].rstrip() + '…'
         if purpose: out.append(f"- {a['Name']}: {purpose}")
     return '\n'.join(out)
 

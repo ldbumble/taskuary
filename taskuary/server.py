@@ -4784,6 +4784,43 @@ def test_cli_connection(name: str):
     except Exception as e: return {'ok': False, 'error': str(e)[:400]}
 
 
+class SkillPathBody(BaseModel): path: str
+class SkillImportBody(BaseModel): skills: list
+
+@app.get('/api/skills/found')
+def skills_found():
+    """Skills already installed on this machine. Read-only, and only files - nothing is learned from
+    another tool's configuration."""
+    from . import skillimport
+    return {'data': skillimport.found()}
+
+
+@app.post('/api/skills/read')
+def skills_read(body: SkillPathBody):
+    """A path (a SKILL.md, or a plugin folder) turned into proposals. WRITES NOTHING: the owner reads
+    the purpose and the body before any of it becomes a worker's instructions."""
+    from . import skillimport, llm as llm_mod
+    try: entries = skillimport.read_path(body.path)
+    except OSError as e: raise HTTPException(422, f'could not read that: {e}')
+    if not entries: raise HTTPException(422, 'no SKILL.md there')
+    try: brain = llm_mod.build_llm(store)
+    except Exception: brain = None
+    return {'data': [dict(skillimport.convert(e, brain), path=e['path'], bytes=e['bytes'],
+                          plugin=e.get('plugin') or '') for e in entries]}
+
+
+@app.post('/api/skills/import')
+def skills_import(body: SkillImportBody):
+    """Write the ones the owner confirmed. Each becomes an ordinary profile."""
+    from . import skillimport
+    made = []
+    for s in (body.skills or []):
+        try: made.append(skillimport.save(store, s, bool(s.get('enabled'))))
+        except (ValueError, OSError) as e: raise HTTPException(422, f'{s.get("name")!r}: {e}')
+    store.audit('agent', 0, 'skills_imported', ACTOR, detail={'names': made})
+    return {'imported': made}
+
+
 @app.get('/api/agents')
 def agents():
     """data = store rows (for dispatch pickers); config = the editable profiles;

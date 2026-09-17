@@ -24,6 +24,17 @@ test("Settings can be opened on a page and a group", () => {
   assert.match(view, /history\.replaceState/);
 });
 
+test("only the parent consumes the settings hash, because child effects run first", () => {
+  const view = read("SettingsView.jsx");
+  // React runs child effects before parent ones. SettingsPages reads `&group=`; SettingsView reads
+  // `settings=`. Consuming it in the child blanked it before the parent ever ran, so the page never
+  // opened and only the tab changed. Whoever consumes it must be the one that runs LAST.
+  const child = view.slice(view.indexOf("function SettingsPages"), view.indexOf("export default"));
+  const parent = view.slice(view.indexOf("export default"));
+  assert.doesNotMatch(child, /replaceState/);
+  assert.match(parent, /replaceState/);
+});
+
 test("Docs can be opened on the name field", () => {
   const view = read("DocsView.jsx");
   assert.match(view, /#?owner/);

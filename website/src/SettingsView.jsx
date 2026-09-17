@@ -336,15 +336,14 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
   const [panelOk, setPanelOk] = useState(false);   // the AI defaults panel is standing up; until it is, the plain rows stay
   const [cfgTab, setCfgTab] = useState(GROUPS[0]);   // the leading tab, whatever it is - a hardcoded name here went stale the moment a group was added in front of it
   // ...and &group=<name> picks the tab within Configuration. The group names contain a `&` ("Triage
-  // & agents"), so the link carries them encoded and they are decoded exactly once here.
+  // & agents"), so the link carries them encoded and they are decoded exactly once here. This does
+  // NOT consume the hash: React runs child effects before parent ones, so blanking it here left
+  // SettingsView's own effect below with nothing to read, and the page never opened.
   useEffect(() => {
-    const hash = window.location.hash || "";
-    const m = /group=([^&]+)/.exec(hash);
-    if (m) {
-      const want = decodeURIComponent(m[1]);
-      if (GROUPS.includes(want)) setCfgTab(want);
-    }
-    if (/settings=/.test(hash)) window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    const m = /group=([^&]+)/.exec(window.location.hash || "");
+    if (!m) return;
+    const want = decodeURIComponent(m[1]);
+    if (GROUPS.includes(want)) setCfgTab(want);
   }, []);
   const [err, setErr] = useState("");
 
@@ -823,13 +822,17 @@ const NAV = ["about", "config", "policies", "memory", "audit", "updates"];
 
 export default function SettingsView({ onNavigate }) {
   const [page, setPage] = useState(NAV[0]);      // the rail's first entry is where Settings opens - About you
-  // #settings=<page> lands on one of the rail's pages. The checklist's "what runs on which model"
-  // row points here, and Settings had no hash routing at all - `page` and `cfgTab` were state-only,
-  // so every link into it arrived on About you. Consumed once, so Back does not reopen it.
+  // #settings=<page> lands on one of the rail's pages, and &group= picks the tab within it. Settings
+  // had no hash routing at all, so every link in arrived on About you.
+  //
+  // The hash is consumed HERE and only here. Both halves are read by two effects in two components,
+  // and React runs the CHILD's first - consuming it in the child blanked it before this ever ran.
   useEffect(() => {
-    const m = /settings=([\w-]+)/.exec(window.location.hash || "");
-    if (!m || !NAV.includes(m[1])) return;
-    setPage(m[1]);
+    const hash = window.location.hash || "";
+    if (!/settings=/.test(hash)) return;
+    const m = /settings=([\w-]+)/.exec(hash);
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    if (m && NAV.includes(m[1])) setPage(m[1]);
   }, []);
   const [q, setQ] = useState("");
   return (

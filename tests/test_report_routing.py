@@ -44,8 +44,9 @@ def test_a_line_set_to_anything_makes_the_report_routed():
 
 
 def test_an_unset_line_falls_back_to_what_that_destination_has_always_done():
-    """The Timeline is where a report lands and delivery has always gone out every run; the work
-    rail and the phone are both off until asked for."""
+    """A report you set up is work you wanted done: the Timeline AND the work rail every run,
+    and delivery every run. Only the interruption stays off until it is asked for."""
+    assert reports.route_of({'route': {'timeline': {'how': 'never'}}}, 'work')[0] == 'always'
     cfg = {'route': {'work': {'how': 'ai', 'when': 'any error'}}}
     assert reports.route_of(cfg, 'timeline')[0] == 'always'
     assert reports.route_of(cfg, 'send')[0] == 'always'
@@ -58,8 +59,10 @@ def test_a_line_asking_the_ai_with_nothing_to_judge_by_is_not_asking():
     assert reports.route_of({'route': {'work': {'how': 'ai', 'when': '   '}}}, 'work')[0] == 'always'
 
 
-def test_a_word_we_do_not_know_is_not_a_route():
-    assert reports.route_of({'route': {'work': {'how': 'sometimes'}}}, 'work')[0] == 'never'
+def test_a_word_we_do_not_know_falls_back_to_what_that_line_means_by_default():
+    """Never to a guess: an unreadable route is that line's own default, both ways round."""
+    assert reports.route_of({'route': {'work': {'how': 'sometimes'}}}, 'work')[0] == 'always'
+    assert reports.route_of({'route': {'alert': {'how': 'sometimes'}}}, 'alert')[0] == 'never'
 
 
 # ── no sentence anywhere means no model is asked ────────────────────────────────────────
@@ -244,3 +247,11 @@ def test_a_failed_routed_run_is_work_because_a_broken_monitor_is_something_to_de
 def test_an_old_report_still_refuses_to_make_a_task_out_of_an_outage():
     """Nothing already running starts doing something new on the day this ships."""
     assert reports.decide({'triage': True, 'reach': 'always'}, res(failed=True), None)['work'] is False
+
+
+# ── the interruption is not "the phone" ─────────────────────────────────────────────────
+def test_the_alert_line_is_named_for_being_immediate_not_for_a_device():
+    """It goes to whichever live channel the owner picked - as often email as WhatsApp (the owner,
+    2026-09-17: "why does this say phone if it can go to email?")."""
+    assert 'phone' not in reports.LINE_SAYS['alert']
+    assert 'right away' in reports.LINE_SAYS['alert']

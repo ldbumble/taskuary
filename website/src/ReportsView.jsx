@@ -285,13 +285,17 @@ const CONDITIONS = [
 // deciding it, so it's a prompt on the report for routing").
 export const ROUTE_LINES = ["timeline", "work", "alert", "send"];
 const ROUTE_HOW = ["always", "ai", "never"];
-// What a line nobody set means: the Timeline is where a report lands and delivery has always gone
-// out every run; the work rail and the phone stay off until they are asked for.
-const LINE_DEFAULT = { timeline: "always", send: "always", work: "never", alert: "never" };
+// What a line nobody set means: a report you set up is work you wanted done, so it lands on the
+// Timeline AND the work rail every run until you say otherwise (2026-09-17: "default should be on
+// timeline/work rail every run"). Only the interruption stays off until it is asked for.
+const LINE_DEFAULT = { timeline: "always", send: "always", work: "always", alert: "never" };
+// `alert` is not "the phone" - it goes to whichever live channel you picked, as often email as
+// WhatsApp (2026-09-17: "why does this say phone if it can go to email?"). What makes it an alert
+// is that it goes the moment the run lands and skips Review, not the device it arrives on.
 export const LINE_SAYS = {
   timeline: ["post it on my Timeline", "news to read — it does not wait for me"],
   work: ["put it on my Work rail", "something I have to deal with"],
-  alert: ["ping my phone", "interrupt me, right now"],
+  alert: ["reach me right away", "the moment it lands, with no Review step"],
   send: ["send it out", "to the people it is addressed to"],
 };
 // ...and what the model is literally asked, word for word as reports.LINE_SAYS and judge_prompt
@@ -300,7 +304,7 @@ export const LINE_SAYS = {
 const PROMPT_SAYS = {
   timeline: "post it on the owner's timeline as news to read",
   work: "put it on the owner's work rail, as something they have to do",
-  alert: "interrupt the owner on their phone right now",
+  alert: "reach the owner right away, on whichever channel they chose",
   send: "send the report out to the people it is addressed to",
 };
 export const judgePrompt = (c, lines = ROUTE_LINES) => lines
@@ -309,7 +313,7 @@ export const judgePrompt = (c, lines = ROUTE_LINES) => lines
   .join("\n");
 // ...and the short name a replayed run wears, so that reading down the strip the DIFFERENCE
 // between two runs is what stands out, not the same sentence four times
-const LINE_CHIP = { timeline: "Timeline", work: "Work rail", alert: "phone", send: "sent out" };
+const LINE_CHIP = { timeline: "Timeline", work: "Work rail", alert: "reached you", send: "sent out" };
 export const isRouted = (c) => ROUTE_LINES.some((l) => ROUTE_HOW.includes(c?.route?.[l]?.how));
 export const routeOf = (c, line) => {
   const r = (c?.route || {})[line] || {}, when = (r.when || "").trim();
@@ -335,8 +339,11 @@ export const seedRoute = (c) => {
     : { how: "ai", when: how === "wrong" ? "something in it is wrong, or needs me" : asSentence(cond) });
   return {
     timeline: from(reachOf(c), c?.alert),
-    work: !c?.triage ? { how: "never" }
-      : (c?.watch_for || "").trim() ? { how: "ai", when: c.watch_for.trim() } : { how: "always" },
+    // ...and the work rail follows the DEFAULT, not the old `triage` switch. That switch was off on
+    // every report that exists - it needed a sentence nobody had been asked for - so inheriting it
+    // would mean "every report you already have stays news forever", which is the opposite of what
+    // the card is for (2026-09-17: "default should be on timeline/work rail every run").
+    work: (c?.watch_for || "").trim() ? { how: "ai", when: c.watch_for.trim() } : { how: "always" },
     alert: c?.alert?.to ? from(reachOf(c), c?.alert) : { how: "never" },
     send: c?.deliver?.to ? from(deliverSendOf(c), c?.deliver) : { how: "always" },
   };

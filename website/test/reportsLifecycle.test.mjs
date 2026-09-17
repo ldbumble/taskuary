@@ -65,14 +65,21 @@ test("see the prompt shows the prompt, word for word as the server builds it", (
   assert.match(source, /\$\{l\.toUpperCase\(\)\}: yes\|no .* but only if: \$\{routeOf\(c, l\)\[1\]\}/);
 });
 
-test("converting a report written before the card keeps every line meaning what it meant", () => {
-  // Touching one line must not silently change the other three. seedRoute says the old rules as
-  // sentences - the owner can then argue with them like any other.
+test("converting a report written before the card says the old rules out loud", () => {
+  // Touching one line must not silently change the others behind your back, so seedRoute writes the
+  // old rules down AS SENTENCES, on the card, before anything is saved - the owner can then argue
+  // with them like any other. The work rail is the deliberate exception: it follows the new default
+  // rather than the `triage` switch, which was off on every report that exists.
   assert.match(source, /export const seedRoute = \(c\) => \{/);
-  assert.match(source, /work: !c\?\.triage \? \{ how: "never" \}/);        // off by default, as `triage` was
+  assert.match(source, /work: \(c\?\.watch_for \|\| ""\)\.trim\(\) \? \{ how: "ai"/);   // the pipe sentence, else the default
   assert.match(source, /\{ how: "ai", when: c\.watch_for\.trim\(\) \}/);    // the pipe sentence becomes the work line's
   assert.match(source, /send: c\?\.deliver\?\.to \? from\(deliverSendOf\(c\), c\?\.deliver\) : \{ how: "always" \}/);
-  assert.match(source, /const LINE_DEFAULT = \{ timeline: "always", send: "always", work: "never", alert: "never" \}/);
+  assert.match(source, /const LINE_DEFAULT = \{ timeline: "always", send: "always", work: "always", alert: "never" \}/);
+  // ...and the interruption is named for being immediate, not for a device: it goes wherever you
+  // picked, as often email as WhatsApp (2026-09-17: "why does this say phone if it can go to email?")
+  assert.doesNotMatch(source, /ping my phone/);
+  assert.match(source, /alert: \["reach me right away"/);
+  assert.match(source, /alert: "reach the owner right away, on whichever channel they chose"/);
 });
 
 test("the reading of an absent setting is the server's own, and prose is offered words", () => {

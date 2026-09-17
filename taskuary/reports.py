@@ -1578,13 +1578,19 @@ def delivers(cfg: dict, res: dict) -> tuple:
 # its own can still have an AI rule - the judge reads the rows.
 ROUTE = ('always', 'ai', 'never')
 LINES = ('timeline', 'work', 'alert', 'send')
-# What a line nobody set means. The Timeline is where a report lands, and delivery has always gone
-# out every run: a setting nobody chose must never be why recipients stop getting their report.
-# The work rail and the phone stay off until they are asked for, which is what they did before.
-LINE_DEFAULT = {'timeline': 'always', 'send': 'always', 'work': 'never', 'alert': 'never'}
+# What a line nobody set means. A report you set up is work you wanted done, so it lands on the
+# Timeline AND on the work rail every run unless you say otherwise (the owner, 2026-09-17: "default
+# should be on timeline/work rail every run"). Delivery has always gone out every run, and a setting
+# nobody chose must never be why recipients stop getting their report. Only the interruption stays
+# off until it is asked for: nothing Taskuary was not told to shout about gets to shout.
+LINE_DEFAULT = {'timeline': 'always', 'send': 'always', 'work': 'always', 'alert': 'never'}
+# ...and what each line is, in the words the judge is given. `alert` is NOT "the phone": it goes to
+# whichever live channel the owner picked, which is as often email as it is WhatsApp (2026-09-17:
+# "why does this say phone if it can go to email?"). What makes it an alert is that it is immediate
+# and skips Review, not the device it lands on.
 LINE_SAYS = {'timeline': "post it on the owner's timeline as news to read",
              'work': "put it on the owner's work rail, as something they have to do",
-             'alert': "interrupt the owner on their phone right now",
+             'alert': "reach the owner right away, on whichever channel they chose",
              'send': 'send the report out to the people it is addressed to'}
 JUDGE_TOKENS = 300                # four yes/nos and a sentence each - nothing to think about at length
 

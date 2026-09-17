@@ -153,10 +153,10 @@ class PreservationTests(unittest.TestCase):
                               'Inspect /Data/Export.csv.', 'Inspect /data/export.csv.'])
             self.assertEqual(len({i['id'] for i in items}), 7)
             self.assertEqual(s.set_task_checklist(tid, [i['text'] for i in items], 'owner'), items)
-            s.cx.close()
+            s.close()
             reopened = SQLiteStore(str(path))
             self.assertEqual(reopened.task_checklist(tid), items)
-            reopened.cx.close()
+            reopened.close()
 
     def test_owner_reorder_cannot_let_a_new_box_steal_a_retained_legacy_id(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -173,13 +173,13 @@ class PreservationTests(unittest.TestCase):
             self.assertEqual(items[1], {'id': retained_id, 'text': 'Step 1.', 'done': True})
             self.assertNotEqual(items[0]['id'], retained_id)
             self.assertEqual(len({item['id'] for item in items}), 2)
-            s.cx.close()
+            s.close()
 
             reopened = SQLiteStore(str(path))
             self.assertEqual(reopened.task_checklist(tid), items)
             self.assertTrue(reopened.tick_checklist_item(tid, retained_id, False, 'owner'))
             self.assertFalse(reopened.task_checklist(tid)[1]['done'])
-            reopened.cx.close()
+            reopened.close()
 
     def test_thirteenth_item_is_durable_repeated_once_and_owner_can_edit_and_tick_past_twelve(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -200,14 +200,14 @@ class PreservationTests(unittest.TestCase):
             self.assertEqual(len(edited), 14)
             self.assertEqual(edited[0], {**first[0], 'done': True})
             self.assertTrue(s.tick_checklist_item(tid, edited[13]['id'], True, 'owner'))
-            s.cx.close()
+            s.close()
 
             reopened = SQLiteStore(str(path))
             after = reopened.task_checklist(tid)
             self.assertEqual(len(after), 14)
             self.assertTrue(after[0]['done'])
             self.assertTrue(after[13]['done'])
-            reopened.cx.close()
+            reopened.close()
 
     def test_followup_announcement_exactly_matches_the_persisted_addition(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -226,7 +226,7 @@ class PreservationTests(unittest.TestCase):
             self.assertEqual(len(persisted), 13)
             self.assertEqual(announcements, ['New from the latest message:\n- [ ] step 12'])
             self.assertEqual([i['text'] for i in persisted[12:]], ['step 12'])
-            s.cx.close()
+            s.close()
 
 
 class SharedContextTests(unittest.TestCase):

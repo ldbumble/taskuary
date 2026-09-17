@@ -48,15 +48,23 @@ def dump(db):
     return list(db.cx.iterdump())
 
 
+def _another(db, n=2):
+    tid = db.create_task({'Title': f'Synthetic selection {n}', 'Status': 'open'}, 'fixture')
+    mid = db.add_message({'TaskId': tid, 'Channel': 'email', 'Status': 'filed', 'Subject': f'Synthetic source {n}',
+                          'BodyText': 'Another body', 'SentAt': datetime.now().isoformat(sep=' ')})
+    return db.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'reply', 'Status': 'pending', 'DraftText': 'Another draft'})
+
+
 @pytest.mark.parametrize('route', ['next', 'stream'])
-@pytest.mark.parametrize('change', ['body', 'draft', 'scope', 'chat'])
+@pytest.mark.parametrize('change', ['gone', 'replaced'])
 def test_initial_stale_is_http_409_before_any_effect(nav_api, monkeypatch, route, change):
+    """Stale is the PICK moving: the item the page shows as next is no longer what the rail hands
+    over (it was settled; or settled and another stands in its place). Not a refusal to be taken
+    lightly - and not one for anything else, see the fresh-content test below."""
     db, client, mid, rid = nav_api
     payload = binding(client)
-    if change == 'body': db.update_message_body(mid, 'Changed full source')
-    elif change == 'draft': db.save_review_draft(rid, 'Changed draft')
-    elif change == 'scope': payload['only'] = 'mail'
-    elif change == 'chat': general.dock_task(db)
+    funnel.settle(db, f'review:{rid}', 'done', 'owner')
+    if change == 'replaced': _another(db)
     before, writes = dump(db), db.cx.total_changes
 
     def forbidden(*args, **kwargs):
@@ -74,20 +82,48 @@ def test_initial_stale_is_http_409_before_any_effect(nav_api, monkeypatch, route
 
 
 @pytest.mark.parametrize('route', ['next', 'stream'])
+@pytest.mark.parametrize('change', ['body', 'draft', 'scope', 'chat'])
+def test_what_moved_around_the_same_pick_is_taken_fresh_not_refused(nav_api, route, change):
+    """The page shows review:1 as next and review:1 is still the pick: the press goes through and the
+    turn speaks from the rail as it is NOW - the grown body, the rewritten draft, the renewed chat.
+    Refusing here failed a press with "the next item changed" when it had not (design B, 2026-09-17)."""
+    db, client, mid, rid = nav_api
+    payload = binding(client)
+    if change == 'body': db.update_message_body(mid, 'Changed full source')
+    elif change == 'draft': db.save_review_draft(rid, 'Changed draft')
+    elif change == 'scope': payload['only'] = 'mail'
+    elif change == 'chat': general.dock_task(db)
+    response = client.post(f'/api/concierge/{route}', json={'mode': 'next', **payload})
+    assert response.status_code == 200, response.text
+    data = response.json() if route == 'next' else json.loads(response.text.splitlines()[-1])
+    assert data['item']['key'] == f'review:{rid}'
+    if change == 'body': assert data['item']['preview'] == 'Changed full source'
+    states = db.funnel_states()
+    assert states[f'review:{rid}']['Status'] == 'surfaced', 'the turn had its effect'
+
+
+@pytest.mark.parametrize('route', ['next', 'stream'])
 def test_accepted_selection_consumes_exact_capture_once(nav_api, monkeypatch, route):
+    """The accepted turn takes the captured item and never selects again. It may READ the rail's
+    cached pile - that is where the page's token came from, and the turn validates against it rather
+    than building a second one (design B, 2026-09-17) - but it must not pick."""
     db, client, mid, rid = nav_api
     payload = binding(client)
     assert payload['expected_next_key'] == f'review:{rid}'
 
     def forbidden(*args, **kwargs):
-        pytest.fail('accepted selection rebuilt or selected again')
+        pytest.fail('accepted selection selected again')
 
-    for name in ('pile', 'next_item', 'fyi_batch'):
+    for name in ('next_item', 'fyi_batch'):
         monkeypatch.setattr(funnel, name, forbidden)
     response = client.post(f'/api/concierge/{route}', json={'mode': 'next', **payload})
     assert response.status_code == 200, response.text
     data = response.json() if route == 'next' else json.loads(response.text.splitlines()[-1])
     assert data['item']['key'] == payload['expected_next_key']
+    # ...and the rail as the turn left it rides along, captured with the surfaced item excluded, so
+    # the page holds it instead of fetching the same rows again
+    assert data['pile']['expected_next_key'] != data['item']['key']
+    assert set(data['pile']) >= {'selection_revision', 'expected_next_members', 'items', 'display_revision', 'generated_at'}
     before, writes = dump(db), db.cx.total_changes
     repeated = client.post(f'/api/concierge/{route}', json={'mode': 'next', **payload})
     assert repeated.status_code == 409

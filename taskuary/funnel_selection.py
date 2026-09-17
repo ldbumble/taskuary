@@ -234,6 +234,27 @@ def capture_selection(store, *, only=None, include_surfaced=False,
     )
 
 
+def capture_from_rail(store, *, only=None, include_surfaced=False, exclude=None,
+                      now: datetime | None = None) -> SelectionCapture:
+    """The selection the page is looking at, taken from the rail's own cached build rather than a
+    second one. /api/funnel/pile captures from funnel.pile for the unscoped walk, so this is the same
+    pile the client's token came from; the cache serves it only while nothing has been written since
+    (funnel.pile checks the store's dirty-row top), and a scoped walk (`only`) still builds its own.
+    Quiet: the watcher does not speak inside a turn's admission (design B, 2026-09-17).
+
+    The live workers are observed HERE, first, and the cache is compared against that observation:
+    an observation that fails is still a refusal (SelectionUnavailable) - a cached pile is not a
+    guess to fall back on - and a worker that moved since the build is a rebuilt pile."""
+    from . import funnel, terminal
+    if only is None:
+        try: observed = copy.deepcopy(terminal.live_sessions(tail=6))
+        except Exception as error: raise SelectionUnavailable() from error
+        pile = funnel.pile(store, quiet=True, observed=observed)
+    else: pile = None
+    return capture_selection(store, only=only, include_surfaced=include_surfaced, exclude=exclude,
+                             now=now, pile=pile)
+
+
 def selection_fields(capture: SelectionCapture) -> dict:
     """The stable fields exposed by pile responses and echoed by Next requests."""
     return {
@@ -257,7 +278,7 @@ def validate_selection(capture: SelectionCapture, *, selection_revision,
 
 def recheck_selection(store, capture: SelectionCapture, *, now: datetime | None = None) -> SelectionCapture:
     """Reject drift after a model call while retaining the originally selected object."""
-    fresh = capture_selection(store, now=now, **capture.scope)
+    fresh = capture_from_rail(store, now=now, **capture.scope)
     if (fresh.revision != capture.revision
             or fresh.member_keys != capture.member_keys
             or (fresh.selected or {}).get("key") != (capture.selected or {}).get("key")):

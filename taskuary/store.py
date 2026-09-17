@@ -2366,6 +2366,24 @@ class SQLiteStore:
         return snapshot
 
     # ---- the rail: re-project what a write touched, reuse the rest (processing_rail) ----------------
+    def close(self):
+        """Both connections: the writer and the rail's reader. A test that closes only `cx` leaves the
+        file open on Windows and its temporary directory cannot be removed."""
+        for cx in (self._rail_cx, self.cx):
+            try:
+                if cx is not None: cx.close()
+            except sqlite3.Error: pass
+
+    def rail_top(self):
+        """The newest dirty-row id: "has anything been written, by any process?" in one cheap read. The
+        pile cache (funnel.pile) compares it to the one it was built at, so a write from the sync
+        process invalidates it as surely as this process's own do. None when the table is not there."""
+        sql = 'SELECT COALESCE(MAX(Id),0) FROM processing_dirty_row'
+        try:
+            if self._rail_cx is not None: return self._rail_cx.execute(sql).fetchone()[0]
+            with self.lock: return self.cx.execute(sql).fetchone()[0]
+        except sqlite3.OperationalError: return None
+
     def _rail_read(self, *, as_of, history_days, frozen_live, worker_revision):
         """The display snapshot from the rail cache, keyed by window and by whether workers were observed.
         Returns (snapshot, per-root hashes); items are reader copies (item dict + view dict), the
@@ -3687,7 +3705,13 @@ class SQLiteStore:
             # processing projection, so do not make it invalidate otherwise reusable DB work.
             self._processing_ignored_writes += 1
         else:
-            self._processing_display_cache = {}
+            # Only a setting the projection READS colds the rail (PROCESSING_DIRTY_SETTINGS - and its
+            # trigger leaves the dirty row that says so). Every other setting is bookkeeping to the
+            # rail: the assistant writes the item on the table (concierge.set_current) and its session
+            # id on EVERY press, and dropping the whole rail for those made each press rebuild it cold
+            # - 1.4 s of a 1.5 s press, measured on the owner's DB copy (2026-09-17, design B/D).
+            if name in PROCESSING_DIRTY_SETTINGS: self._processing_display_cache = {}
+            else: self._processing_ignored_writes += 1
             # ...and the Assistant's pile is built from settings too - the mutes, feed_days, the
             # owner's own address. Leaving its cache alone showed a change the owner had just made up
             # to PILE_EVERY seconds later, or not until New chat (2026-09-10 audit).

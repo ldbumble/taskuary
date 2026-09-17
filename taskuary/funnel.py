@@ -77,7 +77,7 @@ _FAILED = re.compile(r'FAILED\s*$')                # reports.py writes '<title> 
 # only for converting a manually named historical row into a generic FYI card.
 _QUIET = {'filed', 'ignored', 'yours', 'error'}   # error: triage failed - unread information with a retry, never work
 PILE_EVERY = 30                   # websocket writes invalidate it; this is only a disconnected-client safety net
-_CACHE = {'at': 0.0, 'pile': None, 'store': None, 'generation': 0, 'full': None}   # full: the same build with read items kept
+_CACHE = {'at': 0.0, 'pile': None, 'store': None, 'generation': 0, 'full': None, 'mark': None, 'workers': None}   # full: the build with read items kept; mark/workers: rail_top + live sessions at build
 _STATE = {}                        # tid -> 'working' | 'parked' | 'asking' | 'done' | 'idle', as last seen by the watcher
 _SEEN = {}                         # tid -> (state, first seen at) - a change must HOLD before it is news
 _WATCHED = [False]                 # first LOOK, even when there were no sessions; _STATE empty is not the same thing
@@ -907,12 +907,47 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
                        'n': sum(1 for i in items if i['lane'] == l)} for l in LANES]}
 
 
-def pile(store, force: bool = False) -> dict:
+def _rail_top(store):
+    top = getattr(store, 'rail_top', None)
+    return top() if callable(top) else None
+
+
+def workers_signature(live_state) -> str | None:
+    """What the pile reads from the live sessions, hashed the way the store's snapshot hashes it - so a
+    worker that stopped, asked or finished since the cache was built is a different pile. None when
+    the sessions cannot be observed right now."""
+    from .processing_projection import _worker_attention
+    if live_state is None: return None
+    rows = sorted(json.dumps(_worker_attention(t), ensure_ascii=False, sort_keys=True, separators=(',', ':'), allow_nan=False)
+                  for t in live_state)
+    return hashlib.sha256('\n'.join(rows).encode()).hexdigest()
+
+
+_OBSERVE = object()
+
+
+def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE) -> dict:
     """The pile, cached for a few seconds: it is polled while the page is open, and every look
-    is a dozen queries."""
+    is a dozen queries.
+
+    A cached pile is served only while NOTHING has moved since it was built: no write in any process
+    (the store's dirty-row top, rail_top, says so) and no change among the live workers (`observed`,
+    the sessions as seen now - taken here when not handed in). So a turn can take its selection from
+    here instead of building the rail a second time (design B, 2026-09-17). `quiet` skips the
+    watcher: a Next that turns out stale must reach no write, and announce() writes notices."""
+    from . import terminal as term
     seen_generation = _CACHE.get('generation', 0)
+    if observed is _OBSERVE:
+        try: observed = term.live_sessions(tail=6)
+        except Exception: observed = None            # unobservable: never compare, always rebuild (the build says why)
+    workers = workers_signature(observed)
     with _LOCK:
         same_store = _CACHE.get('store') is store
+        if same_store and _CACHE['pile'] and not force:
+            top = _rail_top(store)
+            moved = (top is not None and _CACHE.get('mark') is not None and top != _CACHE['mark']) \
+                    or workers is None or workers != _CACHE.get('workers')
+            if moved: _CACHE.update(at=0.0); force = True
         # One websocket event wakes every open browser. If they all arrive while the first forced
         # rebuild is running, that one result satisfies all of them; rebuilding once per tab is a
         # thundering herd that can hold every other API request behind this lock for a minute. A
@@ -926,7 +961,9 @@ def pile(store, force: bool = False) -> dict:
                                    and _CACHE.get('generation', 0) != seen_generation)
         if same_store and _CACHE['pile'] and (refreshed_while_waiting or (not force and time.time() - _CACHE['at'] < PILE_EVERY)):
             return _CACHE['pile']
-        events = announce(store)                       # the watcher speaks first: a transition changes the pile too
+        mark = _rail_top(store)                        # taken BEFORE the build: a write during it counts as after
+        # the watcher speaks first: a transition changes the pile too. Quiet, it keeps what it last said.
+        events = ((_CACHE['pile'] or {}).get('events') or [] if same_store else []) if quiet else announce(store)
         # ONE build serves the pile and the item the page is holding: the shared builder computes
         # every card's read state anyway, and the pile is its unread subset (processing_unread.build)
         shared = getattr(store, 'processing_reads_active', lambda: False)()
@@ -939,7 +976,7 @@ def pile(store, force: bool = False) -> dict:
         p['alerts'] = alerts(store, p['items'])
         p['events'] = events
         _CACHE.update(at=time.time(), pile=p, store=store, full=full['items'] if shared else None,
-                      generation=_CACHE.get('generation', 0) + 1)
+                      generation=_CACHE.get('generation', 0) + 1, mark=mark, workers=workers)
         return p
 
 
@@ -948,7 +985,7 @@ def full_items(store) -> list | None:
     return _CACHE['full'] if _CACHE.get('store') is store and _CACHE['pile'] else None
 
 
-def invalidate(): _CACHE.update(at=0.0, pile=None, store=None, full=None); _SOURCES.update(at=0.0, by={})
+def invalidate(): _CACHE.update(at=0.0, pile=None, store=None, full=None, mark=None, workers=None); _SOURCES.update(at=0.0, by={})
 def forget_states(): _STATE.clear(); _SEEN.clear(); _WATCHED[0] = False
 
 

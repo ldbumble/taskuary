@@ -32,7 +32,7 @@ import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
 import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, hasNextSelection, interactiveCardIndex, keysOf, laneCounted, lastSaidIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, pendingAlerts, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
-import { coveredByReload } from "./funnelPile.js";
+import { coveredByReload, heldSince } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
 import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WalkCard, WrapupCard, sourceColor } from "./assistantCards.jsx";
@@ -730,15 +730,28 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const alert = pending[0] || null;
   const say = useCallback((line) => { if (speakOnState) speak(line); }, [speakOnState]);
   useEffect(() => { speakRef.current = say; }, [say]);
+  // The rail came WITH an answer - a turn's or a settle's - read on the server after that write. The
+  // page holds it and captures Next from it under the scope it will press with, instead of asking for
+  // the same rows again: a press of Next was two of those reloads at 1.5-2 s each, and the visible
+  // gap between the old rows vanishing and the next four appearing (design B, 2026-09-17).
+  const holdPile = useCallback((data, scope) => {
+    forcedLoadStartedAt.current = heldSince(data);     // the live events this read already saw need no reload
+    if (hasNextSelection(data)) selectionContractSeen.current = true;
+    selectionRef.current = captureNextSelection(data, scope);
+    setPile((p) => refreshPilePresentation(p, data));
+  }, []);
   const landed = useCallback((data) => {
     if (data.exhausted && !only.current?.startsWith("view:")) only.current = null;            // the mail ran out: Next continues with the rest of the pipe
     const card = data.item ? { ...data.item } : null;
     setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: data.options || [], card }]);
     currentRef.current = card;
-    selectionRef.current = null;
     if (card) { setCurrent(card.key); setCurrentItem(card); } else { setCurrent(null); setCurrentItem(null); }
-    say(data.say); loadPile(true);
-  }, [loadPile, say]);
+    say(data.say);
+    // the turn brought the rail as it left it: hold that, with the new table excluded. Nothing along
+    // (the walk ran out, an older server, the demo) is the page's own load, as before.
+    if (card && data.pile) holdPile(data.pile, nextSelectionScope(only.current, card.key));
+    else { selectionRef.current = null; loadPile(true); }
+  }, [holdPile, loadPile, say]);
 
   const ensureNextSelection = useCallback(async (scope) => {
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -883,7 +896,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         return;
       }
       if (verb === "next") {
-        selectionRef.current = null;
+        // the capture is kept: the table did not change, so the token still names the pick the rail
+        // shows - and the server takes anything else that moved fresh (processing_navigation.reserve)
         deferInChat(() => surfaceRef.current?.(), 300); return;
       }
       if (verb === "reply" && mid) {
@@ -985,15 +999,21 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     currentRef.current = null; selectionRef.current = null;
     setCurrent(null); setCurrentItem(null);
   };
-  const advance = () => {
+  const advance = (pile = null) => {
     clearTable();
     onChanged?.();                                     // a draft may have gone out: the Review badge recounts
-    deferInChat(() => surfaceRef.current?.(), 500);
+    // a settle that brought the rail back with it: held under the empty table's scope, and the walk needs
+    // no half-second of grace - the server has settled already, and the timer only has to outlive this
+    // render (a proposal's busy flag is released the moment its caller returns)
+    if (pile) holdPile(pile, nextSelectionScope(only.current, null));
+    deferInChat(() => surfaceRef.current?.(), pile ? 120 : 500);
   };
   const done = async (receipt) => {
     if (receipt) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: receipt }]);
-    if (current) { try { await api.post("/api/funnel/settle", { key: current, verb: "done" }); } catch { /* it may already be gone */ } }
-    advance();
+    let pile = null;
+    // `only` rides along so the rail comes back captured under the scope this page walks with
+    if (current) { try { pile = (await api.post("/api/funnel/settle", { key: current, verb: "done", only: only.current })).data?.pile || null; } catch { /* it may already be gone */ } }
+    advance(pile);
   };
   // Setting Taskuary up: the scripted walk, one stop per message so the conversation keeps the
   // trail. Nothing here reaches a model - a question typed during it is an ordinary turn, answered

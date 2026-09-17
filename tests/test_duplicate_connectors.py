@@ -34,12 +34,12 @@ class DuplicateConnectors(unittest.TestCase):
             self.assertEqual(store.get_source(88)['ConnectorId'], 77)
             self.assertEqual([(c['ConnectorId'], c['Name']) for c in store.connectors_by_type('imap')],
                              [(77, 'Operations mailbox'), (second, 'Support mailbox')])
-            store.cx.close()
+            store.close()
 
             # Startup seeds a missing type, not another copy of every existing type.
             reopened = SQLiteStore(str(db))
             self.assertEqual(len(reopened.connectors_by_type('imap')), 2)
-            reopened.cx.close()
+            reopened.close()
 
     def test_report_source_selects_a_specific_connector_instance(self):
         store = SQLiteStore(':memory:')

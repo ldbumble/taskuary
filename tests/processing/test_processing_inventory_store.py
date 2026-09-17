@@ -116,9 +116,15 @@ def test_display_history_filters_before_projection_and_caches_until_a_write(tmp_
             fixed_now='2026-09-06 12:00:01', live_state=[], display_only=True, history_days=14)
         assert projection.call_count == calls
 
+        # a setting the projection never reads is bookkeeping to the rail (the assistant writes one on
+        # every press, concierge.set_current) - it must not cold it; one it reads (PROCESSING_DIRTY_SETTINGS) must
         store.set_setting('owner_name', 'Cache invalidation', 'fixture')
         store.processing_inventory_snapshot(
             fixed_now='2026-09-06 12:00:02', live_state=[], display_only=True, history_days=14)
+        assert projection.call_count == calls
+        store.set_setting('owner_email', 'owner@example.test', 'fixture')
+        store.processing_inventory_snapshot(
+            fixed_now='2026-09-06 12:00:03', live_state=[], display_only=True, history_days=14)
         assert projection.call_count > calls
     store.cx.close()
 

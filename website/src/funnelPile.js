@@ -424,3 +424,12 @@ export const topAlert = (alerts, acked, current = null, shown = null) => pending
 // write and finished after it read stale rows and must not be counted.
 export const coveredByReload = (meta, forcedStartedAt) =>
   !!(meta && meta.lastAt && forcedStartedAt && meta.lastAt <= forcedStartedAt);
+
+// A rail that came WITH an answer (a turn's, a settle's) was read on the server after that write;
+// `generated_at` is when that read began, on the server's clock. Events older than it were seen by
+// the read. It is never taken as later than now: a server clock ahead of ours must not cover a write
+// the read did not see - the safe error is one reload too many, never one too few.
+export const heldSince = (pile, now = Date.now()) => {
+  const at = Number(pile?.generated_at);
+  return Number.isFinite(at) && at > 0 ? Math.min(at, now) : now;
+};

@@ -55,14 +55,20 @@ class NavigationStale(ValueError):
 
 def reserve(store, *, selection_revision, expected_next_key, expected_next_members,
             only=None, include_surfaced=False, exclude=None):
-    from .funnel_selection import capture_selection
+    from .funnel_selection import capture_from_rail
     state = _state(store)
     with state.lock:
-        capture = capture_selection(store, only=only, include_surfaced=include_surfaced,
+        # the rail's cached build, not a second one: the page's token came from that very pile
+        capture = capture_from_rail(store, only=only, include_surfaced=include_surfaced,
                                     exclude=exclude)
         fresh = fields(store, capture)
-        if (selection_revision != fresh['selection_revision']
-                or expected_next_key != fresh['expected_next_key']
+        # THE PICK IS THE CONTRACT. Stale means the item(s) the page shows as next are not what the
+        # rail would hand over now - the one case PW-050 protects, and the page must re-capture.
+        # Anything else that moved (a body that grew, a draft rewritten, other rows arriving, the
+        # chat renewed) is taken FRESH: the turn speaks from this capture, not the page's, so the
+        # answer is about what is there now. Refusing on the whole revision meant a press failed
+        # with "the next item changed" when the next item had not (design B, 2026-09-17).
+        if (expected_next_key != fresh['expected_next_key']
                 or expected_next_members != fresh['expected_next_members']):
             raise NavigationStale(fresh)
         if state.active is not None:

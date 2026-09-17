@@ -1,7 +1,7 @@
 """The local HTTP API + built-in minimal web UI. Localhost-only by default; set
 [server].token in config to require an X-Taskuary-Token header (for LAN/self-hosting).
 """
-import asyncio, contextlib, copy, json, re, secrets, sys, threading, time, weakref
+import asyncio, collections, contextlib, copy, json, re, secrets, sys, threading, time, weakref
 import requests
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -2996,7 +2996,7 @@ def dispatch_cancel(tid: int):
 def funnel_rerank(): return {'updated': rank.rerank(store, force=True)}
 
 # ── the pipe and the concierge (funnel.py, concierge.py): what comes next, said out loud ──────
-class SettleBody(BaseModel): key: str; verb: str = 'done'; hours: float | None = None
+class SettleBody(BaseModel): key: str; verb: str = 'done'; hours: float | None = None; only: str | None = None
 class SurfaceBody(BaseModel):
     key: str | None = None
     only: str | None = None
@@ -3009,37 +3009,55 @@ class SurfaceBody(BaseModel):
 class ConciergeSayBody(BaseModel): text: str; key: str | None = None; context_mid: int | None = None
 class ConciergeActBody(BaseModel): key: str; verb: str; hours: float | None = None
 
+def _pile_payload(force: bool = False, current: str = None, only: str = None,
+                  include_surfaced: bool = False, exclude: str = None) -> dict:
+    """The pile as the page draws it, with the selection token Next echoes. One road for the GET,
+    for the turn that carries the rail in its answer, and for the settle that does the same."""
+    from . import funnel
+    from .funnel_selection import capture_selection
+    from .processing_navigation import fields
+    started = time.time()
+    # funnel.pile owns invalidation and single-flight across open tabs. Capture navigation
+    # from that exact cached pile; capture_selection accepts it specifically so this endpoint
+    # does not rebuild canonical membership a second time.
+    cached = funnel.pile(store, force=force) if only is None else None
+    events = (cached.get('events') or []) if cached is not None else funnel.announce(store)
+    capture = capture_selection(store, only=only, include_surfaced=include_surfaced,
+                                exclude=exclude, pile=cached)
+    # generated_at: when this read BEGAN (server clock, ms) - the page compares it to its live events
+    # to know which writes this read already saw (funnelPile.coveredByReload); transient, outside the revision
+    p = {**capture.pile, **fields(store, capture), 'generated_at': int(started * 1000),
+         'alerts': funnel.alerts(store, capture.pile['items']), 'events': events}
+    # ...and what the page is HOLDING: an item whose review was decided (or whose task closed)
+    # leaves the pile, and nothing told the page - so a sent reply sat on the table as
+    # "reply pending" for as long as the tab stayed open (the owner, 2026-09-03: "why is it
+    # showing back up if the ai agent replied, i edited it and sent??"). Looked up in the build
+    # the pile came from, not a second one.
+    if current: p = {**p, 'current': funnel.next_item(store, current, items=funnel.full_items(store) if cached is not None else None)}
+    # Current is query-specific and may be absent from the ordinary pile. Include
+    # its complete presentation in the revision after attaching it to the response.
+    return funnel.present(store, p)
+
+def _pile_along(only: str = None, include_surfaced: bool = False, exclude: str = None) -> dict | None:
+    """The rail read once after a write and carried in that write's answer, so the page holds it
+    instead of asking for the same rows again (design B, 2026-09-17: a press of Next was two of these
+    reloads at 1.5-2 s each). Scoped the way the page will hold it. Never the answer's failure: the
+    page falls back to its own load when nothing rides along."""
+    try: return _pile_payload(force=True, only=only, include_surfaced=include_surfaced, exclude=exclude)
+    except Exception as e:
+        logger.debug(f'the pile did not ride along: {e}'); return None
+
 @app.get('/api/funnel/pile')
 def funnel_pile(force: bool = False, current: str = None, only: str = None,
                 include_surfaced: bool = False, exclude: str = None):
     """The ranked pile the Assistant page draws: next-first, every item with the words it rests
     on, plus the alerts that interrupt. Cached a few seconds - it is polled while the page is open."""
-    from . import funnel
-    from .funnel_selection import capture_selection, SelectionUnavailable
-    from .processing_navigation import fields
-    try:
-        # funnel.pile owns invalidation and single-flight across open tabs. Capture navigation
-        # from that exact cached pile; capture_selection accepts it specifically so this endpoint
-        # does not rebuild canonical membership a second time.
-        cached = funnel.pile(store, force=force) if only is None else None
-        events = (cached.get('events') or []) if cached is not None else funnel.announce(store)
-        capture = capture_selection(store, only=only, include_surfaced=include_surfaced,
-                                    exclude=exclude, pile=cached)
-        p = {**capture.pile, **fields(store, capture),
-             'alerts': funnel.alerts(store, capture.pile['items']), 'events': events}
-        # ...and what the page is HOLDING: an item whose review was decided (or whose task closed)
-        # leaves the pile, and nothing told the page - so a sent reply sat on the table as
-        # "reply pending" for as long as the tab stayed open (the owner, 2026-09-03: "why is it
-        # showing back up if the ai agent replied, i edited it and sent??"). Looked up in the build
-        # the pile came from, not a second one.
-        if current: p = {**p, 'current': funnel.next_item(store, current, items=funnel.full_items(store) if cached is not None else None)}
+    from .funnel_selection import SelectionUnavailable
+    try: return _pile_payload(force, current, only, include_surfaced, exclude)
     except SelectionUnavailable as error:
         raise HTTPException(503, error.detail) from error
     except processing_all.AllError as error:
         raise HTTPException(error.status, error.detail) from error
-    # Current is query-specific and may be absent from the ordinary pile. Include
-    # its complete presentation in the revision after attaching it to the response.
-    return funnel.present(store, p)
 
 @app.post('/api/funnel/settle')
 def funnel_settle(body: SettleBody):
@@ -3049,6 +3067,8 @@ def funnel_settle(body: SettleBody):
     if body.verb in ('done', 'later', 'skip'):                              # settled: off the table, and nothing chosen in its place
         dock = general.dock_task(store, ACTOR)[0]['TaskId']
         if concierge.current_key(store, dock) == body.key: concierge.set_current(store, dock, None, ACTOR)
+        # the table is empty now, so the page's next scope excludes nothing: the rail comes back captured that way
+        out = {**out, 'pile': _pile_along(only=body.only)}
     return out
 
 @app.get('/api/concierge')
@@ -3151,27 +3171,28 @@ def concierge_next(body: SurfaceBody = None):
         from .funnel_selection import SelectionUnavailable
         try:
             def _surface(selected, guard, dock):
-                # the captured pick is validated against its source before it is spoken (PW-050); a pile that
-                # moved under it is a stale navigation, and the client re-captures
-                picked = selected.selected or {}
-                if picked:
-                    members = picked.get('items') if picked.get('kind') == 'fyis' else [picked]
-                    if _refresh_items(members or []).get('newer'):
-                        from . import funnel as _f
-                        _f.invalidate()
-                        raise NavigationStale({'reason': 'new_activity', 'detail': 'new messages arrived on the item; refresh and go again'})
                 return concierge.surface(store, actor=ACTOR, only=body.only, include_surfaced=body.include_surfaced,
                                          exclude=body.exclude, selection=selected, commit_guard=guard, bound_dock=dock,
                                          leaving=body.leaving)
-            return reservation.run(_surface, ACTOR)
+            out = _with_pile(reservation.run(_surface, ACTOR), body)
+            _refresh_after(out)                      # the change-check follows the four (design C)
+            return out
         except NavigationStale as error:
             raise HTTPException(409, error.detail) from error
         except SelectionUnavailable as error:
             raise HTTPException(503, error.detail) from error
-    if body.key: _refresh_chat_key(body.key)
-    else: _refresh_next_selection(body)          # select first, then validate the source (PW-050)
-    return concierge.surface(store, body.key, actor=ACTOR, only=body.only,
-                             include_surfaced=body.include_surfaced, exclude=body.exclude, leaving=body.leaving)
+    if body.key: _refresh_chat_key(body.key)     # a named pull refreshes ITS item first: the item is the subject (PW-050)
+    out = _with_pile(concierge.surface(store, body.key, actor=ACTOR, only=body.only,
+                                       include_surfaced=body.include_surfaced, exclude=body.exclude, leaving=body.leaving), body)
+    if not body.key: _refresh_after(out)         # ...and the walk's Next answers first, then asks the provider (design C)
+    return out
+
+def _with_pile(out: dict, body) -> dict:
+    """A Next answer with the rail as the turn left it. The item is on the table, so the page will hold
+    the rail with everything but it - that is the scope it is captured under. The walk running out
+    (no item) leaves the page to its own load; a named pull (`key`) is not a walk."""
+    if body.key or not (out.get('item') or {}).get('key'): return out
+    return {**out, 'pile': _pile_along(only=body.only, include_surfaced=body.include_surfaced, exclude=out['item']['key'])}
 
 @app.post('/api/concierge/open')
 def concierge_open():
@@ -3245,10 +3266,10 @@ async def concierge_stream(body: ConciergeStreamBody):
             def fetched(n):                      # once per turn, as the new lines land - the result line follows
                 if not started: started.append(n); put({'type': 'context_update', 'say': RETRIAGE_STARTED, 'stage': 'started', 'new': n})
             # A typed question polls NOTHING up front: the words are read first, and the item is
-            # brought in below only if the answer turns out to be about it. Surfacing still refreshes,
-            # because there the item IS the subject (PW-050).
+            # brought in below only if the answer turns out to be about it. A NAMED pull still refreshes,
+            # because there the item IS the subject (PW-050). The walk's Next does not either: it answers
+            # from the rail and the change-check follows the four (_refresh_after, design C, 2026-09-17).
             if body.key and body.mode != 'say': freshness = _refresh_chat_key(body.key, body.context_mid, on_fetched=fetched)
-            elif body.mode == 'next' and not reservation: freshness = _refresh_next_selection(body, on_fetched=fetched)
             else: freshness = {}
             if freshness.get('polled'):
                 put({'type': 'tool_call', 'name': 'sync_messages',
@@ -3273,7 +3294,9 @@ async def concierge_stream(body: ConciergeStreamBody):
                                             leaving=body.leaving)
             else: out = concierge.say(store, body.text or '', body.key, actor=ACTOR, trace=trace, cancel=cancel, item=freshness.get('item'))
             if notice: out['context_update'] = notice
+            if body.mode == 'next': out = _with_pile(out, body)       # the rail rides along (design B)
             put({'type': 'done', **out})
+            if body.mode == 'next' and not body.key: _refresh_after(out)     # after the answer, never before it (design C)
         except NavigationStale as error:
             put({'type': 'error', 'code': 'selection_stale', 'detail': error.detail, 'error': str(error)})
         except SelectionUnavailable as error:
@@ -5511,23 +5534,31 @@ def _refresh_items(items: list, on_fetched=None) -> dict:
     return out
 
 
-def _refresh_next_selection(body, on_fetched=None) -> dict:
-    """Next without a key (PW-050): pick what the walk would surface, refresh THAT item's source (every
-    channel of an FYI batch, once), and re-pick when the refresh moved the pile - so the assistant and
-    Current/Next speak about the same, current item. Rebuilding the pile from the database alone is not a
-    source refresh; this asks the provider."""
-    from . import funnel
-    item = funnel.next_item(store, None, body.only, body.include_surfaced, body.exclude)
-    if not item: return {'polled': False, 'newer': False, 'item': None}
-    members = funnel.fyi_batch(store, item) if item.get('lane') == 'fyi' else [item]
-    f = _refresh_items(members, on_fetched)
-    if f.get('newer'):
-        from . import funnel as _f
-        _f.invalidate()
-        item = funnel.next_item(store, None, body.only, body.include_surfaced, body.exclude) or item
-    f['item'] = item
-    f['after'] = _latest_context_message(item.get('tid'), item.get('mid'))
-    return f
+_AFTER = collections.deque(maxlen=8)      # the change-checks in flight, so a test (or a shutdown) can wait for them
+
+
+def _refresh_after(out: dict):
+    """The change-check FOLLOWS the four (design C, 2026-09-17). Next used to ask the provider about the
+    item it was about to show BEFORE answering - a network wait of 100-1,000 ms inside every press, and a
+    re-pick when the thread had moved. Now the answer goes out from the rail, and the provider is asked
+    afterwards, here, on a thread: every channel of an FYI batch once (_refresh_items). Mail that arrives
+    writes through ingest, the rail's dirty rows and the live event carry it to the page, whose reload
+    refreshes the card in place and says so on the strip (funnelPile.currentItemFromPile). The item on
+    the table is NOT re-picked. A named pull keeps its up-front refresh - there the item is the subject."""
+    item = (out or {}).get('item') or {}
+    members = item.get('items') if item.get('kind') == 'fyis' else [item]
+    members = [m for m in (members or []) if isinstance(m, dict) and (m.get('mid') or m.get('tid'))]
+    if not members: return None
+    def work():
+        try: _refresh_items(members)
+        except Exception as e: logger.debug(f'the change-check after the four could not ask the provider: {e}')
+    t = threading.Thread(target=work, daemon=True, name='refresh-after'); _AFTER.append(t); t.start()
+    return t
+
+
+def wait_refresh_after(timeout: float = 5.0):
+    """Wait for the change-checks in flight (tests; nothing in the request path waits on them)."""
+    for t in list(_AFTER): t.join(timeout)
 
 
 def _notice_once(freshness: dict) -> str | None:

@@ -47,35 +47,47 @@ class Base(unittest.TestCase):
         p = mock.patch.object(server, 'store', self.s); p.start(); self.addCleanup(p.stop)
 
 
-class SelectThenValidateTests(Base):
-    def test_next_without_a_key_refreshes_the_picked_items_source_and_repicks_when_it_moved(self):
+class TheChangeCheckFollowsTheFourTests(Base):
+    """Design C (2026-09-17): Next answers from the rail, then asks the provider about what it put on the
+    table - on a thread, after the answer. The check itself is unchanged: every channel of the item(s) once."""
+
+    def test_the_picked_items_source_is_polled_once_after_the_answer_and_the_line_lands(self):
         tid, first, rid = teams_task(self.s)
         polls = []
         def poll(*a, **k):
             polls.append(k.get('only'))
             later(self.s, tid); return 1                                          # the refresh brings a newer line
+        item = funnel.next_item(self.s, None)
+        self.assertEqual(item['key'], f'review:{rid}')
         with mock.patch.object(server, '_poll_reports', side_effect=poll):
-            fresh = server._refresh_next_selection(server.SurfaceBody())
+            t = server._refresh_after({'item': item}); t.join(5)
         self.assertEqual(polls, [['teams']])
-        self.assertTrue(fresh['newer']); self.assertEqual(fresh['item']['key'], f'review:{rid}')
-        self.assertEqual(fresh['item']['mid'], self.s.last_inbound_on_task(tid)['MessageId'])   # the pick speaks with the newest line
+        # the line is in the store; the page's next read of the item carries it (the strip says so)
+        self.assertEqual(self.s.last_inbound_on_task(tid)['BodyText'], 'Actually it works now.')
+        self.assertEqual(funnel.next_item(self.s, f'review:{rid}')['mid'], self.s.last_inbound_on_task(tid)['MessageId'])
 
-    def test_an_fyi_batch_is_validated_once_per_channel(self):
+    def test_an_fyi_batch_is_checked_once_per_channel(self):
         for i, ch in enumerate(('teams', 'slack', 'teams')):
             self.s.add_message({'ExternalId': f'fyi{i}', 'ConversationId': f'c{i}', 'Channel': ch, 'SourceName': 'x', 'Subject': f'note {i}',
                                 'FromName': 'Sam', 'SentAt': stamp(-10 - i), 'BodyText': 'fyi only', 'Status': 'filed'})
             self.s.add_route(i + 1, None, 'file', None, 'triage: fyi - nothing to do', [], 'triage')
         polls = []
+        first = funnel.next_item(self.s, None)
+        card = {'kind': 'fyis', 'key': 'fyis:x', 'items': funnel.fyi_batch(self.s, first)}
         with mock.patch.object(server, '_poll_reports', side_effect=lambda *a, **k: polls.append(k.get('only')) or 0):
-            fresh = server._refresh_next_selection(server.SurfaceBody())
+            server._refresh_after({'item': card}).join(5)
         self.assertEqual(sorted(p[0] for p in polls), ['slack', 'teams'])
-        self.assertFalse(fresh['newer'])
 
     def test_a_quiet_source_is_a_no_op(self):
         tid, first, rid = teams_task(self.s)
         with mock.patch.object(server, '_poll_reports', return_value=0):
-            fresh = server._refresh_next_selection(server.SurfaceBody())
-        self.assertFalse(fresh['newer']); self.assertEqual(fresh['item']['key'], f'review:{rid}')
+            f = server._refresh_items([funnel.next_item(self.s, None)])
+        self.assertFalse(f['newer'])
+
+    def test_nothing_on_the_table_asks_nothing(self):
+        with mock.patch.object(server, '_poll_reports', side_effect=AssertionError('must not poll')):
+            self.assertIsNone(server._refresh_after({'item': None}))
+            self.assertIsNone(server._refresh_after({}))
 
 
 class NoticeTests(Base):
@@ -84,32 +96,44 @@ class NoticeTests(Base):
             # the sync_messages tool event is the poll's own receipt; the notice and the answer are what is asserted
             return [e for e in (json.loads(l) for l in r.iter_lines() if l.strip()) if e.get('type') != 'tool_call']
 
-    def test_the_notice_comes_before_the_answer_once_per_revision_and_says_triage_ran(self):
+    def test_the_answer_comes_first_and_the_provider_is_asked_after_it(self):
+        """Design C: no notice and no wait before the answer - the rail's item is spoken as it stands, the
+        provider is polled once the answer is out, and what arrives reaches the page through its own reload
+        (the strip's "New message from ... arrived" line, funnelPile.currentItemFromPile)."""
         tid, first, rid = teams_task(self.s)
         c = TestClient(server.app)
-        arrivals = [lambda: later(self.s, tid)]
+        polls = []
         def poll(*a, **k):
-            if arrivals: arrivals.pop()(); return 1
-            return 0
+            polls.append(k.get('only')); later(self.s, tid); return 1
         with mock.patch.object(server, '_poll_reports', side_effect=poll), mock.patch.dict(server.hub_term.SESSIONS, {}, clear=True):
             lines = self.stream(c)
-            self.assertEqual([l['type'] for l in lines], ['context_update', 'done'])
-            self.assertIn('New message', lines[0]['say']); self.assertIn('triage', lines[0]['say'].lower())
-            self.assertIn('works now', lines[0]['say'])
-            again = self.stream(c, include_surfaced=True)                         # nothing new: no second notice
-            self.assertEqual([l['type'] for l in again], ['done'])
-            arrivals.append(lambda: later(self.s, tid, text='One more thing: the VPN too.'))
-            third = self.stream(c, include_surfaced=True)
-            self.assertEqual([l['type'] for l in third], ['context_update', 'done'])
-            self.assertIn('VPN', third[0]['say'])
+            self.assertEqual([l['type'] for l in lines], ['done'])
+            self.assertEqual(lines[0]['item']['key'], f'review:{rid}')
+            self.assertEqual(lines[0]['item']['mid'], first, 'spoken as the rail had it - the check had not run yet')
+            server.wait_refresh_after(5)
+        self.assertEqual(polls, [['teams']])
+        newest = self.s.last_inbound_on_task(tid)['MessageId']
+        self.assertNotEqual(newest, first)
+        cur = c.get('/api/funnel/pile', params={'force': 1, 'current': f'review:{rid}'}).json()['current']
+        self.assertEqual(cur['mid'], newest, "the page's next read carries the line that arrived")
 
-    def test_a_refresh_that_fails_is_an_error_not_a_fresh_answer(self):
+    def test_a_named_pull_still_refreshes_its_item_first(self):
+        """Clicking a row is about THAT item: the check stays up front, with its notice (PW-050/052)."""
+        tid, first, rid = teams_task(self.s)
+        c = TestClient(server.app)
+        with mock.patch.object(server, '_poll_reports', side_effect=lambda *a, **k: later(self.s, tid) and 1), \
+             mock.patch.dict(server.hub_term.SESSIONS, {}, clear=True):
+            lines = self.stream(c, key=f'review:{rid}')
+        self.assertEqual([l['type'] for l in lines], ['context_update', 'done'])
+        self.assertIn('works now', lines[0]['say'])
+
+    def test_a_provider_that_cannot_be_reached_does_not_fail_the_answer(self):
         tid, first, rid = teams_task(self.s)
         c = TestClient(server.app)
         with mock.patch.object(server, '_poll_reports', return_value=False), mock.patch.dict(server.hub_term.SESSIONS, {}, clear=True):
             lines = self.stream(c)
-        self.assertEqual([l['type'] for l in lines], ['error'])
-        self.assertIn('stale', lines[0]['error'].lower())
+            server.wait_refresh_after(5)
+        self.assertEqual([l['type'] for l in lines], ['done'])
 
 
 def mail_task(s):

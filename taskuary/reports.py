@@ -1592,7 +1592,9 @@ LINE_SAYS = {'timeline': "post it on the owner's timeline as news to read",
              'work': "put it on the owner's work rail, as something they have to do",
              'alert': "reach the owner right away, on whichever channel they chose",
              'send': 'send the report out to the people it is addressed to'}
-JUDGE_TOKENS = 300                # four yes/nos and a sentence each - nothing to think about at length
+# Four bare yes/nos. This was 300 while the prompt also asked for a sentence each; the sentence was
+# never a requirement of routing, only of the thing that happened to be answering.
+JUDGE_TOKENS = 60
 
 
 def routed(cfg: dict) -> bool:
@@ -1622,12 +1624,11 @@ def work_brief(cfg: dict) -> str:
 
 
 JUDGE_SYSTEM = (
-    'A scheduled report has just run. Decide where its result goes. You are not summarizing it and '
-    'nobody reads what you write here except as one short reason on a row.\n\n'
+    'A scheduled report has just run. Decide where its result goes.\n\n'
     'Answer EVERY question below, one per line, in exactly this form:\n'
-    'NAME: yes|no - one short sentence saying why\n\n'
+    'NAME: yes|no\n\n'
     'Judge only what the run actually came back with. If it does not say a thing, that thing did not '
-    'happen. Write nothing else - no preamble, no summary, no closing line.\n\nThe questions:\n')
+    'happen. Write nothing else - no reason, no preamble, no summary, no closing line.\n\nThe questions:\n')
 
 
 def judge_prompt(cfg: dict) -> str:
@@ -1641,15 +1642,18 @@ _FLAG = re.compile(r'^[ \t>*_\-]*(TIMELINE|WORK|ALERT|SEND)\s*:\s*(yes|no)\b[ \t
 
 
 def judge_run(cfg: dict, res: dict, llm) -> dict:
-    """Ask this report's own brain where the run goes: {line: bool} for the lines it was asked
-    about, plus the sentence it gave.
+    """Where this run goes: {line: bool} for the lines the card asked the AI about. Nothing else.
+
+    The judge decides; it does not narrate. An all-clear check obviously does not belong on the
+    Timeline, and the report's own head is already on the row - so three of the four lines threw
+    their sentence away, and the fourth (the alert) gets a better one from the owner's own rule.
 
     A line it did not answer - or a judge that would not run at all - is a run nobody judged, and
     an unjudged run REACHES the owner. The rule this replaces failed the other way, and a monitor
     that silently stops speaking is worse than one that speaks too often.
     """
     ask = [l for l in LINES if route_of(cfg, l)[0] == 'ai']
-    unjudged = dict({l: True for l in ask}, why='the AI was asked where this run goes and did not judge it')
+    unjudged = {l: True for l in ask}
     if not llm: return unjudged
     try:
         out = llm(JUDGE_SYSTEM + judge_prompt(cfg),
@@ -1658,11 +1662,13 @@ def judge_run(cfg: dict, res: dict, llm) -> dict:
     except Exception as e:
         logger.warning(f'the routing judge failed, so the run reaches the owner: {e}')
         return unjudged
-    said = {m.group(1).lower(): (m.group(2).lower() == 'yes', m.group(3).strip()) for m in _FLAG.finditer(out)}
+    # _FLAG keeps its trailing group so a model that volunteers a reason still parses - the group is
+    # simply no longer read.
+    said = {m.group(1).lower(): m.group(2).lower() == 'yes' for m in _FLAG.finditer(out)}
     if any(l not in said for l in ask):
         logger.warning(f'the routing judge answered {sorted(said) or "nothing"} of {sorted(ask)}')
         return unjudged
-    return dict({l: said[l][0] for l in ask}, why=next((said[l][1] for l in ask if said[l][0]), ''))
+    return {l: said[l] for l in ask}
 
 
 def decide(cfg: dict, res: dict, llm=None) -> dict:
@@ -1677,7 +1683,11 @@ def decide(cfg: dict, res: dict, llm=None) -> dict:
     # the owner switched off does not come back on because the report broke.
     if res['failed']: return dict({l: how[l] != 'never' for l in LINES}, why='the report failed to run')
     said = judge_run(cfg, res, llm) if 'ai' in how.values() else {}
-    return dict({l: said.get(l, how[l] == 'always') for l in LINES}, why=str(said.get('why') or ''))
+    # The one reason anybody reads: send_alert's text. An interrupt with no reason is a ping, so it
+    # quotes the rule the owner wrote rather than a model's paraphrase of it - and no model is asked
+    # for prose anywhere on this road.
+    fired = route_of(cfg, 'alert')[1]
+    return dict({l: said.get(l, how[l] == 'always') for l in LINES}, why=f'your rule: {fired}' if fired else '')
 
 
 def _decided_by_the_old_rules(cfg: dict, res: dict) -> dict:

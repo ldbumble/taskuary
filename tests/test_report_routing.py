@@ -86,7 +86,47 @@ def test_the_ai_decides_each_line_it_was_asked_about():
                      'work': {'how': 'ai', 'when': 'any error'}}}
     d = reports.decide(cfg, res(), llm_saying('TIMELINE: yes - PROC-8 errored twice\nWORK: yes - same'))
     assert (d['timeline'], d['work']) == (True, True)
-    assert d['why'] == 'PROC-8 errored twice'
+
+
+def test_the_judge_answers_booleans_and_writes_no_prose():
+    """The sentence was there because the thing answering happened to be able to write. It is not a
+    requirement of routing, and for three of the four lines it was computed and thrown away."""
+    cfg = {'route': {'work': {'how': 'ai', 'when': 'a job has not run in over two hours'},
+                     'timeline': {'how': 'ai', 'when': 'anything worth reading'}}}
+    said = reports.judge_run(cfg, res(), llm_saying('WORK: yes\nTIMELINE: no'))
+    assert said == {'work': True, 'timeline': False}
+    assert 'why' not in said
+
+
+def test_a_judge_that_volunteers_a_reason_is_not_punished_for_it():
+    """An older model, or one that ignores the instruction, still routes correctly - the reason is
+    simply ignored rather than failing the parse."""
+    cfg = {'route': {'work': {'how': 'ai', 'when': 'x'}}}
+    assert reports.judge_run(cfg, res(), llm_saying('WORK: yes - the export is late')) == {'work': True}
+
+
+def test_a_line_the_judge_skipped_leaves_the_run_unjudged_and_it_reaches_you():
+    cfg = {'route': {'work': {'how': 'ai', 'when': 'x'}, 'alert': {'how': 'ai', 'when': 'y'}}}
+    assert reports.judge_run(cfg, res(), llm_saying('WORK: no')) == {'work': True, 'alert': True}
+
+
+def test_a_judge_that_raises_leaves_the_run_unjudged_and_it_reaches_you():
+    def boom(*a, **kw): raise RuntimeError('502')
+    assert reports.judge_run({'route': {'work': {'how': 'ai', 'when': 'x'}}}, res(), boom) == {'work': True}
+
+
+def test_the_prompt_no_longer_asks_for_a_sentence():
+    assert 'one short sentence' not in reports.JUDGE_SYSTEM
+    assert reports.JUDGE_TOKENS < 300        # it was sized for four yes/nos AND a sentence each
+
+
+def test_the_alerts_reason_is_the_owners_own_rule_and_no_model_writes_it():
+    """An interrupt with no reason is a ping, so it quotes the sentence the owner wrote rather than
+    a model's paraphrase of it - and nothing on this road asks anybody for prose."""
+    cfg = {'route': {'alert': {'how': 'ai', 'when': 'a job has not run in over two hours'}}}
+    d = reports.decide(cfg, res(), llm_saying('ALERT: yes'))
+    assert d['alert'] is True
+    assert d['why'] == 'your rule: a job has not run in over two hours'
 
 
 def test_a_no_on_every_line_is_a_run_that_reaches_nobody():
@@ -115,7 +155,6 @@ def test_an_unanswered_line_reaches_you_rather_than_going_quiet():
                      'work': {'how': 'ai', 'when': 'any error'}}}
     d = reports.decide(cfg, res(), llm_saying('Sure! Here is my assessment: everything looks fine.'))
     assert (d['timeline'], d['work']) == (True, True)
-    assert 'did not judge' in d['why']
 
 
 def test_a_judge_that_answers_half_the_question_answered_none_of_it():
@@ -127,8 +166,7 @@ def test_a_judge_that_answers_half_the_question_answered_none_of_it():
 def test_a_judge_that_will_not_run_at_all_reaches_you():
     def broken(system, user, **kw): raise RuntimeError('no brain configured')
     cfg = {'route': {'timeline': {'how': 'ai', 'when': 'any error'}}}
-    d = reports.decide(cfg, res(), broken)
-    assert d['timeline'] is True and 'did not judge' in d['why']
+    assert reports.decide(cfg, res(), broken)['timeline'] is True
 
 
 def test_no_brain_at_all_reaches_you():

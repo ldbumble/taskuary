@@ -75,6 +75,12 @@ jobs:
             echo "$added"
             exit 1
           fi
+      # When the check fails, the only way to learn WHY is to diff what CI built against what was
+      # committed - and a `git diff` of deleted minified chunks in the log is truncated past use
+      # (56f266a0, 2026-09-18: three hashes differed, the log showed one line of one of them).
+      - if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with: { name: web-as-ci-built-it, path: taskuary/web, retention-days: 3 }
 
   browser:
     # Real Chromium + the disposable fixture backend; never targets the owner's server.

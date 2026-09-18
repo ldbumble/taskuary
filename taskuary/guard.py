@@ -175,7 +175,8 @@ def allowed_hosts(server: dict) -> set:
     try: out |= {socket.gethostname().lower(), socket.gethostname().lower() + '.local'}
     except Exception: pass
     extra = server.get('allowed_hosts') or ''
-    out |= {str(h).strip().lower() for h in (extra.split(',') if isinstance(extra, str) else extra)}
+    names = extra.split(',') if isinstance(extra, str) else extra if isinstance(extra, (list, tuple, set)) else [extra]
+    out |= {str(h).strip().lower() for h in names}
     return {h for h in out if h}
 
 

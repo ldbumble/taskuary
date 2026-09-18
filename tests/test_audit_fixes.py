@@ -197,7 +197,8 @@ class DoorTests(unittest.TestCase):
     def test_f03_an_allowed_host_survives_the_config_round_trip(self):
         """What save() writes, load() must be able to answer to. dumps_toml emits a list as a TOML
         array, so reading only the string form made a saved name stop working after the next save."""
-        import tomllib
+        try: import tomllib
+        except ImportError: import tomli as tomllib
         from taskuary import config
         raw = config.dumps_toml({'server': {'host': '0.0.0.0', 'allowed_hosts': ['taskuary.lan']}})
         srv = tomllib.loads(raw)['server']

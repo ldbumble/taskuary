@@ -226,11 +226,19 @@ words. The chat assistant proposes nothing of its own.
    look-ups), 8bd7e19d (the state block on the general road), 98192ce4 (bundle). Plan: docs/superpowers/plans/2026-09-18-assistant-facts-pack.md.
 2. **Stop verbs and by-name acts** - the report, setting and connection operations, the tiers, the
    undo receipts, results back to the asking chat, the audit list. About four days.
+   Landed 2026-09-18: 2b4ecb0b (the kinds, the tiers, the undo, results back to the asking chat, the
+   audit list), 7339837c (tests re-pinned to the tiers). Plan: docs/superpowers/plans/2026-09-18-assistant-acts-pack.md.
+   Left out on purpose: a connector's own switch (github use_as_tracker) is not a schema knob and is not reachable by setting.set.
 3. **Ideas in the report** - app health, connect-a-system, the catalogue moved server-side, the
    remembered no. About three days.
+   Landed 2026-09-18: 1d61fa6b (assistant.health_ideas / connect_ideas, taskuary/connectorcatalog.json read by
+   the tab and the report, the doors on the idea card, the decline remembered by key).
 4. **Doorways and the live proof** - the welcome line, receipts to the asking chat, and the proof
    run from a phone. About a day and a half. iMessage and Teams as doorways are their own packs
    after this, each about a day, when wanted.
+   Landed 2026-09-18: 30665092 (the morning line, once a day, the three scripts numbered; a script named in
+   words runs with no model), 296b4627 (bundle). The proof from a real phone is still to run on the owner's
+   install; the unit tests cover the doorway end to end with a mocked sender.
 
 Each pack lands on master on its own, with its tests, and the app is restarted once per pack.
 

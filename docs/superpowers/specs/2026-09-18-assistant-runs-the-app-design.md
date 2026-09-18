@@ -185,7 +185,9 @@ and the scripts as numbered options, so one reply starts the walk there. Quiet w
 empty; never twice in a day (the digest's `once_per_day` rule); the Morning digest itself may be
 delivered to the same chat, since delivery already takes a chat as a destination - the line is the
 door, the digest is the reading. One switch under *Assistant on your phone*, on by default once a
-chat is chosen.
+chat is chosen. The options are always the same three - *walk me through my tasks*, *set up
+Taskuary*, *set up a report* - and set-up never drops off the list once the checklist is done: "there
+always is more to set up" (the owner, 2026-09-18), and the setup walk is the tour of the app too.
 
 Long results: the summary in the first bubble, the whole thing as a follow-up on request. Pictures
 (a snapshot from the browser pane, a chart from a report) go as attachments where the channel allows

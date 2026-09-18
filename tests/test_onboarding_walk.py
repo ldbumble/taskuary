@@ -5,7 +5,8 @@ connected - which is exactly when somebody presses it. So the stops are static t
 reads, and a typed question is an ordinary assistant turn that happens beside the walk rather than
 inside it.
 """
-import unittest
+import json, unittest
+from unittest import mock
 
 from fastapi.testclient import TestClient
 from taskuary import server, setup, walk
@@ -214,6 +215,51 @@ class TheAiStopKnowsWhatYouAlreadyHaveTests(unittest.TestCase):
         self.assertIn('Azure OpenAI', can[0])
         self.assertTrue(any('coding CLI' in t for t in can), 'the CLI road is still offered')
         self.assertEqual(sum('coding CLI' in t for t in can), 1, 'and offered once')
+
+
+class _NoRows:
+    """A store that holds nothing, so 'none yet' can be tested without unseeding the real one."""
+    def list_sources(self, *a, **k): return []
+    def list_tasks(self, *a, **k): return []
+
+
+class EveryStopSaysWhatYouAlreadyHaveTests(unittest.TestCase):
+    """The walk is a tour of an INSTALL, not of the product. A stop that could not say what is
+    already set up made you go and look, which is the trip the walk exists to save (the owner,
+    2026-09-17: "for each step it should include if step was already completed and what is setup for
+    each step. So for reports show the reports setup and workflows").
+    """
+
+    def test_every_stop_either_ticks_or_counts_something(self):
+        s = MemoryStore()
+        stops = walk.state(s)['stops']
+        for o in stops:
+            self.assertTrue('done' in o or 'facts' in o, f"{o['key']} says nothing about this install")
+
+    def test_the_reports_stop_answers_for_both_things_it_names(self):
+        """"3 reports" on a card about reports AND workflows leaves you wondering which three."""
+        s = MemoryStore()
+        for title, flow in [('Process errors', False), ('Chase overdue invoices', True)]:
+            s.save_source({'Channel': 'report', 'Address': title, 'Active': 1, 'Owner': 'o',
+                           'ConfigJson': json.dumps({'type': 'mssql', 'title': title, 'is_workflow': flow})}, 'o')
+        said = next(o for o in walk.state(s)['stops'] if o['key'] == 'reports')['facts']
+        # both halves counted and named separately; only the first few names are listed, because a
+        # card is not a directory - the count is the answer and the names are the sanity check
+        self.assertIn('5 reports:', said)
+        self.assertIn('1 workflows: Chase overdue invoices', said)
+
+    def test_a_stop_with_nothing_to_count_says_none_yet_rather_than_nothing(self):
+        """A blank where a number belongs reads as a failed read, not as an empty shelf."""
+        self.assertEqual(walk._fact_reports(_NoRows()), 'none yet')
+        self.assertEqual(walk._fact_tasks(_NoRows()), 'none yet')
+
+    def test_a_counter_that_throws_does_not_take_the_walk_down(self):
+        """The install that most needs the walk is the half-configured one where a read throws."""
+        s = MemoryStore()
+        with mock.patch.dict(walk.FACTS, {'hub': lambda _s: (_ for _ in ()).throw(RuntimeError('no table'))}):
+            stops = walk.state(s)['stops']
+        self.assertEqual(len(stops), len(walk.STOPS))
+        self.assertNotIn('facts', next(o for o in stops if o['key'] == 'hub'))
 
 
 if __name__ == '__main__':

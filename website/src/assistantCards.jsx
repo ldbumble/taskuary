@@ -865,6 +865,14 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onFinish, onSave
           {pane && <CliPane pane={pane} height="38vh" />}
         </div>
       )}
+      {/* The walk is scripted and reaches no model - but a question typed during it is an ordinary
+          turn, answered beside the walk while the walk keeps its place (walk.py's own design). That
+          was true before and nowhere said so, so the only way to find out was to risk losing your
+          place (the owner, 2026-09-17: "ask them if they have any questions"). */}
+      <div style={{ fontSize: 12, color: "#867f74", margin: "10px 0 0" }}>
+        Any questions about this step? Ask below in your own words — the walk keeps your place, and
+        Next picks it back up.
+      </div>
       <div className="tq-card-actions">
         {/* the checklist's five stops carry the label the panel's own row uses, so the walk and the
             panel name the same destination the same way; a tab stop is its tab and needs none */}

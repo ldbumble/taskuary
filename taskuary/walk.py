@@ -16,6 +16,8 @@ TWO KINDS OF TEXT live in a stop, and the difference is the whole design:
   `facts` - what THIS install has done. Read off the same tables `setup.state` reads, so a stop can
             never claim something the checklist contradicts.
 """
+from loguru import logger
+
 from . import setup
 
 AT = 'setup_walk_at'                 # where the owner stopped; a setting, so a reload resumes
@@ -151,9 +153,99 @@ def _fact_tasks(s) -> str:
     return f'{len(tasks)} here so far' if tasks else 'none yet'
 
 
-# What THIS install has done, for the stops where a number is worth more than a sentence. Keyed by
-# stop; a stop with no entry simply carries no `facts`.
-FACTS = {'connections': _fact_connections, 'tasks': _fact_tasks}
+def _named(rows, key='Name', n=3) -> str:
+    """`3 things: a, b, c` - a count leads because it is the answer, the names follow because a
+    number alone does not tell you whether it is the right three."""
+    names = [str(r[key]) for r in rows if r.get(key)]
+    return f"{len(names)}: {', '.join(names[:n])}" + ('…' if len(names) > n else '') if names else 'none yet'
+
+
+def _fact_ai(s) -> str:
+    """Every brain that could answer, not just the one that does - "running on Azure" above a stop
+    offering four roads reads as though the other three are unavailable."""
+    # through setup, never through llm: this module may not reach a model, and a test pins that by
+    # reading its source. setup already owns which card types can answer a prompt.
+    live = [c for c in s.list_connectors() if c['Type'] in setup.AI_TYPES and c['Active'] and c['HasSecret']]
+    return _named(live)
+
+
+def _brain_name(s, value: str) -> str:
+    """A setting reads `connector:80` or `cli:coder`; neither is a thing the owner named. Resolved
+    HERE and not through aidefaults.state, which needs the live config.toml this does not have."""
+    v = str(value or '').strip()
+    if not v: return 'auto'
+    if v.startswith('cli:'): return v[4:]
+    if v.startswith('connector:') and v[10:].isdigit():
+        row = s.get_connector(int(v[10:]))
+        return (row['Name'] or row['Type']) if row else v
+    return v
+
+
+def _fact_models(s) -> str:
+    st = s.get_settings()
+    return ', '.join(f'{label}: {_brain_name(s, st.get(key))}' for label, key in
+                     (('triage', 'triage_ai'), ('assistant', 'concierge_ai'), ('general', 'assistant_ai')))
+
+
+def _fact_sync(s) -> str:
+    waiting = s.pending_triage(limit=200)
+    return f'{len(waiting)} waiting to be triaged' if waiting else 'nothing waiting'
+
+
+def _fact_docs(s) -> str:
+    profiles = {(r.get('rules_doc') or r['Name']) for r in s.list_agents()}
+    return f"{len(profiles)} profile documents: {', '.join(sorted(profiles)[:3])}" if profiles else 'none yet'
+
+
+def _fact_board(s) -> str:
+    return _named(s.list_agents())
+
+
+def _fact_review(s) -> str:
+    rows = s.list_reviews(None)
+    return f'{len(rows)} waiting for your yes' if rows else 'nothing waiting for you'
+
+
+def _fact_reports(s) -> str:
+    """The stop names two things, so the fact answers for both: a report READS, a workflow WRITES,
+    and "3 reports" on a card about both leaves you wondering which three (the owner, 2026-09-17:
+    "for reports show the reports setup and workflows")."""
+    import json as _json
+    reports, flows = [], []
+    for row in s.list_sources():
+        if row['Channel'] != 'report': continue
+        try: cfg = _json.loads(row['ConfigJson'] or '{}')
+        except ValueError: cfg = {}
+        (flows if cfg.get('is_workflow') else reports).append(cfg.get('title') or row['Address'] or '')
+    if not reports and not flows: return 'none yet'
+    said = []
+    if reports: said.append(f"{len(reports)} reports: {', '.join(x for x in reports[:3] if x)}")
+    if flows: said.append(f"{len(flows)} workflows: {', '.join(x for x in flows[:3] if x)}")
+    return ' · '.join(said)
+
+
+def _fact_assistant(s) -> str:
+    return f"speaking on {_brain_name(s, s.get_settings().get('concierge_ai'))}"
+
+
+def _fact_hub(s) -> str:
+    posts = s.lore_posts(None, None, 200, 'new', 'live', None)
+    return f'{len(posts)} posted so far' if posts else 'nothing posted yet'
+
+
+def _fact_settings(s) -> str:
+    on = [k for k in ('triage_ai', 'default_agent', 'notify_channel') if str(s.get_settings().get(k) or '').strip()]
+    return f"{len(on)} of the three headline settings chosen" if on else 'all on their defaults'
+
+
+# What THIS install has done, for EVERY stop - the walk is a tour of an install, not of the product,
+# and a stop that could not say what you already have made you go and look (the owner, 2026-09-17:
+# "for each step it should include if step was already completed and what is setup for each step").
+# The five checklist stops carry `detail` from setup.state as well; these add what that cannot say.
+FACTS = {'ai': _fact_ai, 'models': _fact_models, 'sync': _fact_sync,
+         'connections': _fact_connections, 'docs': _fact_docs, 'settings': _fact_settings,
+         'board': _fact_board, 'tasks': _fact_tasks, 'review': _fact_review,
+         'reports': _fact_reports, 'assistant': _fact_assistant, 'hub': _fact_hub}
 
 
 def state(store, at=None) -> dict:
@@ -170,7 +262,12 @@ def state(store, at=None) -> dict:
         # five that could drift without a word of the stop changing
         if row: o.update(done=row['done'], detail=row['detail'], blurb=row['why'], title=row['title'], goto=row['goto'])
         fact = FACTS.get(stop['key'])
-        if fact: o['facts'] = fact(store)
+        # A COUNTER MUST NEVER TAKE THE WALK DOWN. These read a dozen different tables, and the one
+        # install that most needs the walk is the half-configured one where some of those reads
+        # throw. A stop that cannot count simply says nothing, which is what it did before it could.
+        if fact:
+            try: o['facts'] = fact(store)
+            except Exception as e: logger.warning(f"the {stop['key']} stop could not read its facts: {e}")
         stops.append(o)
     return {'stops': stops, 'at': at, 'total': len(STOPS)}
 

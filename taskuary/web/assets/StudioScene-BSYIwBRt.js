@@ -1,8 +1,4 @@
-<<<<<<<< HEAD:taskuary/web/assets/StudioScene-DbXyBUE9.js
-import{r as Ve,j as Re,B as pn,F as Ei,P as ql,b as Vo,R as Fs,T as Ki,I as Zl,m as Kl}from"./index-CzkRIeh4.js";/**
-========
-import{r as Ve,j as Re,B as pn,F as Ei,P as ql,b as Vo,R as Fs,T as Ki,I as Zl,m as Kl}from"./index-C8Ped6Bv.js";/**
->>>>>>>> 22b25492 (feat: the chat opens itself once a day, and a script named in words needs no model):taskuary/web/assets/StudioScene-DRKTV0X6.js
+import{r as Ve,j as Re,B as pn,F as Ei,P as ql,b as Vo,R as Fs,T as Ki,I as Zl,m as Kl}from"./index-D8AE6HEO.js";/**
  * @license
  * Copyright 2010-2025 Three.js Authors
  * SPDX-License-Identifier: MIT

@@ -699,8 +699,13 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const checklist = detail?.checklist || [];
   const checklistPct = checklist.length ? (checklist.filter((i) => i.done).length / checklist.length) * 100 : 0;
   const tickItem = async (i) => {
-    try { await api.patch(`/api/tasks/${t.TaskId}/checklist/${i.id}`, { done: !i.done }); loadDetail(t.TaskId); }
-    catch { /* the list reloads on the next refresh */ }
+    try {
+      const { data } = await api.patch(`/api/tasks/${t.TaskId}/checklist/${i.id}`, { done: !i.done });
+      loadDetail(t.TaskId);
+      // the last tick closed it (server: tick_checklist): the list and the rail move with it now,
+      // not on the next poll, or the row you just finished sits there looking open
+      if (data?.closed) { loadTasks(); onChanged?.(); }
+    } catch { /* the list reloads on the next refresh */ }
   };
   // what the folded strip says on its left: the header already has the id, title and state, so
   // this carries the two things it cannot - how far the list got, and what the task is

@@ -441,7 +441,9 @@ GitHub-style Markdown checklist describing the actual requested work.
   surface substantive changes from new messages rather than overwriting silently.
 - [x] <a id="pw-077"></a>**PW-077** Keep checklist progress separate from agent/session state and task completion;
   rendering or generating a checklist must not mark work done. Completion rules
-  remain subject to the later lifecycle walkthrough.
+  remain subject to the later lifecycle walkthrough. Amended 2026-09-18 (TQ-0626): the
+  OWNER's tick on the last box of an unassigned open task closes it, down the same road as
+  Completed; an agent-held task is never closed by a tick.
 - [ ] <a id="pw-078"></a>**PW-078** Add tests for multi-request chains, coding/general/personal tasks, meaningful
   summaries, interactive checkbox persistence, worker context, new-message merges,
   retained edits/progress, and no duplicate items or invented completed work.

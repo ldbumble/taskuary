@@ -401,7 +401,8 @@ function Line({ m, live, last, actions, fresh }) {
     message: <MessageCard card={c} onDone={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} onSurface={actions.surface} />,
     setup: <SetupCard card={m.card} onNavigate={actions.navigate} onHandOff={actions.handOff} />,
     walk: <WalkCard card={m.card} at={m.card.n} total={m.card.total} onNavigate={actions.navigate}
-      onNext={() => actions.walk(m.card.n + 1)} onFinish={() => actions.walk(-1)}
+      onNext={() => actions.walk(m.card.n + 1)} onBack={() => actions.walk(m.card.n - 1)}
+      onRestart={actions.walkRestart} onFinish={() => actions.walk(-1)}
       onSaved={() => actions.walkSaved(m.id)} />,
     brief: <BriefCard card={m.card} onStart={actions.start} />,
     task: <TaskCard card={c} onDone={actions.done} onOpenTask={actions.openTask} />,
@@ -1069,6 +1070,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     } catch { /* the card stays where it is; nothing was lost */ }
     finally { setWalking(false); }
   };
+  // Start over: the server's reset (place -> 0), then the first stop as a fresh card. Not walkTo(0):
+  // that is a move to stop 1 from wherever you were, and the receipt trail would read as one.
+  const walkRestart = async () => {
+    if (walking) return;
+    setWalking(true);
+    try { pushStop((await api.post("/api/setup/walk/reset")).data); }
+    catch { /* the card stays where it is */ }
+    finally { setWalking(false); }
+  };
   // The walk's task, fetched once so GeneralWorkspace has the row it needs (it owns everything
   // after that: the session, the provider, the browser beside the thread).
   const enterWalk = async ({ tid, ref, title }) => {
@@ -1239,7 +1249,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   };
 
   const actions = { done, start, handOff, openTask: onOpenTask, timeline, navigate: onNavigate,
-    walk: walkTo, walkSaved, chip: runChip, busy: busy || resetting || !!handoff,
+    walk: walkTo, walkSaved, walkRestart, chip: runChip, busy: busy || resetting || !!handoff,
     confirm: confirmProposal, cancel: cancelProposal, propose: proposeDirect, preview: previewProposal,
     surface: (key, note) => {
       if (note) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: note }]);

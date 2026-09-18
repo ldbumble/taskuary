@@ -29,22 +29,43 @@ test("the walk is a card kind of its own and keeps the trail", () => {
   assert.match(view, /walk: <WalkCard/);
 });
 
-test("a stop shows what you can do there, each with its own way in", () => {
+test("a stop shows what you can do there, each with its own way in - three at most", () => {
   const card = walkCard(read("assistantCards.jsx"));
   assert.match(card, /You can/);
   // guarded against a skewed release where the server sends a stop with no `can` (PW-... /
   // ab82e00a: a UI bundle once shipped ahead of the server half it depended on)
-  assert.match(card, /can \|\| \[\]\)\.map/);
+  assert.match(card, /can \|\| \[\]\)\.slice\(0, 3\)/);   // five bullets a stop stopped being read by stop three
   assert.match(card, /Next/);
   assert.match(card, /Finish/);
   assert.doesNotMatch(card, /Skip/);          // with only a position stored, skip and next are one act
 });
 
-test("a tab stop shows the tab, and a missing image never leaves a torn box", () => {
+// "we also need a button to start over the walk through" (the owner, 2026-09-18). The server always
+// had the reset; the card never offered it. Back is the same move as Next, the other way.
+test("the walk can go back a stop and start over from the first", () => {
+  const card = walkCard(read("assistantCards.jsx"));
+  assert.match(card, /Start over/);
+  assert.match(card, /onRestart/);
+  assert.match(card, /Back/);
+  assert.match(card, /onBack/);
+  const view = read("AssistantView.jsx");
+  assert.match(view, /\/api\/setup\/walk\/reset/);
+  assert.match(view, /onBack=\{\(\) => actions\.walk\(m\.card\.n - 1\)\}/);
+  assert.match(view, /onRestart=\{actions\.walkRestart\}/);
+});
+
+// The picture was squeezed to the card and cropped to a 130px strip of its corner: a search box and
+// half a heading (the owner, 2026-09-18: "the images look unclear"). Whole, and it is the way in.
+test("a tab stop shows the whole tab, clickable, and a missing image never leaves a torn box", () => {
   const card = walkCard(read("assistantCards.jsx"));
   assert.match(card, /card\.image &&/);
   assert.match(card, /alt=\{`The \$\{card\.title\} tab`\}/);
   assert.match(card, /onError/);
+  assert.match(card, /className="tq-walk-shot"/);
+  assert.doesNotMatch(card, /maxHeight: 130/);
+  assert.match(card, /onClick=\{\(\) => go\(card\.goto\)\}/);
+  const css = read("assistantView.css");
+  assert.match(css, /\.tq-walk-shot \{[^}]*aspect-ratio: 1280 \/ 760/);   // the capture's own shape, so nothing is cropped
 });
 
 test("the AI stop opens the real terminal rather than describing one", () => {

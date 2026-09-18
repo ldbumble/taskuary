@@ -584,10 +584,21 @@ class ChecklistEdit(BaseModel):
 
 @app.patch('/api/tasks/{task_id}/checklist/{item_id}')
 def tick_checklist(task_id: int, item_id: str, body: ChecklistTick):
-    """One box. Progress on the list, never task completion (PW-077)."""
-    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    """One box - and the LAST box is the close. PW-077 kept a tick from ever completing a task so
+    that an agent's progress could not end the owner's work; this is the owner's own hand on the
+    owner's own list, and with every item ticked there is nothing left of the task but its row -
+    which sat on the rail for a day (TQ-0626; the owner, 2026-09-18: "it did not close even though
+    i ticked the items"). A task an agent holds is left alone: closing it would stop the agent."""
+    t = store.get_task(task_id)
+    if not t: raise HTTPException(404, 'task not found')
     if not store.tick_checklist_item(task_id, item_id, body.done, ACTOR): raise HTTPException(404, 'no such checklist item')
-    return {'ok': True, 'checklist': store.task_checklist(task_id)}
+    items, closed = store.task_checklist(task_id), False
+    if (body.done and items and all(i.get('done') for i in items) and t.get('Status') == 'open'
+            and not str(t.get('Assignee') or '').startswith('agent:')):
+        from . import concierge
+        closed = concierge.close_task(store, task_id, ACTOR)          # the same road as Completed and "close it"
+        if closed: store.add_comment(task_id, ACTOR, 'human', 'Closed - the last item on the checklist was ticked.')
+    return {'ok': True, 'checklist': items, 'closed': closed}
 
 
 @app.put('/api/tasks/{task_id}/checklist')
@@ -5775,6 +5786,14 @@ def _poll_reports(backfill_hours: float = 0, what: str = 'syncing', startup: boo
     _LAST_POLL[0] = time.time()  # a manual Sync now resets the clock too, so the timer
                                  # does not fire again moments later over the same watermarks
     status = _status_begin(target_store, 'full', what)
+    # WHERE A PASS SPENDS ITS TIME, in one line at the end. The startup catch-up sat behind the
+    # "catching up" banner for minutes with nothing in the log between its phases, so "startup took
+    # almost 10 minutes" (the owner, 2026-09-18) could not be answered: reading the mailboxes, judging
+    # the arrivals, or running the reports? Each phase stamps here; the line at the end says which.
+    t0, spent = time.monotonic(), {}
+    def _lap(name):
+        nonlocal t0
+        now = time.monotonic(); spent[name] = spent.get(name, 0.0) + now - t0; t0 = now
     try:
         # channels FIRST: the Morning digest is a report over Taskuary's own data, and run
         # before the catch-up it would summarize yesterday while today sat in the mailbox
@@ -5804,6 +5823,7 @@ def _poll_reports(backfill_hours: float = 0, what: str = 'syncing', startup: boo
                     if t in CHAT_CONNECTORS:
                         _QUICK_LAST[t] = now
                         _QUICK_LAST_STORE[t] = id(target_store)
+        _lap('reading')
         def _left(n): _status_progress(target_store, status, f'{what} · processing messages' + (f' · {n} left' if n else ''), phase='triaging')
         # Drain progress runs after a judgement finishes. Publish the phase before
         # submitting so even the first slow judgement cannot still say "reading".
@@ -5822,6 +5842,7 @@ def _poll_reports(backfill_hours: float = 0, what: str = 'syncing', startup: boo
             if retried: _status_progress(target_store, status, f'{what} · {retried} retried', phase='triaging')
         except Exception as e:
             logger.warning(f'retrying stranded triage failures failed: {e}')
+        _lap('judging')
         # the git loop: a task's PR is watched here, and a red build goes back to the agent
         # that wrote the code (ci.py) - off unless the owner turned ci_watch on
         _status_progress(target_store, status, what, phase='checking')
@@ -5847,11 +5868,18 @@ def _poll_reports(backfill_hours: float = 0, what: str = 'syncing', startup: boo
             wabridge.trim_log(target_store)
         except Exception as e:
             logger.warning(f'whatsapp log trim skipped: {e}')
+        _lap('housekeeping')
         run_due_reports(target_store, startup)          # ...the seeded 'Assistant' report among them (assistant.py)
+        _lap('reports')
         return added
     finally:
-        try: _status_end(target_store, status)
-        finally: _POLL_BUSY.release()
+        try:
+            if spent:
+                total = sum(spent.values())
+                logger.info(f"full pass ({what}) took {total:.0f}s: " + ' · '.join(f'{k} {v:.0f}s' for k, v in spent.items()))
+        finally:
+            try: _status_end(target_store, status)
+            finally: _POLL_BUSY.release()
 
 
 def _poll_quick(only, what: str = 'syncing', wait: bool = False, timer: bool = False, on_fetched=None):

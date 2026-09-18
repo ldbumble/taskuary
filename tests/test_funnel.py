@@ -901,6 +901,35 @@ class MemoryTests(unittest.TestCase):
         # under ("Import broken") - funnel.says prefers Title now (the owner, 2026-09-16)
         self.assertEqual([(i['title'], i['kind'], i['lane']) for i in items], [('Re: budget 0', 'fyi', 'fyi'), ('Fix the import', 'todo', 'working')])
 
+    def test_an_open_task_is_on_you_whatever_the_last_message_said(self):
+        """TQ-0626 (the owner, 2026-09-18): a Teams ask became a task, the owner answered "done",
+        the sender said "thanks" - and the chain sat in fyi with the task still open. The last line
+        was triaged fyi, and the rule that keeps open work on the rail only fired when THAT line's own
+        category was work. A thank-you is not work; the open task behind it is. The task being open
+        is the fact, not what the newest message happened to be."""
+        s = store()
+        t = s.create_task({'Title': 'Change her clock-out time to 4:40', 'Kind': 'task', 'Status': 'open'}, 'o')
+        ask = mail(s, 'clock-out', who='Mindy', email='mindy@ours.com', body='Can you change this to 4:40? Thanks!',
+                   hours=10, tid=t, channel='teams', conv='room')
+        s.add_route(ask, t, 'create', None, 'triage: task', [], 'router')
+        s.add_message({'TaskId': t, 'ExternalId': 'x:mine', 'ConversationId': 'room', 'Channel': 'teams', 'SourceName': 'inbox',
+                       'Subject': 'clock-out', 'FromName': 'You', 'FromEmail': 'me@ours.com', 'Direction': 'in',
+                       'SentAt': ago(9.5), 'BodyText': 'done', 'Status': 'context'})
+        thanks = mail(s, 'clock-out', who='Mindy', email='mindy@ours.com', body='thanks', hours=9, tid=t, status='filed',
+                      channel='teams', conv='room')
+        s.add_route(thanks, t, 'attach', 1.0, 'triage: fyi - a thank-you, nothing asked', [], 'triage')
+        # the legacy pile has the wrap-up ("the reply went out - the task is still open"), which says
+        # more than "on you" and still outranks the row (FollowUpTests)...
+        self.assertEqual([(i['kind'], i['lane']) for i in funnel.build(s)['items']], [('wrapup', 'report')])
+        # ...and the processing pile, the one the live rail reads and where TQ-0626 sat, has no wrap-up:
+        # there the open task is the row, as the owner's own work
+        settle = lambda: (s.reconcile_processing_membership(fixed_now=ago(0)), funnel.invalidate())
+        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        self.assertEqual([(i['title'], i['kind'], i['lane']) for i in funnel.build(s)['items'] if i.get('tid') == t],
+                         [('Change her clock-out time to 4:40', 'todo', 'yours')])
+        s.update_task(t, {'Status': 'done'}, 'o'); settle()             # ...and closing it is what takes the row away
+        self.assertEqual([i['title'] for i in funnel.build(s)['items'] if i.get('tid') == t], [])
+
     def test_a_pty_worker_that_ran_and_left_leaves_a_transcript_not_a_run(self):
         """A coder started from the terminal writes a TRANSCRIPT on its way out and no run row at
         all - the same row the task card reads to offer "Continue previous work". not_started_why

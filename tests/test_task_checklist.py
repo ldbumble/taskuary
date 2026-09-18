@@ -94,10 +94,16 @@ class ProgressTests(unittest.TestCase):
         self.assertEqual([i['done'] for i in detail['checklist']], [True, False])
         self.assertIn('- [x] Add Priya to the payroll portal', detail['task']['ChecklistMd'])
 
-    def test_ticking_every_box_completes_nothing_and_closing_ticks_nothing(self):
-        for i in self.items: self.c.patch(f'/api/tasks/{self.tid}/checklist/{i["id"]}', json={'done': True})
-        self.assertEqual(self.s.get_task(self.tid)['Status'], 'open')
-        self.s.update_task(self.tid, {'Status': 'done'}, 'owner')
+    def test_the_owners_last_tick_closes_and_closing_ticks_nothing(self):
+        """PW-077 kept a tick from completing a task, so an AGENT's progress could not end the owner's
+        work. The owner's own last tick is the owner's close (TQ-0626; 2026-09-18: "it did not close
+        even though i ticked the items") - test_api pins the agent-held exception. Closing the task
+        still ticks nothing: the list is a record of what was done, not of what closing implies."""
+        first, last = self.items
+        self.c.patch(f'/api/tasks/{self.tid}/checklist/{first["id"]}', json={'done': True})
+        self.assertEqual(self.s.get_task(self.tid)['Status'], 'open')            # one box left: still open
+        self.c.patch(f'/api/tasks/{self.tid}/checklist/{last["id"]}', json={'done': True})
+        self.assertEqual(self.s.get_task(self.tid)['Status'], 'done')            # the last box was the close
         self.assertEqual([i['done'] for i in self.s.task_checklist(self.tid)], [True, True])
         self.s.update_task(self.tid, {'Status': 'open'}, 'owner')
         s2 = MemoryStore()

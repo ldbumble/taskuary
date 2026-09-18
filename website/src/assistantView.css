@@ -221,6 +221,23 @@
 .tq-step-done b { font-weight: 600; font-variant-numeric: tabular-nums; }
 .tq-card-err { font-size: 11px; color: #7a2f3c; margin-top: 6px; }
 
+/* THE WALK'S STOP: a picture of the tab, whole, and three things to try. The picture used to be a
+   130px crop of a page corner - a search box and half a heading - under five bullets of text. */
+.tq-walk-progress { height: 3px; margin: 7px 0 8px; border-radius: 2px; background: #ebe6de; overflow: hidden; }
+.tq-walk-progress i { display: block; height: 100%; border-radius: 2px; background: #718b75; transition: width .3s ease; }
+/* capped at 600px wide: a 790px picture made a 700px card, and the card's own title scrolled off the
+   top of a 900px-tall window before you could read it */
+.tq-walk-shot { display: block; width: 100%; max-width: 540px; aspect-ratio: 1280 / 760; object-fit: cover; object-position: top left;
+  border-radius: 8px; border: 1px solid #ddd8cf; background: #f6f4f1; margin: 0 0 8px; transition: box-shadow .15s; }
+.tq-walk-shot:hover, .tq-walk-shot:focus-visible { box-shadow: 0 0 0 2px #b9c8bb; outline: none; }
+.tq-walk-can { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.tq-walk-can .lbl { font: 750 9.5px/1.2 'IBM Plex Mono', Consolas, monospace; letter-spacing: .12em; text-transform: uppercase; color: #867f74; margin-right: 2px; }
+.tq-walk-can button, .tq-walk-can .plain { font: 500 11.5px/1.3 'IBM Plex Sans', system-ui, sans-serif; padding: 4px 10px; border-radius: 99px;
+  border: 1px solid #ddd8cf; background: #fffdf9; color: #41525f; text-align: left; }
+.tq-walk-can button { cursor: pointer; transition: border-color .15s, background .15s; }
+.tq-walk-can button:hover { border-color: #b9c3cb; background: #f6f4f1; }
+.tq-walk-can .plain { color: #6e685f; border-style: dashed; }
+
 /* the pinned "by the way": one line, above the composer, whatever the chat is on */
 .tq-btw { margin: 0 20px 8px; padding: 8px 12px; border: 1px solid #cbd4dc; border-radius: 10px; background: #fffdfb; display: flex; align-items: center; gap: 10px; box-shadow: 0 6px 18px rgba(51,45,35,.08); animation: tqBtw .35s ease both; }
 @keyframes tqBtw { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }

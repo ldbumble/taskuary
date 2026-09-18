@@ -791,7 +791,7 @@ export function SetupCard({ card, onNavigate, onHandOff }) {
    something the checklist contradicts. `image` is a shot of the tab, and it is decoration with a
    caption's job: a card whose image fails to load is still a complete stop, which is why it is
    rendered with onError rather than reserved space. */
-export function WalkCard({ card, at, total, onNavigate, onNext, onFinish, onSaved }) {
+export function WalkCard({ card, at, total, onNavigate, onNext, onBack, onRestart, onFinish, onSaved }) {
   const { openSetup, opening, pane, note } = useCliSetup();
   const [cli, setCli] = useState(null);
   useEffect(() => {
@@ -803,9 +803,12 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onFinish, onSave
     if (goto.hash) window.location.hash = goto.hash;
     onNavigate?.(goto.tab);
   };
-  const last = at >= total - 1;
+  const last = at >= total - 1, first = at <= 0;
+  // THREE THINGS TO DO, NOT FIVE. The lists ran to five bullets a stop and the eye stopped reading
+  // them by the third stop; three is what a person tries, and the tab itself has the rest.
+  const can = (card.can || []).slice(0, 3);
   return (
-    <CardShell card={{ ...card, lane: "report" }} kicker={`setting up · ${at + 1} of ${total}`}
+    <CardShell card={{ ...card, lane: "report" }} kicker={`the walk · ${at + 1} of ${total}`}
       title={<>
         {/* A BOX ONLY WHERE THERE IS SOMETHING TO COMPLETE. The first five stops carry the
             checklist's own `done`; the rest are a tour of the app, and an empty box beside "the
@@ -818,18 +821,24 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onFinish, onSave
         )}
         {card.title}
       </>} sub={card.blurb}>
-      {/* the tab itself. A broken image removes itself rather than leaving a torn box in the middle
-          of the card - the words above and below already carry the stop. Capped and cropped to its
-          top-left: the job is recognition ("you'll know it when you get there"), not reading text off
-          a thumbnail, and an uncapped screenshot pushed the card's own buttons off the bottom of a
-          1440x900 screen. */}
+      {/* how far along: one thin bar, no numbers to read twice */}
+      <div className="tq-walk-progress" aria-hidden="true"><i style={{ width: `${((at + 1) / Math.max(1, total)) * 100}%` }} /></div>
+      {/* THE PICTURE IS THE CARD. It used to be squeezed to the card's width and then cropped to a
+          130px strip of its top-left corner, which showed a search box and half a heading and read as
+          a smear (the owner, 2026-09-18: "the images look unclear"). Whole, at the shot's own shape,
+          and clickable: the picture of the tab is the way to the tab. A broken image removes itself
+          rather than leaving a torn box - the words above and below already carry the stop. */}
       {card.image && (
-        <img src={card.image} alt={`The ${card.title} tab`} loading="lazy"
+        <img src={card.image} alt={`The ${card.title} tab`} loading="lazy" className="tq-walk-shot"
+          title={card.goto ? `Open ${card.goto.tab}` : undefined} role={card.goto ? "button" : undefined}
+          tabIndex={card.goto ? 0 : undefined} onClick={() => go(card.goto)}
+          onKeyDown={(e) => { if (e.key === "Enter") go(card.goto); }}
           onError={(e) => { e.currentTarget.style.display = "none"; }}
-          style={{ width: "100%", maxHeight: 130, objectFit: "cover", objectPosition: "top left",
-            display: "block", borderRadius: 6, border: "1px solid #e1dcd5", margin: "8px 0 2px" }} />
+          style={{ cursor: card.goto ? "pointer" : "default" }} />
       )}
-      {card.facts && <div className="tq-card-excerpt">{card.facts}</div>}
+      {/* what THIS install has - the same tables the checklist reads. Said as whose it is: a bare
+          "none yet" under a picture of the tab did not say none of WHAT. */}
+      {card.facts && <div className="tq-card-excerpt"><b>On this install</b> · {card.facts}</div>}
       {/* the five setup stops mirror the checklist's own done-ness (walk.state reads the same
           tables) - a stop that has been done says so, the same green the checklist panel uses,
           rather than reading identically whether or not it has been. */}
@@ -838,16 +847,14 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onFinish, onSave
           left every other step reading as a heading for the instructions under it. */}
       {card.done && card.detail && <div style={{ fontSize: 12.5, fontWeight: 600, color: "#47654a", margin: "4px 0" }}>
         {card.detail}</div>}
-      <div style={{ fontSize: 12, fontWeight: 700, color: "#867f74", margin: "8px 0 4px" }}>You can</div>
-      <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, lineHeight: 1.75 }}>
-        {(card.can || []).map((o, i) => (
-          <li key={i}>
-            {o.goto ? <span role="button" tabIndex={0} onClick={() => go(o.goto)}
-              onKeyDown={(e) => { if (e.key === "Enter") go(o.goto); }}
-              style={{ color: "#55697a", cursor: "pointer" }}>{o.text}</span> : o.text}
-          </li>
-        ))}
-      </ul>
+      {can.length > 0 && (
+        <div className="tq-walk-can">
+          <span className="lbl">You can</span>
+          {can.map((o, i) => o.goto
+            ? <button key={i} type="button" onClick={() => go(o.goto)} title={`Open ${o.goto.tab}`}>{o.text}</button>
+            : <span key={i} className="plain">{o.text}</span>)}
+        </div>
+      )}
       {/* Two stops do the work in place rather than sending you somewhere. This one because its whole
           content is two text boxes, and because the bullet above it says "type your name and email
           right here" - a card that then offered only a button to Docs was making a promise it did not
@@ -866,20 +873,21 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onFinish, onSave
         </div>
       )}
       {/* The walk is scripted and reaches no model - but a question typed during it is an ordinary
-          turn, answered beside the walk while the walk keeps its place (walk.py's own design). That
-          was true before and nowhere said so, so the only way to find out was to risk losing your
-          place (the owner, 2026-09-17: "ask them if they have any questions"). */}
-      <div style={{ fontSize: 12, color: "#867f74", margin: "10px 0 0" }}>
-        Any questions about this step? Ask below in your own words — the walk keeps your place, and
-        Next picks it back up.
-      </div>
+          turn, answered beside the walk while the walk keeps its place (walk.py's own design). One
+          line: it is a reassurance, not a paragraph to read fourteen times. */}
+      <div className="tq-card-note">Questions? Ask below in your own words — the walk keeps your place.</div>
       <div className="tq-card-actions">
         {/* the checklist's five stops carry the label the panel's own row uses, so the walk and the
             panel name the same destination the same way; a tab stop is its tab and needs none */}
         {card.goto && <Button size="small" variant="contained" disableElevation onClick={() => go(card.goto)}
           sx={primary}>{card.goto.label || `Open ${card.goto.tab}`}</Button>}
+        {/* Back and Next are one act each - a position moved (walk.go takes any stop). Start over is
+            the reset the server always had and the card never offered (the owner, 2026-09-18: "we
+            also need a button to start over the walk through"). */}
+        {!first && <Button size="small" onClick={onBack} sx={faint}>‹ Back</Button>}
         {!last && <Button size="small" onClick={onNext} sx={faint}>Next ›</Button>}
         <span className="sp" />
+        {!first && <Button size="small" onClick={onRestart} sx={faint} title="back to the first stop">Start over</Button>}
         <Button size="small" onClick={onFinish} sx={faint}>Finish</Button>
       </div>
     </CardShell>

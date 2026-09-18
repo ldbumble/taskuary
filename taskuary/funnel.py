@@ -323,19 +323,21 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
         # one"). Real work standing open is its own reason to be on the rail.
         open_work = (r.get('TaskStatus') not in ('done', 'dropped')
                      and str(r.get('TaskKind') or '') in ('coding', 'general', 'task'))
-        if cat in ('coding', 'todo') and (r.get('NeedsYou') or r.get('Working') or open_work):   # a worked row is kept, tagged, and let go in build()
-            # WHOSE it is decides the word. Work triage handed to an agent that has not run is
-            # QUEUED - waiting to start; work with nobody on it is the owner's own, and its kind
-            # ('todo') carries the word for that. Both used to say "asked you", which claimed a
-            # person had asked for something on rows triage derived from a report (the owner,
-            # 2026-09-16: "i don't like this asked you, it's queued, working on it, or agent
-            # waiting on you").
+        # WHOSE it is decides the word. Work triage handed to an agent that has not run is QUEUED -
+        # waiting to start; work with nobody on it is the owner's own, and its kind ('todo') carries
+        # the word for that. Both used to say "asked you", which claimed a person had asked for
+        # something on rows triage derived from a report (the owner, 2026-09-16: "i don't like this
+        # asked you, it's queued, working on it, or agent waiting on you").
+        def _work(open_only=False):
             handed = str((store.get_task(r['TaskId']) or {}).get('Assignee') or '').startswith('agent:')
             lane = 'time' if urgent else ('queued' if handed and not r.get('Working') else 'yours')
-            out.append(_item(f"msg:{r['MessageId']}", 'todo', lane, subj, coding=cat == 'coding',
+            # open_only: the row is here for the open task alone (its own line was a thank-you, an
+            # fyi) - build() lets the wrap-up outrank exactly these, and never a line triage kept as work
+            out.append(_item(f"msg:{r['MessageId']}", 'todo', lane, subj, coding=cat == 'coding', open_only=open_only,
                              why=('an urgent sender - ' if urgent else '') + (r.get('RouteReason') or ('a coding task with no agent on it' if cat == 'coding' else 'real work with nobody on it')), **base))
             if group and threads.get(group) is None: threads[group] = out[-1]
-            continue
+        if cat in ('coding', 'todo') and (r.get('NeedsYou') or r.get('Working') or open_work):   # a worked row is kept, tagged, and let go in build()
+            _work(); continue
         if cat == 'review' or (r.get('NeedsYou') and cat not in ('info',)):
             out.append(_item(f"msg:{r['MessageId']}", 'asked', 'time' if urgent else 'asked', subj,
                              why=r.get('RouteReason') or 'a person asked you for something', **base))
@@ -353,6 +355,12 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
                              why=r.get('RouteReason') or 'triage could not classify this - nothing was started', **base))
             if group and threads.get(group) is None: threads[group] = out[-1]
             continue
+        # ...AND THE LAST MESSAGE DOES NOT GET A VOTE ON AN OPEN TASK. Everything above judged the row
+        # by its own line, and a chain whose newest line was a thank-you ("thanks", triaged fyi) fell
+        # through to fyi with its task still open - TQ-0626 sat there a day (the owner, 2026-09-18).
+        # What the newest message was about is not what the task is: the open task is the row.
+        if open_work and r.get('TaskId'):
+            _work(open_only=True); continue
         out.append(_item(f"msg:{r['MessageId']}", 'fyi', 'fyi', subj, why=r.get('RouteReason') or 'a person told you something; nothing to do', **base))
         if group and out and threads.get(group) is None: threads[group] = out[-1]
     # ONE brief leads the day. `brief_today` is true of every digest run made today, and the digest
@@ -885,7 +893,10 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
     # suppressed it and the task fell out of the pipe altogether (2026-09-03).
     wrapped = _apply_states(from_wrapped(store, now, busy), states, now, keep_surfaced)
     wrap_tids = {w['tid'] for w in wrapped}
-    items = [i for i in items if not (i['lane'] == 'fyi' and i.get('tid') in wrap_tids)]
+    # ...and it outranks a row that is on the rail for its open task alone (from_feed open_only): an
+    # open task whose reply already went out is better told as "the reply went out - the task is
+    # still open" than as work with nobody on it. A line triage kept as WORK stays what it is.
+    items = [i for i in items if not (i['lane'] == 'fyi' or i.get('open_only')) or i.get('tid') not in wrap_tids]
     held = {i['tid'] for i in items if i.get('tid')}
     items = _order(items + [w for w in wrapped if w['tid'] not in held])
     # the owner's standing rules: what they told us to stop showing them never enters again. Only the

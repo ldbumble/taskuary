@@ -66,6 +66,10 @@ try {
     // far better than a wrong picture that ships silently.
     if (!clicked) throw new Error(`no nav control matched "${label}" - the tab was renamed, or its label grew something norm() does not strip`);
     await new Promise((r) => setTimeout(r, 2200));          // let the tab's own fetches land
+    // The demo raises a hand every few seconds ("TQ-0004 · coder stopped and is waiting on you") and
+    // the toast landed in every one of the nine pictures, bottom right, as if it were part of the tab.
+    // A shot of the Settings tab is not the place to learn what a toast looks like (2026-09-18).
+    await p.evaluate(() => document.querySelectorAll(".MuiSnackbar-root").forEach((el) => { el.style.display = "none"; }));
     await p.screenshot({ path: path.join(out, `${key}.png`),
                          clip: { x: 0, y: 44, width: 1280, height: 760 } });
     console.log(`walk shot ${key} ok`);

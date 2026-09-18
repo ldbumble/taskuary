@@ -329,6 +329,28 @@ class ApiTests(unittest.TestCase):
         drawn = json.loads(row['Checklist'])
         self.assertEqual((len(drawn), sum(1 for i in drawn if i.get('done'))), (3, 1))
 
+    def test_ticking_the_last_item_closes_the_task(self):
+        """The list IS the work: when the owner ticks the last box there is nothing left, and the task
+        stayed open anyway - on the rail, in fyi, for a day (TQ-0626; the owner, 2026-09-18: "it did
+        not close even though i ticked the items"). The owner's tick is the owner's close."""
+        tid = c.post('/api/tasks', json={'Title': 'two steps'}).json()['taskId']
+        a, b = c.put(f'/api/tasks/{tid}/checklist', json={'items': ['fix it', 'tell her']}).json()['checklist']
+        self.assertFalse(c.patch(f'/api/tasks/{tid}/checklist/{a["id"]}', json={'done': True}).json().get('closed'))
+        self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], 'open')
+        self.assertTrue(c.patch(f'/api/tasks/{tid}/checklist/{b["id"]}', json={'done': True}).json()['closed'])
+        self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], 'done')
+        # un-ticking a box on the closed task is a note to self, not a reopen
+        self.assertFalse(c.patch(f'/api/tasks/{tid}/checklist/{a["id"]}', json={'done': False}).json().get('closed'))
+        self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], 'done')
+
+    def test_an_agents_task_is_not_closed_by_a_tick(self):
+        """A task an agent holds may have boxes the owner ticks while it works; closing it would stop
+        the agent mid-run. The agent's task ends the agent's way (--done, or the owner's Completed)."""
+        tid = c.post('/api/tasks', json={'Title': 'agent work', 'Assignee': 'agent:coder'}).json()['taskId']
+        (a,) = c.put(f'/api/tasks/{tid}/checklist', json={'items': ['one thing']}).json()['checklist']
+        self.assertFalse(c.patch(f'/api/tasks/{tid}/checklist/{a["id"]}', json={'done': True}).json().get('closed'))
+        self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], 'open')
+
     def test_active_tasks_omit_old_done(self):
         """Board/Studio ask ?active=1 so they do not ship every finished task ever."""
         fx = Factory(server.store)

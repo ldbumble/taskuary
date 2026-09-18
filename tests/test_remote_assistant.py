@@ -448,6 +448,54 @@ class CardParityTests(unittest.TestCase):
                            'SentAt': '2026-09-17 23:40:00', 'BodyText': 'One more thought.', 'Status': 'routed'})
         self.assertIn('GitHub context', remote_assistant.decision_block(store, {'tid': tid, 'mid': mid}))
 
+    def test_a_report_is_not_dressed_up_as_something_a_person_wrote(self):
+        """The digest is Taskuary's OWN output. "THEY WROTE" over a >-quoted block says a person sent
+        it to you, and the card never quotes it - it prints the sections (the owner, 2026-09-18:
+        "this is morning digest report on whatsapp vs assistant??? still wrong")."""
+        store = MemoryStore()
+        mid = store.add_message({'TaskId': None, 'ExternalId': 'report:1:x', 'ConversationId': 'report:1',
+                                 'Channel': 'report', 'Subject': 'Morning digest', 'FromName': 'Morning digest',
+                                 'SentAt': '2026-09-18 08:05:00', 'Status': 'feed',
+                                 'BodyText': '\U0001F4C5 Meetings today\n\n1. 10:00 \u00b7 ESS link\n\n\U0001F64B People want\n\n1. Autumn asked about a refund'})
+        block = remote_assistant.decision_block(store, {'mid': mid, 'kind': 'report'})
+        self.assertNotIn('THEY WROTE', block)
+        self.assertFalse([l for l in block.splitlines() if l.startswith('>')], 'a report is not quoted')
+        self.assertIn('Meetings today', block)
+        self.assertIn('People want', block)
+
+    def test_a_person_still_gets_the_quote_marks(self):
+        store, tid, mid = self.armed()
+        self.assertIn('THEY WROTE', remote_assistant.decision_block(store, {'tid': tid, 'mid': mid}))
+
+    def test_markdown_is_read_not_shown_as_its_own_punctuation(self):
+        """Neither sender sets parse_mode - both post PLAIN text - so a sender's **bold**, `code`,
+        ## headings and [links](url) arrived as their own punctuation once the body stopped being
+        truncated. The desktop renders them; a chat has to be given the words without the marks."""
+        body = ('## Summary\n\n'
+                'The **export** job fails on `--dry-run` when the _config_ is empty.\n\n'
+                '- [ ] reproduce it\n'
+                '- [x] find the cause\n\n'
+                'See [the PR](https://github.com/x/y/pull/50) for the fix.')
+        store, tid, mid = self.armed(body=body, checklist=())
+        block = remote_assistant.decision_block(store, {'tid': tid, 'mid': mid})
+        for raw in ('**', '`', '## ', '](', '- [ ]', '- [x]'):
+            self.assertNotIn(raw, block, f'{raw!r} is punctuation, not words')
+        for word in ('Summary', 'export', '--dry-run', 'reproduce it', 'the PR'):
+            self.assertIn(word, block, f'{word!r} must survive the stripping')
+        self.assertIn('\u2610 reproduce it', block)
+        self.assertIn('\u2611 find the cause', block)
+
+    def test_the_draft_is_never_rewritten_on_its_way_to_you(self):
+        """YOUR DRAFT is the literal text that goes out in your name - approving a cleaned-up copy
+        of it would mean approving something other than what is sent."""
+        store, tid, mid = self.armed(checklist=())
+        rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft',
+                                'DraftText': 'Totals are in the **attached** sheet (`Q3.xlsx`).',
+                                'Status': 'pending'})
+        block = remote_assistant.decision_block(store, {'tid': tid, 'mid': mid, 'rid': rid})
+        self.assertIn('**attached**', block)
+        self.assertIn('`Q3.xlsx`', block)
+
     def test_a_single_message_is_not_announced_as_a_thread(self):
         store, tid, mid = self.armed()
         self.assertNotIn('combined by triage', remote_assistant.decision_block(store, {'tid': tid, 'mid': mid}))

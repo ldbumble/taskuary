@@ -535,6 +535,35 @@ BOX, TICKED = '☐', '☑'
 _SOURCE_WORDS = {'github': 'GitHub', 'gitlab': 'GitLab', 'pagerduty': 'PagerDuty', 'imessage': 'iMessage'}
 
 
+_CODE = re.compile(r'`+([^`\n]+?)`+')
+_MD = (
+    (re.compile(r'^\s{0,3}#{1,6}\s+', re.M), ''),                        # a heading keeps its words
+    (re.compile(r'^(\s*)[-*+]\s+\[([ xX])\]\s+', re.M),
+     lambda m: m.group(1) + (TICKED if m.group(2).lower() == 'x' else BOX) + ' '),
+    (re.compile(r'^\s*```+[a-z]*\s*$', re.M), ''),                       # the fence, never the code
+    (re.compile(r'!?\[([^\]]+)\]\([^)]*\)'), r'\1'),                   # the link's words, not its url
+    (re.compile(r'(\*\*|__)(.+?)\1', re.S), r'\2'),                     # bold
+    (re.compile(r'(?<![\w*])\*(?!\s)([^*\n]+?)(?<!\s)\*(?![\w*])'), r'\1'),   # *italic*
+    (re.compile(r'(?<![\w_])_(?!\s)([^_\n]+?)(?<!\s)_(?![\w_])'), r'\1'),       # _italic_
+)
+
+
+def _plain(text) -> str:
+    """Markdown as WORDS. Neither sender sets parse_mode - Telegram's sendMessage and the WhatsApp
+    bridge both post plain text - so every ** and ` and [](...) arrived as its own punctuation once
+    the body stopped being truncated. The desktop renders them; here they are simply removed.
+
+    Code spans come out first and go back last, so `snake_case_name` is not read as an italic."""
+    kept = []
+    def _hold(m):
+        kept.append(m.group(1))
+        return f'\x00{len(kept) - 1}\x00'
+    out = _CODE.sub(_hold, str(text or ''))
+    for pat, rep in _MD: out = pat.sub(rep, out)
+    for i, code in enumerate(kept): out = out.replace(f'\x00{i}\x00', code)
+    return out
+
+
 def _quote(text) -> str:
     """Every line marked, not just the first - a multi-paragraph body has to keep reading as theirs."""
     return '\n'.join('> ' + l.rstrip() if l.strip() else '>' for l in str(text or '').strip().splitlines())
@@ -606,7 +635,11 @@ def decision_block(store, item: dict | None) -> str:
             if kin: parts.append(kin)
             # WHOLE, not a teaser: _cut also flattened every paragraph, and the rest of it existed
             # only on the desktop. send() splits on paragraph boundaries, so length costs bubbles.
-            if str(msg.get('BodyText') or '').strip(): parts.append('THEY WROTE\n' + _quote(msg['BodyText']))
+            body = str(msg.get('BodyText') or '').strip()
+            # a REPORT is ours, not a letter: the card prints its sections, and "THEY WROTE" over a
+            # quoted block credits a person with what Taskuary itself wrote
+            if body and (item.get('kind') == 'report' or msg.get('Channel') == 'report'): parts.append(_plain(body))
+            elif body: parts.append('THEY WROTE\n' + _quote(_plain(body)))
         if item.get('rid'):
             rv = store.get_review(int(item['rid'])) or {}
             # an `action` review's DraftText is the proposal's JSON, never prose to read out

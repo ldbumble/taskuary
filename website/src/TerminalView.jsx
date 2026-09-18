@@ -216,8 +216,14 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
     // lift() again: scrollToBottom + focus(), several times a second. That stole the keyboard from
     // every other input on the page (the queue bar, the New task dialog - the Tasks tab stays
     // mounted behind the others) and made the pane jump: "it just flickers, can't type in it".
+    // Every xterm write completes asynchronously, and the pane can be unmounted in between (a
+    // phone leaving the task page, a Wall cell closing). term.dispose() drops the renderer, and the
+    // write's own callback then called scrollToBottom on a terminal with none - "Cannot read
+    // properties of undefined (reading 'dimensions')" on every such exit (2026-09-18).
+    let disposed = false;
     let bail = null, revealFrame = null, pendingWrites = 0, readySeen = false, lifted = false;
     const lift = () => {
+      if (disposed) return;
       clearTimeout(bail); cancelAnimationFrame(revealFrame);
       revealFrame = null; lifted = true;
       term.scrollToBottom(); setRestoring(false); if (!readOnly && autoFocus) term.focus();
@@ -230,7 +236,7 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
       pendingWrites += 1;
       // behind the curtain the viewport follows the replay; once live, xterm's own follow-output
       // rule applies, so scrolling up to read while the agent works is not yanked back down
-      term.write(data, () => { pendingWrites -= 1; if (!lifted) term.scrollToBottom(); maybeLift(); });
+      term.write(data, () => { if (disposed) return; pendingWrites -= 1; if (!lifted) term.scrollToBottom(); maybeLift(); });
     };
     // Codex repaints its full TUI for each key, spread over several websocket frames. Writing
     // every fragment into xterm separately makes rendering fall behind input while the agent is
@@ -291,6 +297,7 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
     let resizeTimer = null;
     let wasHidden = false;
     const onResize = () => {
+      if (disposed) return;
       const box = host.current?.getBoundingClientRect();
       if (!box || !usableTerminalBox(box.width, box.height)) { wasHidden = true; return; }
       fitSafely();
@@ -308,7 +315,7 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
     refit.current = onResize;                       // the size picker drives the same path
     window.addEventListener("resize", onResize);
     // ...and the same on the browser tab itself coming back to the foreground
-    const onVisible = () => { if (document.visibilityState === "visible") term.refresh(0, Math.max(0, term.rows - 1)); };
+    const onVisible = () => { if (!disposed && document.visibilityState === "visible") term.refresh(0, Math.max(0, term.rows - 1)); };
     document.addEventListener("visibilitychange", onVisible);
     const ro = new ResizeObserver(onResize);
     ro.observe(host.current);
@@ -344,7 +351,7 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
     gauge();
     const d1 = term.onScroll(gauge), d2 = term.onRender(gauge);
     if (!readOnly && autoFocus) term.focus();
-    return () => { window.removeEventListener("resize", onResize); document.removeEventListener("visibilitychange", onVisible); ro.disconnect(); clearTimeout(bail); clearTimeout(resizeTimer); cancelAnimationFrame(revealFrame); output.dispose();
+    return () => { disposed = true; window.removeEventListener("resize", onResize); document.removeEventListener("visibilitychange", onVisible); ro.disconnect(); clearTimeout(bail); clearTimeout(resizeTimer); cancelAnimationFrame(revealFrame); output.dispose();
       el.removeEventListener("wheel", trap); el.removeEventListener("paste", pasteImages, true);
       input?.dispose(); d1.dispose(); d2.dispose(); ws.close(); term.dispose(); };
   }, [sid, readOnly, autoFocus]);
@@ -356,8 +363,18 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
       {/* the pane's two knobs, discreet until hovered: how it is painted, and how much of the
           run fits in it. Both restyle ANY CLI in the pane - codex and claude included - and
           both stick per browser. */}
-      {!readOnly && <Box sx={{ position: "absolute", top: 5, right: 10, zIndex: 2, display: "flex", alignItems: "center", gap: 0.5,
+      {/* right: 36, not 10 - SessionPane's full-screen button sits at right: 6 and covered the
+          end of the palette's name ("Catppuccin Moch" on every Wall cell and the task page,
+          2026-09-18). The connection word rides in this row too, instead of at a hardcoded
+          offset that only fitted one width of the row. */}
+      {!readOnly && <Box sx={{ position: "absolute", top: 5, right: 36, zIndex: 2, display: "flex", alignItems: "center", gap: 0.5,
         opacity: 0.62, "&:hover": { opacity: 1 }, transition: "opacity .15s" }}>
+        {state !== "live" && (
+          <Typography variant="caption" sx={{ ...mono, fontSize: 10, mr: 0.5,
+            color: state === "exited" ? CATPPUCCIN.green : CATPPUCCIN.yellow }}>
+            {state}
+          </Typography>
+        )}
         {/* one step smaller is a couple more rows of the run without touching the layout -
             far cheaper than scrolling back for what just went past */}
         <Box component="button" onClick={() => setSize((n) => SIZES[Math.max(0, SIZES.indexOf(n) - 1)])}
@@ -433,8 +450,8 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
           </Typography>
         </Box>
       )}
-      {state !== "live" && (
-        <Typography variant="caption" sx={{ ...mono, position: "absolute", top: 6, right: 130, fontSize: 10,
+      {readOnly && state !== "live" && (
+        <Typography variant="caption" sx={{ ...mono, position: "absolute", top: 6, right: 10, fontSize: 10,
           color: state === "exited" ? CATPPUCCIN.green : CATPPUCCIN.yellow }}>
           {state}
         </Typography>

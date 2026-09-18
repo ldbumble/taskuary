@@ -1007,8 +1007,11 @@ export const IDLE_WAITING = 45;
 // `waiting` is the server's verdict (the CLI's own screen, silence as fallback); older rows
 // without it fall back to the clock here
 export const isWaiting = (s) => (s?.waiting ?? (s?.idle >= IDLE_WAITING));
-export const busyNow = (t) => (t?.RunStatus === "running")
-  || (t?.Session?.alive && !isWaiting(t.Session));
+// A LIVE SESSION SPEAKS FOR ITSELF. The run row says `running` for as long as the pty is up,
+// including while the CLI sits at its prompt waiting for an answer - so the rail read "agent
+// working" on TQ-0004 while the page header, the Wall and the toast all said the coder had
+// stopped and was waiting (2026-09-18). The run row decides only when there is no session to ask.
+export const busyNow = (t) => (t?.Session?.alive ? !isWaiting(t.Session) : t?.RunStatus === "running");
 // The ladder, top down: dropped, done, an agent is ACTUALLY running it, else it is yours.
 // "in_progress with nothing running" used to read as "agent working" - a task whose agent
 // finished without closing it then sat there looking busy and nobody was told.

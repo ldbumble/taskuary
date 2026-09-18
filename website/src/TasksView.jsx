@@ -1076,11 +1076,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         checklist got, and what the task is. The whole strip reopens the task. */}
                     {stage !== "task" && (
                       <Box onClick={() => setOpenStage("task")}
-                        sx={{ display: "flex", alignItems: "center", gap: 0.85, minWidth: 0, cursor: "pointer" }}>
+                        sx={{ display: "flex", alignItems: "center", gap: 0.85, minWidth: 0, cursor: "pointer", flexWrap: { xs: "wrap", sm: "nowrap" } }}>
                         <Typography sx={{ color: FAINT, fontSize: 9, fontWeight: 750, letterSpacing: 1.35, flexShrink: 0 }}>TASK</Typography>
                         <Typography noWrap sx={{ color: DIM, fontSize: 11.5, flex: 1, minWidth: 0 }}>{foldedFacts}</Typography>
                         {!["done", "dropped"].includes(t.Status) && (
-                          <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35, flexShrink: 0 }}>
+                          <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35, flexShrink: 0, flexBasis: { xs: "100%", sm: "auto" }, order: { xs: 9, sm: 0 } }}>
                             <Button size="small" variant="contained" disableElevation startIcon={<DoneAllIcon sx={{ fontSize: 14 }} />}
                               sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
                               title="Closes the task and ends the live agent session with it."
@@ -2005,8 +2005,11 @@ const Fold = ({ title, children }) => (
   </Box>
 );
 
+// ONE ROW ON A DESKTOP, TWO ON A PHONE. The bar is flexShrink: 0 so it never loses a button, which
+// at 390px meant it kept its width by sitting ON the title ("A… w…" under Continue this session,
+// Save this c… cut off at the card's edge, 2026-09-18). Below sm the bar takes the whole next line.
 const WorkflowHeading = ({ number, title, description, chip, tone, folded, onToggle, action }) => (
-  <Box onClick={onToggle} sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0,
+  <Box onClick={onToggle} sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: { xs: "wrap", sm: "nowrap" },
     cursor: onToggle ? "pointer" : "default", opacity: folded ? 0.72 : 1,
     "&:hover": onToggle ? { opacity: 1 } : undefined }}>
     <Box sx={{ width: 24, height: 24, borderRadius: "50%", bgcolor: tone, color: "#fff",
@@ -2018,7 +2021,7 @@ const WorkflowHeading = ({ number, title, description, chip, tone, folded, onTog
       {description && !folded && <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.35 }}>{description}</Typography>}
     </Box>
     {/* the one action a stage cannot afford to hide when it folds. Its click is its own, not the fold's. */}
-    {action && <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", flexShrink: 0 }}>{action}</Box>}
+    {action && <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", flexShrink: 0, flexBasis: { xs: "100%", sm: "auto" }, order: { xs: 9, sm: 0 } }}>{action}</Box>}
     {chip}
     {onToggle && <ExpandMoreIcon sx={{ fontSize: 18, color: FAINT, flexShrink: 0,
       transform: folded ? "rotate(-90deg)" : "none", transition: "transform .15s" }} />}

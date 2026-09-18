@@ -58,3 +58,24 @@ test("a pane that comes back into view repaints from xterm's buffer", () => {
   assert.match(term, /document\.addEventListener\("visibilitychange", onVisible\)/);
   assert.match(term, /document\.removeEventListener\("visibilitychange", onVisible\)/, "and it is taken down with the pane");
 });
+
+test("the pane's knobs clear the full-screen button, and the connection word rides in their row", () => {
+  // SessionPane's full-screen button sits at right: 6 over the same corner; at right: 10 the knob
+  // row ended under it and every pane read "Catppuccin Moch" (2026-09-18). The state word used to
+  // float at right: 130 - the width of one particular knob row - and collided in narrow Wall cells.
+  assert.match(term, /position: "absolute", top: 5, right: 36, zIndex: 2, display: "flex"/);
+  assert.doesNotMatch(term, /right: 130/);
+  const knobs = term.slice(term.indexOf("right: 36, zIndex: 2"), term.indexOf("A\u2212</Box>"));
+  assert.match(knobs, /\{state !== "live" && \(/, "the connection word is the first thing in the knob row");
+});
+
+test("nothing touches xterm after the pane is disposed", () => {
+  // A write's completion callback ran scrollToBottom on a terminal whose renderer dispose() had
+  // already dropped: "Cannot read properties of undefined (reading 'dimensions')" on a phone
+  // leaving the task page (2026-09-18). The unmount flips one flag and every late callback obeys it.
+  assert.match(term, /let disposed = false;/);
+  assert.match(term, /return \(\) => \{ disposed = true; window\.removeEventListener\("resize", onResize\)/);
+  assert.match(term, /term\.write\(data, \(\) => \{ if \(disposed\) return; pendingWrites -= 1;/);
+  assert.match(term, /const lift = \(\) => \{\n\s+if \(disposed\) return;/);
+  assert.match(term, /const onResize = \(\) => \{\n\s+if \(disposed\) return;/);
+});

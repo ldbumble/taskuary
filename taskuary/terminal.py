@@ -188,6 +188,7 @@ class Term:
         self.calm_until = 0                               # output until then must not reset idle()
         self.seeded = ''                                  # the prompt we typed: echoed back, not said
         self.accepted = None                              # None: no prompt yet; True: submitted; False: typed but not taken (PW-209)
+        self.seeding = False                              # the seed is being typed in: the box is up, and nobody is waiting on anyone
         self.store = store                                # so the pty can file its own transcript when it ends
         self.keep_transcript = True                       # off for a session the owner types secrets into (aisetup)
         self.subs = []                                    # (loop, asyncio.Queue)
@@ -403,7 +404,11 @@ class Term:
                 self.accepted = False; return             # echoed but never submitted: stop typing
             self.accepted = False
             logger.warning(f'terminal {self.sid}: prompt typed but nothing came back - press Enter')
-        threading.Thread(target=go, daemon=True).start()
+        def seeding():
+            try: go()
+            finally: self.seeding = False
+        self.seeding = True
+        threading.Thread(target=seeding, daemon=True).start()
 
     def tap(self, fn): self.taps.append(fn)
     def untap(self, fn): self.taps = [f for f in self.taps if f is not fn]
@@ -559,6 +564,12 @@ def prompt_pending(t) -> bool:
     truncation marker), not the tail used to verify simulated typing. Once observed, latch it: the
     prompt may later scroll out of the bounded terminal buffer.
     """
+    # A pane being SEEDED is not waiting on anyone, whatever its screen says. The prompt box is up
+    # while the seed goes in - a toe, its echo, the payload in chunks, Enter - which is longer than
+    # PHASE_DWELL, so the screen read parked, the pile raised "coder stopped on TQ-0631 and is waiting
+    # on you", and the watcher took it back a moment later as "working": both lines in one WhatsApp
+    # by-the-way (the owner, 2026-09-18: "stopped for a second then changed its mind").
+    if getattr(t, 'alive', False) and getattr(t, 'seeding', False) and getattr(t, 'accepted', None) is None: return True
     if (not getattr(t, 'alive', False) or getattr(t, 'accepted', None) is not True or
             cli_of(getattr(t, 'argv', [])) != 'devin' or not getattr(t, 'seeded', '')):
         return False

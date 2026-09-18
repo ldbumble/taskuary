@@ -120,6 +120,22 @@ class SeedArgvTests(unittest.TestCase):
         t.raw = 'later screen with no original prompt'
         self.assertFalse(terminal.prompt_pending(t))
 
+    def test_a_pane_being_seeded_is_working_whatever_its_screen_says(self):
+        """The seed goes in over several seconds - a toe, its echo, the payload in chunks, Enter - with
+        the CLI's prompt box on screen the whole time. That is longer than PHASE_DWELL, so the phase
+        read parked, the pile said "coder stopped on TQ-0631 and is waiting on you", and the watcher took
+        it back as "working" a moment later: both lines in one WhatsApp by-the-way (2026-09-18)."""
+        class Fake:
+            argv, alive, accepted, seeding, seeded = ['claude.cmd'], True, None, True, ''
+            def scrollback(self): return '? for shortcuts'
+        t = Fake()
+        self.assertTrue(terminal.prompt_pending(t))
+        self.assertEqual(terminal.stable_phase_of(t), 'working')
+        t.seeding, t.accepted = False, True                  # submitted: the screen decides again
+        self.assertFalse(terminal.prompt_pending(t))
+        t.seeding, t.accepted = False, None                  # gave up (a trust dialog is up): the owner IS needed
+        self.assertFalse(terminal.prompt_pending(t))
+
     def test_codex_auto_degrades_when_the_windows_sandbox_helper_is_missing(self):
         """Without codex-windows-sandbox-setup.exe next to codex, workspace-write kills every
         command before it runs - full-auto degrades to codex's bypass flag, the same trust the

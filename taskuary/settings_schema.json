@@ -356,6 +356,13 @@
       "desc": "The default for a channel that has never been asked. Each channel above answers for itself once you set it.",
       "help": "Name the Assistant chat on the WhatsApp or Telegram card under Connections first. Taskuary then listens only to messages you send in that exact private chat. Other people, other chats and groups cannot command it. This is separate from the Notifications role, so the Assistant chat is not subscribed to ordinary Taskuary alerts.\n\nIt is the SAME walk the Assistant tab runs, on the same conversation and the same pipe: the item on the table stays where it was, a reply you ask for is drafted, and a yes sends it. The choices arrive as words because a chat has no buttons.\n\nThis switch is the standing permission. The Assistant tab's own \"in WhatsApp\" button hands the walk over for a session whether or not it is on, and locks the tab while the walk is there.\n\nBecause answers can contain private workspace information, use a chat only you can read — WhatsApp's Message yourself, or your own private chat with the Telegram bot. Off (default) leaves your messages ignored as before."
     },
+    "phone_morning_line": {
+      "group": "Assistant on your phone",
+      "label": "A morning line in the chat",
+      "type": "switch",
+      "desc": "Once a day, the assistant's chat says what is waiting and offers the three ways in: walk me through my tasks, set up Taskuary, set up a report.",
+      "help": "On (the default once a chat is chosen): the first check after 6:00 sends one line to the Assistant chat on every channel that has one - the count in the pipe and how many are on you, then the three scripts as numbered options, so one reply starts the walk there. Quiet on a day the pipe is empty; never twice in a day. Set-up is always offered: there is always more to set up, and from a chat it opens on what is connected.\n\nOff: the chat speaks first only for a hand-off, a review ping or a report aimed at it."
+    },
     "vision_enabled": {
       "group": "Attachments & images",
       "label": "AI reads attached images",

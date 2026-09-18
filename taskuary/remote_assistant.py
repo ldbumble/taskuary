@@ -393,6 +393,58 @@ def asking() -> dict | None:
     return getattr(_ASKING, 'chat', None)
 
 
+MORNING_KEY, MORNING_AT = 'phone_morning_line', 'phone_morning_line_at'
+SCRIPT_LINES = ['Walk me through my tasks', 'Set up Taskuary', 'Set up a report']
+
+
+def morning_line(store, now=None, force: bool = False) -> int:
+    """Once a day, to the assistant's own chat: what is waiting in a breath, and the scripts as numbered
+    options, so one reply starts the walk there. The chat used to speak first only for a hand-off, a
+    review ping or a report aimed at it - a doorway nobody opens stays shut (the owner, 2026-09-18:
+    "does WhatsApp surface the option to click to get started once a day so you will interact with
+    it"). Quiet when the pipe is empty; never twice in a day; the three options are always the same -
+    set-up never drops off, "there always is more to set up"."""
+    from datetime import datetime as _dt
+    from . import funnel
+    now = now or _dt.now()
+    st = store.get_settings()
+    if str(st.get(MORNING_KEY, '1')).strip() in ('0', 'false', 'off'): return 0
+    today = now.strftime('%Y-%m-%d')
+    if not force and (str(st.get(MORNING_AT) or '') == today or now.hour < 6): return 0
+    doors = doorways(store)
+    if not doors: return 0
+    try: p = funnel.pile(store)
+    except Exception as e:
+        logger.debug(f'morning line: no pile - {e}'); return 0
+    items = p.get('items') or []
+    if not items and not force: return 0
+    on_you = sum(1 for i in items if (funnel.LANE_WORDS.get(i.get('lane'), ('', ''))[1] == 'you'))
+    head = (f"Good morning - {len(items)} in the pipe" + (f" · {on_you} on you" if on_you else '') + '.') if items else 'Good morning - the pipe is clear.'
+    text = head + '\n\nReply with one of:\n' + '\n'.join(f'{i} · {w}' for i, w in enumerate(SCRIPT_LINES, 1))
+    sent = 0
+    for d in doors:
+        try: send(store, d['channel'], d['chat'], text, d['connectorId']); sent += 1
+        except Exception as e: logger.warning(f'the morning line did not reach {d["channel"]}: {e}')
+    if sent: store.set_setting(MORNING_AT, today, 'assistant')
+    return sent
+
+
+def script_direct(store, question: str) -> str | None:
+    """A script named in so many words needs no model: "walk me through my tasks" is Next, "set up
+    Taskuary" opens on the connections, "set up a report" asks for the sentence. Returns the words to
+    send, or None when the line is not a script (then the general road reads it)."""
+    from . import concierge
+    q = ' '.join(str(question or '').lower().replace('-', ' ').split())
+    if not q: return None
+    if q in ('walk me through my tasks', 'walk me through the tasks', 'walk me through tasks', 'my tasks', 'next'):
+        with concierge.delivering(concierge.PHONE):
+            out = concierge.surface(store, actor='owner')
+            return carry_out(store, out, None, actor='owner')
+    if q in ('set up taskuary', 'setup taskuary', 'set up', 'setup'): return script_words(store, 'set up Taskuary')
+    if q in ('set up a report', 'setup a report', 'set up report', 'new report'): return script_words(store, 'set up a report')
+    return None
+
+
 def respond(store, channel: str, chat: str, question: str, connector_id: int):
     """Answer synchronously; the poller runs this on a serialized background worker."""
     from . import concierge, general
@@ -412,6 +464,11 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int):
                 send(store, channel, chat, concierge.undo_last(store, 'owner'), connector_id)
                 return
             question, picked = resolve_index(store, channel, chat, question)   # "2" is the words we numbered
+            # a script by name (the morning line's options, or the words themselves) runs with no model
+            scripted = script_direct(store, question)
+            if scripted:
+                send(store, channel, chat, scripted, connector_id)
+                return
             straight = answer_the_agent(store, item, question, picked)
             if straight:
                 send(store, channel, chat, straight, connector_id)

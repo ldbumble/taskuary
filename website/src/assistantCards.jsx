@@ -828,13 +828,18 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onBack, onRestar
           a smear (the owner, 2026-09-18: "the images look unclear"). Whole, at the shot's own shape,
           and clickable: the picture of the tab is the way to the tab. A broken image removes itself
           rather than leaving a torn box - the words above and below already carry the stop. */}
+      {/* ZOOMED IN, not shrunk to fit. Whole-and-small put a 1280px page into 540px and the words
+          became texture (the owner, 2026-09-18: "zoom it in even if you can only see part of it").
+          The picture is drawn at twice the box and the box shows its top-left - where a tab's name,
+          its navigation and its first card live - and pans to the rest on hover. */}
       {card.image && (
-        <img src={card.image} alt={`The ${card.title} tab`} loading="lazy" className="tq-walk-shot"
-          title={card.goto ? `Open ${card.goto.tab}` : undefined} role={card.goto ? "button" : undefined}
-          tabIndex={card.goto ? 0 : undefined} onClick={() => go(card.goto)}
-          onKeyDown={(e) => { if (e.key === "Enter") go(card.goto); }}
-          onError={(e) => { e.currentTarget.style.display = "none"; }}
-          style={{ cursor: card.goto ? "pointer" : "default" }} />
+        <div className="tq-walk-shot" title={card.goto ? `Open ${card.goto.tab}` : undefined}
+          role={card.goto ? "button" : undefined} tabIndex={card.goto ? 0 : undefined}
+          onClick={() => go(card.goto)} onKeyDown={(e) => { if (e.key === "Enter") go(card.goto); }}
+          style={{ cursor: card.goto ? "pointer" : "default" }}>
+          <img src={card.image} alt={`The ${card.title} tab`} loading="lazy"
+            onError={(e) => { e.currentTarget.parentElement.style.display = "none"; }} />
+        </div>
       )}
       {/* what THIS install has - the same tables the checklist reads. Said as whose it is: a bare
           "none yet" under a picture of the tab did not say none of WHAT. */}

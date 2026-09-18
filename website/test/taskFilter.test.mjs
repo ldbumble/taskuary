@@ -51,3 +51,15 @@ test("a closed task opened directly cannot remain under the in-progress pill", a
   assert.match(source, /inBucket\(row, next\)/);
   assert.match(source, /onSelect\(replacement\)/);
 });
+
+// The X on the task detail cleared the selection, and the "follow the list to its first row"
+// effect put the same task straight back - a flicker that landed you where you started (the owner,
+// 2026-09-18: "when you hit x when coding to see task it just flickers and comes back").
+test("closing the detail shows the list rather than re-opening the first task", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("../src/TasksView.jsx", import.meta.url), "utf8");
+  assert.match(source, /const dismiss = \(\) => \{ dismissed\.current = true; onSelect\(null\); \}/);
+  assert.match(source, /if \(active && !selected && firstShownId && !dismissed\.current\) onSelect\(firstShownId\)/);
+  assert.match(source, /title="Close — back to the list \(the task stays\)">\s*<IconButton size="small" onClick=\{dismiss\}/);
+  assert.match(source, /if \(selected \|\| !active\) dismissed\.current = false/, "a real pick, or leaving the tab, lifts it");
+});

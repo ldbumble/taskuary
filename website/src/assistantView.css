@@ -225,10 +225,14 @@
    130px crop of a page corner - a search box and half a heading - under five bullets of text. */
 .tq-walk-progress { height: 3px; margin: 7px 0 8px; border-radius: 2px; background: #ebe6de; overflow: hidden; }
 .tq-walk-progress i { display: block; height: 100%; border-radius: 2px; background: #718b75; transition: width .3s ease; }
-/* capped at 600px wide: a 790px picture made a 700px card, and the card's own title scrolled off the
-   top of a 900px-tall window before you could read it */
-.tq-walk-shot { display: block; width: 100%; max-width: 540px; aspect-ratio: 1280 / 760; object-fit: cover; object-position: top left;
+/* capped at 540px wide: a 790px picture made a 700px card, and the card's own title scrolled off the
+   top of a 900px-tall window before you could read it. ZOOMED: the shot is drawn at twice the box
+   (a 1280px page at ~1080px, so its words are words) and the box is a window onto its top-left that
+   pans to the bottom-right on hover. */
+.tq-walk-shot { display: block; width: 100%; max-width: 540px; aspect-ratio: 1280 / 760; overflow: hidden; position: relative;
   border-radius: 8px; border: 1px solid #ddd8cf; background: #f6f4f1; margin: 0 0 8px; transition: box-shadow .15s; }
+.tq-walk-shot img { display: block; width: 200%; height: auto; transform: translate(0, 0); transition: transform 2.4s ease-in-out; }
+.tq-walk-shot:hover img, .tq-walk-shot:focus-visible img { transform: translate(-50%, -50%); }
 .tq-walk-shot:hover, .tq-walk-shot:focus-visible { box-shadow: 0 0 0 2px #b9c8bb; outline: none; }
 .tq-walk-can { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
 .tq-walk-can .lbl { font: 750 9.5px/1.2 'IBM Plex Mono', Consolas, monospace; letter-spacing: .12em; text-transform: uppercase; color: #867f74; margin-right: 2px; }

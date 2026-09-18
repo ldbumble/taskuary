@@ -557,8 +557,16 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // compulsory. Follow the visible list to its first task on arrival (and after removing the
   // selected task); an explicitly selected task is never replaced when filters change.
   const firstShownId = shown[0]?.TaskId;
+  // ...but never over the owner's own Close. The X on the detail means "show me the list", and
+  // following the list straight back to its first row - the task just closed, whenever it leads
+  // the list - made the X a flicker that landed you where you started (the owner, 2026-09-18:
+  // "when you hit x ... it just flickers and comes back"). A real pick, or leaving and returning
+  // to the tab, lifts it.
+  const dismissed = useRef(false);
+  const dismiss = () => { dismissed.current = true; onSelect(null); };
+  useEffect(() => { if (selected || !active) dismissed.current = false; }, [selected, active]);
   useEffect(() => {
-    if (active && !selected && firstShownId) onSelect(firstShownId);
+    if (active && !selected && firstShownId && !dismissed.current) onSelect(firstShownId);
   }, [active, selected, firstShownId, onSelect]);
   const changeFilter = (next) => {
     setFilter(next); setQuery(""); setOlder(false);
@@ -1021,7 +1029,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   )}
                   <LifecycleChip kind="task" phase={taskState} compact sx={{ flexShrink: 0 }} />
                   <Tooltip title="Close — back to the list (the task stays)">
-                    <IconButton size="small" onClick={() => onSelect(null)}><CloseIcon sx={{ fontSize: 15 }} /></IconButton>
+                    <IconButton size="small" onClick={dismiss}><CloseIcon sx={{ fontSize: 15 }} /></IconButton>
                   </Tooltip>
                 </Box>
                 {workContext && <Typography variant="caption" sx={{ color: "#6b5f45", display: "block",

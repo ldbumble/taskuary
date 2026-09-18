@@ -806,7 +806,18 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onFinish, onSave
   const last = at >= total - 1;
   return (
     <CardShell card={{ ...card, lane: "report" }} kicker={`setting up · ${at + 1} of ${total}`}
-      title={card.title} sub={card.blurb}>
+      title={<>
+        {/* A BOX ONLY WHERE THERE IS SOMETHING TO COMPLETE. The first five stops carry the
+            checklist's own `done`; the rest are a tour of the app, and an empty box beside "the
+            Timeline" would invent a chore nobody has (the owner, 2026-09-17: "show check boxes if
+            it's done. Make the walk through accurate to what was completed"). */}
+        {"done" in card && (
+          <span aria-hidden="true" title={card.done ? "already done" : "not done yet"}
+            style={{ marginRight: 7, fontSize: 13, fontWeight: 700, color: card.done ? "#47654a" : "#b3aa9c" }}>
+            {card.done ? "☑" : "☐"}</span>
+        )}
+        {card.title}
+      </>} sub={card.blurb}>
       {/* the tab itself. A broken image removes itself rather than leaving a torn box in the middle
           of the card - the words above and below already carry the stop. Capped and cropped to its
           top-left: the job is recognition ("you'll know it when you get there"), not reading text off
@@ -822,10 +833,11 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onFinish, onSave
       {/* the five setup stops mirror the checklist's own done-ness (walk.state reads the same
           tables) - a stop that has been done says so, the same green the checklist panel uses,
           rather than reading identically whether or not it has been. */}
+      {/* setup.state writes a detail that says what it IS ("already connected: Outlook mail, \u2026"),
+          so this renders it as given. It used to patch the words back on for one step by key, which
+          left every other step reading as a heading for the instructions under it. */}
       {card.done && card.detail && <div style={{ fontSize: 12.5, fontWeight: 600, color: "#47654a", margin: "4px 0" }}>
-        {/* a bare brain name in green, sitting directly above "You can install a coding CLI",
-            read as a HEADING for the instructions rather than as "this is already done" */}
-        {card.key === "ai" ? `Already set up \u2014 ${card.detail}` : card.detail}</div>}
+        {card.detail}</div>}
       <div style={{ fontSize: 12, fontWeight: 700, color: "#867f74", margin: "8px 0 4px" }}>You can</div>
       <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, lineHeight: 1.75 }}>
         {(card.can || []).map((o, i) => (

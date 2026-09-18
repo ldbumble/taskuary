@@ -149,3 +149,22 @@ test("a row's button names what it opens, in words the server owns", () => {
   assert.equal(labels.length, 5);
   assert.equal(new Set(labels).size, 5, `two rows wear the same button: ${labels}`);
 });
+
+// A box only where there is something to complete: the first five stops carry the checklist's own
+// `done`, the other nine are a tour of the app, and an empty box beside "the Timeline" would invent
+// a chore nobody has (the owner, 2026-09-17: "show check boxes if it's done. Make the walk through
+// accurate to what was completed").
+test("a stop that can be completed wears a box, and says which way it is ticked", () => {
+  const cards = read("assistantCards.jsx");
+  const walk = cards.slice(cards.indexOf("export function WalkCard"), cards.indexOf("export function", cards.indexOf("export function WalkCard") + 10));
+  assert.match(walk, /"done" in card &&/);          // presence, not truthiness: false must still show a box
+  assert.match(walk, /card\.done \? "\u2611" : "\u2610"/);
+  assert.match(walk, /title=\{card\.done \? "already done" : "not done yet"\}/);
+});
+
+// The done-green line says what it IS. A bare noun there - "Outlook mail, Microsoft Teams, Telegram"
+// directly above "You can connect a mailbox" - read as a heading for the instructions under it.
+test("what is already set up says so, for every stop and not just one", () => {
+  const cards = read("assistantCards.jsx");
+  assert.doesNotMatch(cards, /card\.key === "ai" \? `Already set up/);
+});

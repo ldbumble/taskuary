@@ -84,6 +84,11 @@ def state(store) -> dict:
     # message had ever been read
     inbox = [m for m in store.feed(limit=5, days=3650) if m.get('Channel') != 'report']
     steps = [
+        # EVERY detail says what it IS, not just what it holds. A bare noun in the done-green -
+        # "Outlook mail, Microsoft Teams, Telegram" sitting directly above "You can connect a
+        # mailbox" - reads as a HEADING for the instructions rather than as "you already have
+        # these" (the owner, 2026-09-17: "shouldn't this show what is already connected?"). Two
+        # surfaces render this line and neither can add the words: only here knows what it means.
         {'key': 'owner', 'title': 'Say who you are',
          'why': 'Your name signs every reply, and the operator documents fill it in wherever they '
                 'say {{owner}}. Without it the drafts go out addressed by nobody.',
@@ -91,14 +96,14 @@ def state(store) -> dict:
          # when nothing is set - so both have to be checked or this step reads done on a fresh
          # install and the checklist sends nobody to the one field that signs their mail
          'done': bool(who) and who != 'the owner',
-         'detail': who if who != 'the owner' else '',
+         'detail': f'signed as {who}' if who and who != 'the owner' else '',
          'goto': {'tab': 'Docs', 'hash': 'owner', 'label': 'Open your name in Docs'}},
         {'key': 'ai', 'title': 'Set up an AI',
          'why': 'This is what reads each message and decides whether it is work, a question, or '
                 'noise. Until it exists every message just files itself onto the Timeline, '
                 'untriaged - the app runs, and does nothing for you. A coding CLI you already '
                 'pay for will do it; so will an API key.',
-         'done': bool(ai), 'detail': ai.get('Name') or '',
+         'done': bool(ai), 'detail': f"running on {ai.get('Name')}" if ai.get('Name') else '',
          # WHERE IT SENDS YOU DEPENDS ON WHAT YOU HAVE. "Open AI CLI agents" is the right door when
          # there is no brain yet, or when the brain IS a CLI. It is the wrong one for a key provider:
          # Azure OpenAI is not a CLI tool and cannot be set up in a terminal, so pointing an install
@@ -119,7 +124,7 @@ def state(store) -> dict:
          'why': 'A mailbox or a chat - somewhere people actually write to you. Without one the '
                 'Timeline is empty because nothing is being read, not because nothing happened. '
                 'Trackers and report sources come later; they file work, they do not bring it in.',
-         'done': bool(inbound), 'detail': ', '.join(inbound[:3]),
+         'done': bool(inbound), 'detail': f"already connected: {', '.join(inbound[:3])}" if inbound else '',
          'goto': {'tab': 'Connections', 'hash': '', 'label': 'Add a mailbox or chat'}},
         {'key': 'sync', 'title': 'Read your first messages',
          'why': 'With the four above in place, one sync pulls your mail in and the AI triages it. '

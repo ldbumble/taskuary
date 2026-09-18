@@ -91,7 +91,9 @@ class WhatCountsAsSetUpTests(unittest.TestCase):
         self.assertFalse(_step(setup.state(s), 'owner')['done'])
         s.set_setting('owner_name', 'Dana Example', 't')
         self.assertTrue(_step(setup.state(s), 'owner')['done'])
-        self.assertEqual(_step(setup.state(s), 'owner')['detail'], 'Dana Example')
+        # the detail says what it IS, not just what it holds: a bare name in the done-green sat
+        # directly above the instructions and read as a heading for them (2026-09-17)
+        self.assertEqual(_step(setup.state(s), 'owner')['detail'], 'signed as Dana Example')
 
     def test_an_ai_card_with_no_key_is_not_a_brain(self):
         s = _fresh()

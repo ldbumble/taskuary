@@ -95,6 +95,80 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: { name: exe, path: dist/Taskuary.exe }
 
+  ghcr:
+    # The image nobody has to build themselves: ghcr.io/ldbumble/taskuary:<version>.
+    # No secret is created or stored - GITHUB_TOKEN with packages:write is the whole
+    # credential, the same trade Trusted Publishing makes for PyPI above.
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45     # the arm64 leg runs pip under QEMU; never burn a runner for hours
+    # push only. workflow_dispatch can be aimed at a tag ref, and re-publishing an already
+    # released image tag should be a deliberate act, not the side effect of a TestPyPI dry run.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+      packages: write       # push to GHCR as the workflow, not as a stored password
+      id-token: write       # short-lived Sigstore identity, as the release job uses
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: '22' }
+
+      # The Dockerfile COPYs taskuary/web, which is the bundle as COMMITTED. Rebuild it
+      # from this tag's source for the same reason the wheel does: the image and the
+      # wheel have to be the same app, not whatever was last committed to master.
+      - name: Build the web UI
+        run: npm ci && npm run build
+        working-directory: website
+
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Taken from the tag, never parsed. Taskuary versions have four components
+      # (v0.3.4.12), so metadata-action's type=semver matches nothing and would publish
+      # the image under no version tag at all, silently. type=raw cannot do that.
+      - name: The version is the tag
+        id: version
+        run: echo "number=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/${{ github.repository }}
+          flavor: latest=false          # latest is set below, deliberately, not inferred
+          tags: |
+            type=raw,value=${{ steps.version.outputs.number }}
+            type=raw,value=latest
+
+      # arm64 as well as amd64: a home server is as likely to be a Pi as a NUC, and no
+      # runtime dependency needs compiling (pyodbc is an extra, not a base dependency).
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Same provenance the wheel and the exe get, pushed beside the image so
+      # `gh attestation verify oci://ghcr.io/ldbumble/taskuary:<version>` answers.
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
   release:
     needs: [pypi, exe]
     if: startsWith(github.ref, 'refs/tags/v')

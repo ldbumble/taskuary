@@ -188,6 +188,9 @@ door, the digest is the reading. One switch under *Assistant on your phone*, on 
 chat is chosen. The options are always the same three - *walk me through my tasks*, *set up
 Taskuary*, *set up a report* - and set-up never drops off the list once the checklist is done: "there
 always is more to set up" (the owner, 2026-09-18), and the setup walk is the tour of the app too.
+Picked from a chat with the checklist complete, it opens on what is connected - the Connections stop
+first, as words: each live connection with its state, then what is planned - and offers the rest of
+the walk from there ("or at least see my connectors").
 
 Long results: the summary in the first bubble, the whole thing as a follow-up on request. Pictures
 (a snapshot from the browser pane, a chart from a report) go as attachments where the channel allows

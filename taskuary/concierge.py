@@ -2364,8 +2364,15 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
     try:
         from . import handbook as hub
         hub_context = hub.block(store, text, actions=False) if hub.enabled(store) else ''
-        from . import toolcatalog
+        from . import toolcatalog, appfacts
+        # THE APP'S OWN STATE rides every turn of the general road (appfacts): what is set up, so
+        # "run the AR report" can name a report and "is Teams connected" is a read, not a guess.
+        # Never a reason for the chat to fall over: a table that cannot be read leaves the block out.
+        try: state = appfacts.state_block(store)
+        except Exception as e:
+            logger.warning(f'concierge: the app state block was left out - {e}'); state = ''
         system = (_system(store, llm) + '\n\n' + toolcatalog.block(store)
+                  + (f'\n\n{state}' if state else '')
                   + (f'\n\n{hub.ASSISTANT_LINE}' if hub.enabled(store) else ''))
         raw = str(llm(system,
                       f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n\n{facts(store, item)}{trouble(store, text)}\n\n"

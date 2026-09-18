@@ -375,3 +375,15 @@ class AppReadTests(unittest.TestCase):
         self.assertIn('Teams - type teams', concierge.read_op(s, 'connection.read', {'name': 'teams'}))   # off, but readable by name
         self.assertIn('No connection by that name', concierge.read_op(s, 'connection.read', {'name': 'zzzz'}))
         self.assertIn('coder', concierge.read_op(s, 'agents.list', {}))
+
+    def test_every_general_turn_carries_the_app_state(self):
+        """Asked "run me the AR report" from a chat, the assistant had no list of reports at all. The
+        state block rides the system prompt of the general road - and never the scripts, which reach
+        no model (walk.py)."""
+        s = self._store()
+        seen = {}
+        def llm(system, user, max_tokens=None): seen['system'] = system; return 'Two reports are set up.'
+        concierge.say(s, 'what reports do we have?', llm=llm)
+        self.assertIn('THE APP RIGHT NOW', seen['system'])
+        self.assertIn('Monthly AR Report', seen['system'])
+        self.assertIn('walk me through my tasks', seen['system'])

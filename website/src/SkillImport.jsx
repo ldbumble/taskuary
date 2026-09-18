@@ -24,6 +24,8 @@ export default function SkillImport({ onClose, onImported }) {
   const [err, setErr] = useState("");
   const [done, setDone] = useState(null); // the last import's receipt: {imported: [...names]}
   const [docChars, setDocChars] = useState(0);   // where a session's seed cuts a rules document - the server's number
+  const [catalog, setCatalog] = useState(null);  // {target, rows, picked} when there is more there than one import takes
+  const [max, setMax] = useState(10);            // how many an import brings in - the server's number
   const [overwrite, setOverwrite] = useState(null); // index of the row whose Overwrite is waiting on a confirm
 
   useEffect(() => {
@@ -43,22 +45,44 @@ export default function SkillImport({ onClose, onImported }) {
     return [...g.values()];
   }, [found]);
 
-  const read = async () => {
+  // WHAT IS THERE comes first, and costs nothing: names and paths, no bodies and no model calls. A
+  // repository of 252 skills used to be refused outright over a limit the owner had not been asked
+  // about yet (the owner, 2026-09-18: "it should not limit reading it, just say max to push in is 10,
+  // meaning you actually choose them"). Looking is free; the cap is on what you tick.
+  const look = async () => {
     const target = path.trim();
     if (!target) return;
+    setBusy(true); setErr(""); setCatalog(null);
+    try {
+      const { data } = await api.post("/api/skills/list", { url: target });
+      const rows_ = data.data || [];
+      setMax(data.max || 10);
+      // nothing to choose between: one skill, or a folder small enough to read whole
+      if (rows_.length <= (data.max || 10)) await bringIn(target, rows_.map((r) => r.path));
+      else setCatalog({ target, rows: rows_, picked: [] });
+    } catch (e) { setErr(failure(e)); }
+    setBusy(false);
+  };
+
+  // ...and only now is anything read: the ticked paths are fetched and turned into proposals. Both
+  // roads still only PROPOSE - nothing is written until the last step.
+  const bringIn = async (target, paths) => {
     setBusy(true); setErr("");
     try {
-      // a link is fetched (raw SKILL.md, GitHub file, or a whole GitHub repo/folder); anything else is
-      // a path on this machine. Both only PROPOSE - nothing is written until step 3.
       const { data } = isLink(target)
-        ? await api.post("/api/skills/fetch", { url: target })
-        : await api.post("/api/skills/read", { path: target });
+        ? await api.post("/api/skills/fetch", { url: target, paths })
+        : await api.post("/api/skills/read", { path: target, paths });
       setDocChars(data.doc_chars || 0);
       setRows(toRows(data.data));    // include: on for a single skill, off for a catalogue; enabled: always off
       setStep(1);
     } catch (e) { setErr(failure(e)); }
     setBusy(false);
   };
+
+  const pickCount = catalog?.picked.length || 0;
+  const togglePick = (p) => setCatalog((c) => ({
+    ...c, picked: c.picked.includes(p) ? c.picked.filter((x) => x !== p) : c.picked.concat(p).slice(0, max),
+  }));
 
   const setRow = (i, patch) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
 
@@ -94,15 +118,54 @@ export default function SkillImport({ onClose, onImported }) {
             </Typography>
             <Box sx={{ display: "flex", gap: 1 }}>
               <TextField fullWidth size="small" label="Link or path" placeholder="https://github.com/anthropics/skills/tree/main/skills"
-                value={path} onChange={(e) => setPath(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") read(); }} />
-              <Button variant="contained" disableElevation disabled={busy || !path.trim()} onClick={read}>
+                value={path} onChange={(e) => { setPath(e.target.value); setCatalog(null); }}
+                onKeyDown={(e) => { if (e.key === "Enter") look(); }} />
+              <Button variant="contained" disableElevation disabled={busy || !path.trim()} onClick={look}>
                 {busy ? <CircularProgress size={16} sx={{ color: "#fff" }} /> : "Read"}
               </Button>
             </Box>
-            <Typography variant="caption" sx={{ color: FAINT }}>
+
+            {/* WHAT IS IN THERE, and which of it to bring in. Only the ticked ones are read, so this
+                list costs nothing however long it is. */}
+            {catalog && (
+              <>
+                <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap" }}>
+                  <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>
+                    {catalog.rows.length} skills there - choose up to {max} to bring in
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: pickCount >= max ? ROLES.you.ink : FAINT, flex: 1 }}>
+                    {pickCount} chosen{pickCount >= max ? " - that is the most one import takes" : ""}
+                  </Typography>
+                  <Button size="small" disabled={!pickCount} onClick={() => setCatalog((c) => ({ ...c, picked: [] }))}>Clear</Button>
+                </Box>
+                <Box sx={{ flex: 1, minHeight: 0, maxHeight: 300, overflowY: "auto", border: `1px solid ${BORDER}`, borderRadius: 1.5, p: 1 }}>
+                  {catalog.rows.map((r) => {
+                    const on = catalog.picked.includes(r.path);
+                    return (
+                      <Box key={r.path} onClick={() => (on || pickCount < max) && togglePick(r.path)}
+                        sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.35, px: 0.75, borderRadius: 1,
+                          cursor: on || pickCount < max ? "pointer" : "default", opacity: on || pickCount < max ? 1 : 0.5,
+                          "&:hover": { bgcolor: "#f4f1ec" } }}>
+                        <Checkbox size="small" checked={on} disabled={!on && pickCount >= max} sx={{ p: 0.25 }}
+                          inputProps={{ "aria-label": `bring in ${r.name}` }} />
+                        <Typography sx={{ ...mono, fontSize: 12.5, fontWeight: 600, color: INK, flex: 1 }} noWrap>{r.name}</Typography>
+                        {!!r.plugin && <Typography variant="caption" sx={{ color: FAINT }} noWrap>{r.plugin}</Typography>}
+                      </Box>
+                    );
+                  })}
+                </Box>
+                <Button variant="contained" disableElevation sx={{ alignSelf: "flex-start" }}
+                  disabled={busy || !pickCount} onClick={() => bringIn(catalog.target, catalog.picked)}>
+                  {busy ? <CircularProgress size={16} sx={{ color: "#fff" }} /> : `Read the ${pickCount || ""} chosen`.trim()}
+                </Button>
+              </>
+            )}
+            {/* ...and while a catalogue is on screen, the machine's own list is not: the question
+                has moved on from where to look to which of these to take */}
+            {!catalog && <Typography variant="caption" sx={{ color: FAINT }}>
               Already found on this machine - click one to fill the path above, then Read.
-            </Typography>
-            <Box sx={{ flex: 1, minHeight: 0, maxHeight: 340, overflowY: "auto", border: `1px solid ${BORDER}`, borderRadius: 1.5, p: 1 }}>
+            </Typography>}
+            <Box sx={{ display: catalog ? "none" : "block", flex: 1, minHeight: 0, maxHeight: 340, overflowY: "auto", border: `1px solid ${BORDER}`, borderRadius: 1.5, p: 1 }}>
               {found === null && <CircularProgress size={18} />}
               {found?.length === 0 && <Typography variant="body2" sx={{ color: FAINT }}>No skills found under ~/.claude on this machine.</Typography>}
               {groups.map((g) => (

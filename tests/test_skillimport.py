@@ -520,9 +520,10 @@ class FetchByLinkTests(unittest.TestCase):
         get, _ = self._get(tree_paths=['skills/x/SKILL.md'])
         with self.assertRaises(ValueError) as c: skillimport.fetch_url('https://github.com/acme/skills/tree/main/nothing', get)
         self.assertIn('no SKILL.md', str(c.exception))
-        get, _ = self._get(tree_paths=[f'skills/s{i}/SKILL.md' for i in range(skillimport.FETCH_MAX + 1)])
+        get, asked = self._get(tree_paths=[f'skills/s{i}/SKILL.md' for i in range(skillimport.PICK_MAX + 1)])
         with self.assertRaises(ValueError) as c: skillimport.fetch_url('https://github.com/acme/skills', get)
-        self.assertIn('at most', str(c.exception))
+        self.assertIn(f'at most {skillimport.PICK_MAX}', str(c.exception))
+        self.assertFalse([a for a in asked if a.endswith('SKILL.md')], 'counted before anything is downloaded')
 
     def test_any_other_https_host_only_for_a_file_called_skill_md(self):
         get = lambda url: SKILL
@@ -540,9 +541,23 @@ class FetchByLinkTests(unittest.TestCase):
             resp = TestClient(server.app).post('/api/skills/fetch', json={'url': 'http://x'})
         self.assertEqual(resp.status_code, 422); self.assertIn('https', resp.json()['detail'])
 
+    def test_the_list_endpoint_says_what_is_there_and_reads_none_of_it(self):
+        """A catalogue is a listing, not an import: names and paths, and the number an import takes."""
+        s = MemoryStore()
+        tree = json.dumps({'tree': [{'path': f'skills/s{i}/SKILL.md', 'type': 'blob'} for i in range(252)]})
+        def get(url):
+            if url.endswith('/repos/acme/skills'): return json.dumps({'default_branch': 'main'})
+            if '/git/trees/' in url: return tree
+            raise AssertionError(f'a listing must not fetch {url}')
+        with mock.patch.object(server, 'store', s), mock.patch.object(skillimport, '_http_get', get):
+            body = TestClient(server.app).post('/api/skills/list', json={'url': 'https://github.com/acme/skills'}).json()
+        self.assertEqual(len(body['data']), 252)
+        self.assertEqual(body['max'], skillimport.PICK_MAX)
+        self.assertEqual(s.list_agents(), [])
+
     def test_an_agent_token_cannot_use_the_link_door(self):
         from taskuary import guard
-        for path in ('/api/skills/fetch', '/api/skills/read', '/api/skills/import'):
+        for path in ('/api/skills/fetch', '/api/skills/read', '/api/skills/import', '/api/skills/list'):
             self.assertTrue(guard.denied('POST', path), path)
         self.assertFalse(guard.denied('GET', '/api/skills/found'))
 
@@ -603,6 +618,58 @@ class ReadReportsTheCutTests(unittest.TestCase):
         s = MemoryStore()
         s.save_doc('coder', '# Heading\n\n- one  two\n\nthree\n', 'owner')
         self.assertEqual(terminal.rules_text(s, 10_000, 'coder'), terminal.flatten_rules(s.get_doc('coder')))
+
+
+class CatalogueTests(unittest.TestCase):
+    """Looking is free; the cap is on what you tick (the owner, 2026-09-18: "it should not limit
+    reading it, just say max to push in is 10, meaning you actually choose them").
+
+    A 252-skill repository was refused outright, so the whole of it was unreachable over a number
+    nobody had been asked about. Listing is one tree read - no bodies, no model calls - and the
+    choosing happens where the owner is.
+    """
+    def _get(self, n=252):
+        asked = []
+        def get(url):
+            asked.append(url)
+            if url.endswith('/repos/acme/skills'): return json.dumps({'default_branch': 'main'})
+            if '/git/trees/' in url:
+                return json.dumps({'tree': [{'path': f'plug{i % 3}/skills/s{i}/SKILL.md', 'type': 'blob'} for i in range(n)]})
+            if url.endswith('SKILL.md'): return SKILL
+            raise AssertionError(f'unexpected fetch {url}')
+        return get, asked
+
+    def test_a_catalogue_lists_everything_and_downloads_nothing(self):
+        get, asked = self._get()
+        rows = skillimport.list_url('https://github.com/acme/skills', get)
+        self.assertEqual(len(rows), 252)
+        self.assertEqual(rows[0]['name'], 's0'); self.assertEqual(rows[0]['plugin'], 'plug0')
+        self.assertTrue(rows[0]['path'].startswith('https://raw.githubusercontent.com/acme/skills/main/'))
+        self.assertFalse([a for a in asked if a.endswith('SKILL.md')], 'a catalogue reads no skill')
+
+    def test_only_the_ticked_ones_are_fetched(self):
+        get, asked = self._get()
+        rows = skillimport.list_url('https://github.com/acme/skills', get)
+        picks = [rows[3]['path'], rows[9]['path']]
+        got = skillimport.fetch_url('https://github.com/acme/skills', get, only=picks)
+        self.assertEqual([g['path'] for g in got], picks)
+        self.assertEqual([a for a in asked if a.endswith('SKILL.md')], picks)
+
+    def test_a_pick_that_is_not_there_any_more_is_said_plainly(self):
+        get, _ = self._get()
+        with self.assertRaises(ValueError) as c:
+            skillimport.fetch_url('https://github.com/acme/skills', get,
+                                  only=['https://raw.githubusercontent.com/acme/skills/main/gone/SKILL.md'])
+        self.assertIn('any more', str(c.exception))
+
+    def test_one_skill_is_its_own_catalogue_of_one(self):
+        get, asked = self._get()
+        raw = 'https://raw.githubusercontent.com/acme/skills/main/skills/nda-triage/SKILL.md'
+        self.assertEqual(skillimport.list_url(raw, get),
+                         [{'name': 'nda-triage', 'path': raw, 'plugin': 'skills'}])
+        self.assertEqual(asked, [], 'nothing is fetched to say what one link holds')
+        page = 'https://github.com/acme/skills/blob/main/skills/nda-triage/SKILL.md'
+        self.assertEqual(skillimport.list_url(page, get)[0]['path'], raw)
 
 
 if __name__ == '__main__':

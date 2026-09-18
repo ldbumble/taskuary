@@ -76,18 +76,36 @@ def _entry(path: Path, plugin: str = '', plugin_desc: str = '', name: str = None
             'plugin': plugin, 'plugin_desc': plugin_desc, 'bytes': len(text)}
 
 
-def read_path(p: str) -> list:
+def read_path(p: str, only=None) -> list:
     """One entry for a SKILL.md, or one per skill for a plugin folder. `commands/` is not read: a
     command is a thing invoked by name, which an attached playbook already is.
 
     A single file must actually BE named SKILL.md. Accepting any readable path made the endpoint in
     front of this an arbitrary local-file read - point it at a key, a database or a config file and
-    the contents come back as a proposed worker's body."""
+    the contents come back as a proposed worker's body.
+
+    `only` is the owner's pick out of `list_path`, and is filtered against what the folder actually
+    holds for the same reason the link door filters its own: a path that arrives from outside is a
+    request to look somewhere, not permission to."""
     root = Path(p)
     if root.is_file(): return [_entry(root)] if root.name == 'SKILL.md' else []
     if not root.is_dir(): return []
     pname, pdesc = _plugin_of(root)
-    return sorted((_entry(f, pname, pdesc, f.parent.name) for f in root.glob('skills/*/SKILL.md')),
+    files = sorted(root.glob('skills/*/SKILL.md'))
+    if only is not None: files = [f for f in files if str(f) in set(only)]
+    if len(files) > PICK_MAX: raise ValueError(f'{len(files)} skills - choose at most {PICK_MAX} to bring in')
+    return sorted((_entry(f, pname, pdesc, f.parent.name) for f in files), key=lambda e: e['name'])
+
+
+def list_path(p: str) -> list:
+    """WHAT IS IN a folder, without proposing any of it: [{name, path, plugin}], no bodies and no
+    model calls - the local twin of `list_url`."""
+    root = Path(p)
+    if root.is_file():
+        return [{'name': root.parent.name, 'path': str(root), 'plugin': ''}] if root.name == 'SKILL.md' else []
+    if not root.is_dir(): return []
+    pname = _plugin_of(root)[0]
+    return sorted(({'name': f.parent.name, 'path': str(f), 'plugin': pname} for f in root.glob('skills/*/SKILL.md')),
                   key=lambda e: e['name'])
 
 
@@ -120,7 +138,15 @@ def found(home: Path = None) -> list:
 # body arrives untouched for the owner to read before any of it is written.
 GITHUB_API = 'https://api.github.com'
 RAW_HOST = 'raw.githubusercontent.com'
-FETCH_MAX = 60          # skills per link; a repo with more is a catalogue, not an import
+# How many skills one import BRINGS IN. Looking is not limited: a repository of 252 is a catalogue to
+# choose from, and refusing to read it refused the whole repository over a number the owner had not
+# been asked about yet (the owner, 2026-09-18: "it should not limit reading it, just say max to push
+# in is 10, meaning you actually choose them"). A pick costs a fetch and a model call to convert, and
+# ten rules documents is already more instruction than one company has jobs for - so the CHOOSING is
+# what is capped, at the point where the owner is doing the choosing.
+PICK_MAX = 10
+# ...and the catalogue itself is one tree read. The only ceiling left is a list nobody could scan.
+LIST_MAX = 500
 _FETCH_HEADERS = {'User-Agent': 'taskuary-skill-import', 'Accept': 'application/vnd.github+json'}
 
 
@@ -138,12 +164,18 @@ def _skill_at(url: str, text: str, name: str, plugin: str = '') -> dict:
     return {**got, 'name': name or got['name'], 'path': url, 'plugin': plugin, 'plugin_desc': '', 'bytes': len(text)}
 
 
-def fetch_url(url: str, get=None) -> list:
+def fetch_url(url: str, get=None, only=None) -> list:
     """Entries for every skill a link names - see the shapes above. `get` is the text fetcher, so a
     test can hand in a fake without the network. Raises ValueError with a plain reason for anything
-    this does not read, which the endpoint shows as written."""
+    this does not read, which the endpoint shows as written.
+
+    `only` is the catalogue's own answer coming back: the raw URLs the owner ticked in `list_url`.
+    Whatever it says, the tree is re-read and the picks are FILTERED against it - an arbitrary URL
+    handed to this parameter fetches nothing, because a link door that takes any address is not a
+    link door at all."""
     from urllib.parse import urlsplit, unquote
     get = get or _http_get
+    want = set(only or ())
     u = urlsplit(str(url or '').strip())
     if u.scheme != 'https' or not u.netloc: raise ValueError('a skill link starts with https://')
     parts = [unquote(p) for p in u.path.strip('/').split('/') if p]
@@ -167,15 +199,63 @@ def fetch_url(url: str, get=None) -> list:
         paths = sorted(t['path'] for t in tree.get('tree', [])
                        if t.get('type') == 'blob' and t['path'].startswith(prefix) and t['path'].rsplit('/', 1)[-1] == 'SKILL.md')
         if not paths: raise ValueError(f'no SKILL.md under {url}')
-        if len(paths) > FETCH_MAX: raise ValueError(f'{len(paths)} skills there - point at a folder with at most {FETCH_MAX}')
-        out = []
-        for p in paths:
-            raw = f'https://{RAW_HOST}/{owner}/{repo}/{ref}/{p}'
-            folder = p.rsplit('/', 2)[-2] if '/' in p else repo
-            out.append(_skill_at(raw, get(raw), folder, plugin=repo))
-        return out
+        picks = [(f'https://{RAW_HOST}/{owner}/{repo}/{ref}/{p}', p) for p in paths]
+        if want: picks = [(raw, p) for raw, p in picks if raw in want]
+        if not picks: raise ValueError('none of those skills are under that link any more')
+        # counted BEFORE anything is fetched: the cap is on what an import brings in, not a tripwire
+        # somebody pays eleven downloads to trip
+        if len(picks) > PICK_MAX: raise ValueError(f'{len(picks)} skills - choose at most {PICK_MAX} to bring in')
+        return [_skill_at(raw, get(raw), p.rsplit('/', 2)[-2] if '/' in p else repo, plugin=repo) for raw, p in picks]
     if parts and parts[-1] == 'SKILL.md':
         return [_skill_at(url, get(url), parts[-2] if len(parts) > 1 else host)]
+    raise ValueError('that link is not a SKILL.md, a GitHub file, or a GitHub repository or folder')
+
+
+def list_url(url: str, get=None) -> list:
+    """WHAT IS THERE, without reading any of it: [{name, path, plugin}] for every skill a link names.
+
+    One tree read for a whole repository, no bodies and no model calls - which is the difference
+    between showing somebody a catalogue and importing it. The `path` of each row is the raw URL
+    `fetch_url(only=...)` takes back once the owner has ticked the ones they want.
+    """
+    from urllib.parse import urlsplit, unquote
+    get = get or _http_get
+    u = urlsplit(str(url or '').strip())
+    if u.scheme != 'https' or not u.netloc: raise ValueError('a skill link starts with https://')
+    parts = [unquote(p) for p in u.path.strip('/').split('/') if p]
+    host = u.netloc.lower()
+    if host in ('github.com', 'www.github.com') and len(parts) >= 2 and not (len(parts) >= 3 and parts[2] == 'blob'):
+        owner, repo = parts[0], parts[1].removesuffix('.git')
+        ref, sub = (parts[3], parts[4:]) if len(parts) >= 4 and parts[2] == 'tree' else ('', [])
+        if not ref:
+            ref = str(json.loads(get(f'{GITHUB_API}/repos/{owner}/{repo}')).get('default_branch') or 'main')
+        tree = json.loads(get(f'{GITHUB_API}/repos/{owner}/{repo}/git/trees/{ref}?recursive=1'))
+        prefix = '/'.join(sub) + '/' if sub else ''
+        paths = sorted(t['path'] for t in tree.get('tree', [])
+                       if t.get('type') == 'blob' and t['path'].startswith(prefix) and t['path'].rsplit('/', 1)[-1] == 'SKILL.md')
+        if not paths: raise ValueError(f'no SKILL.md under {url}')
+        if len(paths) > LIST_MAX: raise ValueError(f'{len(paths)} skills there - point at a folder inside it')
+        return [{'name': p.rsplit('/', 2)[-2] if '/' in p else repo,
+                 'path': f'https://{RAW_HOST}/{owner}/{repo}/{ref}/{p}',
+                 'plugin': p.split('/')[0] if '/' in p else repo} for p in paths]
+    # a single file - raw, a GitHub blob, or any https SKILL.md: there is nothing to choose between,
+    # so the listing is that one row and the wizard goes straight on to reading it
+    return [{'name': n, 'path': p, 'plugin': g} for n, p, g in [_single(url, parts, host)]]
+
+
+def _single(url: str, parts: list, host: str) -> tuple:
+    """(name, raw url, plugin) for a link that names ONE SKILL.md, by the same rules `fetch_url`
+    reads it with - so what the catalogue lists and what the fetch returns cannot disagree."""
+    if host == RAW_HOST:
+        if not parts or parts[-1] != 'SKILL.md': raise ValueError('a raw link must name a SKILL.md')
+        return (parts[-2] if len(parts) >= 5 else parts[1], url, parts[1] if len(parts) > 1 else '')
+    if host in ('github.com', 'www.github.com'):
+        owner, repo = parts[0], parts[1].removesuffix('.git')
+        sub = parts[4:] if len(parts) >= 4 else []
+        if not sub or sub[-1] != 'SKILL.md': raise ValueError('a GitHub file link must point at a SKILL.md')
+        return (sub[-2] if len(sub) > 1 else repo, f'https://{RAW_HOST}/{owner}/{repo}/{parts[3]}/{"/".join(sub)}', repo)
+    if parts and parts[-1] == 'SKILL.md':
+        return (parts[-2] if len(parts) > 1 else host, url, '')
     raise ValueError('that link is not a SKILL.md, a GitHub file, or a GitHub repository or folder')
 
 

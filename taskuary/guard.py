@@ -67,6 +67,7 @@ DENIED = (
     (r'POST', r'^/api/skills/import$', 'importing a skill makes a worker and writes its rules - an agent does not get to hire itself'),
     (r'POST', r'^/api/skills/read$', 'turning a file on this machine into a proposed worker is the first half of hiring one'),
     (r'POST', r'^/api/skills/fetch$', 'pulling a document off the internet to propose a worker is the same half, from further away'),
+    (r'POST', r'^/api/skills/list$', 'reading what a link or a folder holds is where hiring one starts, and it reaches the internet to do it'),
     (r'POST', r'^/api/update$', 'replacing the program is the owner\'s decision'),
     (r'POST|PUT|PATCH|DELETE', r'^/api/(invoice-batches|reports/\d+/invoice-batches)(/|$)',
      'preparing or changing an invoice batch is the owner\'s decision'),

@@ -15,8 +15,18 @@ test("a link goes to /fetch and a path to /read, decided in one place", () => {
   assert.equal(isLink("~/.claude/skills/x/SKILL.md"), false);
   assert.equal(isLink("C:/Users/me/SKILL.md"), false);
   assert.match(wizard, /isLink\(target\)/);
-  assert.match(wizard, /"\/api\/skills\/fetch", \{ url: target \}/);
-  assert.match(wizard, /"\/api\/skills\/read", \{ path: target \}/);
+  assert.match(wizard, /"\/api\/skills\/fetch", \{ url: target, paths \}/);
+  assert.match(wizard, /"\/api\/skills\/read", \{ path: target, paths \}/);
+});
+
+test("looking is free and the cap is on what you tick", () => {
+  // a catalogue is listed first - no bodies, no model calls - and only the ticked paths are read
+  // (the owner, 2026-09-18: a 252-skill repository was refused outright)
+  assert.match(wizard, /"\/api\/skills\/list", \{ url: target \}/);
+  assert.match(wizard, /rows_\.length <= \(data\.max \|\| 10\)/);        // small enough: no picker at all
+  assert.match(wizard, /choose up to \{max\} to bring in/);
+  assert.match(wizard, /disabled=\{!on && pickCount >= max\}/);           // the cap is visible, not silent
+  assert.doesNotMatch(wizard, /point at a folder with at most/);          // the old refusal is gone
 });
 
 test("you choose which ones: one skill starts chosen, a catalogue starts unchosen, only chosen rows are sent", () => {

@@ -4820,7 +4820,9 @@ def test_cli_connection(name: str):
     except Exception as e: return {'ok': False, 'error': str(e)[:400]}
 
 
-class SkillPathBody(BaseModel): path: str
+class SkillPathBody(BaseModel):
+    path: str
+    paths: list | None = None      # the ones ticked in the catalogue; all of them when absent
 class SkillImportBody(BaseModel): skills: list
 
 @app.get('/api/skills/found')
@@ -4836,13 +4838,32 @@ def skills_read(body: SkillPathBody):
     """A path (a SKILL.md, or a plugin folder) turned into proposals. WRITES NOTHING: the owner reads
     the purpose and the body before any of it becomes a worker's instructions."""
     from . import skillimport
-    try: entries = skillimport.read_path(body.path)
+    try: entries = skillimport.read_path(body.path, body.paths)
+    except ValueError as e: raise HTTPException(422, str(e))
     except OSError as e: raise HTTPException(422, f'could not read that: {e}')
     if not entries: raise HTTPException(422, 'no SKILL.md there')
     return _skill_proposals(entries)
 
 
-class SkillUrlBody(BaseModel): url: str
+class SkillUrlBody(BaseModel):
+    url: str
+    paths: list | None = None
+
+@app.post('/api/skills/list')
+def skills_list(body: SkillUrlBody):
+    """WHAT IS THERE, before anything is read: one row per skill under a link or a folder - a name, a
+    path and which plugin it belongs to. No bodies are fetched and no model is called, so a 252-skill
+    repository is a catalogue to choose from rather than a refusal (the owner, 2026-09-18). The
+    `paths` of the ones ticked come back to /read or /fetch, which brings in at most PICK_MAX."""
+    from . import skillimport
+    target = str(body.url or '').strip()
+    try:
+        rows = skillimport.list_url(target) if target[:8].lower() == 'https://' else skillimport.list_path(target)
+    except ValueError as e: raise HTTPException(422, str(e))
+    except OSError as e: raise HTTPException(422, f'could not read that: {e}')
+    except Exception as e: raise HTTPException(422, f'could not read that: {str(e)[:200]}')
+    if not rows: raise HTTPException(422, 'no SKILL.md there')
+    return {'data': rows, 'max': skillimport.PICK_MAX}
 
 @app.post('/api/skills/fetch')
 def skills_fetch(body: SkillUrlBody):
@@ -4850,7 +4871,7 @@ def skills_fetch(body: SkillUrlBody):
     turned into proposals, the same shape as /read. WRITES NOTHING, and fetches only what the link
     names (skillimport.fetch_url says which shapes)."""
     from . import skillimport
-    try: entries = skillimport.fetch_url(body.url)
+    try: entries = skillimport.fetch_url(body.url, only=body.paths)
     except ValueError as e: raise HTTPException(422, str(e))
     except Exception as e: raise HTTPException(422, f'could not fetch that: {str(e)[:200]}')
     return _skill_proposals(entries)

@@ -111,7 +111,11 @@ class QueueTests(unittest.TestCase):
             blackboard.drain(s)
         self.assertEqual(started, [b])
 
-    def test_rerank_blends_the_models_order_with_the_floor(self):
+    def test_the_models_order_is_the_rank_and_the_floor_only_breaks_a_fall(self):
+        """It used to be half the floor and half the model, which let a handful of deterministic
+        signals outvote the judgement. What deserves attention IS a judgement (the owner,
+        2026-09-18: "rank has to be ai") - so the model's position is the value, and the floor is
+        kept only as what answers when there is no brain to ask."""
         s = MemoryStore()
         a, b = (s.create_task({'Title': t, 'Kind': 'coding', 'Status': 'open'}, 't') for t in ('alpha', 'beta'))
         s.enqueue_dispatch(a, None, 'coder', 'ranked', value=0.9, why='to you'); s.enqueue_dispatch(b, None, 'coder', 'ranked', value=0.3, why='cc')
@@ -119,9 +123,19 @@ class QueueTests(unittest.TestCase):
         with mock.patch('taskuary.llm.build_llm', return_value=llm):
             self.assertEqual(rank.rerank(s, force=True), 2)
         qa, qb = (next(q for q in s.queued_dispatches() if q['TaskId'] == t) for t in (a, b))
-        self.assertAlmostEqual(qa['Value'], 0.45); self.assertAlmostEqual(qb['Value'], 0.65)   # 0.5*floor + 0.5*position
-        self.assertEqual((qa['Floor'], qb['Floor']), (0.9, 0.3))                                  # the floor is kept for the next blend
+        # beta was put first by the model and outranks alpha, whose floor was three times higher
+        self.assertAlmostEqual(qb['Value'], 1.0); self.assertAlmostEqual(qa['Value'], 0.0)
+        self.assertEqual((qa['Floor'], qb['Floor']), (0.9, 0.3))     # kept: it is what answers with no AI
         self.assertIn('CFO is asking', qb['Why']); self.assertTrue(qb['Why'].startswith('cc'))
+
+    def test_with_no_brain_the_floor_still_orders_the_dispatch_queue(self):
+        s = MemoryStore()
+        a, b = (s.create_task({'Title': t, 'Kind': 'coding', 'Status': 'open'}, 't') for t in ('alpha', 'beta'))
+        s.enqueue_dispatch(a, None, 'coder', 'ranked', value=0.9, why='to you'); s.enqueue_dispatch(b, None, 'coder', 'ranked', value=0.3, why='cc')
+        with mock.patch('taskuary.llm.build_llm', return_value=None):
+            self.assertEqual(rank.rerank(s, force=True), 0)
+        qa, qb = (next(q for q in s.queued_dispatches() if q['TaskId'] == t) for t in (a, b))
+        self.assertAlmostEqual(qa['Value'], 0.9); self.assertAlmostEqual(qb['Value'], 0.3)
 
 
 class ApiTests(unittest.TestCase):

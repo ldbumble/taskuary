@@ -14,9 +14,15 @@ Value is two layers, and the split is the point:
              many people, whether a colleague has replied, urgency, who the author is on a code
              host). Runs on everything, costs nothing, and is never shown as a number: the card
              shows the WORDS it came from.
-  rerank() - one listwise call to the triage brain over the head of the queue, blended in.
-             Ranking is cheap where classifying is not: forty titles in one call, not forty
-             calls. Debounced, optional, and falls back to the floor with no AI configured.
+  rank()   - one small listwise call, and its order IS the rank. Ranking is cheap where
+             classifying is not: forty subjects in one call, not forty calls. Debounced, and
+             the floor is what answers when no brain is configured.
+
+Two queues are ranked, by the same rule and by two functions:
+  rank_pending() - the arrivals waiting to be TRIAGED. Only the head of it is judged, and a
+                   slot opens as the owner settles one, so 300 pull requests cost a handful
+                   of calls instead of 300. It reads the raw arrival: there is no task yet.
+  rerank()       - the tasks waiting for an AGENT, ordered by the same rule.
 """
 import json, re, threading, time
 from datetime import datetime
@@ -158,7 +164,9 @@ def rerank(store, force: bool = False) -> int:
             if ref not in order: continue
             model = 1 - order.index(ref) / max(1, k - 1) if k > 1 else 1.0
             base = float(q.get('Floor') if q.get('Floor') is not None else q['Value'])
-            store.set_dispatch_value(q['TaskId'], round(0.5 * base + 0.5 * model, 3),
+            # the model's position IS the value. Blending half the floor into it let a handful of
+            # deterministic signals outvote the judgement they were only ever standing in for.
+            store.set_dispatch_value(q['TaskId'], round(model, 3),
                                      (q.get('Why') or '').split(' → ')[0] + (f" → {whys[ref]}" if whys.get(ref) else ''), floor_=base)
             n += 1
         return n

@@ -985,6 +985,10 @@ def replay_text(t, lines: int = REPLAY_LINES) -> str:
     text = render(t.scrollback(), getattr(t, 'cols', 110), getattr(t, 'rows', 32))
     tail = text.splitlines()[-max(1, lines):]
     while tail and not tail[0].strip(): tail.pop(0)
+    # ...nor trailing ones: render() hands back the pty's whole grid, blank rows included, so a
+    # 32-row pty seeded into a 26-row Wall cell had six empty rows of "scrollback" - a scrollbar
+    # that dragged nothing and the cursor parked at the very bottom (2026-09-18)
+    while tail and not tail[-1].strip(): tail.pop()
     return (REPLAY_RESET + CRLF.join(tail)) if tail else ''
 
 

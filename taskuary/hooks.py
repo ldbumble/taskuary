@@ -118,7 +118,7 @@ def _events(t, p: dict) -> None:
             # once the owner clicked yes in the pane - no hook fires for that - so the card said "stopped and
             # is waiting on you" over a coder mid-search, until its next prompt.
             for r in ws.open_requests(ws.events(st, tid, sid)):
-                if r['Kind'] == 'approval_needed':
+                if r['Kind'] == 'approval_needed' and (r.get('Source') or 'api') != 'screen':
                     ws.record(st, tid, sid, 'answered', request_id=r['RequestId'], text='granted in the pane', source='hook')
         elif ev == 'Notification' and 'permission' in str(p.get('notification_type') or p.get('message') or '').lower():
             text = str(p.get('message') or 'Claude needs your permission').strip()

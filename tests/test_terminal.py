@@ -948,6 +948,13 @@ class ReplaySeedTests(unittest.TestCase):
         self.assertEqual(self._seed('   ' + chr(10) + '  '), '')
         self.assertEqual(self._seed(''), '')
 
+    def test_the_seed_carries_no_blank_rows_after_the_last_line(self):
+        """render() is the pty's whole grid (12 rows here). Seeded as-is into a pane shorter than
+        the pty, the blank rows under the text became scrollback: a Wall cell grew a scrollbar
+        that dragged nothing and parked the cursor at its very bottom (2026-09-18)."""
+        body = self._seed('one' + terminal.CRLF + 'two')[len(terminal.REPLAY_RESET):]   # a bare LF would not return the carriage
+        self.assertEqual(body.split(terminal.CRLF), ['one', 'two'])
+
     def test_the_seed_is_capped_to_the_tail(self):
         raw = chr(10).join('line %d' % n for n in range(1200))
         out = self._seed(raw, lines=50)

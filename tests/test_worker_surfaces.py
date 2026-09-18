@@ -145,6 +145,18 @@ class ScreenChooserTests(unittest.TestCase):
         # ...and what the owner CHOSE is what the task's discussion says they chose
         self.assertTrue(any('Upload-only for now' in c['Body'] for c in self.s.list_comments(self.tid)))
 
+    def test_the_next_question_replaces_the_one_before_it(self):
+        second = ['| Which repository should the fix land in?',
+                  '> 1. northwind/importers', '  2. northwind/exports',
+                  'Enter to select · Tab/Arrow keys to navigate · Esc to cancel']
+        with mock.patch.dict(terminal.SESSIONS, {'run1': self.t}, clear=True):
+            with self._showing(self.SCREEN): first = ws.reconcile_screen_request(self.s, self.t, True)
+            with self._showing(second): now = ws.reconcile_screen_request(self.s, self.t, True)
+        self.assertNotEqual(now['request_id'], first['request_id'])
+        self.assertIn('Which repository', now['text'])
+        self.assertEqual([r['request_id'] for r in ws.status(self.s, self.tid)['requests']], [now['request_id']],
+                         'one question at a time: answering in the pane is what moved it on')
+
     def test_prose_that_merely_contains_a_list_is_not_a_question(self):
         prose = ['Here is what I found:', '  1. the export is stale', '  2. the job never ran',
                  'Levitating… (3s · esc to interrupt)']

@@ -100,23 +100,26 @@ def reconcile_screen_request(store, t, asking: bool) -> dict | None:
     Recording it as an ordinary `input_needed` gives it what every other question has - the text, the
     options, and an id an answer binds to - and every surface then works unchanged.
 
-    Both directions matter. Choosing an option in the pane submits no prompt and fires no hook, so
-    NOTHING else would ever close this request and the card would say "asked you" for the rest of the
-    run. When the chooser leaves the screen, the pane answered it.
+    Both directions matter, and nothing else can keep this side of the books. Choosing an option in
+    the pane submits no prompt and fires no hook, so no other event would ever close this request and
+    the card would say "asked you" for the rest of the run. A chooser that has left the screen was
+    answered in the pane - and a chooser REPLACED BY THE NEXT ONE was too, which is the ordinary
+    shape of a walk through a plan: answer, next question, answer. The screen is what this request
+    is, so the screen is what it follows.
     """
     from . import terminal as term
     tid, sid = getattr(t, 'task_id', None), str(getattr(t, 'sid', '') or '')
     if not tid or not sid: return None
     open_ = asking_of(store, t)
-    if asking and not open_:
-        q = term.screen_question(t)
-        if not q or len(q['choices']) < 2: return None
+    mine = open_ if (open_ or {}).get('source') == 'screen' else None
+    q = term.screen_question(t) if asking else None
+    if mine and (not asking or (q and q['text'] and q['text'] != mine['text'])):
+        record(store, int(tid), sid, 'answered', request_id=mine['request_id'], text='answered in the pane', source='screen')
+        open_ = None
+    if asking and not open_ and q and len(q['choices']) > 1:
         record(store, int(tid), sid, 'input_needed', text=q['text'] or 'Choose how to go on.',
                choices=q['choices'], source='screen')
         return asking_of(store, t)
-    if not asking and open_ and open_.get('source') == 'screen':
-        record(store, int(tid), sid, 'answered', request_id=open_['request_id'], text='answered in the pane', source='screen')
-        return None
     return open_
 
 

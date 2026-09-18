@@ -186,10 +186,20 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # there was nothing left to keep it out of the walk: Next introduced it, Next chose it again, for as
     # long as the owner kept pressing (the owner, 2026-09-14: "i keep on clicking next on the assistant
     # idea but it just comes right back behind the current one"). It stays unread, so the work tab still
-    # holds it; it is simply no longer the thing the walk offers next. A new chat clears the mark.
+    # holds it; it is simply no longer the thing the walk offers next.
+    # ...for the same hour the receipt holds. A new chat clears the mark for agent: keys only
+    # (funnel.reset_walk), so on these rows it held for good: the quiet hour brought a task waiting to
+    # start back unread (`back`, above), the walk skipped it for the mark, and stranded it at the end
+    # as "1 unread thing still waits. Say next" for as long as Next was pressed (the owner, 2026-09-18:
+    # "it skipped it but then saw it at the end and hitting next just confuses it"). The mark ages out
+    # with the receipt, so the row comes round again when the hour brings it back. blocked/approve keep
+    # their own 30-minute cooldown (funnel_selection._eligible).
     card.pop('surfaced', None); card.pop('surfaced_at', None)
     shown = next((st for k in [card['key'], *card['aliases']] for st in [(states or {}).get(k)] if st and st.get('Status') == 'surfaced'), None)
-    if shown and card['lane'] in ('approve', 'blocked', 'queued', 'stopped'): card.update(surfaced=True, surfaced_at=shown.get('At'))
+    if shown and card['lane'] in ('approve', 'blocked', 'queued', 'stopped'):
+        shown_at = processing_all._stamp(shown.get('At'))
+        if card['lane'] in ('approve', 'blocked') or shown_at is None or shown_at > now - timedelta(minutes=quiet):
+            card.update(surfaced=True, surfaced_at=shown.get('At'))
     if card['lane'] == 'fyi' and not card.get('sig'):
         summaries = [r for r in view.get('processing_summaries', [])
                      if r.get('ContextRevision') == item['context_revision'] and r.get('Summary')

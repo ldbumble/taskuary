@@ -1770,9 +1770,13 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         waiting = [i for i in left if i.get('surfaced') and i['lane'] != 'working']
         if key: say = "I can't find that one - it may be older than what I keep, or it went out under another subject."
         elif not only and waiting:
-            # Defensive only: next_item includes merely-shown unread rows, so a normal walk should
-            # never strand them here.
-            say = f"{len(waiting)} unread thing{'s' if len(waiting) != 1 else ''} still wait{'s' if len(waiting) == 1 else ''}. Say next and I'll take them one at a time."
+            # Shown in this walk and still on the rail: a task waiting to start or one an agent left, put
+            # down within the hour, or a draft/question seen in the last half hour. Next will not repeat
+            # them yet, so the line must not promise it does - it did ("Say next and I'll take them"), and
+            # Next only said it again (the owner, 2026-09-18: "hitting next just confuses it").
+            n = len(waiting)
+            say = (f"{n} thing{'s' if n != 1 else ''} you've already seen still wait{'s' if n == 1 else ''} in Work. "
+                   f"I'll bring {'it' if n == 1 else 'them'} round again in a while.")
         elif only and left:
             # the mail is done; what remains is the rest of the pipe - offer it rather than call the day over
             say = f"That's all the mail. {len(left)} other thing{'s' if len(left) != 1 else ''} still wait{'s' if len(left) == 1 else ''} - {funnel.summary(left).split(' - ', 1)[-1].split('.')[0]}. Say next and I'll take you through them."

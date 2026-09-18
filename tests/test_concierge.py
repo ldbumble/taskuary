@@ -186,7 +186,7 @@ class TurnTests(unittest.TestCase):
         drafted(s)
         concierge.surface(s, llm=lambda *a, **k: 'first')
         again = concierge.surface(s, llm=lambda *a, **k: 'never')
-        self.assertIsNone(again['item']); self.assertEqual(again['say'], "1 unread thing still waits. Say next and I'll take them one at a time.")
+        self.assertIsNone(again['item']); self.assertEqual(again['say'], "1 thing you've already seen still waits in Work. I'll bring it round again in a while.")
         s.add_message({'ExternalId': 'r9', 'Channel': 'report', 'SourceName': 'Nightly', 'Subject': 'Nightly report', 'FromName': 'Nightly', 'SentAt': ago(1), 'BodyText': '5 rows', 'Status': 'feed'})
         mail_out = concierge.surface(s, llm=lambda *a, **k: 'never', only='mail')
         self.assertIsNone(mail_out['item']); self.assertEqual(mail_out['exhausted'], 'mail'); self.assertIn("That's all the mail. 2 other things still wait", mail_out['say'])

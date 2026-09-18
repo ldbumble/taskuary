@@ -930,6 +930,31 @@ class MemoryTests(unittest.TestCase):
         s.update_task(t, {'Status': 'done'}, 'o'); settle()             # ...and closing it is what takes the row away
         self.assertEqual([i['title'] for i in funnel.build(s)['items'] if i.get('tid') == t], [])
 
+    def test_a_task_waiting_to_start_comes_round_again_once_the_hour_brings_it_back(self):
+        """The owner, 2026-09-18: "it's not feeding the waiting to start task into assistant. It skipped
+        it but then saw it at the end and hitting next just confuses it." Next put the queued row down
+        as shown and read; the quiet hour brought it back unread (why_open) - but the shown mark stayed,
+        since a new chat clears only agent: keys, so the walk never offered it again and stranded it at
+        the end as "1 unread thing still waits. Say next", for as long as Next was pressed. The mark
+        holds for the same hour the receipt does, and the row comes round with it."""
+        from taskuary import concierge, funnel_selection, processing_unread
+        s = store()
+        s.upsert_agent('coder', 'coding', 'cli', '{}')
+        t = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open', 'Assignee': 'agent:coder'}, 'o')
+        mid = mail(s, 'export', who='Dana', email='dana@ours.com', hours=3, tid=t)
+        s.add_route(mid, t, 'route', 1.0, 'triage: coding', [], 'triage')
+        settle = lambda: (s.reconcile_processing_membership(fixed_now=ago(0)), funnel.invalidate())
+        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            first = concierge.surface(s, llm=lambda *a, **k: 'never')
+            self.assertEqual((first['item']['lane'], first['item']['tid']), ('queued', t))
+            again = concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])
+            self.assertIsNone(again['item']); self.assertEqual(again['say'], concierge.ALL_DONE)   # put down: read, and nothing else waits
+            later = datetime.now() + timedelta(hours=2)
+            on_rail = [(i['lane'], bool(i.get('why_open')), bool(i.get('surfaced'))) for i in processing_unread.build(s, now=later, live_state=[])['items'] if i.get('tid') == t]
+            self.assertEqual(on_rail, [('queued', True, False)])                                # the hour brought it back, and the mark went with it
+            self.assertEqual(funnel_selection.capture_selection(s, now=later).selected['tid'], t)   # ...so the walk offers it again
+
     def test_a_pty_worker_that_ran_and_left_leaves_a_transcript_not_a_run(self):
         """A coder started from the terminal writes a TRANSCRIPT on its way out and no run row at
         all - the same row the task card reads to offer "Continue previous work". not_started_why

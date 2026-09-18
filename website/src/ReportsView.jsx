@@ -772,6 +772,21 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
 
    `never` is not offered on the Timeline unless the report has somewhere else to go: a report that
    reaches nobody at all is not a setting, it is a report that does nothing. */
+// the one judge setting, app-wide: Settings › Configuration › Triage & agents › Where runs go
+const JUDGE_HASH = `settings=config&group=${encodeURIComponent("Triage & agents")}`;
+const WHERE_RUNS_GO = "Settings › Triage & agents › Where runs go";
+// Who decides where a run goes, in words the card can say. `judge` is the Where-runs-go slot as
+// /api/ai/defaults reports it; blank there means the brain that writes this report (reports.judge_for).
+function judgeWords(judge, cfg, brains) {
+  const brainLabel = (value) => (brains || []).find((b) => b.value === value)?.label;
+  if (judge?.kind === "decision") return [judge.display || "TypeSafe Jev",
+    `It reads what came back and answers yes or no to each line above — nothing else is asked of it, which is why a model that only decides can do this job. Chosen for every report under ${WHERE_RUNS_GO}. A run it does not answer for reaches you anyway.`];
+  if (judge?.value) return [brainLabel(judge.value) || judge.display || "The brain chosen under Where runs go",
+    `It reads what came back and answers yes or no to each line above. Chosen for every report under ${WHERE_RUNS_GO}. A run it does not answer for reaches you anyway.`];
+  return ["The brain that writes this report",
+    `That is ${brainLabel(cfg.ai_brain) || "the triage brain"} — the same brain the summary above runs on, picked there. To have one judge for every report, or a model that only decides, pick it under ${WHERE_RUNS_GO}. A run it does not answer for reaches you anyway.`];
+}
+
 function RoutingCard({ cfg, setCfg, targets, brains, firstDest, sourceId }) {
   const [replay, setReplay] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -862,16 +877,20 @@ function RoutingCard({ cfg, setCfg, targets, brains, firstDest, sourceId }) {
           </Box>
         );
       })}
-      {/* A judge nobody chose a brain for is the report's own brain - the same setting the summary
-          above uses (reports.report_llm), not a second one that could quietly differ. */}
+      {/* WHO JUDGES IS SAID HERE, NOT PICKED. There is ONE judge setting, for every report (Settings ›
+          Triage & agents › Where runs go), and blank there means the brain that writes this report - the
+          picker above the summary prompt. A second brain picker used to sit here: it wrote the very same
+          field as that one, and read as a per-report judge that the setting then quietly overrode (the
+          owner, 2026-09-17: "here i choose what model judges what goes on rail?? ... but then in setting
+          config we have another setting?"). */}
       {ask ? (
         <Box sx={{ mt: 1.2, pt: 1.2, borderTop: `1px solid ${BORDER}` }}>
-          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-            <Select size="small" displayEmpty value={cfg.ai_brain || ""} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 220 }}
-              onChange={(e) => setCfg({ ...cfg, ai_brain: e.target.value, ai_model: "" })}>
-              <MenuItem value="" sx={{ fontSize: 12 }}>the triage brain (default)</MenuItem>
-              {brains.map((b) => <MenuItem key={b.value} value={b.value} sx={{ fontSize: 12 }}>{b.label}</MenuItem>)}
-            </Select>
+          <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+            <Typography variant="body2" sx={{ fontSize: 12.5 }}>
+              <b>{judgeWords(judge, cfg, brains)[0]}</b> decides where each run goes
+            </Typography>
+            <Button size="small" onClick={() => { window.location.hash = JUDGE_HASH; }} sx={{ fontSize: 12, color: INK }}>
+              {judge?.value ? "change the judge" : "pick one judge for every report"}</Button>
             <Button size="small" onClick={() => setShowPrompt(!showPrompt)} sx={{ fontSize: 12, color: INK }}>
               {showPrompt ? "hide the prompt ⌃" : "see the prompt ⌄"}</Button>
             <Box sx={{ flex: 1 }} />
@@ -882,10 +901,7 @@ function RoutingCard({ cfg, setCfg, targets, brains, firstDest, sourceId }) {
             )}
           </Box>
           <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.8 }}>
-            Which AI decides where each run goes. It reads what came back and answers yes or no to each
-            line above — nothing else is asked of it, so this job can run on a model that only decides.
-            A run it does not answer for reaches you anyway.
-            {judge?.kind === "decision" && ` Right now that is ${judge.display}, chosen under Triage & agents.`}
+            {judgeWords(judge, cfg, brains)[1]}
           </Typography>
           {showPrompt && (
             <Box component="pre" sx={{ mt: 0.8, p: 1, bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 1,

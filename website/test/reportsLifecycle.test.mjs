@@ -21,7 +21,7 @@ test("an existing report has a visible top-level Delete button", () => {
   assert.match(wizard, /api\.delete\(`\/api\/sources\/\$\{cur\.SourceId\}`\)/);
 });
 
-test("where a run goes is one prompt, and the card says the AI is answering it", () => {
+test("where a run goes is one prompt, and the card says the AI is answering it", async () => {
   // Three judgements of one run - "when should this reach you" (a three-way switch plus a
   // row-shaped condition), "move it up in the pipe if" (a sentence) and delivery's own copy of the
   // same three words - each with its own vocabulary, none of which could read prose. The owner
@@ -36,6 +36,20 @@ test("where a run goes is one prompt, and the card says the AI is answering it",
   assert.match(card, /<MenuItem value="ai"[^>]*>ask the AI<\/MenuItem>/);   // the control names who answers
   assert.match(card, /see the prompt/);
   assert.match(card, /ON THE LAST RUNS THIS WOULD HAVE/);
+  // ...and WHO answers is said, not picked a second time. One judge setting lives under Triage & agents
+  // for every report; blank there means the brain that writes the report, which is the picker above
+  // the summary prompt. The card used to carry a second picker writing that very same field, and it
+  // read as a per-report judge that the setting quietly overrode (the owner, 2026-09-17).
+  assert.doesNotMatch(card, /ai_brain: e\.target\.value/);
+  assert.match(card, /decides where each run goes/);
+  assert.match(card, /window\.location\.hash = JUDGE_HASH/);
+  assert.match(source, /const WHERE_RUNS_GO = "Settings › Triage & agents › Where runs go"/);
+  assert.match(source, /if \(judge\?\.kind === "decision"\) return \[judge\.display/);
+  assert.match(source, /return \["The brain that writes this report"/);
+  // the hash it sets is one the page follows
+  const hub = await readFile(new URL("../src/TaskHubPage.jsx", import.meta.url), "utf8");
+  assert.match(hub, /if \(\/\^#settings=\/\.test\(hash\)\) return "Settings";/);
+  assert.match(hub, /if \(\/\^#settings=\/\.test\(window\.location\.hash \|\| ""\)\) go\("Settings"\);/);
 });
 
 test("a line the AI is not asked about is not the AI's to answer", () => {

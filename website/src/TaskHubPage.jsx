@@ -183,6 +183,7 @@ export default function TaskHubPage() {
     if (/^#report=/.test(hash)) return "Reports";
     if (/^#connector=/.test(hash)) return "Connections";
     if (/^#(?:playbook=|profiles(?:$|=))/.test(hash)) return "Docs";
+    if (/^#settings=/.test(hash)) return "Settings";
     return "Assistant";
   });
   const demo = useDemo();          // the badge, and what the header hides to make room for it
@@ -291,6 +292,8 @@ export default function TaskHubPage() {
       if (/^#msg=\d+/.test(window.location.hash || "")) go("Assistant");
       // a connector card's playbook link: the words live on the Docs tab (DocsView reads the hash itself)
       if (/^#(?:playbook=|profiles(?:$|=))/.test(window.location.hash || "")) go("Docs");
+      // a card's "change the judge" / a connector's phone-doorway link: SettingsView reads the page and group
+      if (/^#settings=/.test(window.location.hash || "")) go("Settings");
     };
     fromHash(); window.addEventListener("hashchange", fromHash);
     return () => window.removeEventListener("hashchange", fromHash);

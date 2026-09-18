@@ -947,6 +947,15 @@ export default function SettingsView({ onNavigate }) {
         <Typography variant="caption" sx={{ color: FAINT, display: "block", pt: 2, px: 1.25, lineHeight: 1.6 }}>
           Everything here is stored locally, in the same SQLite file as your tasks.
         </Typography>
+        {/* the one link out to the docs, and it is here because this is where someone already is
+            when they are looking a setting up (taskuary.com/docs/settings is generated from the
+            same settings_schema.json this page draws from, so it can never describe another app) */}
+        <Typography variant="caption" sx={{ color: FAINT, display: "block", pt: 1, px: 1.25 }}>
+          <Box component="a" href="https://taskuary.com/docs/settings" target="_blank" rel="noreferrer"
+            sx={{ color: "#55697a", textDecoration: "none", "&:hover": { textDecoration: "underline" } }}>
+            Full documentation →
+          </Box>
+        </Typography>
       </Box>
       <Box sx={{ minWidth: 0 }}>
         {/* the other rails (Reports, Connections, Docs) open every section under its title; this

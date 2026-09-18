@@ -1,0 +1,134 @@
+/* The docs site's skin: taskuary.com's own palette and type (site/index.html), not the app's.
+   "Editorial" - the page is the text. A 760px measure, hairlines rather than boxes, callouts as a
+   left rule with a mono eyebrow. Colour identifies; it never tints a whole surface. */
+:root{
+  --bg:#f6f4f1; --panel:#fffdfb; --panel2:#e9e3d8; --bd:#e1dcd5; --bd2:#ece7e0;
+  --ink:#262521; --dim:#4d4a43; --faint:#6e685f;
+  --accent:#55697a; --accent-ink:#41525f; --sage:#6f8a6e; --sage-ink:#4c6450;
+  --alert:#8a3646; --gold:#d4a72c;
+  --sans:'IBM Plex Sans','Segoe UI',system-ui,sans-serif;
+  --mono:'IBM Plex Mono',Consolas,monospace;
+  --rail:236px; --page:760px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#1b1a18; --panel:#232220; --panel2:#2c2a27; --bd:#38352f; --bd2:#302e2a;
+    --ink:#eceae5; --dim:#c3bfb6; --faint:#968f86;
+    --accent:#8fa6b8; --accent-ink:#a8bccd; --sage-ink:#9dba9c; --alert:#d78a98;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#1b1a18; --panel:#232220; --panel2:#2c2a27; --bd:#38352f; --bd2:#302e2a;
+  --ink:#eceae5; --dim:#c3bfb6; --faint:#968f86;
+  --accent:#8fa6b8; --accent-ink:#a8bccd; --sage-ink:#9dba9c; --alert:#d78a98;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16.5px;line-height:1.72;-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+.sr,.skip{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.skip:focus{position:fixed;top:8px;left:8px;width:auto;height:auto;clip:auto;z-index:50;background:var(--panel);border:1px solid var(--bd);border-radius:8px;padding:8px 14px}
+
+/* nav */
+.nav{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:saturate(1.2) blur(10px);border-bottom:1px solid var(--bd)}
+.navwrap{max-width:1240px;margin:0 auto;padding:0 24px;display:flex;align-items:center;gap:22px;height:58px}
+.brand{display:flex;align-items:center;gap:10px;color:var(--ink);font-weight:700;font-size:17px;letter-spacing:-.01em}
+.brand img{border-radius:7px}
+.brand:hover{text-decoration:none}
+.tag{color:var(--faint);font-size:12.5px;font-family:var(--mono)}
+.links{margin-left:auto;display:flex;align-items:center;gap:20px;font-size:14px;font-weight:500}
+.links a{color:var(--dim)}
+.links a[aria-current]{color:var(--ink);font-weight:600}
+.links a:hover{color:var(--ink);text-decoration:none}
+.btn{display:inline-flex;align-items:center;padding:9px 16px;border-radius:9px;background:var(--accent);color:#fffdfb!important;font-weight:600}
+.btn:hover{text-decoration:none}
+
+/* shell */
+.shell{max-width:1240px;margin:0 auto;padding:34px 24px 72px;display:grid;grid-template-columns:var(--rail) minmax(0,1fr);gap:24px;align-items:start}
+.rail{position:sticky;top:76px;max-height:calc(100vh - 92px);overflow-y:auto;display:flex;flex-direction:column;gap:14px}
+.search input{width:100%;height:36px;padding:0 12px;border:1px solid var(--bd);border-radius:9px;background:var(--panel);color:var(--ink);font-family:inherit;font-size:13px}
+.search input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.entries{display:flex;flex-direction:column;gap:1px}
+.entry{display:grid;grid-template-columns:1fr auto;align-items:center}
+.entry .page{grid-column:1;display:flex;align-items:center;height:33px;padding:0 11px;border-radius:8px;font-size:13px;color:var(--dim)}
+.entry .page:hover{background:var(--bd2);text-decoration:none}
+.entry.on .page{background:var(--panel2);color:var(--accent-ink);font-weight:600}
+.chev{grid-column:2;width:26px;height:26px;border:0;background:none;cursor:pointer;color:var(--faint);padding:0}
+.chev::before{content:"";display:block;width:7px;height:7px;margin:0 auto;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg) translate(-2px,-2px);transition:transform .15s}
+.chev[aria-expanded="false"]::before{transform:rotate(-45deg) translate(-1px,1px)}
+.chev:hover{color:var(--ink)}
+.secs{grid-column:1 / -1;display:flex;flex-direction:column;margin:3px 0 4px 21px}
+/* `display` beats the hidden attribute, so a collapsed entry stayed open and every page showed
+   every other page's sections - the rail was the whole table of contents at once */
+.secs[hidden]{display:none}
+.secs .sec{border-left:2px solid var(--bd);padding:5px 0 5px 13px;font-size:12.5px;line-height:1.35;color:var(--dim)}
+.secs .sec:hover{color:var(--accent-ink);border-left-color:var(--faint);text-decoration:none}
+.secs .sec.here{border-left-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.rail .note{color:var(--faint);font-size:12px;line-height:1.6;padding:8px 11px 0;margin:0}
+.results{display:flex;flex-direction:column;gap:2px}
+.results a{padding:7px 11px;border-radius:8px;font-size:12.5px;line-height:1.4;color:var(--ink)}
+.results a:hover{background:var(--bd2);text-decoration:none}
+.results .crumb{display:block;font-family:var(--mono);font-size:10.5px;color:var(--faint)}
+.results .none{padding:8px 11px;font-size:12.5px;color:var(--faint)}
+
+/* the page */
+main{min-width:0;max-width:var(--page)}
+.eyebrow{margin:0 0 10px;font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--sage-ink);font-weight:600}
+article>p:first-of-type{font-size:18.5px;line-height:1.6;color:var(--dim)}
+h1,h2,h3{letter-spacing:-.018em;line-height:1.2}
+h2{font-size:23px;font-weight:700;margin:42px 0 16px;padding-top:22px;border-top:1px solid var(--bd)}
+h3{font-size:16.5px;font-weight:700;margin:28px 0 8px}
+article p,article li{color:var(--ink)}
+article ul,article ol{padding-left:22px}
+article li{margin:5px 0}
+.anchor{margin-left:8px;color:var(--faint);opacity:0;font-weight:400;text-decoration:none}
+h2:hover .anchor,h3:hover .anchor{opacity:1}
+strong{font-weight:600}
+code{font-family:var(--mono);font-size:.86em;background:var(--panel2);padding:1px 5px;border-radius:5px}
+pre{background:var(--panel);border:1px solid var(--bd);border-radius:11px;padding:15px 17px;overflow-x:auto;line-height:1.65}
+pre code{background:none;padding:0;font-size:13px}
+table{width:100%;border-collapse:collapse;margin:20px 0;font-size:15px}
+th{text-align:left;padding:8px 12px 8px 0;border-bottom:1px solid var(--bd);font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:600}
+td{padding:10px 12px 10px 0;border-bottom:1px solid var(--bd2);vertical-align:top;color:var(--dim)}
+td:first-child{color:var(--ink)}
+figure{margin:22px 0}
+figure img{display:block;width:100%;border-radius:11px;border:1px solid var(--bd);box-shadow:0 10px 28px rgba(38,37,33,.10)}
+figcaption{margin-top:9px;font-family:var(--mono);font-size:11.5px;color:var(--faint)}
+article img{max-width:100%}
+
+/* callouts: a left rule, never a tinted box */
+.callout{border-left:2px solid var(--accent);padding:2px 0 2px 16px;margin:24px 0}
+.callout .eyebrow{color:var(--accent-ink);font-size:10.5px;margin-bottom:5px}
+.callout p{margin:0 0 8px;font-size:15.5px;line-height:1.65;color:var(--dim)}
+.callout p:last-child{margin-bottom:0}
+.callout.warn{border-left-color:var(--alert)}
+.callout.warn .eyebrow{color:var(--alert)}
+.callout.rule{border-left-color:var(--sage)}
+.callout.rule .eyebrow{color:var(--sage-ink)}
+
+/* foot */
+.pager{display:flex;justify-content:space-between;gap:16px;margin:56px 0 0;padding-top:22px;border-top:1px solid var(--bd)}
+.pn{display:flex;flex-direction:column;font-size:15px;font-weight:600;color:var(--accent-ink)}
+.pn span{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:600}
+.pn.next{text-align:right}
+.stamp{margin:26px 0 0;font-family:var(--mono);font-size:11px;color:var(--faint)}
+
+@media (max-width:900px){
+  .shell{grid-template-columns:minmax(0,1fr);padding:20px 16px 56px}
+  .rail{position:static;max-height:none;order:-1;border-bottom:1px solid var(--bd);padding-bottom:14px}
+  .entries{max-height:42vh;overflow-y:auto}
+  main{max-width:none}
+  .tag{display:none}
+  h2{margin-top:34px}
+  /* a wide table is the one thing that will not fold: let it scroll inside itself rather than
+     pushing the whole page sideways */
+  table{display:block;overflow-x:auto}
+}
+@media (max-width:520px){
+  /* the nav's own links are what push a phone sideways - the brand, three links and the Download
+     button do not fit across 420px, and the page scrolled by five pixels because of it */
+  .navwrap{gap:14px;padding:0 16px}
+  .links{gap:14px;font-size:13.5px}
+  .btn{padding:8px 12px}
+}

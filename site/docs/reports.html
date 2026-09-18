@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reports and the Assistant — Taskuary documentation</title>
+<meta name="description" content="Reading the systems you work in on a schedule, and the report whose job is to judge.">
+<link rel="icon" href="/favicon.ico">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="./docs.css">
+</head>
+<body>
+<a class="skip" href="#doc">Skip to the documentation</a>
+<header class="nav">
+  <div class="navwrap">
+    <a class="brand" href="/"><img src="/icon.png" alt="" width="26" height="26">Taskuary</a>
+    <span class="tag">a work AI assistant</span>
+    <nav class="links">
+      <a href="/docs/" aria-current="true">Docs</a>
+      <a href="/demo/">Demo</a>
+      <a href="https://github.com/ldbumble/taskuary">GitHub</a>
+      <a class="btn" href="https://github.com/ldbumble/taskuary/releases/latest/download/Taskuary.exe">Download</a>
+    </nav>
+  </div>
+</header>
+<div class="shell">
+  <aside class="rail" id="rail">
+    <form class="search" role="search" onsubmit="return false">
+      <label class="sr" for="q">Search the documentation</label>
+      <input id="q" type="search" placeholder="Search the docs…" autocomplete="off">
+    </form>
+    <div class="results" id="results" hidden></div>
+    <nav class="entries" id="entries" aria-label="Documentation">
+<div class="entry">
+      <a class="page" href="./">Start here</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show Start here's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./#what-taskuary-is">What Taskuary is</a><a class="sec" href="./#install-on-windows">Install on Windows</a><a class="sec" href="./#install-with-python">Install with Python</a><a class="sec" href="./#docker">Docker</a><a class="sec" href="./#your-first-run">Your first run</a><a class="sec" href="./#choosing-the-ai-setup">Choosing the AI setup</a><a class="sec" href="./#where-your-data-lives">Where your data lives</a><a class="sec" href="./#what-leaves-your-machine">What leaves your machine</a><a class="sec" href="./#updating">Updating</a><a class="sec" href="./#next">Next</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./how-it-works">How it works</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show How it works's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./how-it-works#the-timeline">The Timeline</a><a class="sec" href="./how-it-works#the-five-roads-a-message-can-take">The five roads a message can take</a><a class="sec" href="./how-it-works#what-triage-actually-decides">What triage actually decides</a><a class="sec" href="./how-it-works#nothing-sends-itself">Nothing sends itself</a><a class="sec" href="./how-it-works#correcting-it-teaches-it">Correcting it teaches it</a><a class="sec" href="./how-it-works#the-documents-that-govern-it">The documents that govern it</a><a class="sec" href="./how-it-works#where-the-rest-of-the-workspace-fits">Where the rest of the workspace fits</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./connections">Connections</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show Connections's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./connections#what-a-connection-is">What a connection is</a><a class="sec" href="./connections#the-five-roles">The five roles</a><a class="sec" href="./connections#mail">Mail</a><a class="sec" href="./connections#chat">Chat</a><a class="sec" href="./connections#repositories-and-trackers">Repositories and trackers</a><a class="sec" href="./connections#data-and-report-sources">Data and report sources</a><a class="sec" href="./connections#coding-clis-and-ai-providers">Coding CLIs and AI providers</a><a class="sec" href="./connections#adding-another-of-the-same-kind">Adding another of the same kind</a><a class="sec" href="./connections#pushing-something-in-yourself">Pushing something in yourself</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./tasks-and-agents">Tasks and agents</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show Tasks and agents's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./tasks-and-agents#a-tasks-three-lives">A task's three lives</a><a class="sec" href="./tasks-and-agents#sending-work-to-a-coding-agent">Sending work to a coding agent</a><a class="sec" href="./tasks-and-agents#the-general-agent">The general agent</a><a class="sec" href="./tasks-and-agents#sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="./tasks-and-agents#several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="./tasks-and-agents#checklists-and-closing">Checklists and closing</a><a class="sec" href="./tasks-and-agents#replies">Replies</a><a class="sec" href="./tasks-and-agents#profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="./tasks-and-agents#how-work-is-ordered">How work is ordered</a></div>
+    </div>
+<div class="entry on">
+      <a class="page" href="./reports" aria-current="page">Reports and the Assistant</a>
+      <button class="chev" type="button" aria-expanded="true" aria-label="Hide Reports and the Assistant's sections"></button>
+      <div class="secs"><a class="sec" href="#a-report-is-a-pipeline" data-sec="a-report-is-a-pipeline">A report is a pipeline</a><a class="sec" href="#sources" data-sec="sources">Sources</a><a class="sec" href="#letting-the-ai-write-the-source-cards" data-sec="letting-the-ai-write-the-source-cards">Letting the AI write the source cards</a><a class="sec" href="#the-ai-pass" data-sec="the-ai-pass">The AI pass</a><a class="sec" href="#where-a-run-goes" data-sec="where-a-run-goes">Where a run goes</a><a class="sec" href="#schedules" data-sec="schedules">Schedules</a><a class="sec" href="#the-assistant" data-sec="the-assistant">The Assistant</a><a class="sec" href="#stateful-workflows" data-sec="stateful-workflows">Stateful workflows</a><a class="sec" href="#sage-intacct-specifically" data-sec="sage-intacct-specifically">Sage Intacct, specifically</a><a class="sec" href="#api" data-sec="api">API</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./phone">On your phone</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show On your phone's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./phone#the-doorways">The doorways</a><a class="sec" href="./phone#what-it-can-do">What it can do</a><a class="sec" href="./phone#the-morning-line">The morning line</a><a class="sec" href="./phone#handing-over">Handing over</a><a class="sec" href="./phone#what-it-will-not-do">What it will not do</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./settings">Settings reference</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show Settings reference's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./settings#how-to-read-this">How to read this</a><a class="sec" href="./settings#triage-agents">Triage &amp; agents</a><a class="sec" href="./settings#triage-routing">Triage &amp; routing</a><a class="sec" href="./settings#replies">Replies</a><a class="sec" href="./settings#assistant">Assistant</a><a class="sec" href="./settings#assistant-on-your-phone">Assistant on your phone</a><a class="sec" href="./settings#coder-agent">Coder agent</a><a class="sec" href="./settings#notifications">Notifications</a><a class="sec" href="./settings#attachments-images">Attachments &amp; images</a><a class="sec" href="./settings#sync-startup">Sync &amp; startup</a><a class="sec" href="./settings#display">Display</a><a class="sec" href="./settings#routing-policies">Routing policies</a><a class="sec" href="./settings#verdicts-notes">Verdicts &amp; notes</a><a class="sec" href="./settings#audit-integrity">Audit integrity</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./troubleshooting">When something is wrong</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show When something is wrong's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./troubleshooting#it-will-not-start">It will not start</a><a class="sec" href="./troubleshooting#a-connection-stopped">A connection stopped</a><a class="sec" href="./troubleshooting#triage-got-it-wrong">Triage got it wrong</a><a class="sec" href="./troubleshooting#an-agent-is-stuck">An agent is stuck</a><a class="sec" href="./troubleshooting#a-report-returned-nothing">A report returned nothing</a><a class="sec" href="./troubleshooting#reading-the-audit-log">Reading the audit log</a><a class="sec" href="./troubleshooting#where-the-logs-are">Where the logs are</a><a class="sec" href="./troubleshooting#still-wrong">Still wrong</a></div>
+    </div>
+    </nav>
+    <p class="note">Everything here is stored on your own machine, in the same SQLite file as your tasks.</p>
+  </aside>
+  <main id="doc">
+    <p class="eyebrow">Reports and the Assistant</p>
+    <article>
+<p>Reports are how Taskuary reads the systems you work in. The Assistant is a report with a different
+job: instead of filing what it read, it decides whether any of it is worth your attention. They
+share one builder, which is why they share one page here.</p>
+<h2 id="a-report-is-a-pipeline">A report is a pipeline<a class="anchor" href="#a-report-is-a-pipeline" aria-label="Link to this section">#</a></h2>
+<p>One report is one saved configuration on the <strong>Reports</strong> tab, built in four steps.</p>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>What it decides</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Pipeline</strong></td>
+<td>The title, the sources it reads, and the one prompt that reads all of them</td>
+</tr>
+<tr>
+<td><strong>Test &amp; preview</strong></td>
+<td>Test calls a single source; Preview runs the whole pipeline, AI pass included, filing nothing</td>
+</tr>
+<tr>
+<td><strong>Schedule &amp; save</strong></td>
+<td>How often it runs, and whether each run goes through triage</td>
+</tr>
+<tr>
+<td>Delivery and alerts</td>
+<td>Optional, on the Pipeline step: send each run somewhere, or say nothing unless the result trips a rule</td>
+</tr>
+</tbody></table>
+<p>Sources at the top, one prompt at the bottom. Every source runs on its own connection and query,
+the results are stacked under labelled headers, and the prompt sees all of them at once. One
+source failing is reported in place and never takes the whole report down.</p>
+<div class="callout rule"><p class="eyebrow">Connections owns the credential, Reports owns the question</p><p>You do not configure a connection here. A source names the connector card its credentials live
+on. That separation is why the same database can answer five different reports without five
+copies of its password.</p>
+</div><h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to this section">#</a></h2>
+<p>A source card carries a type, an optional label, whatever that type needs to run, and a row cap.
+The type picker is grouped by where the data lives: this computer, files and sheets, databases,
+AWS, Azure, Microsoft 365, monitoring, corporate systems, the AI itself, the web, and Taskuary&#39;s
+own data.</p>
+<p>Three things are worth knowing:</p>
+<ul>
+<li><strong>label</strong> is how the prompt refers to that data. Two queries against the same database are two
+sources, and without labels the prompt cannot tell them apart.</li>
+<li><strong>max rows</strong> is blank by default, and blank means 200 — a cap nobody chose. When a run is
+capped the headline says so, so the AI can never describe a truncated slice as complete.</li>
+<li><strong>Test — show me the data</strong> returns the exact text a scheduled run would hand the prompt. Use
+it before assembling the rest of the pipeline.</li>
+</ul>
+<p>Drag cards to reorder them; duplicate one to ask the same connection a second question.</p>
+<h2 id="letting-the-ai-write-the-source-cards">Letting the AI write the source cards<a class="anchor" href="#letting-the-ai-write-the-source-cards" aria-label="Link to this section">#</a></h2>
+<p>A source card asks you to know things first: which of thirty-odd types your data sits behind,
+what that type&#39;s config keys are called, and the query language of whatever is on the other end.
+Nobody remembers that a GL entry&#39;s amount is <code>AMOUNT</code> but a bill&#39;s is <code>TOTALENTERED</code>. So you can
+describe what you want instead, in three places:</p>
+<table>
+<thead>
+<tr>
+<th>Where</th>
+<th>What it writes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Describe the report you want</strong>, top of the Reports tab</td>
+<td>A whole report — type, query, prompt and schedule — dropped into the builder</td>
+</tr>
+<tr>
+<td><strong>let AI fill this in</strong>, on any source card</td>
+<td>That one card, in the type it is already set to</td>
+</tr>
+<tr>
+<td><strong>Describe what the Assistant should keep an eye on</strong></td>
+<td>Every source the ask needs, plus the instruction to judge them by</td>
+</tr>
+</tbody></table>
+<p>Four things keep this from being a wish machine:</p>
+<ol>
+<li><strong>It may only choose a type whose connection actually exists.</strong> The catalogue is built from
+this install&#39;s live connectors, so it cannot answer &quot;connect to Salesforce&quot; — only tell you
+that nothing here reaches Salesforce and what you would have to connect.</li>
+<li><strong>The config keys come from the executors&#39; own docstrings</strong>, so a composed card cannot drift
+from the keys the code really reads.</li>
+<li><strong>It reads the real schema before writing a query</strong> — an object&#39;s field list, a table&#39;s
+columns, which <code>LOCATIONID</code> the site you named actually has. Up to three look-ups per ask,
+each a real call whose result goes back to the model.</li>
+<li><strong>It is allowed to say it does not know.</strong> Questions come back as questions, at most three,
+each answerable in a few words. A guessed <code>WHERE</code> clause on a finance report is silently wrong
+forever; a question costs five seconds.</li>
+</ol>
+<p>Everything it writes is checked before you see it: a real type, a connected one, and the keys
+that type needs to run at all. Nothing is saved — a composed card lands in the boxes you would
+have filled in by hand, and <strong>Preview</strong> runs it for real so you look at actual rows before
+anything is scheduled.</p>
+<h2 id="the-ai-pass">The AI pass<a class="anchor" href="#the-ai-pass" aria-label="Link to this section">#</a></h2>
+<p>The prompt at the bottom of the pipeline turns rows into prose. Leave it empty and the raw rows
+file as they are.</p>
+<ul>
+<li>Write a concrete instruction — &quot;Summarise spend by site; flag any vendor above 10k or new this
+month&quot; — not &quot;summarise the data&quot;.</li>
+<li><strong>Brain</strong>: the triage brain writes it by default; any connector with a saved key can be picked
+per report. A saved pick that has lost its key stays visible and disabled rather than silently
+vanishing.</li>
+<li>With a prompt set but no AI connector active, the raw data files and the builder says so.</li>
+<li>When one column is a measure worth plotting, the model that just read every row says so and the
+run hands back a bar chart beside the text.</li>
+</ul>
+<h2 id="where-a-run-goes">Where a run goes<a class="anchor" href="#where-a-run-goes" aria-label="Link to this section">#</a></h2>
+<p>Every run lands on your Timeline. Two optional additions, both off by default:</p>
+<ul>
+<li><strong>Send it somewhere</strong> — email, Teams, Telegram, WhatsApp, iMessage or Discord. It waits in
+Review for approval by default. &quot;Send it without asking&quot; is the one place in Taskuary where
+that gate can be switched off, and it is deliberate.</li>
+<li><strong>Tell me when it looks wrong</strong> — silence is the normal outcome. An alert fires only when the
+result trips a rule: nothing came back, anything came back, fewer or more rows than N, the
+result mentions (or never mentions) something, or the report failed. Alerts send the moment the
+rule trips, with no Review step.</li>
+</ul>
+<p><strong>Can become work</strong> sends each run through triage like an inbound message, so <code>TRIAGE.md</code> decides
+whether it becomes a task. Off by default — a report is informational. A failed run is never
+triaged.</p>
+<p>Under each report row, the last run shows what it read, what came out, and the error when it
+failed.</p>
+<h2 id="schedules">Schedules<a class="anchor" href="#schedules" aria-label="Link to this section">#</a></h2>
+<p>Pick one: every N minutes, daily at <code>HH:MM</code>, a five-field cron, or on app startup. Everything
+blank means once a day while the app is open, and a slot missed while the app was closed fires
+once on reopen.</p>
+<p><strong>Run due now</strong> on the Reports tab runs everything owed; <strong>Run now</strong> on a row runs that one
+report immediately.</p>
+<div class="callout note"><p class="eyebrow">Once a day means once a day</p><p>A daily slot is a cap on the whole report, not on each way of triggering it. If the 08:00 slot
+has already produced today&#39;s run, opening the app at 09:00 does not produce a second one.</p>
+</div><h2 id="the-assistant">The Assistant<a class="anchor" href="#the-assistant" aria-label="Link to this section">#</a></h2>
+<p>The Assistant is a report of type <code>assistant</code>. It runs on its own schedule and when the app
+opens, and it posts on the Timeline <strong>only</strong> when it finds something worth saying: an unanswered
+reply, context for an upcoming meeting, a task gone quiet, a pattern across incoming work, or
+something in the systems it watches that does not look right. Each suggestion names its evidence
+and offers <strong>Make it a task</strong>, <strong>Done</strong>, <strong>Snooze a day</strong> and <strong>Not this</strong>.</p>
+<p>Its pipeline is itself, so its Pipeline step looks different from every other report:</p>
+<ul>
+<li><strong>Systems and data views to check</strong> — source cards owned by this check alone. Anything a report
+can read belongs here, and no saved report needs to stand behind it: the Assistant pulls each
+one silently and files no intermediate report.</li>
+<li><strong>…and pull these saved data views too</strong> — existing reports it should also read. A report can
+stay switched off as a standalone schedule and still be pulled here.</li>
+<li><strong>What should the Assistant surface?</strong> — one instruction over all of the above plus its own
+view of your work.</li>
+</ul>
+<p>Every post records what it reviewed and leaves a note for its next check, so it does not research
+the same silence twice or repeat a suggestion you have seen. <strong>Not this</strong> teaches it which kinds
+of nudges you do not want.</p>
+<p>Four things shape it:</p>
+<ul>
+<li><code>COUNSEL.md</code> on the Docs tab — how it speaks, and how readily it takes a position.</li>
+<li>The <strong>Assistant</strong> report — what it watches, its schedule, its model.</li>
+<li><strong>Settings → Assistant</strong> — thresholds such as how long a reply or task must be quiet.</li>
+<li><strong>Settings → Learning</strong> — whether your verdicts feed back into <code>LEARNED.md</code>.</li>
+</ul>
+<p>Delete the Assistant report to switch it off. Its <strong>Preview</strong> shows exactly what a run would hand
+the model, which is the fastest way to find out whether a watched source returns what you think
+it does.</p>
+<p>The morning brief is a separate report of type <code>digest</code>: it writes <code>DIGEST.md</code> and lands on the
+Timeline daily. Deleting that report turns the brief off.</p>
+<h3 id="ideas-it-raises">Ideas it raises<a class="anchor" href="#ideas-it-raises" aria-label="Link to this section">#</a></h3>
+<p>Beyond what it watches, the Assistant looks at the shape of your own work and occasionally raises
+an <strong>idea</strong>: a system your mail keeps naming that nothing here reads, for instance. It raises at
+most one per run and never one you have already answered. If the connector is on the roadmap
+rather than built, saying yes is a vote for building it.</p>
+<h2 id="stateful-workflows">Stateful workflows<a class="anchor" href="#stateful-workflows" aria-label="Link to this section">#</a></h2>
+<p><strong>Monthly Zoho invoices</strong> is the first workflow on the Reports page that is not a query returning
+one result. One scheduled run opens a batch, the batch holds one row per customer, and each row
+advances separately through amount, draft, Review and sent.</p>
+<ol>
+<li>Connect <strong>Zoho Invoice</strong>, then use <strong>Monthly invoices</strong> on Reports.</li>
+<li>Choose the customers and a monthly cron. Saving enables the workflow.</li>
+<li>On schedule (or <strong>Open this month</strong>), Taskuary reads each customer&#39;s latest prior sent invoice
+and prefills its total. No new invoice exists yet.</li>
+<li>Confirm or change the amounts, then <strong>Prepare Zoho drafts</strong> — each prior invoice is duplicated
+as a draft and gets one durable Review card.</li>
+<li>Edit and approve each email. Approval sends that invoice; leaving the page, restarting
+Taskuary or approving a different customer does not lose the others.</li>
+</ol>
+<p>The duplicate boundary is <code>(workflow, customer, YYYY-MM)</code>, stored locally and written into Zoho&#39;s
+<code>reference_number</code>. A retry after a timeout reuses an existing draft; an existing non-draft
+invoice blocks the retry rather than creating another. A changed total is applied automatically
+only when the previous invoice had one line — a multi-line invoice with a changed total stops for
+attention, because Taskuary cannot safely guess how to allocate it.</p>
+<h2 id="sage-intacct-specifically">Sage Intacct, specifically<a class="anchor" href="#sage-intacct-specifically" aria-label="Link to this section">#</a></h2>
+<p>Intacct is the case that made the AI card composer necessary, so it gets explicit help.</p>
+<ul>
+<li>Objects are named, not picked: <code>APBILL</code>, <code>APBILLITEM</code>, <code>APPYMT</code>, <code>ARINVOICE</code>, <code>VENDOR</code>,
+<code>CUSTOMER</code>, <code>GLENTRY</code> / <code>GLDETAIL</code>, <code>GLACCOUNT</code>, <code>LOCATION</code>, <code>DEPARTMENT</code>, <code>GLBUDGETITEM</code>,
+<code>PROJECT</code>.</li>
+<li>Field ids are UPPERCASE and not guessable — <code>WHENCREATED</code> is entered, <code>WHENPOSTED</code> is posted, a
+bill&#39;s total is <code>TOTALENTERED</code>, a GL entry&#39;s is <code>AMOUNT</code>. Every company also has custom fields.</li>
+<li><strong>What fields does APBILL have?</strong> on the source card asks Intacct itself and lists every field
+in <em>your</em> company with its label and datatype. There is also a report type for that question,
+so you can hear about it the day somebody adds a field.</li>
+<li>Filters are <code>FIELD op value</code>, one per line — <code>WHENDUE &lt;= 08/31/2026</code>. Dates are <code>MM/DD/YYYY</code>,
+and <code>in</code> takes a comma-separated list.</li>
+<li><code>readByQuery</code> does not group or count. &quot;How many bills per person&quot; is the rows with the person
+field included, plus a prompt that counts them.</li>
+</ul>
+<div class="callout warn"><p class="eyebrow">A named business number is not a query to write from scratch</p><p>The chart of accounts is configured per organisation, so a hand-written GL query is plausible and
+wrong. Use a metric that has been proved against figures you already knew, and say plainly when
+a number has not been.</p>
+</div><p>Leaving the field list blank returns every field on the object — right for a list you want to
+eyeball, wrong for GL detail.</p>
+<h2 id="api">API<a class="anchor" href="#api" aria-label="Link to this section">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>Endpoint</th>
+<th>Does</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>POST /api/reports/compose</code></td>
+<td>A sentence in, a whole report configuration out (or its questions)</td>
+</tr>
+<tr>
+<td><code>POST /api/reports/compose-sources</code></td>
+<td>A sentence in, source cards out</td>
+</tr>
+<tr>
+<td><code>POST /api/reports/preview</code></td>
+<td>Dry-run a configuration, AI pass and chart included, filing nothing</td>
+</tr>
+<tr>
+<td><code>POST /api/sources</code></td>
+<td>Save a report</td>
+</tr>
+<tr>
+<td><code>POST /api/sources/{id}/run</code></td>
+<td>Run one report now</td>
+</tr>
+<tr>
+<td><code>POST /api/ingest/poll</code></td>
+<td>Run everything that is due</td>
+</tr>
+<tr>
+<td><code>GET /api/report-types</code></td>
+<td>Every type this install can run, and whether its connection is ready</td>
+</tr>
+<tr>
+<td><code>GET /api/intacct/fields?obj=APBILL</code></td>
+<td>What that object carries in this company</td>
+</tr>
+</tbody></table>
+<p>The full interactive reference is at <code>/api/docs</code> while Taskuary is running.</p>
+
+    </article>
+    <nav class="pager"><a class="pn prev" href="./tasks-and-agents"><span>Previous</span>Tasks and agents</a><a class="pn next" href="./phone"><span>Next</span>On your phone</a></nav>
+    <p class="stamp">Documentation for Taskuary 0.3.5.6 · updated 2026-09-18</p>
+  </main>
+</div>
+<script src="./docs.js"></script>
+</body>
+</html>

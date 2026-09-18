@@ -1,0 +1,56 @@
+{
+  "_": "THE DOCS SITE'S MAP. One entry per rail page, in rail order; `file` is the markdown under docs/site/ and `slug` is the URL under /docs/. The `##` headings inside each file become that page's rail sub-entries, its anchors and its search crumbs at once - nothing is listed twice. `generated` names a block the build writes from another file in the repo, so that page cannot drift from the code (settings: taskuary/settings_schema.json). Build with `npm run build:docs` in website/; CI fails if site/docs is not what a fresh build produces.",
+  "version": "0.3.5.6",
+  "updated": "2026-09-18",
+  "pages": [
+    {
+      "slug": "index",
+      "file": "start-here.md",
+      "title": "Start here",
+      "desc": "What Taskuary is, how to install it, and what the first hour looks like."
+    },
+    {
+      "slug": "how-it-works",
+      "file": "how-it-works.md",
+      "title": "How it works",
+      "desc": "One message from arrival to approval: the Timeline, the five roads, and what triage actually decides."
+    },
+    {
+      "slug": "connections",
+      "file": "connections.md",
+      "title": "Connections",
+      "desc": "The accounts Taskuary may read, and the role that says what it may do with each."
+    },
+    {
+      "slug": "tasks-and-agents",
+      "file": "tasks-and-agents.md",
+      "title": "Tasks and agents",
+      "desc": "A task, the agent work on it and the reply to the sender are three separate lives."
+    },
+    {
+      "slug": "reports",
+      "file": "reports.md",
+      "title": "Reports and the Assistant",
+      "desc": "Reading the systems you work in on a schedule, and the report whose job is to judge."
+    },
+    {
+      "slug": "phone",
+      "file": "phone.md",
+      "title": "On your phone",
+      "desc": "The same assistant over WhatsApp or Telegram, and what it may do there."
+    },
+    {
+      "slug": "settings",
+      "file": "settings.md",
+      "title": "Settings reference",
+      "desc": "Every setting, generated from the same file the app and the assistant read.",
+      "generated": "settings"
+    },
+    {
+      "slug": "troubleshooting",
+      "file": "troubleshooting.md",
+      "title": "When something is wrong",
+      "desc": "What to check, in the order worth checking it."
+    }
+  ]
+}

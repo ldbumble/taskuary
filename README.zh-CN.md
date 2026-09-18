@@ -129,7 +129,7 @@ Board 的 **Live handoffs** 展示当前进展、阻碍和待接手事项。
 - **只使用有效记忆。** 提示词构建时会排除假设、待批准规则和原始决定记录。有效记忆用于消息分拣、回复草稿和智能体上下文。
 - **控制权仍在你手里。** 推断出来的隐藏或归档规则先进入待批准区；两次相符的明确用户决定可以提供授权。你手写的不带机器标签的内容会保留，也可以在 Settings 中关闭学习。
 
-参见[从你的决定中学习（英文产品指南）](https://github.com/ldbumble/taskuary/blob/master/docs/product-guide.md#learned-memory)，
+参见[从你的决定中学习（英文文档）](https://taskuary.com/docs/how-it-works#correcting-it-teaches-it)，
 或查看实现：[learn.py](taskuary/learn.py)、[learnedgraph.py](taskuary/learnedgraph.py)。
 
 </details>
@@ -228,10 +228,14 @@ taskuary --demo
 
 ## 文档
 
-- [入门指南](docs/getting-started.md)：安装、初始配置、Docker 和数据存储。
-- [产品指南](docs/product-guide.md)：完整流程、学习机制、智能体和配置文档。
-- [集成列表](docs/integrations.md)：消息渠道、AI、业务系统和报表来源。
-- [报表与主动检查](docs/reports-and-assistant.md)：报表处理流程及助手的检查范围。
+完整文档（英文）在 **[taskuary.com/docs](https://taskuary.com/docs/)**。
+
+- [入门指南](https://taskuary.com/docs/)：安装、初始配置、Docker 和数据存储。
+- [工作原理](https://taskuary.com/docs/how-it-works)：完整流程、五条路径、学习机制和配置文档。
+- [连接](https://taskuary.com/docs/connections)：消息渠道、AI、业务系统和报表来源。
+- [任务与智能体](https://taskuary.com/docs/tasks-and-agents)：任务、智能体工作与回复是三条独立的生命周期。
+- [报表与助手](https://taskuary.com/docs/reports)：报表处理流程及助手的检查范围。
+- [设置参考](https://taskuary.com/docs/settings)：全部设置项，由应用自身读取的同一份 schema 生成。
 - [状态与路线图](docs/roadmap.md)：当前能力和后续计划。
 - [贡献指南](CONTRIBUTING.md)：开发环境与贡献方式。
 

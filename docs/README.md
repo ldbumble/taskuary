@@ -1,16 +1,38 @@
 # Taskuary documentation
 
-Taskuary is a local-first work hub: inbound messages and reports become a single timeline,
-AI triage separates work from noise, coding agents handle repository tasks, and outbound
-actions wait for human approval.
+The user documentation lives at **[taskuary.com/docs](https://taskuary.com/docs/)**.
 
-- [Getting started](getting-started.md)—installation, first-run setup, Docker, and data
-- [Product guide](product-guide.md)—the workflow, the five roads a message can take, learning loop, agents, and operator documents
-- [Task lifecycle](task-lifecycle.md)—separate task, agent-session, and reply states; restart and completion rules
-- [Integrations](integrations.md)—channels, AI providers, work systems, and report sources
-- [Reports and the Assistant](reports-and-assistant.md)—the report pipeline, letting the AI write the source cards, and what the Assistant watches
-- [Status and roadmap](roadmap.md)—what works today and what is next
-- [Beyond code](beyond-code.md)—how one funnel handles any kind of task: playbooks, gated tools, receipts (design note)
-- [Contributing](../CONTRIBUTING.md)—development setup and contribution guide
+It is written once, as markdown in [`docs/site/`](site/), and built into `site/docs/` by
+`npm run build:docs` in `website/`. CI rebuilds it and fails if the committed pages are not what a
+fresh build produces, so the site and the source cannot drift apart.
 
-The API is also browsable at `/api/docs` while Taskuary is running.
+| Page | Covers |
+|---|---|
+| [Start here](https://taskuary.com/docs/) | What Taskuary is, installing it, the first run, where your data lives |
+| [How it works](https://taskuary.com/docs/how-it-works) | The Timeline, the five roads, what triage decides, the documents that govern it |
+| [Connections](https://taskuary.com/docs/connections) | The accounts Taskuary may read, and the role that says what it may do |
+| [Tasks and agents](https://taskuary.com/docs/tasks-and-agents) | The task, the agent work and the reply as three separate lives |
+| [Reports and the Assistant](https://taskuary.com/docs/reports) | The report pipeline, and the report whose job is to judge |
+| [On your phone](https://taskuary.com/docs/phone) | The same assistant over WhatsApp or Telegram |
+| [Settings reference](https://taskuary.com/docs/settings) | Every setting — generated from `taskuary/settings_schema.json` |
+| [When something is wrong](https://taskuary.com/docs/troubleshooting) | What to check, in the order worth checking it |
+
+## Editing the documentation
+
+1. Edit the markdown in `docs/site/`. A `##` heading becomes a rail entry, an anchor and a search
+   crumb at once — there is no separate index to update.
+2. `cd website && npm run build:docs`
+3. Commit `docs/site/` and `site/docs/` together.
+
+`npm test` in `website/` checks that every cross-reference still resolves, that every page is in
+the manifest and vice versa, and that the settings reference still matches the schema.
+
+The settings page is generated: adding a knob to `taskuary/settings_schema.json` puts it in the
+docs on the next build, with the same label, group and help text the app shows.
+
+## Engineering notes
+
+The rest of this folder is working material rather than product documentation — design records,
+acceptance ledgers, investigation write-ups, and the specs and plans under `superpowers/`. It is
+kept because it explains why things are the way they are, not because it is meant to be read as a
+guide. [Status and roadmap](roadmap.md) is the one that is still for readers.

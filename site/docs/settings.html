@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings reference — Taskuary documentation</title>
+<meta name="description" content="Every setting, generated from the same file the app and the assistant read.">
+<link rel="icon" href="/favicon.ico">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="./docs.css">
+</head>
+<body>
+<a class="skip" href="#doc">Skip to the documentation</a>
+<header class="nav">
+  <div class="navwrap">
+    <a class="brand" href="/"><img src="/icon.png" alt="" width="26" height="26">Taskuary</a>
+    <span class="tag">a work AI assistant</span>
+    <nav class="links">
+      <a href="/docs/" aria-current="true">Docs</a>
+      <a href="/demo/">Demo</a>
+      <a href="https://github.com/ldbumble/taskuary">GitHub</a>
+      <a class="btn" href="https://github.com/ldbumble/taskuary/releases/latest/download/Taskuary.exe">Download</a>
+    </nav>
+  </div>
+</header>
+<div class="shell">
+  <aside class="rail" id="rail">
+    <form class="search" role="search" onsubmit="return false">
+      <label class="sr" for="q">Search the documentation</label>
+      <input id="q" type="search" placeholder="Search the docs…" autocomplete="off">
+    </form>
+    <div class="results" id="results" hidden></div>
+    <nav class="entries" id="entries" aria-label="Documentation">
+<div class="entry">
+      <a class="page" href="./">Start here</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show Start here's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./#what-taskuary-is">What Taskuary is</a><a class="sec" href="./#install-on-windows">Install on Windows</a><a class="sec" href="./#install-with-python">Install with Python</a><a class="sec" href="./#docker">Docker</a><a class="sec" href="./#your-first-run">Your first run</a><a class="sec" href="./#choosing-the-ai-setup">Choosing the AI setup</a><a class="sec" href="./#where-your-data-lives">Where your data lives</a><a class="sec" href="./#what-leaves-your-machine">What leaves your machine</a><a class="sec" href="./#updating">Updating</a><a class="sec" href="./#next">Next</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./how-it-works">How it works</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show How it works's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./how-it-works#the-timeline">The Timeline</a><a class="sec" href="./how-it-works#the-five-roads-a-message-can-take">The five roads a message can take</a><a class="sec" href="./how-it-works#what-triage-actually-decides">What triage actually decides</a><a class="sec" href="./how-it-works#nothing-sends-itself">Nothing sends itself</a><a class="sec" href="./how-it-works#correcting-it-teaches-it">Correcting it teaches it</a><a class="sec" href="./how-it-works#the-documents-that-govern-it">The documents that govern it</a><a class="sec" href="./how-it-works#where-the-rest-of-the-workspace-fits">Where the rest of the workspace fits</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./connections">Connections</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show Connections's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./connections#what-a-connection-is">What a connection is</a><a class="sec" href="./connections#the-five-roles">The five roles</a><a class="sec" href="./connections#mail">Mail</a><a class="sec" href="./connections#chat">Chat</a><a class="sec" href="./connections#repositories-and-trackers">Repositories and trackers</a><a class="sec" href="./connections#data-and-report-sources">Data and report sources</a><a class="sec" href="./connections#coding-clis-and-ai-providers">Coding CLIs and AI providers</a><a class="sec" href="./connections#adding-another-of-the-same-kind">Adding another of the same kind</a><a class="sec" href="./connections#pushing-something-in-yourself">Pushing something in yourself</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./tasks-and-agents">Tasks and agents</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show Tasks and agents's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./tasks-and-agents#a-tasks-three-lives">A task's three lives</a><a class="sec" href="./tasks-and-agents#sending-work-to-a-coding-agent">Sending work to a coding agent</a><a class="sec" href="./tasks-and-agents#the-general-agent">The general agent</a><a class="sec" href="./tasks-and-agents#sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="./tasks-and-agents#several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="./tasks-and-agents#checklists-and-closing">Checklists and closing</a><a class="sec" href="./tasks-and-agents#replies">Replies</a><a class="sec" href="./tasks-and-agents#profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="./tasks-and-agents#how-work-is-ordered">How work is ordered</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./reports">Reports and the Assistant</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show Reports and the Assistant's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./reports#a-report-is-a-pipeline">A report is a pipeline</a><a class="sec" href="./reports#sources">Sources</a><a class="sec" href="./reports#letting-the-ai-write-the-source-cards">Letting the AI write the source cards</a><a class="sec" href="./reports#the-ai-pass">The AI pass</a><a class="sec" href="./reports#where-a-run-goes">Where a run goes</a><a class="sec" href="./reports#schedules">Schedules</a><a class="sec" href="./reports#the-assistant">The Assistant</a><a class="sec" href="./reports#stateful-workflows">Stateful workflows</a><a class="sec" href="./reports#sage-intacct-specifically">Sage Intacct, specifically</a><a class="sec" href="./reports#api">API</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./phone">On your phone</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show On your phone's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./phone#the-doorways">The doorways</a><a class="sec" href="./phone#what-it-can-do">What it can do</a><a class="sec" href="./phone#the-morning-line">The morning line</a><a class="sec" href="./phone#handing-over">Handing over</a><a class="sec" href="./phone#what-it-will-not-do">What it will not do</a></div>
+    </div>
+<div class="entry on">
+      <a class="page" href="./settings" aria-current="page">Settings reference</a>
+      <button class="chev" type="button" aria-expanded="true" aria-label="Hide Settings reference's sections"></button>
+      <div class="secs"><a class="sec" href="#how-to-read-this" data-sec="how-to-read-this">How to read this</a><a class="sec" href="#triage-agents" data-sec="triage-agents">Triage &amp; agents</a><a class="sec" href="#triage-routing" data-sec="triage-routing">Triage &amp; routing</a><a class="sec" href="#replies" data-sec="replies">Replies</a><a class="sec" href="#assistant" data-sec="assistant">Assistant</a><a class="sec" href="#assistant-on-your-phone" data-sec="assistant-on-your-phone">Assistant on your phone</a><a class="sec" href="#coder-agent" data-sec="coder-agent">Coder agent</a><a class="sec" href="#notifications" data-sec="notifications">Notifications</a><a class="sec" href="#attachments-images" data-sec="attachments-images">Attachments &amp; images</a><a class="sec" href="#sync-startup" data-sec="sync-startup">Sync &amp; startup</a><a class="sec" href="#display" data-sec="display">Display</a><a class="sec" href="#routing-policies" data-sec="routing-policies">Routing policies</a><a class="sec" href="#verdicts-notes" data-sec="verdicts-notes">Verdicts &amp; notes</a><a class="sec" href="#audit-integrity" data-sec="audit-integrity">Audit integrity</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./troubleshooting">When something is wrong</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show When something is wrong's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./troubleshooting#it-will-not-start">It will not start</a><a class="sec" href="./troubleshooting#a-connection-stopped">A connection stopped</a><a class="sec" href="./troubleshooting#triage-got-it-wrong">Triage got it wrong</a><a class="sec" href="./troubleshooting#an-agent-is-stuck">An agent is stuck</a><a class="sec" href="./troubleshooting#a-report-returned-nothing">A report returned nothing</a><a class="sec" href="./troubleshooting#reading-the-audit-log">Reading the audit log</a><a class="sec" href="./troubleshooting#where-the-logs-are">Where the logs are</a><a class="sec" href="./troubleshooting#still-wrong">Still wrong</a></div>
+    </div>
+    </nav>
+    <p class="note">Everything here is stored on your own machine, in the same SQLite file as your tasks.</p>
+  </aside>
+  <main id="doc">
+    <p class="eyebrow">Settings reference</p>
+    <article>
+<p>Settings is a rail of pages, each one long page you scroll. This reference covers the
+<strong>Configuration</strong> page — every knob, in the sections the app itself shows them in.</p>
+<div class="callout note"><p class="eyebrow">This page writes itself</p><p>Everything below the next heading is generated from <code>taskuary/settings_schema.json</code>, the same file
+the Settings page and the assistant read. A knob added to the app appears here on the next build,
+with the same name, the same group and the same help text. It cannot drift, and nobody has to
+remember to update it.</p>
+</div><p>The other Settings pages are documented where their subject is: <strong>About you</strong> and the per-channel
+identities, <strong>Routing policies</strong> (<a href="how-it-works#what-triage-actually-decides">the deterministic layer</a>),
+<strong>Verdicts &amp; notes</strong> (<a href="how-it-works#correcting-it-teaches-it">the evidence behind LEARNED.md</a>),
+<strong>Audit integrity</strong>, and <strong>Updates</strong> (<a href="index#updating">updating</a>).</p>
+<h2 id="how-to-read-this">How to read this<a class="anchor" href="#how-to-read-this" aria-label="Link to this section">#</a></h2>
+<p>Each setting shows what it does, and its shipped default. A few notes that apply throughout:</p>
+<ul>
+<li><strong>Blank is meaningful.</strong> For a brain or model setting, blank means &quot;decide from what is
+connected&quot; rather than &quot;off&quot; — the specific fallback is given per knob.</li>
+<li><strong>A switch that is off is off for everything</strong>, not just the surface you are looking at.</li>
+<li>Four AI slots — the triage brain, the default coding CLI, the assistant and the general agent,
+plus the judge that decides where a report run goes — are set on the cards at the top of the
+Configuration page rather than as plain rows. They appear below with their fallback rows, which
+is what you see if those cards cannot load.</li>
+</ul>
+<h2 id="triage-agents">Triage &amp; agents<a class="anchor" href="#triage-agents" aria-label="Link to this section">#</a></h2>
+<h3 id="triage-brain">Triage brain<a class="anchor" href="#triage-brain" aria-label="Link to this section">#</a></h3>
+<p><code>triage_ai</code> · type: brain · set on a card at the top of the page</p>
+<p>Which AI reads and classifies inbound messages.</p>
+<p>TWO BRAINS: a small, fast cloud model (Anthropic / OpenAI / Azure OpenAI) classifies each message in under a second for a fraction of a cent, while your CLI agent — the expensive, capable one — is saved for actually working tasks.</p>
+<p>ONE BRAIN, TWO GEARS also works well: pick a CLI agent here and set its &#39;light model&#39; (Docs → Profiles → Manage profiles → Edit) — triage, drafts, summaries and the digest then run on the cheap fast tier (haiku, gemini-flash…) while coding sessions keep the agent&#39;s main model. No second API key, one bill.</p>
+<p>auto = the first active AI connector holding a key. Obvious automated noise is filtered by cheap heuristics before any AI is called either way.</p>
+<h3 id="backup-brains">Backup brains<a class="anchor" href="#backup-brains" aria-label="Link to this section">#</a></h3>
+<p><code>triage_backup_ai</code> · type: brains</p>
+<p>Ordered alternatives for triage, reply drafts, summaries, reports, and assistant chat when the chosen AI is unavailable.</p>
+<p>Pick more than one. Taskuary tries them in the order shown when the primary brain hits a session or usage limit, is signed out, has no key, or otherwise refuses the call. A fallback uses its own default model; a model name chosen for Claude is never handed to Codex.</p>
+<p>This starts blank because crossing from a cloud API to a local CLI can change cost and privacy. Once you name backups, the same chain protects every short/background AI job as well as the non-coding assistant.</p>
+<h3 id="assistant-tab-brain">Assistant tab brain<a class="anchor" href="#assistant-tab-brain" aria-label="Link to this section">#</a></h3>
+<p><code>concierge_ai</code> · type: brain · set on a card at the top of the page</p>
+<p>Which AI speaks on the Assistant tab and walks you through the pipe. auto = your default coding agent&#39;s CLI on its quick gear.</p>
+<p>THREE DEFAULTS, one place each: the triage brain (Triage &amp; routing), the default coding agent (Coder agent), and this one.</p>
+<p>A CLI agent here can ACT - read a task or message, rerun a report, run a data tool - because it has a shell; it runs in its own scratch folder on a light model (Claude: haiku, Codex: low effort, Gemini: flash, or the agent&#39;s own &#39;light model&#39; from Docs → Profiles) and picks its conversation back up turn to turn, so only the first turn pays the start-up. An API connector answers faster but can only talk. Sending, approving and pushing are your buttons whichever speaks.</p>
+<h3 id="assistant-tab-model">Assistant tab model<a class="anchor" href="#assistant-tab-model" aria-label="Link to this section">#</a></h3>
+<p><code>concierge_model</code> · type: text · set on a card at the top of the page</p>
+<p>Override the quick gear for the brain above (e.g. sonnet, gpt-5.4-mini@low). Blank = the default.</p>
+<p>For a CLI this is its --model (Codex takes model@effort); for an API connector, its model or deployment name. Changing it starts a fresh CLI conversation.</p>
+<h3 id="general-agent-brain">General agent brain<a class="anchor" href="#general-agent-brain" aria-label="Link to this section">#</a></h3>
+<p><code>assistant_ai</code> · type: brain · set on a card at the top of the page</p>
+<p>Which AI works every general task - research, planning, writing, a job with no repository - and answers the floating bubble and the WhatsApp doorway.</p>
+<p>Normally set on the General agent card at the top of this tab; this row is the fallback if that panel cannot load. A CLI here can run tools, drive a browser and post to the wall; an API connector has no shell, so it can only read and write - quicker, and enough for chat. Blank = the first active API connector, else the default agent.</p>
+<h3 id="where-runs-go">Where runs go<a class="anchor" href="#where-runs-go" aria-label="Link to this section">#</a></h3>
+<p><code>judge_ai</code> · type: brain · set on a card at the top of the page</p>
+<p>Which AI decides whether a finished report lands on your Timeline, your work rail, reaches you right away, or goes out.</p>
+<p>Normally set on the &#39;Where runs go&#39; card at the top of this section; this row is the fallback if that panel cannot load. Four yes/nos about a result somebody else wrote, judged against the sentences on the report&#39;s own card - it never has to write anything, so a decision model belongs here and a chat model is wasted on it. Blank = the brain that writes each report judges its own run.</p>
+<h3 id="general-agent-model">General agent model<a class="anchor" href="#general-agent-model" aria-label="Link to this section">#</a></h3>
+<p><code>assistant_model</code> · type: text · set on a card at the top of the page</p>
+<p>Override the model for the brain above. Blank = the provider&#39;s own default.</p>
+<p>For an API connector this is its model or deployment name; for a CLI it is the profile&#39;s light model. Changing it starts a fresh CLI conversation.</p>
+<h3 id="default-brain">Default brain<a class="anchor" href="#default-brain" aria-label="Link to this section">#</a></h3>
+<p><code>default_brain</code> · type: text</p>
+<p>Which CLI actually executes a worker when its role names none. A ROLE picks the document a session is seeded with (coder, researcher, analyst); a BRAIN is the executable that runs it. Blank = each profile&#39;s own command.</p>
+<p>Set from the cards above in normal use — this is the raw value they write. Naming a brain here is what stops a role name being read as a CLI name, which is how TQ-0588&#39;s coding work was once routed to Copilot.</p>
+<p>A role and a brain are different questions and one name cannot answer both.</p>
+<h3 id="backup-brains">Backup brains<a class="anchor" href="#backup-brains" aria-label="Link to this section">#</a></h3>
+<p><code>backup_brains</code> · type: text</p>
+<p>Ordered alternates when the first brain is out of sessions, signed out, or cannot start. * = every other configured one, in roster order. This is the live successor to the old &#39;Backup coding CLIs&#39;, which named profiles and no longer does anything.</p>
+<p>Failover is for AVAILABILITY failures only — session/usage/rate limits, quota, expired login, a missing executable — never for an agent that simply erred. The task, its messages, attachments, repository and seed prompt all travel to the replacement, which starts a fresh conversation with its own model.</p>
+<h3 id="per-role-brain-overrides">Per-role brain overrides<a class="anchor" href="#per-role-brain-overrides" aria-label="Link to this section">#</a></h3>
+<p><code>profile_brains</code> · type: text</p>
+<p>JSON, e.g. {&quot;researcher&quot;: &quot;codex&quot;} — one role that should run on a different brain from the default above. Blank (the default) means every role uses the default brain.</p>
+<p>The escape hatch for &#39;the analyst should run on codex but everything else on claude&#39;. An unknown role name is ignored rather than guessed at. Edited here because it is rare enough not to earn a picker.</p>
+<h3 id="default-coding-cli">Default coding CLI<a class="anchor" href="#default-coding-cli" aria-label="Link to this section">#</a></h3>
+<p><code>default_agent</code> · type: agent · set on a card at the top of the page</p>
+<p>The CLI agent that works tasks when nothing names one.</p>
+<p>Start session, Send to coding agent and auto-dispatch all use this agent unless you pick another in the moment; every agent picker lists it first. The roster itself lives under Docs → Profiles → Manage profiles, where the default row wears the star.</p>
+<p>GitHub-specific permissions (may agents open issues? push?) are on the GitHub connector card, because they are decisions about how your team uses GitHub, not about Taskuary.</p>
+<h2 id="triage-routing">Triage &amp; routing<a class="anchor" href="#triage-routing" aria-label="Link to this section">#</a></h2>
+<h3 id="intent-triage">Intent triage<a class="anchor" href="#intent-triage" aria-label="Link to this section">#</a></h3>
+<p><code>intent_classify_enabled</code> · type: switch</p>
+<p>Classify every new message: a task to DO, a question to ANSWER, or FYI to file.</p>
+<p>The heart of the funnel. Every inbound message is read (by the triage brain below, guided by SOUL.md) and classified: task = something must be done, so an agent can be dispatched; reply_only = answering IS the work, so a reply is drafted for your approval; fyi = informational, filed with no task and no draft.</p>
+<p>Off: every message becomes a task, which turns newsletters into work items. Leave this on unless you are debugging triage itself.</p>
+<h3 id="when-no-rule-matches">When no rule matches<a class="anchor" href="#when-no-rule-matches" aria-label="Link to this section">#</a></h3>
+<p><code>default_action</code> · type: select</p>
+<p>The fallback when no routing policy claims a message.</p>
+<p>Options: <code>draft</code>, <code>task_only</code>, <code>escalate</code></p>
+<p>draft = reply-only questions get an AI draft waiting in Review; task_only = file a task, draft nothing; escalate = always put it in front of you undecided.</p>
+<p>This is only the FALLBACK: your routing policies (Settings → Routing policies) always win, and messages triaged as real tasks go to the coder regardless.</p>
+<h3 id="learn-from-your-verdicts">Learn from your verdicts<a class="anchor" href="#learn-from-your-verdicts" aria-label="Link to this section">#</a></h3>
+<p><code>learn_enabled</code> · type: switch</p>
+<p>Your corrections teach LEARNED.md — style, responsibilities, what deserves a task.</p>
+<p>Every correction you make — editing a draft before sending, rejecting one, reclassifying a task as a question, promoting something triage filed, &#39;Not a task&#39; / &#39;Not our task&#39; — is distilled into LEARNED.md (Docs tab): first as a hypothesis with a strength counter and the evidence behind it, promoted into the active profile only once it keeps holding across separate episodes. The active sections ride into every triage call, draft and agent run; SOUL.md always outranks them.</p>
+<p>Rules that would HIDE mail (treat as fyi, never a task) never activate themselves — they wait in the doc&#39;s &#39;Proposed rules&#39; for you to adopt or delete. Off: nothing new is learned; the doc stays as it is and is still injected.</p>
+<h2 id="replies">Replies<a class="anchor" href="#replies" aria-label="Link to this section">#</a></h2>
+<h3 id="draft-replies-on">Draft replies on<a class="anchor" href="#draft-replies-on" aria-label="Link to this section">#</a></h3>
+<p><code>reply_channels</code> · type: channels</p>
+<p>Which channels get a drafted reply at all. Switch one off and its questions just file.</p>
+<p>Options: <code>email</code>, <code>teams</code>, <code>slack</code>, <code>telegram</code>, <code>whatsapp</code>, <code>imessage</code>, <code>discord</code>, <code>github</code></p>
+<p>A question arriving somewhere you never answer from should not open a reply task whose draft has nowhere to go. Turn a channel off and messages from it still land on the Timeline and can still become real tasks — they simply never get a draft, and the funnel says so in the row&#39;s reason (&#39;replies are off for slack&#39;).</p>
+<p>One answer for the whole app: triage uses it to decide whether a question becomes a reply task, the coder wrap-up uses it to decide whether to draft at all, and the Review buttons use it to decide whether Approve can actually send. They cannot disagree.</p>
+<p>Two rules are not yours to change here: GitHub also needs &#39;Reply to issue/PR authors&#39; on its own card (a reply there is a PUBLIC comment), and the read-only trackers — Jira, Linear, Sentry, PagerDuty and friends — can never carry a reply because Taskuary only reads them.</p>
+<h3 id="check-your-calendar-when-a-reply-is-about-time">Check your calendar when a reply is about time<a class="anchor" href="#check-your-calendar-when-a-reply-is-about-time" aria-label="Link to this section">#</a></h3>
+<p><code>calendar_enabled</code> · type: switch</p>
+<p>&quot;Tuesday at 1 works for me&quot; is only drafted if Tuesday at 1 is free. Reads the Outlook card&#39;s calendars (needs the Calendars.Read application permission) and a Google calendar if its OAuth fields are on the Gmail card.</p>
+<p>When the thread mentions a day, a time, a meeting or availability, the responder fetches your busy slots for the next 14 days and is told: never offer a busy time; if the asked time is busy, say so and offer the nearest free one; if the calendar could not be read, say you will confirm. The task gets a note that the calendar was checked.</p>
+<p>Agents can read the same thing: POST /api/tools/run with type &quot;calendar&quot;.</p>
+<h3 id="draft-replies-automatically">Draft replies automatically<a class="anchor" href="#draft-replies-automatically" aria-label="Link to this section">#</a></h3>
+<p><code>auto_draft_enabled</code> · type: switch</p>
+<p>Questions get their AI draft the moment they arrive, waiting in Review.</p>
+<p>Retired: a message triaged as a question always lands in Review with its draft requested at once, and a draft that could not be written says so with a retry. Nothing sends itself — approving is always yours.</p>
+<h3 id="acknowledge-chat-asks-at-once">Acknowledge chat asks at once<a class="anchor" href="#acknowledge-chat-asks-at-once" aria-label="Link to this section">#</a></h3>
+<p><code>chat_ack_enabled</code> · type: switch</p>
+<p>The moment an agent starts on something asked in Teams, WhatsApp, Telegram or Messages, one line goes back into the chat so they know somebody is on it.</p>
+<p>In chat, an ask is a task AND a question - and until the agent wraps up and its reply is approved, the person hears nothing. On: when a chat line becomes a task and an agent actually starts, the line below is sent into the same chat right away. It is fixed text, never a drafted answer, so it promises attention and nothing else.</p>
+<p>Not twice within half an hour on the same chat, and never when your own last line there is that recent - they have already heard from you. Off for a channel when its replies are off (above). Mail never gets one: an email thread can wait for the real answer.</p>
+<h3 id="the-acknowledgement">The acknowledgement<a class="anchor" href="#the-acknowledgement" aria-label="Link to this section">#</a></h3>
+<p><code>chat_ack_text</code> · type: text</p>
+<p>The one line that goes back. Keep it honest - it is sent before anything has been looked at.</p>
+<p>Written in your voice, since it arrives from your account. Something like &quot;On it - I&#39;ll get back to you here.&quot; A question mark invites an answer you are not there to read yet.</p>
+<h2 id="assistant">Assistant<a class="anchor" href="#assistant" aria-label="Link to this section">#</a></h2>
+<h3 id="lines-per-post-at-most">Lines per post, at most<a class="anchor" href="#lines-per-post-at-most" aria-label="Link to this section">#</a></h3>
+<p><code>assistant_max_lines</code> · type: number</p>
+<p>The assistant checks in every 30 minutes and on startup (the &#39;Assistant&#39; report on the Reports tab — edit its prompt for what it watches for, change the cadence, delete it to turn it off) and posts only when it has something to say. How it SPEAKS is COUNSEL.md on the Docs tab: edit that to change its voice, how bold it is, what it takes a position on. This caps how much one post says. 5 by default.</p>
+<p>One AI call per post, and none when there is nothing new. Every line has a key and a state, so it never says the same thing twice. Talk back under a suggestion to correct it or ask a follow-up; the answer and your correction stay with the idea and inform later checks. &#39;Follow up&#39; drafts the chase in your voice into Review — nothing is sent by itself; &#39;Make it a task&#39; starts the agent. Voice: COUNSEL.md (Docs tab); what to watch for: the report&#39;s prompt. Without an AI connector the facts still post, in the hub&#39;s own words. &#39;Run now&#39; on the Reports tab&#39;s Assistant row posts regardless of the schedule.</p>
+<h3 id="silence-before-a-follow-up">Silence before a follow-up<a class="anchor" href="#silence-before-a-follow-up" aria-label="Link to this section">#</a></h3>
+<p><code>assistant_followup_hours</code> · type: number</p>
+<p>Hours after your last reply on a thread — one that asked for or promised something — before &#39;no answer yet, follow up?&#39; appears. 24 by default.</p>
+<p>Only your own last word counts, and only when it asked or promised something (&#39;could you send&#39;, &#39;by Friday&#39;, a question mark). A plain thanks that goes unanswered is not a follow-up. The chase itself is drafted only when you click.</p>
+<h3 id="quiet-days-before-a-task-has-gone-cold">Quiet days before a task has &#39;gone cold&#39;<a class="anchor" href="#quiet-days-before-a-task-has-gone-cold" aria-label="Link to this section">#</a></h3>
+<p><code>assistant_cold_days</code> · type: number</p>
+<p>Open work with no comment, message or run for this many days gets a line. 3 by default.</p>
+<p>A task with a live agent on it is never cold. One with a draft waiting in Review is named as waiting on you.</p>
+<h3 id="what-it-looks-for">What it looks for<a class="anchor" href="#what-it-looks-for" aria-label="Link to this section">#</a></h3>
+<p><code>assistant_producers</code> · type: channels</p>
+<p>followup = your unanswered asks · promise = what you said you would do and have not · prep = meetings in the next two days, with what came before them · cold = tasks gone quiet · idea = the model&#39;s own thoughts from the day&#39;s mail, guided by the report&#39;s prompt.</p>
+<p>Options: <code>followup</code>, <code>promise</code>, <code>prep</code>, <code>cold</code>, <code>idea</code></p>
+<p>Switch a kind off and it never appears in a post again; lines already posted keep their actions and conversation. &#39;idea&#39; is the only one that needs an AI connector — the others are read straight off the hub&#39;s own tables and your calendar. With &#39;idea&#39; off no model is called at all: the facts post in the hub&#39;s own words.</p>
+<h3 id="the-pipe-reaches-back-hours">The pipe reaches back (hours)<a class="anchor" href="#the-pipe-reaches-back-hours" aria-label="Link to this section">#</a></h3>
+<p><code>funnel_hours</code> · type: number</p>
+<p>How far back ordinary mail, reports and fyi enter the pipe the assistant walks you through. Drafts waiting for your yes and agents waiting on you always enter.</p>
+<p>A first launch must not surface a year of never-triaged mail. Twelve hours is a working day; set it to 48 after a long weekend.</p>
+<h3 id="the-pipe-holds-at-most">The pipe holds at most<a class="anchor" href="#the-pipe-holds-at-most" aria-label="Link to this section">#</a></h3>
+<p><code>funnel_max</code> · type: number</p>
+<p>How many items the pipe shows at once. The rest wait their turn and slide in as you clear it.</p>
+<p>Order is kept: an agent waiting on you or a draft for your yes is never the one held back.</p>
+<h3 id="an-open-task-comes-back-after-minutes">An open task comes back after (minutes)<a class="anchor" href="#an-open-task-comes-back-after-minutes" aria-label="Link to this section">#</a></h3>
+<p><code>task_return_minutes</code> · type: number</p>
+<p>How long a task you cleared from Work stays quiet before it is raised again. Sixty by default.</p>
+<p>Done takes a task off the work tab, it does not close it — the task stays open in Tasks. Rather than let it sit there unseen, the work tab raises it again once it has been quiet this long, and keeps doing so until somebody closes it. Use the Completed button on the card to end it for good. Later and Skip still outrank this: a task you put down until tomorrow stays down.</p>
+<h3 id="fyi-read-together">FYI read together<a class="anchor" href="#fyi-read-together" aria-label="Link to this section">#</a></h3>
+<p><code>fyi_batch</code> · type: number</p>
+<p>How many fyi the assistant puts in front of you at once. 1 to 10; four by default.</p>
+<p>An fyi needs no action, so they come in a batch rather than one at a time. At 1 they arrive singly, which is the slow read-everything walk; at 10 you clear the noise in one card. Anything outside 1-10 is clamped - a 0 would take the fyi lane out of the walk entirely.</p>
+<h3 id="keep-past-chats-days">Keep past chats (days)<a class="anchor" href="#keep-past-chats-days" aria-label="Link to this section">#</a></h3>
+<p><code>chat_keep_days</code> · type: number</p>
+<p>Archived assistant chats older than this are removed once a day. Fifteen by default.</p>
+<p>Only the chat transcript goes. What a chat said about a task stays on the task, and memories, rules and correction evidence are never touched.</p>
+<h2 id="assistant-on-your-phone">Assistant on your phone<a class="anchor" href="#assistant-on-your-phone" aria-label="Link to this section">#</a></h2>
+<h3 id="chat-with-the-assistant-in-whatsapp-or-telegram">Chat with the assistant in WhatsApp or Telegram<a class="anchor" href="#chat-with-the-assistant-in-whatsapp-or-telegram" aria-label="Link to this section">#</a></h3>
+<p><code>phone_assistant</code> · type: switch · set on a card at the top of the page</p>
+<p>The default for a channel that has never been asked. Each channel above answers for itself once you set it.</p>
+<p>Name the Assistant chat on the WhatsApp or Telegram card under Connections first. Taskuary then listens only to messages you send in that exact private chat. Other people, other chats and groups cannot command it. This is separate from the Notifications role, so the Assistant chat is not subscribed to ordinary Taskuary alerts.</p>
+<p>It is the SAME walk the Assistant tab runs, on the same conversation and the same pipe: the item on the table stays where it was, a reply you ask for is drafted, and a yes sends it. The choices arrive as words because a chat has no buttons.</p>
+<p>This switch is the standing permission. The Assistant tab&#39;s own &quot;in WhatsApp&quot; button hands the walk over for a session whether or not it is on, and locks the tab while the walk is there.</p>
+<p>Because answers can contain private workspace information, use a chat only you can read — WhatsApp&#39;s Message yourself, or your own private chat with the Telegram bot. Off (default) leaves your messages ignored as before.</p>
+<h3 id="a-morning-line-in-the-chat">A morning line in the chat<a class="anchor" href="#a-morning-line-in-the-chat" aria-label="Link to this section">#</a></h3>
+<p><code>phone_morning_line</code> · type: switch</p>
+<p>Once a day, the assistant&#39;s chat says what is waiting and offers the three ways in: walk me through my tasks, set up Taskuary, set up a report.</p>
+<p>On (the default once a chat is chosen): the first check after 6:00 sends one line to the Assistant chat on every channel that has one - the count in the pipe and how many are on you, then the three scripts as numbered options, so one reply starts the walk there. Quiet on a day the pipe is empty; never twice in a day. Set-up is always offered: there is always more to set up, and from a chat it opens on what is connected.</p>
+<p>Off: the chat speaks first only for a hand-off, a review ping or a report aimed at it.</p>
+<h2 id="coder-agent">Coder agent<a class="anchor" href="#coder-agent" aria-label="Link to this section">#</a></h2>
+<h3 id="hand-answers-to-the-working-agent">Hand answers to the working agent<a class="anchor" href="#hand-answers-to-the-working-agent" aria-label="Link to this section">#</a></h3>
+<p><code>answer_to_agent</code> · type: select</p>
+<p>An agent asks a question mid-task, Taskuary asks the person, and their reply lands back on the same task. This is what happens next. ask = Review offers one click, &#39;Type this into the agent&#39;s session&#39;. auto = it is typed in the moment it arrives, as if you relayed it. off = it just sits on the task.</p>
+<p>Options: <code>ask</code>, <code>auto</code>, <code>off</code></p>
+<p>Only a LIVE session is ever typed into. If the agent already exited nothing happens and the answer simply waits on the task, so <code>auto</code> cannot lose anything.</p>
+<p>The reason this is a choice rather than always-on: <code>auto</code> puts someone else&#39;s words into your agent&#39;s session without you reading them first. That is usually what you want on your own team&#39;s mail and rarely what you want from a stranger&#39;s reply, and Taskuary cannot tell the difference well enough to decide for you.</p>
+<h3 id="how-finished-work-lands">How finished work lands<a class="anchor" href="#how-finished-work-lands" aria-label="Link to this section">#</a></h3>
+<p><code>git_flow</code> · type: select</p>
+<p>A draft pull request, or the commits pushed straight onto the default branch.</p>
+<p>Options: <code>pr</code>, <code>direct</code></p>
+<p>pr (default) = a DRAFT pull request from the task&#39;s branch; you review and merge it yourself, and Taskuary never merges. direct = the commits already in the checkout are pushed straight onto the default branch — no PR, no review ceremony, which is usually what you want on your own repository.</p>
+<p>Direct mode is deliberately narrow: it pushes commits that ALREADY EXIST. A dirty checkout is refused rather than committed for you (Taskuary will not write a commit message over work nobody has read), nothing ahead of the remote is simply &#39;nothing to do&#39;, and a rejected push is reported for you to pull and rebase — it never force-pushes.</p>
+<p>Either way &#39;Agents may push / deploy&#39; on the GitHub card is what allows anything to leave the machine at all, and CI watching follows the work to wherever it landed.</p>
+<h3 id="watch-ci-on-the-tasks-pull-request">Watch CI on the task&#39;s pull request<a class="anchor" href="#watch-ci-on-the-tasks-pull-request" aria-label="Link to this section">#</a></h3>
+<p><code>ci_watch</code> · type: select</p>
+<p>A red build goes back to the agent that wrote the code, with the failing check named.</p>
+<p>Options: <code>off</code>, <code>feedback</code>, <code>watch</code></p>
+<p>Once a task has a draft pull request (open it from the task, or let the agent propose one), every sync refreshes its checks.</p>
+<p>feedback = a failing build is typed into the live session — &#39;these checks failed, fix the cause and push again, do not merge&#39; — and recorded on the task; if no session is live the task returns to &#39;open&#39; so it lands on you. watch = the state is shown on the proof card but nothing is handed back. off (default) = no polling at all.</p>
+<p>Each distinct failure reaches the agent ONCE per commit, never on every poll. Taskuary opens drafts and never merges.</p>
+<h3 id="agents-may-propose-actions">Agents may propose actions<a class="anchor" href="#agents-may-propose-actions" aria-label="Link to this section">#</a></h3>
+<p><code>proposals_enabled</code> · type: switch</p>
+<p>An agent can ASK to open a PR, comment publicly, close an issue or run a tool — each waits for your approval.</p>
+<p>High-impact actions come off the auto-approve road entirely. Instead of doing them, the agent writes a typed proposal in its transcript (TASKUARY-PROPOSE {&quot;action&quot;: &quot;open_pr&quot;, …}); when the session wraps up, each valid one becomes a pending review saying what it wants and why. Approving RUNS it; rejecting does nothing.</p>
+<p>Every proposal is re-validated at execution, so approving never grants a permission you have switched off — an open_pr proposal still needs &#39;Agents may push / deploy&#39;, a public comment still needs the GitHub card&#39;s reply switch. Malformed or unpermitted proposals are refused and recorded on the task rather than dropped silently.</p>
+<h3 id="tell-the-agent-notes-land-one-per-stop">Tell-the-agent notes land one per stop<a class="anchor" href="#tell-the-agent-notes-land-one-per-stop" aria-label="Link to this section">#</a></h3>
+<p><code>waitroom_drip</code> · type: switch</p>
+<p>On: a queue of prompts drips in - each time the agent stops, the next one is typed in, the rest wait their turn. Off: everything queued goes in as one batch.</p>
+<p>The waiting room is a funnel: paste twenty prompts and each becomes its own note, in order. With the drip on, the agent gets one at a time with its full attention - it is told how many wait behind it and that the next comes when it stops again, so it never goes looking. Turn it off to hand over the whole list in one message instead.</p>
+<h3 id="auto-start-the-coding-agent">Auto-start the coding agent<a class="anchor" href="#auto-start-the-coding-agent" aria-label="Link to this section">#</a></h3>
+<p><code>coder_auto_enabled</code> · type: switch</p>
+<p>Every new coding task immediately opens a live CLI session in its repository. Off: the task waits on the Board for you to send it.</p>
+<p>On: the moment triage says &#39;this is work&#39; your CLI opens in the task&#39;s repository (picked from the SOUL.md repo map) with the full ask seeded: visible on the Board, watchable, interruptible. General work uses the separate assistant auto-start switch. Only plain questions (a reply is drafted instead) and notices (filed) stay out of it. Off: tasks queue as &#39;needs you&#39; and you press Start session yourself.</p>
+<p>A first-time sender from outside your domains never starts an agent by itself - the task lands, you press the button. Requires the CLI installed and signed in on this machine. Nothing ships or sends without your approval either way.</p>
+<h3 id="auto-start-the-assistant-on-general-tasks">Auto-start the assistant on general tasks<a class="anchor" href="#auto-start-the-assistant-on-general-tasks" aria-label="Link to this section">#</a></h3>
+<p><code>general_auto_enabled</code> · type: switch</p>
+<p>Every new general task (research, a question to think through, a job with no keyboard) opens its own assistant session with the ask already put. Off: the task waits for you to open it.</p>
+<p>Both worker kinds start by themselves by default; each has its own switch. The same holds apply to both: a first-time sender waits for your click (release it from the task), a coding job whose repository is unclear waits for your choice, and a missing AI provider is said on the task instead of failing quietly. A hold never hides the task - it is still triaged and on the Board.</p>
+<h3 id="who-may-start-a-worker-without-you">Who may start a worker without you<a class="anchor" href="#who-may-start-a-worker-without-you" aria-label="Link to this section">#</a></h3>
+<p><code>trust_own_domain</code> · type: flags</p>
+<p>An inbound message can open a task AND start the agent on it unattended. These are the three rules that allow it; a sender matching none of them still gets triaged and lands on the Board, and only the unattended start waits for your click.</p>
+<p>One control over: <strong>your own domains</strong> (<code>trust_own_domain</code>), <strong>people you have written to</strong> (<code>trust_sent_history</code>), <strong>chat channels</strong> (<code>trust_non_email</code>)</p>
+<p>Three separate switches until 2026-09-16, which meant reading all three to know the answer to one question.</p>
+<p>your own domains — every connected mailbox&#39;s domain and the owner address.</p>
+<p>people you have written to — checked in your own records first, then asked of the mail server once per address and remembered. Earlier INCOMING mail is never evidence: a stranger&#39;s second message is still a stranger&#39;s. A lookup that fails is not proof either way, so the task says so and waits.</p>
+<p>chat channels — Teams, Slack, Telegram, WhatsApp, iMessage, Discord.</p>
+<p>Turn all three off and nothing ever starts by itself; every task waits on the Board for you. Turning them off does not stop triage, drafting or filing - only the unattended start.</p>
+<h3 id="write-the-agent-a-context-file">Write the agent a context file<a class="anchor" href="#write-the-agent-a-context-file" aria-label="Link to this section">#</a></h3>
+<p><code>coder_context_file</code> · type: switch</p>
+<p>Each session gets ~/.taskuary/context/TQ-xxxx.md: this sender&#39;s recent mail and what you last wrote them, the topic elsewhere, your calendar, the assistant&#39;s read, the learned profile, the whole thread - and the reports of closed tasks on the same sender, subject or repo. The seed says &#39;read it first&#39;.</p>
+<p>The seed prompt is one command line (Windows caps it at 32,767 characters, and when it overflows the ask is what gets cut), so the two-line read rides in the prompt and the rest lives in this file. It is written under Taskuary&#39;s own home, never inside a checkout - a stray file in a shared checkout gets staged. Off: the seed carries what it always did and no file is written.</p>
+<h3 id="write-claude-code-hooks-into-your-checkouts">Write Claude Code hooks into your checkouts<a class="anchor" href="#write-claude-code-hooks-into-your-checkouts" aria-label="Link to this section">#</a></h3>
+<p><code>agent_hooks</code> · type: switch</p>
+<p>Taskuary adds four hook entries to .claude/settings.local.json in each repository a session opens, so the Board reads the agent&#39;s real tool calls instead of guessing from the screen. Switch it off to leave your checkouts untouched — the Board then falls back to reading the terminal.</p>
+<p>The decision here is whether Taskuary may WRITE to your repositories, not whether the Board should be accurate — it should, which is why this ships on.</p>
+<p>The file is the project-LOCAL settings Claude itself gitignores, so nothing is committed. Existing hooks are kept and only Taskuary&#39;s own entries (marked by the /api/hooks/claude endpoint) are replaced. Removing them by hand is safe; they are rewritten the next time a session opens.</p>
+<p>CLAUDE CODE ONLY. The hook format is Claude&#39;s, so on codex, copilot, qwen, devin or any other CLI this switch does nothing at all — those sessions are read from the terminal whatever it says.</p>
+<h3 id="let-a-finished-agent-close-its-own-task">Let a finished agent close its own task<a class="anchor" href="#let-a-finished-agent-close-its-own-task" aria-label="Link to this section">#</a></h3>
+<p><code>agent_self_close</code> · type: select</p>
+<p>An agent that has finished wraps itself up: the report is written from its transcript and the reply to whoever asked is drafted for your approval.</p>
+<p>Options: <code>1</code>, <code>ask</code>, <code>0</code></p>
+<p>Done was a button, which meant a task finished at 2am produced no report and the person who asked heard nothing until somebody opened the tab. The agent knows it has finished long before you look, so it says so.</p>
+<p>The explicit road is a command every session is told about in its prompt: taskuary --done with one sentence. That closes the task, files the report from what is on screen, and drafts the reply - which still waits for YOUR approval before it leaves.</p>
+<p>yes = that, plus a safety net: when a Claude Code session stops talking, the end of its transcript is read and the task closes only if it plainly reads as finished. A session parked on a question never closes - the screen is checked for one first, and an unsure judge does nothing.</p>
+<p>only when it says so = the command works, the silent ending does not. never = the Done button, exactly as before.</p>
+<h3 id="agents-at-once">Agents at once<a class="anchor" href="#agents-at-once" aria-label="Link to this section">#</a></h3>
+<p><code>auto_sessions</code> · type: number</p>
+<p>How many unattended agent sessions may run together. The rest queue.</p>
+<p>The one number that decides how much work this machine takes on at once. Four is the default because four live CLI sessions in four checkouts is about what a laptop stays responsive under — each one is a real process with a real model behind it.</p>
+<p>Past the limit nothing is dropped: a dispatched task joins the queue and starts the moment a session ends, and the Board shows it waiting with the reason. The Board&#39;s floor view is drawn to this number, so raising it widens the room instead of crowding it.</p>
+<p>Raise it if the machine has headroom and your tasks rarely touch the same files; lower it to one if you would rather watch a single agent at a time. Sessions you start yourself are never blocked by this.</p>
+<h2 id="notifications">Notifications<a class="anchor" href="#notifications" aria-label="Link to this section">#</a></h2>
+<h3 id="push-to-your-chat">Push to your chat<a class="anchor" href="#push-to-your-chat" aria-label="Link to this section">#</a></h3>
+<p><code>notify_level</code> · type: select</p>
+<p>Ping a Telegram / WhatsApp / Teams chat instead of you watching the tab.</p>
+<p>Options: <code>needs_me</code>, <code>all</code>, <code>off</code></p>
+<p>Give a chat connector the Notifications role (its Role step) and name the chat in its config; this decides what gets pushed there.</p>
+<p>needs me (default) = only what is genuinely waiting on YOU: a question to answer, a task nobody was dispatched at, and — the one that matters — &#39;the work is done, the reply is drafted and waiting in Review&#39;. everything = every new timeline item. off = never push.</p>
+<p>Events that happened in the notify chat itself are never echoed back into it, so one channel can safely be both input and output.</p>
+<h3 id="sound-when-an-agent-raises-its-hand">Sound when an agent raises its hand<a class="anchor" href="#sound-when-an-agent-raises-its-hand" aria-label="Link to this section">#</a></h3>
+<p><code>hand_sound</code> · type: sound</p>
+<p>A session that stops at its prompt, or asks you a question, plays this - from any tab. Off silences it.</p>
+<p>The moment worth a sound: the thing you delegated is now waiting on you. It fires once, on the transition from working to waiting, never while you already have the task open in front of you. Sounds are synthesised in the browser - nothing to download.</p>
+<p>The desktop notification below is separate: it is the browser&#39;s own, so it reaches you when Taskuary is behind other windows, and the first time it asks for permission.</p>
+<h3 id="desktop-notification-when-an-agent-raises-its-hand">Desktop notification when an agent raises its hand<a class="anchor" href="#desktop-notification-when-an-agent-raises-its-hand" aria-label="Link to this section">#</a></h3>
+<p><code>hand_desktop</code> · type: switch</p>
+<p>The browser&#39;s notification, so it reaches you when Taskuary is behind other windows. Click it to jump to the task.</p>
+<h3 id="answer-agents-approve-from-phone">Answer agents &amp; approve from phone<a class="anchor" href="#answer-agents-approve-from-phone" aria-label="Link to this section">#</a></h3>
+<p><code>phone_approvals</code> · type: switch</p>
+<p>Reply to a tagged ping to answer that live agent, approve a draft, reject it, or write the reply yourself.</p>
+<p>On: when a live coding agent stops or asks, its chat ping carries a [tqN] tag. Reply to that ping and your words go straight into that exact agent session. Pending-reply pings carry the DRAFT and an [rvN] tag: &#39;approve&#39; sends the draft, &#39;reject&#39; / &#39;no reply&#39; land those verdicts, and ANY OTHER TEXT is sent instead of the draft. Confirmations come back into the chat.</p>
+<p>Needs a Telegram or WhatsApp connector with the NOTIFY role and its notify chat set — and the connector polled (trigger or feed role on). Answers and verdicts are intercepted before triage, so they never become new work. Quoting the [tqN] ping is required for agent answers because several agents may be waiting at once.</p>
+<p>Off (default): pings stay read-only.</p>
+<h2 id="attachments-images">Attachments &amp; images<a class="anchor" href="#attachments-images" aria-label="Link to this section">#</a></h2>
+<h3 id="ai-reads-attached-images">AI reads attached images<a class="anchor" href="#ai-reads-attached-images" aria-label="Link to this section">#</a></h3>
+<p><code>vision_enabled</code> · type: switch</p>
+<p>Screenshots go to the triage AI — &quot;see below&quot; mail is read, not guessed at.</p>
+<p>Half of &quot;see below&quot; mail says nothing in its body: the screenshot IS the request. On: attached images (PNG/JPEG/GIF/WebP, up to 4 per message, 5MB each) ride along into triage when the model has vision, and coding sessions get the local file paths to open themselves.</p>
+<p>Off: only text is ever sent to the AI — the setting to use if your model lacks vision or images must never leave the machine. The panel still displays attachments either way.</p>
+<h3 id="charts-on-reports">Charts on reports<a class="anchor" href="#charts-on-reports" aria-label="Link to this section">#</a></h3>
+<p><code>report_images_enabled</code> · type: switch</p>
+<p>Reports hand back a bar chart alongside the spreadsheet.</p>
+<p>A report&#39;s rows always come back as an .xlsx; with this on they also become an .svg bar chart drawn in the panel — and the summarizing model, which just read every row, picks which column to plot (better than a heuristic grabbing the id column). Off: spreadsheet only.</p>
+<h2 id="sync-startup">Sync &amp; startup<a class="anchor" href="#sync-startup" aria-label="Link to this section">#</a></h2>
+<h3 id="background-sync-minutes">Background sync (minutes)<a class="anchor" href="#background-sync-minutes" aria-label="Link to this section">#</a></h3>
+<p><code>poll_minutes</code> · type: number</p>
+<p>How often the app checks your connections while it is open. 0 turns it off.</p>
+<p>The server keeps this clock, so it runs whichever tab you are on and whether or not you are looking at the app - it is also what makes a SCHEDULED REPORT fire on time, since reports are checked on the same pass.</p>
+<p>It used to live in the Timeline tab instead: the countdown died the moment you opened Board or Tasks, restarted itself every time you changed a filter, and with the window closed nothing polled at all - so a report set for 8am Monday only ran if somebody happened to be sitting on the Timeline at 8am on Monday.</p>
+<p>10 is the default. Lower it if you want mail sooner and do not mind the API calls; 0 turns recurring background polling off. Sync now, startup catch-up, and an action that must refresh chat context can still fetch.</p>
+<p>Chat connectors (Teams, Slack, Telegram, WhatsApp, iMessage, Discord) also have a separate recurring fast clock - every 30 seconds unless their card says otherwise. 0 here disables both recurring clocks; manual Sync now, startup catch-up, and action-time refreshes remain available.</p>
+<h3 id="catch-up-window-days">Catch-up window (days)<a class="anchor" href="#catch-up-window-days" aria-label="Link to this section">#</a></h3>
+<p><code>startup_sync_days</code> · type: number</p>
+<p>How far back the app reaches when it opens, for what arrived while it was closed.</p>
+<p>Taskuary is a window you open, not a service — at 5:30am it is closed, so &#39;anything since I last polled&#39; misses the weekend. On startup every trigger connection is asked for this many days; the window only ever WIDENS (a source last polled a month ago is not pulled forward), and duplicates are never re-ingested.</p>
+<p>The Timeline shows the catch-up running and refreshes when it lands. The daily DIGEST.md synthesis runs right after it. 0 = plain incremental poll on startup.</p>
+<h3 id="mark-items-read-at-the-source">Mark items read at the source<a class="anchor" href="#mark-items-read-at-the-source" aria-label="Link to this section">#</a></h3>
+<p><code>mark_read_enabled</code> · type: switch</p>
+<p>Once the funnel has taken a message in, mark it read where it came from — the mail seen, the chat read.</p>
+<p>Off (default): Taskuary is a pure reader — your inbox still shows every message bold, so nothing about your mailbox changes because you connected it. On: anything the funnel ingests is marked read at the source, so the bold rows left over are exactly the ones the hub never saw.</p>
+<p>WHERE IT APPLIES: Outlook mail (needs the Mail.ReadWrite consent), Gmail/IMAP mailboxes (the \Seen flag), Slack channels (the read cursor moves to the newest line taken), Teams (Graph marks the whole CHAT read — there is no per-message read state there) and WhatsApp (blue ticks, via the bridge).</p>
+<p>WHERE IT CANNOT: Telegram and Discord bots have no read state to set, and the trackers — Jira, Linear, GitHub, Sentry and friends — have nothing to mark. The switch is simply a no-op for them.</p>
+<p>Marking always runs AFTER the message is safely stored and is best-effort: a refused permission is logged and never costs you the ingest.</p>
+<h2 id="display">Display<a class="anchor" href="#display" aria-label="Link to this section">#</a></h2>
+<h3 id="timezone">Timezone<a class="anchor" href="#timezone" aria-label="Link to this section">#</a></h3>
+<p><code>timezone</code> · type: timezone</p>
+<p>The zone the app&#39;s clock speaks. Blank = this machine&#39;s local time.</p>
+<p>Timestamps are stored in the server machine&#39;s local time. Name that zone here and every displayed time wears its label (2:44 PM EDT) — and a browser opened from another timezone still reads the stamps correctly instead of silently reinterpreting them in its own zone.</p>
+<p>Use an IANA name (America/New_York, Europe/London, Asia/Jerusalem). Takes effect on the next page load.</p>
+<h3 id="fade-bottom-of-timeline">Fade bottom of Timeline<a class="anchor" href="#fade-bottom-of-timeline" aria-label="Link to this section">#</a></h3>
+<p><code>timeline_fade</code> · type: select</p>
+<p>How tall the soft fade is at the bottom edge of the Timeline viewport.</p>
+<p>Options: <code>off</code>, <code>gentle</code>, <code>normal</code>, <code>sharp</code></p>
+<p>Rows are never dimmed because they are old. A row only gets lighter while it passes through the bottom edge, then returns to full contrast as you scroll it upward. Gentle, normal, and sharp change the height of that band; off removes it. Purely visual - nothing is hidden or removed.</p>
+<h3 id="timeline-lookback-days">Timeline lookback (days)<a class="anchor" href="#timeline-lookback-days" aria-label="Link to this section">#</a></h3>
+<p><code>feed_days</code> · type: number</p>
+<p>How many days the Timeline shows. Display only — nothing is deleted.</p>
+<p>Purely the Timeline&#39;s window. Older messages stay in the database, in task histories, and in search.</p>
+<h2 id="routing-policies">Routing policies<a class="anchor" href="#routing-policies" aria-label="Link to this section">#</a></h2>
+<p>Rules evaluated <strong>before</strong> any AI touches a message; no model confidence overrides them.
+Precedence runs <code>ignore</code> → <code>escalate</code> → <code>auto_answer</code> → <code>draft</code> → <code>task_only</code>, and within one
+action the lowest order number wins.</p>
+<p><strong>Kinds</strong>: <code>keyword</code> (pipe-separated substrings matched against subject and body), <code>sender</code>
+(exact addresses), <code>sender_domain</code>, <code>noreply</code> (a built-in matcher for automated addresses), and
+<code>first_time_sender</code> (fires when the address has never been seen).</p>
+<p><strong>Actions</strong>: <code>ignore</code> files it with no task, and it stays visible; <code>escalate</code> puts it in front of
+you and marks the task urgent — this is the only thing that marks one urgent, so name the senders
+whose mail should jump your queue; <code>auto_answer</code> auto-approves the draft, which is still never
+sent; <code>draft</code> is the targeted default; <code>task_only</code> files a task and drafts nothing.</p>
+<p>Nothing writes into this table by itself. <strong>Not a task</strong> teaches a verdict in Verdicts &amp; notes,
+not a rule here, and muting a sender is <strong>Skip this sender</strong>.</p>
+<h2 id="verdicts-notes">Verdicts &amp; notes<a class="anchor" href="#verdicts-notes" aria-label="Link to this section">#</a></h2>
+<p>Two layers, one loop. <code>LEARNED.md</code> on the Docs tab is the general profile — your style, your
+responsibilities, what deserves a task — written by a nightly pass. This page is the evidence
+that pass reads: one dated line per verdict you gave, plus notes you write yourself, each tied to
+a sender, a domain, a subject, or everyone.</p>
+<p>When a message arrives, the lines that bear on it ride into triage and into the reply draft, and
+the model judges how alike the new message really is — the same sender asking the same thing is
+binding, a shared word is not.</p>
+<p>Toggle off a line that was learned wrong: it stays for the record, is never injected again, and
+the next distillation drops it too.</p>
+<h2 id="audit-integrity">Audit integrity<a class="anchor" href="#audit-integrity" aria-label="Link to this section">#</a></h2>
+<p>Every consequential thing Taskuary does is one row in an append-only log: a message routed or
+filed and why, a verdict, a reply sent, an agent session opened or wrapped, a connector saved, a
+setting changed, a task deleted.</p>
+<p>Each row stores a hash of its own contents <strong>plus</strong> the hash of the row before it, so the rows
+form a chain. Change any row after the fact — even one character in the database — and its hash
+no longer matches, and every row after it points at a parent that no longer exists.</p>
+<p><strong>Verify</strong> recomputes the whole chain from the first row:</p>
+<table>
+<thead>
+<tr>
+<th>Result</th>
+<th>Means</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Intact</td>
+<td>The record you see is the record that was written</td>
+</tr>
+<tr>
+<td>Contents altered</td>
+<td>Named rows were changed after writing — the thing this log exists to catch</td>
+</tr>
+<tr>
+<td>Out of order</td>
+<td>Two writers raced at the same instant once; nothing was changed, and it cannot recur</td>
+</tr>
+</tbody></table>
+<p>The history below it is that log, newest first: when, who, what was done, and to what. It is the
+answer to &quot;why did this happen&quot; and &quot;who did this&quot; for anything on the Timeline or the Board.</p>
+
+    </article>
+    <nav class="pager"><a class="pn prev" href="./phone"><span>Previous</span>On your phone</a><a class="pn next" href="./troubleshooting"><span>Next</span>When something is wrong</a></nav>
+    <p class="stamp">Documentation for Taskuary 0.3.5.6 · updated 2026-09-18</p>
+  </main>
+</div>
+<script src="./docs.js"></script>
+</body>
+</html>

@@ -131,7 +131,7 @@ in `SOUL.md` take precedence.
   rules. Two matching explicit owner verdicts can already supply that authorization.
   Untagged lines you write are preserved, and learning can be disabled in Settings.
 
-See [Learning from your decisions](https://github.com/ldbumble/taskuary/blob/master/docs/product-guide.md#learned-memory),
+See [Learning from your decisions](https://taskuary.com/docs/how-it-works#correcting-it-teaches-it),
 or the implementation in [learn.py](taskuary/learn.py) and [learnedgraph.py](taskuary/learnedgraph.py).
 
 </details>
@@ -210,10 +210,14 @@ Updated daily from PyPI with mirror traffic excluded. The raw series is
 
 ## Documentation
 
-- [Getting started](docs/getting-started.md)—installation, first-run setup, Docker, and data
-- [Product guide](docs/product-guide.md)—the workflow, learning loop, agents, and operator documents
-- [Integrations](docs/integrations.md)—channels, AI providers, work systems, and report sources
-- [Reports and proactive checks](docs/reports-and-assistant.md)—the report pipeline, AI-written source cards, and what Taskuary watches
+The documentation is at **[taskuary.com/docs](https://taskuary.com/docs/)**.
+
+- [Start here](https://taskuary.com/docs/)—installation, first run, Docker, and where your data lives
+- [How it works](https://taskuary.com/docs/how-it-works)—the Timeline, the five roads, what triage decides, the operator documents
+- [Connections](https://taskuary.com/docs/connections)—channels, AI providers, work systems, and report sources
+- [Tasks and agents](https://taskuary.com/docs/tasks-and-agents)—the task, the agent work and the reply as three separate lives
+- [Reports and the Assistant](https://taskuary.com/docs/reports)—the report pipeline, AI-written source cards, and what Taskuary watches
+- [Settings reference](https://taskuary.com/docs/settings)—every setting, generated from the schema the app itself reads
 - [Status and roadmap](docs/roadmap.md)—what works today and what is next
 - [Contributing](CONTRIBUTING.md)—development setup and contribution guide
 

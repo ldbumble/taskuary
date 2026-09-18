@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>On your phone — Taskuary documentation</title>
+<meta name="description" content="The same assistant over WhatsApp or Telegram, and what it may do there.">
+<link rel="icon" href="/favicon.ico">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="./docs.css">
+</head>
+<body>
+<a class="skip" href="#doc">Skip to the documentation</a>
+<header class="nav">
+  <div class="navwrap">
+    <a class="brand" href="/"><img src="/icon.png" alt="" width="26" height="26">Taskuary</a>
+    <span class="tag">a work AI assistant</span>
+    <nav class="links">
+      <a href="/docs/" aria-current="true">Docs</a>
+      <a href="/demo/">Demo</a>
+      <a href="https://github.com/ldbumble/taskuary">GitHub</a>
+      <a class="btn" href="https://github.com/ldbumble/taskuary/releases/latest/download/Taskuary.exe">Download</a>
+    </nav>
+  </div>
+</header>
+<div class="shell">
+  <aside class="rail" id="rail">
+    <form class="search" role="search" onsubmit="return false">
+      <label class="sr" for="q">Search the documentation</label>
+      <input id="q" type="search" placeholder="Search the docs…" autocomplete="off">
+    </form>
+    <div class="results" id="results" hidden></div>
+    <nav class="entries" id="entries" aria-label="Documentation">
+<div class="entry">
+      <a class="page" href="./">Start here</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show Start here's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./#what-taskuary-is">What Taskuary is</a><a class="sec" href="./#install-on-windows">Install on Windows</a><a class="sec" href="./#install-with-python">Install with Python</a><a class="sec" href="./#docker">Docker</a><a class="sec" href="./#your-first-run">Your first run</a><a class="sec" href="./#choosing-the-ai-setup">Choosing the AI setup</a><a class="sec" href="./#where-your-data-lives">Where your data lives</a><a class="sec" href="./#what-leaves-your-machine">What leaves your machine</a><a class="sec" href="./#updating">Updating</a><a class="sec" href="./#next">Next</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./how-it-works">How it works</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show How it works's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./how-it-works#the-timeline">The Timeline</a><a class="sec" href="./how-it-works#the-five-roads-a-message-can-take">The five roads a message can take</a><a class="sec" href="./how-it-works#what-triage-actually-decides">What triage actually decides</a><a class="sec" href="./how-it-works#nothing-sends-itself">Nothing sends itself</a><a class="sec" href="./how-it-works#correcting-it-teaches-it">Correcting it teaches it</a><a class="sec" href="./how-it-works#the-documents-that-govern-it">The documents that govern it</a><a class="sec" href="./how-it-works#where-the-rest-of-the-workspace-fits">Where the rest of the workspace fits</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./connections">Connections</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show Connections's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./connections#what-a-connection-is">What a connection is</a><a class="sec" href="./connections#the-five-roles">The five roles</a><a class="sec" href="./connections#mail">Mail</a><a class="sec" href="./connections#chat">Chat</a><a class="sec" href="./connections#repositories-and-trackers">Repositories and trackers</a><a class="sec" href="./connections#data-and-report-sources">Data and report sources</a><a class="sec" href="./connections#coding-clis-and-ai-providers">Coding CLIs and AI providers</a><a class="sec" href="./connections#adding-another-of-the-same-kind">Adding another of the same kind</a><a class="sec" href="./connections#pushing-something-in-yourself">Pushing something in yourself</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./tasks-and-agents">Tasks and agents</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show Tasks and agents's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./tasks-and-agents#a-tasks-three-lives">A task's three lives</a><a class="sec" href="./tasks-and-agents#sending-work-to-a-coding-agent">Sending work to a coding agent</a><a class="sec" href="./tasks-and-agents#the-general-agent">The general agent</a><a class="sec" href="./tasks-and-agents#sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="./tasks-and-agents#several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="./tasks-and-agents#checklists-and-closing">Checklists and closing</a><a class="sec" href="./tasks-and-agents#replies">Replies</a><a class="sec" href="./tasks-and-agents#profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="./tasks-and-agents#how-work-is-ordered">How work is ordered</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./reports">Reports and the Assistant</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show Reports and the Assistant's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./reports#a-report-is-a-pipeline">A report is a pipeline</a><a class="sec" href="./reports#sources">Sources</a><a class="sec" href="./reports#letting-the-ai-write-the-source-cards">Letting the AI write the source cards</a><a class="sec" href="./reports#the-ai-pass">The AI pass</a><a class="sec" href="./reports#where-a-run-goes">Where a run goes</a><a class="sec" href="./reports#schedules">Schedules</a><a class="sec" href="./reports#the-assistant">The Assistant</a><a class="sec" href="./reports#stateful-workflows">Stateful workflows</a><a class="sec" href="./reports#sage-intacct-specifically">Sage Intacct, specifically</a><a class="sec" href="./reports#api">API</a></div>
+    </div>
+<div class="entry on">
+      <a class="page" href="./phone" aria-current="page">On your phone</a>
+      <button class="chev" type="button" aria-expanded="true" aria-label="Hide On your phone's sections"></button>
+      <div class="secs"><a class="sec" href="#the-doorways" data-sec="the-doorways">The doorways</a><a class="sec" href="#what-it-can-do" data-sec="what-it-can-do">What it can do</a><a class="sec" href="#the-morning-line" data-sec="the-morning-line">The morning line</a><a class="sec" href="#handing-over" data-sec="handing-over">Handing over</a><a class="sec" href="#what-it-will-not-do" data-sec="what-it-will-not-do">What it will not do</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./settings">Settings reference</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show Settings reference's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./settings#how-to-read-this">How to read this</a><a class="sec" href="./settings#triage-agents">Triage &amp; agents</a><a class="sec" href="./settings#triage-routing">Triage &amp; routing</a><a class="sec" href="./settings#replies">Replies</a><a class="sec" href="./settings#assistant">Assistant</a><a class="sec" href="./settings#assistant-on-your-phone">Assistant on your phone</a><a class="sec" href="./settings#coder-agent">Coder agent</a><a class="sec" href="./settings#notifications">Notifications</a><a class="sec" href="./settings#attachments-images">Attachments &amp; images</a><a class="sec" href="./settings#sync-startup">Sync &amp; startup</a><a class="sec" href="./settings#display">Display</a><a class="sec" href="./settings#routing-policies">Routing policies</a><a class="sec" href="./settings#verdicts-notes">Verdicts &amp; notes</a><a class="sec" href="./settings#audit-integrity">Audit integrity</a></div>
+    </div>
+<div class="entry">
+      <a class="page" href="./troubleshooting">When something is wrong</a>
+      <button class="chev" type="button" aria-expanded="false" aria-label="Show When something is wrong's sections"></button>
+      <div class="secs" hidden><a class="sec" href="./troubleshooting#it-will-not-start">It will not start</a><a class="sec" href="./troubleshooting#a-connection-stopped">A connection stopped</a><a class="sec" href="./troubleshooting#triage-got-it-wrong">Triage got it wrong</a><a class="sec" href="./troubleshooting#an-agent-is-stuck">An agent is stuck</a><a class="sec" href="./troubleshooting#a-report-returned-nothing">A report returned nothing</a><a class="sec" href="./troubleshooting#reading-the-audit-log">Reading the audit log</a><a class="sec" href="./troubleshooting#where-the-logs-are">Where the logs are</a><a class="sec" href="./troubleshooting#still-wrong">Still wrong</a></div>
+    </div>
+    </nav>
+    <p class="note">Everything here is stored on your own machine, in the same SQLite file as your tasks.</p>
+  </aside>
+  <main id="doc">
+    <p class="eyebrow">On your phone</p>
+    <article>
+<p>The assistant you talk to in the app is reachable from your phone over WhatsApp or Telegram. It is
+the same conversation and the same assistant — not a notification feed and not a second, weaker
+bot. It can walk you through your work, answer questions about it, and carry out the things the
+page can carry out.</p>
+<h2 id="the-doorways">The doorways<a class="anchor" href="#the-doorways" aria-label="Link to this section">#</a></h2>
+<p>A doorway is one chat, on one channel, that the assistant is allowed to speak in. Set it up in
+<strong>Settings → Assistant on your phone</strong>, which lists every channel you have connected and lets you
+pick the chat and whether it may listen.</p>
+<ol>
+<li>Connect WhatsApp or Telegram under <a href="connections#chat">Connections</a>.</li>
+<li>Send a message to the private chat you want to use — on WhatsApp that is the <strong>Message
+yourself</strong> chat.</li>
+<li>Pick that chat in Settings. Taskuary adds the notification role, names the chat, and switches
+on the assistant for it.</li>
+</ol>
+<div class="callout rule"><p class="eyebrow">Only chats you are alone in</p><p>The picker offers nothing but chats with one member: you. Groups cannot be selected, because an
+answer may name anything in your workspace. The rule is enforced again when a message arrives, so
+the picker is a convenience rather than the guard.</p>
+</div><p>Only messages sent by the linked owner account, in that exact chat, are accepted. Taskuary marks
+its own bridge output so its notifications can never loop back in as if you had typed them.</p>
+<h2 id="what-it-can-do">What it can do<a class="anchor" href="#what-it-can-do" aria-label="Link to this section">#</a></h2>
+<p>Ask it in plain words. These are real examples, not a command list:</p>
+<ul>
+<li>&quot;what needs me?&quot;</li>
+<li>&quot;walk through important email&quot;</li>
+<li>&quot;what is outstanding?&quot;</li>
+<li>&quot;what did the coding agents finish?&quot;</li>
+<li>&quot;reply to Ruth that the numbers are coming tomorrow&quot;</li>
+</ul>
+<p><strong>Walk through</strong> is the one worth knowing. It is the same turn-by-turn walk the Assistant page
+runs: one unresolved item at a time, one question, and it waits for your answer before moving on.
+The phone is not given a cut-down version of it — the walk carries out the page&#39;s job, including
+the actions at the end of each item.</p>
+<p>Answers you give on the phone land in the desktop conversation too, because it is one
+conversation with two doors.</p>
+<h3 id="approving-things">Approving things<a class="anchor" href="#approving-things" aria-label="Link to this section">#</a></h3>
+<p>A reply drafted for you can be approved from the phone. Tagged answers use <code>[tq…]</code> for a task and
+<code>[rv…]</code> for a Review item, and the plain words <code>approve</code>, <code>reject</code> and <code>no reply</code> work as
+shortcuts on the item currently in front of you.</p>
+<p>The approval gate itself does not move: approving on your phone is the same deliberate human
+action as approving on the page, and nothing goes out without one.</p>
+<h2 id="the-morning-line">The morning line<a class="anchor" href="#the-morning-line" aria-label="Link to this section">#</a></h2>
+<p>Once a day, the assistant can open with a short line about the day ahead — what slipped, what is
+waiting, today&#39;s meetings. It is the morning brief&#39;s voice, cut to the length of something you
+read while walking.</p>
+<p>It fires once per day, not once per app start, and it is the same cap the brief itself uses: if
+today&#39;s line has gone out, reopening the app does not produce another.</p>
+<h2 id="handing-over">Handing over<a class="anchor" href="#handing-over" aria-label="Link to this section">#</a></h2>
+<p>When a conversation on the phone reaches something better done at a keyboard — a coding session,
+a long document, a report builder — the assistant hands over rather than pretending. The tab it
+hands to locks onto that item so you arrive where the conversation left off, and the phone thread
+says so plainly instead of going quiet.</p>
+<p>The reverse is true too: a walk started on the page can be picked up on the phone, because the
+walk&#39;s position belongs to the conversation rather than to the surface you started it on.</p>
+<h2 id="what-it-will-not-do">What it will not do<a class="anchor" href="#what-it-will-not-do" aria-label="Link to this section">#</a></h2>
+<ul>
+<li>It will not speak in a group chat, or in a chat you did not choose.</li>
+<li>It will not send anything a human has not approved, on any channel.</li>
+<li>It will not change a setting. Settings are changed in the app, deliberately.</li>
+<li>It will not answer someone else in your chat — only the linked owner account is heard.</li>
+</ul>
+<div class="callout warn"><p class="eyebrow">WhatsApp is an unofficial bridge</p><p>The WhatsApp connector runs a local bridge against an unofficial protocol. It works well, and it
+is not a supported WhatsApp product: use a number you can afford to lose. Telegram uses a proper
+bot API and has no such caveat.</p>
+</div>
+    </article>
+    <nav class="pager"><a class="pn prev" href="./reports"><span>Previous</span>Reports and the Assistant</a><a class="pn next" href="./settings"><span>Next</span>Settings reference</a></nav>
+    <p class="stamp">Documentation for Taskuary 0.3.5.6 · updated 2026-09-18</p>
+  </main>
+</div>
+<script src="./docs.js"></script>
+</body>
+</html>

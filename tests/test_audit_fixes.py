@@ -182,14 +182,28 @@ class DoorTests(unittest.TestCase):
         self.assertEqual(kept, {'token': 'mine', 'agent_token': 'theirs'})   # an owner who chose one keeps it
 
     def test_f03_a_name_this_server_does_not_answer_to_is_refused(self):
-        srv = {'host': '127.0.0.1', 'allowed_hosts': 'taskuary.lan'}
-        for good in ('127.0.0.1:7787', 'localhost:7787', '[::1]:7787', '192.168.1.9:7787', 'taskuary.lan'):
-            self.assertTrue(guard.host_ok(good, srv), good)
-        for bad in ('evil.example', 'evil.example:7787', 'localhost.evil.example', ''):
-            self.assertFalse(guard.host_ok(bad, srv), bad)
+        # both spellings of allowed_hosts: the comma-separated string an owner types, and the
+        # TOML array config._tval writes back (a list used to str() into "['taskuary.lan']")
+        for allowed in ('taskuary.lan', ['taskuary.lan'], 'taskuary.lan, desk.lan'):
+            srv = {'host': '127.0.0.1', 'allowed_hosts': allowed}
+            for good in ('127.0.0.1:7787', 'localhost:7787', '[::1]:7787', '192.168.1.9:7787', 'taskuary.lan'):
+                self.assertTrue(guard.host_ok(good, srv), (allowed, good))
+            for bad in ('evil.example', 'evil.example:7787', 'localhost.evil.example', ''):
+                self.assertFalse(guard.host_ok(bad, srv), (allowed, bad))
         # and it is enforced on the page itself, not just on /api: the page carries the token
         self.assertEqual(c.get('/', headers={'host': 'evil.example'}).status_code, 403)
         self.assertEqual(c.get('/api/feed', headers={'host': 'evil.example'}).status_code, 403)
+
+    def test_f03_an_allowed_host_survives_the_config_round_trip(self):
+        """What save() writes, load() must be able to answer to. dumps_toml emits a list as a TOML
+        array, so reading only the string form made a saved name stop working after the next save."""
+        import tomllib
+        from taskuary import config
+        raw = config.dumps_toml({'server': {'host': '0.0.0.0', 'allowed_hosts': ['taskuary.lan']}})
+        srv = tomllib.loads(raw)['server']
+        self.assertEqual(srv['allowed_hosts'], ['taskuary.lan'])   # the array really is what lands on disk
+        self.assertTrue(guard.host_ok('taskuary.lan', srv))
+        self.assertFalse(guard.host_ok('evil.example', srv))
 
     def test_f03_another_sites_page_cannot_drive_the_api(self):
         h = {'origin': 'http://evil.example', 'sec-fetch-site': 'cross-site'}

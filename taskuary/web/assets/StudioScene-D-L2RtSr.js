@@ -1,8 +1,4 @@
-<<<<<<<< HEAD:taskuary/web/assets/StudioScene-D27r2XAB.js
-import{r as Ve,j as Re,B as pn,F as Ei,P as ql,b as Vo,R as Fs,T as Ki,I as Zl,m as Kl}from"./index-CIr-geCu.js";/**
-========
-import{r as Ve,j as Re,B as pn,F as Ei,P as ql,b as Vo,R as Fs,T as Ki,I as Zl,m as Kl}from"./index-C3U0_OM_.js";/**
->>>>>>>> 98fa4a68 (feat: the settings schema is one file the page and the assistant both read):taskuary/web/assets/StudioScene-CTZ82MG1.js
+import{r as Ve,j as Re,B as pn,F as Ei,P as ql,b as Vo,R as Fs,T as Ki,I as Zl,m as Kl}from"./index-CcqOuq6Y.js";/**
  * @license
  * Copyright 2010-2025 Three.js Authors
  * SPDX-License-Identifier: MIT

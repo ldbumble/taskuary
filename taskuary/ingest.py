@@ -383,7 +383,7 @@ def drain(store, llm=None, progress=None, limit: int = 500, fresh=(), only_fresh
                 mid = r['MessageId']
                 done.add(mid); n += 1
                 with _PENDING_LOCK: held = _PENDING.pop(mid, None)
-                msg = {**(held or _from_row(r)), '_mid': mid}
+                msg = {**(held or _from_row(r, store)), '_mid': mid}
                 if on_start: on_start(r)
                 try:
                     ingest_message(store, msg, llm=llm)

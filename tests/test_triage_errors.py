@@ -205,3 +205,26 @@ class LegacyUpgradeTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class DrainSurvivesARestartTests(unittest.TestCase):
+    """_from_row exists FOR "a drain in a later process" - the one case where the in-process
+    _PENDING dict is empty - and it was called without the store its github branch needs. So a
+    restart with pull requests waiting raised AttributeError OUTSIDE the per-message try, and the
+    drain died there: not one row filed with an error, but every channel's triage stopped."""
+
+    def test_a_pull_request_left_over_from_a_previous_process_still_gets_judged(self):
+        from unittest import mock
+        from taskuary import ingest
+        from taskuary.store import MemoryStore
+        s = MemoryStore()
+        s.add_message({'ExternalId': 'gh:1', 'Channel': 'github', 'Subject': 'PR #1', 'FromName': 'dev',
+                       'SentAt': '2026-09-18 07:00:00', 'Status': 'triaging',
+                       'BodyText': '[pull request by dev - association: NONE] please review'})
+        s.add_message({'ExternalId': 'e:1', 'Channel': 'email', 'Subject': 'and an ordinary mail',
+                       'FromName': 'Dana', 'SentAt': '2026-09-18 07:01:00', 'Status': 'triaging'})
+        ingest._PENDING.clear()                      # exactly what a fresh process starts with
+        judged = []
+        with mock.patch.object(ingest, 'ingest_message', side_effect=lambda st, m, **k: judged.append(m['_mid'])):
+            ingest.drain(s)
+        self.assertEqual(len(judged), 2, 'the github row must not take the mail down with it')

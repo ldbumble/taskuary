@@ -807,15 +807,20 @@ function RoutingCard({ cfg, setCfg, targets, brains, firstDest, sourceId }) {
   // and the sentence box could never appear. And an unconverted report shows the sentences its old
   // rules already mean (seedRoute), so the card never claims it does something else.
   const view = routed ? (cfg.route || {}) : seedRoute(cfg);
+  // THE BOX SHOWS THE SENTENCE AS TYPED. Trimming it here meant every space you typed was, at that
+  // moment, a trailing space - gone before it was drawn - so no sentence could ever hold two words
+  // (the owner, 2026-09-17: "can't type space here"). Trimming belongs where the sentence is READ:
+  // routeOf here, reports.route_of on the server.
   const shownAs = (line) => {
     const r = view[line] || {};
-    return [ROUTE_HOW.includes(r.how) ? r.how : LINE_DEFAULT[line], (r.when || "").trim()];
+    return [ROUTE_HOW.includes(r.how) ? r.how : LINE_DEFAULT[line], r.when || ""];
   };
   // an unconverted report keeps answering to the rules it was set up with; the moment a line is
   // touched, ALL of them are written down as sentences that mean the same thing (seedRoute)
   const set = (line, patch) => setCfg({ ...cfg, route: { ...(routed ? cfg.route : seedRoute(cfg)), [line]: { ...(routed ? cfg.route?.[line] : seedRoute(cfg)[line]), ...patch } } });
   const shown = ROUTE_LINES.filter((l) => l !== "send" || cfg.deliver?.to);
   const ask = shown.some((l) => shownAs(l)[0] === "ai");
+  const blank = (when) => !when.trim();
   const canSilenceTimeline = !!cfg.deliver?.to;
   const runReplay = async () => {
     setBusy(true);
@@ -856,7 +861,7 @@ function RoutingCard({ cfg, setCfg, targets, brains, firstDest, sourceId }) {
                     : "anything happened that is worth my knowing about"}
                 value={when} onChange={(e) => set(line, { when: e.target.value })} />
             )}
-            {how === "ai" && !when && (
+            {how === "ai" && blank(when) && (
               <Typography variant="caption" sx={{ color: "#8c6d3b", display: "block", mt: 0.5 }}>
                 Say what to look for — until you do, this line happens on every run.
               </Typography>

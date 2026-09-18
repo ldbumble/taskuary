@@ -32,6 +32,13 @@ test("where a run goes is one prompt, and the card says the AI is answering it",
   assert.doesNotMatch(source, /TELL ME WHEN IT LOOKS WRONG/);
   const card = source.slice(source.indexOf("function RoutingCard"), source.indexOf("function ReportWizard"));
   assert.match(card, /ONE PROMPT THAT ROUTES EACH RUN/);
+  // the sentence box shows what was typed, spaces included: a trimmed value is redrawn without its
+  // trailing space, which is every space at the moment it is typed (the owner, 2026-09-17: "can't type
+  // space here"). Trimming happens where the sentence is read (routeOf, reports.route_of), not here.
+  const shownAs = card.slice(card.indexOf("const shownAs"), card.indexOf("const set = "));
+  assert.match(shownAs, /r\.when \|\| ""\]/);
+  assert.doesNotMatch(shownAs, /\.trim\(\)/);
+  assert.match(card, /how === "ai" && blank\(when\) &&/);
   assert.match(card, /<AutoAwesomeIcon/);                                  // the same grammar as the summary prompt
   assert.match(card, /<MenuItem value="ai"[^>]*>ask the AI<\/MenuItem>/);   // the control names who answers
   assert.match(card, /see the prompt/);

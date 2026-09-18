@@ -40,3 +40,42 @@ class AutoPickerTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class ADeadRepoDoesNotBlindTheOthersTests(unittest.TestCase):
+    """A renamed or deleted repo answers 404 for ever. The github branch had no guard of its own, so
+    that error escaped the whole source loop and every repo listed AFTER it went unpolled - silently,
+    on every cycle (the owner, 2026-09-18: "channel poll failed (github): 404 ... /FckSignups/issues").
+    Outlook already had this guard; github did not."""
+
+    def test_a_404_repo_is_reported_and_the_next_repo_is_still_polled(self):
+        import json
+        from unittest import mock
+        from taskuary import channels
+        from taskuary.store import MemoryStore
+        s = MemoryStore()
+        c = s.get_connector_by_type('github')
+        s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'Roles': 'trigger', 'Secret': 'tok'}, 't')
+        for repo in ('ldbumble/GoneForever', 'ldbumble/taskuary'):
+            s.save_source({'Channel': 'github', 'Address': repo, 'Owner': 'me', 'Active': 1,
+                           'ConnectorId': c['ConnectorId'], 'ConfigJson': json.dumps({'issues': 'work'})}, 't')
+        polled = []
+
+        def issues(store, src, tok, since, llm, file_only):
+            polled.append(src['Address'])
+            if src['Address'].endswith('GoneForever'):
+                raise RuntimeError('404 Client Error: Not Found for url: .../GoneForever/issues')
+            return 0
+
+        with mock.patch.object(channels, 'ingest_github_issues', side_effect=issues), \
+             mock.patch.object(channels, 'gh_modes', return_value=('work',)):
+            channels._poll_one(s, s.get_connector(c['ConnectorId'], with_secret=True), False, 0, None, False)
+        self.assertEqual(polled, ['ldbumble/GoneForever', 'ldbumble/taskuary'],
+                         'the live repo must still be polled after the dead one')
+        said = str((s.get_connector(c['ConnectorId']) or {}).get('LastError') or '')
+        self.assertIn('GoneForever', said, 'the card has to name the repo that is gone')
+        self.assertIn('no such repository', said)
+        # the watermarks: the live repo moves on, the dead one stays put so nothing is stepped over
+        by_addr = {r['Address']: r for r in s.list_sources(active_only=False) if r['Channel'] == 'github'}
+        self.assertIsNotNone(by_addr['ldbumble/taskuary']['LastPolledAt'])
+        self.assertIsNone(by_addr['ldbumble/GoneForever']['LastPolledAt'])

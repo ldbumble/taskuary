@@ -1153,6 +1153,16 @@ def ingest_github_issues(store, src: dict, tok: str, since, llm=None, file_only=
     return n
 
 
+def _repo_error(e) -> str:
+    """A poll failure in words the owner can act on. A 404 is not a hiccup to retry: the repo was
+    renamed, deleted, or the token stopped being able to see it, and only a person can fix that."""
+    text = str(e)
+    if '404' in text or 'Not Found' in text:
+        return 'no such repository - it was renamed or deleted, or this token cannot see it'
+    if '403' in text or 'rate limit' in text.lower(): return 'GitHub refused the read (permissions or rate limit)'
+    return text[:160]
+
+
 def _gh_explicit(store) -> bool:
     """Any repo whose issues/PRs picker is set to something live - that IS the trigger intent,
     whatever the connector card's role says."""
@@ -1459,7 +1469,17 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
                 # move: advancing it would step over the issues sitting there, and
                 # switching the repo on later would only ever see what came next
                 if set(gh_modes(s, file_only)) == {'off'}: continue
-                n += ingest_github_issues(store, s, tok, since, llm, file_only)
+                # ONE dead repo must not blind the others. A renamed or deleted repo answers 404 for
+                # ever, and with no guard of its own that error escaped the whole source loop: every
+                # repo listed after it went unpolled, on every cycle, saying nothing. The mail branch
+                # above has had this guard for as long as it has had folders that can fail.
+                try: n += ingest_github_issues(store, s, tok, since, llm, file_only)
+                except Exception as e:
+                    errors.append(f"{s['Address']}: {_repo_error(e)}")
+                    logger.warning(f"github: {s['Address']} could not be read ({e})")
+                    # ...and the watermark stays PUT. Stamping a repo we failed to read would step
+                    # over whatever arrived in the window we never saw.
+                    continue
             elif c['Type'] in ('gmail', 'imap'):
                 # one poll per connector (the UID watermark lives there); its own source only
                 from . import imapmail

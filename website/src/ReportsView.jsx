@@ -1305,7 +1305,17 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                   : "Off — every run waits for you separately, and they stack up in the reports band until you clear them by hand."}
               </Typography>
             </Box>
-            <Box sx={{ mt: 1.5 }}><Button variant="contained" disableElevation onClick={() => setStep(1)}>Continue</Button></Box>
+            {/* On a report that already exists, Continue SAVES. The routing card above lives in cfg
+                until Save on step three, and "put it on my Work rail" followed by Continue and a run
+                left the server on the old rules - nothing in the database ever carried a route block
+                (the owner, 2026-09-18: "i updated ... but it did not save? ... the continue button?").
+                A new report still has nowhere to save to until it has a title, so it only advances. */}
+            <Box sx={{ mt: 1.5, display: "flex", alignItems: "center", gap: 1.5 }}>
+              <Button variant="contained" disableElevation onClick={async () => { if (cur) await save(); setStep(1); }}>
+                {cur ? "Save & continue" : "Continue"}</Button>
+              {saveErr && <Typography variant="body2" sx={{ color: "#6b2733" }}>{saveErr}</Typography>}
+              {savedMsg && <Typography variant="body2" sx={{ color: "#47654a" }}>{savedMsg}</Typography>}
+            </Box>
           </StepContent>
         </Step>
         <Step completed={!!test?.ok || !!preview?.ok}>

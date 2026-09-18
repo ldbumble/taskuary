@@ -47,3 +47,14 @@ test("the geom frame is handled, and taking ownership back re-sends the size", (
   assert.ok(/sentSize = "";\s*sendSize\(\);/.test(handler),
     "regaining ownership must clear the dedupe and re-assert this pane's size");
 });
+
+test("a pane that comes back into view repaints from xterm's buffer", () => {
+  // Hidden behind another tab the box is unusable and onResize returns early; on the way back the
+  // canvas showed whatever xterm last painted - often nothing - until the next byte arrived (the
+  // owner, 2026-09-18: "can't see anything ... especially when I click away and come back").
+  assert.match(term, /let wasHidden = false;/);
+  assert.match(term, /if \(!box \|\| !usableTerminalBox\(box\.width, box\.height\)\) \{ wasHidden = true; return; \}/);
+  assert.match(term, /if \(wasHidden\) \{ wasHidden = false; term\.refresh\(0, Math\.max\(0, term\.rows - 1\)\); \}/);
+  assert.match(term, /document\.addEventListener\("visibilitychange", onVisible\)/);
+  assert.match(term, /document\.removeEventListener\("visibilitychange", onVisible\)/, "and it is taken down with the pane");
+});

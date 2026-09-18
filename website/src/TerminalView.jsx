@@ -289,10 +289,16 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
     };
     const input = readOnly ? null : term.onData((d) => send({ type: "in", data: d }));
     let resizeTimer = null;
+    let wasHidden = false;
     const onResize = () => {
       const box = host.current?.getBoundingClientRect();
-      if (!box || !usableTerminalBox(box.width, box.height)) return;
+      if (!box || !usableTerminalBox(box.width, box.height)) { wasHidden = true; return; }
       fitSafely();
+      // A pane hidden behind another tab (the Tasks tab stays mounted) comes back with the
+      // canvas xterm painted before it went away - sometimes nothing at all, and no scroll
+      // until the next byte arrives (the owner, 2026-09-18: "can't see anything ... especially
+      // when I click away and come back"). Repaint every row from xterm's buffer on the way back.
+      if (wasHidden) { wasHidden = false; term.refresh(0, Math.max(0, term.rows - 1)); }
       // Flex layout, tab visibility and the browser split can report several intermediate
       // boxes in one gesture. Codex redraws its whole TUI for every PTY resize; send only the
       // settled geometry while still fitting xterm locally on each frame.
@@ -301,6 +307,9 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
     };
     refit.current = onResize;                       // the size picker drives the same path
     window.addEventListener("resize", onResize);
+    // ...and the same on the browser tab itself coming back to the foreground
+    const onVisible = () => { if (document.visibilityState === "visible") term.refresh(0, Math.max(0, term.rows - 1)); };
+    document.addEventListener("visibilitychange", onVisible);
     const ro = new ResizeObserver(onResize);
     ro.observe(host.current);
     // The wheel never leaves the terminal. When xterm has nothing to scroll (an idle TUI in the
@@ -335,7 +344,7 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
     gauge();
     const d1 = term.onScroll(gauge), d2 = term.onRender(gauge);
     if (!readOnly && autoFocus) term.focus();
-    return () => { window.removeEventListener("resize", onResize); ro.disconnect(); clearTimeout(bail); clearTimeout(resizeTimer); cancelAnimationFrame(revealFrame); output.dispose();
+    return () => { window.removeEventListener("resize", onResize); document.removeEventListener("visibilitychange", onVisible); ro.disconnect(); clearTimeout(bail); clearTimeout(resizeTimer); cancelAnimationFrame(revealFrame); output.dispose();
       el.removeEventListener("wheel", trap); el.removeEventListener("paste", pasteImages, true);
       input?.dispose(); d1.dispose(); d2.dispose(); ws.close(); term.dispose(); };
   }, [sid, readOnly, autoFocus]);

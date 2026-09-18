@@ -140,3 +140,16 @@ test("delivery keeps its own answer, and the card says where that answer now liv
   assert.match(panel, /cfg\.deliver\.gate/);                     // the Review gate stays exactly where it was
 });
 
+
+test("on an existing report the routing step's Continue saves before it advances", () => {
+  // The routing card writes cfg, and cfg reached the server only from Save on step three. So
+  // "put it on my Work rail", Continue, Run now left the server on the old rules - no report in
+  // the owner's database ever carried a route block (2026-09-18: "it did not save? ... the
+  // continue button?"). A new report has no title to save under yet, so it still only advances.
+  const wizard = source.slice(source.indexOf("function ReportWizard"));
+  const at = wizard.indexOf("<RoutingCard");
+  const step = wizard.slice(at, wizard.indexOf("</StepContent>", at));
+  assert.match(step, /onClick=\{async \(\) => \{ if \(cur\) await save\(\); setStep\(1\); \}\}/);
+  assert.match(step, /\{cur \? "Save & continue" : "Continue"\}/);
+  assert.match(step, /\{saveErr && /, "a refused save must say so on the step where the button is");
+});

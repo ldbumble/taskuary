@@ -525,6 +525,7 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
         {/* the segmented pill bar, same as Reports and the Timeline - the old underlined tab
             strip was the one place in the app still wearing a different header */}
         <Box sx={{ mb: 2 }}><FilterPills options={tabs} value={cfgTab} onChange={setCfgTab} /></Box>
+        <AssistantChanges />
         {cfgTab === "Triage & agents" && <AiDefaults brains={brainOptions} agents={agentOptions} onGo={goFromPanel} onLoaded={setPanelOk} />}
         {cfgTab === "Notifications" && <NotifyStatus connectors={connectors} settings={settings} />}
         {cfgTab === "Assistant on your phone" && (
@@ -825,6 +826,46 @@ export default function SettingsView({ onNavigate }) {
 // The log itself, newest first - the page used to be one button and a sentence, and nobody could
 // tell what it was a log OF. Who is said in words: you, the router, an agent, a scheduled report.
 const ACTOR_LABEL = { owner: "you", router: "the router", triage: "triage", report: "a report", system: "the app", startup: "startup", "connector-test": "a Test", msauth: "sign-in" };
+// WHAT THE ASSISTANT CHANGED. An instant write from the chat (a setting, a report's clock, a
+// connection switched off) is always visible here and, while it still applies, reversible with one
+// click - the tiers' promise, kept on the page that owns the knobs (2026-09-18). Hidden when empty.
+const AssistantChanges = () => {
+  const [rows, setRows] = useState([]);
+  const [undo, setUndo] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(async () => {
+    try { const { data } = await api.get("/api/audit/assistant", { params: { limit: 8 } }); setRows(data.data || []); setUndo(data.undo || null); }
+    catch { /* the list is a nicety */ }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  if (!rows.length) return null;
+  const said = (r) => {
+    const d = r.detail || {};
+    if (r.entity === "setting") return `${d.key}: ${d.from ?? "(blank)"} → ${d.to}`;
+    if (r.entity === "source") return `${r.action} · ${d.title || `report ${r.id}`}${d.to ? ` → ${d.to}` : ""}${d.changed ? ` (${d.changed.join(", ")})` : ""}`;
+    if (r.entity === "connector") return `${r.action.replace("_", " ")} · ${d.name || `connection ${r.id}`}`;
+    return `${r.entity} ${r.action}`;
+  };
+  const revert = async () => {
+    setBusy(true);
+    try { await api.post(`/api/operations/${undo.id}/execute`, { version: undo.version }); await load(); }
+    catch { /* the receipt in the chat says why */ } finally { setBusy(false); }
+  };
+  return (
+    <Box sx={{ ...card, mb: 2, px: 1.5, py: 1.1, borderLeft: "4px solid #6f8a6e" }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        <Typography sx={{ ...mono, fontSize: 10, fontWeight: 750, letterSpacing: 1.2, color: ACCENT2, flex: 1, textTransform: "uppercase" }}>What the assistant changed</Typography>
+        {undo && <Button size="small" variant="outlined" disabled={busy} onClick={revert} sx={{ fontSize: 11, minHeight: 26, py: 0 }}>{busy ? "Undoing…" : "Undo the last change"}</Button>}
+      </Box>
+      {rows.map((r, i) => (
+        <Typography key={i} variant="body2" sx={{ fontSize: 12, color: INK, mt: 0.4 }}>
+          <Box component="span" sx={{ color: FAINT, mr: 1 }}>{String(r.when || "").slice(0, 16)}</Box>{said(r)}
+        </Typography>
+      ))}
+    </Box>
+  );
+};
+
 const AuditHistory = () => {
   const [rows, setRows] = useState(null);
   const [q, setQ] = useState("");

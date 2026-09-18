@@ -655,6 +655,75 @@ def _run_operation(op: dict, background: BackgroundTasks):
         if not taught: return {'field': field, 'value': value, 'learned': 0, 'already': True}
         store.add_comment(tid, ACTOR, 'human', f'You told the assistant: work like this is {field} {value}. Triage learns from it.')
         return {'field': field, 'value': value, **taught}
+    # THE APP ITSELF, BY NAME (the assistant-runs-the-app design, 2026-09-18). Each handler runs the road
+    # the tab's own button runs, audits as the assistant, and hands back an `undo` the receipt can offer.
+    if kind in ('report.run', 'report.pause', 'report.resume', 'report.reach', 'report.edit', 'report.delete'):
+        src = store.get_source(tid)
+        if not src or src.get('Channel') != 'report': raise HTTPException(404, 'no such report')
+        cfg = json.loads(src.get('ConfigJson') or '{}') or {}
+        title = cfg.get('title') or src.get('Address')
+        if kind == 'report.run':
+            from . import remote_assistant
+            out = _rerun_report(tid, asked=remote_assistant.asking())
+            return {**out, 'title': title, 'undo': None}
+        if kind in ('report.pause', 'report.resume'):
+            on = kind == 'report.resume'
+            store.save_source({'SourceId': tid, 'Active': int(on)}, ACTOR)
+            store.audit('source', tid, 'resume' if on else 'pause', 'assistant', detail={'title': title})
+            return {'title': title, 'active': on,
+                    'undo': {'kind': 'report.pause' if on else 'report.resume', 'target': tid, 'params': {}, 'label': f"{'Pause' if on else 'Resume'} {title}"}}
+        if kind == 'report.reach':
+            from .reports import REACH, reach_of
+            want, prev = str(p.get('reach') or '').strip().lower(), reach_of(cfg)
+            if want not in REACH: raise HTTPException(422, f"a report reaches you {', '.join(REACH)} - not {want or 'nothing'}")
+            store.save_source({'SourceId': tid, 'ConfigJson': json.dumps({**cfg, 'reach': want})}, ACTOR)
+            store.audit('source', tid, 'reach', 'assistant', detail={'title': title, 'from': prev, 'to': want})
+            return {'title': title, 'reach': want, 'undo': {'kind': 'report.reach', 'target': tid, 'params': {'reach': prev}, 'label': f'Put {title} back to reaching you: {prev}'}}
+        if kind == 'report.edit':
+            patch = p.get('config') if isinstance(p.get('config'), dict) else {}
+            if not patch: raise HTTPException(422, 'say what to change - config is the keys to change')
+            if 'title' in patch and not str(patch['title'] or '').strip(): raise HTTPException(422, 'a report needs a title')
+            new = {**cfg, **patch}
+            store.save_source({'SourceId': tid, 'ConfigJson': json.dumps(new)}, ACTOR)
+            store.audit('source', tid, 'edit', 'assistant', detail={'title': title, 'changed': sorted(patch)})
+            return {'title': new.get('title') or title, 'changed': sorted(patch),
+                    'undo': {'kind': 'report.edit', 'target': tid, 'params': {'config': {k: cfg.get(k) for k in patch}}, 'label': f'Put {title} back as it was'}}
+        delete_source(tid)
+        store.audit('source', tid, 'delete', 'assistant', detail={'title': title})
+        return {'title': title, 'deleted': True, 'undo': None}
+    if kind == 'setting.set':
+        from . import settings_schema
+        key, meta = str(p.get('setting') or '').strip(), settings_schema.knobs().get(str(p.get('setting') or '').strip())
+        if not meta: raise HTTPException(422, f'{key or "that"} is not a setting the schema knows')
+        raw, t = p.get('value'), meta.get('type')
+        v = str(raw if raw is not None else '').strip()
+        if t == 'switch': v = '1' if v.lower() in ('1', 'true', 'on', 'yes') else '0' if v.lower() in ('0', 'false', 'off', 'no') else None
+        elif t == 'number': v = str(int(float(v))) if v.replace('.', '', 1).lstrip('-').isdigit() else None
+        elif t == 'select': v = v if v in [str(o) for o in (meta.get('options') or [])] else None
+        if v is None: raise HTTPException(422, f"{meta['label']} takes {'on or off' if t == 'switch' else 'a number' if t == 'number' else 'one of ' + ', '.join(str(o) for o in meta.get('options') or [])} - not {raw!r}")
+        prev = store.get_settings().get(key)
+        store.set_setting(key, v, ACTOR)
+        store.audit('setting', 0, 'set', 'assistant', detail={'key': key, 'from': prev, 'to': v})
+        said = settings_schema.describe(key, v)
+        return {'key': key, 'label': meta['label'], 'value': v, 'said': said,
+                'undo': {'kind': 'setting.set', 'target': 0, 'params': {'setting': key, 'value': prev if prev is not None else ''},
+                         'label': f"Put {meta['label']} back to {settings_schema.describe(key, prev).split(': ', 1)[-1]}"}}
+    if kind in ('connection.test', 'connection.pause', 'connection.resume'):
+        c = store.get_connector(tid)
+        if not c: raise HTTPException(404, 'connector not found')
+        name = c.get('Name') or c.get('Type')
+        if kind == 'connection.test':
+            from .channels import test_connector
+            out = test_connector(store, tid)
+            store.audit('connector', tid, 'test_ok' if out.get('ok') else 'test_failed', 'assistant', detail=out.get('detail'))
+            return {'name': name, 'ok': bool(out.get('ok')), 'detail': out.get('detail'), 'undo': None}
+        on = kind == 'connection.resume'
+        store.save_connector({'ConnectorId': tid, 'Active': int(on)}, ACTOR)
+        store.audit('connector', tid, 'resume' if on else 'pause', 'assistant', detail={'name': name})
+        return {'name': name, 'active': on,
+                'undo': {'kind': 'connection.pause' if on else 'connection.resume', 'target': tid, 'params': {}, 'label': f"{'Switch off' if on else 'Switch on'} {name}"}}
+    if kind == 'script.start':
+        return {'script': str(p.get('name') or ''), 'undo': None}
     if kind == 'task.complete':
         # the same close the PATCH road does: the pending draft is dismissed and the agent on it is stopped
         from . import concierge
@@ -3359,11 +3428,30 @@ def report_rerun(sid: int):
     """Run one report now and hand back what it produced - the assistant's door (an agent token may
     not touch /api/sources, and should not: this changes no configuration). The report lands on the
     Timeline exactly as a scheduled run would."""
+    return _rerun_report(sid)
+
+
+def _rerun_report(sid: int, asked: dict | None = None) -> dict:
+    """The rerun itself. `asked` is the chat the ask came from (remote_assistant.asking): a run started
+    from WhatsApp used to land on the Timeline and tell the chat nothing (the owner, 2026-09-18: "would
+    that come back?"). When it lands, that chat gets the summary."""
     src = store.get_source(sid)
     if not src or src.get('Channel') != 'report': raise HTTPException(404, 'no such report')
+    try: title = json.loads(src.get('ConfigJson') or '{}').get('title') or src.get('Address')
+    except ValueError: title = src.get('Address')
     def work():
-        try: run_report_source(store, src, _llm(), trigger='manual'); store.touch_source(sid)
-        except Exception as e: logger.warning(f'rerun of report {sid} failed: {e}')
+        try:
+            out = run_report_source(store, src, _llm(), trigger='manual'); store.touch_source(sid)
+        except Exception as e:
+            logger.warning(f'rerun of report {sid} failed: {e}'); out = {'error': str(e)[:300]}
+        if asked:
+            from . import remote_assistant
+            said = str(out.get('summary') or out.get('said') or out.get('error') or out.get('subject') or 'done').strip()
+            failed = bool(out.get('error')) or str(out.get('subject') or '').endswith('FAILED')
+            text = (f"{title} {'could not run' if failed else 'landed'}: {said[:900]}"
+                    + ('' if failed else f"\n\nIt is in the pipe. Say \"read {title}\" for the whole thing."))
+            try: remote_assistant.send(store, asked['channel'], asked['chat'], text, asked.get('connector_id'))
+            except Exception as e: logger.warning(f'the landed report could not reach {asked.get("channel")}: {e}')
     # queued, not awaited: the report lands on the Timeline like a scheduled run, and the pipe picks it up
     threading.Thread(target=work, daemon=True).start()
     try: title = json.loads(src.get('ConfigJson') or '{}').get('title') or src.get('Address')
@@ -6630,6 +6718,29 @@ def build():
                 'version': _ver, 'disk_version': _version()}
     except OSError:
         return {'asset': '', 'version': _ver, 'disk_version': _version()}
+
+@app.get('/api/connectors/catalog')
+def connectors_catalog():
+    """Every card, working or planned, from the one catalogue file both the tab and the report read."""
+    from . import connectorcatalog
+    return {'data': connectorcatalog.cards()}
+
+
+@app.get('/api/audit/assistant')
+def audit_assistant(limit: int = 60):
+    """What the assistant changed, newest first - the rows its handlers audit as `assistant` (settings,
+    reports, connections). Settings -> Configuration shows them, with the undo beside the newest while
+    it still applies (the tiers: an instant write is always visible and always reversible)."""
+    rows = [r for r in store.list_audit(limit=max(limit * 5, 200)) if r.get('Actor') == 'assistant'][:limit]
+    out = []
+    for r in rows:
+        try: d = json.loads(r.get('Detail') or '{}') if str(r.get('Detail') or '').startswith('{') else {'detail': r.get('Detail')}
+        except ValueError: d = {'detail': r.get('Detail')}
+        out.append({'when': r.get('CreatedAt'), 'entity': r.get('EntityType'), 'id': r.get('EntityId'), 'action': r.get('Action'), 'detail': d})
+    undo = str(store.get_settings().get('assistant_last_undo') or '')
+    op = operations.get(store, undo) if undo else None
+    return {'data': out, 'undo': ({'id': op['id'], 'version': op['version'], 'label': 'Undo the last change'} if op and op.get('status') == 'proposed' else None)}
+
 
 @app.get('/api/settings')
 def settings():

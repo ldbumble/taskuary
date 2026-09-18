@@ -1044,41 +1044,9 @@ _SWEEP_CUES = _CUES | {'remove', 'clear', 'dismiss', 'get', 'rid', 'hide', 'drop
 # back as a proposal with the switch named, and the owner's click applies it (the owner, 2026-09-03:
 # "yes do it that way ask user if it can change setttings"). The phrase table is deliberate: a switch
 # is not something to guess at, so words that match nothing here reach the model as a question.
-SWITCH_ASKS = (
-    (re.compile(r"\b(pr|prs|pull requests?|github (issues?|items?))\b.*\b(timeline|not tasks?|no tasks?|feed)\b"
-                r"|\b(don'?t|do not|stop) (making|make|turning|turn) (github |pr |prs )?.*\btasks\b", re.I),
-     [{'connector': 'github', 'name': 'use_as_tracker', 'value': False}, {'name': 'agent_issues_enabled', 'value': False}],
-     'GitHub items land on the Timeline instead of becoming tasks'),
-    (re.compile(r"\b(stop|don'?t|do not) (auto-?start(ing)?|automatically start(ing)?|auto-?run(ning)?)\b|\bno auto-?(start|coder)\b"
-                r"|\b(stop|don'?t) (sending|handing) (everything |it )?to the (coding agent|coder)\b", re.I),
-     [{'name': 'coder_auto_enabled', 'value': False}], 'the coding agent waits for you instead of starting itself'),
-    (re.compile(r"\b(auto-?start|automatically start) the (coding agent|coder)\b|\bturn (on|back on) auto-?code\b", re.I),
-     [{'name': 'coder_auto_enabled', 'value': True}], 'the coding agent starts itself on new coding work'),
-    (re.compile(r"\b(stop|don'?t|do not) (drafting|draft) (replies|them|it) (in advance|in the background|before)\b"
-                r"|\bno (auto-?draft|background draft)\b", re.I),
-     [{'name': 'auto_draft_enabled', 'value': False}], 'replies are drafted when you ask, not in advance'),
-    (re.compile(r"\b(check|read|poll|sync) (the )?(mail|mailboxes?|email)\s*(every|each)\s*(\d+)\s*(min|minute|minutes)\b", re.I),
-     'poll_minutes', 'how often the mailboxes are read'),
-    (re.compile(r"\b(pipe|funnel) (should )?(hold|keep)\s*(at most)?\s*(\d+)\b", re.I),
-     'funnel_max', 'how much the pipe holds at once'),
-    (re.compile(r"\b(pipe|funnel).{0,20}\b(reach|go) back(\s*to)?\s*(\d+)\s*(h|hour|hours)\b", re.I),
-     'funnel_hours', 'how far back the pipe reaches'),
-    (re.compile(r"\b(never|stop|don'?t) (read|reading|check|checking) (my )?calendar\b", re.I),
-     [{'name': 'calendar_enabled', 'value': False}], 'your calendar is left alone'),
-)
-
-
-def switch_ask(text: str) -> tuple:
-    """(changes, what it means) when the owner's words name a switch we may propose; ([], '') when not."""
-    for rx, target, says in SWITCH_ASKS:
-        m = rx.search(text or '')
-        if not m: continue
-        if isinstance(target, str):                       # a number the owner said out loud
-            num = next((g for g in reversed(m.groups()) if g and str(g).isdigit()), None)
-            if not num: continue
-            return [{'name': target, 'value': str(num)}], f'{says} - {num}'
-        return list(target), says
-    return [], ''
+# The regex table that used to map a few phrases to a few switches (SWITCH_ASKS / switch_ask) is gone
+# (2026-09-18): the model has every knob in its facts (appfacts, settings_schema) and names one with
+# setting.set, which code validates against the schema - no phrase list decides a setting.
 
 
 _STANDING = re.compile(r"\b(never|don'?t need|do not need|stop|anymore|always|from now on|not needed|taken care of|"
@@ -1472,11 +1440,44 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         if f in operations.KINDS[kind][1] and not params.get(f):
             if not it.get(f): raise ValueError(f'there is nothing on the table for {kind} to act on')
             params[f] = it[f]
+    # THE APP ITSELF, BY NAME (appfacts). The model says "the AR report"; the id is ours to find, and a
+    # name that finds nothing never proposes - the answer lists what exists, so the next words can aim.
+    named, tk = '', operations.KINDS[kind][0]
+    if tk in ('source', 'connector', 'setting', 'script'):
+        from . import appfacts
+        def _miss(say_):
+            record_related(store, tid, item, 'assistant', say_)
+            return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
+        if tk == 'source':
+            r = appfacts.find_report(store, str(params.pop('title', '') or ''), params.pop('source_id', None) or params.get('target'))
+            if not r: return _miss('No report by that name. The ones set up: ' + ', '.join(x['title'] for x in appfacts.reports(store)[:20]) + '.')
+            params['target'], named = r['source_id'], r['title']
+            if kind == 'report.reach' and str(params.get('reach') or '').lower() not in ('always', 'wrong', 'rule'):
+                return _miss('A report reaches you always, only when wrong, or by its own rule - say which.')
+        elif tk == 'connector' and kind != 'connection.create':
+            c = appfacts.find_connection(store, str(params.pop('name', '') or ''), params.pop('connector_id', None) or params.get('target'))
+            if not c: return _miss('No connection by that name. Connected: ' + ', '.join(x['name'] for x in appfacts.connections(store) if x['active']) + '.')
+            params['target'], named = c['connector_id'], c['name']
+        elif tk == 'setting':
+            rows = appfacts.settings(store)
+            key, label_ = str(params.get('setting') or params.get('key') or '').strip(), str(params.get('label') or '').strip().lower()
+            r = next((x for x in rows if x['key'] == key), None) or next((x for x in rows if label_ and label_ in x['label'].lower()), None)
+            if not r: return _miss('No setting by that name - settings.list <group> names them. Nothing was changed.')
+            params['setting'], named = r['key'], r['label']; params.pop('label', None); params.pop('key', None); params['target'] = 0
+        elif tk == 'script':
+            want = str(params.get('name') or '').strip().lower()
+            hit = next((n for n, _ in appfacts.SCRIPTS if want and (want in n.lower() or n.lower() in want)), None)
+            if not hit: return _miss('The scripts are: ' + '; '.join(n for n, _ in appfacts.SCRIPTS) + '.')
+            params['name'], named = hit, hit; params['target'] = 0
     target = params.pop('target', None) or it.get('mid') or it.get('tid') or it.get('rid') or 0
     label = toolcatalog.PURPOSE.get(kind, kind).split(' - ')[0].strip()
     label = label[0].upper() + label[1:] if label else kind
-    prop = _propose_raw(store, tid, kind, int(target or 0), params, label, _where(it) or kind,
-                        'Nothing has been started - confirm below, or tell me what to change.', actor, item)
+    # an instant kind (the tiers) runs as soon as it is proposed - the desktop and the phone both carry
+    # out an `auto` proposal at once - and its receipt carries the undo; the rest wait for the click
+    instant = toolcatalog.is_instant(kind)
+    tail = 'Doing it now.' if instant else 'Nothing has been started - confirm below, or tell me what to change.'
+    prop = _propose_raw(store, tid, kind, int(target or 0), params, label, named or _where(it) or kind, tail, actor, item)
+    if instant: prop = {**prop, 'auto': True}
     return {'say': prop['say'], 'options': [], 'chips': [], 'decision': None, 'proposal': prop}
 
 
@@ -1486,17 +1487,12 @@ def _carry_out(store, tid: int, text: str, words: dict, item0: dict | None, acto
     sent only on approval)."""
     rec = lambda body, card=None: record_related(store, tid, item0, 'assistant', body, card)
     if words['verb'] == 'setting':
-        changes, says = switch_ask(text)
-        try: out = propose_switch(store, changes, says, text, actor)
-        except Exception as e:
-            logger.warning(f'concierge: the switch was not proposed - {e}')
-            say_ = f"That is a setting - open Settings and I will leave it to you. ({e})"
-            rec(say_)
-            return {'say': say_, 'options': [], 'decision': None}
-        say_ = (f"That is a switch, not a note - so I have put it in front of you rather than touching it: "
-                f"{says}. Approve it below and it changes; nothing changes until you do.")
-        rec(say_, out['card'])
-        return {'say': say_, 'options': [], 'decision': {'verb': 'setting', 'reviewId': out['reviewId'], 'changes': changes}}
+        # a setting is changed by NAME now (setting.set - validated against the schema, undo in the
+        # receipt); a bare "change a setting" with no name gets the road, not a guess at a switch
+        say_ = ('Name the setting and the value - "auto-drafts off", "poll every 5 minutes" - and I change it; '
+                'the receipt carries the undo. settings.list <group> names the knobs.')
+        rec(say_)
+        return {'say': say_, 'options': [], 'decision': None}
     if words['verb'] == 'forward':
         try: out = forward_item(store, item0 or {}, words.get('who') or '', words.get('text') or '', actor)
         except Exception as e:
@@ -2038,6 +2034,10 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     if target is None: raise ValueError(f"there is nothing to {SAYS_VERB.get(verb, verb)} on this one")
     params = {k: v for k, v in params.items() if v is not None}
     prev = open_proposal(store, dock_tid)
+    # an undo still on offer is NOT a proposal to revise into the next ask: a second setting change
+    # would have rewritten the undo of the first. The next act closes the old undo (it no longer applies).
+    if prev and (prev.get('params') or {}).get('_undo'):
+        operations.cancel(store, prev['id'], actor); store.set_setting(LAST_UNDO, '', actor); prev = None
     if prev and prev['kind'] == kind and int(prev['target']) == int(target): op = operations.revise(store, prev['id'], params, actor)
     else:
         if prev: operations.cancel(store, prev['id'], actor)
@@ -2133,6 +2133,10 @@ def _propose_raw(store, dock_tid: int, kind: str, target: int, params: dict, lab
                  item: dict | None = None) -> dict:
     """A proposal that is not about the item on the table: the same revise-or-replace rule as propose_for, recorded as a card."""
     prev = open_proposal(store, dock_tid)
+    # an undo still on offer is NOT a proposal to revise into the next ask: a second setting change
+    # would have rewritten the undo of the first. The next act closes the old undo (it no longer applies).
+    if prev and (prev.get('params') or {}).get('_undo'):
+        operations.cancel(store, prev['id'], actor); store.set_setting(LAST_UNDO, '', actor); prev = None
     if prev and prev['kind'] == kind and int(prev['target']) == int(target): op = operations.revise(store, prev['id'], params, actor)
     else:
         if prev: operations.cancel(store, prev['id'], actor)
@@ -2249,6 +2253,8 @@ def describe_op(store, op: dict) -> tuple:
     if kind == 'agent.stop' and p.get('wrap'): label = 'Wrap it up'
     if kind == 'report.create': label = 'Create the report'
     if kind == 'connection.create': label = 'Create the connection'
+    if kind in toolcatalog.INSTANT or kind == 'report.delete':
+        label = toolcatalog.PURPOSE.get(kind, kind).split(' - ')[0].strip(); label = label[0].upper() + label[1:]
     ref = ''
     try:
         if tk == 'task' and target: ref = task_ref(int(target))
@@ -2269,6 +2275,16 @@ def describe_op(store, op: dict) -> tuple:
 def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     """What the handler reported, in the words the sweep, the split and the hand-off used to say for themselves."""
     o = o or {}
+    # the app itself, by name (server._run_operation's handlers): the fact, then the undo rides on the receipt
+    if kind == 'report.run': return f" {o.get('title') or 'It'} is running - it lands in the pipe when it is done."
+    if kind in ('report.pause', 'report.resume'): return f" {o.get('title') or 'It'} is {'back on its clock' if o.get('active') else 'off its clock'}."
+    if kind == 'report.reach': return f" {o.get('title') or 'It'} reaches you: {o.get('reach')}."
+    if kind == 'report.edit': return f" {o.get('title') or 'It'} changed: {', '.join(o.get('changed') or [])}."
+    if kind == 'report.delete': return f" {o.get('title') or 'It'} is deleted."
+    if kind == 'setting.set': return f" {o.get('said') or ''}"
+    if kind == 'connection.test': return f" {o.get('name') or 'It'} {'answered' if o.get('ok') else 'did not answer'}: {str(o.get('detail') or '')[:300]}"
+    if kind in ('connection.pause', 'connection.resume'): return f" {o.get('name') or 'It'} is {'on' if o.get('active') else 'off'}."
+    if kind == 'script.start': return f" Starting: {o.get('script')}."
     if kind == 'pipe.clear':
         if o.get('cleared'):
             return (f" Cleared {o['cleared']} from the pipe - {', '.join((o.get('titles') or [])[:3])}{'…' if o['cleared'] > 3 else ''}. "
@@ -2319,8 +2335,34 @@ def receipt(store, op: dict, actor: str = 'owner') -> str:
     raw = store.get_settings().get('assistant_dock_task_id')
     dock_tid = int(raw) if str(raw or '').isdigit() else None
     if not dock_tid or not _chat_proposed(store, dock_tid, op.get('id')): return line
+    # THE UNDO RIDES THE RECEIPT (the tiers): an instant write says what it did AND how to put it back -
+    # a one-click card on the desktop, the word "undo" on the phone (remote_assistant). The undo is a
+    # proposal of its own, never auto, so the click is the only thing that reverts.
+    undo = (op.get('outcome') or {}).get('undo') if st == 'done' and not op.get('duplicate') else None
+    # ...and an undo that ran offers no undo of its own: put back is put back, not a see-saw
+    if undo and undo.get('kind') in operations.KINDS and not (op.get('params') or {}).get('_undo'):
+        try:
+            u = operations.propose(store, undo['kind'], int(undo.get('target') or 0), {**dict(undo.get('params') or {}), '_undo': True}, actor)
+            store.set_setting(LAST_UNDO, u['id'], actor)
+            line += f" Undo: {undo.get('label') or 'put it back'}."
+            record(store, dock_tid, 'assistant', line, {'kind': 'proposal', 'key': None, 'title': undo.get('label') or 'Undo', 'op': u['id'],
+                                                       'tid': None, 'ref': None, 'undo': True})
+            return line
+        except Exception as e: logger.debug(f'no undo offered for {op.get("id")}: {e}')
     record(store, dock_tid, 'assistant', line)
     return line
+
+
+LAST_UNDO = 'assistant_last_undo'           # the newest undo proposal's id: what "undo" on the phone runs
+
+
+def undo_last(store, actor: str = 'owner') -> str:
+    """"undo", alone, from a chat: run the newest undo the receipts offered, once."""
+    oid = str(store.get_settings().get(LAST_UNDO) or '').strip()
+    op = operations.get(store, oid) if oid else None
+    if not op or op.get('status') != 'proposed': return 'Nothing to undo - the last change has no undo left, or it was already put back.'
+    store.set_setting(LAST_UNDO, '', actor)
+    return receipt(store, run_proposal(store, op, actor), actor)
 
 
 def _chat_proposed(store, dock_tid: int, oid: str) -> bool:

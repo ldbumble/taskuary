@@ -384,9 +384,19 @@ def _locked_respond(store, channel: str, chat: str, question: str, connector_id:
     with lock: respond(store, channel, chat, question, connector_id)
 
 
+_ASKING = threading.local()                  # the chat a turn came from, for the thread that answers it
+
+
+def asking() -> dict | None:
+    """The chat whose owner is speaking RIGHT NOW on this thread - {channel, chat, connector_id} - or None
+    on the desktop. What a report run started here reports back to (server._rerun_report)."""
+    return getattr(_ASKING, 'chat', None)
+
+
 def respond(store, channel: str, chat: str, question: str, connector_id: int):
     """Answer synchronously; the poller runs this on a serialized background worker."""
     from . import concierge, general
+    _ASKING.chat = {'channel': channel, 'chat': chat, 'connector_id': connector_id}
     try:
         task, _ = general.dock_task(store, f'owner-{channel}')
         tid = task['TaskId']
@@ -396,6 +406,11 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int):
             # the item on the table is the walk's own, persisted and validated here - a phone has no
             # client state to send, and the key is all say() needs to build the item afresh
             item = concierge.restore_current(store, tid)
+            # "undo", alone: the newest undo a receipt offered, run once (the tiers - an instant write
+            # says how to put it back, and on a phone the word is the button)
+            if question.strip().lower() in ('undo', 'undo it', 'put it back'):
+                send(store, channel, chat, concierge.undo_last(store, 'owner'), connector_id)
+                return
             question, picked = resolve_index(store, channel, chat, question)   # "2" is the words we numbered
             straight = answer_the_agent(store, item, question, picked)
             if straight:
@@ -408,6 +423,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int):
         logger.warning(f'the {channel} assistant could not answer: {e}')
         try: send(store, channel, chat, f"I couldn't answer that: {e}", connector_id)
         except Exception as send_error: logger.warning(f'the {channel} assistant could not send its error: {send_error}')
+    finally: _ASKING.chat = None
 
 
 def answer_the_agent(store, item: dict | None, words: str, picked: bool, actor: str = 'owner') -> str:
@@ -467,6 +483,12 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
         done = concierge.run_proposal(store, prop, actor)
         said.append(concierge.receipt(store, done, actor))
         walk_on = done.get('status') == 'done' and prop.get('settles')
+        # a SCRIPT started by name from the phone: the tasks walk is Next; set-up opens on the connections
+        # (the spec: "or at least see my connectors"); the composer wants a sentence
+        script = str((done.get('outcome') or {}).get('script') or '')
+        if script:
+            if 'tasks' in script: walk_on = True
+            else: said.append(script_words(store, script))
     elif verb in ('reply', 'redraft') and (on or {}).get('mid'):
         rid = _draft(store, on, verb, decision.get('text') or '')
         if rid:                                             # the draft is the next thing to read, so go to it
@@ -648,6 +670,26 @@ def decision_block(store, item: dict | None) -> str:
     except Exception as e:
         logger.debug(f'the phone could not show what is on the table: {e}')
     return '\n\n'.join(parts)
+
+
+def script_words(store, script: str) -> str:
+    """A script, as a chat can hold it. Set-up from a phone opens on what is connected - each live
+    connection with its state, then the stops still to do (the owner, 2026-09-18: "or at least see my
+    connectors"); the composer asks for the sentence it builds from."""
+    from . import appfacts, walk
+    if 'report' in script.lower():
+        return 'Tell me what to set up - a check that reads, or a workflow that writes - in a sentence, and I put it together.'
+    conns = appfacts.connections(store); live = [c for c in conns if c['active']]
+    lines = ['SET UP TASKUARY - what is connected:']
+    lines += [f"· {c['name']} ({c['type']}{', no key yet' if not c['has_secret'] else ''}{' - ERROR ' + c['last_error'] if c['last_error'] else ''})" for c in live] or ['· nothing yet']
+    lines.append(f"{len(conns) - len(live)} more in the catalogue, off - say \"connect <name>\" and I open the card.")
+    try:
+        stops = walk.state(store)['stops']
+        todo = [s for s in stops[:5] if 'done' in s and not s.get('done')]
+        if todo: lines.append('Still to do: ' + '; '.join(s.get('title') or s['key'] for s in todo) + ' - the desktop walk does each in a click.')
+        else: lines.append('The five set-up steps are done; the desktop walk shows the rest of the app.')
+    except Exception as e: logger.debug(f'the phone set-up walk could not read the stops: {e}')
+    return '\n'.join(lines)
 
 
 def turn_text(out: dict, lead: str = '', store=None) -> str:

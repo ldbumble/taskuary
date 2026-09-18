@@ -447,7 +447,7 @@ function Line({ m, live, last, actions, fresh }) {
     meeting: <MeetingCard card={c} onDone={actions.done} onOpenTask={actions.openTask} />,
     report: <ReportCard card={c} onOpenTask={actions.openTask} onTimeline={actions.timeline} onDone={actions.done} />,
     agentdone: <AgentDoneCard card={c} onOpenTask={actions.openTask} onDone={actions.done} onSurface={actions.surface} />,
-    idea: <IdeaCard card={c} onAct={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} />,
+    idea: <IdeaCard card={c} onAct={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} onNavigate={actions.navigate} />,
     message: <MessageCard card={c} onDone={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} onSurface={actions.surface} />,
     setup: <SetupCard card={m.card} onNavigate={actions.navigate} onHandOff={actions.handOff} />,
     walk: <WalkCard card={m.card} at={m.card.n} total={m.card.total} onNavigate={actions.navigate}
@@ -984,6 +984,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       setMsgs((m) => [...m.map((x) => (x.proposal?.id === p.id ? { ...x, proposal: { ...x.proposal, status: out.status, repo: out.repo || null, outcome: res?.outcome || null } } : x)),
                        { id: `r${Date.now()}`, role: "receipt", text: out.receipt, tid: p.tid, ref: p.ref, chips }]);
       onChanged?.();
+      // A SCRIPT, started by name (script.start): the deterministic road the words asked for opens here -
+      // the walk's Next, the set-up tour, or the composer - and nothing on the table moves for it.
+      const script = res?.outcome?.script;
+      if (script) {
+        if (/tasks/i.test(script)) advance();
+        else if (/set up taskuary/i.test(script)) await setup();
+        else if (/report/i.test(script)) askSetup();
+        return;
+      }
       // the server already settled or closed the item; a settle proposal (later, tomorrow, done) must not be
       // re-marked "done" by the page, so it advances without the settle post. A hand-off that STARTED advances
       // once the same way (PW-135): the delegated task stays in Unread as Working, nothing is settled; a

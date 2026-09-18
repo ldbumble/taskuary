@@ -53,6 +53,22 @@ KINDS = {
     # ...and what the chat sets up through the tabs' own roads (concierge.setup_turn, PW-194): a report, a connection
     'report.create':            ('report', ('config',), None),
     'connection.create':        ('connector', ('type', 'name'), None),
+    # ...and the app itself, by name (the assistant-runs-the-app design, 2026-09-18): a report or
+    # workflow run, paused, resumed, re-aimed, edited or deleted; a setting set; a connection tested,
+    # paused or resumed; a script started. The chat names the thing, appfacts resolves it, and each
+    # runs the same road the tab's own button runs. Which of these run at once and which confirm
+    # first is toolcatalog.INSTANT - the tiers - not a property of the registry.
+    'report.run':               ('source', (), None),
+    'report.pause':             ('source', (), None),
+    'report.resume':            ('source', (), None),
+    'report.reach':             ('source', ('reach',), None),
+    'report.edit':              ('source', ('config',), None),
+    'report.delete':            ('source', (), None),
+    'setting.set':              ('setting', ('setting', 'value'), None),   # `setting`, not `key`: `key` is the pile key the chat fills in
+    'connection.test':          ('connector', (), None),
+    'connection.pause':         ('connector', (), None),
+    'connection.resume':        ('connector', (), None),
+    'script.start':             ('script', ('name',), None),
 }
 # triage's `task` and `general` are one answer for this comparison (work, no coder); `coding` is another
 SAME = {frozenset(('task', 'general'))}

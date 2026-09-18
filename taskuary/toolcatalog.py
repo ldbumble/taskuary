@@ -44,7 +44,30 @@ PURPOSE = {
     # uses - report.create through save_source, connection.create through save_connector.
     'report.create':            'create a scheduled report or workflow - `config`; the composer builds it from what the owner asked for',
     'connection.create':        'add a system Taskuary talks to - `type`, `name`; created OFF and never carrying a secret, which the owner gives on the card',
+    # THE APP ITSELF, by name. A report is named by `title` (part of its name) or `source_id`; a
+    # connection by `name` or `connector_id`; a setting by `key` or `label`. These run AT ONCE
+    # (INSTANT below) with an undo in the receipt, except report.delete, which asks first.
+    'report.run':               'run a report or workflow now - `title` (or `source_id`); it lands in the pipe when done',
+    'report.pause':             'stop a report or workflow running on its clock - `title`',
+    'report.resume':            'put a paused report or workflow back on its clock - `title`',
+    'report.reach':             'change when a report reaches the owner - `title`, `reach`: always | wrong | rule',
+    'report.edit':              'change a report\'s configuration - `title`, `config`: only the keys to change (title, cron, daily_at, every_minutes, deliver, alert...)',
+    'report.delete':            'delete a report or workflow for good - `title`; asks first',
+    'setting.set':              'change one setting - `setting` (its key, or `label`: part of its name) and `value`; the schema says what it takes',
+    'connection.test':          'test a connection now and say what it answered - `name`',
+    'connection.pause':         'switch a connection off - `name`; nothing is deleted',
+    'connection.resume':        'switch a connection back on - `name`',
+    'script.start':             'start a script by its name: walk me through my tasks | set up Taskuary | set up a report',
 }
+
+# THE TIERS (the spec, 2026-09-18). Reads run at once (READS). These WRITES run at once too, because
+# each can be put back: the receipt carries the undo. Everything else waits for the owner's yes -
+# deleting, sending to a person, spending, stopping an agent mid-run.
+INSTANT = frozenset({'report.run', 'report.pause', 'report.resume', 'report.reach', 'report.edit', 'setting.set',
+                     'connection.test', 'connection.pause', 'connection.resume', 'script.start'})
+
+
+def is_instant(kind: str) -> bool: return kind in INSTANT
 
 # A set of items, described rather than listed. This is the part the verb vocabulary never had: it is
 # how "all the reports" or "everything from that sender" is said in a way code can carry out exactly.
@@ -170,7 +193,10 @@ def valid(kind: str, params: dict) -> str:
         return ''
     if kind not in operations.KINDS: return f'{kind} is not an operation this app has'
     if kind not in PURPOSE: return f'{kind} is not something the chat may ask for'
+    # a setting may be named by its label instead of its key; concierge.call_turn resolves either
+    alt = {'setting': ('label', 'key')}
     missing = [p for p in operations.KINDS[kind][1]
-               if p not in CONTEXT_FILLED and not str((params or {}).get(p) or '').strip()]
+               if p not in CONTEXT_FILLED and not str((params or {}).get(p) or '').strip()
+               and not any(str((params or {}).get(a) or '').strip() for a in alt.get(p, ()))]
     if missing: return f"{kind} needs {', '.join(missing)}"
     return ''

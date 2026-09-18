@@ -137,9 +137,17 @@ def block(store=None) -> str:
 # (the owner, 2026-09-07: "read should be immediate, yes it can take time since it's searching").
 # A read never moves what is on the table: asking about another task must not hijack the walk.
 READS = {
-    'task.read':       'everything on one task - its summary, status, the messages on it, what agents said and did. `ref`: TQ-0401 (or `id`)',
-    'timeline.search': 'find rows anywhere in the history, however old - takes the same SELECT fields below, plus `limit`. Returns refs, senders, subjects and dates; read one with task.read',
-    'report.read':     'a report and its last runs - what it said, whether it failed and why. `title`: the report name (or `source_id`)',
+    'task.read':        'everything on one task - its summary, status, the messages on it, what agents said and did. `ref`: TQ-0401 (or `id`)',
+    'timeline.search':  'find rows anywhere in the history, however old - takes the same SELECT fields below, plus `limit`. Returns refs, senders, subjects and dates; read one with task.read',
+    'report.read':      'a report or workflow and its last runs - what it said, whether it failed and why, and its source_id. `title`: part of its name (or `source_id`)',
+    # THE APP ITSELF, by name (appfacts). Asked from a chat to "run me the AR report" the assistant had
+    # no list of reports at all; "is Teams connected" had no answer but a guess (the owner, 2026-09-18).
+    'reports.list':     'every report and workflow: name, source_id, clock, how it reaches the owner, last outcome',
+    'settings.list':    'the settings in one `group` (or, with no group, the groups themselves and how many knobs each has)',
+    'setting.read':     'one setting, its value in words and what it does. `key` (or `label`: part of its name)',
+    'connections.list': 'every live connection: name, type, whether it has a key, last sync, last error - and how many catalogue cards are off',
+    'connection.read':  'one connection in full. `name`: part of its name (or `connector_id`)',
+    'agents.list':      'the agents and profiles, and which brain answers which job',
 }
 
 # Parameters the CHAT supplies from what is on the table, never the model: it has no way to know a
@@ -154,7 +162,9 @@ def is_read(kind: str) -> bool: return kind in READS
 def valid(kind: str, params: dict) -> str:
     """'' when this CALL is one the registry actually runs, otherwise why not."""
     if kind in READS:
-        need = {'task.read': ('ref', 'id'), 'report.read': ('title', 'source_id'), 'timeline.search': ()}[kind]
+        need = {'task.read': ('ref', 'id'), 'report.read': ('title', 'source_id'), 'timeline.search': (),
+                'reports.list': (), 'settings.list': (), 'setting.read': ('key', 'label'),
+                'connections.list': (), 'connection.read': ('name', 'connector_id'), 'agents.list': ()}[kind]
         if need and not any(str((params or {}).get(n) or '').strip() for n in need):
             return f"{kind} needs {' or '.join(need)}"
         return ''

@@ -1371,17 +1371,58 @@ def read_op(store, kind: str, params: dict) -> str:
         for c in (store.list_comments(tid) or [])[-8:]:
             out.append(f"  {c.get('Actor')} ({c.get('ActorType')}) {str(c.get('CreatedAt') or '')[:16]}: {_cut(c.get('Body') or '', 500)}")
         return NEWLINE.join(out)
+    # THE APP ITSELF, by name - appfacts reads the tables the tabs read. A miss lists what exists, so
+    # the second try finds it; an id is printed with every row, so the next call can be exact.
     if kind == 'report.read':
-        title = str(p.get('title') or '').strip().lower()
-        srcs = [x for x in store.list_sources(active_only=False) if x.get('Channel') == 'report']
-        src = (next((x for x in srcs if str(x.get('SourceId')) == str(p.get('source_id'))), None)
-               or next((x for x in srcs if title and title in str(x.get('Address') or '').lower()), None))
-        if not src: return 'No report by that name. The ones set up: ' + ', '.join(str(x.get('Address')) for x in srcs[:20])
-        out = [f"REPORT {src.get('Address')} (active: {bool(src.get('Active'))})"]
-        for r in (store.report_runs(src['SourceId'], 6) or []):
-            out.append(f"  {str(r.get('at') or '')[:16]} {'FAILED' if r.get('failed') else 'ok'} "
-                       f"{r.get('ms') or 0}ms - {_cut(r.get('error') or r.get('summary') or r.get('said') or '', 400)}")
+        from . import appfacts
+        r = appfacts.find_report(store, str(p.get('title') or ''), p.get('source_id'))
+        if not r: return 'No report by that name. The ones set up: ' + ', '.join(x['title'] for x in appfacts.reports(store)[:20])
+        out = [f"{'WORKFLOW' if r['workflow'] else 'REPORT'} {r['title']} (source_id {r['source_id']}, {'on' if r['active'] else 'off'}) - "
+               f"runs {r['schedule'] or 'on no clock'}; reaches you: {r['reach']}"]
+        for run in (store.report_runs(r['source_id'], 6) or []):
+            out.append(f"  {str(run.get('at') or '')[:16]} {'FAILED' if run.get('failed') else 'ok'} "
+                       f"{run.get('ms') or 0}ms - {_cut(run.get('error') or run.get('summary') or run.get('said') or '', 400)}")
         return NEWLINE.join(out)
+    if kind == 'reports.list':
+        from . import appfacts
+        rows = appfacts.reports(store)
+        if not rows: return 'No reports or workflows are set up.'
+        def last(r): return 'never ran' if r['last_ok'] is None else (f"FAILED - {r['last_said']}" if r['last_ok'] is False else f"ok {r['last_at'][:16]}")
+        return NEWLINE.join(f"{'WORKFLOW' if r['workflow'] else 'REPORT'} {r['title']} (source_id {r['source_id']}{'' if r['active'] else ', off'}) - "
+                            f"{r['schedule'] or 'no clock'}; reaches you: {r['reach']}; last: {last(r)}" for r in rows)
+    if kind == 'settings.list':
+        from . import appfacts, settings_schema
+        rows, group = appfacts.settings(store), str(p.get('group') or '').strip().lower()
+        if not group: return NEWLINE.join(f"{g}: {sum(1 for r in rows if r['group'] == g)} knobs" for g in settings_schema.GROUPS)
+        hit = [r for r in rows if group in r['group'].lower()]
+        if not hit: return 'No settings group by that name. The groups: ' + ', '.join(settings_schema.GROUPS)
+        return NEWLINE.join(f"{r['said']}  [{r['key']}]" for r in hit)
+    if kind == 'setting.read':
+        from . import appfacts, settings_schema
+        rows, key, label = appfacts.settings(store), str(p.get('key') or '').strip(), str(p.get('label') or '').strip().lower()
+        r = next((x for x in rows if x['key'] == key), None) or next((x for x in rows if label and label in x['label'].lower()), None)
+        if not r: return 'No setting by that name. The groups: ' + ', '.join(settings_schema.GROUPS) + ' - settings.list <group> names their knobs.'
+        meta = settings_schema.knobs()[r['key']]
+        opts = f" - {' | '.join(str(o) for o in meta['options'])}" if meta.get('options') else ''
+        return f"{r['said']}  [{r['key']}, a {r['type']}{opts}]{NEWLINE}{meta.get('desc', '')}"
+    if kind == 'connections.list':
+        from . import appfacts
+        rows = appfacts.connections(store); live = [c for c in rows if c['active']]
+        if not live: return f'Nothing is connected yet ({len(rows)} catalogue cards are off).'
+        return NEWLINE.join(f"{c['name']} ({c['type']}{', no key yet' if not c['has_secret'] else ''})"
+                            f"{' - last sync ' + c['last_sync'][:16] if c['last_sync'] else ''}{' - ERROR ' + c['last_error'] if c['last_error'] else ''}"
+                            for c in live) + f"{NEWLINE}{len(rows) - len(live)} catalogue cards are off - connection.read <name> for any of them."
+    if kind == 'connection.read':
+        from . import appfacts
+        c = appfacts.find_connection(store, str(p.get('name') or ''), p.get('connector_id'))
+        if not c: return 'No connection by that name. Connected: ' + ', '.join(x['name'] for x in appfacts.connections(store) if x['active'])
+        return (f"{c['name']} - type {c['type']}, connector_id {c['connector_id']}, {'on' if c['active'] else 'off'}, "
+                f"{'has a key' if c['has_secret'] else 'no key yet'}, last sync {c['last_sync'][:16] or 'never'}"
+                + (f"{NEWLINE}last error: {c['last_error']}" if c['last_error'] else ''))
+    if kind == 'agents.list':
+        from . import appfacts
+        return ('agents: ' + ', '.join(f"{a['name']} ({a['kind']}{'' if a['active'] else ', off'})" for a in appfacts.agents(store))
+                + NEWLINE + 'brains: ' + '; '.join(appfacts.brains(store)))
     if kind == 'timeline.search':
         sel = {k: v for k, v in p.items() if k != 'limit'}
         if sel.get('select'): sel = sel['select']

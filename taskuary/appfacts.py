@@ -81,8 +81,11 @@ def _match(rows, want: str, field: str, id_field: str, id_val):
     return next((r for r in rows if w and w in str(r[field]).lower()), None) if w else None
 
 
-def find_report(store, title: str = '', source_id=None): return _match(reports(store), title, 'title', 'source_id', source_id)
-def find_connection(store, name: str = '', connector_id=None): return _match(connections(store), name, 'name', 'connector_id', connector_id)
+def _live_first(rows): return sorted(rows, key=lambda r: not r['active'])     # "mailbox" means the one that is on, not the catalogue's IMAP card
+
+
+def find_report(store, title: str = '', source_id=None): return _match(_live_first(reports(store)), title, 'title', 'source_id', source_id)
+def find_connection(store, name: str = '', connector_id=None): return _match(_live_first(connections(store)), name, 'name', 'connector_id', connector_id)
 
 
 def state_block(store, cap: int = 2500) -> str:

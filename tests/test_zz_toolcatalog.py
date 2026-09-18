@@ -331,3 +331,47 @@ class SweepReachesTheTableTests(unittest.TestCase):
             other = concierge.call_turn(s, dock['TaskId'], {'kind': 'pipe.clear', 'params': {'select': {'sender': 'nobody@nowhere.com'}}},
                                         None, 'clear those', 'owner')
         self.assertIsNone(other.get('proposal'))            # nothing matched - and nothing on the table moved
+
+
+class AppReadTests(unittest.TestCase):
+    """The look-ups that make "what reports do we have" answerable and "run the AR report" resolvable -
+    the app itself, by name, read off the tables the tabs read (appfacts; the owner, 2026-09-18)."""
+    def _store(self):
+        import tests.test_appfacts as A
+        return A.store()
+
+    def test_every_new_read_is_in_the_catalogue_and_validates(self):
+        b = toolcatalog.block()
+        for k in ('reports.list', 'settings.list', 'setting.read', 'connections.list', 'connection.read', 'agents.list'):
+            self.assertTrue(toolcatalog.is_read(k), k); self.assertIn(k, b)
+        self.assertEqual(toolcatalog.valid('setting.read', {}), 'setting.read needs key or label')
+        self.assertEqual(toolcatalog.valid('reports.list', {}), '')
+
+    def test_reports_list_names_them_with_ids_clocks_and_outcomes(self):
+        out = concierge.read_op(self._store(), 'reports.list', {})
+        self.assertIn('REPORT Monthly AR Report', out); self.assertIn('WORKFLOW ADP hours export', out)
+        self.assertIn('source_id', out); self.assertIn('07:00', out); self.assertIn('FAILED - sign-in page', out)
+
+    def test_report_read_finds_by_part_of_the_name_and_says_its_id(self):
+        out = concierge.read_op(self._store(), 'report.read', {'title': 'ar report'})
+        self.assertIn('REPORT Monthly AR Report', out); self.assertIn('source_id', out); self.assertIn('07:00', out)
+        miss = concierge.read_op(self._store(), 'report.read', {'title': 'payroll'})
+        self.assertIn('No report by that name', miss); self.assertIn('Monthly AR Report', miss)
+
+    def test_settings_read_by_key_or_label_and_a_group_lists_its_knobs(self):
+        s = self._store()
+        self.assertIn('Intent triage (Triage & routing): on', concierge.read_op(s, 'setting.read', {'key': 'intent_classify_enabled'}))
+        self.assertIn('Intent triage', concierge.read_op(s, 'setting.read', {'label': 'intent triage'}))
+        self.assertIn('No setting by that name', concierge.read_op(s, 'setting.read', {'label': 'warp drive'}))
+        out = concierge.read_op(s, 'settings.list', {'group': 'Triage & routing'})
+        self.assertIn('Intent triage', out); self.assertNotIn('Triage brain', out)
+        self.assertIn('Triage & agents', concierge.read_op(s, 'settings.list', {}))            # no group: the groups
+
+    def test_connections_and_agents(self):
+        s = self._store()
+        out = concierge.read_op(s, 'connections.list', {})
+        self.assertIn('Uri mailbox (outlook)', out); self.assertNotIn('Teams (teams', out); self.assertIn('catalogue cards are off', out)
+        self.assertIn('outlook', concierge.read_op(s, 'connection.read', {'name': 'mailbox'}))
+        self.assertIn('Teams - type teams', concierge.read_op(s, 'connection.read', {'name': 'teams'}))   # off, but readable by name
+        self.assertIn('No connection by that name', concierge.read_op(s, 'connection.read', {'name': 'zzzz'}))
+        self.assertIn('coder', concierge.read_op(s, 'agents.list', {}))

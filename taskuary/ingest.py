@@ -345,8 +345,28 @@ def _take_fresh() -> set:
 
 def _queue(store, done: set, first: set, only_first: bool, limit: int) -> list:
     rows = [r for r in store.pending_triage(_ALL) if r['MessageId'] not in done]
+    rows = _rank_first(store, rows)
     head = [r for r in rows if r['Channel'] in first]
     return (head if only_first else head + [r for r in rows if r['Channel'] not in first])[:limit]
+
+
+def _rank_first(store, rows: list) -> list:
+    """Bulk processing: a rank-mode arrival is judged in VALUE order, and only the head of it is
+    judged at all - the rest keep their place and are judged as slots open. A clear-mode arrival is
+    untouched by any of this, including in a store where some other connector ranks.
+
+    Triage is the expensive call. Ranking first is what makes 300 pull requests affordable; judging
+    only the head is what makes it fast."""
+    from . import rank
+    if not rows or not rank.any_rank(store): return rows
+    ranked = [r for r in rows if rank.mode_for(store, r) == 'rank']
+    if not ranked: return rows
+    try: rank.rank_pending(store)
+    except Exception as e: logger.debug(f'ranking the pool failed, arrival order stands: {e}')
+    fresh = {r['MessageId']: r for r in store.pending_triage(_ALL, ranked=True)}
+    keep = {r['MessageId'] for r in ranked}
+    in_order = [fresh[m] for m in fresh if m in keep][:rank.head_size(store)]
+    return [r for r in rows if r['MessageId'] not in keep] + in_order
 
 
 def await_quiet(store, channels, timeout: float) -> bool:

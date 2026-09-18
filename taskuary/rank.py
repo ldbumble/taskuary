@@ -31,6 +31,25 @@ PIN, LATER = 1.0, 0.05    # what the owner's two buttons set
 _TEAM = ('OWNER', 'MEMBER', 'COLLABORATOR')
 _ASSOC = re.compile(r'association: ([A-Z_]+)\]', re.I)
 _TYPES = {'email': ('outlook', 'gmail', 'imap')}   # channel -> the connector types behind it
+HEAD_JUDGED = 4           # how many of the ranked pool are TRIAGED at once - the rest wait, in order
+HEAD_RANGE = (1, 20)
+RANK_BATCH = 40           # arrivals per listwise ranking call
+
+
+def head_size(store) -> int:
+    """How many ranked arrivals are judged at once. The owner's, clamped: a 0 would judge nothing
+    and a 500 would spend the whole saving this exists to make."""
+    lo, hi = HEAD_RANGE
+    try: n = int(str(store.get_settings().get('bulk_head') or HEAD_JUDGED).strip())
+    except (AttributeError, TypeError, ValueError): return HEAD_JUDGED
+    return max(lo, min(hi, n))
+
+
+def build_rank_llm(store):
+    """The ranking brain. Its OWN seam, because ranking is not triage: a small prompt over subjects,
+    no soul, no learned doc, no notes, no images - see RANK_SYSTEM."""
+    from .llm import build_llm
+    return build_llm(store)
 
 
 def mode_for(store, msg_row: dict) -> str:
@@ -147,6 +166,84 @@ def rerank(store, force: bool = False) -> int:
         logger.debug(f'rerank skipped: {e}'); return 0
     finally:
         _lock.release()
+
+
+RANK_SYSTEM = (
+    'You order ARRIVALS by how much attention they deserve from the owner, most first. Nothing here '
+    'has been read yet - you see only what the arrival itself carries. Weigh: is the owner asked '
+    'directly or merely copied; how urgent the subject sounds; on code hosts, who the author is '
+    '(a team member outranks a stranger). Output ONLY JSON: '
+    '{"order": [{"ref": "m<id>", "why": "<six words at most>"}...]} covering every item once.')
+
+
+def _arrival_line(r: dict) -> str:
+    """What the ranking call is given about one arrival. There is no task yet, so no Title and no
+    Summary exist - only the header the message came in with."""
+    who = r.get('FromName') or r.get('FromEmail') or ''
+    bits = [f"m{r['MessageId']}", str(r.get('Subject') or '(no subject)')[:110], f"{who} \u00b7 {r.get('Channel') or ''}"]
+    if r.get('Channel') == 'github':
+        a = _ASSOC.search(str(r.get('BodyText') or '')[:200])
+        bits.append(f"author: {(a.group(1) if a else 'NONE').lower()}")
+    return ' | '.join(bits)
+
+
+def rank_pending(store, force: bool = False) -> int:
+    """Rank what is waiting to be JUDGED, before any of it is. One listwise call over the batch -
+    forty subjects in one call, never forty calls - and the floor when there is no brain to ask.
+
+    This is the whole point of bulk mode: triage is the expensive step, so it must be spent on the
+    items that deserve it, which means something has to order them first, cheaply."""
+    if not force and time.time() - _last['at'] < RERANK_EVERY: return 0
+    if not _lock.acquire(blocking=False): return 0
+    try:
+        _last['at'] = time.time()
+        rows = [r for r in store.pending_triage(RANK_BATCH) if mode_for(store, r) == 'rank']
+        if not rows: return 0
+        from .ingest import owner_addresses
+        mine = owner_addresses(store)
+        # the floor first, so a cold start (or an install with no AI) still has a sane order
+        for r in rows:
+            v, why = floor(store, {}, r, mine)
+            store.set_message_rank(r['MessageId'], v, why, 'rank')
+        llm = build_rank_llm(store)
+        if not llm or len(rows) < 2: return len(rows)
+        try:
+            out = llm(RANK_SYSTEM, 'Arrivals:\n' + '\n'.join(_arrival_line(r) for r in rows), max_tokens=900)
+            j = json.loads(re.sub(r'^```(json)?|```$', '', (out or '').strip(), flags=re.M))
+            order = [str(o.get('ref') or '') for o in j.get('order') or []]
+            whys = {str(o.get('ref') or ''): str(o.get('why') or '')[:60] for o in j.get('order') or []}
+            k = len(order)
+            for r in rows:
+                ref = f"m{r['MessageId']}"
+                if ref not in order: continue
+                # the MODEL's position IS the rank here. The floor is the fallback, not half of it:
+                # what deserves attention is a judgement, and a handful of deterministic signals
+                # cannot make it (the owner, 2026-09-18: "rank has to be ai").
+                store.set_message_rank(r['MessageId'], round(1 - order.index(ref) / max(1, k - 1), 3) if k > 1 else 1.0,
+                                       whys.get(ref) or (store.get_message(r['MessageId']) or {}).get('RankWhy') or '', 'rank')
+        except Exception as e:
+            logger.debug(f'the ranking call did not answer, the floor stands: {e}')
+        return len(rows)
+    finally:
+        _lock.release()
+
+
+def waiting(store) -> dict:
+    """What is ranked and still waiting to be judged - the rail's "296 up next". A count and the
+    subjects, straight off the arrivals: looking at them costs no model call."""
+    rows = [r for r in store.pending_triage(500, ranked=True) if mode_for(store, r) == 'rank']
+    return {'count': len(rows),
+            'items': [{'mid': r['MessageId'], 'subject': r.get('Subject') or '(no subject)',
+                       'who': r.get('FromName') or r.get('FromEmail') or '', 'channel': r.get('Channel') or '',
+                       'value': r.get('RankValue'), 'why': r.get('RankWhy') or '', 'when': r.get('SentAt')}
+                      for r in rows]}
+
+
+def top_up(store, n: int = 1) -> int:
+    """A slot opened - judge the next most valuable arrivals. Every settling verb opens one, `later`
+    included: it holds the ITEM, it does not hold the queue behind it (the owner, 2026-09-18)."""
+    from . import ingest
+    return ingest.drain(store, limit=max(0, int(n)), wait=False)
 
 
 def enqueue(store, tid: int, agent: str) -> dict:

@@ -12,7 +12,7 @@ GENESIS = '0' * 64
 TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Source', 'SourceRef', 'Tags')
 MSG_COLS = ('TaskId', 'ExternalId', 'ConversationId', 'Channel', 'SourceName', 'Subject',
             'FromName', 'FromEmail', 'SentAt', 'BodyText', 'SourceLink', 'Status', 'Direction', 'RecipientsJson',
-            'MailMetaJson', 'TriageTitle')
+            'MailMetaJson', 'TriageTitle', 'RankValue', 'RankWhy')
 RUN_COLS = ('Status', 'TraceJson', 'Result', 'LastError', 'SessionId', 'DiffText')
 REVIEW_COLS = ('TaskId', 'MessageId', 'RunId', 'Kind', 'DraftText', 'FinalText', 'Status', 'Reason', 'Deliver')
 POLICY_COLS = ('Name', 'Kind', 'Pattern', 'Action', 'Reason', 'SortOrder', 'Active')
@@ -714,6 +714,14 @@ class SQLiteStore:
             # verdict's line lives for a message that never became work.
             if 'TriageTitle' not in mcols:
                 self.cx.execute('ALTER TABLE message ADD COLUMN TriageTitle TEXT')
+            # WHAT ORDER TO JUDGE IT IN (bulk processing, rank.py). Triage is the expensive call, so a
+            # connector in rank mode ranks its arrivals BEFORE judging any: 300 pull requests cost one
+            # listwise ranking call and four triage calls, not 300 triage calls. The value lives on the
+            # message because at this point there is no task - making one is what triage does.
+            if 'RankValue' not in mcols:
+                self.cx.execute('ALTER TABLE message ADD COLUMN RankValue REAL')
+            if 'RankWhy' not in mcols:
+                self.cx.execute('ALTER TABLE message ADD COLUMN RankWhy TEXT')
             # WHERE an approved outbound draft goes. A reply knows its recipient from the
             # message it answers; an outbound report has no such message, so the review has to
             # carry the address itself or approving it would have nowhere to send.
@@ -3154,8 +3162,15 @@ class SQLiteStore:
         return self._rows("""SELECT DISTINCT t.TaskId, t.Title FROM task t JOIN message m ON m.TaskId=t.TaskId
                              WHERE t.Status NOT IN ('done','dropped') AND lower(IFNULL(m.FromEmail,''))=?
                              ORDER BY t.TaskId""", ((email or '').lower().strip(),))
-    def pending_triage(self, limit=500):
-        return self._rows("SELECT * FROM message WHERE Status='triaging' ORDER BY MessageId LIMIT ?", (limit,))
+    def pending_triage(self, limit=500, ranked=False):
+        """What is waiting to be judged. Arrival order is the rule; `ranked` answers by the value
+        rank.py gave it, and a row nobody ranked sorts AFTER what was ranked - never above it, which
+        would let an unranked arrival jump the queue it was never measured against."""
+        order = 'RankValue IS NULL, RankValue DESC, MessageId' if ranked else 'MessageId'
+        return self._rows(f"SELECT * FROM message WHERE Status='triaging' ORDER BY {order} LIMIT ?", (limit,))
+    def set_message_rank(self, mid, value: float, why: str, actor: str):
+        """Where in the judging queue this arrival sits, and the words it got there by."""
+        self._exec('UPDATE message SET RankValue=?, RankWhy=? WHERE MessageId=?', (float(value), str(why or ''), mid))
     def attach_message(self, mid, task_id):
         self._exec("UPDATE message SET TaskId=?, Status='routed' WHERE MessageId=?", (task_id, mid))
         self._bump_snapshots()

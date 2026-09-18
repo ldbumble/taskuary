@@ -1313,6 +1313,16 @@ def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, n
         store.reconcile_processing_membership()
         store.set_funnel_state(key, verb, by, until, note, **kw)
     invalidate()
+    # BULK PROCESSING: an item leaving the head is what pays for the next one to be judged - triage
+    # is spent as the owner makes room, not 300 times on arrival (rank.py). `later` counts: it holds
+    # the ITEM, never the queue behind it (the owner, 2026-09-18: "later should open the slot").
+    # A bare `surfaced` does not - it was shown, not dealt with, and the head is still full.
+    if verb in ('done', 'later', 'skip') or (verb == 'surfaced' and read):
+        try:
+            from . import rank
+            if rank.any_rank(store): rank.top_up(store, 1)
+        except Exception as e:
+            logger.debug(f'the ranked queue did not top up: {e}')
     return {'key': key, 'verb': verb, 'until': until}
 
 

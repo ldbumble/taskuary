@@ -146,3 +146,144 @@ class ApiTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+def pending(s, subject, who='Asker', channel='email', body='', when='2026-08-27 09:00:00'):
+    """An arrival as it sits BEFORE triage: Status='triaging', no task, no title but its own subject."""
+    return s.add_message({'ExternalId': f'p-{subject}', 'ConversationId': f'c-{subject}', 'Channel': channel,
+                          'Subject': subject, 'FromName': who, 'FromEmail': f'{who.lower()}@x.com',
+                          'SentAt': when, 'BodyText': body, 'Status': 'triaging'})
+
+
+def judging(store, judged):
+    """A stand-in for triage that also CONSUMES the arrival - a real judgement takes the row out of
+    the pending pool, and a mock that does not makes the queue look infinite."""
+    def go(s, m, **k):
+        judged.append(m['_mid'])
+        s.place_message(m['_mid'], None, 'filed')
+    return go
+
+
+class RankBeforeTriageTests(unittest.TestCase):
+    """300 pull requests must not cost 300 triage calls. In bulk mode the pool is RANKED first - by
+    its own small call, not by triage's - and only the head is judged; the rest wait, already in
+    order, and are judged as slots open (the owner, 2026-09-18: "the triage would process them up
+    next when you read or close one of the first 4 ranked").
+
+    Everything here is gated on the connector's bulk setting: clear mode must take none of it."""
+
+    def setUp(self):
+        self.s = MemoryStore()
+        self.s.save_source({'Channel': 'email', 'Address': 'me@corp.example', 'Owner': 'me', 'Active': 1}, 't')
+
+    def test_a_message_carries_the_rank_it_was_given(self):
+        mid = pending(self.s, 'one')
+        self.s.set_message_rank(mid, 0.82, 'team member \u00b7 pull request', 'rank')
+        row = self.s.get_message(mid)
+        self.assertEqual((row['RankValue'], row['RankWhy']), (0.82, 'team member \u00b7 pull request'))
+
+    def test_the_untriaged_pool_can_come_back_in_rank_order(self):
+        """Arrival order is what pending_triage has always used; a ranked pool answers by value, and
+        anything never ranked sorts after what was, not above it."""
+        a, b, c = pending(self.s, 'a'), pending(self.s, 'b'), pending(self.s, 'c')
+        self.s.set_message_rank(a, 0.2, 'cc', 'rank')
+        self.s.set_message_rank(b, 0.9, 'to you \u00b7 urgent', 'rank')
+        self.assertEqual([r['MessageId'] for r in self.s.pending_triage(ranked=True)], [b, a, c])
+        self.assertEqual([r['MessageId'] for r in self.s.pending_triage()], [a, b, c])
+
+    def test_the_ranking_call_reads_the_raw_arrival_and_is_one_call_for_the_lot(self):
+        """It runs BEFORE triage, so there is no task, no Title and no Summary to read - only what
+        the arrival itself carries. And it is listwise: forty subjects in one call, never forty calls."""
+        rank_mode(self.s)
+        mids = [pending(self.s, f'subject {i}', who=f'Person{i}') for i in range(5)]
+        seen = []
+        def llm(system, user, **k):
+            seen.append((system, user))
+            order = [{'ref': f'm{m}', 'why': 'looks urgent'} for m in reversed(mids)]
+            return json.dumps({'order': order})
+        with mock.patch.object(rank, 'build_rank_llm', return_value=llm):
+            n = rank.rank_pending(self.s, force=True)
+        self.assertEqual(len(seen), 1, 'one listwise call, not one per item')
+        self.assertEqual(n, 5)
+        self.assertIn('subject 0', seen[0][1])
+        self.assertNotIn('Summary', seen[0][1])
+        ranked = [r['MessageId'] for r in self.s.pending_triage(ranked=True)]
+        self.assertEqual(ranked, list(reversed(mids)), "the model's order is the order")
+
+    def test_with_no_brain_the_floor_orders_it_rather_than_nothing(self):
+        """A cold start, or an install with no AI configured, still gets a sane queue - the floor is
+        the FALLBACK now, not half of every answer."""
+        rank_mode(self.s)
+        mids = [pending(self.s, f's{i}') for i in range(3)]
+        with mock.patch.object(rank, 'build_rank_llm', return_value=None):
+            rank.rank_pending(self.s, force=True)
+        for m in mids: self.assertIsNotNone(self.s.get_message(m)['RankValue'])
+
+    def test_clear_mode_judges_everything_exactly_as_before(self):
+        judged = []
+        for i in range(6): pending(self.s, f'c{i}')
+        with mock.patch.object(ingest, 'ingest_message', side_effect=judging(self.s, judged)):
+            ingest.drain(self.s)
+        self.assertEqual(len(judged), 6, 'clear mode drains the lot, untouched')
+
+    def test_bulk_mode_judges_only_the_head_and_leaves_the_rest_waiting(self):
+        rank_mode(self.s)
+        mids = [pending(self.s, f'b{i}') for i in range(10)]
+        for i, m in enumerate(mids): self.s.set_message_rank(m, i / 10, 'floor', 'rank')
+        judged = []
+        with mock.patch.object(ingest, 'ingest_message', side_effect=judging(self.s, judged)):
+            ingest.drain(self.s)
+        self.assertEqual(len(judged), rank.head_size(self.s))
+        self.assertEqual(judged, list(reversed(mids))[:rank.head_size(self.s)], 'the most valuable first')
+        self.assertEqual(len(self.s.pending_triage()), 10 - rank.head_size(self.s), 'the rest wait, ranked')
+
+    def test_a_slot_opening_judges_exactly_one_more(self):
+        rank_mode(self.s)
+        mids = [pending(self.s, f'd{i}') for i in range(10)]
+        for i, m in enumerate(mids): self.s.set_message_rank(m, i / 10, 'floor', 'rank')
+        judged = []
+        with mock.patch.object(ingest, 'ingest_message', side_effect=judging(self.s, judged)):
+            ingest.drain(self.s)
+            before = len(judged)
+            rank.top_up(self.s, 1)
+        self.assertEqual(len(judged), before + 1)
+        self.assertEqual(judged[-1], list(reversed(mids))[before])
+
+    def test_settling_a_head_item_judges_the_next_one_and_later_counts(self):
+        """`later` holds the ITEM, not the queue behind it - so it opens the slot like any other
+        disposal (the owner, 2026-09-18: "later should open the slot")."""
+        from taskuary import funnel
+        rank_mode(self.s)
+        mids = [pending(self.s, f'e{i}') for i in range(10)]
+        for i, m in enumerate(mids): self.s.set_message_rank(m, i / 10, 'floor', 'rank')
+        judged = []
+        with mock.patch.object(ingest, 'ingest_message', side_effect=judging(self.s, judged)):
+            ingest.drain(self.s)
+            head = len(judged)
+            for verb in ('done', 'later', 'skip'):
+                rank._last['at'] = 0
+                funnel.settle(self.s, f'task:{9000 + len(judged)}', verb, 'owner')
+        self.assertEqual(len(judged), head + 3, 'done, later and skip each open one slot')
+
+    def test_merely_showing_an_item_does_not_open_a_slot(self):
+        """`surfaced` without read means it was put up, not dealt with - the head is still full."""
+        from taskuary import funnel
+        rank_mode(self.s)
+        mids = [pending(self.s, f'f{i}') for i in range(10)]
+        for i, m in enumerate(mids): self.s.set_message_rank(m, i / 10, 'floor', 'rank')
+        judged = []
+        with mock.patch.object(ingest, 'ingest_message', side_effect=judging(self.s, judged)):
+            ingest.drain(self.s)
+            head = len(judged)
+            rank._last['at'] = 0
+            funnel.settle(self.s, 'task:9999', 'surfaced', 'owner')
+        self.assertEqual(len(judged), head)
+
+    def test_how_many_still_wait_is_answerable_without_judging_any_of_them(self):
+        """The rail's "296 up next" - a count and a list of subjects, costing no model call."""
+        rank_mode(self.s)
+        for i in range(12): pending(self.s, f'u{i}')
+        waiting = rank.waiting(self.s)
+        self.assertEqual(waiting['count'], 12)
+        self.assertEqual(len(waiting['items']), 12)
+        self.assertIn('u0', [i['subject'] for i in waiting['items']])

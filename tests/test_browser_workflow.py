@@ -205,6 +205,17 @@ class TheWatchedBrowserOutlivesAPauseTests(unittest.TestCase):
     def test_the_idle_timeout_is_in_the_environment_of_every_pty(self):
         self.assertEqual(browserview.env('abc123')['AGENT_BROWSER_IDLE_TIMEOUT_MS'], '0')
 
+    def test_the_autosave_clock_is_off_everywhere(self):
+        """With --restore, the 30-second autosave closed the browser once the tab had been to a second
+        site (measured 2026-09-18, outside Taskuary too). The per-command save is what keeps a login;
+        the clock rides as 0 in the same environment, launch and agent alike."""
+        self.assertEqual(browserview.env('abc123')['AGENT_BROWSER_AUTOSAVE_INTERVAL_MS'], '0')
+        with mock.patch.object(browserview, 'state', return_value={'open': False, 'url': '', 'port': 0}):
+            browserview.start('abc123')
+        cmd, kw = self.seen[0]
+        self.assertEqual(kw['env']['AGENT_BROWSER_AUTOSAVE_INTERVAL_MS'], '0')
+        self.assertEqual(cmd[cmd.index('--restore') + 1], browserview.RESTORE_KEY)   # the login still restores
+
     def test_the_launch_carries_no_idle_flag_and_the_same_environment(self):
         with mock.patch.object(browserview, 'state', return_value={'open': False, 'url': '', 'port': 0}):
             browserview.start('abc123')

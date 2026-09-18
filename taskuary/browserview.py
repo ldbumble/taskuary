@@ -67,7 +67,16 @@ def session_name(sid: str) -> str: return f'tq-{sid}'
 # the dying daemon's socket). "It either appears but is plain white, or freezes and is just black"
 # (the owner, 2026-09-18). 0 = never idle out: this browser is closed by close(), not by a clock.
 IDLE_MS = '0'
-def env(sid: str) -> dict: return {'AGENT_BROWSER_SESSION': session_name(sid), 'AGENT_BROWSER_IDLE_TIMEOUT_MS': IDLE_MS}
+# ...AND NO PERIODIC AUTOSAVE. With --restore, agent-browser 0.37.1 saves cookies and storage on a
+# 30-second clock as well as after every command - and the clocked save, once the tab has been to a
+# SECOND site, closes the browser: measured 2026-09-18 outside Taskuary (launch, wikipedia, a login
+# page, dead at +34s; example.com then example.org, dead at +40s; one site alone, or no --restore, or
+# this set to 0: alive for minutes). The pane went white, and the next command opened a fresh browser
+# without the restored login. The per-command save keeps what the owner typed; the clock only broke it.
+AUTOSAVE_MS = '0'
+def env(sid: str) -> dict:
+    return {'AGENT_BROWSER_SESSION': session_name(sid), 'AGENT_BROWSER_IDLE_TIMEOUT_MS': IDLE_MS,
+            'AGENT_BROWSER_AUTOSAVE_INTERVAL_MS': AUTOSAVE_MS}
 def _cli_env(sid: str) -> dict: return {**os.environ, **env(sid)}    # the server's own calls match the pty's
 def home() -> Path: return Path(os.environ.get('AGENT_BROWSER_HOME') or Path.home() / '.agent-browser')
 

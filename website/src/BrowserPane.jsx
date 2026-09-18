@@ -208,6 +208,20 @@ Take over to drive it yourself; close the session to close it."
             </Typography>
           </Box>
         )}
+        {/* THE EMPTY PAGE SAYS IT IS EMPTY. A session that asked for a browser gets one on
+            about:blank, which paints as a white rectangle labelled LIVE - and nothing said whether
+            that was the page or a broken pane (the 2026-09-18 pane pass, defect #1). Frames ARE
+            flowing; it is a blank tab, and here is what fills it. Gone the moment a page has an
+            address. */}
+        {live && (!url || url === "about:blank") && (
+          <Box sx={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", pointerEvents: "none",
+            alignItems: "center", justifyContent: "center", gap: 0.75, px: 3, textAlign: "center" }}>
+            <Typography sx={{ ...mono, fontSize: 11.5, color: "#867f74" }}>an empty tab, live</Typography>
+            <Typography sx={{ ...mono, fontSize: 10.5, color: "#a8a196", lineHeight: 1.6 }}>
+              The agent opens its pages here. Or type an address above to open one yourself.
+            </Typography>
+          </Box>
+        )}
         {driving && (
           <Typography sx={{ ...mono, position: "absolute", left: 8, bottom: 6, fontSize: 10, color: CATPPUCCIN.yellow,
             bgcolor: "#000000aa", px: 0.75, py: 0.25, borderRadius: 1, pointerEvents: "none" }}>

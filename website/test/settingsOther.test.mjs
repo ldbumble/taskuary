@@ -133,3 +133,12 @@ test("a browser with no page open says so instead of painting black", () => {
   assert.ok(pane.includes("the browser is running, with no page open"),
     "and say which of the two it is, in words");
 });
+
+// ...and a browser that IS streaming, on about:blank, says that too. A needs:browser session starts
+// on an empty tab, which painted as a white rectangle labelled LIVE (the 2026-09-18 pane pass).
+test("a live browser on an empty tab says it is an empty tab", () => {
+  const pane = fs.readFileSync(path.join(process.cwd(), "src", "BrowserPane.jsx"), "utf8");
+  assert.match(pane, /live && \(!url \|\| url === "about:blank"\) &&/, "only while live and blank");
+  assert.ok(pane.includes("an empty tab, live"));
+  assert.match(pane, /pointerEvents: "none"/, "the note must not swallow a take-over click");
+});

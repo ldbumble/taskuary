@@ -29,10 +29,15 @@ class CatalogueTests(unittest.TestCase):
         """"can you share the file?" counted as a thread about the SMB share until the words a title
         splits into were filtered - 26 of them, which is how this became an idea (TQ-0647)."""
         ordinary = ['please share the file', 'the network is down again', 'any update on the data?',
-                    'card declined at the bank', 'search the web for it']
+                    'card declined at the bank', 'search the web for it',
+                    # TQ-0650: an app about messages cannot read the bare word as a Mac-only channel
+                    '12 messages waiting', 'no messages from the vendor since Tuesday',
+                    'Your Apple ID was used to sign in', 'Apple sent a receipt for the subscription']
         self.assertEqual(connectorcatalog.mentions(ordinary), {})
         self.assertEqual(connectorcatalog.mentions(['the network file share is full']).get('smb_file'), 1)
         self.assertEqual(connectorcatalog.mentions(['SMB share on fileserv']).get('smb_file'), 1)
+        self.assertEqual(connectorcatalog.mentions(['can you read Apple Messages?']).get('imessage'), 1)
+        self.assertEqual(connectorcatalog.mentions(['it came over iMessage']).get('imessage'), 1)
         for c in connectorcatalog.cards():
             self.assertTrue(connectorcatalog.words(c), f"{c['type']} has no match word left")
             self.assertIn(c['type'], connectorcatalog.mentions([c['title']]), f"{c['type']} no longer matches its own title")

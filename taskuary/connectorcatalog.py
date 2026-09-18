@@ -22,9 +22,12 @@ def by_type(t: str) -> dict | None: return next((c for c in cards() if c['type']
 # words in office mail - and `mentions` counted "can you share the file?" as a thread about an SMB
 # share. A single one of these is dropped; a PHRASE that contains one ("network file share",
 # "bank & card feed (teller)") is kept, which is what keeps every card matchable by its own title.
-GENERIC = frozenset({'any', 'bank', 'card', 'cloud', 'connection', 'data', 'database', 'feed', 'file',
-                     'files', 'historical', 'market', 'network', 'search', 'server', 'services',
-                     'share', 'string', 'team', 'web'})
+# `messages` and `apple` joined them for the same reason (TQ-0650): this app's whole subject matter
+# IS messages, so "Apple Messages" matched "12 messages waiting" and "Your Apple ID was used", and
+# four ordinary threads became four threads about a Mac-only channel.
+GENERIC = frozenset({'any', 'apple', 'bank', 'card', 'cloud', 'connection', 'data', 'database', 'feed',
+                     'file', 'files', 'historical', 'market', 'messages', 'network', 'search', 'server',
+                     'services', 'share', 'string', 'team', 'web'})
 
 
 def words(card: dict) -> list:

@@ -144,17 +144,26 @@ test("a live browser on an empty tab says it is an empty tab", () => {
   assert.match(pane, /pointerEvents: "none"/, "the note must not swallow a take-over click");
 });
 
-// EVERY SETTINGS PAGE IS THE SAME WIDTH. The shell gives each page one column; two of them then
-// capped themselves INSIDE it - Updates at 720, About you at 860 - so the page got narrower as you
-// moved down the rail (the owner, 2026-09-18: "all settings pages ... should be the same width").
-// The cap belongs to the shell, once, or nowhere.
-test("no settings page sets a width of its own", () => {
+// A SETTINGS PAGE'S WIDTH IS DECLARED IN ONE PLACE. Two pages used to cap themselves INSIDE their
+// own component (Updates at 720, About you at 860), so the width changed as you moved down the rail
+// and nothing said why. One number for all six was wrong too, seen on the page: a list earns the
+// whole column, a form does not (the owner, 2026-09-18). So the width is a property of the page,
+// declared beside its title, and the page components carry none of their own.
+test("each settings page declares its width in one table, and no page caps itself", () => {
   assert.match(src, /gap: 3, alignItems: "start", maxWidth: 1560, mx: "auto"/,
-    "the shell owns the width, and it takes more of the page than the old 1320");
+    "the shell owns the outer bound, and it takes more of the page than the old 1320");
+  const table = /const PAGE_WIDTH = \{([^}]*)\}/.exec(src);
+  assert.ok(table, "the widths live in a PAGE_WIDTH table");
+  const named = [...table[1].matchAll(/(\w+):/g)].map((m) => m[1]).sort();
+  const body = src.slice(src.indexOf("const PAGES = {"), src.indexOf("\n};", src.indexOf("const PAGES = {")));
+  const pages = [...body.matchAll(/^  (\w+): \{ title: /gm)].map((m) => m[1]).sort();
+  assert.deepEqual(named, pages, "every page in the rail has an entry - and nothing else does");
+  // the two LISTS take the whole column; a 0 is what says so, not a missing entry
+  assert.match(table[1], /policies: 0/); assert.match(table[1], /memory: 0/);
   for (const name of ["UpdateCard.jsx", "AboutYou.jsx"]) {
     const page = fs.readFileSync(path.join(process.cwd(), "src", name), "utf8");
     const open = page.indexOf("return (");
     assert.doesNotMatch(page.slice(open, open + 200), /maxWidth: \d+/,
-      `${name} must not cap its own root - that is what made the pages different widths`);
+      `${name} must not cap its own root - the table above is the one place a width is set`);
   }
 });

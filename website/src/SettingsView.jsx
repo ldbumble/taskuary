@@ -254,6 +254,11 @@ const SECTION_HELP = {
     body: "Every consequential thing Taskuary does is one row in an append-only log: a message routed or filed and why, a verdict you gave, a reply sent, an agent session opened or wrapped, a connector saved or signed in, a setting changed, a task deleted. Each row stores a hash of its own contents PLUS the hash of the row before it, so the rows form a chain: change any row after the fact — even one character in the database — and its hash no longer matches, and every row after it points at a parent that no longer exists.\n\nVerify recomputes the whole chain from the first row. Intact means the record you see is the record that was written. 'Contents altered' names the exact rows that were changed after writing — the thing this log exists to catch. 'Out of order' means two writers raced at the same instant once; nothing was changed, and it cannot recur.\n\nThe history below is that log, newest first: when, who (you, the router, an agent, a scheduled report), what was done, to what. It is the answer to 'why did this happen' and 'who did this' for anything on the Timeline or the Board." },
 };
 
+// How wide each page reads. Not one number for all six: a list wants the room, a form does not,
+// and a page that capped itself inside its own component is why the width used to change as you
+// moved down the rail (the owner, 2026-09-18). 0 = the whole column.
+const PAGE_WIDTH = { about: 860, config: 980, policies: 0, memory: 0, audit: 1180, updates: 1120 };
+
 const PAGES = {
   about: { title: "About you", icon: AccountCircleIcon, desc: "Who the system knows you are — your identities per channel, the facts only you can add, your avatar." },
   config: { title: "Configuration", icon: TuneIcon, desc: "Triage, drafting, coder and display knobs — how the funnel behaves." },
@@ -806,7 +811,7 @@ export default function SettingsView({ onNavigate }) {
           Everything here is stored locally, in the same SQLite file as your tasks.
         </Typography>
       </Box>
-      <Box sx={{ minWidth: 0 }}>
+      <Box sx={{ minWidth: 0, maxWidth: (!q && PAGE_WIDTH[page]) || "none" }}>
         {/* the other rails (Reports, Connections, Docs) open every section under its title; this
             one dropped you straight into the knobs, and the config page's sub-tabs read as the
             heading. Same title style the Board and Reports use. */}

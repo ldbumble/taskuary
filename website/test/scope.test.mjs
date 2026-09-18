@@ -32,9 +32,14 @@ const strip = (s) => s
 const GLOBALS = new Set(["setTimeout", "setInterval", "setImmediate"]);
 
 // a component starts at a CamelCase top-level const/function; its body runs to the next one, so
-// a helper defined INSIDE a component counts as part of it - which is exactly the scope it has
+// a helper defined INSIDE a component counts as part of it - which is exactly the scope it has.
+// `export default function X` has to count too: it did not, so the default-exported component of
+// every file was folded into whichever component happened to precede it, and its setters read as
+// free variables of that one. ConnectorsView.jsx showed it the moment a `function` component was
+// added above the default export - five setters blamed on AlchemyWalletGuide, all of them declared
+// and used perfectly well inside ConnectorsView (2026-09-18).
 const componentsOf = (src) => {
-  const starts = [...src.matchAll(/^(?:export\s+)?(?:const|function)\s+([A-Z]\w*)\s*[=(]/gm)]
+  const starts = [...src.matchAll(/^(?:export\s+(?:default\s+)?)?(?:const|function)\s+([A-Z]\w*)\s*[=(]/gm)]
     .map((m) => ({ name: m[1], at: m.index }));
   return starts.filter((s) => /^[A-Z][a-z]/.test(s.name))
     .map((s) => ({ name: s.name, body: src.slice(s.at, starts[starts.indexOf(s) + 1]?.at ?? src.length) }));

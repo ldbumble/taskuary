@@ -1117,7 +1117,7 @@ function AlchemyWalletGuide({ onBack, onData }) {
   return <Box sx={{ maxWidth: 850, mx: "auto" }}>
     <Crumb section="Connections" onBack={onBack} title="Alchemy Agent Wallet" />
     <Typography variant="body2" sx={{ color: DIM, mb: 2 }}>
-      Create the wallet in Alchemy's Dashboard, then approve a CLI session for this computer. The session can be revoked in the Dashboard and does not put a private key in Taskuary.
+      Create the wallet in Alchemy’s Dashboard, then approve a CLI session for this computer. The session can be revoked in the Dashboard and does not put a private key in Taskuary.
     </Typography>
     <Button variant="contained" disabled={busy || !!sid} onClick={start} startIcon={<TerminalIcon sx={{ fontSize: 16 }} />}>
       {busy ? "Opening terminal…" : sid ? "Terminal open below" : "Set it up in terminal"}

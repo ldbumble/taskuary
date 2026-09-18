@@ -8,6 +8,9 @@ import CheckIcon from "@mui/icons-material/Check";
 import api from "./api";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 import { ChannelIcon } from "./ui.jsx";
+import { ABOUT_SECTIONS, secId } from "./settingsMap.js";
+
+const [S_YOU, S_CHANNEL, S_TOLD] = ABOUT_SECTIONS;   // the rail's sub-entries scroll to these three
 
 const svgUri = (svg) => `data:image/svg+xml;utf8,${encodeURIComponent(svg || "")}`;
 const CHANNEL_LABEL = { email: "Email", teams: "Microsoft Teams", telegram: "Telegram", whatsapp: "WhatsApp", slack: "Slack", github: "GitHub" };
@@ -42,7 +45,7 @@ export default function AboutYou() {
       {err && <Typography variant="body2" sx={{ color: "#6b2733", mb: 1 }}>{err}</Typography>}
 
       {/* the card: avatar, name, the line under it */}
-      <Box sx={{ display: "flex", gap: 3, alignItems: "flex-start", p: 2.5, border: `1px solid ${BORDER}`, borderRadius: 3, bgcolor: PANEL2, mb: 3, flexWrap: "wrap" }}>
+      <Box id={secId("about", S_YOU)} sx={{ display: "flex", gap: 3, alignItems: "flex-start", p: 2.5, border: `1px solid ${BORDER}`, borderRadius: 3, bgcolor: PANEL2, mb: 3, flexWrap: "wrap" }}>
         <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}>
           <Box component="img" alt="your avatar" src={svgUri(preview ? preview.svg : p.avatar)}
             sx={{ width: 128, height: 128, borderRadius: 4, boxShadow: "0 6px 18px rgba(40,30,20,.14)" }} />
@@ -83,7 +86,7 @@ export default function AboutYou() {
       </Box>
 
       {/* who you are on each channel, with provenance */}
-      <Typography sx={{ ...mono, fontSize: 10, letterSpacing: 1, color: FAINT, mb: 1 }}>WHO YOU ARE, PER CHANNEL</Typography>
+      <Typography id={secId("about", S_CHANNEL)} sx={{ ...mono, fontSize: 10, letterSpacing: 1, color: FAINT, mb: 1 }}>WHO YOU ARE, PER CHANNEL</Typography>
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         Everything a connector has learned about you, and where it learned it. Nothing here is guessed from mail — it is what you signed in as,
         typed under Sources, or set as the chat that pings you.
@@ -123,7 +126,7 @@ export default function AboutYou() {
       ))}
 
       {/* honesty about the gap between "known here" and "told to the agents" */}
-      <Typography sx={{ ...mono, fontSize: 10, letterSpacing: 1, color: FAINT, mt: 3, mb: 1 }}>WHAT THE AGENTS ARE TOLD ABOUT YOU</Typography>
+      <Typography id={secId("about", S_TOLD)} sx={{ ...mono, fontSize: 10, letterSpacing: 1, color: FAINT, mt: 3, mb: 1 }}>WHAT THE AGENTS ARE TOLD ABOUT YOU</Typography>
       <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>
         Agents read SOUL.md, where your name and email are filled in as tokens. The lines below are what it currently says about you; edit it on the Docs page.
       </Typography>

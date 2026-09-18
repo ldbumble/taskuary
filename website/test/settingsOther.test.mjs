@@ -41,16 +41,17 @@ test("the scalar bookkeeping keys are named, not guessed at", () => {
     "a knob with no reader is not offered, however much it looks like one");
 });
 
-test("a key the AI-defaults panel owns is suppressed on every tab, not just its own", () => {
+test("a key the AI-defaults panel owns is suppressed in every section, not just its own", () => {
   // assistant_ai lost its KNOB_META entry when it became a card, so meta() defaulted it to the
   // "Other" group - where the old tab-scoped guard did not run, and it came back as a bare
-  // unlabelled text box next to the machine state (d3bde8bd).
-  const at = src.indexOf("const rows = settings.filter");
+  // unlabelled text box next to the machine state (d3bde8bd). The groups are sections on one
+  // page now rather than tabs, and the rule is the same one: the filter never names a group.
+  const at = src.indexOf("const rowsOf = (g) => settings.filter");
   assert.notEqual(at, -1);
   const filter = src.slice(at, at + 260);
   assert.ok(filter.includes("!(panelOk && PANEL_OWNED.has(s.Name))"),
-    "the suppression must not be scoped to one tab");
-  assert.ok(!/cfgTab === "Triage & agents" && panelOk/.test(filter),
+    "the suppression must not be scoped to one section");
+  assert.ok(!/=== "Triage & agents" && panelOk/.test(filter),
     "the old tab-scoped form is what let an owned key leak onto Other");
 });
 
@@ -150,8 +151,14 @@ test("a live browser on an empty tab says it is an empty tab", () => {
 // whole column, a form does not (the owner, 2026-09-18). So the width is a property of the page,
 // declared beside its title, and the page components carry none of their own.
 test("each settings page declares its width in one table, and no page caps itself", () => {
-  assert.match(src, /gap: 3, alignItems: "start", maxWidth: 1560, mx: "auto"/,
-    "the shell owns the outer bound, and it takes more of the page than the old 1320");
+  // ...and the WHOLE BLOCK wears that width, rail included. Capping the page inside a grid that
+  // stayed 1560 wide pinned rail and page to the left of the window with half a screen of nothing
+  // beside them (the owner, 2026-09-18: "it's not centered??").
+  assert.match(src, /maxWidth: width \? RAIL \+ GUTTER \+ width : 1560/,
+    "the grid asks for the page's declared width plus the rail - not a fixed bound");
+  assert.match(src, /gap: 3, alignItems: "start", mx: "auto"/, "and mx:auto is what centres it");
+  assert.doesNotMatch(src, /minWidth: 0, maxWidth: \(!q &&/,
+    "the page must not be capped inside a column that is wider than it - that is the void");
   const table = /const PAGE_WIDTH = \{([^}]*)\}/.exec(src);
   assert.ok(table, "the widths live in a PAGE_WIDTH table");
   const named = [...table[1].matchAll(/(\w+):/g)].map((m) => m[1]).sort();

@@ -1,7 +1,8 @@
-// Settings, Stripe-style: a landing page of grouped category cards (icon + indigo title +
-// description) that drill into detail pages - breadcrumb on top, big title, underline tabs,
-// then generous divider-separated rows. Search on the landing reaches EVERYTHING (knobs,
-// rules, memory, help text) and jumps straight to the right page + tab.
+// Settings: a rail on the left that is the whole map - every page, and under it the sections
+// that page stacks - beside one scrolling page. Picking a section scrolls to it; it does not
+// swap the page out, so a knob two sections down is one scroll away rather than a tab hunt.
+// Search reaches EVERYTHING (knobs, rules, memory, help text, the section names themselves)
+// and lands you on the same anchor, under the same path the rail shows.
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
@@ -18,15 +19,17 @@ import TuneIcon from "@mui/icons-material/Tune";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
 import PsychologyIcon from "@mui/icons-material/Psychology";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import AiDefaults from "./AiDefaults.jsx";
 import AboutYou from "./AboutYou.jsx";
 import UpdateCard from "./UpdateCard.jsx";
 import SystemUpdateAltIcon from "@mui/icons-material/SystemUpdateAlt";
 import api from "./api";
 import { PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, ACTION_COLORS } from "./theme.jsx";
-import { ChannelIcon, ConfirmDelete, Empty, FilterPills } from "./ui.jsx";
+import { ChannelIcon, ConfirmDelete, Empty } from "./ui.jsx";
 import { notifyState } from "./notify.js";
 import { normalizeBrainOptions } from "./brainOptions.js";
+import { ABOUT_SECTIONS, AUDIT_SECTIONS, secId, scrollToSection, sectionOffset, SCROLL_TOP } from "./settingsMap.js";
 
 
 const KINDS = ["keyword", "sender", "sender_domain", "noreply", "first_time_sender"];
@@ -191,7 +194,11 @@ const HIDDEN = new Set(["ingest_status", "agent_issues_enabled", "agent_push_ena
                         // read back); they are simply not offered as something you can set.
                         "send_enabled", "outlook_drafts_enabled", "attach_threshold", "backup_agents",
                         "last_pinged_review", "triage_last_error",                          // bookkeeping
-                        "setup_dismissed", "task_id_mark", "learn_pending", "learn_last_reflect"]);
+                        // ...and the one step that records having been LOOKED at (setup.SEEN_MODELS,
+                        // written by the AI-defaults panel's own mount). A switch for it would
+                        // un-tick a setup step you had already done.
+                        "setup_dismissed", "setup_seen_models",
+                        "task_id_mark", "learn_pending", "learn_last_reflect"]);
 // the four AI defaults the panel at the top of this tab draws as cards - each would otherwise
 // also appear as a bare dropdown in the knob list, and `assistant_ai` appeared on a different
 // tab under a different name, which is how the general agent's brain went unfindable
@@ -214,9 +221,11 @@ const PANEL_OWNED = new Set(["triage_ai", "default_agent", "concierge_ai", "conc
 // `assistant_card` and `counsel_enabled` have NO reader anywhere: two more dead knobs found the
 // same way as the other four (grep every module for the key, do not trust the label).
 // ...and the two the combined "who may start a worker" row now owns: they are still the
-// settings senders.py reads, they just are not their own rows any more. Plus a one-shot
-// migration sentinel that ends in _fixed rather than _seeded and so slipped the suffix rule.
+// settings senders.py reads, they just are not their own rows any more. Plus two one-shot
+// migration sentinels that end in _fixed and _dropped rather than _seeded and so slipped the
+// suffix rule - the second of which was the only thing keeping "Other" on the page at all.
 const STATE = new Set(["trust_sent_history", "trust_non_email", "triage_pr_rule_fixed",
+  "whatsapp_star_dropped",
   "handbook_on_by_default", "processing_membership_rules", "voice_vocabulary",
   "assistant_card", "counsel_enabled",
   "app_sessions", "assistant_dock_task_id", "assistant_handoff", "assistant_last_run",
@@ -268,11 +277,24 @@ const PAGES = {
   updates: { title: "Updates", icon: SystemUpdateAltIcon, desc: "Which build is running, which is the latest release, and one button that installs it and reopens — connections and settings untouched." },
 };
 
+// WHAT EACH PAGE STACKS. The rail draws these under the page as sub-entries, the page stamps the
+// same id on the matching heading, and search says the same path back to you. Configuration's are
+// the schema's groups - add a group there and it appears in all three at once. A page with no
+// entry here is one section long and simply has no sub-entries.
+const SECTIONS = { about: ABOUT_SECTIONS, config: GROUPS, audit: AUDIT_SECTIONS };
+
+// The heading a rail entry scrolls to. scrollMarginTop is the belt to the offset's braces: a
+// keyboard "find in page" or a browser restoring the anchor does not go through scrollToSection.
+const SectionHead = ({ page, name }) => (
+  <Typography id={secId(page, name)} sx={{ color: INK, fontWeight: 800, fontSize: 14.5, pt: 0.5, pb: 0.75, mb: 1.75,
+    borderBottom: `1px solid ${BORDER}`, scrollMarginTop: `${SCROLL_TOP}px` }}>{name}</Typography>
+);
+
 // onNavigate is threaded through: goFromPanel below calls it, and it was declared on
 // SettingsView instead - two components apart, so the panel's "go to Connections" was a
 // ReferenceError waiting for a click. The scope test only tracks set* setters, so eslint's
 // no-undef is what caught it before it shipped.
-function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
+function SettingsPages({ page, setPage, q, setQ, onNavigate, onJump, onSections }) {
   const [policies, setPolicies] = useState(null);
   const [settings, setSettings] = useState([]);
   const [memory, setMemory] = useState([]);
@@ -281,17 +303,6 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
   const [verify, setVerify] = useState(null);
   const [help, setHelp] = useState(null);
   const [panelOk, setPanelOk] = useState(false);   // the AI defaults panel is standing up; until it is, the plain rows stay
-  const [cfgTab, setCfgTab] = useState(GROUPS[0]);   // the leading tab, whatever it is - a hardcoded name here went stale the moment a group was added in front of it
-  // ...and &group=<name> picks the tab within Configuration. The group names contain a `&` ("Triage
-  // & agents"), so the link carries them encoded and they are decoded exactly once here. This does
-  // NOT consume the hash: React runs child effects before parent ones, so blanking it here left
-  // SettingsView's own effect below with nothing to read, and the page never opened.
-  useEffect(() => {
-    const m = /group=([^&]+)/.exec(window.location.hash || "");
-    if (!m) return;
-    const want = decodeURIComponent(m[1]);
-    if (GROUPS.includes(want)) setCfgTab(want);
-  }, []);
   const [err, setErr] = useState("");
 
   const [brains, setBrains] = useState([{ value: "", label: "auto — first active AI connector", ready: true }]);
@@ -351,16 +362,22 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
     onNavigate?.("Connections");
   };
 
-  // Deep search: every hit knows which page (and tab) it lives on and jumps there.
+  // Deep search: every hit knows the page and the section it lives in, and scrolls there.
+  // Sections lead - they are the rail's own entries, and a search for a place should offer the place.
   const hit = (...parts) => parts.join(" ").toLowerCase().includes(q.toLowerCase());
   const results = !q ? [] : [
+    // the sections themselves, under the same path the rail draws - typing "display" should offer
+    // the section, not only the three knobs that happen to sit in it (the owner, 2026-09-18)
+    ...Object.entries(SECTIONS).flatMap(([pg, names]) => names.filter((n) => hit(n, PAGES[pg].title))
+      .map((n) => ({ key: `s${pg}${n}`, label: n, crumb: `${PAGES[pg].title} → ${n}`, section: true,
+        go: () => { setQ(""); onJump(pg, n); } }))),
     ...settings.filter((s) => { if (hidden(s.Name)) return false; const m = meta(s.Name); return hit(s.Name, s.Description, m.label, m.desc, m.help, m.group); })
       .map((s) => ({ key: `k${s.Name}`, label: meta(s.Name).label, crumb: `Configuration → ${meta(s.Name).group}`,
-        go: () => { setPage("config"); setCfgTab(meta(s.Name).group); setQ(""); } })),
+        go: () => { setQ(""); onJump("config", meta(s.Name).group); } })),
     ...(policies || []).filter((p) => hit(p.Name, p.Kind, p.Pattern, p.Action, p.Reason))
-      .map((p) => ({ key: `p${p.PolicyId}`, label: p.Name, crumb: "Routing policies", go: () => { setPage("policies"); setQ(""); } })),
+      .map((p) => ({ key: `p${p.PolicyId}`, label: p.Name, crumb: PAGES.policies.title, go: () => { setPage("policies"); setQ(""); } })),
     ...memory.filter((m) => hit(m.Note, m.Scope, m.ScopeKey, m.Source))
-      .map((m) => ({ key: `m${m.MemoryId}`, label: m.Note.slice(0, 70), crumb: "Agent memory", go: () => { setPage("memory"); setQ(""); } })),
+      .map((m) => ({ key: `m${m.MemoryId}`, label: m.Note.slice(0, 70), crumb: PAGES.memory.title, go: () => { setPage("memory"); setQ(""); } })),
   ];
 
   const control = (s) => {
@@ -513,6 +530,20 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
     );
   };
 
+  // WHAT CONFIGURATION ACTUALLY DRAWS, decided once and told to the rail. A group with nothing in
+  // it ("Other", on an install where no stray key fell there) must not be a rail entry: it would
+  // scroll nowhere and highlight nothing. The rail cannot work this out - the rows are here.
+  const rowsOf = (g) => settings.filter((s) => !hidden(s.Name) && meta(s.Name).group === g
+    && !(panelOk && PANEL_OWNED.has(s.Name)));
+  const panels = {
+    "Triage & agents": <AiDefaults brains={brainOptions} agents={agentOptions} onGo={goFromPanel} onLoaded={setPanelOk} />,
+    "Notifications": <NotifyStatus connectors={connectors} settings={settings} />,
+    "Assistant on your phone": <PhoneDoorways onLoaded={setPanelOk} />,
+  };
+  const cfgGroups = GROUPS.filter((g) => panels[g] || rowsOf(g).length);
+  const cfgKey = cfgGroups.join("|");
+  useEffect(() => { onSections(cfgKey ? cfgKey.split("|") : []); }, [cfgKey, onSections]);
+
   if (!policies) return <CircularProgress size={22} sx={{ m: 4 }} />;
 
   /* ── detail pages ─────────────────────────────────────────────────────── */
@@ -522,45 +553,46 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
     // then `assistant_ai` lost its entry when it became a card, fell to "Other" by default, and
     // came back as a bare unlabelled text box (d3bde8bd). `panelOk` still puts the plain rows
     // back if the panel fails to load, which is why they keep their KNOB_META entries.
-    const rows = settings.filter((s) => !hidden(s.Name) && meta(s.Name).group === cfgTab
-      && !(panelOk && PANEL_OWNED.has(s.Name)));
-    const tabs = GROUPS.filter((g) => settings.some((s) => meta(s.Name).group === g));
+    // A FUNCTION, NOT A COMPONENT: a component declared in here is a new type on every render,
+    // so React would remount every row and the box you are typing in would lose the caret.
+    const knobRow = (s) => {
+      const m = meta(s.Name);
+      return (
+        <Box key={s.Name} sx={{ display: "flex", alignItems: { xs: "stretch", sm: "center" }, flexDirection: { xs: "column", sm: "row" },
+          gap: { xs: 1, sm: 3 }, py: 2.5, borderBottom: `1px solid ${BORDER}`,
+          opacity: s.Name === "phone_approvals" && (settings.find((x) => x.Name === "notify_level") || {}).Value === "off" ? 0.5 : 1 }}>
+          <Box sx={{ flex: 1, minWidth: 0, cursor: m.help ? "pointer" : "default" }}
+            onClick={() => m.help && setHelp({ title: m.label, body: m.help })}>
+            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5, display: "flex", alignItems: "center", gap: 0.75 }}>
+              {m.label}
+              {m.help && <HelpOutlineIcon sx={{ fontSize: 15, color: "#cfc9bf" }} />}
+            </Typography>
+            <Typography variant="body2" sx={{ color: DIM, mt: 0.25 }}>{m.desc || s.Description}</Typography>
+            {/* the line every description was missing: what shipped, and whether this is
+                still it. Quiet on purpose - it is a fact you check, not a thing to read. */}
+            {defaultNote(s, m.type) && (
+              <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.3 }}>
+                {defaultNote(s, m.type)}
+              </Typography>
+            )}
+          </Box>
+          <Box sx={{ flexShrink: 0 }}>{control(s)}</Box>
+        </Box>
+      );
+    };
+    // ONE PAGE, NOT ELEVEN TABS. Every group is a section you scroll past and the rail holds the
+    // same eleven names, so nothing runs off the right edge and a knob you half remember is found
+    // by reading rather than by guessing which tab it was hiding on (the owner, 2026-09-18).
     return (
       <Box>
-        {/* the segmented pill bar, same as Reports and the Timeline - the old underlined tab
-            strip was the one place in the app still wearing a different header */}
-        <Box sx={{ mb: 2 }}><FilterPills options={tabs} value={cfgTab} onChange={setCfgTab} /></Box>
         <AssistantChanges />
-        {cfgTab === "Triage & agents" && <AiDefaults brains={brainOptions} agents={agentOptions} onGo={goFromPanel} onLoaded={setPanelOk} />}
-        {cfgTab === "Notifications" && <NotifyStatus connectors={connectors} settings={settings} />}
-        {cfgTab === "Assistant on your phone" && (
-          <PhoneDoorways onLoaded={setPanelOk} />
-        )}
-        {rows.map((s) => {
-          const m = meta(s.Name);
-          return (
-            <Box key={s.Name} sx={{ display: "flex", alignItems: { xs: "stretch", sm: "center" }, flexDirection: { xs: "column", sm: "row" },
-              gap: { xs: 1, sm: 3 }, py: 2.5, borderBottom: `1px solid ${BORDER}`,
-              opacity: s.Name === "phone_approvals" && (settings.find((x) => x.Name === "notify_level") || {}).Value === "off" ? 0.5 : 1 }}>
-              <Box sx={{ flex: 1, minWidth: 0, cursor: m.help ? "pointer" : "default" }}
-                onClick={() => m.help && setHelp({ title: m.label, body: m.help })}>
-                <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5, display: "flex", alignItems: "center", gap: 0.75 }}>
-                  {m.label}
-                  {m.help && <HelpOutlineIcon sx={{ fontSize: 15, color: "#cfc9bf" }} />}
-                </Typography>
-                <Typography variant="body2" sx={{ color: DIM, mt: 0.25 }}>{m.desc || s.Description}</Typography>
-                {/* the line every description was missing: what shipped, and whether this is
-                    still it. Quiet on purpose - it is a fact you check, not a thing to read. */}
-                {defaultNote(s, m.type) && (
-                  <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.3 }}>
-                    {defaultNote(s, m.type)}
-                  </Typography>
-                )}
-              </Box>
-              <Box sx={{ flexShrink: 0 }}>{control(s)}</Box>
-            </Box>
-          );
-        })}
+        {cfgGroups.map((g) => (
+          <Box key={g} sx={{ mb: 4.5 }}>
+            <SectionHead page="config" name={g} />
+            {panels[g]}
+            {rowsOf(g).map(knobRow)}
+          </Box>
+        ))}
         <HelpDialog help={help} onClose={() => setHelp(null)} />
       </Box>
     );
@@ -698,6 +730,7 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
   if (page === "audit") {
     return (
       <Box>
+        <SectionHead page="audit" name={AUDIT_SECTIONS[0]} />
         <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>
           Every consequential action — a message routed, a verdict given, a reply sent, an agent started, a connector or setting changed —
           is one row in an append-only log. Each row carries a hash of its own contents and of the row before it, so changing history
@@ -709,7 +742,6 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
           </Typography>
         </Typography>
         <Button variant="contained" startIcon={<VerifiedIcon sx={{ fontSize: 16 }} />} onClick={runVerify}>Verify chain</Button>
-        <AuditHistory />
         {verify && (
           <Box sx={{ mt: 2 }}>
             {verify.ok && <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: "#47654a" }}>
@@ -737,6 +769,8 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
             </Typography>}
           </Box>
         )}
+        <Box sx={{ mt: 4 }}><SectionHead page="audit" name={AUDIT_SECTIONS[1]} /></Box>
+        <AuditHistory />
         <HelpDialog help={help} onClose={() => setHelp(null)} />
       </Box>
     );
@@ -768,42 +802,137 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
 }
 
 // One page, a rail, and a search box that is always reachable. The landing grid meant every
-// trip between two settings went section → back → section; these five are edited together.
+// trip between two settings went section -> back -> section; these six are edited together.
 const NAV = ["about", "config", "policies", "memory", "audit", "updates"];
+const RAIL = 236, GUTTER = 24;   // the rail's own width, and the grid gap beside it
 
 export default function SettingsView({ onNavigate }) {
   const [page, setPage] = useState(NAV[0]);      // the rail's first entry is where Settings opens - About you
-  // #settings=<page> lands on one of the rail's pages, and &group= picks the tab within it. Settings
-  // had no hash routing at all, so every link in arrived on About you.
-  //
-  // The hash is consumed HERE and only here. Both halves are read by two effects in two components,
-  // and React runs the CHILD's first - consuming it in the child blanked it before this ever ran.
+  const [open, setOpen] = useState({ [NAV[0]]: true });   // which rail entries are showing their sections
+  const [jump, setJump] = useState("");          // a section id waiting for its page to be on screen
+  const [here, setHere] = useState("");          // the section the page is actually scrolled to
+  const [cfgSecs, setCfgSecs] = useState(null);  // Configuration's sections, as the page reports them
+  const [q, setQ] = useState("");
+  // The rail draws what the page draws. Configuration's list is the page's own - a group with no
+  // rows on this install is not an entry - and every other page's is fixed.
+  const sectionsOf = useCallback((k) => (k === "config" && cfgSecs) || SECTIONS[k] || [], [cfgSecs]);
+
+  // Go to a page, and to a section inside it. The heading may not exist yet - the page has not
+  // rendered, and its rows arrive from the server after that - so the scroll is retried until it
+  // lands or two seconds pass. Nothing swaps out: a section is a place on the page, not a tab.
+  const goTo = useCallback((pg, section) => {
+    setQ(""); setPage(pg); setOpen((o) => ({ ...o, [pg]: true }));
+    setHere(section || "");
+    if (section) setJump(secId(pg, section));
+    else window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+  // LANDING ONCE IS NOT LANDING. The heading exists long before the page has stopped growing under
+  // it - the AI panel fetches its brains, the rows arrive, the audit log paints - and every one of
+  // those pushes the anchor back down past the top bar. So it is nudged until the heading sits
+  // still where it belongs, or two seconds have gone by: smooth for the move you asked for, then
+  // instant corrections, which read as the page settling rather than as a second scroll.
+  useEffect(() => {
+    if (!jump) return;
+    let tries = 0, settled = 0, t;
+    const land = () => {
+      const at = sectionOffset(jump);
+      if (at?.landed) settled += 1;
+      else if (at && (tries === 0 || tries > 8)) { settled = 0; scrollToSection(jump, tries ? "auto" : "smooth"); }
+      if (settled > 2 || ++tries > 40) { setJump(""); return; }
+      t = setTimeout(land, 50);
+    };
+    land();
+    return () => clearTimeout(t);
+  }, [jump]);
+
+  // WHICH SECTION YOU ARE IN: the last heading that has passed under the top bar. Without it the
+  // rail would highlight the last thing you clicked and then quietly lie as you scrolled past it.
+  useEffect(() => {
+    const names = q ? [] : sectionsOf(page);
+    if (!names.length) { setHere(""); return; }
+    let queued = false;
+    const measure = () => {
+      queued = false;
+      let cur = "";
+      for (const n of names) {
+        const el = document.getElementById(secId(page, n));
+        if (el && el.getBoundingClientRect().top <= SCROLL_TOP + 8) cur = n;
+      }
+      // the last section is short and cannot scroll its heading up to the bar: at the foot of the
+      // page it is what you are looking at, whatever the arithmetic says about the one above it
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) cur = names[names.length - 1];
+      setHere(cur || names[0]);
+    };
+    const onScroll = () => { if (queued) return; queued = true; requestAnimationFrame(measure); };
+    measure();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [page, q, sectionsOf]);
+
+  // #settings=<page> lands on one of the rail's pages, and &group=<section> scrolls to a section
+  // inside it. The section names contain a `&` ("Triage & agents"), so a link carries them encoded
+  // and they are decoded exactly once, here. The hash is read and consumed in this one place: it
+  // used to be two effects in two components, and React runs the child's first, so the child
+  // blanked the hash before the parent ever read it.
   useEffect(() => {
     const hash = window.location.hash || "";
     if (!/settings=/.test(hash)) return;
     const m = /settings=([\w-]+)/.exec(hash);
+    const g = /group=([^&]+)/.exec(hash);
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
-    if (m && NAV.includes(m[1])) setPage(m[1]);
-  }, []);
-  const [q, setQ] = useState("");
+    if (!m || !NAV.includes(m[1])) return;
+    const want = g ? decodeURIComponent(g[1]) : "";
+    goTo(m[1], (SECTIONS[m[1]] || []).includes(want) ? want : "");
+  }, [goTo]);
+
+  // ...and a search reads at the width of the knobs it is offering; letting it take the whole
+  // 1560 put the void straight back on a page of five result cards.
+  const width = q ? PAGE_WIDTH.config : (PAGE_WIDTH[page] || 0);
   return (
-    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "236px minmax(0,1fr)" },
-      gap: 3, alignItems: "start", maxWidth: 1560, mx: "auto" }}>
-      <Box sx={{ position: { md: "sticky" }, top: { md: 62 } }}>
+    // THE BLOCK IS CENTRED, NOT THE PAGE INSIDE IT. Capping the page's width while the grid around
+    // it stayed 1560 wide left the rail and the page glued to the left of the window with half a
+    // screen of nothing beside them (the owner, 2026-09-18: "it's not centered??"). The width is
+    // still the page's own; the grid asks for exactly that plus the rail, and mx:auto does the rest.
+    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: `${RAIL}px minmax(0,1fr)` },
+      gap: 3, alignItems: "start", mx: "auto", maxWidth: width ? RAIL + GUTTER + width : 1560 }}>
+      <Box sx={{ position: { md: "sticky" }, top: { md: 62 }, maxHeight: { md: "calc(100vh - 74px)" }, overflowY: { md: "auto" } }}>
         <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16, mb: 1.5 }}>Settings</Typography>
         <TextField fullWidth placeholder="Search settings…" value={q}
           onChange={(e) => setQ(e.target.value)} sx={{ mb: 1.5, bgcolor: "#fff", borderRadius: 2 }}
           InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 17, color: FAINT }} /></InputAdornment> }} />
+        {/* THE RAIL IS THE MAP: a page, and under it the sections that page stacks. Eleven
+            Configuration groups were a pill strip that ran off the right edge of the page, and a
+            strip can only ever hold what fits across - a rail grows downward (the owner, 2026-09-18). */}
         {NAV.map((k) => {
-          const on = !q && page === k;
+          const on = !q && page === k, secs = q ? [] : sectionsOf(k), shown = !!open[k];
           return (
-            <Box key={k} onClick={() => { setQ(""); setPage(k); }}
-              sx={{ display: "flex", alignItems: "center", gap: 1.1, px: 1.25, height: 34, borderRadius: 1.75,
-                cursor: "pointer", fontSize: 12.5, fontWeight: on ? 600 : 400,
-                color: on ? "#41525f" : DIM, bgcolor: on ? "#eae4d8" : "transparent",
-                "&:hover": { bgcolor: on ? "#eae4d8" : "#f4f1ec" } }}>
-              {React.createElement(PAGES[k].icon, { sx: { fontSize: 16 } })}
-              {PAGES[k].title}
+            <Box key={k}>
+              <Box onClick={() => goTo(k)}
+                sx={{ display: "flex", alignItems: "center", gap: 1.1, px: 1.25, height: 34, borderRadius: 1.75,
+                  cursor: "pointer", fontSize: 12.5, fontWeight: on ? 600 : 400,
+                  color: on ? "#41525f" : DIM, bgcolor: on ? "#eae4d8" : "transparent",
+                  "&:hover": { bgcolor: on ? "#eae4d8" : "#f4f1ec" } }}>
+                {React.createElement(PAGES[k].icon, { sx: { fontSize: 16 } })}
+                <Box component="span" sx={{ flex: 1, minWidth: 0 }}>{PAGES[k].title}</Box>
+                {!!secs.length && (
+                  <ExpandMoreIcon titleAccess={`${shown ? "hide" : "show"} ${PAGES[k].title}'s sections`}
+                    onClick={(e) => { e.stopPropagation(); setOpen((o) => ({ ...o, [k]: !shown })); }}
+                    sx={{ fontSize: 17, color: FAINT, transition: "transform .15s", transform: shown ? "none" : "rotate(-90deg)",
+                      "&:hover": { color: INK } }} />
+                )}
+              </Box>
+              {shown && secs.map((n) => {
+                const at = on && here === n;
+                return (
+                  <Box key={n} onClick={() => goTo(k, n)}
+                    sx={{ ml: 2.5, pl: 1.25, pr: 0.75, py: 0.45, cursor: "pointer", fontSize: 12, lineHeight: 1.35,
+                      borderLeft: `2px solid ${at ? ACCENT2 : BORDER}`,
+                      color: at ? "#41525f" : DIM, fontWeight: at ? 650 : 400,
+                      "&:hover": { color: "#41525f", borderLeftColor: at ? ACCENT2 : "#c8c0b3" } }}>
+                    {n}
+                  </Box>
+                );
+              })}
             </Box>
           );
         })}
@@ -811,7 +940,7 @@ export default function SettingsView({ onNavigate }) {
           Everything here is stored locally, in the same SQLite file as your tasks.
         </Typography>
       </Box>
-      <Box sx={{ minWidth: 0, maxWidth: (!q && PAGE_WIDTH[page]) || "none" }}>
+      <Box sx={{ minWidth: 0 }}>
         {/* the other rails (Reports, Connections, Docs) open every section under its title; this
             one dropped you straight into the knobs, and the config page's sub-tabs read as the
             heading. Same title style the Board and Reports use. */}
@@ -821,7 +950,7 @@ export default function SettingsView({ onNavigate }) {
             <Typography variant="body2" sx={{ color: DIM, mt: 0.25 }}>{PAGES[page].desc}</Typography>
           </Box>
         )}
-        <SettingsPages page={q ? null : page} setPage={setPage} q={q} setQ={setQ} onNavigate={onNavigate} />
+        <SettingsPages page={q ? null : page} setPage={setPage} q={q} setQ={setQ} onNavigate={onNavigate} onJump={goTo} onSections={setCfgSecs} />
       </Box>
     </Box>
   );
@@ -882,7 +1011,7 @@ const AuditHistory = () => {
   return (
     <Box sx={{ mt: 3 }}>
       <Box sx={{ display: "flex", alignItems: "baseline", gap: 1.5, mb: 1 }}>
-        <Typography sx={{ ...mono, fontSize: 10, letterSpacing: 1, color: FAINT }}>HISTORY · LAST {rows.length} ACTIONS</Typography>
+        <Typography sx={{ ...mono, fontSize: 10, letterSpacing: 1, color: FAINT }}>LAST {rows.length} ACTIONS</Typography>
         <Box sx={{ flex: 1 }} />
         <TextField size="small" placeholder="filter — a task id, an action, a word" value={q} onChange={(e) => setQ(e.target.value)}
           sx={{ width: 280, bgcolor: "#fff" }} inputProps={{ style: { fontSize: 12, padding: "5px 9px" } }} />

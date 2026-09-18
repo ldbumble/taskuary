@@ -1337,39 +1337,47 @@ class WhichCheckoutTests(unittest.TestCase):
 
 
 class SettingProposalTests(unittest.TestCase):
-    """A standing instruction that belongs in a SWITCH is written there - but never on the
-    assistant's own say-so (the owner, 2026-09-03: "yes do it that way ask user if it can change
-    setttings")."""
+    """A setting is changed BY NAME (setting.set - the tiers, 2026-09-18): the model names the knob out of
+    the schema in its facts, code validates the value, it runs at once, and the receipt carries the undo.
+    The regex table that used to map a few phrases to a few switches is gone; the `setting` VERB with no
+    knob named gets the road, and writes nothing (the owner, 2026-09-03: "ask user if it can change
+    settings" - the ask is now the undo beside every change, and the audit row under it)."""
 
-    def test_a_switch_the_owner_names_is_proposed_and_nothing_changes_until_they_approve(self):
-        from taskuary import proposals, verdicts
+    def _call(self, s, kind, **params):
+        return concierge.say(s, 'do it', llm=lambda system, user, max_tokens=None: 'On it.\nCALL: ' + json.dumps({'kind': kind, 'params': params}))
+
+    def test_a_switch_named_by_the_verb_alone_changes_nothing_and_says_how(self):
         s = store()
-        s.save_connector({'Type': 'github', 'Name': 'GitHub', 'Secret': 'x', 'Active': 1,
-                          'ConfigJson': json.dumps({'use_as_tracker': True})}, 'o')
+        keys = ('agent_issues_enabled', 'coder_auto_enabled', 'poll_minutes', 'calendar_enabled')
+        before = {k: v for k, v in s.get_settings().items() if k in keys}
         out = decide(s, 'turn PRs into timeline items not tasks', 'setting')
-        self.assertEqual(out['decision']['verb'], 'setting')
-        rid = out['decision']['reviewId']
-        rv = s.get_review(rid)
-        self.assertEqual((rv['Kind'], rv['Status']), ('action', 'pending'))
-        self.assertIn('you asked for this setting', rv['Reason'])
-        self.assertIn('put it in front of you rather than touching it', out['say'])
-        self.assertTrue(json.loads(s.get_connector_by_type('github')['ConfigJson'])['use_as_tracker'],
-                        'nothing changed on the proposal alone')
-        # …and it waits in the pipe, so it cannot scroll away
-        self.assertEqual([(i['kind'], i['lane']) for i in pile(s)], [('action', 'approve')])
-        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
-            res = verdicts.decide(s, s.get_review(rid), 'approve', None, None, 'owner')
-        self.assertEqual(res['status'], 'approved')
-        self.assertFalse(json.loads(s.get_connector_by_type('github')['ConfigJson'])['use_as_tracker'])
-        self.assertEqual(s.get_settings().get('agent_issues_enabled'), '0')
+        self.assertIsNone(out['decision']); self.assertIn('Name the setting and the value', out['say'])
+        self.assertEqual({k: v for k, v in s.get_settings().items() if k in keys}, before)
+        self.assertEqual([r for r in s.list_reviews('pending') if r['Kind'] == 'action'], [])
 
-    def test_a_number_the_owner_says_out_loud_is_the_value(self):
+    def test_a_number_the_owner_says_out_loud_is_the_value_and_the_receipt_carries_the_undo(self):
         s = store()
-        out = decide(s, 'check the mail every 5 minutes', 'setting')
-        self.assertEqual(out['decision']['changes'], [{'name': 'poll_minutes', 'value': '5'}])
-        self.assertNotEqual(s.get_settings().get('poll_minutes'), '5', 'still theirs to approve')
+        with mock.patch.object(server, 'store', s):
+            out = self._call(s, 'setting.set', setting='poll_minutes', value='5')
+            self.assertEqual(out['proposal']['params'], {'setting': 'poll_minutes', 'value': '5'})
+            self.assertTrue(out['proposal'].get('auto'), 'an undoable write runs at once')
+            done = concierge.run_proposal(s, out['proposal'])
+        self.assertEqual(s.get_settings().get('poll_minutes'), '5')
+        self.assertIn('Undo: Put', concierge.receipt(s, done))
 
-    def test_only_the_allow_listed_switches_can_ever_be_named(self):
+    def test_the_assistant_writes_a_setting_only_through_the_registry_with_an_audit_row(self):
+        s = store()
+        before = dict(s.get_settings())
+        for words in ('stop auto-starting the coder', 'never read my calendar', 'the pipe should hold at most 15'):
+            decide(s, words, 'setting')                                   # words alone: nothing moves
+        self.assertEqual({k: v for k, v in s.get_settings().items() if k in ('coder_auto_enabled', 'calendar_enabled', 'funnel_max')},
+                         {k: v for k, v in before.items() if k in ('coder_auto_enabled', 'calendar_enabled', 'funnel_max')})
+        with mock.patch.object(server, 'store', s):
+            concierge.run_proposal(s, self._call(s, 'setting.set', setting='coder_auto_enabled', value='off')['proposal'])
+        self.assertEqual(s.get_settings().get('coder_auto_enabled'), '0')
+        self.assertTrue(any(r.get('Actor') == 'assistant' and r.get('EntityType') == 'setting' for r in s.list_audit(limit=20)))
+
+    def test_only_the_allow_listed_switches_can_ever_be_named_on_the_review_road(self):
         from taskuary import proposals
         s = store()
         for bad in ('agent_push_enabled', 'github_replies_ok', 'owner_email', 'agent_token'):
@@ -1380,18 +1388,6 @@ class SettingProposalTests(unittest.TestCase):
         self.assertFalse(ok); self.assertIn('whole number', why)
         ok, _ = proposals.validate(s, {'action': 'settings', 'changes': [{'name': 'coder_auto_enabled', 'value': False}]})
         self.assertTrue(ok)
-
-    def test_the_assistant_never_writes_a_setting_itself(self):
-        """Whatever the words, the only road to a written setting is proposals.execute behind an
-        approval - so the chat path must not touch the store."""
-        s = store()
-        before = dict(s.get_settings())
-        for words in ('stop auto-starting the coder', 'never read my calendar', 'the pipe should hold at most 15'):
-            decide(s, words, 'setting')
-        after = dict(s.get_settings())
-        self.assertEqual({k: v for k, v in after.items() if k in ('coder_auto_enabled', 'calendar_enabled', 'funnel_max')},
-                         {k: v for k, v in before.items() if k in ('coder_auto_enabled', 'calendar_enabled', 'funnel_max')})
-        self.assertEqual(len([r for r in s.list_reviews('pending') if r['Kind'] == 'action']), 3)
 
 
 # ── the buttons the assistant points at: every one of them, through the API ──────────────────

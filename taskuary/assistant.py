@@ -347,6 +347,84 @@ def candidates(store, c: dict) -> list:
     return out
 
 
+# ── the report proposes (the assistant-runs-the-app design, 2026-09-18) ──────────────────────────
+# Two idea kinds the REPORT raises and the chat assistant never invents: the app's own health, and a
+# system worth connecting. Deterministic reads, no model; each lands as a row like every other idea,
+# is taken or declined in the walk, and the decline is remembered on its key (fresh() below - a
+# constant `sig` means a dismissed idea never returns; a health sig is the failure's own stamp, so a
+# NEW failure comes back after the old one was seen).
+def health_ideas(store, now: datetime = None) -> list:
+    """A report that failed its last three runs; a workflow never run since it was saved; a live
+    connection erroring; a brain left blank while mail waits. One row each, the door is the tab that fixes it."""
+    from . import appfacts
+    out, now = [], now or datetime.now()
+    for r in appfacts.reports(store):
+        if not r['active']: continue
+        runs = store.report_runs(r['source_id'], 3) or []
+        if len(runs) >= 3 and all(x.get('failed') for x in runs):
+            out.append({'key': f"health:report:{r['source_id']}", 'kind': 'health', 'sig': str(runs[0].get('at') or '')[:16],
+                        'text': f"{r['title']} failed its last three runs - {_short(runs[0].get('error') or 'no reason recorded', 80)}.",
+                        'action': {'type': 'health', 'tab': 'Reports', 'hash': f"report={r['source_id']}", 'source_id': r['source_id'],
+                                   'why': 'three failures in a row is a broken report, not a bad day'}})
+        elif r['workflow'] and not runs:
+            out.append({'key': f"health:workflow:{r['source_id']}", 'kind': 'health', 'sig': 'never',
+                        'text': f"{r['title']} is a workflow that has never run - its clock is {r['schedule'] or 'not set'}.",
+                        'action': {'type': 'health', 'tab': 'Reports', 'hash': f"report={r['source_id']}", 'source_id': r['source_id'],
+                                   'why': 'a workflow that never ran is either mis-clocked or waiting on a sign-in'}})
+    for c in appfacts.connections(store):
+        if c['active'] and c['last_error']:
+            out.append({'key': f"health:connection:{c['connector_id']}", 'kind': 'health', 'sig': _short(c['last_error'], 60),
+                        'text': f"{c['name']} is erroring - {_short(c['last_error'], 80)}.",
+                        'action': {'type': 'health', 'tab': 'Connections', 'hash': f"connector={c['type']}", 'connector_id': c['connector_id'],
+                                   'why': 'a connection that errors reads nothing until somebody looks'}})
+    try:
+        waiting = len(store.pending_triage(limit=50))
+        brain = str(store.get_settings().get('triage_ai') or '').strip()
+        if waiting and not brain and not any(x['active'] and x['has_secret'] for x in appfacts.connections(store) if x['type'] in ('anthropic', 'openai', 'azure_openai', 'openrouter', 'ollama', 'meta')):
+            out.append({'key': 'health:brain', 'kind': 'health', 'sig': 'no-brain',
+                        'text': f'{waiting} messages wait for triage and no brain is set to read them.',
+                        'action': {'type': 'health', 'tab': 'Settings', 'hash': 'settings=config&group=Triage%20%26%20agents',
+                                   'why': 'nothing is judged until a brain is chosen'}})
+    except Exception as e: logger.debug(f'health: the brain check was skipped - {e}')
+    return out
+
+
+def connect_ideas(store, now: datetime = None, days: int = 30, floor: int = 3) -> list:
+    """The system the owner's own workflows name most, that nothing here reads. Evidence the app already
+    holds: sender domains and subjects across the last month, the systems triage learned from corrections
+    (routing_fact field `system`), SOUL.md, and reports pointing at a type with no connection. At most ONE
+    new suggestion per run, and never one already raised (declined or not) - one row a day, not a catalogue."""
+    from . import appfacts, connectorcatalog
+    from .senders import own_domains
+    texts = []
+    try:
+        mine = own_domains(store)
+        for m in store.feed(limit=600, days=days):
+            if str(m.get('Direction') or 'in') == 'out': continue
+            dom = str(m.get('FromEmail') or '').rsplit('@', 1)[-1].lower()
+            # ONE text per message - the sender's domain and the subject together - so a message counts once
+            texts.append(f"{dom.split('.')[0] if dom and dom not in mine else ''} {m.get('Subject') or ''}")
+    except Exception as e: logger.debug(f'connect: the feed was not read - {e}')
+    try: texts += [f['Value'] for f in store.routing_facts(field='system')]
+    except Exception: pass
+    try: texts += [ln for ln in str(store.get_doc('SOUL.md') or '').splitlines() if ln.strip()]
+    except Exception: pass
+    for r in appfacts.reports(store):
+        texts.append(r['title'])
+    connected = {c['type'] for c in appfacts.connections(store) if c['active']}
+    hits = connectorcatalog.mentions(texts, exclude_types=connected)
+    raised = {i['Key'] for i in store.list_ideas() if str(i['Key']).startswith('connect:')}
+    best = sorted(((n, t) for t, n in hits.items() if n >= floor and f'connect:{t}' not in raised), reverse=True)
+    if not best: return []
+    n, t = best[0]
+    card = connectorcatalog.by_type(t) or {'title': t, 'planned': False}
+    return [{'key': f'connect:{t}', 'kind': 'connect', 'sig': t,
+             'text': (f"{n} threads this month were about {card['title']} and nothing here reads it. "
+                      + ('It is on the roadmap - say so and it moves up.' if card.get('planned') else f"Connect {card['title']}?")),
+             'action': {'type': 'connect', 'connector_type': t, 'title': card['title'], 'planned': bool(card.get('planned')), 'count': n,
+                        'why': 'the systems your own mail and tasks name are the ones worth reading'}}]
+
+
 def fresh(state: dict, cand: dict, now: datetime) -> bool:
     """Worth saying now? Never said: yes. Said with these facts: no. Dismissed or done: only when
     the facts changed (a new last word on the thread, a moved meeting). Snoozed: when it wakes."""
@@ -1178,6 +1256,14 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
             'notes': '', 'scope': 'sources', 'systems': len(_ids(watch_source_ids)) + len(_inline(watch_sources))}
     else:
         rv = reviewed(cands, say, _recent(store), _open(store), _said(store), used, _week(store), _people(store)) | {'notes': note}
+    # ...and what the REPORT proposes on its own: the app's health and a system worth connecting. Read,
+    # not thought; fresh() keeps a declined one from coming back, and a raised one from repeating.
+    if not systems_only:
+        have = {s['key'] for s in say}
+        try:
+            say = list(say) + [x | {'why': x['action'].get('why', '')} for x in health_ideas(store, now) + connect_ideas(store, now)
+                               if x['key'] not in have and fresh(state, x, now)]
+        except Exception as e: logger.warning(f'assistant: the health and connect checks were skipped - {e}')
     stamp = now.strftime('%Y-%m-%d %H:%M:%S')
     if not say:
         # Nothing to say is the normal outcome of a monitor and it posts NOTHING - unless the owner

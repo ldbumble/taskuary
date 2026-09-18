@@ -1,0 +1,2137 @@
+{
+  "_": "THE connector catalogue, once: every card the Connections tab shows - the working ones (seeded as connector rows on first launch, store.py) and the planned ones - with a group, a one-line desc and `match`: the words in mail, chats, tasks and reports that mean this system. The tab reads it (connectorCatalog.js); the Assistant report reads it to suggest what to connect (assistant.connect_ideas). Add `match` words by hand when a system is known by another name.",
+  "cards": [
+    {
+      "type": "outlook",
+      "title": "Outlook mail",
+      "group": "Messaging",
+      "planned": false,
+      "desc": "Your Microsoft mailbox on the Timeline through triage. Sign in with your own account - no Azure portal - or register your own app if you prefer.",
+      "match": [
+        "outlook mail",
+        "outlook"
+      ]
+    },
+    {
+      "type": "teams",
+      "title": "Microsoft Teams",
+      "group": "Messaging",
+      "planned": false,
+      "desc": "Ingest Teams chats via Graph. Leave credentials blank to reuse the Outlook connector's app.",
+      "match": [
+        "microsoft teams",
+        "microsoft",
+        "teams"
+      ]
+    },
+    {
+      "type": "slack",
+      "title": "Slack",
+      "group": "Messaging",
+      "planned": false,
+      "desc": "Ingest Slack channels with a bot token - messages land on the Timeline through triage.",
+      "match": [
+        "slack"
+      ]
+    },
+    {
+      "type": "github",
+      "title": "GitHub",
+      "group": "Developer",
+      "planned": false,
+      "desc": "Paste a PAT - repos are auto-discovered, feed the Board's repo picker and the coder's issue loop. Per repo, choose what issues and PRs do: tasks, feed, or off.",
+      "match": [
+        "github"
+      ]
+    },
+    {
+      "type": "anthropic",
+      "title": "Anthropic API",
+      "group": "AI — agents & models",
+      "planned": false,
+      "desc": "Claude via the Anthropic API - powers intent triage (task / reply-only / FYI) once enabled.",
+      "match": [
+        "anthropic api",
+        "anthropic"
+      ]
+    },
+    {
+      "type": "openai",
+      "title": "OpenAI API",
+      "group": "AI — agents & models",
+      "planned": false,
+      "desc": "OpenAI models for intent triage - alternative to the Anthropic connector.",
+      "match": [
+        "openai api",
+        "openai"
+      ]
+    },
+    {
+      "type": "azure_openai",
+      "title": "Azure OpenAI",
+      "group": "AI — agents & models",
+      "planned": false,
+      "desc": "Your Azure OpenAI deployment for intent triage - endpoint + deployment + key.",
+      "match": [
+        "azure openai",
+        "azure",
+        "openai"
+      ]
+    },
+    {
+      "type": "openrouter",
+      "title": "OpenRouter",
+      "group": "AI — agents & models",
+      "planned": false,
+      "desc": "One key, the whole catalog — open-weights Llama / Qwen / Mistral and every closed model, through OpenRouter's OpenAI-compatible API.",
+      "match": [
+        "openrouter"
+      ]
+    },
+    {
+      "type": "ollama",
+      "title": "Local models (Ollama)",
+      "group": "AI — agents & models",
+      "planned": false,
+      "desc": "Open-source models on YOUR machine — Ollama out of the box, or any OpenAI-compatible server (LM Studio, llama.cpp, vLLM). Your mail never leaves the box.",
+      "match": [
+        "local models (ollama)",
+        "ollama"
+      ]
+    },
+    {
+      "type": "meta",
+      "title": "Meta Model API (Muse Spark)",
+      "group": "AI — agents & models",
+      "planned": false,
+      "desc": "Meta's Muse Spark models through the Meta Model API — the way to reach Muse Spark on Windows, where the muse CLI does not install.",
+      "match": [
+        "meta model api (muse spark)",
+        "meta",
+        "muse",
+        "spark"
+      ]
+    },
+    {
+      "type": "typesafe",
+      "title": "TypeSafe Jev (decisions only)",
+      "group": "AI — agents & models",
+      "planned": false,
+      "desc": "TypeSafe's Jev — answers typed questions with calibrated probabilities instead of words. It can decide where a finished report goes; it cannot write one.",
+      "match": [
+        "typesafe jev (decisions only)",
+        "typesafe",
+        "jev",
+        "decisions",
+        "only"
+      ]
+    },
+    {
+      "type": "mssql",
+      "title": "Microsoft SQL Server",
+      "group": "Databases",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "microsoft sql server",
+        "microsoft",
+        "sql",
+        "mssql"
+      ]
+    },
+    {
+      "type": "telegram",
+      "title": "Telegram",
+      "group": "Messaging",
+      "planned": false,
+      "desc": "A Telegram bot as an inbound channel - approved chats flow through triage; approved replies go back into the same chat. Unknown chats never become work: a bot is public.",
+      "match": [
+        "telegram"
+      ]
+    },
+    {
+      "type": "whatsapp",
+      "title": "WhatsApp",
+      "group": "Messaging",
+      "planned": false,
+      "desc": "Your own WhatsApp, via a small bridge that runs beside Taskuary (Baileys, installed separately) - chats flow through triage, approved replies go back into the chat.",
+      "match": [
+        "whatsapp"
+      ]
+    },
+    {
+      "type": "imessage",
+      "title": "Apple Messages",
+      "group": "Messaging",
+      "planned": false,
+      "desc": "The Mac's own Messages — iMessage, SMS and RCS that reach this machine. Chats flow through triage, approved replies go back into the same chat through Messages.app. macOS only.",
+      "match": [
+        "apple messages",
+        "apple",
+        "messages",
+        "imessage"
+      ]
+    },
+    {
+      "type": "gmail",
+      "title": "Gmail / Google Workspace",
+      "group": "Messaging",
+      "planned": false,
+      "desc": "A Gmail or Google Workspace mailbox - IMAP in through triage, replies back over Gmail's own SMTP, in-thread. Optional OAuth fields add the calendar.",
+      "match": [
+        "gmail / google workspace",
+        "gmail",
+        "google",
+        "workspace"
+      ]
+    },
+    {
+      "type": "imap",
+      "title": "Any mailbox (IMAP)",
+      "group": "Messaging",
+      "planned": false,
+      "desc": "Any mailbox that speaks IMAP - a domain.com address, Yahoo, an ISP, your webhost. In through triage, replies out over its SMTP.",
+      "match": [
+        "any mailbox (imap)",
+        "any",
+        "mailbox",
+        "imap"
+      ]
+    },
+    {
+      "type": "winrm",
+      "title": "Remote Windows (WinRM)",
+      "group": "Cloud & infrastructure",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "remote windows (winrm)",
+        "remote",
+        "windows",
+        "winrm"
+      ]
+    },
+    {
+      "type": "database",
+      "title": "Any database (connection string)",
+      "group": "Databases",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "any database (connection string)",
+        "any",
+        "database",
+        "connection",
+        "string"
+      ]
+    },
+    {
+      "type": "robinhood",
+      "title": "Robinhood (agentic trading)",
+      "group": "Markets & finance",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "robinhood (agentic trading)",
+        "robinhood",
+        "agentic",
+        "trading"
+      ]
+    },
+    {
+      "type": "aws",
+      "title": "Amazon Web Services",
+      "group": "Cloud & infrastructure",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "amazon web services",
+        "amazon",
+        "web",
+        "services",
+        "aws"
+      ]
+    },
+    {
+      "type": "azure",
+      "title": "Microsoft Azure",
+      "group": "Cloud & infrastructure",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "microsoft azure",
+        "microsoft",
+        "azure"
+      ]
+    },
+    {
+      "type": "sharepoint",
+      "title": "SharePoint",
+      "group": "Files & sheets",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "sharepoint"
+      ]
+    },
+    {
+      "type": "google_sheets",
+      "title": "Google Sheets",
+      "group": "Files & sheets",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "google sheets",
+        "google"
+      ]
+    },
+    {
+      "type": "smb_file",
+      "title": "Network file share",
+      "group": "Files & sheets",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "network file share",
+        "network",
+        "file",
+        "share",
+        "smb file"
+      ]
+    },
+    {
+      "type": "sftp",
+      "title": "SFTP",
+      "group": "Files & sheets",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "sftp"
+      ]
+    },
+    {
+      "type": "knowledge",
+      "title": "Knowledge base",
+      "group": "Files & sheets",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "knowledge base",
+        "knowledge",
+        "base"
+      ]
+    },
+    {
+      "type": "handbook",
+      "title": "Company Hub",
+      "group": "Files & sheets",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "company hub",
+        "company",
+        "hub",
+        "handbook"
+      ]
+    },
+    {
+      "type": "jira",
+      "title": "Jira",
+      "group": "Project management",
+      "planned": false,
+      "desc": "Jira issues ASSIGNED TO YOU land on the Timeline through triage — 'assigned in Jira' and 'asked by email' end up in the one funnel.",
+      "match": [
+        "jira"
+      ]
+    },
+    {
+      "type": "asana",
+      "title": "Asana",
+      "group": "Project management",
+      "planned": false,
+      "desc": "Asana tasks ASSIGNED TO YOU land on the Timeline through triage, linking back to Asana.",
+      "match": [
+        "asana"
+      ]
+    },
+    {
+      "type": "monday",
+      "title": "Monday.com",
+      "group": "Project management",
+      "planned": false,
+      "desc": "Monday.com items ASSIGNED TO YOU (any People column naming you) land on the Timeline through triage.",
+      "match": [
+        "monday.com",
+        "monday"
+      ]
+    },
+    {
+      "type": "clickup",
+      "title": "ClickUp",
+      "group": "Project management",
+      "planned": false,
+      "desc": "ClickUp tasks ASSIGNED TO YOU land on the Timeline through triage, with their list, status and priority.",
+      "match": [
+        "clickup"
+      ]
+    },
+    {
+      "type": "todoist",
+      "title": "Todoist",
+      "group": "Project management",
+      "planned": false,
+      "desc": "The Todoist tasks a filter says are live — due today and overdue by default — land on the Timeline through triage.",
+      "match": [
+        "todoist"
+      ]
+    },
+    {
+      "type": "gitlab",
+      "title": "GitLab",
+      "group": "Developer",
+      "planned": false,
+      "desc": "GitLab issues and merge requests ASSIGNED TO YOU land on the Timeline through triage — gitlab.com or your own instance.",
+      "match": [
+        "gitlab"
+      ]
+    },
+    {
+      "type": "azdo",
+      "title": "Azure DevOps",
+      "group": "Developer",
+      "planned": false,
+      "desc": "Azure DevOps work items ASSIGNED TO YOU land on the Timeline through triage.",
+      "match": [
+        "azure devops",
+        "azure",
+        "devops",
+        "azdo"
+      ]
+    },
+    {
+      "type": "linear",
+      "title": "Linear",
+      "group": "Project management",
+      "planned": false,
+      "desc": "Linear issues ASSIGNED TO YOU land on the Timeline through triage.",
+      "match": [
+        "linear"
+      ]
+    },
+    {
+      "type": "trello",
+      "title": "Trello",
+      "group": "Project management",
+      "planned": false,
+      "desc": "Open Trello cards ASSIGNED TO YOU land on the Timeline through triage.",
+      "match": [
+        "trello"
+      ]
+    },
+    {
+      "type": "notion",
+      "title": "Notion",
+      "group": "Project management",
+      "planned": false,
+      "desc": "Notion pages shared with your integration show on the Timeline as they change — a FEED by default: edits are information, not assignments.",
+      "match": [
+        "notion"
+      ]
+    },
+    {
+      "type": "discord",
+      "title": "Discord",
+      "group": "Messaging",
+      "planned": false,
+      "desc": "Watch Discord channels with a bot — messages land on the Timeline through triage, and approved replies post back to the channel.",
+      "match": [
+        "discord"
+      ]
+    },
+    {
+      "type": "sentry",
+      "title": "Sentry",
+      "group": "Developer",
+      "planned": false,
+      "desc": "New unresolved Sentry errors land on the Timeline through triage — production breakage joins the same funnel as the mail about it.",
+      "match": [
+        "sentry"
+      ]
+    },
+    {
+      "type": "pagerduty",
+      "title": "PagerDuty",
+      "group": "Developer",
+      "planned": false,
+      "desc": "Open PagerDuty incidents (triggered / acknowledged) land on the Timeline through triage.",
+      "match": [
+        "pagerduty"
+      ]
+    },
+    {
+      "type": "prometheus",
+      "title": "Prometheus",
+      "group": "Observability",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "prometheus"
+      ]
+    },
+    {
+      "type": "datadog",
+      "title": "Datadog",
+      "group": "Observability",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "datadog"
+      ]
+    },
+    {
+      "type": "intacct",
+      "title": "Sage Intacct",
+      "group": "Corporate systems",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "sage intacct",
+        "sage",
+        "intacct"
+      ]
+    },
+    {
+      "type": "quickbooks",
+      "title": "QuickBooks Online",
+      "group": "Corporate systems",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "quickbooks online",
+        "quickbooks",
+        "online"
+      ]
+    },
+    {
+      "type": "teller",
+      "title": "Bank & card feed (Teller)",
+      "group": "Markets & finance",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "bank & card feed (teller)",
+        "bank",
+        "card",
+        "feed",
+        "teller"
+      ]
+    },
+    {
+      "type": "simplefin",
+      "title": "Bank & card feed (SimpleFIN)",
+      "group": "Markets & finance",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "bank & card feed (simplefin)",
+        "bank",
+        "card",
+        "feed",
+        "simplefin"
+      ]
+    },
+    {
+      "type": "coingecko",
+      "title": "Crypto prices (CoinGecko)",
+      "group": "Markets & finance",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "crypto prices (coingecko)",
+        "crypto",
+        "prices",
+        "coingecko"
+      ]
+    },
+    {
+      "type": "frankfurter",
+      "title": "FX rates",
+      "group": "Markets & finance",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "fx rates",
+        "rates",
+        "frankfurter"
+      ]
+    },
+    {
+      "type": "yahoo",
+      "title": "Yahoo Finance (best-effort)",
+      "group": "Markets & finance",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "yahoo finance (best-effort)",
+        "yahoo",
+        "finance",
+        "best",
+        "effort"
+      ]
+    },
+    {
+      "type": "sec_edgar",
+      "title": "SEC filings (EDGAR)",
+      "group": "Markets & finance",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "sec filings (edgar)",
+        "sec",
+        "filings",
+        "edgar",
+        "sec edgar"
+      ]
+    },
+    {
+      "type": "twelvedata",
+      "title": "Twelve Data",
+      "group": "Markets & finance",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "twelve data",
+        "twelve",
+        "data",
+        "twelvedata"
+      ]
+    },
+    {
+      "type": "alphavantage",
+      "title": "Alpha Vantage",
+      "group": "Markets & finance",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "alpha vantage",
+        "alpha",
+        "vantage",
+        "alphavantage"
+      ]
+    },
+    {
+      "type": "fred",
+      "title": "FRED (keyless)",
+      "group": "Markets & finance",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "fred (keyless)",
+        "fred",
+        "keyless"
+      ]
+    },
+    {
+      "type": "finnhub",
+      "title": "Finnhub",
+      "group": "Markets & finance",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "finnhub"
+      ]
+    },
+    {
+      "type": "polygon",
+      "title": "Polygon.io",
+      "group": "Markets & finance",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "polygon.io",
+        "polygon"
+      ]
+    },
+    {
+      "type": "tiingo",
+      "title": "Tiingo",
+      "group": "Markets & finance",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "tiingo"
+      ]
+    },
+    {
+      "type": "fmp",
+      "title": "Financial Modeling Prep",
+      "group": "Markets & finance",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "financial modeling prep",
+        "financial",
+        "modeling",
+        "prep",
+        "fmp"
+      ]
+    },
+    {
+      "type": "alpaca",
+      "title": "Alpaca (market data)",
+      "group": "Markets & finance",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "alpaca (market data)",
+        "alpaca",
+        "market",
+        "data"
+      ]
+    },
+    {
+      "type": "screen",
+      "title": "Strategy screen",
+      "group": "Markets & finance",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "strategy screen",
+        "strategy",
+        "screen"
+      ]
+    },
+    {
+      "type": "zoho_invoice",
+      "title": "Zoho Invoice",
+      "group": "Corporate systems",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "zoho invoice",
+        "zoho",
+        "invoice"
+      ]
+    },
+    {
+      "type": "exa",
+      "title": "Exa search",
+      "group": "Agentic web",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "exa search",
+        "exa",
+        "search"
+      ]
+    },
+    {
+      "type": "tavily",
+      "title": "Tavily search",
+      "group": "Agentic web",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "tavily search",
+        "tavily",
+        "search"
+      ]
+    },
+    {
+      "type": "firecrawl",
+      "title": "Firecrawl",
+      "group": "Agentic web",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "firecrawl"
+      ]
+    },
+    {
+      "type": "reader",
+      "title": "Jina Reader",
+      "group": "Agentic web",
+      "planned": false,
+      "desc": "",
+      "match": [
+        "jina reader",
+        "jina",
+        "reader"
+      ]
+    },
+    {
+      "type": "gemini_stt",
+      "title": "Google Gemini transcription",
+      "group": "AI — voice",
+      "planned": false,
+      "desc": "Google Gemini transcription — accurate speech-to-text with native custom-vocabulary biasing for names, acronyms and system terms.",
+      "match": [
+        "google gemini transcription",
+        "google",
+        "gemini",
+        "transcription",
+        "gemini stt"
+      ]
+    },
+    {
+      "type": "groq_stt",
+      "title": "Groq (Whisper)",
+      "group": "AI — voice",
+      "planned": false,
+      "desc": "Whisper on Groq — the cheapest hosted transcription (free tier; ~$0.04 per audio hour after) and the fastest: an hour of audio in seconds.",
+      "match": [
+        "groq (whisper)",
+        "groq",
+        "whisper",
+        "groq stt"
+      ]
+    },
+    {
+      "type": "openai_stt",
+      "title": "OpenAI transcription",
+      "group": "AI — voice",
+      "planned": false,
+      "desc": "OpenAI transcription — gpt-4o-mini-transcribe is cheap ($0.003/min) and accurate; gpt-4o-transcribe is the accuracy leader on independent benchmarks.",
+      "match": [
+        "openai transcription",
+        "openai",
+        "transcription",
+        "openai stt"
+      ]
+    },
+    {
+      "type": "deepgram",
+      "title": "Deepgram",
+      "group": "AI — voice",
+      "planned": false,
+      "desc": "Deepgram Nova-3 — the fastest hosted API, ~$0.26 per audio hour, very strong accuracy, generous free credit to start.",
+      "match": [
+        "deepgram"
+      ]
+    },
+    {
+      "type": "elevenlabs_stt",
+      "title": "ElevenLabs Scribe",
+      "group": "AI — voice",
+      "planned": false,
+      "desc": "ElevenLabs Scribe — top-tier accuracy across 99 languages, ~$0.22 per audio hour; the pick when notes arrive in several languages.",
+      "match": [
+        "elevenlabs scribe",
+        "elevenlabs",
+        "scribe",
+        "elevenlabs stt"
+      ]
+    },
+    {
+      "type": "stt_server",
+      "title": "Any Whisper server",
+      "group": "AI — voice",
+      "planned": false,
+      "desc": "Any speech-to-text server speaking the OpenAI audio endpoint: speaches (faster-whisper), whisper.cpp server, LocalAI — audio stays on your network.",
+      "match": [
+        "any whisper server",
+        "any",
+        "whisper",
+        "stt server"
+      ]
+    },
+    {
+      "type": "local_whisper",
+      "title": "Local Whisper",
+      "group": "AI — voice",
+      "planned": false,
+      "desc": "Whisper on this machine, no key and no server — faster-whisper inside Taskuary. Audio never leaves the box; the first run downloads the model.",
+      "match": [
+        "local whisper",
+        "whisper"
+      ]
+    },
+    {
+      "type": "openai_image",
+      "title": "OpenAI images",
+      "group": "AI — images",
+      "planned": false,
+      "desc": "OpenAI image generation — gpt-image-1 renders text inside a picture legibly, which matters for diagrams and mock-ups.",
+      "match": [
+        "openai images",
+        "openai",
+        "openai image"
+      ]
+    },
+    {
+      "type": "azure_openai_image",
+      "title": "Azure OpenAI images",
+      "group": "AI — images",
+      "planned": false,
+      "desc": "The same models through your own Azure tenant — the prompt stays inside your subscription and its data agreements.",
+      "match": [
+        "azure openai images",
+        "azure",
+        "openai",
+        "azure openai image"
+      ]
+    },
+    {
+      "type": "gemini_image",
+      "title": "Google Gemini images",
+      "group": "AI — images",
+      "planned": false,
+      "desc": "Google's image model — fast, cheap, and strong at editing an idea in words rather than restarting from scratch.",
+      "match": [
+        "google gemini images",
+        "google",
+        "gemini",
+        "gemini image"
+      ]
+    },
+    {
+      "type": "stability_image",
+      "title": "Stability AI",
+      "group": "AI — images",
+      "planned": false,
+      "desc": "Stable Image from Stability AI — credits rather than a subscription, and core is inexpensive per picture.",
+      "match": [
+        "stability ai",
+        "stability",
+        "stability image"
+      ]
+    },
+    {
+      "type": "openrouter_image",
+      "title": "OpenRouter images",
+      "group": "AI — images",
+      "planned": false,
+      "desc": "One key, many image models — OpenRouter bills them all together, so you can switch model without a new account.",
+      "match": [
+        "openrouter images",
+        "openrouter",
+        "openrouter image"
+      ]
+    },
+    {
+      "type": "replicate_image",
+      "title": "Replicate",
+      "group": "AI — images",
+      "planned": false,
+      "desc": "FLUX, SDXL, Ideogram, Recraft and hundreds more behind one token — change the model field and you have changed vendor, with no new card.",
+      "match": [
+        "replicate",
+        "replicate image"
+      ]
+    },
+    {
+      "type": "xai_image",
+      "title": "xAI Grok images",
+      "group": "AI — images",
+      "planned": false,
+      "desc": "xAI's image model, on the same OpenAI-shaped endpoint — useful if you already hold an xAI key.",
+      "match": [
+        "xai grok images",
+        "xai",
+        "grok",
+        "xai image"
+      ]
+    },
+    {
+      "type": "image_server",
+      "title": "Any image server",
+      "group": "AI — images",
+      "planned": false,
+      "desc": "Any server speaking the OpenAI images endpoint — ComfyUI or Automatic1111 behind a compatible proxy, LocalAI, vLLM. Nothing leaves the machine and nothing is billed.",
+      "match": [
+        "any image server",
+        "any",
+        "image server"
+      ]
+    },
+    {
+      "type": "xai",
+      "title": "xAI (Grok API)",
+      "group": "AI — agents & models",
+      "planned": true,
+      "desc": "Grok models through xAI's API",
+      "match": [
+        "xai (grok api)",
+        "xai",
+        "grok"
+      ]
+    },
+    {
+      "type": "gemini",
+      "title": "Google Gemini API",
+      "group": "AI — agents & models",
+      "planned": true,
+      "desc": "Gemini models through Google AI Studio",
+      "match": [
+        "google gemini api",
+        "google",
+        "gemini"
+      ]
+    },
+    {
+      "type": "mistral",
+      "title": "Mistral AI",
+      "group": "AI — agents & models",
+      "planned": true,
+      "desc": "Mistral and Codestral hosted models",
+      "match": [
+        "mistral ai",
+        "mistral"
+      ]
+    },
+    {
+      "type": "cohere",
+      "title": "Cohere",
+      "group": "AI — agents & models",
+      "planned": true,
+      "desc": "Command models and enterprise RAG",
+      "match": [
+        "cohere"
+      ]
+    },
+    {
+      "type": "groq",
+      "title": "Groq inference",
+      "group": "AI — agents & models",
+      "planned": true,
+      "desc": "Fast hosted inference for open models",
+      "match": [
+        "groq inference",
+        "groq"
+      ]
+    },
+    {
+      "type": "together",
+      "title": "Together AI",
+      "group": "AI — agents & models",
+      "planned": true,
+      "desc": "Hosted open-source models and embeddings",
+      "match": [
+        "together ai",
+        "together"
+      ]
+    },
+    {
+      "type": "fireworks_ai",
+      "title": "Fireworks AI",
+      "group": "AI — agents & models",
+      "planned": true,
+      "desc": "Serverless inference for open models",
+      "match": [
+        "fireworks ai",
+        "fireworks"
+      ]
+    },
+    {
+      "type": "cerebras",
+      "title": "Cerebras Inference",
+      "group": "AI — agents & models",
+      "planned": true,
+      "desc": "High-speed inference for open models",
+      "match": [
+        "cerebras inference",
+        "cerebras"
+      ]
+    },
+    {
+      "type": "bedrock",
+      "title": "AWS Bedrock",
+      "group": "AI — agents & models",
+      "planned": true,
+      "desc": "Claude, Llama and other models through AWS",
+      "match": [
+        "aws bedrock",
+        "aws",
+        "bedrock"
+      ]
+    },
+    {
+      "type": "vertex_ai",
+      "title": "Google Vertex AI",
+      "group": "AI — agents & models",
+      "planned": true,
+      "desc": "Gemini and partner models through GCP",
+      "match": [
+        "google vertex ai",
+        "google",
+        "vertex",
+        "vertex ai"
+      ]
+    },
+    {
+      "type": "assemblyai",
+      "title": "AssemblyAI",
+      "group": "AI — voice",
+      "planned": true,
+      "desc": "Hosted transcription and audio intelligence",
+      "match": [
+        "assemblyai"
+      ]
+    },
+    {
+      "type": "azure_speech",
+      "title": "Azure AI Speech",
+      "group": "AI — voice",
+      "planned": true,
+      "desc": "Microsoft speech-to-text and diarization",
+      "match": [
+        "azure ai speech",
+        "azure",
+        "speech",
+        "azure speech"
+      ]
+    },
+    {
+      "type": "amazon_transcribe",
+      "title": "Amazon Transcribe",
+      "group": "AI — voice",
+      "planned": true,
+      "desc": "AWS speech-to-text for recorded audio",
+      "match": [
+        "amazon transcribe",
+        "amazon",
+        "transcribe"
+      ]
+    },
+    {
+      "type": "speechmatics",
+      "title": "Speechmatics",
+      "group": "AI — voice",
+      "planned": true,
+      "desc": "Multilingual speech recognition",
+      "match": [
+        "speechmatics"
+      ]
+    },
+    {
+      "type": "gladia",
+      "title": "Gladia",
+      "group": "AI — voice",
+      "planned": true,
+      "desc": "Real-time and recorded transcription",
+      "match": [
+        "gladia"
+      ]
+    },
+    {
+      "type": "exchange",
+      "title": "Exchange Server",
+      "group": "Email",
+      "planned": true,
+      "desc": "On-premises Exchange mailboxes",
+      "match": [
+        "exchange server",
+        "exchange"
+      ]
+    },
+    {
+      "type": "fastmail",
+      "title": "Fastmail",
+      "group": "Email",
+      "planned": true,
+      "desc": "Mail, contacts and calendars",
+      "match": [
+        "fastmail"
+      ]
+    },
+    {
+      "type": "proton_mail",
+      "title": "Proton Mail",
+      "group": "Email",
+      "planned": true,
+      "desc": "Mail through Proton Mail Bridge",
+      "match": [
+        "proton mail",
+        "proton"
+      ]
+    },
+    {
+      "type": "yahoo_mail",
+      "title": "Yahoo Mail",
+      "group": "Email",
+      "planned": true,
+      "desc": "Yahoo mailboxes and folders",
+      "match": [
+        "yahoo mail",
+        "yahoo"
+      ]
+    },
+    {
+      "type": "mailgun",
+      "title": "Mailgun",
+      "group": "Email",
+      "planned": true,
+      "desc": "Inbound routes and delivery events",
+      "match": [
+        "mailgun"
+      ]
+    },
+    {
+      "type": "sendgrid",
+      "title": "SendGrid",
+      "group": "Email",
+      "planned": true,
+      "desc": "Inbound parse and delivery events",
+      "match": [
+        "sendgrid"
+      ]
+    },
+    {
+      "type": "google_chat",
+      "title": "Google Chat",
+      "group": "Messaging",
+      "planned": true,
+      "desc": "Spaces, threads and direct messages",
+      "match": [
+        "google chat",
+        "google"
+      ]
+    },
+    {
+      "type": "mattermost",
+      "title": "Mattermost",
+      "group": "Messaging",
+      "planned": true,
+      "desc": "Self-hosted team channels",
+      "match": [
+        "mattermost"
+      ]
+    },
+    {
+      "type": "matrix",
+      "title": "Matrix",
+      "group": "Messaging",
+      "planned": true,
+      "desc": "Open Matrix rooms and direct messages",
+      "match": [
+        "matrix"
+      ]
+    },
+    {
+      "type": "signal",
+      "title": "Signal",
+      "group": "Messaging",
+      "planned": true,
+      "desc": "Signal conversations through a local bridge",
+      "match": [
+        "signal"
+      ]
+    },
+    {
+      "type": "zoom_chat",
+      "title": "Zoom Team Chat",
+      "group": "Messaging",
+      "planned": true,
+      "desc": "Channels and direct messages",
+      "match": [
+        "zoom team chat",
+        "zoom",
+        "team",
+        "zoom chat"
+      ]
+    },
+    {
+      "type": "webex",
+      "title": "Webex",
+      "group": "Messaging",
+      "planned": true,
+      "desc": "Webex spaces and messages",
+      "match": [
+        "webex"
+      ]
+    },
+    {
+      "type": "rocketchat",
+      "title": "Rocket.Chat",
+      "group": "Messaging",
+      "planned": true,
+      "desc": "Self-hosted chat rooms",
+      "match": [
+        "rocket.chat",
+        "rocketchat"
+      ]
+    },
+    {
+      "type": "bitbucket",
+      "title": "Bitbucket",
+      "group": "Developer",
+      "planned": true,
+      "desc": "Repositories, pull requests and issues",
+      "match": [
+        "bitbucket"
+      ]
+    },
+    {
+      "type": "jenkins",
+      "title": "Jenkins",
+      "group": "Developer",
+      "planned": true,
+      "desc": "Builds, failures and job status",
+      "match": [
+        "jenkins"
+      ]
+    },
+    {
+      "type": "circleci",
+      "title": "CircleCI",
+      "group": "Developer",
+      "planned": true,
+      "desc": "Pipelines, workflows and test failures",
+      "match": [
+        "circleci"
+      ]
+    },
+    {
+      "type": "buildkite",
+      "title": "Buildkite",
+      "group": "Developer",
+      "planned": true,
+      "desc": "Build pipelines and agent status",
+      "match": [
+        "buildkite"
+      ]
+    },
+    {
+      "type": "docker_hub",
+      "title": "Docker Hub",
+      "group": "Developer",
+      "planned": true,
+      "desc": "Images, tags and build activity",
+      "match": [
+        "docker hub",
+        "docker",
+        "hub"
+      ]
+    },
+    {
+      "type": "sonarqube",
+      "title": "SonarQube",
+      "group": "Developer",
+      "planned": true,
+      "desc": "Quality gates and code findings",
+      "match": [
+        "sonarqube"
+      ]
+    },
+    {
+      "type": "basecamp",
+      "title": "Basecamp",
+      "group": "Project management",
+      "planned": true,
+      "desc": "Projects, to-dos and messages",
+      "match": [
+        "basecamp"
+      ]
+    },
+    {
+      "type": "ms_planner",
+      "title": "Microsoft Planner",
+      "group": "Project management",
+      "planned": true,
+      "desc": "Plans, buckets and assigned tasks",
+      "match": [
+        "microsoft planner",
+        "microsoft",
+        "planner",
+        "ms planner"
+      ]
+    },
+    {
+      "type": "smartsheet",
+      "title": "Smartsheet",
+      "group": "Project management",
+      "planned": true,
+      "desc": "Sheets, rows and workflow updates",
+      "match": [
+        "smartsheet"
+      ]
+    },
+    {
+      "type": "airtable",
+      "title": "Airtable",
+      "group": "Project management",
+      "planned": true,
+      "desc": "Bases, records and automations",
+      "match": [
+        "airtable"
+      ]
+    },
+    {
+      "type": "wrike",
+      "title": "Wrike",
+      "group": "Project management",
+      "planned": true,
+      "desc": "Projects, requests and assigned work",
+      "match": [
+        "wrike"
+      ]
+    },
+    {
+      "type": "shortcut",
+      "title": "Shortcut",
+      "group": "Project management",
+      "planned": true,
+      "desc": "Stories, epics and iterations",
+      "match": [
+        "shortcut"
+      ]
+    },
+    {
+      "type": "github_projects",
+      "title": "GitHub Projects",
+      "group": "Project management",
+      "planned": true,
+      "desc": "Project boards and work items",
+      "match": [
+        "github projects",
+        "github",
+        "projects"
+      ]
+    },
+    {
+      "type": "postgresql",
+      "title": "PostgreSQL",
+      "group": "Databases",
+      "planned": true,
+      "desc": "Postgres databases without a hand-written URL",
+      "match": [
+        "postgresql"
+      ]
+    },
+    {
+      "type": "mysql",
+      "title": "MySQL",
+      "group": "Databases",
+      "planned": true,
+      "desc": "MySQL and MariaDB databases",
+      "match": [
+        "mysql"
+      ]
+    },
+    {
+      "type": "snowflake",
+      "title": "Snowflake",
+      "group": "Databases",
+      "planned": true,
+      "desc": "Warehouses, queries and scheduled reports",
+      "match": [
+        "snowflake"
+      ]
+    },
+    {
+      "type": "bigquery",
+      "title": "Google BigQuery",
+      "group": "Databases",
+      "planned": true,
+      "desc": "Datasets and scheduled SQL queries",
+      "match": [
+        "google bigquery",
+        "google",
+        "bigquery"
+      ]
+    },
+    {
+      "type": "mongodb",
+      "title": "MongoDB",
+      "group": "Databases",
+      "planned": true,
+      "desc": "Collections, documents and Atlas clusters",
+      "match": [
+        "mongodb"
+      ]
+    },
+    {
+      "type": "dynamodb",
+      "title": "Amazon DynamoDB",
+      "group": "Databases",
+      "planned": true,
+      "desc": "Tables, items and query reports",
+      "match": [
+        "amazon dynamodb",
+        "amazon",
+        "dynamodb"
+      ]
+    },
+    {
+      "type": "clickhouse",
+      "title": "ClickHouse",
+      "group": "Databases",
+      "planned": true,
+      "desc": "Analytical databases and queries",
+      "match": [
+        "clickhouse"
+      ]
+    },
+    {
+      "type": "redis",
+      "title": "Redis",
+      "group": "Databases",
+      "planned": true,
+      "desc": "Keys, streams and operational metrics",
+      "match": [
+        "redis"
+      ]
+    },
+    {
+      "type": "gcp",
+      "title": "Google Cloud",
+      "group": "Cloud & infrastructure",
+      "planned": true,
+      "desc": "Projects, resources and audit activity",
+      "match": [
+        "google cloud",
+        "google",
+        "cloud",
+        "gcp"
+      ]
+    },
+    {
+      "type": "kubernetes",
+      "title": "Kubernetes",
+      "group": "Cloud & infrastructure",
+      "planned": true,
+      "desc": "Clusters, workloads and events",
+      "match": [
+        "kubernetes"
+      ]
+    },
+    {
+      "type": "cloudflare",
+      "title": "Cloudflare",
+      "group": "Cloud & infrastructure",
+      "planned": true,
+      "desc": "Zones, Workers and security events",
+      "match": [
+        "cloudflare"
+      ]
+    },
+    {
+      "type": "digitalocean",
+      "title": "DigitalOcean",
+      "group": "Cloud & infrastructure",
+      "planned": true,
+      "desc": "Droplets, apps and managed databases",
+      "match": [
+        "digitalocean"
+      ]
+    },
+    {
+      "type": "vercel",
+      "title": "Vercel",
+      "group": "Cloud & infrastructure",
+      "planned": true,
+      "desc": "Deployments, projects and build failures",
+      "match": [
+        "vercel"
+      ]
+    },
+    {
+      "type": "netlify",
+      "title": "Netlify",
+      "group": "Cloud & infrastructure",
+      "planned": true,
+      "desc": "Sites, deploys and functions",
+      "match": [
+        "netlify"
+      ]
+    },
+    {
+      "type": "heroku",
+      "title": "Heroku",
+      "group": "Cloud & infrastructure",
+      "planned": true,
+      "desc": "Apps, releases and dynos",
+      "match": [
+        "heroku"
+      ]
+    },
+    {
+      "type": "terraform_cloud",
+      "title": "Terraform Cloud",
+      "group": "Cloud & infrastructure",
+      "planned": true,
+      "desc": "Runs, workspaces and policy checks",
+      "match": [
+        "terraform cloud",
+        "terraform",
+        "cloud"
+      ]
+    },
+    {
+      "type": "netsuite",
+      "title": "NetSuite",
+      "group": "Corporate systems",
+      "planned": true,
+      "desc": "ERP records, saved searches and reports",
+      "match": [
+        "netsuite"
+      ]
+    },
+    {
+      "type": "sap",
+      "title": "SAP",
+      "group": "Corporate systems",
+      "planned": true,
+      "desc": "ERP data and business workflows",
+      "match": [
+        "sap"
+      ]
+    },
+    {
+      "type": "salesforce",
+      "title": "Salesforce",
+      "group": "Corporate systems",
+      "planned": true,
+      "desc": "CRM records, cases and opportunities",
+      "match": [
+        "salesforce"
+      ]
+    },
+    {
+      "type": "hubspot",
+      "title": "HubSpot",
+      "group": "Corporate systems",
+      "planned": true,
+      "desc": "CRM contacts, deals and tickets",
+      "match": [
+        "hubspot"
+      ]
+    },
+    {
+      "type": "servicenow",
+      "title": "ServiceNow",
+      "group": "Corporate systems",
+      "planned": true,
+      "desc": "Incidents, requests and workflows",
+      "match": [
+        "servicenow"
+      ]
+    },
+    {
+      "type": "dynamics365",
+      "title": "Dynamics 365",
+      "group": "Corporate systems",
+      "planned": true,
+      "desc": "CRM and finance records",
+      "match": [
+        "dynamics 365",
+        "dynamics",
+        "365",
+        "dynamics365"
+      ]
+    },
+    {
+      "type": "bamboohr",
+      "title": "BambooHR",
+      "group": "Corporate systems",
+      "planned": true,
+      "desc": "People, time off and employee data",
+      "match": [
+        "bamboohr"
+      ]
+    },
+    {
+      "type": "workday",
+      "title": "Workday",
+      "group": "Corporate systems",
+      "planned": true,
+      "desc": "HR, finance and workforce data",
+      "match": [
+        "workday"
+      ]
+    },
+    {
+      "type": "adp",
+      "title": "ADP",
+      "group": "Corporate systems",
+      "planned": true,
+      "desc": "Payroll, workforce and employee data",
+      "match": [
+        "adp"
+      ]
+    },
+    {
+      "type": "epic",
+      "title": "Epic (EMR)",
+      "group": "Corporate systems",
+      "planned": true,
+      "desc": "Clinical records and operational reports",
+      "match": [
+        "epic (emr)",
+        "epic",
+        "emr"
+      ]
+    },
+    {
+      "type": "cerner",
+      "title": "Oracle Cerner (EMR)",
+      "group": "Corporate systems",
+      "planned": true,
+      "desc": "Clinical and scheduling data",
+      "match": [
+        "oracle cerner (emr)",
+        "oracle",
+        "cerner",
+        "emr"
+      ]
+    },
+    {
+      "type": "pointclickcare",
+      "title": "PointClickCare (EMR)",
+      "group": "Corporate systems",
+      "planned": true,
+      "desc": "Senior-care clinical and operational data",
+      "match": [
+        "pointclickcare (emr)",
+        "pointclickcare",
+        "emr"
+      ]
+    },
+    {
+      "type": "plaid",
+      "title": "Plaid",
+      "group": "Markets & finance",
+      "planned": true,
+      "desc": "Bank account and transaction data through a linked-account aggregator",
+      "match": [
+        "plaid"
+      ]
+    },
+    {
+      "type": "ibkr",
+      "title": "Interactive Brokers",
+      "group": "Markets & finance",
+      "planned": true,
+      "desc": "Positions, orders and account data",
+      "match": [
+        "interactive brokers",
+        "interactive",
+        "brokers",
+        "ibkr"
+      ]
+    },
+    {
+      "type": "schwab",
+      "title": "Charles Schwab",
+      "group": "Markets & finance",
+      "planned": true,
+      "desc": "Brokerage accounts and market data",
+      "match": [
+        "charles schwab",
+        "charles",
+        "schwab"
+      ]
+    },
+    {
+      "type": "tradier",
+      "title": "Tradier",
+      "group": "Markets & finance",
+      "planned": true,
+      "desc": "Brokerage market data and trading",
+      "match": [
+        "tradier"
+      ]
+    },
+    {
+      "type": "eodhd",
+      "title": "EOD Historical Data",
+      "group": "Markets & finance",
+      "planned": true,
+      "desc": "End-of-day and fundamental data across global exchanges",
+      "match": [
+        "eod historical data",
+        "eod",
+        "historical",
+        "data",
+        "eodhd"
+      ]
+    },
+    {
+      "type": "marketstack",
+      "title": "Marketstack",
+      "group": "Markets & finance",
+      "planned": true,
+      "desc": "Historical and intraday stock market data",
+      "match": [
+        "marketstack"
+      ]
+    },
+    {
+      "type": "intrinio",
+      "title": "Intrinio",
+      "group": "Markets & finance",
+      "planned": true,
+      "desc": "Financial data feeds and fundamentals for public companies",
+      "match": [
+        "intrinio"
+      ]
+    },
+    {
+      "type": "benzinga",
+      "title": "Benzinga",
+      "group": "Markets & finance",
+      "planned": true,
+      "desc": "Market news, analyst ratings and calendar events",
+      "match": [
+        "benzinga"
+      ]
+    },
+    {
+      "type": "grafana",
+      "title": "Grafana",
+      "group": "Observability",
+      "planned": true,
+      "desc": "Dashboards, alerts and annotations",
+      "match": [
+        "grafana"
+      ]
+    },
+    {
+      "type": "elastic",
+      "title": "Elasticsearch",
+      "group": "Observability",
+      "planned": true,
+      "desc": "Search, logs and indexed events",
+      "match": [
+        "elasticsearch",
+        "elastic"
+      ]
+    },
+    {
+      "type": "new_relic",
+      "title": "New Relic",
+      "group": "Observability",
+      "planned": true,
+      "desc": "APM incidents, errors and alerts",
+      "match": [
+        "new relic",
+        "new",
+        "relic"
+      ]
+    },
+    {
+      "type": "splunk",
+      "title": "Splunk",
+      "group": "Observability",
+      "planned": true,
+      "desc": "Searches, dashboards and alerts",
+      "match": [
+        "splunk"
+      ]
+    },
+    {
+      "type": "honeycomb",
+      "title": "Honeycomb",
+      "group": "Observability",
+      "planned": true,
+      "desc": "Traces, triggers and SLOs",
+      "match": [
+        "honeycomb"
+      ]
+    },
+    {
+      "type": "dynatrace",
+      "title": "Dynatrace",
+      "group": "Observability",
+      "planned": true,
+      "desc": "Problems, services and observability data",
+      "match": [
+        "dynatrace"
+      ]
+    },
+    {
+      "type": "better_stack",
+      "title": "Better Stack",
+      "group": "Observability",
+      "planned": true,
+      "desc": "Logs, incidents and uptime checks",
+      "match": [
+        "better stack",
+        "better",
+        "stack"
+      ]
+    },
+    {
+      "type": "uptimerobot",
+      "title": "UptimeRobot",
+      "group": "Observability",
+      "planned": true,
+      "desc": "Monitor status and outage alerts",
+      "match": [
+        "uptimerobot"
+      ]
+    },
+    {
+      "type": "perplexity",
+      "title": "Perplexity",
+      "group": "Agentic web",
+      "planned": true,
+      "desc": "Web-grounded answers and research",
+      "match": [
+        "perplexity"
+      ]
+    },
+    {
+      "type": "serpapi",
+      "title": "SerpAPI",
+      "group": "Agentic web",
+      "planned": true,
+      "desc": "Structured search-engine results",
+      "match": [
+        "serpapi"
+      ]
+    },
+    {
+      "type": "browserbase",
+      "title": "Browserbase",
+      "group": "Agentic web",
+      "planned": true,
+      "desc": "Managed browsers for web agents",
+      "match": [
+        "browserbase"
+      ]
+    },
+    {
+      "type": "brave_search",
+      "title": "Brave Search",
+      "group": "Agentic web",
+      "planned": true,
+      "desc": "Independent web and news search",
+      "match": [
+        "brave search",
+        "brave",
+        "search"
+      ]
+    },
+    {
+      "type": "bing_search",
+      "title": "Bing Web Search",
+      "group": "Agentic web",
+      "planned": true,
+      "desc": "Microsoft web and news search",
+      "match": [
+        "bing web search",
+        "bing",
+        "web",
+        "search",
+        "bing search"
+      ]
+    },
+    {
+      "type": "apify",
+      "title": "Apify",
+      "group": "Agentic web",
+      "planned": true,
+      "desc": "Hosted crawlers and structured web datasets",
+      "match": [
+        "apify"
+      ]
+    },
+    {
+      "type": "scrapingbee",
+      "title": "ScrapingBee",
+      "group": "Agentic web",
+      "planned": true,
+      "desc": "Rendered pages and extraction",
+      "match": [
+        "scrapingbee"
+      ]
+    },
+    {
+      "type": "oxylabs",
+      "title": "Oxylabs",
+      "group": "Agentic web",
+      "planned": true,
+      "desc": "Web scraping and proxy-backed collection",
+      "match": [
+        "oxylabs"
+      ]
+    },
+    {
+      "type": "google_drive",
+      "title": "Google Drive",
+      "group": "Files & sheets",
+      "planned": true,
+      "desc": "Files, folders and shared drives",
+      "match": [
+        "google drive",
+        "google",
+        "drive"
+      ]
+    },
+    {
+      "type": "onedrive",
+      "title": "OneDrive",
+      "group": "Files & sheets",
+      "planned": true,
+      "desc": "Files and folders in Microsoft 365",
+      "match": [
+        "onedrive"
+      ]
+    },
+    {
+      "type": "dropbox",
+      "title": "Dropbox",
+      "group": "Files & sheets",
+      "planned": true,
+      "desc": "Files, folders and shared content",
+      "match": [
+        "dropbox"
+      ]
+    },
+    {
+      "type": "box",
+      "title": "Box",
+      "group": "Files & sheets",
+      "planned": true,
+      "desc": "Enterprise files and metadata",
+      "match": [
+        "box"
+      ]
+    },
+    {
+      "type": "egnyte",
+      "title": "Egnyte",
+      "group": "Files & sheets",
+      "planned": true,
+      "desc": "Enterprise files and governed content",
+      "match": [
+        "egnyte"
+      ]
+    },
+    {
+      "type": "coda",
+      "title": "Coda",
+      "group": "Files & sheets",
+      "planned": true,
+      "desc": "Docs, tables and rows",
+      "match": [
+        "coda"
+      ]
+    },
+    {
+      "type": "office365_files",
+      "title": "Microsoft 365 files",
+      "group": "Files & sheets",
+      "planned": true,
+      "desc": "Word, Excel and PowerPoint content",
+      "match": [
+        "microsoft 365 files",
+        "microsoft",
+        "365",
+        "files",
+        "office365 files"
+      ]
+    },
+    {
+      "type": "stripe",
+      "title": "Stripe",
+      "group": "Everything else",
+      "planned": true,
+      "desc": "Payments, subscriptions and disputes",
+      "match": [
+        "stripe"
+      ]
+    },
+    {
+      "type": "shopify",
+      "title": "Shopify",
+      "group": "Everything else",
+      "planned": true,
+      "desc": "Orders, products and customers",
+      "match": [
+        "shopify"
+      ]
+    },
+    {
+      "type": "square",
+      "title": "Square",
+      "group": "Everything else",
+      "planned": true,
+      "desc": "Payments, orders and locations",
+      "match": [
+        "square"
+      ]
+    },
+    {
+      "type": "paypal",
+      "title": "PayPal",
+      "group": "Everything else",
+      "planned": true,
+      "desc": "Payments, disputes and transactions",
+      "match": [
+        "paypal"
+      ]
+    },
+    {
+      "type": "twilio",
+      "title": "Twilio",
+      "group": "Everything else",
+      "planned": true,
+      "desc": "SMS, calls and delivery events",
+      "match": [
+        "twilio"
+      ]
+    },
+    {
+      "type": "docusign",
+      "title": "DocuSign",
+      "group": "Everything else",
+      "planned": true,
+      "desc": "Envelopes, signatures and status changes",
+      "match": [
+        "docusign"
+      ]
+    },
+    {
+      "type": "zoom",
+      "title": "Zoom",
+      "group": "Everything else",
+      "planned": true,
+      "desc": "Meetings, recordings and transcripts",
+      "match": [
+        "zoom"
+      ]
+    },
+    {
+      "type": "calendly",
+      "title": "Calendly",
+      "group": "Everything else",
+      "planned": true,
+      "desc": "Scheduled events and invitees",
+      "match": [
+        "calendly"
+      ]
+    },
+    {
+      "type": "intercom",
+      "title": "Intercom",
+      "group": "Everything else",
+      "planned": true,
+      "desc": "Customer conversations and tickets",
+      "match": [
+        "intercom"
+      ]
+    },
+    {
+      "type": "zendesk",
+      "title": "Zendesk",
+      "group": "Everything else",
+      "planned": true,
+      "desc": "Support tickets and conversations",
+      "match": [
+        "zendesk"
+      ]
+    },
+    {
+      "type": "shipstation",
+      "title": "ShipStation",
+      "group": "Everything else",
+      "planned": true,
+      "desc": "Orders, shipments and delivery status",
+      "match": [
+        "shipstation"
+      ]
+    }
+  ]
+}

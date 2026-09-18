@@ -513,14 +513,30 @@ export function AgentDoneCard({ card, onOpenTask, onDone, onSurface }) {
 }
 
 // the assistant's own line: the slipped ask, the promise, the thread gone quiet
-export function IdeaCard({ card, onAct, onOpenTask, onTimeline }) {
+export function IdeaCard({ card, onAct, onOpenTask, onTimeline, onNavigate }) {
   const a = card.action || {};
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
-  const words = { followup: "waiting on them", promise: "you promised", asked: "slipped", cold: "gone quiet", idea: "worth a thought" };
+  const words = { followup: "waiting on them", promise: "you promised", asked: "slipped", cold: "gone quiet", idea: "worth a thought",
+                  connect: "worth connecting", health: "needs a look" };
+  // THE REPORT PROPOSES, THE CARD HAS THE DOORS (the assistant-runs-the-app design, 2026-09-18): a
+  // system to connect opens its card on the Connections tab; a health finding opens the tab that fixes
+  // it. "Not for us" is the plain done verb - the idea's key is remembered and it never comes back.
+  const go = (tab, hash) => { if (hash) window.location.hash = hash; onNavigate?.(tab); };
   return (
     <CardShell card={card} kicker={words[card.idea_kind] || "slipped"} title={card.title} sub={card.why} err={err}>
       <div className="tq-card-actions">
+        {card.idea_kind === "connect" && a.connector_type && (
+          <Button size="small" variant="contained" disableElevation sx={primary}
+            onClick={() => go("Connections", `connector=${a.connector_type}`)}>{a.planned ? `Vote for ${a.title || a.connector_type}` : `Connect ${a.title || a.connector_type}`}</Button>
+        )}
+        {card.idea_kind === "health" && a.tab && (
+          <Button size="small" variant="contained" disableElevation sx={primary} onClick={() => go(a.tab, a.hash || "")}>Open {a.tab}</Button>
+        )}
+        {(card.idea_kind === "connect" || card.idea_kind === "health") && onAct && (
+          <Button size="small" onClick={() => onAct(card.idea_kind === "connect" ? "Not for us - remembered." : "Seen.")} sx={faint}>
+            {card.idea_kind === "connect" ? "Not for us" : "Seen"}</Button>
+        )}
         <span className="sp" />
         <Where card={{ ...card, tid: a.tid || card.tid, mid: a.mid || card.mid }} onOpenTask={onOpenTask} onTimeline={onTimeline} />
       </div>

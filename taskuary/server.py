@@ -5992,6 +5992,11 @@ def _poll_reports(backfill_hours: float = 0, what: str = 'syncing', startup: boo
         _lap('housekeeping')
         run_due_reports(target_store, startup)          # ...the seeded 'Assistant' report among them (assistant.py)
         _lap('reports')
+        try:                                            # ...and the phone's morning line, once a day (remote_assistant)
+            from . import remote_assistant
+            remote_assistant.morning_line(target_store)
+        except Exception as e:
+            logger.warning(f'the morning line was skipped: {e}')
         return added
     finally:
         try:

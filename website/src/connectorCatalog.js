@@ -1,155 +1,16 @@
-// Integrations that belong in the Connectors catalog but do not have a working
-// executor yet. Keeping the roadmap in data (rather than scattering one-off cards
-// through ConnectorsView) makes it harder for a category to quietly become empty.
-export const PLANNED_CONNECTORS = Object.freeze({
-  "AI — agents & models": [
-    { type: "xai", title: "xAI (Grok API)", desc: "Grok models through xAI's API" },
-    { type: "gemini", title: "Google Gemini API", desc: "Gemini models through Google AI Studio" },
-    { type: "mistral", title: "Mistral AI", desc: "Mistral and Codestral hosted models" },
-    { type: "cohere", title: "Cohere", desc: "Command models and enterprise RAG" },
-    { type: "groq", title: "Groq inference", desc: "Fast hosted inference for open models" },
-    { type: "together", title: "Together AI", desc: "Hosted open-source models and embeddings" },
-    { type: "fireworks_ai", title: "Fireworks AI", desc: "Serverless inference for open models" },
-    { type: "cerebras", title: "Cerebras Inference", desc: "High-speed inference for open models" },
-    { type: "bedrock", title: "AWS Bedrock", desc: "Claude, Llama and other models through AWS" },
-    { type: "vertex_ai", title: "Google Vertex AI", desc: "Gemini and partner models through GCP" },
-  ],
-  "AI — voice": [
-    { type: "assemblyai", title: "AssemblyAI", desc: "Hosted transcription and audio intelligence" },
-    { type: "azure_speech", title: "Azure AI Speech", desc: "Microsoft speech-to-text and diarization" },
-    { type: "amazon_transcribe", title: "Amazon Transcribe", desc: "AWS speech-to-text for recorded audio" },
-    { type: "speechmatics", title: "Speechmatics", desc: "Multilingual speech recognition" },
-    { type: "gladia", title: "Gladia", desc: "Real-time and recorded transcription" },
-  ],
-  Email: [
-    { type: "exchange", title: "Exchange Server", desc: "On-premises Exchange mailboxes" },
-    { type: "fastmail", title: "Fastmail", desc: "Mail, contacts and calendars" },
-    { type: "proton_mail", title: "Proton Mail", desc: "Mail through Proton Mail Bridge" },
-    { type: "yahoo_mail", title: "Yahoo Mail", desc: "Yahoo mailboxes and folders" },
-    { type: "mailgun", title: "Mailgun", desc: "Inbound routes and delivery events" },
-    { type: "sendgrid", title: "SendGrid", desc: "Inbound parse and delivery events" },
-  ],
-  Messaging: [
-    { type: "google_chat", title: "Google Chat", desc: "Spaces, threads and direct messages" },
-    { type: "mattermost", title: "Mattermost", desc: "Self-hosted team channels" },
-    { type: "matrix", title: "Matrix", desc: "Open Matrix rooms and direct messages" },
-    { type: "signal", title: "Signal", desc: "Signal conversations through a local bridge" },
-    { type: "zoom_chat", title: "Zoom Team Chat", desc: "Channels and direct messages" },
-    { type: "webex", title: "Webex", desc: "Webex spaces and messages" },
-    { type: "rocketchat", title: "Rocket.Chat", desc: "Self-hosted chat rooms" },
-  ],
-  Developer: [
-    { type: "bitbucket", title: "Bitbucket", desc: "Repositories, pull requests and issues" },
-    { type: "jenkins", title: "Jenkins", desc: "Builds, failures and job status" },
-    { type: "circleci", title: "CircleCI", desc: "Pipelines, workflows and test failures" },
-    { type: "buildkite", title: "Buildkite", desc: "Build pipelines and agent status" },
-    { type: "docker_hub", title: "Docker Hub", desc: "Images, tags and build activity" },
-    { type: "sonarqube", title: "SonarQube", desc: "Quality gates and code findings" },
-  ],
-  "Project management": [
-    { type: "basecamp", title: "Basecamp", desc: "Projects, to-dos and messages" },
-    { type: "ms_planner", title: "Microsoft Planner", desc: "Plans, buckets and assigned tasks" },
-    { type: "smartsheet", title: "Smartsheet", desc: "Sheets, rows and workflow updates" },
-    { type: "airtable", title: "Airtable", desc: "Bases, records and automations" },
-    { type: "wrike", title: "Wrike", desc: "Projects, requests and assigned work" },
-    { type: "shortcut", title: "Shortcut", desc: "Stories, epics and iterations" },
-    { type: "github_projects", title: "GitHub Projects", desc: "Project boards and work items" },
-  ],
-  Databases: [
-    { type: "postgresql", title: "PostgreSQL", desc: "Postgres databases without a hand-written URL" },
-    { type: "mysql", title: "MySQL", desc: "MySQL and MariaDB databases" },
-    { type: "snowflake", title: "Snowflake", desc: "Warehouses, queries and scheduled reports" },
-    { type: "bigquery", title: "Google BigQuery", desc: "Datasets and scheduled SQL queries" },
-    { type: "mongodb", title: "MongoDB", desc: "Collections, documents and Atlas clusters" },
-    { type: "dynamodb", title: "Amazon DynamoDB", desc: "Tables, items and query reports" },
-    { type: "clickhouse", title: "ClickHouse", desc: "Analytical databases and queries" },
-    { type: "redis", title: "Redis", desc: "Keys, streams and operational metrics" },
-  ],
-  "Cloud & infrastructure": [
-    { type: "gcp", title: "Google Cloud", desc: "Projects, resources and audit activity" },
-    { type: "kubernetes", title: "Kubernetes", desc: "Clusters, workloads and events" },
-    { type: "cloudflare", title: "Cloudflare", desc: "Zones, Workers and security events" },
-    { type: "digitalocean", title: "DigitalOcean", desc: "Droplets, apps and managed databases" },
-    { type: "vercel", title: "Vercel", desc: "Deployments, projects and build failures" },
-    { type: "netlify", title: "Netlify", desc: "Sites, deploys and functions" },
-    { type: "heroku", title: "Heroku", desc: "Apps, releases and dynos" },
-    { type: "terraform_cloud", title: "Terraform Cloud", desc: "Runs, workspaces and policy checks" },
-  ],
-  "Corporate systems": [
-    { type: "netsuite", title: "NetSuite", desc: "ERP records, saved searches and reports" },
-    { type: "sap", title: "SAP", desc: "ERP data and business workflows" },
-    { type: "salesforce", title: "Salesforce", desc: "CRM records, cases and opportunities" },
-    { type: "hubspot", title: "HubSpot", desc: "CRM contacts, deals and tickets" },
-    { type: "servicenow", title: "ServiceNow", desc: "Incidents, requests and workflows" },
-    { type: "dynamics365", title: "Dynamics 365", desc: "CRM and finance records" },
-    { type: "bamboohr", title: "BambooHR", desc: "People, time off and employee data" },
-    { type: "workday", title: "Workday", desc: "HR, finance and workforce data" },
-    { type: "adp", title: "ADP", desc: "Payroll, workforce and employee data" },
-    { type: "epic", title: "Epic (EMR)", desc: "Clinical records and operational reports" },
-    { type: "cerner", title: "Oracle Cerner (EMR)", desc: "Clinical and scheduling data" },
-    { type: "pointclickcare", title: "PointClickCare (EMR)", desc: "Senior-care clinical and operational data" },
-  ],
-  "Markets & finance": [
-    { type: "finnhub", title: "Finnhub", desc: "Real-time quotes, company news, earnings and insider transactions from one key" },
-    { type: "alphavantage", title: "Alpha Vantage", desc: "Quotes, server-side technical indicators (RSI, MACD, SMA/EMA) and news sentiment" },
-    { type: "twelvedata", title: "Twelve Data", desc: "The same kind of indicators as Alpha Vantage, at a per-minute rather than per-day limit" },
-    { type: "tiingo", title: "Tiingo", desc: "End-of-day prices and a genuine news corpus, cheap" },
-    { type: "fmp", title: "Financial Modeling Prep", desc: "Fundamentals, ratios and a stock screener" },
-    { type: "polygon", title: "Polygon.io", desc: "Real-time and historical data across stocks, options, forex and crypto" },
-    { type: "fred", title: "FRED", desc: "Federal Reserve macro series — rates, CPI, employment" },
-    { type: "alpaca", title: "Alpaca", desc: "Brokerage quotes and, later, positions and orders — the only card here that could place a trade" },
-    { type: "plaid", title: "Plaid", desc: "Bank account and transaction data through a linked-account aggregator" },
-    { type: "ibkr", title: "Interactive Brokers", desc: "Positions, orders and account data" },
-    { type: "schwab", title: "Charles Schwab", desc: "Brokerage accounts and market data" },
-    { type: "tradier", title: "Tradier", desc: "Brokerage market data and trading" },
-    { type: "robinhood", title: "Robinhood", desc: "No official equities API — if built, it is built against their Crypto Trading API" },
-    { type: "eodhd", title: "EOD Historical Data", desc: "End-of-day and fundamental data across global exchanges" },
-    { type: "marketstack", title: "Marketstack", desc: "Historical and intraday stock market data" },
-    { type: "intrinio", title: "Intrinio", desc: "Financial data feeds and fundamentals for public companies" },
-    { type: "benzinga", title: "Benzinga", desc: "Market news, analyst ratings and calendar events" },
-  ],
-  Observability: [
-    { type: "grafana", title: "Grafana", desc: "Dashboards, alerts and annotations" },
-    { type: "elastic", title: "Elasticsearch", desc: "Search, logs and indexed events" },
-    { type: "new_relic", title: "New Relic", desc: "APM incidents, errors and alerts" },
-    { type: "splunk", title: "Splunk", desc: "Searches, dashboards and alerts" },
-    { type: "honeycomb", title: "Honeycomb", desc: "Traces, triggers and SLOs" },
-    { type: "dynatrace", title: "Dynatrace", desc: "Problems, services and observability data" },
-    { type: "better_stack", title: "Better Stack", desc: "Logs, incidents and uptime checks" },
-    { type: "uptimerobot", title: "UptimeRobot", desc: "Monitor status and outage alerts" },
-  ],
-  "Agentic web": [
-    { type: "perplexity", title: "Perplexity", desc: "Web-grounded answers and research" },
-    { type: "serpapi", title: "SerpAPI", desc: "Structured search-engine results" },
-    { type: "browserbase", title: "Browserbase", desc: "Managed browsers for web agents" },
-    { type: "brave_search", title: "Brave Search", desc: "Independent web and news search" },
-    { type: "bing_search", title: "Bing Web Search", desc: "Microsoft web and news search" },
-    { type: "apify", title: "Apify", desc: "Hosted crawlers and structured web datasets" },
-    { type: "scrapingbee", title: "ScrapingBee", desc: "Rendered pages and extraction" },
-    { type: "oxylabs", title: "Oxylabs", desc: "Web scraping and proxy-backed collection" },
-  ],
-  "Files & sheets": [
-    { type: "google_drive", title: "Google Drive", desc: "Files, folders and shared drives" },
-    { type: "onedrive", title: "OneDrive", desc: "Files and folders in Microsoft 365" },
-    { type: "dropbox", title: "Dropbox", desc: "Files, folders and shared content" },
-    { type: "box", title: "Box", desc: "Enterprise files and metadata" },
-    { type: "egnyte", title: "Egnyte", desc: "Enterprise files and governed content" },
-    { type: "coda", title: "Coda", desc: "Docs, tables and rows" },
-    { type: "office365_files", title: "Microsoft 365 files", desc: "Word, Excel and PowerPoint content" },
-  ],
-  "Everything else": [
-    { type: "stripe", title: "Stripe", desc: "Payments, subscriptions and disputes" },
-    { type: "shopify", title: "Shopify", desc: "Orders, products and customers" },
-    { type: "square", title: "Square", desc: "Payments, orders and locations" },
-    { type: "paypal", title: "PayPal", desc: "Payments, disputes and transactions" },
-    { type: "twilio", title: "Twilio", desc: "SMS, calls and delivery events" },
-    { type: "docusign", title: "DocuSign", desc: "Envelopes, signatures and status changes" },
-    { type: "zoom", title: "Zoom", desc: "Meetings, recordings and transcripts" },
-    { type: "calendly", title: "Calendly", desc: "Scheduled events and invitees" },
-    { type: "intercom", title: "Intercom", desc: "Customer conversations and tickets" },
-    { type: "zendesk", title: "Zendesk", desc: "Support tickets and conversations" },
-    { type: "shipstation", title: "ShipStation", desc: "Orders, shipments and delivery status" },
-  ],
-});
+// ONE CATALOGUE, in taskuary/connectorcatalog.json: the working cards and the planned ones, each with
+// a group, a line and the words that mean that system. This page reads the planned ones from it; the
+// Assistant report reads the same file on the server to suggest what to connect (connectorcatalog.py,
+// assistant.connect_ideas) - which it could not do while the roadmap lived only here (2026-09-18).
+// Keeping the roadmap in data rather than scattering one-off cards through ConnectorsView makes it
+// harder for a category to quietly become empty.
+import catalogue from "../../taskuary/connectorcatalog.json" with { type: "json" };
 
+const grouped = {};
+for (const c of catalogue.cards) {
+  if (!c.planned) continue;
+  (grouped[c.group] ||= []).push({ type: c.type, title: c.title, desc: c.desc });
+}
+export const PLANNED_CONNECTORS = Object.freeze(grouped);
+export const CATALOGUE = Object.freeze(catalogue.cards);
 export const plannedFor = (category) => PLANNED_CONNECTORS[category] || [];

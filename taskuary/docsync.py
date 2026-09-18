@@ -70,7 +70,7 @@ def sync_connections(store, actor='system'):
                      # was the one system this list never named, so the only road an agent could SEE
                      # to the ERP was "get a report pipeline saved first"
                      'intacct|intacct_fields|quickbooks|quickbooks_vendors|quickbooks_accounts|teller_accounts|teller_transactions|teller_balances|teller_spend|simplefin_accounts|simplefin_transactions|simplefin_balances|simplefin_spend'
-                     '|yahoo_quotes|yahoo_history|edgar_filings|edgar_facts|coingecko_prices|fx_rates|'
+                     '|yahoo_quotes|yahoo_history|edgar_filings|edgar_facts|coingecko_prices|alchemy_prices|alchemy_wallet|fx_rates|'
                      'td_quotes|td_indicator|av_quotes|fred_series|markets_screen|'
                      'finnhub_quotes|finnhub_news|finnhub_earnings|finnhub_insiders|'
                      'polygon_bars|polygon_snapshot|tiingo_history|tiingo_news|'

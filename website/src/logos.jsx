@@ -90,6 +90,7 @@ export const LOGOS = {
   simplefin: (p) => <T p={p} bg="#2f6f5f" text="SF" size={10} />,
   yahoo: (p) => <T p={p} bg="#6001D2" text="Y!" size={9.5} />,
   coingecko: (p) => <T p={p} bg="#8BC53F" text="CG" size={9} />,
+  alchemy: (p) => <T p={p} bg="#345DCC" text="A" size={12} />,
   frankfurter: (p) => <T p={p} bg="#2B5A8C" text="FX" size={10} />,
   sec_edgar: (p) => <T p={p} bg="#0A2E5C" text="SEC" size={7.5} />,
   // not a brand - the screen borrows another card's connection, so it wears a neutral filter

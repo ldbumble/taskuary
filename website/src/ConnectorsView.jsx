@@ -681,6 +681,14 @@ const DATA_META = {
       "Build the report on the REPORTS tab: ids (CoinGecko's own ids - 'bitcoin,ethereum', not 'BTC,ETH') and the currency to price in (vs)."],
     agent: ["CoinGecko ids are not tickers - bitcoin, not BTC. api.coingecko.com/api/v3/coins/list gives the full mapping if the owner is unsure.",
       "A demo key is optional; ask for one only if the owner is hitting the free rate limit."] },
+  alchemy: { title: "Alchemy", types: ["alchemy_prices", "alchemy_wallet"], fields: [],
+    secretLabel: "Alchemy API key (write-only)",
+    desc: "Read-only onchain finance data: current USD token prices by symbol and wallet token balances with prices across selected networks.",
+    howto: ["Create an API key at dashboard.alchemy.com and paste it here. Test checks one ETH price with your saved key.",
+      "On REPORTS choose 'Alchemy - token prices' and set symbols such as ETH,BTC (up to 25), or choose 'Alchemy - wallet holdings' and set address plus networks such as eth-mainnet,base-mainnet.",
+      "Wallet holdings include native and ERC-20 tokens. A partial network failure fails the report so an incomplete portfolio is never shown as complete."],
+    agent: ["The card holds only an API key. Put the public wallet address and Alchemy network identifiers on each report.",
+      "These tools read balances and prices; they cannot sign or submit transactions."] },
   frankfurter: { title: "FX rates (Frankfurter)", types: ["fx_rates"], fields: [], noSecret: true,
     desc: "Reference exchange rates from the European Central Bank, served through the free Frankfurter API — no key, no account.",
     howto: ["Nothing to configure. Test fetches the latest USD rates.",
@@ -906,10 +914,10 @@ const NL = String.fromCharCode(10);
 
 // A card per connection. The dot is read off the status line the card already carries -
 // "off", "not set up" and "connection failing" are the only three states worth a colour.
-const connState = (c) => (c.planned ? "planned"
+const connState = (c) => (c.planned ? "planned" : c.guide ? "guide"
   : /failing|test failed/.test(c.desc) ? "failing"
     : /^off|not set up|no key yet/.test(c.desc) ? "off" : "on");
-const connDot = (c) => ({ planned: "#cfc9bf", failing: "#6b2733", off: "#cfc9bf", on: "#55697a" })[connState(c)];
+const connDot = (c) => ({ planned: "#cfc9bf", guide: "#8b7c63", failing: "#6b2733", off: "#cfc9bf", on: "#55697a" })[connState(c)];
 // the whole card says its state, not just the 7px dot: a live connection wears the brand
 // border on a faintly tinted ground, a failing one the alert border, an unconfigured one
 // stays paper - so a wall of nine cards reads at a glance which three are actually working
@@ -918,6 +926,7 @@ const CARD_STATE = {
   failing: { border: "#8a3646", bg: PANEL, width: 1.5 },     // oxblood: the one loud colour, "this is on you"
   off:     { border: BORDER, bg: PANEL, width: 1 },
   planned: { border: BORDER, bg: PANEL, width: 1 },
+  guide:   { border: BORDER, bg: PANEL, width: 1 },
 };
 
 // The result of a Test, and the one failure the owner can fix from here. "boto3 is not
@@ -976,7 +985,7 @@ const ConnCard = ({ c }) => (
 // The catalog's sections, named once: the rail reads them before `groups` is built (groups
 // needs the loaded connectors), and they must stay in step.
 const GROUP_TITLES = ["AI — agents & models", "AI — voice", "Email", "Messaging", "Developer", "Project management",
-  "Databases", "Cloud & infrastructure", "Corporate systems", "Markets & finance", "Observability", "Agentic web", "Files & sheets", "Everything else"];
+  "Databases", "Cloud & infrastructure", "Corporate systems", "Markets & finance", "Wallets & onchain", "Observability", "Agentic web", "Files & sheets", "Everything else"];
 // planned types read as raw identifiers on a card ("sharepoint_list"), which looks unfinished
 // in a way the feature is not. Named here; anything unnamed falls back to a de-underscored key.
 const PLANNED_TITLES = { google_sheets: "Google Sheets", sharepoint_list: "SharePoint list",
@@ -1077,6 +1086,71 @@ const VoiceVocabulary = ({ onBack }) => {
   );
 };
 
+function AlchemyWalletGuide({ onBack, onData }) {
+  const [sid, setSid] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    const saved = localStorage.getItem("tq-alchemy-wallet-shell");
+    if (saved) api.get("/api/terminals", { params: { details: false } })
+      .then(({ data }) => { if ((data.data || []).some((t) => t.sid === saved)) setSid(saved);
+        else localStorage.removeItem("tq-alchemy-wallet-shell"); })
+      .catch(() => localStorage.removeItem("tq-alchemy-wallet-shell"));
+  }, []);
+  const start = async () => {
+    setBusy(true); setError("");
+    try {
+      const { data } = await api.post("/api/terminals", { rows: 32, cols: 110 });
+      localStorage.setItem("tq-alchemy-wallet-shell", data.sid);
+      setSid(data.sid);
+    } catch (e) { setError(e?.response?.data?.detail || "could not open the terminal"); }
+    setBusy(false);
+  };
+  const close = async () => {
+    try { await api.delete(`/api/terminals/${encodeURIComponent(sid)}`); }
+    catch (e) { if (e?.response?.status !== 404) { setError(e?.response?.data?.detail || "could not close the terminal"); return; } }
+    localStorage.removeItem("tq-alchemy-wallet-shell");
+    setSid("");
+  };
+  const command = (value) => <Box component="pre" sx={{ m: 0, mt: 0.6, mb: 1.5, p: 1.2, bgcolor: "#f4f0e8",
+    border: `1px solid ${BORDER}`, borderRadius: 1.5, overflowX: "auto", fontSize: 12 }}>{value}</Box>;
+  return <Box sx={{ maxWidth: 850, mx: "auto" }}>
+    <Crumb section="Connections" onBack={onBack} title="Alchemy Agent Wallet" />
+    <Typography variant="body2" sx={{ color: DIM, mb: 2 }}>
+      Create the wallet in Alchemy's Dashboard, then approve a CLI session for this computer. The session can be revoked in the Dashboard and does not put a private key in Taskuary.
+    </Typography>
+    <Button variant="contained" disabled={busy || !!sid} onClick={start} startIcon={<TerminalIcon sx={{ fontSize: 16 }} />}>
+      {busy ? "Opening terminal…" : sid ? "Terminal open below" : "Set it up in terminal"}
+    </Button>
+    {error && <Alert severity="error" sx={{ mt: 1 }}>{error}</Alert>}
+    {sid && <Box sx={{ mt: 2, mb: 2 }}>
+      <Box sx={{ display: "flex", alignItems: "center", mb: 0.7 }}>
+        <Typography sx={{ fontWeight: 700, flex: 1 }}>Alchemy setup terminal</Typography>
+        <Button size="small" onClick={close}>Close terminal</Button>
+      </Box>
+      <TerminalPane sid={sid} height={420} />
+    </Box>}
+    <Typography variant="body2" sx={{ color: DIM, mt: 2, mb: 1 }}>
+      Run these commands in the terminal above. Installation and wallet creation start only when you enter their commands.
+    </Typography>
+    <Typography sx={{ fontWeight: 700, color: INK }}>1. Install the CLI (Node.js 22 or newer)</Typography>
+    {command("npm i -g @alchemy/cli@latest")}
+    <Typography sx={{ fontWeight: 700, color: INK }}>2. Sign in to Alchemy</Typography>
+    {command("alchemy auth login --device-code")}
+    <Typography sx={{ fontWeight: 700, color: INK }}>3. Create an Agent Wallet and approve this computer</Typography>
+    <Typography variant="body2" sx={{ color: DIM }}>
+      Create the wallet in the <a href="https://dashboard.alchemy.com/products/agent-wallet/evm-wallet" target="_blank" rel="noreferrer">Alchemy Agent Wallets Dashboard</a>, then run:
+    </Typography>
+    {command("alchemy wallet connect --mode session --instance-name taskuary")}
+    <Typography sx={{ fontWeight: 700, color: INK }}>4. Check the session and wallet address</Typography>
+    {command("alchemy --json --no-interactive wallet status --verify\nalchemy --json --no-interactive wallet address")}
+    <Typography variant="body2" sx={{ color: DIM, mt: 1 }}>
+      To create local EVM and Solana key files instead, run <code>alchemy wallet connect --mode local</code>. Keep the generated key files private and backed up; this path stores signing keys on this computer.
+    </Typography>
+    <Button size="small" variant="outlined" sx={{ mt: 2 }} onClick={onData}>Open Alchemy data connection</Button>
+  </Box>;
+}
+
 export default function ConnectorsView({ onNavigate }) {
   const [connectors, setConnectors] = useState(null);
   const [sources, setSources] = useState([]);
@@ -1129,6 +1203,8 @@ export default function ConnectorsView({ onNavigate }) {
 
   if (open?.kind === "agents") return <CliConnectionsPage onBack={() => setOpen(null)} />;
   if (open?.kind === "voice-vocabulary") return <VoiceVocabulary onBack={() => setOpen(null)} />;
+  if (open?.kind === "alchemy-wallet") return <AlchemyWalletGuide onBack={() => setOpen(null)}
+    onData={() => { const c = byType.alchemy; if (c) setOpen({ kind: "connector", id: c.ConnectorId }); }} />;
   if (open?.kind === "connector") {
     const conn = connectors.find((c) => c.ConnectorId === open.id);
     if (!conn) return null;
@@ -1242,9 +1318,15 @@ export default function ConnectorsView({ onNavigate }) {
       ...catalogCards("Corporate systems"),
     ]},
     { title: "Markets & finance", cards: [
-      ...dataCards(["simplefin", "teller", "yahoo", "coingecko", "frankfurter", "sec_edgar", "screen"]),
+      ...dataCards(["simplefin", "teller", "yahoo", "coingecko", "alchemy", "frankfurter", "sec_edgar", "screen"]),
       ...plannedCards(["stooq"]),
       ...catalogCards("Markets & finance"),
+    ]},
+    { title: "Wallets & onchain", cards: [
+      { key: "alchemy-wallet", title: "Alchemy Agent Wallet", channel: "alchemy", guide: true,
+        desc: "Create a wallet in Alchemy and approve a CLI session for this computer",
+        haystack: "alchemy wallet agent wallet cli create connect session local evm solana",
+        go: () => setOpen({ kind: "alchemy-wallet" }) },
     ]},
     { title: "Observability", cards: [...dataCards(["prometheus", "datadog"]), ...catalogCards("Observability")] },
     // the web as a source: one REST call and a key each. What is deliberately NOT here is

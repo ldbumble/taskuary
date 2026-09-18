@@ -515,6 +515,7 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  'simplefin': 'report,tool',       # the same feed, from the bridge anyone can sign up to
                  # market data (markets.py): four keyless cards, each a report source and an agent tool
                  'coingecko': 'report,tool', 'frankfurter': 'report,tool',
+                 'alchemy': 'report,tool',
                  'yahoo': 'report,tool', 'sec_edgar': 'report,tool',
                  # twelvedata/alphavantage need a key; fred does not (fredgraph.csv is keyless)
                  'twelvedata': 'report,tool', 'alphavantage': 'report,tool', 'fred': 'report,tool',
@@ -830,7 +831,7 @@ class SQLiteStore:
                          ('prometheus', 'Prometheus'), ('datadog', 'Datadog'),
                          ('intacct', 'Sage Intacct'), ('quickbooks', 'QuickBooks Online'), ('teller', 'Bank & card feed (Teller)'),
                          ('simplefin', 'Bank & card feed (SimpleFIN)'),
-                         ('coingecko', 'Crypto prices (CoinGecko)'), ('frankfurter', 'FX rates'),
+                         ('coingecko', 'Crypto prices (CoinGecko)'), ('alchemy', 'Alchemy'), ('frankfurter', 'FX rates'),
                          ('yahoo', 'Yahoo Finance (best-effort)'), ('sec_edgar', 'SEC filings (EDGAR)'),
                          ('twelvedata', 'Twelve Data'), ('alphavantage', 'Alpha Vantage'), ('fred', 'FRED (keyless)'),
                          ('finnhub', 'Finnhub'), ('polygon', 'Polygon.io'), ('tiingo', 'Tiingo'),

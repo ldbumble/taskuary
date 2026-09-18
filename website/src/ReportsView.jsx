@@ -135,6 +135,9 @@ const FIELDS = {
     ["news window (optional)", "time_range", "text", "day · week · month · year"], AI_FIELD],
   firecrawl: [["page to read", "url", "text", "https://example.com/pricing"], AI_FIELD],
   reader: [["page to read", "url", "text", "https://example.com/pricing"], AI_FIELD],
+  alchemy_prices: [["token symbols (up to 25)", "symbols", "text", "ETH,BTC"], AI_FIELD],
+  alchemy_wallet: [["wallet address", "address", "text", "0x..."],
+    ["Alchemy networks", "networks", "text", "eth-mainnet,base-mainnet"], AI_FIELD],
 };
 // A cron line, said in words when it is one of the shapes people actually write; the raw
 // expression stays for anything cleverer, because a wrong paraphrase is worse than none.
@@ -180,7 +183,7 @@ const TYPE_LABELS = {
   simplefin_transactions: "Bank & card (SimpleFIN) \u2014 transactions", simplefin_accounts: "Bank & card (SimpleFIN) \u2014 accounts",
   simplefin_balances: "Bank & card (SimpleFIN) \u2014 balances", simplefin_spend: "Bank & card (SimpleFIN) \u2014 spend, per account and in total",
   yahoo_quotes: "Yahoo Finance — quotes", yahoo_history: "Yahoo Finance — price history",
-  coingecko_prices: "Crypto prices (CoinGecko)", fx_rates: "FX rates", fred_series: "FRED — macro series",
+  coingecko_prices: "Crypto prices (CoinGecko)", alchemy_prices: "Alchemy — token prices", alchemy_wallet: "Alchemy — wallet holdings", fx_rates: "FX rates", fred_series: "FRED — macro series",
   edgar_filings: "SEC EDGAR — filings", edgar_facts: "SEC EDGAR — one reported number over time",
   td_quotes: "Twelve Data — quotes", td_indicator: "Twelve Data — technical indicator", av_quotes: "Alpha Vantage — quotes",
   finnhub_quotes: "Finnhub — quotes", finnhub_news: "Finnhub — company news", finnhub_earnings: "Finnhub — earnings", finnhub_insiders: "Finnhub — insider transactions",
@@ -233,7 +236,7 @@ const TYPE_GROUPS = [
   // the bank/card feed is money, not a corporate system: it belongs beside the market sources
   ["Markets & finance", ["simplefin_transactions", "simplefin_accounts", "simplefin_balances", "simplefin_spend",
     "teller_transactions", "teller_accounts", "teller_balances", "teller_spend",
-    "yahoo_quotes", "yahoo_history", "coingecko_prices", "fx_rates", "edgar_filings", "edgar_facts", "fred_series",
+    "yahoo_quotes", "yahoo_history", "coingecko_prices", "alchemy_prices", "alchemy_wallet", "fx_rates", "edgar_filings", "edgar_facts", "fred_series",
     "td_quotes", "td_indicator", "av_quotes", "finnhub_quotes", "finnhub_news", "finnhub_earnings", "finnhub_insiders",
     "polygon_bars", "polygon_snapshot", "tiingo_history", "tiingo_news", "fmp_fundamentals", "fmp_ratios",
     "alpaca_quotes", "alpaca_bars", "markets_screen"]],
@@ -245,6 +248,7 @@ const TYPE_GROUPS = [
 ];
 // which connector CARD a type's credentials live on (mirrors reports.card_of server-side)
 const CARD_OF = { s3_object: "aws", cloudwatch_logs: "aws", azure_blob: "azure", azure_logs: "azure",
+  alchemy_prices: "alchemy", alchemy_wallet: "alchemy",
   zoho_monthly_invoices: "zoho_invoice",
   entra_users: "azure", entra_groups: "azure", entra_signins: "azure", entra_licenses: "azure",
   intacct_fields: "intacct", sharepoint_list: "sharepoint", sharepoint_file: "sharepoint" };
@@ -1732,7 +1736,7 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
   const conn = matching.find((c) => c.ConnectorId === Number(src.connector_id))
     || matching.find((c) => c.Active) || matching[0];
   const needsConn = ["mssql", "winrm", "database", "aws", "azure", "prometheus", "datadog",
-    "exa", "tavily", "firecrawl"].includes(cardType);   // reader works with no key at all
+    "exa", "tavily", "firecrawl", "alchemy"].includes(cardType);   // reader works with no key at all
   const connOk = conn?.LastSyncAt && !conn?.LastError;
   return (
     <Box draggable={!!onDragStart} onDragStart={onDragStart} onDragEnd={onDragEnd}

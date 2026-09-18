@@ -270,6 +270,10 @@ def test_connector(store, cid: int) -> dict:
         elif c['Type'] == 'simplefin':
             from .simplefin import probe, connection
             detail = probe(connection(store, cid))
+        elif c['Type'] == 'alchemy':
+            from .alchemy import probe
+            from .reports import _card
+            detail = probe(_card(store, 'alchemy', 'api_key', cid))
         elif c['Type'] in ('coingecko', 'frankfurter', 'yahoo', 'sec_edgar', 'fred', 'screen',
                            'twelvedata', 'alphavantage', 'finnhub', 'polygon', 'tiingo', 'fmp'):
             # every market card probes the same way: one cheap real call, through markets.py's

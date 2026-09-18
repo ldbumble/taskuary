@@ -62,6 +62,7 @@ Nothing is polled without an enabled role.
 | Bank & card feed (Teller) | Available | One card per bank login, enrolled in the browser with Teller Connect; accounts, transactions (newest first, with spend/inflow direction) and balances as reports and tools. Spend is a report of its own (teller_spend): per-card and total over a window, with a headline that leads with the total so a 'more than' alert compares dollars. Read-only by construction. Schedule the transactions with 'can become work' and each new one is a message triage judges — the front door of the card-to-books playbook. Development tier is free to 100 logins; development and production present Teller's client certificate. **Teller stopped taking new signups** (checked 2026-09-10: the login page still works, /signup is a 404 and dashboard.teller.io no longer resolves), so this card is for owners who already hold credentials — everyone else wants the SimpleFIN card above |
 | Yahoo Finance (best-effort) | Available | Quotes and historical bars through an undocumented endpoint (v8/finance/chart) — Yahoo retired its official market-data API in 2017; this can change or break without notice. No key |
 | CoinGecko | Available | Spot price and 24-hour change for any coin, by CoinGecko id; no key needed, an optional demo key raises the free rate limit |
+| Alchemy | Available | Read-only token prices by symbol (`alchemy_prices`) and wallet holdings with balances and USD prices (`alchemy_wallet`). Save an API key on the card; set `symbols` or `address` and `networks` on the report. Partial network responses fail visibly; no transaction signing or submission |
 | FX rates (Frankfurter) | Available | European Central Bank reference exchange rates; no key |
 | SEC filings (EDGAR) | Available | A company's filings and its reported XBRL facts (e.g. Revenues) by CIK, straight from SEC EDGAR; no key. Schedule filings with 'can become work' and a new 8-K is a message triage judges |
 | Strategy screen | Available | Filters another market card's rows to the ones matching a condition (e.g. change_pct <= -5); borrows that card's connection rather than holding its own — works over a Yahoo watchlist or CoinGecko prices today |
@@ -79,6 +80,22 @@ Nothing is polled without an enabled role.
 
 Connection secrets are write-only in the UI. A database string may contain `{password}` so
 the saved password remains separate from the readable connection configuration.
+
+## Wallets and onchain actions
+
+Connections has a separate **Wallets & onchain** section with an Alchemy Agent Wallet setup guide
+and a **Set it up in terminal** button. The button opens an interactive shell on the user's own
+Taskuary machine; the installation and wallet commands run only when the user enters them.
+It uses the [Alchemy CLI](https://www.alchemy.com/docs/alchemy-cli) and an Agent Wallet created in
+the Alchemy Dashboard. Install Node.js 22 or newer and run `npm i -g @alchemy/cli@latest`, then
+`alchemy auth login --device-code`. After creating the wallet in the Dashboard, run
+`alchemy wallet connect --mode session --instance-name taskuary` and approve the session there.
+Check it with `alchemy --json --no-interactive wallet status --verify` and read its public address
+with `alchemy --json --no-interactive wallet address`. The Dashboard can revoke the session.
+
+For a wallet whose private key stays on this computer, `alchemy wallet connect --mode local`
+creates local EVM and Solana wallets. These signing options are separate from Taskuary's read-only
+Alchemy data card; Taskuary does not submit wallet transactions through that card.
 
 ## Push API
 

@@ -47,6 +47,7 @@ ACTIONS = {
     'simplefin_accounts': 'read', 'simplefin_transactions': 'read', 'simplefin_balances': 'read', 'simplefin_spend': 'read',
     # market data: every one of these is a window on a public market. Nothing upstream moves.
     'coingecko_prices': 'read', 'fx_rates': 'read', 'yahoo_quotes': 'read', 'yahoo_history': 'read',
+    'alchemy_prices': 'read', 'alchemy_wallet': 'read',
     'edgar_filings': 'read', 'edgar_facts': 'read', 'fred_series': 'read',
     'td_quotes': 'read', 'td_indicator': 'read', 'av_quotes': 'read',
     # five more providers (2026-09-08), field mapping written from documentation, not a live
@@ -111,7 +112,7 @@ DEFAULT_SCOPE = {
     'gmail': 'write', 'imap': 'write',
     'mssql': 'read', 'database': 'read', 'prometheus': 'read', 'datadog': 'read',
     'intacct': 'read', 'quickbooks': 'read', 'teller': 'read', 'simplefin': 'read',
-    'coingecko': 'read', 'frankfurter': 'read', 'yahoo': 'read', 'sec_edgar': 'read',
+    'coingecko': 'read', 'alchemy': 'read', 'frankfurter': 'read', 'yahoo': 'read', 'sec_edgar': 'read',
     'twelvedata': 'read', 'alphavantage': 'read', 'fred': 'read',
     'finnhub': 'read', 'polygon': 'read', 'tiingo': 'read', 'fmp': 'read', 'alpaca': 'read',
     'robinhood': 'read',                                     # a broker starts as a window; raising it is the owner's call

@@ -25,6 +25,18 @@ class CatalogueTests(unittest.TestCase):
         self.assertEqual(hits.get('adp'), 2)                                            # "adapter" is not ADP
         self.assertNotIn('adp', connectorcatalog.mentions(['adp'], exclude_types={'adp'}))
 
+    def test_a_generic_word_is_not_a_system_and_every_card_keeps_its_own_title(self):
+        """"can you share the file?" counted as a thread about the SMB share until the words a title
+        splits into were filtered - 26 of them, which is how this became an idea (TQ-0647)."""
+        ordinary = ['please share the file', 'the network is down again', 'any update on the data?',
+                    'card declined at the bank', 'search the web for it']
+        self.assertEqual(connectorcatalog.mentions(ordinary), {})
+        self.assertEqual(connectorcatalog.mentions(['the network file share is full']).get('smb_file'), 1)
+        self.assertEqual(connectorcatalog.mentions(['SMB share on fileserv']).get('smb_file'), 1)
+        for c in connectorcatalog.cards():
+            self.assertTrue(connectorcatalog.words(c), f"{c['type']} has no match word left")
+            self.assertIn(c['type'], connectorcatalog.mentions([c['title']]), f"{c['type']} no longer matches its own title")
+
 
 class HealthTests(unittest.TestCase):
     def test_three_failures_a_never_run_workflow_and_an_erroring_connection_each_raise_one_row(self):

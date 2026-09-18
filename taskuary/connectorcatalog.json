@@ -293,10 +293,10 @@
       "desc": "",
       "match": [
         "network file share",
-        "network",
-        "file",
-        "share",
-        "smb file"
+        "smb file",
+        "file share",
+        "fileshare",
+        "smb"
       ]
     },
     {

@@ -1807,7 +1807,9 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
     # FYIs have no action to take, so the normal walk brings four together. A row explicitly
     # clicked on the Timeline still opens by itself (`key` is set); only Next/Walk batches them.
     if not key and item['lane'] == 'fyi':
-        batch = item.get('items') if selection is not None and item.get('kind') == 'fyis' else funnel.fyi_batch(store, item)
+        # a batch already assembled (funnel_selection._batch, which next_item returns on a processing store)
+        # IS the batch: passed to fyi_batch as `first` it became its own member, "someone - 4 fyi" (2026-09-18)
+        batch = item.get('items') if item.get('kind') == 'fyis' else funnel.fyi_batch(store, item)
         # NO MODEL CALL HERE. An fyi batch is the one card with nothing to decide - the entries are
         # already written, and a pass that only restates them in the assistant's voice bought a
         # paraphrase at the cost of the wait before the next four appear (the owner, 2026-09-16:

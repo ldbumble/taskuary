@@ -768,6 +768,14 @@ def turn_text(out: dict, lead: str = '', store=None) -> str:
     # the say line often already carries the cause; a card does not print the same sentence twice
     if state and state.split(' - ', 1)[-1].lower() in say.lower(): state = state.split(' - ', 1)[0]
     head = '\n'.join(x for x in (source_line(item), say, state) if x)
+    if item.get('kind') == 'fyis':
+        # THE ITEMS, one per line, and nothing else: the say line restated them as one run-on sentence and
+        # the status line added "fyi - people told you things" under it, and on a phone that read as
+        # nothing at all (the owner, 2026-09-18: "don't need random summary, just show the items")
+        members = item.get('items') or []
+        head = '\n'.join([f"{mark} {len(members)} fyi · nothing to do"] +
+                         [' '.join(x for x in (funnel.CHANNEL_MARKS.get(str(m.get('channel') or ''), ''),
+                                               f"{' '.join(str(m.get('who') or 'someone').split())} - {m.get('title') or ''}") if x) for m in members])
     words = choices(out)
     opts = 'Reply with one of:\n' + '\n'.join(f'{i} · {w}' for i, w in enumerate(words, 1)) if words else ''
     shown = decision_block(store, item) if store is not None else ''

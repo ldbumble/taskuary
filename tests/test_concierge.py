@@ -401,6 +401,24 @@ class BrainTests(unittest.TestCase):
 
 
 class FyiWalkTests(unittest.TestCase):
+    def test_a_batch_the_pile_already_assembled_is_never_its_own_member(self):
+        """On a processing store next_item hands surface() the fyis card funnel_selection._batch built.
+        Passed to fyi_batch as `first`, that card became member one of a new batch - "someone - 4 fyi"
+        above three real rows, on the desktop and on WhatsApp (the owner, 2026-09-18)."""
+        s = store()
+        s.set_setting('team_domains', 'ours.com', 't')
+        for n in range(3):
+            m = s.add_message({'ExternalId': f'f{n}', 'ConversationId': f'c{n}', 'Channel': 'email', 'Subject': f'Note {n}', 'FromName': f'Person {n}',
+                               'FromEmail': f'p{n}@ours.com', 'SentAt': ago(n), 'BodyText': f'FYI number {n}, done.', 'Status': 'filed'})
+            s.add_route(m, None, 'file', None, 'triage: fyi - a colleague keeping you in the loop', [], 'triage')
+        settle = lambda: (s.reconcile_processing_membership(fixed_now=ago(0)), funnel.invalidate())
+        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            self.assertEqual(funnel.next_item(s)['kind'], 'fyis')                  # the chooser already batched
+            out = concierge.surface(s, llm=lambda *a, **k: 'never')
+        self.assertEqual(sorted(i['title'] for i in out['item']['items']), ['Note 0', 'Note 1', 'Note 2'])
+        self.assertNotIn('fyi;', out['say']); self.assertNotIn('someone', out['say'])
+
     def test_fyis_come_four_at_a_time_and_a_mail_walk_still_stops_for_a_waiting_agent(self):
         s = store()
         s.set_setting('team_domains', 'ours.com', 't')

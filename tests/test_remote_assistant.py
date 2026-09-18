@@ -168,6 +168,22 @@ class WordsInsteadOfButtonsTests(unittest.TestCase):
         done = {'say': 'coder finished TQ-0491.', 'item': {'lane': 'report', 'kind': 'agentdone'}}
         self.assertTrue(remote_assistant.turn_text(done).startswith('✅ coder finished'), 'the kind outranks the lane')
 
+    def test_an_fyi_batch_is_its_items_one_per_line_and_no_summary(self):
+        """"4 things people told you, nothing to do: someone - 4 fyi; Uri - Run failed..." and under it
+        "fyi - people told you things; nothing to do" - on a phone that read as nothing (the owner,
+        2026-09-18: "don't need random summary, just show the items")."""
+        batch = {'say': '2 things people told you, nothing to do: Uri - Run failed: ci; Chana - Rebecca is back Tuesday.',
+                 'chips': [{'verb': 'next', 'label': 'All read, next'}],
+                 'item': {'kind': 'fyis', 'lane': 'fyi', 'why': 'people told you things; nothing to do',
+                          'items': [{'who': 'Uri', 'title': 'Run failed: ci', 'channel': 'github'},
+                                    {'who': 'Chana', 'title': 'Rebecca is back Tuesday', 'channel': 'email'}]}}
+        text = remote_assistant.turn_text(batch)
+        self.assertNotIn('people told you', text)
+        head = text.split('\n\n')[0].split('\n')
+        self.assertEqual(head[1:], [f"{funnel.CHANNEL_MARKS['github']} Uri - Run failed: ci",
+                                    f"{funnel.CHANNEL_MARKS['email']} Chana - Rebecca is back Tuesday"])
+        self.assertTrue(head[0].endswith('2 fyi · nothing to do'), head[0])
+
     def test_an_unknown_source_gets_no_invented_mark(self):
         said = {'say': 'Something landed.', 'item': {'lane': 'fyi', 'kind': 'fyi', 'who': 'Someone', 'channel': 'carrier_pigeon'}}
         self.assertEqual(remote_assistant.turn_text(said), 'Someone · carrier pigeon\n👀 Something landed.')

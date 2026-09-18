@@ -522,6 +522,13 @@ class GeneralApiTests(unittest.TestCase):
 class BrainOptionsTests(unittest.TestCase):
     """Which BRAINS a non-coding hand-off may be given to - not which worker profiles exist."""
 
+    def setUp(self):
+        # Which CLIs are installed is the MACHINE's fact, not this test's: read off PATH, these passed
+        # on the box that wrote them (claude is on it) and failed on every CI runner since 1ad262cc.
+        from taskuary import agents
+        p = mock.patch.object(agents, 'runs_here', side_effect=lambda profile: (profile or {}).get('cmd') == 'claude')
+        p.start(); self.addCleanup(p.stop)
+
     def store(self):
         s = MemoryStore()
         for name, kind in (('coder', 'coding'), ('researcher', 'research'), ('analyst', 'analysis')):

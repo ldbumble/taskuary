@@ -3,7 +3,7 @@
 [English](README.md) · **简体中文**
 
 [![CI](https://github.com/ldbumble/taskuary/actions/workflows/ci.yml/badge.svg)](https://github.com/ldbumble/taskuary/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/taskuary.svg?cacheSeconds=300&release=0.3.5.5&asof=2026-09-17c)](https://pypi.org/project/taskuary/)
+[![PyPI](https://img.shields.io/pypi/v/taskuary.svg?cacheSeconds=300&release=0.3.5.6&asof=2026-09-17c)](https://pypi.org/project/taskuary/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab.svg)](https://www.python.org/)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/ldbumble/taskuary?style=flat&color=d4a72c&label=%E2%98%85%20stars)](https://github.com/ldbumble/taskuary/stargazers)
@@ -18,7 +18,7 @@ Taskuary 在本机运行，把收到的消息整理成任务，交给智能体�
 
 ![工作到来时，Taskuary 的工作室逐渐展开，AI 智能体就位。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.gif?v=workspace)
 
-Taskuary 仍处于早期阶段，目前为 **v0.3.5.5**，1.0 之前可能出现不兼容变更。
+Taskuary 仍处于早期阶段，目前为 **v0.3.5.6**，1.0 之前可能出现不兼容变更。
 应用界面和演示截图目前以英文为主；下文保留英文按钮名称，方便对照操作。
 
 <p align="center">

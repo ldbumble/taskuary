@@ -109,7 +109,7 @@ class ActsTests(unittest.TestCase):
         sent = []
         with mock.patch.object(remote_assistant, 'send', lambda store, ch, chat, text, connector_id=None: sent.append((ch, chat, text))), \
              mock.patch.object(server, 'run_report_source', return_value={'summary': '3 invoices over 30 days', 'subject': 'Monthly AR Report - 3 rows'}), \
-             mock.patch.object(server.threading, 'Thread', lambda target, daemon: type('T', (), {'start': lambda self: target()})()):
+             mock.patch.object(server, '_spawn_rerun', lambda fn: fn()):                       # the work, inline
             remote_assistant._ASKING.chat = {'channel': 'whatsapp', 'chat': '1555@s.whatsapp.net', 'connector_id': 7}
             try: concierge.run_proposal(self.s, self._turn('report.run', title='ar report')['proposal'])
             finally: remote_assistant._ASKING.chat = None

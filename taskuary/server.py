@@ -3431,6 +3431,12 @@ def report_rerun(sid: int):
     return _rerun_report(sid)
 
 
+def _spawn_rerun(fn):
+    """The rerun's own thread door, so a test can run the work inline without patching the global
+    Thread class - which left a refresh thread unjoinable in a later test's teardown (2026-09-18)."""
+    threading.Thread(target=fn, daemon=True).start()
+
+
 def _rerun_report(sid: int, asked: dict | None = None) -> dict:
     """The rerun itself. `asked` is the chat the ask came from (remote_assistant.asking): a run started
     from WhatsApp used to land on the Timeline and tell the chat nothing (the owner, 2026-09-18: "would
@@ -3453,7 +3459,7 @@ def _rerun_report(sid: int, asked: dict | None = None) -> dict:
             try: remote_assistant.send(store, asked['channel'], asked['chat'], text, asked.get('connector_id'))
             except Exception as e: logger.warning(f'the landed report could not reach {asked.get("channel")}: {e}')
     # queued, not awaited: the report lands on the Timeline like a scheduled run, and the pipe picks it up
-    threading.Thread(target=work, daemon=True).start()
+    _spawn_rerun(work)
     try: title = json.loads(src.get('ConfigJson') or '{}').get('title') or src.get('Address')
     except ValueError: title = src.get('Address')
     return {'queued': True, 'sourceId': sid, 'title': title}

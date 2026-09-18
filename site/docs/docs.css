@@ -8,7 +8,11 @@
   --alert:#8a3646; --gold:#d4a72c;
   --sans:'IBM Plex Sans','Segoe UI',system-ui,sans-serif;
   --mono:'IBM Plex Mono',Consolas,monospace;
-  --rail:236px; --page:760px;
+  --rail:236px; --page:760px; --gutter:56px;
+  /* the rail, the gutter and the page, plus the shell's own 24px each side. Naming the sum is what
+     keeps the block CENTRED: a grid that is wider than rail+gutter+page gives the slack to the
+     text column, which then sits left of a window with empty space beside it. */
+  --shell:1100px;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
@@ -32,7 +36,7 @@ a:hover{text-decoration:underline}
 
 /* nav */
 .nav{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:saturate(1.2) blur(10px);border-bottom:1px solid var(--bd)}
-.navwrap{max-width:1240px;margin:0 auto;padding:0 24px;display:flex;align-items:center;gap:22px;height:58px}
+.navwrap{max-width:var(--shell);margin:0 auto;padding:0 24px;display:flex;align-items:center;gap:22px;height:58px}
 .brand{display:flex;align-items:center;gap:10px;color:var(--ink);font-weight:700;font-size:17px;letter-spacing:-.01em}
 .brand img{border-radius:7px}
 .brand:hover{text-decoration:none}
@@ -45,7 +49,7 @@ a:hover{text-decoration:underline}
 .btn:hover{text-decoration:none}
 
 /* shell */
-.shell{max-width:1240px;margin:0 auto;padding:34px 24px 72px;display:grid;grid-template-columns:var(--rail) minmax(0,1fr);gap:24px;align-items:start}
+.shell{max-width:var(--shell);margin:0 auto;padding:34px 24px 72px;display:grid;grid-template-columns:var(--rail) minmax(0,1fr);gap:var(--gutter);align-items:start}
 .rail{position:sticky;top:76px;max-height:calc(100vh - 92px);overflow-y:auto;display:flex;flex-direction:column;gap:14px}
 .search input{width:100%;height:36px;padding:0 12px;border:1px solid var(--bd);border-radius:9px;background:var(--panel);color:var(--ink);font-family:inherit;font-size:13px}
 .search input:focus{outline:2px solid var(--accent);outline-offset:-1px}

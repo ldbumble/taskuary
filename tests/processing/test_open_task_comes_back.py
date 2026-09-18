@@ -43,6 +43,14 @@ def a_task(db, title, *, assignee=None):
     return tid
 
 
+def after(**delta):
+    """A moment after the clear, on the clock the receipt is stamped with. NOW is the module's
+    import time, and a receipt is stamped when settle runs - on a slow CI runner that was more
+    than the minute of slack these checks had, so "61 minutes after NOW" fell short of an hour
+    after the clear and four tests said a task never came back (windows 3.12, 2026-09-18)."""
+    return datetime.now().replace(microsecond=0) + timedelta(**delta)
+
+
 def work(db, at=None):
     """The work tab: what is unread at `at`."""
     with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
@@ -68,8 +76,8 @@ def test_it_comes_back_once_the_hour_is_up(db):
     a_task(db, 'Call Dvora about PAM review')
     key = only_key(db)
     clear_it(db, key)
-    assert key not in work(db, NOW + timedelta(minutes=59)), 'it came back before the hour was up'
-    assert key in work(db, NOW + timedelta(minutes=61)), 'an open task never came back to the work tab'
+    assert key not in work(db, after(minutes=59)), 'it came back before the hour was up'
+    assert key in work(db, after(minutes=61)), 'an open task never came back to the work tab'
 
 
 def test_a_task_handed_to_an_agent_clears_like_any_other(db):
@@ -78,7 +86,7 @@ def test_a_task_handed_to_an_agent_clears_like_any_other(db):
     key = only_key(db)
     clear_it(db, key)
     assert work(db) == {}, 'a queued task ignored Done and stayed in the work tab'
-    assert key in work(db, NOW + timedelta(minutes=61)), 'and then it never came back'
+    assert key in work(db, after(minutes=61)), 'and then it never came back'
 
 
 def test_later_still_holds_it_past_the_hour(db):
@@ -86,8 +94,8 @@ def test_later_still_holds_it_past_the_hour(db):
     a_task(db, 'Call Dvora about PAM review')
     key = only_key(db)
     funnel.settle(db, key, 'later', hours=6)
-    assert key not in work(db, NOW + timedelta(minutes=61)), 'the hourly nudge overrode Later'
-    assert key in work(db, NOW + timedelta(hours=7)), 'and then Later never expired'
+    assert key not in work(db, after(minutes=61)), 'the hourly nudge overrode Later'
+    assert key in work(db, after(hours=7)), 'and then Later never expired'
 
 
 def test_a_closed_task_never_comes_back(db):
@@ -95,7 +103,7 @@ def test_a_closed_task_never_comes_back(db):
     key = only_key(db)
     clear_it(db, key)
     db.update_task(tid, {'Status': 'done'}, 'owner')
-    assert work(db, NOW + timedelta(days=2)) == {}, 'a closed task is not work'
+    assert work(db, after(days=2)) == {}, 'a closed task is not work'
 
 
 def test_the_setting_moves_the_clock(db):
@@ -103,7 +111,7 @@ def test_the_setting_moves_the_clock(db):
     a_task(db, 'Call Dvora about PAM review')
     key = only_key(db)
     clear_it(db, key)
-    assert key in work(db, NOW + timedelta(minutes=6)), 'the setting did not shorten the quiet spell'
+    assert key in work(db, after(minutes=6)), 'the setting did not shorten the quiet spell'
 
 
 def test_it_says_why_it_is_back(db):
@@ -112,7 +120,7 @@ def test_it_says_why_it_is_back(db):
     key = only_key(db)
     assert not work(db)[key].get('why_open'), 'a task you have not cleared yet is not back from anywhere'
     clear_it(db, key)
-    assert 'close' in (work(db, NOW + timedelta(minutes=61))[key].get('why_open') or '').lower()
+    assert 'close' in (work(db, after(minutes=61))[key].get('why_open') or '').lower()
 
 
 def test_the_owner_can_change_the_clock_by_saying_so(db):

@@ -19,6 +19,8 @@ test("the chats panel pages with a cursor and offers earlier chats", () => {
 });
 
 test("the retention knob is on the Assistant page of Settings", () => {
-  const settings = read("SettingsView.jsx");
-  assert.match(settings, /chat_keep_days: \{ group: "Assistant", label: "Keep past chats \(days\)", type: "number"/);
+  // the knob table is taskuary/settings_schema.json now, one file for the page and the assistant
+  const schema = JSON.parse(readFileSync(fileURLToPath(new URL("../../taskuary/settings_schema.json", import.meta.url)), "utf8"));
+  const knob = schema.knobs.chat_keep_days;
+  assert.deepEqual([knob.group, knob.label, knob.type], ["Assistant", "Keep past chats (days)", "number"]);
 });

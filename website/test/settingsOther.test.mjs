@@ -10,6 +10,9 @@ import fs from "node:fs";
 import path from "node:path";
 
 const src = fs.readFileSync(path.join(process.cwd(), "src", "SettingsView.jsx"), "utf8");
+// the knob table itself lives in taskuary/settings_schema.json now (one file for the page and the
+// assistant, 2026-09-18); the tests about WHAT the knobs are read it from there
+const KNOBS = JSON.parse(fs.readFileSync(path.join(process.cwd(), "..", "taskuary", "settings_schema.json"), "utf8")).knobs;
 
 test("per-entity state never renders as a knob", () => {
   assert.match(src, /const isState = \(name\) => name\.includes\(":"\) \|\| STATE\.has\(name\);/,
@@ -57,23 +60,21 @@ test("every panel-owned key still has a labelled fallback row", () => {
   const from = src.indexOf("const PANEL_OWNED");
   const owned = src.slice(from, src.indexOf("]);", from));   // its own declaration, not the block after it
   for (const key of owned.match(/"([a-z_0-9]+)"/g).map((m) => m.slice(1, -1))) {
-    assert.ok(new RegExp(`^  ${key}: \\{`, "m").test(src),
-      `${key} is hidden by the panel but has no KNOB_META entry to fall back to`);
+    assert.ok(KNOBS[key], `${key} is hidden by the panel but has no schema entry to fall back to`);
   }
 });
 
 test("one question gets one row: the three trust switches are a single control", () => {
   // Who may start a worker without you was three separate switches, so knowing the answer meant
   // reading all three (the owner, 2026-09-16: "combine trust own domain, sent history etc").
-  const at = src.indexOf("  trust_own_domain: {");
-  assert.notEqual(at, -1);
-  const row = src.slice(at, at + 1400);
-  assert.ok(row.includes('type: "flags"'), "it is one control over several boolean settings");
+  const row = KNOBS.trust_own_domain;
+  assert.ok(row, "the combined row exists");
+  assert.equal(row.type, "flags", "it is one control over several boolean settings");
   for (const k of ["trust_own_domain", "trust_sent_history", "trust_non_email"]) {
-    assert.ok(row.includes(`${k}: { label:`), `${k} must still be one of the pills`);
+    assert.ok(row.flags?.[k]?.label, `${k} must still be one of the pills`);
   }
   // no new key, no migration: senders.py keeps reading exactly what it read before
-  assert.ok(!/trust_sources|trust_csv/.test(src), "combining the ROW must not invent a fourth setting");
+  assert.ok(!Object.keys(KNOBS).some((k) => /trust_sources|trust_csv/.test(k)), "combining the ROW must not invent a fourth setting");
   // ...and the two it now owns must not also appear as their own rows
   const state = src.slice(src.indexOf("const STATE = new Set"), src.indexOf("const isState"));
   for (const k of ["trust_sent_history", "trust_non_email"]) {
@@ -84,7 +85,7 @@ test("one question gets one row: the three trust switches are a single control",
 test("every row the page offers is a knob somebody reads", () => {
   // The audit's own rule, kept honest: a key with no KNOB_META entry renders with its raw name
   // and no explanation, which is what the "Other" tab was. Nothing should reach it now.
-  const keys = [...src.slice(src.indexOf("const KNOB_META = {")).matchAll(/^  ([a-z_0-9]+): \{/gm)].map((m) => m[1]);
+  const keys = Object.keys(KNOBS);
   for (const dead of ["send_enabled", "outlook_drafts_enabled", "attach_threshold", "backup_agents",
                       "assistant_card", "counsel_enabled"]) {
     assert.ok(!keys.includes(dead), `${dead} has no reader - it must not be offered as a setting`);

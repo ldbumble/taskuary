@@ -43,8 +43,9 @@ test("every chat card and the Settings help are wired to the shared description"
   const view = readFileSync(new URL("../src/ConnectorsView.jsx", import.meta.url), "utf8");
   for (const type of CHAT_CONNECTORS) assert.match(view, new RegExp(`pollSecondsField\\("${type}"\\)`), type);
   assert.doesNotMatch(view, /"poll_seconds"/, "no card keeps a private copy of the field");
-  const settings = readFileSync(new URL("../src/SettingsView.jsx", import.meta.url), "utf8");
-  const pollHelp = settings.slice(settings.indexOf("poll_minutes:"), settings.indexOf("startup_sync_days:"));
+  // the knob's words live in taskuary/settings_schema.json now (one file for the page and the assistant)
+  const schema = JSON.parse(readFileSync(new URL("../../taskuary/settings_schema.json", import.meta.url), "utf8"));
+  const pollHelp = `${schema.knobs.poll_minutes.desc} ${schema.knobs.poll_minutes.help || ""}`;
   assert.match(pollHelp, /0 turns recurring background polling off/);
   assert.match(pollHelp, /Sync now, startup catch-up, and an action that must refresh chat context can still fetch/);
   assert.match(pollHelp, /0 here disables both recurring clocks/);

@@ -241,6 +241,13 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
             card.update(unread=not receipt.get('read') and not deferred, deferred=deferred,
                         actionable=not receipt.get('read') and not deferred and not funnel._not_yet(card))
             cards.append(card)
+    # A broken connection is a CONDITION: no receipt, no defer, no census row - it is on the rail
+    # while it is broken and gone when it is fixed. The owner, 2026-09-18, on a repo that had been
+    # answering 404 for days: "we should have notification for the github issue in the notification
+    # place". Before this the `broken` lane was produced by exactly one thing, a failing report.
+    for card in funnel.broken_connections(store):
+        card.update(unread=True, deferred=False, actionable=True, order_band=funnel._band(card))
+        cards.append(card)
     cards = funnel._order(cards)
     return {'rev': snapshot['snapshot_revision'], 'items': cards, 'hidden': 0, 'muted': 0,
             'rules': [], 'canonical': True, 'coverage': coverage,

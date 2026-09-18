@@ -365,7 +365,15 @@ def _rank_first(store, rows: list) -> list:
     except Exception as e: logger.debug(f'ranking the pool failed, arrival order stands: {e}')
     fresh = {r['MessageId']: r for r in store.pending_triage(_ALL, ranked=True)}
     keep = {r['MessageId'] for r in ranked}
-    in_order = [fresh[m] for m in fresh if m in keep][:rank.head_size(store)]
+    # each input's OWN batch size: a repo firehose and a mailbox are not the same appetite
+    heads, in_order = {}, []
+    for mid in fresh:
+        if mid not in keep: continue
+        ch = str(fresh[mid].get('Channel') or '')
+        if ch not in heads: heads[ch] = rank.head_size(store, ch)
+        if heads[ch] <= 0: continue
+        heads[ch] -= 1
+        in_order.append(fresh[mid])
     return [r for r in rows if r['MessageId'] not in keep] + in_order
 
 

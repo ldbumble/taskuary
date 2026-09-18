@@ -42,13 +42,47 @@ HEAD_RANGE = (1, 20)
 RANK_BATCH = 40           # arrivals per listwise ranking call
 
 
-def head_size(store) -> int:
-    """How many ranked arrivals are judged at once. The owner's, clamped: a 0 would judge nothing
-    and a 500 would spend the whole saving this exists to make."""
+def head_size(store, channel: str = None) -> int:
+    """How many of THIS input's ranked arrivals are judged at once.
+
+    It belongs to the connector, beside the switch that turned ranking on: a repo firehose and a
+    mailbox are not the same appetite (the owner, 2026-09-18: "per connector input you can choose
+    how many you want in each batch"). Clamped either way - a 0 would judge nothing and a 500 would
+    spend the whole saving this exists to make."""
     lo, hi = HEAD_RANGE
-    try: n = int(str(store.get_settings().get('bulk_head') or HEAD_JUDGED).strip())
-    except (AttributeError, TypeError, ValueError): return HEAD_JUDGED
+    raw = None
+    if channel:
+        for c in _rank_connectors(store):
+            if channel in _channels_of(c):
+                raw = _cfg(c).get('bulk_head')
+                break
+    if raw in (None, ''):
+        try: raw = store.get_settings().get('bulk_head')
+        except AttributeError: raw = None
+    try: n = int(str(raw if raw not in (None, '') else HEAD_JUDGED).strip())
+    except (TypeError, ValueError): return HEAD_JUDGED
     return max(lo, min(hi, n))
+
+
+def _cfg(c: dict) -> dict:
+    try: return json.loads((c or {}).get('ConfigJson') or '{}')
+    except ValueError: return {}
+
+
+def _channels_of(c: dict) -> set:
+    """The channels one connector's messages arrive on - 'email' for any mail connector, else its
+    own type, which is what a message row carries."""
+    t = c.get('Type')
+    return ({ch for ch, types in _TYPES.items() if t in types} | {t}) - {None}
+
+
+def _rank_connectors(store) -> list:
+    """Every ACTIVE connector switched to rank, read once."""
+    out = []
+    for c in store.list_connectors():
+        full = store.get_connector(c['ConnectorId']) or {}
+        if c.get('Active') and _cfg(full).get('bulk') == 'rank': out.append({**full, 'Type': c.get('Type') or full.get('Type')})
+    return out
 
 
 def build_rank_llm(store):
@@ -251,31 +285,34 @@ def rank_channels(store) -> set:
     """The channels whose connector is in rank mode - worked out once, so marking a rail of sixty
     rows does not resolve the same connector sixty times."""
     out = set()
-    for c in store.list_connectors():
-        try: cfg = json.loads((store.get_connector(c['ConnectorId']) or {}).get('ConfigJson') or '{}')
-        except ValueError: continue
-        if c.get('Active') and cfg.get('bulk') == 'rank':
-            out |= {ch for ch, types in _TYPES.items() if c.get('Type') in types} | {c.get('Type')}
+    for c in _rank_connectors(store): out |= _channels_of(c)
     return {c for c in out if c}
 
 
-def more_after(store, rows: list) -> dict | None:
-    """Which row wears the "250 more" pill, and what it says. None when there is nothing to say.
+def more_markers(store, rows: list) -> list:
+    """Which rows wear a "250 more" pill, and what each says. Empty when there is nothing to say.
 
-    It hangs off the LAST ranked row on screen, because that row is where reading stopped - the fyi
-    pill sits under its whole band, which is a different fact about a different thing (the owner,
-    2026-09-18: "the more button should be on the last github item that is triaged").
+    One per ranked INPUT, because each has its own queue and its own batch size - and each hangs off
+    that input's LAST row on screen, which is where reading stopped. (The fyi pill sits under a whole
+    band, which is a different fact about a different thing.)
 
-    None for an owner who ranks nothing, which is most of them: no rank-mode connector, no waiting
+    Empty for an owner who ranks nothing, which is most of them: no rank-mode connector, no waiting
     arrivals, or no ranked row drawn means no pill anywhere.
     """
-    if not rows or not any_rank(store): return None
+    if not rows: return []
     chans = rank_channels(store)
-    if not chans: return None
-    last = next((r for r in reversed(rows) if str((r or {}).get('channel') or '') in chans), None)
-    if not last: return None
-    n = waiting(store)['count']
-    return {'key': last.get('key'), 'count': n} if n else None
+    if not chans: return []
+    counts = {}
+    for w in waiting(store)['items']:
+        ch = str(w.get('channel') or '')
+        counts[ch] = counts.get(ch, 0) + 1
+    out, seen = [], set()
+    for r in reversed(rows):
+        ch = str((r or {}).get('channel') or '')
+        if ch not in chans or ch in seen: continue
+        seen.add(ch)
+        if counts.get(ch): out.append({'key': r.get('key'), 'channel': ch, 'count': counts[ch]})
+    return list(reversed(out))
 
 
 def top_up(store, n: int = 1) -> int:

@@ -38,6 +38,12 @@
 .tq-pile-head hr { flex: 1 1 auto; border: 0; border-top: 1px solid #ece7e0; margin: 0; }
 .tq-pile-head em { font: 700 10px 'IBM Plex Sans', system-ui, sans-serif; font-style: normal; color: #a09889; font-variant-numeric: tabular-nums; }
 /* what a capped band leaves behind. Only reports and fyi can ever show one (funnelPile.CAPPED) */
+/* A BUTTON IS ONE LINE. Every pill-shaped button in the rail and on a card - none of them said so,
+   so "Hand it to a coding agent" folded the moment its card got narrow (the owner, 2026-09-18: "i
+   hate 2 line buttons ... check every button"). A label too long for its room is a label to
+   shorten; it is never a reason to fold one button into two rows. */
+.tq-verb, .tq-chip, .tq-pile-more { white-space: nowrap; flex-shrink: 0; }
+
 .tq-pile-more { display: block; margin: 5px 0 2px 70px; padding: 3px 11px; border: 1px solid #dcd5cb; border-radius: 99px;
   background: #fffdfb; color: #55697a; font: 600 11px 'IBM Plex Sans', system-ui, sans-serif; cursor: pointer; }
 .tq-pile-more:hover { border-color: #b9c3cb; background: #f5f8f9; }

@@ -149,7 +149,12 @@ export const theme = createTheme({
     MuiPaper: { styleOverrides: { root: { backgroundImage: "none", border: `1px solid ${BORDER}`, boxShadow: "none" } } },
     MuiButton: {
       styleOverrides: {
-        root: { textTransform: "none", fontWeight: 600, fontSize: 12.5, borderRadius: 8 },
+        // A BUTTON IS ONE LINE. Two causes, both shut here rather than per button: its label
+        // wrapping, and flex squeezing it narrower than its own words in a row that has a
+        // greedy neighbour (the owner, 2026-09-18: "i hate 2 line buttons ... check every
+        // button"). A label too long for its room is a label to shorten, not to fold.
+        root: { textTransform: "none", fontWeight: 600, fontSize: 12.5, borderRadius: 8,
+          whiteSpace: "nowrap", flexShrink: 0 },
         contained: { boxShadow: "none", "&:hover": { boxShadow: "0 2px 8px rgba(47,107,79,.25)" } },
       },
     },

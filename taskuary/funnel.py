@@ -161,6 +161,37 @@ def _item(key, kind, lane, title, *, who='', when='', since='', why='', mid=None
 
 
 # ── the producers: each reads one thing the hub holds ─────────────────────────────────────────
+
+CONN_LABELS = {'outlook': 'Outlook', 'gmail': 'Gmail', 'imap': 'IMAP', 'teams': 'Teams', 'slack': 'Slack',
+               'github': 'GitHub', 'gitlab': 'GitLab', 'whatsapp': 'WhatsApp', 'telegram': 'Telegram',
+               'jira': 'Jira', 'sentry': 'Sentry', 'intacct': 'Intacct', 'quickbooks': 'QuickBooks'}
+
+
+def broken_connections(store) -> list:
+    """A connection that stopped answering, as a row you will actually walk past.
+
+    The `broken` lane has always existed and exactly one thing produced it: a failing REPORT. So a
+    repo that answers 404 for a fortnight said so only in connector.LastError - on a settings page
+    you have to think to open - and the log. The owner, 2026-09-18, on a repo that had been dead for
+    days: "we should have notification for the github issue in the notification place".
+
+    Only an ACTIVE connector: one nobody turned on is not broken, it is off.
+    """
+    out = []
+    for c in store.list_connectors():
+        if not c.get('Active'): continue
+        full = store.get_connector(c['ConnectorId']) or {}
+        err = ' '.join(str(full.get('LastError') or '').split())
+        if not err: continue
+        kind = str(c.get('Type') or full.get('Type') or '')
+        label = CONN_LABELS.get(kind, kind.title() or 'A connection')
+        out.append(_item(f'conn:{c["ConnectorId"]}', 'connection', 'broken',
+                         f'{label} stopped answering', channel=kind,
+                         who=label, why=_short(err, 220),
+                         when=full.get('LastSyncAt') or '', since=full.get('LastSyncAt') or ''))
+    return out
+
+
 def _feed_skip(r: dict) -> bool:
     """Rows that are nobody asking anything: our own sends, withdrawn lines, an auto-reply, and
     anything on a task that is over (unless a draft on it still waits for a yes)."""
@@ -823,6 +854,10 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
     items = [i for i in items if not (i['kind'] in ('asked', 'todo', 'fyi') and i.get('tid') in parked)]
     items += from_proposals(store, {i['rid'] for i in items if i.get('rid')})
     items += from_calendar(store, now)
+    # A CONDITION, not a letter: it is here while the connection is broken and gone when it is
+    # fixed, so it carries no read receipt and cannot be marked read. Marking a dead repo "read"
+    # would be marking the outage read.
+    items += broken_connections(store)
     # Only a row still inside the walk window may suppress a fresh Assistant follow-up about the
     # same conversation. Once filed/automated mail was admitted to Unread, an old message could
     # occupy used_cids here, hide this morning's follow-up, and then age out itself below—leaving
@@ -991,10 +1026,10 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE) -> 
         # itself and not in bulk").
         try:
             from . import rank
-            p['more_after'] = rank.more_after(store, p['items'])
+            p['more_markers'] = rank.more_markers(store, p['items'])
         except Exception as e:
             logger.debug(f'the ranked count did not reach the rail: {e}')
-            p['more_after'] = None
+            p['more_markers'] = []
         p['events'] = events
         _CACHE.update(at=time.time(), pile=p, store=store, full=full['items'] if shared else None,
                       generation=_CACHE.get('generation', 0) + 1, mark=mark, workers=workers)

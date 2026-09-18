@@ -1005,3 +1005,47 @@ class MemoryTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ABrokenConnectionSaysSoTests(unittest.TestCase):
+    """A dead connection only ever landed in connector.LastError, on a page you have to go and open.
+    The `broken` lane existed and was produced by exactly one thing: a failing REPORT. So a repo
+    that 404s for a fortnight said nothing anywhere you look (the owner, 2026-09-18: "we should have
+    notification for the github issue in the notification place")."""
+
+    def setUp(self):
+        self.s = MemoryStore()
+        funnel.invalidate()
+
+    def _broken(self, ctype, err):
+        c = self.s.get_connector_by_type(ctype)
+        self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'Roles': 'trigger'}, 't')
+        self.s.touch_connector(c['ConnectorId'], err)
+        return c['ConnectorId']
+
+    def test_a_connection_that_stopped_answering_is_on_the_rail(self):
+        self._broken('github', 'ldbumble/FckSignups: no such repository - it was renamed or deleted')
+        rows = funnel.broken_connections(self.s)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['lane'], 'broken')
+        self.assertIn('github', rows[0]['title'].lower())
+        self.assertIn('no such repository', rows[0]['why'])
+        self.assertTrue(rows[0]['key'].startswith('conn:'))
+
+    def test_a_healthy_connection_says_nothing(self):
+        c = self.s.get_connector_by_type('github')
+        self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'Roles': 'trigger'}, 't')
+        self.s.touch_connector(c['ConnectorId'], None)
+        self.assertEqual(funnel.broken_connections(self.s), [])
+
+    def test_a_connection_nobody_turned_on_is_not_broken(self):
+        c = self.s.get_connector_by_type('github')
+        self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 0}, 't')
+        self.s.touch_connector(c['ConnectorId'], 'boom')
+        self.assertEqual(funnel.broken_connections(self.s), [])
+
+    def test_it_reaches_the_pile_the_rail_actually_draws(self):
+        self._broken('github', 'ldbumble/FckSignups: no such repository')
+        funnel.invalidate()
+        keys = [i['key'] for i in funnel.pile(self.s, force=True)['items']]
+        self.assertTrue(any(k.startswith('conn:') for k in keys), keys[:8])

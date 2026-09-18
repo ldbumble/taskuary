@@ -323,24 +323,74 @@ class TheMoreMarkerTests(unittest.TestCase):
         """A normal install must be untouched by every part of this - no marker, no count, no pill."""
         for i in range(6): self._arrival(f'pr {i}')
         self.assertEqual(rank.waiting(self.s)['count'], 0)
-        self.assertIsNone(rank.more_after(self.s, [{'key': 'k1', 'channel': 'github'}]))
+        self.assertEqual(rank.more_markers(self.s, [{'key': 'k1', 'channel': 'github'}]), [])
 
     def test_the_count_hangs_off_the_last_ranked_row(self):
         c = self.s.get_connector_by_type('github')
         self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'ConfigJson': json.dumps({'bulk': 'rank'})}, 't')
         for i in range(9): self._arrival(f'pr {i}')
         rows = [{'key': 'k1', 'channel': 'github'}, {'key': 'k2', 'channel': 'email'}, {'key': 'k3', 'channel': 'github'}]
-        got = rank.more_after(self.s, rows)
-        self.assertEqual(got['key'], 'k3', 'the LAST ranked row, not the last row and not the first')
-        self.assertEqual(got['count'], 9)
+        got = rank.more_markers(self.s, rows)
+        self.assertEqual(len(got), 1)
+        self.assertEqual(got[0]['key'], 'k3', 'the LAST ranked row, not the last row and not the first')
+        self.assertEqual(got[0]['count'], 9)
 
     def test_a_ranked_source_with_nothing_waiting_shows_no_pill(self):
         c = self.s.get_connector_by_type('github')
         self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'ConfigJson': json.dumps({'bulk': 'rank'})}, 't')
-        self.assertIsNone(rank.more_after(self.s, [{'key': 'k1', 'channel': 'github'}]))
+        self.assertEqual(rank.more_markers(self.s, [{'key': 'k1', 'channel': 'github'}]), [])
 
     def test_with_no_ranked_row_on_screen_there_is_nowhere_to_hang_it(self):
         c = self.s.get_connector_by_type('github')
         self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'ConfigJson': json.dumps({'bulk': 'rank'})}, 't')
         for i in range(4): self._arrival(f'pr {i}')
-        self.assertIsNone(rank.more_after(self.s, [{'key': 'k1', 'channel': 'email'}]))
+        self.assertEqual(rank.more_markers(self.s, [{'key': 'k1', 'channel': 'email'}]), [])
+
+
+class EachInputChoosesItsOwnBatchTests(unittest.TestCase):
+    """How many to read at once belongs to the CONNECTOR, beside the switch that turned ranking on -
+    a repo firehose and a mailbox are not the same appetite (the owner, 2026-09-18: "per connector
+    input you can choose how many you want in each batch no?")."""
+
+    def setUp(self):
+        self.s = MemoryStore()
+        self.s.save_source({'Channel': 'email', 'Address': 'me@corp.example', 'Owner': 'me', 'Active': 1}, 't')
+
+    def _rank(self, ctype, head=None):
+        c = self.s.get_connector_by_type(ctype)
+        cfg = {'bulk': 'rank'}
+        if head is not None: cfg['bulk_head'] = head
+        self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'ConfigJson': json.dumps(cfg)}, 't')
+
+    def test_a_connector_that_says_nothing_takes_the_default(self):
+        self._rank('github')
+        self.assertEqual(rank.head_size(self.s, 'github'), rank.HEAD_JUDGED)
+
+    def test_each_input_keeps_its_own_number(self):
+        self._rank('github', 10)
+        self._rank('outlook', 2)
+        self.assertEqual(rank.head_size(self.s, 'github'), 10)
+        self.assertEqual(rank.head_size(self.s, 'email'), 2)
+
+    def test_a_nonsense_number_is_clamped_not_obeyed(self):
+        self._rank('github', 900)
+        self.assertEqual(rank.head_size(self.s, 'github'), rank.HEAD_RANGE[1])
+        self._rank('github', 0)
+        self.assertEqual(rank.head_size(self.s, 'github'), rank.HEAD_RANGE[0])
+
+    def test_each_ranked_input_wears_its_own_pill(self):
+        """Two inputs ranking means two queues and two counts - one pill under each one's last row."""
+        self._rank('github', 2)
+        self._rank('outlook', 2)
+        for i in range(5):
+            self.s.add_message({'ExternalId': f'g{i}', 'Channel': 'github', 'Subject': f'pr {i}',
+                                'FromName': 'dev', 'SentAt': '2026-09-18 07:00:00', 'Status': 'triaging'})
+        for i in range(3):
+            self.s.add_message({'ExternalId': f'e{i}', 'Channel': 'email', 'Subject': f'mail {i}',
+                                'FromName': 'Dana', 'SentAt': '2026-09-18 07:00:00', 'Status': 'triaging'})
+        rows = [{'key': 'g1', 'channel': 'github'}, {'key': 'e1', 'channel': 'email'}, {'key': 'g2', 'channel': 'github'}]
+        marks = rank.more_markers(self.s, rows)
+        self.assertEqual({m['key']: m['count'] for m in marks}, {'g2': 5, 'e1': 3})
+
+    def test_an_owner_who_ranks_nothing_gets_no_markers_at_all(self):
+        self.assertEqual(rank.more_markers(self.s, [{'key': 'k', 'channel': 'github'}]), [])

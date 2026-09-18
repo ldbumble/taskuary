@@ -2772,7 +2772,14 @@ const MsSignIn = ({ conn, cfg, reload, onSignedIn }) => {
         <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
           <Button variant="contained" disableElevation disabled={busy} onClick={start}>
             {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Sign in with Microsoft"}</Button>
-          {!adminUrl && <Button size="small" onClick={adminLink} sx={{ fontSize: 11.5, textTransform: "none", color: DIM }}>Does IT have to approve apps? Get the admin link</Button>}
+          {/* the QUESTION is not the button. Asked and answered in one 48-character control, it was
+              the widest thing on the card and read as a sentence somebody had made clickable. */}
+          {!adminUrl && (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+              <Typography variant="caption" sx={{ color: DIM }}>Does IT have to approve apps?</Typography>
+              <Button size="small" onClick={adminLink} sx={{ fontSize: 11.5, color: DIM }}>Get the admin link</Button>
+            </Box>
+          )}
         </Box>
       )}
       {detail && <Typography variant="body2" sx={{ fontWeight: 600, color: state === "ok" ? "#47654a" : "#6b2733" }}>
@@ -2804,6 +2811,16 @@ const ProcessingStep = ({ conn, reload, n }) => {
     const next = { ...cfg, bulk: v }; setCfg(next);
     await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(next) }); reload();
   };
+  // HOW MANY of this input's ranked arrivals are read at once. It belongs to the connection, not to
+  // Settings: a repo firehose and a mailbox are not the same appetite (the owner, 2026-09-18: "per
+  // connector input you can choose how many you want in each batch"). Clamped to the same 1-20 the
+  // server clamps to, so the box cannot promise a number rank.head_size would refuse.
+  const head = Number(cfg.bulk_head) || 4;
+  const setHead = async (raw) => {
+    const n = Math.max(1, Math.min(20, Number(raw) || 4));
+    const next = { ...cfg, bulk_head: n }; setCfg(next);
+    await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(next) }); reload();
+  };
   return (
     <Box sx={{ mt: 2 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
@@ -2833,6 +2850,18 @@ const ProcessingStep = ({ conn, reload, n }) => {
               {v === "clear" && <Typography variant="caption" sx={{ color: FAINT }}>default</Typography>}
             </Box>
             <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.5, lineHeight: 1.5 }}>{desc}</Typography>
+            {v === "rank" && mode === "rank" && (
+              <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 1.25, pt: 1.25, borderTop: `1px solid ${BORDER}`,
+                display: "flex", alignItems: "center", gap: 1 }}>
+                <TextField size="small" type="number" value={head} label="Read at once"
+                  onChange={(e) => setCfg({ ...cfg, bulk_head: e.target.value })}
+                  onBlur={(e) => setHead(e.target.value)}
+                  inputProps={{ min: 1, max: 20, style: { width: 52 } }} />
+                <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.45 }}>
+                  The rest wait in rank order. One more is read each time you finish one.
+                </Typography>
+              </Box>
+            )}
           </Box>
         ))}
       </Box>

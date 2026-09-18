@@ -15,8 +15,11 @@ try:
 except ImportError:
     import tomli as tomllib
 
+# Only the stable ALIASES, and only as a fallback: the real list is claude_models() below, read from
+# Claude Code's own catalog. Spelling ids here is what left a stale `claude-haiku-4-5` and no Fable at
+# all in the picker while /model on the same machine said otherwise (the owner, 2026-09-18).
 STATIC = {'claude': [{'id': m, 'label': m, 'desc': '', 'efforts': [], 'default_effort': ''}
-                     for m in ('opus', 'sonnet', 'haiku', 'claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5')],
+                     for m in ('opus', 'sonnet', 'haiku')],
           'gemini': [{'id': m, 'label': m, 'desc': '', 'efforts': [], 'default_effort': ''} for m in ('gemini-2.5-pro', 'gemini-2.5-flash')],
           # Verified against Qwen Code 0.23.4's QWEN_OAUTH_MODELS. API-provider
           # configurations replace this alias with their own model ids below.
@@ -132,6 +135,41 @@ def copilot_models() -> list:
     return _copilot_models(shutil.which('copilot') or '')
 
 
+def claude_home() -> Path: return Path(os.getenv('CLAUDE_CONFIG_DIR') or Path.home() / '.claude')
+
+
+def _claude_granted() -> list:
+    """Models this account was granted on top of the catalog - the [1m] long-context variants."""
+    for p in (claude_home() / '.claude.json', Path.home() / '.claude.json'):
+        try: rows = json.loads(p.read_text(encoding='utf-8', errors='replace')).get('additionalModelOptionsCache') or []
+        except (OSError, ValueError): continue
+        return [{'id': r['value'], 'label': r.get('label') or r['value'], 'desc': (r.get('description') or '')[:120],
+                 'efforts': [], 'default_effort': ''} for r in rows if isinstance(r, dict) and r.get('value')]
+    return []
+
+
+def claude_models() -> list:
+    """The /model list, as Claude Code cached it.
+
+    It writes a catalog per surface under cache/model-catalog/ and leaves the older file behind when a
+    signed-in account refetches, so the newest `fetchedAt` wins. `efforts` is deliberately EMPTY even
+    though every model lists reasoning levels: an @effort pick is translated into codex's
+    `-c model_reasoning_effort=`, and Claude Code takes its effort from settings.json, not from a flag.
+    """
+    best, models = -1.0, []
+    for p in sorted(claude_home().glob('cache/model-catalog/*.json')):
+        try: d = json.loads(p.read_text(encoding='utf-8', errors='replace'))
+        except (OSError, ValueError): continue
+        when = float(d.get('fetchedAt') or 0)
+        if when < best: continue
+        rows = ((d.get('catalog') or {}).get('config') or {}).get('models') or []
+        found = [{'id': m['id'], 'label': m.get('name') or m['id'], 'desc': (m.get('description') or '')[:120],
+                  'efforts': [], 'default_effort': ''} for m in rows if isinstance(m, dict) and m.get('id')]
+        if found: best, models = when, found
+    seen = {m['id'] for m in models}
+    return models + [m for m in _claude_granted() if m['id'] not in seen] if models else []
+
+
 def codex_home() -> Path: return Path(os.getenv('CODEX_HOME') or Path.home() / '.codex')
 
 
@@ -205,6 +243,11 @@ def catalog(cli: str) -> dict:
         if not models: models, source = STATIC[cli], 'built-in'
         return {'models': models, 'current': current, 'source': source or 'built-in',
                 'choices': [m['id'] for m in models]}
+    if cli == 'claude':
+        models = claude_models()
+        return {'models': models or STATIC['claude'], 'current': {},
+                'source': 'claude model catalog' if models else 'built-in',
+                'choices': [m['id'] for m in (models or STATIC['claude'])]}
     models = STATIC.get(cli, [])
     return {'models': models, 'current': {}, 'source': 'built-in', 'choices': [m['id'] for m in models]}
 

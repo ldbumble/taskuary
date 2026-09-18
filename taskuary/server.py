@@ -269,8 +269,10 @@ class SourceBody(BaseModel):
     Address: str | None = None; ConfigJson: str | None = None; Active: bool | None = None
 class DispatchBody(BaseModel):
     # `agent` is the ROLE that works it; `brain` is WHICH CLI runs it. Two questions, and
-    # answering both with one name is what sent TQ-0588's coding work to Copilot.
-    agent: str | None = None; brain: str | None = None
+    # answering both with one name is what sent TQ-0588's coding work to Copilot. `pick` is the
+    # same question in the GENERAL namespace ('cli:<profile>' / 'connector:<id>'), which is what a
+    # general session resolves and saves; a cli_connections key would mean nothing to it.
+    agent: str | None = None; brain: str | None = None; pick: str | None = None
     instruction: str | None = None; model: str | None = None
     # The button says "Send to agent".  The task's Kind remains authoritative once a task
     # exists; this hint is only how an unpromoted message says which kind of task to create.
@@ -886,7 +888,10 @@ def _assistant_payload(task_id: int, session=None):
     if not general.handles(task):
         raise HTTPException(422, 'assistant view is available for general, research, marketing, and triage tasks')
     session = session or general.session_for(task_id)
-    return {'messages': general.history(store, task_id), 'providers': general.provider_options(store),
+    return {'messages': general.history(store, task_id),
+            # ONE ENTRY PER CLI, and only the installed ones: this listed a provider per worker
+            # profile, so five profiles on Claude read as five brains (the owner, 2026-09-18).
+            'providers': general.brain_options(store, keep=general.default_pick(store, task)),
             # what the chat WOULD run on if nobody picks: the picker showed providers[0] instead,
             # which is always a CLI, so a task with no session nominated a coding agent (TQ-0420)
             'defaultPick': general.default_pick(store, task),
@@ -2081,8 +2086,17 @@ def _dispatch_task_to_its_agent(tid: int, body: DispatchBody, background: Backgr
 
     if regular:
         had_session = general.session_for(tid) is not None
+        # THE PROFILE IS THE ASSIGNEE. A general hand-off may now name the worker it goes to, and
+        # `agent:<name>` is where general.assigned_role already reads it from to seed PROFILE RULES -
+        # so choosing one needs no new column and no migration (the owner, 2026-09-18). A CODING
+        # profile named here would seed CODER.md into a chat, so it is refused rather than obeyed.
+        if body.agent and body.agent != general.assigned_role(store, task):
+            if str((store.get_agent(body.agent) or {}).get('Kind') or '').lower() in ('coding', 'cli'):
+                raise HTTPException(422, f'{body.agent} is a coding profile - it cannot run a non-coding task')
+            store.update_task(tid, {'Assignee': f'agent:{body.agent}'}, ACTOR)
+            task = store.get_task(tid)
         try:
-            session = general.start_session(store, tid, model=body.model, actor=ACTOR)
+            session = general.start_session(store, tid, model=body.model, pick=body.pick or None, actor=ACTOR)
         except (ValueError, RuntimeError) as e:
             raise HTTPException(422, str(e))
         # The source messages and their files are injected by GeneralSession.send_prompt.  On a
@@ -3105,7 +3119,8 @@ def concierge_state():
     return {'task': task, 'ref': task_ref(task['TaskId']), 'messages': concierge.history(store, task['TaskId']),
             # the persisted Current, validated against the pile - never the last card of the history (PW-162)
             'current': concierge.restore_current(store, task['TaskId']),
-            'providers': options, 'pick': pick, 'provider': (chosen or {}).get('label') or pick, 'model': model,
+            'providers': general.brain_options(store, keep=pick), 'pick': pick,
+            'provider': (chosen or {}).get('label') or pick, 'model': model,
             # the chats this walk can be handed to, and the one it is in right now
             'doorways': remote_assistant.doorways(store), 'handoff': remote_assistant.handoff(store)}
 
@@ -3874,7 +3889,7 @@ def brains():
     from . import climodels
     out += [{'value': f"cli:{o['value']}", 'label': f"{o['label']} (your CLI)",
              'kind': 'cli', 'ready': o['ready'],
-             'models': climodels.catalog(o['cli']).get('choices') or CLI_MODELS.get(o['cli'], [])}
+             'models': climodels.catalog(o['cli'])['choices']}
             for o in hub_agents.cli_agent_options(store, preferred=preferred)]
     current = store.get_settings().get('triage_ai') or ''
     # Old settings named a type (connector:anthropic). Keep accepting that in llm.py, but
@@ -4724,12 +4739,6 @@ def mssql_test(body: dict):
 
 # Models each CLI can be pointed at. The agent profile's own `model` (Connections → AI CLI
 # agents) always wins as the default; these are the quick picks the run dialogs offer.
-CLI_MODELS = {
-    'claude': ['opus', 'sonnet', 'haiku', 'claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5'],
-    'codex': ['gpt-5-codex', 'gpt-5'],
-    'gemini': ['gemini-2.5-pro', 'gemini-2.5-flash'],
-}
-
 def cli_base(cmd) -> str:
     """'C:\\Users\\me\\...\\codex.exe' and 'codex' are the same CLI. A profile saved with the full
     path (the setup wizard writes what `where` found) offered no model list at all."""
@@ -4951,12 +4960,23 @@ def agents():
         prof = json.loads(a.get('Config') or '{}')
         cli = cli_base(prof.get('cmd'))
         cat = climodels.catalog(cli)                       # codex: its own /model list off disk; others: the built-in aliases
-        return {'cmd': prof.get('cmd'), 'cli': cli, 'default': prof.get('model'), 'choices': cat['choices'] or CLI_MODELS.get(cli, []),
+        return {'cmd': prof.get('cmd'), 'cli': cli, 'default': prof.get('model'), 'choices': cat['choices'],
                 'models': cat['models'], 'current': cat['current'], 'source': cat['source']}
     # the default agent (a setting) comes FIRST: every picker's initial value is the head of
     # this list, so "which CLI opens when I hit Start session" is decided in one place
     # ...and "the default" is the one that can actually run: shipping coder=claude means a
     # machine with only codex installed had every dispatch aimed at a CLI nobody had.
+    # A BRAIN THAT IS NOT INSTALLED IS NOT A CHOICE. brain_list was every key in cli_connections,
+    # so a CLI the owner had removed - or one seeded and never installed - stayed on every dispatch
+    # menu app-wide and failed only when it was started (the owner, 2026-09-18).
+    conns = cfg.get('cli_connections') or {}
+    brains_here = sorted(k for k in conns if hub_agents.runs_here(cli_connections.with_defaults(conns[k])))
+    _cats = {}
+    def _brain_cat(key):
+        """One catalog read per CLI per request: `catalog` goes to disk, and this is asked twice a brain."""
+        if key not in _cats: _cats[key] = climodels.catalog(cli_connections.cli_key(conns[key].get('cmd')) or key)
+        return _cats[key]
+    from . import general as _general
     head = hub_agents.default_agent(store)
     rows = sorted(store.list_agents(), key=lambda a: a['Name'] != head)
     profs = hub_agents.profiles(store)
@@ -4977,8 +4997,13 @@ def agents():
             # every brain that can be picked, and the models each offers. A coding picker chooses
             # the BRAIN: the role is `coder` for every coding task, so offering roles there would
             # be one choice with one entry (the 2026-09-16 spec).
-            'brain_list': sorted(cfg.get('cli_connections') or {}),
-            'brain_models': {k: {'choices': climodels.catalog(k)['choices'],
+            # the brains a NON-coding hand-off may choose, one per installed CLI (general.py)
+            'general_brains': _general.brain_options(store),
+            'brain_list': brains_here,
+            # every connection keeps its models, installed or not: a task still pinned to a CLI that
+            # has since gone has to be able to SAY so, and the picker renders it from this.
+            'brain_models': {k: {'choices': _brain_cat(k)['choices'], 'models': _brain_cat(k)['models'],
+                                 'installed': k in brains_here,
                                  'default': (cli_connections.gears(cfg, k) or {}).get('model') or ''}
                              for k in (cfg.get('cli_connections') or {})},
             'work': _agent_work(store)}

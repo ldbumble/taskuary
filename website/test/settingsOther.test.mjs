@@ -143,3 +143,18 @@ test("a live browser on an empty tab says it is an empty tab", () => {
   assert.ok(pane.includes("an empty tab, live"));
   assert.match(pane, /pointerEvents: "none"/, "the note must not swallow a take-over click");
 });
+
+// EVERY SETTINGS PAGE IS THE SAME WIDTH. The shell gives each page one column; two of them then
+// capped themselves INSIDE it - Updates at 720, About you at 860 - so the page got narrower as you
+// moved down the rail (the owner, 2026-09-18: "all settings pages ... should be the same width").
+// The cap belongs to the shell, once, or nowhere.
+test("no settings page sets a width of its own", () => {
+  assert.match(src, /gap: 3, alignItems: "start", maxWidth: 1560, mx: "auto"/,
+    "the shell owns the width, and it takes more of the page than the old 1320");
+  for (const name of ["UpdateCard.jsx", "AboutYou.jsx"]) {
+    const page = fs.readFileSync(path.join(process.cwd(), "src", name), "utf8");
+    const open = page.indexOf("return (");
+    assert.doesNotMatch(page.slice(open, open + 200), /maxWidth: \d+/,
+      `${name} must not cap its own root - that is what made the pages different widths`);
+  }
+});

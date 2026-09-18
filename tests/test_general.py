@@ -519,6 +519,37 @@ class GeneralApiTests(unittest.TestCase):
         self.assertEqual([m['role'] for m in general.history(store, tid)][:2], ['user', 'assistant'])
 
 
+class BrainOptionsTests(unittest.TestCase):
+    """Which BRAINS a non-coding hand-off may be given to - not which worker profiles exist."""
+
+    def store(self):
+        s = MemoryStore()
+        for name, kind in (('coder', 'coding'), ('researcher', 'research'), ('analyst', 'analysis')):
+            s.upsert_agent(name, kind, 'cli', json.dumps({'cmd': 'claude'}))
+        s.upsert_agent('gone', 'research', 'cli', json.dumps({'cmd': 'not-on-this-machine-at-all'}))
+        return s
+
+    def test_one_entry_per_cli_not_one_per_profile(self):
+        """Three profiles on Claude are ONE brain. The picker listed them as three providers."""
+        got = general.brain_options(self.store())
+        self.assertEqual([o['label'] for o in got if o.get('type') == 'cli'], ['claude (your CLI)'])
+        self.assertEqual(len({o['pick'] for o in got}), len(got))
+        # and it carries that CLI's own model list, so the model dropdown beside it is real
+        self.assertTrue(all(m['id'] and m['label'] for o in got if o.get('type') == 'cli' for m in o['models']))
+
+    def test_a_brain_that_is_not_installed_is_not_offered(self):
+        self.assertEqual([o['pick'] for o in general.brain_options(self.store()) if o.get('type') == 'cli'],
+                         ['cli:coder'])
+
+    def test_a_pick_already_in_use_never_vanishes_from_its_own_picker(self):
+        """Collapsing the list must not blank the dropdown of a chat running on the fourth profile."""
+        got = general.brain_options(self.store(), keep='cli:analyst')
+        self.assertEqual(got[0]['pick'], 'cli:analyst')
+        self.assertIn('cli:coder', [o['pick'] for o in got])
+        # a pick that means nothing is not invented back into the list
+        self.assertNotIn('cli:nobody', [o['pick'] for o in general.brain_options(self.store(), keep='cli:nobody')])
+
+
 class GeneralWaitroomTests(unittest.TestCase):
     def test_a_general_note_reopens_the_assistant_not_a_coding_cli(self):
         store = MemoryStore(); tid = general_task(store); connect_openai(store)

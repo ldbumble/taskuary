@@ -647,9 +647,10 @@ class CoreTests(unittest.TestCase):
             self.assertEqual(terminal.terminal_host_env(['codex.exe'], 'abc123'), {})
 
     def test_a_full_path_to_the_cli_still_finds_its_model_list(self):
-        from taskuary.server import cli_base, CLI_MODELS
+        from taskuary.server import cli_base
+        from taskuary import climodels
         for cmd in (r'C:\Users\rabbi\AppData\Local\OpenAI\Codex\bin\codex.exe', '/usr/local/bin/codex', 'codex', 'CODEX.CMD'):
-            self.assertEqual(cli_base(cmd), 'codex'); self.assertEqual(CLI_MODELS[cli_base(cmd)], CLI_MODELS['codex'])
+            self.assertEqual(cli_base(cmd), 'codex'); self.assertTrue(climodels.catalog(cli_base(cmd))['choices'])
         self.assertEqual(cli_base(r'C:\npm\claude.cmd'), 'claude'); self.assertEqual(cli_base(''), '')
 
     def test_terminal_env_never_inherits_a_session(self):

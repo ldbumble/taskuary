@@ -14,13 +14,15 @@ const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, impo
 test("the coding picker filters to coding workers and names them by their CLI", () => {
   const ui = read("ui.jsx");
   const picker = ui.slice(ui.indexOf("export const AgentPicker"), ui.indexOf("export const timeAgo"));
-  assert.match(picker, /coding = false, kinds = \{\}/);
+  assert.match(picker, /kinds = \{\},\n\s+coding = false/);
   assert.match(picker, /\["coding", "cli"\]\.includes\(String\(kinds\[a\] \|\| ""\)\.toLowerCase\(\)\)/);
   // The brain layer (33e452f5) answered this question at the source instead of translating at the
   // menu: a coding picker now lists BRAINS, which already are CLIs, so the `cliOf` map this used to
   // assert on has nothing left to do. Same promise, one fewer indirection - and the choice it
   // writes is the brain, never the role, because every coding task's role is `coder`.
-  assert.match(picker, /const list = coding \? \(brains\.length \? brains : \[brain\]\.filter\(Boolean\)\)/);
+  // ...and a brain the machine no longer has is still what this task NAMES: the list used to fall
+  // back to brains[0], so filtering to installed brains would have shown a CLI nobody chose.
+  assert.match(picker, /const list = coding \? \(brain && !brains\.includes\(brain\) \? \[brain, \.\.\.brains\] : brains\) : roles;/);
   assert.match(picker, /const value = coding \? brain : agent;/);
   assert.match(picker, /onChange=\{\(e\) => \(coding \? onBrain : onAgent\)\(e\.target\.value\)\}/);
   assert.doesNotMatch(picker, /<em/);

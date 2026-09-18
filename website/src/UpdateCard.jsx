@@ -59,8 +59,9 @@ export default function UpdateCard() {
 
   const how = info?.how || "exe";
   const canApply = !!info && info.newer && !info.error && how !== "source";
+  // no width of its own: every settings page is as wide as the shell's column (2026-09-18)
   return (
-    <Box sx={{ maxWidth: 720 }}>
+    <Box>
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5, lineHeight: 1.6 }}>
         Everything you have set up — connections, tokens, the database, your documents and playbooks — lives in
         the data folder, never beside the program. An update only swaps the program, so all of it is exactly

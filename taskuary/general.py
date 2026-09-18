@@ -131,6 +131,34 @@ def provider_options(store) -> list:
     return out
 
 
+def brain_options(store, keep: str = '') -> list:
+    """The brains a general hand-off can choose - ONE ENTRY PER CLI, then the API connectors.
+
+    provider_options lists a `cli:` entry per worker ROW, so five profiles backed by Claude read as
+    five providers; a hand-off asks which BRAIN runs the job, which is not the same question as which
+    PROFILE it is (the 2026-09-16 split). The value stays a `cli:<profile>` pick because that is what
+    make_cli_llm resolves - the representative row is where the command lives - so choosing a brain
+    here needs no second namespace and no change to what a session saves.
+    """
+    from . import agents as hub_agents, climodels
+    options = provider_options(store)
+    by_pick = {o['pick']: o for o in options}
+    out = []
+    for row in hub_agents.cli_agent_options(store):
+        o = by_pick.get(f"cli:{row['value']}")
+        # not installed is not a choice - the same rule the coding brain list follows
+        if o and row.get('ready'):
+            out.append({**o, 'label': f"{row['cli']} (your CLI)", 'agent': row['value'],
+                        'models': climodels.catalog(row['cli'])['models']})
+    out += [o for o in options if o.get('type') != 'cli']
+    # ...but a pick already in use never vanishes from its own picker. Collapsing five Claude
+    # profiles into one entry would otherwise blank the dropdown of a chat running on the fourth.
+    if keep and not any(o['pick'] == keep for o in out):
+        known = by_pick.get(keep)
+        if known: out.insert(0, known)
+    return out
+
+
 def _browser_task(task: dict) -> bool:
     """Does this task drive a browser? Only a CLI can: the browser is driven from a shell."""
     from . import browserview

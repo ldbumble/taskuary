@@ -71,7 +71,7 @@ test("the agent card names the role and the brain, and offers no model", () => {
   assert.match(tasks, /const runBrain = term\?\.provider \|\| term\?\.cli \|\| term\?\.agent \|\| \(runRole && brains\[runRole\]\) \|\| "";/);
   assert.match(tasks, /const brainPill = runBrain && !\(isGeneral && term\?\.alive\) \? runBrain : "";/,
     "a live general session shows the brain in its workspace picker - the pill would be the same fact twice");
-  assert.ok(tasks.includes("const { agents, models, kinds, brains, brainList, brainModels } = useAgents();"),
+  assert.ok(tasks.includes("const { agents, models, kinds, brains, brainList, brainModels, generalBrains } = useAgents();"),
     "the roster's role->brain map has to reach the card");
   const at = tasks.indexOf("{runRole && <Box");
   assert.notEqual(at, -1, "the role pill must be rendered");

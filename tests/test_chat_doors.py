@@ -12,6 +12,7 @@ The doors:
 
 and the thing they must NOT open: a plain `task`, which is yours and has no agent behind it.
 """
+import json
 import unittest
 from unittest import mock
 
@@ -199,6 +200,36 @@ class ItClosesAndSaysSo(unittest.TestCase):
     def test_an_ordinary_reply_never_closes_anything(self):
         """Most turns are not endings. Guessing here closes tasks out from under someone."""
         self.assertEqual(selfclose.chat_marker('Which budget is this coming from?')[1], None)
+
+    def test_a_non_coding_hand_off_carries_the_profile_the_brain_and_the_model(self):
+        """Profile, brain and model are three answers, and all three have to reach the session.
+
+        The profile is the ASSIGNEE (`agent:<name>`), which is where general.assigned_role reads the
+        rules document from - so choosing one needs no new column. The brain and the model are the
+        session's own pick, saved where a session already saves them.
+        """
+        mid = _msg('look into the vendor', 'What do other hospitals pay for this?')
+        server.store.upsert_agent('researcher', 'research', 'cli', json.dumps({'cmd': 'claude', 'kind': 'research'}))
+        session = mock.Mock(provider='claude', model='opus')
+        session.info.return_value = {'sid': 'assistant-4', 'mode': 'assistant'}
+        with mock.patch.object(general, 'start_session', return_value=session) as start:
+            d = c.post(f'/api/messages/{mid}/dispatch',
+                       json={'kind': 'general', 'agent': 'researcher', 'pick': 'cli:researcher', 'model': 'opus'}).json()
+        self.assertEqual(d['dispatch'], 'assistant')
+        self.assertEqual(start.call_args.kwargs['pick'], 'cli:researcher')
+        self.assertEqual(start.call_args.kwargs['model'], 'opus')
+        task = _task(d['taskId'])
+        self.assertEqual(task['Assignee'], 'agent:researcher')
+        self.assertEqual(general.assigned_role(server.store, server.store.get_task(d['taskId'])), 'researcher')
+
+    def test_a_coding_profile_cannot_be_handed_a_non_coding_task(self):
+        """CODER.md in a chat is not a worker, it is a coding agent with no checkout."""
+        mid = _msg('talk it through', 'Which way should we go?')
+        with mock.patch.object(general, 'start_session') as start:
+            r = c.post(f'/api/messages/{mid}/dispatch', json={'kind': 'general', 'agent': 'coder'})
+        self.assertEqual(r.status_code, 422)
+        self.assertIn('coding profile', r.json()['detail'])
+        start.assert_not_called()
 
     def test_wrapping_a_chat_closes_it_and_reports_its_last_word(self):
         s = MemoryStore()

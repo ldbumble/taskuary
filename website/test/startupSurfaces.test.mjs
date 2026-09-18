@@ -44,7 +44,9 @@ test("All detail offers Send to agent for fyi and reply rows too, like the chat 
 test("the task page's non-coding start goes through the shared dispatch, whatever the task's kind was", () => {
   const tasks = src("TasksView.jsx");
   const fn = tasks.slice(tasks.indexOf("const startGeneralAgent = async"), tasks.indexOf("useEffect(() => { if (!liveCodingSession)"));
-  assert.match(fn, /api\.post\(`\/api\/tasks\/\$\{id\}\/dispatch`, \{ kind: "general" \}\)/);
+  // ...and it carries the three answers the hand-off row now asks for: which profile, which brain,
+  // which model. Blank means "as configured", which is what one press used to be able to say.
+  assert.match(fn, /api\.post\(`\/api\/tasks\/\$\{id\}\/dispatch`,\n\s+\{ kind: "general", agent: run\.agent \|\| null, pick: run\.pick \|\| null, model: run\.model \|\| null \}\)/);
   assert.doesNotMatch(fn, /api\.patch\(`\/api\/tasks\/\$\{id\}`, \{ Kind: "general"/);
   assert.match(fn, /outcomeOf\(data\)/);
 });

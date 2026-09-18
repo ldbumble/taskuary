@@ -651,6 +651,7 @@ export const useAgents = () => {
   const [brains, setBrains] = useState({});
   const [brainList, setBrainList] = useState([]);
   const [brainModels, setBrainModels] = useState({});
+  const [generalBrains, setGeneralBrains] = useState([]);
   useEffect(() => {
     api.get("/api/agents").then(({ data }) => {
       setAgents((data.data || []).map((a) => a.Name));
@@ -666,9 +667,11 @@ export const useAgents = () => {
       setBrains(data.brains || {});
       setBrainList(data.brain_list || []);
       setBrainModels(data.brain_models || {});
+      // the brains a NON-coding hand-off may choose: one per installed CLI, then the API connectors
+      setGeneralBrains(data.general_brains || []);
     }).catch(() => {});
   }, []);
-  return { agents, models, cmds, kinds, brains, brainList, brainModels };
+  return { agents, models, cmds, kinds, brains, brainList, brainModels, generalBrains };
 };
 
 // CODING IS THE PROFILE. Both shipped coding workers carry rules_doc "coder", so `coder` and
@@ -676,36 +679,73 @@ export const useAgents = () => {
 // repository dialog asks is which CLI runs it (the owner, 2026-09-14: "for coding there is no need
 // to choose profile. That's for general. Coding is the profile for coding sessions"). So in coding
 // mode the menu says the CLI, and the five general profiles are not offered at all.
-export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, size = 30, coding = false, kinds = {},
-                             brains = [], brain = "", onBrain, brainModels = {} }) => {
+// One row of model choices, wherever they are asked for. `info.models` carries the CLI's own
+// [{id,label}] - Claude Code's catalog, codex's models_cache - so the menu reads the way that CLI's
+// own /model does; `choices` is the flat id list older payloads still send.
+export const ModelSelect = ({ info = {}, model, onModel, size = 30, whose = "brain", sx, menuProps, empty }) => {
+  const rows = (info.models || []).filter((m) => m && m.id);
+  const ids = rows.length ? rows.map((m) => m.id) : (info.choices || []);
+  const labels = Object.fromEntries(rows.map((m) => [m.id, m.label || m.id]));
+  // a model saved before its CLI changed hands is still what this run would use: show it, do not
+  // silently fall back to the default and report a model nobody chose
+  const list = model && !ids.includes(model) ? [model, ...ids] : ids;
+  const fs = sx?.fontSize || 12.5;
+  return (
+    <Select size="small" displayEmpty value={model || ""} onChange={(e) => onModel(e.target.value)} MenuProps={menuProps}
+      sx={{ fontSize: 12.5, height: size, bgcolor: "#fff", minWidth: 150, ...sx }}>
+      <MenuItem value="" sx={{ fontSize: fs }}>
+        {empty || (info.default ? `default · ${info.default}` : `the ${whose}'s default model`)}
+      </MenuItem>
+      {list.map((m) => <MenuItem key={m} value={m} sx={{ fontSize: fs }}>{labels[m] || m}</MenuItem>)}
+    </Select>
+  );
+};
+
+export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, size = 30, kinds = {},
+                             coding = false, brains = [], brain = "", onBrain, brainModels = {},
+                             generalBrains = [], pick = "", onPick }) => {
   // A coding picker chooses the BRAIN - which CLI runs the work. It always did in spirit ("chooses
   // the executable, not one of several instruction profiles backed by it") but it named a profile
   // to say so; the role is `coder` for every coding task now, so that list would be one entry
-  // repeated (the 2026-09-16 spec). General work still picks a ROLE: there the role IS the choice.
-  const list = coding ? (brains.length ? brains : [brain].filter(Boolean))
-    : (Object.keys(kinds).length ? agents.filter((a) => !["coding", "cli"].includes(String(kinds[a] || "").toLowerCase())) : agents);
+  // repeated (the 2026-09-16 spec). General work picks a ROLE **and** a brain: two questions, and
+  // a hand-off is allowed to answer both (the owner, 2026-09-18).
+  const roles = Object.keys(kinds).length
+    ? agents.filter((a) => !["coding", "cli"].includes(String(kinds[a] || "").toLowerCase())) : agents;
+  // A BRAIN THAT IS GONE IS STILL WHAT THIS TASK NAMES. `brains` is the installed list now, so a
+  // value outside it used to select brains[0] silently - the picker showed a CLI nobody chose.
+  const list = coding ? (brain && !brains.includes(brain) ? [brain, ...brains] : brains) : roles;
   const value = coding ? brain : agent;
-  const selected = list.includes(value) ? value : (list[0] || value);
+  // A HAND-OFF MAY DECLINE THE QUESTION. Elsewhere a blank value shows list[0] and the dispatch sends
+  // nothing, which is the same answer twice; here blank means "leave the profile it already has", so
+  // it has to SAY that rather than name a profile the run will not use.
+  const handOff = !coding && !!onPick;
+  const selected = handOff ? value : (list.includes(value) ? value : (list[0] || value));
   const info = (coding ? brainModels[selected] : models[selected]) || {};
-  const choices = info.choices || [];
+  const chosenBrain = generalBrains.find((b) => b.pick === pick) || {};
   return (
     <>
-      <Select size="small" value={selected || ""}
+      <Select size="small" value={selected || ""} displayEmpty={handOff}
         onChange={(e) => (coding ? onBrain : onAgent)(e.target.value)}
         sx={{ fontSize: 12.5, height: size, bgcolor: "#fff", minWidth: 120 }}>
+        {handOff && <MenuItem value="" sx={{ fontSize: 12.5 }}>the profile it has</MenuItem>}
         {list.map((a) => (
           <MenuItem key={a} value={a} sx={{ fontSize: 12.5 }}>
-            {a}{!coding && (models[a]?.cmd ? ` · ${models[a].cmd}` : "")}
+            {a}{coding && brainModels[a] && brainModels[a].installed === false ? " · not installed" : ""}
+            {!coding && (models[a]?.cmd ? ` · ${models[a].cmd}` : "")}
           </MenuItem>
         ))}
       </Select>
-      <Select size="small" displayEmpty value={model || ""} onChange={(e) => onModel(e.target.value)}
-        sx={{ fontSize: 12.5, height: size, bgcolor: "#fff", minWidth: 150 }}>
-        <MenuItem value="" sx={{ fontSize: 12.5 }}>
-          {info.default ? `default · ${info.default}` : `the ${coding ? "brain" : "agent"}'s default model`}
-        </MenuItem>
-        {choices.map((m) => <MenuItem key={m} value={m} sx={{ fontSize: 12.5 }}>{m}</MenuItem>)}
-      </Select>
+      {handOff && (
+        <Select size="small" displayEmpty value={pick || ""} onChange={(e) => { onPick(e.target.value); onModel(""); }}
+          sx={{ fontSize: 12.5, height: size, bgcolor: "#fff", minWidth: 150 }}>
+          <MenuItem value="" sx={{ fontSize: 12.5 }}>
+            {generalBrains.length ? "the brain it runs on" : "No AI connected"}
+          </MenuItem>
+          {generalBrains.map((b) => <MenuItem key={b.pick} value={b.pick} sx={{ fontSize: 12.5 }}>{b.label}</MenuItem>)}
+        </Select>
+      )}
+      <ModelSelect size={size} model={model} onModel={onModel} whose={coding ? "brain" : "agent"}
+        info={handOff ? { models: chosenBrain.models, default: chosenBrain.model } : info} />
     </>
   );
 };

@@ -36,8 +36,9 @@ export default function AboutYou() {
   if (!p) return err ? <Typography sx={{ color: "#6b2733" }}>{err}</Typography> : <CircularProgress size={22} sx={{ m: 4 }} />;
   const f = p.facts;
   const byChannel = p.identities.reduce((acc, i) => { (acc[i.channel] = acc[i.channel] || []).push(i); return acc; }, {});
+  // no width of its own: every settings page is as wide as the shell's column (2026-09-18)
   return (
-    <Box sx={{ maxWidth: 860 }}>
+    <Box>
       {err && <Typography variant="body2" sx={{ color: "#6b2733", mb: 1 }}>{err}</Typography>}
 
       {/* the card: avatar, name, the line under it */}

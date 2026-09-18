@@ -29,8 +29,6 @@ import { notifyState } from "./notify.js";
 import { normalizeBrainOptions } from "./brainOptions.js";
 
 
-// a header button sits in a flex row next to a long paragraph; without this it shrinks and its label wraps
-const nowrapBtn = { flexShrink: 0, whiteSpace: "nowrap" };
 const KINDS = ["keyword", "sender", "sender_domain", "noreply", "first_time_sender"];
 // skip = never shows on the timeline at all (flood senders); ignore = shows, no task
 const ACTIONS = ["skip", "ignore", "escalate", "auto_answer", "draft", "task_only"];
@@ -574,7 +572,7 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
             </Typography>
           </Typography>
           <Box sx={{ flex: 1 }} />
-          <Button size="small" variant="contained" startIcon={<AddIcon sx={{ fontSize: 14 }} />} sx={nowrapBtn} onClick={() => setDraft({ ...NEW_POLICY })}>Add rule</Button>
+          <Button size="small" variant="contained" startIcon={<AddIcon sx={{ fontSize: 14 }} />} onClick={() => setDraft({ ...NEW_POLICY })}>Add rule</Button>
         </Box>
         {!(policies || []).length && !draft && (
           <Box sx={{ ...card, bgcolor: PANEL2, p: 2.25, mt: 2, maxWidth: 680 }}>
@@ -647,7 +645,7 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate }) {
             </Typography>
           </Typography>
           <Box sx={{ flex: 1 }} />
-          <Button size="small" variant="contained" startIcon={<AddIcon sx={{ fontSize: 14 }} />} sx={nowrapBtn}
+          <Button size="small" variant="contained" startIcon={<AddIcon sx={{ fontSize: 14 }} />}
             onClick={() => setNewNote({ note: "", scope: "global", scope_key: "" })}>Add note</Button>
         </Box>
         {!memory.length && <Empty>Nothing learned yet — every review verdict teaches it.</Empty>}
@@ -784,7 +782,7 @@ export default function SettingsView({ onNavigate }) {
   const [q, setQ] = useState("");
   return (
     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "236px minmax(0,1fr)" },
-      gap: 3, alignItems: "start", maxWidth: 1320, mx: "auto" }}>
+      gap: 3, alignItems: "start", maxWidth: 1560, mx: "auto" }}>
       <Box sx={{ position: { md: "sticky" }, top: { md: 62 } }}>
         <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16, mb: 1.5 }}>Settings</Typography>
         <TextField fullWidth placeholder="Search settings…" value={q}

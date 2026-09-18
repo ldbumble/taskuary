@@ -131,6 +131,7 @@ def test_a_root_leaves_the_window_and_a_new_one_enters(db):
     first = read(db)
     assert all(f'message:{old}' not in i['member_ids'] for i in first['items'])
     new = mail(db, 2)
+    db._exec('UPDATE message SET CreatedAt=? WHERE MessageId=?', (NOW.strftime('%Y-%m-%d %H:%M:%S'), new))
     second = read(db)
     assert by_member(second, f'message:{new}')
     same_except(first, second)

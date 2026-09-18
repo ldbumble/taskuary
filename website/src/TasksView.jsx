@@ -187,7 +187,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // fired on return. Only the newest request is allowed to repaint the list.
   const taskLoadSeq = useRef(0);
   const stale = (id) => selRef.current !== id;
-  const { agents, models, kinds, brains, brainList, brainModels } = useAgents();
+  const { agents, models, kinds, brains, brainList, brainModels, generalBrains } = useAgents();
   const pickerTask = useRef(null);          // initialize each task from its durable worker once
   const [err, setErr] = useState("");
   const [newOpen, setNewOpen] = useState(false);
@@ -203,6 +203,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     return () => window.removeEventListener("hashchange", fromHash);
   }, []);
   const [run, setRun] = useState({ agent: "", model: "", instruction: "" });   // "" = the roster's default (served first)
+  // Which KIND of worker this row is configuring. "Use non-coding agent" used to dispatch on the
+  // spot, so there was no moment at which a profile or a brain could be chosen for it - the block
+  // is called "Configure the next run" and could not configure that one (the owner, 2026-09-18).
+  const [handOff, setHandOff] = useState(false);
   // A finished run should lead with what it accomplished. Harness/model/prompt choices stay
   // behind an explicit restart action instead of looking like the main thing to do next.
   const [restartOpen, setRestartOpen] = useState(false);
@@ -783,7 +787,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     try {
       // one shared dispatch whatever the task's kind was: it switches the kind, starts (or reuses) the
       // assistant session and records the live worker - a relabelled task is not a started one (PW-213)
-      const { data } = await api.post(`/api/tasks/${id}/dispatch`, { kind: "general" });
+      // profile, brain and model - whichever of them was chosen; blank means "as configured"
+      const { data } = await api.post(`/api/tasks/${id}/dispatch`,
+        { kind: "general", agent: run.agent || null, pick: run.pick || null, model: run.model || null });
       const outcome = outcomeOf(data);
       if (!stale(id)) setTerm(outcome.state === "started" || outcome.state === "existing" ? (data.session || null) : null);
       if (!stale(id)) setRestartOpen(false);
@@ -1398,8 +1404,13 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         {report || detail?.transcript ? "Configure the next run" : "Start an agent"}
                       </Typography>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
-                        <AgentPicker agents={agents} models={models} kinds={kinds} coding agent={run.agent} model={run.model}
+                        {/* coding asks ONE question (which CLI); a hand-off asks three - which profile,
+                            which brain, which model - and all three reach the session. */}
+                        <AgentPicker agents={agents} models={models} kinds={kinds} coding={!handOff}
+                          agent={run.agent} model={run.model}
                           brains={brainList} brainModels={brainModels} brain={run.brain || ""}
+                          generalBrains={generalBrains} pick={run.pick || ""}
+                          onPick={(p) => setRun({ ...run, pick: p })}
                           onBrain={(b) => setRun({ ...run, brain: b, model: "" })}
                           onAgent={(a) => setRun({ ...run, agent: a, model: "" })}
                           onModel={(m) => setRun({ ...run, model: m })} size={28} />
@@ -1412,16 +1423,26 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         placeholder={detail?.transcript ? "What should this new agent do next?" : "Extra instructions for this session (optional)"}
                         sx={{ mt: 0.85, bgcolor: "#fff" }} />
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.75, flexWrap: "wrap" }}>
-                        <Button size="small" variant="contained" disableElevation disabled={!!startingAgent}
+                        {!handOff && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent}
                           startIcon={startingAgent === "coding" ? <CircularProgress size={11} /> : <TerminalIcon sx={{ fontSize: 14 }} />}
                           onClick={startCodingAgent}>
                           {startingAgent === "coding" ? "Starting…" : detail?.transcript ? "Start new coding session" : "Start coding session"}
-                        </Button>
-                        {detail?.transcript && !report && <Button size="small" variant="outlined" disabled={!!wrapping}
+                        </Button>}
+                        {detail?.transcript && !report && !handOff && <Button size="small" variant="outlined" disabled={!!wrapping}
                           title="Saves the stopped session's result and report. The task stays open."
                           startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>Save stopped run result</Button>}
-                        <Button size="small" variant="outlined" disabled={!!startingAgent}
-                          startIcon={<TaskuaryMark size={13} />} onClick={startGeneralAgent}>Use non-coding agent</Button>
+                        {/* it SWITCHES the row rather than dispatching on the spot: the pickers above
+                            become the profile, brain and model, and the next press starts it */}
+                        {!handOff && <Button size="small" variant="outlined" disabled={!!startingAgent}
+                          startIcon={<TaskuaryMark size={13} />}
+                          onClick={() => setHandOff(true)}>Use non-coding agent</Button>}
+                        {handOff && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent}
+                          startIcon={startingAgent === "general" ? <CircularProgress size={11} /> : <TaskuaryMark size={13} />}
+                          onClick={startGeneralAgent}>
+                          {startingAgent === "general" ? "Starting…" : "Send to non-coding agent"}
+                        </Button>}
+                        {handOff && <Button size="small" variant="text" disabled={!!startingAgent}
+                          onClick={() => { setHandOff(false); setRun({ ...run, agent: "", pick: "", model: "" }); }}>Back to coding</Button>}
                         {(report || detail?.transcript) && <Button size="small" variant="text"
                           onClick={() => setRestartOpen(false)}>Cancel</Button>}
                         {repoOf(t) && <Typography variant="caption" sx={{ ...mono, color: FAINT }}>repo · {repoOf(t)}</Typography>}
@@ -1430,6 +1451,14 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   )}
                   {isGeneral && !generalStarted && (
                     <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
+                      {/* the same three answers the hand-off asks - this door had none at all */}
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mb: 1 }}>
+                        <AgentPicker agents={agents} models={models} kinds={kinds} agent={run.agent} model={run.model}
+                          generalBrains={generalBrains} pick={run.pick || ""}
+                          onPick={(p) => setRun({ ...run, pick: p })}
+                          onAgent={(a) => setRun({ ...run, agent: a, model: "" })}
+                          onModel={(m) => setRun({ ...run, model: m })} size={28} />
+                      </Box>
                       <Button size="small" variant="contained" disableElevation disabled={!!startingAgent}
                         startIcon={startingAgent === "general" ? <CircularProgress size={11} /> : <TaskuaryMark size={13} />}
                         onClick={startGeneralAgent}>

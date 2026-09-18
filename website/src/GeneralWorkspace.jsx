@@ -31,7 +31,7 @@ import { SessionPane, TerminalPane } from "./TerminalView.jsx";
 import SemanticPanel from "./SemanticPanel.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
 import "./generalWorkspace.css";
-import { TaskuaryMark } from "./ui.jsx";
+import { ModelSelect, TaskuaryMark } from "./ui.jsx";
 
 const savedView = () => localStorage.getItem("taskuary_general_view") || "assistant";
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
@@ -794,9 +794,12 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
             {p.label}{p.type === "cli" ? " · tool-capable" : " · fast"}
           </MenuItem>)}
         </Select>
-        <TextField size="small" value={model} placeholder="default model" onChange={(e) => setModel(e.target.value)}
-          onBlur={() => connectorId && updateProvider(connectorId, model)}
-          sx={{ width: 118, "& input": { py: 0.5, fontSize: 10.5 } }} />
+        {/* the CLI's own model list, the same one every other picker reads now - typing the name
+            of a model that no longer exists was the only way to choose one here (2026-09-18) */}
+        <ModelSelect model={model} size={26} empty="default model" menuProps={{ sx: { zIndex: 1600 } }}
+          info={{ models: (data?.providers || []).find((p) => String(p.id) === String(connectorId))?.models }}
+          onModel={(m) => { setModel(m); if (connectorId) updateProvider(connectorId, m); }}
+          sx={{ minWidth: 118, maxWidth: 190, fontSize: 10.5, bgcolor: PANEL2 }} />
         <Button size="small" variant="outlined" startIcon={<AddCommentOutlinedIcon sx={{ fontSize: 14 }} />}
           disabled={busy || newChatBusy || !shownMessages.length} onClick={() => setConfirmNewChat(true)}
           title="Archive this conversation and start a fresh Taskuary chat"

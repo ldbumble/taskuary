@@ -493,6 +493,36 @@ class ApiTests(unittest.TestCase):
         vals = {s['Name']: s['Value'] for s in c.get('/api/settings').json()['data']}
         self.assertEqual(vals['feed_days'], '7')
 
+    def test_only_installed_brains_are_offered_and_a_missing_one_still_says_so(self):
+        """A CLI that is not on this machine cannot run anything, so it is not a choice.
+
+        brain_list was every key in cli_connections, so a CLI the owner never installed - or removed -
+        stayed on every dispatch menu app-wide and failed only when it was started (2026-09-18). Its
+        MODELS stay served either way: a task still pinned to it has to be able to name it.
+        """
+        self.assertEqual(c.put('/api/cli/connections/ghost-cli', json={
+            'cmd': 'ghost-cli-not-on-this-machine', 'args': ['-p'], 'timeout': 900}).status_code, 200)
+        try:
+            body = c.get('/api/agents').json()
+            self.assertNotIn('ghost-cli', body['brain_list'])
+            self.assertIs(body['brain_models']['ghost-cli']['installed'], False)
+            self.assertIn('models', body['brain_models']['ghost-cli'])
+            for name in body['brain_list']:
+                self.assertIs(body['brain_models'][name]['installed'], True)
+        finally:
+            self.assertEqual(c.delete('/api/cli/connections/ghost-cli').status_code, 200)
+
+    def test_a_model_menu_carries_the_clis_own_labels_and_never_a_hand_typed_list(self):
+        """The ids and the friendly names come from the CLI itself - claude's catalog, codex's cache."""
+        body = c.get('/api/agents').json()
+        for name, info in body['brain_models'].items():
+            for m in info['models']:
+                self.assertTrue(m['id'] and m['label'], f'{name} model row has no id/label: {m}')
+            self.assertEqual(info['choices'], [m['id'] for m in info['models']] or info['choices'])
+        # and the non-coding hand-off gets ONE entry per CLI, not one per worker profile
+        picks = [b['pick'] for b in body['general_brains']]
+        self.assertEqual(len(picks), len(set(picks)))
+
     def test_agents_ui_flow_persists_to_config(self):
         self.assertEqual(c.put('/api/cli/connections/uitest-cli', json={
             'cmd': 'uitest-cli', 'args': ['-p'], 'resume_args': ['--resume'], 'timeout': 900}).status_code, 200)

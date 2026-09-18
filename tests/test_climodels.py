@@ -25,12 +25,42 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(cat['current'], {'model': 'gpt-5.6-sol', 'effort': 'high'}); self.assertIn('models_cache', cat['source'])
         self.assertEqual(cat['choices'], ['gpt-5.6-sol', 'gpt-5.4-mini'])
 
-    def test_no_cache_falls_back_and_claude_stays_static(self):
-        with tempfile.TemporaryDirectory() as d, mock.patch.dict('os.environ', {'CODEX_HOME': d}):
+    def test_no_cache_falls_back_to_the_stable_aliases(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict('os.environ', {'CODEX_HOME': d, 'CLAUDE_CONFIG_DIR': d}):
             cat = climodels.catalog('codex')
+            claude = climodels.catalog('claude')
         self.assertEqual(cat['source'], 'built-in'); self.assertTrue(cat['models'])
-        self.assertIn('sonnet', climodels.catalog('claude')['choices'])
+        # a machine where claude has never run still offers something that works: the aliases
+        self.assertEqual(claude['choices'], ['opus', 'sonnet', 'haiku']); self.assertEqual(claude['source'], 'built-in')
         self.assertEqual(climodels.split_pick('gpt-5.4-mini@low'), ('gpt-5.4-mini', 'low')); self.assertEqual(climodels.split_pick('opus'), ('opus', ''))
+
+    def test_claude_models_are_read_off_its_own_catalog_newest_fetch_wins(self):
+        old = {'fetchedAt': 100, 'catalog': {'config': {'models': [{'id': 'claude-was-current', 'name': 'Was Current'}]}}}
+        new = {'fetchedAt': 200, 'catalog': {'config': {'models': [
+            {'id': 'claude-opus-5', 'name': 'Opus 5', 'description': 'For complex tasks',
+             'thinking': {'effort_options': [{'id': 'low'}, {'id': 'max'}]}},
+            {'id': 'claude-sonnet-5', 'name': 'Sonnet 5'}]}}}
+        with tempfile.TemporaryDirectory() as d:
+            cache = Path(d, 'cache', 'model-catalog'); cache.mkdir(parents=True)
+            # sorted() puts the stale file last: the newest fetchedAt has to win on its own merit
+            Path(cache, 'zzz-old-cc.json').write_text(json.dumps(old), encoding='utf-8')
+            Path(cache, 'aaa-new-cc.json').write_text(json.dumps(new), encoding='utf-8')
+            Path(d, '.claude.json').write_text(json.dumps(
+                {'additionalModelOptionsCache': [{'value': 'claude-opus-5[1m]', 'label': 'Opus', 'description': '1M context'}]}), encoding='utf-8')
+            with mock.patch.dict('os.environ', {'CLAUDE_CONFIG_DIR': d}):
+                cat = climodels.catalog('claude')
+        # the account's granted extras ride along with the catalog, and the friendly name is the label
+        self.assertEqual(cat['choices'], ['claude-opus-5', 'claude-sonnet-5', 'claude-opus-5[1m]'])
+        self.assertEqual(cat['models'][0]['label'], 'Opus 5'); self.assertEqual(cat['source'], 'claude model catalog')
+        # NEVER an @effort pick for claude: that flag is codex's, and claude reads effort from settings.json
+        self.assertTrue(all(m['efforts'] == [] for m in cat['models']))
+
+    def test_an_unreadable_claude_catalog_does_not_take_the_picker_down(self):
+        with tempfile.TemporaryDirectory() as d:
+            cache = Path(d, 'cache', 'model-catalog'); cache.mkdir(parents=True)
+            Path(cache, 'broken-cc.json').write_bytes(b'{not json at all')
+            with mock.patch.dict('os.environ', {'CLAUDE_CONFIG_DIR': d}):
+                self.assertEqual(climodels.catalog('claude')['choices'], ['opus', 'sonnet', 'haiku'])
 
     def test_copilot_models_come_from_the_installed_sdks_visible_choices(self):
         declaration = ('export declare const HELP_VISIBLE_MODELS: '

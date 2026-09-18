@@ -218,6 +218,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // checking briefly so the page cannot freeze forever on the pre-close status it last saw.
   const sessionSettleUntil = useRef(0);
   const [diffOpen, setDiffOpen] = useState(false);   // the pre-push review, in its own drawer
+  // THE TASK BEHIND THE SESSION. A live session takes the whole task page, and with it went the
+  // one thing the X was expected to reach: the task itself - what it is, where it came from, its
+  // thread (the owner, 2026-09-18: "even if the coding cli is open i want to be able to go back to
+  // see the actual task and where it came from"). peek shows the task card with the session folded
+  // to one line; the session keeps running, and the terminal comes back on a click or a new pick.
+  const [peek, setPeek] = useState(false);
   const [askSenderOpen, setAskSenderOpen] = useState(false);
   const [senderQuestion, setSenderQuestion] = useState("");
   // "this one is mine" - the verdict that used to be a silent dropdown (TQ-0501)
@@ -387,7 +393,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const [repoPick, setRepoPick] = useState(false);
   const [resumeAfterRepo, setResumeAfterRepo] = useState(null);
   const [sourceOpen, setSourceOpen] = useState(false);
-  useEffect(() => { setHandoff(false); setReshape(false); setRepoPick(false); setResumeAfterRepo(null); setDiffOpen(false); setSourceOpen(false); }, [selected]);
+  useEffect(() => { setHandoff(false); setReshape(false); setRepoPick(false); setResumeAfterRepo(null); setDiffOpen(false); setSourceOpen(false); setPeek(false); }, [selected]);
   // asked when the drawer opens, and only then: shelling out to git on every task poll would
   // spend a subprocess a second on an answer nobody is looking at
   const loadDiff = useCallback(async (id) => {
@@ -593,6 +599,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // the page where space is the whole point (the owner, 2026-09-16: "why is it so tall... you
   // are taking away precious agent space"). Live is live, whoever is working.
   const liveSession = !!term?.alive;
+  // what fills the page: the session, unless the owner stepped back to the task behind it (peek)
+  const sessionView = liveSession && !peek;
+  useEffect(() => { if (!liveSession) setPeek(false); }, [liveSession]);
   const liveCodingSession = !isGeneral && liveSession;
   const agentWaiting = liveSession && isWaiting(term);
   // Proposals also live in Review and are usually newer than the reply. They have their own
@@ -739,9 +748,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // ONE question per page. A running session is itself the agent stage, so it is never folded; the
   // hand-picked stage wins over the computed one until you leave the task (start an agent on a task
   // whose draft is waiting, or answer a sender the agent is still working for).
-  const stage = term?.alive ? "agent" : (openStage || focusStage({
+  // ...and stepping back from a live session (peek) opens the TASK stage: the point of the step was
+  // to read what the task is and where it came from, and that lives on the task card, not folded
+  // to a strip under a heading that says the agent is working.
+  const stage = sessionView ? "agent" : (openStage || (peek ? "task" : focusStage({
     kind: t?.Kind, task: taskState, agent: agentState, reply: replyState, hasSender: !!sourceMessage,
-  }));
+  })));
   // only a folded heading is a control: exactly one stage is open, so clicking the open one has
   // nothing to do and must not offer a chevron that does nothing.
   const stageProps = (name) => ({ folded: stage !== name, onToggle: stage === name ? null : () => setOpenStage(name) });
@@ -1007,7 +1019,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       the space (2026-09-16: "if agent in progress we want it small to give the most
                       space to the agent canvas"). The four controls ride up here instead: the same
                       four, in the same order, labels dropped to icons after the first. */}
-                  {term?.alive && !["done", "dropped"].includes(t.Status) && (
+                  {sessionView && !["done", "dropped"].includes(t.Status) && (
                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.25, flexShrink: 0 }}>
                       <Button size="small" variant="contained" disableElevation startIcon={<DoneAllIcon sx={{ fontSize: 13 }} />}
                         sx={{ fontSize: 10.5, minHeight: 24, py: 0, px: 1 }}
@@ -1028,8 +1040,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     </Box>
                   )}
                   <LifecycleChip kind="task" phase={taskState} compact sx={{ flexShrink: 0 }} />
-                  <Tooltip title="Close — back to the list (the task stays)">
-                    <IconButton size="small" onClick={dismiss}><CloseIcon sx={{ fontSize: 15 }} /></IconButton>
+                  {/* ONE X, TWO STEPS BACK. With the session filling the page, X first steps back to
+                      the task behind it - the session keeps running; from the task, X goes to the list. */}
+                  <Tooltip title={sessionView ? "Back to the task — the session keeps running" : "Close — back to the list (the task stays)"}>
+                    <IconButton size="small" onClick={() => (sessionView ? setPeek(true) : dismiss())}><CloseIcon sx={{ fontSize: 15 }} /></IconButton>
                   </Tooltip>
                 </Box>
                 {workContext && <Typography variant="caption" sx={{ color: "#6b5f45", display: "block",
@@ -1048,7 +1062,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     result of the work is the thing you are looking at */}
                 {/* The checkout, and why. A wrong guess means an agent editing the wrong tree in
                     good faith, so it is stated on the page rather than buried in the prompt. */}
-                {!term?.alive && (
+                {!sessionView && (
                   <Box sx={{ ...card, mb: 1.25, px: 1.5, py: stage === "task" ? 1.5 : 0.85,
                     bgcolor: "#fff", flexShrink: 0, borderLeft: "4px solid #55697a" }}>
                     {/* FOLDED - the same controls the open card has, in the same order, with their
@@ -1364,7 +1378,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
 
                     </Box>
                   )}
-                  {report && !wrapped && !term?.alive && (
+                  {report && !wrapped && !sessionView && (
                     <Box sx={{ mt: 1.1, pt: 1.1, borderTop: `1px solid ${BORDER}` }}>
                       <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.35,
                         fontSize: 9, fontWeight: 750 }}>Latest saved result</Typography>
@@ -1512,6 +1526,17 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         onClick={onGoReview}>Read the draft in Review</Button>
                     )}
                   </Box>
+                ) : workspaceMode === "live" && peek ? (
+                  /* the session, folded to one line while the task behind it is being read */
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.25, py: 0.8, borderRadius: 1.5,
+                    border: `1px solid ${BORDER}`, bgcolor: PANEL2 }}>
+                    <Box sx={{ width: 8, height: 8, borderRadius: 99, bgcolor: "#6f8a6e", flexShrink: 0 }} />
+                    <Typography variant="body2" sx={{ flex: 1, minWidth: 0, color: INK, fontSize: 12.5 }} noWrap>
+                      {agentName(t)} {agentState === "needs you" ? "is waiting on you" : "is working"} in its session — it keeps running while you read the task.
+                    </Typography>
+                    <Button size="small" variant="contained" disableElevation sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
+                      onClick={() => setPeek(false)}>Back to the session</Button>
+                  </Box>
                 ) : workspaceMode === "live" ? (
                   <>
                     {/* said and did, above the session: the agent's own list beside the files it wrote */}
@@ -1552,7 +1577,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   </>
                 ) : null}
 
-                {!term?.alive && <Box sx={{ ...card, mt: 1.25, p: stage === "reply" ? 1.5 : 1.1,
+                {!sessionView && <Box sx={{ ...card, mt: 1.25, p: stage === "reply" ? 1.5 : 1.1,
                   bgcolor: "#fff", flexShrink: 0,
                   borderLeft: "4px solid #9a7444" }}>
                   <WorkflowHeading number="3" title="Reply"
@@ -1663,7 +1688,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   ))}
                 </Box>}
 
-                {!term?.alive && <Fold title={`Context & history · ${taskMessages.length} message${taskMessages.length === 1 ? "" : "s"} · ${detail.comments.length} note${detail.comments.length === 1 ? "" : "s"}`}>
+                {!sessionView && <Fold title={`Context & history ·${taskMessages.length} message${taskMessages.length === 1 ? "" : "s"} · ${detail.comments.length} note${detail.comments.length === 1 ? "" : "s"}`}>
                   <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.25,
                     fontSize: 9, fontWeight: 750, display: "block", mb: 0.65 }}>Messages</Typography>
                   {taskMessages.map((m) => {
@@ -1720,7 +1745,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 </Fold>}
 
                 {/* runs from before sessions (and any API-driven run) keep their trace here */}
-                {!term?.alive && detail.runs.length > 0 && (
+                {!sessionView && detail.runs.length > 0 && (
                   <Fold title={`Earlier runs · ${detail.runs.length}`}>
                     {detail.runs.map((r) => (
                       <Box key={r.RunId} sx={{ mb: 0.75, p: 1, bgcolor: r.Status === "running" ? "#dfeade" : PANEL2, borderRadius: 1.5, border: `1px solid ${BORDER}` }}>

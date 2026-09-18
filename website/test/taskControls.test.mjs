@@ -85,15 +85,16 @@ test("a live session still lets you act on the TASK", () => {
   // The task card is gated on !term?.alive, so while a session runs it is not on the page at all.
   // When its four controls lived behind the header's dots that did not matter; once the dots went
   // (2026-09-16) a live session had no way to complete, hand off, split or reject the task. The
-  // header carries them for exactly that window.
-  const at = tasks.indexOf('{term?.alive && !["done", "dropped"].includes(t.Status) && (');
-  assert.notEqual(at, -1, "the header must carry the task controls while a session is live");
+  // header carries them for exactly that window - `sessionView`, which is the live session unless
+  // the owner has stepped back to the task behind it (peek), where the card and its controls return.
+  const at = tasks.indexOf('{sessionView && !["done", "dropped"].includes(t.Status) && (');
+  assert.notEqual(at, -1, "the header must carry the task controls while a session fills the page");
   const bar = tasks.slice(at, at + 2200);
   for (const [what, hook] of [["Mark task done", 'finish("done")'], ["Not a task", "setConfirmNAT(true)"],
                               ["Hand it to a person", "setHandoff(true)"], ["Split or merge", "setReshape(true)"]]) {
     assert.ok(bar.includes(hook), `${what} must be reachable during a live session`);
   }
-  assert.ok(tasks.includes("{!term?.alive && ("), "and the full card is still what you get when nothing is running");
+  assert.ok(tasks.includes("{!sessionView && ("), "and the full card is what you get when nothing is running, or when you stepped back to the task");
 });
 
 test("the rail says a task's state once, and puts its title first", () => {

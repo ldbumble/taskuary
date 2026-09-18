@@ -60,6 +60,23 @@ test("closing the detail shows the list rather than re-opening the first task", 
   const source = await readFile(new URL("../src/TasksView.jsx", import.meta.url), "utf8");
   assert.match(source, /const dismiss = \(\) => \{ dismissed\.current = true; onSelect\(null\); \}/);
   assert.match(source, /if \(active && !selected && firstShownId && !dismissed\.current\) onSelect\(firstShownId\)/);
-  assert.match(source, /title="Close — back to the list \(the task stays\)">\s*<IconButton size="small" onClick=\{dismiss\}/);
+  assert.match(source, /Close — back to the list \(the task stays\)"\}>\s*<IconButton size="small" onClick=\{\(\) => \(sessionView \? setPeek\(true\) : dismiss\(\)\)\}/);
   assert.match(source, /if \(selected \|\| !active\) dismissed\.current = false/, "a real pick, or leaving the tab, lifts it");
+});
+
+// "even if the coding cli is open i want to be able to go back to see the actual task and where it
+// came from" (the owner, 2026-09-18). One X, two steps: session -> the task behind it -> the list.
+test("with a live session, X steps back to the task first and the session keeps running", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("../src/TasksView.jsx", import.meta.url), "utf8");
+  assert.match(source, /const sessionView = liveSession && !peek;/);
+  assert.match(source, /useEffect\(\(\) => \{ if \(!liveSession\) setPeek\(false\); \}, \[liveSession\]\);/, "the session ending puts the page back");
+  assert.match(source, /workspaceMode === "live" && peek \?/, "the terminal folds to a line instead of unmounting the page");
+  assert.match(source, /Back to the session/);
+  // the task card, the reply card, context & history and earlier runs all come back while peeking
+  for (const gate of [/\{!sessionView && \(\s*<Box sx=\{\{ \.\.\.card, mb: 1\.25/, /\{!sessionView && <Fold title=\{`Context & history/,
+    /\{!sessionView && detail\.runs\.length > 0/, /\{!sessionView && <Box sx=\{\{ \.\.\.card, mt: 1\.25, p: stage === "reply"/]) {
+    assert.match(source, gate);
+  }
+  assert.doesNotMatch(source, /\{!term\?\.alive && <Fold title=\{`Context & history/, "no gate left on the raw flag");
 });

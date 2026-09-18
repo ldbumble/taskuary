@@ -136,13 +136,25 @@ class ProducersTests(Base):
         base = {'cwd': r'C:\code\repo', 'session_id': 'cc-1'}
         hooks.receive({**base, 'hook_event_name': 'UserPromptSubmit', 'prompt': 'fix the cron'})
         self.assertEqual(ws.status(self.s, self.tid)['state'], 'working')
+        # PostToolUse fires once the tool has completed, and AskUserQuestion completes when the owner has
+        # answered it in the pane: the question goes on the record asked AND answered, never as an open
+        # request (TQ-0631, 2026-09-18: "asked you something" from the answer until the next prompt)
         hooks.receive({**base, 'hook_event_name': 'PostToolUse', 'tool_name': 'AskUserQuestion',
-                       'tool_input': {'questions': [{'question': 'Which environment?', 'options': [{'label': 'staging'}, {'label': 'prod'}]}]}})
+                       'tool_input': {'questions': [{'question': 'Which environment?', 'options': [{'label': 'staging'}, {'label': 'prod'}]}]},
+                       'tool_response': {'answers': {'Which environment?': 'staging'}}})
         st = ws.status(self.s, self.tid)
-        self.assertEqual(st['state'], 'input_needed'); self.assertEqual(st['requests'][0]['choices'], ['staging', 'prod'])
+        self.assertEqual((st['state'], st['requests']), ('working', []))
+        evs = ws.events(self.s, self.tid, 'run1')
+        self.assertEqual([(e['Kind'], e['Text']) for e in evs[-2:]], [('input_needed', 'Which environment?'), ('answered', 'staging')])
+        self.assertEqual(evs[-2]['ChoicesJson'] and json.loads(evs[-2]['ChoicesJson']), ['staging', 'prod'])
         hooks.receive({**base, 'hook_event_name': 'Notification', 'notification_type': 'permission_prompt', 'message': 'Claude needs your permission to use Bash'})
         st = ws.status(self.s, self.tid)
         self.assertEqual(st['state'], 'approval_needed'); self.assertIn('Bash', st['requests'][-1]['text'])
+        # ...and a tool that ran had its permission: the owner's yes in the pane fires no hook, so the run is the answer
+        hooks.receive({**base, 'hook_event_name': 'PostToolUse', 'tool_name': 'Bash', 'tool_input': {'command': 'ls'}, 'tool_response': {'stdout': ''}})
+        st = ws.status(self.s, self.tid)
+        self.assertEqual((st['state'], st['requests']), ('working', []))
+        self.assertEqual(ws.events(self.s, self.tid, 'run1')[-1]['Text'], 'granted in the pane')
         with mock.patch.object(selfclose, 'spawn_on_stop'):
             hooks.receive({**base, 'hook_event_name': 'Stop', 'last_assistant_message': 'I have looked into it.'})
         self.assertNotEqual(ws.status(self.s, self.tid)['state'], 'finished')          # Stop = the response ended, not the task

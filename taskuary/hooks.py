@@ -98,12 +98,28 @@ def _events(t, p: dict) -> None:
     ev, tid, sid = str(p.get('hook_event_name') or ''), t.task_id, t.sid
     try:
         if ev == 'UserPromptSubmit': ws.record(st, tid, sid, 'working', source='hook')
-        elif ev == 'PostToolUse' and str(p.get('tool_name') or '') == 'AskUserQuestion':
-            for q in (p.get('tool_input') or {}).get('questions') or []:
-                text = str(q.get('question') or '').strip()
-                if not text: continue
-                choices = [str(o.get('label') or o) for o in (q.get('options') or []) if str(o.get('label') if isinstance(o, dict) else o).strip()]
-                ws.record(st, tid, sid, 'input_needed', request_id=ws.request_id_for(text), text=text, choices=choices, source='hook')
+        elif ev == 'PostToolUse':
+            # PostToolUse fires once the tool has COMPLETED - and AskUserQuestion completes when the owner
+            # has answered it in the pane. Recorded as an open request, the question said "coder asked you
+            # something" from the moment it was answered until the next prompt, while the pane plainly
+            # worked on (TQ-0631, 2026-09-18: input_needed at 14:23:55, turn_end at 14:29:52, no answer
+            # between). It goes on the record as what it is: asked, and answered.
+            if str(p.get('tool_name') or '') == 'AskUserQuestion':
+                resp = p.get('tool_response') if isinstance(p.get('tool_response'), dict) else {}
+                answers = resp.get('answers') if isinstance(resp.get('answers'), dict) else {}
+                for q in (p.get('tool_input') or {}).get('questions') or []:
+                    text = str(q.get('question') or '').strip()
+                    if not text: continue
+                    choices = [str(o.get('label') or o) for o in (q.get('options') or []) if str(o.get('label') if isinstance(o, dict) else o).strip()]
+                    rid = ws.request_id_for(text)
+                    ws.record(st, tid, sid, 'input_needed', request_id=rid, text=text, choices=choices, source='hook')
+                    ws.record(st, tid, sid, 'answered', request_id=rid, text=str(answers.get(text) or 'answered in the pane'), source='hook')
+            # ...and a tool that RAN had its permission. The notification's request had nothing to close it
+            # once the owner clicked yes in the pane - no hook fires for that - so the card said "stopped and
+            # is waiting on you" over a coder mid-search, until its next prompt.
+            for r in ws.open_requests(ws.events(st, tid, sid)):
+                if r['Kind'] == 'approval_needed':
+                    ws.record(st, tid, sid, 'answered', request_id=r['RequestId'], text='granted in the pane', source='hook')
         elif ev == 'Notification' and 'permission' in str(p.get('notification_type') or p.get('message') or '').lower():
             text = str(p.get('message') or 'Claude needs your permission').strip()
             ws.record(st, tid, sid, 'approval_needed', request_id=ws.request_id_for(text), text=text, source='hook')

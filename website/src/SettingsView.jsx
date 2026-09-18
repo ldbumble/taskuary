@@ -199,11 +199,13 @@ const HIDDEN = new Set(["ingest_status", "agent_issues_enabled", "agent_push_ena
                         // un-tick a setup step you had already done.
                         "setup_dismissed", "setup_seen_models",
                         "task_id_mark", "learn_pending", "learn_last_reflect"]);
-// the four AI defaults the panel at the top of this tab draws as cards - each would otherwise
-// also appear as a bare dropdown in the knob list, and `assistant_ai` appeared on a different
-// tab under a different name, which is how the general agent's brain went unfindable
-const PANEL_OWNED = new Set(["triage_ai", "default_agent", "concierge_ai", "concierge_model",
-                             "assistant_ai", "assistant_model", "phone_assistant"]);
+// The AI defaults the panel at the top of this section draws as cards - each would otherwise also
+// appear as a bare dropdown in the knob list. THE LIST IS NOT KEPT HERE: aidefaults.py grew a
+// fifth slot (`judge_ai`, "Where runs go") and this hand-written set did not, so a real setting
+// the owner is meant to pick showed up as an unlabelled text box in "Other" - exactly what
+// `assistant_ai` did in d3bde8bd. It lives in the schema now, and a Python test fails if a slot
+// is missing from it (the owner, 2026-09-18: "what is the other settings in configuration").
+const PANEL_OWNED = new Set(schema.panel_owned);
 // MACHINE STATE IS NOT CONFIGURATION. The settings table is also where the app keeps its own
 // bookkeeping - which CLI session a chat is on, where a per-task cursor got to, when a sweep last
 // ran - and every row without a KNOB_META entry fell through to the "Other" tab as an editable
@@ -229,10 +231,15 @@ const STATE = new Set(["trust_sent_history", "trust_non_email", "triage_pr_rule_
   "handbook_on_by_default", "processing_membership_rules", "voice_vocabulary",
   "assistant_card", "counsel_enabled",
   "app_sessions", "assistant_dock_task_id", "assistant_handoff", "assistant_last_run",
-  "assistant_notes", "assistant_notes_at", "auto_start_upgraded", "chat_cleanup_at", "github_login",
-  "ingest_last_fetch_completed_at", "learn_reflect_log", "problems_dismissed", "wa_log_trimmed_at",
-  "wall_rolled_on"]);
-const isState = (name) => name.includes(":") || STATE.has(name);
+  "assistant_notes", "auto_start_upgraded", "github_login",
+  "learn_reflect_log", "problems_dismissed", "wall_rolled_on"]);
+// A KEY ENDING `_at` IS A STAMP, NOT A KNOB. Six of them exist and every one is the app writing
+// down when it last did something - the morning line, a cleanup sweep, an ingest fetch, where the
+// setup walk stopped. Two of those (`setup_walk_at`, `phone_morning_line_at`) were newer than the
+// hand-written list and so were being offered as text boxes under "Other"; naming each one as it
+// appears is how that keeps happening. No knob in the schema ends in `_at`, and a stamp you can
+// type over is at best a re-run and at worst a lie about what already went out.
+const isState = (name) => name.includes(":") || name.endsWith("_at") || STATE.has(name);
 // WHAT IT WAS BEFORE YOU TOUCHED IT. No description carried its own default, so a page of knobs
 // could not tell you which ones you had actually changed, or what the shipped answer had been -
 // and a default written into 55 strings is 55 places to drift. The server sends `Default` straight
@@ -263,10 +270,13 @@ const SECTION_HELP = {
     body: "Every consequential thing Taskuary does is one row in an append-only log: a message routed or filed and why, a verdict you gave, a reply sent, an agent session opened or wrapped, a connector saved or signed in, a setting changed, a task deleted. Each row stores a hash of its own contents PLUS the hash of the row before it, so the rows form a chain: change any row after the fact — even one character in the database — and its hash no longer matches, and every row after it points at a parent that no longer exists.\n\nVerify recomputes the whole chain from the first row. Intact means the record you see is the record that was written. 'Contents altered' names the exact rows that were changed after writing — the thing this log exists to catch. 'Out of order' means two writers raced at the same instant once; nothing was changed, and it cannot recur.\n\nThe history below is that log, newest first: when, who (you, the router, an agent, a scheduled report), what was done, to what. It is the answer to 'why did this happen' and 'who did this' for anything on the Timeline or the Board." },
 };
 
-// How wide each page reads. Not one number for all six: a list wants the room, a form does not,
-// and a page that capped itself inside its own component is why the width used to change as you
-// moved down the rail (the owner, 2026-09-18). 0 = the whole column.
-const PAGE_WIDTH = { about: 860, config: 980, policies: 0, memory: 0, audit: 1180, updates: 1120 };
+// ONE WIDTH FOR ALL SIX PAGES, and it is Configuration's. Giving each page the width its own
+// content wanted (a form narrow, a table the whole column) meant the block around it changed size
+// as you moved down the rail - and because the block is centred, the RAIL slid sideways with it:
+// you clicked Routing policies and the menu you had just clicked moved (the owner, 2026-09-18:
+// "keep it the same as above"). A settings menu that does not hold still is worse than a table
+// with less room, so the tables give up the room. Change this one number, not six.
+const PAGE = 980;
 
 const PAGES = {
   about: { title: "About you", icon: AccountCircleIcon, desc: "Who the system knows you are — your identities per channel, the facts only you can add, your avatar." },
@@ -885,16 +895,14 @@ export default function SettingsView({ onNavigate }) {
     goTo(m[1], (SECTIONS[m[1]] || []).includes(want) ? want : "");
   }, [goTo]);
 
-  // ...and a search reads at the width of the knobs it is offering; letting it take the whole
-  // 1560 put the void straight back on a page of five result cards.
-  const width = q ? PAGE_WIDTH.config : (PAGE_WIDTH[page] || 0);
   return (
     // THE BLOCK IS CENTRED, NOT THE PAGE INSIDE IT. Capping the page's width while the grid around
     // it stayed 1560 wide left the rail and the page glued to the left of the window with half a
-    // screen of nothing beside them (the owner, 2026-09-18: "it's not centered??"). The width is
-    // still the page's own; the grid asks for exactly that plus the rail, and mx:auto does the rest.
+    // screen of nothing beside them (the owner, 2026-09-18: "it's not centered??"). So the grid is
+    // exactly rail + gutter + page and mx:auto centres the lot - and since PAGE is one number,
+    // that sum never changes, which is what stops the rail drifting from page to page.
     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: `${RAIL}px minmax(0,1fr)` },
-      gap: 3, alignItems: "start", mx: "auto", maxWidth: width ? RAIL + GUTTER + width : 1560 }}>
+      gap: 3, alignItems: "start", mx: "auto", maxWidth: RAIL + GUTTER + PAGE }}>
       <Box sx={{ position: { md: "sticky" }, top: { md: 62 }, maxHeight: { md: "calc(100vh - 74px)" }, overflowY: { md: "auto" } }}>
         <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16, mb: 1.5 }}>Settings</Typography>
         <TextField fullWidth placeholder="Search settings…" value={q}

@@ -1,5 +1,16 @@
 {
-  "_": "THE settings vocabulary, once. SettingsView.jsx draws its knobs from this file and the assistant (settings_schema.py, appfacts.py) reads the same one, so a knob cannot be called one thing on the page and another in the chat. `groups` is the page's tab order; each knob carries group, label, type (switch | number | select | text | brain | brains | channels | timezone | sound | flags), options for a select, desc (one line) and help (the long explanation the page shows).",
+  "_": "THE settings vocabulary, once. SettingsView.jsx draws its knobs from this file and the assistant (settings_schema.py, appfacts.py) reads the same one, so a knob cannot be called one thing on the page and another in the chat. `groups` is the order the page stacks its sections in; each knob carries group, label, type (switch | number | select | text | brain | brains | channels | timezone | sound | flags), options for a select, desc (one line) and help (the long explanation the page shows).",
+  "_panel_owned": "Keys a CARD on the page already owns, so the knob list must not also offer them as a bare box. Every aidefaults.SLOTS key and its model_setting belongs here - tests/test_settings_schema.py fails if one is missing, which is what `assistant_ai` (d3bde8bd) and then `judge_ai` both did: a real setting with no KNOB_META entry falls through to the empty 'Other' group as an unlabelled text box, which is the one place nobody would look for it.",
+  "panel_owned": [
+    "triage_ai",
+    "default_agent",
+    "concierge_ai",
+    "concierge_model",
+    "assistant_ai",
+    "assistant_model",
+    "judge_ai",
+    "phone_assistant"
+  ],
   "groups": [
     "Triage & agents",
     "Triage & routing",
@@ -119,6 +130,13 @@
       "type": "brain",
       "desc": "Which AI works every general task - research, planning, writing, a job with no repository - and answers the floating bubble and the WhatsApp doorway.",
       "help": "Normally set on the General agent card at the top of this tab; this row is the fallback if that panel cannot load. A CLI here can run tools, drive a browser and post to the wall; an API connector has no shell, so it can only read and write - quicker, and enough for chat. Blank = the first active API connector, else the default agent."
+    },
+    "judge_ai": {
+      "group": "Triage & agents",
+      "label": "Where runs go",
+      "type": "brain",
+      "desc": "Which AI decides whether a finished report lands on your Timeline, your work rail, reaches you right away, or goes out.",
+      "help": "Normally set on the 'Where runs go' card at the top of this section; this row is the fallback if that panel cannot load. Four yes/nos about a result somebody else wrote, judged against the sentences on the report's own card - it never has to write anything, so a decision model belongs here and a chat model is wasted on it. Blank = the brain that writes each report judges its own run."
     },
     "assistant_model": {
       "group": "Triage & agents",

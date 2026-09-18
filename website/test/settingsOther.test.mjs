@@ -12,10 +12,11 @@ import path from "node:path";
 const src = fs.readFileSync(path.join(process.cwd(), "src", "SettingsView.jsx"), "utf8");
 // the knob table itself lives in taskuary/settings_schema.json now (one file for the page and the
 // assistant, 2026-09-18); the tests about WHAT the knobs are read it from there
-const KNOBS = JSON.parse(fs.readFileSync(path.join(process.cwd(), "..", "taskuary", "settings_schema.json"), "utf8")).knobs;
+const SCHEMA = JSON.parse(fs.readFileSync(path.join(process.cwd(), "..", "taskuary", "settings_schema.json"), "utf8"));
+const KNOBS = SCHEMA.knobs, PANEL_OWNED = SCHEMA.panel_owned;
 
 test("per-entity state never renders as a knob", () => {
-  assert.match(src, /const isState = \(name\) => name\.includes\(":"\) \|\| STATE\.has\(name\);/,
+  assert.match(src, /const isState = \(name\) => name\.includes\(":"\)/,
     "a `name:<id>` key is state by construction - there are hundreds of them and they are not settings");
   const at = src.indexOf("const hidden = (name) =>");
   assert.notEqual(at, -1);
@@ -27,8 +28,9 @@ test("the scalar bookkeeping keys are named, not guessed at", () => {
   // Deliberately a list, not a prefix rule: `assistant_notes` is state, `assistant_card` is a
   // real toggle, and no prefix tells them apart. Anything added here stops being offered as a
   // knob, so it has to be a decision somebody made rather than a pattern that swept it up.
-  for (const k of ["app_sessions", "assistant_last_run", "chat_cleanup_at",
-                   "ingest_last_fetch_completed_at", "wall_rolled_on"]) {
+  // The `_at` stamps left this list for a rule of their own - naming each new one as it appeared
+  // is what let two of them through onto the page - and that rule is pinned below.
+  for (const k of ["app_sessions", "assistant_last_run", "wall_rolled_on"]) {
     assert.ok(new RegExp(`"${k}"`).test(src.slice(src.indexOf("const STATE = new Set"), src.indexOf("const isState"))),
       `${k} is machine state and must not be offered as a setting`);
   }
@@ -56,13 +58,11 @@ test("a key the AI-defaults panel owns is suppressed in every section, not just 
 });
 
 test("every panel-owned key still has a labelled fallback row", () => {
-  // panelOk puts the plain rows back when the panel cannot load. A key with no KNOB_META entry
-  // falls back to a box labelled with its own raw name, which is not a fallback.
-  const from = src.indexOf("const PANEL_OWNED");
-  const owned = src.slice(from, src.indexOf("]);", from));   // its own declaration, not the block after it
-  for (const key of owned.match(/"([a-z_0-9]+)"/g).map((m) => m.slice(1, -1))) {
-    assert.ok(KNOBS[key], `${key} is hidden by the panel but has no schema entry to fall back to`);
-  }
+  // panelOk puts the plain rows back when the panel cannot load. A key with no schema entry falls
+  // back to a box labelled with its own raw name, which is not a fallback. The list it walks is
+  // the schema's now - see "nothing falls into Other" below for why it stopped being written here.
+  for (const key of PANEL_OWNED) assert.ok(KNOBS[key], `${key} is hidden by the panel but has no schema entry`);
+  assert.ok(PANEL_OWNED.length >= 8, "all five AI slots, their two model settings and the phone doorway");
 });
 
 test("one question gets one row: the three trust switches are a single control", () => {
@@ -145,32 +145,43 @@ test("a live browser on an empty tab says it is an empty tab", () => {
   assert.match(pane, /pointerEvents: "none"/, "the note must not swallow a take-over click");
 });
 
-// A SETTINGS PAGE'S WIDTH IS DECLARED IN ONE PLACE. Two pages used to cap themselves INSIDE their
-// own component (Updates at 720, About you at 860), so the width changed as you moved down the rail
-// and nothing said why. One number for all six was wrong too, seen on the page: a list earns the
-// whole column, a form does not (the owner, 2026-09-18). So the width is a property of the page,
-// declared beside its title, and the page components carry none of their own.
-test("each settings page declares its width in one table, and no page caps itself", () => {
-  // ...and the WHOLE BLOCK wears that width, rail included. Capping the page inside a grid that
-  // stayed 1560 wide pinned rail and page to the left of the window with half a screen of nothing
-  // beside them (the owner, 2026-09-18: "it's not centered??").
-  assert.match(src, /maxWidth: width \? RAIL \+ GUTTER \+ width : 1560/,
-    "the grid asks for the page's declared width plus the rail - not a fixed bound");
+// EVERY SETTINGS PAGE IS THE SAME WIDTH, AND THE RAIL IS WHY. Pages used to cap themselves inside
+// their own component (Updates at 720, About you at 860); then each page declared its own width in
+// a table, which read better per page and moved the rail: the block is centred, so a page that
+// wanted 1300 pushed the menu left of where the page before it had drawn it, and you watched the
+// thing you had just clicked slide away (the owner, 2026-09-18: "keep it the same as above").
+test("every settings page is one width, so the rail never moves", () => {
+  assert.match(src, /^const PAGE = \d+;$/m, "one number, not a table - and the tables live with it");
+  assert.doesNotMatch(src, /PAGE_WIDTH/, "the per-page table is gone");
+  assert.match(src, /maxWidth: RAIL \+ GUTTER \+ PAGE/,
+    "the block is rail + gutter + page, and that sum is the same on every page");
   assert.match(src, /gap: 3, alignItems: "start", mx: "auto"/, "and mx:auto is what centres it");
   assert.doesNotMatch(src, /minWidth: 0, maxWidth: \(!q &&/,
     "the page must not be capped inside a column that is wider than it - that is the void");
-  const table = /const PAGE_WIDTH = \{([^}]*)\}/.exec(src);
-  assert.ok(table, "the widths live in a PAGE_WIDTH table");
-  const named = [...table[1].matchAll(/(\w+):/g)].map((m) => m[1]).sort();
-  const body = src.slice(src.indexOf("const PAGES = {"), src.indexOf("\n};", src.indexOf("const PAGES = {")));
-  const pages = [...body.matchAll(/^  (\w+): \{ title: /gm)].map((m) => m[1]).sort();
-  assert.deepEqual(named, pages, "every page in the rail has an entry - and nothing else does");
-  // the two LISTS take the whole column; a 0 is what says so, not a missing entry
-  assert.match(table[1], /policies: 0/); assert.match(table[1], /memory: 0/);
+  // the width cannot depend on which page is showing, or the rail drifts again by another route
+  assert.doesNotMatch(src, /const width = /, "no per-page width is computed at render");
   for (const name of ["UpdateCard.jsx", "AboutYou.jsx"]) {
     const page = fs.readFileSync(path.join(process.cwd(), "src", name), "utf8");
     const open = page.indexOf("return (");
     assert.doesNotMatch(page.slice(open, open + 200), /maxWidth: \d+/,
-      `${name} must not cap its own root - the table above is the one place a width is set`);
+      `${name} must not cap its own root - PAGE is the one place a width is set`);
   }
+});
+
+// "Other" is the group a key with no schema entry falls into, and the page only draws a group that
+// has something in it - so on a healthy install it never appears at all. It appeared: three keys
+// had fallen through, two stamps and one REAL setting (`judge_ai`, the fifth AI-defaults slot),
+// which meant the one place you would never look for it (the owner, 2026-09-18: "what is the other
+// settings in configuration"). Both leaks get a rule rather than another name on a hand-written list.
+test("nothing falls into Other: a stamp is state, and a card's key is the card's", () => {
+  assert.match(src, /const isState = \(name\) => name\.includes\(":"\) \|\| name\.endsWith\("_at"\) \|\| STATE\.has\(name\);/,
+    "a key ending _at is when the app last did something, never a knob");
+  assert.ok(Object.keys(KNOBS).every((k) => !k.endsWith("_at")),
+    "...which is only safe while no real knob is named that way");
+  assert.match(src, /const PANEL_OWNED = new Set\(schema\.panel_owned\);/,
+    "the panel's keys come from the schema - the hand-written set is what missed judge_ai");
+  for (const key of PANEL_OWNED) {
+    assert.ok(KNOBS[key], `${key} is hidden by a card but has no schema entry to fall back to`);
+  }
+  assert.ok(PANEL_OWNED.includes("judge_ai"), "the slot that leaked is covered by the rule that replaced the list");
 });

@@ -37,6 +37,7 @@ import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
 import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WalkCard, WrapupCard, sourceColor } from "./assistantCards.jsx";
 import FeedView from "./FeedView.jsx";
+import { MORE_PX } from "./funnelPile.js";
 import GeneralWorkspace from "./GeneralWorkspace.jsx";
 import { ROADS, roadOfCard } from "./timelineState.js";
 import { walkAdvances } from "./walkStep.js";
@@ -181,6 +182,21 @@ function Pile({ pile, current, onPull }) {
   const cheer = !left || left > 15 ? "" : left === 1 ? "One more and the pipe is clear."
     : left <= 5 ? `${left} to go, then the pipe is clear.` : `${left} away from a clear pipe.`;
 
+  // ── the ranked tail, when a connector is in bulk mode ───────────────────────────────────────
+  // The server says WHICH row wears the pill and how many wait behind it; on an install that ranks
+  // nothing it says null, and every line below is dead. An owner who takes one item at a time never
+  // sees any of this (the owner, 2026-09-18: "i should not see it since i process each by itself").
+  const moreAfter = pile?.more_after || null;
+  const [waitingOpen, setWaitingOpen] = useState(false);
+  const [waiting, setWaiting] = useState(null);
+  useEffect(() => {
+    if (!waitingOpen || !moreAfter) return;
+    let alive = true;
+    api.get("/api/funnel/waiting").then(({ data }) => { if (alive) setWaiting(data); }).catch(() => {});
+    return () => { alive = false; };
+  }, [waitingOpen, moreAfter]);
+  useEffect(() => { if (!moreAfter) setWaitingOpen(false); }, [moreAfter]);
+
   // ── how much of each band fits ──────────────────────────────────────────────────────────────
   // urgent, your task and agents working draw in full; reports and fyi divide what is left of the
   // rail's height, floor of two (funnelPile.fillCaps). It is MEASURED from the scroller, so the
@@ -242,9 +258,14 @@ function Pile({ pile, current, onPull }) {
         const shown = rows.filter((i, n) => n < cap || i.key === curKey || batchKeys.has(i.key));
         const hidden = rows.length - shown.length;
         let stackHeight = 0;
+        // BULK PROCESSING: the "250 more" pill hangs off the LAST ranked row, where reading stopped -
+        // not off the band, which is what the fyi pill means. It takes real height, so the rows under
+        // it move down by exactly that and the stack still measures true.
+        let moreTop = null;
         const positioned = shown.map((item) => {
           const top = stackHeight;
           stackHeight += item.key === curKey ? CUR_H : ROW_H;
+          if (moreAfter && item.key === moreAfter.key) { moreTop = stackHeight; stackHeight += MORE_PX; }
           return { item, top };
         });
         // the bracket spans its members where they already are: it adds no height and moves no row
@@ -333,7 +354,30 @@ function Pile({ pile, current, onPull }) {
                   </div>
                 );
               })}
+              {moreTop != null && (
+                <button type="button" className="tq-pile-more" style={{ position: "absolute", top: moreTop }}
+                  title="Ranked and waiting to be read - one is read each time you finish one above"
+                  onClick={() => setWaitingOpen((v) => !v)}>
+                  {moreAfter.count} more
+                </button>
+              )}
             </div>
+            {moreTop != null && waitingOpen && (
+              <div className="tq-pile-waiting">
+                {/* nothing below the line has been triaged, so there is no lane, no ref and no task
+                    list to draw - only what the arrival itself carried, and the rank's own reason */}
+                {(waiting?.items || []).slice(0, 20).map((w) => (
+                  <div key={w.mid} className="tq-pile-waitrow">
+                    <span className="subj">{w.subject}</span>
+                    <span className="why">{[w.who, w.why].filter(Boolean).join(" \u00b7 ")}</span>
+                  </div>
+                ))}
+                {!waiting && <div className="tq-pile-waitrow"><span className="why">Reading the list\u2026</span></div>}
+                {waiting && waiting.count > 20 && (
+                  <div className="tq-pile-waitrow"><span className="why">{waiting.count - 20} more below these</span></div>
+                )}
+              </div>
+            )}
             {hidden > 0 && (
               <button type="button" className="tq-pile-more"
                 onClick={() => setOpened((cur) => new Set(cur).add(level))}>

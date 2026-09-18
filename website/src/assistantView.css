@@ -41,6 +41,13 @@
 .tq-pile-more { display: block; margin: 5px 0 2px 70px; padding: 3px 11px; border: 1px solid #dcd5cb; border-radius: 99px;
   background: #fffdfb; color: #55697a; font: 600 11px 'IBM Plex Sans', system-ui, sans-serif; cursor: pointer; }
 .tq-pile-more:hover { border-color: #b9c3cb; background: #f5f8f9; }
+/* what the ranked pill opens. Thin on purpose: none of it has been triaged, so a card's worth of
+   furniture would promise fields that do not exist. */
+.tq-pile-waiting { margin: 2px 0 6px 70px; border-left: 1px solid #e0dbcf; padding-left: 10px; }
+.tq-pile-waitrow { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; min-width: 0; }
+.tq-pile-waitrow .subj { flex: 1 1 auto; min-width: 0; font-size: 12px; color: #3b4440;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tq-pile-waitrow .why { flex: 0 0 auto; font-size: 10.5px; color: #9aa39d; }
 
 .tq-pile-stack { position: relative; }
 .tq-pile-row { position: absolute; left: 0; right: 0; height: 30px; display: grid; grid-template-columns: 58px 14px minmax(0, 1fr); align-items: stretch;

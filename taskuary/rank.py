@@ -247,6 +247,37 @@ def waiting(store) -> dict:
                       for r in rows]}
 
 
+def rank_channels(store) -> set:
+    """The channels whose connector is in rank mode - worked out once, so marking a rail of sixty
+    rows does not resolve the same connector sixty times."""
+    out = set()
+    for c in store.list_connectors():
+        try: cfg = json.loads((store.get_connector(c['ConnectorId']) or {}).get('ConfigJson') or '{}')
+        except ValueError: continue
+        if c.get('Active') and cfg.get('bulk') == 'rank':
+            out |= {ch for ch, types in _TYPES.items() if c.get('Type') in types} | {c.get('Type')}
+    return {c for c in out if c}
+
+
+def more_after(store, rows: list) -> dict | None:
+    """Which row wears the "250 more" pill, and what it says. None when there is nothing to say.
+
+    It hangs off the LAST ranked row on screen, because that row is where reading stopped - the fyi
+    pill sits under its whole band, which is a different fact about a different thing (the owner,
+    2026-09-18: "the more button should be on the last github item that is triaged").
+
+    None for an owner who ranks nothing, which is most of them: no rank-mode connector, no waiting
+    arrivals, or no ranked row drawn means no pill anywhere.
+    """
+    if not rows or not any_rank(store): return None
+    chans = rank_channels(store)
+    if not chans: return None
+    last = next((r for r in reversed(rows) if str((r or {}).get('channel') or '') in chans), None)
+    if not last: return None
+    n = waiting(store)['count']
+    return {'key': last.get('key'), 'count': n} if n else None
+
+
 def top_up(store, n: int = 1) -> int:
     """A slot opened - judge the next most valuable arrivals. Every settling verb opens one, `later`
     included: it holds the ITEM, it does not hold the queue behind it (the owner, 2026-09-18)."""

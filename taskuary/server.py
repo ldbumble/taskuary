@@ -3003,6 +3003,14 @@ def dispatch_cancel(tid: int):
     store.audit('task', tid, 'dispatch_cancel', ACTOR)
     return {'ok': True}
 
+@app.get('/api/funnel/waiting')
+def funnel_waiting():
+    """What is ranked and still waiting to be judged - what the rail's "250 more" opens. Subjects
+    and senders straight off the arrivals, so looking costs no model call."""
+    from . import rank
+    return rank.waiting(store)
+
+
 @app.post('/api/funnel/rerank')
 def funnel_rerank(): return {'updated': rank.rerank(store, force=True)}
 

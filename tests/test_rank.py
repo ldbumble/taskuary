@@ -301,3 +301,46 @@ class RankBeforeTriageTests(unittest.TestCase):
         self.assertEqual(waiting['count'], 12)
         self.assertEqual(len(waiting['items']), 12)
         self.assertIn('u0', [i['subject'] for i in waiting['items']])
+
+
+class TheMoreMarkerTests(unittest.TestCase):
+    """The rail's "250 more" - the same pill fyi already wears, hung off the LAST ranked row rather
+    than off a band, because that row is where reading stopped (the owner, 2026-09-18: "the more
+    button should be on the last github item that is triaged").
+
+    And the promise that matters most: an owner who processes one at a time never sees any of it."""
+
+    def setUp(self):
+        self.s = MemoryStore()
+        self.s.save_source({'Channel': 'email', 'Address': 'me@corp.example', 'Owner': 'me', 'Active': 1}, 't')
+
+    def _arrival(self, subject, channel='github', status='triaging'):
+        return self.s.add_message({'ExternalId': f'a-{subject}', 'ConversationId': f'c-{subject}', 'Channel': channel,
+                                   'Subject': subject, 'FromName': 'dev', 'FromEmail': 'dev@x.com',
+                                   'SentAt': '2026-09-18 07:00:00', 'Status': status})
+
+    def test_nothing_is_marked_when_no_connector_ranks(self):
+        """A normal install must be untouched by every part of this - no marker, no count, no pill."""
+        for i in range(6): self._arrival(f'pr {i}')
+        self.assertEqual(rank.waiting(self.s)['count'], 0)
+        self.assertIsNone(rank.more_after(self.s, [{'key': 'k1', 'channel': 'github'}]))
+
+    def test_the_count_hangs_off_the_last_ranked_row(self):
+        c = self.s.get_connector_by_type('github')
+        self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'ConfigJson': json.dumps({'bulk': 'rank'})}, 't')
+        for i in range(9): self._arrival(f'pr {i}')
+        rows = [{'key': 'k1', 'channel': 'github'}, {'key': 'k2', 'channel': 'email'}, {'key': 'k3', 'channel': 'github'}]
+        got = rank.more_after(self.s, rows)
+        self.assertEqual(got['key'], 'k3', 'the LAST ranked row, not the last row and not the first')
+        self.assertEqual(got['count'], 9)
+
+    def test_a_ranked_source_with_nothing_waiting_shows_no_pill(self):
+        c = self.s.get_connector_by_type('github')
+        self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'ConfigJson': json.dumps({'bulk': 'rank'})}, 't')
+        self.assertIsNone(rank.more_after(self.s, [{'key': 'k1', 'channel': 'github'}]))
+
+    def test_with_no_ranked_row_on_screen_there_is_nowhere_to_hang_it(self):
+        c = self.s.get_connector_by_type('github')
+        self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'ConfigJson': json.dumps({'bulk': 'rank'})}, 't')
+        for i in range(4): self._arrival(f'pr {i}')
+        self.assertIsNone(rank.more_after(self.s, [{'key': 'k1', 'channel': 'email'}]))

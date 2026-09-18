@@ -985,6 +985,16 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE) -> 
                  'counts': {**full['counts'], 'unread': len(items), 'actionable': sum(i['actionable'] for i in items)}}
         else: p = build(store)
         p['alerts'] = alerts(store, p['items'])
+        # BULK PROCESSING: which row wears the "250 more" pill. None on an install that ranks
+        # nothing, which is what keeps this whole feature invisible to an owner who takes one
+        # item at a time (the owner, 2026-09-18: "i should not see it since i process each by
+        # itself and not in bulk").
+        try:
+            from . import rank
+            p['more_after'] = rank.more_after(store, p['items'])
+        except Exception as e:
+            logger.debug(f'the ranked count did not reach the rail: {e}')
+            p['more_after'] = None
         p['events'] = events
         _CACHE.update(at=time.time(), pile=p, store=store, full=full['items'] if shared else None,
                       generation=_CACHE.get('generation', 0) + 1, mark=mark, workers=workers)

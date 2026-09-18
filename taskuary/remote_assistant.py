@@ -521,13 +521,65 @@ def source_line(item: dict | None) -> str:
     if not item: return ''
     who = ' '.join(str(item.get('who') or '').split())
     ch = str(item.get('channel') or '')
-    bits = ' · '.join(x for x in (who, ch.replace('_', ' ')) if x)
+    bits = ' · '.join(x for x in (who, ch.replace('_', ' '), str(item.get('ref') or '')) if x)
     return ' '.join(x for x in (funnel.CHANNEL_MARKS.get(ch, ''), bits) if x) if bits else ''
 
 
 def _cut(text: str, n: int) -> str:
     t = ' '.join(str(text or '').split())
     return t if len(t) <= n else t[:n].rstrip() + '…'
+
+
+BOX, TICKED = '☐', '☑'
+# the few sources whose own spelling title() would get wrong; everything else title-cases fine
+_SOURCE_WORDS = {'github': 'GitHub', 'gitlab': 'GitLab', 'pagerduty': 'PagerDuty', 'imessage': 'iMessage'}
+
+
+def _quote(text) -> str:
+    """Every line marked, not just the first - a multi-paragraph body has to keep reading as theirs."""
+    return '\n'.join('> ' + l.rstrip() if l.strip() else '>' for l in str(text or '').strip().splitlines())
+
+
+def checklist_block(store, item: dict | None) -> str:
+    """The desktop's TASK LIST, as boxes a chat can print - the job the card exists for, which the
+    phone never showed at all (the owner, 2026-09-18: "where is the github logo, todo's sections").
+    Read-only here, exactly as on the card: ticking stays on the task."""
+    tid = (item or {}).get('tid')
+    if store is None or not tid: return ''
+    try: items = store.task_checklist(int(tid))
+    except Exception as e:
+        logger.debug(f'the phone could not read the task list: {e}')
+        return ''
+    if not items: return ''
+    done = sum(1 for i in items if i.get('done'))
+    boxes = [f'{TICKED if i.get("done") else BOX} {i["text"]}' for i in items]
+    return '\n'.join([f'TASK LIST · {done} of {len(items)} done'] + boxes)
+
+
+def thread_line(store, msg: dict) -> str:
+    """"Email context · 2 messages combined by triage" - the card says how much of the thread is behind
+    the one body it shows, and the chat showed one message as if it were the whole of it."""
+    if store is None or not msg: return ''
+    try: kin = store.thread_messages(msg.get('ConversationId'), msg.get('Subject'))
+    except Exception as e:
+        logger.debug(f'the phone could not count the thread: {e}')
+        return ''
+    n = len([m for m in kin if str(m.get('Status') or '') != 'context'])
+    if n < 2: return ''
+    key = str(msg.get('Channel') or '')
+    ch = _SOURCE_WORDS.get(key) or key.replace('_', ' ').title() or 'Thread'
+    return f'{ch} context · {n} messages combined by triage'
+
+
+def status_line(item: dict | None) -> str:
+    """The card's kicker and the one line under it, in the words lanes.json already holds - the chat
+    must not grow a second copy of a vocabulary that took two tables to unify."""
+    from . import funnel
+    word = (funnel.LANE_WORDS.get(str((item or {}).get('lane') or '')) or ('',))[0]
+    why = ' '.join(str((item or {}).get('why_idle') or (item or {}).get('why') or '').split())
+    # the WHY only. A bare lane word repeats the mark the say line already wears ("fyi" under a 👀),
+    # and the card's kicker earns its place with a header a chat does not have.
+    return f'{word} - {why}' if word and why else ''
 
 
 def decision_block(store, item: dict | None) -> str:
@@ -545,10 +597,16 @@ def decision_block(store, item: dict | None) -> str:
     if item.get('kind') == 'agent' and item.get('asking'):
         asked = ' '.join(str((item.get('tail') or [''])[0]).split())
         if asked: parts.append('IT ASKED\n' + _cut(asked, 600))
+    todos = checklist_block(store, item)
+    if todos: parts.append(todos)
     try:
         if item.get('mid'):
-            body = (store.get_message(int(item['mid'])) or {}).get('BodyText')
-            if str(body or '').strip(): parts.append('THEY WROTE\n> ' + _cut(body, 300))
+            msg = store.get_message(int(item['mid'])) or {}
+            kin = thread_line(store, msg)
+            if kin: parts.append(kin)
+            # WHOLE, not a teaser: _cut also flattened every paragraph, and the rest of it existed
+            # only on the desktop. send() splits on paragraph boundaries, so length costs bubbles.
+            if str(msg.get('BodyText') or '').strip(): parts.append('THEY WROTE\n' + _quote(msg['BodyText']))
         if item.get('rid'):
             rv = store.get_review(int(item['rid'])) or {}
             # an `action` review's DraftText is the proposal's JSON, never prose to read out
@@ -574,7 +632,10 @@ def turn_text(out: dict, lead: str = '', store=None) -> str:
     say = _TASK_LINK.sub(r'\1', str(out.get('say') or '')).strip()
     mark = funnel.mark_for(item)
     if say and mark: say = f'{mark} {say}'
-    head = '\n'.join(x for x in (source_line(item), say) if x)
+    state = status_line(item)
+    # the say line often already carries the cause; a card does not print the same sentence twice
+    if state and state.split(' - ', 1)[-1].lower() in say.lower(): state = state.split(' - ', 1)[0]
+    head = '\n'.join(x for x in (source_line(item), say, state) if x)
     words = choices(out)
     opts = 'Reply with one of:\n' + '\n'.join(f'{i} · {w}' for i, w in enumerate(words, 1)) if words else ''
     shown = decision_block(store, item) if store is not None else ''

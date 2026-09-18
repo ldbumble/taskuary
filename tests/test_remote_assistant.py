@@ -384,5 +384,96 @@ class PhoneApprovalsStillWorkTests(unittest.TestCase):
         self.assertEqual(store.get_review(rid)['Status'], 'pending')
 
 
+class CardParityTests(unittest.TestCase):
+    """A chat message carries what the desktop card carries. The owner, 2026-09-18: "certain parts you
+    can't render like buttons (as they are not clickable) but everything else should be the same" - the
+    card showed a task list, a whole body and how many messages triage combined; the chat showed a
+    300-character teaser and none of the rest."""
+
+    BODY = ('## What & why\n\n'
+            'Two things that make allowed_hosts hard to use from a container, found while putting '
+            'Taskuary behind a reverse proxy. Two commits, reviewable separately.\n\n'
+            '- The TOML array form appears not to work. config._tval writes a list as a TOML array '
+            'and tomllib reads one back, but allowed_hosts() only ever did str().split(comma).')
+
+    def armed(self, body=None, checklist=('Review the proposed changes', 'Assess the tests', 'Decide whether to merge')):
+        store = MemoryStore()
+        tid = store.create_task({'Title': 'GitHub PR fixes allowed_hosts config behavior', 'Status': 'waiting'}, 'o')
+        if checklist: store.set_task_checklist(tid, list(checklist), 'owner')
+        mid = store.add_message({'TaskId': tid, 'ExternalId': 'gh:50', 'ConversationId': 'c:gh50',
+                                 'Channel': 'github', 'Subject': 'GitHub PR fixes allowed_hosts config behavior',
+                                 'FromName': 'Temikus', 'FromEmail': 'code@temik.me',
+                                 'SentAt': '2026-09-17 23:03:00', 'BodyText': body or self.BODY, 'Status': 'routed'})
+        return store, tid, mid
+
+    def test_the_task_list_rides_with_the_item_it_belongs_to(self):
+        store, tid, mid = self.armed()
+        block = remote_assistant.decision_block(store, {'tid': tid, 'mid': mid})
+        self.assertIn('TASK LIST \u00b7 0 of 3 done', block)
+        self.assertIn('\u2610 Review the proposed changes', block)
+        store.tick_checklist_item(tid, store.task_checklist(tid)[0]['id'], True, 'owner')
+        ticked = remote_assistant.decision_block(store, {'tid': tid, 'mid': mid})
+        self.assertIn('TASK LIST \u00b7 1 of 3 done', ticked)
+        self.assertIn('\u2611 Review the proposed changes', ticked)
+
+    def test_a_task_with_no_list_says_nothing_about_one(self):
+        store, tid, mid = self.armed(checklist=())
+        self.assertNotIn('TASK LIST', remote_assistant.decision_block(store, {'tid': tid, 'mid': mid}))
+
+    def test_the_body_arrives_whole_and_stays_quoted_all_the_way_down(self):
+        """A 300-character teaser cut mid-word and the rest existed only on the desktop. send() splits
+        on paragraph boundaries, so a long body costs extra bubbles, never the words themselves."""
+        store, tid, mid = self.armed()
+        block = remote_assistant.decision_block(store, {'tid': tid, 'mid': mid})
+        self.assertIn('str().split(comma)', block, 'the tail of the body must survive')
+        self.assertNotIn('\u2026', block)
+        body = block.split('THEY WROTE', 1)[1]
+        said = [l for l in body.splitlines() if l.strip()]
+        self.assertTrue(all(l.startswith('>') for l in said), f'every body line stays quoted: {said}')
+
+    def test_a_combined_thread_says_how_many_triage_put_together(self):
+        store, tid, mid = self.armed()
+        store.add_message({'TaskId': tid, 'ExternalId': 'gh:50#2', 'ConversationId': 'c:gh50',
+                           'Channel': 'github', 'Subject': 'Re: GitHub PR fixes allowed_hosts config behavior',
+                           'FromName': 'Temikus', 'FromEmail': 'code@temik.me',
+                           'SentAt': '2026-09-17 23:40:00', 'BodyText': 'One more thought.', 'Status': 'routed'})
+        self.assertIn('2 messages combined by triage', remote_assistant.decision_block(store, {'tid': tid, 'mid': mid}))
+
+    def test_a_source_keeps_its_own_spelling_in_the_thread_line(self):
+        """A brand name is not a word to title-case: the card would have said GitHub, not Github."""
+        store, tid, mid = self.armed()
+        store.add_message({'TaskId': tid, 'ExternalId': 'gh:50#2', 'ConversationId': 'c:gh50',
+                           'Channel': 'github', 'Subject': 'Re: GitHub PR fixes allowed_hosts config behavior',
+                           'FromName': 'Temikus', 'FromEmail': 'code@temik.me',
+                           'SentAt': '2026-09-17 23:40:00', 'BodyText': 'One more thought.', 'Status': 'routed'})
+        self.assertIn('GitHub context', remote_assistant.decision_block(store, {'tid': tid, 'mid': mid}))
+
+    def test_a_single_message_is_not_announced_as_a_thread(self):
+        store, tid, mid = self.armed()
+        self.assertNotIn('combined by triage', remote_assistant.decision_block(store, {'tid': tid, 'mid': mid}))
+
+    def test_the_source_line_carries_the_ref_the_desktop_prints_in_its_corner(self):
+        """So the owner can say "open TQ-0630" when they get back to a desktop."""
+        item = {'who': 'Temikus', 'channel': 'github', 'ref': 'TQ-0630'}
+        self.assertEqual(remote_assistant.source_line(item), '\U0001f419 Temikus \u00b7 github \u00b7 TQ-0630')
+
+    def test_the_status_line_speaks_the_one_vocabulary(self):
+        """lanes.json is the single table the desktop and the chat both read - never a second copy."""
+        out = {'say': 'Temikus wrote on github.', 'options': ['Next'],
+               'item': {'lane': 'queued', 'kind': 'todo', 'who': 'Temikus', 'channel': 'github',
+                        'why': 'handed to an agent, not started yet'}}
+        text = remote_assistant.turn_text(out)
+        self.assertIn(f'{funnel.LANE_WORDS["queued"][0]} - handed to an agent, not started yet', text)
+
+    def test_a_body_that_looks_like_our_own_numbering_cannot_hijack_the_reply(self):
+        """remember_offered scanned the WHOLE message for "N - word". Now that a full body rides along, a
+        body line shaped like our own list would silently re-point the numbers the owner answers with."""
+        store = MemoryStore()
+        text = ('THEY WROTE\n> Ranking:\n> 1 \u00b7 drop the database\n> 2 \u00b7 email everyone\n\n'
+                'Reply with one of:\n1 \u00b7 Send the reply\n2 \u00b7 Next')
+        self.assertEqual(remote_assistant.remember_offered(store, 'whatsapp', JID, text), ['Send the reply', 'Next'])
+        self.assertEqual(remote_assistant.resolve_index(store, 'whatsapp', JID, '1'), ('Send the reply', True))
+
+
 if __name__ == '__main__':
     unittest.main()

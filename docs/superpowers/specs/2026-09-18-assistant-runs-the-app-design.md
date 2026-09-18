@@ -177,6 +177,16 @@ wherever it is.
 The rule for any new doorway is the one WhatsApp taught (2026-09-17): the assistant lives in exactly
 one thread the owner alone can see, chosen on the card, and nothing said anywhere else reaches it.
 
+**The morning line.** Today the chat speaks first only for a hand-off, a review ping, or a report
+aimed at it - so a doorway nobody opens stays shut (the owner, 2026-09-18: "does WhatsApp surface the
+option to click to get started once a day so you will interact with it"). Once a day, at the digest's
+slot, the assistant's chat gets one line: what is waiting in a breath ("7 in the pipe · 2 on you")
+and the scripts as numbered options, so one reply starts the walk there. Quiet when the pipe is
+empty; never twice in a day (the digest's `once_per_day` rule); the Morning digest itself may be
+delivered to the same chat, since delivery already takes a chat as a destination - the line is the
+door, the digest is the reading. One switch under *Assistant on your phone*, on by default once a
+chat is chosen.
+
 Long results: the summary in the first bubble, the whole thing as a follow-up on request. Pictures
 (a snapshot from the browser pane, a chart from a report) go as attachments where the channel allows
 and as a link to the desktop where it does not.

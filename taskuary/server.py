@@ -200,7 +200,8 @@ async def token_gate(request: Request, call_next):
         logger.warning(f'refused Host {request.headers.get("host")!r} - not a name this server answers to')
         return JSONResponse({'detail': f'this server does not answer to the name {request.headers.get("host")!r}. '
                                        'If you reach Taskuary by a hostname, add it to allowed_hosts under '
-                                       '[server] in config.toml.'}, status_code=403)
+                                       '[server] in config.toml, or set TASKUARY_ALLOWED_HOSTS in a '
+                                       'container.'}, status_code=403)
     # ...and a request some OTHER page told the browser to make is not the owner asking, whatever
     # token the browser had lying around. The Intuit callback is the one cross-site arrival by
     # design - a redirect from their site, proving itself with the one-time state it was issued.

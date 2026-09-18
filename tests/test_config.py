@@ -36,6 +36,26 @@ class TomlTests(unittest.TestCase):
         self.assertEqual((cfg['server']['host'], cfg['server']['port'], cfg['server']['token']),
                          ('0.0.0.0', 9000, 'abc'))
 
+    def test_env_names_the_hosts_the_server_answers_to(self):
+        """A container behind a proxy is reached by a name, and editing config.toml on a volume to
+        say so is the one thing a container makes hard."""
+        from taskuary import guard
+        path = config.home() / 'config.toml'
+        previous = path.read_text(encoding='utf-8') if path.exists() else None
+        try:
+            with mock.patch.dict(os.environ, {'TASKUARY_HOST': '0.0.0.0',
+                                              'TASKUARY_ALLOWED_HOSTS': 'taskuary.lan, desk.lan'}):
+                cfg = config.load()
+                self.assertTrue(guard.host_ok('taskuary.lan', cfg['server']))
+                self.assertTrue(guard.host_ok('desk.lan:7787', cfg['server']))
+                self.assertFalse(guard.host_ok('evil.example', cfg['server']))
+                config.save(cfg)                       # an unrelated save must not persist the overlay
+            self.assertNotIn('taskuary.lan', path.read_text(encoding='utf-8'))
+            self.assertFalse(guard.host_ok('taskuary.lan', config.load()['server']))   # gone with the env
+        finally:
+            if previous is None: path.unlink(missing_ok=True)
+            else: path.write_text(previous, encoding='utf-8')
+
     def test_env_overrides_do_not_persist_on_agent_save(self):
         """Runtime overlays must not round-trip through save() — that's how Docker was
         writing host = 0.0.0.0 and token = None onto the volume."""

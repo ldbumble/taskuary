@@ -98,12 +98,18 @@ The Python and desktop installs keep data in `~/.taskuary/` by default:
 - `taskuary.log`—the application log
 
 Set `TASKUARY_HOME` to use a different directory. Docker uses `/data` inside the container.
-`TASKUARY_HOST`, `TASKUARY_PORT`, and `TASKUARY_TOKEN` can override server settings at
-runtime without writing them back to the configuration file.
+`TASKUARY_HOST`, `TASKUARY_PORT`, `TASKUARY_TOKEN`, and `TASKUARY_ALLOWED_HOSTS` can override
+server settings at runtime without writing them back to the configuration file.
 
 For LAN access, set `[server].token` in the config or provide `TASKUARY_TOKEN`, and send the
 token in the `X-Taskuary-Token` header. Do not expose an unauthenticated Taskuary instance
 beyond localhost.
+
+Taskuary answers only to names it knows, so reaching it by a hostname—behind a reverse proxy,
+for instance—means listing that name. Set `allowed_hosts` under `[server]` in `config.toml` (a
+comma-separated string or a TOML array), or, in a container, set
+`TASKUARY_ALLOWED_HOSTS=taskuary.example.com`. Without it the request is refused with
+`403: this server does not answer to the name ...`.
 
 ## Next
 

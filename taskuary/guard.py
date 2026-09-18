@@ -164,13 +164,18 @@ def _hostname(v: str) -> str:
 
 def allowed_hosts(server: dict) -> set:
     """localhost, whatever the server was told to bind, this machine's own name, and anything the
-    owner added as `allowed_hosts` in config.toml (comma-separated) - for a self-hoster reaching
-    Taskuary by a real hostname, which is the one legitimate case this rule breaks."""
+    owner added as `allowed_hosts` in config.toml - for a self-hoster reaching Taskuary by a real
+    hostname, which is the one legitimate case this rule breaks.
+
+    A comma-separated string or a TOML array; both, because config._tval WRITES an array and
+    tomllib reads one back, so a list that only ever got str()'d became "['name']" and matched
+    nothing - silently, and again after every save()."""
     import socket
     out = {'localhost', str(server.get('host') or '').lower()}
     try: out |= {socket.gethostname().lower(), socket.gethostname().lower() + '.local'}
     except Exception: pass
-    out |= {h.strip().lower() for h in str(server.get('allowed_hosts') or '').split(',')}
+    extra = server.get('allowed_hosts') or ''
+    out |= {str(h).strip().lower() for h in (extra.split(',') if isinstance(extra, str) else extra)}
     return {h for h in out if h}
 
 

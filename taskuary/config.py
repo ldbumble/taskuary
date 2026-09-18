@@ -2,10 +2,10 @@
 
 [server] port/host/token; [agents.<name>] cmd/args/resume_args/timeout/cwd/cwd_map;
 [github] token/default_repo. Everything is optional: `taskuary` runs with no config at all
-(SQLite store, stub agent, localhost server). TASKUARY_HOST / TASKUARY_PORT / TASKUARY_TOKEN
-are runtime overlays on [server] (a container binds 0.0.0.0 this way) and are never written
-back — save() keeps the on-disk [server] block. Empty env is unset, so compose cannot wipe
-a token stored on the volume.
+(SQLite store, stub agent, localhost server). TASKUARY_HOST / TASKUARY_PORT / TASKUARY_TOKEN /
+TASKUARY_ALLOWED_HOSTS are runtime overlays on [server] (a container binds 0.0.0.0 and answers to
+its proxied name this way) and are never written back — save() keeps the on-disk [server] block.
+Empty env is unset, so compose cannot wipe a token stored on the volume.
 """
 import json, os
 try: import tomllib
@@ -77,9 +77,13 @@ def _env_server() -> dict:
     """Non-empty TASKUARY_* overlays. Empty is unset — an injected '' must not disable a stored token."""
     out = {}
     h, p, t = os.getenv('TASKUARY_HOST'), os.getenv('TASKUARY_PORT'), os.getenv('TASKUARY_TOKEN')
+    a = os.getenv('TASKUARY_ALLOWED_HOSTS')
     if h: out['host'] = h
     if p: out['port'] = int(p)
     if t: out['token'] = t
+    # a container reached by a hostname is exactly what allowed_hosts is for, and editing a file
+    # on the volume to say so is the one thing a container makes hard
+    if a: out['allowed_hosts'] = a
     return out
 
 def load() -> dict:

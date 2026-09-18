@@ -180,17 +180,51 @@ class TheWatchedBrowserOutlivesAPauseTests(unittest.TestCase):
     """agent-browser shuts its daemon down after an hour of inactivity by default. A walk left
     overnight on a half-finished ADP sign-in came back to a white pane: the browser had gone, and the
     next command got a fresh empty one (the owner, 2026-09-15: "it showed the browser, then turned
-    white"). This browser belongs to the session and is closed by close(), not by a clock."""
+    white"). This browser belongs to the session and is closed by close(), not by a clock.
 
-    def test_the_session_browser_is_launched_with_no_idle_timeout(self):
-        seen = {}
-        def popen(cmd, **kw): seen['cmd'] = cmd; raise OSError('not really launching one')
-        with mock.patch('shutil.which', return_value='agent-browser'),              mock.patch.object(browserview, 'state', return_value={'open': False, 'url': '', 'port': 0}),              mock.patch('taskuary.spawn.popen', popen):
+    AND THE CLOCK IS SET THE SAME WAY BY EVERY COMMAND. agent-browser fingerprints a command's
+    launch options into <session>.config, and the idle timeout is part of the fingerprint (--restore
+    and --args are not; measured 2026-09-18 with 0, 720h and raw ms alike). A launch flag that the
+    agent's own flagless `agent-browser open`, the pane's viewport resize and the address bar do not
+    carry is a mismatch, and on a mismatch agent-browser SHUTS THE DAEMON DOWN and starts a default
+    one on about:blank - no restored profile, the idle hour back, and the pane either white (the new
+    blank page) or black (still attached to the dying daemon). "It either appears but is plain white,
+    or freezes and is just black" (the owner, 2026-09-18). So the timeout rides in the ENVIRONMENT
+    every command shares, launch included, and never as a flag."""
+
+    def setUp(self):
+        self.seen = []
+        def popen(cmd, **kw): self.seen.append((cmd, kw)); raise OSError('not really launching one')
+        self.patches = [mock.patch('shutil.which', return_value='agent-browser'),
+                        mock.patch.object(browserview, 'state', return_value={'open': True, 'url': '', 'port': 1}),
+                        mock.patch('taskuary.spawn.popen', popen), mock.patch('taskuary.spawn.run', popen)]
+        for p in self.patches: p.start()
+    def tearDown(self):
+        for p in self.patches: p.stop()
+
+    def test_the_idle_timeout_is_in_the_environment_of_every_pty(self):
+        self.assertEqual(browserview.env('abc123')['AGENT_BROWSER_IDLE_TIMEOUT_MS'], '0')
+
+    def test_the_launch_carries_no_idle_flag_and_the_same_environment(self):
+        with mock.patch.object(browserview, 'state', return_value={'open': False, 'url': '', 'port': 0}):
             browserview.start('abc123')
-        cmd = seen['cmd']
-        self.assertIn('--idle-timeout', cmd)
-        self.assertEqual(cmd[cmd.index('--idle-timeout') + 1], '0')
+        cmd, kw = self.seen[0]
+        self.assertNotIn('--idle-timeout', cmd)                                      # a flag the agent's commands would not match
         self.assertEqual(cmd[cmd.index('--restore') + 1], browserview.RESTORE_KEY)   # and still the owner's profile
+        self.assertEqual(kw['env']['AGENT_BROWSER_IDLE_TIMEOUT_MS'], '0')
+        self.assertEqual(kw['env']['AGENT_BROWSER_SESSION'], 'tq-abc123')
+
+    def test_every_door_the_server_opens_matches_the_launch(self):
+        """set viewport (the pane's shape), open (the address bar) and close each run agent-browser
+        from the server; a single one without the environment relaunches the daemon."""
+        browserview.set_viewport('abc123', 1200, 800)
+        with self.assertRaises(ValueError): browserview.navigate('abc123', 'https://example.test')
+        browserview.home().mkdir(parents=True, exist_ok=True); (browserview.home() / 'tq-abc123.stream').write_text('1')
+        browserview.close('abc123')
+        self.assertEqual(len(self.seen), 3)
+        for cmd, kw in self.seen:
+            self.assertEqual(kw['env']['AGENT_BROWSER_IDLE_TIMEOUT_MS'], '0', cmd)
+            self.assertEqual(kw['env']['AGENT_BROWSER_SESSION'], 'tq-abc123', cmd)
 
 
 if __name__ == '__main__':

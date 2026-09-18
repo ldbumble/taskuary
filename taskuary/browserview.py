@@ -56,7 +56,19 @@ _KEPT = re.compile(r'^\{\s*"type"\s*:\s*"(frame|url)"')   # the head of the mess
 
 def installed() -> bool: return bool(shutil.which('agent-browser'))
 def session_name(sid: str) -> str: return f'tq-{sid}'
-def env(sid: str) -> dict: return {'AGENT_BROWSER_SESSION': session_name(sid)}
+# WHAT EVERY agent-browser COMMAND FOR A SESSION MUST AGREE ON. agent-browser fingerprints a
+# command's launch options into <session>.config, and when a command's fingerprint differs from
+# the running daemon's it SHUTS THAT DAEMON DOWN and starts a default one on about:blank. The idle
+# timeout is in the fingerprint (--restore and --args are not; measured 2026-09-18 with 0, 720h and
+# raw ms alike). So it rides here, in the environment the pty, the pane and the server all share -
+# a `--idle-timeout` flag on the launch alone was a mismatch with the agent's very first flagless
+# `agent-browser open`: the browser the owner was watching died, a fresh blank one took its port,
+# the restored login went with it, and the pane was white (the new blank page) or black (still on
+# the dying daemon's socket). "It either appears but is plain white, or freezes and is just black"
+# (the owner, 2026-09-18). 0 = never idle out: this browser is closed by close(), not by a clock.
+IDLE_MS = '0'
+def env(sid: str) -> dict: return {'AGENT_BROWSER_SESSION': session_name(sid), 'AGENT_BROWSER_IDLE_TIMEOUT_MS': IDLE_MS}
+def _cli_env(sid: str) -> dict: return {**os.environ, **env(sid)}    # the server's own calls match the pty's
 def home() -> Path: return Path(os.environ.get('AGENT_BROWSER_HOME') or Path.home() / '.agent-browser')
 
 
@@ -191,7 +203,7 @@ def navigate(sid: str, url: str) -> str:
     log = Path(tempfile.gettempdir()) / f'{session_name(sid)}-open.log'
     try:
         with open(log, 'wb') as f:
-            p = spawn.popen([exe, '--session', session_name(sid), 'open', u],
+            p = spawn.popen([exe, '--session', session_name(sid), 'open', u], env=_cli_env(sid),
                             stdout=f, stderr=f, stdin=subprocess.DEVNULL)
             try: rc = p.wait(timeout=NAV_WAIT)
             except subprocess.TimeoutExpired:
@@ -217,7 +229,7 @@ def close(sid: str):
     # close it. Reading the stream file before the launch settled leaked the late browser.
     with lock:
         if exe and _read(session_name(sid), 'stream'):
-            try: spawn.run([exe, '--session', session_name(sid), 'close'], timeout=20, capture_output=True)
+            try: spawn.run([exe, '--session', session_name(sid), 'close'], env=_cli_env(sid), timeout=20, capture_output=True)
             except (OSError, subprocess.SubprocessError) as e: logger.debug(f'could not close the browser of {sid}: {e}')
         _CACHE.pop(sid, None); LAST.pop(sid, None)
     with _START_LOCKS_GUARD:
@@ -261,13 +273,16 @@ def start(sid: str, url: str = 'about:blank') -> bool:
         # a walk left overnight at a half-finished ADP sign-in came back to a white pane, because the
         # browser had gone at 23:06 and the next command got a fresh empty one (the owner, 2026-09-15:
         # "it showed the browser, then turned white"). This browser belongs to the session and dies
-        # with it - close() on the pty's end is what closes it, not a clock nobody set.
-        cmd = [exe, '--session', session_name(sid), '--restore', RESTORE_KEY, '--idle-timeout', '0',
+        # with it - close() on the pty's end is what closes it, not a clock nobody set. The "never"
+        # is AGENT_BROWSER_IDLE_TIMEOUT_MS in env(), NOT an --idle-timeout flag here: a flag only the
+        # launch carries is a launch-option mismatch with every later command, and a mismatch is
+        # exactly what makes agent-browser replace this daemon with a blank default one (see IDLE_MS).
+        cmd = [exe, '--session', session_name(sid), '--restore', RESTORE_KEY,
                '--args', LAUNCH_ARGS, 'open', url or 'about:blank']
         try:
             # detached and HEADLESS: the live pane is the visible browser. --headed opens a second
             # desktop window outside Taskuary and defeats the side-by-side surface.
-            spawn.popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            spawn.popen(cmd, env=_cli_env(sid), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                              stdin=subprocess.DEVNULL, close_fds=True)
         except (OSError, subprocess.SubprocessError) as e:
             logger.warning(f'could not start the browser for {sid}: {e}')
@@ -293,7 +308,7 @@ def set_viewport(sid: str, w: int, h: int) -> bool:
     w, h = int(w), int(h)
     if not exe or not (200 <= w <= 4000 and 200 <= h <= 4000): return False
     try:
-        spawn.popen([exe, '--session', session_name(sid), 'set', 'viewport', str(w), str(h)],
+        spawn.popen([exe, '--session', session_name(sid), 'set', 'viewport', str(w), str(h)], env=_cli_env(sid),
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, close_fds=True)
         return True
     except (OSError, subprocess.SubprocessError) as e:

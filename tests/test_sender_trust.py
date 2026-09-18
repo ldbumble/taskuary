@@ -126,9 +126,11 @@ class SettingsTests(unittest.TestCase):
     def test_defaults_and_exposure(self):
         s = MemoryStore(); cfg = s.get_settings()
         self.assertEqual((cfg.get('trust_own_domain'), cfg.get('trust_sent_history'), cfg.get('trust_non_email')), ('1', '1', '1'))
-        src = pathlib.Path(__file__).resolve().parents[1].joinpath('website', 'src', 'SettingsView.jsx').read_text(encoding='utf-8')
-        for k in ('trust_own_domain', 'trust_sent_history', 'trust_non_email'): self.assertIn(k, src)
-        self.assertNotIn('has written before', src)
+        # the knob table is taskuary/settings_schema.json now - one file for the page and the assistant (2026-09-18)
+        from taskuary import settings_schema
+        flags = settings_schema.knobs()['trust_own_domain']['flags']
+        for k in ('trust_own_domain', 'trust_sent_history', 'trust_non_email'): self.assertIn(k, flags)
+        self.assertNotIn('has written before', str(settings_schema.knobs()))
 
 
 if __name__ == '__main__':

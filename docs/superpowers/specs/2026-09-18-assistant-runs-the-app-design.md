@@ -222,6 +222,8 @@ words. The chat assistant proposes nothing of its own.
 
 1. **Facts pack** - the state block, the look-ups, the scripts named. The walk and the chat already
    improve; nothing writes yet. About a day.
+   Landed 2026-09-18: 98fa4a68 (settings schema to the server), cd2af3e1 (appfacts), 8144ff80 (the
+   look-ups), 067b3363 (the state block on the general road). Plan: docs/superpowers/plans/2026-09-18-assistant-facts-pack.md.
 2. **Stop verbs and by-name acts** - the report, setting and connection operations, the tiers, the
    undo receipts, results back to the asking chat, the audit list. About four days.
 3. **Ideas in the report** - app health, connect-a-system, the catalogue moved server-side, the

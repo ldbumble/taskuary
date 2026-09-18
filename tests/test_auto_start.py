@@ -209,8 +209,10 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(s3.get_settings().get('general_auto_enabled'), '1')  # an explicit choice is never overwritten
 
     def test_settings_exposes_both_switches(self):
-        src = pathlib.Path(__file__).resolve().parents[1].joinpath('website', 'src', 'SettingsView.jsx').read_text(encoding='utf-8')
-        self.assertIn('general_auto_enabled', src); self.assertIn('coder_auto_enabled', src)
+        # the knob table is taskuary/settings_schema.json now - one file for the page and the assistant (2026-09-18)
+        from taskuary import settings_schema
+        knobs = settings_schema.knobs()
+        self.assertIn('general_auto_enabled', knobs); self.assertIn('coder_auto_enabled', knobs)
 
 
 if __name__ == '__main__':

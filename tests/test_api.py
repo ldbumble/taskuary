@@ -343,6 +343,20 @@ class ApiTests(unittest.TestCase):
         self.assertFalse(c.patch(f'/api/tasks/{tid}/checklist/{a["id"]}', json={'done': False}).json().get('closed'))
         self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], 'done')
 
+    def test_closing_the_task_ticks_every_box_and_dropping_it_ticks_none(self):
+        """The reverse door. A coder finished TQ-0646 with `--done` and the closed card kept three open
+        boxes, as if the work were still owed (the owner, 2026-09-18: "part of --done should be that,
+        no? same if it's saved manually"). Done means done, whoever says it; dropped means nothing was."""
+        boxes = lambda tid: [i['done'] for i in json.loads(c.get(f'/api/tasks/{tid}').json()['task']['Checklist'])]
+        tid = c.post('/api/tasks', json={'Title': 'three steps'}).json()['taskId']
+        c.put(f'/api/tasks/{tid}/checklist', json={'items': ['read the log', 'find the cause', 'say what to rerun']})
+        c.patch(f'/api/tasks/{tid}', json={'Status': 'done'})
+        self.assertEqual(boxes(tid), [True, True, True])
+        other = c.post('/api/tasks', json={'Title': 'never mind'}).json()['taskId']
+        c.put(f'/api/tasks/{other}/checklist', json={'items': ['one', 'two']})
+        c.patch(f'/api/tasks/{other}', json={'Status': 'dropped'})
+        self.assertEqual(boxes(other), [False, False])
+
     def test_an_agents_task_is_not_closed_by_a_tick(self):
         """A task an agent holds may have boxes the owner ticks while it works; closing it would stop
         the agent mid-run. The agent's task ends the agent's way (--done, or the owner's Completed)."""

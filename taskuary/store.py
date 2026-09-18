@@ -1210,6 +1210,13 @@ class SQLiteStore:
         if fields.get('Status') in ('done', 'dropped'):
             self._exec("UPDATE review SET Status='superseded', DecidedBy=?, DecidedAt=? "
                        "WHERE TaskId=? AND Status='pending'", (actor, _now(), task_id))
+        # ...and Done is the whole job. A coder finished TQ-0646 with `--done` and the card kept three
+        # open boxes, as if the work were still owed (the owner, 2026-09-18: "part of --done should be
+        # that, no? same if it's saved manually"). Dropped leaves them: nothing was done.
+        if fields.get('Status') == 'done':
+            items = self.task_checklist(task_id)
+            if any(not i.get('done') for i in items):
+                self._exec('UPDATE task SET Checklist=? WHERE TaskId=?', (json.dumps([{**i, 'done': True} for i in items]), task_id))
         self._bump_snapshots()
         # Timeline rows carry task/review state too, so a task transition changes both views.
         self._poke('feed-changed', 'task-changed', task_id=task_id)

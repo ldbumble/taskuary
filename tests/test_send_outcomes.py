@@ -39,7 +39,7 @@ class OutcomeTests(unittest.TestCase):
             out = verdicts.decide(s, s.get_review(rid), 'approve')
         self.assertTrue(out['ok']); self.assertEqual(out['status'], 'approved')
         self.assertEqual(s.get_task(tid)['Status'], 'done')
-        self.assertEqual([i['done'] for i in s.task_checklist(tid)], [False, False])      # closure ticks nothing
+        self.assertEqual([i['done'] for i in s.task_checklist(tid)], [True, True])        # done is the whole job (TQ-0646, 2026-09-18)
         self.assertEqual(s.get_review(rid)['Status'], 'approved')
 
     def test_a_definite_failure_keeps_the_draft_and_the_task_open_with_a_retry(self):

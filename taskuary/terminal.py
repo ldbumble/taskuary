@@ -868,8 +868,15 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         try:
             # with the agent token: once [server].token is set the gate refuses a bare hook POST, and
             # the Board went dark the moment the owner did the recommended thing (audit 2026-09-02)
-            if _hooks.wanted(store, profile): _hooks.install(cwd, token=session_env(agent, task_id, cwd).get('TASKUARY_TOKEN', ''), cmd=str(profile.get('cmd') or 'claude'))
-        except Exception as e: logger.debug(f'claude hooks not installed in {cwd}: {e}')
+            # ONCE, AT USER SCOPE (~/.claude/settings.json, ~/.codex/hooks.json): set-up installs them right
+            # after the CLI, before any checkout exists, and a session only refreshes them. The old
+            # per-checkout entries are retired so no event ever fires twice (a doubled Stop is a doubled
+            # wrap-up) - and the owner's own CLI in the same folder is bound apart by session id (hooks.receive).
+            cli = _hooks.cli_for(profile)
+            if cli and _hooks.wanted(store, profile):
+                _hooks.install_user(cli, token=session_env(agent, task_id, cwd).get('TASKUARY_TOKEN', ''), cmd=str(profile.get('cmd') or cli))
+                _hooks.retire_project(cwd)
+        except Exception as e: logger.debug(f'agent hooks not installed for {cwd}: {e}')
     t = Term(argv, cwd, label, task_id, agent, rows, cols, store, cli=cli_named(profile, argv))
     SESSIONS[t.sid] = t
     if assigned: bind_ext(t, assigned)     # resumable before it has drawn a single character
@@ -1978,6 +1985,15 @@ def release_task(store, task_id, actor='terminal', note=None) -> bool:
     for run in store.list_runs(task_id):
         if run.get('Status') == 'running':
             store.update_run(run['RunId'], {'Status': 'stopped'}, finished=True)
+    # ...and on the WORKER record too. A pty that died with a question open kept reading as
+    # `input_needed` for ever, because nothing ever wrote the run's ending there: only the owner's
+    # stop button, a headless failure and a self-close did (audit 2026-09-18, item 2).
+    try:
+        from . import workerstate as ws
+        sid = ws.current_sid(store, task_id)
+        if sid and ws.status(store, task_id)['state'] not in ws.TERMINAL:
+            ws.record(store, task_id, sid, 'disconnected', text='the session ended', source=actor)
+    except Exception as e: logger.debug(f'release_task: no worker ending written for {task_id}: {e}')
     store.update_task(task_id, {'Status': 'open'}, actor)
     # not Working, not Done: interrupted, visibly - and nothing restarts by itself (PW-262)
     if actor in INTERRUPTING: store.tag_task(task_id, INTERRUPTED, True, actor)

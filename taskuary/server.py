@@ -120,6 +120,10 @@ async def _lifespan(_app):
     try:
         wabridge.start_configured(store)      # the launch grace is spent by the first poll (wabridge.ready), never here
     except Exception as e: logger.warning(f'wa bridge startup failed: {e}')
+    try:                                      # Codex's hooks write a spool, not a request (hooks.py): read it
+        from . import hooks as _hooks
+        _hooks.start_codex_spool()
+    except Exception as e: logger.warning(f'codex hook spool not started: {e}')
     catch_up_on_startup()          # defined below; resolved when the app actually starts
     try:                           # a relaunch opens a NEW chat rather than resuming the last one
         from . import funnel as _f
@@ -2710,11 +2714,13 @@ def task_work(tid: int, diff: bool = True):
     return {'work': work, 'files': files, 'prov': prov, 'diffstat': {'added': rev.get('added'), 'removed': rev.get('removed')},
             'session': {'sid': sess.sid, 'alive': sess.alive, 'agent': sess.agent, 'cli': hub_term.cli_of(sess.argv), 'started': sess.started, 'cwd': sess.cwd} if sess else None}
 
-@app.post('/api/hooks/claude')
-async def claude_hook(request: Request):
-    """Claude Code's hook fired in a checkout a session of ours works in (hooks.py wires it): the
-    event's JSON comes in on the body. Always 200 and quiet - a hook must never trouble the agent."""
+@app.post('/api/hooks/{cli}')
+async def cli_hook(cli: str, request: Request):
+    """A CLI's hook fired in a checkout a session of ours works in (hooks.py wires it): the event's
+    JSON comes in on the body, the path says which CLI is speaking (claude or codex - same event
+    schema, bound to a session of that CLI). Always 200 and quiet - a hook must never trouble the agent."""
     from . import hooks
+    if cli not in hooks.HOOKED: return {'bound': False}
     # Anything unreadable is a non-event, including a hook that HUNG UP: hooks.py posts with
     # `curl -s -m 3` so it can never hold the agent, and a server stalled for longer than that
     # outlives the curl - request.body() then raises ClientDisconnect, which is no ValueError and
@@ -2722,9 +2728,9 @@ async def claude_hook(request: Request):
     try: payload = json.loads((await request.body()) or b'{}')
     except Exception as e:
         logger.debug(f'claude hook body unreadable: {e}'); return {'bound': False}
-    try: return hooks.receive(payload if isinstance(payload, dict) else {})
+    try: return hooks.receive(payload if isinstance(payload, dict) else {}, cli=cli)
     except Exception as e:
-        logger.debug(f'claude hook ignored: {e}'); return {'bound': False}
+        logger.debug(f'{cli} hook ignored: {e}'); return {'bound': False}
 
 # ── the handbook (handbook.py): what the agents worked out, by topic, open to comment ──────
 class HubPostBody(BaseModel):

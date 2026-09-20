@@ -256,6 +256,17 @@ def isolated_runtime_boundaries():
             return False
         return real_hook_install(cwd, *args, **kwargs)
 
+    # The user-scope installer writes ~/.claude/settings.json and ~/.codex/hooks.json - the owner's
+    # own files. A test reaches them only through an explicit `home` under the test root.
+    real_hook_install_user = getattr(hooks, 'install_user', None)
+
+    def guarded_hooks_user(cli, *args, home=None, **kwargs):
+        try: Path(home or '').resolve().relative_to(_TEST_ROOT)
+        except ValueError:
+            _SAFETY_EVENTS.append(('user hook write', f'{cli} home={home}'))
+            return False
+        return real_hook_install_user(cli, *args, home=home, **kwargs)
+
     def guarded_browser_listening(port, *args, **kwargs):
         """Treat unregistered browser ports as closed without probing a live owner service."""
         if int(port) not in _ALLOWED_PORTS:
@@ -436,6 +447,7 @@ def isolated_runtime_boundaries():
         patches.enter_context(mock.patch.object(general, 'start_session', guarded_start_session))
         patches.enter_context(mock.patch.object(blackboard, 'drain_later', guarded_drain_later))
         patches.enter_context(mock.patch.object(hooks, 'install', guarded_hooks))
+        if real_hook_install_user: patches.enter_context(mock.patch.object(hooks, 'install_user', guarded_hooks_user))
         patches.enter_context(mock.patch.object(browserview, '_listening', guarded_browser_listening))
         patches.enter_context(mock.patch.object(server.app.router, 'lifespan_context', safe_lifespan))
         yield

@@ -13,8 +13,11 @@ changed, and written into the task's discussion with its delivery outcome.
 import hashlib, json
 from loguru import logger
 
-KINDS = ('working', 'turn_end', 'input_needed', 'approval_needed', 'answered', 'finished', 'failed', 'disconnected', 'stopped')
-REQUESTS = ('input_needed', 'approval_needed')
+KINDS = ('working', 'turn_end', 'input_needed', 'approval_needed', 'stalled', 'answered', 'finished', 'failed', 'disconnected', 'stopped')
+# A `stalled` request is a turn that DIED on a wall - a rate limit, a token ceiling, an API error - with the
+# CLI alive at its prompt. On the screen that looks exactly like a question. It is not terminal (Claude can
+# auto-resume; the owner can retry), so it is a request: open until the run speaks again (hooks.py).
+REQUESTS = ('input_needed', 'approval_needed', 'stalled')
 TERMINAL = ('failed', 'disconnected', 'stopped')
 
 
@@ -133,6 +136,8 @@ def status(store, tid: int) -> dict:
     if not evs: return out
     last = evs[-1]
     if last['Kind'] in TERMINAL: out['state'] = last['Kind']; return out
+    # a wall outranks any question: nothing can be answered through a rate limit
+    if any(r['kind'] == 'stalled' for r in requests): out['state'] = 'stalled'; return out
     if any(r['kind'] == 'approval_needed' for r in requests): out['state'] = 'approval_needed'; return out
     if requests: out['state'] = 'input_needed'; return out
     # a finish counts until a new turn starts work again
@@ -237,4 +242,5 @@ def request_line(agent: str, req: dict) -> str:
     """One sentence for a raised hand, from the request itself."""
     text = ' '.join(str(req.get('text') or '').split())[:300]
     if req.get('kind') == 'approval_needed': return f'{agent} needs your approval: {text}'
+    if req.get('kind') == 'stalled': return f'{agent} is stuck - {text}'
     return f'{agent} asked you: {text}'

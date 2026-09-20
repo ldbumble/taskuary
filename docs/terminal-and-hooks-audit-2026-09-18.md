@@ -36,13 +36,22 @@ and a pane being seeded is `working` whatever its screen says (`Term.seeding`).
    vocabulary in lanes.json. Sites: funnelPile.js:228, ui.jsx:1518/1747, BoardView.jsx:120, TasksView.jsx:1564,
    assistantCards.jsx:354, concierge.py:642, workerstate.request_line. Many tests pin these strings, so it is a deliberate
    pass, not a find-and-replace.
-2. **A pty that exited mid-question says `input_needed` for ever.** `workerstate.status` ranks open requests above "not
-   live", and `answer` refuses to deliver to a dead run. Not fixable by reordering (headless general work has no pty and
-   legitimately asks) - it needs a real "this run ended" event from `Term.close`/`release_task`, which today write a run
-   row and a transcript but no worker event. `disconnected` has no producer at all.
-3. **Hook coverage.** `PreToolUse` (the actual permission decision), `SubagentStop`, `SessionEnd` are not installed
-   (hooks.py EVENTS); permissions are seen only through the `'permission' in message` substring of `Notification`.
-   `AskUserQuestion` is recorded asked-and-answered in one breath, so no surface can ever show the question itself.
+2. ~~**A pty that exited mid-question says `input_needed` for ever.**~~ FIXED 2026-09-20: `release_task`, the one
+   idempotent place that already knows a run ended, now writes `disconnected` on the worker record; Claude's `SessionEnd`
+   hook does the same earlier, except for `clear`/`resume`, which leave the process alive. (Reordering `status()` was and
+   is wrong: headless general work has no pty and legitimately asks.)
+3. ~~**Hook coverage.**~~ FIXED 2026-09-20, and it turned two "guesses" into events. Claude: `StopFailure` (rate limit,
+   token ceiling, overloaded, billing... with the error text) is a new `stalled` request that outranks any question and
+   clears when the run speaks again or its quota auto-resumes; `Notification` is read by its typed `notification_type`
+   (`agent_needs_input`/`idle_prompt` = a question asked inside the TUI, `permission_prompt` = approval);
+   `PermissionRequest` is the approval itself, naming the tool and its arguments; `Elicitation`/`ElicitationResult` cover
+   an MCP server asking; `SessionStart` binds the session id before a word is said. Codex: hooks now too (same schema, no
+   StopFailure and no question event) - and measured on Windows, a Codex hook cannot reach the network sandbox on or off,
+   so its hook appends stdin to `~/.taskuary/hooks/codex.jsonl` (cmd's redirect writes UTF-16) and `hooks.CodexSpool`
+   tails it; `--dangerously-bypass-hook-trust` rides on the session argv because a user-scope hook is otherwise skipped
+   silently until approved inside the TUI. Both CLIs' hooks install ONCE at user scope, right after set-up installs the
+   CLI; a session refreshes them and retires the old per-checkout entries so nothing fires twice. Still not an event:
+   a Codex stuck alive on an error (the screen's to notice), and `AskUserQuestion` still arrives asked-and-answered.
 4. **Four clocks.** `PHASE_DWELL` 3 s (terminal.py), `funnel.DWELL` 12 s, handraiseState's two-poll confirm (~16 s),
    `IDLE_WAITING` 45 s, plus hook latency. The strip can ring several seconds before the pile narrates the same thing.
 5. **`NeedsYou` means two things.** processing_all sets it from `waiting` only when no review is pending; rowLane treats

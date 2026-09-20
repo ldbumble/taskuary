@@ -137,4 +137,4 @@ class HookWiringTests(unittest.TestCase):
         scope = {'type': 'http', 'method': 'POST', 'path': '/api/hooks/claude', 'headers': [],
                  'query_string': b'', 'client': ('127.0.0.1', 1)}
         async def gone(): return {'type': 'http.disconnect'}
-        self.assertEqual(asyncio.run(server.claude_hook(Request(scope, gone))), {'bound': False})
+        self.assertEqual(asyncio.run(server.cli_hook('claude', Request(scope, gone))), {'bound': False})

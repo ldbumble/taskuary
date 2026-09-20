@@ -412,6 +412,12 @@ def install(name: str, has_npm: bool = None, system: str = None, runner=None) ->
         if found:
             ensure_on_path(Path(found).parent)
             _set('done', name, f'{name} is installed', found)
+            # ...and its hooks, right behind it (the owner, 2026-09-20: "add it to the install after
+            # installing the cli"). User scope, so no checkout has to exist yet; a session refreshes them.
+            try:
+                from . import hooks
+                if name in hooks.HOOKED: hooks.install_user(name, cmd=found)
+            except Exception as e: logger.warning(f'{name} installed but its hooks were not: {e}')
             logger.info(f'installed {name} at {found}')
             return state()
         last = last or 'the installer reported success but left nothing to run'

@@ -40,6 +40,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 
 from .store import task_ref
+from .assistantblocks import said_number   # the payload's own English for a window: 'the last two days'
 
 CHANNEL = 'assistant'
 PRODUCERS = ('followup', 'promise', 'prep', 'cold', 'idea')
@@ -275,8 +276,9 @@ _AGENDA = {}               # one calendar read per check: prep's candidates and 
 _AGENDA_FRESH = 60         # seconds a read stays good
 _AGENDA_LOCK = threading.Lock()
 
-def _agenda(store, *, block: bool = True) -> list:
-    """The next two days of meetings, cached for _AGENDA_FRESH seconds.
+def _agenda(store, *, block: bool = True, days: int = 2) -> list:
+    """The next `days` of meetings - two, unless the owner widened the CALENDAR block - cached for
+    _AGENDA_FRESH seconds.
 
     Reading this is a LIVE Microsoft Graph call - a token POST plus one calendarView per mailbox,
     20s timeout each. Whoever found the cache stale used to pay for all of it, and the pile reads
@@ -285,24 +287,34 @@ def _agenda(store, *, block: bool = True) -> list:
     So a caller the OWNER is waiting on passes block=False and gets what is known right now while
     the refresh runs on its own thread. A report composing a brief keeps the blocking read - an
     empty calendar in the morning digest would be a wrong answer, not a slow one.
+
+    A cached read WIDER than the caller asked for is trimmed rather than fetched again: the pile's
+    two days and a widened CALENDAR block then share one Graph call instead of evicting each other
+    every minute.
     """
     if store.get_settings().get('calendar_enabled', '1') != '1': return []
-    if _AGENDA.get('at', 0) > datetime.now().timestamp() - _AGENDA_FRESH: return _AGENDA['events']
-    if block: return _read_agenda(store)
-    _refresh_agenda(store)
-    return _AGENDA.get('events', [])
+    wide = _AGENDA.get('days', 0) >= days
+    if wide and _AGENDA.get('at', 0) > datetime.now().timestamp() - _AGENDA_FRESH: return _within(_AGENDA['events'], days)
+    if block: return _read_agenda(store, days)
+    _refresh_agenda(store, days)
+    return _within(_AGENDA.get('events', []), days) if wide else []
 
 
-def _read_agenda(store) -> list:
+def _within(events: list, days: int) -> list:
+    cut = (datetime.now() + timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+    return [e for e in events if _ts(e.get('start')) <= cut]
+
+
+def _read_agenda(store, days: int = 2) -> list:
     from . import calendar as cal
-    try: ev = [e for e in (cal.agenda(store, days=2).get('events') or []) if not e.get('all_day')]
+    try: ev = [e for e in (cal.agenda(store, days=days).get('events') or []) if not e.get('all_day')]
     except Exception as e:
         logger.debug(f'assistant: calendar skipped - {e}'); ev = []
-    _AGENDA.update(at=datetime.now().timestamp(), events=ev)
+    _AGENDA.update(at=datetime.now().timestamp(), events=ev, days=days)
     return ev
 
 
-def _refresh_agenda(store):
+def _refresh_agenda(store, days: int = 2):
     """One refresh at a time, whoever asked for it. The stamp is written by _read_agenda even when
     the read failed, so a calendar nobody can reach is retried on the clock rather than on every
     read - which is what kept a stalled Graph call in front of the pile."""
@@ -310,7 +322,7 @@ def _refresh_agenda(store):
         if _AGENDA.get('reading'): return
         _AGENDA['reading'] = True
     def go():
-        try: _read_agenda(store)
+        try: _read_agenda(store, days)
         finally: _AGENDA['reading'] = False
     threading.Thread(target=go, name='taskuary-agenda', daemon=True).start()
 
@@ -519,7 +531,7 @@ def _recent(store, days: int = 2) -> str:
         detail = cause or (f' -> says: "{words}"' if words else '')
         lines.append(f"- {'x%d ' % g['n'] if g['n'] > 1 else ''}[{'/'.join(sorted(c for c in g['cats'] if c))}] {who}: \"{_short(r.get('Subject'), 70)}\" "
                      f"(latest mid {r['MessageId']} {_when(r['SentAt'])}" + (f", {task_ref(r['TaskId'])}" if r.get('TaskId') else '') + ')' + clock + detail)
-    return '\n'.join(lines) or '(nothing arrived in the last two days)'
+    return '\n'.join(lines) or f'(nothing arrived in the last {said_number(days)} days)'
 
 
 def _people_context(store, days: int = 2) -> tuple[str, list[int]]:
@@ -587,7 +599,7 @@ def _people_context(store, days: int = 2) -> tuple[str, list[int]]:
         block = '\n'.join([head] + [q for q in quotes if not q.endswith(': ""')])
         if used + len(block) > PEOPLE_CHARS: break
         out.append(block); used += len(block); mids += [c['MessageId'] for c in chain]
-    return '\n'.join(out) or '(no person wrote in the last two days)', mids
+    return '\n'.join(out) or f'(no person wrote in the last {said_number(days)} days)', mids
 
 
 def _people(store, days: int = 2) -> str:
@@ -607,11 +619,11 @@ def said_about(store, conversation_id: str, limit: int = 4) -> list:
             for i in store.list_ideas() if str(i.get('Key') or '').endswith(tail)][:limit]
 
 
-def _calendar(store) -> str:
+def _calendar(store, days: int = 2) -> str:
     from . import calendar as cal
-    ev = _agenda(store)
+    ev = _agenda(store, days=days)
     return '\n'.join(f"- {_when(e['start'])} {cal.span(e['start'], e.get('end') or '')} \"{e.get('subject')}\"" + (f" with {', '.join(list(e.get('who') or [])[:6])}" if e.get('who') else '')
-                     for e in ev[:8]) or '(nothing on the calendar for two days' + (')' if store.get_settings().get('calendar_enabled', '1') == '1' else ' - calendar off)')
+                     for e in ev[:8]) or f'(nothing on the calendar for {said_number(days)} days' + (')' if store.get_settings().get('calendar_enabled', '1') == '1' else ' - calendar off)')
 
 
 def _done(store, days: float = 7) -> str:
@@ -635,18 +647,18 @@ def _done(store, days: float = 7) -> str:
 def _week(store) -> str: return _done(store, 7)
 
 
-def _open(store) -> str:
+def _open(store, cap: int = 20) -> str:
     ts = [t for t in store.list_tasks(active_only=True) if t.get('Status') in ('open', 'in_progress', 'waiting')]
     def line(t):
         last = _dt(store.task_last_activity(t['TaskId']) or t.get('UpdatedAt') or t.get('CreatedAt'))
         age = f"{int((datetime.now() - last).total_seconds() // 3600)}h since anything happened" if last else ''
         state = f"{t.get('RunAgent') or 'an agent'} is working it" if t.get('RunStatus') == 'running' else 'a draft waits for you in Review' if t.get('ReviewStatus') == 'pending' else age
         return f"- {task_ref(t['TaskId'])} [{t['Status']}, {t.get('Kind')}] {_short(t.get('Title'), 80)}" + (f" - {state}" if state else '')
-    return '\n'.join(line(t) for t in ts[:20]) or '(nothing open)'
+    return '\n'.join(line(t) for t in ts[:cap]) or '(nothing open)'
 
 
-def _said(store) -> str:
-    rows = [i for i in store.list_ideas() if i.get('Status') in ('open', 'dismissed', 'snoozed')][:40]
+def _said(store, cap: int = 40) -> str:
+    rows = [i for i in store.list_ideas() if i.get('Status') in ('open', 'dismissed', 'snoozed')][:cap]
     out = []
     for i in rows:
         out.append(f"- ({i['Status']}) {i['Text']}")

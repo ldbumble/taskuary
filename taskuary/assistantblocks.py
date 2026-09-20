@@ -46,10 +46,11 @@ class Block(NamedTuple):
 # ── the SQL, for the blocks that are one statement ───────────────────────────────────────────────
 # Only three are. The rest read through several store helpers and compose the section in Python -
 # `kind='view'` says so out loud rather than printing a SELECT that is not the one the block ran.
+# store.recent_messages - the auto-reply match is a Python regex over these rows
 OOO_SQL = ("SELECT MessageId, ConversationId, Channel, Direction, Subject, FromName, FromEmail, SentAt, Status, TaskId, substr(BodyText, 1, 400) BodyText "
-           "FROM message WHERE Status NOT IN ('context','history','skipped') AND SentAt>=? ORDER BY SentAt DESC LIMIT ?")   # store.recent_messages; the auto-reply match is a Python regex over these rows
-ALREADY_SAID_SQL = 'SELECT * FROM idea ORDER BY IdeaId DESC'                                                                # store.list_ideas
-NOTES_SQL = 'SELECT * FROM setting'                                                                                         # store.get_settings -> assistant_notes, assistant_notes_at
+           "FROM message WHERE Status NOT IN ('context','history','skipped') AND SentAt>=? ORDER BY SentAt DESC LIMIT ?")
+ALREADY_SAID_SQL = 'SELECT * FROM idea ORDER BY IdeaId DESC'      # store.list_ideas
+NOTES_SQL = 'SELECT * FROM setting'                               # store.get_settings -> assistant_notes, assistant_notes_at
 
 
 # ── the builds: one wrapper per block, each calling what already does the work ───────────────────
@@ -71,7 +72,7 @@ def _ooo(store, o):
 
 def _calendar(store, o):
     from .assistant import _calendar as cal
-    return cal(store), []
+    return cal(store, o['days']), []
 
 def _arrivals(store, o):
     from .assistant import _recent
@@ -83,11 +84,11 @@ def _done(store, o):
 
 def _open(store, o):
     from .assistant import _open as open_
-    return open_(store), []
+    return open_(store, o.get('cap') or 20), []
 
 def _already_said(store, o):
     from .assistant import _said
-    return _said(store), []
+    return _said(store, o.get('cap') or 40), []
 
 def _notes(store, o):
     from .assistant import _notes_block
@@ -185,12 +186,17 @@ _WORDS = {1: 'one', 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six', 7: 'se
 def by_id(bid: str): return _BY_ID.get(bid)
 
 
+def said_number(n) -> str:
+    """A window in the payload's own English. "the last two days" is what the heads and the
+    (nothing arrived ...) lines have said since the day they were written, so a window that widens
+    has to widen in the words too - in the body as much as in the head."""
+    return _WORDS.get(n, str(n))
+
+
 def headline(b: Block, o: dict) -> str:
-    """The section head as the model sees it. A window renders as an English WORD - "the last two
-    days" is what the payload has said since the day it was written, and this task may not change a
-    character of it; a widened window says "the last 30 days" and the head stops lying."""
+    """The section head as the model sees it, with the block's real window in it."""
     if not b.window: return b.heading
-    w = _WORDS.get(o.get(b.window[0]), str(o.get(b.window[0], b.window[1])))
+    w = said_number(o.get(b.window[0], b.window[1]))
     return b.heading.format(**{**o, b.window[0]: w, b.window[0].upper(): w.upper()})
 
 
@@ -220,5 +226,4 @@ def render(store, b: Block, o: dict) -> tuple:
     try: return b.build(store, o)
     except Exception as e:
         logger.warning(f'assistant block {b.id} failed - {e}')
-        if b.proposes: return [], []                  # a producer's caller iterates rows: hand it none, not a sentence
         return f'(this block could not be read: {str(e)[:120]})', []

@@ -4,7 +4,7 @@
 
 **Goal:** Make every context block the Assistant reads a named, declared, per-report-configurable thing, shown on the report card with its tables and SQL and its token cost, and name the block behind every line the post says.
 
-**Architecture:** A block registry (`taskuary/assistantblocks.py`) declares each context block: label, kind (`query` | `view`), the tables it reads, its SQL or its builder, its window, its cap, whether it is on by default and whether it also proposes a row. `assistant.inputs()` stops being nine hardcoded calls and becomes a loop over the blocks a report resolved. The report's `ConfigJson` holds overrides only. The Reports card renders the registry. Each block records the message and task ids it contributed, giving a `mid -> block` index that attributes lines without asking the model.
+**Architecture:** A block registry (`taskuary/assistantblocks.py`) declares each context block: label, kind (`query` | `view`), the tables it reads, its SQL or its builder, its window, its cap, whether it is on by default and whether it also proposes a row. `assistant.inputs()` stops being nine hardcoded calls and becomes a loop over the blocks a report resolved. The report's `ConfigJson` holds overrides only. The Reports card renders the registry. Each block records the message and task ids it contributed; `build_inputs` returns that `mid -> block` index alongside the text, and it attributes lines without asking the model.
 
 **Tech Stack:** Python 3.10, FastAPI, SQLite (`taskuary/store.py`), React 18 + MUI 6 (`website/src/ReportsView.jsx`), pytest, node --test.
 
@@ -37,7 +37,7 @@
 
 ### Task 1: The block registry and the loop
 
-The registry, the fourteen blocks, and `inputs()` rewritten to walk them. No config is read yet and
+The registry, the sixteen blocks, and `inputs()` rewritten to walk them. No config is read yet and
 no UI changes. The deliverable is that nothing changes and a test proves it.
 
 **Files:**
@@ -52,7 +52,7 @@ no UI changes. The deliverable is that nothing changes and a test proves it.
     (`'query'` or `'view'`), `tables: tuple[str, ...]`, `heading: str`, `build: callable`,
     `sql: str | None = None`, `window: tuple[str, int, str] | None = None`, `cap: int | None = None`,
     `default_on: bool = True`, `proposes: bool = False`, `setting: str | None = None`.
-  - `assistantblocks.CATALOGUE: tuple[Block, ...]` — the fourteen, in post order.
+  - `assistantblocks.CATALOGUE: tuple[Block, ...]` — the sixteen, in catalogue order.
   - `assistantblocks.by_id(bid: str) -> Block | None`.
   - `render(store, block, opts) -> tuple[str, list[int]]` — the block's rendered text and the
     message ids it contributed. Named `render`, not `build`: `Block.build` is the field holding the
@@ -71,11 +71,12 @@ import tests.test_appfacts as A
 
 class CatalogueTests(unittest.TestCase):
     def test_every_block_says_what_it_reads(self):
-        self.assertGreaterEqual(len(B.CATALOGUE), 14)
+        self.assertGreaterEqual(len(B.CATALOGUE), 16)
         seen = set()
         for b in B.CATALOGUE:
             self.assertNotIn(b.id, seen, f'{b.id} declared twice'); seen.add(b.id)
-            self.assertTrue(b.label and b.heading, f'{b.id} has no label or heading')
+            self.assertTrue(b.label, f'{b.id} has no label')
+            self.assertEqual(bool(b.heading), not b.proposes, f'{b.id}: a context block needs a heading, a producer must not have one')
             self.assertIn(b.kind, ('query', 'view'), f'{b.id} is neither a query nor a view')
             self.assertTrue(b.tables, f'{b.id} names no table')
             self.assertTrue(callable(b.build), f'{b.id} has no builder')
@@ -123,8 +124,14 @@ class Block(NamedTuple):
     label: str                      # what the card calls it
     kind: str                       # 'query' - one SELECT, shown verbatim | 'view' - composed in code
     tables: tuple                   # the Taskuary tables it reads, for the card
-    heading: str                    # the section head in the model's input
-    build: Callable                 # (store, opts) -> (text, [message ids it contributed])
+    heading: str = None             # a CONTEXT block's section head in the model's input.
+                                    # None for a PRODUCER block: its rows render under CANDIDATES:,
+                                    # which is where they have always rendered - giving them a
+                                    # section of their own would change today's payload, and the
+                                    # first global constraint says it may not.
+    build: Callable                 # CONTEXT: (store, opts) -> (text, [mids]).
+                                    # PRODUCER: (store, opts) -> ([candidate dicts], [mids]); each
+                                    # dict carries 'block' so Task 4 attributes it with no model.
     sql: str = None                 # required when kind == 'query'
     window: tuple = None            # (unit, default, label) - ('days', 2, 'How far back...') or None
     knobs: tuple = ()               # any OTHER numbers the owner may turn: (name, default, label).
@@ -145,7 +152,7 @@ WHERE t.Status IN ('open', 'in_progress', 'waiting')
   AND IFNULL((SELECT MAX(CreatedAt) FROM message WHERE TaskId = t.TaskId), '') < :cut
   AND NOT EXISTS (SELECT 1 FROM run WHERE TaskId = t.TaskId AND Status = 'running')
 ORDER BY t.UpdatedAt LIMIT :cap"""
-# One constant per QUERY block - fourteen entries, six of them views with no constant. The table
+# One constant per QUERY block - sixteen entries, four of them views with no constant. The table
 # below this code block names every id, the function it delegates to and the tables it reads; a
 # query block's constant is the statement that function already runs, lifted verbatim.
 
@@ -175,8 +182,8 @@ CATALOGUE = (
           'ARRIVED IN THE LAST {days} DAYS (xN = that many alike; each line carries the latest message\'s words, '
           "a report's schedule, and a failure's cause)",
           _arrivals, window=('days', 2, 'How far back to roll up arrivals')),
-    # ...and the other twelve, in the order of the table below, each with today's section head
-    # from inputs() as its `heading`.
+    # ...and the other fourteen, in the order of the table below. A CONTEXT block's `heading` is
+    # today's section head from inputs(); a PRODUCER block has heading=None.
 )
 
 _BY_ID = {b.id: b for b in CATALOGUE}
@@ -210,29 +217,49 @@ def render(store, b: Block, o: dict) -> tuple:
         return f'(this block could not be read: {str(e)[:120]})', []
 ```
 
-**The fourteen, each naming the function that already does its work.** No logic moves in this task:
+**The sixteen, each naming the function that already does its work.** No logic moves in this task:
 a `view` wrapper delegates to the named function; a `query` block's `sql` is the statement its named
 function runs today, lifted verbatim into a module constant so the card can print the same text the
 database receives. `heading` is today's section head from `inputs()` with the hardcoded "two days"
 replaced by `{days}`, so a widened window does not leave the payload lying about itself.
 
-| id | label | kind | delegates to | tables | window / knobs | setting | on | proposes |
-|---|---|---|---|---|---|---|---|---|
-| `threads` | What people said | view | `_people_context(store, days)` | message, route, task | days 2 | — | yes | |
-| `arrivals` | What arrived | view | `_recent(store, days)` | message, route, source | days 2 | — | yes | |
-| `calendar` | Calendar | query | `_calendar(store)` | message | days 2 | — | yes | |
-| `open_work` | Open work | query | `_open(store)` | task, run, review | cap 20 | — | yes | |
-| `gone_quiet` | Work gone quiet | query | `cold(store, days)` | task, comment, message, run | days 3 | `assistant_cold_days` | yes | yes |
-| `waiting_on` | Waiting on them | query | `followups(store, hours, ('followup',))` | message, review | hours 24 | `assistant_followup_hours` | yes | yes |
-| `promised` | What I promised | query | `followups(store, hours, ('promise',))` | message, review | hours 24 | `assistant_followup_hours` | yes | yes |
-| `meeting_prep` | Meeting prep | query | `prep(store)` | message | — | — | yes | yes |
-| `done_this_week` | Done this week | query | `_done(store, days)` | task, run | days 7 | — | yes | |
-| `already_said` | Already said | query | `_said(store)` | idea | cap 40 | — | yes | |
-| `connectors` | Connectors mentioned | query | `connect_ideas(store, days, floor)` | message, routing_fact, doc | days 30, floor 3 | — | yes | yes |
-| `health` | App health | query | `health_ideas(store)` | source, report_run, connector | — | — | yes | yes |
-| `knowledge` | Knowledge base | view | `knowledge.block(store, facts)` | kb_fts | — | — | **no** | |
-| `system_checks` | Configured systems | view | `system_checks(store, ids, inline)` | source, connector | — | — | yes | |
-| `notes` | My notes from last check | query | `_notes_block(store)` | setting | — | — | yes | |
+**CONTEXT blocks** — each renders its own section, in this order, which is the order `inputs()`
+renders them today. `heading` is that section's head verbatim, with the hardcoded "two days"
+replaced by `{days}`.
+
+| id | label | kind | delegates to | tables | window | on |
+|---|---|---|---|---|---|---|
+| `knowledge` | Knowledge base | view | `knowledge.block(store, facts)` | kb_fts | — | yes |
+| `system_checks` | Configured systems | view | `system_checks(store, ids, inline)` | source, connector | — | yes |
+| `threads` | What people said | view | `_people_context(store, days)` | message, route, task | days 2 | yes |
+| `ooo` | Out of office | query | `ooo(store)` | message | — | yes |
+| `calendar` | Calendar | query | `_calendar(store)` | message | days 2 | yes |
+| `arrivals` | What arrived | view | `_recent(store, days)` | message, route, source | days 2 | yes |
+| `done_this_week` | Done this week | query | `_done(store, days)` | task, run | days 7 | yes |
+| `open_work` | Open work | query | `_open(store)` | task, run, review | cap 20 | yes |
+| `already_said` | Already said | query | `_said(store)` | idea | cap 40 | yes |
+| `notes` | My notes from last check | query | `_notes_block(store)` | setting | — | yes |
+
+**PRODUCER blocks** — `heading=None`. Each returns candidate dicts, which render under `CANDIDATES:`
+exactly as they do today, and each also posts a row of its own. `proposes=True` on all six.
+
+| id | label | kind | delegates to | tables | window / knobs | setting |
+|---|---|---|---|---|---|---|
+| `waiting_on` | Waiting on them | query | `followups(store, hours, ('followup',))` | message, review | hours 24 | `assistant_followup_hours` |
+| `promised` | What I promised | query | `followups(store, hours, ('promise',))` | message, review | hours 24 | `assistant_followup_hours` |
+| `meeting_prep` | Meeting prep | query | `prep(store)` | message | — | — |
+| `gone_quiet` | Work gone quiet | query | `cold(store, days)` | task, comment, message, run | days 3 | `assistant_cold_days` |
+| `connectors` | Connectors mentioned | query | `connect_ideas(store, days, floor)` | message, routing_fact, doc | days 30, floor 3 | — |
+| `health` | App health | query | `health_ideas(store)` | source, report_run, connector | — | — |
+
+`waiting_on` and `promised` are the same function with a different `want` tuple, and stay two
+entries because `assistant_producers` already lets the owner run one without the other. A producer
+absent from `assistant_producers` resolves `default_on: false` — that mapping
+(`followup`->`waiting_on`, `promise`->`promised`, `prep`->`meeting_prep`, `cold`->`gone_quiet`) lives
+in `defaults()`.
+
+`NOW`, the uptime paragraph and `_verdicts_block` are NOT blocks and are not configurable: the first
+two are the clock, and the third is a cross-check over whatever blocks ran.
 
 `waiting_on` and `promised` are the same function with a different `want` tuple, and stay two
 entries because `assistant_producers` already lets the owner run one without the other. A producer
@@ -272,7 +299,8 @@ class DefaultsAreTodayTests(unittest.TestCase):
         text = assistant.inputs(s, [])
         for b in B.CATALOGUE:
             if not B.defaults(s, b)['on']: continue
-            head = b.heading.split('(')[0].strip().rstrip(':')
+            if not b.heading: continue                      # a producer renders under CANDIDATES, not its own head
+            head = b.heading.split('(')[0].split('{')[0].strip().rstrip(':')
             with self.subTest(block=b.id): self.assertIn(head, text, f'{b.id} is on by default and is not in the payload')
 ```
 
@@ -287,11 +315,15 @@ In `taskuary/assistant.py`, replace the body of `inputs` (currently lines 867-89
 gains `blocks=None` — a resolved `{block_id: opts}` dict, or `None` for the declared defaults.
 
 ```python
-def inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=None, watch_sources=None, blocks=None) -> str:
-    """Everything one check reads, as the model sees it - the same text is the Reports tab's Preview
-    (facts) and the run record (reports.run_report_source), so what it was given is never a guess.
+def build_inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=None, watch_sources=None, blocks=None) -> tuple:
+    """(the text the model sees, {message id: the block that supplied it}). The same text is the
+    Reports tab's Preview (facts) and the run record (reports.run_report_source), so what it was
+    given is never a guess; the index is how Task 4 attributes a line without asking the model.
     `blocks` is the report's resolved choice; None means the declared defaults, which is what this
-    function read when the list was hardcoded."""
+    function read when the list was hardcoded.
+
+    Returns the index rather than stashing it on the function: this install runs two Assistant
+    reports, and a module-level `last_mids` would have the second one reading the first's sources."""
     from . import assistantblocks as blk
     now, mids = datetime.now(), {}
     chosen = blocks if blocks is not None else {b.id: blk.defaults(store, b) for b in blk.CATALOGUE}
@@ -306,9 +338,33 @@ def inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=None, 
         for m in got: mids[int(m)] = b.id
         parts.append('\n\n' + b.heading.format(**o) + ':\n' + text)
     parts.append(_verdicts_block(store, cands, ''))
-    inputs.last_mids = mids            # Task 4 reads this; harmless until then
-    return ''.join(parts)
+    return ''.join(parts), mids
+
+
+def inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=None, watch_sources=None, blocks=None) -> str:
+    """The text alone, for every caller that does not need to know which block said what."""
+    return build_inputs(store, cands, head, watch_source_ids, watch_sources, blocks)[0]
 ```
+
+A producer block contributes to `cands`, not to its own section, so the loop splits on `heading`:
+
+```python
+    for b in blk.CATALOGUE:
+        o = chosen.get(b.id)
+        if not o or not o.get('on'): continue
+        if b.id == 'system_checks': o = o | {'source_ids': watch_source_ids, 'inline': watch_sources}
+        if b.id == 'knowledge': o = o | {'facts': ' '.join(str(c.get('facts') or '') for c in cands)[:4000]}
+        out, got = blk.render(store, b, o)
+        for m in got: mids[int(m)] = b.id
+        if b.heading: parts.append('
+
+' + b.heading.format(**o) + ':
+' + out)
+```
+
+`knowledge` and `system_checks` render where `inputs()` renders them today, which is why they sit
+first and second in the context table - the loop walks the catalogue in order and the order IS the
+payload.
 
 Keep `_verdicts_block` outside the loop: it is not a block, it is a cross-check over the blocks that
 ran. Extract today's `uptime` paragraph into `_uptime_block(store)` unchanged.
@@ -665,7 +721,7 @@ const BlockDetail = ({ row }) => !row ? null : (
 ```
 
 Fetch `blockRows` from `/api/assistant/blocks?source_id=` on mount and after each change, debounced
-300ms so a held arrow key does not run fourteen COUNT queries per keystroke.
+300ms so a held arrow key does not run sixteen COUNT queries per keystroke.
 
 - [ ] **Step 6: Update the saved summary**
 
@@ -691,7 +747,7 @@ server:
 export const BLOCKS = [
   { id: "threads", label: "What people said", days: 2 },
   { id: "arrivals", label: "What arrived", days: 2 },
-  // ...and the other twelve, ids and labels copied from the table in Task 1, same order.
+  // ...and the other fourteen, ids and labels copied from the table in Task 1, same order.
 ];
 
 export const blockRowsOf = (cfg) => {
@@ -746,7 +802,7 @@ git commit -m "feat: the Assistant report card shows the Taskuary tables it read
 - Test: `tests/test_assistant_blocks.py`
 
 **Interfaces:**
-- Consumes: `inputs.last_mids` (`{mid: block_id}`) from Task 1, `resolve` from Task 2.
+- Consumes: `build_inputs(...) -> (text, mids)` from Task 1, `resolve` from Task 2.
 - Produces: `ActionJson.source` — `{'block': str, 'window': str, 'rows': list[int]}`, and a
   `reviewed` dict keyed by block id instead of hand-counted fields.
 
@@ -801,7 +857,7 @@ Every `proposes` block sets `'block': <its id>` on the candidates it returns —
 `prep`, `connect_ideas`, `health_ideas`. In `run()`, after `say` is final:
 
 ```python
-    mids = getattr(inputs, 'last_mids', {}) or {}
+    # `read` is already built by run() via build_inputs; keep its mids rather than rebuilding
     say = [s | {'source': source_of(s, mids, chosen)} for s in say]
 ```
 

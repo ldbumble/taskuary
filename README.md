@@ -28,6 +28,8 @@ Taskuary is early—currently **v0.3.5.7**—so breaking changes are still possi
 
 <p align="center"><sub>The real app with invented data. Nothing connects, sends, or runs.</sub></p>
 
+<p align="center"><b><a href="https://taskuary.com/docs/">Read the documentation</a></b> — installation, the first run, what to connect, and every setting.</p>
+
 ## What Taskuary can do
 
 One request, from arrival to your approval. Follow Ruth's request for the latest vendor spend

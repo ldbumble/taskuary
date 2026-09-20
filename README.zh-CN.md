@@ -29,6 +29,8 @@ Taskuary 仍处于早期阶段，目前为 **v0.3.5.7**，1.0 之前可能出现
 
 <p align="center"><sub>真实界面，虚构数据。演示不会连接外部服务、发送消息或运行智能体。</sub></p>
 
+<p align="center"><b><a href="https://taskuary.com/docs/">阅读文档（英文）</a></b> —— 安装、初次运行、连接哪些系统，以及每一项设置。</p>
+
 想从 Qwen Code 开始？可以使用 **本地 Taskuary + Ollama 分拣消息 + Qwen Code 编程**，
 无需把 Claude Code、Codex 或 Gemini 作为必选依赖。
 Qwen Code 使用哪个云端或本地模型，由你配置。见[使用 Qwen Code](#使用-qwen-code)。

@@ -8,11 +8,13 @@
   --alert:#8a3646; --gold:#d4a72c;
   --sans:'IBM Plex Sans','Segoe UI',system-ui,sans-serif;
   --mono:'IBM Plex Mono',Consolas,monospace;
-  --rail:236px; --page:760px; --gutter:56px;
+  --rail:236px; --page:760px; --gutter:88px;
   /* the rail, the gutter and the page, plus the shell's own 24px each side. Naming the sum is what
      keeps the block CENTRED: a grid that is wider than rail+gutter+page gives the slack to the
-     text column, which then sits left of a window with empty space beside it. */
-  --shell:1100px;
+     text column, which then sits left of a window with empty space beside it. The gutter is the
+     one number that decides whether the rail reads as a menu or as the first column of the text;
+     the slack it spends was sitting unused in the margins (the owner, twice, 2026-09-18). */
+  --shell:1132px;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){

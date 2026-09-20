@@ -575,12 +575,18 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
         if not chat: raise RuntimeError('this chat message has no chat id to answer in')
         return send_teams(store, chat, body, _source_connector_id(store, 'teams', msg.get('SourceName')))
     if ch in ('telegram', 'whatsapp'):
-        from . import messengers
+        from . import chatformat, messengers
         chat = str(msg.get('ConversationId') or '').split(':', 1)[-1]   # 'telegram:<id>' / 'whatsapp:<jid>'
         if not chat: raise RuntimeError('this chat message has no chat id to answer in')
         send = messengers.tg_send if ch == 'telegram' else messengers.wa_send
         connector_id = _source_connector_id(store, ch, chat)
-        return send(store, chat, body, connector_id) if connector_id else send(store, chat, body)
+        # A reply in the owner's name carries no Taskuary chrome, but a model wrote it and models
+        # reach for markdown - and the person reading it is on the same WhatsApp that prints **
+        # as punctuation and folds a long bubble behind "Read more". Spell it for the channel and
+        # send it whole; the first piece is the reply, so its receipt is the one that answers.
+        said = [p for p in chatformat.split(chatformat.render(body, ch)) if p.strip()] or [body]
+        out = [send(store, chat, p, connector_id) if connector_id else send(store, chat, p) for p in said]
+        return out[0]
     if ch == 'imessage':
         from .imessage import send_text
         chat = str(msg.get('ConversationId') or '')[9:]                 # 'imessage:<chat guid>'
@@ -659,8 +665,10 @@ def notify(store, text: str, about: dict = None) -> int:
         if about and about.get('Channel') == ch and str(about.get('ConversationId') or '').endswith(chat):
             continue
         try:
-            if ch == 'telegram': messengers.tg_send(store, chat, text, connector_id)
-            elif ch == 'whatsapp': messengers.wa_send(store, chat, text, connector_id)
+            from . import chatformat
+            said = chatformat.render(text, ch)          # ** is punctuation on a phone, not emphasis
+            if ch == 'telegram': messengers.tg_send(store, chat, said, connector_id)
+            elif ch == 'whatsapp': messengers.wa_send(store, chat, said, connector_id)
             else: send_teams(store, chat, text, connector_id)
             sent += 1
         except Exception as e:

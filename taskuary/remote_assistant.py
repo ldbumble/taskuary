@@ -710,14 +710,25 @@ def decision_block(store, item: dict | None) -> str:
     try:
         if item.get('mid'):
             msg = store.get_message(int(item['mid'])) or {}
-            kin = thread_line(store, msg)
+            is_report = item.get('kind') == 'report' or msg.get('Channel') == 'report'
+            # a report is OURS, not a letter and not a thread: "Report context · 35 messages
+            # combined by triage" counted the mail it was WRITTEN FROM as if it were a
+            # conversation somebody was having with you
+            kin = '' if is_report else thread_line(store, msg)
             if kin: parts.append(kin)
             # WHOLE, not a teaser: _cut also flattened every paragraph, and the rest of it existed
             # only on the desktop. send() splits on paragraph boundaries, so length costs bubbles.
             body = str(msg.get('BodyText') or '').strip()
             # a REPORT is ours, not a letter: the card prints its sections, and "THEY WROTE" over a
             # quoted block credits a person with what Taskuary itself wrote
-            if body and (item.get('kind') == 'report' or msg.get('Channel') == 'report'): parts.append(_plain(body))
+            # A REPORT arrives as its sections, each its own bubble, with the `--- raw data ---`
+            # evidence dump cut off exactly where the desktop cuts it. It used to arrive whole:
+            # seven thousand characters in two bubbles, both folded behind "Read more", four
+            # thousand of them the rows the model had been given (the owner, 2026-09-19).
+            if body and is_report:
+                from . import chatformat
+                said = chatformat.blocks(body)
+                if said: parts.append(chatformat.BREAK + chatformat.BREAK.join(said))
             elif body: parts.append('THEY WROTE\n' + _quote(_plain(body)))
         if item.get('rid'):
             rv = store.get_review(int(item['rid'])) or {}
@@ -815,25 +826,33 @@ def resolve_index(store, channel: str, chat: str, text: str) -> tuple[str, bool]
 
 
 def _chunks(text: str, limit=3900) -> list[str]:
-    """Split a long walkthrough on paragraph boundaries instead of silently truncating it."""
-    text = str(text or '').strip()
-    if not text: return []
-    out = []
-    while len(text) > limit:
-        cut = max(text.rfind('\n\n', 0, limit), text.rfind('\n', 0, limit), text.rfind(' ', 0, limit))
-        if cut < limit // 2: cut = limit
-        out.append(text[:cut].rstrip()); text = text[cut:].lstrip()
-    if text: out.append(text)
-    return out
+    """Split a long walkthrough where a reader would split it (chatformat.split).
+
+    This used to take max() of the paragraph, line and space positions - and the space is
+    always the latest of the three, so it won every time and the break landed mid-sentence:
+    '...asked Fri 18 Sep 10:34 re "MFA and' (the owner, 2026-09-19, with a screenshot)."""
+    from . import chatformat
+    return chatformat.split(str(text or '').strip(), limit)
 
 
 def send(store, channel: str, chat: str, text: str, connector_id: int = None):
-    from . import messengers
+    """Everything we say to the owner leaves through here, so this is where it is SPELLED.
+
+    WhatsApp formats client-side, so its own emphasis reaches it; Telegram renders nothing
+    without a parse mode and neither sender sets one, so it gets the words bare. A producer
+    writes one markup and puts chatformat.BREAK wherever a new bubble should start.
+
+    Only the opening bubble wears the name. Four of them labelled "Taskuary (2/4):" over a
+    heading that already says what it is read as machinery rather than somebody talking."""
+    from . import chatformat, messengers
     out = messengers.tg_send if channel == 'telegram' else messengers.wa_send
-    # every road to this chat passes here, so this is where what we offered is written down
+    # every road to this chat passes here, so this is where what we offered is written down -
+    # off the text AS WRITTEN, before any of it is respelled for the channel
     try: remember_offered(store, channel, chat, text)
     except Exception as e: logger.debug(f'could not keep the offered options for {channel}: {e}')
-    chunks = _chunks(text)
-    for i, chunk in enumerate(chunks):
-        prefix = 'Taskuary:\n' if i == 0 else f'Taskuary ({i + 1}/{len(chunks)}):\n'
-        out(store, chat, prefix + chunk, connector_id=connector_id)
+    msgs = []
+    for part in str(text or '').split(chatformat.BREAK):
+        shown = chatformat.render(part, channel)
+        if shown.strip(): msgs.extend(chatformat.split(shown, chatformat.HARD))
+    for i, msg in enumerate(msgs):
+        out(store, chat, ('Taskuary:\n' + msg) if i == 0 else msg, connector_id=connector_id)

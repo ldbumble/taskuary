@@ -169,6 +169,18 @@ class ResolveTests(unittest.TestCase):
                 self.assertFalse(chosen['open_work']['on'], 'an unreadable block value must be off, not on')
                 self.assertTrue(chosen['threads']['on'])          # ...and it does not poison the readable ones
 
+    def test_a_null_blocks_means_no_choice_was_recorded(self):
+        """DECIDED, so Task 3 does not discover it by shipping: `blocks: null` is ABSENT, not "a
+        choice naming nothing". null is how every serialiser says "there is nothing here", so a
+        panel that blanks the field must not silently switch a working report off. `{}` is the empty
+        CHOICE - the owner opened the panel and ticked nothing - and that one IS all-off."""
+        s = A.store()
+        self.assertEqual(B.resolve(s, {'type': 'assistant', 'blocks': None}), B.resolve(s, {'type': 'assistant'}))
+        self.assertTrue(B.reads_taskuary(B.resolve(s, {'type': 'assistant', 'blocks': None})))
+        self.assertFalse(B.reads_taskuary(B.resolve(s, {'type': 'assistant', 'blocks': {}})))
+        # ...and a null `blocks` on a report with sources still reads no Taskuary block, as an absent one does
+        self.assertFalse(B.reads_taskuary(B.resolve(s, {'type': 'assistant', 'blocks': None, 'watch_source_ids': [4]})))
+
     def test_a_stored_key_the_block_never_declared_is_ignored(self):
         chosen = B.resolve(A.store(), {'type': 'assistant', 'blocks': {'open_work': {'on': True, 'cap': 3, 'source_ids': [9], 'days': 'x'}}})
         self.assertEqual(chosen['open_work']['cap'], 3)
@@ -285,15 +297,27 @@ class WeighTests(unittest.TestCase):
         """Ruling R: one GET renders most of an Assistant payload, and the card asks as the owner
         types."""
         s = F.store(); chosen = B.resolve(s, {'type': 'assistant'})
-        B._WEIGHED.clear()
+        B._WEIGHED.clear(); self.addCleanup(B._WEIGHED.clear)
         first = B.weighed(s, chosen)
         with mock.patch('taskuary.assistantblocks.weigh', side_effect=AssertionError('priced again')):
-            self.assertIs(B.weighed(s, chosen), first)
-        B._WEIGHED.clear()
+            self.assertEqual(B.weighed(s, chosen), first)
         with mock.patch('taskuary.assistantblocks.weigh', return_value=[]) as w:
             B.weighed(s, chosen, ttl=0); B.weighed(s, chosen, ttl=0)
             self.assertEqual(w.call_count, 2, 'ttl=0 must always read fresh')
-        B._WEIGHED.clear()
+
+    def test_the_cache_hands_out_a_copy_and_never_answers_for_another_store(self):
+        """Two latent bugs in one entry: a caller editing a row would have edited the cache, and the
+        key held id(store), which Python reuses the moment a store is collected."""
+        s = F.store(); chosen = B.resolve(s, {'type': 'assistant'})
+        B._WEIGHED.clear(); self.addCleanup(B._WEIGHED.clear)
+        B.weighed(s, chosen)                                   # fills the entry
+        B.weighed(s, chosen)[0]['tokens'] = 999_999            # ...and this one is served FROM it
+        self.assertNotEqual(B.weighed(s, chosen)[0]['tokens'], 999_999, 'a caller edited the cache')
+        # a second store standing where the first one's id used to be must be priced, not answered for
+        key = next(iter(B._WEIGHED))
+        s2 = F.store()
+        B._WEIGHED[key] = (B._WEIGHED[key][0], [{'id': 'stale'}], s2)
+        self.assertNotEqual([r['id'] for r in B.weighed(s, chosen)], ['stale'])
 
 
 class DoneThisWeekHeadTests(unittest.TestCase):
@@ -364,10 +388,57 @@ class IdentityTests(unittest.TestCase):
 
     def test_the_apps_own_assistant_is_still_the_assistant_thread(self):
         s = F.store()
-        src = assistant.source(s)
+        src = assistant.seeded_source(s)
+        self.assertEqual(src['Owner'], 'template')
         self.assertFalse(assistant.own_identity(s, src['SourceId']), 'the seeded Assistant must keep the `assistant` thread')
         self.assertFalse(assistant.own_identity(s, None))
         self.assertTrue(assistant.own_identity(s, int(src['SourceId']) + 999))
+
+    def test_deleting_the_seeded_row_does_not_hand_its_thread_to_another_report(self):
+        """Deleting the seeded Assistant is the documented off switch (store.py). Anchored on
+        `source()` - the FIRST assistant-typed report - the owner's own Assistant report inherited
+        the exception the moment that row went, taking the shared thread and the shared idea
+        namespace with it: exactly the collision own_identity exists to prevent."""
+        from taskuary import reports
+        s = F.store()
+        mine = s.save_source({'Channel': 'report', 'Address': 'mine@report', 'Active': 1, 'ConfigJson': json.dumps(
+            {'title': 'My assistant', 'type': 'assistant', 'blocks': {'open_work': {'on': True}}})}, 'owner')
+        s.delete_source(assistant.seeded_source(s)['SourceId'])
+        self.assertIsNone(assistant.seeded_source(s))
+        self.assertEqual(assistant.source(s)['SourceId'], mine)       # source() now names the owner's report...
+        self.assertTrue(assistant.own_identity(s, mine))              # ...and identity does not follow it
+        reports.run_report_source(s, s.get_source(mine), lambda *a, **k: json.dumps(
+            {'say': [{'key': 'idea:stuck', 'text': 'Something looks stuck.', 'why': 'nothing moved'}]}))
+        self.assertIn(f'report:{mine}:idea:stuck', {i['Key'] for i in s.list_ideas()})
+        posts = [m for m in s.recent_messages('2000-01-01', limit=80) if str(m.get('ConversationId') or '') == f'assistant:{mine}']
+        self.assertTrue(posts and posts[0]['FromName'] == 'My assistant')
+
+
+class NotesAreOneChecksOwnTests(unittest.TestCase):
+    """Ruling W: the note is a check's private memory of its own last run. One global key meant a
+    second Assistant report read the first's note and then overwrote it."""
+    def test_each_report_writes_and_reads_its_own_note(self):
+        from taskuary import reports
+        s = F.store()
+        mine = s.save_source({'Channel': 'report', 'Address': 'mine@report', 'Active': 1, 'ConfigJson': json.dumps(
+            {'title': 'My assistant', 'type': 'assistant', 'blocks': {'open_work': {'on': True}}})}, 'owner')
+        reports.run_report_source(s, s.get_source(mine), lambda *a, **k: json.dumps(
+            {'say': [], 'notes': 'the importer run is the one to watch'}))
+        settings = s.get_settings()
+        self.assertIn('the importer', settings[f'assistant_notes:{mine}'])
+        self.assertEqual(settings.get('assistant_notes'), F.store().get_settings().get('assistant_notes'),
+                         "a report overwrote the app Assistant's note")
+        # ...and each one READS its own: the seeded note must not leak into this report's payload
+        chosen = B.resolve(s, {'type': 'assistant', 'blocks': {'notes': {'on': True}}})
+        self.assertIn('the importer', assistant.inputs(s, [], blocks=chosen, report_id=mine))
+        self.assertNotIn('the importer', assistant.inputs(s, [], blocks=chosen))
+        self.assertIn('Dana still owes the ledger', assistant.inputs(s, [], blocks=chosen))   # the seeded one's, unmoved
+
+    def test_the_seeded_assistant_keeps_the_bare_key(self):
+        s = F.store()
+        self.assertEqual(assistant.notes_key(s, None), 'assistant_notes')
+        self.assertEqual(assistant.notes_key(s, assistant.seeded_source(s)['SourceId']), 'assistant_notes')
+        self.assertEqual(assistant.notes_key(s, 4242), 'assistant_notes:4242')
 
 
 class ReadsNothingTests(unittest.TestCase):

@@ -6826,8 +6826,10 @@ def settings():
     places to drift out of step with store.DEFAULT_SETTINGS; the page reads it from the same dict
     the install was seeded from, so it cannot disagree with what actually shipped."""
     from .store import DEFAULT_SETTINGS
-    rows = [s for s in store.list_settings() if s['Name'] not in ('ingest_status', 'assistant_last_run', 'assistant_notes', 'assistant_notes_at', 'pane_geometry')
-            and not s['Name'].startswith('report_last_run:')]
+    # `assistant_notes*` is a check's private memory of its own last run, one key per report
+    # (assistant.notes_key) - bookkeeping, not a knob, however many reports there are
+    rows = [s for s in store.list_settings() if s['Name'] not in ('ingest_status', 'assistant_last_run', 'pane_geometry')
+            and not s['Name'].startswith('report_last_run:') and not s['Name'].startswith('assistant_notes')]
     return {'data': [{**r, 'Default': DEFAULT_SETTINGS.get(r['Name'])} for r in rows]}
 
 @app.patch('/api/settings')

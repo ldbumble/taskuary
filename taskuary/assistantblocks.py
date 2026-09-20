@@ -100,7 +100,9 @@ def _already_said(store, o):
 
 def _notes(store, o):
     from .assistant import _notes_block
-    return '\n\n' + _notes_block(store), []                           # whole=True: the head carries the note's timestamp
+    # `report` is the report whose OWN note this is: each Assistant report keeps its own memory of
+    # its own last run (assistant.notes_key). None is the seeded Assistant's, the bare key.
+    return '\n\n' + _notes_block(store, o.get('report')), []          # whole=True: the head carries the note's timestamp
 
 def _waiting_on(store, o):
     from .assistant import followups
@@ -263,11 +265,16 @@ def resolve(store, cfg: dict) -> dict:
     EVERY malformed shape fails toward not spending the owner's tokens. `ConfigJson` is free text on
     POST /api/sources, and this runs inside the scheduled dispatch BEFORE assistant.run - so a bad
     value used to be a report that silently stopped posting, not a report that read too much."""
-    raw, named = cfg.get('blocks'), 'blocks' in cfg
+    raw = cfg.get('blocks')
+    # `blocks: null` is ABSENT, not "a choice naming nothing". null is how every serialiser says
+    # "there is nothing here", so a UI that blanks the field means "I recorded no choice" - and
+    # reading that as all-off would let one UI bug silently blank a working report. `{}` is the
+    # empty CHOICE and does mean all-off: the owner opened the panel and ticked nothing.
     over = raw if isinstance(raw, dict) else None
-    if named and over is None:
-        # the owner's config names `blocks` and we cannot read it. That is "they configured
-        # something", so nothing is on - never "we could not tell, so read everything".
+    named = raw is not None and over is None
+    if named:
+        # a value we cannot read at all IS "they configured something", so nothing is on - never
+        # "we could not tell, so read everything"
         logger.warning(f'assistant blocks: `blocks` is {type(raw).__name__}, not an object - reading no Taskuary block')
     isolated = bool(cfg.get('watch_source_ids') or cfg.get('watch_sources'))
     out = {}
@@ -278,8 +285,9 @@ def resolve(store, cfg: dict) -> dict:
             if (isolated or named) and b.id != 'system_checks': o['on'] = False
         elif isinstance(over.get(b.id), dict): _apply(b, o, over[b.id])
         elif b.id != 'system_checks':
-            # not named, or named with a value that is not an object ({'open_work': True}, None, a
-            # string): unreadable is the same as unchosen, and unchosen is off
+            # not named, or named with a value that is not an object ({'open_work': True}, null, a
+            # string). Unlike a null `blocks`, the surrounding dict IS a recorded choice, so a block
+            # inside it that says nothing readable cannot be read as on
             if b.id in over: logger.warning(f'assistant blocks: {b.id} is saved as {type(over[b.id]).__name__}, not an object - off')
             o['on'] = False
         out[b.id] = o
@@ -376,11 +384,6 @@ def _candidates(store, chosen: dict) -> list:
         return []
 
 
-def _now():
-    from datetime import datetime
-    return datetime.now()
-
-
 def _price_rows(rows: list) -> tuple:
     """A producer's price is the CANDIDATES: lines it adds - the shape the post files them in."""
     return len(rows), len('\n'.join(f"[{c.get('key')}] {c.get('facts') or c.get('text') or ''}" for c in rows)) // 4
@@ -406,12 +409,15 @@ _WEIGHED, _WEIGH_TTL = {}, 20.0
 
 def weighed(store, chosen: dict, ttl: float = _WEIGH_TTL) -> list:
     """weigh(), cached briefly on the resolved choice. Anything that must see a fresh read - a test,
-    a run - calls weigh() directly."""
-    import time
-    key = (id(store), json.dumps({k: {n: v for n, v in sorted((o or {}).items())} for k, o in sorted(chosen.items())}, default=str, sort_keys=True))
+    a run - calls weigh() directly.
+
+    The STORE is held in the entry and compared by identity, not hashed into the key: id() is reused
+    once an object is collected, and a cache that answered for a dead store would be pricing another
+    install's data. And the answer is copied out, so a caller editing a row cannot edit the cache."""
+    key = (id(store), json.dumps({k: dict(sorted((o or {}).items())) for k, o in sorted(chosen.items())}, default=str, sort_keys=True))
     hit = _WEIGHED.get(key)
-    if hit and time.time() - hit[0] < ttl: return hit[1]
+    if hit and hit[2] is store and time.time() - hit[0] < ttl: return [dict(r) for r in hit[1]]
     rows = weigh(store, chosen)
-    _WEIGHED.clear() if len(_WEIGHED) > 32 else None       # one owner, a handful of reports: a cap, not an eviction policy
-    _WEIGHED[key] = (time.time(), rows)
-    return rows
+    if len(_WEIGHED) > 32: _WEIGHED.clear()      # one owner, a handful of reports: a cap, not an eviction policy
+    _WEIGHED[key] = (time.time(), rows, store)
+    return [dict(r) for r in rows]

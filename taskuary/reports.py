@@ -520,9 +520,11 @@ def run_assistant(cfg):
     # systems_only is DERIVED: this report reads no Taskuary block. It used to be "it has sources of
     # its own", which made choosing a source silently give up the inbox (assistantblocks.resolve).
     chosen = blk.resolve(cfg['store'], cfg)
+    # `source_id` when the page is previewing a SAVED report: the notes block is per-report
+    # (assistant.notes_key), so without it the Preview would show the Assistant's own note
     return 'what the assistant would read right now', facts(
         cfg['store'], cfg.get('watch_source_ids'), cfg.get('watch_sources'),
-        systems_only=not blk.reads_taskuary(chosen), blocks=chosen)
+        systems_only=not blk.reads_taskuary(chosen), blocks=chosen, report_id=cfg.get('source_id'))
 
 
 def run_automate(cfg):

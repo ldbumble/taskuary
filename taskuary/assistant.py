@@ -897,7 +897,7 @@ def _uptime_block(store) -> str:
             f"fires and no mail arrives - so a gap here is not a fault):\n{up}\n") if up else ''
 
 
-def build_inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=None, watch_sources=None, blocks=None) -> tuple:
+def build_inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=None, watch_sources=None, blocks=None, report_id=None) -> tuple:
     """(the text the model sees, {message id: the block that supplied it}). The same text is the
     Reports tab's Preview (facts) and the run record (reports.run_report_source), so what it was
     given is never a guess; the index is how a line is attributed without asking the model.
@@ -918,6 +918,7 @@ def build_inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=
         if not o or not o.get('on') or not b.heading: continue
         if b.id == 'system_checks': o = o | {'source_ids': watch_source_ids, 'inline': watch_sources}
         if b.id == 'knowledge': o = o | {'facts': ' '.join(str(c.get('facts') or '') for c in cands)[:4000]}
+        if b.id == 'notes': o = o | {'report': report_id}      # a report reads its OWN note, never another report's
         out, got = blk.render(store, b, o)
         said[b.id] = out
         for m in got: mids[int(m)] = b.id
@@ -934,9 +935,9 @@ def _verdicts(store, cands: list, said: dict) -> str:
     return _verdicts_block(store, cands, f"{said.get('threads', '')}\n{said.get('arrivals', '')}")
 
 
-def inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=None, watch_sources=None, blocks=None) -> str:
+def inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=None, watch_sources=None, blocks=None, report_id=None) -> str:
     """The text alone, for every caller that does not need to know which block said what."""
-    return build_inputs(store, cands, head, watch_source_ids, watch_sources, blocks)[0]
+    return build_inputs(store, cands, head, watch_source_ids, watch_sources, blocks, report_id)[0]
 
 
 def systems_inputs(store, watch_source_ids=None, watch_sources=None) -> str:
@@ -948,7 +949,7 @@ def systems_inputs(store, watch_source_ids=None, watch_sources=None) -> str:
 
 
 def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX_LINES,
-          watch_source_ids=None, watch_sources=None, systems_only: bool = False, blocks=None) -> list:
+          watch_source_ids=None, watch_sources=None, systems_only: bool = False, blocks=None, report_id=None) -> list:
     """One call: the owner's instruction (the Reports tab), the candidates, the day, what was already said."""
     soul = store.doc('soul') or ''
     direction = ((SYSTEMS_PROMPT + (f"\n\nTHE OWNER'S RULE FOR THIS MONITOR:\n{instruction.strip()}" if instruction else ''))
@@ -959,7 +960,7 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
     system = (f"YOUR INSTRUCTION (the owner's, from the Reports tab):\n{direction}" + contract.replace('{max_lines}', str(max_lines))
               + (f"\n\nWho the owner is (their own document; its reply rules are for text sent to OTHERS):\n{soul[:1500]}" if soul else ''))
     user = (systems_inputs(store, watch_source_ids, watch_sources) if systems_only
-            else inputs(store, cands, watch_source_ids=watch_source_ids, watch_sources=watch_sources, blocks=blocks))
+            else inputs(store, cands, watch_source_ids=watch_source_ids, watch_sources=watch_sources, blocks=blocks, report_id=report_id))
     images = []
     if not systems_only:
         from .llm import readable_images
@@ -968,7 +969,7 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
     return parse(store, text, cands, max_lines), _notes(text), user
 
 
-def facts(store, watch_source_ids=None, watch_sources=None, systems_only: bool = False, blocks=None) -> str:
+def facts(store, watch_source_ids=None, watch_sources=None, systems_only: bool = False, blocks=None, report_id=None) -> str:
     """What a run would hand the model, as text - the Reports tab's Preview (reports.run_assistant).
     Preview and run share `blocks`, so the Preview is the payload rather than a picture of one."""
     if systems_only:
@@ -979,17 +980,25 @@ def facts(store, watch_source_ids=None, watch_sources=None, systems_only: bool =
         c = c | blk.producer_cfg(blocks, c)
     state = {i['Key']: i for i in store.list_ideas()}
     return inputs(store, [x for x in candidates(store, c) if fresh(state, x, now)],
-                  'CANDIDATES (new since the last post)', watch_source_ids, watch_sources, blocks)
+                  'CANDIDATES (new since the last post)', watch_source_ids, watch_sources, blocks, report_id)
 
 
 # ── the note to the next check ───────────────────────────────────────────────────────────────
-def notes(store) -> tuple:
-    """(text, when) of the note the last check left - '' if none yet."""
-    s = store.get_settings()
-    return (s.get('assistant_notes') or '').strip(), s.get('assistant_notes_at') or ''
+def notes_key(store, report_id=None) -> str:
+    """Which setting holds THIS check's note to itself. The note is one report's private memory of
+    its own last run - a second Assistant report reading it is cross-talk, not context - so every
+    report owning its identity gets its own key. The seeded Assistant keeps the bare name it has
+    always had, so nothing on an existing install moves."""
+    return f'assistant_notes:{report_id}' if own_identity(store, report_id) else 'assistant_notes'
 
-def _notes_block(store) -> str:
-    n, at = notes(store)
+
+def notes(store, report_id=None) -> tuple:
+    """(text, when) of the note this check's last run left - '' if none yet."""
+    s, k = store.get_settings(), notes_key(store, report_id)
+    return (s.get(k) or '').strip(), s.get(f'{k}_at') or ''
+
+def _notes_block(store, report_id=None) -> str:
+    n, at = notes(store, report_id)
     return (f"YOUR NOTES FROM YOUR LAST CHECK ({_ts(at)}; your own facts and timings - use them, then rewrite them; they are not rules):\n{n}" if n
             else 'YOUR NOTES FROM YOUR LAST CHECK: (none yet - this is your first check, or the last one left none)')
 
@@ -1269,6 +1278,24 @@ def run(store, llm=None, force: bool = False, instruction: str = None, *,
                     systems_only, report_id, report_title, always_post, blocks)
 
 
+def seeded_source(store) -> dict | None:
+    """THE Assistant row the installer wrote (store.py, `assistant_report_seeded`) - the one whose
+    posts are the Timeline's `assistant` thread.
+
+    Not `source()`, which returns the FIRST assistant-typed report and is the right answer for "is
+    the Assistant switched on". Deleting the seeded row is the documented off switch, and once it is
+    gone `source()` starts naming the owner's OWN Assistant report - which would have handed that
+    report the shared thread and the shared idea namespace, the very collision own_identity exists
+    to prevent. The anchor is `Owner='template'`: every seeded row carries it, the API never writes
+    it (server.py builds report rows as the owner), and it survives an edited title or schedule."""
+    for src in store.list_sources(active_only=False):
+        if src.get('Channel') != 'report' or src.get('Owner') != 'template': continue
+        try: c = json.loads(src.get('ConfigJson') or '{}')
+        except ValueError: continue
+        if c.get('type') == 'assistant': return src | {'cfg': c}
+    return None
+
+
 def own_identity(store, report_id) -> bool:
     """Does this post belong to a REPORT of its own, rather than to the app's Assistant?
 
@@ -1279,11 +1306,14 @@ def own_identity(store, report_id) -> bool:
     suppressing each other's findings on a shared idea key, the failure system_checks() is already
     commented for. So identity is the report, and the report alone.
 
-    The app's own Assistant row is the exception that keeps this backwards-compatible: its posts
-    ARE the Timeline's `assistant` thread and have always been."""
+    The SEEDED Assistant row is the exception that keeps this backwards-compatible: its posts ARE
+    the Timeline's `assistant` thread and have always been. Anchored on that row (seeded_source),
+    never on "the first assistant-typed report" - delete the seeded row, which is the documented off
+    switch, and the owner's own Assistant report would inherit the exception along with the shared
+    namespace this function exists to keep it out of."""
     if report_id is None: return False
     try:
-        src = source(store)
+        src = seeded_source(store)
         return not (src and str(src.get('SourceId')) == str(report_id))
     except Exception: return True
 
@@ -1320,20 +1350,21 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     if used:
         try:
             say, note, read = think(store, cands, llm, instruction, c['max'],
-                                    watch_source_ids, watch_sources, systems_only, blocks)
+                                    watch_source_ids, watch_sources, systems_only, blocks, report_id)
         except Exception as e:
             logger.warning(f'assistant: the model pass failed, posting the facts alone - {e}'); say, used = cands[:c['max']], False
     else: say = cands[:c['max']]          # no model: the facts still stand, in the hub's own words
     if not read:
         read = (systems_inputs(store, watch_source_ids, watch_sources) if systems_only else
                 inputs(store, cands, 'CANDIDATES (no model pass - these posted as facts)',
-                       watch_source_ids, watch_sources, blocks))
+                       watch_source_ids, watch_sources, blocks, report_id))
     own_post = own_identity(store, report_id)
     # the note outlives the post: a quiet check leaves one too, so the next check starts where this
-    # one stopped. `assistant_notes` is ONE global setting, so only the app's own Assistant writes
-    # it - a monitor that reads the notes block must not also overwrite what it reads.
-    if note and not systems_only and not own_post:
-        store.set_setting('assistant_notes', note, 'assistant'); store.set_setting('assistant_notes_at', now.strftime('%Y-%m-%d %H:%M:%S'), 'assistant')
+    # one stopped. Each report writes and reads its OWN note (notes_key) - one global note meant a
+    # second Assistant report reading the first's private memory, and overwriting it.
+    if note and not systems_only:
+        k = notes_key(store, report_id)
+        store.set_setting(k, note, 'assistant'); store.set_setting(f'{k}_at', now.strftime('%Y-%m-%d %H:%M:%S'), 'assistant')
     # Namespace monitor findings so two SQL checks can use the same natural idea key without one
     # report suppressing the other report's finding. Keyed on the REPORT, never on its data scope
     # (own_identity): a monitor that also reads a Taskuary block is still its own monitor.

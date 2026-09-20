@@ -37,11 +37,31 @@ class S3PollPagingTests(unittest.TestCase):
 
         self.assertEqual(count, 1)
         self.assertIn('reports/2026/z-new.csv', store.feed()[0]['Subject'])
-        self.assertEqual(s3.calls, [
-            {'Bucket': 'reports', 'MaxKeys': 200, 'Prefix': 'reports/2026/'},
-            {'Bucket': 'reports', 'MaxKeys': 200, 'Prefix': 'reports/2026/',
-             'ContinuationToken': 'page-2'},
-        ])
+        # the prefix reaches every page and the token reaches the second - the page size is not the point
+        self.assertEqual([c.get('Prefix') for c in s3.calls], ['reports/2026/', 'reports/2026/'])
+        self.assertEqual([c.get('ContinuationToken') for c in s3.calls], [None, 'page-2'])
+
+    def test_a_bucket_that_never_ends_is_walked_to_the_cap_and_no_further(self):
+        since = datetime.now().astimezone() - timedelta(hours=2)
+
+        class Endless:
+            calls = 0
+            def list_objects_v2(self, **kw):
+                self.calls += 1
+                return {'Contents': [], 'IsTruncated': True, 'NextContinuationToken': f'page-{self.calls + 1}'}
+
+        s3 = Endless()
+        src = {'SourceId': 1, 'Address': 's3://huge', 'Channel': 'aws', 'ConfigJson': json.dumps({'mode': 'feed'})}
+        from loguru import logger
+        seen, sink = [], None
+        try:
+            sink = logger.add(lambda m: seen.append(str(m)), level='WARNING')
+            with mock.patch.object(aws, 'client', return_value=s3):
+                aws.poll_source(MemoryStore(), {}, src, since, file_only=True)
+        finally:
+            if sink is not None: logger.remove(sink)
+        self.assertEqual(s3.calls, aws.S3_PAGE_CAP)
+        self.assertTrue(any('stopped after' in m for m in seen), seen)
 
 
 if __name__ == '__main__':

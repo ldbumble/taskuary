@@ -184,13 +184,16 @@ def poll_source(store, cfg: dict, src: dict, since, llm=None, file_only=False) -
     addr, floor, n = src['Address'], since.strftime('%Y-%m-%d %H:%M:%S'), 0
     if addr.startswith('s3://'):
         bucket = addr[5:]
-        s3, tok = client(cfg, 's3', reg), None
-        # S3 orders by key, not LastModified: a fresh z... object can sit after pages of old a... keys.
-        while True:
-            args = {'Bucket': bucket, 'MaxKeys': 200}
+        s3, tok, pages = client(cfg, 's3', reg), None, 0
+        # S3 orders by key, not LastModified: a fresh z... object can sit after pages of old a... keys
+        # (#13). Every page is read, up to S3_PAGE_CAP: this runs on every sync, and a bucket with a
+        # million keys must not turn a poll into a thousand LIST calls (LOG_PAGE_CAP, the same rule for
+        # CloudWatch). A walk that stopped at the cap says so in the log; a prefix narrows it.
+        while pages < S3_PAGE_CAP:
+            args = {'Bucket': bucket, 'MaxKeys': 1000}
             if scfg.get('prefix'): args['Prefix'] = scfg['prefix']
             if tok: args['ContinuationToken'] = tok
-            r = s3.list_objects_v2(**args)
+            r = s3.list_objects_v2(**args); pages += 1
             for o in r.get('Contents') or []:
                 at = o.get('LastModified')
                 stamp = at.astimezone().strftime('%Y-%m-%d %H:%M:%S') if hasattr(at, 'astimezone') else str(at)
@@ -203,8 +206,9 @@ def poll_source(store, cfg: dict, src: dict, since, llm=None, file_only=False) -
                     'source_name': addr}, llm=llm)
                 n += out['status'] != 'duplicate'
             nxt = r.get('NextContinuationToken')
-            if not r.get('IsTruncated') or not nxt or nxt == tok: break
+            if not r.get('IsTruncated') or not nxt or nxt == tok: tok = None; break
             tok = nxt
+        if tok: logger.warning(f'{addr}: listing stopped after {S3_PAGE_CAP} pages ({S3_PAGE_CAP * 1000:,} keys) - newer objects past that point were not seen; set a prefix on the source to narrow it')
     elif addr.startswith('logs://'):
         group = addr[7:]
         pat = scfg.get('pattern') or '?ERROR ?Exception ?FATAL'
@@ -265,6 +269,7 @@ def run_s3_object(cfg: dict):
 
 
 LOG_PAGE_CAP = 12        # one report is worth this many FilterLogEvents calls, not unbounded
+S3_PAGE_CAP = 50         # one feed poll walks at most this many pages of 1,000 keys (poll_source)
 
 
 def run_cloudwatch_logs(cfg: dict):

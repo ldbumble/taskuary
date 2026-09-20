@@ -1499,7 +1499,12 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
                 from .reports import aws_connection, azure_connection
                 mod = __import__(f'taskuary.{c["Type"]}', fromlist=['x'])
                 conn_cfg = (aws_connection if c['Type'] == 'aws' else azure_connection)(store, c['ConnectorId'])
-                n += mod.poll_source(store, conn_cfg, s, since, llm, mode == 'feed')
+                # per source, like github's repos: a throttle on page 40 of one bucket must not
+                # skip the log groups after it, and the failed bucket keeps its watermark
+                try: n += mod.poll_source(store, conn_cfg, s, since, llm, mode == 'feed')
+                except Exception as e:
+                    logger.warning(f"cloud poll failed ({s['Address']}): {e}"); errors.append(f"{s['Address']}: {e}")
+                    continue
             elif c['Type'] == 'discord':
                 # per SOURCE, like slack: each watched channel id is its own source
                 from . import devtools

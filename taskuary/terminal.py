@@ -6,7 +6,7 @@ agent's own TUI, its approval prompts and your typing all go through this.
 
 Windows uses ConPTY via pywinpty; POSIX uses the stdlib pty module.
 """
-import json, os, re, shutil, subprocess, threading, time, uuid
+import json, logging, os, re, shutil, subprocess, threading, time, uuid
 from collections import deque
 from datetime import datetime
 from loguru import logger
@@ -437,7 +437,7 @@ class Term:
                 self.pty.resize(int(rows), int(cols))
                 self.rows, self.cols = int(rows), int(cols)
                 self.quiet_for(3)                         # the repaint this triggers is not activity
-            except Exception: pass
+            except Exception as e: logging.getLogger(__name__).warning('resize %s to %sx%s failed: %s', self.sid, rows, cols, e)
     def close(self):
         self.keep()                                       # before the bytes go, not after
         self.alive, self.ended = False, time.time()

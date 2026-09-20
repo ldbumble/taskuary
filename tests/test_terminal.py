@@ -401,6 +401,19 @@ class TerminalTests(unittest.TestCase):
         finally:
             terminal.close(t.sid)
 
+    def test_geom_frame_says_which_pty_backend_draws(self):
+        """ConPTY keeps a grown viewport top-anchored (cursor on its old row, blank rows below);
+        xterm's default pulls scrollback in and moves the cursor down. The pane needs to know
+        which one it is watching before it fits, or the CLI's next cursor move lands mid-pane."""
+        t = terminal.Term([sys.executable, '-c', 'import time; time.sleep(4)'], os.getcwd(), 'test')
+        terminal.SESSIONS[t.sid] = t
+        try:
+            with c.websocket_connect(f'/api/terminals/{t.sid}/ws') as ws:
+                geom = next(m for m in (ws.receive_json() for _ in range(8)) if m['type'] == 'geom')
+            self.assertEqual(geom['conpty'], os.name == 'nt')
+        finally:
+            terminal.close(t.sid)
+
     def test_websocket_carries_output_and_exit(self):
         t = terminal.Term(ECHO, os.getcwd(), 'test')
         terminal.SESSIONS[t.sid] = t

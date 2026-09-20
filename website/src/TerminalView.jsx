@@ -15,7 +15,7 @@ import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
 import { FULL_SX, useFullScreen } from "./fullScreen.js";
 import { BORDER, CATPPUCCIN, FAINT, PANEL, XTERM_THEME, mono } from "./theme.jsx";
 import { MicButton } from "./ui.jsx";
-import { canRevealTerminal, changedTerminalSize, safeTerminalRows, usableTerminalBox } from "./terminalSizing.js";
+import { adoptPtyGeometry, canRevealTerminal, changedTerminalSize, safeTerminalRows, usableTerminalBox } from "./terminalSizing.js";
 import { pastedImageFiles, pastedImagePrompt } from "./terminalInput.js";
 import { terminalOutputBatcher } from "./terminalOutput.js";
 import api from "./api.js";
@@ -268,6 +268,7 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
         const was = ownsGeometry;
         ownsGeometry = m.owner !== false;
         ptySize = { rows: m.rows, cols: m.cols };
+        adoptPtyGeometry(term, m);                       // ConPTY grows top-anchored; xterm must too
         fitSafely();
         if (ownsGeometry && !was) { sentSize = ""; sendSize(); }
       }

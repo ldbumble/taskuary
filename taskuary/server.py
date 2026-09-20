@@ -6403,6 +6403,13 @@ def _ws_ok(ws: WebSocket) -> bool:
         or guard.token_matches(ws.headers.get('x-taskuary-token'), tok)
 
 
+# The pane fits itself to its box, so the pty grows after output exists. ConPTY keeps a grown
+# viewport top-anchored (cursor on its old row, blank rows below) while xterm pulls scrollback
+# in and moves the cursor down - the CLI's next cursor move then lands mid-pane. The pane fixes
+# that with xterm's windowsPty option, but only if it knows which pty it is watching.
+def geom_frame(t, owner):
+    return {'type': 'geom', 'rows': int(t.rows), 'cols': int(t.cols), 'owner': bool(owner), 'conpty': sys.platform == 'win32'}
+
 @app.websocket('/api/terminals/{sid}/ws')
 async def terminal_ws(ws: WebSocket, sid: str):
     """Bytes out, keystrokes in. The HTTP token gate can't see websockets, so _ws_ok asks the
@@ -6510,8 +6517,7 @@ async def terminal_ws(ws: WebSocket, sid: str):
         # Say who owns the geometry BEFORE any output: a pane that is not the owner must render at
         # the pty's width rather than fit its own box, or it wraps where the child did not - which
         # is the same corruption by a different road.
-        await send_frame({'type': 'geom', 'rows': int(t.rows), 'cols': int(t.cols),
-                          'owner': owns_geometry()})
+        await send_frame(geom_frame(t, owns_geometry()))
         if t.scrollback():
             snap = hub_term.replay_text(t)
             if snap: await send_frame({'type': 'out', 'replay': True, 'data': snap,
@@ -6529,8 +6535,7 @@ async def terminal_ws(ws: WebSocket, sid: str):
                 if not owns_geometry():
                     # Not ours to change. Tell this pane what the geometry actually is - and lift
                     # its curtain, which the owner's road does through the redraw barrier below.
-                    await send_frame({'type': 'geom', 'rows': int(t.rows), 'cols': int(t.cols),
-                                      'owner': False})
+                    await send_frame(geom_frame(t, False))
                     if first_resize:
                         first_resize = False
                         await send_frame({'type': 'ready'})

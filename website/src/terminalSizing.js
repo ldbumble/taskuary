@@ -20,3 +20,15 @@ export const safeTerminalRows = (rows) => Math.max(2, Math.floor(rows || 0) - 1)
 // reveal focuses the terminal, so re-running it on every live frame stole the keyboard from
 // whatever the owner was typing into.
 export const canRevealTerminal = (readySeen, pendingWrites, lifted = false) => !lifted && !!readySeen && pendingWrites === 0;
+
+// ConPTY keeps its viewport TOP-anchored when the pty grows: the cursor stays on its row and the
+// new rows below are blank. xterm's default does the opposite - it pulls scrollback back into the
+// viewport and moves the cursor down with it. A triage-started coder opens at the server's 32x110,
+// the task page then fits ~60 rows, and the CLI's next absolute cursor move (row 32, where ConPTY
+// still is) lands mid-pane over lines the pane already showed: "two frames at once" (2026-09-18).
+// xterm's windowsPty option switches its grow to ConPTY's model. The server says which pty it is
+// on every geom frame; an older server says nothing, and the default stands.
+export const adoptPtyGeometry = (term, geom) => {
+  if (typeof geom?.conpty !== "boolean") return;
+  term.options.windowsPty = geom.conpty ? { backend: "conpty" } : {};
+};

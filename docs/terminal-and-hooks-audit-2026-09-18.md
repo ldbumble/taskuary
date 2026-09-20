@@ -15,6 +15,7 @@ read-throughs of the code (rendering path, signal path), then a puppeteer walk o
 | **"Cannot read properties of undefined (reading 'dimensions')"** page error on a phone leaving the task page | a write's completion callback called `scrollToBottom` after `term.dispose()` | one `disposed` flag; every late callback (write completion, lift, onResize, visibilitychange) obeys it |
 | Phone: the agent bar sat **on top of "Agent work"**, its last button off the card; the task strip's buttons covered "TASK" | `WorkflowHeading` and the folded task strip are single flex rows with a `flexShrink: 0` bar | both wrap below `sm`; the bar takes the whole next line (`order: 9`, `flexBasis: 100%`) |
 | A permission granted in the pane also **closed screen-minted approvals** | today's `PostToolUse` closer matched every open `approval_needed` | only hook-sourced ones; a chooser the screen reader turned into a request stays open |
+| **"Two frames at once"**: Claude Code's UI drawn in the top 32 rows with stale scrollback below, lines landing mid-pane; a real resize did not heal it and hiding/showing the pane was a coincidence (2026-09-19) | a session opens at the server's 32x110 and the page then fits ~60 rows. ConPTY keeps a grown viewport TOP-anchored (cursor on row 32, blank rows below) while xterm pulls 28 lines of scrollback in and moves its cursor to row 60; the CLI's next `ESC[32;..H` overwrites the middle of the pane. Measured: pre-sized 60-row session clean, default-size session broken | the `geom` frame says `conpty`, and the pane sets xterm's `windowsPty` option, whose grow is ConPTY's (blank rows at the bottom, cursor row kept). Behavioural test runs xterm's browser build under node (`terminalConpty.test.mjs`). `Term.resize` now logs the exception it used to swallow |
 
 Earlier today, same area: a pane hidden behind another tab comes back repainted (`wasHidden` + `visibilitychange`),
 and a pane being seeded is `working` whatever its screen says (`Term.seeding`).
@@ -47,7 +48,8 @@ and a pane being seeded is `working` whatever its screen says (`Term.seeding`).
 5. **`NeedsYou` means two things.** processing_all sets it from `waiting` only when no review is pending; rowLane treats
    `AgentWaiting || NeedsYou` as `blocked`; timelineState says they are not synonyms. Rail and Timeline can classify one
    row differently.
-6. **Pane geometry.** A pane mounted while hidden can send xterm's default 80x24 as the pty size (`ws.onopen -> sendSize`
+6. **Pane geometry.** The page could pass its fitted rows/cols when IT starts a session (POST /api/terminals takes them; every
+   page-started session still opens at 32x110 and grows). A pane mounted while hidden can send xterm's default 80x24 as the pty size (`ws.onopen -> sendSize`
    is not gated by `usableTerminalBox`); a non-owner still sends one resize before the `geom` frame lands; A−/A+ in a
    non-owner pane changes the glyph but not the rows. Heights are unrelated magic numbers (640, 440, 360/420, 46vh, 38vh).
 7. **Chrome nits.** The prompt-pending chip has no width bound (overflows a 4-across cell); theme/size are per-pane state

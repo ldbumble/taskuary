@@ -1168,7 +1168,12 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 {/* "we don't have to choose a pre-existing report to ask the Assistant about other
                     data" - right, and the picker below made that a lie. A source card here IS a
                     source: the same types, the same Test button, owned by this check alone. */}
-                <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "stretch", mb: 1.25 }}>
+                {/* left to right, like the funnel below: the sources sit in one row and all of them
+                    draw down into the one prompt. The panel is narrower than the funnel, so the row
+                    scrolls sideways rather than folding into a column (the owner, 2026-09-20). */}
+                <Box sx={{ display: "flex", gap: 1.5, flexWrap: "nowrap", overflowX: "auto", alignItems: "stretch", mb: 1.25, pb: 0.75,
+                  "& > *": { flex: "0 0 auto" }, "&::-webkit-scrollbar": { height: 8 },
+                  "&::-webkit-scrollbar-thumb": { bgcolor: BORDER, borderRadius: 4 } }}>
                   {watchSrcs.map((src, i) => (
                     <SourceCard key={i} src={src} index={i} count={watchSrcs.length} removable
                       typeOptions={typeOptions.filter((t) => t.type !== "assistant")} connectors={connectors}
@@ -1179,7 +1184,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                       onRemove={() => setWatchSrcs((cur) => cur.filter((_, k) => k !== i))} />
                   ))}
                   <Box onClick={() => setWatchSrcs((cur) => [...cur, { type: "mssql" }])}
-                    sx={{ ...card, width: { xs: "100%", sm: 354 }, minHeight: 108, display: "flex", flexDirection: "column", alignItems: "center",
+                    sx={{ ...card, width: { xs: 280, sm: 354 }, minHeight: 108, display: "flex", flexDirection: "column", alignItems: "center",
                       justifyContent: "center", gap: 0.5, cursor: "pointer", borderStyle: "dashed", bgcolor: "#fff",
                       color: DIM, "&:hover": { borderColor: "#d8cfbe", color: "#55697a" } }}>
                     <AddIcon sx={{ fontSize: 20 }} />

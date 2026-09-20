@@ -916,9 +916,9 @@ def build_inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=
         o = chosen.get(b.id)
         # a PRODUCER (no heading) is already in `cands`: the caller ran candidates() and paid for it once
         if not o or not o.get('on') or not b.heading: continue
-        if b.id == 'system_checks': o = o | {'source_ids': watch_source_ids, 'inline': watch_sources}
-        if b.id == 'knowledge': o = o | {'facts': ' '.join(str(c.get('facts') or '') for c in cands)[:4000]}
-        if b.id == 'notes': o = o | {'report': report_id}      # a report reads its OWN note, never another report's
+        # the run-time opts, stamped in ONE place the card prices through too (assistantblocks.stamp)
+        o = blk.stamp(b, o, facts=' '.join(str(c.get('facts') or '') for c in cands)[:4000],
+                      report_id=report_id, source_ids=watch_source_ids, inline=watch_sources)
         out, got = blk.render(store, b, o)
         said[b.id] = out
         for m in got: mids[int(m)] = b.id

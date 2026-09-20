@@ -3777,7 +3777,13 @@ def sources():
 @app.post('/api/sources')
 def save_source(body: SourceBody):
     fields = {k: (int(v) if k == 'Active' else v) for k, v in body.dict().items() if v is not None}
-    fields.setdefault('Owner', ACTOR)
+    # Owner is PROVENANCE - who or what put this row here - and only a CREATE sets it. It was set
+    # on every save, and `Owner` is in SOURCE_COLS, so an ordinary Reports-tab save (and the on/off
+    # toggle, which posts {SourceId, Active}) silently took the row over: a Telegram chat lost the
+    # "discovered: <title>" name ConnectorsView prints, and a seeded row stopped being seeded -
+    # which moved the app's own Assistant off its Timeline thread and re-namespaced its ideas
+    # (assistant.seeded_source). Editing a row has never been a reason to reassign it.
+    if not fields.get('SourceId'): fields.setdefault('Owner', ACTOR)
     # A paired WhatsApp account sees everything its owner does - forty groups and every DM - so
     # there is no catch-all for it; each chat is listed or it does not come in (the owner,
     # 2026-09-17). Telegram keeps its '*': a bot only hears the chats it was added to.
@@ -6791,7 +6797,7 @@ def assistant_blocks(source_id: int = None):
         except ValueError: cfg = {}
         if cfg.get('type') != 'assistant': raise HTTPException(404, f"source {source_id} is a {cfg.get('type') or 'rest'} report, not an Assistant")
     chosen = blk.resolve(store, cfg)
-    rows = blk.weighed(store, chosen)
+    rows = blk.weighed(store, chosen, report_id=int(source_id) if source_id else None)
     # the live blocks are ON and cost nothing HERE, which is not the same as costing nothing. Named
     # so the card can say "and a live call to your calendar" instead of printing a total that reads
     # as zero for exactly the report that costs the most.

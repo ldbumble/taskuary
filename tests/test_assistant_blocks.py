@@ -305,19 +305,45 @@ class WeighTests(unittest.TestCase):
             B.weighed(s, chosen, ttl=0); B.weighed(s, chosen, ttl=0)
             self.assertEqual(w.call_count, 2, 'ttl=0 must always read fresh')
 
-    def test_the_cache_hands_out_a_copy_and_never_answers_for_another_store(self):
-        """Two latent bugs in one entry: a caller editing a row would have edited the cache, and the
-        key held id(store), which Python reuses the moment a store is collected."""
+    def test_the_cache_hands_out_a_deep_copy_and_never_answers_for_another_store(self):
+        """Three latent bugs in one entry: a caller editing a row (or a row's `tables`) would have
+        edited the cache; the key held id(store), which Python reuses the moment a store is
+        collected; and a strong reference kept every store it ever priced alive."""
+        import gc, weakref
         s = F.store(); chosen = B.resolve(s, {'type': 'assistant'})
         B._WEIGHED.clear(); self.addCleanup(B._WEIGHED.clear)
         B.weighed(s, chosen)                                   # fills the entry
-        B.weighed(s, chosen)[0]['tokens'] = 999_999            # ...and this one is served FROM it
-        self.assertNotEqual(B.weighed(s, chosen)[0]['tokens'], 999_999, 'a caller edited the cache')
+        hit = B.weighed(s, chosen)                             # ...and this one is served FROM it
+        hit[0]['tokens'] = 999_999; hit[0]['tables'].append('nonsense')
+        again = B.weighed(s, chosen)
+        self.assertNotEqual(again[0]['tokens'], 999_999, 'a caller edited the cache')
+        self.assertNotIn('nonsense', again[0]['tables'], 'the copy was shallow: the nested lists are shared')
         # a second store standing where the first one's id used to be must be priced, not answered for
         key = next(iter(B._WEIGHED))
         s2 = F.store()
-        B._WEIGHED[key] = (B._WEIGHED[key][0], [{'id': 'stale'}], s2)
+        B._WEIGHED[key] = (B._WEIGHED[key][0], [{'id': 'stale'}], weakref.ref(s2))
         self.assertNotEqual([r['id'] for r in B.weighed(s, chosen)], ['stale'])
+
+    def test_the_cache_does_not_keep_a_store_alive(self):
+        import gc, weakref
+        B._WEIGHED.clear(); self.addCleanup(B._WEIGHED.clear)
+        s = F.store(); dead = weakref.ref(s)
+        B.weighed(s, B.resolve(s, {'type': 'assistant'}))
+        del s; gc.collect()
+        self.assertIsNone(dead(), 'the price cache pinned a whole store (and its SQLite connection)')
+
+    def test_the_note_is_priced_for_the_report_that_asked(self):
+        """weigh() stamped no `report`, so every card priced the SEEDED Assistant's note - a number
+        for a note that report has not got. Both sides go through assistantblocks.stamp now."""
+        s = F.store()
+        s.set_setting('assistant_notes:77', 'x' * 600, 'test')
+        chosen = B.resolve(s, {'type': 'assistant', 'blocks': {'notes': {'on': True}}})
+        seeded = next(r for r in B.weigh(s, chosen) if r['id'] == 'notes')
+        theirs = next(r for r in B.weigh(s, chosen, report_id=77) if r['id'] == 'notes')
+        self.assertGreater(theirs['tokens'], seeded['tokens'] + 100)
+        payload = assistant.inputs(s, [], blocks=chosen, report_id=77)
+        section = payload[payload.index('\n\nYOUR NOTES FROM YOUR LAST CHECK'):]   # the notes block is the last one
+        self.assertEqual(theirs['tokens'], len(section) // 4, 'the card priced a note the payload has not got')
 
 
 class DoneThisWeekHeadTests(unittest.TestCase):
@@ -340,6 +366,32 @@ class DoneThisWeekHeadTests(unittest.TestCase):
 
 
 class CardMatchesPayloadTests(unittest.TestCase):
+    def test_every_priced_block_is_priced_at_what_the_payload_carries(self):
+        """On/off alone let a block be priced from the WRONG report's data and say nothing: weigh()
+        stamped no `report`, so the card quoted the seeded Assistant's note for every report that
+        asked. So slice the payload at the heads the card itself printed and compare the SIZE of
+        each section with the tokens the card charged for it."""
+        s = F.store()
+        s.set_setting('assistant_notes:77', 'a note of its own, and a much longer one at that. ' * 8, 'test')
+        chosen = B.resolve(s, {'type': 'assistant'})
+        rows = B.weigh(s, chosen, report_id=77)
+        payload = assistant.inputs(s, B._candidates(s, chosen), blocks=chosen, report_id=77)
+        # EVERY on block with a head cuts the payload, priced or not: a `live` one is charged 0 on
+        # purpose and still takes up room, so leaving it out would fold its section into its
+        # neighbour's and make every comparison after it meaningless
+        cuts = [(r, payload.index(r['heading'].split('(')[0].strip()))
+                for r in rows if r['on'] and r['heading'] and r['heading'].split('(')[0].strip() in payload]
+        self.assertEqual([i for _, i in cuts], sorted(i for _, i in cuts), 'the card lists the blocks out of payload order')
+        self.assertTrue([r for r, _ in cuts if r['tokens']], 'nothing was priced - this test would pass on an empty store')
+        for n, (r, i) in enumerate(cuts):
+            if not r['tokens']: continue                       # a live block: charged nil by declaration
+            end = cuts[n + 1][1] if n + 1 < len(cuts) else len(payload)
+            # the head's own '\n\n' lead-in sits before `i`, and _price counts it for a `whole`
+            # block and not for the others - two tokens of slack, against sections of tens
+            with self.subTest(block=r['id']):
+                self.assertAlmostEqual(r['tokens'], len(payload[i:end].rstrip()) // 4, delta=2,
+                                       msg=f"{r['id']} was priced from data the payload has not got")
+
     def test_the_card_names_the_blocks_the_payload_contains(self):
         """One resolution behind the card and the payload, or the card claims a read the run never
         made - the exact class of bug this feature exists to end. Both are built from the SAME
@@ -412,6 +464,62 @@ class IdentityTests(unittest.TestCase):
         self.assertIn(f'report:{mine}:idea:stuck', {i['Key'] for i in s.list_ideas()})
         posts = [m for m in s.recent_messages('2000-01-01', limit=80) if str(m.get('ConversationId') or '') == f'assistant:{mine}']
         self.assertTrue(posts and posts[0]['FromName'] == 'My assistant')
+
+
+class OwnerIsProvenanceTests(unittest.TestCase):
+    """Ruling X. `POST /api/sources` set Owner on every save, and Owner is in SOURCE_COLS, so an
+    ordinary Reports-tab save - or the on/off Switch, which posts {SourceId, Active} - took the row
+    over. The seeded Assistant stopped being seeded on the owner's commonest action, which moved its
+    posts off the Timeline's `assistant` thread and re-namespaced its ideas.
+
+    Through the API, not store.save_source: the route is where the overwrite lived."""
+    def _api(self):
+        from taskuary import server
+        s = F.store()
+        p = mock.patch.object(server, 'store', s); p.start(); self.addCleanup(p.stop)
+        return s, server
+
+    def test_an_ordinary_save_and_the_active_toggle_leave_the_seeded_row_seeded(self):
+        s, server = self._api()
+        sid = assistant.seeded_source(s)['SourceId']
+        cfg = json.loads(s.get_source(sid)['ConfigJson'])
+        before = (assistant.own_identity(s, sid), assistant.notes_key(s, sid))
+        self.assertEqual(before, (False, 'assistant_notes'))
+        server.save_source(server.SourceBody(SourceId=sid, Channel='report', Address='Assistant', Active=True,
+                                             ConfigJson=json.dumps({**cfg, 'every_minutes': 45})))   # the Save button
+        server.save_source(server.SourceBody(SourceId=sid, Active=False))                            # the on/off Switch
+        server.save_source(server.SourceBody(SourceId=sid, Active=True))
+        self.assertEqual(s.get_source(sid)['Owner'], 'template', 'an edit reassigned the row')
+        self.assertEqual(assistant.seeded_source(s)['SourceId'], sid)
+        self.assertEqual((assistant.own_identity(s, sid), assistant.notes_key(s, sid)), before)
+        self.assertEqual(json.loads(s.get_source(sid)['ConfigJson'])['every_minutes'], 45)   # ...and the edit still landed
+
+    def test_the_seeded_assistant_still_posts_on_the_shared_thread_after_a_save(self):
+        from taskuary import reports
+        s, server = self._api()
+        sid = assistant.seeded_source(s)['SourceId']
+        server.save_source(server.SourceBody(SourceId=sid, Active=False))
+        server.save_source(server.SourceBody(SourceId=sid, Active=True))
+        reports.run_report_source(s, s.get_source(sid), lambda *a, **k: json.dumps(
+            {'say': [{'key': 'idea:ledger', 'text': 'The ledger looks stuck.', 'why': 'nothing moved'}]}))
+        self.assertIn('idea:ledger', {i['Key'] for i in s.list_ideas()})                 # not report:<sid>:idea:ledger
+        posts = [m for m in s.recent_messages('2000-01-01', limit=80) if str(m.get('FromName') or '') == 'Assistant']
+        self.assertTrue(posts and posts[0]['ConversationId'] == 'assistant', 'the Assistant left its own Timeline thread')
+
+    def test_a_discovered_chats_name_survives_the_toggle_too(self):
+        """Owner is provenance for more than the seeded rows: the Telegram poller writes
+        "discovered: <title>" there and ConnectorsView prints it. One toggle used to erase it."""
+        s, server = self._api()
+        sid = s.save_source({'Channel': 'telegram', 'Address': '-100123', 'Active': 1,
+                             'Owner': 'discovered: Ops room'}, 'telegram-poll')
+        server.save_source(server.SourceBody(SourceId=sid, Active=False))
+        self.assertEqual(s.get_source(sid)['Owner'], 'discovered: Ops room')
+
+    def test_a_new_source_is_still_owned_by_whoever_made_it(self):
+        s, server = self._api()
+        out = server.save_source(server.SourceBody(Channel='report', Address='new@report', Active=True,
+                                                   ConfigJson=json.dumps({'title': 'New', 'type': 'rest'})))
+        self.assertEqual(s.get_source(out['sourceId'])['Owner'], server.ACTOR)
 
 
 class NotesAreOneChecksOwnTests(unittest.TestCase):
@@ -490,6 +598,17 @@ class EndpointTests(unittest.TestCase):
         self.assertEqual(d['total_tokens'], next(x['tokens'] for x in d['data'] if x['id'] == 'open_work'))
         self.assertAlmostEqual(d['runs_per_day'], round(1 / 7, 3))          # a weekly brief is not a daily one
         self.assertTrue(d['reads_taskuary'])
+
+    def test_the_route_prices_the_note_of_the_report_it_was_asked_about(self):
+        """The route has to hand weigh() the report, or the card quotes the seeded Assistant's note
+        for every report that asks - a number for a note that report has not got."""
+        c, store = self._client()
+        sid = self._source(store, {'title': 'Note watch', 'type': 'assistant', 'blocks': {'notes': {'on': True}}})
+        store.set_setting(f'assistant_notes:{sid}', 'a note of its own, and a long one. ' * 20, 'test')
+        self.addCleanup(store.set_setting, f'assistant_notes:{sid}', '', 'test')
+        mine = next(x for x in c.get(f'/api/assistant/blocks?source_id={sid}').json()['data'] if x['id'] == 'notes')
+        seeded = next(x for x in c.get('/api/assistant/blocks').json()['data'] if x['id'] == 'notes')
+        self.assertGreater(mine['tokens'], seeded['tokens'] + 100, 'the card priced the wrong report\'s note')
 
     def test_a_systems_only_report_says_what_is_unpriced_rather_than_just_nil(self):
         """A monitor reading a live SQL view totals 0 tokens, which is true and useless on its own -

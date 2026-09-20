@@ -8,7 +8,7 @@ the past month" and change nothing - the month was never in the payload.
 This task MOVES NO LOGIC: every build below delegates to the function in assistant.py that already
 did the work, and the defaults render the payload byte for byte as it rendered before blocks
 existed (tests/test_assistant_blocks.py)."""
-import json, logging, time
+import copy, json, logging, time, weakref
 from datetime import datetime
 from typing import Callable, NamedTuple
 
@@ -333,11 +333,24 @@ def producer_cfg(chosen: dict, c: dict) -> dict:
 
 
 # ── what it costs ────────────────────────────────────────────────────────────────────────────────
-def weigh(store, chosen: dict) -> list:
+def stamp(b: Block, o: dict, *, facts: str = '', report_id=None, source_ids=None, inline=None) -> dict:
+    """The opts a block needs that its DECLARATION cannot hold, because they belong to the run: the
+    candidate facts the knowledge base is matched against, the report whose own note the notes block
+    reads, the sources system_checks pulls. assistant.build_inputs and weigh() both go through here
+    - they stamped their own and drifted, and the card priced the seeded Assistant's note for every
+    report that asked."""
+    if b.id == 'knowledge': return o | {'facts': facts}
+    if b.id == 'notes': return o | {'report': report_id}
+    if b.id == 'system_checks': return o | {'source_ids': source_ids, 'inline': inline}
+    return o
+
+
+def weigh(store, chosen: dict, report_id=None) -> list:
     """Every block, priced: whether it is on, the rows it returns and the tokens its RENDERED TEXT
     adds to the payload - a block's price is its words, not its row count. Built from the SAME
     resolved dict the payload is built from, which is the whole point: the card cannot name a read
-    the run did not make.
+    the run did not make. `report_id` is whose payload this is, for the blocks that differ by
+    report (the note).
 
     A `live` block is NOT rendered. The calendar's build is a Microsoft Graph token POST plus one
     calendarView per mailbox at a 20s timeout each, and this list is what a settings card refreshes
@@ -354,7 +367,7 @@ def weigh(store, chosen: dict) -> list:
         if not on: rows, toks = 0, 0
         elif b.live: rows, toks = None, 0
         elif b.id in PRODUCER_OF: rows, toks = _price_rows(by_kind.get(PRODUCER_OF[b.id]) or [])
-        else: rows, toks = _price(store, b, o | ({'facts': facts} if b.id == 'knowledge' else {}))
+        else: rows, toks = _price(store, b, stamp(b, o, facts=facts, report_id=report_id))
         out.append({'id': b.id, 'label': b.label, 'kind': b.kind, 'tables': list(b.tables), 'sql': b.sql,
                     'on': on, 'proposes': b.proposes, 'live': b.live, 'rows': rows, 'tokens': toks,
                     'cap': o.get('cap'), 'heading': headline(b, o) if b.heading else None,
@@ -407,17 +420,21 @@ def _price(store, b: Block, o: dict) -> tuple:
 _WEIGHED, _WEIGH_TTL = {}, 20.0
 
 
-def weighed(store, chosen: dict, ttl: float = _WEIGH_TTL) -> list:
+def weighed(store, chosen: dict, ttl: float = _WEIGH_TTL, report_id=None) -> list:
     """weigh(), cached briefly on the resolved choice. Anything that must see a fresh read - a test,
     a run - calls weigh() directly.
 
-    The STORE is held in the entry and compared by identity, not hashed into the key: id() is reused
-    once an object is collected, and a cache that answered for a dead store would be pricing another
-    install's data. And the answer is copied out, so a caller editing a row cannot edit the cache."""
-    key = (id(store), json.dumps({k: dict(sorted((o or {}).items())) for k, o in sorted(chosen.items())}, default=str, sort_keys=True))
+    The store is held as a WEAK reference and compared by identity rather than hashed into the key:
+    id() is reused the moment an object is collected, so a strong key alone would let a dead store's
+    entry answer for a live one - and a strong reference would keep every store it ever priced
+    alive. The answer is DEEP-copied out: `tables`, `window` and `knobs` are nested, and a caller
+    editing one would be editing the cache."""
+    key = (id(store), report_id, json.dumps({k: dict(sorted((o or {}).items())) for k, o in sorted(chosen.items())}, default=str, sort_keys=True))
     hit = _WEIGHED.get(key)
-    if hit and hit[2] is store and time.time() - hit[0] < ttl: return [dict(r) for r in hit[1]]
-    rows = weigh(store, chosen)
+    if hit and hit[2]() is store and time.time() - hit[0] < ttl: return copy.deepcopy(hit[1])
+    rows = weigh(store, chosen, report_id)
     if len(_WEIGHED) > 32: _WEIGHED.clear()      # one owner, a handful of reports: a cap, not an eviction policy
-    _WEIGHED[key] = (time.time(), rows, store)
-    return [dict(r) for r in rows]
+    try: ref = weakref.ref(store)
+    except TypeError: return rows                # a store that cannot be weak-referenced is simply not cached
+    _WEIGHED[key] = (time.time(), rows, ref)
+    return copy.deepcopy(rows)

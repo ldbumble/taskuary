@@ -30,5 +30,5 @@ export const canRevealTerminal = (readySeen, pendingWrites, lifted = false) => !
 // on every geom frame; an older server says nothing, and the default stands.
 export const adoptPtyGeometry = (term, geom) => {
   if (typeof geom?.conpty !== "boolean") return;
-  term.options.windowsPty = geom.conpty ? { backend: "conpty" } : {};
+  term.options.windowsPty = geom.conpty ? { backend: "conpty", ...(Number.isInteger(geom.build) ? { buildNumber: geom.build } : {}) } : {};
 };

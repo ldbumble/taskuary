@@ -5898,7 +5898,7 @@ def _quick_due() -> list:
     return due
 
 def _poll_reports(backfill_hours: float = 0, what: str = 'syncing', startup: bool = False,
-                  only=None, wait: bool = False, on_fetched=None):
+                  only=None, wait: bool = False, on_fetched=None, run_reports: bool = True):
     """The full lane; `only` hands the call to the chat lane (_poll_quick) instead."""
     if only is not None:
         return _poll_quick(only, what, wait, timer=bool(getattr(_QUICK_TIMER, 'active', False)), on_fetched=on_fetched)
@@ -5996,13 +5996,16 @@ def _poll_reports(backfill_hours: float = 0, what: str = 'syncing', startup: boo
         except Exception as e:
             logger.warning(f'whatsapp log trim skipped: {e}')
         _lap('housekeeping')
-        run_due_reports(target_store, startup)          # ...the seeded 'Assistant' report among them (assistant.py)
-        _lap('reports')
-        try:                                            # ...and the phone's morning line, once a day (remote_assistant)
-            from . import remote_assistant
-            remote_assistant.morning_line(target_store)
-        except Exception as e:
-            logger.warning(f'the morning line was skipped: {e}')
+        # A startup catch-up says NO here: pulling the inputs in is what 'catching up' means,
+        # and the reports that were due get a pass of their own behind it (catch_up_on_startup).
+        if run_reports:
+            run_due_reports(target_store, startup)      # ...the seeded 'Assistant' report among them (assistant.py)
+            _lap('reports')
+            try:                                        # ...and the phone's morning line, once a day (remote_assistant)
+                from . import remote_assistant
+                remote_assistant.morning_line(target_store)
+            except Exception as e:
+                logger.warning(f'the morning line was skipped: {e}')
         return added
     finally:
         try:
@@ -6113,13 +6116,25 @@ def catch_up_on_startup():
         from . import wabridge
         try: wabridge.ready(8)
         except Exception as e: logger.debug(f'wa bridge grace skipped: {e}')
-        _poll_reports(hours, what=f'catching up on the {hours:.0f} hour(s) it was closed' if hours else 'syncing', startup=True)
+        # EVERYTHING IN FIRST. A report is not the mail, and running the due ones inside this
+        # pass charged their minutes to the catch-up: 27 hours of mail was 91 s of a 264 s
+        # startup and six reports were the other 165 s, all of it behind one 'catching up on
+        # the 27 hour(s)' banner (measured on the owner's box, 2026-09-19). So the catch-up
+        # ENDS when the mail is in and judged...
+        _poll_reports(hours, what=f'catching up on the {hours:.0f} hour(s) it was closed' if hours else 'syncing',
+                      startup=True, run_reports=False)
+        # ...and the reports that were due take their own pass, under their own name. It reads
+        # the sources again on the way in, which is cheap (~2 s) and catches whatever landed
+        # while the backlog was being judged.
+        _poll_reports(0, what='running the reports that were due', startup=True)
         # the Morning digest needs no call of its own anymore: it is a seeded REPORT, run by
-        # the poll above like every other one. Consolidate what the verdicts taught next,
+        # the pass above like every other one. Consolidate what the verdicts taught next,
         # on the same once-a-day rhythm.
         try: learn.reflect_if_due(store)
         except Exception as e: logger.warning(f'reflection failed: {e}')
-    threading.Thread(target=_catch_up, daemon=True).start()
+    t = threading.Thread(target=_catch_up, daemon=True)
+    t.start()
+    return t                       # the caller may wait on it; startup itself never does
 
 
 def _heal_owner_docs():
@@ -6218,7 +6233,7 @@ async def events_ws(ws: WebSocket):
 
 class TermBody(BaseModel):
     agent: str | None = None; brain: str | None = None; task_id: int | None = None; repo: str | None = None
-    cwd: str | None = None; rows: int = 32; cols: int = 110; seed: bool = False
+    cwd: str | None = None; rows: int = 0; cols: int = 0; seed: bool = False   # 0: open it where the owner watches (terminal.opening_geometry)
     model: str | None = None; instruction: str | None = None
 
 @app.get('/api/terminals')
@@ -6408,7 +6423,9 @@ def _ws_ok(ws: WebSocket) -> bool:
 # in and moves the cursor down - the CLI's next cursor move then lands mid-pane. The pane fixes
 # that with xterm's windowsPty option, but only if it knows which pty it is watching.
 def geom_frame(t, owner):
-    return {'type': 'geom', 'rows': int(t.rows), 'cols': int(t.cols), 'owner': bool(owner), 'conpty': sys.platform == 'win32'}
+    win = sys.platform == 'win32'
+    return {'type': 'geom', 'rows': int(t.rows), 'cols': int(t.cols), 'owner': bool(owner), 'conpty': win,
+            'build': sys.getwindowsversion().build if win else None}   # ConPTY reflows only from 21376; xterm follows the build
 
 @app.websocket('/api/terminals/{sid}/ws')
 async def terminal_ws(ws: WebSocket, sid: str):
@@ -6557,6 +6574,8 @@ async def terminal_ws(ws: WebSocket, sid: str):
                 elif (int(rows), int(cols)) == (int(t.rows), int(t.cols)):
                     continue
                 t.resize(rows, cols)
+                # ...and the next session opens at this size instead of being grown into it
+                hub_term.remember_geometry(store, rows, cols)
     except (WebSocketDisconnect, RuntimeError, ValueError):
         pass
     finally:
@@ -6767,7 +6786,7 @@ def settings():
     places to drift out of step with store.DEFAULT_SETTINGS; the page reads it from the same dict
     the install was seeded from, so it cannot disagree with what actually shipped."""
     from .store import DEFAULT_SETTINGS
-    rows = [s for s in store.list_settings() if s['Name'] not in ('ingest_status', 'assistant_last_run', 'assistant_notes', 'assistant_notes_at')
+    rows = [s for s in store.list_settings() if s['Name'] not in ('ingest_status', 'assistant_last_run', 'assistant_notes', 'assistant_notes_at', 'pane_geometry')
             and not s['Name'].startswith('report_last_run:')]
     return {'data': [{**r, 'Default': DEFAULT_SETTINGS.get(r['Name'])} for r in rows]}
 

@@ -91,7 +91,7 @@ def start(store, server: dict, cid: int, guide: list, fields: list = None, secre
     tid = store.create_task({'Title': f"Set up {c.get('Name') or c.get('Type')}", 'Kind': KIND, 'Status': 'in_progress', 'Tags': tag(cid),
                              'Summary': f"{agent} walks the owner through the {c.get('Type')} guide in a live session on the card and saves what they give it."}, actor)
     # no repo: the session sits in Taskuary's own data folder, where there is no checkout to attribute dirt to
-    t = term.open_session(store, agent, tid, None, str(config.home()), 32, 110, actor, model,
+    t = term.open_session(store, agent, tid, None, str(config.home()), 0, 0, actor, model,
                           seed_fn=lambda cwd: prompt(c, server, guide, fields or [], secret_label or '', agent_steps))
     t.keep_transcript = False
     store.add_comment(tid, actor, 'human', f"{agent} is helping set up {c.get('Name') or c.get('Type')} in a live session on its card.")

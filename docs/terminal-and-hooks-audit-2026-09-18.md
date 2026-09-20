@@ -48,8 +48,9 @@ and a pane being seeded is `working` whatever its screen says (`Term.seeding`).
 5. **`NeedsYou` means two things.** processing_all sets it from `waiting` only when no review is pending; rowLane treats
    `AgentWaiting || NeedsYou` as `blocked`; timelineState says they are not synonyms. Rail and Timeline can classify one
    row differently.
-6. **Pane geometry.** The page could pass its fitted rows/cols when IT starts a session (POST /api/terminals takes them; every
-   page-started session still opens at 32x110 and grows). A pane mounted while hidden can send xterm's default 80x24 as the pty size (`ws.onopen -> sendSize`
+6. **Pane geometry.** The FIRST session on a fresh install still opens at the built-in 32x110 and is grown by the pane that
+   shows it - nothing has taught the app a pane size yet; every session after that one opens at the remembered size.
+   A pane mounted while hidden can send xterm's default 80x24 as the pty size (`ws.onopen -> sendSize`
    is not gated by `usableTerminalBox`); a non-owner still sends one resize before the `geom` frame lands; A−/A+ in a
    non-owner pane changes the glyph but not the rows. Heights are unrelated magic numbers (640, 440, 360/420, 46vh, 38vh).
 7. **Chrome nits.** The prompt-pending chip has no width bound (overflows a 4-across cell); theme/size are per-pane state

@@ -64,6 +64,28 @@ class LaneTests(unittest.TestCase):
         self.assertCountEqual(polled[0], ['teams', 'outlook'])
         self.assertEqual(polled[1], ['teams'])
 
+    def test_the_startup_catch_up_is_over_before_a_report_runs(self):
+        """Opening the app should pull the inputs in and then say it is done. Measured on the
+        owner's box 2026-09-19: a 27-hour catch-up took 264s, of which the mail was 91s and six
+        due reports were 165s - and all of it sat behind one 'catching up on the 27 hour(s)'
+        banner, so the reports read as the mail being slow. They get their own pass."""
+        order, seen = [], {}
+        def poll(store, days, progress=None, only=None):
+            order.append('inputs'); return 0
+        def reports(store, startup=False):
+            order.append('reports')
+            seen['what'] = json.loads(store.get_settings().get('ingest_status') or '{}').get('what') or ''
+            return 0
+        self.s.set_setting('startup_sync_days', '3', 't')
+        with mock.patch('taskuary.channels.poll_channels', poll), \
+             mock.patch.object(server, 'run_due_reports', reports), \
+             mock.patch('taskuary.wabridge.ready'), mock.patch('taskuary.learn.reflect_if_due'):
+            server.catch_up_on_startup().join(60)
+        self.assertEqual(order[0], 'inputs')                     # the mail is read first
+        self.assertEqual(order[-1], 'reports')                   # ...and the reports come after it
+        self.assertNotIn('catching up', seen['what'].lower())    # no longer charged to the catch-up
+        self.assertIn('report', seen['what'].lower())
+
     def test_a_full_sync_counts_as_the_chat_fetch_it_included(self):
         """PW-002: the full pass read Teams too, so the fast clock must not fetch it again a moment later."""
         with mock.patch('taskuary.channels.poll_channels', lambda s, d, progress=None, **k: 0), mock.patch('taskuary.ingest.drain', return_value=0):

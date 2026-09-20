@@ -745,8 +745,37 @@ def pretrust(cwd: str, agent: str = '', home: str = None) -> bool:
     return True
 
 
+DEFAULT_ROWS, DEFAULT_COLS = 32, 110       # what a session opens at before any pane has been seen
+
+def remember_geometry(store, rows, cols) -> bool:
+    """The BIGGEST pane the owner has shown a session in, so the next one opens at least that
+    big and every pane that follows only ever shrinks it.
+
+    A pty resized after it has output is the whole corruption: ConPTY keeps a grown viewport
+    top-anchored - cursor on its old row, blank rows below - while the pane's replay is
+    re-rendered bottom-filled, so the child's next line lands mid-pane over history the pane
+    had already drawn (measured 2026-09-19: a session born at 32x110 and grown to the page's
+    60 rows broke on click-away-and-back; one born at 60 did not). GROWING is the bug;
+    shrinking is safe on both sides. The Wall's 2x2 cell is taller than the task page and half
+    as wide, so keeping whichever came last would always leave the other one growing the pty -
+    each dimension keeps its maximum instead, floored at the built-in default."""
+    have_rows, have_cols = opening_geometry(store)
+    want = f'{max(have_rows, int(rows or 0))}x{max(have_cols, int(cols or 0))}'
+    if want == (store.get_settings().get('pane_geometry') or ''): return False
+    store.set_setting('pane_geometry', want, 'system')
+    return True
+
+def opening_geometry(store) -> tuple:
+    """Bookkeeping, never a knob: it is the last pane's size, floored at the built-in default."""
+    try:
+        rows, cols = str(store.get_settings().get('pane_geometry') or '').split('x')
+        return max(DEFAULT_ROWS, int(rows)), max(DEFAULT_COLS, int(cols))
+    except (AttributeError, TypeError, ValueError):
+        return DEFAULT_ROWS, DEFAULT_COLS
+
+
 def open_session(store, agent: str = None, task_id: int = None, repo: str = None, cwd: str = None,
-                 rows: int = 32, cols: int = 110, actor: str = 'owner', model: str = None,
+                 rows: int = 0, cols: int = 0, actor: str = 'owner', model: str = None,
                  seed_fn=None, resume: str = None, brain: str = None) -> Term:
     """Start a terminal: a configured agent CLI, or a plain shell when agent is None.
 
@@ -754,6 +783,8 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     that take an interactive prompt on the command line get it THERE - the session starts with
     it already submitted; unknown wrappers get it typed in (Term.seed)."""
     import json
+    # 0 means 'wherever the owner will actually watch this' - see remember_geometry
+    if not rows or not cols: rows, cols = opening_geometry(store)
     profile = {}
     if agent:
         row = store.get_agent(agent)
@@ -1600,7 +1631,7 @@ def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, inst
     continued_cwd = cwd if cwd and os.path.isdir(cwd) else None
     for i, candidate in enumerate(chain):
         try:
-            term = open_session(store, agent, tid, repo, continued_cwd, 32, 110, actor,
+            term = open_session(store, agent, tid, repo, continued_cwd, 0, 0, actor,
                                 model if i == 0 else None, resume=resume,
                                 brain=candidate or None,
                                 seed_fn=(lambda here: resume_seed(instruction)) if resume else

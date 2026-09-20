@@ -401,6 +401,31 @@ class TerminalTests(unittest.TestCase):
         finally:
             terminal.close(t.sid)
 
+    def test_a_session_opens_at_the_size_the_owners_pane_last_showed(self):
+        """A pty grown after it has output is the whole corruption (the pane and ConPTY then
+        disagree about where the cursor is), so the cure is to not grow it: a session opens at
+        the geometry the owner's pane actually renders at."""
+        server.store.set_setting('pane_geometry', '', 'test')
+        terminal.remember_geometry(server.store, 60, 191)
+        self.assertEqual(terminal.opening_geometry(server.store), (60, 191))
+
+    def test_a_small_wall_cell_never_shrinks_what_the_next_session_opens_at(self):
+        """A 3x Wall cell is a quarter of a screen. Opening the next session that small would
+        make the task page grow it - the very thing this avoids - and shrinking is safe anyway."""
+        server.store.set_setting('pane_geometry', '', 'test')
+        terminal.remember_geometry(server.store, 60, 191)
+        terminal.remember_geometry(server.store, 26, 80)
+        self.assertEqual(terminal.opening_geometry(server.store), (60, 191))
+
+    def test_a_session_opens_big_enough_for_every_pane_that_will_show_it(self):
+        """The Wall's 2x2 cell is TALLER than the task page and half as wide. Remembering
+        whichever came last would leave the other one growing the pty - so each dimension
+        keeps the biggest pane seen, and every pane that follows only ever shrinks it."""
+        server.store.set_setting('pane_geometry', '', 'test')
+        terminal.remember_geometry(server.store, 60, 191)      # the task page
+        terminal.remember_geometry(server.store, 68, 125)      # a Wall cell, two across
+        self.assertEqual(terminal.opening_geometry(server.store), (68, 191))
+
     def test_geom_frame_says_which_pty_backend_draws(self):
         """ConPTY keeps a grown viewport top-anchored (cursor on its old row, blank rows below);
         xterm's default pulls scrollback in and moves the cursor down. The pane needs to know
@@ -411,6 +436,8 @@ class TerminalTests(unittest.TestCase):
             with c.websocket_connect(f'/api/terminals/{t.sid}/ws') as ws:
                 geom = next(m for m in (ws.receive_json() for _ in range(8)) if m['type'] == 'geom')
             self.assertEqual(geom['conpty'], os.name == 'nt')
+            # ConPTY reflows on a width change only from build 21376; xterm mirrors that from the build
+            self.assertEqual(geom['build'], sys.getwindowsversion().build if os.name == 'nt' else None)
         finally:
             terminal.close(t.sid)
 

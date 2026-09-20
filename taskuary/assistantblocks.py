@@ -496,7 +496,13 @@ def cards_of(cfg: dict) -> list | None:
     """The report's saved cards, or None when it never saved any - the block dict, or nothing at
     all, decides then (resolve). Anything that is not a known card is dropped, a card named twice
     counts once, and only the numbers the card declares come through."""
-    raw = cfg.get(KEY)
+    # the cards live in the report's SOURCE LIST beside its systems (`watch_sources`, type
+    # 'taskuary' - the owner, 2026-09-20: "it should be in the data sources"); the separate key is
+    # how the first version of the page saved them, read for the reports it wrote
+    ws = cfg.get('watch_sources')
+    ws = [ws] if isinstance(ws, dict) else ws if isinstance(ws, list) else []
+    mine = [x for x in ws if isinstance(x, dict) and x.get('type') == TOKEN_TYPE]
+    raw = mine or cfg.get(KEY)
     if not isinstance(raw, list): return None
     out, seen = [], set()
     for x in raw:

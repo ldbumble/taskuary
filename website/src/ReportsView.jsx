@@ -63,6 +63,7 @@ const FIELDS = {
   // The Assistant silently pulls selected saved report pipelines; its prompt judges all of
   // those current views together. The selector itself lives in ReportWizard below.
   assistant: [],
+  taskuary: [["what it reads", "card", "taskuary_card", ""]],     // a card of Taskuary's own tables (assistantBlocks.TASKUARY_CARDS)
   evening_inbox: [["hours back", "hours", "text", "8"], AI_FIELD],
   // the window starts at MIDNIGHT that many days back: 1 = all of yesterday plus today so far
   digest: [["days back (1 = all of yesterday + today so far; counted from midnight)", "days", "text", "1"], AI_FIELD],
@@ -170,7 +171,7 @@ const reportSchedule = (c) => [c.on_startup && startupText(c), c.cron && cronTex
   .filter(Boolean).join(" + ") || "once a day while Taskuary is open";
 
 const TYPE_LABELS = {
-  zoho_monthly_invoices: "Monthly Zoho invoices",
+  zoho_monthly_invoices: "Monthly Zoho invoices", taskuary: "Taskuary",
   mssql: "SQL Server", winrm: "Remote Windows", mcp: "MCP server", sqlite: "SQLite", rest: "REST / JSON", rss: "RSS / Atom",
   database: "Any database", aws: "AWS (any call)", s3_object: "S3 object", cloudwatch_logs: "CloudWatch logs",
   azure: "Azure (ARM)", azure_blob: "Azure blob", azure_logs: "Azure Log Analytics",
@@ -226,6 +227,7 @@ const PLACEHOLDER_FOR = {
 };
 
 const TYPE_GROUPS = [
+  ["Taskuary itself", ["taskuary"]],
   ["This computer", ["local_file", "sqlite", "mcp"]],
   ["Files & sheets", ["google_sheets", "sharepoint_list", "sharepoint_file"]],
   ["Databases", ["mssql", "database"]],
@@ -970,7 +972,14 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
   const [cfg, setCfg] = useState(saved);
   const [srcs, setSrcs] = useState(toSources(saved));   // the funnel's inputs, in order
   // the Assistant's OWN data sources: a system it checks without a saved report standing behind it
-  const [watchSrcs, setWatchSrcs] = useState(() => (Array.isArray(saved.watch_sources) ? saved.watch_sources : []));
+  // ...and Taskuary's own cards sit in that same list (type "taskuary"). A report saved before
+  // they did - with the block dict, the first page's own key, or nothing - opens with the cards
+  // its choice amounts to (assistantBlocks.cardsOf), and saves them in the list from then on.
+  const [watchSrcs, setWatchSrcs] = useState(() => {
+    const ws = Array.isArray(saved.watch_sources) ? saved.watch_sources : [];
+    const own = saved.type === "assistant" && !ws.some((s) => s?.type === "taskuary") ? cardsOf(saved) : [];
+    return [...own, ...ws];
+  });
   const [drag, setDrag] = useState(null);
   const [step, setStep] = useState(0);
   const [test, setTest] = useState(null);
@@ -983,9 +992,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
   const [blockRows, setBlockRows] = useState(null);
   // Taskuary's own cards, the report's sources like any other (assistantBlocks.cardsOf: a report
   // saved with the block dict, or with nothing, is shown as the cards it amounts to)
-  const [cards, setCards] = useState(() => cardsOf(saved));
-  const [openCard, setOpenCard] = useState(null);
-  const [addCard, setAddCard] = useState(null);      // the "add a Taskuary card" menu's anchor
+  const cards = watchSrcs.filter((s) => s?.type === "taskuary" && (s.card || "").trim()).map(toShape);
   const cardsKey = JSON.stringify(cards);
   useEffect(() => {
     if (!(cfg.type === "assistant" || (srcs.length === 1 && srcs[0].type === "assistant"))) return undefined;
@@ -1051,7 +1058,8 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
     // Taskuary's cards are saved as the whole truth (even none), and the block dict they replaced
     // goes - two records of one choice is how a page and a run come to disagree
     if (c.type === "assistant" || list.some((x) => x.type === "assistant")) {
-      c.taskuary_sources = cards.map((k) => Object.fromEntries(Object.entries(k).filter(([, v]) => v !== "")));
+      // the cards ride in watch_sources; "none at all" is still a choice, and the empty key says so
+      if (watch.some((x) => x.type === "taskuary")) delete c.taskuary_sources; else c.taskuary_sources = [];
       delete c.blocks;
     }
     // a single source still writes the flat shape too, so a config saved here stays
@@ -1141,87 +1149,9 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
 
             {isAssistant && (
               <Box sx={{ ...card, p: 1.5, mb: 1.5, maxWidth: 720, bgcolor: PANEL2 }}>
-                <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13, mb: 0.4 }}>Taskuary as a source</Typography>
+                <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13, mb: 0.4 }}>What it reads</Typography>
                 <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1 }}>
-                  Taskuary's own tables, as source cards beside the systems below. Every line it posts says which card it came from,
-                  and the prompt can place a card where it talks about it (Insert source, under the prompt). Remove them all and it reads only the systems.
-                </Typography>
-                {/* one card per Taskuary source, the same width and rhythm as the system cards below */}
-                <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "stretch", mb: 1.25 }}>
-                  {cards.map((k) => {
-                    const priced = blockRows?.cards?.find((p) => p.id === k.card);
-                    const def = TASKUARY_CARDS.find((c) => c.id === k.card) || { label: k.card, says: "", blocks: [] };
-                    return (
-                      <Box key={k.card} sx={{ ...card, width: { xs: "100%", sm: "calc(50% - 6px)" }, minHeight: 108, bgcolor: "#fff", p: 1.1,
-                        display: "flex", flexDirection: "column", gap: 0.5 }}>
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                          <Typography sx={{ fontSize: 13, fontWeight: 700, color: INK, flex: 1, minWidth: 0 }}>Taskuary · {def.label}</Typography>
-                          <Typography sx={{ ...mono, fontSize: 11, color: DIM }}>
-                            {!priced ? "…" : priced.live ? (priced.rows ? `${priced.rows} row${priced.rows === 1 ? "" : "s"} + live` : "live") : `${priced.rows} row${priced.rows === 1 ? "" : "s"}`}
-                            {priced && priced.tokens ? ` · ~${kilo(priced.tokens)}` : ""}
-                          </Typography>
-                          <IconButton size="small" aria-label={`remove Taskuary · ${def.label}`} sx={{ p: 0.3 }}
-                            onClick={() => setCards((cur) => cur.filter((x) => x.card !== k.card))}><CloseIcon sx={{ fontSize: 15 }} /></IconButton>
-                        </Box>
-                        <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.35 }}>{def.says}</Typography>
-                        {!!knobsOf(k.card).length && (
-                          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mt: "auto", pt: 0.5 }}>
-                            {knobsOf(k.card).map((n) => (
-                              <TextField key={n.name} size="small" type="number" label={n.label} value={k[n.name] ?? n.default}
-                                sx={{ width: 150, bgcolor: "#fff" }} inputProps={{ "aria-label": `Taskuary · ${def.label} — ${n.label}` }}
-                                onChange={(e) => setCards((cur) => cardPatch(cur, k.card, n.name, e.target.value))} />
-                            ))}
-                          </Box>
-                        )}
-                        <Typography onClick={() => setOpenCard(openCard === k.card ? null : k.card)}
-                          sx={{ ...mono, fontSize: 10.5, color: FAINT, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
-                          {openCard === k.card ? "reads: " + (priced?.blocks || def.blocks).join(", ") : "what it reads"}
-                        </Typography>
-                      </Box>
-                    );
-                  })}
-                  {cards.length < TASKUARY_CARDS.length && (
-                    <Box onClick={(e) => setAddCard(e.currentTarget)}
-                      sx={{ ...card, width: { xs: "100%", sm: "calc(50% - 6px)" }, minHeight: 108, display: "flex", flexDirection: "column", alignItems: "center",
-                        justifyContent: "center", gap: 0.5, cursor: "pointer", borderStyle: "dashed", bgcolor: "#fff",
-                        color: DIM, "&:hover": { borderColor: "#d8cfbe", color: "#55697a" } }}>
-                      <AddIcon sx={{ fontSize: 20 }} />
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>add a Taskuary card</Typography>
-                      <Typography variant="caption" sx={{ color: FAINT }}>{TASKUARY_CARDS.length - cards.length} more to choose from</Typography>
-                    </Box>
-                  )}
-                  <Menu open={!!addCard} anchorEl={addCard} onClose={() => setAddCard(null)}>
-                    {TASKUARY_CARDS.filter((c) => !cards.some((k) => k.card === c.id)).map((c) => (
-                      <MenuItem key={c.id} sx={{ fontSize: 12.5, display: "block", maxWidth: 420, whiteSpace: "normal" }}
-                        onClick={() => { setCards((cur) => [...cur, { type: "taskuary", card: c.id }]); setAddCard(null); }}>
-                        <Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>Taskuary · {c.label}</Typography>
-                        <Typography variant="caption" sx={{ color: DIM }}>{c.says}</Typography>
-                      </MenuItem>
-                    ))}
-                  </Menu>
-                </Box>
-                {!blockRows ? <Typography variant="caption" sx={{ color: FAINT }}>pricing…</Typography> : (
-                  <Box>
-                    <Box sx={{ borderTop: `1px solid ${BORDER}`, mt: 0.2, pt: 0.7 }}>
-                      <Typography sx={{ ...mono, fontSize: 11, color: DIM }}>
-                        {costLine(blockRows.total_tokens, blockRows.runs_per_day, blockRows.cost)}
-                      </Typography>
-                      {!!blockRows.unpriced?.length && (
-                        <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT, mt: 0.3 }}>
-                          not in that total: {blockRows.unpriced.map((u) => u.label.toLowerCase()).join(", ")} — read live when the check runs
-                        </Typography>
-                      )}
-                    </Box>
-                  </Box>
-                )}
-              </Box>
-            )}
-
-            {isAssistant && (
-              <Box sx={{ ...card, p: 1.5, mb: 1.5, maxWidth: 720, bgcolor: PANEL2 }}>
-                <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13, mb: 0.4 }}>Systems and data views to check</Typography>
-                <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1 }}>
-                  Anything a report can read — Intacct queries, databases, REST or MCP tools, cloud systems, files, agent skills. Add it here and nothing else needs to exist. This check reads only the sources below — not your inbox, calendar, tasks, Morning digest, or another Assistant report.
+                  Taskuary's own tables (the Taskuary cards) and anything a report can read — Intacct queries, databases, REST or MCP tools, cloud systems, files, agent skills. Every card has a Test that shows its data; the prompt can place a card where it talks about it (Insert source, under the prompt). This check reads only the sources below.
                 </Typography>
                 {/* "I don't know what fields off hand Intacct has set up" - so this step cannot be a
                     form. Describe what the Assistant should keep an eye on and the composer adds
@@ -1257,6 +1187,19 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                     <Typography variant="caption" sx={{ color: FAINT }}>no saved report needed</Typography>
                   </Box>
                 </Box>
+                {/* what the Taskuary cards in the list cost, priced by the server from the same choice the run reads */}
+                {!!cards.length && blockRows && (
+                  <Box sx={{ mb: 1.25, mt: -0.5 }}>
+                    <Typography sx={{ ...mono, fontSize: 11, color: DIM }}>
+                      Taskuary cards: {costLine(blockRows.total_tokens, blockRows.runs_per_day, blockRows.cost)}
+                    </Typography>
+                    {!!blockRows.unpriced?.length && (
+                      <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT, mt: 0.3 }}>
+                        not in that total: {blockRows.unpriced.map((u) => u.label.toLowerCase()).join(", ")} — read live when the check runs
+                      </Typography>
+                    )}
+                  </Box>
+                )}
                 <Typography variant="caption" sx={{ color: INK, fontWeight: 700, display: "block", mb: 0.5 }}>
                   …and pull these saved data views too (optional)
                 </Typography>
@@ -1323,7 +1266,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                   rest follow underneath as they always have. The menu writes the token, so nobody
                   has to know its spelling. */}
               {(() => {
-                const opts = promptSources({ cards: isAssistant ? cards : [], sources: isAssistant ? watchSrcs.map(toShape).filter((x) => x.type) : srcs.map(toShape).filter((x) => x.type) });
+                const opts = promptSources({ sources: (isAssistant ? watchSrcs : srcs).map(toShape).filter((x) => x.type) });
                 return !!opts.length && (
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.6, flexWrap: "wrap" }}>
                     <Button size="small" variant="outlined" onClick={(e) => setInsertAt(e.currentTarget)} sx={{ fontSize: 11.5, py: 0.1 }}>Insert source</Button>
@@ -1942,7 +1885,7 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
           </Typography>
         </>
       )}
-      {onFill && src.type !== "assistant" && <SourceComposer one typeHint={src.type} hint="say what you want out of it"
+      {onFill && !["assistant", "taskuary"].includes(src.type) && <SourceComposer one typeHint={src.type} hint="say what you want out of it"
         placeholder={PLACEHOLDER_FOR[src.type] || "the rows this card should return"}
         onSources={(list) => onFill(list[0])} />}
       {(count > 1 || removable) && (
@@ -1963,6 +1906,35 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
       {fields.map(([label, key, kind, ph]) => {
         const v = src[key];
         const shown = showValue(v, kind);
+        if (kind === "taskuary_card") {
+          // which of Taskuary's own tables this card reads, and the card's numbers: the same
+          // choice the Assistant's payload is built from (assistantblocks.CARDS), priced elsewhere
+          const def = TASKUARY_CARDS.find((c) => c.id === src.card);
+          return (
+            <Box key={key} sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+              <Select size="small" displayEmpty value={src.card || ""} sx={{ fontSize: 12.5, bgcolor: "#fff" }}
+                inputProps={{ "aria-label": "which of Taskuary's tables" }}
+                onChange={(e) => onChange({ card: e.target.value, label: src.label || cardLabel(e.target.value) })}>
+                <MenuItem value="" sx={{ fontSize: 12 }} disabled>choose what it reads…</MenuItem>
+                {TASKUARY_CARDS.map((c) => (
+                  <MenuItem key={c.id} value={c.id} sx={{ fontSize: 12.5, display: "block", maxWidth: 420, whiteSpace: "normal" }}>
+                    <Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>{c.label}</Typography>
+                    <Typography variant="caption" sx={{ color: DIM }}>{c.says}</Typography>
+                  </MenuItem>
+                ))}
+              </Select>
+              {!!def?.knobs.length && (
+                <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                  {def.knobs.map((n) => (
+                    <TextField key={n.name} size="small" type="number" label={n.label} value={src[n.name] ?? n.default}
+                      sx={{ width: 150, bgcolor: "#fff" }} inputProps={{ "aria-label": `Taskuary · ${def.label} — ${n.label}` }}
+                      onChange={(e) => onChange({ [n.name]: e.target.value })} />
+                  ))}
+                </Box>
+              )}
+            </Box>
+          );
+        }
         if (kind === "pick_file") {
           return (
             <Select key={key} size="small" value={src.pick || "newest"} sx={{ fontSize: 12.5, bgcolor: "#fff" }}
@@ -1996,10 +1968,10 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
           nothing at all when it comes back as one object - which the Test below makes obvious. */}
       {/* width:300 on a 300-wide card with padding on both sides: it hung out over the edge.
           Full width of whatever the card gives it, and a one-line hint instead of three. */}
-      <TextField size="small" label="max rows" type="number" placeholder="200" value={src.max_rows ?? ""}
+      {src.type !== "taskuary" && <TextField size="small" label="max rows" type="number" placeholder="200" value={src.max_rows ?? ""}
         helperText="blank = 200, and only for list results"
         FormHelperTextProps={{ sx: { fontSize: 10.5, mx: 0 } }}
-        sx={{ bgcolor: "#fff", width: "100%" }} onChange={(e) => onChange({ max_rows: e.target.value })} />
+        sx={{ bgcolor: "#fff", width: "100%" }} onChange={(e) => onChange({ max_rows: e.target.value })} />}
       <SourceTest src={src} />
     </Box>
   );

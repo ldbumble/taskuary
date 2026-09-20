@@ -60,34 +60,40 @@ _PROMISE = re.compile(r"\b(i('ll| will)|i'?m going to|let me) (send|get|have|fol
 # The editable instruction - what a real assistant watches for. Seeded as the 'Assistant' report
 # on the Reports tab (store.__init__), so the owner edits it there like the Morning digest's;
 # this copy is the default and the fallback. CONTRACT (the JSON shape) stays in code.
+# Each section names the source card it reads, as a token (reports.substitute): the card's rows are
+# placed right there when the check runs, so the prompt IS the payload's shape - the owner reads
+# which data feeds which instruction, and can move or drop a card by editing the words.
 PROMPT = (
-    'You are my assistant; every 30 minutes you check in across the systems and conversations I chose. Tell me only what a sharp human assistant who had READ everything '
+    'You are my assistant; every 30 minutes you read the sources below and check in. Tell me only what a sharp human assistant who had READ everything '
     'would lean over and say - never a summary of my inbox, never a count I can see myself. A good line connects two things I '
     'have not connected, or names the one thing I am about to miss. Read, in this order of worth:\n'
-    '0. CONFIGURED SYSTEM CHECKS - current views from finance, operations, CRM, infrastructure, or any other connected system. '
-    'Look for threshold breaches, unusual totals, sharp changes, missing expected activity, and facts that conflict across systems.\n'
-    '1. WHAT PEOPLE SAID - the actual words, by thread. The ask buried in a chat ("can you fill out the form?") that got a '
+    '0. CONFIGURED SYSTEM CHECKS - current views from finance, operations, CRM, infrastructure, or any other connected system (they follow '
+    'this prompt, each under its own name). Look for threshold breaches, unusual totals, sharp changes, missing expected activity, and facts '
+    'that conflict across systems.\n'
+    '1. WHAT PEOPLE SAID, who is out of office, what arrived, and what waits on somebody:\n[taskuary.messages]\n'
+    'The actual words, by thread: the ask buried in a chat ("can you fill out the form?") that got a '
     'reply but not the thing itself; the colleague mentioning in passing that a system fails "every day 4-5"; the person '
     'answering a question nobody asked me; the thread where the last word is theirs and it wants something from me. Say who, '
-    'what, and what I would do - "Marcus asked for X on Thursday; I would send it before his Monday 1pm".\n'
-    '2. What I am waiting on and have not chased (CANDIDATES followup) - but check OUT OF OFFICE first: a chase to someone '
-    'who is away is worse than silence; say when they are back instead.\n'
-    '3. What I promised and have not done (promise): the date I gave, and whether it has passed.\n'
-    '4. CALENDAR: for each meeting in the next two days, what in the mail and chats bears on it - the person in the room '
+    'what, and what I would do - "Marcus asked for X on Thursday; I would send it before his Monday 1pm". '
+    'What I am waiting on and have not chased (CANDIDATES followup) - but check OUT OF OFFICE first: a chase to someone '
+    'who is away is worse than silence; say when they are back instead. What I promised and have not done (promise): the date '
+    'I gave, and whether it has passed. What the machines are telling me, read not counted: a report marked FAILED says WHY '
+    '(the error is in the line) - name the cause; a job that fails the same way N times is one finding, with the cause; a report '
+    'whose every run says "0 rows" is a report nobody needs. Reports carry their schedule: "on app start" firing 20 times means '
+    'the app was started 20 times, not that the scheduler is broken. The same in reverse: read WHEN TASKUARY WAS RUNNING before '
+    'calling a report late or the scheduler dead - a report cannot fire while the app is shut, an overnight close is not a missed '
+    'run, and minutes after a launch nothing due today has had its turn yet.\n'
+    '2. THE CALENDAR:\n[taskuary.calendar]\n'
+    'For each meeting in the next two days, what in the mail and chats bears on it - the person in the room '
     'who asked me something this week, the thread it will be about. A recurring standup with nothing behind it needs no line.\n'
-    '5. Work gone quiet (cold): push it or drop it - say which.\n'
-    '6. What the machines are telling me, read not counted: a report marked FAILED says WHY (the error is in the line) - name '
-    'the cause; a job that fails the same way N times is one finding, with the cause; a report whose every run says "0 rows" '
-    'is a report nobody needs. Reports carry their schedule: "on app start" firing 20 times means the app was started 20 '
-    'times, not that the scheduler is broken. The same in reverse: read WHEN TASKUARY WAS RUNNING before calling a report '
-    'late or the scheduler dead - a report cannot fire while the app is shut, an overnight close is not a missed run, and '
-    'minutes after a launch nothing due today has had its turn yet.\n'
-    '7. My own work (DONE THIS WEEK, OPEN WORK): the fix that keeps coming back, the task that closed without shipping, the '
-    'process change worth proposing. Name the evidence: TQ-ref, count, sender. Never restate what I did.\n'
+    '3. MY OWN WORK:\n[taskuary.work]\n'
+    'Work gone quiet (cold): push it or drop it - say which. The fix that keeps coming back, the task that closed without '
+    'shipping, the process change worth proposing. Name the evidence: TQ-ref, count, sender. Never restate what I did.\n'
+    '4. THE APP AND THE SYSTEMS PEOPLE NAME:\n[taskuary.systems]\n'
+    '5. WHAT I ALREADY KNOW - never repeat anything under ALREADY SAID, reworded or not; use my notes; draw on the knowledge base by name:\n[taskuary.memory]\n'
     'Be useful, not busy: a check with nothing NEW posts nothing, and most checks are that. When you do speak, prefer the '
     'specific over the general: a name, a date, a quoted phrase, a cause. One idea about my own work a day is right; three is '
-    'noise. Never repeat anything under ALREADY SAID, reworded or not - but a fact that CHANGES an earlier line (they are out '
-    'of office; the failure has a cause; they answered) is new and worth one line.\n'
+    'noise. A fact that CHANGES an earlier line (they are out of office; the failure has a cause; they answered) is new and worth one line.\n'
     'End every check with a note to your next one: what you looked at and found nothing in, when something becomes worth '
     'raising (a date, a length of silence), anything you would otherwise have to work out again - facts, never rules.')
 
@@ -112,7 +118,8 @@ SYSTEMS_CONTRACT = (
 # a stock prompt still starting like one of these is healed to PROMPT (store.__init__)
 OLD_PROMPT_HEADS = ('You are my assistant. Once an hour,', 'You are my assistant. Every 20 minutes you check in;',
                     'You are my assistant. Every 30 minutes you check in;',
-                    'You are my assistant; every 30 minutes you check in.')
+                    'You are my assistant; every 30 minutes you check in.',
+                    'You are my assistant; every 30 minutes you check in across the systems and conversations I chose.')
 
 
 def cfg(store) -> dict:
@@ -818,7 +825,8 @@ def _inline(raw) -> list[dict]:
     same way a chosen saved view is, and an Assistant still cannot watch itself."""
     if isinstance(raw, dict): raw = [raw]
     if not isinstance(raw, list): return []
-    return [dict(x) for x in raw if isinstance(x, dict) and x.get('type') and x.get('type') != 'assistant'][:20]
+    # a Taskuary card sits in the same list (2026-09-20) but is a block choice, not a system to pull
+    return [dict(x) for x in raw if isinstance(x, dict) and x.get('type') and x.get('type') not in ('assistant', 'taskuary')][:20]
 
 
 def _watch(store) -> tuple[list[int], list[dict]]:
@@ -964,6 +972,16 @@ def build_sections(store, cands: list, head: str = 'CANDIDATES', watch_source_id
     return lead, parts, mids
 
 
+# What the system prompt says in the instruction's place once the instruction has moved into the
+# message with its data, and how that message opens - the one text the model reads, the run record
+# keeps and the Preview shows.
+PLACED_SAYS = 'It is at the top of the message, with the cards it names placed where it names them.'
+PLACED_HEAD = "YOUR INSTRUCTION (the owner's, from the Reports tab), with the cards it names placed in it:"
+
+
+def placed_message(shaped: str, rest: str) -> str: return f'{PLACED_HEAD}\n{shaped}\n\n{rest}'
+
+
 def placed(instruction: str, lead: str, parts: list) -> tuple:
     """(the instruction with every card it names in its place, the payload without those cards).
     A prompt naming no card leaves both exactly as they were - the substitution costs nothing
@@ -1004,9 +1022,13 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
     contract = SYSTEMS_CONTRACT if systems_only else CONTRACT
     if systems_only: user, mids = systems_inputs(store, watch_source_ids, watch_sources), {}
     else:
-        # a card the instruction names is placed in it; the rest is the payload as it always was
+        # a card the instruction names is placed in it, and the instruction then travels IN the
+        # message with its data (one text: what the model reads, the run record, the Preview); the
+        # rest of the payload follows it as it always did
         lead, parts, mids = build_sections(store, cands, watch_source_ids=watch_source_ids, watch_sources=watch_sources, blocks=blocks, report_id=report_id)
-        direction, user = placed(direction, lead, parts)
+        shaped, rest = placed(direction, lead, parts)
+        if shaped is direction: user = rest
+        else: direction, user = PLACED_SAYS, placed_message(shaped, rest)
     # the report's prompt is the report's own: instruction, data scope, output contract, owner (PW-242).
     # COUNSEL is the chat's document; its walkthrough rules governed idea generation until 2026-09-06.
     system = (f"YOUR INSTRUCTION (the owner's, from the Reports tab):\n{direction}" + contract.replace('{max_lines}', str(max_lines))
@@ -1035,8 +1057,7 @@ def facts(store, watch_source_ids=None, watch_sources=None, systems_only: bool =
                                     'CANDIDATES (new since the last post)', watch_source_ids, watch_sources, blocks, report_id)
     from .reports import names_sources
     if not names_sources(instruction): return lead + ''.join(t for _, t in parts)
-    direction, user = placed(instruction, lead, parts)
-    return f'YOUR INSTRUCTION, with the cards it names placed in it:\n{direction}\n\n{user}'
+    return placed_message(*placed(instruction, lead, parts))
 
 
 # ── the note to the next check ───────────────────────────────────────────────────────────────

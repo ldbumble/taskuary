@@ -240,7 +240,7 @@ def test_the_metric_tools_are_reachable_on_a_read_only_intacct_card():
 # rather than a tool that mysteriously will not run - adding a report type means giving it an
 # authority in scopes.ACTIONS, or adding it below and saying why 'write' is right for it.
 UNCLASSIFIED = ['agent', 'assistant', 'calendar', 'google_sheets', 'kb_reindex',
-                'sharepoint_file', 'sharepoint_list']
+                'sharepoint_file', 'sharepoint_list', 'taskuary']   # a Taskuary card reads the store, like the assistant
 
 
 def test_no_new_report_type_is_left_unclassified():

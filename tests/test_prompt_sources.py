@@ -118,10 +118,14 @@ class SubstituteTests(unittest.TestCase):
         def llm(system, user, **kw): seen['system'], seen['user'] = system, user; return '{"say": []}'
         chosen = B.from_cards(s, [{'card': 'memory'}, {'card': 'work'}])
         assistant.think(s, [], llm, 'Never repeat these: [taskuary.memory]. Now the rest.', blocks=chosen)
-        self.assertIn('ALREADY SAID (never repeat)', seen['system']); self.assertNotIn('ALREADY SAID (never repeat)', seen['user'])
-        self.assertIn('OPEN WORK', seen['user']); self.assertNotIn('OPEN WORK', seen['system'])
+        u = seen['user']
+        self.assertTrue(u.startswith(assistant.PLACED_HEAD))                       # the instruction travels IN the message, with its data
+        self.assertIn(assistant.PLACED_SAYS, seen['system'])
+        self.assertLess(u.index('ALREADY SAID (never repeat)'), u.index('Now the rest.'))   # placed where the prompt names it
+        self.assertGreater(u.index('OPEN WORK'), u.index('Now the rest.'))                 # the rest follows
+        self.assertEqual(u.count('ALREADY SAID (never repeat)'), 1)
         assistant.think(s, [], llm, 'Plain.', blocks=chosen)
-        self.assertNotIn('ALREADY SAID (never repeat)', seen['system']); self.assertIn('ALREADY SAID (never repeat)', seen['user'])   # the contract's own words mention the head; the section is the head with its rows
+        self.assertTrue(seen['user'].startswith('NOW:')); self.assertIn('ALREADY SAID (never repeat)', seen['user'])
 
     def test_the_preview_is_the_placed_shape(self):
         s = A.store()
@@ -129,7 +133,7 @@ class SubstituteTests(unittest.TestCase):
         plain = assistant.facts(s, blocks=chosen, instruction='Plain.')
         self.assertTrue(plain.startswith('NOW:'))
         shaped = assistant.facts(s, blocks=chosen, instruction='Read [taskuary.memory] first.')
-        self.assertTrue(shaped.startswith('YOUR INSTRUCTION'))
+        self.assertTrue(shaped.startswith(assistant.PLACED_HEAD))
         self.assertEqual(shaped.count('ALREADY SAID (never repeat)'), 1)
 
     def test_a_card_with_nothing_rendered_still_answers_in_words(self):
@@ -138,3 +142,35 @@ class SubstituteTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class CardsInTheSourceListTests(unittest.TestCase):
+    """2026-09-20, second round - the owner: "it's not supposed to be separate, it should be in the
+    data sources, like this, so you can see what the data looks like, like all other data sources"."""
+    def test_a_taskuary_card_in_watch_sources_is_the_choice_and_not_a_system(self):
+        s = MemoryStore()
+        cfg = {'type': 'assistant', 'watch_sources': [{'type': 'taskuary', 'card': 'work', 'quiet_days': 9}, {'type': 'rest', 'url': 'http://x'}]}
+        self.assertEqual(B.cards_of(cfg), [{'type': 'taskuary', 'card': 'work', 'quiet_days': 9}])
+        chosen = B.resolve(s, cfg)
+        self.assertTrue(chosen['gone_quiet']['on'] and chosen['gone_quiet']['days'] == 9 and not chosen['threads']['on'])
+        self.assertEqual([x['type'] for x in assistant._inline(cfg['watch_sources'])], ['rest'])   # the systems reader skips it
+        self.assertEqual([x['type'] for x in reports.systems_of(cfg)], ['rest'])
+        self.assertEqual(reports.assistant_default({'type': 'assistant', 'watch_sources': [{'type': 'taskuary', 'card': 'work'}]}) != {}, True)
+
+    def test_the_card_is_a_source_with_a_test_like_any_other(self):
+        s = A.store()
+        head, body = reports.executor_for('taskuary')({'store': s, 'type': 'taskuary', 'card': 'memory'})
+        self.assertTrue(head.startswith('Memory - '))
+        self.assertIn('ALREADY SAID (never repeat)', body)
+        with self.assertRaises(ValueError): reports.executor_for('taskuary')({'store': s, 'type': 'taskuary', 'card': 'nope'})
+        head, body = reports.run_sources(s, [{'type': 'taskuary', 'card': 'work', 'label': 'my work'}])
+        self.assertIn('=== my work (Work - ', body)
+
+    def test_a_card_is_named_by_its_card_whatever_it_was_labelled(self):
+        self.assertEqual(reports.source_key({'type': 'taskuary', 'card': 'messages', 'label': 'inbox stuff'}, 1), 'taskuary.messages')
+
+    def test_the_seeded_prompt_names_every_card_and_the_old_one_migrates(self):
+        for c in B.CARDS: self.assertIn(f'[taskuary.{c.id}]', assistant.PROMPT, c.id)
+        self.assertTrue(reports.names_sources(assistant.PROMPT))
+        self.assertFalse(assistant.PROMPT.startswith(assistant.OLD_PROMPT_HEADS))
+        self.assertTrue('You are my assistant; every 30 minutes you check in across the systems and conversations I chose.'.startswith(assistant.OLD_PROMPT_HEADS))

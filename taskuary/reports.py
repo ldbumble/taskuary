@@ -510,6 +510,29 @@ def run_evening_inbox(cfg):
     return f'the last {hours} hours of Inbox and Sent email', gather(cfg['store'], hours)
 
 
+def run_taskuary(cfg):
+    """One Taskuary card as a report SOURCE - a card in the same list as an Intacct query or a
+    database, with the same Test button (the owner, 2026-09-20: "it should be in the data sources,
+    so you can see what the data looks like, like all other data sources"). Its body is the card's
+    sections exactly as the Assistant's payload carries them (assistant.build_sections), plus the
+    lines its producers would raise as candidates. `store` arrives via resolve_cfg."""
+    from . import assistantblocks as blk
+    from . import assistant
+    store, c = cfg['store'], blk.card(str(cfg.get('card') or '').strip())
+    if not c: raise ValueError(f"no Taskuary card called {cfg.get('card')!r} - choose one of {', '.join(x.id for x in blk.CARDS)}")
+    chosen = blk.from_cards(store, [cfg])
+    _, parts, _ = assistant.build_sections(store, [], blocks=chosen, report_id=cfg.get('source_id'))
+    body = blk.sections_by_card(parts)[f'{blk.TOKEN_TYPE}.{c.id}']
+    raised = []
+    for bid in c.blocks:
+        b = blk.by_id(bid)
+        if b.heading or not chosen[bid].get('on'): continue
+        out, _ = blk.render(store, b, blk.stamp(b, chosen[bid], report_id=cfg.get('source_id')))
+        raised += [f"[{x.get('key')}] {x.get('facts') or x.get('text') or ''}" for x in (out if isinstance(out, list) else [])]
+    if raised: body += '\n\nRAISED BY THIS CARD (posted as candidates, no model needed):\n' + '\n'.join(raised)
+    return f"{c.label} - {body.strip().count(chr(10)) + 1} line(s)", body.strip()
+
+
 def run_assistant(cfg):
     """The 'Assistant' report - the post on the Timeline (assistant.py). Scheduled and worded on the
     Reports tab like the Morning digest, but it does not file prose: run_report_source hands the
@@ -715,7 +738,7 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             # the semantic layer over the ERP: a number that was PROVED, and the check that keeps it proved
             'metric': run_metric, 'metric_check': run_metric_check,
             'rss': run_rss, 'digest': run_digest, 'evening_inbox': run_evening_inbox,
-            'automate': run_automate, 'assistant': run_assistant,
+            'automate': run_automate, 'assistant': run_assistant, 'taskuary': run_taskuary,
             'calendar': _calendar,       # the owner's busy times, off the Outlook (and Google) cards - read-only
             'agent': run_agent,          # the AI itself: a saved skill or a prompt, run by a CLI agent on the schedule
             # files & sheets people already keep: a Google Sheet, a SharePoint list, a file in a library
@@ -957,7 +980,7 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
 # Report types whose data IS the store - they reach no further than the local database, so they
 # can neither be slow nor unreachable. Everything else dials out: a SQL box, an API, a share.
 # run_due_reports runs these FIRST for that reason, so keep the two uses of this list together.
-STORE_BACKED = ('digest', 'evening_inbox', 'automate', 'assistant', 'agent', 'calendar', 'kb_search', 'kb_reindex',
+STORE_BACKED = ('taskuary', 'digest', 'evening_inbox', 'automate', 'assistant', 'agent', 'calendar', 'kb_search', 'kb_reindex',
                 'metric', 'metric_check', 'handbook_search', 'handbook_write', 'handbook_vote',
                 'hub_search', 'hub_write', 'hub_vote', 'hub_comment')
 
@@ -1038,6 +1061,7 @@ def slug(s) -> str: return ' '.join(str(s or '').lower().split())
 def source_key(sub: dict, i: int) -> str:
     """`type.label`, lower-cased and single-spaced - what the token in a prompt has to say to mean
     this source. Mirrored by ReportsView.sourceKey."""
+    if sub.get('type') == 'taskuary' and str(sub.get('card') or '').strip(): return f"taskuary.{slug(sub['card'])}"   # a card's name, whatever it was labelled
     return f"{sub.get('type', 'rest')}.{slug(source_label(sub, i))}"
 
 
@@ -1756,6 +1780,14 @@ ASSISTANT_WHEN = ('it has an idea that matters: something I would act on or need
                   'not a status note or a restatement of what is already on my Timeline')
 
 
+def systems_of(cfg: dict) -> list:
+    """The source cards on an Assistant report that are SYSTEMS - a Taskuary card sits in the same
+    list (the owner, 2026-09-20) but is the Assistant's own reading, not a system it monitors."""
+    raw = cfg.get('watch_sources')
+    if isinstance(raw, dict): raw = [raw]
+    return [s for s in (raw if isinstance(raw, list) else []) if isinstance(s, dict) and s.get('type') and s.get('type') != 'taskuary']
+
+
 def assistant_default(cfg: dict) -> dict:
     """The route an Assistant report with no rule of its own runs under. A `reach` or an alert
     condition is a rule (the owner asked for it before this card existed), and keeps meaning what
@@ -1763,8 +1795,9 @@ def assistant_default(cfg: dict) -> dict:
     if cfg.get('type') != 'assistant' or routed(cfg): return {}
     if str(cfg.get('reach') or '').strip().lower() in REACH or str((cfg.get('alert') or {}).get('when') or '').strip(): return {}
     # a monitor over connected systems posts its findings - the numbers ARE what matters there;
-    # the voice over Taskuary's own tables is the one whose every-half-hour post needed a judge
-    if cfg.get('watch_source_ids') or cfg.get('watch_sources'): return {}
+    # the voice over Taskuary's own tables is the one whose every-half-hour post needed a judge.
+    # A Taskuary card in the source list is that voice's own reading, not a system it monitors.
+    if cfg.get('watch_source_ids') or systems_of(cfg): return {}
     return {l: {'how': 'ai', 'when': ASSISTANT_WHEN} for l in ('timeline', 'work')}
 # ...and what each line is, in the words the judge is given. `alert` is NOT "the phone": it goes to
 # whichever live channel the owner picked, which is as often email as it is WhatsApp (2026-09-17:

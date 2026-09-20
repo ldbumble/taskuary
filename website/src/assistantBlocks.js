@@ -114,12 +114,17 @@ export const cardPatch = (cards, id, name, raw) => {
 // A prompt names a source as [type.label] - reports.source_key, lower-cased and single-spaced -
 // and a Taskuary card as [taskuary.<card>]. The page writes these; the server reads them.
 export const slug = (s) => String(s || "").toLowerCase().split(/\s+/).filter(Boolean).join(" ");
-export const sourceKey = (src, i) => `${src?.type || "rest"}.${slug((src?.label || "").trim() || `${src?.type || "rest"} #${i}`)}`;
+export const sourceKey = (src, i) => (src?.type === "taskuary" && (src.card || "").trim()
+  ? `taskuary.${slug(src.card)}`                                              // a card's name, whatever it was labelled
+  : `${src?.type || "rest"}.${slug((src?.label || "").trim() || `${src?.type || "rest"} #${i}`)}`);
 export const tokenOf = (key) => `[${key}]`;
-// every source a report's prompt can name: Taskuary cards first, then the report's own sources
+// every source a report's prompt can name, in the order they sit on the page. A Taskuary card is
+// one source among the others (2026-09-20), named by its card rather than by a label
 export const promptSources = ({ cards = [], sources = [] }) => [
   ...cards.map((c) => ({ key: `taskuary.${c.card}`, label: `Taskuary · ${cardLabel(c.card)}` })),
-  ...sources.map((s, i) => ({ key: sourceKey(s, i + 1), label: (s.label || "").trim() || `${s.type || "rest"} #${i + 1}` })),
+  ...sources.map((s, i) => ({ key: sourceKey(s, i + 1), blank: s.type === "taskuary" && !(s.card || "").trim(),
+    label: s.type === "taskuary" ? `Taskuary · ${cardLabel(s.card)}` : (s.label || "").trim() || `${s.type || "rest"} #${i + 1}` }))
+    .filter((o) => !o.blank).map(({ key, label }) => ({ key, label })),     // the index counts every card, as the server's does
 ];
 
 // The one line under a saved report: what it reads, named. Never a fixed sentence - that is what

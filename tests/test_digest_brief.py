@@ -94,6 +94,46 @@ class BriefMemoryTests(unittest.TestCase):
         self.assertIn('do not raise them to Uri', text)
         self.assertIn('governs every section', digest.PROMPT)
 
+    def test_an_ask_a_standing_verdict_covers_ranks_below_the_live_asks_and_names_its_verdict(self):
+        """TQ-0654: the on-start digest led 'People want' with a resident-refund thread the owner had
+        ruled not ours. The ask sat first in THEIR ASKS with 'no task, no draft' and the verdict lived
+        blocks later as general context, so the model ranked the ask before it read the ruling."""
+        s = _store()
+        _mail(s, 'christine@ours.com', 'Re: Resident Refund Request Form Rejected - Sawyers, Donald R, Valley',
+              'Can you explain why rejected? They have been calling and wanting a refund.', days=0, conv='sawyers')
+        s._exec("UPDATE message SET SentAt=? WHERE ConversationId='sawyers'", (_ago(hours=5),))
+        _mail(s, 'bob@ours.com', 'Target meeting', 'Can you confirm Thursday still holds?', days=1, conv='target')
+        s.add_memory({'Scope': 'subject', 'ScopeKey': 'resident refund request', 'Note': 'resident refunds are not ours',
+                      'Active': 1, 'CreatedBy': 'owner'})
+        s._exec('UPDATE memory SET CreatedAt=?', (_ago(days=17),))
+        text = digest.gather(s, 1)
+        asks = text[text.index('THEIR ASKS YOU HAVE NOT ANSWERED'):text.index('ASKS YOUR STANDING VERDICTS ALREADY COVER')]
+        self.assertIn('Bob asked', asks)
+        self.assertNotIn('Christine asked', asks)
+        ruled = text[text.index('ASKS YOUR STANDING VERDICTS ALREADY COVER'):text.index('MY OPEN LOOPS')]
+        self.assertIn('Christine asked', ruled)
+        self.assertIn('ruled out by your verdict "resident refunds are not ours"', ruled)
+        self.assertLess(text.index('Bob asked'), text.index('Christine asked'))
+
+    def test_a_global_verdict_covers_an_ask_only_when_it_is_about_that_topic(self):
+        s = _store()
+        _mail(s, 'christine@ours.com', 'Re: Resident Refund Request Form Rejected - Sawyers, Donald R, Valley',
+              'Can you explain why rejected?', days=1, conv='sawyers')
+        _mail(s, 'bob@ours.com', 'Target meeting', 'Can you confirm Thursday still holds?', days=1, conv='target')
+        s.add_memory({'Scope': 'global', 'Note': 'Resident refunds are not ours', 'Active': 1, 'CreatedBy': 'owner'})
+        s.add_memory({'Scope': 'global', 'Note': 'Never chase a vendor before noon', 'Active': 1, 'CreatedBy': 'owner'})
+        s._exec('UPDATE memory SET CreatedAt=?', (_ago(days=17),))
+        text = digest.gather(s, 1)
+        asks = text[text.index('THEIR ASKS YOU HAVE NOT ANSWERED'):text.index('ASKS YOUR STANDING VERDICTS ALREADY COVER')]
+        self.assertIn('Bob asked', asks); self.assertNotIn('Christine asked', asks)
+        self.assertIn('ruled out by your verdict "Resident refunds are not ours"', text)
+        self.assertNotIn('vendor before noon"', text[text.index('ASKS YOUR STANDING'):text.index('MY OPEN LOOPS')])
+
+    def test_without_a_covering_verdict_no_ruled_out_block_is_written(self):
+        s = _store()
+        _mail(s, 'bob@ours.com', 'Target meeting', 'Can you confirm Thursday still holds?', days=1, conv='target')
+        self.assertNotIn('ASKS YOUR STANDING VERDICTS ALREADY COVER', digest.gather(s, 1))
+
     def test_unrelated_or_switched_off_memory_stays_out_of_the_digest(self):
         s = _store()
         _mail(s, DANA, 'Resident Refund Request - Watson, Lisa',

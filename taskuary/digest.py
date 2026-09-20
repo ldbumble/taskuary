@@ -16,8 +16,10 @@ reviews, the verdicts given - and it SPEAKS in the assistant's voice (system(): 
 same document the Timeline assistant speaks from). It also knows what the assistant already
 raised in the window, so the brief consolidates instead of rediscovering.
 """
-import math, re
+import logging, math, re
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 
 DAYS = 1                 # the window the synthesis reads: all of yesterday, plus today so far (gather starts at midnight)
 
@@ -284,6 +286,32 @@ def _linked(text: str) -> str:
     return '\n'.join(one(l) for l in text.split('\n'))
 
 
+def _ruled_out(store, c: dict) -> str:
+    """The owner's standing verdict that covers this ask (assistant.unanswered's candidate), or ''.
+
+    The same memory triage reads (ingest.applicable_notes), applied to the ask's OWN sender, subject
+    and words rather than to the whole window: a sender-, domain-, subject- or source-scoped note
+    covers the ask by its scope; a GLOBAL note - "Resident refunds are not ours" - covers it only
+    when it is about the same topic, or every global rule would tag every ask. Words are folded to
+    their singular so "refunds" meets "Refund Request"; nothing else is inferred."""
+    from .ingest import applicable_notes, TOPIC_MATCH
+    from .routing import tokens
+    mid = (c.get('action') or {}).get('mid')
+    m = store.get_message(mid) if mid else None
+    if not m: return ''
+    subj, body = str(m.get('Subject') or ''), str(m.get('BodyText') or '')[:2000]
+    fold = lambda s: {t[:-1] if len(t) > 3 and t.endswith('s') else t for t in tokens(s)}
+    hay = fold(f'{subj} {body}')
+    def about(note):
+        k = fold(note)
+        return bool(k) and len(k & hay) / len(k) >= TOPIC_MATCH
+    try: notes = applicable_notes(store, [m.get('FromEmail')], subj, body)
+    except Exception as e:
+        logger.debug(f'digest: standing verdicts skipped for an ask - {e}'); return ''
+    return next(((n.get('Note') or '').strip() for n in notes
+                 if (n.get('Note') or '').strip() and (n['Scope'] != 'global' or about(n['Note']))), '')
+
+
 def _midnight_since(days: int) -> datetime:
     """The window starts at MIDNIGHT `days` days back, not `days`*24h ago: a morning digest with
     days=1 is "all of yesterday, plus today so far" - run at 07:26 it used to start at yesterday
@@ -317,8 +345,17 @@ def gather(store, days: int = DAYS) -> str:
         return f" [the assistant raised this {A._when(i.get('LastSaid') or i.get('FirstSeen'))}" + (f"; you marked it {s}" if s in ('dismissed', 'done', 'snoozed') else '') + ']'
     try: asked = A.unanswered(store, span + 1)
     except Exception as e: asked = [{'facts': f'COULD NOT READ: {str(e)[:120]}'}]
+    # The verdicts are read BEFORE the asks are ranked (TQ-0654): an ask on a topic the owner has
+    # ruled not theirs used to sit first in this block wearing "no task, no draft", with the ruling
+    # blocks later as general context - and the brief led "People want" with a resident refund.
+    ruled = {id(c): _ruled_out(store, c) for c in asked}
+    live, covered = [c for c in asked if not ruled[id(c)]], [c for c in asked if ruled[id(c)]]
     _block(out, 'THEIR ASKS YOU HAVE NOT ANSWERED (their last word wants something from you; what covers it, if anything):',
-           (f"  {c['facts']}{said(c)}" for c in asked[:15]))
+           (f"  {c['facts']}{said(c)}" for c in live[:15]))
+    if covered:
+        _block(out, 'ASKS YOUR STANDING VERDICTS ALREADY COVER (you ruled the topic is not yours, so these are NOT "People want"\n'
+                    'and rank below everything above; only a NEW ask aimed at you personally outranks the verdict named on its line):',
+               (f"  {c['facts']}{said(c)} - ruled out by your verdict \"{ruled[id(c)]}\"" for c in covered[:10]))
     # the owner's own open loops: what they asked for and never got, what they promised, what went cold
     c = A.cfg(store)
     try: loops = A.candidates(store, c | {'producers': {'followup', 'promise', 'cold'}})

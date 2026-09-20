@@ -704,6 +704,28 @@ class EndpointTests(unittest.TestCase):
         self.assertTrue(d['reads_taskuary'])
         self.assertEqual([u['id'] for u in d['unpriced']], [b.id for b in B.CATALOGUE if b.live])
 
+    def test_the_choice_being_MADE_is_what_is_priced(self):
+        """The card prices what the owner is ticking right now, not what they last saved. Without
+        this the panel would show the edited blocks beside the saved report's numbers - a page
+        disagreeing with its own data, which is the thing this feature exists to end."""
+        c, store = self._client()
+        sid = self._source(store, {'title': 'Saved wide', 'type': 'assistant',
+                                   'blocks': {'open_work': {'on': True}, 'threads': {'on': True, 'days': 30}}})
+        unsaved = json.dumps({'ooo': {'on': True}})
+        d = c.get(f'/api/assistant/blocks?source_id={sid}&blocks={unsaved}').json()
+        self.assertEqual({x['id'] for x in d['data'] if x['on']}, {'ooo', 'system_checks'})
+        # ...and the saved report is untouched by having been priced against something else
+        again = c.get(f'/api/assistant/blocks?source_id={sid}').json()
+        self.assertEqual({x['id'] for x in again['data'] if x['on']}, {'open_work', 'threads', 'system_checks'})
+
+    def test_a_half_typed_choice_prices_what_is_saved_rather_than_erroring(self):
+        """The page sends this on every keystroke; mid-edit it can be anything. A 400 at the owner
+        for typing is not an answer."""
+        c, store = self._client()
+        sid = self._source(store, {'title': 'Mid keystroke', 'type': 'assistant', 'blocks': {'open_work': {'on': True}}})
+        d = c.get(f'/api/assistant/blocks?source_id={sid}&blocks=%7B%22oo').json()
+        self.assertEqual({x['id'] for x in d['data'] if x['on']}, {'open_work', 'system_checks'})
+
     def test_a_reports_own_choice_is_what_is_priced(self):
         c, store = self._client()
         sid = self._source(store, {'title': 'One block', 'type': 'assistant', 'once_per_week': True,

@@ -6778,9 +6778,12 @@ def connectors_catalog():
 
 
 @app.get('/api/assistant/blocks')
-def assistant_blocks(source_id: int = None):
+def assistant_blocks(source_id: int = None, blocks: str = None):
     """What an Assistant report reads, priced. `source_id` names the report whose choice to resolve;
-    absent means the declared defaults, which is what a new report starts from.
+    absent means the declared defaults, which is what a new report starts from. `blocks` is the
+    choice the owner is making RIGHT NOW, as JSON, before they have saved it - without it the card
+    would price the saved report while showing the edited one, which is the kind of disagreement
+    between a page and its data this whole feature exists to end.
 
     One resolution feeds both this and the run (assistantblocks.resolve), so the card cannot claim a
     read the payload never made. `cost` stays None until the brain's price is known - the money line
@@ -6796,6 +6799,11 @@ def assistant_blocks(source_id: int = None):
         try: cfg = json.loads(src.get('ConfigJson') or '{}')
         except ValueError: cfg = {}
         if cfg.get('type') != 'assistant': raise HTTPException(404, f"source {source_id} is a {cfg.get('type') or 'rest'} report, not an Assistant")
+    if blocks is not None:
+        # the unsaved choice wins over the saved one. A malformed string is the owner's editor
+        # mid-keystroke, not an attack: price the saved report rather than 400 at them.
+        try: cfg = {**cfg, 'blocks': json.loads(blocks)}
+        except ValueError: logger.debug('assistant blocks: the page sent a blocks value that is not JSON; pricing what is saved')
     chosen = blk.resolve(store, cfg)
     rows = blk.weighed(store, chosen, report_id=int(source_id) if source_id else None)
     # the live blocks are ON and cost nothing HERE, which is not the same as costing nothing. Named

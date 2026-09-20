@@ -20,6 +20,7 @@ import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import api from "./api";
 import { NL, SOURCE_KEYS, WORKFLOW_TYPES, addField, isWorkflowConfig, showValue, toShape, toSources } from "./sourceShape.js";
 import { ASSISTANT, GRADIENT, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, PILL_COLORS } from "./theme.jsx";
+import { blockChoice, blockRowsOf, blocksPatch, costLine, kilo, readsLine, windowPatch } from "./assistantBlocks.js";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, Empty, FilterPills, SideRail, ConfirmDelete } from "./ui.jsx";
 
 const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
@@ -606,9 +607,10 @@ function SavedReportSummary({ source, workflow = false }) {
   const labels = sourceList.map((s) => s.label || TYPE_LABELS[s.type] || s.type).filter(Boolean);
   const watched = (Array.isArray(c.watch_sources) ? c.watch_sources.length : 0)
     + (Array.isArray(c.watch_source_ids) ? c.watch_source_ids.length : 0);
+  // what it reads is the BLOCKS it chose, named - not a fixed sentence that was true of one report
   const reads = c.type === "assistant"
-    ? (watched ? `${watched} configured data source${watched === 1 ? "" : "s"} only`
-      : "Assistant context — messages, tasks, calendar, and its configured checks")
+    ? [readsLine(blockRowsOf(c)), watched ? `${watched} configured data source${watched === 1 ? "" : "s"}` : ""]
+      .filter(Boolean).join(" and ") || "nothing yet — tick a block or add a source"
     : labels.length > 1 ? `${labels.length} sources — ${labels.join(", ")}` : labels[0] || "one report source";
   const destinations = ["the Timeline"];
   if (c.deliver?.to) destinations.push(`a draft to ${c.deliver.to} on ${c.deliver.channel || "email"}`
@@ -966,6 +968,19 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
   const [busy, setBusy] = useState("");
   const [brains, setBrains] = useState([]);   // which AI writes THIS summary - same roster as triage
   useEffect(() => { api.get("/api/brains").then(({ data }) => setBrains(data.data || [])).catch(() => {}); }, []);
+  // WHAT IT READS OF TASKUARY, priced. One GET renders every chosen block, so it is debounced as
+  // well as cached server-side: a held arrow key must not run sixteen counts per keystroke.
+  const [blockRows, setBlockRows] = useState(null);
+  const [openBlock, setOpenBlock] = useState(null);
+  const blocksKey = JSON.stringify(cfg.blocks || null);
+  useEffect(() => {
+    if (!(cfg.type === "assistant" || (srcs.length === 1 && srcs[0].type === "assistant"))) return undefined;
+    const t = setTimeout(() => {
+      api.get("/api/assistant/blocks", { params: { ...(cur ? { source_id: cur.SourceId } : {}), ...(cfg.blocks ? { blocks: blocksKey } : {}) } })
+        .then(({ data }) => setBlockRows(data)).catch(() => setBlockRows(null));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [blocksKey, cur, cfg.type, srcs]);
   // where it may be SENT: only live channels, only destinations Taskuary knows (see Destination)
   const [targets, setTargets] = useState([]);
   useEffect(() => { api.get("/api/send-targets").then(({ data }) => setTargets(data.data || [])).catch(() => {}); }, []);
@@ -1093,6 +1108,71 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
             </Typography>
             <TextField required label="title — becomes the Timeline headline" value={cfg.title || ""} sx={{ bgcolor: "#fff", maxWidth: 720, mb: 2 }}
               fullWidth onChange={(e) => setCfg({ ...cfg, title: e.target.value })} />
+
+            {isAssistant && (
+              <Box sx={{ ...card, p: 1.5, mb: 1.5, maxWidth: 720, bgcolor: PANEL2 }}>
+                <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13, mb: 0.4 }}>Reads Taskuary</Typography>
+                <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1 }}>
+                  Taskuary's own tables are this check's source. Tick what it should read and how far back;
+                  every line it posts says which of these it came from. Leave them all off and it reads only the systems below.
+                </Typography>
+                {!blockRows ? <Typography variant="caption" sx={{ color: FAINT }}>reading…</Typography> : (
+                  <Box>
+                    {blockRows.data.map((r) => (
+                      <Box key={r.id}>
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, py: 0.15 }}>
+                          <Checkbox size="small" checked={r.on} sx={{ p: 0.3 }}
+                            inputProps={{ "aria-label": r.label }}
+                            onChange={(e) => setCfg((c) => ({ ...c, blocks: blocksPatch(blockChoice(c, blockRows.data), r.id, { on: e.target.checked }) }))} />
+                          {/* the LABEL opens what it reads. Sixteen "reads" buttons down the card was
+                              a column of shouting for something most owners open once. */}
+                          <Typography onClick={() => setOpenBlock(openBlock === r.id ? null : r.id)}
+                            title={r.tables.length ? `reads ${r.tables.join(", ")}` : "reads no Taskuary table"}
+                            sx={{ fontSize: 12.5, color: INK, flex: 1, minWidth: 0, cursor: "pointer",
+                              textDecorationColor: BORDER, textDecoration: openBlock === r.id ? "underline" : "none",
+                              "&:hover": { textDecoration: "underline" } }}>{r.label}</Typography>
+                          {r.window && <TextField size="small" type="number" value={r.window.value}
+                            sx={{ width: 68, bgcolor: "#fff" }} inputProps={{ "aria-label": `${r.label} — ${r.window.label}` }}
+                            onChange={(e) => setCfg((c) => ({ ...c, blocks: windowPatch(blockChoice(c, blockRows.data), r.id, r.window.unit, e.target.value) }))} />}
+                          <Typography sx={{ ...mono, fontSize: 11, color: FAINT, width: 14 }}>{r.window ? (r.window.unit === "hours" ? "h" : "d") : ""}</Typography>
+                          <Typography sx={{ ...mono, fontSize: 11, color: DIM, width: 74, textAlign: "right" }}>
+                            {!r.on ? "off" : r.live ? "live" : `${r.rows} rows`}
+                          </Typography>
+                          <Typography sx={{ ...mono, fontSize: 11, color: r.on && !r.live ? DIM : FAINT, width: 54, textAlign: "right", pr: 0.5 }}>
+                            {r.on && !r.live ? `~${kilo(r.tokens)}` : ""}
+                          </Typography>
+                        </Box>
+                        {openBlock === r.id && (
+                          <Box sx={{ ...card, bgcolor: "#fff", p: 1.1, mt: 0.3, mb: 0.6, ml: 4 }}>
+                            <Typography sx={{ ...mono, fontSize: 11, color: DIM, mb: r.sql ? 0.6 : 0 }}>
+                              {r.tables.length ? `reads: ${r.tables.join(", ")}` : "reads no Taskuary table"}
+                            </Typography>
+                            {r.sql
+                              ? <Box component="pre" sx={{ ...mono, m: 0, fontSize: 10.5, color: INK, whiteSpace: "pre-wrap" }}>{r.sql}</Box>
+                              : <Typography sx={{ fontSize: 12, color: DIM }}>
+                                  {r.live
+                                    ? "A live call to the connection itself, made when the check runs — its cost is time, not tokens, so it is not priced here."
+                                    : "Composed in code — more than one query, plus the lookups this block folds in. It cannot be shown as one statement."}
+                                </Typography>}
+                            {r.heading && <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT, mt: 0.6 }}>heads the section: {r.heading}</Typography>}
+                          </Box>
+                        )}
+                      </Box>
+                    ))}
+                    <Box sx={{ borderTop: `1px solid ${BORDER}`, mt: 0.8, pt: 0.7 }}>
+                      <Typography sx={{ ...mono, fontSize: 11, color: DIM }}>
+                        {costLine(blockRows.total_tokens, blockRows.runs_per_day, blockRows.cost)}
+                      </Typography>
+                      {!!blockRows.unpriced?.length && (
+                        <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT, mt: 0.3 }}>
+                          not in that total: {blockRows.unpriced.map((u) => u.label.toLowerCase()).join(", ")} — read live when the check runs
+                        </Typography>
+                      )}
+                    </Box>
+                  </Box>
+                )}
+              </Box>
+            )}
 
             {isAssistant && (
               <Box sx={{ ...card, p: 1.5, mb: 1.5, maxWidth: 720, bgcolor: PANEL2 }}>

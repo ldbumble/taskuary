@@ -102,6 +102,44 @@ class QuestionTests(unittest.TestCase):
             self.assertFalse(waitroom.looks_like_question(tail), tail)
 
 
+class ChooserTests(unittest.TestCase):
+    """A parked pane showing a chooser is ASKING, and only the owner answers it (2026-09-20: a
+    peer briefing typed into Claude's trust dialog chose "No, exit" and respawned the session in a loop)."""
+    def test_a_chooser_only_the_rendered_screen_shows_is_a_question(self):
+        s = MemoryStore(); tid = task(s)
+        t = FakeTerm(tid, idle=60, tail=['? for shortcuts'])                 # the raw stream: an older frame
+        t.status_tail = lambda n=8: ['Yes, I trust this folder', 'Enter to confirm · Esc to cancel']
+        t.waiting = lambda: True
+        with mock.patch.dict(terminal.SESSIONS, {'a': t}, clear=True):
+            self.assertEqual(waitroom.state(s, tid)[0], 'asking')
+
+    def test_the_runs_own_open_request_is_a_question_whatever_the_screen_says(self):
+        from taskuary import workerstate as ws
+        s = MemoryStore(); tid = task(s)
+        t = FakeTerm(tid, idle=60, tail=['Done.', '? for shortcuts']); t.sid = 'fake'; t.waiting = lambda: True
+        with mock.patch.dict(terminal.SESSIONS, {'a': t}, clear=True):
+            self.assertEqual(waitroom.state(s, tid)[0], 'parked')
+            ws.record(s, tid, 'fake', 'input_needed', text='alpha or beta?', choices=['alpha', 'beta'], source='hook')
+            self.assertEqual(waitroom.state(s, tid)[0], 'asking')
+
+    def test_a_peer_briefing_waits_behind_a_question_and_the_owners_answer_does_not(self):
+        s = MemoryStore(); tid = task(s)
+        t = FakeTerm(tid, idle=60, tail=['Do you want to proceed?', '❯ 1. Yes', '  2. No']); t.waiting = lambda: True
+        with mock.patch.dict(terminal.SESSIONS, {'a': t}, clear=True):
+            got = waitroom.add(s, tid, 'PEER UPDATE: TQ-0002 (coder) just started in this checkout', actor='router')
+            self.assertEqual((got['delivered'], got['state']), (0, 'asking'))
+            self.assertEqual(t.writes, [])                                     # nothing typed into the chooser
+            self.assertEqual(len(s.waiting_notes(tid)), 1)                    # ...and the briefing keeps its place
+            got = waitroom.add(s, tid, 'yes, go ahead', actor='owner')
+            self.assertEqual((got['delivered'], got['state']), (1, 'answered'))
+            self.assertIn('yes, go ahead', t.typed()); self.assertNotIn('PEER UPDATE', t.typed())
+            self.assertEqual([n['CreatedBy'] for n in s.waiting_notes(tid)], ['router'])   # still waiting for the next stop
+            # ...which comes: parked at a plain prompt, the briefing is typed
+            t._tail = ['Done.', '? for shortcuts']
+            self.assertEqual(waitroom.deliver(s, tid)['state'], 'parked'); time.sleep(0.5)     # typed on its own thread
+            self.assertIn('PEER UPDATE', t.typed())
+
+
 class DeliveryTests(unittest.TestCase):
     def test_held_while_the_agent_works_then_typed_as_one_batch_in_order(self):
         s = MemoryStore(); tid = task(s)

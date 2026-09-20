@@ -142,7 +142,13 @@ class ACPClient:
         said = []
         outer = self.on_update
         def collect(u):
-            if u.get('sessionUpdate') == 'agent_message_chunk': said.append(_text_of(u.get('content')))
+            kind = u.get('sessionUpdate')
+            # a message resumed after a tool call is a new paragraph: copilot and devin both stream
+            # "Hello!" / tool_call / "What would you like..." and the result read "Hello!What would you"
+            if kind == 'agent_message_chunk':
+                if said and said[-1] is None: said[-1] = chr(10)
+                said.append(_text_of(u.get('content')))
+            elif kind in ('tool_call', 'tool_call_update', 'plan') and said and said[-1] is not None: said.append(None)
             if outer: outer(u)
         self.on_update = collect
         try:
@@ -150,7 +156,7 @@ class ACPClient:
                                                 'prompt': [{'type': 'text', 'text': str(text or '')}]}) or {}
         finally:
             self.on_update = outer
-        return r.get('stopReason'), ''.join(said).strip()
+        return r.get('stopReason'), ''.join(x for x in said if x).strip()
 
     def cancel(self):
         if not (self._alive and self.session_id): return

@@ -76,16 +76,33 @@ def add_many(store, tid: int, text: str, actor: str = 'owner') -> dict:
     return {'queued': len(items), **deliver(store, tid)}
 
 
+PEER = 'router'          # the actor a peer briefing is queued under (blackboard.peer_update); never an answer
+
+
+def _screen(t) -> list:
+    """The RENDERED tail where the session has one - a TUI's chooser is drawn in place and the raw
+    stream keeps the frames that went before it - else the raw tail the small test doubles carry."""
+    try: return t.status_tail(TAIL_LINES)
+    except (AttributeError, TypeError): return t.tail(TAIL_LINES)
+
+
 def state(store, tid: int) -> tuple:
     """('working'|'asking'|'parked'|'no_session', live Term or None) - where the agent on this
-    task stands right now, read off the terminal's silence and its last lines."""
-    from . import terminal as term
+    task stands right now: the run's own word first (an open request), then the rendered screen.
+
+    Read off the RAW tail, Claude's first-run trust dialog and its AskUserQuestion chooser both
+    read `parked`, and the next peer briefing was typed straight into them - Enter on "No, exit"
+    ended the session, the notes left behind reopened it, and the loop ran until the folder was
+    trusted by hand (measured 2026-09-20)."""
+    from . import terminal as term, workerstate as ws
     t = next((x for x in list(term.SESSIONS.values()) if x.task_id == tid and x.alive), None)
     if t is None:
         return ('working', None) if any(r.get('TaskId') == tid for r in store.running_runs()) else ('no_session', None)
     parked = t.waiting() if hasattr(t, 'waiting') else term.waiting_of(t)
     if not parked: return 'working', t
-    return ('asking' if looks_like_question(t.tail(TAIL_LINES)) else 'parked'), t
+    try: asked = bool(ws.asking_of(store, t))
+    except Exception: asked = False
+    return ('asking' if asked or looks_like_question(_screen(t)) else 'parked'), t
 
 
 def add(store, tid: int, note: str, actor: str = 'owner') -> dict:
@@ -116,6 +133,14 @@ def deliver(store, tid: int) -> dict:
     notes = pending[:1] if drip(store) else pending
     left = len(pending) - len(notes)
     if st == 'asking':
+        # A question is the OWNER's to answer. A peer briefing (blackboard.peer_update) queued under
+        # `router` is not an answer to anything: typed into a chooser it picks whatever the cursor is
+        # on. It keeps its place until the agent's next stop; an owner's note behind it goes now.
+        yours = [n for n in pending if (n.get('CreatedBy') or 'owner') != PEER]
+        if not yours:
+            return {'delivered': 0, 'state': 'asking', 'held': len(pending)}
+        notes = yours[:1] if drip(store) else yours
+        left = len(pending) - len(notes)
         # An agent parked on a QUESTION is asking the OWNER, so the words they write next are the
         # ANSWER to it: bound to its open request where the worker reported one, typed in plainly
         # where it did not. They used to queue behind the question and never arrive at all - the card

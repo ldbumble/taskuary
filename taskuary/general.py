@@ -889,6 +889,11 @@ class GeneralSession:
                 if kind == 'tool_call':
                     target = next(iter((detail.get('args') or {}).values()), '') if isinstance(detail, dict) else ''
                     self._emit(f'\x1b[33mtool>\x1b[0m {name} {str(target)[:180]}\r\n')
+                elif kind == 'live' and isinstance(detail, str):
+                    # the ACP road's progress (a tool call, its completion, a plan) - the argv road's
+                    # stream-json arrives as `tool_call` above; over ACP it is a `live` line, and the pane
+                    # and the Board card showed nothing but "you>" for the whole turn (2026-09-20)
+                    self._emit(f'\x1b[2m{name}> {detail[:180]}\x1b[0m\r\n')
                 elif kind == 'tool_result' and isinstance(detail, dict) and detail.get('is_error'):
                     self._emit(f'\x1b[31mtool error>\x1b[0m {str(detail.get("result") or "")[:240]}\r\n')
             # Continue the CLI's own conversation rather than starting a new one and re-typing
@@ -1080,11 +1085,17 @@ class GeneralSession:
             except RuntimeError: pass
 
     def info(self, tail=0, details=True):
+        # ...and the ONE sentence for its state, as a pty session carries it (terminal.worker_fields):
+        # without it the Timeline row of a chat waiting on the owner had AgentWaiting and no AgentLine
+        from . import waitroom, workerstate as ws
+        waiting = self.waiting()
+        sub = ws.sub_state(waiting, bool(waiting) and waitroom.looks_like_question(self.tail(waitroom.TAIL_LINES)))
         base = {'sid': self.sid, 'label': self.label, 'cwd': '', 'taskId': self.task_id,
                 'agent': self.agent, 'cli': 'taskuary', 'mode': self.mode, 'alive': self.alive,
                 'busy': self.busy,
                 'started': self.started, 'idle': self.idle(), 'phase': self.phase(),
-                'waiting': self.waiting(), 'cmd': f'{self.provider or "AI connector"} {self.model}'.strip(),
+                'waiting': waiting, 'request': None, 'state': sub, 'line': ws.says(sub, self.agent) if sub else None,
+                'cmd': f'{self.provider or "AI connector"} {self.model}'.strip(),
                 'provider': self.provider, 'pick': self.pick,
                 'connector_id': int(self.pick.split(':', 1)[1]) if self.pick.startswith('connector:') else None,
                 'model': self.model,

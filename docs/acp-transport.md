@@ -50,7 +50,8 @@ Only the ones that speak ACP natively, verified against each vendor's own docume
 | copilot | native | `copilot --acp` (stdio default; public preview since 2026-01-28) |
 | claude | adapter only | `@agentclientprotocol/claude-agent-acp` |
 | codex | adapter only | `codex-acp` |
-| muse, devin | none | — |
+| devin | native | `devin acp` (arrived after this survey; verified with `acp.ACPClient` 2026-09-20: session ids like `relieved-radiator`, `loadSession` true) |
+| muse | none | — |
 
 OpenCode (`opencode acp`) and Kimi Code (`kimi acp`) also offer native ACP, but
 Taskuary's presets currently use their headless CLI interfaces. Model selection and

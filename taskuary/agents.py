@@ -844,6 +844,11 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     env = child_env({**os.environ, **(extra_env or {})})
 
     def show(u):
+        # the agent's words arrive one TOKEN per update ("Hello", "!", "Shell", "command") and are
+        # returned whole as the result; traced one by one they buried the tool calls between them
+        # (a copilot turn left 40 one-word trace lines, measured 2026-09-20). Tools and plans are the
+        # progress worth a line.
+        if u.get('sessionUpdate') == 'agent_message_chunk': return
         line = acp_mod.trace_line(u)
         if line: trace('live', name, line)
 

@@ -161,11 +161,21 @@ class NothingElseChangesTests(unittest.TestCase):
             brain('sys', 'user')
         self.assertTrue(seen.get('acp_ok'))
 
+    def test_an_acp_session_id_is_kept_for_a_cli_with_no_argv_resume_flag(self):
+        """devin reloads its ACP sessions (loadSession) but has no --resume; the id session/new returned
+        was dropped and the saved row read NativeId '' (2026-09-20)."""
+        from taskuary import continuity
+        s = MemoryStore()
+        s.upsert_agent('deviner', 'general', 'cli', json.dumps({'cmd': 'devin', 'acp': ['acp']}))
+        s.upsert_agent('devin', 'general', 'cli', json.dumps({'cmd': 'devin'}))
+        self.assertTrue(continuity.can_resume(s, 'cli:deviner'))
+        self.assertFalse(continuity.can_resume(s, 'cli:devin'))
+
     def test_only_the_clis_that_speak_it_natively_ship_with_it(self):
         by = {r['name']: r for r in clis.KNOWN}
-        self.assertEqual(sorted(n for n, r in by.items() if r.get('acp')), ['copilot', 'cursor', 'gemini', 'qwen'])
+        self.assertEqual(sorted(n for n, r in by.items() if r.get('acp')), ['copilot', 'cursor', 'devin', 'gemini', 'qwen'])   # devin acp: verified 2026-09-20
         # claude and codex are adapter-only: reachable by putting the adapter in a profile, never shipped on
-        for n in ('claude', 'codex', 'muse', 'devin'):
+        for n in ('claude', 'codex', 'muse'):
             self.assertIsNone(by[n].get('acp'))
 
 

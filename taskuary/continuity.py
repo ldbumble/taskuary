@@ -20,7 +20,11 @@ def context_key(store, pick, model):
 def can_resume(store, pick):
     if not pick.startswith('cli:'): return False
     from .agents import resume_argv
-    return bool(resume_argv(json.loads((store.get_agent(pick[4:]) or {}).get('Config') or '{}'), 'x'))
+    prof = json.loads((store.get_agent(pick[4:]) or {}).get('Config') or '{}')
+    # over ACP the id is the protocol's own (session/new) and session/load is how it is picked back up:
+    # devin has no argv resume flag and still reloads its sessions, yet the id it returned was dropped
+    # on the floor and the row saved NativeId '' (measured 2026-09-20)
+    return bool(resume_argv(prof, 'x')) or bool(prof.get('acp'))
 
 
 def previous_work(store, limit=5):

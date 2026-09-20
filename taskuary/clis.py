@@ -67,8 +67,11 @@ KNOWN = [
     #     form on purpose: the value is optional, and a space-separated one is read as a prompt.
     # No stream-json equivalent, so the Board reads the run as plain text. Interactive task
     # sessions use `devin ... -- <prompt>` (terminal.SEED_ARGV), not simulated typing.
+    # `devin acp` arrived after the 2026-09-15 survey (docs/acp-transport.md said none): devin 3000.10.21
+    # answers initialize, session/new (an id like 'relieved-radiator') and session/prompt, streaming
+    # thought, message and tool_call updates - verified with acp.ACPClient on the owner's box 2026-09-20.
     {'name': 'devin', 'cmd': 'devin', 'label': 'Devin CLI',
-     'args': ['--permission-mode', 'dangerous', '--respect-workspace-trust=false', '-p'], 'timeout': 1500},
+     'args': ['--permission-mode', 'dangerous', '--respect-workspace-trust=false', '-p'], 'acp': ['acp'], 'timeout': 1500},
 ]
 
 

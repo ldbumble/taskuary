@@ -864,35 +864,54 @@ def _verdicts_block(store, cands: list, source: str = "") -> str:
             'never argue with one:\n' + '\n'.join(f'- {n}' for n in notes_))
 
 
-def inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=None, watch_sources=None) -> str:
-    """Everything one check reads, as the model sees it - the same text is the Reports tab's Preview
-    (facts) and the run record (reports.run_report_source), so what it was given is never a guess."""
-    now = datetime.now()
-    away = ooo(store)
-    from . import knowledge
-    facts_text = ' '.join(str(c.get('facts') or '') for c in cands)[:4000]
-    # built once: the model reads them, and so does the verdict matcher, which needs the real
-    # subjects rather than the model's words about them
-    said, recent = _people(store), _recent(store)
+def _uptime_block(store) -> str:
+    """An EMPTY labelled section is worse than none: it reads as "nothing was running"."""
     from . import reports as _r
-    # an EMPTY labelled section is worse than none: it reads as "nothing was running"
-    uptime = _r.uptime_words(store)
-    uptime = (f"WHEN TASKUARY WAS RUNNING (it is a window on this machine: while it is shut nothing polls, no report "
-              f"fires and no mail arrives - so a gap here is not a fault):\n{uptime}\n") if uptime else ''
-    return (f"NOW: {now.strftime('%A %d %B %Y %H:%M')}\n{uptime}"
-            f"\n{head}:\n" + ('\n'.join(f"[{c['key']}] {c['facts']}" for c in cands) or '(none)')
-            + knowledge.block(store, facts_text)
-            + f"\n\nCONFIGURED SYSTEM CHECKS (pulled live for this check; failures are also worth noticing):\n{system_checks(store, watch_source_ids, watch_sources)}"
-            + f"\n\nWHAT PEOPLE SAID (the last two days, by thread, newest first; the last lines of each, oldest first. "
-              f"Each head quotes what triage decided when the latest line arrived: when you disagree, say so in your line - "
-              f"'triage filed this as fyi, but...' - never raise a thread as if nothing had judged it):\n{said}"
-            + '\n\nOUT OF OFFICE (from their auto-replies):\n' + ('\n'.join(f'- {k}: {v}' for k, v in away.items()) or '(nobody)')
-            + f"\n\nCALENDAR (the next two days):\n{_calendar(store)}"
-            + f"\n\nARRIVED IN THE LAST TWO DAYS (xN = that many alike; each line carries the latest message's words, a report's schedule, and a failure's cause):\n{recent}"
-            + f"\n\nDONE THIS WEEK (my own work, with the agent's summary):\n{_week(store)}"
-            + f"\n\nOPEN WORK:\n{_open(store)}\n\nALREADY SAID (never repeat):\n{_said(store)}"
-            + _verdicts_block(store, cands, f'{said}\n{recent}')
-            + f"\n\n{_notes_block(store)}")
+    up = _r.uptime_words(store)
+    return (f"WHEN TASKUARY WAS RUNNING (it is a window on this machine: while it is shut nothing polls, no report "
+            f"fires and no mail arrives - so a gap here is not a fault):\n{up}\n") if up else ''
+
+
+def build_inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=None, watch_sources=None, blocks=None) -> tuple:
+    """(the text the model sees, {message id: the block that supplied it}). The same text is the
+    Reports tab's Preview (facts) and the run record (reports.run_report_source), so what it was
+    given is never a guess; the index is how a line is attributed without asking the model.
+    `blocks` is the report's resolved choice; None means the declared defaults, which is what this
+    function read when the list was hardcoded (assistantblocks.CATALOGUE is that list).
+
+    Returns the index rather than stashing it on the function: this install runs two Assistant
+    reports, and a module-level `last_mids` would have the second one reading the first's sources."""
+    from . import assistantblocks as blk
+    now, mids, said = datetime.now(), {}, {}
+    chosen = blocks if blocks is not None else {b.id: blk.defaults(store, b) for b in blk.CATALOGUE}
+    parts = [f"NOW: {now.strftime('%A %d %B %Y %H:%M')}\n{_uptime_block(store)}",
+             f"\n{head}:\n" + ('\n'.join(f"[{c['key']}] {c['facts']}" for c in cands) or '(none)')]
+    verdicts_before = 'notes'          # the cross-check sits after ALREADY SAID and before the notes, where it has always sat
+    for b in blk.CATALOGUE:
+        o = chosen.get(b.id)
+        # a PRODUCER (no heading) is already in `cands`: the caller ran candidates() and paid for it once
+        if not o or not o.get('on') or not b.heading: continue
+        if b.id == 'system_checks': o = o | {'source_ids': watch_source_ids, 'inline': watch_sources}
+        if b.id == 'knowledge': o = o | {'facts': ' '.join(str(c.get('facts') or '') for c in cands)[:4000]}
+        out, got = blk.render(store, b, o)
+        said[b.id] = out
+        for m in got: mids[int(m)] = b.id
+        if b.id == verdicts_before: parts.append(_verdicts(store, cands, said)); verdicts_before = None
+        if not str(out).strip(): continue                 # nothing to say prints no head: an empty labelled section reads as an answer
+        parts.append(out if b.whole else '\n\n' + blk.headline(b, o) + ':\n' + out)
+    if verdicts_before: parts.append(_verdicts(store, cands, said))
+    return ''.join(parts), mids
+
+
+def _verdicts(store, cands: list, said: dict) -> str:
+    """The standing verdicts are matched against the THREADS and the ARRIVALS the model was handed -
+    the real subjects, not the model's words about them (see _verdicts_block)."""
+    return _verdicts_block(store, cands, f"{said.get('threads', '')}\n{said.get('arrivals', '')}")
+
+
+def inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=None, watch_sources=None, blocks=None) -> str:
+    """The text alone, for every caller that does not need to know which block said what."""
+    return build_inputs(store, cands, head, watch_source_ids, watch_sources, blocks)[0]
 
 
 def systems_inputs(store, watch_source_ids=None, watch_sources=None) -> str:

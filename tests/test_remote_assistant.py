@@ -180,9 +180,27 @@ class WordsInsteadOfButtonsTests(unittest.TestCase):
         text = remote_assistant.turn_text(batch)
         self.assertNotIn('people told you', text)
         head = text.split('\n\n')[0].split('\n')
-        self.assertEqual(head[1:], [f"{funnel.CHANNEL_MARKS['github']} Uri - Run failed: ci",
-                                    f"{funnel.CHANNEL_MARKS['email']} Chana - Rebecca is back Tuesday"])
+        # ...numbered, so a number opens one; the chips take the numbers after the members
+        self.assertEqual(head[1:], [f"1 · {funnel.CHANNEL_MARKS['github']} Uri - Run failed: ci",
+                                    f"2 · {funnel.CHANNEL_MARKS['email']} Chana - Rebecca is back Tuesday"])
         self.assertTrue(head[0].endswith('2 fyi · nothing to do'), head[0])
+        self.assertIn('Reply with a number to open one, or:\n3 · All read, next', text)
+
+    def test_a_number_on_an_fyi_batch_opens_that_one(self):
+        """The desktop's "Talk about it" on one member; the chat had four lines and no door into any of
+        them (the owner, 2026-09-20: "how do you dig into one specific one?")."""
+        store, connector = armed_store()
+        batch = {'kind': 'fyis', 'lane': 'fyi', 'items': [{'key': 'msg:7', 'who': 'Uri', 'title': 'Run failed: ci', 'channel': 'github'},
+                                                          {'key': 'msg:8', 'who': 'Chana', 'title': 'Back Tuesday', 'channel': 'email'}]}
+        text = remote_assistant.turn_text({'say': 'x', 'chips': [{'verb': 'next', 'label': 'All read, next'}], 'item': batch})
+        remote_assistant.remember_offered(store, 'whatsapp', JID, text)
+        with mock.patch.object(concierge, 'restore_current', return_value=batch), \
+             mock.patch.object(concierge, 'surface', return_value={'say': 'Chana: back Tuesday.', 'options': [], 'chips': [],
+                                                                   'item': {'kind': 'fyi', 'lane': 'fyi'}}) as opened, \
+             mock.patch.object(messengers, 'wa_send') as send:
+            remote_assistant.respond(store, 'whatsapp', JID, '2', connector['ConnectorId'])
+        self.assertEqual(opened.call_args.args[1], 'msg:8')
+        self.assertIn('Chana: back Tuesday.', send.call_args.args[2])
 
     def test_an_unknown_source_gets_no_invented_mark(self):
         said = {'say': 'Something landed.', 'item': {'lane': 'fyi', 'kind': 'fyi', 'who': 'Someone', 'channel': 'carrier_pigeon'}}

@@ -123,6 +123,14 @@ class RenderTests(unittest.TestCase):
         self.assertIn('Step · Tool · Result\nFetch · WebFetch · OK',
                       cf.render('| Step | Tool | Result |\n|---|---|---|\n| Fetch | WebFetch | OK |', 'whatsapp'))
 
+    def test_a_reports_html_fold_is_unwrapped_and_an_errors_angle_brackets_are_not(self):
+        """Ten of the last 400 live reports carry a <details><summary> evidence fold; a chat draws tags as
+        text. The tags go, the words stay - and "<urlopen error ...>" is an error's words, not a tag."""
+        out = cf.render('<details><summary>Evidence</summary>\n<ul><li>row 1</li><li>row 2</li></ul>\n<p>failed: <urlopen error x></p></details>', 'whatsapp')
+        self.assertIn('Evidence\n- row 1\n- row 2', out.replace('\n\n', '\n'))
+        self.assertIn('failed: <urlopen error x>', out)
+        for tag in ('<details', '<summary', '<ul', '<li', '<p>', '</p>'): self.assertNotIn(tag, out)
+
     def test_a_heading_is_not_left_wearing_its_hashes(self):
         self.assertNotIn('#', cf.render('## What happened', 'telegram'))
 

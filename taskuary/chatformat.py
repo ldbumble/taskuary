@@ -37,6 +37,13 @@ _BOLD = re.compile(r'(\*\*|__)(.+?)\1', re.S)
 _ITAL = re.compile(r'(?<![\w*])\*(?!\s)([^*\n]+?)(?<!\s)\*(?![\w*])')
 _UNDER = re.compile(r'(?<![\w_])_(?!\s)([^_\n]+?)(?<!\s)_(?![\w_])')
 _FENCE = re.compile(r'^\s*```+[a-z]*\s*$', re.M)
+# the HTML a report body carries: the <details><summary> evidence fold (ten of the last 400 live reports),
+# the odd <ul><li>, <br>, <p>, <em>. Only THESE tags are unwrapped - an error's own text such as
+# "<urlopen error [Errno 11001] ...>" is words, not markup, and must reach the reader whole.
+_SUMMARY = re.compile(r'<summary[^>]*>(.*?)</summary>', re.I | re.S)
+_LI = re.compile(r'\s*<li[^>]*>\s*', re.I)          # an item starts its own line, wherever the tag sat
+_BR = re.compile(r'<br\s*/?>', re.I)
+_TAG = re.compile(r'</?(details|summary|a|p|em|strong|b|i|u|ul|ol|li|article|section|div|span|code|pre|table|thead|tbody|tr|td|th)(\s[^>]*)?>', re.I)
 
 
 def _is_emoji(ch: str) -> bool:
@@ -144,6 +151,7 @@ def render(text, channel: str) -> str:
         if h: line = f'\x01{h.group(1).strip()}\x01'
         lines.append(line)
     out = '\n'.join(lines)
+    out = _SUMMARY.sub(r'\1', out); out = _LI.sub(chr(10) + '- ', out); out = _BR.sub('\n', out); out = _TAG.sub('', out)
     out = _LINK.sub(r'\1', out)                     # the link's words; a chat linkifies bare urls itself
     if channel == 'whatsapp':
         # ITALIC FIRST. Bold emits a single star, which is precisely what the italic rule matches -

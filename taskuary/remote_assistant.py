@@ -464,6 +464,13 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int):
                 send(store, channel, chat, concierge.undo_last(store, 'owner'), connector_id)
                 return
             question, picked = resolve_index(store, channel, chat, question)   # "2" is the words we numbered
+            # ...and on an fyi batch a number names one of the lines we printed: open that one - the item on
+            # the table, its own text and its own options under it - as the desktop's "Talk about it" does
+            key = next((k for k, line in member_lines(item) if picked and line == question), None)
+            if key:
+                nxt = concierge.surface(store, key, actor='owner')
+                send(store, channel, chat, carry_out(store, nxt, nxt.get('item')), connector_id)
+                return
             # a script by name (the morning line's options, or the words themselves) runs with no model
             scripted = script_direct(store, question)
             if scripted:
@@ -591,6 +598,17 @@ def choices(out: dict) -> list:
     said = agent_answers(out.get('item'))
     rest = [str(o) for o in (out.get('options') or [])] or [c['label'] for c in (out.get('chips') or [])]
     return said + [w for w in rest if w not in said] if said else rest
+
+
+def member_lines(item: dict | None) -> list:
+    """An fyi batch's members as (key, line): the line the phone prints, numbered, and what a number
+    answers. The desktop opens one member with "Talk about it"; a chat had the four lines and no door
+    into any of them (the owner, 2026-09-20: "how do you dig into one specific one?")."""
+    from . import funnel
+    if not item or item.get('kind') != 'fyis': return []
+    return [(m.get('key'), ' '.join(x for x in (funnel.CHANNEL_MARKS.get(str(m.get('channel') or ''), ''),
+                                                 f"{' '.join(str(m.get('who') or 'someone').split())} - {m.get('title') or ''}") if x))
+            for m in item.get('items') or []]
 
 
 def source_line(item: dict | None) -> str:
@@ -783,12 +801,12 @@ def turn_text(out: dict, lead: str = '', store=None) -> str:
         # THE ITEMS, one per line, and nothing else: the say line restated them as one run-on sentence and
         # the status line added "fyi - people told you things" under it, and on a phone that read as
         # nothing at all (the owner, 2026-09-18: "don't need random summary, just show the items")
-        members = item.get('items') or []
-        head = '\n'.join([f"{mark} {len(members)} fyi · nothing to do"] +
-                         [' '.join(x for x in (funnel.CHANNEL_MARKS.get(str(m.get('channel') or ''), ''),
-                                               f"{' '.join(str(m.get('who') or 'someone').split())} - {m.get('title') or ''}") if x) for m in members])
-    words = choices(out)
-    opts = 'Reply with one of:\n' + '\n'.join(f'{i} · {w}' for i, w in enumerate(words, 1)) if words else ''
+        # ...each NUMBERED, so a number opens that one (respond): the desktop's "Talk about it" door
+        members = member_lines(item)
+        head = '\n'.join([f"{mark} {len(members)} fyi · nothing to do"] + [f'{i} · {line}' for i, (_k, line) in enumerate(members, 1)])
+    words, first = choices(out), len(member_lines(item)) + 1
+    opts = (('Reply with a number to open one, or:' if first > 1 else 'Reply with one of:') + '\n'
+            + '\n'.join(f'{i} · {w}' for i, w in enumerate(words, first))) if words else ''
     shown = decision_block(store, item) if store is not None else ''
     return '\n\n'.join(x for x in (lead.strip(), head, shown, opts) if x)
 

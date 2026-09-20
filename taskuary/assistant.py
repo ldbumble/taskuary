@@ -391,7 +391,7 @@ def health_ideas(store, now: datetime = None) -> list:
 
 def connect_ideas(store, now: datetime = None, days: int = 30, floor: int = 3) -> list:
     """The system the owner's own workflows name most, that nothing here reads. Evidence the app already
-    holds: sender domains and subjects across the last month, the systems triage learned from corrections
+    holds: the sender and subject of every inbound THREAD of the last month, the systems triage learned from corrections
     (routing_fact field `system`), SOUL.md, and reports pointing at a type with no connection. At most ONE
     new suggestion per run, and never one already raised (declined or not) - one row a day, not a catalogue."""
     from . import appfacts, connectorcatalog
@@ -399,27 +399,35 @@ def connect_ideas(store, now: datetime = None, days: int = 30, floor: int = 3) -
     texts = []
     try:
         mine = own_domains(store)
-        for m in store.feed(limit=600, days=days):
-            if str(m.get('Direction') or 'in') == 'out': continue
+        # ONE text per THREAD - the sender's domain and the subject together - so three replies on one
+        # pull request are one conversation and `floor` means three separate ones. The app's own posts
+        # are not in here: "3 threads this month were about Microsoft Planner" is a row the assistant
+        # wrote, and counting it made the next run read it as a thread about Microsoft (TQ-0651).
+        for m in store.inbound_threads(days=days):
             dom = str(m.get('FromEmail') or '').rsplit('@', 1)[-1].lower()
-            # ONE text per message - the sender's domain and the subject together - so a message counts once
             texts.append(f"{dom.split('.')[0] if dom and dom not in mine else ''} {m.get('Subject') or ''}")
-    except Exception as e: logger.debug(f'connect: the feed was not read - {e}')
-    try: texts += [f['Value'] for f in store.routing_facts(field='system')]
+    except Exception as e: logger.debug(f'connect: the threads were not read - {e}')
+    written = []
+    try: written += [f['Value'] for f in store.routing_facts(field='system')]
     except Exception: pass
-    try: texts += [ln for ln in str(store.get_doc('SOUL.md') or '').splitlines() if ln.strip()]
+    try: written += [ln for ln in str(store.get_doc('SOUL.md') or '').splitlines() if ln.strip()]
     except Exception: pass
-    for r in appfacts.reports(store):
-        texts.append(r['title'])
+    written += [r['title'] for r in appfacts.reports(store)]
     connected = {c['type'] for c in appfacts.connections(store) if c['active']}
-    hits = connectorcatalog.mentions(texts, exclude_types=connected)
+    hits = connectorcatalog.mentions(texts + written, exclude_types=connected)
+    # the threads on their own, because that is what the sentence claims to have counted: a card
+    # raised by SOUL.md and two report titles must not say "3 threads this month"
+    threads = connectorcatalog.mentions(texts, exclude_types=connected)
     raised = {i['Key'] for i in store.list_ideas() if str(i['Key']).startswith('connect:')}
     best = sorted(((n, t) for t, n in hits.items() if n >= floor and f'connect:{t}' not in raised), reverse=True)
     if not best: return []
     n, t = best[0]
     card = connectorcatalog.by_type(t) or {'title': t, 'planned': False}
+    said = threads.get(t, 0)
+    lead = (f"{said} threads this month were about {card['title']}" if said
+            else f"Your own reports and documents name {card['title']}")
     return [{'key': f'connect:{t}', 'kind': 'connect', 'sig': t,
-             'text': (f"{n} threads this month were about {card['title']} and nothing here reads it. "
+             'text': (f"{lead} and nothing here reads it. "
                       + ('It is on the roadmap - say so and it moves up.' if card.get('planned') else f"Connect {card['title']}?")),
              'action': {'type': 'connect', 'connector_type': t, 'title': card['title'], 'planned': bool(card.get('planned')), 'count': n,
                         'why': 'the systems your own mail and tasks name are the ones worth reading'}}]

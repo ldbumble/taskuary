@@ -4184,6 +4184,20 @@ class SQLiteStore:
         bits = [n, ver, int(bool(pending_only)), channel or '', source or '', int(days)]
         return '-'.join(str(b) for b in bits)
 
+    def inbound_threads(self, days=30):
+        """One row per inbound CONVERSATION of the last `days` - the sender and the subject, nothing
+        else. What `connect_ideas` needs to say "N threads this month were about X", and the reason it
+        does not read the Timeline for it: `feed` carries a dozen joins, so it was capped at 600 rows
+        and saw under a third of a month on a busy mailbox, with whatever flooded the last week
+        crowding the rest out (TQ-0651). The app's own posts are left out here - a row the assistant
+        wrote is not a thread about anything."""
+        q = """SELECT MIN(MessageId) MessageId, MAX(FromEmail) FromEmail, MAX(Subject) Subject
+               FROM message
+               WHERE CreatedAt >= datetime('now', 'localtime', ?) AND Status NOT IN ('context', 'history', 'skipped')
+                 AND IFNULL(Direction, 'in') <> 'out' AND IFNULL(Channel, '') <> 'assistant'
+               GROUP BY IFNULL(ConversationId, 'm' || MessageId)"""
+        return self._rows(q, (f'-{int(days)} days',))
+
     def people(self, limit=60):
         """Everyone who has written to you lately - the hand-off picker's address book."""
         q = """SELECT FromEmail Email, MAX(FromName) Name, COUNT(*) N, MAX(SentAt) Last

@@ -30,9 +30,26 @@ GENERIC = frozenset({'any', 'apple', 'bank', 'card', 'cloud', 'connection', 'dat
                      'services', 'share', 'string', 'team', 'web'})
 
 
+def _toks(s: str) -> set: return set(re.findall(r'[a-z0-9]+', str(s).lower()))
+
+
 def words(card: dict) -> list:
-    """The match words that survive GENERIC - the card's own title always among them."""
-    return [w for w in card.get('match') or [] if len(w) > 2 and w.lower() not in GENERIC]
+    """The match words that actually NAME this system - its title as a phrase, its own type, and any
+    alias the card lists. A bare word split out of a multi-word title is dropped: it names the vendor
+    or the category, not the product, so "Interactive Brokers" stopped counting "add Taskuary
+    interactive demo", "New Relic" stopped counting "you have new requests", and "Microsoft Planner"
+    and "Microsoft 365 files" stopped counting every mail from microsoft.com (TQ-0651). GENERIC and a
+    length floor still guard the aliases themselves; this rule is what keeps the guard from being a
+    word list that grows by one every time a card misfires."""
+    title, typ = _toks(card.get('title')), str(card.get('type') or '')
+    own = {typ.lower(), typ.replace('_', ' ').lower()}
+    out = []
+    for w in card.get('match') or []:
+        v = w.lower()
+        if len(v) <= 2 or v in GENERIC: continue
+        if ' ' not in v and len(title) > 1 and v in title and v not in own: continue
+        out.append(w)
+    return out
 
 
 def _patterns(card: dict) -> list:

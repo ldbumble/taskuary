@@ -42,6 +42,24 @@ class CatalogueTests(unittest.TestCase):
             self.assertTrue(connectorcatalog.words(c), f"{c['type']} has no match word left")
             self.assertIn(c['type'], connectorcatalog.mentions([c['title']]), f"{c['type']} no longer matches its own title")
 
+    def test_a_word_split_out_of_a_title_names_the_vendor_not_the_product(self):
+        """Three replies to "add Taskuary interactive demo" became "3 threads about Interactive
+        Brokers"; "you have new requests" became New Relic; every mail from microsoft.com became
+        Microsoft Planner AND Microsoft 365 files (TQ-0651). A blocklist could not keep up - it had
+        already taken 26 words and missed these."""
+        self.assertEqual(connectorcatalog.mentions([
+            'Re: [org/app] feat: add Taskuary interactive demo (PR #1736)',
+            'you have new requests from your team', 'microsoft Refresh succeeded with critical warnings',
+            'the brokers sent the renewal quote', 'sage advice from the planner', 'amazon your order has shipped',
+        ]), {})
+        # and the systems themselves still answer to their own names
+        for text, typ in [('Interactive Brokers margin call', 'ibkr'), ('open an IBKR account', 'ibkr'),
+                          ('New Relic alert: apdex below threshold', 'new_relic'), ('Charles Schwab statement', 'schwab'),
+                          ('Sage Intacct close is done', 'intacct'), ('the Intacct journal', 'intacct'),
+                          ('PointClickCare census export', 'pointclickcare'), ('Microsoft Planner board', 'ms_planner'),
+                          ('Replicate ran the model', 'replicate_image'), ('Elasticsearch is down', 'elastic')]:
+            self.assertEqual(connectorcatalog.mentions([text]).get(typ), 1, f"{typ} lost its own name in {text!r}")
+
 
 class HealthTests(unittest.TestCase):
     def test_three_failures_a_never_run_workflow_and_an_erroring_connection_each_raise_one_row(self):
@@ -98,6 +116,36 @@ class ConnectTests(unittest.TestCase):
         s = A.store()
         self._mail(s, 5, 'Outlook mail rules changed', email='admin@outlook.com')
         self.assertNotIn('connect:outlook', [i['key'] for i in assistant.connect_ideas(s)])
+
+    def test_one_conversation_is_one_thread(self):
+        """Three replies on one pull request were three threads, so "add Taskuary interactive demo"
+        cleared a floor of three on its own (TQ-0651)."""
+        s = A.store()
+        for i in range(4):
+            s.add_message({'ExternalId': f'pr:{i}', 'ConversationId': 'pr-1736', 'Channel': 'email', 'SourceName': 'inbox',
+                           'Subject': 'Re: ADP payroll register ready', 'FromName': 'ADP', 'FromEmail': 'hr@adp.com',
+                           'SentAt': '2026-09-17 09:00:00', 'BodyText': '.', 'Status': 'routed'})
+        self.assertEqual([i['key'] for i in assistant.connect_ideas(s)], [])
+        self._mail(s, 3, 'ADP hours export late')                                    # three separate ones do clear it
+        self.assertEqual(assistant.connect_ideas(s)[0]['key'], 'connect:adp')
+
+    def test_my_own_post_is_not_a_thread_about_anything(self):
+        """The idea went onto the Timeline as a message, the next run counted it, and the count grew
+        by one a day off its own words (TQ-0651)."""
+        s = A.store()
+        for i in range(4):
+            s.add_message({'ExternalId': f'a:{i}', 'Channel': 'assistant', 'SourceName': 'Assistant', 'FromName': 'Assistant',
+                           'Subject': '6 threads this month were about ADP and nothing here reads it.',
+                           'SentAt': '2026-09-17 09:00:00', 'BodyText': '.', 'Status': 'routed'})
+        self.assertEqual([i['key'] for i in assistant.connect_ideas(s)], [])
+
+    def test_the_sentence_counts_threads_and_nothing_else(self):
+        """Raised by a report title and SOUL.md with no mail behind it, the row said "3 threads this
+        month" about threads that did not exist."""
+        s = A.store()
+        self._mail(s, 3, 'ADP payroll register ready')
+        idea = assistant.connect_ideas(s)[0]
+        self.assertTrue(idea['text'].startswith('3 threads this month'), idea['text'])
 
 
 class RunTests(unittest.TestCase):

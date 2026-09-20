@@ -3609,6 +3609,15 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
                 {ev.who?.length ? `with ${ev.who.join(", ")}` : ""}{ev.where ? ` · ${ev.where}` : ""}{ev.about ? ` · ${ev.about}` : ""}
               </Typography>
             )}
+            {/* WHICH QUERY PUT THIS IN FRONT OF IT. Looked up from the block that supplied the
+                message, never asked of the model - a line with no source says nothing rather than
+                guessing, which is the only reason this is worth reading at all. */}
+            {a.source && (
+              <Typography variant="caption" sx={{ ...mono, display: "block", color: FAINT, mt: 0.35, fontSize: 10.5 }}>
+                from: {a.source.label || a.source.block}{a.source.window ? ` (${a.source.window})` : ""}
+                {a.source.rows?.length ? ` · ${a.source.rows.length} message${a.source.rows.length === 1 ? "" : "s"}` : ""}
+              </Typography>
+            )}
             {open ? (
               <>
                 {(a.chat || []).map((turn, n) => (

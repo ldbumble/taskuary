@@ -781,3 +781,63 @@ class RunsPerDayTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class SourceTests(unittest.TestCase):
+    """Every line on the post names the block behind it, and the attribution is LOOKED UP - a
+    deterministic candidate by its kind, a model line through the message id it returned. A wrong
+    provenance is worse than none, so a line it cannot place carries none."""
+    def test_a_producers_candidate_carries_its_own_block(self):
+        for kind, bid in (('connect', 'connectors'), ('health', 'health'), ('cold', 'gone_quiet'),
+                          ('followup', 'waiting_on'), ('promise', 'promised'), ('prep', 'meeting_prep')):
+            with self.subTest(kind=kind):
+                src = assistant.source_of({'key': f'{kind}:x', 'kind': kind}, {}, {bid: {'days': 30}})
+                self.assertEqual(src['block'], bid)
+                self.assertEqual(src['label'], B.by_id(bid).label)
+
+    def test_a_model_line_resolves_through_the_mid_it_returned(self):
+        self.assertEqual(assistant.source_of({'key': 'idea:x', 'mid': 42}, {42: 'threads'}, {'threads': {'days': 7}}),
+                         {'block': 'threads', 'label': 'What people said', 'window': '7d', 'rows': [42]})
+
+    def test_a_line_it_cannot_place_carries_no_source(self):
+        self.assertIsNone(assistant.source_of({'key': 'idea:x', 'mid': None}, {42: 'threads'}, {}))
+        self.assertIsNone(assistant.source_of({'key': 'idea:x'}, {42: 'threads'}, {}))
+        # a mid NO block contributed means the model named something it was not given
+        self.assertIsNone(assistant.source_of({'key': 'idea:x', 'mid': 99}, {42: 'threads'}, {}))
+        self.assertIsNone(assistant.source_of({'key': 'idea:x', 'mid': 'not-a-number'}, {42: 'threads'}, {}))
+
+    def test_the_window_it_names_is_the_one_that_ran(self):
+        self.assertEqual(assistant.source_of({'kind': 'cold'}, {}, {'gone_quiet': {'days': 14}})['window'], '14d')
+        self.assertEqual(assistant.source_of({'kind': 'followup'}, {}, {'waiting_on': {'hours': 48}})['window'], '48h')
+        self.assertEqual(assistant.source_of({'kind': 'health'}, {}, {'health': {}})['window'], '')
+
+    def test_build_inputs_hands_back_which_block_supplied_which_message(self):
+        """The index the attribution reads. It is RETURNED, never stashed on the module: this
+        install runs two Assistant reports and the second would have read the first's."""
+        s = A.store()
+        text, mids = assistant.build_inputs(s, [])
+        self.assertIsInstance(mids, dict)
+        for mid, bid in mids.items():
+            self.assertIsInstance(mid, int)
+            self.assertIn(bid, {b.id for b in B.CATALOGUE})
+
+    def test_the_receipt_is_written_from_the_blocks_that_ran(self):
+        rows = assistant.read_blocks({'threads': {'on': True, 'days': 7}, 'open_work': {'on': True}, 'knowledge': {'on': False}})
+        self.assertEqual([r['id'] for r in rows], ['threads', 'open_work'])
+        foot = assistant._footer({'candidates': {}, 'skipped': [], 'model': True, 'blocks': rows,
+                                  'people': 3, 'recent': 41, 'week': 2, 'open': 18, 'said': 22})
+        self.assertIn('What people said (7d)', foot)          # the label as WRITTEN: lowercasing gave "what i promised"
+        self.assertIn('Open work', foot)
+        self.assertNotIn('Knowledge', foot)
+        # ...and the counts it always carried are still there: naming the blocks does not make
+        # "41 sender/subject lines" less of a fact, and dropping them broke a test that was right
+        self.assertIn('41 sender/subject line(s)', foot)
+        self.assertIn('3 thread(s) of what people said', foot)
+        self.assertIn(chr(10) + 'Read: ', foot)              # its own line - sixteen names after "Reviewed:" is a paragraph
+
+    def test_a_post_written_before_blocks_keeps_the_sentence_it_was_written_with(self):
+        """An old post carries no `blocks` key. Rewriting its receipt from today's catalogue would
+        be a guess about a run nobody can re-read."""
+        old = {'candidates': {'cold': 2}, 'skipped': [], 'model': True, 'people': 3, 'recent': 41,
+               'week': 2, 'open': 18, 'said': 22}
+        self.assertIn('41 sender/subject line(s) from the last two days', assistant._footer(old))

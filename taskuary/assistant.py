@@ -467,6 +467,31 @@ def fresh(state: dict, cand: dict, now: datetime) -> bool:
     return (i.get('Sig') or '') != (cand.get('sig') or '')
 
 
+def source_of(line: dict, mids: dict, chosen: dict) -> dict | None:
+    """Which block put this line in front of the model. LOOKED UP, never asked for: a candidate a
+    producer raised carries its own block id, and for the model's own lines the block is read off
+    the message id it returned. No mid, or a mid no block contributed, means NO source line - a
+    wrong provenance is worse than none, and this is the one thing on the post whose whole value is
+    that the owner can trust it."""
+    from . import assistantblocks as blk
+    bid = line.get('block') or blk.BLOCK_OF_KIND.get(line.get('kind'))
+    if not bid:
+        mid = line.get('mid') or (line.get('action') or {}).get('mid')
+        try: bid = mids.get(int(mid)) if mid else None
+        except (TypeError, ValueError): bid = None
+    if not bid: return None
+    o = (chosen or {}).get(bid) or {}
+    win = f"{o['days']}d" if o.get('days') else f"{o['hours']}h" if o.get('hours') else ''
+    rows = [int(line['mid'])] if line.get('mid') else []
+    return {'block': bid, 'label': (blk_label(bid) or bid), 'window': win, 'rows': rows}
+
+
+def blk_label(bid: str) -> str:
+    from . import assistantblocks as blk
+    b = blk.by_id(bid)
+    return b.label if b else ''
+
+
 # ── the model's pass: its own read, given what it already said ───────────────────────────────
 CONTRACT = ('\n\nYou are writing your POST on the owner\'s Timeline - the short list of things worth saying right now. You get '
             'CANDIDATES the hub found itself (each with a key), WHAT PEOPLE SAID (the words, by thread), who is OUT OF OFFICE, the '
@@ -959,14 +984,14 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
     # COUNSEL is the chat's document; its walkthrough rules governed idea generation until 2026-09-06.
     system = (f"YOUR INSTRUCTION (the owner's, from the Reports tab):\n{direction}" + contract.replace('{max_lines}', str(max_lines))
               + (f"\n\nWho the owner is (their own document; its reply rules are for text sent to OTHERS):\n{soul[:1500]}" if soul else ''))
-    user = (systems_inputs(store, watch_source_ids, watch_sources) if systems_only
-            else inputs(store, cands, watch_source_ids=watch_source_ids, watch_sources=watch_sources, blocks=blocks, report_id=report_id))
+    if systems_only: user, mids = systems_inputs(store, watch_source_ids, watch_sources), {}
+    else: user, mids = build_inputs(store, cands, watch_source_ids=watch_source_ids, watch_sources=watch_sources, blocks=blocks, report_id=report_id)
     images = []
     if not systems_only:
         from .llm import readable_images
         images = readable_images(store, _people_context(store)[1])
     text = llm(system, user, max_tokens=POST_TOKENS, **({'images': images} if images else {}))
-    return parse(store, text, cands, max_lines), _notes(text), user
+    return parse(store, text, cands, max_lines), _notes(text), user, mids
 
 
 def facts(store, watch_source_ids=None, watch_sources=None, systems_only: bool = False, blocks=None, report_id=None) -> str:
@@ -1150,7 +1175,7 @@ def _public(i: dict) -> dict:
     try: a = json.loads(i.get('ActionJson') or '{}')
     except ValueError: a = {}
     return {'id': i['IdeaId'], 'key': i['Key'], 'kind': i['Kind'], 'text': i['Text'], 'why': a.pop('why', ''), 'action': a, 'status': i.get('Status'),
-            'section': section_of({'section': a.get('section'), 'kind': i['Kind']})}
+            'source': a.get('source'), 'section': section_of({'section': a.get('section'), 'kind': i['Kind']})}
 
 
 def talk(store, idea_id: int, text: str, actor: str = 'owner', llm=None) -> dict:
@@ -1247,15 +1272,39 @@ def reviewed(cands: list, say: list, recent: str, open_: str, said: str, model: 
             'people': 0 if people.startswith('(') else sum(1 for l in people.split('\n') if l.startswith('- '))}
 
 
+def read_blocks(chosen: dict) -> list:
+    """[{id, label, window}] for the blocks this run actually read, in catalogue order. What the
+    receipt under the post is written from - it used to be a fixed sentence with hand-counted
+    numbers, which could only ever describe the one report it was written for."""
+    from . import assistantblocks as blk
+    out = []
+    for b in blk.CATALOGUE:
+        o = (chosen or {}).get(b.id)
+        if chosen is not None and not (o or {}).get('on'): continue
+        o = o or {}
+        win = f"{o['days']}d" if o.get('days') else f"{o['hours']}h" if o.get('hours') else ''
+        out.append({'id': b.id, 'label': b.label, 'window': win})
+    return out
+
+
 def _footer(r: dict) -> str:
     if r.get('scope') == 'sources':
         n = int(r.get('systems') or 0)
         return f"Reviewed: {n} configured data source{'s' if n != 1 else ''} only"
     kinds = ', '.join(f"{v} {k}" for k, v in r['candidates'].items()) or 'no candidates'
     skip = f"; let go: {len(r['skipped'])}" if r['skipped'] else ''
-    return (f"Reviewed: {kinds}{skip} - {r.get('people', 0)} thread(s) of what people said, {r['recent']} sender/subject line(s) from the last two days, "
-            f"{r['week']} task(s) closed this week, {r['open']} open task(s), {r['said']} line(s) already said"
-            + ('' if r['model'] else " - no model: the facts in the hub's own words"))
+    counted = (f"Reviewed: {kinds}{skip} - {r.get('people', 0)} thread(s) of what people said, {r['recent']} sender/subject line(s) from the last two days, "
+               f"{r['week']} task(s) closed this week, {r['open']} open task(s), {r['said']} line(s) already said"
+               + ('' if r['model'] else " - no model: the facts in the hub's own words"))
+    # THE COUNTS STAY. Naming the blocks does not make "41 sender/subject lines" less of a fact,
+    # and a test caught me dropping them. `Read:` adds WHICH queries produced them - the part
+    # nobody could see - on its own line, because sixteen names run on after "Reviewed:" read as a
+    # paragraph. Labels as WRITTEN: lowercasing turned "What I promised" into "what i promised".
+    # A post from before blocks carries no `blocks` key and keeps the counts alone; rewriting its
+    # receipt from today's catalogue would be a guess about a run nobody can re-read.
+    if r.get('blocks') is None: return counted
+    named = ', '.join(b['label'] + (f" ({b['window']})" if b['window'] else '') for b in r['blocks']) or 'nothing'
+    return counted + '\nRead: ' + named
 
 
 def run(store, llm=None, force: bool = False, instruction: str = None, *,
@@ -1346,18 +1395,18 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     # Selecting system views is itself an explicit request for model judgement. It must keep
     # working even if the owner turns off the free-form "idea" producer in Settings.
     configured = bool(_ids(watch_source_ids) or _inline(watch_sources))
-    used, note, read = bool(llm and (configured if systems_only else ('idea' in c['producers'] or configured))), '', ''
+    used, note, read, mids = bool(llm and (configured if systems_only else ('idea' in c['producers'] or configured))), '', '', {}
     if used:
         try:
-            say, note, read = think(store, cands, llm, instruction, c['max'],
-                                    watch_source_ids, watch_sources, systems_only, blocks, report_id)
+            say, note, read, mids = think(store, cands, llm, instruction, c['max'],
+                                          watch_source_ids, watch_sources, systems_only, blocks, report_id)
         except Exception as e:
             logger.warning(f'assistant: the model pass failed, posting the facts alone - {e}'); say, used = cands[:c['max']], False
     else: say = cands[:c['max']]          # no model: the facts still stand, in the hub's own words
     if not read:
-        read = (systems_inputs(store, watch_source_ids, watch_sources) if systems_only else
-                inputs(store, cands, 'CANDIDATES (no model pass - these posted as facts)',
-                       watch_source_ids, watch_sources, blocks, report_id))
+        if systems_only: read = systems_inputs(store, watch_source_ids, watch_sources)
+        else: read, mids = build_inputs(store, cands, 'CANDIDATES (no model pass - these posted as facts)',
+                                        watch_source_ids, watch_sources, blocks, report_id)
     own_post = own_identity(store, report_id)
     # the note outlives the post: a quiet check leaves one too, so the next check starts where this
     # one stopped. Each report writes and reads its OWN note (notes_key) - one global note meant a
@@ -1379,7 +1428,8 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
         rv = reviewed([], say, '(', '(', '(', used, '(', '(') | {
             'notes': '', 'scope': 'sources', 'systems': len(_ids(watch_source_ids)) + len(_inline(watch_sources))}
     else:
-        rv = reviewed(cands, say, _recent(store), _open(store), _said(store), used, _week(store), _people(store)) | {'notes': note}
+        rv = reviewed(cands, say, _recent(store), _open(store), _said(store), used, _week(store), _people(store)) | {
+            'notes': note, 'blocks': read_blocks(blocks)}
     # ...and what the REPORT proposes on its own: the app's health and a system worth connecting. Read,
     # not thought; fresh() keeps a declined one from coming back, and a raised one from repeating.
     if not systems_only:
@@ -1408,8 +1458,18 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
         store.add_route(mid, None, 'feed', None, 'the check ran and found nothing - you asked to see every run', [], 'assistant')
         store.set_brief(mid, json.dumps({'ideas': [], 'reviewed': rv, 'flight': [], 'stats': []}))
         return {'ran': True, 'said': 0, 'message_id': mid, 'reviewed': rv, 'inputs': read}
-    rows = [store.upsert_idea(s | {'action': (s.get('action') or {}) | {'why': s['why']}}, stamp) for s in say]
-    body = ('\n'.join(f"- {i['Text']}\n    why: {s_['why']}" for i, s_ in zip(rows, say)) + '\n\n' + _footer(rv)
+    # every line names the block behind it, looked up rather than asked for (source_of)
+    rows = [store.upsert_idea(s | {'action': (s.get('action') or {}) | {'why': s['why']}
+                                   | ({'source': src} if (src := source_of(s, mids, blocks)) else {})}, stamp) for s in say]
+    # the source goes in the BODY, not only on the card: the Timeline's detail pane renders an
+    # assistant post as its plain text, so a provenance that lived only in the React card was
+    # invisible exactly where the owner reads the post
+    def _said_line(i, s_):
+        src = source_of(s_, mids, blocks)
+        if not src: return f"- {i['Text']}\n    why: {s_['why']}"
+        win = f" ({src['window']})" if src['window'] else ''
+        return f"- {i['Text']}\n    why: {s_['why']}\n    from: {src['label']}{win}"
+    body = ('\n'.join(_said_line(i, s_) for i, s_ in zip(rows, say)) + '\n\n' + _footer(rv)
             + (f"\nNote to my next check: {note}" if note else ''))
     # the row's one line: the first idea, cut at a word, and how many more wait behind it
     head = rows[0]['Text'] if len(rows[0]['Text']) <= 90 else rows[0]['Text'][:90].rsplit(' ', 1)[0] + '…'

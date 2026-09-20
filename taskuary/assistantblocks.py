@@ -190,6 +190,10 @@ _BY_ID = {b.id: b for b in CATALOGUE}
 # `assistant_producers` is the switch the owner already has for the six that post rows; a producer
 # missing from it is a block that is off, not a second place to say the same thing.
 PRODUCER_OF = {'waiting_on': 'followup', 'promised': 'promise', 'meeting_prep': 'prep', 'gone_quiet': 'cold'}
+# ...and back the other way, plus the two that raise a row without a `producers` switch behind them.
+# This is how a candidate is attributed with NO model involved: its kind already says which block
+# made it, so source_of never has to ask and can never be told wrong.
+BLOCK_OF_KIND = {v: k for k, v in PRODUCER_OF.items()} | {'health': 'health', 'connect': 'connectors'}
 
 _WORDS = {1: 'one', 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six', 7: 'seven', 8: 'eight', 9: 'nine', 10: 'ten', 11: 'eleven', 12: 'twelve'}
 

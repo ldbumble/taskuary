@@ -354,3 +354,47 @@ def test_the_alert_line_is_named_for_being_immediate_not_for_a_device():
     2026-09-17: "why does this say phone if it can go to email?")."""
     assert 'phone' not in reports.LINE_SAYS['alert']
     assert 'right away' in reports.LINE_SAYS['alert']
+
+
+# ── the Assistant with no rule of its own ───────────────────────────────────────────────
+# A report is work you asked for, so a line nobody set means every run. The Assistant is a voice
+# that checks in every half hour, and every run from a voice is noise (the owner, 2026-09-20: "only
+# show up when the assistant has an idea that matters, not always").
+def test_the_assistant_with_no_rule_asks_whether_it_matters_on_both_lines():
+    cfg = {'type': 'assistant'}
+    assert not reports.routed(cfg)                       # nobody set it - the owner's card still reads "not routed"
+    assert reports.route_of(cfg, 'timeline') == ('ai', reports.ASSISTANT_WHEN)
+    assert reports.route_of(cfg, 'work') == ('ai', reports.ASSISTANT_WHEN)
+    assert reports.route_of(cfg, 'alert')[0] == 'never'
+    assert reports.asks_ai(cfg)
+    assert reports.ASSISTANT_WHEN in reports.judge_prompt(cfg)
+
+
+def test_an_assistant_that_was_given_a_rule_keeps_it():
+    """reach_of's migration rule holds: a rule the owner asked for means what it always meant."""
+    assert reports.assistant_default({'type': 'assistant', 'reach': 'always'}) == {}
+    assert reports.assistant_default({'type': 'assistant', 'alert': {'when': 'something_came_back'}}) == {}
+    assert reports.assistant_default({'type': 'assistant', 'route': {'timeline': {'how': 'always'}}}) == {}
+    assert reports.assistant_default({'type': 'mssql'}) == {}
+    assert reports.assistant_default({'type': 'assistant', 'watch_source_ids': [3]}) == {}   # a monitor posts its findings
+    assert reports.decide({'type': 'assistant', 'reach': 'always'}, res('0 rows', ''), None)['timeline'] is True
+    assert reports.route_of({'type': 'mssql'}, 'work') == ('always', '')
+
+
+def test_the_assistants_default_is_judged_and_a_no_holds_both_lines():
+    asked = []
+    def judge(state, ask, cfg): asked.append(list(ask)); return {l: False for l in ask}
+    d = reports.decide({'type': 'assistant'}, res('Assistant', '- a status note'), judge=judge)
+    assert asked == [['timeline', 'work']]
+    assert (d['timeline'], d['work'], d['alert']) == (False, False, False)
+
+
+def test_the_assistants_default_reaches_you_when_no_judge_answers():
+    d = reports.decide({'type': 'assistant'}, res('Assistant', '- a line'), None)
+    assert (d['timeline'], d['work']) == (True, True)
+
+
+def test_the_card_shows_the_sentence_the_server_asks():
+    from pathlib import Path
+    src = (Path(__file__).resolve().parents[1] / 'website' / 'src' / 'ReportsView.jsx').read_text(encoding='utf-8')
+    assert f'export const ASSISTANT_WHEN = "{reports.ASSISTANT_WHEN}"' in src

@@ -158,6 +158,40 @@ class RunTests(unittest.TestCase):
         self.assertIn(f"health:report:{A.AR['sid']}", keys)
         self.assertGreaterEqual(out.get('said', 0), 1)
 
+    def test_the_card_reads_the_lines_before_they_post_and_a_no_holds_them(self):
+        """2026-09-20: the routing card's Timeline line is asked BEFORE the post - a run held back
+        posts nothing, marks no idea said, and the next check raises the same lines again."""
+        s = A.store()
+        for at in ('06:00', '07:00', '08:00'):
+            s.add_report_run(A.AR['sid'], {'at': f'2026-09-18 {at}:00', 'title': 'Monthly AR Report', 'failed': True, 'error': 'login timed out'})
+        seen = []
+        def judge(lines, n): seen.append((lines, n)); return {'timeline': False, 'work': False, 'why': ''}
+        out = assistant.run(s, llm=None, force=True, judge=judge)
+        self.assertEqual((out['said'], 'message_id' in out), (0, False))
+        self.assertGreaterEqual(out['held'], 1)
+        self.assertEqual(seen[0][1], out['held']); self.assertIn('why:', seen[0][0])
+        self.assertEqual(s.list_ideas(), [])
+        again = assistant.run(s, llm=None, force=True, judge=lambda lines, n: {'timeline': True, 'work': True})
+        self.assertGreaterEqual(again['said'], 1)
+
+    def test_work_no_posts_the_news_and_raises_no_row_on_the_rail(self):
+        from taskuary import funnel
+        s = A.store()
+        for at in ('06:00', '07:00', '08:00'):
+            s.add_report_run(A.AR['sid'], {'at': f'2026-09-18 {at}:00', 'title': 'Monthly AR Report', 'failed': True, 'error': 'login timed out'})
+        out = assistant.run(s, llm=None, force=True, judge=lambda lines, n: {'timeline': True, 'work': False})
+        self.assertGreaterEqual(out['said'], 1); self.assertTrue(out.get('message_id'))
+        self.assertTrue(all(json.loads(i['ActionJson']).get('work') is False for i in s.list_ideas()))
+        self.assertEqual(funnel.from_forgotten(s, set(), set()), [])
+
+    def test_a_judge_that_fails_leaves_the_post_reaching_you(self):
+        s = A.store()
+        for at in ('06:00', '07:00', '08:00'):
+            s.add_report_run(A.AR['sid'], {'at': f'2026-09-18 {at}:00', 'title': 'Monthly AR Report', 'failed': True, 'error': 'login timed out'})
+        def judge(lines, n): raise RuntimeError('no brain')
+        out = assistant.run(s, llm=None, force=True, judge=judge)
+        self.assertGreaterEqual(out['said'], 1); self.assertNotIn('decided', out)
+
 
 if __name__ == '__main__':
     unittest.main()

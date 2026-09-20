@@ -1307,13 +1307,26 @@ def _footer(r: dict) -> str:
     return counted + '\nRead: ' + named
 
 
+def _judged(judge, say: list) -> dict | None:
+    """The card's answer for these lines, or None when no judge answered - the judge is handed the
+    lines as they will read on the post (text and why), never a paraphrase of them."""
+    lines = '\n'.join(f"- {s.get('text') or ''}\n    why: {s.get('why') or ''}" for s in say)
+    try: return judge(lines, len(say))
+    except Exception as e:
+        logger.warning(f'assistant: the routing judge failed, so the post reaches you - {e}'); return None
+
+
 def run(store, llm=None, force: bool = False, instruction: str = None, *,
         watch_source_ids=None, watch_sources=None, systems_only: bool = False, blocks=None,
-        report_id=None, report_title: str = None, always_post: bool = False) -> dict:
+        report_id=None, report_title: str = None, always_post: bool = False, judge=None) -> dict:
     """One post. The Reports tab's scheduler calls this when the 'Assistant' report is due
     (reports.run_report_source) and its "Run now" calls it forced; the instruction is the report's
     editable prompt. Deleting or switching off that report is the off switch - a forced run still
-    answers. Posts nothing when nothing is new."""
+    answers. Posts nothing when nothing is new.
+
+    `judge(lines, n) -> {'timeline': bool, 'work': bool, ...}` is the report's routing card, asked
+    BEFORE anything posts (reports.decide): timeline=no holds the whole post and its ideas stay
+    fresh for the next check; work=no posts it as news that raises no row on the work rail."""
     src = source(store)
     if not force and not (src and src.get('Active')): return {'ran': False, 'said': 0}
     if instruction is None and src and report_id is None:
@@ -1324,7 +1337,7 @@ def run(store, llm=None, force: bool = False, instruction: str = None, *,
         watch_source_ids, watch_sources = _watch(store)
     with _LOCK:
         return _run(store, llm, instruction, watch_source_ids or [], watch_sources or [],
-                    systems_only, report_id, report_title, always_post, blocks)
+                    systems_only, report_id, report_title, always_post, blocks, judge)
 
 
 def seeded_source(store) -> dict | None:
@@ -1368,7 +1381,7 @@ def own_identity(store, report_id) -> bool:
 
 
 def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=False,
-         report_id=None, report_title=None, always_post=False, blocks=None) -> dict:
+         report_id=None, report_title=None, always_post=False, blocks=None, judge=None) -> dict:
     c = cfg(store); now = datetime.now()
     # the report's own block choice drives its producers too - ticking "Work gone quiet" off and
     # still getting cold rows would be the card describing a choice nothing read
@@ -1444,6 +1457,13 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
                                if x['key'] not in have and fresh(state, x, now)]
         except Exception as e: logger.warning(f'assistant: the health and connect checks were skipped - {e}')
     stamp = now.strftime('%Y-%m-%d %H:%M:%S')
+    # the report's routing card reads the lines BEFORE they post. Held back = nothing on the Timeline,
+    # no idea marked said, so the next check raises them again if they still stand; a judge that
+    # fails leaves the run unjudged, and an unjudged run reaches the owner (reports.decide's rule)
+    d = _judged(judge, say) if say and judge else None
+    if d is not None and not d.get('timeline'):
+        logger.info(f'assistant: held back {len(say)} line(s) - the card says nothing here matters')
+        return {'ran': True, 'said': 0, 'held': len(say), 'reviewed': rv, 'inputs': read, 'decided': d}
     if not say:
         # Nothing to say is the normal outcome of a monitor and it posts NOTHING - unless the owner
         # chose "every run", in which case the check still says it ran, in one line, with what it
@@ -1459,7 +1479,10 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
         store.set_brief(mid, json.dumps({'ideas': [], 'reviewed': rv, 'flight': [], 'stats': []}))
         return {'ran': True, 'said': 0, 'message_id': mid, 'reviewed': rv, 'inputs': read}
     # every line names the block behind it, looked up rather than asked for (source_of)
-    rows = [store.upsert_idea(s | {'action': (s.get('action') or {}) | {'why': s['why']}
+    # work=no from the card: the post is news to read, and none of its lines raises a row on the
+    # work rail (funnel.from_forgotten reads the flag); the ideas still carry their state on the post
+    rail = {} if d is None or d.get('work') else {'work': False}
+    rows = [store.upsert_idea(s | {'action': (s.get('action') or {}) | {'why': s['why']} | rail
                                    | ({'source': src} if (src := source_of(s, mids, blocks)) else {})}, stamp) for s in say]
     # the source goes in the BODY, not only on the card: the Timeline's detail pane renders an
     # assistant post as its plain text, so a provenance that lived only in the React card was
@@ -1498,7 +1521,8 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
         triage_ideas(store, rows, brain, report_title=name if own_post else None)
     except Exception as e: logger.warning(f'assistant: idea triage skipped - {e}')
     logger.info(f'assistant: posted {len(rows)} idea(s) as message {mid}')
-    return {'ran': True, 'said': len(rows), 'message_id': mid, 'reviewed': rv, 'inputs': read, 'lines': [_public(i) for i in rows]}
+    return {'ran': True, 'said': len(rows), 'message_id': mid, 'reviewed': rv, 'inputs': read, 'lines': [_public(i) for i in rows],
+            **({'decided': d} if d is not None else {})}
 
 
 # ── the buttons ──────────────────────────────────────────────────────────────────────────────

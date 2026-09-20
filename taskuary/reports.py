@@ -1437,7 +1437,10 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
                             watch_source_ids=watched_ids, watch_sources=watched_sources,
                             systems_only=not blk.reads_taskuary(chosen), blocks=chosen,
                             report_id=src.get('SourceId'), report_title=title,
-                            always_post=route_of(cfg, 'timeline')[0] == 'always' if routed(cfg) else reach_of(cfg) == 'always')
+                            always_post=route_of(cfg, 'timeline')[0] == 'always' if routed(cfg) else reach_of(cfg) == 'always',
+                            # the judge reads the lines BEFORE they post: a post the card's rule would
+                            # have held back is not quiet once it is on the Timeline (2026-09-20)
+                            judge=lambda lines, n: decide_for(store, cfg, read_result(title, lines, False, n), report_llm(store, cfg, llm)))
         # THE PUSH REACHES THIS KIND TOO. Everything below - delivery, the alert, the whole tail -
         # sits after this early return, so the "tell me when it looks wrong" panel was dead for
         # every Assistant-sourced check: the owner filled it in and nothing ever read it
@@ -1447,8 +1450,12 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
         # a clock firing for ever into an empty payload is not a quiet check, it is a broken one
         if out.get('reads_nothing'):
             return {'message_id': None, 'subject': f'{title} - read nothing', 'files': 0, **out}
+        # a run the judge held back is in the run history with what it read and how many lines it
+        # kept to itself - "it ran and found nothing that matters" is where that belongs
+        if out.get('held'):
+            return {'message_id': None, 'subject': f"{title} - {out['held']} line(s) held back: nothing that matters", 'files': 0, **out}
         lines = '\n'.join(str((l or {}).get('text') or '') for l in (out.get('lines') or []))
-        d = decide_for(store, cfg, read_result(title, lines, False, said), report_llm(store, cfg, llm))
+        d = out.get('decided') or decide_for(store, cfg, read_result(title, lines, False, said), report_llm(store, cfg, llm))
         speak, why = d['alert'], d['why']
         if speak and str((cfg.get('alert') or {}).get('to') or '').strip():
             try: send_alert(store, src, cfg, why or f'{said} thing(s) to look at', f'{title} - {said} line(s)', lines)
@@ -1682,6 +1689,25 @@ LINES = ('timeline', 'work', 'alert', 'send')
 # nobody chose must never be why recipients stop getting their report. Only the interruption stays
 # off until it is asked for: nothing Taskuary was not told to shout about gets to shout.
 LINE_DEFAULT = {'timeline': 'always', 'send': 'always', 'work': 'always', 'alert': 'never'}
+# ...except the Assistant. A report is work you asked for; the Assistant is a voice that checks in
+# every half hour, and "every run" from a voice is noise (the owner, 2026-09-20: "only show up when
+# the assistant has an idea that matters, not always"). With no rule of its own it asks, for the
+# Timeline and the work rail alike, one question - and a run the judge holds back posts nothing,
+# its ideas stay fresh for the next check. Mirrored word for word by ReportsView.ASSISTANT_WHEN.
+ASSISTANT_WHEN = ('it has an idea that matters: something I would act on or need to know today, '
+                  'not a status note or a restatement of what is already on my Timeline')
+
+
+def assistant_default(cfg: dict) -> dict:
+    """The route an Assistant report with no rule of its own runs under. A `reach` or an alert
+    condition is a rule (the owner asked for it before this card existed), and keeps meaning what
+    it meant - the migration rule of reach_of."""
+    if cfg.get('type') != 'assistant' or routed(cfg): return {}
+    if str(cfg.get('reach') or '').strip().lower() in REACH or str((cfg.get('alert') or {}).get('when') or '').strip(): return {}
+    # a monitor over connected systems posts its findings - the numbers ARE what matters there;
+    # the voice over Taskuary's own tables is the one whose every-half-hour post needed a judge
+    if cfg.get('watch_source_ids') or cfg.get('watch_sources'): return {}
+    return {l: {'how': 'ai', 'when': ASSISTANT_WHEN} for l in ('timeline', 'work')}
 # ...and what each line is, in the words the judge is given. `alert` is NOT "the phone": it goes to
 # whichever live channel the owner picked, which is as often email as it is WhatsApp (2026-09-17:
 # "why does this say phone if it can go to email?"). What makes it an alert is that it is immediate
@@ -1705,7 +1731,7 @@ def routed(cfg: dict) -> bool:
 def route_of(cfg: dict, line: str) -> tuple:
     """(how, the sentence) for one destination. A line asking the AI with nothing to judge by is a
     question the model cannot answer, so it means the line is simply on."""
-    r = (cfg.get('route') or {}).get(line) or {}
+    r = (cfg.get('route') or assistant_default(cfg)).get(line) or {}
     how, when = str(r.get('how') or '').strip().lower(), str(r.get('when') or '').strip()
     if how not in ROUTE: how = LINE_DEFAULT[line]
     return ('always' if how == 'ai' and not when else how), when
@@ -1796,7 +1822,9 @@ def decide(cfg: dict, res: dict, llm=None, judge=None) -> dict:
     ONE reading of one result for the Timeline, the work rail, the phone and the post out alike -
     two readings of the same run is how they come to disagree (06447455).
     """
-    if not routed(cfg): return _decided_by_the_old_rules(cfg, res)
+    if not routed(cfg):
+        if not (dr := assistant_default(cfg)): return _decided_by_the_old_rules(cfg, res)
+        cfg = cfg | {'route': dr}
     how = {l: route_of(cfg, l)[0] for l in LINES}
     # a failed run has nothing to judge and is not a clear one - but `never` is still never: a line
     # the owner switched off does not come back on because the report broke.

@@ -153,3 +153,12 @@ test("on an existing report the routing step's Continue saves before it advances
   assert.match(step, /\{cur \? "Save & continue" : "Continue"\}/);
   assert.match(step, /\{saveErr && /, "a refused save must say so on the step where the button is");
 });
+
+test("the Assistant with no rule of its own asks whether it matters, on the Timeline and the work rail alike", () => {
+  // 2026-09-20: "only show up when the assistant has an idea that matters, not always" - the card
+  // shows the sentence the server asks (reports.ASSISTANT_WHEN), on both lines, unless a rule was given
+  assert.match(source, /export const ASSISTANT_WHEN = "it has an idea that matters: /);
+  assert.match(source, /export const assistantDefault = \(c\) => \(c\?\.type === "assistant" && !isRouted\(c\)/);
+  assert.match(source, /const r = \(c\?\.route \|\| assistantDefault\(c\)\)\[line\] \|\| \{\}/);   // routeOf mirrors reports.route_of
+  assert.match(source, /\.\.\.assistantDefault\(c\),/);                                            // seedRoute writes it down as the card's sentences
+});

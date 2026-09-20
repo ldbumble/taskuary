@@ -294,6 +294,15 @@ const ROUTE_HOW = ["always", "ai", "never"];
 // Timeline AND the work rail every run until you say otherwise (2026-09-17: "default should be on
 // timeline/work rail every run"). Only the interruption stays off until it is asked for.
 const LINE_DEFAULT = { timeline: "always", send: "always", work: "always", alert: "never" };
+// ...except the Assistant: a voice that checks in every half hour, and "every run" from a voice is
+// noise (2026-09-20: "only show up when the assistant has an idea that matters, not always"). With
+// no rule of its own it asks this on the Timeline and the work rail alike. Word for word
+// reports.ASSISTANT_WHEN / reports.assistant_default - the card must show what the server asks.
+export const ASSISTANT_WHEN = "it has an idea that matters: something I would act on or need to know today, not a status note or a restatement of what is already on my Timeline";
+// A monitor over connected systems (watch sources) posts its findings - the numbers are what matters there.
+export const assistantDefault = (c) => (c?.type === "assistant" && !isRouted(c) && !["always", "wrong", "rule"].includes(c?.reach) && !(c?.alert?.when || "").trim()
+  && !(c?.watch_source_ids?.length || c?.watch_sources?.length)
+  ? { timeline: { how: "ai", when: ASSISTANT_WHEN }, work: { how: "ai", when: ASSISTANT_WHEN } } : {});
 // `alert` is not "the phone" - it goes to whichever live channel you picked, as often email as
 // WhatsApp (2026-09-17: "why does this say phone if it can go to email?"). What makes it an alert
 // is that it goes the moment the run lands and skips Review, not the device it arrives on.
@@ -331,7 +340,7 @@ export const judgeQuestions = (c, lines = ROUTE_LINES) => lines
 const LINE_CHIP = { timeline: "Timeline", work: "Work rail", alert: "reached you", send: "sent out" };
 export const isRouted = (c) => ROUTE_LINES.some((l) => ROUTE_HOW.includes(c?.route?.[l]?.how));
 export const routeOf = (c, line) => {
-  const r = (c?.route || {})[line] || {}, when = (r.when || "").trim();
+  const r = (c?.route || assistantDefault(c))[line] || {}, when = (r.when || "").trim();
   const how = ROUTE_HOW.includes(r.how) ? r.how : LINE_DEFAULT[line];
   // a line asking the AI with nothing to judge by is a question the model cannot answer
   return [how === "ai" && !when ? "always" : how, when];
@@ -361,6 +370,7 @@ export const seedRoute = (c) => {
     work: (c?.watch_for || "").trim() ? { how: "ai", when: c.watch_for.trim() } : { how: "always" },
     alert: c?.alert?.to ? from(reachOf(c), c?.alert) : { how: "never" },
     send: c?.deliver?.to ? from(deliverSendOf(c), c?.deliver) : { how: "always" },
+    ...assistantDefault(c),   // the Assistant's own default, on both lines, unless it was given a rule
   };
 };
 

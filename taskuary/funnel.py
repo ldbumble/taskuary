@@ -643,6 +643,8 @@ def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = froze
         try: a = json.loads(i.get('ActionJson') or '{}')
         except ValueError: a = {}
         if i.get('Kind') == 'prep': continue                      # the calendar lane already has the meeting itself
+        # the report's card said work=no for this post: news to read on the Timeline, not a row here
+        if a.get('work') is False: continue
         # A closed source task does NOT mean the Assistant post was read. The post may also name a
         # separate follow-up or a pattern learned across several tasks (for example, recurring blank
         # logins). It leaves Unread only through its own idea state, never as a side effect of closing

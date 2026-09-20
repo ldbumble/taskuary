@@ -63,10 +63,22 @@ test("the pane's knobs clear the full-screen button, and the connection word rid
   // SessionPane's full-screen button sits at right: 6 over the same corner; at right: 10 the knob
   // row ended under it and every pane read "Catppuccin Moch" (2026-09-18). The state word used to
   // float at right: 130 - the width of one particular knob row - and collided in narrow Wall cells.
-  assert.match(term, /position: "absolute", top: 5, right: 36, zIndex: 2, display: "flex"/);
+  assert.match(term, /position: "absolute", top: 3, right: 36, zIndex: 2, display: "flex"/);
   assert.doesNotMatch(term, /right: 130/);
   const knobs = term.slice(term.indexOf("right: 36, zIndex: 2"), term.indexOf("A\u2212</Box>"));
   assert.match(knobs, /\{state !== "live" && \(/, "the connection word is the first thing in the knob row");
+});
+
+test("the knobs sit on the pane's background, and a narrow pane draws none", () => {
+  // At 62% opacity with no backdrop the first row of the run printed straight through
+  // "A\u2212 10 A+ Catppuccin Mocha"; on a phone and in the walk's agent card the row spanned the
+  // whole pane and covered the first three rows (2026-09-20). Solid backdrop, faded knobs; and
+  // under 520px the row is not drawn - the full-screen button is enough there.
+  const knobs = term.slice(term.indexOf("!readOnly && !narrow &&"), term.indexOf("A\u2212</Box>"));
+  assert.match(knobs, /bgcolor: THEMES\[themeName\]\.background/, "the backdrop is the pane's own colour");
+  assert.match(knobs, /"& > \*": \{ opacity: 0\.62/, "only the knobs fade, never the backdrop");
+  assert.match(term, /new ResizeObserver\(\(entries\) => setNarrow\(\(entries\[0\]\?\.contentRect\.width \|\| 0\) < 520\)\)/);
+  assert.match(term, /<Box ref=\{root\} sx=\{\{ position: "relative"/, "the pane's own box is what is measured");
 });
 
 test("nothing touches xterm after the pane is disposed", () => {

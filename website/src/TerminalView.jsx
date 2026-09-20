@@ -107,6 +107,18 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
   const [restoring, setRestoring] = useState(true);
   const [themeName, setThemeName] = useState(savedTheme);
   const [size, setSize] = useState(savedSize);
+  // a NARROW pane has no room for the knobs: on a phone, in a Wall cell and inside the walk's agent
+  // card they spanned the whole width and sat over the first rows of the run (2026-09-20). The
+  // full-screen button stays; a pane that wide again gets them back.
+  const [narrow, setNarrow] = useState(false);
+  const root = useRef(null);
+  useEffect(() => {
+    const el = root.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver((entries) => setNarrow((entries[0]?.contentRect.width || 0) < 520));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const termRef = useRef(null);
   const refit = useRef(null);                        // set at mount: refit + tell the pty
   const sendRef = useRef(null);                      // the socket's send, for the mic: dictated text is typed into the session
@@ -359,7 +371,7 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
   return (
     // height="100%": the pane fills the flex slot its parent gives it (the task page sizes it to
     // whatever is left on screen); any other value is a fixed height as before
-    <Box sx={{ position: "relative", border: `1px solid ${BORDER}`, borderRadius: 2, overflow: "hidden",
+    <Box ref={root} sx={{ position: "relative", border: `1px solid ${BORDER}`, borderRadius: 2, overflow: "hidden",
       bgcolor: THEMES[themeName].background, ...(height === "100%" ? { display: "flex", flexDirection: "column", minHeight: 0 } : {}) }}>
       {/* the pane's two knobs, discreet until hovered: how it is painted, and how much of the
           run fits in it. Both restyle ANY CLI in the pane - codex and claude included - and
@@ -368,8 +380,12 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
           end of the palette's name ("Catppuccin Moch" on every Wall cell and the task page,
           2026-09-18). The connection word rides in this row too, instead of at a hardcoded
           offset that only fitted one width of the row. */}
-      {!readOnly && <Box sx={{ position: "absolute", top: 5, right: 36, zIndex: 2, display: "flex", alignItems: "center", gap: 0.5,
-        opacity: 0.62, "&:hover": { opacity: 1 }, transition: "opacity .15s" }}>
+      {/* ...on the pane's own background: the knobs used to float at 62% over the first row of the
+          run, and its text printed straight through "A− 10 A+ Catppuccin Mocha" (2026-09-20). The
+          backdrop is solid and only the knobs fade, so the row under them is covered, not blended. */}
+      {!readOnly && !narrow && <Box sx={{ position: "absolute", top: 3, right: 36, zIndex: 2, display: "flex", alignItems: "center", gap: 0.5,
+        bgcolor: THEMES[themeName].background, borderRadius: 1, pl: 0.75, pr: 0.5, py: 0.25,
+        "& > *": { opacity: 0.62, transition: "opacity .15s" }, "&:hover > *": { opacity: 1 } }}>
         {state !== "live" && (
           <Typography variant="caption" sx={{ ...mono, fontSize: 10, mr: 0.5,
             color: state === "exited" ? CATPPUCCIN.green : CATPPUCCIN.yellow }}>

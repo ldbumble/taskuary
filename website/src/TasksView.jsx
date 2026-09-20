@@ -1361,8 +1361,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   </Box>
                   {stage === "agent" && <>
                   {term?.alive && (
+                    // on a phone the two buttons take their own row: sharing one with the heading, they
+                    // stacked over the "agent · needs you" chip (2026-09-20)
                     <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end",
-                      gap: 0.35, flexWrap: "wrap", flex: 1, minWidth: 0, mt: liveSession ? 0 : 1 }}>
+                      gap: 0.35, flexWrap: "wrap", flex: { xs: "1 0 100%", sm: 1 }, minWidth: 0, mt: liveSession ? { xs: 0.5, sm: 0 } : 1 }}>
                       {/* A LIVE SESSION HAS NO PRIMARY. "Answer agent" / "Give new prompt" opened a
                           Dialog whose whole body was the SAME TellAgent that is already inline under
                           the terminal - a modal copy of a control on the page (the owner, 2026-09-16:

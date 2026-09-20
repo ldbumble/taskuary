@@ -10,7 +10,7 @@
 // hover previews, click pins). Past chats slide over; New chat starts a fresh conversation.
 // Everything durable lives on the server; this file only draws and pushes buttons.
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Box, CircularProgress, IconButton, MenuItem, Popover, Select, Tooltip, Typography } from "@mui/material";
+import { Box, CircularProgress, IconButton, MenuItem, Popover, Select, Tooltip, Typography, useMediaQuery } from "@mui/material";
 import HistoryIcon from "@mui/icons-material/History";
 import EditNoteIcon from "@mui/icons-material/EditNote";
 import TuneIcon from "@mui/icons-material/Tune";
@@ -523,6 +523,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [current, setCurrent] = useState(null);       // the key on the table
   const [currentItem, setCurrentItem] = useState(null);   // ...and the item itself, drawn at the top of the pipe
   const [text, setText] = useState("");
+  const phone = useMediaQuery("(max-width:600px)");     // the composer's hint is one line there
   const [acked, setAcked] = useState(() => new Set());
   const [notices, setNotices] = useState([]);           // the page's own strip notices: a newer message on Current (PW-165)
   const [chatsOpen, setChatsOpen] = useState(false);
@@ -1466,7 +1467,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                 <SentimentSatisfiedAltIcon sx={{ fontSize: 18 }} />
               </IconButton>
             </Tooltip>
-            <textarea rows={1} value={text} disabled={resetting} placeholder={current ? "Ask about this one, tell me what to do with it, or name something else…" : "Ask Taskuary anything — a name or a subject pulls it in…"}
+            {/* a phone's composer is one line tall and the long hint wrapped under its own edge, cut
+                mid-word ("name or a subject pulls it in" lost its tail, 2026-09-20): the short hint there */}
+            <textarea rows={1} value={text} disabled={resetting} placeholder={phone ? (current ? "Ask about this one, or name another…" : "Ask Taskuary anything…")
+              : current ? "Ask about this one, tell me what to do with it, or name something else…" : "Ask Taskuary anything — a name or a subject pulls it in…"}
               onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
             <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || !text.trim()} onClick={() => send()}><SendIcon fontSize="small" /></button>
           </div>

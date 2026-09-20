@@ -501,7 +501,9 @@ def cards_of(cfg: dict) -> list | None:
     # how the first version of the page saved them, read for the reports it wrote
     ws = cfg.get('watch_sources')
     ws = [ws] if isinstance(ws, dict) else ws if isinstance(ws, list) else []
-    mine = [x for x in ws if isinstance(x, dict) and x.get('type') == TOKEN_TYPE]
+    # ...and each card knows its place in that list ("source 3 of 5" on the page), so a section
+    # placed in the prompt can say which card it is
+    mine = [dict(x, n=i + 1, of=len(ws)) for i, x in enumerate(ws) if isinstance(x, dict) and x.get('type') == TOKEN_TYPE]
     raw = mine or cfg.get(KEY)
     if not isinstance(raw, list): return None
     out, seen = [], set()
@@ -510,7 +512,8 @@ def cards_of(cfg: dict) -> list | None:
         cid = str(x.get('card') or '').strip()
         if cid not in _CARD or cid in seen: continue
         seen.add(cid)
-        out.append({'type': TOKEN_TYPE, 'card': cid, **{n: x[n] for n, *_ in _CARD[cid].knobs if n in x}})
+        out.append({'type': TOKEN_TYPE, 'card': cid, **{n: x[n] for n, *_ in _CARD[cid].knobs if n in x},
+                    **({'n': int(x['n']), 'of': int(x['of'])} if x.get('n') and x.get('of') else {})})
     return out
 
 
@@ -523,6 +526,7 @@ def from_cards(store, cards: list) -> dict:
     for b in CATALOGUE:
         o, cid = defaults(store, b), CARD_OF.get(b.id)
         if cid: o['on'] = cid in by
+        if cid in by and by[cid].get('n'): o['source_no'] = f"source {by[cid]['n']} of {by[cid].get('of') or by[cid]['n']}"
         if cid in by:
             for name, _, dflt, targets in _CARD[cid].knobs:
                 try: v = max(0, int(by[cid].get(name, dflt)))
@@ -564,12 +568,16 @@ def price_cards(rows: list, chosen: dict) -> list:
     return out
 
 
-def sections_by_card(parts: list) -> dict:
+def sections_by_card(parts: list, chosen: dict = None) -> dict:
     """{'taskuary.<card>': the card's rendered sections} from a payload's parts [(block id, text)],
-    for a prompt that names a card. A card whose blocks rendered nothing still answers, in words -
-    a token that vanished would read as a prompt that never asked."""
+    for a prompt that names a card, each headed with the card's name and its place in the source
+    list ("source 3 of 5" - what the page prints on the card, the owner 2026-09-20: "it should say
+    which source number"). A card whose blocks rendered nothing still answers, in words - a token
+    that vanished would read as a prompt that never asked."""
     out = {}
     for c in CARDS:
         text = ''.join(t for bid, t in parts if CARD_OF.get(bid) == c.id).strip()
-        out[f'{TOKEN_TYPE}.{c.id}'] = text or f'(nothing in Taskuary · {c.label} right now)'
+        no = next((o.get('source_no') for b in c.blocks if (o := (chosen or {}).get(b)) and o.get('source_no')), None)
+        head = f"TASKUARY · {c.label.upper()}" + (f' ({no})' if no else '') + ':'
+        out[f'{TOKEN_TYPE}.{c.id}'] = head + '\n' + (text or f'(nothing in Taskuary · {c.label} right now)')
     return out

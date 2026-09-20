@@ -982,14 +982,14 @@ PLACED_HEAD = "YOUR INSTRUCTION (the owner's, from the Reports tab), with the ca
 def placed_message(shaped: str, rest: str) -> str: return f'{PLACED_HEAD}\n{shaped}\n\n{rest}'
 
 
-def placed(instruction: str, lead: str, parts: list) -> tuple:
+def placed(instruction: str, lead: str, parts: list, chosen: dict = None) -> tuple:
     """(the instruction with every card it names in its place, the payload without those cards).
     A prompt naming no card leaves both exactly as they were - the substitution costs nothing
     when nobody asked for it."""
     from . import assistantblocks as blk
     from .reports import names_sources, substitute
     if not names_sources(instruction): return instruction, lead + ''.join(t for _, t in parts)
-    text, used, missing = substitute(instruction, blk.sections_by_card(parts))
+    text, used, missing = substitute(instruction, blk.sections_by_card(parts, chosen))
     if missing: logger.warning(f'assistant prompt names sources this report does not have: {", ".join(missing)}')
     return text, lead + ''.join(t for bid, t in parts if f'{blk.TOKEN_TYPE}.{blk.CARD_OF.get(bid)}' not in used)
 
@@ -1026,7 +1026,7 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
         # message with its data (one text: what the model reads, the run record, the Preview); the
         # rest of the payload follows it as it always did
         lead, parts, mids = build_sections(store, cands, watch_source_ids=watch_source_ids, watch_sources=watch_sources, blocks=blocks, report_id=report_id)
-        shaped, rest = placed(direction, lead, parts)
+        shaped, rest = placed(direction, lead, parts, blocks)
         if shaped is direction: user = rest
         else: direction, user = PLACED_SAYS, placed_message(shaped, rest)
     # the report's prompt is the report's own: instruction, data scope, output contract, owner (PW-242).
@@ -1057,7 +1057,7 @@ def facts(store, watch_source_ids=None, watch_sources=None, systems_only: bool =
                                     'CANDIDATES (new since the last post)', watch_source_ids, watch_sources, blocks, report_id)
     from .reports import names_sources
     if not names_sources(instruction): return lead + ''.join(t for _, t in parts)
-    return placed_message(*placed(instruction, lead, parts))
+    return placed_message(*placed(instruction, lead, parts, blocks))
 
 
 # ── the note to the next check ───────────────────────────────────────────────────────────────

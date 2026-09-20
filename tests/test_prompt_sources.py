@@ -137,7 +137,18 @@ class SubstituteTests(unittest.TestCase):
         self.assertEqual(shaped.count('ALREADY SAID (never repeat)'), 1)
 
     def test_a_card_with_nothing_rendered_still_answers_in_words(self):
-        self.assertEqual(B.sections_by_card([('open_work', 'X')])['taskuary.calendar'], '(nothing in Taskuary · Calendar right now)')
+        self.assertEqual(B.sections_by_card([('open_work', 'X')])['taskuary.calendar'], 'TASKUARY · CALENDAR:' + chr(10) + '(nothing in Taskuary · Calendar right now)')
+
+    def test_a_placed_card_says_which_source_it_is(self):
+        """The page prints "source 3 of 5" on the card; the placed section says the same."""
+        s = MemoryStore()
+        cfg = {'type': 'assistant', 'watch_sources': [{'type': 'rest', 'url': 'x'}, {'type': 'taskuary', 'card': 'work'}, {'type': 'taskuary', 'card': 'memory'}]}
+        chosen = B.resolve(s, cfg)
+        self.assertEqual(chosen['open_work']['source_no'], 'source 2 of 3')
+        secs = B.sections_by_card([('open_work', 'OPEN WORK:' + chr(10) + 'X')], chosen)
+        self.assertTrue(secs['taskuary.work'].startswith('TASKUARY · WORK (source 2 of 3):' + chr(10)))
+        self.assertTrue(secs['taskuary.memory'].startswith('TASKUARY · MEMORY (source 3 of 3):' + chr(10)))
+        self.assertNotIn('(source', secs['taskuary.calendar'])           # a card not in the list has no number
 
 
 if __name__ == '__main__':
@@ -150,7 +161,7 @@ class CardsInTheSourceListTests(unittest.TestCase):
     def test_a_taskuary_card_in_watch_sources_is_the_choice_and_not_a_system(self):
         s = MemoryStore()
         cfg = {'type': 'assistant', 'watch_sources': [{'type': 'taskuary', 'card': 'work', 'quiet_days': 9}, {'type': 'rest', 'url': 'http://x'}]}
-        self.assertEqual(B.cards_of(cfg), [{'type': 'taskuary', 'card': 'work', 'quiet_days': 9}])
+        self.assertEqual(B.cards_of(cfg), [{'type': 'taskuary', 'card': 'work', 'quiet_days': 9, 'n': 1, 'of': 2}])   # its place in the list rides along
         chosen = B.resolve(s, cfg)
         self.assertTrue(chosen['gone_quiet']['on'] and chosen['gone_quiet']['days'] == 9 and not chosen['threads']['on'])
         self.assertEqual([x['type'] for x in assistant._inline(cfg['watch_sources'])], ['rest'])   # the systems reader skips it

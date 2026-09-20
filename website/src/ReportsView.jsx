@@ -9,6 +9,8 @@ import {
   Stepper, Switch, TextField, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import CloseIcon from "@mui/icons-material/Close";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
@@ -20,7 +22,7 @@ import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import api from "./api";
 import { NL, SOURCE_KEYS, WORKFLOW_TYPES, addField, isWorkflowConfig, showValue, toShape, toSources } from "./sourceShape.js";
 import { ASSISTANT, GRADIENT, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, PILL_COLORS } from "./theme.jsx";
-import { TASKUARY_CARDS, cardLabel, cardPatch, cardsLine, cardsOf, costLine, kilo, knobsOf, promptSources, tokenOf } from "./assistantBlocks.js";
+import { TASKUARY_CARDS, cardLabel, cardsLine, cardsOf, costLine, promptSources, sourceKey, tokenOf } from "./assistantBlocks.js";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, Empty, FilterPills, SideRail, ConfirmDelete } from "./ui.jsx";
 
 const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
@@ -1005,6 +1007,19 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
   // ...and the prompt's "insert a source" menu: a token the server reads (reports.substitute)
   const promptRef = useRef(null);
   const [insertAt, setInsertAt] = useState(null);
+  // the source strip scrolls sideways; the arrows appear only when there is somewhere to scroll
+  // (a scrollbar alone was invisible on the owner's screen, 2026-09-20)
+  const stripRef = useRef(null);
+  const [stripOverflows, setStripOverflows] = useState(false);
+  useEffect(() => {
+    const el = stripRef.current;
+    if (!el) return undefined;
+    const check = () => setStripOverflows(el.scrollWidth > el.clientWidth + 2);
+    check();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(check) : null;
+    ro?.observe(el);
+    return () => ro?.disconnect();
+  }, [watchSrcs.length, cfg.type]);
   const insertToken = (key) => {
     const el = promptRef.current, cur_ = cfg.ai_prompt || "", tok = tokenOf(key);
     const at = el && typeof el.selectionStart === "number" ? el.selectionStart : cur_.length;
@@ -1171,9 +1186,18 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 {/* left to right, like the funnel below: the sources sit in one row and all of them
                     draw down into the one prompt. The panel is narrower than the funnel, so the row
                     scrolls sideways rather than folding into a column (the owner, 2026-09-20). */}
-                <Box sx={{ display: "flex", gap: 1.5, flexWrap: "nowrap", overflowX: "auto", alignItems: "stretch", mb: 1.25, pb: 0.75,
-                  "& > *": { flex: "0 0 auto" }, "&::-webkit-scrollbar": { height: 8 },
-                  "&::-webkit-scrollbar-thumb": { bgcolor: BORDER, borderRadius: 4 } }}>
+                {stripOverflows && (
+                  <Box sx={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 0.25, mb: 0.25 }}>
+                    <Typography variant="caption" sx={{ color: FAINT, mr: 0.5 }}>{watchSrcs.length} sources, left to right</Typography>
+                    <IconButton size="small" aria-label="scroll the sources left" sx={{ p: 0.3 }}
+                      onClick={() => stripRef.current?.scrollBy({ left: -372, behavior: "smooth" })}><ChevronLeftIcon sx={{ fontSize: 18 }} /></IconButton>
+                    <IconButton size="small" aria-label="scroll the sources right" sx={{ p: 0.3 }}
+                      onClick={() => stripRef.current?.scrollBy({ left: 372, behavior: "smooth" })}><ChevronRightIcon sx={{ fontSize: 18 }} /></IconButton>
+                  </Box>
+                )}
+                <Box ref={stripRef} sx={{ display: "flex", gap: 1.5, flexWrap: "nowrap", overflowX: "auto", alignItems: "stretch", mb: 1.25, pb: 0.75,
+                  "& > *": { flex: "0 0 auto" }, scrollbarWidth: "thin", "&::-webkit-scrollbar": { height: 8 },
+                  "&::-webkit-scrollbar-track": { bgcolor: "#f1ece3", borderRadius: 4 }, "&::-webkit-scrollbar-thumb": { bgcolor: "#cfc9bf", borderRadius: 4 } }}>
                   {watchSrcs.map((src, i) => (
                     <SourceCard key={i} src={src} index={i} count={watchSrcs.length} removable
                       typeOptions={typeOptions.filter((t) => t.type !== "assistant")} connectors={connectors}
@@ -1845,7 +1869,11 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
         opacity: dragging ? 0.45 : 1, ...(onDragStart ? { cursor: "grab", "&:active": { cursor: "grabbing" } } : {}) }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
         {onDragStart && <DragIndicatorIcon sx={{ fontSize: 16, color: "#cfc9bf" }} />}
-        <Typography variant="caption" sx={{ ...mono, color: FAINT, flex: 1 }}>source {index + 1} of {count}</Typography>
+        {/* ...and the name the prompt calls it by, so "source 3 of 5" and [taskuary.work] read as one card */}
+        <Typography variant="caption" sx={{ ...mono, color: FAINT, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+          title={`name it in the prompt as ${tokenOf(sourceKey(src, index + 1))}`}>
+          source {index + 1} of {count}{src.type && src.type !== "assistant" && (src.type !== "taskuary" || src.card) ? ` · ${tokenOf(sourceKey(src, index + 1))}` : ""}
+        </Typography>
         <ContentCopyIcon onClick={onCopy} titleAccess="Duplicate — same connection, different query"
           sx={{ fontSize: 14, color: FAINT, cursor: "pointer", "&:hover": { color: "#55697a" } }} />
         {removable && <CloseIcon onClick={onRemove} titleAccess="Remove this source"

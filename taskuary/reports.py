@@ -522,7 +522,7 @@ def run_taskuary(cfg):
     if not c: raise ValueError(f"no Taskuary card called {cfg.get('card')!r} - choose one of {', '.join(x.id for x in blk.CARDS)}")
     chosen = blk.from_cards(store, [cfg])
     _, parts, _ = assistant.build_sections(store, [], blocks=chosen, report_id=cfg.get('source_id'))
-    body = blk.sections_by_card(parts)[f'{blk.TOKEN_TYPE}.{c.id}']
+    body = blk.sections_by_card(parts, chosen)[f'{blk.TOKEN_TYPE}.{c.id}']
     raised = []
     for bid in c.blocks:
         b = blk.by_id(bid)

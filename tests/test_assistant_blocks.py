@@ -7,6 +7,25 @@ import tests.test_appfacts as A
 
 
 class CatalogueTests(unittest.TestCase):
+    def test_the_page_and_the_server_name_the_same_blocks(self):
+        """The saved-report summary renders in a list and cannot fetch per row, so the page keeps a
+        mirror of the catalogue. Two lists of the same thing drift; this is what keeps the mirror
+        true, and Python owns the catalogue so the test lives here."""
+        import re, pathlib
+        js = pathlib.Path(__file__).resolve().parents[1] / 'website' / 'src' / 'assistantBlocks.js'
+        text = js.read_text(encoding='utf-8')
+        body = text[text.index('export const BLOCKS'):text.index('export const blocksPatch')]
+        self.assertEqual(re.findall(r'id: "([a-z_]+)"', body), [b.id for b in B.CATALOGUE], 'the page and the catalogue disagree')
+        self.assertEqual(re.findall(r'label: "([^"]+)"', body), [b.label for b in B.CATALOGUE])
+        # ...and the windows, because a mirror that names the right blocks with the wrong defaults
+        # shows the owner a number the server never used
+        for b in B.CATALOGUE:
+            if not b.window: continue
+            unit, dflt = b.window[0], b.window[1]
+            m = re.search(r'id: "%s".*?%s: (\d+)' % (b.id, unit), body)
+            self.assertTrue(m, f'{b.id} has a {unit} window and the page does not mirror it')
+            self.assertEqual(int(m.group(1)), dflt, f'{b.id}: page says {m.group(1)}, catalogue says {dflt}')
+
     def test_every_block_says_what_it_reads(self):
         self.assertGreaterEqual(len(B.CATALOGUE), 16)
         seen = set()
@@ -520,6 +539,102 @@ class OwnerIsProvenanceTests(unittest.TestCase):
         out = server.save_source(server.SourceBody(Channel='report', Address='new@report', Active=True,
                                                    ConfigJson=json.dumps({'title': 'New', 'type': 'rest'})))
         self.assertEqual(s.get_source(out['sourceId'])['Owner'], server.ACTOR)
+
+
+def _reopened(s):
+    """Not a real reopen (an in-memory store would come back empty) - runs the heal the store's
+    own __init__ would run on upgrade, against this same database."""
+    s._heal_seeded_report_owner()
+    return s
+
+
+class OwnershipHealTests(unittest.TestCase):
+    """The heal for installs already damaged by the save-takes-over bug. The owner's own box:
+
+        137 report 'Assistant'                        Owner='owner'     <- the seeded one, wounded
+        140 report 'Assistant for Backend Monitoring' Owner='owner'     <- theirs, must not move
+        141 report 'End of day checkup'               Owner='template'  <- intact, must not be rewritten
+        ideas: report:137:* = 0, report:140:* = 11, bare = 334          <- and NONE of them may move
+    """
+    def _damaged(self):
+        """A store in exactly that shape: the seed runs, then an old save is replayed over three of
+        the four seeded rows, then the heal's own sentinel is dropped so it runs on the next open."""
+        from taskuary.store import MemoryStore
+        s = F.store()
+        for addr in ('Morning digest', 'Automation ideas', 'Assistant'):
+            s._exec("UPDATE source SET Owner='owner' WHERE Channel='report' AND Address=?", (addr,))
+        mine = s.save_source({'Channel': 'report', 'Address': 'Assistant for Backend Monitoring', 'Active': 1,
+                              'Owner': 'owner', 'ConfigJson': json.dumps(
+                                  {'title': 'Assistant for Backend Monitoring', 'type': 'assistant'})}, 'owner')
+        for n in range(11):
+            s.upsert_idea({'key': f'report:{mine}:idea:{n}', 'kind': 'idea', 'sig': str(n),
+                           'text': f'Finding {n}.', 'action': {}}, '2026-09-19 08:00:00')
+        s._exec("DELETE FROM setting WHERE Name='seeded_report_owner_healed'")
+        return s, mine
+
+    def test_the_seeded_rows_are_healed_and_nothing_else_is(self):
+        s, mine = self._damaged()
+        before = {i['Key'] for i in s.list_ideas()}
+        self.assertEqual(len([k for k in before if k.startswith(f'report:{mine}:')]), 11)
+        s2 = _reopened(s)
+        rows = {r['Address']: r for r in s2.list_sources(active_only=False) if r['Channel'] == 'report'}
+        for addr in ('Morning digest', 'Automation ideas', 'Assistant', 'End of day checkup'):
+            with self.subTest(row=addr): self.assertEqual(rows[addr]['Owner'], 'template', f'{addr} was left wounded')
+        self.assertEqual(rows['Assistant for Backend Monitoring']['Owner'], 'owner', "the owner's own report was taken over")
+        # ...and not one idea key moved: report:<mine>:* carry state (declined, snoozed, said)
+        self.assertEqual({i['Key'] for i in s2.list_ideas()}, before)
+
+    def test_the_heal_settles_identity_the_way_the_code_needs_it(self):
+        """Worked out from the code, not assumed: after the heal `seeded_source` finds the row the
+        installer wrote, so own_identity is FALSE for it - that row IS the app's Assistant and keeps
+        the shared `assistant` thread - and TRUE for the owner's own report, which keeps its
+        `report:<id>:` namespace and its own title. own_identity(None) stays False: a direct call
+        with no report behind it has always been the app's own."""
+        s, mine = self._damaged()
+        s2 = _reopened(s)
+        seeded = assistant.seeded_source(s2)
+        self.assertEqual(seeded['Address'], 'Assistant')
+        self.assertFalse(assistant.own_identity(s2, seeded['SourceId']))
+        self.assertTrue(assistant.own_identity(s2, mine))
+        self.assertFalse(assistant.own_identity(s2, None))
+        self.assertEqual(assistant.notes_key(s2, seeded['SourceId']), 'assistant_notes')
+        self.assertEqual(assistant.notes_key(s2, mine), f'assistant_notes:{mine}')
+
+    def test_it_is_idempotent_and_leaves_an_intact_row_alone(self):
+        s, mine = self._damaged()
+        s._exec("UPDATE source SET Owner='template' WHERE Channel='report' AND Address='End of day checkup'")
+        s2 = _reopened(s)
+        self.assertEqual(s2.get_settings().get('seeded_report_owner_healed'), '1')
+        s3 = _reopened(s2)                                   # the sentinel is set: a second open does nothing
+        rows = {r['Address']: r['Owner'] for r in s3.list_sources(active_only=False) if r['Channel'] == 'report'}
+        self.assertEqual(rows['Assistant'], 'template')
+        self.assertEqual(rows['Assistant for Backend Monitoring'], 'owner')
+
+    def test_a_deleted_or_renamed_seeded_row_is_simply_not_healed(self):
+        """Deleting a seeded row is the off switch and the sentinel keeps it deleted; renaming one
+        moves its Address, which is how ReportsView saves a title. Neither is a row this migration
+        can identify, so it touches nothing and says nothing - it must not guess and adopt the
+        owner's report instead."""
+        s, mine = self._damaged()
+        s._exec("DELETE FROM source WHERE Channel='report' AND Address='Assistant'")
+        s2 = _reopened(s)
+        self.assertIsNone(assistant.seeded_source(s2))
+        self.assertEqual({r['Address']: r['Owner'] for r in s2.list_sources(active_only=False)
+                          if r['Channel'] == 'report'}['Assistant for Backend Monitoring'], 'owner')
+
+    def test_the_table_the_heal_reads_describes_the_rows_the_seeder_writes(self):
+        """The heal keys on (sentinel, Address, type) held in SEEDED_REPORTS. A seed that changed any
+        of the three without changing the table would make the heal silently find nothing."""
+        from taskuary.store import SEEDED_REPORTS
+        s = F.store()
+        seeded = {r['Address']: (r['Owner'], json.loads(r['ConfigJson'] or '{}').get('type'))
+                  for r in s.list_sources(active_only=False) if r['Channel'] == 'report'}
+        settings = s.get_settings()
+        self.assertEqual(len(SEEDED_REPORTS), 4)
+        for sentinel, address, kind in SEEDED_REPORTS:
+            with self.subTest(row=address):
+                self.assertEqual(settings.get(sentinel), '1', f'{sentinel} is not a sentinel the seeder sets')
+                self.assertEqual(seeded.get(address), ('template', kind), f'{address} is not the row the seeder writes')
 
 
 class NotesAreOneChecksOwnTests(unittest.TestCase):

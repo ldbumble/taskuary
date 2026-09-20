@@ -17,6 +17,14 @@ RUN_COLS = ('Status', 'TraceJson', 'Result', 'LastError', 'SessionId', 'DiffText
 REVIEW_COLS = ('TaskId', 'MessageId', 'RunId', 'Kind', 'DraftText', 'FinalText', 'Status', 'Reason', 'Deliver')
 POLICY_COLS = ('Name', 'Kind', 'Pattern', 'Action', 'Reason', 'SortOrder', 'Active')
 SOURCE_COLS = ('Channel', 'Address', 'Owner', 'ConnectorId', 'Active', 'ConfigJson')
+# The four reports this app seeds, as (sentinel setting, the Address the seeder writes, the config
+# type). KEEP IN STEP with the four seeding blocks below - tests/test_assistant_blocks.py builds a
+# fresh store and asserts this table describes the rows that actually appeared. The ownership heal
+# reads it; nothing else may write `Owner='template'`.
+SEEDED_REPORTS = (('digest_report_seeded', 'Morning digest', 'digest'),
+                  ('automate_report_seeded', 'Automation ideas', 'automate'),
+                  ('assistant_report_seeded', 'Assistant', 'assistant'),
+                  ('evening_inbox_report_seeded', 'End of day checkup', 'evening_inbox'))
 MEMORY_COLS = ('Scope', 'ScopeKey', 'Note', 'Source', 'Active', 'CreatedBy')
 PROJECT_COLS = ('Name', 'Description', 'Active', 'CreatedBy', 'UpdatedBy')
 ROUTING_FACT_COLS = ('Field', 'Signal', 'SignalKey', 'Value', 'Confidence', 'EvidenceCount',
@@ -946,6 +954,7 @@ class SQLiteStore:
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) "
                                 "VALUES ('whatsapp_star_dropped', '1', 'migration')")
                 if gone: logger.info(f'whatsapp: dropped the {gone} catch-all source row - named chats only now')
+            self._heal_seeded_report_owner()
             # the Morning digest ships as a real REPORT (reports.run_digest): the brief lands
             # on the Timeline, its prompt is edited on the Reports tab, and deleting the
             # source turns it off - the sentinel keeps a deletion deleted across restarts.
@@ -1051,6 +1060,43 @@ class SQLiteStore:
             # task keeps its 'waiting' status, so nothing quietly stops needing you.
             self.cx.execute("UPDATE review SET Status='superseded' WHERE Status='pending' AND Kind='escalation'")
             self.cx.commit()
+
+    def _heal_seeded_report_owner(self):
+        """OWNERSHIP HEAL. `POST /api/sources` used to stamp Owner on every save, and Owner is in
+        SOURCE_COLS, so one press of Save - or of the on/off Switch, which posts
+        {SourceId, Active} - rewrote a seeded row's 'template' to the actor. The route sets
+        Owner on CREATE only now, but installs carry the damage: on the owner's own box three
+        of the four seeded reports had already lost it, the Assistant among them. Owner is how
+        assistant.seeded_source tells the app's own Assistant from one the owner made, so
+        unhealed, both would read as the app's and would share the `assistant` Timeline thread
+        and its idea namespace.
+
+        IDEA KEYS ARE LEFT ALONE, deliberately and for ever: a report that has been posting as
+        its own has `report:<id>:...` keys with state on them (declined, snoozed, said), and
+        rewriting them would strand every one. Do not "finish" this by renaming them.
+
+        Its own method (not inline in __init__) so a test can run it again against a live
+        store - reopening a :memory: store would just hand back an empty one."""
+        if self.cx.execute("SELECT 1 FROM setting WHERE Name='seeded_report_owner_healed'").fetchone(): return
+        healed = []
+        for sentinel, address, kind in SEEDED_REPORTS:
+            if not self.cx.execute('SELECT 1 FROM setting WHERE Name=?', (sentinel,)).fetchone(): continue
+            # The name the seeder gave it, and the type it seeded, LOWEST id first. Address
+            # follows the title (ReportsView posts Address: c.title), so a renamed row is
+            # indistinguishable from one the owner made - and a migration that cannot be
+            # sure does nothing. The seeded row is the oldest of its type either way: it is
+            # written at first run, before the owner can create anything.
+            rows = [r for r in self.cx.execute(
+                'SELECT SourceId, Owner, ConfigJson FROM source WHERE Channel=? AND Address=? ORDER BY SourceId', ('report', address)).fetchall()
+                if (json.loads(r['ConfigJson'] or '{}') or {}).get('type') == kind]
+            if not rows: continue                           # deleted (the off switch) or renamed: nothing to heal
+            row = rows[0]
+            if row['Owner'] == 'template': continue         # intact - never rewritten, never touched
+            self.cx.execute("UPDATE source SET Owner='template' WHERE SourceId=?", (row['SourceId'],))
+            healed.append(row['SourceId'])
+        self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('seeded_report_owner_healed', '1', 'migration')")
+        if healed: logger.info(f'sources: restored Owner=template on the seeded report row(s) an old save had taken over - SourceId {healed} '
+                               '(idea keys deliberately untouched)')
 
     def _rows(self, q, p=()):
         with self.lock: return [dict(r) for r in self.cx.execute(q, p).fetchall()]

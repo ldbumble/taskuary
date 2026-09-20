@@ -6771,6 +6771,28 @@ def connectors_catalog():
     return {'data': connectorcatalog.cards()}
 
 
+@app.get('/api/assistant/blocks')
+def assistant_blocks(source_id: int = None):
+    """What an Assistant report reads, priced. `source_id` names the report whose choice to resolve;
+    absent means the declared defaults, which is what a new report starts from.
+
+    One resolution feeds both this and the run (assistantblocks.resolve), so the card cannot claim a
+    read the payload never made. `cost` stays None until the brain's price is known - the money line
+    is Task 3's, and a field that exists and says nothing beats a number that is a guess."""
+    from . import assistantblocks as blk
+    from .reports import runs_per_day
+    cfg = {}
+    if source_id:
+        src = store.get_source(int(source_id))
+        if src:
+            try: cfg = json.loads(src.get('ConfigJson') or '{}')
+            except ValueError: cfg = {}
+    rows = blk.weigh(store, blk.resolve(store, cfg))
+    return {'data': rows, 'total_tokens': sum(r['tokens'] for r in rows if r['on']),
+            'runs_per_day': runs_per_day(cfg), 'cost': None,
+            'reads_taskuary': blk.reads_taskuary({r['id']: r for r in rows})}
+
+
 @app.get('/api/audit/assistant')
 def audit_assistant(limit: int = 60):
     """What the assistant changed, newest first - the rows its handlers audit as `assistant` (settings,

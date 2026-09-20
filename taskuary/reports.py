@@ -516,9 +516,13 @@ def run_assistant(cfg):
     due run to assistant.run, which posts ideas with buttons and state. This executor is what
     PREVIEW shows - the facts a run would hand the model. `store` arrives via resolve_cfg."""
     from .assistant import facts
-    isolated = bool(cfg.get('watch_source_ids') or cfg.get('watch_sources'))
+    from . import assistantblocks as blk
+    # systems_only is DERIVED: this report reads no Taskuary block. It used to be "it has sources of
+    # its own", which made choosing a source silently give up the inbox (assistantblocks.resolve).
+    chosen = blk.resolve(cfg['store'], cfg)
     return 'what the assistant would read right now', facts(
-        cfg['store'], cfg.get('watch_source_ids'), cfg.get('watch_sources'), systems_only=isolated)
+        cfg['store'], cfg.get('watch_source_ids'), cfg.get('watch_sources'),
+        systems_only=not blk.reads_taskuary(chosen), blocks=chosen)
 
 
 def run_automate(cfg):
@@ -1237,6 +1241,26 @@ def schedule_words(cfg: dict) -> str:
     return ' + '.join(p for p in parts if p) or 'no schedule - run it by hand'
 
 
+def runs_per_day(cfg: dict) -> int:
+    """How many times this report fires on a day it runs - the multiplier on one run's token cost,
+    for the Assistant's cost card (/api/assistant/blocks). Counted on a day it RUNS rather than
+    averaged over the week: "what will this cost me" is not answered by a number no day matches.
+    A once-a-day/week cap is exactly that - a cap - so it flattens the count to one."""
+    n = 0
+    try:
+        if cfg.get('every_minutes'): n += max(1, 1440 // max(1, int(cfg['every_minutes'])))
+    except (TypeError, ValueError): pass
+    if cfg.get('daily_at'): n += 1
+    if cfg.get('cron'):
+        try:
+            p = str(cfg['cron']).split()
+            if len(p) == 5: n += len(_cron_field(p[0], 0, 59)) * len(_cron_field(p[1], 0, 23))
+        except ValueError: pass
+    if cfg.get('on_startup'): n += 1
+    if cfg.get('once_per_day') or cfg.get('once_per_week'): n = min(n, 1)
+    return n
+
+
 def _daily_slot(cfg: dict, now: datetime):
     """Today's `daily_at` moment, or None when it is absent or unreadable. Tolerant of what people
     type: '8' and '8:30' both parse, and garbage is a report on the daily default rather than an
@@ -1397,11 +1421,13 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
         # not a report row: the assistant posts its own kind of row (ideas with buttons and state),
         # on this report's schedule and with this report's prompt as its instruction
         from . import assistant
+        from . import assistantblocks as blk
         watched_ids, watched_sources = cfg.get('watch_source_ids') or [], cfg.get('watch_sources') or []
+        chosen = blk.resolve(cfg['store'] if cfg.get('store') else store, cfg)
         out = assistant.run(cfg['store'] if cfg.get('store') else store, report_llm(store, cfg, llm),
                             force=True, instruction=cfg.get('ai_prompt'),
                             watch_source_ids=watched_ids, watch_sources=watched_sources,
-                            systems_only=bool(watched_ids or watched_sources),
+                            systems_only=not blk.reads_taskuary(chosen), blocks=chosen,
                             report_id=src.get('SourceId'), report_title=title,
                             always_post=route_of(cfg, 'timeline')[0] == 'always' if routed(cfg) else reach_of(cfg) == 'always')
         # THE PUSH REACHES THIS KIND TOO. Everything below - delivery, the alert, the whole tail -

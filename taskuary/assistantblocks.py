@@ -41,6 +41,13 @@ class Block(NamedTuple):
                                     # its head changes with its content (the notes' timestamp, the
                                     # knowledge base's nothing-at-all) and so cannot live in
                                     # `heading` - which still carries the head the card prints.
+    wide: str = None                # the head to print when the window is NOT the declared default,
+                                    # for a heading that names its window in WORDS ("DONE THIS
+                                    # WEEK") instead of a {token}. Widen that block and the words
+                                    # would lie; this form names the real window.
+    live: bool = False              # building it reaches a network connection (a Graph call, a
+                                    # configured data view). `weigh` refuses to run one: a cost card
+                                    # that refreshes on every keystroke must never pay a 20s fetch.
 
 
 # ── the SQL, for the blocks that are one statement ───────────────────────────────────────────────
@@ -127,7 +134,7 @@ CATALOGUE = (
           _knowledge, whole=True),
     Block('system_checks', 'Configured systems', 'view', ('source', 'connector'),
           'CONFIGURED SYSTEM CHECKS (pulled live for this check; failures are also worth noticing)',
-          _system_checks),
+          _system_checks, live=True),
     Block('threads', 'What people said', 'view', ('message', 'route', 'task'),
           'WHAT PEOPLE SAID (the last {days} days, by thread, newest first; the last lines of each, oldest first. '
           "Each head quotes what triage decided when the latest line arrived: when you disagree, say so in your line - "
@@ -138,14 +145,15 @@ CATALOGUE = (
           _ooo, sql=OOO_SQL),
     Block('calendar', 'Calendar', 'view', ('microsoft graph', 'google calendar'),
           'CALENDAR (the next {days} days)',
-          _calendar, window=('days', 2, 'How far ahead to read the calendar')),
+          _calendar, window=('days', 2, 'How far ahead to read the calendar'), live=True),
     Block('arrivals', 'What arrived', 'view', ('message', 'route', 'source'),
           'ARRIVED IN THE LAST {DAYS} DAYS (xN = that many alike; each line carries the latest message\'s words, '
           "a report's schedule, and a failure's cause)",
           _arrivals, window=('days', 2, 'How far back to roll up arrivals')),
     Block('done_this_week', 'Done this week', 'view', ('task', 'comment'),
           "DONE THIS WEEK (my own work, with the agent's summary)",
-          _done, window=('days', 7, 'How far back to count what got done')),
+          _done, window=('days', 7, 'How far back to count what got done'),
+          wide="DONE IN THE LAST {DAYS} DAYS (my own work, with the agent's summary)"),
     Block('open_work', 'Open work', 'view', ('task', 'run', 'review'),
           'OPEN WORK',
           _open, cap=20),
@@ -163,7 +171,7 @@ CATALOGUE = (
           None, _promised, window=('hours', 24, 'How long a promise waits before it is raised'),
           proposes=True, setting='assistant_followup_hours'),
     Block('meeting_prep', 'Meeting prep', 'view', ('message', 'task'),
-          None, _meeting_prep, proposes=True),
+          None, _meeting_prep, proposes=True, live=True),
     Block('gone_quiet', 'Work gone quiet', 'view', ('task', 'comment', 'message', 'run'),
           None, _gone_quiet, window=('days', 3, 'Days of silence before work has gone quiet'),
           proposes=True, setting='assistant_cold_days'),
@@ -194,10 +202,16 @@ def said_number(n) -> str:
 
 
 def headline(b: Block, o: dict) -> str:
-    """The section head as the model sees it, with the block's real window in it."""
+    """The section head as the model sees it, with the block's real window in it.
+
+    A head that names its window in WORDS rather than a {token} - "DONE THIS WEEK" - keeps those
+    words at the declared default and switches to `wide` the moment the owner moves the window: at
+    30 days "DONE THIS WEEK" is not a label, it is a wrong statement about what follows it."""
     if not b.window: return b.heading
-    w = said_number(o.get(b.window[0], b.window[1]))
-    return b.heading.format(**{**o, b.window[0]: w, b.window[0].upper(): w.upper()})
+    v = o.get(b.window[0], b.window[1])
+    head = b.wide if b.wide and v != b.window[1] else b.heading
+    w = said_number(v)
+    return head.format(**{**o, b.window[0]: w, b.window[0].upper(): w.upper()})
 
 
 def defaults(store, b: Block) -> dict:
@@ -227,3 +241,107 @@ def render(store, b: Block, o: dict) -> tuple:
     except Exception as e:
         logger.warning(f'assistant block {b.id} failed - {e}')
         return f'(this block could not be read: {str(e)[:120]})', []
+
+
+# ── one report's choice ──────────────────────────────────────────────────────────────────────────
+def resolve(store, cfg: dict) -> dict:
+    """{block id: opts} for one Assistant report. Declaration -> the global setting -> the report's
+    own override, in that order, and EVERY catalogue id is in the answer: a caller that reads this
+    dict must never have to guess what a missing key meant.
+
+    Two rules that look alike and are not:
+    - a report with sources of its own and NO `blocks` key reads no Taskuary block. That is what
+      systems_only meant before this existed, and a monitor saved last month must not wake up
+      reading the owner's inbox. Tick one block and it reads that block AND its sources - the
+      either/or was an accident of the old flag, not a decision.
+    - once `blocks` IS saved, it is the whole truth: a block absent from it is off, not at its
+      declared default. A block we ship next month does not switch itself on in a report the owner
+      already configured, and start spending their tokens.
+    `system_checks` is outside both: it is the report's own sources, not a Taskuary table."""
+    over = cfg.get('blocks') if isinstance(cfg.get('blocks'), dict) else None
+    isolated = bool(cfg.get('watch_source_ids') or cfg.get('watch_sources'))
+    out = {}
+    for b in CATALOGUE:
+        o = defaults(store, b)
+        # the sources ride in the opts so `weigh` prices the report's own systems, not the seeded one's
+        if b.id == 'system_checks': o['source_ids'], o['inline'] = cfg.get('watch_source_ids'), cfg.get('watch_sources')
+        if over is None:
+            if isolated and b.id != 'system_checks': o['on'] = False
+        elif b.id in over: _apply(b, o, over[b.id])
+        elif b.id != 'system_checks': o['on'] = False
+        out[b.id] = o
+    return out
+
+
+def _apply(b: Block, o: dict, over):
+    """The owner's saved numbers, and ONLY the numbers this block declares - a stored key nothing
+    declares is a key nothing reads, not a way into the opts the builder trusts."""
+    nums = ({b.window[0]} if b.window else set()) | {'cap'} | {k for k, _, _ in b.knobs}
+    for k, v in (over or {}).items():
+        if k == 'on': o['on'] = bool(v)
+        elif k in nums:
+            try: o[k] = max(0, int(v))
+            except (TypeError, ValueError): pass
+
+
+def reads_taskuary(chosen: dict) -> bool:
+    """The Assistant has Taskuary as a source when any of its blocks is on. `systems_only` is the
+    absence of that - derived here on every read, stored nowhere, so it can never disagree with the
+    blocks the same card shows."""
+    return any(o.get('on') for bid, o in chosen.items() if bid != 'system_checks')
+
+
+def producer_cfg(chosen: dict, c: dict) -> dict:
+    """The `assistant.cfg` keys the four candidate producers are driven by, as THIS report chose
+    them. Without it a report could tick "Work gone quiet" off and still get cold rows: the global
+    setting would decide and the card would be describing a choice nothing read.
+
+    ONLY those four are replaced. `idea` is in the same setting and is not a block - it is whether
+    the model thinks freely at all, and dropping it here turned every run into a no-model run."""
+    o = lambda bid: chosen.get(bid) or {}
+    kept = set(c.get('producers') or ()) - set(PRODUCER_OF.values())
+    out = {'producers': kept | {p for bid, p in PRODUCER_OF.items() if o(bid).get('on')}}
+    # one `followups` call serves both halves, so one window has to win: the block that is on
+    fu = o('waiting_on') if o('waiting_on').get('on') else o('promised')
+    if fu.get('hours') is not None: out['followup_h'] = max(0, int(fu['hours']))
+    if o('gone_quiet').get('days') is not None: out['cold_d'] = max(0, int(o('gone_quiet')['days']))
+    return out
+
+
+# ── what it costs ────────────────────────────────────────────────────────────────────────────────
+def weigh(store, chosen: dict) -> list:
+    """Every block, priced: whether it is on, the rows it returns and the tokens its RENDERED TEXT
+    adds to the payload - a block's price is its words, not its row count. Built from the SAME
+    resolved dict the payload is built from, which is the whole point: the card cannot name a read
+    the run did not make.
+
+    A `live` block is NOT rendered. The calendar's build is a Microsoft Graph token POST plus one
+    calendarView per mailbox at a 20s timeout each, and this list is what a settings card refreshes
+    on every keystroke. Its rows come back unknown (None) and its tokens 0, with `live` set so the
+    card can say the cost is time rather than pretend it is nothing."""
+    out = []
+    for b in CATALOGUE:
+        o = chosen.get(b.id) or defaults(store, b)
+        on = bool(o.get('on'))
+        rows, toks = (_price(store, b, o) if on and not b.live else (None if on else 0, 0))
+        out.append({'id': b.id, 'label': b.label, 'kind': b.kind, 'tables': list(b.tables), 'sql': b.sql,
+                    'on': on, 'proposes': b.proposes, 'live': b.live, 'rows': rows, 'tokens': toks,
+                    'cap': o.get('cap'), 'heading': headline(b, o) if b.heading else None,
+                    'window': ({'unit': b.window[0], 'value': o.get(b.window[0], b.window[1]),
+                                'default': b.window[1], 'label': b.window[2]} if b.window else None),
+                    'knobs': [{'name': n, 'value': o.get(n, d), 'default': d, 'label': l} for n, d, l in b.knobs]})
+    return out
+
+
+def _price(store, b: Block, o: dict) -> tuple:
+    """(rows, tokens) for one block, by rendering exactly what the payload would carry - head
+    included, because the head is words the model is billed for too. A producer's rows are candidate
+    dicts and render under CANDIDATES: as the post files them, so they are priced in that shape."""
+    text, _ = render(store, b, o)
+    if isinstance(text, list):
+        lines = [f"[{c.get('key')}] {c.get('facts') or c.get('text') or ''}" for c in text]
+        return len(lines), len('\n'.join(lines)) // 4
+    text = str(text)
+    if not text.strip(): return 0, 0                      # build_inputs prints nothing at all for this one
+    full = text if b.whole else headline(b, o) + ':\n' + text
+    return (0 if text.lstrip().startswith('(') else text.strip().count('\n') + 1), len(full) // 4

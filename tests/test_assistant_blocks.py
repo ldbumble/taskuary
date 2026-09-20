@@ -87,6 +87,13 @@ class DefaultsAreTodayTests(unittest.TestCase):
         cands = assistant.candidates(s, assistant.cfg(s))
         self.assertEqual(assistant.inputs(s, cands), assistant.inputs(s, cands, blocks=None))
 
+    def test_resolving_a_report_that_chose_nothing_reads_what_it_always_read(self):
+        """Every Assistant run now goes through resolve (reports.run_assistant and the dispatch), so
+        the gate has to hold through it too - not only through the blocks=None path nobody takes."""
+        s = A.store()
+        cands = assistant.candidates(s, assistant.cfg(s))
+        self.assertEqual(assistant.inputs(s, cands), assistant.inputs(s, cands, blocks=B.resolve(s, {'type': 'assistant'})))
+
     def test_every_default_on_block_appears_in_the_payload(self):
         s = A.store()
         text = assistant.inputs(s, [])
@@ -96,6 +103,148 @@ class DefaultsAreTodayTests(unittest.TestCase):
             if not B.render(s, b, B.defaults(s, b))[0].strip(): continue   # a block with nothing to say has never printed an empty head
             head = b.heading.split('(')[0].split('{')[0].strip().rstrip(':')
             with self.subTest(block=b.id): self.assertIn(head, text, f'{b.id} is on by default and is not in the payload')
+
+
+class ResolveTests(unittest.TestCase):
+    """Three places hold a number - the declaration, the global setting, the report - and this is the
+    order they win in. A fourth rule sits on top: what a report SAVED is the whole truth."""
+    def test_no_config_is_the_declared_defaults(self):
+        s = A.store()
+        self.assertEqual(B.resolve(s, {'type': 'assistant'}),
+                         {b.id: B.defaults(s, b) | ({'source_ids': None, 'inline': None} if b.id == 'system_checks' else {})
+                          for b in B.CATALOGUE})
+
+    def test_a_report_override_beats_the_setting_which_beats_the_declaration(self):
+        s = A.store()
+        self.assertEqual(B.resolve(s, {'type': 'assistant'})['gone_quiet']['days'], 3)
+        s.set_setting('assistant_cold_days', '9', 'test')
+        self.assertEqual(B.resolve(s, {'type': 'assistant'})['gone_quiet']['days'], 9)
+        self.assertEqual(B.resolve(s, {'type': 'assistant', 'blocks': {'gone_quiet': {'days': 21}}})['gone_quiet']['days'], 21)
+
+    def test_every_catalogue_id_is_in_the_answer(self):
+        """Ruling J: a block missing from a saved choice resolves OFF, so a caller must never have to
+        tell "the owner said no" from "this key was written before the block existed". resolve is the
+        only supported producer of that dict, and it emits all sixteen whatever it was handed."""
+        s, ids = A.store(), {b.id for b in B.CATALOGUE}
+        for cfg in ({}, {'type': 'assistant'}, {'type': 'assistant', 'blocks': {}},
+                    {'type': 'assistant', 'watch_source_ids': [4]},
+                    {'type': 'assistant', 'blocks': {b.id: {'on': True} for b in B.CATALOGUE}},
+                    {'type': 'assistant', 'blocks': {'nonesuch': {'on': True}}}):
+            with self.subTest(cfg=cfg): self.assertEqual(set(B.resolve(s, cfg)), ids)
+
+    def test_a_block_the_saved_choice_does_not_name_is_off(self):
+        chosen = B.resolve(A.store(), {'type': 'assistant', 'blocks': {'open_work': {'on': True}}})
+        self.assertTrue(chosen['open_work']['on'])
+        self.assertFalse(chosen['threads']['on'])                 # shipped later ≠ switched on later
+
+    def test_a_stored_key_the_block_never_declared_is_ignored(self):
+        chosen = B.resolve(A.store(), {'type': 'assistant', 'blocks': {'open_work': {'on': True, 'cap': 3, 'source_ids': [9], 'days': 'x'}}})
+        self.assertEqual(chosen['open_work']['cap'], 3)
+        self.assertNotIn('source_ids', chosen['open_work'])
+        self.assertNotIn('days', chosen['open_work'])
+
+    def test_watch_sources_with_no_blocks_key_reads_no_taskuary_block(self):
+        """Today an Assistant report with a source of its own is systems-only. A report saved before
+        blocks existed must not silently start reading the owner's whole inbox."""
+        chosen = B.resolve(A.store(), {'type': 'assistant', 'watch_source_ids': [4]})
+        self.assertFalse(any(o['on'] for bid, o in chosen.items() if bid != 'system_checks'))
+        self.assertFalse(B.reads_taskuary(chosen))
+
+    def test_ticking_one_block_makes_it_no_longer_systems_only(self):
+        chosen = B.resolve(A.store(), {'type': 'assistant', 'watch_source_ids': [4], 'blocks': {'open_work': {'on': True}}})
+        self.assertTrue(chosen['open_work']['on'])
+        self.assertTrue(B.reads_taskuary(chosen))
+        self.assertEqual(chosen['system_checks']['source_ids'], [4])      # and its sources ride along
+
+    def test_producers_follow_the_report_and_not_the_global_setting(self):
+        s = A.store()
+        chosen = B.resolve(s, {'type': 'assistant', 'blocks': {'gone_quiet': {'on': True, 'days': 11}}})
+        c = B.producer_cfg(chosen, assistant.cfg(s))
+        self.assertEqual(c['producers'], {'cold', 'idea'})      # `idea` is not a block: it is whether the model thinks at all
+        self.assertEqual(c['cold_d'], 11)
+
+
+class WeighTests(unittest.TestCase):
+    def test_weigh_prices_each_block(self):
+        s = A.store()
+        rows = B.weigh(s, B.resolve(s, {'type': 'assistant'}))
+        self.assertEqual({r['id'] for r in rows}, {b.id for b in B.CATALOGUE})
+        one = next(r for r in rows if r['id'] == 'gone_quiet')
+        self.assertEqual(one['tables'], ['task', 'comment', 'message', 'run'])
+        self.assertIsInstance(one['tokens'], int)
+        self.assertTrue(next(r for r in rows if r['id'] == 'ooo')['sql'])      # a query block shows its statement
+        self.assertIsNone(next(r for r in rows if r['id'] == 'threads')['sql'])   # a view shows none
+
+    def test_a_block_switched_off_costs_nothing(self):
+        s = A.store()
+        rows = {r['id']: r for r in B.weigh(s, B.resolve(s, {'type': 'assistant', 'blocks': {'open_work': {'on': True}}}))}
+        self.assertEqual((rows['threads']['on'], rows['threads']['tokens'], rows['threads']['rows']), (False, 0, 0))
+        self.assertGreater(rows['open_work']['tokens'], 0)
+
+    def test_weighing_never_reaches_the_calendar(self):
+        """Ruling H. Pricing the calendar means a Graph token POST plus a calendarView per mailbox at
+        20s each, and this list is what a settings card re-reads on every keystroke. So a live block
+        is declared, not run: rows unknown, tokens nil, and the card says the cost is time."""
+        from unittest import mock
+        s = A.store(); s.set_setting('calendar_enabled', '1', 't')
+        assistant._AGENDA.clear()
+        with mock.patch('taskuary.assistant._read_agenda', side_effect=AssertionError('weigh fetched the calendar')):
+            rows = {r['id']: r for r in B.weigh(s, B.resolve(s, {'type': 'assistant'}))}
+        assistant._AGENDA.clear()
+        for bid in ('calendar', 'meeting_prep', 'system_checks'):
+            with self.subTest(block=bid):
+                self.assertTrue(rows[bid]['live'], f'{bid} reaches a live connection and must say so')
+                if rows[bid]['on']: self.assertIsNone(rows[bid]['rows']); self.assertEqual(rows[bid]['tokens'], 0)
+
+
+class DoneThisWeekHeadTests(unittest.TestCase):
+    """Ruling L: "DONE THIS WEEK" names its window in words. At the default that is the head the
+    payload has always carried; widened, it would be a wrong statement about the lines under it."""
+    def test_the_default_head_is_unchanged(self):
+        b = B.by_id('done_this_week')
+        self.assertEqual(B.headline(b, {'days': 7}), "DONE THIS WEEK (my own work, with the agent's summary)")
+
+    def test_a_widened_window_is_named(self):
+        b = B.by_id('done_this_week')
+        self.assertEqual(B.headline(b, {'days': 30}), "DONE IN THE LAST 30 DAYS (my own work, with the agent's summary)")
+        self.assertIn('TWO DAYS', B.headline(b, {'days': 2}))
+
+    def test_no_other_heading_names_its_window_in_words(self):
+        for b in B.CATALOGUE:
+            if not (b.heading and b.window) or b.wide: continue
+            with self.subTest(block=b.id):
+                self.assertIn('{', b.heading, f'{b.id} has a window and no token in its head - declare a `wide` form')
+
+
+class CardMatchesPayloadTests(unittest.TestCase):
+    def test_the_card_names_the_blocks_the_payload_contains(self):
+        """One resolution behind the card and the payload, or the card claims a read the run never
+        made - the exact class of bug this feature exists to end. A block with nothing to say has
+        never printed an empty head, so it is checked in the direction that can lie."""
+        s = A.store()
+        cfg = {'type': 'assistant', 'blocks': {'open_work': {'on': True}, 'gone_quiet': {'on': True, 'days': 14}}}
+        chosen = B.resolve(s, cfg)
+        payload = assistant.inputs(s, [], blocks=chosen)
+        for row in B.weigh(s, chosen):
+            b = B.by_id(row['id'])
+            if not b.heading: continue                    # a producer renders under CANDIDATES, which weigh does not own
+            head = b.heading.split('(')[0].split('{')[0].strip().rstrip(':')
+            with self.subTest(block=row['id']):
+                if not row['on']: self.assertNotIn(head, payload, f"the card says {row['id']} is off and the payload has it")
+                elif row['tokens']: self.assertIn(head, payload, f"the card says {row['id']} is on and the payload has not got it")
+
+
+class EndpointTests(unittest.TestCase):
+    def test_the_route_prices_the_declared_defaults(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        r = TestClient(server.app).get('/api/assistant/blocks')
+        self.assertEqual(r.status_code, 200)
+        d = r.json()
+        self.assertEqual({x['id'] for x in d['data']}, {b.id for b in B.CATALOGUE})
+        self.assertEqual(d['cost'], None)                          # the money line is Task 3's
+        self.assertIsInstance(d['runs_per_day'], int)
+        self.assertEqual(d['total_tokens'], sum(x['tokens'] for x in d['data'] if x['on']))
 
 
 if __name__ == '__main__':

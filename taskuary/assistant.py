@@ -935,7 +935,7 @@ def systems_inputs(store, watch_source_ids=None, watch_sources=None) -> str:
 
 
 def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX_LINES,
-          watch_source_ids=None, watch_sources=None, systems_only: bool = False) -> list:
+          watch_source_ids=None, watch_sources=None, systems_only: bool = False, blocks=None) -> list:
     """One call: the owner's instruction (the Reports tab), the candidates, the day, what was already said."""
     soul = store.doc('soul') or ''
     direction = ((SYSTEMS_PROMPT + (f"\n\nTHE OWNER'S RULE FOR THIS MONITOR:\n{instruction.strip()}" if instruction else ''))
@@ -946,7 +946,7 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
     system = (f"YOUR INSTRUCTION (the owner's, from the Reports tab):\n{direction}" + contract.replace('{max_lines}', str(max_lines))
               + (f"\n\nWho the owner is (their own document; its reply rules are for text sent to OTHERS):\n{soul[:1500]}" if soul else ''))
     user = (systems_inputs(store, watch_source_ids, watch_sources) if systems_only
-            else inputs(store, cands, watch_source_ids=watch_source_ids, watch_sources=watch_sources))
+            else inputs(store, cands, watch_source_ids=watch_source_ids, watch_sources=watch_sources, blocks=blocks))
     images = []
     if not systems_only:
         from .llm import readable_images
@@ -955,14 +955,18 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
     return parse(store, text, cands, max_lines), _notes(text), user
 
 
-def facts(store, watch_source_ids=None, watch_sources=None, systems_only: bool = False) -> str:
-    """What a run would hand the model, as text - the Reports tab's Preview (reports.run_assistant)."""
+def facts(store, watch_source_ids=None, watch_sources=None, systems_only: bool = False, blocks=None) -> str:
+    """What a run would hand the model, as text - the Reports tab's Preview (reports.run_assistant).
+    Preview and run share `blocks`, so the Preview is the payload rather than a picture of one."""
     if systems_only:
         return systems_inputs(store, watch_source_ids, watch_sources)
     c = cfg(store); now = datetime.now()
+    if blocks is not None:
+        from . import assistantblocks as blk
+        c = c | blk.producer_cfg(blocks, c)
     state = {i['Key']: i for i in store.list_ideas()}
     return inputs(store, [x for x in candidates(store, c) if fresh(state, x, now)],
-                  'CANDIDATES (new since the last post)', watch_source_ids, watch_sources)
+                  'CANDIDATES (new since the last post)', watch_source_ids, watch_sources, blocks)
 
 
 # ── the note to the next check ───────────────────────────────────────────────────────────────
@@ -1233,7 +1237,7 @@ def _footer(r: dict) -> str:
 
 
 def run(store, llm=None, force: bool = False, instruction: str = None, *,
-        watch_source_ids=None, watch_sources=None, systems_only: bool = False,
+        watch_source_ids=None, watch_sources=None, systems_only: bool = False, blocks=None,
         report_id=None, report_title: str = None, always_post: bool = False) -> dict:
     """One post. The Reports tab's scheduler calls this when the 'Assistant' report is due
     (reports.run_report_source) and its "Run now" calls it forced; the instruction is the report's
@@ -1249,12 +1253,17 @@ def run(store, llm=None, force: bool = False, instruction: str = None, *,
         watch_source_ids, watch_sources = _watch(store)
     with _LOCK:
         return _run(store, llm, instruction, watch_source_ids or [], watch_sources or [],
-                    systems_only, report_id, report_title, always_post)
+                    systems_only, report_id, report_title, always_post, blocks)
 
 
 def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=False,
-         report_id=None, report_title=None, always_post=False) -> dict:
+         report_id=None, report_title=None, always_post=False, blocks=None) -> dict:
     c = cfg(store); now = datetime.now()
+    # the report's own block choice drives its producers too - ticking "Work gone quiet" off and
+    # still getting cold rows would be the card describing a choice nothing read
+    if blocks is not None:
+        from . import assistantblocks as blk
+        c = c | blk.producer_cfg(blocks, c)
     store.set_setting('assistant_last_run', now.isoformat(timespec='seconds'), 'assistant')
     state = {i['Key']: i for i in store.list_ideas()}
     cands = [] if systems_only else [x for x in candidates(store, c) if fresh(state, x, now)]
@@ -1270,14 +1279,14 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     if used:
         try:
             say, note, read = think(store, cands, llm, instruction, c['max'],
-                                    watch_source_ids, watch_sources, systems_only)
+                                    watch_source_ids, watch_sources, systems_only, blocks)
         except Exception as e:
             logger.warning(f'assistant: the model pass failed, posting the facts alone - {e}'); say, used = cands[:c['max']], False
     else: say = cands[:c['max']]          # no model: the facts still stand, in the hub's own words
     if not read:
         read = (systems_inputs(store, watch_source_ids, watch_sources) if systems_only else
                 inputs(store, cands, 'CANDIDATES (no model pass - these posted as facts)',
-                       watch_source_ids, watch_sources))
+                       watch_source_ids, watch_sources, blocks))
     # the note outlives the post: a quiet check leaves one too, so the next check starts where this one stopped
     if note and not systems_only:
         store.set_setting('assistant_notes', note, 'assistant'); store.set_setting('assistant_notes_at', now.strftime('%Y-%m-%d %H:%M:%S'), 'assistant')
@@ -1299,8 +1308,13 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     # not thought; fresh() keeps a declined one from coming back, and a raised one from repeating.
     if not systems_only:
         have = {s['key'] for s in say}
+        # the two the report raises are blocks like any other: off in this report's choice, off here
+        on = lambda bid: blocks is None or bool((blocks.get(bid) or {}).get('on'))
+        co = (blocks or {}).get('connectors') or {}
         try:
-            say = list(say) + [x | {'why': x['action'].get('why', '')} for x in health_ideas(store, now) + connect_ideas(store, now)
+            props = ((health_ideas(store, now) if on('health') else [])
+                     + (connect_ideas(store, now, days=co.get('days', 30), floor=co.get('floor', 3)) if on('connectors') else []))
+            say = list(say) + [x | {'why': x['action'].get('why', '')} for x in props
                                if x['key'] not in have and fresh(state, x, now)]
         except Exception as e: logger.warning(f'assistant: the health and connect checks were skipped - {e}')
     stamp = now.strftime('%Y-%m-%d %H:%M:%S')

@@ -184,18 +184,27 @@ def poll_source(store, cfg: dict, src: dict, since, llm=None, file_only=False) -
     addr, floor, n = src['Address'], since.strftime('%Y-%m-%d %H:%M:%S'), 0
     if addr.startswith('s3://'):
         bucket = addr[5:]
-        r = client(cfg, 's3', reg).list_objects_v2(Bucket=bucket, MaxKeys=200)
-        for o in r.get('Contents') or []:
-            at = o.get('LastModified')
-            stamp = at.astimezone().strftime('%Y-%m-%d %H:%M:%S') if hasattr(at, 'astimezone') else str(at)
-            if stamp < floor: continue
-            out = ingest_message(store, file_only=file_only, msg={
-                'external_id': f"aws:{reg or '-'}:{bucket}:{o['Key']}:{stamp[:16]}", 'channel': 'aws',
-                'subject': f"New in {addr}: {o['Key']}" + (f' ({reg})' if reg else ''),
-                'body': f"[S3 object landed - {o.get('Size')} bytes]\ns3://{bucket}/{o['Key']}",
-                'from_name': addr, 'conversation_id': f'aws:{addr}', 'sent_at': stamp,
-                'source_name': addr}, llm=llm)
-            n += out['status'] != 'duplicate'
+        s3, tok = client(cfg, 's3', reg), None
+        # S3 orders by key, not LastModified: a fresh z... object can sit after pages of old a... keys.
+        while True:
+            args = {'Bucket': bucket, 'MaxKeys': 200}
+            if scfg.get('prefix'): args['Prefix'] = scfg['prefix']
+            if tok: args['ContinuationToken'] = tok
+            r = s3.list_objects_v2(**args)
+            for o in r.get('Contents') or []:
+                at = o.get('LastModified')
+                stamp = at.astimezone().strftime('%Y-%m-%d %H:%M:%S') if hasattr(at, 'astimezone') else str(at)
+                if stamp < floor: continue
+                out = ingest_message(store, file_only=file_only, msg={
+                    'external_id': f"aws:{reg or '-'}:{bucket}:{o['Key']}:{stamp[:16]}", 'channel': 'aws',
+                    'subject': f"New in {addr}: {o['Key']}" + (f' ({reg})' if reg else ''),
+                    'body': f"[S3 object landed - {o.get('Size')} bytes]\ns3://{bucket}/{o['Key']}",
+                    'from_name': addr, 'conversation_id': f'aws:{addr}', 'sent_at': stamp,
+                    'source_name': addr}, llm=llm)
+                n += out['status'] != 'duplicate'
+            nxt = r.get('NextContinuationToken')
+            if not r.get('IsTruncated') or not nxt or nxt == tok: break
+            tok = nxt
     elif addr.startswith('logs://'):
         group = addr[7:]
         pat = scfg.get('pattern') or '?ERROR ?Exception ?FATAL'

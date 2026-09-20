@@ -85,6 +85,40 @@ def sections(text) -> list:
     return out
 
 
+NARROW = 3               # up to this many columns a row reads as one dotted line; wider, as a record
+LONG = 48                # a cell past this is prose (a description) and gets a line of its own
+_RANK = re.compile(r'^\d+(\s*\(\w+\))?$')      # 1, 14 (W)
+
+
+def _cells(line: str) -> list:
+    return [c.strip() for c in _ROW.match(line).group(1).split('|')]
+
+
+def table(rows: list) -> list:
+    """A markdown table's lines, as a phone can read them. Up to NARROW columns: each row is its cells
+    joined by a middle dot (Step · Tool · Result read fine). Wider - the GitHub report's fifteen repos by
+    six columns - the dotted row ran to three wrapped lines of numbers nobody could tell apart (the
+    owner, 2026-09-20: "starts looks a little messy"), so each row becomes a RECORD: a bold title from
+    the rank and the name, the short cells as `label value` pairs on one line, and any cell past LONG
+    characters in ANY row (the description column) as its own line in every row - decided per column,
+    so a short description does not join the numbers as "What it is Framework for agentic apps" while
+    the long one above it stands alone. The header row names the labels and is not shown. Bold is
+    marked with the heading mark and spelled by the door, like a heading."""
+    if not rows: return []
+    head, body = _cells(rows[0]), [_cells(r) for r in rows[1:]]
+    if len(head) <= NARROW:
+        return [' · '.join(c for c in r if c) for r in [head, *body] if any(r)]
+    body = [r + [''] * (len(head) - len(r)) for r in body if any(r)]
+    prose_cols = {i for i in range(len(head)) if any(len(r[i]) > LONG for r in body)}
+    out = []
+    for r in body:
+        title, rest = (f'{r[0]}. {r[1]}', 2) if _RANK.match(r[0] or '') and r[1] else (r[0], 1)
+        pairs = [f'{head[i]} {r[i]}'.strip() for i in range(rest, len(head)) if r[i] and i not in prose_cols]
+        prose = [r[i] for i in range(rest, len(head)) if r[i] and i in prose_cols]
+        out += [f'\x01{title}\x01', *([' · '.join(pairs)] if pairs else []), *prose, '']
+    return out[:-1] if out else out
+
+
 def render(text, channel: str) -> str:
     """Markdown as this channel actually draws it. Code spans come out first and go back last,
     so `snake_case_name` is never read as an italic."""
@@ -93,18 +127,16 @@ def render(text, channel: str) -> str:
         kept.append(m.group(1)); return f'\x00{len(kept) - 1}\x00'
     out = _CODE.sub(hold, str(text or ''))
     out = _FENCE.sub('', out)
-    lines = []
-    for line in out.split('\n'):
+    lines, rows = [], []
+    for line in out.split('\n') + ['']:
         if _RULE.match(line) and ('|' in line or set(line.strip()) <= set('- ')): continue
-        row = _ROW.match(line)
-        # a table is unreadable as pipes in a bubble - fifteen repos by six columns of them was
-        # the GitHub report - so each row becomes its cells, in order, separated by a middle dot.
-        # It is settled HERE and the line goes no further: a rank column makes the header row read
-        # '# | Repo | ...', and run past the heading rule below that is a level-one heading, which
-        # swallowed the rank column and bolded the rest of the labels.
-        if row:
-            lines.append(' · '.join(c.strip() for c in row.group(1).split('|') if c.strip()))
-            continue
+        # a table is unreadable as pipes in a bubble, so its rows are gathered and settled by
+        # table() the moment the table ends. It is settled HERE and the line goes no further: a rank
+        # column makes the header row read '# | Repo | ...', and run past the heading rule below that
+        # is a level-one heading, which swallowed the rank column and bolded the rest of the labels.
+        if _ROW.match(line):
+            rows.append(line); continue
+        if rows: lines += table(rows); rows = []
         h = _HEAD.match(line)
         # A heading is MARKED here and spelled at the very end: writing its star now would put a
         # single star into the text, which is exactly what the italic rule reads, and every

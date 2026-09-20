@@ -104,6 +104,25 @@ class RenderTests(unittest.TestCase):
         self.assertIn('# · Repo', out)
         self.assertNotIn('*', out)
 
+    def test_a_wide_table_arrives_as_one_record_per_row(self):
+        """Six columns as a dotted line ran to three wrapped lines of numbers nobody could tell apart (the
+        GitHub Trending report, 2026-09-20). Each row is a record: bold title, short cells as label-value
+        pairs, the description on its own line; the header names the labels and is not repeated."""
+        md = ('| # | Repo | Stars today | Total ★ | Lang | What it is |\n|---|---|---|---|---|---|\n'
+              '| 1 | [affaan-m/ECC](https://github.com/affaan-m/ECC) | 1,012 | 263,352 | JavaScript | Agent harness optimization system: skills, instincts, memory, security |\n'
+              '| 14 (W) | Tencent/WeKnora | 4,867 /wk | 27,849 | Go | Open LLM knowledge platform: documents to RAG plus reasoning agent |')
+        out = cf.render(md, 'whatsapp')
+        self.assertIn('*1. affaan-m/ECC*\nStars today 1,012 · Total ★ 263,352 · Lang JavaScript\nAgent harness optimization system', out)
+        self.assertIn('\n\n*14 (W). Tencent/WeKnora*\nStars today 4,867 /wk', out)
+        self.assertNotIn('# · Repo', out); self.assertNotIn('|', out)
+        self.assertIn('1. affaan-m/ECC\nStars today', cf.render(md, 'telegram'))        # the same record, no stars
+        # a SHORT description still gets its own line: the column is prose, whatever this row's length
+        short = md + '\n| 2 | BuilderIO/agent-native | 89 | 5,014 | TypeScript | Framework for agentic apps |'
+        self.assertIn('*2. BuilderIO/agent-native*\nStars today 89 · Total ★ 5,014 · Lang TypeScript\nFramework for agentic apps', cf.render(short, 'whatsapp'))
+        # ...and a narrow table keeps its dotted lines, header included
+        self.assertIn('Step · Tool · Result\nFetch · WebFetch · OK',
+                      cf.render('| Step | Tool | Result |\n|---|---|---|\n| Fetch | WebFetch | OK |', 'whatsapp'))
+
     def test_a_heading_is_not_left_wearing_its_hashes(self):
         self.assertNotIn('#', cf.render('## What happened', 'telegram'))
 

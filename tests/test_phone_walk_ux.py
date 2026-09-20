@@ -118,6 +118,28 @@ class HeardYouTests(unittest.TestCase):
             self.assertFalse(messengers.react(s, 'whatsapp', JID, 'MSG1'))
 
 
+class DoorwayReadsEveryTickTests(unittest.TestCase):
+    """The doorway loop ticks every second, but its read went through the chat clock's due-check, so the
+    assistant chat was actually read once per poll_seconds - and "next" on the phone waited up to thirty
+    seconds for anything to hear it (the owner, 2026-09-20: "hitting next or 3 in whatsapp takes a while")."""
+    def test_the_doorway_reads_the_assistant_chat_on_every_tick(self):
+        from taskuary import server, channels
+        s = server.store
+        cid = s.get_connector_by_type('whatsapp')['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Active': 1, 'Secret': 'tok',
+                          'ConfigJson': json.dumps({'poll_seconds': 30, 'assistant_chat': JID})}, 'test')
+        reads = []
+        ticket = mock.Mock(error=None); ticket.wait.return_value = True
+        with mock.patch.object(channels, 'poll_channels', side_effect=lambda *a, **k: reads.append(k.get('only')) or 0), \
+             mock.patch.object(server, '_drain_worker', return_value=mock.Mock(submit=mock.Mock(return_value=ticket))):
+            server._QUICK_LAST.pop('whatsapp', None)
+            server._poll_on_quick_clock(['whatsapp'])                     # the chat clock: due, so it reads
+            server._poll_on_quick_clock(['whatsapp'])                     # a moment later: not due for 29 s more
+            self.assertEqual(len(reads), 1)
+            server._poll_on_quick_clock(['whatsapp'], timer=False)        # the doorway: a conversation, not a mailbox
+            self.assertEqual(len(reads), 2)
+
+
 class AnsweredOnceTests(unittest.TestCase):
     def test_two_readers_of_the_same_message_answer_it_once(self):
         """The fast doorway loop and the connector's own poll both see it (server.doorway_forever)."""

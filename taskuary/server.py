@@ -5488,6 +5488,7 @@ _HEARTBEAT = [0.0]              # ...and when we last wrote down that the app is
 HEARTBEAT_TICK = 300
 POLL_TICK = 30                  # how often the full loop wakes to look at the clock
 QUICK_TICK = 5                  # the chat loop looks more often, so "every 30 seconds" means that
+SLOW_CHAT_READ = 3.0            # a chat read past this is logged with its length: it is a late phone answer
 DRAIN_WAIT = 45                 # the context gate's patience for its lines to be judged (the old lock wait)
 CHAT_CONNECTORS = {'teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'discord'}
 CHAT_POLL_SECONDS = 30
@@ -5836,7 +5837,7 @@ def doorway_forever():
             for c in store.list_connectors():
                 if c.get('Active') and c.get('Type') not in types and remote_assistant.polls(store, c):
                     types.append(c['Type'])
-            if types: _poll_on_quick_clock(types)
+            if types: _poll_on_quick_clock(types, timer=False)     # every tick, whatever the chat clock says
         except Exception as e:
             logger.debug(f'doorway poll failed: {e}')
         time.sleep(DOORWAY_TICK)
@@ -5884,12 +5885,17 @@ def _recently_fetched(types, target_store=None) -> bool:
         for provider in providers)
 
 
-def _poll_on_quick_clock(types):
+def _poll_on_quick_clock(types, timer: bool = True):
     """Each due chat type on its own thread, marked for the due recheck. One shared chat lane meant a
     bridge that hung for forty seconds skipped every Teams, Slack and Telegram tick in between; now a
-    slow type holds only its own lock (_poll_quick) and this tick waits for it no longer than the clock."""
+    slow type holds only its own lock (_poll_quick) and this tick waits for it no longer than the clock.
+
+    `timer=False` is the doorway's read: it is NOT subject to the chat clock's cadence. Marked as a
+    timer read, the doorway's one-second tick was filtered by _quick_due and actually read the
+    assistant chat once per poll_seconds - thirty seconds - so "next" typed on the phone sat unheard
+    for up to half a minute while the reply itself takes half a second (measured 2026-09-20)."""
     def one(typ):
-        _QUICK_TIMER.active = True
+        _QUICK_TIMER.active = timer
         try: _poll_reports(0, what='syncing', only=[typ])
         except Exception as e: logger.exception(f'chat poll failed ({typ}): {e}')   # with the traceback: 'unhashable type: dict' twice, and no line to go to
         finally: _QUICK_TIMER.active = False
@@ -6049,7 +6055,9 @@ def _poll_quick(only, what: str = 'syncing', wait: bool = False, timer: bool = F
     held = [t for t in dict.fromkeys(only)
             if (_quick_lock(t).acquire(timeout=DRAIN_WAIT) if wait else _quick_lock(t).acquire(blocking=False))]
     if not held:
-        logger.info('chat poll already running - skipped'); return False
+        # named, and only when the wait is long enough to be the reason a chat answer is late: the
+        # live log had 161 anonymous "skipped" lines and nothing to say which lane or how long
+        logger.info(f"chat poll already running - skipped {', '.join(dict.fromkeys(only))}"); return False
     only = held                          # a type another tick still holds is left to it; it is due again next tick
     ticket, added, fresh_channels = None, False, []
     try:
@@ -6069,8 +6077,14 @@ def _poll_quick(only, what: str = 'syncing', wait: bool = False, timer: bool = F
                     fresh_channels = list(dict.fromkeys(CH2SRC[t] for t in types if t in CH2SRC))
                     def _say(kind, so_far):
                         _status_progress(target_store, status, f'{what} · reading {kind}' + (f' · {so_far} in so far' if so_far else ''))
+                    t_read = time.monotonic()
                     with ingest_mod.deferred():
                         added = poll_channels(target_store, 0, progress=_say, only=types)
+                    # a slow read is the whole latency of a phone turn: the doorway cannot hand the
+                    # owner's line to the assistant until this returns (the owner, 2026-09-20:
+                    # "hitting next or 3 in whatsapp takes a while")
+                    if (took := time.monotonic() - t_read) > SLOW_CHAT_READ:
+                        logger.info(f"chat poll {', '.join(types)} read {int(added or 0)} line(s) in {took:.1f}s")
                     # new lines are announced the moment they LAND (PW-052): the caller says retriage started,
                     # then waits below for the result - the owner is never shown the result as the first word
                     if on_fetched and added:

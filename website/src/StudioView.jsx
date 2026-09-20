@@ -119,7 +119,7 @@ export default function StudioView({ onOpenTask, refresh = 0, active = true }) {
                 {(liveRow?.work || liveRow?.promptPending) && (
                   <Box sx={{ pt: 0.5 }}>
                     <WorkLine work={liveRow.work} who={state.agent} waiting={liveRow.kind === "session" && isWaiting(liveRow)}
-                      asking={liveRow.asking} startedAt={liveRow.StartedAt} promptPending={liveRow.promptPending} />
+                      asking={liveRow.asking} state={liveRow.state} detail={liveRow.request?.text} startedAt={liveRow.StartedAt} promptPending={liveRow.promptPending} />
                   </Box>
                 )}
                 {liveRow?.files?.length > 0 && <Box sx={{ pt: 0.6 }}><FileChips files={liveRow.files} /></Box>}

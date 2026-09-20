@@ -1,3 +1,4 @@
+import { says, subState } from "./laneSays.js";
 // Pure hand-raise state. Keeping this out of React makes the polling edge cases testable:
 // delayed responses, uncertain idle screens, vanished processes, and multiple live rows.
 
@@ -7,6 +8,7 @@ const payload = (row, identity, cycle, finished = false) => ({
   agent: row.AgentName || "agent",
   title: row.Title || "",
   asking: !finished && !!row.asking,
+  state: finished ? "" : row.state || "", line: finished ? "" : row.line || "",   // the ONE sentence (laneSays), from the server
   finished,
   tail: (row.tail || []).slice(-2).join(" "),
   identity,
@@ -112,9 +114,7 @@ export function saveHandRaiseState(storage, state) {
 
 export const isWatchingTask = (tab, selected, tid) => tab === "Tasks" && Number(selected) === Number(tid);
 
-export const handRaiseWhat = (raise) => raise.finished ? `${raise.agent} finished`
-  : raise.asking ? `${raise.agent} asked you something`
-    : `${raise.agent} stopped and is waiting on you`;
+export const handRaiseWhat = (raise) => raise.finished ? `${raise.agent} finished` : raise.line || says(subState(raise), raise.agent);
 
 export const enqueueHandRaise = (queue, raise) => [...(queue || []), raise];
 export const dismissHandRaise = (queue) => (queue || []).slice(1);

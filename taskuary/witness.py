@@ -45,7 +45,7 @@ class Witness:
         at = n.get('at') or _now()
         with self.lock:
             k = n.get('k')
-            if k == 'tool': self.tool = {'name': n.get('name') or '', 'target': str(n.get('target') or '')[:160], 'at': at}
+            if k == 'tool': self.tool = {'name': n.get('name') or '', 'target': str(n.get('target') or '')[:160], 'at': at, **({'error': str(n['error'])[:200]} if n.get('error') else {})}
             elif k == 'file':
                 f = self.files.setdefault(n['path'], {'n': 0, 'first': at, 'last': at})
                 f['n'] += 1; f['last'] = at
@@ -100,6 +100,10 @@ def claude_notes(p: dict) -> list:
         if name == 'TodoWrite':
             out.append({'k': 'todos', 'items': [{'text': t.get('content') or t.get('activeForm') or '', 'status': t.get('status')} for t in (inp.get('todos') or []) if isinstance(t, dict)], 'at': at})
         return out
+    if ev == 'PostToolUseFailure':
+        # the tool itself failed: the pane shows the failure where a running tool would show its name
+        return [{'k': 'tool', 'name': str(p.get('tool_name') or ''), 'target': _fmt_input(p.get('tool_input') or {}), 'at': at, 'source': 'hook',
+                 'error': str(p.get('error') or p.get('error_message') or 'failed').strip()[:200]}]
     if ev == 'Stop': return [{'k': 'done', 'text': str(p.get('last_assistant_message') or '').strip(), 'at': at, 'source': 'hook'}]
     if ev == 'UserPromptSubmit': return [{'k': 'turn', 'at': at, 'source': 'hook'}]
     return []

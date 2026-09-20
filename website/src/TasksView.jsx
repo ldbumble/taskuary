@@ -1,4 +1,5 @@
 // Tasks: dense two-pane - list rows on the left, the selected task's full story right.
+import { says, subState } from "./laneSays.js";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress,
@@ -1561,7 +1562,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     border: `1px solid ${BORDER}`, bgcolor: PANEL2 }}>
                     <Box sx={{ width: 8, height: 8, borderRadius: 99, bgcolor: "#6f8a6e", flexShrink: 0 }} />
                     <Typography variant="body2" sx={{ flex: 1, minWidth: 0, color: INK, fontSize: 12.5 }} noWrap>
-                      {agentName(t)} {agentState === "needs you" ? "is waiting on you" : "is working"} in its session — it keeps running while you read the task.
+                      {agentState === "needs you" ? says(subState(term), agentName(t)) : `${agentName(t)} is working`} in its session — it keeps running while you read the task.
                     </Typography>
                     <Button size="small" variant="contained" disableElevation sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
                       onClick={() => setPeek(false)}>Back to the session</Button>

@@ -1,4 +1,6 @@
 import vocab from "../../taskuary/lanes.json" with { type: "json" };
+import { says, subState } from "./laneSays.js";
+export { says, subState };
 // The pipe, as the Assistant page draws it: what each lane is called and coloured, which item is a
 // new arrival (it drops in from the top and slides to its slot), and which card goes under a line.
 // Pure and dependency-free so it runs under bare node (test/funnelPile.test.mjs); colour is named
@@ -225,7 +227,7 @@ export const assistantFocus = (item) => {
   if (!item) return { card: null, lead: "" };
   const who = item.agent || item.working || "the agent";
   if (item.lane === "working" && item.tid) return { card: "agent", lead: `${who} is working on this — nothing for you here yet.` };
-  if (item.lane === "blocked") return { card: "agent", lead: `${who} stopped and is waiting on you.` };
+  if (item.lane === "blocked") return { card: "agent", lead: `${item.why || says(subState(item), who)}.` };
   if (item.kind === "review" || item.kind === "action" || item.lane === "approve")
     return { card: "reply", lead: item.kind === "action"
       ? "An agent proposed this. Read it, then it runs only if you say so."

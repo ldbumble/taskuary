@@ -1,4 +1,5 @@
 // Shared Task Hub atoms: chips, channel icons, relative time. Light + compact.
+import { says } from "./laneSays.js";
 import React, { useEffect, useState } from "react";
 import { Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
   DialogContentText, DialogTitle, InputAdornment, MenuItem, Select, TextField, Tooltip, Typography } from "@mui/material";
@@ -1344,7 +1345,7 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
   // compact has no room for a header line, so the placeholder carries the state instead
   const ph = many ? "One prompt per line — twenty is fine. Bullets and numbers are stripped; they drip in one per stop, in this order."
     : !compact ? "Anything you think of while it works — queued, typed in when it stops. Enter to queue, Shift+Enter for a new line. Paste a screenshot to send it along."
-    : wait.state === "asking" ? "It asked you something — answer here and it goes straight in"
+    : wait.state === "asking" ? "It is asking — answer here and it goes straight in"
     : wait.state === "parked" ? "Tell the agent — goes straight in. Enter to send, paste a screenshot to attach it"
     : wait.state === "no_session" ? "Tell the agent — reopens a session with this as the ask"
     : "Tell the agent — queued, typed in when it stops. Enter to send, paste a screenshot to attach it";
@@ -1515,11 +1516,14 @@ const TERM_MARK = { done: "✓", now: "▸", todo: "○" };
 const TERM_TONE = { done: CATPPUCCIN.faint, now: CATPPUCCIN.yellow, todo: CATPPUCCIN.faint };
 
 // the one header line, shared by the pane and the compact WorkLine
-const workHead = (work, who, waiting, asking, startedAt, promptPending = false) => {
+const workHead = (work, who, waiting, asking, startedAt, promptPending = false, state = "", detail = "") => {
   if (promptPending) return { tone: CATPPUCCIN.yellow, mark: "▮", text: who,
     tool: "prompt sent · waiting for first response", t: startedAt ? secsAgo(startedAt) : "", blink: true };
-  if (waiting) return { tone: CATPPUCCIN.yellow, mark: "⏸", text: `${who} ${asking ? "asked you something" : "stopped - waiting on you"}`, tool: "", t: "" };
-  if (work?.tool?.name) return { tone: CATPPUCCIN.cyan, mark: "▮", text: who, tool: `${work.tool.name} ${fileName(work.tool.target) || work.tool.target || ""}`.trim(), t: secsAgo(work.tool.at), blink: true };
+  // the ONE sentence for the state (laneSays): a stall reads "stuck", never "asked you"; the request's words ride in the tool slot
+  if (waiting) return { tone: CATPPUCCIN.yellow, mark: "⏸", text: says(state || (asking ? "asking" : "parked"), who), tool: String(detail || "").slice(0, 120), t: "" };
+  // a tool that FAILED (the PostToolUseFailure hook) shows its failure where a running tool shows its name
+  if (work?.tool?.name) return { tone: work.tool.error ? CATPPUCCIN.red : CATPPUCCIN.cyan, mark: work.tool.error ? "✗" : "▮", text: who,
+    tool: `${work.tool.name} ${fileName(work.tool.target) || work.tool.target || ""}${work.tool.error ? ` — failed: ${work.tool.error}` : ""}`.trim(), t: secsAgo(work.tool.at), blink: !work.tool.error };
   if (work?.last_line) return { tone: CATPPUCCIN.cyan, mark: "▮", text: who, tool: `last line: ${work.last_line}`, t: startedAt ? secsAgo(startedAt) : "", blink: true, muted: true };
   return { tone: CATPPUCCIN.cyan, mark: "▮", text: `${who} working`, tool: "", t: startedAt ? secsAgo(startedAt) : "", blink: true };
 };
@@ -1528,7 +1532,7 @@ export const WorkPane = ({ run, onOpen }) => {
   // the CLI it runs, not the profile's nickname: a profile called codex that runs claude is claude here
   const work = run?.work || {}, who = run?.cli || run?.AgentName || run?.agent || "agent";
   const waiting = run?.kind === "session" && (run.asking || isWaiting(run));
-  const h = workHead(work, who, waiting, run?.asking, run?.StartedAt || run?.started, run?.promptPending);
+  const h = workHead(work, who, waiting, run?.asking, run?.StartedAt || run?.started, run?.promptPending, run?.state, run?.request?.text);
   const todos = work.todos || [];
   const files = (work.files?.length ? work.files : (run?.files || []).map((p) => ({ path: p, n: 0 }))).slice(0, 4);
   const more = Math.max(0, (work.files?.length || run?.files?.length || 0) - files.length);
@@ -1586,8 +1590,8 @@ export const WorkPane = ({ run, onOpen }) => {
 };
 
 // one line, for a header: ● agent · Edit server.py · 4s  |  ● agent · last line: "…"
-export const WorkLine = ({ work, who = "agent", waiting = false, asking = false, startedAt, promptPending = false }) => {
-  const h = workHead(work, who, waiting, asking, startedAt, promptPending);
+export const WorkLine = ({ work, who = "agent", waiting = false, asking = false, startedAt, promptPending = false, state = "", detail = "" }) => {
+  const h = workHead(work, who, waiting, asking, startedAt, promptPending, state, detail);
   if (!h.tool && !waiting) return null;
   return (
     <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.6, minWidth: 0, maxWidth: "100%", ...mono, fontSize: 10.5 }}>
@@ -1747,7 +1751,7 @@ export const LiveConsole = ({ run, agent, lines = 5, onOpen, fill }) => {
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: tail.length ? 0.5 : 0, flexShrink: 0 }}>
         <Typography variant="caption" sx={{ ...mono, fontSize: 10.5, fontWeight: 700, color: waiting ? CATPPUCCIN.yellow : CATPPUCCIN.cyan,
           ...(waiting ? {} : { "@keyframes tqBlink2": { "50%": { opacity: 0.25 } }, animation: "tqBlink2 1.1s step-end infinite" }) }}>
-          {waiting ? `⏸ ${who} ${run?.asking ? "asked you something" : "stopped - waiting on you"}` : `▮ ${who} working${run?.StartedAt ? ` · ${_elapsed(run.StartedAt)}` : ""}`}
+          {waiting ? `⏸ ${says(run?.state || (run?.asking ? "asking" : "parked"), who)}` : `▮ ${who} working${run?.StartedAt ? ` · ${_elapsed(run.StartedAt)}` : ""}`}
         </Typography>
         <Box sx={{ flex: 1 }} />
         {files.slice(0, 4).map((f) => (

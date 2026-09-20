@@ -29,7 +29,7 @@ MARK = '/api/hooks/claude'
 # the agent asking inside its own TUI (Notification agent_needs_input / idle_prompt), the permission
 # decision itself (PermissionRequest), an MCP server asking (Elicitation), and the session ending.
 # SessionStart names the session id before a word is said, so the binding never has to guess.
-EVENTS = ('PostToolUse', 'Stop', 'UserPromptSubmit', 'Notification',
+EVENTS = ('PostToolUse', 'PostToolUseFailure', 'Stop', 'UserPromptSubmit', 'Notification',
           'StopFailure', 'PermissionRequest', 'SessionStart', 'SessionEnd', 'Elicitation', 'ElicitationResult')
 # Codex's, same schema (no StopFailure and no question event: a Codex stuck alive on an error is still
 # the screen's to notice). Codex clamps SessionEnd and Interrupt hook timeouts to 3 s.

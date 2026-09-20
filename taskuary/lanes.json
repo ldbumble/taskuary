@@ -7,7 +7,14 @@
       "role": "you",
       "mark": "👋",
       "hint": "an agent stopped and is waiting on you — it is blocking work",
-      "loud": true
+      "loud": true,
+      "_says": "the ONE sentence each sub-state of this lane gets, on every surface (workerstate.says / funnelPile.says). `line` when the request has words, `bare` when it does not. asking = a question, approval = a permission, stalled = a turn that died on a wall (rate limit, token ceiling) with the CLI alive at its prompt, parked = quiet at its prompt with nothing recorded",
+      "says": {
+        "asking": { "bare": "{agent} asked you something", "line": "{agent} asked you: {text}" },
+        "approval": { "bare": "{agent} needs your approval", "line": "{agent} needs your approval: {text}" },
+        "stalled": { "bare": "{agent} is stuck", "line": "{agent} is stuck - {text}" },
+        "parked": { "bare": "{agent} stopped and is waiting on you" }
+      }
     },
     {
       "key": "time",

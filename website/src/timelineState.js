@@ -10,6 +10,7 @@
 // Colour is named by ROLE, not by hex: theme.jsx stays the only place a colour is chosen.
 // `role: null` is a state that takes no colour at all.
 // loud: genuinely on you — at most two may ever be loud, or none of them are.
+import { says } from "./laneSays.js";
 import vocab from "../../taskuary/lanes.json" with { type: "json" };
 
 // the shared table, flattened: a lane, a kind and a Timeline-only state are three PURPOSES, not
@@ -130,7 +131,7 @@ export function subline(row, ref = (id) => `TQ-${String(id).padStart(4, "0")}`) 
   switch (stateOf(row)) {
     case "triaging": bits.push("triage is deciding what this is"); break;
     case "error":   bits.push("triage failed — retry, or choose what it is"); break;
-    case "waving":  bits.push(row.Working ? `${row.Working} asked you something` : "waiting on you — nothing is moving it"); break;
+    case "waving":  bits.push(row.AgentLine || (row.Working ? says("asking", row.Working) : "waiting on you — nothing is moving it")); break;
     case "working": bits.push(row.Working ? `${row.Working} has this open` : "an agent has this"); break;
     case "reply":   bits.push(undrafted(row) ? "waiting for your answer — nothing drafted yet" : "a reply is drafted — read it and send"); break;
     case "held":    bits.push("first message from this address — nothing started"); break;

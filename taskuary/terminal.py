@@ -491,7 +491,8 @@ class Term:
         word = worker_fields(getattr(self, 'store', None), self)      # the run's own word outranks the screen (PW-228)
         base = {'sid': self.sid, 'label': self.label, 'cwd': self.cwd, 'taskId': self.task_id,
                 'agent': self.agent, 'cli': getattr(self, 'cli', '') or cli_of(self.argv), 'alive': self.alive, 'started': self.started,
-                'idle': self.idle(), 'phase': phase, 'waiting': word['waiting'], 'request': word['request'], 'accepted': getattr(self, 'accepted', None),
+                'idle': self.idle(), 'phase': phase, 'waiting': word['waiting'], 'request': word['request'], 'state': word.get('state'), 'line': word.get('line'),
+                'accepted': getattr(self, 'accepted', None),
                 'promptPending': prompt_pending(self),
                 'cmd': ' '.join(self.argv), **({'tail': self.tail(tail)} if tail else {})}
         if not details:
@@ -521,7 +522,7 @@ def worker_fields(store, t) -> dict:
     # Devin paints its argv-supplied prompt only when the first model turn comes back. Its idle
     # input footer looks parked during that gap, but the prompt is already submitted and there is
     # nothing for the owner to answer.
-    if prompt_pending(t): return {'waiting': False, 'request': None}
+    if prompt_pending(t): return {'waiting': False, 'request': None, 'state': None, 'line': None}
     from . import workerstate as ws
     req = None
     try:
@@ -536,7 +537,13 @@ def worker_fields(store, t) -> dict:
     # long as it stands there (the owner, 2026-09-17, TQ-0621: "why does coder say is working, when
     # it's waiting for answer?"). There is no request to bind an answer to; the pane is the answer.
     elif w is False and not req and screen_asking(t): w = True
-    return {'waiting': bool(w), 'request': req}
+    # ...and the ONE sentence for the state (lanes.json via workerstate.says), keyed by the request's kind
+    # first - a stall reads "stuck", never "asked you" - and the screen's question second
+    try: ask = bool(w) and not req and bool(screen_asking(t))
+    except Exception: ask = False
+    sub = ws.sub_state(bool(w), ask, req)
+    return {'waiting': bool(w), 'request': req, 'state': sub,
+            'line': ws.says(sub, getattr(t, 'agent', None) or getattr(t, 'label', None), (req or {}).get('text')) if sub else None}
 
 
 def cli_of(argv) -> str:
@@ -586,7 +593,7 @@ def prompt_pending(t) -> bool:
 
 
 _LIGHT_INFO = {'sid', 'label', 'cwd', 'taskId', 'agent', 'cli', 'mode', 'alive', 'busy',
-               'started', 'idle', 'phase', 'waiting', 'request', 'accepted', 'promptPending', 'cmd', 'provider', 'pick',
+               'started', 'idle', 'phase', 'waiting', 'request', 'state', 'line', 'accepted', 'promptPending', 'cmd', 'provider', 'pick',
                'connector_id', 'model', 'tail'}
 
 def _info(t, tail=0, details=True) -> dict:

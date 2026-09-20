@@ -242,12 +242,12 @@ def message_row(message, item, threads, now, *, full=False):
     workers = [r for r in view.get('worker_attention', [])
                if str(r.get('taskId', r.get('task_id'))) == str(tid)] if tid else []
     working = (running[-1].get('AgentName') or 'agent') if running else None
-    waiting = False
+    waiting, line = False, ''
     for worker in workers:
         working = worker.get('agent') or worker.get('label') or 'coder'
-        waiting = waiting or bool(worker.get('waiting'))
+        waiting, line = waiting or bool(worker.get('waiting')), line or str(worker.get('line') or '')
     if working and active_task:
-        row.update(Working=working, AgentWaiting=waiting)
+        row.update(Working=working, AgentWaiting=waiting, AgentLine=line if waiting else '')
         if review.get('Status') != 'pending':
             row['NeedsYou'] = int(waiting)
     # Classification needs the existing 4k window even when the HTTP preview is compact.

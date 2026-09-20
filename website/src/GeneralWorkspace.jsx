@@ -1,3 +1,4 @@
+import { says, subState } from "./laneSays.js";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AssistantRuntimeProvider, ComposerPrimitive, MessagePrimitive, ThreadPrimitive, useLocalRuntime,
@@ -500,7 +501,7 @@ function AssistantThread({ task, messages, onAsked, onStop, selectionRef, attach
               as their next message - the same road the composer uses, so the turn streams as it always did. */}
           {!dock && asking && (
             <div className="tq-aui-asking">
-              <div><b>{asking.kind === "approval_needed" ? `${name} needs your approval` : `${name} asked you`}</b><span>{asking.text}</span></div>
+              <div><b>{says(subState({ request: asking }), name)}</b><span>{asking.text}</span></div>
               <div className="tq-aui-asking-choices">
                 {(asking.choices || []).map((c) => (
                   <Button key={c} size="small" variant="outlined" onClick={() => onAnswer?.(c)}>{c}</Button>

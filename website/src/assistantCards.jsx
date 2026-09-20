@@ -20,6 +20,9 @@ import DigestText from "./DigestText.jsx";
 import TodayMeetingsStrip from "./TodayMeetingsStrip.jsx";
 import { ROLES, ASSISTANT } from "./theme.jsx";
 import { laneMeta, ageText, agoText, assistantFocus } from "./funnelPile.js";
+import { says, subState } from "./laneSays.js";
+// the agent card's kicker, per sub-state of the blocked lane (the sentence itself is laneSays)
+const KICK = { asking: "asked", approval: "asks permission", stalled: "is stuck", parked: "stopped" };
 import { sendBlockLine, draftState } from "./sendState.js";
 import { progressLine } from "./checklist.js";
 import { TerminalPane } from "./TerminalView.jsx";
@@ -350,8 +353,10 @@ export function AgentCard({ card, onDone, onOpenTask }) {
   // reach either. Both roads are alive where they ARE offered: /api/tasks/{id}/wrap from the task
   // page, the Wall and the Agents panel. Removed rather than left looking like a feature.
   return (
-    <CardShell card={card} kicker={working ? `the ${who} is working again` : card.paused ? "conversation paused" : card.asking ? `the ${who} asked` : `the ${who} stopped`} title={card.paused ? null : card.title}
-      sub={`${card.working || card.agent || who} · ${working ? "back at it - nothing for you until it stops" : card.paused ? "saved after Taskuary stopped - ready to resume" : card.asking ? "waiting on your answer" : chat ? "waiting on you" : "parked at its prompt"}`} err={err}>
+    <CardShell card={card} kicker={working ? `the ${who} is working again` : card.paused ? "conversation paused" : `the ${who} ${KICK[subState(card)]}`} title={card.paused ? null : card.title}
+      sub={working ? `${card.working || card.agent || who} · back at it - nothing for you until it stops` : card.paused ? `${card.working || card.agent || who} · saved after Taskuary stopped - ready to resume`
+        // ONE sentence for the state (laneSays); when the question and its choices are drawn below, the bare form here
+        : (card.choices || []).length && card.request_id ? says(subState(card), card.working || card.agent || who) : card.why || says(subState(card), card.working || card.agent || who)} err={err}>
       {card.paused && card.tid && <CombinedTaskText card={card} />}
       {chat && live ? (
         <div className="tq-card-chat" style={{ height: big ? 640 : 340 }}>

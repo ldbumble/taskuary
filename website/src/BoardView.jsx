@@ -1,6 +1,7 @@
 // Board: the agent kanban - every task as a card in a status column. Some cards arrive
 // from triage, some you start yourself; drag between columns to change status, click a
 // card to open the task (where you can message the agent working it). House design.
+import { says, subState } from "./laneSays.js";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
@@ -117,7 +118,7 @@ const LiveTail = ({ run, chat, name }) => {
     ))}
     <Typography variant="caption" sx={{ ...mono, fontSize: 9.5, color: waiting ? CATPPUCCIN.yellow : CATPPUCCIN.cyan,
       ...(waiting ? {} : { "@keyframes tqBlink": { "50%": { opacity: 0.25 } }, animation: "tqBlink 1.1s step-end infinite" }) }}>
-      {waiting ? `⏸ ${run.AgentName} is waiting on you — answer it`
+      {waiting ? `⏸ ${run.line || says(subState(run), run.AgentName)}`
         : `▮ ${run.AgentName} working ${elapsed(run.StartedAt)}`}
     </Typography>
   </Box>

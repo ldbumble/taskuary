@@ -17,6 +17,7 @@ from .store import task_ref
 from .assistant import _ts, _dt, _short, _cut, _gist, _agenda, _OOO
 from .funnel_presentation import present as _present
 from .processing_order import attention_band, priority_rank
+from .workerstate import says as agent_says, sub_state, request_line   # funnel.says is a message's subject
 
 # ONE VOCABULARY, in taskuary/lanes.json - the words, roles and marks a lane wears, loaded here and
 # imported by the desktop (website/src/funnelPile.js) from the same file. They were two hand-kept
@@ -78,7 +79,8 @@ _FAILED = re.compile(r'FAILED\s*$')                # reports.py writes '<title> 
 _QUIET = {'filed', 'ignored', 'yours', 'error'}   # error: triage failed - unread information with a retry, never work
 PILE_EVERY = 30                   # websocket writes invalidate it; this is only a disconnected-client safety net
 _CACHE = {'at': 0.0, 'pile': None, 'store': None, 'generation': 0, 'full': None, 'mark': None, 'workers': None}   # full: the build with read items kept; mark/workers: rail_top + live sessions at build
-_STATE = {}                        # tid -> 'working' | 'parked' | 'asking' | 'done' | 'idle', as last seen by the watcher
+_STATE = {}                        # tid -> 'working' | a blocked sub-state | 'done' | 'idle', as last seen by the watcher
+BLOCKED = ('parked', 'asking', 'approval', 'stalled')   # the sub-states of the blocked lane (workerstate.sub_state)
 _SEEN = {}                         # tid -> (state, first seen at) - a change must HOLD before it is news
 _WATCHED = [False]                 # first LOOK, even when there were no sessions; _STATE empty is not the same thing
 DWELL = 12.0                       # seconds a new state must survive before the watcher announces it
@@ -311,7 +313,7 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
             if r['TaskId'] in agents: continue
             agents.add(r['TaskId'])
             out.append(_item(f"agent:{r['TaskId']}", 'agent', 'blocked', r.get('Title') or subj, agent=r.get('Working') or 'agent',
-                             why=f"{r.get('Working') or 'the agent'} stopped and is waiting on you", **base))
+                             why=agent_says('parked', r.get('Working')), **base))
             if group: threads[group] = out[-1]
             continue
         base['working'] = r.get('Working') or ''             # an agent has it: build() lets these go, by name
@@ -588,7 +590,6 @@ def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
         if req:
             # the worker said what it needs (workerstate.py, PW-228): the exact question or action, its kind and
             # choices - the card shows that, not four lines of screen
-            from .workerstate import request_line
             out.append(_item(f"agent:{tid}", 'agent', 'blocked', task.get('Title') or f'task {tid}', who=agent, when=t.get('started'),
                              tid=tid, agent=agent, priority=task.get('Priority'), since=req.get('at') or t.get('started'), asking=req.get('kind') == 'input_needed', tail=[str(req.get('text') or '')[:300]], sid=t.get('sid'),
                              mode=t.get('mode') or 'terminal', request_id=req.get('request_id'), request_kind=req.get('kind'), choices=list(req.get('choices') or []),
@@ -597,7 +598,7 @@ def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
         asking = waitroom.looks_like_question(tail)
         out.append(_item(f"agent:{tid}", 'agent', 'blocked', task.get('Title') or f'task {tid}', who=agent, when=t.get('started'),
                          tid=tid, agent=agent, priority=task.get('Priority'), asking=asking, tail=tail[-4:], sid=t.get('sid'), mode=t.get('mode') or 'terminal',
-                         why=f'{agent} asked you something' if asking else f'{agent} stopped and is waiting on you'))
+                         why=agent_says('asking' if asking else 'parked', agent)))
     return out
 
 
@@ -1073,7 +1074,7 @@ def agent_states(store) -> dict:
         if not tid or (store.get_task(tid) or {}).get('SourceRef') == 'assistant:dock': continue
         waiting = t.get('waiting') if t.get('waiting') is not None else (t.get('idle') or 0) >= term.IDLE_WAITING
         tail = [str(x).strip() for x in (t.get('tail') or []) if str(x).strip()]
-        out[tid] = (('asking' if waitroom.looks_like_question(tail) else 'parked') if waiting else 'working', t.get('agent') or t.get('label') or 'the agent')
+        out[tid] = (sub_state(waiting, waitroom.looks_like_question(tail), t.get('request')) or 'working', t.get('agent') or t.get('label') or 'the agent')
     for r in store.running_runs():
         if r.get('TaskId') and r['TaskId'] not in out: out[r['TaskId']] = ('working', r.get('AgentName') or 'the agent')
     for tid in list(_STATE):
@@ -1108,13 +1109,12 @@ def announce(store, actor: str = 'assistant') -> list:
         if first or was == state or was is None and state in ('idle',): continue
         t = store.get_task(tid) or {}
         ref, title = task_ref(tid), _short(t.get('Title'), 80)
-        if state == 'working' and was in (None, 'idle', 'parked', 'asking'):
+        if state == 'working' and was in (None, 'idle', *BLOCKED):
             events.append({'tid': tid, 'ref': ref, 'kind': 'working', 'agent': agent,
                            'text': f"{agent} is working on {ref} ({title}) - nothing for you there now."})
-        elif state in ('parked', 'asking') and was in ('working', 'idle', None):   # stopped - or found already parked
-            events.append({'tid': tid, 'ref': ref, 'kind': state, 'agent': agent,
-                           'text': f"{agent} {'asked you something' if state == 'asking' else 'stopped and is waiting on you'} on {ref} ({title})."})
-        elif state == 'done' and was in ('working', 'parked', 'asking', 'idle'):
+        elif state in BLOCKED and was in ('working', 'idle', None):   # stopped - or found already parked
+            events.append({'tid': tid, 'ref': ref, 'kind': state, 'agent': agent, 'text': f"{agent_says(state, agent)} on {ref} ({title})."})
+        elif state == 'done' and was in ('working', 'idle', *BLOCKED):
             summ = agent_found(store, tid)
             events.append({'tid': tid, 'ref': ref, 'kind': 'done', 'agent': agent, 'summary': summ,
                            'text': f"{agent} finished {ref} ({title})" + (f": {summ}" if summ else '.') + ' The task is closed.'})
@@ -1402,8 +1402,7 @@ def alerts(store, items: list = None) -> list:
                         'text': f"{i['title']} {when}" + (f" with {i['who']}" if i.get('who') else '')})
         elif i['kind'] == 'agent':
             out.append({'key': f"alert:{i['key']}", 'item': i['key'], 'kind': 'agent', 'lane': i['lane'],
-                        'text': (f"{i.get('agent') or 'an agent'} asked you something on {i.get('ref') or i['title']}" if i.get('asking')
-                                 else f"{i.get('agent') or 'an agent'} stopped on {i.get('ref') or i['title']} and is waiting on you")})
+                        'text': f"{i.get('why') or agent_says('parked', i.get('agent'))} ({i.get('ref') or i['title']})"})
         elif i['lane'] == 'asked' and i['kind'] in ('asked', 'todo') and i.get('who'):
             out.append({'key': f"alert:{i['key']}", 'item': i['key'], 'kind': 'asked', 'lane': 'asked', 'text': f"{i['who']} asked you: {i['title']}"})
         elif i['lane'] in ('time', 'approve') and i['kind'] != 'meeting':      # a meeting further out is not yet news

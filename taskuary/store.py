@@ -4073,7 +4073,7 @@ class SQLiteStore:
         # NEEDS_YOU (SQL) only sees `run` rows; a coder in a LIVE pty session is working the task
         # just as much, and the row said "needs you - no agent is working it" over a running
         # console. Working carries the agent's name so the chip can say who.
-        live, parked = {r['TaskId']: r.get('AgentName') or 'agent' for r in self.running_runs()}, set()
+        live, parked = {r['TaskId']: r.get('AgentName') or 'agent' for r in self.running_runs()}, {}
         try:
             from . import terminal as hub_term
             observed_live = hub_term.live_sessions(tail=0) if live_state is _LIVE_UNSET else live_state
@@ -4083,13 +4083,14 @@ class SQLiteStore:
                 # "an agent has it" and "an agent stopped and is waiting on you" are opposite
                 # facts and the row wore the same chip for both, so a session sitting on an
                 # unanswered question read as work in progress for as long as nobody looked.
-                if t.get('waiting'): parked.add(t['taskId'])
+                if t.get('waiting'): parked[t['taskId']] = str(t.get('line') or '')   # ...and its ONE sentence (workerstate.says)
         except Exception:
             pass                                   # no pty support here: runs alone decide
         for r in rows:
             if r.get('TaskId') in live and r.get('TaskStatus') not in ('done', 'dropped'):
                 r['Working'] = live[r['TaskId']]
                 r['AgentWaiting'] = r['TaskId'] in parked
+                r['AgentLine'] = parked.get(r['TaskId']) or ''
                 if r.get('ReviewStatus') != 'pending': r['NeedsYou'] = 1 if r['TaskId'] in parked else 0
         # Unread and All are two views of this SAME feed.  Triage's verdict is not a read receipt:
         # a filed FYI, automated notice, promotional message, ignored-by-policy row, report, or

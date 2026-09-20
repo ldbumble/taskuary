@@ -147,7 +147,8 @@ export function unreadProcessingRows(pile) {
       // waving hand is really small still... it should show agent waving"). LaneTag draws `blocked`
       // loud, with the word, which is the whole point of the lane having one.
       Lane: item.lane || "",
-      AgentWaiting: item.lane === "blocked" ? 1 : 0,     // `blocked` IS "an agent stopped and is waiting on you"
+      AgentWaiting: item.lane === "blocked" ? 1 : 0,     // `blocked` IS the agent waiting on you
+      AgentLine: item.lane === "blocked" ? item.why || "" : "",   // ...and the ONE sentence for its state (laneSays)
       Unread: item.unread ? 1 : 0,
     }];
   });

@@ -2589,7 +2589,11 @@ def live_runs(lines: int = 3):
             out.append({'RunId': None, 'TaskId': t['taskId'], 'AgentName': t['agent'] or t['label'],
                         'kind': 'session', 'StartedAt': t['started'], 'idle': t['idle'],
                         'waiting': (w := t['waiting'] if t.get('waiting') is not None else t['idle'] >= hub_term.IDLE_WAITING), 'phase': t.get('phase'),
-                        'asking': bool(w) and waitroom.looks_like_question(t.get('tail') or []),
+                        'asking': (ask := bool(w) and waitroom.looks_like_question(t.get('tail') or [])),
+                        # ...and the ONE sentence for the state (lanes.json via workerstate.says), so the card, the
+                        # Wall and the hand-raise ping read it instead of composing their own from `asking`
+                        'request': t.get('request'), 'state': (sub := _workerstate().sub_state(bool(w), ask, t.get('request'))),
+                        'line': _workerstate().says(sub, t['agent'] or t['label'], (t.get('request') or {}).get('text')) if sub else None,
                         'Title': (store.get_task(t['taskId']) or {}).get('Title') or '',
                         'files': t.get('files') or [], 'tail': t.get('tail') or [],
                         'cli': t.get('cli'), 'work': t.get('work')})     # the CLI it runs; said and did (witness.py) - the card's pane

@@ -28,7 +28,7 @@ from loguru import logger
 from . import funnel, general, llm as llm_mod, store as store_mod, toolcatalog
 from .redact import scrub as _scrub
 from .assistant import _ts
-from . import operations
+from . import operations, workerstate as ws
 from .store import task_ref
 
 MAX_TOKENS, TURNS, FACT_CHARS = 380, 10, 1_600
@@ -330,10 +330,12 @@ def task_now(store, tid: int) -> str:
     if live:
         tail = [str(l).strip() for l in (live.get('tail') or []) if str(l).strip()]
         waiting = live.get('waiting') if live.get('waiting') is not None else (live.get('idle') or 0) >= 45
-        who = live.get('agent') or live.get('label') or 'an agent'
-        state = (f"{who} is PARKED and ASKING you: {tail[-1][:200]}" if waiting and waitroom.looks_like_question(tail) else
-                 f"{who} is PARKED at its prompt, waiting on you (idle {int(live.get('idle') or 0)}s)" if waiting else
-                 f"{who} is WORKING right now (idle {int(live.get('idle') or 0)}s) - nothing for the owner until it stops")
+        who, req, idle = live.get('agent') or live.get('label') or 'an agent', live.get('request'), int(live.get('idle') or 0)
+        # the run's own word first (a stall is not a question, however the screen looks), then the screen
+        state = (f"{ws.request_line(who, req)} (idle {idle}s)" if waiting and req else
+                 f"{who} is PARKED and ASKING you: {tail[-1][:200]}" if waiting and waitroom.looks_like_question(tail) else
+                 f"{who} is PARKED at its prompt, waiting on you (idle {idle}s)" if waiting else
+                 f"{who} is WORKING right now (idle {idle}s) - nothing for the owner until it stops")
     elif t.get('RunStatus') == 'running': state = f"{t.get('RunAgent') or 'an agent'} is running headless - nothing for the owner until it stops"
     else: state = 'no agent on it right now'
     rv = store.pending_review(tid)
@@ -639,7 +641,12 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None) -> str:
                 else 'nothing has to happen - make it a task, tell me to ignore this sender, or move on')
         return f"{frm}. Since then: {done}. From you: {need}."
     if item['kind'] == 'agent':
-        return f"{item.get('agent') or 'An agent'} on {item.get('ref') or item['title']} " + (f"asked: {item['tail'][-1]}" if item.get('asking') and item.get('tail') else 'stopped at its prompt') + ' - answer it below.'
+        # ONE sentence per state (lanes.json): the item's `why` when the run said what it needs, else the
+        # screen's question. A stall has nothing to answer - saying "answer it below" over a rate limit
+        # sent the owner typing at a wall.
+        sub = ws.sub_state(True, bool(item.get('asking')), {'kind': item['request_kind']} if item.get('request_kind') else None)
+        line = item['why'] if item.get('request_kind') and item.get('why') else ws.says(sub, item.get('agent') or 'An agent', item['tail'][-1] if sub == 'asking' and item.get('tail') else '')
+        return f"{line} ({item.get('ref') or item['title']}) - " + ('it resumes when the limit lifts, or continue it in its session.' if sub == 'stalled' else 'answer it below.')
     if item['kind'] == 'wrapup':
         return f"{item.get('ref') or item['title']}: the reply went out" + (f" and the agent finished ({item['summary']})" if item.get('summary') else '') + '. The task is still open - close it?'
     if item['kind'] == 'idea':
@@ -648,7 +655,7 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None) -> str:
     if item['kind'] == 'report':
         return f"{item['title']} landed {funnel_age(item)}" + (' and FAILED - the cause is in it.' if item.get('bad') else '.') + ' It is open below - run it again, or move on.'
     if item['kind'] == 'agentdone': return f"{item.get('who') or 'The agent'} finished {item.get('ref') or item['title']}" + (f": {item['summary']}" if item.get('summary') else '.') + ' Want to see the final report?'
-    lead = {'agent': f"{item.get('agent') or 'An agent'} is waiting on you on {item.get('ref') or item['title']}.",
+    lead = {'agent': f"{item.get('why') or ws.says('parked', item.get('agent') or 'An agent')} ({item.get('ref') or item['title']}).",
             'meeting': f"{item['title']} is {item.get('why')}.",
             'review': f"{item.get('who') or 'Someone'} is owed a reply on \"{item['title']}\"" + (' - the draft is below.' if item.get('draft') else ' - nothing is drafted yet.'),
             'action': f"An agent wants to run something on \"{item['title']}\" - it waits for your yes.",

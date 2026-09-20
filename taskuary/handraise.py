@@ -56,7 +56,7 @@ def tick(store) -> int:
         agent = getattr(term, 'agent', None) or getattr(term, 'label', None) or 'agent'
         # a request line already names the agent and the ask; a screen tail rides under the generic line
         from_word = tail.startswith(f'{agent} ')
-        what = tail if from_word else (f'{agent} asked you something' if asking else f'{agent} stopped and is waiting on you')
+        what = tail if from_word else ws.says('asking' if asking else 'parked', agent)
         detail = '' if from_word else (f'\n\n{tail}' if tail else '')
         try:
             outbound.notify(store, f'{task_ref(tid)} · {what}: {task.get("Title") or "untitled"}'

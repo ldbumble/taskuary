@@ -11,6 +11,7 @@ bound to the exact outstanding request and run: delivered once, refused when res
 changed, and written into the task's discussion with its delivery outcome.
 """
 import hashlib, json
+from pathlib import Path
 from loguru import logger
 
 KINDS = ('working', 'turn_end', 'input_needed', 'approval_needed', 'stalled', 'answered', 'finished', 'failed', 'disconnected', 'stopped')
@@ -19,6 +20,26 @@ KINDS = ('working', 'turn_end', 'input_needed', 'approval_needed', 'stalled', 'a
 # auto-resume; the owner can retry), so it is a request: open until the run speaks again (hooks.py).
 REQUESTS = ('input_needed', 'approval_needed', 'stalled')
 TERMINAL = ('failed', 'disconnected', 'stopped')
+# ONE SENTENCE PER SUB-STATE of a blocked agent, from lanes.json (the desktop reads the same entry in
+# funnelPile.js). Seven surfaces each spelled "parked at its prompt" their own way, and none of them
+# could say "stuck on a rate limit" at all, because each composed its sentence from two booleans
+# (the 2026-09-18 audit's top open item). The request's KIND picks the sentence; the booleans are
+# the fallback for a run whose word is silent.
+SAYS = next(l for l in json.loads((Path(__file__).parent / 'lanes.json').read_text(encoding='utf-8'))['lanes'] if l['key'] == 'blocked')['says']
+_SUB = {'approval_needed': 'approval', 'stalled': 'stalled', 'input_needed': 'asking'}
+
+
+def sub_state(waiting: bool = True, asking: bool = False, req: dict = None) -> str | None:
+    """'asking' | 'approval' | 'stalled' | 'parked', or None when the agent is not waiting at all."""
+    if req: return _SUB.get(str(req.get('kind') or ''), 'asking')
+    return ('asking' if asking else 'parked') if waiting else None
+
+
+def says(sub: str, agent: str = None, text: str = '') -> str:
+    """The sentence for a sub-state: with the request's words when it has any."""
+    s = SAYS.get(sub) or SAYS['parked']
+    text = ' '.join(str(text or '').split())[:300]
+    return (s['line'] if text and s.get('line') else s['bare']).format(agent=agent or 'the agent', text=text)
 
 
 def request_id_for(text: str) -> str:
@@ -240,7 +261,4 @@ def asking_of(store, t):
 
 def request_line(agent: str, req: dict) -> str:
     """One sentence for a raised hand, from the request itself."""
-    text = ' '.join(str(req.get('text') or '').split())[:300]
-    if req.get('kind') == 'approval_needed': return f'{agent} needs your approval: {text}'
-    if req.get('kind') == 'stalled': return f'{agent} is stuck - {text}'
-    return f'{agent} asked you: {text}'
+    return says(sub_state(req=req), agent, req.get('text'))

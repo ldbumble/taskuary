@@ -29,13 +29,18 @@ and a pane being seeded is `working` whatever its screen says (`Term.seeding`).
 
 ## Still open - ranked
 
-1. **One state, six sentences.** The same "the agent is parked at its prompt" reads `agent waving` (Assistant rail chip,
-   lanes.json), `needs you` (Tasks rail, header), `coder stopped - waiting on you` (Wall, WorkPane), `coder stopped and is
-   waiting on you` (toast, pile lead), `coder on TQ-0004 stopped at its prompt - answer it below` (chat), `parked at its
-   prompt` (agent card sub-line), `⏸ coder is waiting on you — answer it` (Board). The owner's standing rule is one
-   vocabulary in lanes.json. Sites: funnelPile.js:228, ui.jsx:1518/1747, BoardView.jsx:120, TasksView.jsx:1564,
-   assistantCards.jsx:354, concierge.py:642, workerstate.request_line. Many tests pin these strings, so it is a deliberate
-   pass, not a find-and-replace.
+1. ~~**One state, six sentences.**~~ FIXED 2026-09-20. The `blocked` lane in lanes.json now carries `says`: one sentence
+   per sub-state (`asking`, `approval`, `stalled`, `parked`), with a `line` form that carries the request's words. Python
+   reads it through `workerstate.says` / `sub_state` (request_line, funnel's items, the watcher, the by-the-way alerts, the
+   hand-raise ping, the concierge's spoken line and lead, the assistant's context); the desktop through `laneSays.js`
+   (WorkPane/WorkLine, the raw-tail pane, Board, the task page's session strip, the agent card's kicker and sub-line, the
+   walk's lead, the hand-raise toast, the Timeline sub-line, the general workspace's raised hand). Every session row and
+   Board row now carries `state` and `line`; Timeline rows carry `AgentLine` from all three loaders. The point of doing it
+   now: the hooks' new `stalled` state (a rate limit) was reaching the pile as "is stuck - rate limit" and every other
+   surface as "stopped and is waiting on you" or "asked you something", because those composed from two booleans.
+   `tests/test_agent_sentence.py` guards that no site spells the sentence itself. Sub-state names are the chip/kicker words
+   (`the coder is stuck`); the `needs you` chip and `agent waving` lane word are unchanged - they are the lane, not the
+   sub-state.
 2. ~~**A pty that exited mid-question says `input_needed` for ever.**~~ FIXED 2026-09-20: `release_task`, the one
    idempotent place that already knows a run ended, now writes `disconnected` on the worker record; Claude's `SessionEnd`
    hook does the same earlier, except for `clear`/`resume`, which leave the process alive. (Reordering `status()` was and

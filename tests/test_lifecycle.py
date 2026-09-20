@@ -80,7 +80,7 @@ class LifecycleTests(unittest.TestCase):
             self.assertEqual([e['kind'] for e in ev], ['asking'])
             self.assertEqual(funnel.next_item(s)['kind'], 'agent')
             out = concierge.surface(s)
-        self.assertEqual(out['item']['kind'], 'agent'); self.assertIn('asked: Remove Bulk Deny as well?', out['say'])
+        self.assertEqual(out['item']['kind'], 'agent'); self.assertIn('asked you: Remove Bulk Deny as well?', out['say'])
         # 7. it finishes with a report and drafts the reply; the watcher offers the report, the pipe holds the draft
         s.add_comment(t, 'coder', 'agent', 'CODER REPORT' + chr(10) + 'Summary: removed Bulk Approve and Deny; deployed.')
         r = s.add_review({'TaskId': t, 'MessageId': m, 'Kind': 'reply', 'DraftText': 'Done - both are off now.', 'Status': 'pending'})

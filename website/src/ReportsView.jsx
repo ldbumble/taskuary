@@ -2,10 +2,10 @@
 // Connections tab, or an inline one), write the query, optionally an AI summary prompt,
 // preview the whole pipeline, schedule it - results land on the Timeline. Connections
 // stay pure connections; this tab is where reports are built and managed.
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, createFilterOptions, Dialog,
-  DialogContent, DialogTitle, ListSubheader, MenuItem, Select, Step, StepButton, StepContent,
+  DialogContent, DialogTitle, IconButton, ListSubheader, Menu, MenuItem, Select, Step, StepButton, StepContent,
   Stepper, Switch, TextField, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
@@ -20,7 +20,7 @@ import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import api from "./api";
 import { NL, SOURCE_KEYS, WORKFLOW_TYPES, addField, isWorkflowConfig, showValue, toShape, toSources } from "./sourceShape.js";
 import { ASSISTANT, GRADIENT, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, PILL_COLORS } from "./theme.jsx";
-import { blockChoice, blockRowsOf, blocksPatch, costLine, kilo, readsLine, windowPatch } from "./assistantBlocks.js";
+import { TASKUARY_CARDS, cardLabel, cardPatch, cardsLine, cardsOf, costLine, kilo, knobsOf, promptSources, tokenOf } from "./assistantBlocks.js";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, Empty, FilterPills, SideRail, ConfirmDelete } from "./ui.jsx";
 
 const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
@@ -617,10 +617,10 @@ function SavedReportSummary({ source, workflow = false }) {
   const labels = sourceList.map((s) => s.label || TYPE_LABELS[s.type] || s.type).filter(Boolean);
   const watched = (Array.isArray(c.watch_sources) ? c.watch_sources.length : 0)
     + (Array.isArray(c.watch_source_ids) ? c.watch_source_ids.length : 0);
-  // what it reads is the BLOCKS it chose, named - not a fixed sentence that was true of one report
+  // what it reads is the CARDS it chose, named - not a fixed sentence that was true of one report
   const reads = c.type === "assistant"
-    ? [readsLine(blockRowsOf(c)), watched ? `${watched} configured data source${watched === 1 ? "" : "s"}` : ""]
-      .filter(Boolean).join(" and ") || "nothing yet — tick a block or add a source"
+    ? [cardsLine(cardsOf(c)), watched ? `${watched} configured data source${watched === 1 ? "" : "s"}` : ""]
+      .filter(Boolean).join(" and ") || "nothing yet — add a Taskuary card or a source"
     : labels.length > 1 ? `${labels.length} sources — ${labels.join(", ")}` : labels[0] || "one report source";
   const destinations = ["the Timeline"];
   if (c.deliver?.to) destinations.push(`a draft to ${c.deliver.to} on ${c.deliver.channel || "email"}`
@@ -981,16 +981,30 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
   // WHAT IT READS OF TASKUARY, priced. One GET renders every chosen block, so it is debounced as
   // well as cached server-side: a held arrow key must not run sixteen counts per keystroke.
   const [blockRows, setBlockRows] = useState(null);
-  const [openBlock, setOpenBlock] = useState(null);
-  const blocksKey = JSON.stringify(cfg.blocks || null);
+  // Taskuary's own cards, the report's sources like any other (assistantBlocks.cardsOf: a report
+  // saved with the block dict, or with nothing, is shown as the cards it amounts to)
+  const [cards, setCards] = useState(() => cardsOf(saved));
+  const [openCard, setOpenCard] = useState(null);
+  const [addCard, setAddCard] = useState(null);      // the "add a Taskuary card" menu's anchor
+  const cardsKey = JSON.stringify(cards);
   useEffect(() => {
     if (!(cfg.type === "assistant" || (srcs.length === 1 && srcs[0].type === "assistant"))) return undefined;
     const t = setTimeout(() => {
-      api.get("/api/assistant/blocks", { params: { ...(cur ? { source_id: cur.SourceId } : {}), ...(cfg.blocks ? { blocks: blocksKey } : {}) } })
+      api.get("/api/assistant/blocks", { params: { ...(cur ? { source_id: cur.SourceId } : {}), taskuary: cardsKey } })
         .then(({ data }) => setBlockRows(data)).catch(() => setBlockRows(null));
     }, 300);
     return () => clearTimeout(t);
-  }, [blocksKey, cur, cfg.type, srcs]);
+  }, [cardsKey, cur, cfg.type, srcs]);
+  // ...and the prompt's "insert a source" menu: a token the server reads (reports.substitute)
+  const promptRef = useRef(null);
+  const [insertAt, setInsertAt] = useState(null);
+  const insertToken = (key) => {
+    const el = promptRef.current, cur_ = cfg.ai_prompt || "", tok = tokenOf(key);
+    const at = el && typeof el.selectionStart === "number" ? el.selectionStart : cur_.length;
+    const sep = at > 0 && !/\s$/.test(cur_.slice(0, at)) ? " " : "";
+    setCfg({ ...cfg, ai_prompt: cur_.slice(0, at) + sep + tok + cur_.slice(at) });
+    setInsertAt(null);
+  };
   // where it may be SENT: only live channels, only destinations Taskuary knows (see Destination)
   const [targets, setTargets] = useState([]);
   useEffect(() => { api.get("/api/send-targets").then(({ data }) => setTargets(data.data || [])).catch(() => {}); }, []);
@@ -1034,6 +1048,12 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
     // pipeline, and the Assistant's pipeline is itself; these are systems it reads before it thinks
     const watch = watchSrcs.map(toShape).filter((x) => x.type);
     if (watch.length) c.watch_sources = watch; else delete c.watch_sources;
+    // Taskuary's cards are saved as the whole truth (even none), and the block dict they replaced
+    // goes - two records of one choice is how a page and a run come to disagree
+    if (c.type === "assistant" || list.some((x) => x.type === "assistant")) {
+      c.taskuary_sources = cards.map((k) => Object.fromEntries(Object.entries(k).filter(([, v]) => v !== "")));
+      delete c.blocks;
+    }
     // a single source still writes the flat shape too, so a config saved here stays
     // readable by anything (and by an older Taskuary) that expects one source
     return list.length === 1 ? { ...c, ...list[0] } : { ...c, sources: list };
@@ -1121,55 +1141,68 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
 
             {isAssistant && (
               <Box sx={{ ...card, p: 1.5, mb: 1.5, maxWidth: 720, bgcolor: PANEL2 }}>
-                <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13, mb: 0.4 }}>Reads Taskuary</Typography>
+                <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13, mb: 0.4 }}>Taskuary as a source</Typography>
                 <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1 }}>
-                  Taskuary's own tables are this check's source. Tick what it should read and how far back;
-                  every line it posts says which of these it came from. Leave them all off and it reads only the systems below.
+                  Taskuary's own tables, as source cards beside the systems below. Every line it posts says which card it came from,
+                  and the prompt can place a card where it talks about it (Insert source, under the prompt). Remove them all and it reads only the systems.
                 </Typography>
-                {!blockRows ? <Typography variant="caption" sx={{ color: FAINT }}>reading…</Typography> : (
-                  <Box>
-                    {blockRows.data.map((r) => (
-                      <Box key={r.id}>
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, py: 0.15 }}>
-                          <Checkbox size="small" checked={r.on} sx={{ p: 0.3 }}
-                            inputProps={{ "aria-label": r.label }}
-                            onChange={(e) => setCfg((c) => ({ ...c, blocks: blocksPatch(blockChoice(c, blockRows.data), r.id, { on: e.target.checked }) }))} />
-                          {/* the LABEL opens what it reads. Sixteen "reads" buttons down the card was
-                              a column of shouting for something most owners open once. */}
-                          <Typography onClick={() => setOpenBlock(openBlock === r.id ? null : r.id)}
-                            title={r.tables.length ? `reads ${r.tables.join(", ")}` : "reads no Taskuary table"}
-                            sx={{ fontSize: 12.5, color: INK, flex: 1, minWidth: 0, cursor: "pointer",
-                              textDecorationColor: BORDER, textDecoration: openBlock === r.id ? "underline" : "none",
-                              "&:hover": { textDecoration: "underline" } }}>{r.label}</Typography>
-                          {r.window && <TextField size="small" type="number" value={r.window.value}
-                            sx={{ width: 68, bgcolor: "#fff" }} inputProps={{ "aria-label": `${r.label} — ${r.window.label}` }}
-                            onChange={(e) => setCfg((c) => ({ ...c, blocks: windowPatch(blockChoice(c, blockRows.data), r.id, r.window.unit, e.target.value) }))} />}
-                          <Typography sx={{ ...mono, fontSize: 11, color: FAINT, width: 14 }}>{r.window ? (r.window.unit === "hours" ? "h" : "d") : ""}</Typography>
-                          <Typography sx={{ ...mono, fontSize: 11, color: DIM, width: 74, textAlign: "right" }}>
-                            {!r.on ? "off" : r.live ? "live" : `${r.rows} rows`}
+                {/* one card per Taskuary source, the same width and rhythm as the system cards below */}
+                <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "stretch", mb: 1.25 }}>
+                  {cards.map((k) => {
+                    const priced = blockRows?.cards?.find((p) => p.id === k.card);
+                    const def = TASKUARY_CARDS.find((c) => c.id === k.card) || { label: k.card, says: "", blocks: [] };
+                    return (
+                      <Box key={k.card} sx={{ ...card, width: { xs: "100%", sm: "calc(50% - 6px)" }, minHeight: 108, bgcolor: "#fff", p: 1.1,
+                        display: "flex", flexDirection: "column", gap: 0.5 }}>
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                          <Typography sx={{ fontSize: 13, fontWeight: 700, color: INK, flex: 1, minWidth: 0 }}>Taskuary · {def.label}</Typography>
+                          <Typography sx={{ ...mono, fontSize: 11, color: DIM }}>
+                            {!priced ? "…" : priced.live ? (priced.rows ? `${priced.rows} row${priced.rows === 1 ? "" : "s"} + live` : "live") : `${priced.rows} row${priced.rows === 1 ? "" : "s"}`}
+                            {priced && priced.tokens ? ` · ~${kilo(priced.tokens)}` : ""}
                           </Typography>
-                          <Typography sx={{ ...mono, fontSize: 11, color: r.on && !r.live ? DIM : FAINT, width: 54, textAlign: "right", pr: 0.5 }}>
-                            {r.on && !r.live ? `~${kilo(r.tokens)}` : ""}
-                          </Typography>
+                          <IconButton size="small" aria-label={`remove Taskuary · ${def.label}`} sx={{ p: 0.3 }}
+                            onClick={() => setCards((cur) => cur.filter((x) => x.card !== k.card))}><CloseIcon sx={{ fontSize: 15 }} /></IconButton>
                         </Box>
-                        {openBlock === r.id && (
-                          <Box sx={{ ...card, bgcolor: "#fff", p: 1.1, mt: 0.3, mb: 0.6, ml: 4 }}>
-                            <Typography sx={{ ...mono, fontSize: 11, color: DIM, mb: r.sql ? 0.6 : 0 }}>
-                              {r.tables.length ? `reads: ${r.tables.join(", ")}` : "reads no Taskuary table"}
-                            </Typography>
-                            {r.sql
-                              ? <Box component="pre" sx={{ ...mono, m: 0, fontSize: 10.5, color: INK, whiteSpace: "pre-wrap" }}>{r.sql}</Box>
-                              : <Typography sx={{ fontSize: 12, color: DIM }}>
-                                  {r.live
-                                    ? "A live call to the connection itself, made when the check runs — its cost is time, not tokens, so it is not priced here."
-                                    : "Composed in code — more than one query, plus the lookups this block folds in. It cannot be shown as one statement."}
-                                </Typography>}
-                            {r.heading && <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT, mt: 0.6 }}>heads the section: {r.heading}</Typography>}
+                        <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.35 }}>{def.says}</Typography>
+                        {!!knobsOf(k.card).length && (
+                          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mt: "auto", pt: 0.5 }}>
+                            {knobsOf(k.card).map((n) => (
+                              <TextField key={n.name} size="small" type="number" label={n.label} value={k[n.name] ?? n.default}
+                                sx={{ width: 150, bgcolor: "#fff" }} inputProps={{ "aria-label": `Taskuary · ${def.label} — ${n.label}` }}
+                                onChange={(e) => setCards((cur) => cardPatch(cur, k.card, n.name, e.target.value))} />
+                            ))}
                           </Box>
                         )}
+                        <Typography onClick={() => setOpenCard(openCard === k.card ? null : k.card)}
+                          sx={{ ...mono, fontSize: 10.5, color: FAINT, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
+                          {openCard === k.card ? "reads: " + (priced?.blocks || def.blocks).join(", ") : "what it reads"}
+                        </Typography>
                       </Box>
+                    );
+                  })}
+                  {cards.length < TASKUARY_CARDS.length && (
+                    <Box onClick={(e) => setAddCard(e.currentTarget)}
+                      sx={{ ...card, width: { xs: "100%", sm: "calc(50% - 6px)" }, minHeight: 108, display: "flex", flexDirection: "column", alignItems: "center",
+                        justifyContent: "center", gap: 0.5, cursor: "pointer", borderStyle: "dashed", bgcolor: "#fff",
+                        color: DIM, "&:hover": { borderColor: "#d8cfbe", color: "#55697a" } }}>
+                      <AddIcon sx={{ fontSize: 20 }} />
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>add a Taskuary card</Typography>
+                      <Typography variant="caption" sx={{ color: FAINT }}>{TASKUARY_CARDS.length - cards.length} more to choose from</Typography>
+                    </Box>
+                  )}
+                  <Menu open={!!addCard} anchorEl={addCard} onClose={() => setAddCard(null)}>
+                    {TASKUARY_CARDS.filter((c) => !cards.some((k) => k.card === c.id)).map((c) => (
+                      <MenuItem key={c.id} sx={{ fontSize: 12.5, display: "block", maxWidth: 420, whiteSpace: "normal" }}
+                        onClick={() => { setCards((cur) => [...cur, { type: "taskuary", card: c.id }]); setAddCard(null); }}>
+                        <Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>Taskuary · {c.label}</Typography>
+                        <Typography variant="caption" sx={{ color: DIM }}>{c.says}</Typography>
+                      </MenuItem>
                     ))}
-                    <Box sx={{ borderTop: `1px solid ${BORDER}`, mt: 0.8, pt: 0.7 }}>
+                  </Menu>
+                </Box>
+                {!blockRows ? <Typography variant="caption" sx={{ color: FAINT }}>pricing…</Typography> : (
+                  <Box>
+                    <Box sx={{ borderTop: `1px solid ${BORDER}`, mt: 0.2, pt: 0.7 }}>
                       <Typography sx={{ ...mono, fontSize: 11, color: DIM }}>
                         {costLine(blockRows.total_tokens, blockRows.runs_per_day, blockRows.cost)}
                       </Typography>
@@ -1282,10 +1315,29 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                   {isAssistant ? "WHAT SHOULD THE ASSISTANT SURFACE?" : `ONE PROMPT OVER ALL ${srcs.length > 1 ? `${srcs.length} SOURCES` : "THE ROWS"}`}
                 </Typography>
               </Box>
-              <TextField fullWidth multiline minRows={3} value={cfg.ai_prompt || ""} sx={{ bgcolor: "#fff" }}
+              <TextField fullWidth multiline minRows={3} value={cfg.ai_prompt || ""} sx={{ bgcolor: "#fff" }} inputRef={promptRef}
                 placeholder={isAssistant
                   ? "Tell me only what needs attention now. Across finance and operations, flag unusual totals or changes, thresholds crossed, missing expected activity, failures, and contradictions. Give the number, comparison, and source."
                   : AI_FIELD[3]} onChange={(e) => setCfg({ ...cfg, ai_prompt: e.target.value })} />
+              {/* a source named in the prompt gets its rows placed there (reports.substitute); the
+                  rest follow underneath as they always have. The menu writes the token, so nobody
+                  has to know its spelling. */}
+              {(() => {
+                const opts = promptSources({ cards: isAssistant ? cards : [], sources: isAssistant ? watchSrcs.map(toShape).filter((x) => x.type) : srcs.map(toShape).filter((x) => x.type) });
+                return !!opts.length && (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.6, flexWrap: "wrap" }}>
+                    <Button size="small" variant="outlined" onClick={(e) => setInsertAt(e.currentTarget)} sx={{ fontSize: 11.5, py: 0.1 }}>Insert source</Button>
+                    <Typography variant="caption" sx={{ color: FAINT }}>puts that source's rows where the cursor is — the rest follow the prompt</Typography>
+                    <Menu open={!!insertAt} anchorEl={insertAt} onClose={() => setInsertAt(null)}>
+                      {opts.map((o) => (
+                        <MenuItem key={o.key} sx={{ fontSize: 12.5 }} onClick={() => insertToken(o.key)}>
+                          {o.label}<Typography component="span" sx={{ ...mono, fontSize: 10.5, color: FAINT, ml: 1 }}>{tokenOf(o.key)}</Typography>
+                        </MenuItem>
+                      ))}
+                    </Menu>
+                  </Box>
+                );
+              })()}
               {cfg.ai_prompt && (
                 <Box sx={{ display: "flex", gap: 1, mt: 1, alignItems: "center", flexWrap: "wrap" }}>
                   <Select size="small" displayEmpty value={cfg.ai_brain || ""} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 230 }}

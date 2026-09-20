@@ -269,6 +269,9 @@ def resolve(store, cfg: dict) -> dict:
     EVERY malformed shape fails toward not spending the owner's tokens. `ConfigJson` is free text on
     POST /api/sources, and this runs inside the scheduled dispatch BEFORE assistant.run - so a bad
     value used to be a report that silently stopped posting, not a report that read too much."""
+    # a report that saved CARDS (the page since 2026-09-20) is read from them, and only them
+    cards = cards_of(cfg)
+    if cards is not None: return from_cards(store, cards)
     raw = cfg.get('blocks')
     # `blocks: null` is ABSENT, not "a choice naming nothing". null is how every serialiser says
     # "there is nothing here", so a UI that blanks the field means "I recorded no choice" - and
@@ -442,3 +445,125 @@ def weighed(store, chosen: dict, ttl: float = _WEIGH_TTL, report_id=None) -> lis
     except TypeError: return rows                # a store that cannot be weak-referenced is simply not cached
     _WEIGHED[key] = (time.time(), rows, ref)
     return copy.deepcopy(rows)
+
+
+# ── the five cards: Taskuary as a SOURCE of an Assistant report ──────────────────────────────────
+# Sixteen rows was a table. The owner (2026-09-20): "different cards as data sources, and the cards
+# should be Taskuary itself, with the name of the source... do we need 16 of them? combine them as
+# much as possible." So the BLOCK stays the unit the payload and the post are built from, and a
+# CARD is a group of blocks with one switch and the group's numbers: what the report saves
+# (`taskuary_sources`), what the page draws beside its Intacct and database cards, and what a
+# prompt names (`[taskuary.messages]` puts that card's sections there - reports.substitute).
+class Card(NamedTuple):
+    id: str
+    label: str
+    blocks: tuple                   # block ids, in catalogue order
+    knobs: tuple = ()               # (name, label, default, ((block id, opt), ...)): ONE number on the
+                                    # card, written to every block opt it stands for - "days back"
+                                    # is the threads' window and the arrivals' window at once
+    says: str = ''                  # what the card reads, in the page's words
+
+
+CARDS = (
+    Card('messages', 'Messages', ('threads', 'ooo', 'arrivals', 'waiting_on', 'promised'),
+         (('days', 'days back', 2, (('threads', 'days'), ('arrivals', 'days'))),
+          ('hours', 'hours of silence', 24, (('waiting_on', 'hours'), ('promised', 'hours')))),
+         'what people said by thread, who is out of office, what arrived, and the asks and promises waiting on somebody'),
+    Card('calendar', 'Calendar', ('calendar', 'meeting_prep'),
+         (('days', 'days ahead', 2, (('calendar', 'days'),)),),
+         'the next days on the calendar, and the meetings worth preparing for'),
+    Card('work', 'Work', ('open_work', 'done_this_week', 'gone_quiet'),
+         (('done_days', 'days of done work', 7, (('done_this_week', 'days'),)),
+          ('quiet_days', 'days before work is quiet', 3, (('gone_quiet', 'days'),))),
+         'open tasks, what got done, and work that has gone quiet'),
+    Card('memory', 'Memory', ('already_said', 'notes', 'knowledge'), (),
+         'what it already said, its note from the last check, and the knowledge base'),
+    Card('systems', 'Systems', ('health', 'connectors'),
+         (('days', 'days of mentions', 30, (('connectors', 'days'),)),
+          ('floor', 'threads before it is worth saying', 3, (('connectors', 'floor'),))),
+         "the app's own health, and the systems people keep naming that nothing here reads"),
+)
+_CARD = {c.id: c for c in CARDS}
+CARD_OF = {b: c.id for c in CARDS for b in c.blocks}     # block id -> card id; system_checks is the systems cards themselves
+KEY = 'taskuary_sources'                                  # the report's saved cards; present (even []) = the whole truth
+TOKEN_TYPE = 'taskuary'                                   # `[taskuary.messages]` in a prompt
+
+
+def card(cid: str): return _CARD.get(cid)
+
+
+def cards_of(cfg: dict) -> list | None:
+    """The report's saved cards, or None when it never saved any - the block dict, or nothing at
+    all, decides then (resolve). Anything that is not a known card is dropped, a card named twice
+    counts once, and only the numbers the card declares come through."""
+    raw = cfg.get(KEY)
+    if not isinstance(raw, list): return None
+    out, seen = [], set()
+    for x in raw:
+        if not isinstance(x, dict) or x.get('type') not in (None, TOKEN_TYPE): continue
+        cid = str(x.get('card') or '').strip()
+        if cid not in _CARD or cid in seen: continue
+        seen.add(cid)
+        out.append({'type': TOKEN_TYPE, 'card': cid, **{n: x[n] for n, *_ in _CARD[cid].knobs if n in x}})
+    return out
+
+
+def from_cards(store, cards: list) -> dict:
+    """{block id: opts} from the cards: a block is on when its card is present, the card's numbers
+    land on every opt they stand for, and the rest is the declaration. A number that cannot be
+    read keeps the default rather than blanking a window."""
+    by = {c['card']: c for c in cards}
+    out = {}
+    for b in CATALOGUE:
+        o, cid = defaults(store, b), CARD_OF.get(b.id)
+        if cid: o['on'] = cid in by
+        if cid in by:
+            for name, _, dflt, targets in _CARD[cid].knobs:
+                try: v = max(0, int(by[cid].get(name, dflt)))
+                except (TypeError, ValueError): v = dflt
+                for bid, opt in targets:
+                    if bid == b.id: o[opt] = v
+        out[b.id] = o
+    return out
+
+
+def to_cards(chosen: dict) -> list:
+    """The cards a block choice amounts to - how a report saved before cards existed is shown, and
+    then saved. A card is present when any of its blocks is on; its number is its first block's."""
+    out = []
+    for c in CARDS:
+        if not any((chosen.get(b) or {}).get('on') for b in c.blocks): continue
+        x = {'type': TOKEN_TYPE, 'card': c.id}
+        for name, _, dflt, targets in c.knobs:
+            bid, opt = targets[0]
+            x[name] = (chosen.get(bid) or {}).get(opt, dflt)
+        out.append(x)
+    return out
+
+
+def price_cards(rows: list, chosen: dict) -> list:
+    """The weighed blocks, folded to cards for the page: on when any block is, rows and tokens
+    summed, `live` when a live block is on (its cost is time, and the sum must not read as the
+    whole price), the numbers as the run will use them."""
+    by = {r['id']: r for r in rows}
+    out = []
+    for c in CARDS:
+        rs = [by[b] for b in c.blocks if b in by]
+        on = any(r['on'] for r in rs)
+        out.append({'id': c.id, 'label': c.label, 'says': c.says, 'on': on,
+                    'rows': sum(r['rows'] or 0 for r in rs if r['on']), 'tokens': sum(r['tokens'] for r in rs if r['on']),
+                    'live': any(r['on'] and r['live'] for r in rs), 'blocks': [r['label'] for r in rs],
+                    'knobs': [{'name': n, 'label': l, 'default': d, 'value': (chosen.get(t[0][0]) or {}).get(t[0][1], d)}
+                              for n, l, d, t in c.knobs]})
+    return out
+
+
+def sections_by_card(parts: list) -> dict:
+    """{'taskuary.<card>': the card's rendered sections} from a payload's parts [(block id, text)],
+    for a prompt that names a card. A card whose blocks rendered nothing still answers, in words -
+    a token that vanished would read as a prompt that never asked."""
+    out = {}
+    for c in CARDS:
+        text = ''.join(t for bid, t in parts if CARD_OF.get(bid) == c.id).strip()
+        out[f'{TOKEN_TYPE}.{c.id}'] = text or f'(nothing in Taskuary · {c.label} right now)'
+    return out

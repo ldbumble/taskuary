@@ -931,11 +931,21 @@ def build_inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=
 
     Returns the index rather than stashing it on the function: this install runs two Assistant
     reports, and a module-level `last_mids` would have the second one reading the first's sources."""
+    lead, parts, mids = build_sections(store, cands, head, watch_source_ids, watch_sources, blocks, report_id)
+    return lead + ''.join(t for _, t in parts), mids
+
+
+def build_sections(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=None, watch_sources=None, blocks=None, report_id=None) -> tuple:
+    """(the lead - the clock and the candidates, [(block id, its section)], {message id: block}).
+    The payload in parts, so a prompt that names a card (`[taskuary.messages]`) can be handed that
+    card's sections where it asks for them and the rest underneath (think). Joined, the parts are
+    build_inputs' text byte for byte; the verdicts cross-check is a part of its own."""
     from . import assistantblocks as blk
     now, mids, said = datetime.now(), {}, {}
     chosen = blocks if blocks is not None else {b.id: blk.defaults(store, b) for b in blk.CATALOGUE}
-    parts = [f"NOW: {now.strftime('%A %d %B %Y %H:%M')}\n{_uptime_block(store)}",
-             f"\n{head}:\n" + ('\n'.join(f"[{c['key']}] {c['facts']}" for c in cands) or '(none)')]
+    lead = (f"NOW: {now.strftime('%A %d %B %Y %H:%M')}\n{_uptime_block(store)}"
+            f"\n{head}:\n" + ('\n'.join(f"[{c['key']}] {c['facts']}" for c in cands) or '(none)'))
+    parts = []
     verdicts_before = 'notes'          # the cross-check sits after ALREADY SAID and before the notes, where it has always sat
     for b in blk.CATALOGUE:
         o = chosen.get(b.id)
@@ -947,11 +957,23 @@ def build_inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=
         out, got = blk.render(store, b, o)
         said[b.id] = out
         for m in got: mids[int(m)] = b.id
-        if b.id == verdicts_before: parts.append(_verdicts(store, cands, said)); verdicts_before = None
+        if b.id == verdicts_before: parts.append(('_verdicts', _verdicts(store, cands, said))); verdicts_before = None
         if not str(out).strip(): continue                 # nothing to say prints no head: an empty labelled section reads as an answer
-        parts.append(out if b.whole else '\n\n' + blk.headline(b, o) + ':\n' + out)
-    if verdicts_before: parts.append(_verdicts(store, cands, said))
-    return ''.join(parts), mids
+        parts.append((b.id, out if b.whole else '\n\n' + blk.headline(b, o) + ':\n' + out))
+    if verdicts_before: parts.append(('_verdicts', _verdicts(store, cands, said)))
+    return lead, parts, mids
+
+
+def placed(instruction: str, lead: str, parts: list) -> tuple:
+    """(the instruction with every card it names in its place, the payload without those cards).
+    A prompt naming no card leaves both exactly as they were - the substitution costs nothing
+    when nobody asked for it."""
+    from . import assistantblocks as blk
+    from .reports import names_sources, substitute
+    if not names_sources(instruction): return instruction, lead + ''.join(t for _, t in parts)
+    text, used, missing = substitute(instruction, blk.sections_by_card(parts))
+    if missing: logger.warning(f'assistant prompt names sources this report does not have: {", ".join(missing)}')
+    return text, lead + ''.join(t for bid, t in parts if f'{blk.TOKEN_TYPE}.{blk.CARD_OF.get(bid)}' not in used)
 
 
 def _verdicts(store, cands: list, said: dict) -> str:
@@ -980,12 +1002,15 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
     direction = ((SYSTEMS_PROMPT + (f"\n\nTHE OWNER'S RULE FOR THIS MONITOR:\n{instruction.strip()}" if instruction else ''))
                  if systems_only else (instruction or PROMPT).strip())
     contract = SYSTEMS_CONTRACT if systems_only else CONTRACT
+    if systems_only: user, mids = systems_inputs(store, watch_source_ids, watch_sources), {}
+    else:
+        # a card the instruction names is placed in it; the rest is the payload as it always was
+        lead, parts, mids = build_sections(store, cands, watch_source_ids=watch_source_ids, watch_sources=watch_sources, blocks=blocks, report_id=report_id)
+        direction, user = placed(direction, lead, parts)
     # the report's prompt is the report's own: instruction, data scope, output contract, owner (PW-242).
     # COUNSEL is the chat's document; its walkthrough rules governed idea generation until 2026-09-06.
     system = (f"YOUR INSTRUCTION (the owner's, from the Reports tab):\n{direction}" + contract.replace('{max_lines}', str(max_lines))
               + (f"\n\nWho the owner is (their own document; its reply rules are for text sent to OTHERS):\n{soul[:1500]}" if soul else ''))
-    if systems_only: user, mids = systems_inputs(store, watch_source_ids, watch_sources), {}
-    else: user, mids = build_inputs(store, cands, watch_source_ids=watch_source_ids, watch_sources=watch_sources, blocks=blocks, report_id=report_id)
     images = []
     if not systems_only:
         from .llm import readable_images
@@ -994,9 +1019,11 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
     return parse(store, text, cands, max_lines), _notes(text), user, mids
 
 
-def facts(store, watch_source_ids=None, watch_sources=None, systems_only: bool = False, blocks=None, report_id=None) -> str:
+def facts(store, watch_source_ids=None, watch_sources=None, systems_only: bool = False, blocks=None, report_id=None,
+          instruction: str = None) -> str:
     """What a run would hand the model, as text - the Reports tab's Preview (reports.run_assistant).
-    Preview and run share `blocks`, so the Preview is the payload rather than a picture of one."""
+    Preview and run share `blocks`, so the Preview is the payload rather than a picture of one. A
+    prompt that names a card shows that card placed in it, above the rest - the run's own shape."""
     if systems_only:
         return systems_inputs(store, watch_source_ids, watch_sources)
     c = cfg(store); now = datetime.now()
@@ -1004,8 +1031,12 @@ def facts(store, watch_source_ids=None, watch_sources=None, systems_only: bool =
         from . import assistantblocks as blk
         c = c | blk.producer_cfg(blocks, c)
     state = {i['Key']: i for i in store.list_ideas()}
-    return inputs(store, [x for x in candidates(store, c) if fresh(state, x, now)],
-                  'CANDIDATES (new since the last post)', watch_source_ids, watch_sources, blocks, report_id)
+    lead, parts, _ = build_sections(store, [x for x in candidates(store, c) if fresh(state, x, now)],
+                                    'CANDIDATES (new since the last post)', watch_source_ids, watch_sources, blocks, report_id)
+    from .reports import names_sources
+    if not names_sources(instruction): return lead + ''.join(t for _, t in parts)
+    direction, user = placed(instruction, lead, parts)
+    return f'YOUR INSTRUCTION, with the cards it names placed in it:\n{direction}\n\n{user}'
 
 
 # ── the note to the next check ───────────────────────────────────────────────────────────────

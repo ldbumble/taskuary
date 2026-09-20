@@ -111,3 +111,37 @@ test("a malformed saved choice is reseeded from what the card shows, not trusted
     assert.deepEqual(blockChoice({ blocks: bad }, [{ id: "ooo", on: true, window: null }]), { ooo: { on: true } });
   }
 });
+
+// ── the five cards (2026-09-20) ──────────────────────────────────────────────────────────────
+import { TASKUARY_CARDS, cardPatch, cardsOf, promptSources, sourceKey } from "../src/assistantBlocks.js";
+
+test("a report saved with cards is read from them, junk and repeats dropped", () => {
+  const cards = cardsOf({ type: "assistant", taskuary_sources: [{ card: "work", quiet_days: 5, x: 1 }, { card: "work" }, { card: "nope" }, "junk"] });
+  assert.deepEqual(cards, [{ type: "taskuary", card: "work", quiet_days: 5 }]);
+  assert.deepEqual(cardsOf({ type: "assistant", taskuary_sources: [] }), []);       // none is a choice
+});
+
+test("a report saved before cards existed is shown as the cards its blocks amount to", () => {
+  const all = cardsOf({ type: "assistant" });                                          // the seeded Assistant: everything on
+  assert.deepEqual(all.map((c) => c.card), TASKUARY_CARDS.map((c) => c.id));
+  assert.equal(all[0].days, 2); assert.equal(all[0].hours, 24); assert.equal(all[2].done_days, 7);
+  const some = cardsOf({ type: "assistant", blocks: { threads: { on: true, days: 6 }, health: { on: true } } });
+  assert.deepEqual(some.map((c) => c.card), ["messages", "systems"]);
+  assert.equal(some[0].days, 6);
+  assert.deepEqual(cardsOf({ type: "assistant", watch_source_ids: [4] }), []);       // a monitor read no Taskuary block
+});
+
+test("a card's number mid-keystroke stays empty rather than snapping to zero", () => {
+  const cards = [{ type: "taskuary", card: "messages", days: 2 }];
+  assert.equal(cardPatch(cards, "messages", "days", "")[0].days, "");
+  assert.equal(cardPatch(cards, "messages", "days", "9")[0].days, 9);
+  assert.equal(cardPatch(cards, "messages", "days", "x")[0].days, 2);
+});
+
+test("the prompt names a source the way the server spells it", () => {
+  assert.equal(sourceKey({ type: "intacct", label: " AP  Bills Due " }, 1), "intacct.ap bills due");
+  assert.equal(sourceKey({ type: "mssql" }, 2), "mssql.mssql #2");
+  const opts = promptSources({ cards: [{ card: "memory" }], sources: [{ type: "intacct", label: "AP bills due" }] });
+  assert.deepEqual(opts.map((o) => o.key), ["taskuary.memory", "intacct.ap bills due"]);
+  assert.equal(opts[0].label, "Taskuary · Memory");
+});

@@ -6778,7 +6778,7 @@ def connectors_catalog():
 
 
 @app.get('/api/assistant/blocks')
-def assistant_blocks(source_id: int = None, blocks: str = None):
+def assistant_blocks(source_id: int = None, blocks: str = None, taskuary: str = None):
     """What an Assistant report reads, priced. `source_id` names the report whose choice to resolve;
     absent means the declared defaults, which is what a new report starts from. `blocks` is the
     choice the owner is making RIGHT NOW, as JSON, before they have saved it - without it the card
@@ -6804,13 +6804,17 @@ def assistant_blocks(source_id: int = None, blocks: str = None):
         # mid-keystroke, not an attack: price the saved report rather than 400 at them.
         try: cfg = {**cfg, 'blocks': json.loads(blocks)}
         except ValueError: logger.debug('assistant blocks: the page sent a blocks value that is not JSON; pricing what is saved')
+    if taskuary is not None:
+        # the cards the owner is drawing RIGHT NOW (the page since 2026-09-20) - same rule as `blocks`
+        try: cfg = {**cfg, blk.KEY: json.loads(taskuary)}
+        except ValueError: logger.debug('assistant blocks: the page sent a taskuary value that is not JSON; pricing what is saved')
     chosen = blk.resolve(store, cfg)
     rows = blk.weighed(store, chosen, report_id=int(source_id) if source_id else None)
     # the live blocks are ON and cost nothing HERE, which is not the same as costing nothing. Named
     # so the card can say "and a live call to your calendar" instead of printing a total that reads
     # as zero for exactly the report that costs the most.
     unpriced = [{'id': r['id'], 'label': r['label']} for r in rows if r['on'] and r['live']]
-    return {'data': rows, 'total_tokens': sum(r['tokens'] for r in rows if r['on']),
+    return {'data': rows, 'cards': blk.price_cards(rows, chosen), 'total_tokens': sum(r['tokens'] for r in rows if r['on']),
             'runs_per_day': runs_per_day(cfg), 'cost': None, 'unpriced': unpriced,
             'reads_taskuary': blk.reads_taskuary(chosen)}
 

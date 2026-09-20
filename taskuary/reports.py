@@ -524,7 +524,8 @@ def run_assistant(cfg):
     # (assistant.notes_key), so without it the Preview would show the Assistant's own note
     return 'what the assistant would read right now', facts(
         cfg['store'], cfg.get('watch_source_ids'), cfg.get('watch_sources'),
-        systems_only=not blk.reads_taskuary(chosen), blocks=chosen, report_id=cfg.get('source_id'))
+        systems_only=not blk.reads_taskuary(chosen), blocks=chosen, report_id=cfg.get('source_id'),
+        instruction=cfg.get('ai_prompt'))
 
 
 def run_automate(cfg):
@@ -987,23 +988,71 @@ CHART_SYSTEM = ('\n\nThe rows are also turned into a bar chart for the reader. I
                 'nothing is worse than no chart.')
 
 
-def run_sources(store, subs: list):
-    """Several sources feeding ONE report: each runs on its own connection and query, the
-    bodies are stacked under labeled headers, and the AI pass downstream sees all of them
-    at once. The same connection can appear twice with different queries. One source
-    failing is reported in place - it never takes the whole report down."""
-    heads, bodies = [], []
+def source_label(sub: dict, i: int) -> str:
+    return (sub.get('label') or '').strip() or f"{sub.get('type', 'rest')} #{i}"
+
+
+def run_source_parts(store, subs: list) -> list:
+    """[(key, label, head, body)] - one per source, each run on its own connection and query. One
+    source failing is reported in place - it never takes the whole report down. `key` is the name
+    a prompt uses for it (source_key), so its rows can be placed where the prompt says."""
+    out = []
     for i, sub in enumerate(subs, 1):
-        t = sub.get('type', 'rest')
-        label = (sub.get('label') or '').strip() or f'{t} #{i}'
+        t, label = sub.get('type', 'rest'), source_label(sub, i)
         try:
             head, body = executor_for(t)(resolve_cfg(store, dict(sub)))
         except Exception as e:
             head, body = 'FAILED', f'error: {str(e)[:400]}'
             logger.warning(f'report source "{label}" failed: {e}')
-        heads.append(f'{label}: {head}')
-        bodies.append(f'=== {label} ({head}) ===\n{body}')
-    return ' · '.join(heads)[:400], '\n\n'.join(bodies)[:BODY_CHARS]
+        out.append((source_key(sub, i), label, head, body))
+    return out
+
+
+def stack(parts: list) -> tuple:
+    """(head, body) of several sources: the bodies under labeled headers, the AI pass downstream
+    sees all of them at once."""
+    return (' · '.join(f'{l}: {h}' for _, l, h, _ in parts)[:400],
+            '\n\n'.join(f'=== {l} ({h}) ===\n{b}' for _, l, h, b in parts)[:BODY_CHARS])
+
+
+def run_sources(store, subs: list):
+    """Several sources feeding ONE report. The same connection can appear twice with different
+    queries."""
+    return stack(run_source_parts(store, subs))
+
+
+# ── a prompt that names its sources ─────────────────────────────────────────────────────────────
+# "One prompt on top" of every source is the rule, and it stays the rule. But a prompt that reads
+# "[intacct.ap bills due] - anything over 10k? then check it against [taskuary.messages]" puts each
+# source's rows WHERE the prompt talks about them, instead of all of them in a heap underneath (the
+# owner, 2026-09-20: "insert into the prompt sections by data source"). The page writes the tokens
+# (ReportsView's Insert source menu), this reads them. A source the prompt does not name is
+# appended after it, exactly as before; a token naming nothing stays visible, so nobody reads a
+# prompt that quietly lost a source.
+TOKEN = re.compile(r'\[([a-z0-9_]+)\.([^\]\n]{1,80})\]', re.I)
+
+
+def slug(s) -> str: return ' '.join(str(s or '').lower().split())
+
+
+def source_key(sub: dict, i: int) -> str:
+    """`type.label`, lower-cased and single-spaced - what the token in a prompt has to say to mean
+    this source. Mirrored by ReportsView.sourceKey."""
+    return f"{sub.get('type', 'rest')}.{slug(source_label(sub, i))}"
+
+
+def substitute(prompt: str, sections: dict) -> tuple:
+    """(the prompt with every named source's rows in its place, the keys it used, the tokens that
+    named nothing). Case and spacing do not matter in a token; the brackets do."""
+    used, missing = set(), []
+    def swap(m):
+        k = f'{m.group(1).lower()}.{slug(m.group(2))}'
+        if k not in sections: missing.append(m.group(0)); return m.group(0)
+        used.add(k); return f'\n{sections[k]}\n'
+    return TOKEN.sub(swap, prompt or ''), used, missing
+
+
+def names_sources(prompt: str) -> bool: return bool(TOKEN.search(prompt or ''))
 
 
 def report_llm(store, cfg: dict, default_llm):
@@ -1101,17 +1150,26 @@ def render_report(store, cfg: dict, llm=None):
     llm = report_llm(store, cfg, llm)
     subs = [s for s in (cfg.get('sources') or []) if s.get('type')]
     if subs:
-        head, summary = run_sources(store, subs)
+        parts = run_source_parts(store, subs)
+        head, summary = stack(parts)
+        sections = {k: f'=== {l} ({h}) ===\n{b}' for k, l, h, b in parts}
     else:
         cfg = resolve_cfg(store, cfg)
         head, summary = executor_for(cfg.get('type', 'rest'))(cfg)
+        sections = {source_key(cfg, 1): summary}
     if cfg.get('ai_prompt') and llm:
         try:
-            data = summary[:AI_CHARS]
-            if len(summary) > AI_CHARS: data += '\n…(data truncated here - later rows were NOT shown to you)'
+            # a prompt that names a source gets that source's rows in its place; the rest, and a
+            # prompt that names none, are the data underneath, exactly as they always were
+            instr, used, missing = substitute(cfg['ai_prompt'], sections)
+            if missing: logger.warning(f'report prompt names sources this report does not have: {", ".join(missing)}')
+            rest = '\n\n'.join(s for k, s in sections.items() if k not in used) if used else summary
+            data = rest[:AI_CHARS]
+            if len(rest) > AI_CHARS: data += '\n…(data truncated here - later rows were NOT shown to you)'
             charts = str(store.get_settings().get('report_images_enabled') or '1') == '1'
             ai = (llm(report_system(store, cfg, charts),
-                      f"Instruction: {cfg['ai_prompt']}{contract_for(cfg)}\n\nData ({head}):\n{data}",
+                      f"Instruction: {instr[:AI_CHARS]}{contract_for(cfg)}\n\nData ({head}):\n"
+                      + (data if rest.strip() else '(every source is placed in the instruction above)'),
                       max_tokens=SUMMARY_TOKENS) or '').strip()
             # an empty answer used to file as a bare '--- raw data ---' wall, which reads
             # like the prompt was never run. Say what happened instead.

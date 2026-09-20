@@ -8,7 +8,8 @@ the past month" and change nothing - the month was never in the payload.
 This task MOVES NO LOGIC: every build below delegates to the function in assistant.py that already
 did the work, and the defaults render the payload byte for byte as it rendered before blocks
 existed (tests/test_assistant_blocks.py)."""
-import logging
+import json, logging, time
+from datetime import datetime
 from typing import Callable, NamedTuple
 
 logger = logging.getLogger(__name__)
@@ -257,30 +258,44 @@ def resolve(store, cfg: dict) -> dict:
     - once `blocks` IS saved, it is the whole truth: a block absent from it is off, not at its
       declared default. A block we ship next month does not switch itself on in a report the owner
       already configured, and start spending their tokens.
-    `system_checks` is outside both: it is the report's own sources, not a Taskuary table."""
-    over = cfg.get('blocks') if isinstance(cfg.get('blocks'), dict) else None
+    `system_checks` is outside both: it is the report's own sources, not a Taskuary table.
+
+    EVERY malformed shape fails toward not spending the owner's tokens. `ConfigJson` is free text on
+    POST /api/sources, and this runs inside the scheduled dispatch BEFORE assistant.run - so a bad
+    value used to be a report that silently stopped posting, not a report that read too much."""
+    raw, named = cfg.get('blocks'), 'blocks' in cfg
+    over = raw if isinstance(raw, dict) else None
+    if named and over is None:
+        # the owner's config names `blocks` and we cannot read it. That is "they configured
+        # something", so nothing is on - never "we could not tell, so read everything".
+        logger.warning(f'assistant blocks: `blocks` is {type(raw).__name__}, not an object - reading no Taskuary block')
     isolated = bool(cfg.get('watch_source_ids') or cfg.get('watch_sources'))
     out = {}
     for b in CATALOGUE:
         o = defaults(store, b)
-        # the sources ride in the opts so `weigh` prices the report's own systems, not the seeded one's
-        if b.id == 'system_checks': o['source_ids'], o['inline'] = cfg.get('watch_source_ids'), cfg.get('watch_sources')
         if over is None:
-            if isolated and b.id != 'system_checks': o['on'] = False
-        elif b.id in over: _apply(b, o, over[b.id])
-        elif b.id != 'system_checks': o['on'] = False
+            # a named-but-unreadable `blocks` is a saved choice too: off, like a block it does not name
+            if (isolated or named) and b.id != 'system_checks': o['on'] = False
+        elif isinstance(over.get(b.id), dict): _apply(b, o, over[b.id])
+        elif b.id != 'system_checks':
+            # not named, or named with a value that is not an object ({'open_work': True}, None, a
+            # string): unreadable is the same as unchosen, and unchosen is off
+            if b.id in over: logger.warning(f'assistant blocks: {b.id} is saved as {type(over[b.id]).__name__}, not an object - off')
+            o['on'] = False
         out[b.id] = o
     return out
 
 
-def _apply(b: Block, o: dict, over):
+def _apply(b: Block, o: dict, over: dict):
     """The owner's saved numbers, and ONLY the numbers this block declares - a stored key nothing
-    declares is a key nothing reads, not a way into the opts the builder trusts."""
+    declares is a key nothing reads, not a way into the opts the builder trusts. A cap floors at 1:
+    the builders read it as `o.get('cap') or 20`, so a stored 0 would have shown 0 on the card and
+    used 20 in the payload - and "none of this block" is what the on switch is for."""
     nums = ({b.window[0]} if b.window else set()) | {'cap'} | {k for k, _, _ in b.knobs}
-    for k, v in (over or {}).items():
+    for k, v in over.items():
         if k == 'on': o['on'] = bool(v)
-        elif k in nums:
-            try: o[k] = max(0, int(v))
+        elif k in nums and not isinstance(v, (dict, list)):
+            try: o[k] = max(1 if k == 'cap' else 0, int(v))
             except (TypeError, ValueError): pass
 
 
@@ -301,9 +316,10 @@ def producer_cfg(chosen: dict, c: dict) -> dict:
     o = lambda bid: chosen.get(bid) or {}
     kept = set(c.get('producers') or ()) - set(PRODUCER_OF.values())
     out = {'producers': kept | {p for bid, p in PRODUCER_OF.items() if o(bid).get('on')}}
-    # one `followups` call serves both halves, so one window has to win: the block that is on
-    fu = o('waiting_on') if o('waiting_on').get('on') else o('promised')
-    if fu.get('hours') is not None: out['followup_h'] = max(0, int(fu['hours']))
+    # the two halves of followups() keep their OWN window: the card prices them separately, so one
+    # of them quoting the other's hours is the card lying in both directions at once
+    for bid, key in (('waiting_on', 'followup_h'), ('promised', 'promise_h')):
+        if o(bid).get('hours') is not None: out[key] = max(0, int(o(bid)['hours']))
     if o('gone_quiet').get('days') is not None: out['cold_d'] = max(0, int(o('gone_quiet')['days']))
     return out
 
@@ -319,11 +335,18 @@ def weigh(store, chosen: dict) -> list:
     calendarView per mailbox at a 20s timeout each, and this list is what a settings card refreshes
     on every keystroke. Its rows come back unknown (None) and its tokens 0, with `live` set so the
     card can say the cost is time rather than pretend it is nothing."""
+    cands = _candidates(store, chosen)
+    facts = ' '.join(str(c.get('facts') or '') for c in cands)[:4000]   # exactly what build_inputs feeds the kb
+    by_kind = {}
+    for x in cands: by_kind.setdefault(x.get('kind'), []).append(x)
     out = []
     for b in CATALOGUE:
         o = chosen.get(b.id) or defaults(store, b)
         on = bool(o.get('on'))
-        rows, toks = (_price(store, b, o) if on and not b.live else (None if on else 0, 0))
+        if not on: rows, toks = 0, 0
+        elif b.live: rows, toks = None, 0
+        elif b.id in PRODUCER_OF: rows, toks = _price_rows(by_kind.get(PRODUCER_OF[b.id]) or [])
+        else: rows, toks = _price(store, b, o | ({'facts': facts} if b.id == 'knowledge' else {}))
         out.append({'id': b.id, 'label': b.label, 'kind': b.kind, 'tables': list(b.tables), 'sql': b.sql,
                     'on': on, 'proposes': b.proposes, 'live': b.live, 'rows': rows, 'tokens': toks,
                     'cap': o.get('cap'), 'heading': headline(b, o) if b.heading else None,
@@ -333,15 +356,62 @@ def weigh(store, chosen: dict) -> list:
     return out
 
 
+def _candidates(store, chosen: dict) -> list:
+    """The candidate rows this choice would actually post, through the RUN's own path
+    (assistant.candidates + fresh) rather than a second one that could drift from it. Two things the
+    card got wrong without it: it counted rows the run drops because it already said them, and it
+    priced the knowledge base at nil because the passages are matched against these very facts.
+
+    `prep` is left out of the pass: assistant.candidates() would reach the live calendar for it, and
+    weigh() does not fetch. It is priced as the live block it is."""
+    from . import assistant
+    try:
+        c = assistant.cfg(store)
+        c = c | producer_cfg(chosen, c)
+        c['producers'] = set(c['producers']) - {'prep'}
+        state, now = {i['Key']: i for i in store.list_ideas()}, datetime.now()
+        return [x for x in assistant.candidates(store, c) if assistant.fresh(state, x, now)]
+    except Exception as e:
+        logger.warning(f'assistant blocks: the candidates could not be priced - {e}')
+        return []
+
+
+def _now():
+    from datetime import datetime
+    return datetime.now()
+
+
+def _price_rows(rows: list) -> tuple:
+    """A producer's price is the CANDIDATES: lines it adds - the shape the post files them in."""
+    return len(rows), len('\n'.join(f"[{c.get('key')}] {c.get('facts') or c.get('text') or ''}" for c in rows)) // 4
+
+
 def _price(store, b: Block, o: dict) -> tuple:
-    """(rows, tokens) for one block, by rendering exactly what the payload would carry - head
-    included, because the head is words the model is billed for too. A producer's rows are candidate
-    dicts and render under CANDIDATES: as the post files them, so they are priced in that shape."""
+    """(rows, tokens) for one context block, by rendering exactly what the payload would carry -
+    head included, because the head is words the model is billed for too."""
     text, _ = render(store, b, o)
-    if isinstance(text, list):
-        lines = [f"[{c.get('key')}] {c.get('facts') or c.get('text') or ''}" for c in text]
-        return len(lines), len('\n'.join(lines)) // 4
+    if isinstance(text, list): return _price_rows(text)
     text = str(text)
     if not text.strip(): return 0, 0                      # build_inputs prints nothing at all for this one
     full = text if b.whole else headline(b, o) + ':\n' + text
     return (0 if text.lstrip().startswith('(') else text.strip().count('\n') + 1), len(full) // 4
+
+
+# One GET renders most of an Assistant payload - list_tasks twice, recent_messages(500) and their
+# thread chains, cold(), connect_ideas(30d), health_ideas - measured elsewhere at 1.6s p50 and 7s
+# p90. The card that reads this refreshes as the owner types, so an identical choice asked for again
+# within a breath is served from here. Task 3 debounces on top; this is the floor, not the fix.
+_WEIGHED, _WEIGH_TTL = {}, 20.0
+
+
+def weighed(store, chosen: dict, ttl: float = _WEIGH_TTL) -> list:
+    """weigh(), cached briefly on the resolved choice. Anything that must see a fresh read - a test,
+    a run - calls weigh() directly."""
+    import time
+    key = (id(store), json.dumps({k: {n: v for n, v in sorted((o or {}).items())} for k, o in sorted(chosen.items())}, default=str, sort_keys=True))
+    hit = _WEIGHED.get(key)
+    if hit and time.time() - hit[0] < ttl: return hit[1]
+    rows = weigh(store, chosen)
+    _WEIGHED.clear() if len(_WEIGHED) > 32 else None       # one owner, a handful of reports: a cap, not an eviction policy
+    _WEIGHED[key] = (time.time(), rows)
+    return rows

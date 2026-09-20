@@ -6784,13 +6784,21 @@ def assistant_blocks(source_id: int = None):
     cfg = {}
     if source_id:
         src = store.get_source(int(source_id))
-        if src:
-            try: cfg = json.loads(src.get('ConfigJson') or '{}')
-            except ValueError: cfg = {}
-    rows = blk.weigh(store, blk.resolve(store, cfg))
+        # a card that asks about a report that is not there must not be answered with the DEFAULTS:
+        # it would show a confident picture of a configuration nobody saved
+        if not src: raise HTTPException(404, f'no source {source_id}')
+        try: cfg = json.loads(src.get('ConfigJson') or '{}')
+        except ValueError: cfg = {}
+        if cfg.get('type') != 'assistant': raise HTTPException(404, f"source {source_id} is a {cfg.get('type') or 'rest'} report, not an Assistant")
+    chosen = blk.resolve(store, cfg)
+    rows = blk.weighed(store, chosen)
+    # the live blocks are ON and cost nothing HERE, which is not the same as costing nothing. Named
+    # so the card can say "and a live call to your calendar" instead of printing a total that reads
+    # as zero for exactly the report that costs the most.
+    unpriced = [{'id': r['id'], 'label': r['label']} for r in rows if r['on'] and r['live']]
     return {'data': rows, 'total_tokens': sum(r['tokens'] for r in rows if r['on']),
-            'runs_per_day': runs_per_day(cfg), 'cost': None,
-            'reads_taskuary': blk.reads_taskuary({r['id']: r for r in rows})}
+            'runs_per_day': runs_per_day(cfg), 'cost': None, 'unpriced': unpriced,
+            'reads_taskuary': blk.reads_taskuary(chosen)}
 
 
 @app.get('/api/audit/assistant')

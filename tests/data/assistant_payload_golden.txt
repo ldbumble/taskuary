@@ -1,0 +1,73 @@
+NOW: <now>
+
+CANDIDATES:
+[promise:c-audit] You told Sam Okoro on <date> re "Re: Audit questions": "I will send you the answers tomorrow." - 2 day(s) ago, and the thread has not moved.
+[followup:c-invoice] You wrote Priya Shah on <date> re "Re: Invoice 4471": "Could you send the signed copy before Friday?" - nothing has come back in 3 day(s).
+[cold:TQ-0001] TQ-0001 "Reconcile the Q3 ledger" [open, kind coding] - nothing has happened on it for 9 days
+
+CONFIGURED SYSTEM CHECKS (pulled live for this check; failures are also worth noticing):
+(none selected - add a data source, or choose saved data views, on Reports -> Assistant)
+
+WHAT PEOPLE SAID (the last two days, by thread, newest first; the last lines of each, oldest first. Each head quotes what triage decided when the latest line arrived: when you disagree, say so in your line - 'triage filed this as fyi, but...' - never raise a thread as if nothing had judged it):
+- Dana Reed [email] re "Q3 ledger" - 1 new, last word THEIRS <day> <mon> <time> (latest mid 1)
+    Dana <day>: "Here is the Q3 ledger. Let me know if the reconciliation looks right."
+
+OUT OF OFFICE (from their auto-replies):
+- sam@client.example: out of office (auto-reply <day> <mon>)
+
+CALENDAR (the next two days):
+(nothing on the calendar for two days - calendar off)
+
+ARRIVED IN THE LAST TWO DAYS (xN = that many alike; each line carries the latest message's words, a report's schedule, and a failure's cause):
+- [feed] Sam Okoro: "Automatic reply: Audit questions" (latest mid 6 <day> <mon> <time>) -> says: "I am out of the office until Monday with limited access to email."
+- [feed] Dana Reed: "Q3 ledger" (latest mid 1 <day> <mon> <time>) -> says: "Here is the Q3 ledger. Let me know if the reconciliation looks right."
+
+DONE THIS WEEK (my own work, with the agent's summary):
+- TQ-0003 [coding] Ship the invoice importer - imported the March invoices and closed the run.
+
+OPEN WORK:
+- TQ-0002 [in_progress, writing] Draft the audit answers - <h> since anything happened
+- TQ-0001 [open, coding] Reconcile the Q3 ledger - <h> since anything happened
+
+ALREADY SAID (never repeat):
+- (open) The ledger reconciliation repeats monthly - worth automating.
+- (open) No answer from Priya on the signed copy.
+
+YOUR NOTES FROM YOUR LAST CHECK (<date> <time>; your own facts and timings - use them, then rewrite them; they are not rules):
+Dana still owes the ledger; Sam is away.
+@@@ NO CANDIDATES @@@
+NOW: <now>
+
+CANDIDATES:
+(none)
+
+CONFIGURED SYSTEM CHECKS (pulled live for this check; failures are also worth noticing):
+(none selected - add a data source, or choose saved data views, on Reports -> Assistant)
+
+WHAT PEOPLE SAID (the last two days, by thread, newest first; the last lines of each, oldest first. Each head quotes what triage decided when the latest line arrived: when you disagree, say so in your line - 'triage filed this as fyi, but...' - never raise a thread as if nothing had judged it):
+- Dana Reed [email] re "Q3 ledger" - 1 new, last word THEIRS <day> <mon> <time> (latest mid 1)
+    Dana <day>: "Here is the Q3 ledger. Let me know if the reconciliation looks right."
+
+OUT OF OFFICE (from their auto-replies):
+- sam@client.example: out of office (auto-reply <day> <mon>)
+
+CALENDAR (the next two days):
+(nothing on the calendar for two days - calendar off)
+
+ARRIVED IN THE LAST TWO DAYS (xN = that many alike; each line carries the latest message's words, a report's schedule, and a failure's cause):
+- [feed] Sam Okoro: "Automatic reply: Audit questions" (latest mid 6 <day> <mon> <time>) -> says: "I am out of the office until Monday with limited access to email."
+- [feed] Dana Reed: "Q3 ledger" (latest mid 1 <day> <mon> <time>) -> says: "Here is the Q3 ledger. Let me know if the reconciliation looks right."
+
+DONE THIS WEEK (my own work, with the agent's summary):
+- TQ-0003 [coding] Ship the invoice importer - imported the March invoices and closed the run.
+
+OPEN WORK:
+- TQ-0002 [in_progress, writing] Draft the audit answers - <h> since anything happened
+- TQ-0001 [open, coding] Reconcile the Q3 ledger - <h> since anything happened
+
+ALREADY SAID (never repeat):
+- (open) The ledger reconciliation repeats monthly - worth automating.
+- (open) No answer from Priya on the signed copy.
+
+YOUR NOTES FROM YOUR LAST CHECK (<date> <time>; your own facts and timings - use them, then rewrite them; they are not rules):
+Dana still owes the ledger; Sam is away.

@@ -122,7 +122,10 @@ def cfg(store) -> dict:
         except (TypeError, ValueError): return d
     raw = s.get('assistant_producers')
     prod = {p.strip() for p in (raw if raw is not None else ','.join(PRODUCERS)).split(',') if p.strip()}
-    return {'followup_h': n('assistant_followup_hours', 24), 'cold_d': n('assistant_cold_days', 3), 'max': max(1, n('assistant_max_lines', MAX_LINES)),
+    fh = n('assistant_followup_hours', 24)
+    # promise_h is the SAME setting until a report says otherwise (assistantblocks.producer_cfg):
+    # the global knob is one number, and two blocks reading it is not two knobs
+    return {'followup_h': fh, 'promise_h': fh, 'cold_d': n('assistant_cold_days', 3), 'max': max(1, n('assistant_max_lines', MAX_LINES)),
             'producers': prod, 'last': s.get('assistant_last_run') or ''}
 
 
@@ -348,10 +351,20 @@ def prep(store) -> list:
     return out
 
 
+def _asks_and_promises(store, c: dict) -> list:
+    """The two halves of followups(). ONE pass while they share a window - that is the order the
+    payload has always listed them in, interleaved by thread - and one pass each the moment a report
+    gives them different hours, because then there is no single window to make one pass with."""
+    want = tuple(k for k in ('followup', 'promise') if k in c['producers'])
+    fh, ph = c['followup_h'], c.get('promise_h', c['followup_h'])
+    if not want: return []
+    if fh == ph or len(want) == 1: return followups(store, fh if 'followup' in want else ph, want)
+    return followups(store, fh, ('followup',)) + followups(store, ph, ('promise',))
+
+
 def candidates(store, c: dict) -> list:
     out = []
-    want = tuple(k for k in ('followup', 'promise') if k in c['producers'])
-    for name, fn in (('followup/promise', lambda: followups(store, c['followup_h'], want) if want else []),
+    for name, fn in (('followup/promise', lambda: _asks_and_promises(store, c)),
                      ('prep', lambda: prep(store) if 'prep' in c['producers'] else []),
                      ('cold', lambda: cold(store, c['cold_d']) if 'cold' in c['producers'] else [])):
         try: out += fn()
@@ -1256,6 +1269,25 @@ def run(store, llm=None, force: bool = False, instruction: str = None, *,
                     systems_only, report_id, report_title, always_post, blocks)
 
 
+def own_identity(store, report_id) -> bool:
+    """Does this post belong to a REPORT of its own, rather than to the app's Assistant?
+
+    Identity and data scope used to be the same flag. `systems_only` decided the post's
+    ConversationId, its displayed name AND the namespace its idea keys live in - which worked only
+    while "has sources of its own" and "is its own monitor" were the same sentence. Tick a Taskuary
+    block on a sourced monitor and it would have lost its namespace mid-life: two Assistant reports
+    suppressing each other's findings on a shared idea key, the failure system_checks() is already
+    commented for. So identity is the report, and the report alone.
+
+    The app's own Assistant row is the exception that keeps this backwards-compatible: its posts
+    ARE the Timeline's `assistant` thread and have always been."""
+    if report_id is None: return False
+    try:
+        src = source(store)
+        return not (src and str(src.get('SourceId')) == str(report_id))
+    except Exception: return True
+
+
 def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=False,
          report_id=None, report_title=None, always_post=False, blocks=None) -> dict:
     c = cfg(store); now = datetime.now()
@@ -1265,6 +1297,15 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
         from . import assistantblocks as blk
         c = c | blk.producer_cfg(blocks, c)
     store.set_setting('assistant_last_run', now.isoformat(timespec='seconds'), 'assistant')
+    # A report that reads NOTHING - every block off and no data source either - would otherwise
+    # swap in the systems prompt, hand the model "(none selected)" and post whatever it invented
+    # from that. It runs on a clock, so it would do that for ever without saying why. Say why.
+    if systems_only and not (_ids(watch_source_ids) or _inline(watch_sources)):
+        why = ('this report reads nothing: no Taskuary block is ticked and no data source is chosen '
+               '- tick a block, or choose a source, on the report')
+        logger.warning(f"assistant: {report_title or 'Assistant'} ran and read nothing - {why}")
+        return {'ran': True, 'said': 0, 'reads_nothing': True, 'summary': why, 'inputs': '',
+                'reviewed': {'notes': '', 'scope': 'nothing', 'systems': 0, 'why': why}}
     state = {i['Key']: i for i in store.list_ideas()}
     cands = [] if systems_only else [x for x in candidates(store, c) if fresh(state, x, now)]
     if llm is None:
@@ -1287,12 +1328,16 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
         read = (systems_inputs(store, watch_source_ids, watch_sources) if systems_only else
                 inputs(store, cands, 'CANDIDATES (no model pass - these posted as facts)',
                        watch_source_ids, watch_sources, blocks))
-    # the note outlives the post: a quiet check leaves one too, so the next check starts where this one stopped
-    if note and not systems_only:
+    own_post = own_identity(store, report_id)
+    # the note outlives the post: a quiet check leaves one too, so the next check starts where this
+    # one stopped. `assistant_notes` is ONE global setting, so only the app's own Assistant writes
+    # it - a monitor that reads the notes block must not also overwrite what it reads.
+    if note and not systems_only and not own_post:
         store.set_setting('assistant_notes', note, 'assistant'); store.set_setting('assistant_notes_at', now.strftime('%Y-%m-%d %H:%M:%S'), 'assistant')
     # Namespace monitor findings so two SQL checks can use the same natural idea key without one
-    # report suppressing the other report's finding.
-    if systems_only and report_id is not None:
+    # report suppressing the other report's finding. Keyed on the REPORT, never on its data scope
+    # (own_identity): a monitor that also reads a Taskuary block is still its own monitor.
+    if own_post:
         say = [{**s, 'key': f"report:{report_id}:{s['key']}"} if str(s.get('key') or '').startswith('idea:') else s for s in say]
     # the state is read AGAIN here: another process may have posted while the model was thinking, and a
     # model echoing a dismissed key changes nothing
@@ -1323,8 +1368,8 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
         # chose "every run", in which case the check still says it ran, in one line, with what it
         # read behind it. A setting that promises every run and then shows nothing is a lie.
         if not always_post: return {'ran': True, 'said': 0, 'reviewed': rv, 'inputs': read}
-        who = (report_title or 'Assistant') if systems_only else 'Assistant'
-        me = f'assistant:{report_id}' if systems_only and report_id is not None else 'assistant'
+        who = (report_title or 'Assistant') if own_post else 'Assistant'
+        me = f'assistant:{report_id}' if own_post else 'assistant'
         mid = store.add_message({'TaskId': None, 'ExternalId': f'{me}:{stamp}', 'ConversationId': me, 'Channel': CHANNEL,
                                  'SourceName': who, 'Subject': f'{who} - nothing to report', 'FromName': who,
                                  'SentAt': stamp, 'BodyText': f'I checked and found nothing that needs you.\n\n{_footer(rv)}',
@@ -1338,8 +1383,8 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     # the row's one line: the first idea, cut at a word, and how many more wait behind it
     head = rows[0]['Text'] if len(rows[0]['Text']) <= 90 else rows[0]['Text'][:90].rsplit(' ', 1)[0] + '…'
     subj = head + (f' (+{len(rows) - 1} more)' if len(rows) > 1 else '')
-    identity = f'assistant:{report_id}' if systems_only and report_id is not None else 'assistant'
-    name = (report_title or 'Assistant') if systems_only else 'Assistant'
+    identity = f'assistant:{report_id}' if own_post else 'assistant'
+    name = (report_title or 'Assistant') if own_post else 'Assistant'
     mid = store.add_message({'TaskId': None, 'ExternalId': f'{identity}:{stamp}', 'ConversationId': identity, 'Channel': CHANNEL,
                              'SourceName': name, 'Subject': subj, 'FromName': name, 'SentAt': stamp,
                              'BodyText': body, 'Status': 'feed'})
@@ -1359,7 +1404,7 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
         from .llm import build_llm
         try: brain = build_llm(store)
         except Exception: brain = None
-        triage_ideas(store, rows, brain, report_title=name if systems_only else None)
+        triage_ideas(store, rows, brain, report_title=name if own_post else None)
     except Exception as e: logger.warning(f'assistant: idea triage skipped - {e}')
     logger.info(f'assistant: posted {len(rows)} idea(s) as message {mid}')
     return {'ran': True, 'said': len(rows), 'message_id': mid, 'reviewed': rv, 'inputs': read, 'lines': [_public(i) for i in rows]}

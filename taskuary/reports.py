@@ -1241,12 +1241,14 @@ def schedule_words(cfg: dict) -> str:
     return ' + '.join(p for p in parts if p) or 'no schedule - run it by hand'
 
 
-def runs_per_day(cfg: dict) -> int:
-    """How many times this report fires on a day it runs - the multiplier on one run's token cost,
-    for the Assistant's cost card (/api/assistant/blocks). Counted on a day it RUNS rather than
-    averaged over the week: "what will this cost me" is not answered by a number no day matches.
-    A once-a-day/week cap is exactly that - a cap - so it flattens the count to one."""
-    n = 0
+def runs_per_day(cfg: dict) -> float:
+    """How many times this report fires in an average day - the multiplier on one run's token cost,
+    for the Assistant's cost card (/api/assistant/blocks).
+
+    A FLOAT, because the honest answer often is one: a weekly cap is 1/7 of a day's cost, and
+    returning 1 for it quoted a weekly brief at seven times what it costs. A weekday cron is
+    likewise counted over the week it runs in, not over the weekdays alone."""
+    n = 0.0
     try:
         if cfg.get('every_minutes'): n += max(1, 1440 // max(1, int(cfg['every_minutes'])))
     except (TypeError, ValueError): pass
@@ -1254,11 +1256,15 @@ def runs_per_day(cfg: dict) -> int:
     if cfg.get('cron'):
         try:
             p = str(cfg['cron']).split()
-            if len(p) == 5: n += len(_cron_field(p[0], 0, 59)) * len(_cron_field(p[1], 0, 23))
+            if len(p) == 5:
+                slots = len(_cron_field(p[0], 0, 59)) * len(_cron_field(p[1], 0, 23))
+                days = len({d % 7 for d in _cron_field(p[4], 0, 7)}) if p[4] != '*' else 7
+                n += slots * days / 7
         except ValueError: pass
-    if cfg.get('on_startup'): n += 1
-    if cfg.get('once_per_day') or cfg.get('once_per_week'): n = min(n, 1)
-    return n
+    if cfg.get('on_startup'): n += 1                      # one launch a day is the assumption; it is a floor, not a promise
+    if cfg.get('once_per_week'): n = min(n, 1 / 7)
+    elif cfg.get('once_per_day'): n = min(n, 1)
+    return round(n, 3)
 
 
 def _daily_slot(cfg: dict, now: datetime):
@@ -1435,6 +1441,10 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
         # every Assistant-sourced check: the owner filled it in and nothing ever read it
         # (2026-09-17). A check that found something is exactly what a phone is for.
         said = int(out.get('said') or 0)
+        # a report configured to read nothing posts nothing, and the run history says so in words -
+        # a clock firing for ever into an empty payload is not a quiet check, it is a broken one
+        if out.get('reads_nothing'):
+            return {'message_id': None, 'subject': f'{title} - read nothing', 'files': 0, **out}
         lines = '\n'.join(str((l or {}).get('text') or '') for l in (out.get('lines') or []))
         d = decide_for(store, cfg, read_result(title, lines, False, said), report_llm(store, cfg, llm))
         speak, why = d['alert'], d['why']

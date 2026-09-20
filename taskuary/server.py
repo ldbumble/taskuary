@@ -6292,7 +6292,7 @@ def open_terminal(body: TermBody):
     if tk: _sc.claim(store, body.task_id, ACTOR)
     try:
         t = hub_term.open_session(store, body.agent, body.task_id, repo, body.cwd, body.rows, body.cols,
-                                  ACTOR, body.model, seed_fn=seed_fn)
+                                  ACTOR, body.model, seed_fn=seed_fn, brain=body.brain)
     except (ValueError, RuntimeError, FileNotFoundError) as e:
         # a CLI you configured but never installed is the common one - say which, don't 500
         raise HTTPException(422, str(e))

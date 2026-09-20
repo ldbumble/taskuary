@@ -46,7 +46,12 @@ SESSION_GOES_ON = ('clear', 'resume')
 
 def cli_version(cmd: str = 'claude') -> str | None:
     """`claude --version` -> '2.1.3'; None when the CLI is not there or will not say."""
-    try: out = subprocess.run([cmd, '--version'], capture_output=True, text=True, timeout=5).stdout
+    import shutil
+    path = shutil.which(cmd) or cmd
+    # an npm shim (.cmd) only runs through cmd.exe; CreateProcess on it bare raised and the log said
+    # "unknown version" for a claude that was right there
+    argv = ['cmd', '/c', path, '--version'] if str(path).lower().endswith(('.cmd', '.bat')) else [path, '--version']
+    try: out = subprocess.run(argv, capture_output=True, text=True, timeout=8).stdout
     except (OSError, subprocess.SubprocessError, ValueError): return None
     m = re.search(r'(\d+)\.(\d+)\.(\d+)', str(out or ''))
     return m.group(0) if m else None
@@ -208,6 +213,17 @@ def _describe(tool: str, inp) -> str:
     return f'{tool} {what}'.strip() if what else tool
 
 
+def _questions(p: dict) -> list:
+    """AskUserQuestion's questions as (text, choices) pairs, read off its tool_input."""
+    out = []
+    for q in (p.get('tool_input') or {}).get('questions') or []:
+        text = str(q.get('question') or '').strip()
+        if not text: continue
+        labels = [str(o.get('label') or '') if isinstance(o, dict) else str(o) for o in (q.get('options') or [])]
+        out.append((text, [l for l in labels if l.strip()]))
+    return out
+
+
 def _events(t, p: dict) -> None:
     """The hook as a worker event (workerstate.py). A prompt submitted is Working; a question is Input
     needed with its text; a permission is Approval needed with the action; a turn that died on a wall
@@ -232,10 +248,7 @@ def _events(t, p: dict) -> None:
             if str(p.get('tool_name') or '') == 'AskUserQuestion':
                 resp = p.get('tool_response') if isinstance(p.get('tool_response'), dict) else {}
                 answers = resp.get('answers') if isinstance(resp.get('answers'), dict) else {}
-                for q in (p.get('tool_input') or {}).get('questions') or []:
-                    text = str(q.get('question') or '').strip()
-                    if not text: continue
-                    choices = [str(o.get('label') or o) for o in (q.get('options') or []) if str(o.get('label') if isinstance(o, dict) else o).strip()]
+                for text, choices in _questions(p):
                     rid = ws.request_id_for(text)
                     ws.record(st, tid, sid, 'input_needed', request_id=rid, text=text, choices=choices, source='hook')
                     ws.record(st, tid, sid, 'answered', request_id=rid, text=str(answers.get(text) or 'answered in the pane'), source='hook')
@@ -244,14 +257,26 @@ def _events(t, p: dict) -> None:
             # is waiting on you" over a coder mid-search, until its next prompt.
             close(('approval_needed',), 'granted in the pane')
         elif ev == 'PermissionRequest':
-            # the decision point itself, with the tool and what it wants to do - not a sentence about it
-            text = _describe(str(p.get('tool_name') or 'a tool'), p.get('tool_input'))
-            ws.record(st, tid, sid, 'approval_needed', request_id=ws.request_id_for(text), text=text, source='hook')
+            if str(p.get('tool_name') or '') == 'AskUserQuestion':
+                # a QUESTION, not a permission: Claude asks leave to run the tool that asks (measured 2026-09-20),
+                # so every surface read "coder needs your approval: AskUserQuestion {json}" over a chooser of
+                # two plain options, and the chat had nothing to pick from. Recorded as what it is, with its
+                # choices, under the id PostToolUse closes it by once the owner has picked.
+                for text, choices in _questions(p):
+                    ws.record(st, tid, sid, 'input_needed', request_id=ws.request_id_for(text), text=text, choices=choices, source='hook')
+            else:
+                # the decision point itself, with the tool and what it wants to do - not a sentence about it
+                text = _describe(str(p.get('tool_name') or 'a tool'), p.get('tool_input'))
+                ws.record(st, tid, sid, 'approval_needed', request_id=ws.request_id_for(text), text=text, source='hook')
         elif ev == 'Notification':
             kind, msg = str(p.get('notification_type') or '').lower(), str(p.get('message') or '').strip()
             if kind == 'permission_prompt' or (not kind and 'permission' in msg.lower()):
-                text = msg or 'Claude needs your permission'
-                ws.record(st, tid, sid, 'approval_needed', request_id=ws.request_id_for(text), text=text, source='hook')
+                # the generic sentence that FOLLOWS PermissionRequest's specific one, six seconds later: the
+                # same stop recorded twice, and the newest won the card - "Claude needs your permission" over
+                # "Edit taskuary/server.py" (measured 2026-09-20). It stands alone only when nothing else does.
+                if not ws.open_requests(ws.events(st, tid, sid)):
+                    text = msg or 'Claude needs your permission'
+                    ws.record(st, tid, sid, 'approval_needed', request_id=ws.request_id_for(text), text=text, source='hook')
             elif kind in ('agent_needs_input', 'idle_prompt'):
                 # the agent asking INSIDE its TUI - a chooser, a prompt - which no tool hook ever reports
                 text = msg or 'Claude is waiting for your input'

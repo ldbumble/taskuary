@@ -107,6 +107,30 @@ class QuestionAndPermissionTests(Base):
         self.fire('Notification', notification_type='permission_prompt', message='Claude needs your permission to use Bash')
         self.assertEqual(self.state()['state'], 'approval_needed')
 
+    def test_asking_the_owner_is_a_question_not_a_permission(self):
+        """Claude asks leave to run AskUserQuestion, so the PermissionRequest CARRIES the question: the record
+        says asked, with the choices - never "needs your approval: AskUserQuestion {json}" (2026-09-20)."""
+        self.session()
+        q = {'questions': [{'question': 'alpha or beta?', 'header': 'Name', 'options': [{'label': 'alpha'}, {'label': 'beta'}]}]}
+        self.fire('PermissionRequest', tool_name='AskUserQuestion', tool_input=q, tool_use_id='tu2')
+        st = self.state()
+        self.assertEqual(st['state'], 'input_needed')
+        self.assertEqual((st['requests'][0]['text'], st['requests'][0]['choices']), ('alpha or beta?', ['alpha', 'beta']))
+        self.assertEqual(ws.request_line('coder', st['requests'][0]), 'coder asked you: alpha or beta?')
+        # the generic notification that follows a few seconds later is the same stop, not a second one
+        self.fire('Notification', notification_type='permission_prompt', message='Claude needs your permission')
+        self.assertEqual(len(self.state()['requests']), 1)
+        # ...and the owner picking in the pane completes the tool: asked and answered, nothing left open
+        self.fire('PostToolUse', tool_name='AskUserQuestion', tool_input=q, tool_response={'answers': {'alpha or beta?': 'alpha'}})
+        self.assertEqual(self.state()['requests'], [])
+
+    def test_the_generic_permission_sentence_never_replaces_the_specific_one(self):
+        self.session()
+        self.fire('PermissionRequest', tool_name='Edit', tool_input={'file_path': 'server.py'}, tool_use_id='tu3')
+        self.fire('Notification', notification_type='permission_prompt', message='Claude needs your permission')
+        st = self.state()
+        self.assertEqual(len(st['requests']), 1); self.assertIn('Edit', st['requests'][0]['text'])
+
     def test_an_mcp_elicitation_is_a_question_until_answered(self):
         self.session()
         self.fire('Elicitation', server_name='jira', tool_name='create_issue', prompt='Which project key?', input_type='text')

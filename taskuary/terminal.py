@@ -478,7 +478,10 @@ class Term:
         if wrote != self.writes:
             lines = render(self.scrollback()[-PHASE_TAIL:], self.cols, self.rows).splitlines()
             self._phase_screen = (self.writes, lines)
-        return lines[-max(1, n):]
+        # ...the last n lines that SAY something: a pane opens taller than a young session's output, so
+        # Claude's first chooser sat mid-screen over blank rows and the bottom eight rows said nothing.
+        # The phase read `unknown` until the 45 s idle fallback, and only then did the card wave.
+        return [l for l in lines if str(l).strip()][-max(1, n):]
 
     def phase(self) -> str: return stable_phase_of(self)
     def waiting(self) -> bool: return self.phase() == 'parked'
@@ -712,7 +715,16 @@ def agent_argv(profile: dict, model: str = None) -> list:
     argv += list(profile['interactive_args']) if profile.get('interactive_args') else interactive_args(profile.get('args') or preset_args(profile.get('cmd') or 'claude'))
     model = model or profile.get('model')
     argv += [profile.get('model_arg') or '--model', str(model)] if model else []
-    return _codex_windows_auto(_codex_browser_tui(argv))
+    return _codex_hook_trust(_codex_windows_auto(_codex_browser_tui(argv)))
+
+
+def _codex_hook_trust(argv: list) -> list:
+    """Codex runs a user-scope hook only once it is trusted inside its TUI, which a pane never is; the flag
+    is what makes hooks.py's events arrive (2026-09-20). A profile saved before the flag existed - the
+    owner's own config.toml carries `exec --dangerously-bypass-approvals-and-sandbox` and nothing else - kept
+    silently skipping them. Added here for every codex pane; it grants nothing a pane had not already."""
+    if not any('codex' in os.path.basename(str(a)).lower() for a in argv): return argv
+    return argv if '--dangerously-bypass-hook-trust' in argv else [*argv, '--dangerously-bypass-hook-trust']
 
 
 # Claude Code asks two questions the FIRST time it opens a folder: "Do you trust the files in this
@@ -738,9 +750,14 @@ def pretrust(cwd: str, agent: str = '', home: str = None) -> bool:
         return False
     projects = cfg.setdefault('projects', {})
     if not isinstance(projects, dict): return False
-    entry = projects.get(cwd) if isinstance(projects.get(cwd), dict) else {}
+    # Claude Code keys a project by its path with FORWARD slashes (C:/Users/...): every entry it wrote
+    # itself on the owner's box is spelled that way, and the backslash entries this used to write were
+    # never read - the "Quick safety check" dialog came up on every folder the owner had not opened by
+    # hand, and a waiting-room note typed into it chose "No, exit" (measured 2026-09-20).
+    key = str(cwd).replace(chr(92), '/')
+    entry = projects.get(key) if isinstance(projects.get(key), dict) else {}
     if all(entry.get(k) for k in TRUSTED): return False                  # already answered - nothing to write
-    projects[cwd] = {**entry, **TRUSTED}
+    projects[key] = {**entry, **TRUSTED}
     try:
         tmp = path + '.tq'
         with open(tmp, 'w', encoding='utf-8') as f: json.dump(cfg, f, indent=2)
@@ -749,6 +766,36 @@ def pretrust(cwd: str, agent: str = '', home: str = None) -> bool:
         logger.warning(f'pretrust: could not write {path} ({e}) - the CLI may ask about {cwd}')
         return False
     logger.info(f'pretrust: {cwd} is trusted for claude - no first-run dialog for this session')
+    return True
+
+
+def pretrust_codex(cwd: str, home: str = None) -> bool:
+    """Codex's own first question - "Do you trust the contents of this directory?" - answered where it
+    reads the answer: a `[projects.'<path>'] trust_level = "trusted"` table in CODEX_HOME/config.toml.
+    Codex spells the key lowercase with backslashes on Windows (its own entries, measured 2026-09-20).
+    A pane could never answer it: the app's render of that prompt was blank rows, the phase read parked
+    after 45 s, and a waiting-room note was typed into the chooser. The table is APPENDED as text so
+    nothing else in the owner's file is touched; a key already present, trusted or not, is left alone."""
+    if not cwd: return False
+    root = home or os.environ.get('CODEX_HOME') or os.path.join(os.path.expanduser('~'), '.codex')
+    path = os.path.join(root, 'config.toml')
+    key = os.path.normcase(os.path.normpath(str(cwd))) if os.name == 'nt' else os.path.normpath(str(cwd))
+    try: cur = open(path, encoding='utf-8').read() if os.path.exists(path) else ''
+    except OSError as e:
+        logger.debug(f'pretrust: {path} could not be read ({e}) - codex will ask its own question'); return False
+    try: import tomllib
+    except ImportError: import tomli as tomllib
+    try: projects = tomllib.loads(cur).get('projects') or {}
+    except Exception as e:
+        logger.debug(f'pretrust: {path} did not parse ({e}) - left as it is'); return False
+    if key in projects: return False                        # answered already, one way or the other
+    block = f"[projects.'{key}']{chr(10)}trust_level = \"trusted\"{chr(10)}"
+    try:
+        os.makedirs(root, exist_ok=True)
+        with open(path, 'a', encoding='utf-8') as f: f.write(('' if not cur or cur.endswith(chr(10)) else chr(10)) + chr(10) + block)
+    except OSError as e:
+        logger.warning(f'pretrust: could not write {path} ({e}) - codex may ask about {cwd}'); return False
+    logger.info(f'pretrust: {key} is trusted for codex - no first-run question for this session')
     return True
 
 
@@ -856,6 +903,9 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     if agent:
         try: pretrust(cwd, ' '.join(str(a) for a in argv))     # no first-run dialog to park on
         except Exception as e: logger.debug(f'pretrust skipped: {e}')
+        if any('codex' in os.path.basename(str(a)).lower() for a in argv):
+            try: pretrust_codex(cwd)                            # ...and codex's own, in its own file
+            except Exception as e: logger.debug(f'codex pretrust skipped: {e}')
     # One scrub for BOTH roads: the prompt is about to go either into argv (seed_argv) or be
     # typed into the pane, and either way it reaches the CLI's provider. See redact.py.
     seed = redact.scrub(' '.join(seed_fn(cwd).split())) if (seed_fn and agent) else None

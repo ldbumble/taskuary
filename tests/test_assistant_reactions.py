@@ -1057,7 +1057,8 @@ class AgentsStartAndFinishTests(unittest.TestCase):
         import json as _json, tempfile
         home, cwd = tempfile.mkdtemp(), tempfile.mkdtemp()
         self.assertTrue(terminal.pretrust(cwd, r'C:\bin\claude.cmd --model sonnet', home=home))
-        got = _json.load(open(os.path.join(home, '.claude.json'), encoding='utf-8'))['projects'][cwd]
+        # Claude Code keys the project with forward slashes, whatever the OS spells the path with
+        got = _json.load(open(os.path.join(home, '.claude.json'), encoding='utf-8'))['projects'][cwd.replace(chr(92), '/')]
         self.assertTrue(got['hasTrustDialogAccepted'] and got['hasClaudeMdExternalIncludesApproved'])
         self.assertFalse(terminal.pretrust(cwd, 'claude', home=home))       # already answered: nothing written
         self.assertFalse(terminal.pretrust(cwd, 'codex', home=home))        # only claude asks these
@@ -1071,6 +1072,21 @@ class AgentsStartAndFinishTests(unittest.TestCase):
         got = _json.load(open(p, encoding='utf-8'))
         self.assertEqual(got['userID'], 'abc')
         self.assertEqual(got['projects']['/other'], {'allowedTools': ['Bash']})
+
+    def test_codex_is_told_it_may_trust_the_checkout_in_its_own_file(self):
+        import tempfile
+        try: import tomllib
+        except ImportError: import tomli as tomllib
+        home, cwd = tempfile.mkdtemp(), tempfile.mkdtemp()
+        p = os.path.join(home, 'config.toml')
+        open(p, 'w', encoding='utf-8').write('model = "gpt-5"' + chr(10) + chr(10) + "[projects.'/other']" + chr(10) + 'trust_level = "trusted"' + chr(10))
+        self.assertTrue(terminal.pretrust_codex(cwd, home=home))
+        cfg = tomllib.loads(open(p, encoding='utf-8').read())
+        key = os.path.normcase(os.path.normpath(cwd)) if os.name == 'nt' else os.path.normpath(cwd)
+        self.assertEqual(cfg['projects'][key], {'trust_level': 'trusted'})     # codex's own spelling of the key
+        self.assertEqual((cfg['model'], cfg['projects']['/other']), ('gpt-5', {'trust_level': 'trusted'}))   # nothing else touched
+        self.assertFalse(terminal.pretrust_codex(cwd, home=home))              # answered already: nothing written
+        self.assertFalse(terminal.pretrust_codex('', home=home))
 
     def test_the_cards_question_is_the_screen_not_the_theme_bar(self):
         chrome = ['─────────────', '  Catppuccin Mocha  Dracula  Nord', '? for shortcuts', 'auto-accept edits on']

@@ -402,6 +402,23 @@ def compact_inventory(snapshot, query, *, include_excluded=False, degraded_ok=Fa
                               else 'approve' if kind == 'review' else idea_lane(entity) if kind == 'idea' else 'fyi'}
             # ...and the verdict that chose that lane, in words, so the pane under it can say why
             if kind == 'idea' and (reason := idea_reason(entity)): legacy['RouteReason'] = reason
+            # ...and for a task, the LIVE AGENT's word, exactly as a message-backed row takes it above. A task
+            # with no message - the owner's own todo, a Board card - read `queued` ("waiting to start") over a
+            # coder that was mid-turn, and still `queued` once it stopped on a question (measured 2026-09-20);
+            # the pile beside it said "coder asked you", so one item wore two words.
+            if kind == 'task':
+                tid = entity.get('TaskId')
+                legacy.update(TaskId=tid, Title=entity.get('Title'), TaskStatus=status, Assignee=entity.get('Assignee'), TaskKind=entity.get('Kind'))
+                workers = [w for w in view.get('worker_attention', []) if str(w.get('taskId', w.get('task_id'))) == str(tid)]
+                running = [r for r in view.get('runs', []) if r.get('TaskId') == tid and r.get('Status') == 'running']
+                working = (running[-1].get('AgentName') or 'agent') if running else None
+                waiting, line = False, ''
+                for w in workers:
+                    working = w.get('agent') or w.get('label') or 'coder'
+                    waiting, line = waiting or bool(w.get('waiting')), line or str(w.get('line') or '')
+                if working and open_task:
+                    legacy.update(Working=working, AgentWaiting=waiting, AgentLine=line if waiting else '', NeedsYou=int(waiting),
+                                  Lane='blocked' if waiting else 'working')
         counts = {kind: sum(mid.startswith(prefix + ':') for mid in members) for kind, prefix in (
             ('messages', 'message'), ('tasks', 'task'), ('ideas', 'idea'), ('reviews', 'review'))}
         counts.update(members=len(members), attachments=len(view.get('attachments', [])))

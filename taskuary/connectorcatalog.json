@@ -2203,6 +2203,16 @@
       "match": [
         "hyperbolic"
       ]
+    },
+    {
+      "type": "treg",
+      "title": "treg (agent tools)",
+      "group": "Agent tools",
+      "planned": false,
+      "desc": "About 3,600 third-party endpoints behind one key, billed per call with no subscription. Search the catalogue free; every call is a proposal you approve.",
+      "match": [
+        "treg"
+      ]
     }
   ]
 }

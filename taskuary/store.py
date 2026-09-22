@@ -869,6 +869,7 @@ class SQLiteStore:
                          ('mssql', 'Microsoft SQL Server'),
                          ('telegram', 'Telegram'), ('whatsapp', 'WhatsApp'),
                          ('linkedin', 'LinkedIn'),
+                         ('treg', 'treg (agent tools)'),
                          ('imessage', 'Apple Messages'),
                          ('gmail', 'Gmail / Google Workspace'), ('imap', 'Any mailbox (IMAP)'),
                          ('winrm', 'Remote Windows (WinRM)'),

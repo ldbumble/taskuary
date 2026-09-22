@@ -687,6 +687,12 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'entra_signins': run_entra_signins, 'entra_licenses': run_entra_licenses,
             'prometheus': run_prometheus, 'datadog': run_datadog,
             'winrm': run_winrm, 'mcp': run_mcp, 'rest': run_rest,
+            # treg over its hosted MCP: search the catalogue (free), then call one endpoint.
+            # The call is a write whatever the endpoint does - it spends money, and the same
+            # door reaches endpoints that publish and order.
+            'treg_tools': _lazy('treg', 'run_treg_tools'),
+            'treg_search': _lazy('treg', 'run_treg_search'),
+            'treg_call': _lazy('treg', 'run_treg_call'),
             # LinkedIn: read who you are, and the one WRITE. Registered like QuickBooks' bill -
             # it exists so it can be PROPOSED, because the card ships at read.
             'linkedin_me': _lazy('linkedin', 'run_linkedin_me'),
@@ -783,7 +789,8 @@ def executor_for(type_name):
 
 # Which connector CARD owns each executor type: the s3/cloudwatch types run on the aws
 # card's keys, the blob/logs types on the azure card's app - roles and creds resolve there.
-CARD_OF = {'linkedin_me': 'linkedin', 'linkedin_post': 'linkedin',
+CARD_OF = {'treg_tools': 'treg', 'treg_search': 'treg', 'treg_call': 'treg',
+           'linkedin_me': 'linkedin', 'linkedin_post': 'linkedin',
            's3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 'azure_logs': 'azure', 'calendar': 'outlook',
            'entra_users': 'azure', 'entra_groups': 'azure', 'entra_signins': 'azure', 'entra_licenses': 'azure',
            'intacct_fields': 'intacct', 'intacct_create': 'intacct', 'intacct_update': 'intacct',

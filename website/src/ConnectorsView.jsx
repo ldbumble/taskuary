@@ -665,6 +665,25 @@ const DATA_META = {
     agent: ["GET {base}/api/connectors/{cid}/quickbooks/status{hdr}: has_app says whether the Intuit keys are saved; connected says whether a token is. Neither is yours to make - the owner creates the app at developer.intuit.com and presses Connect (a browser sign-in). Ask for the client id and secret, save them in ConfigJson, tell them the redirect URI from status to register, then ask them to press Connect on the card.",
       "Once connected, POST {base}/api/connectors/{cid}/test{hdr}. A 401 in the detail means the refresh token expired (100 days unused) - the owner presses Connect again.",
       "Never post a bill or an expense yourself: propose it (TASKUARY-PROPOSE {\"action\": \"run_tool\", \"type\": \"quickbooks_bill\", \"vendor\": ..., \"amount\": ..., \"account\": ..., \"doc_number\": ...}) and say in the session what it is for. Turn the card on, SETUP DONE."] },
+  // ~3,600 third-party endpoints behind one card. It is ONE card and not ninety because tool
+  // definitions live in the model's context: treg's own MCP server exposes about ten fixed
+  // tools and keeps the catalogue as DATA behind them, so an agent searches it rather than
+  // carrying it. Same hosted-MCP shape as Robinhood, which is why this needs no new transport.
+  treg: { title: "treg (agent tools)", types: ["treg_tools", "treg_search", "treg_call"],
+    fields: [["MCP url — blank uses treg's own (https://treg.to/mcp/)", "url"],
+             ["max cost per call in USD (default 0.25)", "max_cost"]],
+    secretLabel: "treg token — from treg.to after sign-in",
+    desc: "About 3,600 endpoints across ~90 providers behind one key — enrichment, search, social, market data — billed per call at cost with no subscription. Searching the catalogue is free; every call is a proposal you approve.",
+    howto: ["Sign in at treg.to (GitHub or an emailed code) and create a token. New verified accounts get $1.00 of credit; there is no subscription and no seat.",
+      "Paste the token under Credentials. Leave the url blank unless you self-host.",
+      "Test lists treg's own tool surface — about ten meta-tools. The 3,600 endpoints are not tools; they are the catalogue those tools search.",
+      "Searching is free and changes nothing, so an agent may do it unattended. CALLING spends real money and can reach endpoints that publish or order, so the card ships at authority READ and every call becomes a proposal you approve on the task.",
+      "max cost is the only ceiling there is — treg applies none of its own to a direct call. 0.25 is generous for ordinary work (their median endpoint is $0.002) and still refuses the video-generation tail.",
+      "Your own credential always wins: if you connect a provider you already pay for, treg uses it and never meters it."],
+    agent: ["Search FIRST: run_tool with type treg_search and a `q` that says the JOB, not the vendor (‘find a company's employee count’, not ‘Crunchbase’). The answer gives each endpoint's id, its price and how reliably it has been working.",
+      "Searching is free and yours to do. Reading the catalogue costs nothing and commits nothing.",
+      "You may NOT call an endpoint. Propose it: TASKUARY-PROPOSE {\"action\": \"run_tool\", \"type\": \"treg_call\", \"endpoint\": \"<id from the search>\", \"args\": {...}}. Say what it costs and what you will do with the answer - the owner is approving a purchase, not just a call.",
+      "Prefer the cheapest endpoint that answers the question, and say why you chose it over the alternatives the search returned."] },
   robinhood: { title: "Robinhood (agentic trading)", types: ["robinhood_tools", "robinhood_read", "robinhood_order"],
     fields: [["MCP url — blank uses Robinhood's own (https://agent.robinhood.com/mcp/trading)", "url"]],
     secretLabel: "agent token (write-only) — issued by Robinhood's MCP sign-in",
@@ -1044,7 +1063,7 @@ const ConnCard = ({ c }) => (
 
 // The catalog's sections, named once: the rail reads them before `groups` is built (groups
 // needs the loaded connectors), and they must stay in step.
-const GROUP_TITLES = ["AI — agents & models", "AI — voice", "Email", "Messaging", "Social", "Developer", "Project management",
+const GROUP_TITLES = ["AI — agents & models", "AI — voice", "Email", "Messaging", "Social", "Agent tools", "Developer", "Project management",
   "Databases", "Cloud & infrastructure", "Corporate systems", "Markets & finance", "Wallets & onchain", "Observability", "Agentic web", "Files & sheets", "Everything else"];
 // planned types read as raw identifiers on a card ("sharepoint_list"), which looks unfinished
 // in a way the feature is not. Named here; anything unnamed falls back to a de-underscored key.
@@ -1362,6 +1381,10 @@ export default function ConnectorsView({ onNavigate }) {
        from here, and the only verb is "post". It gets its own shelf so the Messaging group
        keeps meaning "things that talk to you". */
     { title: "Social", cards: [...channelCards(["linkedin"]), ...catalogCards("Social")] },
+    /* Not a data source and not a channel: these give an AGENT reach. A Zoho card means
+       "Taskuary can see this system of ours"; a card here means "an agent can reach outward
+       through this". Different question, different shelf. */
+    { title: "Agent tools", cards: [...dataCards(["treg"]), ...catalogCards("Agent tools")] },
     { title: "Developer", cards: [...channelCards(["github", "gitlab", "azdo", "sentry", "pagerduty"]), ...catalogCards("Developer")] },
     { title: "Project management", cards: [...channelCards(["jira", "asana", "monday", "clickup", "todoist", "linear", "trello", "notion"]), ...catalogCards("Project management")] },
     /* One "Data connections" bucket held eleven cards that have nothing to do with each

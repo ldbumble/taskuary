@@ -184,7 +184,10 @@ class WordsInsteadOfButtonsTests(unittest.TestCase):
         self.assertEqual(head[1:], [f"1 · {funnel.CHANNEL_MARKS['github']} Alex - Run failed: ci",
                                     f"2 · {funnel.CHANNEL_MARKS['email']} Erin - Rebecca is back Tuesday"])
         self.assertTrue(head[0].endswith('2 fyi · nothing to do'), head[0])
-        self.assertIn('Reply with a number to open one, or:\n3 · All read, next', text)
+        # ...and the line says what a number DOES: "open one" describes a door on a screen that is not
+        # here, and on a phone the number is the only way to see what a line is about (2026-09-22)
+        self.assertIn('Reply with a number to read that message in full, or:\n3 · All read, next', text)
+        self.assertNotIn('4 · ', text, 'the walk already offered the way on under its own name')
 
     def test_a_number_on_an_fyi_batch_opens_that_one(self):
         """The desktop's "Talk about it" on one member; the chat had four lines and no door into any of

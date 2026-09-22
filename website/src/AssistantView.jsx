@@ -671,6 +671,21 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       const { data: st } = await api.get("/api/concierge");
       if (epoch !== chatEpoch.current || resettingRef.current) return;
       setMsgs((m) => mergeDurableTurns(m, st.messages || []).messages);
+      // ...AND WHAT IS ON THE TABLE, from the same answer. The walk can be driven from somewhere
+      // else - a phone chat holding the handoff, another tab - and this one followed the WORDS while
+      // its rail went on ringing whatever the desk itself last put up: the chat showed four fyis and
+      // the rail ringed the report before them (the owner, 2026-09-22: "it's out of sync again while
+      // talking to assistant on whatsapp"). Current is the server's persisted, validated word
+      // (PW-162) wherever it is read; never while a turn of ours is in flight, because that answer
+      // is the newer truth and the poll would drag the table back a step.
+      if (!turnFlight.current) {
+        const said = st.current || null;
+        if ((said?.key || null) !== (currentRef.current?.key || null)) {
+          currentRef.current = said;
+          setCurrent(said?.key || null);
+          setCurrentItem(said);
+        }
+      }
       if (data.events?.length) {
         // The watcher's word is a strip notice the server keeps (PW-165/166) and, here, a spoken line.
         // Background activity is never permission to choose, replace, clear, or advance the subject.

@@ -805,7 +805,23 @@ def turn_text(out: dict, lead: str = '', store=None) -> str:
         members = member_lines(item)
         head = '\n'.join([f"{mark} {len(members)} fyi · nothing to do"] + [f'{i} · {line}' for i, (_k, line) in enumerate(members, 1)])
     words, first = choices(out), len(member_lines(item)) + 1
-    opts = (('Reply with a number to open one, or:' if first > 1 else 'Reply with one of:') + '\n'
+    if item.get('kind') == 'fyis':
+        # THE WAY ON, which only this channel has to say. The desktop card carries its own "All read,
+        # next" button, so concierge.CHIPS leaves `next` off the batch on purpose - and a chat has no
+        # buttons, so the phone listed four things and offered no way past them (the owner, 2026-09-22:
+        # "next to go to next group"). The word is the vocabulary's own, so the number answers it
+        # exactly as it does on every other card.
+        from . import concierge
+        # ...unless the walk already offered one under its own name ("All read, next" is the batch
+        # card's button, and on the phone it arrives as a word like any other): two ways to say the
+        # same move, numbered separately, is the thing that made the desktop drop a button in the
+        # first place.
+        if not any('next' in str(w).lower() for w in words): words = words + [concierge.CHIP_WORDS['next']]
+    # ...and what a NUMBER does, said plainly. "Open one" describes a door on a screen that is not
+    # here; on a phone the number is the only way to see what the line is actually about.
+    lead_in = ('Reply with a number to read that message in full, or:' if item.get('kind') == 'fyis'
+               else 'Reply with a number to open one, or:') if first > 1 else 'Reply with one of:'
+    opts = (lead_in + '\n'
             + '\n'.join(f'{i} · {w}' for i, w in enumerate(words, first))) if words else ''
     shown = decision_block(store, item) if store is not None else ''
     return '\n\n'.join(x for x in (lead.strip(), head, shown, opts) if x)

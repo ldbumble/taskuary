@@ -238,3 +238,44 @@ class AnAgentsQuestionComesBackAnsweredTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class FyiGroupOnAPhoneTests(unittest.TestCase):
+    """Four things nobody has to do, on a screen with no buttons.
+
+    The desktop card carries its own "All read, next" button, so concierge.CHIPS leaves `next` off a
+    batch on purpose. A chat has no buttons: the phone printed four numbered lines, said nothing about
+    what a number was for, and offered no way past them (the owner, 2026-09-22: "fyi groups should say
+    hit number to see full message ... and next to go to next group").
+    """
+
+    ITEM = {'kind': 'fyis', 'key': 'fyis:a,b',
+            'items': [{'key': 'msg:1', 'channel': 'email', 'who': 'noreply@vendor.example', 'title': 'File - SUCCESS!'},
+                      {'key': 'msg:2', 'channel': 'email', 'who': 'bank@vendor.example', 'title': 'Balance Reporting'}]}
+
+    def turn(self, chips=()):
+        from taskuary import concierge
+        return remote_assistant.turn_text({'item': self.ITEM, 'say': '2 things people told you',
+                                           'chips': [{'label': concierge.CHIP_WORDS[v]} for v in chips]})
+
+    def test_a_number_is_told_what_it_does(self):
+        text = self.turn(('not_ours_sender',))
+        self.assertIn('Reply with a number to read that message in full', text)
+        self.assertIn('1 · ', text); self.assertIn('2 · ', text)
+
+    def test_the_way_on_is_offered_even_though_the_card_keeps_it_in_a_button(self):
+        from taskuary import concierge
+        self.assertNotIn('next', concierge.CHIPS['fyis'], 'the desktop card still keeps its own button')
+        text = self.turn(('not_ours_sender', 'block_sender'))
+        self.assertIn('5 · Next', text, 'after the two members and the two sender rules')
+
+    def test_it_is_offered_even_when_the_walk_sends_no_chips(self):
+        text = self.turn(())
+        self.assertIn('3 · Next', text)
+        self.assertIn('read that message in full', text)
+
+    def test_an_ordinary_card_still_says_open_one(self):
+        text = remote_assistant.turn_text({'item': {'kind': 'report', 'key': 'report:1'},
+                                           'say': 'Process Error Check landed', 'chips': [{'label': 'Run it again'}]})
+        self.assertNotIn('read that message in full', text)
+        self.assertIn('Reply with one of:', text)

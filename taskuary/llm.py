@@ -22,7 +22,24 @@ from . import redact
 # Everything that can answer a PROMPT. This list is what populates every brain picker, so a model
 # that cannot emit text does not belong in it however good it is: `typesafe` (Jev) answers typed
 # questions and would have nothing to say as the Assistant's brain. It is chosen on its own card.
-AI_TYPES = ('anthropic', 'openai', 'azure_openai', 'openrouter', 'ollama', 'meta')
+# Providers that speak the OpenAI chat-completions schema exactly. A base url, a default model
+# and a bearer key is the WHOLE integration, so they are data rather than nine near-identical
+# branches - the tenth is a row here, not a code change. Every one was verified to exist by an
+# unauthenticated POST returning 401/400 (a wrong path returns 404). base_url stays overridable
+# for the same reason ollama's is: a gateway in front of any of them still speaks this surface.
+# The model defaults are a starting point, not a promise - model names churn, the box overrides.
+OPENAI_COMPATIBLE = {
+    'groq':       ('https://api.groq.com/openai/v1', 'llama-3.3-70b-versatile'),
+    'mistral':    ('https://api.mistral.ai/v1', 'mistral-small-latest'),
+    'together':   ('https://api.together.xyz/v1', 'meta-llama/Llama-3.3-70B-Instruct-Turbo'),
+    'cerebras':   ('https://api.cerebras.ai/v1', 'llama-3.3-70b'),
+    'xai':        ('https://api.x.ai/v1', 'grok-2-latest'),
+    'gemini':     ('https://generativelanguage.googleapis.com/v1beta/openai', 'gemini-2.0-flash'),
+    'cohere':     ('https://api.cohere.ai/compatibility/v1', 'command-r-plus'),
+    'deepseek':   ('https://api.deepseek.com/v1', 'deepseek-chat'),
+    'perplexity': ('https://api.perplexity.ai', 'sonar'),
+}
+AI_TYPES = ('anthropic', 'openai', 'azure_openai', 'openrouter', 'ollama', 'meta') + tuple(OPENAI_COMPATIBLE)
 
 # What a vision model will look at. "See below." is half the mail this app reads, and below was
 # a screenshot - a text-only funnel filed the sentence and threw the actual ask away.
@@ -380,6 +397,11 @@ def make_llm(t, cfg: dict, key: str):
         if not cfg.get('model'): raise RuntimeError('a local brain needs its model named - `ollama list` shows what is installed')
         urls, model = [f'{base}/v1/chat/completions'], cfg['model']
         headers = {'Authorization': f'Bearer {key}'} if key else {}
+    elif t in OPENAI_COMPATIBLE:
+        default_base, default_model = OPENAI_COMPATIBLE[t]
+        base = (cfg.get('base_url') or default_base).rstrip('/')
+        urls = [f'{base}/chat/completions']
+        headers, model = {'Authorization': f'Bearer {key}'}, cfg.get('model') or default_model
     elif t == 'azure_openai':
         ep = (cfg.get('endpoint') or '').rstrip('/')
         if not (ep and cfg.get('deployment')): raise RuntimeError('azure_openai needs endpoint + deployment')

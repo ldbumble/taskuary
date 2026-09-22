@@ -948,7 +948,7 @@
       "type": "xai",
       "title": "xAI (Grok API)",
       "group": "AI — agents & models",
-      "planned": true,
+      "planned": false,
       "desc": "Grok models through xAI's API",
       "match": [
         "xai (grok api)",
@@ -960,7 +960,7 @@
       "type": "gemini",
       "title": "Google Gemini API",
       "group": "AI — agents & models",
-      "planned": true,
+      "planned": false,
       "desc": "Gemini models through Google AI Studio",
       "match": [
         "google gemini api",
@@ -972,7 +972,7 @@
       "type": "mistral",
       "title": "Mistral AI",
       "group": "AI — agents & models",
-      "planned": true,
+      "planned": false,
       "desc": "Mistral and Codestral hosted models",
       "match": [
         "mistral ai",
@@ -983,7 +983,7 @@
       "type": "cohere",
       "title": "Cohere",
       "group": "AI — agents & models",
-      "planned": true,
+      "planned": false,
       "desc": "Command models and enterprise RAG",
       "match": [
         "cohere"
@@ -993,7 +993,7 @@
       "type": "groq",
       "title": "Groq inference",
       "group": "AI — agents & models",
-      "planned": true,
+      "planned": false,
       "desc": "Fast hosted inference for open models",
       "match": [
         "groq inference",
@@ -1004,7 +1004,7 @@
       "type": "together",
       "title": "Together AI",
       "group": "AI — agents & models",
-      "planned": true,
+      "planned": false,
       "desc": "Hosted open-source models and embeddings",
       "match": [
         "together ai",
@@ -1026,7 +1026,7 @@
       "type": "cerebras",
       "title": "Cerebras Inference",
       "group": "AI — agents & models",
-      "planned": true,
+      "planned": false,
       "desc": "High-speed inference for open models",
       "match": [
         "cerebras inference",
@@ -1864,8 +1864,8 @@
     {
       "type": "perplexity",
       "title": "Perplexity",
-      "group": "Agentic web",
-      "planned": true,
+      "group": "AI — agents & models",
+      "planned": false,
       "desc": "Web-grounded answers and research",
       "match": [
         "perplexity"
@@ -2131,6 +2131,16 @@
       "desc": "Orders, shipments and delivery status",
       "match": [
         "shipstation"
+      ]
+    },
+    {
+      "type": "deepseek",
+      "title": "DeepSeek",
+      "group": "AI — agents & models",
+      "planned": false,
+      "desc": "Open reasoning models at roughly a tenth of the usual price - the cheapest capable triage brain here.",
+      "match": [
+        "deepseek"
       ]
     }
   ]

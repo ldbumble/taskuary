@@ -636,7 +636,15 @@ def _run_operation(op: dict, background: BackgroundTasks):
     if kind == 'message.file': return file_message(mid, NotATaskBody(learn=bool(p.get('learn', True))), background)
     if kind == 'message.reply': return open_reply(mid, None)
     if kind == 'dispatch.prepare':
-        return _dispatch_task_to_its_agent(tid, DispatchBody(kind=p.get('kind'), agent=p.get('agent'), instruction=p.get('instructions'), model=p.get('model')), background)
+        # ...through the task's own dispatch DOOR, not the handler underneath it: the door is where a
+        # repository the agent cannot open becomes a decision (`needs_repo`) instead of a 422. Calling
+        # the handler directly skipped that, so the task page's Start showed "422: I could not tell which
+        # checkout this belongs in" as a dead end - and its advice named a task menu the card redesign
+        # had already removed (the owner, 2026-09-22: "don't see anywhere on agent or task to choose repo").
+        out = dispatch_task(tid, DispatchBody(kind=p.get('kind'), agent=p.get('agent'), instruction=p.get('instructions'), model=p.get('model')), background)
+        if out.get('dispatch') == 'needs_repo':
+            raise operations.Halt(f"{out.get('ref') or 'it'} needs a repository first - {out.get('reason') or 'pick one'}", out)
+        return out
     if kind == 'task.set_kind':
         if str(p.get('kind')) == 'task': return not_coding(tid, NotATaskBody(learn=bool(p.get('learn', True))), background)
         # ...and every other kind down the task page's own road, not a bare field write. Writing

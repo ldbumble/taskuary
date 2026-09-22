@@ -66,6 +66,24 @@ class TaskControls(unittest.TestCase):
         self.assertEqual(out['status'], 'error'); self.assertIn('unknown agent', out['error'])
         self.assertEqual(self.s.get_task(tid)['Status'], 'open')
 
+    def test_a_repository_still_to_choose_comes_back_as_a_question_not_a_dead_error(self):
+        """The task page's Start goes through the operations road, which called the dispatch
+        HANDLER directly and so skipped the 422 -> needs_repo conversion that the plain endpoint
+        does. The page got "422: I could not tell which checkout this belongs in" as a flat
+        error - pointing at a task menu the card redesign removed - and no chooser (live,
+        2026-09-22, TQ-0666)."""
+        tid = self.s.create_task({'Title': 'Work', 'Kind': 'coding'}, 'owner')
+        self.s.upsert_agent('coder', 'coding', 'cli', '{}')
+        why = 'I could not tell which checkout this belongs in, and guessing would put an agent in C:/FanApp.'
+        with mock.patch.object(server.hub_term, 'session_for', return_value=None), \
+             mock.patch.object(server.hub_term, 'start_on_task', side_effect=ValueError(why)):
+            _, r = self.run_op('dispatch.prepare', tid, {'kind': 'coding'})
+        out = r.json()
+        self.assertEqual(out['status'], 'error')                       # still not a success: nothing started
+        self.assertEqual(out['outcome']['dispatch'], 'needs_repo')     # ...but the page can ask which one
+        self.assertEqual(out['outcome']['taskId'], tid)
+        self.assertIn('could not tell which checkout', out['outcome']['reason'])
+
     def test_coding_start_on_a_task_with_a_live_worker_is_refused_without_a_duplicate(self):
         tid = self.s.create_task({'Title': 'Work', 'Kind': 'general'}, 'owner')
         with mock.patch.object(server.hub_term, 'session_for', return_value=Live()), \

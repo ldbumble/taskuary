@@ -866,9 +866,10 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
                 logger.info(f'found {repo} at {found} - remembered on {agent or label}')
         if not cwd and paths:
             raise ValueError(f'no local path for {repo}, and a search of your code folders found no '
-                             f'checkout with that git remote. Open the task menu (...) > Pick the '
-                             f'repository, choose {repo} and give it the path - otherwise the session '
-                             f'would open in {profile.get("cwd") or os.getcwd()} and work the wrong tree')
+                             f'checkout with that git remote. Pick the repository on the task - the repo '
+                             f'chip beside its agent, or the chooser this refusal opens - choose {repo} and '
+                             f'give it the path; otherwise the session would open in '
+                             f'{profile.get("cwd") or os.getcwd()} and work the wrong tree')
     # ...and NO repo decided must not mean "the agent's default folder" either. That default is one
     # particular checkout (FanApp, on this box), so a task nothing matched opened there and an agent
     # worked a tree it had no business in - the same failure the refusal above exists to prevent, one
@@ -877,8 +878,9 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         paths = profile.get('cwd_map') or {}
         if len(paths) > 1:
             raise ValueError('I could not tell which checkout this belongs in, and guessing would put an '
-                             f"agent in {profile.get('cwd') or os.getcwd()}. Open the task menu (...) > Pick "
-                             'the repository and say which one - or tag it, and every later session goes there.')
+                             f"agent in {profile.get('cwd') or os.getcwd()}. Pick the repository on the task "
+                             '- the chooser this refusal opens, or the repo chip beside its agent - and say '
+                             'which one; or tag it, and every later session goes there.')
         if len(paths) == 1: cwd = next(iter(paths.values()))
     cwd = cwd or profile.get('cwd') or os.getcwd()
     if not os.path.isdir(cwd): raise ValueError(f'working directory does not exist: {cwd}')

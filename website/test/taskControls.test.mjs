@@ -132,7 +132,11 @@ test("the operations helper proposes then executes by version and surfaces a fai
   const ops = src("taskOps.js");
   assert.match(ops, /api\.post\("\/api\/operations", \{ kind, target, params \}\)/);
   assert.match(ops, /\/execute`, \{ version: op\.version \}/);
-  assert.match(ops, /status === "error"\) throw/);
+  // it still throws on a failed handler - and carries the halt's outcome, so a caller can ask
+  // the question the handler stopped for (a repository still to choose) instead of printing it
+  assert.match(ops, /data\?\.status === "error"\) \{/);
+  assert.match(ops, /err\.outcome = data\.outcome \?\? null;/);
+  assert.match(ops, /throw err;/);
 });
 
 test("interrupted work shows as interrupted and reopening starts nothing", () => {

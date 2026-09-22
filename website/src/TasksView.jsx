@@ -778,7 +778,14 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
         setRestartOpen(false);
       }
     } catch (e) {
-      if (!stale(id)) setErr(e?.response?.data?.detail || e?.message || "Could not start the coding agent");
+      if (stale(id)) return;
+      // A repository still to choose is the same QUESTION here as on the terminal road: open the
+      // chooser and resume this start on the answer. Printing the sentence instead sent the owner
+      // looking for a task menu that no longer exists (2026-09-22).
+      const msg = e?.response?.data?.detail || e?.message || "Could not start the coding agent";
+      if (e?.outcome?.dispatch === "needs_repo" || /no local path|could not tell which checkout/i.test(msg)) {
+        setErr(""); setRepoPick(true); setResumeAfterRepo({ dispatch: true });
+      } else setErr(msg);
     } finally { if (!stale(id)) setStartingAgent(""); }
   };
   const startGeneralAgent = async () => {
@@ -1508,7 +1515,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         if (resumeAfterRepo && data?.repo) {
                           const launch = resumeAfterRepo;
                           setResumeAfterRepo(null); setRepoPick(false);
-                          openTerm({ ...launch, repo: data.repo, cwd: null });
+                          // the start that asked the question is the start that resumes: the Start
+                          // button's own road (operations) or the terminal it was opening
+                          if (launch.dispatch) startCodingAgent();
+                          else openTerm({ ...launch, repo: data.repo, cwd: null });
                         }
                       }} />
                   </Box>

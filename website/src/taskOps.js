@@ -5,6 +5,13 @@
 export async function runOperation(api, kind, target, params = {}) {
   const { data: op } = await api.post("/api/operations", { kind, target, params });
   const { data } = await api.post(`/api/operations/${op.id}/execute`, { version: op.version });
-  if (data?.status === "error") throw new Error(data.error || `${kind} did not run`);
+  // A halt carries its own outcome - "a repository still to choose", say - and the caller needs it
+  // to ask the right question. Throwing the sentence alone left the task page with a 422 it could
+  // only print (2026-09-22).
+  if (data?.status === "error") {
+    const err = new Error(data.error || `${kind} did not run`);
+    err.outcome = data.outcome ?? null;
+    throw err;
+  }
   return data?.outcome ?? data;
 }

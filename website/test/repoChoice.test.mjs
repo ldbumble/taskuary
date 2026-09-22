@@ -24,3 +24,13 @@ test("a selected repository with no local checkout still offers path setup", () 
   assert.match(picker, /on && r\.has_path/);
   assert.match(picker, /on \? "set path" : "use this"/);
 });
+
+test("the task page's Start button asks which repo instead of printing the refusal", () => {
+  const tasks = src("TasksView.jsx");
+  // the Start button runs the operations road: a halt carries needs_repo, and the chooser resumes it
+  assert.match(tasks, /e\?\.outcome\?\.dispatch === "needs_repo"/);
+  assert.match(tasks, /setResumeAfterRepo\(\{ dispatch: true \}\)/);
+  assert.match(tasks, /if \(launch\.dispatch\) startCodingAgent\(\)/);
+  const ops = src("taskOps.js");
+  assert.match(ops, /err\.outcome = data\.outcome/);
+});

@@ -51,7 +51,7 @@ FIELDS = {
         'the idea that something was done is not evidence that it was.',
     'recently_closed':
         'recently_closed is work on this thread, this sender or this subject that was ANSWERED AND CLOSED in '
-        'the last fortnight, each with how it ended - the determination the agent wrote, or the ask if no agent '
+        'the last few days, each with how it ended - the determination the agent wrote, or the ask if no agent '
         'ran. It is the strongest evidence there is that an arrival needs nobody: a scheduled check that reports '
         'the same failure every run, a system that keeps sending the same notice, a question already settled. '
         'When the determination ALREADY ANSWERS what arrived - the cause is known, the conclusion was "nothing '

@@ -713,7 +713,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // read "brain taskuary" - the product's own name, on the row whose whole job is to answer that
   // (the owner, 2026-09-16). A general session reports what it actually reached for instead:
   // `provider` is the connector's or the CLI's own label, `model` the gear it runs on.
-  const runBrain = term?.provider || term?.cli || term?.agent || (runRole && brains[runRole]) || "";
+  // ...and once that session is GONE, what it actually ran on (detail.ranOn: the saved pick a general
+  // session resumes from, or the transcript's brain) - never the roster, which names what the role
+  // WOULD run on today. A researcher session on the owner's Azure connector read "brain claude" an
+  // hour after it closed, because that is the default for a role with no override (2026-09-22).
+  const runBrain = term?.provider || term?.cli || term?.agent || detail?.ranOn?.brain || (runRole && brains[runRole]) || "";
   // ...and on a general session that brain is ALREADY on screen, as the live picker in the
   // workspace toolbar a few pixels below - the same two facts twice, one of them editable and one
   // of them stale ("why is it there, the model is below it?"). The pill goes where the picker is.
@@ -1496,7 +1500,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         : { mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }) }}>
                       {runRole && <Box sx={{ ...chipBtnStatic }} title="The role: which document this worker follows. Every coding task's role is `coder`.">
                         <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>role</Box>&nbsp;{runRole}</Box>}
-                      {brainPill && <Box sx={{ ...chipBtnStatic }} title="The brain: which CLI or API connector actually runs it. Chosen on Settings → Triage & agents, or by this role's override — not per task.">
+                      {brainPill && <Box sx={{ ...chipBtnStatic }}
+                        title={brainPill === detail?.ranOn?.brain
+                          ? `What ran this session${detail.ranOn.model ? `, on ${detail.ranOn.model}` : ""}. A brain is chosen on Settings → Triage & agents, or by this role's override — not per task.`
+                          : "The brain: which CLI or API connector actually runs it. Chosen on Settings → Triage & agents, or by this role's override — not per task."}>
                         <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>brain</Box>&nbsp;{brainPill}</Box>}
                       {!isGeneral && <Button size="small" variant="outlined" sx={chipBtn}
                         startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}

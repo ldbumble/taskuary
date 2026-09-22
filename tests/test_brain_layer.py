@@ -124,6 +124,51 @@ class SessionBrainTests(unittest.TestCase):
         self.assertEqual((row['Agent'], row['Brain']), ('coder', 'copilot'))
 
 
+class WhatRanItTests(unittest.TestCase):
+    """The card names the brain that RAN the session, not the one the role would run on today.
+
+    A researcher session ran on the owner's Azure OpenAI connector, closed, and an hour later its
+    card read "brain claude" - the default for a role with no override, read off the coding roster
+    because a closed session said nothing about itself (the owner, 2026-09-22: "claude did not open
+    but azure openai did"). Both records existed: the pick a general session resumes from, and the
+    transcript a pty session leaves."""
+
+    def client(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        return TestClient(server.app), server.store
+
+    def test_a_general_session_is_named_by_the_connector_it_reached_for(self):
+        c, s = self.client()
+        tid = s.create_task({'Title': 'Vendor asks for SAML SSO', 'Kind': 'general', 'Status': 'open'}, 'router')
+        cid = s.save_connector({'Type': 'azure_openai', 'Name': 'Azure OpenAI', 'Active': 1, 'ConfigJson': '{}'}, 'owner')
+        s.save_session(tid, f'connector:{cid}', 'gpt-5.4', '', 'ctx')
+        self.assertEqual(c.get(f'/api/tasks/{tid}').json()['ranOn'], {'brain': 'Azure OpenAI', 'model': 'gpt-5.4'})
+
+    def test_a_coding_session_is_named_by_the_brain_its_transcript_recorded(self):
+        c, s = self.client()
+        tid = s.create_task({'Title': 'fix the importer', 'Kind': 'coding', 'Status': 'open'}, 'router')
+        s.add_transcript(tid, 'sid9', 'output', agent='coder', cwd='C:/repo', brain='claude')
+        d = c.get(f'/api/tasks/{tid}').json()
+        self.assertEqual(d['ranOn'], {'brain': 'claude', 'model': ''})
+        self.assertEqual(d['transcript']['brain'], 'claude')
+
+    def test_the_later_session_is_the_one_that_ran_it(self):
+        """The task in the report had both: yesterday's coder on claude, this morning's researcher
+        on Azure. The card must name the one that just closed."""
+        c, s = self.client()
+        tid = s.create_task({'Title': 'Vendor asks for SAML SSO', 'Kind': 'general', 'Status': 'open'}, 'router')
+        s.add_transcript(tid, 'sidA', 'output', agent='coder', cwd='C:/repo', brain='claude')
+        cid = s.save_connector({'Type': 'azure_openai', 'Name': 'Azure OpenAI', 'Active': 1, 'ConfigJson': '{}'}, 'owner')
+        s.save_session(tid, f'connector:{cid}', 'gpt-5.4', '', 'ctx')
+        self.assertEqual(c.get(f'/api/tasks/{tid}').json()['ranOn']['brain'], 'Azure OpenAI')
+
+    def test_a_task_nothing_ever_ran_claims_nothing(self):
+        c, s = self.client()
+        tid = s.create_task({'Title': 'nobody has touched this', 'Kind': 'general', 'Status': 'open'}, 'router')
+        self.assertIsNone(c.get(f'/api/tasks/{tid}').json()['ranOn'])
+
+
 class GearByJobTests(unittest.TestCase):
     """Session work - coding and general alike - takes the MAIN model. The light gear is for the
     one-message jobs: triage, drafts, summaries, the digest."""

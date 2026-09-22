@@ -939,11 +939,37 @@ def task_detail(task_id: int):
             # The detail page only needs lifecycle here; its terminal pane and optional WorkStrip
             # load their own rich data. Do not block selecting a task on git status.
             'session': hub_term.for_task(task_id, tail=3, details=False),
-            'transcript': {'sid': tr['Sid'], 'agent': tr['Agent'], 'cwd': tr['Cwd'],
+            'transcript': {'sid': tr['Sid'], 'agent': tr['Agent'], 'cwd': tr['Cwd'], 'brain': tr['Brain'],
                            'at': tr['CreatedAt'], 'chars': len(tr['Text'] or '')} if tr else None,
+            # ...and WHICH BRAIN ACTUALLY RAN IT, for a session that has ended (_ran_on)
+            'ranOn': _ran_on(task_id, tr),
             # ...and whether that ended session can be REOPENED rather than replaced. The id itself
             # stays here: the page needs to know a conversation is waiting, not how to address it.
             'resumable': {'sid': rs['Sid'], 'agent': rs['Agent'], 'cwd': rs['Cwd'], 'at': rs['CreatedAt']} if rs else None}
+
+
+def _ran_on(task_id: int, tr=None):
+    """Which brain actually ran this task's last session, once that session is gone.
+
+    A LIVE session says so itself - general.info reports the connector it reached for, a pty says
+    its CLI - and the card reads that first. A CLOSED one said nothing, so the card fell back to the
+    CODING ROSTER, which names the brain a role WOULD run on today: a researcher session that ran on
+    the owner's Azure OpenAI connector came back an hour later labelled "brain claude", the default
+    for a role with no override (the owner, 2026-09-22: "claude did not open but azure openai did").
+
+    Both records exist. A general session saves its pick and model to resume from (store.save_session:
+    'connector:7', 'gpt-5.4'), and a pty session's transcript carries the brain it ran. The newer of
+    the two is what ran last, and a connector is named as the owner named it, not by its type."""
+    saved = store.saved_session(task_id) or {}
+    pick, when = str(saved.get('Pick') or ''), str(saved.get('UpdatedAt') or '')
+    if pick and (not tr or when >= str(tr['CreatedAt'] or '')):
+        if pick.startswith('connector:'):
+            c = store.get_connector(int(pick.split(':', 1)[1])) or {}
+            name = c.get('Name') or c.get('Type') or 'AI connector'
+        else: name = pick.split(':', 1)[-1] or pick
+        return {'brain': name, 'model': saved.get('Model') or ''}
+    if tr and tr['Brain']: return {'brain': tr['Brain'], 'model': ''}
+    return None
 
 
 def _resumable(task_id: int):

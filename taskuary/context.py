@@ -50,7 +50,8 @@ def past_work(store, msgs: list, title: str = '', repo: str = None, limit: int =
     return out
 
 
-RECENT_DAYS = 14         # how far back a closure still speaks to an arrival
+RECENT_DAYS = 3          # how far back a closure still speaks to an arrival (the owner, 2026-09-22:
+                         # "14 days back is very long. too much data" - a recurring check repeats in hours)
 RECENT = 3               # ...and how many of them the judge is shown
 RECENT_CHARS = 700
 
@@ -66,8 +67,9 @@ def recent_closures(store, msg: dict, days: int = RECENT_DAYS, limit: int = RECE
     answered it (TQ-0668 -> TQ-0672, 2026-09-22). The judge is shown what the agent would have
     been shown, before it decides there is work to do.
 
-    A window, because a closure speaks to what arrives next and then stops speaking: a task closed
-    in March is history, and history belongs in the agent's file, not in every triage prompt."""
+    A SHORT window, because a closure speaks to what arrives next and then stops speaking: a check
+    that repeats does it in hours, and last month's closure is history - which belongs in the agent's
+    file, where the whole of past_work already is, not in every triage prompt."""
     from .routing import tokens
     since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
     conv, sender = str(msg.get('conversation_id') or ''), str(msg.get('from_email') or '').lower()

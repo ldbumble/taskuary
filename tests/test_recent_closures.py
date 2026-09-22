@@ -43,8 +43,10 @@ class RecentClosureTests(unittest.TestCase):
         self.assertNotIn('CODER REPORT', hit['ended'], 'the label is not the finding')
 
     def test_the_window_closes(self):
+        """Three days (context.RECENT_DAYS): a check that repeats does it in hours, and last week's
+        closure is history - which the agent's own file already carries in full (past_work)."""
         s = MemoryStore()
-        _closed_task(s, 'Pex exports failing for two facilities', ago(40), conv='report:4')
+        _closed_task(s, 'Pex exports failing for two facilities', ago(4), conv='report:4')
         self.assertEqual(context.recent_closures(s, {'conversation_id': 'report:4', 'subject': 'x'}), [])
 
     def test_an_open_task_is_not_a_closure(self):
@@ -64,9 +66,9 @@ class RecentClosureTests(unittest.TestCase):
 
     def test_the_thread_outranks_the_subject_and_the_sender_and_the_list_is_capped(self):
         s = MemoryStore()
-        for i in range(3): _closed_task(s, f'Pex export failures {i}', ago(2), sender='ops@x.com')
-        _closed_task(s, 'Pex exports failing for two facilities', ago(3))
-        want = _closed_task(s, 'Nothing alike at all', ago(4), conv='report:4')
+        for i in range(3): _closed_task(s, f'Pex export failures {i}', ago(1), sender='ops@x.com')
+        _closed_task(s, 'Pex exports failing for two facilities', ago(1, 2))
+        want = _closed_task(s, 'Nothing alike at all', ago(2), conv='report:4')
         hits = context.recent_closures(s, {'conversation_id': 'report:4', 'subject': 'Pex export failures 1',
                                            'from_email': 'ops@x.com'})
         self.assertEqual(len(hits), context.RECENT)

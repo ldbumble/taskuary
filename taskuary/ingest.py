@@ -662,7 +662,12 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         behind = store.pending_review(tid, kind='draft')
         if behind:
             store.mark_review_stale(behind['ReviewId'])
-            if follow and follow.get('intent') == 'reply_only' and not follow.get('degraded'):
+            # WHATEVER the new line was judged to be. This rewrote the draft only when the follow-up
+            # was reply_only, so Brad's second mail - judged a task, because it asked for access -
+            # left the pending reply pinned to his first one, warned as behind, with nothing behind
+            # the warning (TQ-0665, 2026-09-21). The reply is owed to the newest line either way, and
+            # the owner still approves it. An fyi never reaches here: it files and returns above.
+            if follow and not follow.get('degraded'):
                 store.update_review_message(behind['ReviewId'], mid)
                 store.add_comment(tid, 'triage', 'agent', 'The thread moved - the drafted reply is behind it and is being rewritten from the latest context.')
                 _spawn(_auto_draft, store, tid, behind['ReviewId'])

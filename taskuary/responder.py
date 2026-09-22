@@ -193,9 +193,12 @@ def strip_signoff(text: str) -> str:
     return '\n'.join(lines).strip()
 
 
-def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: str = None) -> str:
+def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: str = None, seen: dict = None) -> str:
     """The reply this task needs, as text. Uses the owner's own brain (the AI connector, or
-    whichever brain `triage_ai` names), the standing memory notes, and the thread itself."""
+    whichever brain `triage_ai` names), the standing memory notes, and the thread itself.
+
+    `seen` is filled with the message set this reply was written against - {'saw', 'revision'} -
+    measured where the thread is actually read, which is the only place that knows it."""
     from .llm import build_llm
     from .ingest import notes_for
     llm = llm or build_llm(store)
@@ -238,6 +241,14 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     from .ingest import exchange_lines
     lines = exchange_lines(store, {'conversation_id': last.get('ConversationId'), 'subject': last.get('Subject'), 'sent_at': None})
     thread = '\n\n'.join(lines) if lines else f"--- {last.get('FromName') or last.get('FromEmail')} · {last.get('SentAt')} · {last.get('Channel')}\n{strip_boilerplate(str(last.get('BodyText') or ''))[:4000]}"
+    # WHAT THE MODEL READ, stamped where it was read. Taken by the caller before this function was
+    # entered, it named the thread as it stood while the job was still QUEUED - so a line that landed
+    # in the seconds before the writer ran, and that the writer then answered, counted as unseen and
+    # marked the draft behind (TQ-0665). Everything below this point - the calendar, the model, the
+    # signature - happens after the reading, and a line landing there IS genuinely unseen.
+    if seen is not None:
+        from . import operations
+        seen['saw'], seen['revision'] = store.last_inbound_on_task(task_id), operations.message_revision(store, task_id)
     user = f"Subject: {last.get('Subject') or t.get('Title') or ''}\nFrom: {last.get('FromName')} <{last.get('FromEmail')}>\n\n{thread}"
     if resolution: user += f'\n\n--- WHAT WAS DONE (your source of truth; the sender has not seen it)\n{resolution}'
     if nudge: user += f'\n\n--- WHY YOU ARE WRITING AGAIN (the assistant\'s note to you, not for the reader)\n{nudge}'
@@ -255,12 +266,15 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
 
 def draft_for_review(store, task_id: int, review_id: int, llm=None, resolution: str = None, nudge: str = None) -> str:
     """Write the draft and park it on its review, ready for approve / edit / no-reply."""
-    # what this wording is ABOUT is fixed before the model runs (PW-048): a line that lands during
-    # generation was not in its input, so it is never labelled as seen - the draft is marked behind instead
+    # what this wording is ABOUT is fixed WHERE THE THREAD IS READ (PW-048, TQ-0665): a line that
+    # lands during generation was not in its input, so it is never labelled as seen - the draft is
+    # marked behind instead. One that landed while the job was merely queued was read, and is.
     from . import operations
-    saw = store.last_inbound_on_task(task_id)
-    revision = operations.message_revision(store, task_id)
-    text = draft_reply(store, task_id, llm, resolution, nudge)
+    # the writer says what it read (below); this is what to assume if it says nothing - the older,
+    # stricter reading, so a caller that replaces draft_reply cannot quietly switch the guard off
+    seen = {'saw': store.last_inbound_on_task(task_id), 'revision': operations.message_revision(store, task_id)}
+    text = draft_reply(store, task_id, llm, resolution, nudge, seen)
+    saw, revision = seen['saw'], seen['revision']
     if saw and str(saw.get('Channel') or '').lower() == 'email':
         # the signature rides in the draft the owner reviews, once (PW-065); the recipients it will go to are pinned
         # with it, Reply all by default (PW-063/064) - an envelope the owner already set is kept

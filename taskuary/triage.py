@@ -193,8 +193,10 @@ _VALEDICTION = _re.compile(r'^\s*(thank(s| you)|best( regards| wishes)?|kind(est
 # so a bare 'Phone:' or 'Email:' line never matched and every signature rode into the prompt.
 _DASH = '\u2010\u2011\u2012\u2013\u2014\u2212-'
 _BLANKISH = _re.compile(r'^[\s\u200b\u200c\u200d\ufeff\u00a0]*$')
+# ...and Outlook writes the label AFTER the number - "(540) 776-7588 Office" - which the anchored
+# number pattern missed, so a signature stopped being trimmed one line early (TQ-0665)
 _CONTACT = _re.compile(r'^\s*(phone|tel|mobile|cell|fax|office|direct|email|e-?mail|web|www\.|address)\b'
-                       r'|^\s*\+?[\d(][\d\s().x' + _DASH + r']{6,}$'
+                       r'|^\s*\+?[\d(][\d\s().x' + _DASH + r']{6,}(\s*(office|direct|mobile|cell|fax|tel|phone|work|home))?\s*$'
                        r'|^[^@\s]+@[^@\s]+\.[a-z]{2,}\s*$', _re.I)
 _KEEP_MIN = 30          # never trim a message down past this - when in doubt, keep
 # the corporate wrapper AROUND a body, not the sender's words: the external-mail banner and the
@@ -242,6 +244,25 @@ def _norm_line(l: str) -> str:
     """Remove quote framing without erasing case, operators or literal spacing."""
     text = _re.sub(r'^\s*(?:>\s+)+', '', str(l or ''))
     return text.strip()
+
+
+def own_words(text: str) -> str:
+    """What the sender typed THIS time: everything above the chain they wrote it on top of.
+
+    strip_boilerplate finds the legal footer and the signature at the END of a body. A forwarded
+    mail has neither there - it has a quote head, and under it somebody else's mail with their
+    signature - so Brad's one-sentence ask reached the card with 8,400 characters of chain beneath
+    it, headers and both signatures included (TQ-0665, 2026-09-21). Cut at the quote first and the
+    signature rules have the tail they were written for. A message with no chain is untouched, and
+    nothing is ever cut down to nothing."""
+    lines = str(text or '').splitlines()
+    for i, l in enumerate(lines):
+        head = (l.lstrip().startswith('>') or _QUOTE_HEAD.match(l)
+                or (_re.match(r'^\s*from:\s', l, _re.I) and i + 1 < len(lines) and _re.match(r'^\s*(sent|date):\s', lines[i + 1], _re.I)))
+        if head and len(NL.join(lines[:i]).strip()) >= _KEEP_MIN:
+            lines = lines[:i]
+            break
+    return strip_boilerplate(NL.join(lines).rstrip()) if lines else strip_boilerplate(text)
 
 
 def known_lines(bodies) -> set:
@@ -426,8 +447,13 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # ...and the same for what the ANSWER must carry. A generated document describes how to
             # judge and never restates the output shape, so asking for it again here is not
             # overriding the owner - it is the half of the prompt the document was never writing.
-            if 'checklist' not in base or '"summary"' not in base:
-                base += '\n\nWHATEVER ELSE YOU ANSWER, THE SHAPE IS FIXED:\n' + TASK_FIELDS
+            # It is added LAST (below), not here: appended to the document it sat 16,000 characters
+            # from the answer, under the soul, the evidence, the playbooks and the repositories,
+            # while the document's own opening line named a contract with no title and no summary.
+            # On a long forwarded mail the model answered that line and dropped both, and the card
+            # fell back to the raw body (TQ-0665, three times in eight replays). A SHAPE cannot
+            # argue with the owner's judgement, so nothing is lost by asking for it at the end.
+            shape = 'checklist' not in base or '"summary"' not in base
             system = base + (f"\n\nOperator's document:\n{soul[:2500]}" if soul else '')
             # `learned` is LEARNED.md's active sections: the profile distilled from the owner's
             # past verdicts. It refines the operator's document; explicit notes still outrank it.
@@ -520,13 +546,21 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                                # lost the noun its whole sentence was about. This is the one line the model routes on.
                                **({'known_repositories': [{'repo': r.get('repo'), 'about': (r.get('about') or '')[:REPO_ABOUT]} for r in repos]} if repos else {}),
                                **({'body_truncated': True} if len(strip_boilerplate(str(msg.get('body') or ''))) > BODY_BUDGET else {}),
-                               'body': strip_boilerplate(str(msg.get('body') or ''))[:BODY_BUDGET]})
+                               'body': strip_boilerplate(str(msg.get('body') or ''))[:BODY_BUDGET],
+                               # the shape once more, under the message, because a LONG message is what
+                               # loses it: on 8,400 characters of forwarded mail the model answered the
+                               # document's own contract line and dropped title and summary in three of
+                               # eight replays; asked here too, sixteen of sixteen carried them (TQ-0665).
+                               **({'answer': 'the JSON object the instructions describe, including '
+                                             '"title" and "summary" - and "checklist" for a task'} if shape else {})})
             if len(strip_boilerplate(str(msg.get('body') or ''))) > BODY_BUDGET:
                 system += ('\n\nbody_truncated: the message was longer than the context budget and its end was cut. '
                            'If the verdict could depend on what you did not see, say so in your reason.')
             if images:
                 system += ('\n\nImages from the message are attached. They are part of the ask - a '
                            'screenshot of the error IS the request. Read them before deciding.')
+            # the last thing asked for, after every block that says how to JUDGE: the output shape
+            if shape: system += '\n\nWHATEVER ELSE YOU ANSWER, THE SHAPE IS FIXED:\n' + TASK_FIELDS
             out = llm(system, user, images=images) if images else llm(system, user)
             raw_answer = str(out or '')
             j = json.loads(re.sub(r'^```(json)?|```$', '', raw_answer.strip(), flags=re.M))

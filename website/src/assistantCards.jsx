@@ -284,10 +284,18 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
         {action ? <>
           <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv} startIcon={<DoneRoundedIcon />} onClick={() => decide("approve")} sx={primary}>{busy === "approve" ? "Running…" : "Run it"}</Button>
         </> : <>
-          {rv?.CanSend !== false && (
-            <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv || !value.trim() || !!stale} startIcon={<SendRoundedIcon />} onClick={() => decide("approve")} sx={primary}>
+          {rv?.CanSend !== false && (stale ? (
+            /* the road out of the warning, on the card that carries it: a stale draft disabled the
+               only button here and named no way forward (the owner, 2026-09-21: "just reprocess it
+               then"). Refreshing is the primary action while the thread is ahead of the draft. */
+            <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv}
+              startIcon={<RefreshRoundedIcon />} onClick={redraft} sx={primary}
+              title="Rewrites the draft from the newest message, then you approve it">
+              {busy === "redraft" ? "Refreshing…" : "Refresh the draft"}</Button>
+          ) : (
+            <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv || !value.trim()} startIcon={<SendRoundedIcon />} onClick={() => decide("approve")} sx={primary}>
               {busy === "approve" ? "Sending…" : "Approve & send"}</Button>
-          )}
+          ))}
           {card.tid && <Button size="small" variant="outlined" disabled={!!busy || !rv}
             startIcon={<DoneRoundedIcon />} onClick={finish} sx={quiet}
             title="Marks the task done, dismisses the draft, and ends any live agent session. No reply is sent.">

@@ -44,9 +44,16 @@ test("same-tick composer submits are synchronously locked", () => {
   assert.match(view, /if \(!t \|\| busy \|\| resetting \|\| handoff \|\| turnFlight\.current\) return/);
 });
 
-test("stale reply drafts cannot be approved until they are refreshed", () => {
-  assert.match(card, /!value\.trim\(\) \|\| !!stale/);
+// A stale draft is never sent - and the card must say what to do instead. Disabling the only
+// button on it left the owner with a warning and no road (the owner, 2026-09-21: "can't hit
+// approve & send since there is warning? just reprocess it then"), so refreshing takes the
+// primary slot for exactly as long as the thread is ahead of the draft.
+test("a stale reply draft offers a refresh in place of the send", () => {
   assert.match(card, /New messages arrived after this draft/);
-  assert.match(reviews, /r\.Stale \|\| !\(edits/);
-  assert.match(reviews, /Refresh draft/);
+  assert.match(card, /stale \? \(/);
+  assert.match(card, /Refresh the draft/);
+  assert.doesNotMatch(card, /!value\.trim\(\) \|\| !!stale/);      // no dead end behind the warning
+  assert.match(reviews, /r\.Stale \? \(/);
+  assert.match(reviews, /Refresh the draft/);
+  assert.doesNotMatch(reviews, /r\.Stale \|\| !\(edits/);
 });

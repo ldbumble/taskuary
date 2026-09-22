@@ -36,6 +36,32 @@ To: Hancock, J. D. <jdhancock@mfa.net>
 """
 
 
+# The same mail without the legal footer that happened to cut the last one short: a signature, and
+# under it the forwarded chain. Nothing in the fallback knew where the sender stopped writing, so
+# the whole chain - every header, both signatures - went on the card as the ask (TQ-0665, 2026-09-21).
+FORWARDED = """Uri,
+
+Can you send me the link on the 2027 budgets?
+
+Thanks,
+
+Brad West
+Medical Facilities of America
+VP Marketing and Business Development
+(540) 776-7588 Office
+Brad.west@mfa.example
+www.lifeworksrehab.example
+
+From: Yeatts, Michael L. <Michael.Yeatts@MFA.EXAMPLE>
+Sent: Thursday, September 17, 2026 2:07 PM
+To: West, Brad <Brad.West@MFA.EXAMPLE>
+Subject: Fw: 2027 Budgets
+
+Mike Yeatts
+Vice President
+"""
+
+
 class AutomaticRoadTests(unittest.TestCase):
     def test_the_triaged_summary_is_the_ask_not_the_whole_thread(self):
         from taskuary.routing import draft_task_fields
@@ -43,6 +69,19 @@ class AutomaticRoadTests(unittest.TestCase):
         self.assertIn('check back in on this', out['summary'])
         for gone in ('Penn Forest', 'confidential', 'From: Uri', '540.776.7576'):
             self.assertNotIn(gone, out['summary'], gone)
+
+    def test_the_forwarded_chain_under_the_ask_is_not_the_ask(self):
+        from taskuary.routing import draft_task_fields
+        out = draft_task_fields({'subject': 'FW: 2027 Budgets', 'body': FORWARDED})
+        self.assertIn('2027 budgets', out['summary'].lower())
+        for gone in ('From: Yeatts', 'Vice President', 'lifeworksrehab', '776-7588'):
+            self.assertNotIn(gone, out['summary'], gone)
+
+    def test_a_mail_that_is_only_the_senders_own_words_is_kept_whole(self):
+        """The cut is for what sits UNDER the ask - it must never eat a message that has no chain."""
+        from taskuary.routing import draft_task_fields
+        body = 'Morning - the payroll export failed again overnight. Same KeyError as last week.'
+        self.assertEqual(draft_task_fields({'subject': 'Payroll export', 'body': body})['summary'], body)
 
     def test_a_reply_only_verdict_carries_the_ask_too(self):
         """reply_only lands as a row of its own, so it is asked for a title and a summary like any
@@ -222,6 +261,43 @@ class ContractTests(unittest.TestCase):
         doc = self.DOC + '\nAlso answer "summary" and a "checklist" of outcomes.'
         sys = self._system_for(doc)
         self.assertNotIn('WHATEVER ELSE YOU ANSWER', sys)
+
+    def test_the_shape_is_the_last_thing_the_model_reads(self):
+        """Appended to the DOCUMENT, it was then buried under the soul, the evidence, the playbooks
+        and the repositories, while the document's own first line named a contract without title or
+        summary. On a long forwarded mail the model answered that line and dropped both - three
+        times in eight replays of TQ-0665 - and the card fell back to the raw body. The shape is not
+        a judgement, so it can sit after everything: it is the last thing asked for."""
+        seen = {}
+        def fake(system, user, **kw):
+            seen['sys'] = system
+            return json.dumps({'intent': 'task', 'kind': 'coding', 'why': 'asks for a change'})
+        triage.classify_intent({'subject': 'Re: Hosting', 'body': 'check back in'}, llm=fake, system=self.DOC,
+                               soul='The owner runs IS at a care provider.', notes=['2026-09-01 - not ours'],
+                               repos=[{'repo': 'acme/app', 'about': 'the portal'}], playbooks='- pto: PTO requests')
+        self.assertTrue(seen['sys'].rstrip().endswith(triage.TASK_FIELDS.rstrip()), seen['sys'][-400:])
+
+    def test_the_shape_is_asked_for_under_the_message_too(self):
+        """Moving it to the end of the instructions was not enough on a long mail - the model still
+        dropped the pair in two of eight replays. Asked again under the body, where the reading
+        actually ends, sixteen of sixteen carried it. The payload stays strictly JSON: it has
+        readers (the scrubber, the tests, the Triage tab), so the ask is a field, not a postscript."""
+        seen = {}
+        def fake(system, user, **kw):
+            seen['user'] = json.loads(user)
+            return json.dumps({'intent': 'fyi', 'why': 'a newsletter'})
+        triage.classify_intent({'subject': 'x', 'body': 'check back in'}, llm=fake, system=self.DOC)
+        self.assertEqual(list(seen['user'])[-1], 'answer')                     # the last thing under the body
+        self.assertIn('"summary"', seen['user']['answer'])
+
+    def test_a_document_that_states_the_shape_is_asked_nothing_twice(self):
+        seen = {}
+        def fake(system, user, **kw):
+            seen['user'] = json.loads(user)
+            return json.dumps({'intent': 'fyi', 'why': 'a newsletter'})
+        triage.classify_intent({'subject': 'x', 'body': 'check back in'}, llm=fake,
+                               system=self.DOC + '\nAlso answer "summary" and a "checklist" of outcomes.')
+        self.assertNotIn('answer', seen['user'])
 
     def test_the_shipped_prompt_carries_it_once(self):
         self.assertIn(triage.TASK_FIELDS, triage.INTENT_SYSTEM)

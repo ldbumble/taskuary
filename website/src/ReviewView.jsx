@@ -221,9 +221,19 @@ export default function ReviewView({ onOpenTask, onChanged }) {
                       onClick={() => decide(r, "close_unsent")}>
                       {busy === r.ReviewId ? "closing…" : "Close without sending"}
                     </Button>
+                  ) : r.Stale ? (
+                    /* THE ROAD OUT OF THE WARNING. A stale draft disabled the only button on the card
+                       and left a faint "Refresh draft" at the far end of the row, so the answer to "a
+                       new message arrived" was a dead end (the owner, 2026-09-21: "can't hit approve &
+                       send since there is warning? just reprocess it then"). Refreshing IS the primary
+                       action while the thread is ahead of the draft. */
+                    <Button size="small" variant="contained" disableElevation disabled={busy === r.ReviewId}
+                      onClick={() => redraft(r)} title="Rewrites the draft from the newest message, then you approve it">
+                      {busy === r.ReviewId ? "refreshing…" : "Refresh the draft"}
+                    </Button>
                   ) : (
                     <Button size="small" variant="contained"
-                      disabled={busy === r.ReviewId || r.Stale || !(edits[r.ReviewId] ?? r.DraftText ?? "").trim()}
+                      disabled={busy === r.ReviewId || !(edits[r.ReviewId] ?? r.DraftText ?? "").trim()}
                       onClick={() => decide(r, "approve")}
                       title={`Sends this response to ${replyContext(r)}`}>
                       {busy === r.ReviewId ? "sending…"

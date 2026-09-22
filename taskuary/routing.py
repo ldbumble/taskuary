@@ -172,6 +172,8 @@ def draft_task_fields(msg, urgent: bool = False, kind: str = None):
     # showing up not the specific task?"). The hand-promote road was fixed this way on 2026-09-10
     # (ingest.promote); the automatic one kept the raw body. A verdict that names its own summary
     # still outranks this - it is the fallback for one that does not, and for triage switched off.
-    from .triage import strip_boilerplate
-    return {'title': subj[:300].capitalize(), 'summary': strip_boilerplate(body)[:1000], 'kind': kind,
+    # ...and the CHAIN under it is not the ask either: strip_boilerplate reads the tail of a body,
+    # which on a forwarded mail belongs to whoever was quoted (own_words, TQ-0665).
+    from .triage import own_words
+    return {'title': subj[:300].capitalize(), 'summary': own_words(body)[:1000], 'kind': kind,
             'priority': 'urgent' if urgent else 'normal'}

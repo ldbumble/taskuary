@@ -34,6 +34,22 @@ class CleanerTests(unittest.TestCase):
         clean = triage.strip_boilerplate('Please fix the importer today, it drops the last row.' + SIG + LEGAL)
         self.assertEqual(clean.strip(), 'Please fix the importer today, it drops the last row.')
 
+    def test_a_phone_line_that_names_which_phone_still_goes(self):
+        """Outlook writes the label after the number - "(540) 776-7588 Office" - and the contact
+        pattern anchored the number to the end of the line, so the block stopped being trimmed
+        one line early and the number rode onto the card (TQ-0665)."""
+        body = 'Can you send me the link on the 2027 budgets?\n\nBrad West\n(540) 776-7588 Office\nbrad.west@mfa.example\n'
+        self.assertEqual(triage.strip_boilerplate(body).strip(), 'Can you send me the link on the 2027 budgets?\n\nBrad West')
+
+    def test_own_words_stop_where_the_forwarded_chain_starts(self):
+        body = ('Uri,\n\nCan you send me the link on the 2027 budgets?\n\nThanks,\n\nBrad West\nVP Marketing\n\n'
+                'From: Yeatts, Michael L. <m@mfa.example>\nSent: Thursday, September 17, 2026 2:07 PM\n'
+                'To: West, Brad <b@mfa.example>\nSubject: Fw: 2027 Budgets\n\nMike Yeatts\nVice President\n')
+        self.assertEqual(triage.own_words(body).strip(), 'Uri,\n\nCan you send me the link on the 2027 budgets?')
+        # a message with no chain under it is its own words, whole
+        plain = 'The payroll export failed again overnight - same KeyError as last week.'
+        self.assertEqual(triage.own_words(plain), plain)
+
     def test_a_request_about_a_notice_or_security_is_not_stripped(self):
         body = 'Notice the error at the top of the security settings page - can you fix the login before Friday?\nThe signature block on the PDF is also wrong.'
         self.assertEqual(triage.strip_boilerplate(body), body)

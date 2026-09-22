@@ -163,6 +163,22 @@ class SupersedeTests(Base):
         self.assertEqual(spawned, [('_auto_draft', rid)])                          # the SAME review, redrafted - never a second one
         self.assertEqual(len(self.s.list_reviews('pending')), 1)
 
+    def test_a_second_line_judged_a_task_still_repoints_and_redrafts_the_pending_reply(self):
+        """Brad asked for the budgets link, then wrote again asking for access to the files. Triage
+        called the second mail a task, so the draft was ONLY marked behind: still pinned to the
+        first mail, warned as stale, with nothing behind the warning but a Refresh link (TQ-0665,
+        2026-09-21). What the new line was judged to be does not change that a reply is owed to it."""
+        tid, first, rid = mail_task(self.s)
+        spawned = []
+        llm = lambda *a, **k: json.dumps({'intent': 'task', 'kind': 'coding', 'why': 'he needs access granted'})
+        with mock.patch.object(ingest, '_spawn', side_effect=lambda f, *a: spawned.append((f.__name__, a[2] if len(a) > 2 else None))):
+            out = ingest.ingest_message(self.s, mail('I also need access to the census files.', 'm:second'), llm=llm)
+        rv = self.s.get_review(rid)
+        self.assertEqual(out['task_id'], tid)
+        self.assertNotEqual(rv['MessageId'], first)                                # re-pointed at the line it must answer
+        self.assertIn(('_auto_draft', rid), spawned)                               # ...and rewritten from it
+        self.assertEqual(len(self.s.list_reviews('pending')), 1)
+
     def test_an_fyi_line_leaves_the_draft_alone(self):
         tid, first, rid = mail_task(self.s)
         llm = lambda *a, **k: json.dumps({'intent': 'fyi', 'why': 'thanks'})

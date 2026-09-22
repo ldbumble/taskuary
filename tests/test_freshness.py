@@ -48,6 +48,29 @@ class DraftPinsWhatItReadTests(unittest.TestCase):
         self.assertEqual(rv['Stale'], 1)                                         # ...and it is said to be behind the thread
         self.assertTrue(rv['ContextRevision'])
 
+    def test_a_line_that_landed_before_the_thread_was_read_is_seen_not_behind(self):
+        """The pin used to be taken when the job was QUEUED, not when the writer read the thread -
+        and the two are seconds apart, because the draft waits its turn behind the rest of a sync.
+        Brad wrote twice in one morning; both mails arrived in one poll; the draft ANSWERED BOTH and
+        was still labelled behind the thread, which disabled the only button that sends it (TQ-0665,
+        2026-09-21). What the model read is what the draft is pinned to."""
+        s, tid, first, rid = thread()
+        landed = []
+        # the seam a real line lands in: after the job was queued, before the writer reads anything
+        with mock.patch.object(responder, 'resolution_of', side_effect=lambda *a: landed.append(later(s, tid)) and None):
+            responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: 'Priya has it - nothing owed.')
+        rv = s.get_review(rid)
+        self.assertEqual(rv['MessageId'], landed[0])                             # the line it actually read
+        self.assertEqual(rv['Stale'], 0)                                         # ...so nothing is behind anything
+        self.assertEqual(rv['ContextRevision'], operations.message_revision(s, tid))
+
+    def test_the_writer_says_which_message_set_it_read(self):
+        s, tid, first, rid = thread()
+        seen = {}
+        responder.draft_reply(s, tid, llm=lambda *a, **k: 'Here it is.', seen=seen)
+        self.assertEqual(seen['saw']['MessageId'], first)
+        self.assertEqual(seen['revision'], operations.message_revision(s, tid))
+
     def test_a_quiet_thread_pins_clean(self):
         s, tid, first, rid = thread()
         responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: 'Here it is.')

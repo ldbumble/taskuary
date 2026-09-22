@@ -1729,6 +1729,16 @@ class SQLiteStore:
         if not s: return []
         return self._rows(f"SELECT DISTINCT t.TaskId FROM task t JOIN message m ON m.TaskId=t.TaskId WHERE t.Status='done' "
                           f"AND lower(m.FromEmail) IN ({','.join('?' * len(s))}) ORDER BY t.TaskId DESC LIMIT ?", [*s, limit])
+    def tasks_closed_since(self, since: str, limit=60):
+        """Tasks closed (done or dropped) on or after `since`, newest first, each with the senders and
+        conversations it carried - enough for a caller to decide whether it touches the message in hand
+        without a query per task (context.recent_closures, which runs inside the triage funnel)."""
+        return self._rows(
+            "SELECT t.TaskId, t.Title, t.Status, t.Summary, IFNULL(t.ClosedAt, t.UpdatedAt) Closed, "
+            "       GROUP_CONCAT(DISTINCT lower(m.FromEmail)) Senders, GROUP_CONCAT(DISTINCT m.ConversationId) Convs "
+            "  FROM task t LEFT JOIN message m ON m.TaskId=t.TaskId "
+            " WHERE t.Status IN ('done','dropped') AND IFNULL(t.ClosedAt, t.UpdatedAt) >= ? "
+            " GROUP BY t.TaskId ORDER BY Closed DESC LIMIT ?", (since, limit))
     # ── ideas: what the assistant said, and what the owner did about it ──────────────────────
     def list_ideas(self, status=None, mid=None):
         q, p = 'SELECT * FROM idea', []

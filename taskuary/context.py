@@ -13,7 +13,7 @@ a stray file in a shared checkout gets staged by somebody (commit 8abb175 exists
 and a .gitignore in every repo is not ours to write. The seed points at it: "read this first".
 """
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from loguru import logger
 
 from .store import task_ref
@@ -48,6 +48,53 @@ def past_work(store, msgs: list, title: str = '', repo: str = None, limit: int =
                     'why': why, 'report': _report(store, t['TaskId'])})
         if len(out) >= limit: break
     return out
+
+
+RECENT_DAYS = 14         # how far back a closure still speaks to an arrival
+RECENT = 3               # ...and how many of them the judge is shown
+RECENT_CHARS = 700
+
+
+def recent_closures(store, msg: dict, days: int = RECENT_DAYS, limit: int = RECENT) -> list:
+    """What was answered and closed RECENTLY that touches this arriving message - the same thread,
+    the same sender, or two words of the same subject - newest first, each with how it ended.
+
+    This is past_work aimed one step earlier. The coder has had this block since it was written;
+    triage never has, so a condition that repeats - a scheduled check reporting the same two Pex
+    export failures every run - was judged new work every morning, an agent was started, and the
+    agent read the determination in its own context file and reported that yesterday had already
+    answered it (TQ-0668 -> TQ-0672, 2026-09-22). The judge is shown what the agent would have
+    been shown, before it decides there is work to do.
+
+    A window, because a closure speaks to what arrives next and then stops speaking: a task closed
+    in March is history, and history belongs in the agent's file, not in every triage prompt."""
+    from .routing import tokens
+    since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+    conv, sender = str(msg.get('conversation_id') or ''), str(msg.get('from_email') or '').lower()
+    toks = set(tokens(msg.get('subject') or ''))
+    # RANKED, then capped - not filtered by a cleverer rule. Weighting the shared words by how rare
+    # they are in the window was tried and measured nothing: across 60 closed titles every shared word
+    # appeared once or twice, so "pex" and "failures" scored alike. What actually separates them is
+    # meaning, which is the model's job - so the code ranks by how much of a closed task's title the
+    # arrival shares, hands over the best few, and the prompt says to weigh them (triage.FIELDS).
+    out = []
+    for t in store.tasks_closed_since(since):
+        convs = {c for c in str(t.get('Convs') or '').split(',') if c}
+        senders = {s for s in str(t.get('Senders') or '').split(',') if s}
+        title_toks = set(tokens(t.get('Title') or ''))
+        shared = toks & title_toks
+        if conv and conv in convs: why, rank = 'the same thread', 3.0
+        elif len(shared) >= 2: why, rank = 'the same subject', 1.0 + len(shared) / max(1, len(title_toks))
+        elif sender and sender in senders: why, rank = 'the same sender', 0.5
+        else: continue
+        out.append({'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '',
+                    'closed': str(t.get('Closed') or '')[:16], 'summary': t.get('Summary') or '',
+                    'how': 'done' if t.get('Status') == 'done' else 'dropped', 'why': why, '_rank': rank})
+    out.sort(key=lambda r: -r['_rank'])          # the query is newest-first and sort is stable: recency breaks ties
+    # ...and only NOW read the reports: _report is a comment scan per task, and a chatty sender can
+    # match twenty closures for the three this hands over. This runs inside the triage funnel.
+    return [{k: v for k, v in {**r, 'ended': _short(_report(store, r['tid']) or r['summary'], RECENT_CHARS)}.items()
+             if k not in ('_rank', 'summary')} for r in out[:limit]]
 
 
 def render_past(rows: list) -> str:

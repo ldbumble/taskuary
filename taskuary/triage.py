@@ -49,6 +49,18 @@ FIELDS = {
         'Judge it like any arrival - fyi when it only informs, task when something must be done and nobody has it, '
         'reply_only when a sentence settles it. A task somebody is already working is not new work; a claim in '
         'the idea that something was done is not evidence that it was.',
+    'recently_closed':
+        'recently_closed is work on this thread, this sender or this subject that was ANSWERED AND CLOSED in '
+        'the last fortnight, each with how it ended - the determination the agent wrote, or the ask if no agent '
+        'ran. It is the strongest evidence there is that an arrival needs nobody: a scheduled check that reports '
+        'the same failure every run, a system that keeps sending the same notice, a question already settled. '
+        'When the determination ALREADY ANSWERS what arrived - the cause is known, the conclusion was "nothing '
+        'to do", the condition is expected until somebody changes the source - this is fyi, and say which task '
+        'answered it and what it said. Weigh it, never obey it: a closure is not a gate. The same subject moving '
+        'on is new work - a different system, facility, error or number than the one that was investigated, a '
+        'failure the determination said was NOT expected, somebody asking for something the closed task did not '
+        'do, or a condition the determination said would be fixed and plainly was not. Judge what this message '
+        'says against what that task found, and when they disagree, the message wins.',
     'assistant_said':
         'assistant_said is what the Timeline assistant already raised about this very thread (a follow-up it '
         'suggested, an ask it flagged, a promise it noticed) and what the owner did with it. Be consistent '
@@ -148,6 +160,7 @@ INTENT_SYSTEM = (
     + FIELDS['others_replied'] + '\n'
     + FIELDS['exchange'] + '\n'
     + FIELDS['assistant_said'] + '\n'
+    + FIELDS['recently_closed'] + '\n'
     + TASK_FIELDS + '\n'
     'Torn between task and reply_only? Choose task. Torn between task and fyi? Choose task unless the mail plainly asks '
     'nobody for anything - a task the owner glances at and drops costs less than a job nobody did, and a drafted reply '

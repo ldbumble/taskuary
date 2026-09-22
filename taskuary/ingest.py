@@ -482,6 +482,15 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
     carried = set()
     lines = exchange_lines(store, msg, seen=carried)
     if lines: thread = {**thread, 'exchange': lines}
+    # ...and what was ANSWERED AND CLOSED lately that touches this. The coder's context file has carried
+    # this block since it was written (context.past_work); the judge deciding whether to START a coder
+    # never had it, so a check reporting the same failure every run opened a task every run and the
+    # agent it started read the determination and said yesterday had answered it (TQ-0672, 2026-09-22).
+    try:
+        from . import context as taskcontext
+        closed = taskcontext.recent_closures(store, msg)
+        if closed: thread = {**thread, 'recently_closed': closed}
+    except Exception as e: logger.debug(f'recent closures skipped: {e}')
     # an assistant idea carries where it came from and what it is about (PW-199): the report, the task
     # it names and whether a worker has that task - facts the model needs to judge a generated line
     if msg.get('idea_context'): thread = {**thread, 'idea_context': msg['idea_context']}

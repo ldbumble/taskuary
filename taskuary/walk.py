@@ -33,7 +33,7 @@ def _can(text, tab=None, hash_=''): return {'text': text, 'goto': _goto(tab, has
 STOPS = [
     {'key': 'owner', 'can': [
         _can('type your name and email right here'),
-        _can('see every document that uses it', 'Docs')]},
+        _can('see every document that uses it', 'Settings', 'settings=docs')]},
     # TWO ROADS, and neither is the other. A key provider - Azure OpenAI, OpenAI, Anthropic - is a
     # card you paste a key on; it is not a CLI and there is nothing to sign in to in a terminal. The
     # CLI road was listed first and twice, so the whole stop read as "install a CLI", which is not
@@ -74,11 +74,14 @@ STOPS = [
               'task, how you answer, what it must never do. STYLE.md is how you write. Edit one and '
               'triage changes; blank one and the shipped default comes back, so nothing is lost by '
               'trying.',
-     'goto': _goto('Docs'), 'can': [
-        _can('make SOUL.md yours - your work, boundaries, systems, people, voice', 'Docs'),
-        _can('generate STYLE.md from the messages you have sent', 'Docs'),
-        _can('generate TRIAGE.md from what you answered and what you let sit', 'Docs'),
-        _can('read COUNSEL.md, which is the voice the assistant speaks in', 'Docs')]},
+     # Docs is a section of Settings now, not a tab of its own - every one of these opened a tab
+     # that no longer exists, so the stop's own button went nowhere (found re-shooting the walk,
+     # 2026-09-22: the capture script refuses to shoot a tab it cannot click, which is what caught it)
+     'goto': _goto('Settings', 'settings=docs'), 'can': [
+        _can('make SOUL.md yours - your work, boundaries, systems, people, voice', 'Settings', 'settings=docs'),
+        _can('generate STYLE.md from the messages you have sent', 'Settings', 'settings=docs'),
+        _can('generate TRIAGE.md from what you answered and what you let sit', 'Settings', 'settings=docs'),
+        _can('read COUNSEL.md, which is the voice the assistant speaks in', 'Settings', 'settings=docs')]},
     {'key': 'settings', 'title': 'Settings', 'image': '/walk/settings.png',
      'blurb': 'The knobs. Most people change three and never come back: what drafts automatically, '
               'how finished work lands, and what reaches them.',
@@ -103,14 +106,12 @@ STOPS = [
         _can('open a task and read the thread behind it', 'Tasks'),
         _can('continue a coding session where it stopped', 'Tasks'),
         _can('hand a task to an agent, or take it back', 'Tasks'),
+        # Review retired as a tab of its own: a drafted reply waits on the task it belongs to. The
+        # stop that used to send you to a queue is gone, and what it was FOR - nothing sends until
+        # you say so - is said here, where the draft actually is (2026-09-22).
+        _can('approve the reply drafted in your voice - nothing sends until you do', 'Tasks'),
+        _can('edit it first, or ask for it again differently', 'Tasks'),
         _can('close it - which is yours, never the agent\'s', 'Tasks')]},
-    {'key': 'review', 'title': 'Review', 'image': '/walk/review.png',
-     'blurb': 'Replies drafted in your voice, waiting on you. Nothing sends until you approve it - '
-              'there is no setting that changes that.',
-     'goto': _goto('Review'), 'can': [
-        _can('approve a draft and send it', 'Review'),
-        _can('edit it first, or ask for it again differently', 'Review'),
-        _can('say it is not yours, which triage remembers', 'Review')]},
     {'key': 'reports', 'title': 'Reports & workflows', 'image': '/walk/reports.png',
      'blurb': 'A report is a scheduled check that reads and summarises. A workflow is the one that '
               'writes. Both file what they find onto the Timeline on their own schedule.',
@@ -149,8 +150,11 @@ def _fact_connections(s) -> str:
 
 
 def _fact_tasks(s) -> str:
-    tasks = s.list_tasks()
-    return f'{len(tasks)} here so far' if tasks else 'none yet'
+    """...and the replies waiting on this stop, now that a draft waits on the task it belongs to
+    rather than in a queue of its own (the Review stop retired with the tab, 2026-09-22)."""
+    tasks, waiting = s.list_tasks(), [r for r in s.list_reviews(None) if r.get('Status') == 'pending']
+    here = f'{len(tasks)} here so far' if tasks else 'none yet'
+    return here + (f' · {len(waiting)} repl{"y" if len(waiting) == 1 else "ies"} waiting for your yes' if waiting else '')
 
 
 def _named(rows, key='Name', n=3) -> str:
@@ -201,11 +205,6 @@ def _fact_board(s) -> str:
     return _named(s.list_agents())
 
 
-def _fact_review(s) -> str:
-    rows = s.list_reviews(None)
-    return f'{len(rows)} waiting for your yes' if rows else 'nothing waiting for you'
-
-
 def _fact_reports(s) -> str:
     """The stop names two things, so the fact answers for both: a report READS, a workflow WRITES,
     and "3 reports" on a card about both leaves you wondering which three (the owner, 2026-09-17:
@@ -244,7 +243,7 @@ def _fact_settings(s) -> str:
 # The five checklist stops carry `detail` from setup.state as well; these add what that cannot say.
 FACTS = {'ai': _fact_ai, 'models': _fact_models, 'sync': _fact_sync,
          'connections': _fact_connections, 'docs': _fact_docs, 'settings': _fact_settings,
-         'board': _fact_board, 'tasks': _fact_tasks, 'review': _fact_review,
+         'board': _fact_board, 'tasks': _fact_tasks,
          'reports': _fact_reports, 'assistant': _fact_assistant, 'hub': _fact_hub}
 
 

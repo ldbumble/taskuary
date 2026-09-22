@@ -39,7 +39,10 @@ def test_desktop_window_exit_signals_the_embedded_server_to_shutdown():
         create_window=lambda *a, **k: (events.append(('window', a[0])), fake_window)[1],
         start=fake_start)
 
+    # nothing is already up: main() asks first now, so a second launch is a window onto the first
+    # rather than a second server beside it (2026-09-22)
     with mock.patch.object(desktop, 'start_server', return_value=(fake_server, 'http://127.0.0.1:54321')), \
+         mock.patch.object(desktop, 'already_serving', return_value=''), \
          mock.patch.object(desktop, 'serving', return_value=True), \
          mock.patch.dict(sys.modules, {'webview': fake_webview}), \
          mock.patch.object(sys, 'argv', ['taskuary-desktop']):

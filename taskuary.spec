@@ -38,8 +38,16 @@ datas, bins, hidden = _collect('winpty', 'wcwidth', 'pip', *BUNDLE)
 a = Analysis(['taskuary/desktop.py'],
              # templates/ too: the operator documents (SOUL.md, CODER.md, TRIAGE.md...) seed the store
              # from here, and a build without them ran every prompt with no constitution (audit 2026-09-02)
+             # EVERY DATA FILE THE WHEEL SHIPS, or the exe is a different program. lanes.json is
+             # read by workerstate AT IMPORT, and funnel imports workerstate - so an exe without it
+             # answered 500 on the Timeline, the Assistant, /api/setup, /api/problems and every
+             # report, for ever, while the wheel was fine (a second machine's log, 2026-09-22:
+             # FileNotFoundError on lanes.json under the exe's own _MEI extraction directory).
+             # Keep this list beside
+             # [tool.setuptools.package-data] in pyproject.toml: the two must say the same thing.
              datas=[('taskuary/web', 'taskuary/web'), ('taskuary/templates', 'taskuary/templates'),
-                    ('taskuary/skills', 'taskuary/skills'), *datas],
+                    ('taskuary/skills', 'taskuary/skills'), ('taskuary/lanes.json', 'taskuary'),
+                    ('taskuary/whatsapp', 'taskuary/whatsapp'), *datas],
              binaries=bins,
              hiddenimports=['taskuary.server', 'webview.platforms.edgechromium', 'webview.platforms.winforms',
                             'websockets', 'uvicorn.protocols.websockets.websockets_impl', 'pyte', *hidden],

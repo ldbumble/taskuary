@@ -247,6 +247,9 @@
 .tq-walk-shot img { display: block; width: 200%; height: auto; transform: translate(0, 0); transition: transform 2.4s ease-in-out; }
 .tq-walk-shot:hover img, .tq-walk-shot:focus-visible img { transform: translate(-50%, -50%); }
 .tq-walk-shot:hover, .tq-walk-shot:focus-visible { box-shadow: 0 0 0 2px #b9c8bb; outline: none; }
+.tq-pile-retry { margin-top: 8px; font: 600 11.5px 'IBM Plex Sans', system-ui, sans-serif; padding: 4px 12px;
+  border-radius: 99px; border: 1px solid #ddd8cf; background: #fffdf9; color: #41525f; cursor: pointer; }
+.tq-pile-retry:hover { border-color: #b9c3cb; background: #f6f4f1; }
 .tq-walk-can { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
 .tq-walk-can .lbl { font: 750 9.5px/1.2 'IBM Plex Mono', Consolas, monospace; letter-spacing: .12em; text-transform: uppercase; color: #867f74; margin-right: 2px; }
 .tq-walk-can button, .tq-walk-can .plain { font: 500 11.5px/1.3 'IBM Plex Sans', system-ui, sans-serif; padding: 4px 10px; border-radius: 99px;

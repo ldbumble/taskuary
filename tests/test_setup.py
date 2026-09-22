@@ -67,7 +67,7 @@ class WhatCountsAsSetUpTests(unittest.TestCase):
             self.assertIn(x['goto']['tab'], tabs, x['key'])
             self.assertIsInstance(x['goto']['hash'], str)
         by = {x['key']: x['goto'] for x in setup.state(_fresh())['steps']}
-        self.assertEqual(by['owner'], {'tab': 'Docs', 'hash': 'owner', 'label': 'Open your name in Docs'})
+        self.assertEqual(by['owner'], {'tab': 'Settings', 'hash': 'settings=about', 'label': 'Open About you'})
         self.assertEqual(by['ai'], {'tab': 'Connections', 'hash': 'cli-agents', 'label': 'Open AI CLI agents'})
         self.assertEqual(by['models'], {'tab': 'Settings', 'hash': 'settings=config&group=Triage%20%26%20agents',
                                         'label': 'Open Triage & agents'})

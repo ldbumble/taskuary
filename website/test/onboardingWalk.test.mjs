@@ -100,7 +100,9 @@ test("walkAdvances lands on every real stop and ends on Finish or past the end",
 test("every image walk.py asks for is one the capture script shoots", () => {
   const walkPy = readFileSync(fileURLToPath(new URL("../../taskuary/walk.py", import.meta.url)), "utf8");
   const wanted = [...walkPy.matchAll(/'\/walk\/(\w+)\.png'/g)].map((m) => m[1]);
-  assert.equal(wanted.length, 9);
+  // Review retired as a tab and its stop folded into Tasks (2026-09-22): the count follows
+  // walk.py, and the pairing below is what this test is actually for.
+  assert.ok(wanted.length >= 8, `walk.py asks for ${wanted.length} pictures`);
   const script = readFileSync(fileURLToPath(new URL("../capture-walk.mjs", import.meta.url)), "utf8");
   const shot = [...script.matchAll(/\["(\w+)",\s*"/g)].map((m) => m[1]);
   assert.deepEqual(new Set(wanted), new Set(shot), "walk.py and capture-walk.mjs disagree about which tabs have pictures");

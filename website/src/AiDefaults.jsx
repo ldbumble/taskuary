@@ -180,7 +180,10 @@ export default function AiDefaults({ brains, agents, onGo, onLoaded }) {
           {stale && " — until then the rows below are the older, plainer controls, and the model and effort pickers are not available."}
         </Alert>
       )}
-      {state.slots.map((s) => (
+      {/* a payload without slots is a payload, not a crash: the public demo serves one and the
+          whole Settings view fell into the error boundary - "Something in this view failed to
+          draw" - over a page of knobs that simply had nothing to list (2026-09-22) */}
+      {(state.slots || []).map((s) => (
         <Slot key={s.key} slot={s} brains={brains} agents={state.agent_options || agents || state.agents || []}
           judgeOptions={state.judge_options || []} onSave={(patch) => save(s, patch)} onGo={onGo} />
       ))}

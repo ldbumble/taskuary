@@ -14,7 +14,9 @@ from taskuary.store import MemoryStore
 
 c = TestClient(server.app)
 
-TABS = {'Assistant', 'Board', 'Tasks', 'Review', 'Reports', 'Connections', 'Docs', 'Settings', 'Hub'}
+# Review retired as a tab of its own and Docs became a section of Settings (2026-09-22): a stop
+# may only send you somewhere that still exists.
+TABS = {'Assistant', 'Board', 'Tasks', 'Reports', 'Connections', 'Settings', 'Hub'}
 
 
 def _fresh():
@@ -30,7 +32,7 @@ class TheStopsTests(unittest.TestCase):
         keys = [x['key'] for x in st['stops']]
         self.assertEqual(keys[:5], [x['key'] for x in setup.state(s)['steps']])
         self.assertEqual(st['total'], len(walk.STOPS))
-        self.assertGreaterEqual(st['total'], 14)
+        self.assertGreaterEqual(st['total'], 13)
 
     def test_the_first_five_stops_land_where_the_checklist_lands(self):
         """`goto` is the fifth field the checklist owns. It was the one copied into STOPS by hand,
@@ -86,7 +88,7 @@ class TheStopsTests(unittest.TestCase):
         by = {x['key']: x for x in walk.state(_fresh())['stops']}
         for key in ('owner', 'ai', 'models', 'inbound', 'sync'):
             self.assertIsNone(by[key].get('image'), key)
-        for key in ('connections', 'docs', 'settings', 'board', 'tasks', 'review', 'reports',
+        for key in ('connections', 'docs', 'settings', 'board', 'tasks', 'reports',
                     'assistant', 'hub'):
             self.assertEqual(by[key]['image'], f'/walk/{key}.png')
 
@@ -103,12 +105,13 @@ class TheStopsTests(unittest.TestCase):
 
 
 class ThePicturesAreServedTests(unittest.TestCase):
-    """The files were on disk, in the vite output and in the wheel, and every one of the nine still
+    """The files were on disk, in the vite output and in the wheel, and every one of them still
     404ed: only /assets was mounted, and these are not build output. Three layers of "the file is
     there" passed while the app was broken, so this asks the SERVER for them, over HTTP."""
     def test_every_stop_with_a_picture_serves_it(self):
         shots = [(x['key'], x['image']) for x in walk.state(_fresh())['stops'] if x.get('image')]
-        self.assertEqual(len(shots), 9)
+        self.assertEqual(len(shots), len([x for x in walk.STOPS if x.get('image')]))
+        self.assertGreaterEqual(len(shots), 8)
         for key, url in shots:
             r = c.get(url)
             self.assertEqual(r.status_code, 200, f'{key}: {url}')
@@ -123,8 +126,8 @@ class ThePicturesAreServedTests(unittest.TestCase):
         self.assertEqual(anon.get('/walk/docs.png').status_code, 200)
 
     def test_nothing_else_under_web_is_reachable_through_it(self):
-        """A static mount is a hole in the shape of its directory. /walk holds nine pictures, so it
-        must not be a road to index.html or to anything above it."""
+        """A static mount is a hole in the shape of its directory. /walk holds the tab pictures, so
+        it must not be a road to index.html or to anything above it."""
         self.assertEqual(c.get('/walk/../index.html').status_code, 404)
         self.assertEqual(c.get('/walk/nope.png').status_code, 404)
 
@@ -221,6 +224,7 @@ class _NoRows:
     """A store that holds nothing, so 'none yet' can be tested without unseeding the real one."""
     def list_sources(self, *a, **k): return []
     def list_tasks(self, *a, **k): return []
+    def list_reviews(self, *a, **k): return []      # the tasks stop counts the replies waiting on it
 
 
 class EveryStopSaysWhatYouAlreadyHaveTests(unittest.TestCase):

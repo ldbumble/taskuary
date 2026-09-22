@@ -105,7 +105,7 @@ function greeting() {
   return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
 }
 
-function Pile({ pile, current, onPull }) {
+function Pile({ pile, current, onPull, error, onRetry }) {
   const items = pile?.items || [];
   // A full account can return dozens of canonical rows together. Painting that entire stack in
   // one React commit leaves the rail blank until the browser has laid out every card. On the
@@ -249,8 +249,17 @@ function Pile({ pile, current, onPull }) {
 
   return (
     <div className="tq-pile" data-tq-keep ref={wrapRef}>
-      {!pile ? (
+      {!pile ? (error ? (
+        /* A LOAD THAT FAILED IS NOT A LOAD IN PROGRESS. This spun on "Loading timeline" for as long
+           as the tab stayed open while the server had answered 500 twenty minutes earlier - and the
+           owner, on a fresh install on another machine, had nothing to read anywhere (2026-09-22). */
+        <div className="tq-pile-empty" role="alert">
+          <span className="mark">!</span><b>The timeline did not load</b>{error}
+          <button type="button" className="tq-pile-retry" onClick={() => onRetry?.()}>Try again</button>
+        </div>
+      ) : (
         <div className="tq-pile-empty" role="status"><CircularProgress size={18} /><b>Loading timeline</b>Reading what arrived and what still needs you.</div>
+      )
       ) : !drawn.length ? (
         <div className="tq-pile-empty"><span className="mark">✓</span><b>All done</b>Nothing is waiting on you. New things land here as they arrive, and Taskuary speaks up.</div>
       ) : bands.map(({ level, items: rows }) => {
@@ -1547,6 +1556,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     <FeedView onOpenTask={onOpenTask} onChanged={onChanged} active={active}
       onInventoryFilter={inventoryFilterChanged} unreadInventory={pile}
       top={({ openByMid, openByItem }) => <Pile pile={pile} current={old ? null : currentItem}
+        error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}
         onPull={(key, asUser) => pullOrOpen(key, asUser, openByMid, openByItem)} />}
       stage={stageMode === "chat" ? chat : placeholder} rowMode={stageMode}
       onPull={(r) => pull(keyForRow(r), `Tell me about “${r.Subject || r.Title || "this"}”`)}

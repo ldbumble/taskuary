@@ -97,7 +97,9 @@ def state(store) -> dict:
          # install and the checklist sends nobody to the one field that signs their mail
          'done': bool(who) and who != 'the owner',
          'detail': f'signed as {who}' if who and who != 'the owner' else '',
-         'goto': {'tab': 'Docs', 'hash': 'owner', 'label': 'Open your name in Docs'}},
+         # Docs is a section of Settings now, and "About you" is where the name actually is -
+         # this button opened a tab that no longer exists (2026-09-22)
+         'goto': {'tab': 'Settings', 'hash': 'settings=about', 'label': 'Open About you'}},
         {'key': 'ai', 'title': 'Set up an AI',
          'why': 'This is what reads each message and decides whether it is work, a question, or '
                 'noise. Until it exists every message just files itself onto the Timeline, '

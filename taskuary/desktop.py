@@ -79,10 +79,35 @@ def free_port(host='127.0.0.1') -> int:
         s.bind((host, 0)); return s.getsockname()[1]
 
 
+def already_serving(host='127.0.0.1', port=None):
+    """The Taskuary ALREADY RUNNING on this machine, or ''. 
+
+    The desktop bound a fresh random port on every launch and never asked, so a second launch was a
+    second SERVER - two pollers, two schedulers and two writers on one SQLite file, each with its own
+    window (the owner, 2026-09-22: "taskuary desktop is opening twice always"). It is also why a
+    running app could never be found by its configured port."""
+    from taskuary import config
+    cfg = config.load()
+    host = host or cfg['server'].get('host') or '127.0.0.1'
+    port = port or cfg['server'].get('port') or 7787
+    probe = '127.0.0.1' if host in ('0.0.0.0', '::') else host
+    with socket.socket() as s:
+        if s.connect_ex((probe, int(port))) != 0: return ''
+    url = f'http://{probe}:{int(port)}'
+    return url if serving(url, secs=3) else ''      # something else on that port is not ours to open
+
+
 def start_server(host='127.0.0.1', port=None):
-    """Run the app in a daemon thread; returns (server, url) once it accepts connections."""
+    """Run the app in a daemon thread; returns (server, url) once it accepts connections.
+
+    The configured port first, so the app a person starts is the app they can find; a random one
+    only when that port is taken by something that is not us."""
+    from taskuary import config, __version__ as _v   # noqa: F401 - config is the port's source
     from taskuary.server import app  # absolute: PyInstaller runs this file as a script
-    port = port or free_port(host)
+    if port is None:
+        want = config.load()['server'].get('port') or 7787
+        probe = '127.0.0.1' if host in ('0.0.0.0', '::') else host
+        with socket.socket() as s: port = want if s.connect_ex((probe, int(want))) != 0 else free_port(host)
     server = uvicorn.Server(uvicorn.Config(app, host=host, port=port, log_level='warning'))
     server.thread = threading.Thread(target=server.run, daemon=True); server.thread.start()   # kept: quitting joins it
     for _ in range(200):
@@ -157,8 +182,15 @@ def main():
     # The window opens FIRST and says what is happening, then the app boots behind it. Importing
     # the app is ~8s cold before uvicorn exists at all, so the alternative is what the owner
     # actually saw: their own window telling them it could not connect, for 18 seconds.
+    # ...and if one is already up, this window is a VIEW of it, not a second copy of the app.
+    running = already_serving()
     held, booted = {}, threading.Event()
-    window = webview.create_window('Taskuary', html=SPLASH, width=1280, height=840, min_size=(900, 600))
+    window = webview.create_window('Taskuary', url=running or None, html=None if running else SPLASH,
+                                   width=1280, height=840, min_size=(900, 600))
+    if running:
+        print(f'Taskuary is already running at {running} - opening that one.')
+        webview.start()
+        return 0
 
     def opened():
         try: held['server'], url = boot()

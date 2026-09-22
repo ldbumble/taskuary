@@ -181,9 +181,18 @@ async def request_log(request: Request, call_next):
     t0 = _time.time()
     try:
         resp = await call_next(request)
-    except Exception:
+    except Exception as e:
+        # WHAT BROKE, IN THE PAGE. The trace goes to taskuary.log as it always has, but the browser
+        # got a bare 500 with no body - so the Timeline sat on "Loading timeline" for ever and the
+        # assistant said "Request failed with status code 500" and nothing else, on a machine whose
+        # owner had no reason to know a log file existed (the owner, 2026-09-22: "it's not showing
+        # the error anywhere"). One line of it here, and where the rest of it is.
         logger.exception(f'{request.method} {request.url.path} crashed')
-        raise
+        if not request.url.path.startswith('/api'): raise
+        from .config import home
+        return JSONResponse({'detail': f'{type(e).__name__}: {str(e)[:300] or "no message"}',
+                             'where': f'{request.method} {request.url.path}',
+                             'log': str(home() / 'taskuary.log'), 'code': 'crashed'}, status_code=500)
     if request.url.path.startswith('/api'):
         logger.debug(f'{request.method} {request.url.path} -> {resp.status_code} ({int((_time.time() - t0) * 1000)}ms)')
     return resp
@@ -4768,7 +4777,12 @@ def cli_setup(body: CliSetupBody):
     name = str(body.name or '')
     label = next((k['label'] for k in clis.KNOWN if k['name'] == name), '')
     try: return clisetup.start(store, name, ACTOR, label=label)
-    except ValueError as e: raise HTTPException(422, str(e))
+    # ...and every other way a PANE can fail to open is an answer too, not a crash: no pywinpty on
+    # this Windows, a shim the ConPTY cannot spawn, a folder that is gone. The owner pressed Test,
+    # watched it pass, pressed Set it up and got a bare 500 (2026-09-22). What stopped it is the
+    # thing they need to read.
+    except (ValueError, RuntimeError, OSError) as e:
+        raise HTTPException(422, f'{name} could not be opened in a live pane - {e}')
 
 @app.get('/api/setup')
 def setup_state():

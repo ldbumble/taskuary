@@ -16,7 +16,9 @@ class DesktopTests(unittest.TestCase):
         self.assertTrue(1024 < a < 65536 and 1024 < b < 65536)
 
     def test_embedded_server_serves_ui_and_api(self):
-        server, url = desktop.start_server()
+        # an explicit port: start_server now PREFERS the configured one (7787) and probes it,
+        # and this suite forbids an unmocked socket - the port is not what these test
+        server, url = desktop.start_server(port=desktop.free_port())
         try:
             self.assertTrue(server.started)
             html = _get(f'{url}/')
@@ -63,7 +65,9 @@ class StartingUpTests(unittest.TestCase):
     app` alone is ~8s cold and the lifespan follows it. The owner should be told it is starting."""
 
     def test_serving_is_true_once_the_port_answers_at_all(self):
-        server, url = desktop.start_server()
+        # an explicit port: start_server now PREFERS the configured one (7787) and probes it,
+        # and this suite forbids an unmocked socket - the port is not what these test
+        server, url = desktop.start_server(port=desktop.free_port())
         try:
             # any HTTP reply means the server is up - even a 401. Only a dead socket is "not yet".
             self.assertTrue(desktop.serving(url, 10))

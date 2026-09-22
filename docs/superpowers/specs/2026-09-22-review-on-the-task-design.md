@@ -198,6 +198,74 @@ superset, and the archive still cannot flood the list — which is what the cut 
 The predicate moves to `taskFilter.js`, already the home for this kind of pure list logic,
 where it can be tested without a browser.
 
+## 7 · Which stage opens, when two things want you
+
+The ladder stays exactly as it is, and it is already pinned by
+`taskLifecycle.test.mjs:56-68`: a draft ready outranks everything, then an agent with work
+in it, then the task. The only new rung is that a pending `Kind:"action"` review also opens
+stage 3 — every existing assertion still holds.
+
+The Assistant already mirrors this. `funnelPile.assistantFocus()` returns the same three
+cards with the sentence that says which, and its comment states the contract outright:
+*"the assistant's answer to the task page's `focusStage`, and kept in the same precedence
+so the two cannot drift."* It also already routes a proposed action to the **reply** card
+with its own words — which is the strongest argument that §1 is right: the Assistant has
+worked this way since 2026-09-14 and the task page is the surface out of step.
+
+### The case where they do drift
+
+They disagree today, despite the comment:
+
+| both true at once | task page | Assistant |
+|---|---|---|
+| agent waving **and** something waiting on your yes | opens **reply** | shows the **agent** card |
+
+`focusStage` tests reply first; `assistantFocus` tests `lane === "blocked"` first, and since
+an item carries one lane and `blocked` sorts above `approve` in `lanes.json`, the funnel
+hands it over as the agent's.
+
+**How often can that happen?** For a reply, almost never — `terminal.py:970` calls
+`store.hold_reviews()` when a session starts, parking pending drafts as `held` (*"a draft
+written from the mail alone promises what the session has not found yet"*). It is reachable
+only by pressing *Answer now anyway* on a held draft while the session is still alive, which
+is the owner explicitly overriding the hold.
+
+But `hold_reviews` matches `Kind IN ('draft','draft_reply')` only. **A `Kind:"action"`
+review is never held.** So an agent that proposes a playbook and then stops with a question
+leaves a waving agent and a pending proposal — routinely. This design makes that case more
+visible, not less, since it is the one moving proposals into stage 3.
+
+### The rule
+
+Not a flat precedence, because it is usually **one event seen twice**. `lanes.json` already
+has the sub-state: `blocked.says.approval` is *"{agent} needs your approval"*. When an agent
+is parked because it proposed something, the proposal **is** the answer to the wave —
+approving it is what releases the agent. Opening the agent stage there would show a terminal
+sitting at a prompt with the thing that unblocks it folded away one card below.
+
+> The agent wins, **except** when the agent is blocked on `approval` and a proposal is
+> pending — then stage 3 opens, because that proposal is what it is waiting for.
+
+`assistantFocus` gains the same exception, in the same shape, so the contract its own
+comment claims becomes true rather than aspirational. Both get a test for the exception and
+for the plain case either side of it.
+
+## 8 · The red count moves to Tasks
+
+The badge is the one thing the Review tab gave you without going anywhere, so it survives
+the tab. `TaskHubPage` already has `refreshPending` and already recounts on
+`feed-changed` / `task-changed`; only the pill it decorates changes.
+
+It counts **tasks, not reviews** — deduplicated by `TaskId`. A task holding both a drafted
+reply and a proposed playbook is one thing waiting on you, and `Tasks · 5` over four rows
+would be the same "count that outruns the rows beneath it" the pill counts were fixed for
+in §6.
+
+Deliberately *not* widened to everything on you: a waving agent is not counted. That would
+be a better number, but it is a different number from the one being moved, and changing its
+meaning in the same breath as its home is how a count quietly starts lying. Easy follow-up
+once this lands.
+
 ## Code shape
 
 `ReviewView.jsx` does not move into `TasksView.jsx`. TasksView is 2043 lines and would take
@@ -213,7 +281,8 @@ Files touched:
 | `website/src/ReviewView.jsx` | **deleted** |
 | `website/src/TasksView.jsx` | stage 3 mounts the decision + proposals; `onGoReview` prop and its three call sites go |
 | `website/src/TaskHubPage.jsx` | `TABS`, the pending badge, the Review mount, `#playbook`/`#profiles` routing |
-| `website/src/taskLifecycle.js` | `focusStage` opens on a pending proposal |
+| `website/src/taskLifecycle.js` | `focusStage` opens on a pending proposal, and the `approval` exception |
+| `website/src/funnelPile.js` | `assistantFocus` gains the same exception, so the two stay in lockstep |
 | `website/src/ui.jsx` | `stateOf`'s busy rung and `needs_you` fall-through give way to lane tags; done/dropped stay |
 | `website/src/taskFilter.js` | `cutAway` |
 | `website/src/settingsMap.js`, `SettingsView.jsx` | the docs rail entry |
@@ -231,6 +300,10 @@ Files touched:
 - `cutAway` and the pill counts: unit tests in `website/test/` (`node --test` is wired up),
   written failing first.
 - `focusStage` with a pending proposal and no sender: `taskLifecycle` tests.
+- The `approval` exception, and the plain case either side of it, asserted **twice** — once
+  against `focusStage` and once against `assistantFocus` — so the lockstep the comment
+  claims is enforced rather than hoped for. `assistantFocus.test.mjs` already exists.
+- The badge counts tasks, not reviews: a task holding a reply *and* a proposal counts once.
 - `add_review` with no `TaskId` creates a task; the migration backfills existing rows:
   pytest, against a temp home — `conftest` forces one, and it must stay that way.
 - The full pytest suite from the repo root before any push. "No tests ran" is a failure.

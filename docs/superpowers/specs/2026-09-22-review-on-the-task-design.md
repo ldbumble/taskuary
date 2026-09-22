@@ -113,16 +113,35 @@ section will have been for nothing.
 | `invoice_workflow` (`invoice_workflow.py:175`) | an outbound Zoho invoice awaiting approval |
 | `reports` (`reports.py:2140`) | an outbound report awaiting approval |
 
-With no Review tab these have nowhere to be decided. **`store.add_review` creates a task
-when `TaskId` is missing** — one chokepoint, so no call site added later can strand a
-decision by forgetting. The three existing callers pass their own title and kind so the
-words are theirs, not a generic fallback:
+With no Review tab these have nowhere to be decided. **`store.add_review` creates a task when
+the caller names one**, via `_task_title` / `_task_kind`. The three pass their own words:
 
 - `Invoice · <customer> · <period>`
 - `Report · <title> → <recipients>`
 - `Setting · <what you asked for>`
 
-A one-off migration gives the same treatment to rows already sitting in live databases.
+A one-off migration gives the same treatment to rows already sitting in live databases,
+scoped to `Kind IN ('outbound','action')` still awaiting a verdict.
+
+### Opt-in, not a blanket rule — corrected during implementation
+
+This section first said *every* review gets a task, on one chokepoint, so that no call site
+added later could strand a decision. That was written, and it broke seven tests that all
+turn out to be one contract (`test_api.py::test_replying_to_a_filed_message_creates_no_task`):
+
+> *"Answering chatter is a REPLY, not a project — promoting the filed message to a task just
+> to hold the review put a TQ badge on 'it was just his demo'. The review rides task-less,
+> still lands in the pending queue, and approving still sends."*
+
+A fourth task-less path exists and is **deliberate**, guarding a complaint the owner already
+made. The premise behind the chokepoint was also simply wrong: a task-less review is not
+stranded. `funnel.py:303` builds it as `review:{ReviewId}` in the `approve` lane with `tid`
+optional, and the assistant's `ReplyCard` decides it by `rid`. So it has a home with or
+without the tab.
+
+**The amended rule:** every decision lives on a task, *except* answering filed chatter, which
+is decided in the Assistant where it already lives. A review asks for a task when it needs
+one; nothing invents one on its behalf.
 
 ## 4 · The word "Review"
 

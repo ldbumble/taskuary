@@ -316,10 +316,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // Only while this tab is the one on screen: it stays mounted behind the others.
   useEffect(() => {
     if (!active) return undefined;
-    return onLive("task-changed", () => {
-      loadTasks("refresh");
-      if (selRef.current) loadDetail(selRef.current);
-    }, { wait: 250, max: 1500 });
+    return onLive("task-changed", () => { loadTasks("refresh"); if (selRef.current) loadDetail(selRef.current); },
+      { wait: 250, max: 1500 });
   }, [active, loadTasks, loadDetail]);
   // the roster is user-config - default to whatever actually exists
   useEffect(() => {

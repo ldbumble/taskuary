@@ -7,12 +7,14 @@ from taskuary.store import MemoryStore
 
 class AutomateReportTests(unittest.TestCase):
     def test_gather_and_registry(self):
+        from datetime import datetime, timedelta
         from taskuary.reports import REGISTRY, resolve_cfg
         from taskuary.toil import gather
         s = MemoryStore()
+        recent = (datetime.now() - timedelta(days=2)).strftime('%Y-%m-%d %H:%M:%S')
         for i in range(4):
             s.add_message({'ExternalId': f'n{i}', 'Channel': 'email', 'FromEmail': 'noise@vendor.com',
-                           'Subject': f'Newsletter #{i}', 'SentAt': '2026-08-23 08:00:00', 'Status': 'ignored'})
+                           'Subject': f'Newsletter #{i}', 'SentAt': recent, 'Status': 'ignored'})
         txt = gather(s, days=30)
         self.assertIn('noise@vendor.com: 4 msgs', txt); self.assertIn('4 ignored', txt)
         head, body = REGISTRY['automate'](resolve_cfg(s, {'type': 'automate', 'days': 30}))

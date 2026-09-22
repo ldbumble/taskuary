@@ -25,7 +25,8 @@ test("a live session anywhere means the agent stage is working, not 'not started
 });
 
 test("the open task is reloaded on task-changed, not just the list", () => {
-  const sub = /onLive\("task-changed",([\s\S]*?)\);\n/.exec(src);
+  const sub = /onLive\("task-changed",([\s\S]*?)\}, \{ wait:/.exec(src)
+    || /onLive\("task-changed",([\s\S]*?)\);\n/.exec(src);
   assert.ok(sub, "TasksView must subscribe to task-changed");
   assert.match(sub[1], /loadDetail\(/,
     "refreshing only the list is how the row said 'agent working' beside a panel saying 'not started'");

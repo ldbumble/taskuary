@@ -69,10 +69,36 @@ def _fail(r):
     raise RuntimeError(f'LinkedIn returned {r.status_code}: {said}')
 
 
-# What a post needs (w_member_social) plus who is posting (openid/profile). These are the scopes
-# the SELF-SERVE "Share on LinkedIn" product grants - asking for more here is what sends an app
-# into Community Management review, where a rejection is terminal.
+# TWO self-serve products, not one, and this is what stops a first sign-in dead:
+#
+#   Share on LinkedIn                          -> w_member_social        (the post)
+#   Sign In with LinkedIn using OpenID Connect  -> openid, profile, email (who is posting)
+#
+# An app holding only the first is refused at the CONSENT screen with "Scope openid is not
+# authorized for your application" - before any code is issued, so nothing here can catch it
+# (2026-09-22). Both are added from the app's Products tab and granted immediately; neither is
+# the reviewed Community Management door, where a rejection is terminal for that app.
+#
+# All four are needed. A post's author is `urn:li:person:{sub}` and `sub` comes from the OIDC
+# userinfo endpoint, so without openid there is nobody to author the post as.
 SCOPES = 'openid profile email w_member_social'
+
+
+def missing_product_hint(said: str) -> str:
+    """The fix, when LinkedIn's refusal is really a product the app has not added.
+
+    Their wording - "Scope X is not authorized for your application" - reads as "ask whoever
+    administers this", which sends the owner looking for permission they already have. It is a
+    checkbox on their own app.
+    """
+    low = str(said or '').lower()
+    if 'not authorized for your application' not in low: return ''
+    which = ('Sign In with LinkedIn using OpenID Connect' if any(w in low for w in ('openid', 'profile', 'email'))
+             else 'Share on LinkedIn' if 'w_member_social' in low else '')
+    return ('Add the ' + (f'"{which}" product' if which else 'missing product')
+            + ' on the app\'s Products tab at developer.linkedin.com/apps - it is self-serve and '
+              'granted immediately - then press Sign in again. This card needs BOTH "Share on '
+              'LinkedIn" and "Sign In with LinkedIn using OpenID Connect".')
 AUTH = 'https://www.linkedin.com/oauth/v2'
 
 

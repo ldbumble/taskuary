@@ -4592,7 +4592,10 @@ def linkedin_callback(code: str = None, state: str = '', error: str = None,
     csp = {'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'"}
     page = lambda msg, ok=True: HTMLResponse(f'<!doctype html><meta charset=utf-8><title>Taskuary</title><body style="font:15px system-ui;padding:40px;color:#262521;background:#f6f4f1">'
         f'<p style="font-weight:700">{"Connected" if ok else "Not connected"}</p><p>{_esc(str(msg))}</p><p style="color:#6e685f">You can close this tab and go back to Taskuary.</p>', headers=csp)
-    if error: return page(f'LinkedIn said: {error_description or error}', False)
+    if error:
+        said = error_description or error
+        hint = linkedin.missing_product_hint(said)
+        return page(f'LinkedIn said: {said}' + (f' -- {hint}' if hint else ''), False)
     if not (code and state.startswith('tq-')): return page('the callback came back without a code', False)
     try: cid, nonce = int(state.split('-')[1]), state.split('-', 2)[2]
     except (ValueError, IndexError): return page('bad state', False)

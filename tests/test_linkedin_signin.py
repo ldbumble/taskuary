@@ -37,7 +37,7 @@ class _Resp:
 
 
 class TheAuthorizeUrl(unittest.TestCase):
-    def test_it_asks_only_for_the_scopes_the_self_serve_product_grants(self):
+    def test_it_asks_only_for_what_the_two_self_serve_products_grant(self):
         """Asking for more is what sends an app into Community Management review, where a
         rejection is terminal for that app."""
         self.assertEqual(linkedin.SCOPES, 'openid profile email w_member_social')
@@ -62,6 +62,40 @@ class TheAuthorizeUrl(unittest.TestCase):
         prints a different port than the one serving it is a dead end."""
         self.assertEqual(linkedin.redirect_uri({'port': 7999}),
                          'http://localhost:7999/api/linkedin/callback')
+
+
+class TheTwoProductsAnAppNeeds(unittest.TestCase):
+    """The first real sign-in failed here (2026-09-22): an app with only Share on LinkedIn is
+    refused at the CONSENT screen, before any code is issued, so nothing in the exchange can catch
+    it. The only place left to help is the words on the way back."""
+
+    def test_openid_being_refused_names_the_product_that_grants_it(self):
+        hint = linkedin.missing_product_hint('Scope "openid" is not authorized for your application')
+        self.assertIn('Sign In with LinkedIn using OpenID Connect', hint)
+        self.assertIn('Products tab', hint)
+        self.assertIn('self-serve', hint)
+
+    def test_the_posting_scope_being_refused_names_the_other_one(self):
+        hint = linkedin.missing_product_hint('Scope "w_member_social" is not authorized for your application')
+        self.assertIn('Share on LinkedIn', hint)
+
+    def test_an_unrelated_refusal_gets_no_hint_rather_than_a_guess(self):
+        self.assertEqual(linkedin.missing_product_hint('The user cancelled the sign-in'), '')
+        self.assertEqual(linkedin.missing_product_hint(''), '')
+
+    def test_the_hint_reaches_the_page_the_owner_actually_sees(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        r = TestClient(server.app).get('/api/linkedin/callback', params={
+            'error': 'unauthorized_scope_error',
+            'error_description': 'Scope "openid" is not authorized for your application'})
+        self.assertIn('Sign In with LinkedIn using OpenID Connect', r.text)
+
+    def test_all_four_scopes_are_asked_for_because_a_post_needs_an_author(self):
+        """openid is not optional: the author urn is urn:li:person:{sub}, and sub comes from the
+        OIDC userinfo endpoint. Dropping it to dodge the second product leaves nobody to post as."""
+        self.assertEqual(sorted(linkedin.SCOPES.split()),
+                         ['email', 'openid', 'profile', 'w_member_social'])
 
 
 class ExchangingTheCode(unittest.TestCase):

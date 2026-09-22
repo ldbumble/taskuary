@@ -68,7 +68,7 @@ test("the agent card names the role and the brain, and offers no model", () => {
   assert.match(tasks, /const runRole = assignedAgent\(t\?\.Assignee\) \|\| \(t\?\.Kind === "coding" \? "coder" : ""\);/);
   // `term.cli` is the literal string "taskuary" on every general session (general.info), so the
   // pill that exists to name the brain named the PRODUCT. The session's own provider leads now.
-  assert.match(tasks, /const runBrain = term\?\.provider \|\| term\?\.cli \|\| term\?\.agent \|\| \(runRole && brains\[runRole\]\) \|\| "";/);
+  assert.match(tasks, /const runBrain = term\?\.provider \|\| term\?\.cli \|\| term\?\.agent \|\| detail\?\.ranOn\?\.brain \|\| \(runRole && brains\[runRole\]\) \|\| "";/);
   assert.match(tasks, /const brainPill = runBrain && !\(isGeneral && term\?\.alive\) \? runBrain : "";/,
     "a live general session shows the brain in its workspace picker - the pill would be the same fact twice");
   assert.ok(tasks.includes("const { agents, models, kinds, brains, brainList, brainModels, generalBrains } = useAgents();"),

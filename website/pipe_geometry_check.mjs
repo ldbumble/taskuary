@@ -6,8 +6,8 @@
 //   node website/pipe_geometry_check.mjs <url>          # against a `taskuary --demo --port N` server
 //
 // The two are no longer on screen together. Unread IS the pile now and draws no `.tqRow` at all;
-// All and Needs me are the chronological lists and draw no pile (FeedView: "Unread alone owns the
-// conversational walk"). So this measures the pile on unread, switches the rail to all, and measures
+// The timeline is the chronological list and draws no pile (FeedView: "Unread alone owns the
+// conversational walk"). So this measures the pile on work, switches the rail to timeline, and measures
 // a Timeline row there - same rail, same viewport, so the edges must still line up. Reading only the
 // landing view is what made this check exit 2 on "no Timeline row" and stop testing anything.
 //
@@ -26,19 +26,16 @@ const pileCards = (page) => page.evaluate(() =>
     return { title: c.querySelector("b")?.textContent?.slice(0, 40) || "", left: b.left, width: b.width };
   }));
 
-// FilterPills renders plain Boxes with no class of their own, so the strip is found by the pills it
-// holds: exactly three children reading unread / all / needs me. Matching a child by prefix instead
-// finds the WRAPPER around every filter group - whose second child is the "all kinds" source picker,
-// so the click landed there and the view never changed.
+// The switcher used to be three pills (unread / all / needs me) found by their own text, and this
+// went hunting for the WRAPPER around every filter group instead - whose second child is the source
+// picker, so the click landed there and the view never changed. It is two labelled buttons in a
+// named group now (work / timeline), so ask for the group by name rather than by what is in it:
+// that is what stopped this script running at all when the labels were renamed at 0.3.5.0.
 const switchView = (page, want) => page.evaluate((label) => {
-  const labels = (el) => [...el.children].map((c) => c.textContent.trim());
-  const strip = [...document.querySelectorAll("div")].find((el) => {
-    const t = labels(el);
-    return t.length === 3 && t.includes("all") && t.includes("needs me") && t.some((x) => x.startsWith("unread"));
-  });
-  if (!strip) return "no unread/all/needs me view switcher on the page";
+  const strip = document.querySelector('[role="group"][aria-label="Feed views"]');
+  if (!strip) return "no work/timeline view switcher on the page";
   const pill = [...strip.children].find((c) => c.textContent.trim() === label);
-  if (!pill) return `the view switcher has no "${label}" pill`;
+  if (!pill) return `the view switcher has no "${label}" button`;
   pill.click();
   return "";
 }, want);
@@ -59,7 +56,7 @@ try {
   const rows = await pileCards(page);
   if (!rows.length) { console.log("pile is empty - nothing to measure"); process.exit(0); }
 
-  const failed = await switchView(page, "all");
+  const failed = await switchView(page, "timeline");
   if (failed) { console.error(failed); process.exit(2); }
   try { await page.waitForSelector(".tqRow [data-tq-keep]", { timeout: 8000 }); }
   catch { console.error("switched to all, but it drew no Timeline row to measure against"); process.exit(2); }

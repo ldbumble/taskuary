@@ -48,3 +48,19 @@ test("All rows can only open detail while Unread keeps the existing chat pull", 
   assert.match(source, /const openRow = \(row\) => \(chatMode \? onPull\(row\) : drill\(row\)\)/);
   assert.doesNotMatch(source, /api\.(?:get|post)\(["'`]\/api\/(?:concierge|funnel\/settle)/);
 });
+
+test("the rail's header is one toolbar, not two controls pushed to opposite edges", () => {
+  // `ml: "auto"` sent New to the rail's right border and left 155px of nothing between it and
+  // the filter, on a rail that was 500px wide - measured, at 1440 (the owner, 2026-09-22: "bar
+  // is too wide and makes filters on top too much space betwee filter and new button").
+  const source = feedSource();
+  const at = source.indexOf("onClick={() => setNewOpen(true)}");
+  assert.notEqual(at, -1, "the New button is still in the rail's header");
+  const btn = source.slice(at, at + 400);
+  assert.doesNotMatch(btn, /ml: "auto"/, "New sits beside the filter; the space belongs after the group");
+  assert.match(btn, /ml: 0\.75/);
+  // 470 is as narrow as the rail goes without costing a subject line: at 1440 the demo world
+  // truncates the same four of seventeen at 500 and at 470, and seven at 440.
+  assert.match(source, /md: "minmax\(0, 470px\) minmax\(0, 1fr\)"/,
+    "the rail's width lives in one place - change it there, with a measurement");
+});

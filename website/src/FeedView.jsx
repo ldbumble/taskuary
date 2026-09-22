@@ -1433,10 +1433,12 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     // open. Both columns are full height and neither one scrolls the page.
     <Box sx={{ display: "grid", columnGap: 1.75, alignItems: "stretch", width: "100%",
       height: `calc(100vh - ${navH}px - 22px)`, minHeight: 420,
-      // 500px of rail: enough that a real subject line is readable before you open anything,
-      // which is the whole job of a one-line row. Everything else goes to the stage, which holds
-      // a whole message, the agent's work and the draft.
-      gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "minmax(0, 500px) minmax(0, 1fr)" },
+      // 470px of rail: enough that a real subject line is readable before you open anything,
+      // which is the whole job of a one-line row. It was 500 and read as too wide; 470 is as
+      // narrow as it goes without costing a single subject - measured on the demo world, where
+      // 500 and 470 truncate the same four of seventeen and 440 truncates seven. Everything else
+      // goes to the stage, which holds a whole message, the agent's work and the draft.
+      gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "minmax(0, 470px) minmax(0, 1fr)" },
       mt: { xs: -1.5, md: -2.25 }, pt: { xs: 1.5, md: 2 } }}>
       <ApprovalInterrupt it={interrupt} onResolve={(choice) => {
         if (choice === "review") reviewInterrupted(interrupt);
@@ -1487,10 +1489,14 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                 if (nextCat !== cat) setCat(nextCat);
                 if (nextPick !== pick) setPick(nextPick);
               }} />
+            {/* NEW SITS BESIDE THE FILTER, not at the far edge. `ml: "auto"` pushed it against
+                the rail's right border and left 155px of nothing between the two controls, which
+                is what made the bar read as too wide (the owner, 2026-09-22). A toolbar is a
+                group you read left to right; the space belongs after it, not inside it. */}
             <Button size="small" variant="contained" disableElevation onClick={() => setNewOpen(true)}
               startIcon={<AddIcon sx={{ fontSize: 15 }} />}
               sx={{ flexShrink: 0, height: 28, minWidth: 68, py: 0, px: 1.25, borderRadius: 99,
-                fontSize: 11.5, background: GRADIENT, ml: "auto" }}>New</Button>
+                fontSize: 11.5, background: GRADIENT, ml: 0.75 }}>New</Button>
           </Box>
 
           {/* ONE centred line, not two. The counts and the sync clock were separate rows justified

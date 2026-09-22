@@ -174,6 +174,7 @@ def prepare(store, batch_id):
                        'connector_id': item['ConnectorId'], 'invoice_number': inv.get('invoice_number')}
             rid = store.add_review({'MessageId': mid, 'Kind': 'outbound', 'Status': 'pending', 'DraftText': body,
                 'Reason': f"{item['CustomerName']} · {item.get('Currency') or 'USD'} {float(item['Amount']):,.2f} · approve to send from Zoho",
+                '_task_title': f"Invoice · {item['CustomerName']} · {batch['Period']}"[:140], '_task_kind': 'task',
                 'Deliver': json.dumps(deliver)})
             store.update_invoice_item(item['ItemId'], {'InvoiceId': invoice_id,
                 'InvoiceNumber': inv.get('invoice_number'), 'ReviewId': rid, 'Subject': subject,

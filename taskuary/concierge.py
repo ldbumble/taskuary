@@ -1558,7 +1558,8 @@ def propose_switch(store, changes: list, says: str, text: str, actor: str = 'own
     ok, why = proposals.validate(store, p)
     if not ok: raise ValueError(why)
     rid = store.add_review({'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(p),
-                            'Reason': f'you asked for this setting: {says}'})
+                            'Reason': f'you asked for this setting: {says}',
+                            '_task_title': f'Setting · {says}'[:140], '_task_kind': 'task'})
     store.audit('review', rid, 'setting_proposed', actor, detail={'changes': changes})
     funnel.invalidate()
     return {'reviewId': rid, 'card': {'key': f'review:{rid}', 'kind': 'action', 'lane': 'approve', 'rid': rid,

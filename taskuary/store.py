@@ -990,6 +990,31 @@ class SQLiteStore:
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) "
                                 "VALUES ('whatsapp_star_dropped', '1', 'migration')")
                 if gone: logger.info(f'whatsapp: dropped the {gone} catch-all source row - named chats only now')
+            # An INVOICE, a REPORT or a proposed SETTING with no task has nowhere left to be
+            # answered once the Review tab is gone; rows filed before add_review asked for one are
+            # still sitting in live stores. Each gets the task it should have had, titled with the
+            # words it already carries. Scoped to those two kinds on purpose: a task-less `draft` is
+            # the answer to filed chatter and is MEANT to stay task-less - it is decided in the
+            # assistant, by rid. The id allocation is create_task's own rule - one past the highest
+            # ever ISSUED, audit included - so a backfilled TQ-ref can never name existing work.
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='review_task_backfilled'").fetchone():
+                stranded = self.cx.execute("SELECT ReviewId, Reason FROM review WHERE TaskId IS NULL "
+                                           "AND Kind IN ('outbound','action') AND Status IN ('pending','held') ORDER BY ReviewId").fetchall()
+                if stranded:
+                    mark = self.cx.execute("SELECT Value FROM setting WHERE Name='task_id_mark'").fetchone()
+                    nxt = max(self.cx.execute('SELECT MAX(TaskId) m FROM task').fetchone()['m'] or 0,
+                              self.cx.execute("SELECT MAX(EntityId) m FROM audit WHERE EntityType='task'").fetchone()['m'] or 0,
+                              int((mark['Value'] if mark else 0) or 0))
+                    for rv in stranded:
+                        nxt += 1
+                        self.cx.execute('INSERT INTO task (TaskId, Title, Kind, Status, Source, CreatedBy, CreatedAt) VALUES (?,?,?,?,?,?,?)',
+                                        (nxt, str(rv['Reason'] or 'Waiting on you')[:140], 'task', 'open', 'review', 'migration', _now()))
+                        self.cx.execute('UPDATE review SET TaskId=? WHERE ReviewId=?', (nxt, rv['ReviewId']))
+                    self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('task_id_mark', ?, 'migration') "
+                                    "ON CONFLICT(Name) DO UPDATE SET Value=excluded.Value", (str(nxt),))
+                    logger.info(f'review: {len(stranded)} decision(s) with no task now have one')
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) "
+                                "VALUES ('review_task_backfilled', '1', 'migration')")
             self._heal_seeded_report_owner()
             # the Morning digest ships as a real REPORT (reports.run_digest): the brief lands
             # on the Timeline, its prompt is edited on the Reports tab, and deleting the
@@ -3505,6 +3530,20 @@ class SQLiteStore:
                        message_id=review.get('MessageId'), task_id=review.get('TaskId'))
     def _review_changed(self, rid): self._poke_review(self.get_review(rid))
     def add_review(self, fields):
+        # A review that NEEDS a task says so, by naming it. Three callers file one that nothing
+        # else owns - a setting proposed in chat, a Zoho invoice, an outbound report - and once
+        # the Review tab is gone those have no page to be answered on, so they ask for a task here.
+        #
+        # This is opt-in, deliberately, and a blanket "every review gets a task" was tried first
+        # and is wrong: answering filed chatter is a REPLY, not a project (server.py, the /reply
+        # endpoint), and minting a task to hold that review puts a TQ badge on "it was just his
+        # demo". A task-less review is not stranded either way - the funnel gives it the `approve`
+        # lane and the assistant decides it by rid, with no tid needed (2026-09-22).
+        fields = dict(fields)
+        title, kind = fields.pop('_task_title', None), fields.pop('_task_kind', None)
+        if title and not fields.get('TaskId'):
+            fields['TaskId'] = self.create_task(
+                {'Title': str(title)[:140], 'Kind': kind or 'task', 'Status': 'open', 'Source': 'review'}, 'system')
         rid = self._insert('review', fields, REVIEW_COLS, {'CreatedAt': _now()})
         self._poke_review({**fields, 'ReviewId': rid})
         # Sync and triage run independently. If the owner answered in WhatsApp/Teams/mail while

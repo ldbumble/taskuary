@@ -2139,6 +2139,7 @@ def deliver_report(store, src: dict, cfg: dict, subject: str, body: str) -> dict
     if gate == 'review':
         store.add_review({'MessageId': mid, 'Kind': 'outbound', 'Status': 'pending', 'DraftText': body,
                           'Reason': f'{cfg.get("title") or "report"} → {who}. Approve to send it.',
+                          '_task_title': f'Report · {cfg.get("title") or "report"} → {who}'[:140], '_task_kind': 'task',
                           'Deliver': json.dumps({'channel': d.get('channel') or 'email', 'to': to, 'subject': subj})})
         store.add_route(mid, None, 'draft', None,
                         f'outbound report waiting for you - approve in Review and it goes to {who}', [], 'report')

@@ -1482,7 +1482,10 @@ class SQLiteStore:
         ids = [r['TaskId'] for r in self._rows(id_sql, id_params)]
         if not ids:
             return []
-        ph = ','.join('?' * len(ids))
+        # Integers we just selected. Binding them twice (message IN + outer WHERE) hits
+        # SQLITE_MAX_VARIABLE_NUMBER (32,766) at 16,384 tasks and takes down every caller
+        # that omits limit — digest, assistant, context, setup.
+        ph = ','.join(str(int(i)) for i in ids)
         blobs = ('''ms.SearchChannels, ms.SearchSubjects, ms.SearchPeople,
                        ms.SearchEmails, ms.SearchExternalIds, ms.SearchLinks,''' if search else '')
         agg = ('''GROUP_CONCAT(DISTINCT Channel) SearchChannels,
@@ -1519,7 +1522,8 @@ class SQLiteStore:
                ) ms ON ms.TaskId=t.TaskId
                WHERE t.TaskId IN ({ph})
                ORDER BY t.TaskId DESC'''
-        return self._rows(sql, ids + ids)
+        return self._rows(sql, [])
+
     def delete_task(self, task_id):
         for q in ("UPDATE message SET TaskId=NULL, Status='filed' WHERE TaskId=?", 'UPDATE route SET TaskId=NULL WHERE TaskId=?',
                   'DELETE FROM review WHERE TaskId=?', 'DELETE FROM comment WHERE TaskId=?',

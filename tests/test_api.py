@@ -395,12 +395,17 @@ class ApiTests(unittest.TestCase):
 
     def test_tasks_page_and_search_do_not_require_the_full_archive(self):
         """A limit of 2 on five tasks must return next, and q must find a mail subject without
-        the client holding every row. Omitting limit still returns the lot, which is the Board."""
+        the client holding every row. Omitting limit still returns the lot, which is the Board.
+        counts is opt-in: Board/Studio ?active=1 must not pay five COUNTs they never used."""
         ids = [c.post('/api/tasks', json={'Title': f'page-{i}'}).json()['taskId'] for i in range(5)]
         first = c.get('/api/tasks', params={'limit': 2}).json()
         self.assertEqual(len(first['data']), 2)
         self.assertEqual(first['next'], first['data'][-1]['TaskId'])
-        self.assertIn('live', first['counts'])
+        self.assertNotIn('counts', first)
+        counted = c.get('/api/tasks', params={'limit': 2, 'counts': 1}).json()
+        self.assertIn('live', counted['counts'])
+        board = c.get('/api/tasks', params={'active': True}).json()
+        self.assertNotIn('counts', board)
         rest = c.get('/api/tasks', params={'limit': 2, 'before': first['next']}).json()
         self.assertEqual(len(rest['data']), 2)
         self.assertTrue({r['TaskId'] for r in first['data']}.isdisjoint({r['TaskId'] for r in rest['data']}))
@@ -410,6 +415,7 @@ class ApiTests(unittest.TestCase):
         unbounded = c.get('/api/tasks').json()
         self.assertGreaterEqual(len(unbounded['data']), 6)
         self.assertNotIn('next', unbounded)
+        self.assertNotIn('counts', unbounded)
 
     def test_feed_304s_when_nothing_changed(self):
         r1 = c.get('/api/feed')

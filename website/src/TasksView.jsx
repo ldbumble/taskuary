@@ -161,11 +161,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const [filter, setFilter] = useState("live");
   const [query, setQuery] = useState("");
   // "all" and "done" pile up for months; today's are the ones you came to look at, the rest
-  // wait behind one button. In progress is never cut: what is still on a plate must show.
+  // wait behind one button. Live work pages too (200, then "show more"): at archive scale the
+  // in-progress set can still be thousands, and shipping all of it froze the tab.
   const [older, setOlder] = useState(false);
   const [detail, setDetail] = useState(null);
   const [hasMore, setHasMore] = useState(false);
-  const [counts, setCounts] = useState(null);
   // Which task is on screen RIGHT NOW, readable from inside any await. Every fetch here is
   // keyed to a task, and a response that lands after you clicked another one must be dropped:
   // a wrap-up finishing 8 seconds later used to paint ITS task's header and report over the
@@ -252,29 +252,36 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // the tab used to apply locally (taskSearch.js).
   const PAGE = 200;
   const tasksTail = useRef(null);
+  const loadedN = useRef(0);
+  const filterRef = useRef(filter); filterRef.current = filter;
+  const queryRef = useRef(query); queryRef.current = query;
   const loadTasks = useCallback(async (append = false) => {
     const seq = ++taskLoadSeq.current;
-    const q = query.trim();
+    const q = queryRef.current.trim();
+    const f = filterRef.current;
+    const refresh = append === "refresh";
+    const isAppend = append === true;
     const params = { limit: PAGE };
+    if (refresh) params.limit = Math.min(Math.max(loadedN.current || PAGE, PAGE), 500);
     if (q) { params.q = q; params.search = 1; }
-    else if (filter === "live") params.active = 1;
-    else if (filter === "done") params.status = "done";
-    if (append && tasksTail.current) params.before = tasksTail.current;
+    else if (f === "live") params.active = 1;
+    else if (f === "done") params.status = "done";
+    if (isAppend && tasksTail.current) params.before = tasksTail.current;
     try {
       const body = (await api.get("/api/tasks", { params })).data || {};
       const rows = body.data || [];
       if (seq !== taskLoadSeq.current) return;
       setTasks((prev) => {
-        const next = append && prev ? [...prev, ...rows] : rows;
+        const next = isAppend && prev ? [...prev, ...rows] : rows;
         tasksTail.current = next.length ? next[next.length - 1].TaskId : null;
+        loadedN.current = next.length;
         return next;
       });
       setHasMore(!!body.next);
-      if (body.counts) setCounts((c) => ({ ...c, ...body.counts }));
     } catch (e) {
       if (seq === taskLoadSeq.current) setErr(e?.response?.data?.detail || "Failed to load tasks");
     }
-  }, [filter, query]);
+  }, []);
 
   const loadDetail = useCallback(async (id) => {
     if (!id) { setDetail(null); return; }
@@ -309,7 +316,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // Only while this tab is the one on screen: it stays mounted behind the others.
   useEffect(() => {
     if (!active) return undefined;
-    return onLive("task-changed", () => { loadTasks(false); if (selRef.current) loadDetail(selRef.current); });
+    return onLive("task-changed", () => {
+      loadTasks("refresh");
+      if (selRef.current) loadDetail(selRef.current);
+    }, { wait: 250, max: 1500 });
   }, [active, loadTasks, loadDetail]);
   // the roster is user-config - default to whatever actually exists
   useEffect(() => {
@@ -501,8 +511,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // Debounce the keystrokes so each letter is not a round trip; pill clicks fire immediately.
   useEffect(() => {
     if (!active) return undefined;
-    const t = setTimeout(() => loadTasks(false), search ? 200 : 0);
-    return () => clearTimeout(t);
+    const searchDebounce = setTimeout(() => loadTasks(false), search ? 200 : 0);
+    return () => clearTimeout(searchDebounce);
   }, [active, search, filter, loadTasks]);
   // Search means the whole archive, regardless of the selected state pill or today's cutoff. That
   // is what makes a completed PR/task discoverable instead of merely searching the visible rows.
@@ -514,14 +524,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // the list is broken, not cut. Each pill counts what clicking it would SHOW - today's, while
   // the cut holds - and the rest stay behind "show N more from before today".
   const countIn = (key) => {
-    if (!counts) {
-      const rows = (tasks || []).filter((x) => !key || inBucket(x, key));
-      return !search && key !== "live" && !older ? rows.filter(touchedToday).length : rows.length;
-    }
-    if (key === "live") return counts.live || 0;
-    if (key === "done") return (older ? counts.done : counts.done_today) || 0;
-    const todayish = (counts.live || 0) + (counts.done_today || 0) + (counts.dropped_today || 0);
-    return (older ? counts.all : todayish) || 0;
+    const rows = (tasks || []).filter((x) => !key || inBucket(x, key));
+    return !search && key !== "live" && !older ? rows.filter(touchedToday).length : rows.length;
   };
   // A task may finish while its detail stays open (especially an assistant conversation). Move
   // the selected bucket with it so Done never sits under an In progress filter. Search and All

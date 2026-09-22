@@ -80,3 +80,27 @@ test("with a live session, X steps back to the task first and the session keeps 
   }
   assert.doesNotMatch(source, /\{!term\?\.alive && <Fold title=\{`Context & history/, "no gate left on the raw flag");
 });
+
+test("a live event keeps the pages already walked", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("../src/TasksView.jsx", import.meta.url), "utf8");
+  assert.match(source, /loadTasks\("refresh"\)/);
+  assert.doesNotMatch(source, /onLive\("task-changed", \(\) => \{ loadTasks\(false\)/);
+  assert.match(source, /queryRef\.current/);
+  assert.match(source, /filterRef\.current/);
+});
+
+test("the search debounce does not shadow the open task", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("../src/TasksView.jsx", import.meta.url), "utf8");
+  assert.match(source, /const searchDebounce = setTimeout/);
+  assert.doesNotMatch(source, /const t = setTimeout\(\(\) => loadTasks/);
+});
+
+test("pill counts stay with the rows on screen", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("../src/TasksView.jsx", import.meta.url), "utf8");
+  assert.match(source, /A count that outruns the rows beneath it reads as a bug/);
+  assert.doesNotMatch(source, /counts\.done/);
+  assert.doesNotMatch(source, /counts\.live/);
+});

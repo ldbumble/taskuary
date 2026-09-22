@@ -489,3 +489,19 @@ class TaskListPageTests(unittest.TestCase):
         self.assertNotIn('Inbox brief', page[0]['SearchSources'] or '')
         s.cx.close()
 
+    def test_unbounded_list_survives_the_sqlite_variable_limit(self):
+        """Ids used to be bound twice (message IN + outer WHERE). SQLITE_MAX_VARIABLE_NUMBER is
+        32,766, so 2 × 16,384 raised OperationalError. Digest, assistant, context and setup all
+        omit limit and walk the done archive; that is the size this work exists to support."""
+        s, _ = _file_store()
+        n = 16384
+        s.cx.executemany(
+            "INSERT INTO task (Title, Kind, Status, Source) VALUES (?, 'general', 'done', 't')",
+            [(f'archive-{i}',) for i in range(n)])
+        s.cx.commit()
+        rows = s.list_tasks(search=False, status='done')
+        self.assertEqual(len(rows), n)
+        page = s.list_tasks(search=False, status='done', limit=200)
+        self.assertEqual(len(page), 200)
+        s.cx.close()
+

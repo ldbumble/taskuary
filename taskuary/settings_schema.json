@@ -56,7 +56,7 @@
         "escalate"
       ],
       "desc": "The fallback when no routing policy claims a message.",
-      "help": "draft = reply-only questions get an AI draft waiting in Review; task_only = file a task, draft nothing; escalate = always put it in front of you undecided.\n\nThis is only the FALLBACK: your routing policies (Settings → Routing policies) always win, and messages triaged as real tasks go to the coder regardless."
+      "help": "draft = reply-only questions get an AI draft waiting on the task; task_only = file a task, draft nothing; escalate = always put it in front of you undecided.\n\nThis is only the FALLBACK: your routing policies (Settings → Routing policies) always win, and messages triaged as real tasks go to the coder regardless."
     },
     "learn_enabled": {
       "group": "Triage & routing",
@@ -93,8 +93,8 @@
       "group": "Replies",
       "label": "Draft replies automatically",
       "type": "switch",
-      "desc": "Questions get their AI draft the moment they arrive, waiting in Review.",
-      "help": "Retired: a message triaged as a question always lands in Review with its draft requested at once, and a draft that could not be written says so with a retry. Nothing sends itself — approving is always yours."
+      "desc": "Questions get their AI draft the moment they arrive, waiting on the task.",
+      "help": "Retired: a message triaged as a question always lands on the task with its draft requested at once, and a draft that could not be written says so with a retry. Nothing sends itself — approving is always yours."
     },
     "chat_ack_enabled": {
       "group": "Replies",
@@ -150,7 +150,7 @@
       "label": "Lines per post, at most",
       "type": "number",
       "desc": "The assistant checks in every 30 minutes and on startup (the 'Assistant' report on the Reports tab — edit its prompt for what it watches for, change the cadence, delete it to turn it off) and posts only when it has something to say. How it SPEAKS is COUNSEL.md on the Docs tab: edit that to change its voice, how bold it is, what it takes a position on. This caps how much one post says. 5 by default.",
-      "help": "One AI call per post, and none when there is nothing new. Every line has a key and a state, so it never says the same thing twice. Talk back under a suggestion to correct it or ask a follow-up; the answer and your correction stay with the idea and inform later checks. 'Follow up' drafts the chase in your voice into Review — nothing is sent by itself; 'Make it a task' starts the agent. Voice: COUNSEL.md (Docs tab); what to watch for: the report's prompt. Without an AI connector the facts still post, in the hub's own words. 'Run now' on the Reports tab's Assistant row posts regardless of the schedule."
+      "help": "One AI call per post, and none when there is nothing new. Every line has a key and a state, so it never says the same thing twice. Talk back under a suggestion to correct it or ask a follow-up; the answer and your correction stay with the idea and inform later checks. 'Follow up' drafts the chase in your voice onto the task — nothing is sent by itself; 'Make it a task' starts the agent. Voice: COUNSEL.md (Docs tab); what to watch for: the report's prompt. Without an AI connector the facts still post, in the hub's own words. 'Run now' on the Reports tab's Assistant row posts regardless of the schedule."
     },
     "assistant_followup_hours": {
       "group": "Assistant",
@@ -164,7 +164,7 @@
       "label": "Quiet days before a task has 'gone cold'",
       "type": "number",
       "desc": "Open work with no comment, message or run for this many days gets a line. 3 by default.",
-      "help": "A task with a live agent on it is never cold. One with a draft waiting in Review is named as waiting on you."
+      "help": "A task with a live agent on it is never cold. One with a draft waiting on the task is named as waiting on you."
     },
     "assistant_producers": {
       "group": "Assistant",
@@ -345,7 +345,7 @@
         "off": "off"
       },
       "desc": "Ping a Telegram / WhatsApp / Teams chat instead of you watching the tab.",
-      "help": "Give a chat connector the Notifications role (its Role step) and name the chat in its config; this decides what gets pushed there.\n\nneeds me (default) = only what is genuinely waiting on YOU: a question to answer, a task nobody was dispatched at, and — the one that matters — 'the work is done, the reply is drafted and waiting in Review'. everything = every new timeline item. off = never push.\n\nEvents that happened in the notify chat itself are never echoed back into it, so one channel can safely be both input and output."
+      "help": "Give a chat connector the Notifications role (its Role step) and name the chat in its config; this decides what gets pushed there.\n\nneeds me (default) = only what is genuinely waiting on YOU: a question to answer, a task nobody was dispatched at, and — the one that matters — 'the work is done, the reply is drafted and waiting on the task'. everything = every new timeline item. off = never push.\n\nEvents that happened in the notify chat itself are never echoed back into it, so one channel can safely be both input and output."
     },
     "hand_sound": {
       "group": "Notifications",

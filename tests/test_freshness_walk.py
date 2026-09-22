@@ -9,7 +9,7 @@ answer - that new messages came in and went through triage; a new inbound line o
 pending draft marks the draft behind and, when triage says a reply is still owed, redrafts that
 same review; the owner's own external answer retires the draft and the notice says it was answered.
 """
-import json, unittest
+import json, threading, unittest
 from datetime import datetime, timedelta
 from unittest import mock
 from fastapi.testclient import TestClient
@@ -88,6 +88,15 @@ class TheChangeCheckFollowsTheFourTests(Base):
         with mock.patch.object(server, '_poll_reports', side_effect=AssertionError('must not poll')):
             self.assertIsNone(server._refresh_after({'item': None}))
             self.assertIsNone(server._refresh_after({}))
+
+    def test_wait_refresh_after_does_not_error_on_a_thread_that_has_not_started(self):
+        """Teardown joins every _AFTER entry. CPython can still raise 'cannot join thread before
+        it is started' after the OS thread has already finished; that ERROR'd macOS 3.10."""
+        t = threading.Thread(target=lambda: None, daemon=True, name='refresh-after')
+        server._AFTER.append(t)
+        server.wait_refresh_after(0.05)
+        t.start()
+        t.join(1)
 
 
 class NoticeTests(Base):

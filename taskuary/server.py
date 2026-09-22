@@ -5763,13 +5763,30 @@ def _refresh_after(out: dict):
     def work():
         try: _refresh_items(members)
         except Exception as e: logger.debug(f'the change-check after the four could not ask the provider: {e}')
-    t = threading.Thread(target=work, daemon=True, name='refresh-after'); _AFTER.append(t); t.start()
+    t = threading.Thread(target=work, daemon=True, name='refresh-after')
+    _AFTER.append(t)
+    t.start()
     return t
 
 
 def wait_refresh_after(timeout: float = 5.0):
-    """Wait for the change-checks in flight (tests; nothing in the request path waits on them)."""
-    for t in list(_AFTER): t.join(timeout)
+    """Wait for the change-checks in flight (tests; nothing in the request path waits on them).
+
+    CPython sets Thread._started after the OS thread is created, and a daemon that finishes in
+    that window still raises ``cannot join thread before it is started``. Tests must not ERROR
+    at teardown for a race that already ran to completion (macOS 3.10, 2026-09-22).
+    """
+    deadline = time.monotonic() + timeout
+    for t in list(_AFTER):
+        while True:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                return
+            try:
+                t.join(left)
+                break
+            except RuntimeError:
+                time.sleep(min(0.005, left))
 
 
 def _notice_once(freshness: dict) -> str | None:

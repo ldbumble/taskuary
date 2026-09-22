@@ -61,10 +61,17 @@ export const replyPhase = (reviews = []) => {
 // start - so the page opened on an empty pane offering a button, with the ask itself folded away
 // (the owner, 2026-09-14: "it should be the task (number 1 pane) ... why is the agent expanded?").
 // A live session never reaches here at all; TasksView pins the agent stage while a pty is alive.
-export const focusStage = ({ kind, task, agent, reply, hasSender, proposal } = {}) => {
+export const focusStage = ({ kind, task, agent, reply, hasSender, proposal, agentSub } = {}) => {
   if (reply === "draft ready") return "reply";
-  // a proposal is the same stage and the same kind of ask. It has no sender and it can outlive the
-  // task being closed, so it is judged before either of those gates.
+  // ONE EVENT SEEN TWICE. An agent parked because it PROPOSED something is not two things wanting
+  // the page: approving the proposal is what releases it. Opening the agent stage there would show
+  // a terminal at a prompt with the thing that unblocks it folded away one card below. Parked on
+  // anything else - a question, a wall - the agent is what stopped, and it wins.
+  // funnelPile.assistantFocus carries the same exception; the two are asserted against each other.
+  if (proposal && agentSub === "approval") return "reply";
+  if (agent === "needs you") return "agent";
+  // a proposal is otherwise the same stage and the same kind of ask. It has no sender and it can
+  // outlive the task being closed, so it is judged before either of those gates.
   if (proposal) return "reply";
   if (hasSender && kind === "reply" && !["sent", "not needed"].includes(reply)) return "reply";
   if (["done", "dropped"].includes(task)) return "task";

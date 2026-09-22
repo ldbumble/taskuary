@@ -762,7 +762,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // to a strip under a heading that says the agent is working.
   const stage = sessionView ? "agent" : (openStage || (peek ? "task" : focusStage({
     kind: t?.Kind, task: taskState, agent: agentState, reply: replyState, hasSender: !!sourceMessage,
-    proposal: proposals.length > 0,
+    // what the agent is parked ON decides whether the proposal or the agent opens: an agent
+    // waiting for approval is released by the very proposal sitting in stage 3
+    proposal: proposals.length > 0, agentSub: term ? subState(term) : null,
   })));
   // only a folded heading is a control: exactly one stage is open, so clicking the open one has
   // nothing to do and must not offer a chevron that does nothing.

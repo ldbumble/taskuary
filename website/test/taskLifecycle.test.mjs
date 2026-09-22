@@ -149,3 +149,23 @@ test("proposals are not the reply, and the reply is not a proposal", () => {
   assert.deepEqual(pendingProposals(reviews).map((r) => r.ReviewId), [3]);
   assert.deepEqual(pendingProposals([]), []);
 });
+
+// ONE EVENT SEEN TWICE. An agent parked because it PROPOSED something is not two things competing
+// for the page: approving the proposal is what releases the agent. Opening the agent stage there
+// shows a terminal sitting at a prompt with the thing that unblocks it folded away below.
+// Parked on anything else - a question, a wall - the agent is what stopped, and it wins.
+test("a waving agent outranks a proposal, unless the proposal is what it wants", () => {
+  const base = { kind: "coding", task: "open", agent: "needs you", reply: "not drafted", proposal: true };
+  assert.equal(focusStage({ ...base, agentSub: "asking" }), "agent");
+  assert.equal(focusStage({ ...base, agentSub: "stalled" }), "agent");
+  assert.equal(focusStage({ ...base, agentSub: "parked" }), "agent");
+  assert.equal(focusStage({ ...base, agentSub: "approval" }), "reply");
+  // and with nothing proposed, an approval-parked agent is still just a waving agent
+  assert.equal(focusStage({ ...base, proposal: false, agentSub: "approval" }), "agent");
+});
+
+test("a drafted reply still outranks a waving agent, whatever it is parked on", () => {
+  const base = { kind: "coding", task: "open", agent: "needs you", reply: "draft ready" };
+  assert.equal(focusStage({ ...base, agentSub: "asking" }), "reply");
+  assert.equal(focusStage({ ...base, agentSub: "approval" }), "reply");
+});

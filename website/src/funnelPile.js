@@ -227,6 +227,13 @@ export const assistantFocus = (item) => {
   if (!item) return { card: null, lead: "" };
   const who = item.agent || item.working || "the agent";
   if (item.lane === "working" && item.tid) return { card: "agent", lead: `${who} is working on this — nothing for you here yet.` };
+  // ONE EVENT SEEN TWICE: an agent parked because it PROPOSED something is released by approving
+  // that proposal, so the proposal is what you are shown - not a terminal at a prompt with the
+  // thing that unblocks it out of reach. No rid means there is nothing proposed to show, and then
+  // it is just a waving agent. taskLifecycle.focusStage carries the same exception, and the two
+  // are asserted against each other so this file's "same precedence" promise is enforced.
+  if (item.lane === "blocked" && subState(item) === "approval" && item.rid)
+    return { card: "reply", lead: "An agent proposed this. Read it, then it runs only if you say so." };
   if (item.lane === "blocked") return { card: "agent", lead: `${item.why || says(subState(item), who)}.` };
   if (item.kind === "review" || item.kind === "action" || item.lane === "approve")
     return { card: "reply", lead: item.kind === "action"

@@ -72,3 +72,24 @@ test("cardFor is the same table, so the two can never disagree", () => {
   }
   assert.equal(cardFor(null), null);
 });
+
+// THE SAME EXCEPTION, ON THE OTHER SURFACE. funnelPile's own comment promises assistantFocus is
+// "kept in the same precedence" as the task page's focusStage; these two assert it rather than
+// hoping for it. Its twin lives in taskLifecycle.test.mjs.
+test("an agent blocked on approval opens the thing it is waiting for", () => {
+  const f = assistantFocus(item({ kind: "agent", lane: "blocked", request_kind: "approval_needed", rid: 9, agent: "codex" }));
+  assert.equal(f.card, "reply");
+  assert.match(f.lead, /runs only if you say so/);
+});
+
+test("an agent blocked on a question is still the agent card", () => {
+  for (const parked of [{ asking: true }, { request_kind: "input_needed" }, { state: "stalled" }, {}]) {
+    const f = assistantFocus(item({ kind: "agent", lane: "blocked", rid: 9, agent: "codex", ...parked }));
+    assert.equal(f.card, "agent", `parked as ${JSON.stringify(parked)} is the agent's card`);
+  }
+});
+
+test("an approval-blocked agent with nothing proposed is still the agent card", () => {
+  const f = assistantFocus(item({ kind: "agent", lane: "blocked", request_kind: "approval_needed", agent: "codex" }));
+  assert.equal(f.card, "agent", "no rid means there is no proposal to show");
+});

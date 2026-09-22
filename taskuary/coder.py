@@ -178,10 +178,14 @@ def freshen(store, task_id: int, mid: int) -> dict:
 
 
 def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'coder',
-           complete_result: str = None, owner_done: bool = False) -> dict:
+           complete_result: str = None, owner_done: bool = False, keep_open: bool = False) -> dict:
     """The end of finished work: the conversation is refreshed, the ask reassessed, and the responder
     drafts the reply the sender gets from the saved result and the thread as it stands; the task waits
-    on you to send it. Nothing to reply to means nothing to wait for, so it just closes."""
+    on you to send it. Nothing to reply to means nothing to wait for, so it just closes.
+
+    `keep_open` is ENDING THE RUN without ending the task: everything here still happens - the
+    refresh, the reassessment, the draft - and the task's own status is left exactly as it was. The
+    session's end is not a verdict on the work."""
     # a held draft is itself proof there is someone waiting on an answer, so it names the message
     # to reply to when reply_target cannot find one (a chat thread, a promoted feed item)
     held = store.held_review(task_id) or {}
@@ -198,7 +202,7 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'cod
             tgt = findings_target(store, m)
             if tgt:
                 deliver_findings(store, task_id, mid, run_id, rep, tgt)
-                store.update_task(task_id, {'Status': 'waiting'}, actor)
+                if not keep_open: store.update_task(task_id, {'Status': 'waiting'}, actor)
                 return {'drafting': True, 'message_id': mid, 'can_send': True, 'send_block': '', 'freshness': 'unchecked'}
             # the always-draft rule (PW-237): a channel that cannot CARRY the reply hides Send and says why -
             # it does not hide the answer. Only a row nobody sent has nobody to answer.
@@ -227,7 +231,7 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'cod
     # reply-writing AI call: it can take seconds (or fail), and during that time the task used to
     # remain `in_progress` with no live agent. A pending review is already durable, so `waiting`
     # is honest even while its draft text is being filled in.
-    store.update_task(task_id, {'Status': 'waiting' if mid else 'done'}, actor)
+    if not keep_open: store.update_task(task_id, {'Status': 'waiting' if mid else 'done'}, actor)
     if mid: raise_reply(store, task_id, mid, run_id, rep, complete_result, fresh=fresh)
     return {'drafting': bool(mid), 'message_id': mid, 'can_send': bool(mid) and can_send,
             'send_block': block if mid else '', 'freshness': fresh['state']}
@@ -300,11 +304,12 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
         # touched it and no button could send it (TQ-0443; TQ-0440/0441 closed answering nobody).
         # The conversation IS this worker's transcript, so it is what the responder drafts from.
         fin = {}
-        if close and task.get('Status') not in ('done', 'dropped'):
+        if task.get('Status') not in ('done', 'dropped'):
             fin = finish(store, tid, {'summary': last}, None, 'assistant',
                          reply_source(general.conversation_text(store, tid), final_message or last),
-                         owner_done=actor == 'owner') or {}
-            from . import selfclose; selfclose.unclaim(store, tid, actor)
+                         owner_done=close and actor == 'owner', keep_open=not close) or {}
+            if close:
+                from . import selfclose; selfclose.unclaim(store, tid, actor)
         store.add_comment(tid, actor, 'human', ('Closed the general-work session.' if session else 'Closed out the assistant conversation.')
                           + (' The reply to whoever asked is drafted for you to approve.' if fin.get('drafting')
                              else ' Marked the task done.' if close else ''))
@@ -352,10 +357,17 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     # 'drafting' must be what finish() ACTUALLY did, not a second guess at it: recomputing it from
     # reply_target alone skipped the can-this-channel-even-reply rule, so a GitHub task with
     # replies off closed with no draft while the card still promised one on the task.
+    # THE RUN ENDING IS WHEN THE ANSWER IS WRITTEN, whoever ended it. Only `close` decided this, so
+    # an agent that finished by itself drafted the reply and the owner pressing Save and end session
+    # got the report filed and nothing to send - on the one road where they had just read the work
+    # and knew it was done (the owner, 2026-09-22). The draft is written either way now; what `close`
+    # still decides is whether the TASK ends with the run (finish's keep_open).
     fin = {}
-    if close and (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'):
-        fin = finish(store, tid, rep, None, agent, reply_source(text, final_message), owner_done=actor == 'owner') or {}
-        from . import selfclose; selfclose.unclaim(store, tid, actor)   # the owner ended it; the mark that kept it open has done its job
+    if (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'):
+        fin = finish(store, tid, rep, None, agent, reply_source(text, final_message),
+                     owner_done=close and actor == 'owner', keep_open=not close) or {}
+        if close:
+            from . import selfclose; selfclose.unclaim(store, tid, actor)   # the owner ended it; the mark that kept it open has done its job
     # ...and the last question, once the report and the reply are in hand: was this a KIND of job that
     # will recur, done here for the first time? The answer is a proposal on the task, never a file
     # (playbooks.py) - the second such job matches it. Last on purpose: the receipt and the sender's

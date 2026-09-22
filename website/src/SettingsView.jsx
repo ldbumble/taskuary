@@ -29,7 +29,7 @@ import { PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, ACTION_COLORS } f
 import { ChannelIcon, ConfirmDelete, Empty } from "./ui.jsx";
 import { notifyState } from "./notify.js";
 import { normalizeBrainOptions } from "./brainOptions.js";
-import { ABOUT_SECTIONS, AUDIT_SECTIONS, secId, scrollToSection, sectionOffset, SCROLL_TOP } from "./settingsMap.js";
+import { ABOUT_SECTIONS, AUDIT_SECTIONS, secId, pageId, scrollToSection, sectionOffset, SCROLL_TOP } from "./settingsMap.js";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import DocsView, { OPERATOR_DOCS } from "./DocsView.jsx";
 
@@ -303,11 +303,27 @@ const SectionHead = ({ page, name }) => (
     borderBottom: `1px solid ${BORDER}`, scrollMarginTop: `${SCROLL_TOP}px` }}>{name}</Typography>
 );
 
+// THE HEADING THAT STARTS A PAGE, and the reason the document reads as a document rather than as
+// seven of them joined end to end: you always know which one you have scrolled into. Four pages
+// used to get this line and three did not, because it was drawn outside SettingsPages and only
+// for the pages whose own first row was a knob. It belongs to the page.
+const PageHead = ({ page, first }) => (
+  // the rule above it is the seam: without one, seven pages end to end read as one page that
+  // keeps changing its mind about what it is about
+  <Box sx={{ mt: first ? 0 : 7, pt: first ? 0 : 5, borderTop: first ? "none" : `1px solid ${BORDER}` }}>
+    <Box id={pageId(page)} sx={{ display: "flex", alignItems: "center", gap: 1, scrollMarginTop: `${SCROLL_TOP}px` }}>
+      {React.createElement(PAGES[page].icon, { sx: { fontSize: 17, color: FAINT } })}
+      <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15 }}>{PAGES[page].title}</Typography>
+    </Box>
+    <Typography variant="body2" sx={{ color: DIM, mt: 0.25, mb: 2 }}>{PAGES[page].desc}</Typography>
+  </Box>
+);
+
 // onNavigate is threaded through: goFromPanel below calls it, and it was declared on
 // SettingsView instead - two components apart, so the panel's "go to Connections" was a
 // ReferenceError waiting for a click. The scope test only tracks set* setters, so eslint's
 // no-undef is what caught it before it shipped.
-function SettingsPages({ page, setPage, q, setQ, onNavigate, onJump, onSections, docSel, setDocSel, onCatalog }) {
+function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDocSel, onCatalog }) {
   const [policies, setPolicies] = useState(null);
   const [settings, setSettings] = useState([]);
   const [memory, setMemory] = useState([]);
@@ -388,9 +404,9 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate, onJump, onSections,
       .map((s) => ({ key: `k${s.Name}`, label: meta(s.Name).label, crumb: `Configuration → ${meta(s.Name).group}`,
         go: () => { setQ(""); onJump("config", meta(s.Name).group); } })),
     ...(policies || []).filter((p) => hit(p.Name, p.Kind, p.Pattern, p.Action, p.Reason))
-      .map((p) => ({ key: `p${p.PolicyId}`, label: p.Name, crumb: PAGES.policies.title, go: () => { setPage("policies"); setQ(""); } })),
+      .map((p) => ({ key: `p${p.PolicyId}`, label: p.Name, crumb: PAGES.policies.title, go: () => { setQ(""); onJump("policies"); } })),
     ...memory.filter((m) => hit(m.Note, m.Scope, m.ScopeKey, m.Source))
-      .map((m) => ({ key: `m${m.MemoryId}`, label: m.Note.slice(0, 70), crumb: PAGES.memory.title, go: () => { setPage("memory"); setQ(""); } })),
+      .map((m) => ({ key: `m${m.MemoryId}`, label: m.Note.slice(0, 70), crumb: PAGES.memory.title, go: () => { setQ(""); onJump("memory"); } })),
   ];
 
   const control = (s) => {
@@ -557,241 +573,248 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate, onJump, onSections,
   const cfgKey = cfgGroups.join("|");
   useEffect(() => { onSections(cfgKey ? cfgKey.split("|") : []); }, [cfgKey, onSections]);
 
-  if (!policies) return <CircularProgress size={22} sx={{ m: 4 }} />;
+  // A spinner that never stops is the worst thing this page can show: on the install where
+  // /api/settings answered 500, Settings span for ever and said nothing (2026-09-22).
+  if (!policies) return err
+    ? <Alert severity="error" sx={{ m: 1 }}>{err}</Alert>
+    : <CircularProgress size={22} sx={{ m: 4 }} />;
 
-  /* ── detail pages ─────────────────────────────────────────────────────── */
-  if (page === "config") {
-    // ...and the panel's own keys are suppressed wherever they would otherwise land. Scoping this
-    // to the panel's tab was fine while every owned key had a KNOB_META entry in that group -
-    // then `assistant_ai` lost its entry when it became a card, fell to "Other" by default, and
-    // came back as a bare unlabelled text box (d3bde8bd). `panelOk` still puts the plain rows
-    // back if the panel fails to load, which is why they keep their KNOB_META entries.
-    // A FUNCTION, NOT A COMPONENT: a component declared in here is a new type on every render,
-    // so React would remount every row and the box you are typing in would lose the caret.
-    const knobRow = (s) => {
-      const m = meta(s.Name);
-      return (
-        <Box key={s.Name} sx={{ display: "flex", alignItems: { xs: "stretch", sm: "center" }, flexDirection: { xs: "column", sm: "row" },
-          gap: { xs: 1, sm: 3 }, py: 2.5, borderBottom: `1px solid ${BORDER}`,
-          opacity: s.Name === "phone_approvals" && (settings.find((x) => x.Name === "notify_level") || {}).Value === "off" ? 0.5 : 1 }}>
-          <Box sx={{ flex: 1, minWidth: 0, cursor: m.help ? "pointer" : "default" }}
-            onClick={() => m.help && setHelp({ title: m.label, body: m.help })}>
-            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5, display: "flex", alignItems: "center", gap: 0.75 }}>
-              {m.label}
-              {m.help && <HelpOutlineIcon sx={{ fontSize: 15, color: "#cfc9bf" }} />}
-            </Typography>
-            <Typography variant="body2" sx={{ color: DIM, mt: 0.25 }}>{m.desc || s.Description}</Typography>
-            {/* the line every description was missing: what shipped, and whether this is
-                still it. Quiet on purpose - it is a fact you check, not a thing to read. */}
-            {defaultNote(s, m.type) && (
-              <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.3 }}>
-                {defaultNote(s, m.type)}
+  // WHAT ONE PAGE OF THE DOCUMENT DRAWS. Every one of them is drawn, every time: Settings is
+  // one long page you scroll from About you to Updates, so a page is a place in it rather than
+  // something that replaces what was there before (the owner, 2026-09-22: "we should have header
+  // for each new section and then continue scrolling"). The loads above are shared, so seven
+  // pages cost the same requests one page did.
+  const body = (page) => {
+    if (page === "config") {
+      // ...and the panel's own keys are suppressed wherever they would otherwise land. Scoping this
+      // to the panel's tab was fine while every owned key had a KNOB_META entry in that group -
+      // then `assistant_ai` lost its entry when it became a card, fell to "Other" by default, and
+      // came back as a bare unlabelled text box (d3bde8bd). `panelOk` still puts the plain rows
+      // back if the panel fails to load, which is why they keep their KNOB_META entries.
+      // A FUNCTION, NOT A COMPONENT: a component declared in here is a new type on every render,
+      // so React would remount every row and the box you are typing in would lose the caret.
+      const knobRow = (s) => {
+        const m = meta(s.Name);
+        return (
+          <Box key={s.Name} sx={{ display: "flex", alignItems: { xs: "stretch", sm: "center" }, flexDirection: { xs: "column", sm: "row" },
+            gap: { xs: 1, sm: 3 }, py: 2.5, borderBottom: `1px solid ${BORDER}`,
+            opacity: s.Name === "phone_approvals" && (settings.find((x) => x.Name === "notify_level") || {}).Value === "off" ? 0.5 : 1 }}>
+            <Box sx={{ flex: 1, minWidth: 0, cursor: m.help ? "pointer" : "default" }}
+              onClick={() => m.help && setHelp({ title: m.label, body: m.help })}>
+              <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5, display: "flex", alignItems: "center", gap: 0.75 }}>
+                {m.label}
+                {m.help && <HelpOutlineIcon sx={{ fontSize: 15, color: "#cfc9bf" }} />}
               </Typography>
-            )}
-          </Box>
-          <Box sx={{ flexShrink: 0 }}>{control(s)}</Box>
-        </Box>
-      );
-    };
-    // ONE PAGE, NOT ELEVEN TABS. Every group is a section you scroll past and the rail holds the
-    // same eleven names, so nothing runs off the right edge and a knob you half remember is found
-    // by reading rather than by guessing which tab it was hiding on (the owner, 2026-09-18).
-    return (
-      <Box>
-        <AssistantChanges />
-        {cfgGroups.map((g) => (
-          <Box key={g} sx={{ mb: 4.5 }}>
-            <SectionHead page="config" name={g} />
-            {panels[g]}
-            {rowsOf(g).map(knobRow)}
-          </Box>
-        ))}
-        <HelpDialog help={help} onClose={() => setHelp(null)} />
-      </Box>
-    );
-  }
-
-  if (page === "policies") {
-    return (
-      <Box>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
-          <Typography variant="body2" sx={{ color: DIM }}>
-            {/* the page title above already says what these are; this line is the door to the rules of the rules */}
-            <Typography component="span" variant="body2" onClick={() => setHelp(SECTION_HELP.policies)}
-              sx={{ color: "#55697a", cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
-              How precedence works →
-            </Typography>
-          </Typography>
-          <Box sx={{ flex: 1 }} />
-          <Button size="small" variant="contained" startIcon={<AddIcon sx={{ fontSize: 14 }} />} onClick={() => setDraft({ ...NEW_POLICY })}>Add rule</Button>
-        </Box>
-        {!(policies || []).length && !draft && (
-          <Box sx={{ ...card, bgcolor: PANEL2, p: 2.25, mt: 2, maxWidth: 680 }}>
-            <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5 }}>No routing rules yet</Typography>
-            <Typography variant="body2" sx={{ color: DIM, mt: 0.5, mb: 1.5, maxWidth: 560 }}>
-              Rules are optional. Add one when a sender, domain, or message type should always be drafted,
-              filed, made into a task, or sent to you for a decision.
-            </Typography>
-            <Button size="small" variant="outlined" startIcon={<AddIcon sx={{ fontSize: 14 }} />}
-              onClick={() => setDraft({ ...NEW_POLICY })}>Add your first rule</Button>
-          </Box>
-        )}
-        {(policies || []).map((p) => (
-          <Box key={p.PolicyId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.75, borderBottom: `1px solid ${BORDER}`, opacity: p.Active ? 1 : 0.55 }}>
-            <Chip size="small" label={p.Action.replace("_", " ")}
-              sx={{ bgcolor: ACTION_COLORS[p.Action]?.bg, color: ACTION_COLORS[p.Action]?.fg, height: 21, fontSize: 10.5, width: 100, justifyContent: "center" }} />
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }} noWrap>{p.Name}</Typography>
-              <Typography variant="caption" sx={{ ...mono, color: FAINT }} noWrap>{p.Kind}{p.Pattern ? `: ${p.Pattern}` : ""}</Typography>
-            </Box>
-            <Typography variant="caption" sx={{ ...mono, color: FAINT }}>#{p.SortOrder}</Typography>
-            <Button size="small" onClick={() => setDraft({ ...p, Active: !!p.Active })}>Edit</Button>
-            <Switch checked={!!p.Active} onChange={() => togglePolicy(p)} />
-            <IconButton size="small" title="Delete this rule" onClick={() => setDelPolicy(p)}><DeleteOutlineIcon sx={{ fontSize: 16 }} /></IconButton>
-          </Box>
-        ))}
-        <ConfirmDelete open={!!delPolicy} what={delPolicy ? `the rule “${delPolicy.Name}”` : "this rule"}
-          consequence="Messages it matched go back to being judged by triage alone."
-          onClose={() => setDelPolicy(null)} onConfirm={() => deletePolicy(delPolicy)} />
-        {draft && (
-          <Box sx={{ ...card, bgcolor: PANEL2, p: 2, mt: 2, display: "flex", flexDirection: "column", gap: 1.25 }}>
-            <Typography variant="body2" sx={{ color: "#55697a", fontWeight: 700 }}>{draft.PolicyId ? `Edit rule · ${draft.Name}` : "New rule"}</Typography>
-            <TextField label="Name" value={draft.Name} onChange={(e) => setDraft({ ...draft, Name: e.target.value })} />
-            <Box sx={{ display: "flex", gap: 1 }}>
-              <Select fullWidth value={draft.Kind} onChange={(e) => setDraft({ ...draft, Kind: e.target.value })}>
-                {KINDS.map((k) => <MenuItem key={k} value={k}>{k}</MenuItem>)}
-              </Select>
-              <Select fullWidth value={draft.Action} onChange={(e) => setDraft({ ...draft, Action: e.target.value })}>
-                {ACTIONS.map((a) => <MenuItem key={a} value={a}>{a.replace("_", " ")}</MenuItem>)}
-              </Select>
-              <TextField label="Order" type="number" sx={{ width: 100 }} value={draft.SortOrder}
-                onChange={(e) => setDraft({ ...draft, SortOrder: Number(e.target.value) })} />
-            </Box>
-            {!["noreply", "first_time_sender"].includes(draft.Kind) && (
-              <TextField label="Pattern (pipe-separated terms / addresses / domains)"
-                value={draft.Pattern || ""} onChange={(e) => setDraft({ ...draft, Pattern: e.target.value })} />
-            )}
-            <TextField label="Reason (shown to the reviewer)" value={draft.Reason} onChange={(e) => setDraft({ ...draft, Reason: e.target.value })} />
-            <Box sx={{ display: "flex", gap: 0.75 }}>
-              <Button size="small" variant="contained" disabled={!draft.Name || !draft.Reason} onClick={() => savePolicy(draft)}>Save</Button>
-              <Button size="small" onClick={() => setDraft(null)}>Cancel</Button>
-            </Box>
-          </Box>
-        )}
-        <HelpDialog help={help} onClose={() => setHelp(null)} />
-      </Box>
-    );
-  }
-
-  if (page === "memory") {
-    return (
-      <Box>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
-          <Typography variant="body2" sx={{ color: DIM }}>
-            One dated line per verdict you gave, plus notes you write — the evidence LEARNED.md (Docs) distils its general lessons from.
-            Lines that bear on a new message ride into its triage and draft.
-            <Typography component="span" variant="body2" onClick={() => setHelp(SECTION_HELP.memory)}
-              sx={{ color: "#55697a", cursor: "pointer", ml: 0.75, "&:hover": { textDecoration: "underline" } }}>
-              How this relates to LEARNED.md →
-            </Typography>
-          </Typography>
-          <Box sx={{ flex: 1 }} />
-          <Button size="small" variant="contained" startIcon={<AddIcon sx={{ fontSize: 14 }} />}
-            onClick={() => setNewNote({ note: "", scope: "global", scope_key: "" })}>Add note</Button>
-        </Box>
-        {!memory.length && <Empty>Nothing learned yet — every review verdict teaches it.</Empty>}
-        {memory.map((m) => (
-          <Box key={m.MemoryId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.75, borderBottom: `1px solid ${BORDER}`, opacity: m.Active ? 1 : 0.5 }}>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography sx={{ color: INK, fontSize: 13.5, lineHeight: 1.4 }}>{m.Note}</Typography>
-              <Typography variant="caption" sx={{ ...mono, color: FAINT }}>{m.Scope}{m.ScopeKey ? `: ${m.ScopeKey}` : ""} · {m.Source}</Typography>
-            </Box>
-            <Switch checked={!!m.Active} onChange={() => toggleMemory(m)} />
-          </Box>
-        ))}
-        {newNote && (
-          <Box sx={{ ...card, bgcolor: PANEL2, p: 2, mt: 2, display: "flex", flexDirection: "column", gap: 1.25 }}>
-            <TextField label="Standing note (imperative, e.g. 'Never draft replies to daily cash reports')"
-              multiline value={newNote.note} onChange={(e) => setNewNote({ ...newNote, note: e.target.value })} />
-            <Box sx={{ display: "flex", gap: 1 }}>
-              <Select fullWidth value={newNote.scope} onChange={(e) => setNewNote({ ...newNote, scope: e.target.value })}>
-                {SCOPES.map((s) => <MenuItem key={s} value={s}>{SCOPE_LABEL[s] || s.replace("_", " ")}</MenuItem>)}
-              </Select>
-              {newNote.scope !== "global" && (
-                // a keyed scope with no key matches nothing, ever - the server refuses it now,
-                // so the button does too rather than posting a note that could never fire
-                <TextField fullWidth label={SCOPE_KEY_LABEL[newNote.scope] || "what to match on"}
-                  value={newNote.scope_key}
-                  onChange={(e) => setNewNote({ ...newNote, scope_key: e.target.value })} />
+              <Typography variant="body2" sx={{ color: DIM, mt: 0.25 }}>{m.desc || s.Description}</Typography>
+              {/* the line every description was missing: what shipped, and whether this is
+                  still it. Quiet on purpose - it is a fact you check, not a thing to read. */}
+              {defaultNote(s, m.type) && (
+                <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.3 }}>
+                  {defaultNote(s, m.type)}
+                </Typography>
               )}
             </Box>
-            <Box sx={{ display: "flex", gap: 0.75 }}>
-              <Button size="small" variant="contained" onClick={addNote}
-                disabled={!newNote.note.trim() || (newNote.scope !== "global" && !(newNote.scope_key || "").trim())}>Save</Button>
-              <Button size="small" onClick={() => setNewNote(null)}>Cancel</Button>
+            <Box sx={{ flexShrink: 0 }}>{control(s)}</Box>
+          </Box>
+        );
+      };
+      // ONE PAGE, NOT ELEVEN TABS. Every group is a section you scroll past and the rail holds the
+      // same eleven names, so nothing runs off the right edge and a knob you half remember is found
+      // by reading rather than by guessing which tab it was hiding on (the owner, 2026-09-18).
+      return (
+        <Box>
+          <AssistantChanges />
+          {cfgGroups.map((g) => (
+            <Box key={g} sx={{ mb: 4.5 }}>
+              <SectionHead page="config" name={g} />
+              {panels[g]}
+              {rowsOf(g).map(knobRow)}
             </Box>
+          ))}
+        </Box>
+      );
+    }
+
+    if (page === "policies") {
+      return (
+        <Box>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+            <Typography variant="body2" sx={{ color: DIM }}>
+              {/* the page title above already says what these are; this line is the door to the rules of the rules */}
+              <Typography component="span" variant="body2" onClick={() => setHelp(SECTION_HELP.policies)}
+                sx={{ color: "#55697a", cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
+                How precedence works →
+              </Typography>
+            </Typography>
+            <Box sx={{ flex: 1 }} />
+            <Button size="small" variant="contained" startIcon={<AddIcon sx={{ fontSize: 14 }} />} onClick={() => setDraft({ ...NEW_POLICY })}>Add rule</Button>
           </Box>
-        )}
-        <HelpDialog help={help} onClose={() => setHelp(null)} />
-      </Box>
-    );
-  }
+          {!(policies || []).length && !draft && (
+            <Box sx={{ ...card, bgcolor: PANEL2, p: 2.25, mt: 2, maxWidth: 680 }}>
+              <Typography sx={{ color: INK, fontWeight: 700, fontSize: 13.5 }}>No routing rules yet</Typography>
+              <Typography variant="body2" sx={{ color: DIM, mt: 0.5, mb: 1.5, maxWidth: 560 }}>
+                Rules are optional. Add one when a sender, domain, or message type should always be drafted,
+                filed, made into a task, or sent to you for a decision.
+              </Typography>
+              <Button size="small" variant="outlined" startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+                onClick={() => setDraft({ ...NEW_POLICY })}>Add your first rule</Button>
+            </Box>
+          )}
+          {(policies || []).map((p) => (
+            <Box key={p.PolicyId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.75, borderBottom: `1px solid ${BORDER}`, opacity: p.Active ? 1 : 0.55 }}>
+              <Chip size="small" label={p.Action.replace("_", " ")}
+                sx={{ bgcolor: ACTION_COLORS[p.Action]?.bg, color: ACTION_COLORS[p.Action]?.fg, height: 21, fontSize: 10.5, width: 100, justifyContent: "center" }} />
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }} noWrap>{p.Name}</Typography>
+                <Typography variant="caption" sx={{ ...mono, color: FAINT }} noWrap>{p.Kind}{p.Pattern ? `: ${p.Pattern}` : ""}</Typography>
+              </Box>
+              <Typography variant="caption" sx={{ ...mono, color: FAINT }}>#{p.SortOrder}</Typography>
+              <Button size="small" onClick={() => setDraft({ ...p, Active: !!p.Active })}>Edit</Button>
+              <Switch checked={!!p.Active} onChange={() => togglePolicy(p)} />
+              <IconButton size="small" title="Delete this rule" onClick={() => setDelPolicy(p)}><DeleteOutlineIcon sx={{ fontSize: 16 }} /></IconButton>
+            </Box>
+          ))}
+          <ConfirmDelete open={!!delPolicy} what={delPolicy ? `the rule “${delPolicy.Name}”` : "this rule"}
+            consequence="Messages it matched go back to being judged by triage alone."
+            onClose={() => setDelPolicy(null)} onConfirm={() => deletePolicy(delPolicy)} />
+          {draft && (
+            <Box sx={{ ...card, bgcolor: PANEL2, p: 2, mt: 2, display: "flex", flexDirection: "column", gap: 1.25 }}>
+              <Typography variant="body2" sx={{ color: "#55697a", fontWeight: 700 }}>{draft.PolicyId ? `Edit rule · ${draft.Name}` : "New rule"}</Typography>
+              <TextField label="Name" value={draft.Name} onChange={(e) => setDraft({ ...draft, Name: e.target.value })} />
+              <Box sx={{ display: "flex", gap: 1 }}>
+                <Select fullWidth value={draft.Kind} onChange={(e) => setDraft({ ...draft, Kind: e.target.value })}>
+                  {KINDS.map((k) => <MenuItem key={k} value={k}>{k}</MenuItem>)}
+                </Select>
+                <Select fullWidth value={draft.Action} onChange={(e) => setDraft({ ...draft, Action: e.target.value })}>
+                  {ACTIONS.map((a) => <MenuItem key={a} value={a}>{a.replace("_", " ")}</MenuItem>)}
+                </Select>
+                <TextField label="Order" type="number" sx={{ width: 100 }} value={draft.SortOrder}
+                  onChange={(e) => setDraft({ ...draft, SortOrder: Number(e.target.value) })} />
+              </Box>
+              {!["noreply", "first_time_sender"].includes(draft.Kind) && (
+                <TextField label="Pattern (pipe-separated terms / addresses / domains)"
+                  value={draft.Pattern || ""} onChange={(e) => setDraft({ ...draft, Pattern: e.target.value })} />
+              )}
+              <TextField label="Reason (shown to the reviewer)" value={draft.Reason} onChange={(e) => setDraft({ ...draft, Reason: e.target.value })} />
+              <Box sx={{ display: "flex", gap: 0.75 }}>
+                <Button size="small" variant="contained" disabled={!draft.Name || !draft.Reason} onClick={() => savePolicy(draft)}>Save</Button>
+                <Button size="small" onClick={() => setDraft(null)}>Cancel</Button>
+              </Box>
+            </Box>
+          )}
+        </Box>
+      );
+    }
 
-  if (page === "about") return <AboutYou />;
-  if (page === "docs") return <DocsView sel={docSel} onSel={setDocSel} onCatalog={onCatalog} />;
-  if (page === "updates") return <UpdateCard />;
+    if (page === "memory") {
+      return (
+        <Box>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+            <Typography variant="body2" sx={{ color: DIM }}>
+              One dated line per verdict you gave, plus notes you write — the evidence LEARNED.md (Docs) distils its general lessons from.
+              Lines that bear on a new message ride into its triage and draft.
+              <Typography component="span" variant="body2" onClick={() => setHelp(SECTION_HELP.memory)}
+                sx={{ color: "#55697a", cursor: "pointer", ml: 0.75, "&:hover": { textDecoration: "underline" } }}>
+                How this relates to LEARNED.md →
+              </Typography>
+            </Typography>
+            <Box sx={{ flex: 1 }} />
+            <Button size="small" variant="contained" startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+              onClick={() => setNewNote({ note: "", scope: "global", scope_key: "" })}>Add note</Button>
+          </Box>
+          {!memory.length && <Empty>Nothing learned yet — every review verdict teaches it.</Empty>}
+          {memory.map((m) => (
+            <Box key={m.MemoryId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.75, borderBottom: `1px solid ${BORDER}`, opacity: m.Active ? 1 : 0.5 }}>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography sx={{ color: INK, fontSize: 13.5, lineHeight: 1.4 }}>{m.Note}</Typography>
+                <Typography variant="caption" sx={{ ...mono, color: FAINT }}>{m.Scope}{m.ScopeKey ? `: ${m.ScopeKey}` : ""} · {m.Source}</Typography>
+              </Box>
+              <Switch checked={!!m.Active} onChange={() => toggleMemory(m)} />
+            </Box>
+          ))}
+          {newNote && (
+            <Box sx={{ ...card, bgcolor: PANEL2, p: 2, mt: 2, display: "flex", flexDirection: "column", gap: 1.25 }}>
+              <TextField label="Standing note (imperative, e.g. 'Never draft replies to daily cash reports')"
+                multiline value={newNote.note} onChange={(e) => setNewNote({ ...newNote, note: e.target.value })} />
+              <Box sx={{ display: "flex", gap: 1 }}>
+                <Select fullWidth value={newNote.scope} onChange={(e) => setNewNote({ ...newNote, scope: e.target.value })}>
+                  {SCOPES.map((s) => <MenuItem key={s} value={s}>{SCOPE_LABEL[s] || s.replace("_", " ")}</MenuItem>)}
+                </Select>
+                {newNote.scope !== "global" && (
+                  // a keyed scope with no key matches nothing, ever - the server refuses it now,
+                  // so the button does too rather than posting a note that could never fire
+                  <TextField fullWidth label={SCOPE_KEY_LABEL[newNote.scope] || "what to match on"}
+                    value={newNote.scope_key}
+                    onChange={(e) => setNewNote({ ...newNote, scope_key: e.target.value })} />
+                )}
+              </Box>
+              <Box sx={{ display: "flex", gap: 0.75 }}>
+                <Button size="small" variant="contained" onClick={addNote}
+                  disabled={!newNote.note.trim() || (newNote.scope !== "global" && !(newNote.scope_key || "").trim())}>Save</Button>
+                <Button size="small" onClick={() => setNewNote(null)}>Cancel</Button>
+              </Box>
+            </Box>
+          )}
+        </Box>
+      );
+    }
 
-  if (page === "audit") {
-    return (
-      <Box>
-        <SectionHead page="audit" name={AUDIT_SECTIONS[0]} />
-        <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>
-          Every consequential action — a message routed, a verdict given, a reply sent, an agent started, a connector or setting changed —
-          is one row in an append-only log. Each row carries a hash of its own contents and of the row before it, so changing history
-          after the fact breaks every hash from that point on. <b>Verify</b> recomputes the chain and says whether the record you see is
-          the record that was written.
-          <Typography component="span" variant="body2" onClick={() => setHelp(SECTION_HELP.audit)}
-            sx={{ color: "#55697a", cursor: "pointer", ml: 0.75, "&:hover": { textDecoration: "underline" } }}>
-            How to read it →
+    if (page === "about") return <AboutYou />;
+    if (page === "docs") return <DocsView sel={docSel} onSel={setDocSel} onCatalog={onCatalog} />;
+    if (page === "updates") return <UpdateCard />;
+
+    if (page === "audit") {
+      return (
+        <Box>
+          <SectionHead page="audit" name={AUDIT_SECTIONS[0]} />
+          <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>
+            Every consequential action — a message routed, a verdict given, a reply sent, an agent started, a connector or setting changed —
+            is one row in an append-only log. Each row carries a hash of its own contents and of the row before it, so changing history
+            after the fact breaks every hash from that point on. <b>Verify</b> recomputes the chain and says whether the record you see is
+            the record that was written.
+            <Typography component="span" variant="body2" onClick={() => setHelp(SECTION_HELP.audit)}
+              sx={{ color: "#55697a", cursor: "pointer", ml: 0.75, "&:hover": { textDecoration: "underline" } }}>
+              How to read it →
+            </Typography>
           </Typography>
-        </Typography>
-        <Button variant="contained" startIcon={<VerifiedIcon sx={{ fontSize: 16 }} />} onClick={runVerify}>Verify chain</Button>
-        {verify && (
-          <Box sx={{ mt: 2 }}>
-            {verify.ok && <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: "#47654a" }}>
-              ✓ Intact — {verify.rows} rows verified
-            </Typography>}
-            {/* two different findings, and calling both "BROKEN" cried wolf about a bug in
-                store.py: a row whose CONTENTS were edited is the thing this log exists to catch,
-                and a row that two concurrent writers linked to the same parent is not. */}
-            {!!verify.altered_ids?.length && (
-              <Alert severity="error" sx={{ fontSize: 12.5, mb: 1 }}>
-                <b>Contents altered</b> at {verify.altered_ids.join(", ")} — {verify.altered_ids.length === 1 ? "this row does" : "these rows do"} not
-                match {verify.altered_ids.length === 1 ? "its" : "their"} own hash. This is what the log is for: something changed the record after it was written.
-              </Alert>
-            )}
-            {!!verify.forked_ids?.length && (
-              <Alert severity="warning" sx={{ fontSize: 12.5 }}>
-                <b>Out of order</b> at {verify.forked_ids.join(", ")} — nothing was altered.
-                Two writers linked to the same previous row at the same moment, which was a bug in
-                Taskuary's own writer (fixed — it cannot happen to rows written from here on).
-                The contents of every row are intact.
-              </Alert>
-            )}
-            {!verify.ok && <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
-              {verify.rows} rows checked.
-            </Typography>}
-          </Box>
-        )}
-        <Box sx={{ mt: 4 }}><SectionHead page="audit" name={AUDIT_SECTIONS[1]} /></Box>
-        <AuditHistory />
-        <HelpDialog help={help} onClose={() => setHelp(null)} />
-      </Box>
-    );
-  }
+          <Button variant="contained" startIcon={<VerifiedIcon sx={{ fontSize: 16 }} />} onClick={runVerify}>Verify chain</Button>
+          {verify && (
+            <Box sx={{ mt: 2 }}>
+              {verify.ok && <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: "#47654a" }}>
+                ✓ Intact — {verify.rows} rows verified
+              </Typography>}
+              {/* two different findings, and calling both "BROKEN" cried wolf about a bug in
+                  store.py: a row whose CONTENTS were edited is the thing this log exists to catch,
+                  and a row that two concurrent writers linked to the same parent is not. */}
+              {!!verify.altered_ids?.length && (
+                <Alert severity="error" sx={{ fontSize: 12.5, mb: 1 }}>
+                  <b>Contents altered</b> at {verify.altered_ids.join(", ")} — {verify.altered_ids.length === 1 ? "this row does" : "these rows do"} not
+                  match {verify.altered_ids.length === 1 ? "its" : "their"} own hash. This is what the log is for: something changed the record after it was written.
+                </Alert>
+              )}
+              {!!verify.forked_ids?.length && (
+                <Alert severity="warning" sx={{ fontSize: 12.5 }}>
+                  <b>Out of order</b> at {verify.forked_ids.join(", ")} — nothing was altered.
+                  Two writers linked to the same previous row at the same moment, which was a bug in
+                  Taskuary's own writer (fixed — it cannot happen to rows written from here on).
+                  The contents of every row are intact.
+                </Alert>
+              )}
+              {!verify.ok && <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
+                {verify.rows} rows checked.
+              </Typography>}
+            </Box>
+          )}
+          <Box sx={{ mt: 4 }}><SectionHead page="audit" name={AUDIT_SECTIONS[1]} /></Box>
+          <AuditHistory />
+        </Box>
+      );
+    }
+    return null;
+  };
 
-  /* ── search results, or nothing: the rail is always on screen now ────── */
-  return (
+  /* ── searching replaces the document; the rail is always on screen either way ────── */
+  if (q) return (
     <Box>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       {!results.length ? <Empty>Nothing matches “{q}”. Try a setting, rule, or memory keyword.</Empty> : (
@@ -811,6 +834,22 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate, onJump, onSections,
           </Box>
         </>
       )}
+    </Box>
+  );
+
+  // THE DOCUMENT. Seven pages end to end, each under its own heading, and the scroll carries you
+  // from one into the next - which is the whole point: scrolling off the bottom of Configuration
+  // used to stop dead, with Routing policies reachable only by clicking the rail.
+  return (
+    <Box>
+      {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
+      {NAV.map((k, i) => (
+        <React.Fragment key={k}>
+          <PageHead page={k} first={!i} />
+          {body(k)}
+        </React.Fragment>
+      ))}
+      <HelpDialog help={help} onClose={() => setHelp(null)} />
     </Box>
   );
 }
@@ -856,7 +895,12 @@ export default function SettingsView({ onNavigate }) {
   const [docCat, setDocCat] = useState({ profiles: [], playbooks: [] });
   const onCatalog = useCallback((c) => setDocCat((cur) =>
     (cur.profiles === c.profiles && cur.playbooks === c.playbooks ? cur : c)), []);
-  const [open, setOpen] = useState({ [NAV[0]]: true });   // which rail entries are showing their sections
+  // WHICH RAIL ENTRIES SHOW THEIR SECTIONS. The page you are in shows its own - it has to, or the
+  // rail would highlight a section folded away under a title - and the rest stay shut. Scrolling
+  // the whole document would otherwise leave all seven open behind you, with eleven Configuration
+  // groups and the whole Docs tree among them. A chevron overrides that for its entry, and keeps
+  // the override: open{} holds only what you asked for by hand.
+  const [open, setOpen] = useState({});
   const [jump, setJump] = useState("");          // a section id waiting for its page to be on screen
   const [here, setHere] = useState("");          // the section the page is actually scrolled to
   const [cfgSecs, setCfgSecs] = useState(null);  // Configuration's sections, as the page reports them
@@ -866,22 +910,23 @@ export default function SettingsView({ onNavigate }) {
   const sectionsOf = useCallback((k) => (k === "config" && cfgSecs)
     || (k === "docs" ? docsTree(docCat) : null) || SECTIONS[k] || [], [cfgSecs, docCat]);
 
-  // Go to a page, and to a section inside it. The heading may not exist yet - the page has not
-  // rendered, and its rows arrive from the server after that - so the scroll is retried until it
-  // lands or two seconds pass. Nothing swaps out: a section is a place on the page, not a tab.
-  // Picking a document is not scrolling - the page swaps - and it opens Docs if you were elsewhere,
-  // so a rail click always lands on the thing you clicked. An ACTION entry (New playbook, Manage
-  // profiles) carries a nonce: it is a one-shot, and without it a second click on the same entry
-  // would be the same selection and nothing would reopen.
+  // Go to a page, and to a section inside it. NOTHING SWAPS OUT, for either one: a page is a
+  // place in the document exactly as a section is, so both are a scroll to an anchor. The anchor
+  // may not have settled yet - the page below it is still fetching its rows - so the scroll is
+  // retried until it lands or two seconds pass.
+  // Picking a document DOES swap what Docs shows, and it also scrolls you to Docs, so a rail
+  // click always lands on the thing you clicked. An ACTION entry (New playbook, Manage profiles)
+  // carries a nonce: it is a one-shot, and without it a second click on the same entry would be
+  // the same selection and nothing would reopen.
   const pickDoc = useCallback((sel) => {
-    setQ(""); setPage("docs"); setOpen((o) => ({ ...o, docs: true }));
+    setQ(""); setPage("docs");
     setDocSel(sel.action ? { ...sel, n: Date.now() } : sel);
+    setJump(pageId("docs"));
   }, []);
   const goTo = useCallback((pg, section) => {
-    setQ(""); setPage(pg); setOpen((o) => ({ ...o, [pg]: true }));
+    setQ(""); setPage(pg);
     setHere(section || "");
-    if (section) setJump(secId(pg, section));
-    else window.scrollTo({ top: 0, behavior: "smooth" });
+    setJump(section ? secId(pg, section) : pageId(pg));
   }, []);
   // LANDING ONCE IS NOT LANDING. The heading exists long before the page has stopped growing under
   // it - the AI panel fetches its brains, the rows arrive, the audit log paints - and every one of
@@ -902,31 +947,34 @@ export default function SettingsView({ onNavigate }) {
     return () => clearTimeout(t);
   }, [jump]);
 
-  // WHICH SECTION YOU ARE IN: the last heading that has passed under the top bar. Without it the
-  // rail would highlight the last thing you clicked and then quietly lie as you scrolled past it.
+  // WHERE YOU ACTUALLY ARE: the last heading that has passed under the top bar, and that heading
+  // names BOTH the page and the section. The rail cannot follow the click any more - you scroll
+  // out of Configuration and into Routing policies without clicking anything - so it follows the
+  // document instead, and the page you are reading is the one it highlights.
   useEffect(() => {
-    // Docs has no headings to spy on: its rail entries SWITCH the document rather than
-    // scrolling to one, and they are objects, not heading names.
-    const names = q || page === "docs" ? [] : sectionsOf(page);
-    if (!names.length) { setHere(""); return; }
+    if (q) { setHere(""); return; }
     let queued = false;
     const measure = () => {
       queued = false;
-      let cur = "";
-      for (const n of names) {
-        const el = document.getElementById(secId(page, n));
-        if (el && el.getBoundingClientRect().top <= SCROLL_TOP + 8) cur = n;
+      // Docs contributes its page heading and nothing else: its rail entries SWITCH the document
+      // rather than scrolling to a heading, and they are objects, not heading names.
+      const marks = NAV.flatMap((k) => [{ page: k, section: "", id: pageId(k) },
+        ...(k === "docs" ? [] : sectionsOf(k).map((n) => ({ page: k, section: n, id: secId(k, n) })))]);
+      let cur = marks[0];
+      for (const m of marks) {
+        const el = document.getElementById(m.id);
+        if (el && el.getBoundingClientRect().top <= SCROLL_TOP + 8) cur = m;
       }
-      // the last section is short and cannot scroll its heading up to the bar: at the foot of the
-      // page it is what you are looking at, whatever the arithmetic says about the one above it
-      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) cur = names[names.length - 1];
-      setHere(cur || names[0]);
+      // the last heading is too short to scroll under the bar: at the foot of the document it is
+      // what you are looking at, whatever the arithmetic says about the one above it
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) cur = marks[marks.length - 1];
+      setPage(cur.page); setHere(cur.section);
     };
     const onScroll = () => { if (queued) return; queued = true; requestAnimationFrame(measure); };
     measure();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, [page, q, sectionsOf]);
+  }, [q, sectionsOf]);
 
   // #settings=<page> lands on one of the rail's pages, and &group=<section> scrolls to a section
   // inside it. The section names contain a `&` ("Triage & agents"), so a link carries them encoded
@@ -964,7 +1012,9 @@ export default function SettingsView({ onNavigate }) {
             Configuration groups were a pill strip that ran off the right edge of the page, and a
             strip can only ever hold what fits across - a rail grows downward (the owner, 2026-09-18). */}
         {NAV.map((k) => {
-          const on = !q && page === k, secs = q ? [] : sectionsOf(k), shown = !!open[k];
+          // the page you are in shows its sections unless you shut them yourself; the rest are
+          // closed unless you opened them
+          const on = !q && page === k, secs = q ? [] : sectionsOf(k), shown = k in open ? open[k] : on;
           return (
             <Box key={k}>
               <Box onClick={() => goTo(k)}
@@ -1015,17 +1065,11 @@ export default function SettingsView({ onNavigate }) {
           </Box>
         </Typography>
       </Box>
+      {/* every page carries its own heading now (PageHead), because there is no longer a
+          "current page" for one heading up here to name - there is a document, and you are
+          somewhere in it */}
       <Box sx={{ minWidth: 0 }}>
-        {/* the other rails (Reports, Connections, Docs) open every section under its title; this
-            one dropped you straight into the knobs, and the config page's sub-tabs read as the
-            heading. Same title style the Board and Reports use. */}
-        {!q && ["config", "policies", "memory", "audit"].includes(page) && (
-          <Box sx={{ mb: 2 }}>
-            <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15 }}>{PAGES[page].title}</Typography>
-            <Typography variant="body2" sx={{ color: DIM, mt: 0.25 }}>{PAGES[page].desc}</Typography>
-          </Box>
-        )}
-        <SettingsPages page={q ? null : page} setPage={setPage} q={q} setQ={setQ} onNavigate={onNavigate} onJump={goTo} onSections={setCfgSecs}
+        <SettingsPages q={q} setQ={setQ} onNavigate={onNavigate} onJump={goTo} onSections={setCfgSecs}
           docSel={docSel} setDocSel={setDocSel} onCatalog={onCatalog} />
       </Box>
     </Box>

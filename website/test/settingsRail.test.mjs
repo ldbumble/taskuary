@@ -47,8 +47,10 @@ test("picking a section scrolls to it - it does not swap the page out", () => {
   const at = src.indexOf("const goTo = useCallback");
   assert.notEqual(at, -1);
   const go = src.slice(at, at + 420);
-  assert.ok(go.includes("setJump(secId(pg, section))"), "a section asks for its anchor");
-  assert.ok(go.includes('window.scrollTo({ top: 0'), "and a bare page goes back to the top");
+  assert.ok(go.includes("setJump(section ? secId(pg, section) : pageId(pg))"),
+    "a section asks for its anchor - and so does a page, because a page is an anchor too now");
+  assert.ok(!/window\.scrollTo\(\{ top: 0/.test(src),
+    "nothing jumps to the top of the document: a rail entry is a place in it, not a page that replaces it");
   // the rows arrive from the server after the page renders and push the anchor back down, so the
   // scroll is corrected until the heading stops moving
   assert.match(src, /const at = sectionOffset\(jump\);/);
@@ -59,8 +61,10 @@ test("picking a section scrolls to it - it does not swap the page out", () => {
 });
 
 test("the rail's sections collapse, and each page remembers", () => {
-  assert.match(src, /const \[open, setOpen\] = useState\(\{ \[NAV\[0\]\]: true \}\)/,
-    "the page you land on is open; the rest are closed until you ask");
+  assert.match(src, /const \[open, setOpen\] = useState\(\{\}\);/,
+    "nothing is pinned open: open{} holds only what you asked for by hand");
+  assert.match(src, /shown = k in open \? open\[k\] : on;/,
+    "the page you are IN shows its sections - scrolling the whole document must not leave all seven open behind you");
   assert.match(src, /setOpen\(\(o\) => \(\{ \.\.\.o, \[k\]: !shown \}\)\)/, "the chevron toggles just that entry");
   assert.match(src, /e\.stopPropagation\(\)/, "and toggling must not also navigate");
 });
@@ -70,8 +74,10 @@ test("the rail says which section you are actually looking at", () => {
   assert.match(src, /el\.getBoundingClientRect\(\)\.top <= SCROLL_TOP \+ 8/);
   assert.match(src, /window\.addEventListener\("scroll", onScroll, \{ passive: true \}\)/);
   assert.match(src, /return \(\) => window\.removeEventListener\("scroll", onScroll\)/, "and lets go of it");
-  assert.match(src, /if \(window\.innerHeight \+ window\.scrollY >= document\.documentElement\.scrollHeight - 2\) cur = names\[names\.length - 1\];/,
-    "the last section is short enough that its heading never reaches the bar - at the foot of the page it still wins");
+  assert.match(src, /if \(window\.innerHeight \+ window\.scrollY >= document\.documentElement\.scrollHeight - 2\) cur = marks\[marks\.length - 1\];/,
+    "the last heading is short enough that it never reaches the bar - at the foot of the document it still wins");
+  assert.match(src, /setPage\(cur\.page\); setHere\(cur\.section\);/,
+    "one measurement names both: the page you are in and the section inside it");
 });
 
 test("a search hit reads like the rail and lands on the same anchor", () => {
@@ -105,7 +111,23 @@ test("the rail offers only the sections the page will actually draw", () => {
   assert.match(src, /\|\| \(k === "docs" \? docsTree\(docCat\) : null\) \|\| SECTIONS\[k\] \|\| \[\], \[cfgSecs, docCat\]\);/,
     "...and Docs contributes its tree to that same list");
   // Docs is the one page whose entries SWITCH the document instead of scrolling to a heading, so
-  // it is the one page the scroll-spy must sit out - it has no headings to measure.
-  assert.match(src, /const names = q \|\| page === "docs" \? \[\] : sectionsOf\(page\);/,
-    "the scroll-spy skips the page that has nothing to scroll to");
+  // it contributes its page heading to the scroll-spy and nothing else - its entries are objects,
+  // not heading names, and there is nothing under them to measure.
+  assert.match(src, /\.\.\.\(k === "docs" \? \[\] : sectionsOf\(k\)\.map\(\(n\) => \(\{ page: k, section: n, id: secId\(k, n\) \}\)\)\)/,
+    "the scroll-spy skips the entries that have nothing to scroll to");
+});
+
+test("Settings is ONE document - the scroll carries on into the next page", () => {
+  // Every rail entry used to be an exclusive page: you scrolled to the bottom of Configuration and
+  // it stopped dead, with Routing policies reachable only by clicking (the owner, 2026-09-22).
+  assert.match(src, /\{NAV\.map\(\(k, i\) => \(/, "every page is drawn, in the rail's order");
+  assert.match(src, /<PageHead page=\{k\} first=\{!i\} \/>/, "each one under its own heading");
+  assert.match(src, /\{body\(k\)\}/, "and its body below that heading");
+  assert.match(map, /export const pageId = \(page\) =>/,
+    "and one function builds a page's anchor id, beside the one that builds a section's");
+  // the page body is a function of the page now; a leftover `if (page === ...)` at the component's
+  // top level would mean one page still swallowed the whole view
+  assert.match(src, /const body = \(page\) => \{/);
+  assert.equal((src.match(/<HelpDialog help=\{help\}/g) || []).length, 1,
+    "four pages each rendered their own copy of the help dialog; one document gets one");
 });

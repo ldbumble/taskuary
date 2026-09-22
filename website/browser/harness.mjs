@@ -258,8 +258,12 @@ export async function bodyText(page) {
 
 export async function clickNav(page, label) {
   const clicked = await page.evaluate((wanted) => {
+    // The count badge rides INSIDE the pill (a MUI Badge hung outside it was clipped by the
+    // strip's own scroller), so the tab that has one reads "Tasks3" here, not "Tasks". Strip a
+    // trailing count before comparing - otherwise a tab becomes unclickable the day it grows one.
+    const name = (node) => node.textContent.trim().replace(/\s*\d+\+?$/, "");
     const node = [...document.querySelectorAll("#tqTopNav div")]
-      .find((candidate) => candidate.textContent.trim() === wanted
+      .find((candidate) => name(candidate) === wanted
         && candidate.getBoundingClientRect().width > 0
         && candidate.getBoundingClientRect().height > 0);
     node?.click();

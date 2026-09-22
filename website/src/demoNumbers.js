@@ -20,7 +20,7 @@ July was **$178,400**. August increased **$14,200 (8.0%)**.
 
 **Source:** Northwind Finance → posted vendor invoices → through August 31. Open purchase orders are excluded.
 
-I prepared the reply to Ruth in **Review**. Nothing has been sent.
+I prepared the reply to Ruth on its task. Nothing has been sent.
 
 *Fictional demo records and scripted analysis; no database or AI was called.*`;
 

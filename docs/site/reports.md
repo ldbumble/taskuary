@@ -91,8 +91,8 @@ file as they are.
 
 Every run lands on your Timeline. Two optional additions, both off by default:
 
-- **Send it somewhere** — email, Teams, Telegram, WhatsApp, iMessage or Discord. It waits in
-  Review for approval by default. "Send it without asking" is the one place in Taskuary where
+- **Send it somewhere** — email, Teams, Telegram, WhatsApp, iMessage or Discord. It waits on
+  the task for approval by default. "Send it without asking" is the one place in Taskuary where
   that gate can be switched off, and it is deliberate.
 - **Tell me when it looks wrong** — silence is the normal outcome. An alert fires only when the
   result trips a rule: nothing came back, anything came back, fewer or more rows than N, the

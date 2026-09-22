@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { mkdir } from 'node:fs/promises';
-import { clickNav, startHarness } from './harness.mjs';
+import { startHarness } from './harness.mjs';
 
 test('Deleting a saved playbook requires confirmation and keeps failures visible', { timeout: 120000 }, async (t) => {
   const harness = await startHarness(); t.after(() => harness.close());
@@ -22,8 +22,8 @@ test('Deleting a saved playbook requires confirmation and keeps failures visible
     if (data) return request.respond({ status, contentType: 'application/json', body: JSON.stringify(data) });
     page.fixtureRequestGuard(request);
   });
-  await page.goto(harness.ui, { waitUntil: 'domcontentloaded' });
-  await clickNav(page, 'Docs'); await click(page, 'Playbooks', false);
+  await page.goto(`${harness.ui}#settings=docs`, { waitUntil: 'domcontentloaded' });
+  await click(page, 'Playbooks', false);
   await click(page, 'Delete');
   await page.waitForSelector('[role="dialog"]');
   assert.match(await page.$eval('[role="dialog"]', (el) => el.innerText), /Prepare item numbers/);
@@ -77,8 +77,8 @@ test('New playbook offers optional historical email, starts AI, and preserves co
     if (data) return request.respond({ status, contentType: 'application/json', body: JSON.stringify(data) });
     page.fixtureRequestGuard(request);
   });
-  await page.goto(harness.ui, { waitUntil: 'domcontentloaded' });
-  await clickNav(page, 'Docs'); await click(page, 'Playbooks');
+  await page.goto(`${harness.ui}#settings=docs`, { waitUntil: 'domcontentloaded' });
+  await click(page, 'Playbooks');
   assert.equal(await page.$('[role="dialog"]'), null, 'Opening the shelf does not start setup');
   await click(page, 'New playbook');
   await page.waitForSelector('[role="dialog"]');

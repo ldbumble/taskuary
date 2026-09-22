@@ -4,7 +4,8 @@ import fs from "node:fs";
 
 const view = fs.readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
 const card = fs.readFileSync(new URL("../src/assistantCards.jsx", import.meta.url), "utf8");
-const reviews = fs.readFileSync(new URL("../src/ReviewView.jsx", import.meta.url), "utf8");
+// the decision moved out of the tab into a component both the queue and the task page mount
+const reviews = fs.readFileSync(new URL("../src/ReviewDecision.jsx", import.meta.url), "utf8");
 
 test("Assistant sends the message revision it saw and raises a newer live-chat line as a strip notice", () => {
   assert.match(view, /context_mid: currentItem\?\.mid/);

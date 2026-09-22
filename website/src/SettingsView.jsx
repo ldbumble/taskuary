@@ -31,7 +31,7 @@ import { notifyState } from "./notify.js";
 import { normalizeBrainOptions } from "./brainOptions.js";
 import { ABOUT_SECTIONS, AUDIT_SECTIONS, secId, scrollToSection, sectionOffset, SCROLL_TOP } from "./settingsMap.js";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
-import DocsView from "./DocsView.jsx";
+import DocsView, { OPERATOR_DOCS } from "./DocsView.jsx";
 
 
 const KINDS = ["keyword", "sender", "sender_domain", "noreply", "first_time_sender"];
@@ -307,7 +307,7 @@ const SectionHead = ({ page, name }) => (
 // SettingsView instead - two components apart, so the panel's "go to Connections" was a
 // ReferenceError waiting for a click. The scope test only tracks set* setters, so eslint's
 // no-undef is what caught it before it shipped.
-function SettingsPages({ page, setPage, q, setQ, onNavigate, onJump, onSections }) {
+function SettingsPages({ page, setPage, q, setQ, onNavigate, onJump, onSections, docSel, setDocSel, onCatalog }) {
   const [policies, setPolicies] = useState(null);
   const [settings, setSettings] = useState([]);
   const [memory, setMemory] = useState([]);
@@ -738,7 +738,7 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate, onJump, onSections 
   }
 
   if (page === "about") return <AboutYou />;
-  if (page === "docs") return <DocsView />;
+  if (page === "docs") return <DocsView sel={docSel} onSel={setDocSel} onCatalog={onCatalog} />;
   if (page === "updates") return <UpdateCard />;
 
   if (page === "audit") {
@@ -821,10 +821,41 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate, onJump, onSections 
 // where About you leaves off, and moving it in keeps the top strip symmetric about the
 // Assistant now that Review is gone (the owner, 2026-09-22).
 const NAV = ["about", "docs", "config", "policies", "memory", "audit", "updates"];
+
+// DOCS IS A TREE, not a list of scroll anchors: its rail entries SWITCH the document rather than
+// scrolling to a heading, because a document is not a heading you scroll past. Groups are headers
+// with their files under them, and the buttons that used to sit on a shelf inside the page - New
+// playbook, Manage profiles - are entries here too. Nothing about this page lives in a header any
+// more (the owner, 2026-09-22: "everything moves to sidebar").
+const docsTree = ({ profiles = [], playbooks = [] }) => [
+  { key: "g:documents", label: "Operator documents", head: true, sel: { group: "documents" } },
+  ...OPERATOR_DOCS.map((d) => ({ key: `d:${d.name}`, label: d.label, sel: { group: "documents", doc: d.name } })),
+  { key: "g:profiles", label: "Profiles", head: true, sel: { group: "profiles" } },
+  // by WORKER NAME, not by filename. A profile's rules document can BE an operator document -
+  // the coder profile's is CODER.md - so filenames here put the same label in the rail twice,
+  // under two groups, and a click landed on whichever came first.
+  ...profiles.map((r) => ({ key: `p:${r.name}`, label: r.name, sel: { group: "profiles", doc: r.name } })),
+  { key: "a:new-profile", label: "+ New profile", sel: { action: "new-profile" } },
+  { key: "a:manage-profiles", label: "Manage profiles", sel: { action: "manage-profiles" } },
+  { key: "g:playbooks", label: "Playbooks", head: true, sel: { group: "playbooks" } },
+  ...playbooks.map((b) => ({ key: `b:${b.slug}`, label: b.title || b.slug, sel: { group: "playbooks", doc: b.slug } })),
+  { key: "a:new-playbook", label: "+ New playbook", sel: { action: "new-playbook" } },
+  // no "Import skills" entry: that road was deliberately consolidated onto the Agents panel,
+  // which holds both ways in - a second door from here is the thing that was removed.
+  { key: "g:how", label: "How it works", head: true, sel: { group: "how" } },
+];
+const sameSel = (a, b) => !!a && !!b && (a.action || "") === (b.action || "")
+  && (a.group || "") === (b.group || "") && (a.doc || "") === (b.doc || "");
 const RAIL = 236, GUTTER = 24;   // the rail's own width, and the grid gap beside it
 
 export default function SettingsView({ onNavigate }) {
   const [page, setPage] = useState(NAV[0]);      // the rail's first entry is where Settings opens - About you
+  // Docs' rail entries switch the document, so the selection belongs here beside `page` - and the
+  // catalog they draw comes from DocsView, which already fetches and derives both lists.
+  const [docSel, setDocSel] = useState({ group: "documents", doc: OPERATOR_DOCS[0].name });
+  const [docCat, setDocCat] = useState({ profiles: [], playbooks: [] });
+  const onCatalog = useCallback((c) => setDocCat((cur) =>
+    (cur.profiles === c.profiles && cur.playbooks === c.playbooks ? cur : c)), []);
   const [open, setOpen] = useState({ [NAV[0]]: true });   // which rail entries are showing their sections
   const [jump, setJump] = useState("");          // a section id waiting for its page to be on screen
   const [here, setHere] = useState("");          // the section the page is actually scrolled to
@@ -832,11 +863,20 @@ export default function SettingsView({ onNavigate }) {
   const [q, setQ] = useState("");
   // The rail draws what the page draws. Configuration's list is the page's own - a group with no
   // rows on this install is not an entry - and every other page's is fixed.
-  const sectionsOf = useCallback((k) => (k === "config" && cfgSecs) || SECTIONS[k] || [], [cfgSecs]);
+  const sectionsOf = useCallback((k) => (k === "config" && cfgSecs)
+    || (k === "docs" ? docsTree(docCat) : null) || SECTIONS[k] || [], [cfgSecs, docCat]);
 
   // Go to a page, and to a section inside it. The heading may not exist yet - the page has not
   // rendered, and its rows arrive from the server after that - so the scroll is retried until it
   // lands or two seconds pass. Nothing swaps out: a section is a place on the page, not a tab.
+  // Picking a document is not scrolling - the page swaps - and it opens Docs if you were elsewhere,
+  // so a rail click always lands on the thing you clicked. An ACTION entry (New playbook, Manage
+  // profiles) carries a nonce: it is a one-shot, and without it a second click on the same entry
+  // would be the same selection and nothing would reopen.
+  const pickDoc = useCallback((sel) => {
+    setQ(""); setPage("docs"); setOpen((o) => ({ ...o, docs: true }));
+    setDocSel(sel.action ? { ...sel, n: Date.now() } : sel);
+  }, []);
   const goTo = useCallback((pg, section) => {
     setQ(""); setPage(pg); setOpen((o) => ({ ...o, [pg]: true }));
     setHere(section || "");
@@ -865,7 +905,9 @@ export default function SettingsView({ onNavigate }) {
   // WHICH SECTION YOU ARE IN: the last heading that has passed under the top bar. Without it the
   // rail would highlight the last thing you clicked and then quietly lie as you scrolled past it.
   useEffect(() => {
-    const names = q ? [] : sectionsOf(page);
+    // Docs has no headings to spy on: its rail entries SWITCH the document rather than
+    // scrolling to one, and they are objects, not heading names.
+    const names = q || page === "docs" ? [] : sectionsOf(page);
     if (!names.length) { setHere(""); return; }
     let queued = false;
     const measure = () => {
@@ -914,7 +956,7 @@ export default function SettingsView({ onNavigate }) {
     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: `${RAIL}px minmax(0,1fr)` },
       gap: 3, alignItems: "start", mx: "auto", maxWidth: RAIL + GUTTER + PAGE }}>
       <Box sx={{ position: { md: "sticky" }, top: { md: 62 }, maxHeight: { md: "calc(100vh - 74px)" }, overflowY: { md: "auto" } }}>
-        <Typography sx={{ color: INK, fontWeight: 700, fontSize: 16, mb: 1.5 }}>Settings</Typography>
+        <Typography id="tqSettingsRail" sx={{ color: INK, fontWeight: 700, fontSize: 16, mb: 1.5 }}>Settings</Typography>
         <TextField fullWidth placeholder="Search settings…" value={q}
           onChange={(e) => setQ(e.target.value)} sx={{ mb: 1.5, bgcolor: "#fff", borderRadius: 2 }}
           InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 17, color: FAINT }} /></InputAdornment> }} />
@@ -939,15 +981,21 @@ export default function SettingsView({ onNavigate }) {
                       "&:hover": { color: INK } }} />
                 )}
               </Box>
-              {shown && secs.map((n) => {
-                const at = on && here === n;
+              {shown && secs.map((raw) => {
+                // a string is a SECTION (a place on one long page); an object is a docs entry,
+                // which switches what the page shows instead of scrolling it
+                const e = typeof raw === "string" ? { key: raw, label: raw, section: raw } : raw;
+                const at = on && (e.section ? here === e.section : sameSel(docSel, e.sel));
                 return (
-                  <Box key={n} onClick={() => goTo(k, n)}
-                    sx={{ ml: 2.5, pl: 1.25, pr: 0.75, py: 0.45, cursor: "pointer", fontSize: 12, lineHeight: 1.35,
-                      borderLeft: `2px solid ${at ? ACCENT2 : BORDER}`,
-                      color: at ? "#41525f" : DIM, fontWeight: at ? 650 : 400,
+                  <Box key={e.key} onClick={() => (e.section ? goTo(k, e.section) : pickDoc(e.sel))}
+                    sx={{ ml: e.head ? 1.5 : 2.5, pl: 1.25, pr: 0.75, py: e.head ? 0.6 : 0.45, cursor: "pointer",
+                      fontSize: 12, lineHeight: 1.35, mt: e.head ? 0.75 : 0,
+                      borderLeft: e.head ? "none" : `2px solid ${at ? ACCENT2 : BORDER}`,
+                      color: at ? "#41525f" : e.head ? "#55697a" : DIM,
+                      fontWeight: at ? 650 : e.head ? 700 : 400,
+                      letterSpacing: e.head ? ".02em" : 0,
                       "&:hover": { color: "#41525f", borderLeftColor: at ? ACCENT2 : "#c8c0b3" } }}>
-                    {n}
+                    {e.label}
                   </Box>
                 );
               })}
@@ -977,7 +1025,8 @@ export default function SettingsView({ onNavigate }) {
             <Typography variant="body2" sx={{ color: DIM, mt: 0.25 }}>{PAGES[page].desc}</Typography>
           </Box>
         )}
-        <SettingsPages page={q ? null : page} setPage={setPage} q={q} setQ={setQ} onNavigate={onNavigate} onJump={goTo} onSections={setCfgSecs} />
+        <SettingsPages page={q ? null : page} setPage={setPage} q={q} setQ={setQ} onNavigate={onNavigate} onJump={goTo} onSections={setCfgSecs}
+          docSel={docSel} setDocSel={setDocSel} onCatalog={onCatalog} />
       </Box>
     </Box>
   );

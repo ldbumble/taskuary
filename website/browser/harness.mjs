@@ -272,6 +272,19 @@ export async function clickNav(page, label) {
   if (!clicked) throw new Error(`navigation item not found: ${label}`);
 }
 
+// A settings RAIL entry - a page, a section, or one of Docs' documents. These are divs, not
+// buttons, so the button-based helpers in the tests cannot reach them.
+export async function clickRail(page, label) {
+  const find = (wanted) => {
+    const rail = document.getElementById("tqSettingsRail")?.parentElement;
+    return [...(rail?.querySelectorAll("div") || [])].find((d) => d.textContent.trim() === wanted
+      && d.childElementCount === 0 && d.getBoundingClientRect().width > 0);
+  };
+  await page.waitForFunction(`(${find})(${JSON.stringify(label)}) != null`);
+  await page.evaluate((wanted, src) => { new Function("return " + src)()(wanted).click(); },
+    label, find.toString());
+}
+
 export async function waitForBody(page, text, timeout = 10000) {
   try {
     await page.waitForFunction((wanted) => document.body.innerText.includes(wanted), { timeout }, text);

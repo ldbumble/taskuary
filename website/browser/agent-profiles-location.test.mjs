@@ -1,7 +1,7 @@
 ﻿import assert from 'node:assert/strict';
 import test from 'node:test';
 import { mkdir } from 'node:fs/promises';
-import { clickNav, startHarness } from './harness.mjs';
+import { clickNav, startHarness, clickRail } from './harness.mjs';
 async function clickText(page, text, selector = 'button,p,div') {
   await page.waitForFunction(({ text, selector }) => [...document.querySelectorAll(selector)].some((el) => el.textContent.trim() === text && el.getBoundingClientRect().height), {}, { text, selector });
   await page.evaluate(({ text, selector }) => [...document.querySelectorAll(selector)].find((el) => el.textContent.trim() === text && el.getBoundingClientRect().height).click(), { text, selector });
@@ -94,12 +94,16 @@ test('Connections share CLI commands; Docs profiles choose only provider and mod
   await clickText(page, 'Close terminal', 'button');
   await page.waitForFunction(() => !document.querySelector('.xterm'));
   await clickText(page, 'Manage profiles in Docs', 'button');
-  await page.waitForFunction(() => document.body.innerText.includes('RESEARCHER.md'));
+  // the rail lists profiles by WORKER NAME - a profile's rules document can BE an operator
+  // document (the coder profile's is CODER.md), so filenames would name one thing twice in one rail
+  await page.waitForFunction(() => document.body.innerText.includes('researcher'));
   assert.doesNotMatch(await page.evaluate(() => document.body.innerText), /CODEX\.md/);
-  assert.match(await page.evaluate(() => document.body.innerText), /Used by coder, codex/);
-  await clickText(page, 'RESEARCHER.md', 'p');
+  // codex shares coder's document, and the document it shares is where that is said
+  await clickRail(page, 'coder');
+  await page.waitForFunction(() => document.body.innerText.includes('Used by coder, codex'));
+  await clickRail(page, 'researcher');
   await page.waitForFunction(() => [...document.querySelectorAll('textarea')].some((el) => el.value.includes('Read public sources')));
-  await clickText(page, 'New profile', 'button');
+  await clickRail(page, '+ New profile');
   await page.waitForSelector('[role="dialog"] input', { visible: true });
   assert.equal(await page.$eval('[role="dialog"]', (el) => {
     const box = el.getBoundingClientRect(); return box.top >= 0 && box.bottom <= window.innerHeight && el.contains(document.activeElement);
@@ -117,7 +121,7 @@ test('Connections share CLI commands; Docs profiles choose only provider and mod
   assert.equal(writes[1].update.triage_enabled, true);
   assert.equal(writes[1].update.cmd, undefined);
   await page.waitForFunction(() => document.body.innerText.includes('SCOUT.md'));
-  await clickText(page, 'Manage profiles', 'button');
+  await clickRail(page, 'Manage profiles');
   await page.waitForSelector('[data-profile="researcher"]');
   assert.doesNotMatch(await page.evaluate(() => document.body.innerText), /Set it up|Edit command|Install|--verbose|Devin CLI/);
   await page.evaluate(() => [...document.querySelectorAll('[data-profile="researcher"] button')].find((el) => el.textContent === 'Edit').click());

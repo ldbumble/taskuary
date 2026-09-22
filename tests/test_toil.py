@@ -2,7 +2,12 @@
 weekly seed. No AI needed - the executor's raw output is what's under test.
 """
 import json, unittest
+from datetime import datetime, timedelta
 from taskuary.store import MemoryStore
+
+# the window gather() reads is the last N DAYS, so a stamp written into the test expires: '2026-08-23
+# 08:00:00' sat inside a 30-day window until 08:00 on 2026-09-22, and failed every run after it.
+def ago(days): return (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
 
 
 class AutomateReportTests(unittest.TestCase):
@@ -12,7 +17,7 @@ class AutomateReportTests(unittest.TestCase):
         s = MemoryStore()
         for i in range(4):
             s.add_message({'ExternalId': f'n{i}', 'Channel': 'email', 'FromEmail': 'noise@vendor.com',
-                           'Subject': f'Newsletter #{i}', 'SentAt': '2026-08-23 08:00:00', 'Status': 'ignored'})
+                           'Subject': f'Newsletter #{i}', 'SentAt': ago(3), 'Status': 'ignored'})
         txt = gather(s, days=30)
         self.assertIn('noise@vendor.com: 4 msgs', txt); self.assertIn('4 ignored', txt)
         head, body = REGISTRY['automate'](resolve_cfg(s, {'type': 'automate', 'days': 30}))
@@ -22,14 +27,14 @@ class AutomateReportTests(unittest.TestCase):
         from taskuary.toil import gather
         s = MemoryStore()
         s.add_message({'ExternalId': 'old', 'Channel': 'email', 'FromEmail': 'noise@vendor.com',
-                       'Subject': 'Old', 'SentAt': '2026-07-01 08:00:00', 'Status': 'ignored',
+                       'Subject': 'Old', 'SentAt': ago(90), 'Status': 'ignored',
                        'BodyText': 'x' * 10000})
         s.add_message({'ExternalId': 'ctx', 'Channel': 'email', 'FromEmail': 'noise@vendor.com',
-                       'Subject': 'Reply', 'SentAt': '2026-09-10 08:00:00', 'Status': 'context',
+                       'Subject': 'Reply', 'SentAt': ago(3), 'Status': 'context',
                        'BodyText': 'x' * 10000})
         for i in range(3):
             s.add_message({'ExternalId': f'n{i}', 'Channel': 'email', 'FromEmail': 'noise@vendor.com',
-                           'Subject': f'Newsletter #{i}', 'SentAt': '2026-09-10 08:00:00', 'Status': 'ignored',
+                           'Subject': f'Newsletter #{i}', 'SentAt': ago(3), 'Status': 'ignored',
                            'BodyText': 'x' * 10000})
         txt = gather(s, days=30)
         self.assertIn('noise@vendor.com: 3 msgs', txt)

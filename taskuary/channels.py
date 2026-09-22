@@ -23,7 +23,13 @@ MAIL_SELECT = ('id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentD
 # bodies come back afterwards (_mail_bodies) for the mail that survives the policy, so a flood
 # sender's twenty thousand characters are never pulled across the wire for a row nobody opens.
 MAIL_LIST_SELECT = ','.join(f for f in MAIL_SELECT.split(',') if f != 'body')
-MAIL_BODY_SELECT = 'id,body'
+# ...and the field that says where the sender's own words END. uniqueBody is the part of the body
+# unique to THIS message - the mailbox drawing the line that everything else has to guess at from
+# text, which on a forwarded mail is what buried Brad's one-sentence ask (TQ-0665). It rides in the
+# $select the bodies already come back on: no extra request, and never in a LISTING, where the whole
+# point is to carry no weight.
+MAIL_BODY_SELECT = 'id,body,uniqueBody'
+MAIL_FULL_SELECT = MAIL_SELECT + ',uniqueBody'
 BODY_BATCH = 20              # Graph's $batch ceiling
 
 
@@ -385,6 +391,15 @@ def _clean(html):
 # so the panel (and the agents) only ever saw the opening sentence. Full body wins.
 def _body(m): return (_clean((m.get('body') or {}).get('content')) or m.get('bodyPreview') or '')[:20000]
 
+def _own(m):
+    """What the sender typed THIS time, as the mailbox marks it (uniqueBody) - or '' when it is not
+    worth believing. Graph sometimes hands back the whole conversation here instead of the new part
+    (microsoftgraph/msgraph-sdk-php#1576), so it is kept only when it is genuinely SHORTER than the
+    body it came from; anything else and triage.split_own finds the cut for itself, as it does for
+    IMAP, chat and every channel that has no such field."""
+    own = _clean((m.get('uniqueBody') or {}).get('content'))[:20000]
+    return own if own and len(own) < len(_body(m)) else ''
+
 # What rode along with the mail. Screenshots of the thing that is broken ARE the ask half the
 # time ("see below"), and a text-only funnel threw them away.
 ATT_MAX, ATT_BYTES = 12, 12 * 1024 * 1024      # per message: how many, and how big each may be
@@ -737,6 +752,7 @@ def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = True) 
                              'Channel': msg['channel'], 'SourceName': msg.get('source_name'),
                              'Subject': msg.get('subject'), 'FromName': 'You', 'FromEmail': msg.get('from_email'),
                              'SentAt': msg.get('sent_at'), 'BodyText': msg.get('body'),
+                             'OwnText': msg.get('own_text') or None,
                              'SourceLink': msg.get('source_link'), 'Status': 'context',
                              'MailMetaJson': json.dumps(msg.get('mail_meta')) if msg.get('mail_meta') else None})
     sent = store.get_message(mid) or {}
@@ -757,7 +773,7 @@ def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = True) 
 def ingest_outbound_mail(store, mailbox: str, m: dict) -> int:
     return ingest_own_message(store, {
         'external_id': f"graph:{m['id']}", 'channel': 'email', 'source_name': mailbox,
-        'subject': m.get('subject'), 'from_email': mailbox, 'body': _body(m),
+        'subject': m.get('subject'), 'from_email': mailbox, 'body': _body(m), 'own_text': _own(m),
         'conversation_id': m.get('conversationId'), 'source_link': m.get('webLink'),
         'sent_at': _local(m.get('receivedDateTime') or m.get('sentDateTime') or ''),
         'mail_meta': {'folder': 'sentitems', 'focus': m.get('inferenceClassification'),
@@ -1402,7 +1418,7 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
                             except Exception as e: logger.warning(f"attachments for {m['id']} failed: {e}")
                         out = ingest_message(store, file_only=file_only, msg={
                             'external_id': f"graph:{m['id']}", 'channel': 'email',
-                            'subject': m.get('subject'), 'body': _body(m),
+                            'subject': m.get('subject'), 'body': _body(m), 'own_text': _own(m),
                             'from_name': frm.get('name'), 'from_email': frm.get('address'),
                             'to': _addrs(m.get('toRecipients')), 'cc': _addrs(m.get('ccRecipients')),
                             'conversation_id': m.get('conversationId'), 'sent_at': _local(m.get('receivedDateTime') or ''),

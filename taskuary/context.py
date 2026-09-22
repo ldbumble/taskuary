@@ -58,7 +58,7 @@ def render_past(rows: list) -> str:
 def build(store, tid: int, msgs: list = None, repo: str = None) -> str:
     """The file's text. Sections the hub has nothing for are left out; an empty file is not written."""
     from .counsel import dossier, msg_of
-    from .triage import strip_boilerplate
+    from .triage import sender_body
     from .learn import injectable
     t = store.get_task(tid) or {}
     msgs = msgs if msgs is not None else [m for m in store.list_messages(tid) if m.get('Status') != 'context']
@@ -89,7 +89,7 @@ def build(store, tid: int, msgs: list = None, repo: str = None) -> str:
         thread, used = [], 0
         for m in allm:
             who = 'THE OWNER' if m.get('Status') == 'context' else (m.get('FromName') or m.get('FromEmail') or '?')
-            body = _short(strip_boilerplate(str(m.get('BodyText') or '')), 1500)
+            body = _short(sender_body(str(m.get('BodyText') or ''), m.get('OwnText'), budget=1500)[0], 1500)
             line = f"--- {who} · {m.get('SentAt')} · {m.get('Channel')}\n{body}"
             if used + len(line) > THREAD_CHARS: break
             thread.append(line); used += len(line)

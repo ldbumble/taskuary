@@ -12,7 +12,7 @@ GENESIS = '0' * 64
 TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Source', 'SourceRef', 'Tags')
 MSG_COLS = ('TaskId', 'ExternalId', 'ConversationId', 'Channel', 'SourceName', 'Subject',
             'FromName', 'FromEmail', 'SentAt', 'BodyText', 'SourceLink', 'Status', 'Direction', 'RecipientsJson',
-            'MailMetaJson', 'TriageTitle', 'RankValue', 'RankWhy')
+            'MailMetaJson', 'OwnText', 'TriageTitle', 'RankValue', 'RankWhy')
 RUN_COLS = ('Status', 'TraceJson', 'Result', 'LastError', 'SessionId', 'DiffText')
 REVIEW_COLS = ('TaskId', 'MessageId', 'RunId', 'Kind', 'DraftText', 'FinalText', 'Status', 'Reason', 'Deliver')
 POLICY_COLS = ('Name', 'Kind', 'Pattern', 'Action', 'Reason', 'SortOrder', 'Active')
@@ -166,7 +166,7 @@ CREATE TABLE IF NOT EXISTS task (TaskId INTEGER PRIMARY KEY, Title TEXT, Summary
 CREATE TABLE IF NOT EXISTS message (MessageId INTEGER PRIMARY KEY, TaskId INTEGER, ExternalId TEXT,
   ConversationId TEXT, Channel TEXT, SourceName TEXT, Subject TEXT, FromName TEXT, FromEmail TEXT,
   SentAt TEXT, BodyText TEXT, SourceLink TEXT, Status TEXT DEFAULT 'routed', CreatedAt TEXT,
-  Direction TEXT DEFAULT 'in', RecipientsJson TEXT, MailMetaJson TEXT);
+  Direction TEXT DEFAULT 'in', RecipientsJson TEXT, MailMetaJson TEXT, OwnText TEXT);
 CREATE TABLE IF NOT EXISTS attachment (AttachmentId INTEGER PRIMARY KEY, MessageId INTEGER, ExternalId TEXT,
   Name TEXT, ContentType TEXT, Size INTEGER, ContentId TEXT, Inline INTEGER DEFAULT 0, Path TEXT, CreatedAt TEXT);
 CREATE TABLE IF NOT EXISTS transcript (TranscriptId INTEGER PRIMARY KEY, TaskId INTEGER, Sid TEXT,
@@ -668,6 +668,12 @@ class SQLiteStore:
             # One JSON column keeps non-mail channels out of an Outlook-shaped schema.
             if 'MailMetaJson' not in mcols:
                 self.cx.execute('ALTER TABLE message ADD COLUMN MailMetaJson TEXT')
+            # WHERE THE SENDER'S OWN WORDS END, as the mailbox itself marks them (Graph's uniqueBody).
+            # Everything else has to find the chain in text, and on a forwarded mail that is a guess -
+            # an 8,400-character chain read as the ask (TQ-0665). Null for every channel that offers
+            # no such thing and for every row stored before this: triage.split_own still finds the cut.
+            if 'OwnText' not in mcols:
+                self.cx.execute('ALTER TABLE message ADD COLUMN OwnText TEXT')
             # Keep the evidence when triage answers but breaks its JSON contract. Without the
             # raw answer another machine could only report "could not read it", not why.
             routecols = {r[1] for r in self.cx.execute('PRAGMA table_info(route)')}

@@ -162,9 +162,10 @@ def _when(s) -> str:
 # the corporate wrapper around a body: one pattern for every surface, kept in triage.py (PW-029)
 from .triage import _BANNER
 def _gist(body, n=180) -> str:
-    """The sender's own words, one line: banner, legal footer and signature gone (triage.strip_boilerplate)."""
-    from .triage import strip_boilerplate
-    return _short(strip_boilerplate(_BANNER.sub('', str(body or ''))), n)
+    """The sender's own words, one line: banner, legal footer, signature and the chain they wrote on
+    top of all gone (triage.own_words) - a preview of a forward used to be the forward (TQ-0665)."""
+    from .triage import own_words
+    return _short(own_words(_BANNER.sub('', str(body or ''))), n)
 
 
 def _reply_text(review: dict | None) -> str:
@@ -192,11 +193,11 @@ def followups(store, hours: int, want=('followup', 'promise')) -> list:
     something (followup - theirs to answer, ours to chase) or PROMISED something (promise - the
     owner's own open item). Silence after a plain "thanks" is neither. A sender's auto-reply in
     the window rides on the line: silence from someone who is away is not silence."""
-    from .triage import strip_boilerplate
+    from .triage import own_words
     cut = (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
     out, away = [], None
     for r in store.owner_last_words(_since(DAYS), cut):
-        body = strip_boilerplate(str(r.get('BodyText') or ''))
+        body = own_words(str(r.get('BodyText') or ''))
         kind = 'promise' if _PROMISE.search(body) else 'followup' if _ASKS.search(body) else None
         if not kind or kind not in want: continue
         inbound = store.last_inbound_in(r['ConversationId'])
@@ -227,7 +228,7 @@ def unanswered(store, days: float = 2, hours: int = 3) -> list:
     is not yet missed). Each carries what covers it: a draft in Review, a task and its state, or
     nothing at all - the morning brief's "what slipped" is built from these."""
     from .categories import sender_class, team_domains_of
-    from .triage import strip_boilerplate
+    from .triage import own_words
     settings = store.get_settings(); team = team_domains_of(settings); me = (settings.get('owner_email') or '').lower()
     cut = (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
     pend = {r['TaskId'] for r in store.list_reviews('pending')}
@@ -242,7 +243,7 @@ def unanswered(store, days: float = 2, hours: int = 3) -> list:
         if not chain: continue
         last = chain[-1]
         if mine(last) or _ts(last.get('SentAt')) > cut: continue
-        body = strip_boilerplate(_BANNER.sub('', str(last.get('BodyText') or '')))
+        body = own_words(_BANNER.sub('', str(last.get('BodyText') or '')))
         if not _ASKS.search(body): continue
         tid = next((c.get('TaskId') for c in reversed(chain) if c.get('TaskId')), None)
         t = store.get_task(tid) if tid else None

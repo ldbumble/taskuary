@@ -19,8 +19,8 @@ def _blocks_triage(store, msg: dict, mid: int) -> list:
     """(label, source, text) for every part of the triage prompt, in prompt order."""
     from .ingest import owner_addresses, relevant_notes
     from .learn import injectable
-    from .triage import INTENT_SYSTEM, addressed_to_you, strip_boilerplate
-    m = {'from_email': msg.get('FromEmail'), 'subject': msg.get('Subject'), 'body': msg.get('BodyText'),
+    from .triage import INTENT_SYSTEM, addressed_to_you, sender_body
+    m = {'from_email': msg.get('FromEmail'), 'subject': msg.get('Subject'), 'body': msg.get('BodyText'), 'own_text': msg.get('OwnText'),
          'source_name': msg.get('SourceName'), 'channel': msg.get('Channel')}
     doc = store.doc('triage') or ''
     base = doc.strip() or INTENT_SYSTEM
@@ -38,10 +38,10 @@ def _blocks_triage(store, msg: dict, mid: int) -> list:
                     f'{len(notes) + left} applied, ranked by ingest.relevant_notes',
                     '\n'.join(f'- {n}' for n in notes)))
     out.append(('the message itself (this is the USER turn, everything above is SYSTEM)',
-                'message table, signature and legal footer trimmed by triage.strip_boilerplate',
+                'message table - their own words on top, the quoted chain under them, both trimmed by triage.sender_body',
                 json.dumps({'from': m['from_email'], 'subject': m['subject'],
                             **({'addressed_to_you': how, 'recipients': 0} if how else {}),
-                            'body': strip_boilerplate(str(m['body'] or ''))[:1500]}, indent=2)))
+                            'body': sender_body(str(m['body'] or ''), m['own_text'], budget=1500)[0]}, indent=2)))
     return out
 
 

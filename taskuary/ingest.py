@@ -127,7 +127,7 @@ def _from_row(r: dict, store=None) -> dict:
     rec = json.loads(r.get('RecipientsJson') or 'null') or {}
     return {'external_id': r.get('ExternalId'), 'channel': r.get('Channel'), 'conversation_id': r.get('ConversationId'),
             'subject': r.get('Subject'), 'from_name': r.get('FromName'), 'from_email': r.get('FromEmail'), 'sent_at': r.get('SentAt'),
-            'body': r.get('BodyText'), 'source_link': r.get('SourceLink'), 'source_name': r.get('SourceName'),
+            'body': r.get('BodyText'), 'own_text': r.get('OwnText'), 'source_link': r.get('SourceLink'), 'source_name': r.get('SourceName'),
             'to': rec.get('to'), 'cc': rec.get('cc'), 'no_auto': _gh_no_auto(store, r)}
 
 
@@ -477,7 +477,10 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
     # underneath it - until it does not: a reply typed on a phone, or one whose quote we stripped,
     # arrives with the ask two messages back invisible. A chat line quotes nothing at all, so
     # triage read "nope. new" with no idea what had been asked two minutes earlier.
-    lines = exchange_lines(store, msg)
+    # `carried` collects the words the exchange actually carries, so the quoted chain under this
+    # very message is not sent a second time underneath it (triage.sender_body)
+    carried = set()
+    lines = exchange_lines(store, msg, seen=carried)
     if lines: thread = {**thread, 'exchange': lines}
     # an assistant idea carries where it came from and what it is about (PW-199): the report, the task
     # it names and whether a worker has that task - facts the model needs to judge a generated line
@@ -490,7 +493,7 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
     from .projects import context_for_message
     from . import agents as hub_agents
     project = context_for_message(store, msg)
-    intent = classify_intent(msg, llm=_guarded, soul=store.doc('soul'), thread=thread,
+    intent = classify_intent(msg, llm=_guarded, soul=store.doc('soul'), thread=thread, seen=carried,
                              learned=injectable(store.doc('learned') or ''),
                              notes=notes, notes_left=notes_left, images=msg.get('images'),
                              system=store.doc('triage'), mine=me,
@@ -1217,7 +1220,7 @@ def is_ours(m: dict) -> bool:
             or str(m.get('FromName') or '').strip().lower() == 'you')
 
 
-def exchange_lines(store, msg: dict, budget: int = None, limit: int = 200) -> list:
+def exchange_lines(store, msg: dict, budget: int = None, limit: int = 200, seen: set = None) -> list:
     """The conversation as a person scrolling up would read it - theirs and OURS, oldest first,
     each marked with who said it, each message's own words once. The owner's own half was in the
     database all along and no classifier was ever shown it, which is why triage read every chat
@@ -1226,12 +1229,16 @@ def exchange_lines(store, msg: dict, budget: int = None, limit: int = 200) -> li
     It used to be twelve lines of 300 characters, silently (PW-026). Now every message's cleaned,
     de-quoted words are kept whole under a character budget (triage.EXCHANGE_BUDGET); when the
     budget is exceeded the OLDEST go first and the first line says how many were dropped - the
-    model is never left to assume it saw the whole thread."""
-    from .triage import strip_boilerplate, dedupe_quoted, known_lines, EXCHANGE_BUDGET
+    model is never left to assume it saw the whole thread.
+
+    `seen` is filled with the words this exchange actually CARRIES - the messages that survived the
+    budget, never the ones it dropped - so the caller can leave the same words out of the quoted
+    chain under the message being judged instead of paying for them twice (triage.sender_body)."""
+    from .triage import strip_boilerplate, sender_body, known_lines, EXCHANGE_BUDGET
     budget = EXCHANGE_BUDGET if budget is None else budget
     # one set of already-said lines, grown a body at a time - never rebuilt from the whole chain per
     # message, which is what made a 200-line conversation cost 773ms of regex before any model ran
-    out, known = [], set()
+    out, known, kept = [], set(), []
     for m in store.thread_messages(msg.get('conversation_id'), msg.get('subject'), limit=limit):
         # ...never the line being judged, and never the ones AFTER it. Under deferred() a whole
         # poll is on the timeline as 'triaging' before any of it is judged, so without this the
@@ -1239,13 +1246,20 @@ def exchange_lines(store, msg: dict, budget: int = None, limit: int = 200) -> li
         if m.get('Status') == 'skipped' or (msg.get('_mid') and m['MessageId'] == msg['_mid']): continue
         if msg.get('sent_at') and str(m.get('SentAt') or '') > str(msg['sent_at']): continue
         who = 'you' if is_ours(m) else (m.get('FromName') or m.get('FromEmail') or 'them')
-        clean = strip_boilerplate(str(m.get('BodyText') or ''))
-        body = ' '.join(dedupe_quoted(clean, (), known=known).split())
-        known |= known_lines((clean,))
-        if body: out.append(f"{who} · {str(m.get('SentAt') or '')[5:16]}: {body}")
+        # what THEY typed leads the line; the chain under it follows only where this thread does not
+        # already hold those words (TQ-0665). `known` still grows from the WHOLE cleaned body - what a
+        # later message quotes was said here whether it led this line or trailed it.
+        raw = str(m.get('BodyText') or '')
+        clean, _cut = sender_body(raw, m.get('OwnText'), budget=EXCHANGE_BUDGET, known=known)
+        body = ' '.join(clean.split())
+        known |= known_lines((strip_boilerplate(raw),))
+        if body: out.append(f"{who} · {str(m.get('SentAt') or '')[5:16]}: {body}"); kept.append(strip_boilerplate(raw))
     dropped = 0
     while len(out) > 1 and sum(len(l) for l in out) > budget:
-        out.pop(0); dropped += 1
+        out.pop(0); kept.pop(0); dropped += 1
+    # what the caller may leave out elsewhere is what SURVIVED - a message the budget dropped is not
+    # in the prompt, and deduping a quoted copy of it against the chain would take it out of both
+    if seen is not None: seen |= known_lines(kept)
     if dropped: out.insert(0, f'… {dropped} earlier message{"s" if dropped != 1 else ""} not shown (context budget) - the thread is longer than what follows')
     # a conversation whose history could not be completed says so (PW-013): the model sees what is stored and
     # is told it is not the whole thread. Said AFTER the budget trim - the trim drops the oldest lines first,
@@ -1689,6 +1703,9 @@ def _fields(msg, task_id):
             # any single path sorts the whole timeline out of order (see store.norm_stamp)
             'FromEmail': msg.get('from_email'), 'SentAt': norm_stamp(msg.get('sent_at')),
             'BodyText': msg.get('body'), 'SourceLink': msg.get('source_link'), 'Status': 'routed',
+            # the mailbox's own answer for where their words end, stored beside the whole body it
+            # was cut from - the panel keeps showing the real mail (channels._own)
+            'OwnText': msg.get('own_text') or None,
             'MailMetaJson': json.dumps(msg.get('mail_meta')) if msg.get('mail_meta') else None,
             # kept so a verdict can be replayed against the lines that decided it (evalset.py)
             'RecipientsJson': json.dumps({'to': list(msg.get('to') or []), 'cc': list(msg.get('cc') or [])})

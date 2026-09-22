@@ -272,23 +272,71 @@ def _norm_line(l: str) -> str:
     return text.strip()
 
 
-def own_words(text: str) -> str:
-    """What the sender typed THIS time: everything above the chain they wrote it on top of.
+def split_own(text: str, floor: int = None) -> tuple:
+    """(what the sender typed THIS time, the chain they wrote it on top of).
 
     strip_boilerplate finds the legal footer and the signature at the END of a body. A forwarded
     mail has neither there - it has a quote head, and under it somebody else's mail with their
     signature - so Brad's one-sentence ask reached the card with 8,400 characters of chain beneath
     it, headers and both signatures included (TQ-0665, 2026-09-21). Cut at the quote first and the
     signature rules have the tail they were written for. A message with no chain is untouched, and
-    nothing is ever cut down to nothing."""
+    nothing is ever cut down to nothing.
+
+    The chain is RETURNED, never thrown away: a forward carries the only copy of what it forwards,
+    and the caller decides whether the thread already holds it (sender_body).
+
+    `floor` is how few characters of their own the cut may leave. own_words DROPS the chain, so it
+    keeps this module's when-in-doubt-keep floor; sender_body only MOVES it under a line, where
+    "Sending it today." on top of a thousand quoted lines is exactly the split worth making."""
     lines = str(text or '').splitlines()
     for i, l in enumerate(lines):
         head = (l.lstrip().startswith('>') or _QUOTE_HEAD.match(l)
                 or (_re.match(r'^\s*from:\s', l, _re.I) and i + 1 < len(lines) and _re.match(r'^\s*(sent|date):\s', lines[i + 1], _re.I)))
-        if head and len(NL.join(lines[:i]).strip()) >= _KEEP_MIN:
-            lines = lines[:i]
-            break
-    return strip_boilerplate(NL.join(lines).rstrip()) if lines else strip_boilerplate(text)
+        if head and len(NL.join(lines[:i]).strip()) >= (_KEEP_MIN if floor is None else floor):
+            return strip_boilerplate(NL.join(lines[:i]).rstrip()), NL.join(lines[i:]).strip()
+    return (strip_boilerplate(NL.join(lines).rstrip()) if lines else strip_boilerplate(text)), ''
+
+
+def own_words(text: str) -> str:
+    """What the sender typed this time, without the chain under it (split_own)."""
+    return split_own(text)[0]
+
+
+def below(text: str, own: str) -> str:
+    """The chain under `own` when the MAILBOX said where the sender's words end (Graph's uniqueBody).
+    Found by the last line of `own` that the body still holds - the two come from the same mail but
+    not through the same HTML - and falling back to the cut this module can find for itself."""
+    last = next((l for l in reversed([l.strip() for l in str(own or '').splitlines() if l.strip()])), '')
+    i = str(text or '').find(last) if len(last) >= 12 else -1
+    return text[i + len(last):].strip() if i >= 0 else split_own(text, floor=1)[1]
+
+
+CHAIN_HEAD = '--- quoted under it, the chain they wrote on top of (their ask is ABOVE this line)'
+
+
+def sender_body(text: str, own: str = None, budget: int = None, known: set = None) -> tuple:
+    """(what one message should look like to a model, whether the budget cut anything).
+
+    The sender's own words first, the chain marked as quoted underneath, and the cut taken out of
+    the CHAIN. It used to be strip_boilerplate(body)[:BODY_BUDGET] - which reads the tail of a body,
+    so on a forwarded mail the ask was one sentence on top of 8,400 characters of somebody else's
+    mail and the budget trimmed the wrong end (TQ-0665). `own` is the mailbox's own answer for where
+    the sender's words end; `known` is the lines the thread already carries, which is the only
+    reason a quoted block is ever dropped."""
+    budget = BODY_BUDGET if budget is None else budget
+    head, chain = split_own(text, floor=1)
+    # no _KEEP_MIN floor on this one: "Please approve this today." is 26 characters and is the whole
+    # ask. A mailbox answer that is short is still an answer; an EMPTY one is not, and nothing under
+    # it is lost either way - what is not their words goes below the line, it does not go away.
+    if str(own or '').strip() and len(str(own).strip()) < len(head):
+        head, chain = strip_boilerplate(str(own).strip()), below(str(text or ''), own)
+    # the chain goes through the same doors every other quoted block does: its From:/Sent:/To: header
+    # lines are wrapper and always go, its words go only where `known` says the thread already has
+    # them, and the signature and legal footer under somebody else's mail are boilerplate there too.
+    if chain: chain = strip_boilerplate(dedupe_quoted(chain, (), known=known if known is not None else set()))
+    room = budget - len(head) - len(CHAIN_HEAD) - 2
+    if not chain or room < 200: return head[:budget], len(head) > budget or bool(chain)
+    return f'{head}{NL}{CHAIN_HEAD}{NL}{chain[:room]}', len(chain) > room
 
 
 def known_lines(bodies) -> set:
@@ -357,22 +405,25 @@ def extract_ask(msg: dict, llm=None) -> dict:
     "shouldn't the ai triage pull out just the task?"). It should, and now the hand road asks
     the same question the automatic one does.
 
-    No brain, or a brain that fails: fall back to strip_boilerplate, which is still the sender's
-    own words minus the footer - never worse than what was stored before.
+    No brain, or a brain that fails: fall back to `own` - what the sender typed THIS time, which is
+    the ask itself and never the chain under it. The model still sees the chain, quoted (sender_body).
     """
-    body = strip_boilerplate(dedupe_quoted(str(msg.get('BodyText') or msg.get('body') or ''), []))
+    raw_body = str(msg.get('BodyText') or msg.get('body') or '')
+    own_text = msg.get('OwnText') or msg.get('own_text')
+    body, _cut = sender_body(raw_body, own_text, budget=6000)
+    own = (own_text and strip_boilerplate(str(own_text).strip())) or own_words(raw_body)
     subject = str(msg.get('Subject') or msg.get('subject') or '')
-    if not llm: return {'summary': body[:1000], 'checklist': []}
+    if not llm: return {'summary': own[:1000], 'checklist': []}
     try:
         raw = llm(ASK_SYSTEM, f'Subject: {subject}\n\n{body[:6000]}')
         j = json.loads(re.sub(r'^```(json)?|```$', '', str(raw or '').strip(), flags=re.M))
         summary = str(j.get('summary') or '').strip()
         items = [x.strip() for x in (j.get('checklist') or []) if isinstance(x, str) and x.strip()]
-        return {'summary': summary or body[:1000], 'checklist': items[:12]}
+        return {'summary': summary or own[:1000], 'checklist': items[:12]}
     except Exception as e:                       # a promote must never fail because a model did
         from loguru import logger
         logger.warning(f'could not extract the ask, keeping the plain body: {e}')
-        return {'summary': body[:1000], 'checklist': []}
+        return {'summary': own[:1000], 'checklist': []}
 
 
 def repo_choice_of(j: dict, repos: list) -> dict:
@@ -418,7 +469,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                     learned: str = None, system: str = None, notes_left: int = 0, mine=(),
                     thread: dict = None, watch: str = None, playbooks: str = None,
                     project: dict = None, candidates: list = None, repos: list = None,
-                    profiles: str = None, routing_history: list = None) -> dict:
+                    profiles: str = None, routing_history: list = None, seen: set = None) -> dict:
     """`notes` are the owner's past verdicts that may bear on this message - each one dated,
     with the sender and subject it was given on - selected by sender and topic overlap
     (ingest.relevant_notes). They are EVIDENCE: the model judges how alike this message is,
@@ -561,6 +612,10 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                            'not make an informational message a task and it is never permission to write or send. '
                            'A tentative or ambiguous relationship must not be presented as certain.')
             how = addressed_to_you(msg, mine)
+            # THE SENDER'S OWN WORDS ON TOP, the chain they wrote on top of quoted under them, and the
+            # budget's cut taken out of the chain (sender_body). `own_text` is Graph's uniqueBody where
+            # the mailbox carried one: the mailbox saying where the ask ends beats guessing at it.
+            body_text, body_cut = sender_body(str(msg.get('body') or ''), msg.get('own_text'), known=seen)
             user = json.dumps({'from': msg.get('from_email'), 'subject': msg.get('subject'),
                                **({'addressed_to_you': how,
                                    'recipients': len(msg.get('to') or []) + len(msg.get('cc') or [])} if how else {}),
@@ -571,16 +626,17 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                                # 160 cut every real description mid-clause - taskuary lost "do the work, you approve", FanApp
                                # lost the noun its whole sentence was about. This is the one line the model routes on.
                                **({'known_repositories': [{'repo': r.get('repo'), 'about': (r.get('about') or '')[:REPO_ABOUT]} for r in repos]} if repos else {}),
-                               **({'body_truncated': True} if len(strip_boilerplate(str(msg.get('body') or ''))) > BODY_BUDGET else {}),
-                               'body': strip_boilerplate(str(msg.get('body') or ''))[:BODY_BUDGET],
+                               **({'body_truncated': True} if body_cut else {}),
+                               'body': body_text,
                                # the shape once more, under the message, because a LONG message is what
                                # loses it: on 8,400 characters of forwarded mail the model answered the
                                # document's own contract line and dropped title and summary in three of
                                # eight replays; asked here too, sixteen of sixteen carried them (TQ-0665).
                                **({'answer': 'the JSON object the instructions describe, including '
                                              '"title" and "summary" - and "checklist" for a task'} if shape else {})})
-            if len(strip_boilerplate(str(msg.get('body') or ''))) > BODY_BUDGET:
+            if body_cut:
                 system += ('\n\nbody_truncated: the message was longer than the context budget and its end was cut. '
+                           'What was cut is the quoted chain UNDER their words, never the ask itself. '
                            'If the verdict could depend on what you did not see, say so in your reason.')
             if images:
                 system += ('\n\nImages from the message are attached. They are part of the ask - a '

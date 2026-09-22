@@ -65,7 +65,7 @@ fx.route(m7, None, 'file', 'automated notification', by='router')
 tid5 = fx.task(title='PTO import for the 7/26-8/8 payroll period', kind='coding',
     status='in_progress', source='email', Assignee='agent:coder')
 m8 = fx.message(task_id=tid5, external_id='demo8', source_name='john.smith@example.com',
-    subject='PTO import - check date 8/17', from_name='Chana Levine', from_email='chana.levine@example.com',
+    subject='PTO import - check date 8/17', from_name='Erin Levine', from_email='erin.levine@example.com',
     sent_at=t(4, 55), body='Please run the PTO import for the 7/26-8/8 pay period, check date 8/17.')
 fx.route(m8, tid5, 'create', 'asks the owner to do something', by='router')
 fx.review(tid5, m8, kind='escalation', reason='coder needs you: confirm reconciliation=True before the import writes payroll data')

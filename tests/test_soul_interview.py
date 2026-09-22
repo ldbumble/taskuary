@@ -47,9 +47,9 @@ class TheSkillTests(unittest.TestCase):
 
     def test_what_the_app_can_already_see_is_supplied_as_context(self):
         s = MemoryStore()
-        s.set_setting('owner', 'Uri', 'o')
+        s.set_setting('owner', 'Alex', 'o')
         ctx = interview.context(s)
-        self.assertEqual(ctx['owner'], 'Uri')
+        self.assertEqual(ctx['owner'], 'Alex')
         self.assertEqual(sorted(ctx.keys()), ['channels', 'owner', 'repos', 'roles', 'writes_most'])
 
 
@@ -93,7 +93,7 @@ class AdaptiveQuestionTests(unittest.TestCase):
 
 class WritingTests(unittest.TestCase):
     def test_the_model_gets_the_full_conversation_and_known_context(self):
-        s = MemoryStore(); s.set_setting('owner', 'Uri', 'o')
+        s = MemoryStore(); s.set_setting('owner', 'Alex', 'o')
         seen = {}
         def llm(system, user, **kw):
             seen.update(system=system, user=user)
@@ -101,7 +101,7 @@ class WritingTests(unittest.TestCase):
         interview.draft(s, TRANSCRIPT, llm=llm)
         self.assertIn('community theatre', seen['user'])
         self.assertIn('grant deadlines', seen['user'])
-        self.assertIn('Owner name on file: Uri', seen['user'])
+        self.assertIn('Owner name on file: Alex', seen['user'])
         self.assertIn('MODE: WRITE_SOUL', seen['user'])
         for heading in HEADINGS: self.assertIn(heading, seen['system'])
         self.assertIn('Never add a policy', seen['system'])
@@ -154,7 +154,7 @@ class WritingTests(unittest.TestCase):
 """, 'owner')
         pid = s.ensure_project('Noble', actor='owner')
         s.upsert_project_link(pid, 'repository', 'noble/app', 'noble/app', 1, True, 'owner')
-        s.upsert_project_link(pid, 'email', 'rene@noble.example', 'Rene Gomez', .86, False, 'repo_choice')
+        s.upsert_project_link(pid, 'email', 'rene@noble.example', 'Paul Rivera', .86, False, 'repo_choice')
         made_up = """# SOUL.md - the operator's document
 
 New interview prose.
@@ -170,7 +170,7 @@ New interview prose.
         self.assertIn('New interview prose.', soul)
         self.assertIn('<!-- connections:start -->', soul)
         self.assertIn("**noble/app**: Owner's routing note that must survive.", soul)
-        self.assertIn('Rene Gomez (email)', soul)
+        self.assertIn('Paul Rivera (email)', soul)
         self.assertNotIn('invented by the model', soul)
 
 

@@ -114,7 +114,7 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
                        future task routed here uses it.`}
                 </Typography>
                 <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }}>
-                  <TextField size="small" fullWidth autoFocus value={path} placeholder="C:\\Users\\you\\Documents\\TopE"
+                  <TextField size="small" fullWidth autoFocus value={path} placeholder="C:\\Users\\you\\Documents\\portal"
                     onChange={(e) => setPath(e.target.value)}
                     inputProps={{ style: { fontSize: 11.5, fontFamily: "ui-monospace, monospace" } }} />
                   <Button size="small" variant="contained" disableElevation disabled={busy || !path.trim()}

@@ -1,6 +1,6 @@
 # CLI setup — spec
 
-**Status:** agreed 2026-09-09 (Uri), after `c4b707c` shipped the Install button.
+**Status:** agreed 2026-09-09 (Alex), after `c4b707c` shipped the Install button.
 **Corrected 2026-09-09** — see "The correction" below. Built as `taskuary/clisetup.py`.
 **Plan:** `docs/superpowers/plans/2026-09-09-cli-sign-in.md` (written against the pre-correction design; kept for the record, superseded by this file).
 
@@ -22,7 +22,7 @@ every session on the Board works. Taskuary can host the setup; nobody wired it u
 ## The correction
 
 The first version of this design was **sign-in shaped**: a per-CLI table of login recipes, and
-`/login` typed into the box. Uri's correction — *"why do you have a sign in button. it should just
+`/login` typed into the box. Alex's correction — *"why do you have a sign in button. it should just
 be a cli pops up that you have to setup like normal. They ask you recommended settings, login
 etc.."* — is the right one, and the code proves it: **the moment the CLI runs itself, the table
 collapses.** `codex login` and a typed `/login` were two shapes of the same thing, and the thing
@@ -41,7 +41,7 @@ and it does not, because it bypasses `open_session` for other reasons anyway.
 
 **A CLI set-up is an `aisetup`-shaped setup task whose session is the CLI itself, interactive.**
 
-Uri's framing, and the one the codebase already agrees with: *"you are making a coding session
+Alex's framing, and the one the codebase already agrees with: *"you are making a coding session
 like a task spawn… maybe it will show up on tasks and board as setup coding window."* Two
 objections were raised against making it a real Task and both turned out to be already handled:
 

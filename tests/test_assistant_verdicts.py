@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from taskuary import assistant
 from taskuary.store import MemoryStore
 
-ME, RIVKA = 'owner@ours.com', 'rivka@clinic.example'
+ME, RIVKA = 'owner@ours.com', 'nina@clinic.example'
 def _ago(h=1): return (datetime.now() - timedelta(hours=h)).strftime('%Y-%m-%d %H:%M:%S')
 
 
@@ -18,13 +18,13 @@ def _store():
     s = MemoryStore()
     s.set_setting('calendar_enabled', '0', 't'); s.set_setting('owner_email', ME, 't')
     s.add_message({'ExternalId': 'm1', 'ConversationId': 'c1', 'Channel': 'email', 'SourceName': ME,
-                   'Subject': 'Fw: Resident Refund Request - Watson, Lisa', 'FromName': 'Rivka',
+                   'Subject': 'Fw: Resident Refund Request - Watson, Lisa', 'FromName': 'Nina',
                    'FromEmail': RIVKA, 'SentAt': _ago(), 'BodyText': 'the refund is still open', 'Status': 'filed'})
     return s
 
 
 CANDS = [{'key': 'asked:c1', 'kind': 'asked',
-          'facts': 'Rivka asked today re "Resident Refund Request - Watson, Lisa": no answer from you.'}]
+          'facts': 'Nina asked today re "Resident Refund Request - Watson, Lisa": no answer from you.'}]
 
 
 class VerdictsReachTheBrief(unittest.TestCase):
@@ -46,13 +46,13 @@ class VerdictsReachTheBrief(unittest.TestCase):
         s = _store()
         s.add_message({'ExternalId': 'refund1', 'ConversationId': 'c-ref', 'Channel': 'email',
                        'SourceName': ME, 'Subject': 'RE: Resident Refund Request - Watson, Lisa',
-                       'FromName': 'Rivka', 'FromEmail': RIVKA, 'SentAt': _ago(),
+                       'FromName': 'Nina', 'FromEmail': RIVKA, 'SentAt': _ago(),
                        'BodyText': 'still waiting for a response', 'Status': 'filed'})
         s.add_memory({'Scope': 'subject', 'ScopeKey': 'resident refund request approved',
                       'Note': 'resident refunds are not ours', 'Active': 1, 'CreatedBy': 'owner'})
         paraphrase = [{'key': 'asked:c-ref', 'kind': 'asked',
                        'facts': 'Barnes and Watson stall the same way: the BOM answers in-thread '
-                                'and Rivka threatens rejection.'}]
+                                'and Nina threatens rejection.'}]
         text = assistant.inputs(s, paraphrase)
         self.assertIn('WHAT THE OWNER HAS ALREADY DECIDED', text)
         self.assertIn('resident refunds are not ours', text)

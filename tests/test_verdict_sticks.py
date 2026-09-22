@@ -83,11 +83,11 @@ class AttachRespectsTheVerdictTests(unittest.TestCase):
         """An open task with the refund thread already on it, exactly like TQ-0046."""
         tid = s.create_task({'Title': 'Resident refund request', 'Kind': 'general', 'Source': 'email'}, 'test')
         s.add_message({'TaskId': tid, 'ExternalId': 'e0', 'ConversationId': 'thread-1', 'Channel': 'email',
-                       'Subject': REFUND, 'FromEmail': 'hudson@regencyhealthrehab.com',
+                       'Subject': REFUND, 'FromEmail': 'hudson@riverbend.example',
                        'BodyText': 'the refund paperwork', 'Status': 'routed'})
         return tid
 
-    def _arrive(self, s, ext='e1', frm='lynch@regencyhealthrehab.com'):
+    def _arrive(self, s, ext='e1', frm='lynch@riverbend.example'):
         return ingest.ingest_message(s, {'external_id': ext, 'channel': 'email', 'from_email': frm,
                                         'subject': 'Re: Resident Refund Request - PAYNE, MICHAEL',
                                         'conversation_id': 'thread-1',
@@ -115,7 +115,7 @@ class AttachRespectsTheVerdictTests(unittest.TestCase):
         def llm(sys_, usr_, **kw):
             seen['sys'] = sys_
             return '{"intent": "fyi", "why": "more paperwork on a thread the owner ruled on"}'
-        out = ingest.ingest_message(s, {'external_id': 'e2', 'channel': 'email', 'from_email': 'another@regencyhealthrehab.com',
+        out = ingest.ingest_message(s, {'external_id': 'e2', 'channel': 'email', 'from_email': 'another@riverbend.example',
                                         'subject': 'Re: Resident Refund Request - PAYNE, MICHAEL', 'conversation_id': 'thread-1',
                                         'body': 'Attached is a new transaction history.'}, llm=llm)
         # an fyi follow-up stays on the thread's task for the chain, off the owner's pile - the
@@ -137,7 +137,7 @@ class AttachRespectsTheVerdictTests(unittest.TestCase):
 class TheDialogTests(unittest.TestCase):
     """The panel offered this sender / their domain / everybody, and defaulted to the sender -
     so the failing choice was also the easy one."""
-    def _msg(self, subject=REFUND, frm='dlynch1@regencyhealthrehab.com'):
+    def _msg(self, subject=REFUND, frm='dlynch1@riverbend.example'):
         return server.store.add_message({'ExternalId': f'ui-{subject}-{frm}', 'Channel': 'email',
                                          'Subject': subject, 'FromEmail': frm,
                                          'BodyText': 'Attached is a new transaction history.',
@@ -148,9 +148,9 @@ class TheDialogTests(unittest.TestCase):
         d = c.get(f'/api/messages/{mid}/not-mine/suggest').json()
         self.assertEqual((d['scope'], d['topic']), ('subject', TOPIC))
         self.assertIn('NOT OURS', d['note']); self.assertIn(f'the topic "{TOPIC}"', d['note'])
-        self.assertIn('from dlynch1@regencyhealthrehab.com', d['note'])      # the evidence names the sender whatever the scope
+        self.assertIn('from dlynch1@riverbend.example', d['note'])      # the evidence names the sender whatever the scope
         # ask for a different scope and the line changes with it
-        self.assertIn('anyone at regencyhealthrehab.com',
+        self.assertIn('anyone at riverbend.example',
                       c.get(f'/api/messages/{mid}/not-mine/suggest?scope=sender_domain').json()['note'])
         self.assertEqual(c.get(f'/api/messages/{mid}/not-mine/suggest?scope=nonsense').status_code, 422)
 
@@ -169,7 +169,7 @@ class TheDialogTests(unittest.TestCase):
                                         'Source': 'email'}, 'test')
         server.store.add_message({'TaskId': tid, 'ExternalId': 'older-1', 'Channel': 'email',
                                   'Subject': 'RE: Resident Refund Request - PAYNE, MICHAEL',
-                                  'FromEmail': 'hudson@regencyhealthrehab.com', 'Status': 'routed'})
+                                  'FromEmail': 'hudson@riverbend.example', 'Status': 'routed'})
         d = c.post(f'/api/messages/{mid}/not-mine',
                    json={'scope': 'subject', 'note': 'resident refunds are not our task'}).json()
         self.assertEqual(d['scope'], 'subject')
@@ -193,7 +193,7 @@ class TheTopicIsTheStandingPartTests(unittest.TestCase):
     and a longer name fell under it. A rule that general work has to key on the general part."""
     def _msg(self, subject):
         return server.store.add_message({'ExternalId': f'topic-{subject}', 'Channel': 'email',
-                                         'Subject': subject, 'FromEmail': 'hudson@regencyhealthrehab.com',
+                                         'Subject': subject, 'FromEmail': 'hudson@riverbend.example',
                                          'BodyText': 'history attached', 'Status': 'filed'})
 
     def test_the_per_item_tail_is_not_part_of_the_topic(self):
@@ -224,7 +224,7 @@ class TheTopicIsTheStandingPartTests(unittest.TestCase):
     def test_a_topic_too_thin_to_match_falls_back_rather_than_saving_nothing(self):
         mid = self._msg('Re: Resident Refund Request - Adams, Neil')
         d = c.post(f'/api/messages/{mid}/not-mine', json={'scope': 'subject', 'topic': 'the'}).json()
-        self.assertEqual((d['scope'], d['scopeKey']), ('sender', 'hudson@regencyhealthrehab.com'))
+        self.assertEqual((d['scope'], d['scopeKey']), ('sender', 'hudson@riverbend.example'))
 
 
 class CreateWeighsTheVerdictTests(unittest.TestCase):

@@ -35,11 +35,11 @@ class HistgenTests(unittest.TestCase):
         self.assertEqual(histgen.cut_quoted('plain\nreply'), 'plain\nreply')
 
     def test_style_sample_keeps_the_signature_at_the_end_of_a_long_email(self):
-        body = 'Hello,\n\n' + ('detail ' * 200) + '\n\nBest,\nUri\nMFA Heritage\n555-0100'
+        body = 'Hello,\n\n' + ('detail ' * 200) + '\n\nBest,\nAlex\nNorthwind Heritage\n555-0100'
         sample = histgen.style_sample(body, 200)
         self.assertLess(len(sample), 240)
         self.assertTrue(sample.startswith('Hello,'))
-        self.assertIn('Best,\nUri\nMFA Heritage\n555-0100', sample)
+        self.assertIn('Best,\nAlex\nNorthwind Heritage\n555-0100', sample)
 
     def test_triage_generates_into_marker_block(self):
         s = MemoryStore()
@@ -99,11 +99,11 @@ class HistgenTests(unittest.TestCase):
 class VocabularyFromHistoryTests(unittest.TestCase):
     """The Shared voice vocabulary page's Generate from history: names off the envelopes and subjects,
     the model picks, the owner's list is kept whole and the new terms fill the room left."""
-    INBOX = [{'id': 'i1', 'subject': 'RE: PointClickCare export', 'receivedDateTime': '2026-08-01T09:00:00Z', 'conversationId': 'c1',
+    INBOX = [{'id': 'i1', 'subject': 'RE: Careview export', 'receivedDateTime': '2026-08-01T09:00:00Z', 'conversationId': 'c1',
               'from': {'emailAddress': {'address': 'sarah@corp.example', 'name': 'Sarah Okafor'}}},
              {'id': 'i2', 'subject': 'Intacct sync', 'receivedDateTime': '2026-08-02T09:00:00Z', 'conversationId': 'c2',
               'from': {'emailAddress': {'address': 'sarah@corp.example', 'name': 'Sarah Okafor'}}}]
-    SENT = [{'id': 's1', 'subject': 'RE: PointClickCare export', 'receivedDateTime': '2026-08-01T10:00:00Z', 'conversationId': 'c1',
+    SENT = [{'id': 's1', 'subject': 'RE: Careview export', 'receivedDateTime': '2026-08-01T10:00:00Z', 'conversationId': 'c1',
              'toRecipients': [{'emailAddress': {'address': 'sarah@corp.example', 'name': 'Sarah Okafor'}}], 'body': {'content': 'done'}}]
 
     def test_history_terms_join_the_owners_list_without_displacing_it(self):
@@ -113,13 +113,13 @@ class VocabularyFromHistoryTests(unittest.TestCase):
         def llm(system, user, max_tokens=0):
             seen['user'] = user
             # numbering, quotes, a duplicate of the owner's own term and an over-long line: each handled per line
-            return '1. Sarah Okafor\n- "PointClickCare"\nintacct\n' + 'x' * 60 + '\nNorthwind Group'
+            return '1. Sarah Okafor\n- "Careview"\nintacct\n' + 'x' * 60 + '\nNorthwind Group'
         with graph(self.SENT, self.INBOX), mock.patch('taskuary.llm.build_llm', return_value=llm):
             detail = histgen.generate(s, 'vocabulary')
-        self.assertEqual(voice.vocabulary(s), ['Taskuary', 'Intacct', 'Sarah Okafor', 'PointClickCare', 'Northwind Group'])
+        self.assertEqual(voice.vocabulary(s), ['Taskuary', 'Intacct', 'Sarah Okafor', 'Careview', 'Northwind Group'])
         self.assertIn('kept 2, added 3', detail); self.assertIn('1 sent + 2 inbound', detail)
         self.assertIn('Sarah Okafor: 3', seen['user']); self.assertIn('corp.example: 2', seen['user'])
-        self.assertIn('PointClickCare export: 2', seen['user'])           # RE: stripped, so both sides of the thread count once
+        self.assertIn('Careview export: 2', seen['user'])           # RE: stripped, so both sides of the thread count once
         self.assertIn('CURRENT LIST: Taskuary, Intacct', seen['user'])
         self.assertEqual(histgen.STATUS['state'], 'done'); self.assertTrue(any('Sarah Okafor' in l for l in histgen.STATUS['evidence']))
         self.assertIsNone(s.get_doc('vocabulary'))                        # a setting, never a doc
@@ -141,14 +141,14 @@ class VocabularyFromHistoryTests(unittest.TestCase):
             with self.assertRaises(RuntimeError) as e: histgen.generate(s, 'vocabulary')
         self.assertIn('no mail history', str(e.exception))
         tid = s.create_task({'Title': 't', 'Kind': 'task', 'Status': 'open'}, 't')
-        s.add_message({'TaskId': tid, 'ExternalId': 'x1', 'Channel': 'email', 'Subject': 'FW: Yardi roll', 'FromName': 'Dov Klein',
+        s.add_message({'TaskId': tid, 'ExternalId': 'x1', 'Channel': 'email', 'Subject': 'FW: Yardi roll', 'FromName': 'Dov Blake',
                        'FromEmail': 'dov@corp.example', 'SentAt': '2026-08-20 10:00:00', 'BodyText': 'see attached'})
         seen = {}
-        def llm(system, user, max_tokens=0): seen['user'] = user; return 'Dov Klein\nYardi'
+        def llm(system, user, max_tokens=0): seen['user'] = user; return 'Dov Blake\nYardi'
         with graph([], [], 0), mock.patch('taskuary.llm.build_llm', return_value=llm):
             detail = histgen.generate(s, 'vocabulary')
-        self.assertIn('no Graph mailbox history', detail); self.assertEqual(voice.vocabulary(s), ['Dov Klein', 'Yardi'])
-        self.assertIn('Yardi roll: 1', seen['user']); self.assertIn('Dov Klein: 1', seen['user'])
+        self.assertIn('no Graph mailbox history', detail); self.assertEqual(voice.vocabulary(s), ['Dov Blake', 'Yardi'])
+        self.assertIn('Yardi roll: 1', seen['user']); self.assertIn('Dov Blake: 1', seen['user'])
 
 
 if __name__ == '__main__':
@@ -163,7 +163,7 @@ class TopicRollUpTests(unittest.TestCase):
     conversation") forbade the model from saying the one thing the mailbox was shouting."""
     REFUNDS = [{'id': f'r{i}', 'subject': f'Re: Resident Refund Request - {name}',
                 'receivedDateTime': f'2026-08-{10 + i:02d}T09:00:00Z', 'conversationId': f'rc{i}',
-                'from': {'emailAddress': {'address': f'{name.split(",")[0].lower()}@regencyhealthrehab.com'}}}
+                'from': {'emailAddress': {'address': f'{name.split(",")[0].lower()}@riverbend.example'}}}
                for i, name in enumerate(['Doe, Jane', 'PAYNE, MICHAEL', 'Watson, Lisa',
                                          'Foote, Marie Grace', 'Smith, Rosemary'])]
 
@@ -204,11 +204,11 @@ class TopicRollUpTests(unittest.TestCase):
 class VocabularyFromHistoryTests(unittest.TestCase):
     """The Shared voice vocabulary page's Generate from history: names off the envelopes and subjects,
     the model picks, the owner's list is kept whole and the new terms fill the room left."""
-    INBOX = [{'id': 'i1', 'subject': 'RE: PointClickCare export', 'receivedDateTime': '2026-08-01T09:00:00Z', 'conversationId': 'c1',
+    INBOX = [{'id': 'i1', 'subject': 'RE: Careview export', 'receivedDateTime': '2026-08-01T09:00:00Z', 'conversationId': 'c1',
               'from': {'emailAddress': {'address': 'sarah@corp.example', 'name': 'Sarah Okafor'}}},
              {'id': 'i2', 'subject': 'Intacct sync', 'receivedDateTime': '2026-08-02T09:00:00Z', 'conversationId': 'c2',
               'from': {'emailAddress': {'address': 'sarah@corp.example', 'name': 'Sarah Okafor'}}}]
-    SENT = [{'id': 's1', 'subject': 'RE: PointClickCare export', 'receivedDateTime': '2026-08-01T10:00:00Z', 'conversationId': 'c1',
+    SENT = [{'id': 's1', 'subject': 'RE: Careview export', 'receivedDateTime': '2026-08-01T10:00:00Z', 'conversationId': 'c1',
              'toRecipients': [{'emailAddress': {'address': 'sarah@corp.example', 'name': 'Sarah Okafor'}}], 'body': {'content': 'done'}}]
 
     def test_history_terms_join_the_owners_list_without_displacing_it(self):
@@ -218,13 +218,13 @@ class VocabularyFromHistoryTests(unittest.TestCase):
         def llm(system, user, max_tokens=0):
             seen['user'] = user
             # numbering, quotes, a duplicate of the owner's own term and an over-long line: each handled per line
-            return '1. Sarah Okafor\n- "PointClickCare"\nintacct\n' + 'x' * 60 + '\nNorthwind Group'
+            return '1. Sarah Okafor\n- "Careview"\nintacct\n' + 'x' * 60 + '\nNorthwind Group'
         with graph(self.SENT, self.INBOX), mock.patch('taskuary.llm.build_llm', return_value=llm):
             detail = histgen.generate(s, 'vocabulary')
-        self.assertEqual(voice.vocabulary(s), ['Taskuary', 'Intacct', 'Sarah Okafor', 'PointClickCare', 'Northwind Group'])
+        self.assertEqual(voice.vocabulary(s), ['Taskuary', 'Intacct', 'Sarah Okafor', 'Careview', 'Northwind Group'])
         self.assertIn('kept 2, added 3', detail); self.assertIn('1 sent + 2 inbound', detail)
         self.assertIn('Sarah Okafor: 3', seen['user']); self.assertIn('corp.example: 2', seen['user'])
-        self.assertIn('PointClickCare export: 2', seen['user'])           # RE: stripped, so both sides of the thread count once
+        self.assertIn('Careview export: 2', seen['user'])           # RE: stripped, so both sides of the thread count once
         self.assertIn('CURRENT LIST: Taskuary, Intacct', seen['user'])
         self.assertEqual(histgen.STATUS['state'], 'done'); self.assertTrue(any('Sarah Okafor' in l for l in histgen.STATUS['evidence']))
         self.assertIsNone(s.get_doc('vocabulary'))                        # a setting, never a doc
@@ -246,11 +246,11 @@ class VocabularyFromHistoryTests(unittest.TestCase):
             with self.assertRaises(RuntimeError) as e: histgen.generate(s, 'vocabulary')
         self.assertIn('no mail history', str(e.exception))
         tid = s.create_task({'Title': 't', 'Kind': 'task', 'Status': 'open'}, 't')
-        s.add_message({'TaskId': tid, 'ExternalId': 'x1', 'Channel': 'email', 'Subject': 'FW: Yardi roll', 'FromName': 'Dov Klein',
+        s.add_message({'TaskId': tid, 'ExternalId': 'x1', 'Channel': 'email', 'Subject': 'FW: Yardi roll', 'FromName': 'Dov Blake',
                        'FromEmail': 'dov@corp.example', 'SentAt': '2026-08-20 10:00:00', 'BodyText': 'see attached'})
         seen = {}
-        def llm(system, user, max_tokens=0): seen['user'] = user; return 'Dov Klein\nYardi'
+        def llm(system, user, max_tokens=0): seen['user'] = user; return 'Dov Blake\nYardi'
         with graph([], [], 0), mock.patch('taskuary.llm.build_llm', return_value=llm):
             detail = histgen.generate(s, 'vocabulary')
-        self.assertIn('no Graph mailbox history', detail); self.assertEqual(voice.vocabulary(s), ['Dov Klein', 'Yardi'])
-        self.assertIn('Yardi roll: 1', seen['user']); self.assertIn('Dov Klein: 1', seen['user'])
+        self.assertIn('no Graph mailbox history', detail); self.assertEqual(voice.vocabulary(s), ['Dov Blake', 'Yardi'])
+        self.assertIn('Yardi roll: 1', seen['user']); self.assertIn('Dov Blake: 1', seen['user'])

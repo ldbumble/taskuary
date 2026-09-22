@@ -42,7 +42,7 @@ def powershell_installer(url):
     """Read and parse the complete vendor script before executing any of it."""
     quoted = "'" + url.replace("'", "''") + "'"
     return ("$ErrorActionPreference = 'Stop'; "
-            "$taskuaryInstallerText = (Invoke-WebRequest -UseBasicParsing -Uri " + quoted + ").Content; "
+            "$taskuaryInstallerText = (Invoke-WebRequest -UseBasicParsing -Alex " + quoted + ").Content; "
             "if ([string]::IsNullOrWhiteSpace($taskuaryInstallerText)) { throw 'The vendor returned an empty installer' }; "
             "$taskuaryInstallerTokens = $null; $taskuaryInstallerErrors = $null; "
             "[System.Management.Automation.Language.Parser]::ParseInput($taskuaryInstallerText, "

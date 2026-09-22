@@ -29,7 +29,7 @@ class CatalogueTests(unittest.TestCase):
             text, call = concierge.parse_call('Sure.\nCALL: ' + bad)
             self.assertIsNone(call, bad)
             self.assertNotIn('CALL', text)                          # ...and it never prints either
-        ok = concierge.parse_call('Sure.\nCALL: {"kind": "memory.remember", "params": {"note": "Chana does payroll"}}')
+        ok = concierge.parse_call('Sure.\nCALL: {"kind": "memory.remember", "params": {"note": "Erin does payroll"}}')
         self.assertEqual(ok[1]['kind'], 'memory.remember')
         self.assertEqual(ok[0], 'Sure.')
 
@@ -370,7 +370,7 @@ class AppReadTests(unittest.TestCase):
     def test_connections_and_agents(self):
         s = self._store()
         out = concierge.read_op(s, 'connections.list', {})
-        self.assertIn('Uri mailbox (outlook)', out); self.assertNotIn('Teams (teams', out); self.assertIn('catalogue cards are off', out)
+        self.assertIn('Alex mailbox (outlook)', out); self.assertNotIn('Teams (teams', out); self.assertIn('catalogue cards are off', out)
         self.assertIn('outlook', concierge.read_op(s, 'connection.read', {'name': 'mailbox'}))
         self.assertIn('Teams - type teams', concierge.read_op(s, 'connection.read', {'name': 'teams'}))   # off, but readable by name
         self.assertIn('No connection by that name', concierge.read_op(s, 'connection.read', {'name': 'zzzz'}))

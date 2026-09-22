@@ -2,7 +2,7 @@
 
 A chat room shares ONE conversation id - teams:<chat>, whatsapp:<jid> - and routing reads a
 matching conversation id as the thread signal, which clears the attach bar on its own. So every
-line a person ever typed joined whichever task their room opened first: a day of Gabi's
+line a person ever typed joined whichever task their room opened first: a day of Tess's
 messages, four unrelated problems and a screenshot among them, folded into one row carrying one
 prompt, and the agent sent at it only ever saw the first ask (owner, 2026-09-02).
 
@@ -38,11 +38,11 @@ def brain(same=False, seen=None):
     return llm
 
 
-def line(s, body, at, llm=None, ext=None, name='Gabi'):
+def line(s, body, at, llm=None, ext=None, name='Tess'):
     return ingest_message(s, {'external_id': ext or f'wa:{at}', 'channel': 'whatsapp',
-                              'subject': 'WhatsApp with Gabi', 'body': body, 'from_name': name,
+                              'subject': 'WhatsApp with Tess', 'body': body, 'from_name': name,
                               'from_email': None, 'conversation_id': CONV, 'sent_at': at,
-                              'source_name': 'Gabi'}, llm=llm)
+                              'source_name': 'Tess'}, llm=llm)
 
 
 class OneRoomManyJobs(unittest.TestCase):
@@ -79,14 +79,14 @@ class OneRoomManyJobs(unittest.TestCase):
     def test_the_reader_is_shown_both_halves_of_the_conversation(self):
         """Our own replies are the clearest boundary in a chat, and nothing ever showed them."""
         self.s.add_message({'ExternalId': 'mine', 'ConversationId': CONV, 'Channel': 'whatsapp',
-                            'TaskId': self.first['task_id'], 'Subject': 'WhatsApp with Gabi',
+                            'TaskId': self.first['task_id'], 'Subject': 'WhatsApp with Tess',
                             'FromName': 'You', 'SentAt': '2026-09-02 16:40:00',
                             'BodyText': 'fixed - try it now', 'Status': 'context'})
         seen = []
         line(self.s, 'nope. new', '2026-09-02 17:30:00', brain(same=False, seen=seen))
         asked = seen[0]['exchange']
         self.assertTrue(any(l.startswith('you ') and 'fixed - try it now' in l for l in asked))
-        self.assertTrue(any(l.startswith('Gabi ') and 'dashboard' in l for l in asked))
+        self.assertTrue(any(l.startswith('Tess ') and 'dashboard' in l for l in asked))
         self.assertEqual(seen[0]['body'], 'nope. new')
         self.assertEqual(len(seen), 1)                    # one call: intent, kind and relationship together
 
@@ -214,7 +214,7 @@ class TheBrainsReadEachOther(unittest.TestCase):
     never saw each other's conclusions - so the owner watched three brains disagree."""
     def test_triage_is_shown_what_the_assistant_raised_about_the_thread(self):
         s = MemoryStore()
-        s.upsert_idea({'key': f'followup:{CONV}', 'kind': 'followup', 'text': 'No answer from Gabi in 2 days - follow up?'},
+        s.upsert_idea({'key': f'followup:{CONV}', 'kind': 'followup', 'text': 'No answer from Tess in 2 days - follow up?'},
                       '2026-09-01 08:00:00')
         seen = []
         line(s, 'sorry, yes - it works now', '2026-09-02 16:35:00', brain(seen=seen))

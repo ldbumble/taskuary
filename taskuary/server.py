@@ -1479,7 +1479,7 @@ def set_task_repo(task_id: int, body: RepoBody, background: BackgroundTasks = No
         from . import routingmemory as rmem
         learn_task_repository(store, task_id, body.repo, ACTOR)
         # the project graph already weighted this choice; what it never did was tell the PROFILE.
-        # "triage chose FanApp and the owner moved the work to TopE" is a pattern worth generalising,
+        # "triage chose ledger and the owner moved the work to portal" is a pattern worth generalising,
         # and it reached LEARNED.md as nothing at all.
         if background is not None and str(t.get('Tags') or '').find(f'repo:{body.repo}') < 0:
             try: background.add_task(learn.learn_from, store, rmem.lesson(store, task_id, 'repository', body.repo))
@@ -1946,7 +1946,7 @@ def open_reply(mid: int, body: OpenReplyBody = None):
     if body is not None and body.redraft: draft = ''          # write it again over what is there
     if not draft and (body is None or body.draft):
         try:
-            # the owner's own words on what to say ("tell Kishan it is not owned here") ride into the draft
+            # the owner's own words on what to say ("tell Ravi it is not owned here") ride into the draft
             note = f"THE OWNER'S INSTRUCTION FOR THIS REPLY - follow it: {body.instruction.strip()}" if body is not None and (body.instruction or '').strip() else None
             draft = (responder.write_draft(store, tid, rid, actor=ACTOR, nudge=note) if tid
                      else responder.draft_for_message(store, m, rid))

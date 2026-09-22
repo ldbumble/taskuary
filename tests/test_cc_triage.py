@@ -72,7 +72,7 @@ class AddressingTests(unittest.TestCase):
         self.assertNotEqual(quiet['intent'], 'fyi')
         self.assertNotIn('cc', quiet['why'])
         # the keyword pass still reads what the message SAYS - that part was never the problem
-        self.assertEqual(triage.heuristic_intent({**cc, 'body': 'Uri, please fix the export.'})['intent'], 'task')
+        self.assertEqual(triage.heuristic_intent({**cc, 'body': 'Alex, please fix the export.'})['intent'], 'task')
         self.assertEqual(triage.heuristic_intent({**cc, 'body': 'Any update on the export?'})['intent'], 'reply_only')
         self.assertEqual(triage.heuristic_intent({**cc, 'body': 'FYI - no action needed.'})['intent'], 'fyi')
 
@@ -104,7 +104,7 @@ class AddressingTests(unittest.TestCase):
             seen['system'], seen['user'] = system, user
             return '{"intent": "task", "why": "addressed to me in the body"}'
         msg = {'source_name': ME, 'from_email': 'dana@vendor.com', 'subject': 'Ledger',
-               'body': 'Uri - can you confirm the ledger?', 'to': ['dana@vendor.com'], 'cc': [ME]}
+               'body': 'Alex - can you confirm the ledger?', 'to': ['dana@vendor.com'], 'cc': [ME]}
         out = triage.classify_intent(msg, llm=llm, system='My own rules. Answer JSON only.', mine={ME})
         # the owner's document arrives first and whole, and the ONLY thing after it is the shape
         self.assertTrue(seen['system'].startswith('My own rules. Answer JSON only.'))

@@ -87,11 +87,11 @@ class BriefMemoryTests(unittest.TestCase):
         _mail(s, DANA, 'Resident Refund Request - Watson, Lisa',
               'The resident refund is still awaiting facility approval.', days=0, conv='refund')
         s.add_memory({'Scope': 'subject', 'ScopeKey': 'resident refund request approved',
-                      'Note': 'Resident refunds are handled by facility staff; do not raise them to Uri.',
+                      'Note': 'Resident refunds are handled by facility staff; do not raise them to Alex.',
                       'Active': 1, 'CreatedBy': 'owner'})
         text = digest.gather(s, 1)
         self.assertIn('WHAT THE OWNER HAS ALREADY DECIDED', text)
-        self.assertIn('do not raise them to Uri', text)
+        self.assertIn('do not raise them to Alex', text)
         self.assertIn('governs every section', digest.PROMPT)
 
     def test_an_ask_a_standing_verdict_covers_ranks_below_the_live_asks_and_names_its_verdict(self):

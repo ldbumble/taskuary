@@ -18,11 +18,11 @@ class Migration(unittest.TestCase):
 
     def test_an_owner_edited_document_keeps_every_word_and_gains_the_section(self):
         st = MemoryStore()
-        mine = "# COUNSEL.md — I am Taskuary\n\nUri's rule: never touch Friday.\n\n## Voice\n- Dry.\n\n## My goal\n- Finish.\n"
+        mine = "# COUNSEL.md — I am Taskuary\n\nAlex's rule: never touch Friday.\n\n## Voice\n- Dry.\n\n## My goal\n- Finish.\n"
         st.save_doc('counsel', mine, 'owner')
         self.assertEqual(counsel.migrate(st), 'appended')
         after = st.get_doc('counsel')
-        self.assertIn("Uri's rule: never touch Friday.", after); self.assertIn('- Dry.', after)
+        self.assertIn("Alex's rule: never touch Friday.", after); self.assertIn('- Dry.', after)
         self.assertLess(after.index('## When the owner decides'), after.index('## My goal'))
         self.assertIn('coder and setup are not the same road', after)
         rows = [r for r in st.list_audit('doc', 0) if r['Action'] == 'migrated']

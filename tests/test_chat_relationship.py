@@ -22,7 +22,7 @@ CONV = 'whatsapp:120363@g.us'
 TODAY, YESTERDAY = '2026-09-06', '2026-09-05'
 
 
-def line(s, body, at, llm, ext=None, name='Gabi', conv=CONV, channel='whatsapp'):
+def line(s, body, at, llm, ext=None, name='Tess', conv=CONV, channel='whatsapp'):
     return ingest_message(s, {'external_id': ext or f'{channel}:{conv}:{at}', 'channel': channel, 'subject': f'Chat with {name}',
                               'body': body, 'from_name': name, 'from_email': None, 'conversation_id': conv,
                               'sent_at': at, 'source_name': name}, llm=llm)

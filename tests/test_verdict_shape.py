@@ -28,8 +28,8 @@ from taskuary import llm as llm_mod, store as store_mod, triage
 from taskuary.store import SQLiteStore
 
 TEMPLATE = (Path(taskuary.__file__).parent / 'templates' / 'triage.md').read_text(encoding='utf-8')
-MSG = {'subject': 'FW: 2027 Budgets', 'from_email': 'brad@mfa.example',
-       'body': 'Uri,\n\nCan you send me the link on the 2027 budgets?\n\nThanks,\n\nBrad'}
+MSG = {'subject': 'FW: 2027 Budgets', 'from_email': 'ray@northwind.example',
+       'body': 'Alex,\n\nCan you send me the link on the 2027 budgets?\n\nThanks,\n\nRay'}
 
 
 class DocumentSaysTheShapeTests(unittest.TestCase):
@@ -53,11 +53,11 @@ class DocumentSaysTheShapeTests(unittest.TestCase):
         self.assertNotIn(store_mod._SHAPE_WAS, TEMPLATE)
 
     def test_a_document_that_stopped_tracking_the_template_gets_the_line_back(self):
-        mine = 'MY OWN RULE: anything from Dvora is urgent.\n\n' + store_mod._SHAPE_WAS + '\n\nAnd my last line.'
+        mine = 'MY OWN RULE: anything from Maya is urgent.\n\n' + store_mod._SHAPE_WAS + '\n\nAnd my last line.'
         after = self._reopen(mine).doc('triage')
         self.assertNotIn(store_mod._SHAPE_WAS, after)
         self.assertIn('"summary"', after)
-        self.assertIn('MY OWN RULE: anything from Dvora is urgent.', after)   # nothing else touched
+        self.assertIn('MY OWN RULE: anything from Maya is urgent.', after)   # nothing else touched
         self.assertIn('And my last line.', after)
 
     def test_it_runs_once_and_never_edits_a_document_again(self):
@@ -172,13 +172,13 @@ class TriageUsesItTests(unittest.TestCase):
         seen, asks = {}, []
         def brain(system, user, **kw):
             seen['want'] = kw.get('want'); asks.append(user)
-            return ('{"intent": "reply_only", "why": "Brad asks for the link", "title": "Send Brad the budgets link",'
-                    ' "summary": "Brad asked for the link to the 2027 budgets."}')
+            return ('{"intent": "reply_only", "why": "Ray asks for the link", "title": "Send Ray the budgets link",'
+                    ' "summary": "Ray asked for the link to the 2027 budgets."}')
         brain.takes_want = True
         out = triage.classify_intent(MSG, llm=brain, system='My own rules. Answer JSON only.')
         self.assertEqual(seen['want']['name'], 'triage_verdict')
         self.assertEqual(seen['want']['schema']['properties']['intent']['enum'], ['task', 'reply_only', 'fyi'])
-        self.assertEqual(out['title'], 'Send Brad the budgets link')
+        self.assertEqual(out['title'], 'Send Ray the budgets link')
         self.assertEqual(len(asks), 1)
 
     def test_classify_asks_a_cli_brain_again_for_the_fields_it_left_out(self):
@@ -188,14 +188,14 @@ class TriageUsesItTests(unittest.TestCase):
         def brain(system, user, **kw):
             asks.append(user)
             self.assertNotIn('want', kw)                               # never handed one it cannot use
-            return ('{"intent": "reply_only", "why": "Brad asks for the link"}' if len(asks) == 1
-                    else '{"intent": "reply_only", "why": "Brad asks for the link", "title": "Send Brad the budgets link",'
-                         ' "summary": "Brad asked for the link to the 2027 budgets."}')
+            return ('{"intent": "reply_only", "why": "Ray asks for the link"}' if len(asks) == 1
+                    else '{"intent": "reply_only", "why": "Ray asks for the link", "title": "Send Ray the budgets link",'
+                         ' "summary": "Ray asked for the link to the 2027 budgets."}')
         brain.takes_want = False
         out = triage.classify_intent(MSG, llm=brain, system='My own rules. Answer JSON only.')
         self.assertEqual(len(asks), 2)
         self.assertIn('title', asks[1]); self.assertIn('summary', asks[1])
-        self.assertEqual(out['title'], 'Send Brad the budgets link')
+        self.assertEqual(out['title'], 'Send Ray the budgets link')
 
     def test_the_wrapper_ingest_puts_round_the_brain_still_carries_a_schema(self):
         """judge() wraps the brain to catch its errors. The wrapper was a plain function, so the

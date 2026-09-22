@@ -22,7 +22,7 @@ product. Everything below is what broke around it, most severe first.
 
 ## A. Wrong target, data lost
 
-1. **"Not ours" about one thing deleted another task.** With Chana's export reply on the table I typed
+1. **"Not ours" about one thing deleted another task.** With Erin's export reply on the table I typed
    *"not ours, facilities handles the portal"* (meaning the Teams outage). The verb applied to the item on the
    table: her message was filed, `/api/messages/{mid}/file` → `_drop_task` **deleted TQ-0002** — the finished
    coding task, its CODER REPORT, the commit reference and the drafted reply. No undo, no confirmation. Later
@@ -78,7 +78,7 @@ The server receipts the verb before knowing whether the card can carry it out
    yes / ok / sure / go ahead / do it are not verbs — without a model the owner cannot say yes.
 9. **The model answers the wrong item.** "is it done?" about the coder → "Yes — both FYIs… They're done."
    "what's left?" → "Two more… one needs your yes, one is fyi" with 6 in the pipe and a blocked agent omitted.
-   "close it" with nothing on the table → "Done. Yosef Adler - Hey is closed." (TQ-0007 still open).
+   "close it" with nothing on the table → "Done. Omar Keller - Hey is closed." (TQ-0007 still open).
    "remember that Dovid handles the badge printers" (nothing on the table) → "Got it." and **no memory row**.
    "make the reply shorter" → "Done. Here's the tightened version: …" — the draft was untouched and the
    next "approve" sent the long one. There is no redraft verb; the model claims the edit.
@@ -96,8 +96,8 @@ The server receipts the verb before knowing whether the card can carry it out
     ("did the invoice for Oak Ridge go out?") attached to it, and the pipe offered the greeting draft for
     approval. The burst reader fired the task on the first line.
 13. **One conversation, several rows.** A pending review does not claim its thread in `from_feed`, so the
-    older mail on the same thread shows again as "asked you" (TQ-0002 twice after the wrap; Yosef three
-    times in the All list). The walk showed Yosef twice.
+    older mail on the same thread shows again as "asked you" (TQ-0002 twice after the wrap; Omar three
+    times in the All list). The walk showed Omar twice.
 14. **A stopped agent's task shows "agent working" forever.** `working_tids` counts `running_runs()`; the
     stop endpoint leaves the run row, so TQ-0006 sat in the working lane with no session, "nothing for
     you", and TQ-0005 (outage, agent stopped) vanished from the pipe entirely: not read, not offered, not
@@ -110,8 +110,8 @@ The server receipts the verb before knowing whether the card can carry it out
     but an agent in the wrong checkout cannot investigate a portal; the reply/escalate road was right.
 17. **Two asks in one mail were not split** by triage and "split it" on it said "only one ask" (the fast
     brain missed it), then settled the item as done.
-18. **Sweep rules key on the wrong words.** "skip all the fyi from Chana and Dovid, I don't need those" wrote
-    rules `dovid from dovid@ours.com` and `fyi from chana@ours.com` plus a sender memory on Dovid.
+18. **Sweep rules key on the wrong words.** "skip all the fyi from Erin and Dovid, I don't need those" wrote
+    rules `dovid from dovid@ours.com` and `fyi from erin@ours.com` plus a sender memory on Dovid.
 
 ## E. Agents
 

@@ -21,7 +21,7 @@ MAIL = """Morning! Just wanted to check back in on this. We have a meeting this 
 the HRs and I wanted to give them a heads up we'll be rolling it out.
 
 Best,
-J.D. Hancock
+J.D. Ellis
 Vice President, Workforce Enhancement
 Medical Facilities of America
 2917 Penn Forest Blvd, Roanoke, VA 24018
@@ -30,34 +30,34 @@ P: 540.776.7576  C: 804.776.5487
 This email and any files transmitted with it are confidential and intended solely for the use
 of the individual or entity to whom they are addressed.
 
-From: Uri Nussbaum <unussbaum@mfaheritage.net>
+From: Alex Doyle <owner@northwind.example>
 Sent: Wednesday, September 2, 2026 17:53
-To: Hancock, J. D. <jdhancock@mfa.net>
+To: Ellis, J. D. <jdhancock@northwind.example>
 """
 
 
 # The same mail without the legal footer that happened to cut the last one short: a signature, and
 # under it the forwarded chain. Nothing in the fallback knew where the sender stopped writing, so
 # the whole chain - every header, both signatures - went on the card as the ask (TQ-0665, 2026-09-21).
-FORWARDED = """Uri,
+FORWARDED = """Alex,
 
 Can you send me the link on the 2027 budgets?
 
 Thanks,
 
-Brad West
+Ray Colton
 Medical Facilities of America
 VP Marketing and Business Development
 (540) 776-7588 Office
-Brad.west@mfa.example
+Ray.west@northwind.example
 www.lifeworksrehab.example
 
-From: Yeatts, Michael L. <Michael.Yeatts@MFA.EXAMPLE>
+From: Barnes, Michael L. <Michael.Barnes@NORTHWIND.EXAMPLE>
 Sent: Thursday, September 17, 2026 2:07 PM
-To: West, Brad <Brad.West@MFA.EXAMPLE>
+To: Colton, Ray <Ray.West@NORTHWIND.EXAMPLE>
 Subject: Fw: 2027 Budgets
 
-Mike Yeatts
+Peter Barnes
 Vice President
 """
 
@@ -67,14 +67,14 @@ class AutomaticRoadTests(unittest.TestCase):
         from taskuary.routing import draft_task_fields
         out = draft_task_fields({'subject': 'Re: Hosting', 'body': MAIL})
         self.assertIn('check back in on this', out['summary'])
-        for gone in ('Penn Forest', 'confidential', 'From: Uri', '540.776.7576'):
+        for gone in ('Penn Forest', 'confidential', 'From: Alex', '540.776.7576'):
             self.assertNotIn(gone, out['summary'], gone)
 
     def test_the_forwarded_chain_under_the_ask_is_not_the_ask(self):
         from taskuary.routing import draft_task_fields
         out = draft_task_fields({'subject': 'FW: 2027 Budgets', 'body': FORWARDED})
         self.assertIn('2027 budgets', out['summary'].lower())
-        for gone in ('From: Yeatts', 'Vice President', 'lifeworksrehab', '776-7588'):
+        for gone in ('From: Barnes', 'Vice President', 'lifeworksrehab', '776-7588'):
             self.assertNotIn(gone, out['summary'], gone)
 
     def test_a_mail_that_is_only_the_senders_own_words_is_kept_whole(self):
@@ -94,24 +94,24 @@ class AutomaticRoadTests(unittest.TestCase):
         self.assertIn('"summary"', triage.TASK_FIELDS)
         s = MemoryStore()
         llm = mock.Mock(return_value=json.dumps({
-            'intent': 'reply_only', 'why': 'Dvora asks which documentation you meant',
-            'title': 'Answer Dvora on the EPR documentation',
-            'summary': 'Dvora Cohen asks which documentation you were referring to; she says the PAM and Review PDFs are all that is in use.'}))
+            'intent': 'reply_only', 'why': 'Maya asks which documentation you meant',
+            'title': 'Answer Maya on the EPR documentation',
+            'summary': 'Maya Cohen asks which documentation you were referring to; she says the PAM and Review PDFs are all that is in use.'}))
         with mock.patch.object(ingest, '_spawn'):
-            r = ingest.ingest_message(s, {'external_id': 'd', 'channel': 'email', 'from_email': 'dcohen@hrtgcs.example',
-                                          'conversation_id': 'c-epr', 'subject': 'RE: Mindy Gorelick Annual EPR- AUG 2026',
+            r = ingest.ingest_message(s, {'external_id': 'd', 'channel': 'email', 'from_email': 'dcohen@vendor.example',
+                                          'conversation_id': 'c-epr', 'subject': 'RE: Robin Gorelick Annual EPR- AUG 2026',
                                           'body': MAIL, 'sent_at': '2026-09-14 09:02:00'}, llm=llm)
         task = s.get_task(r['task_id'])
         self.assertEqual(task['Kind'], 'reply')
-        self.assertEqual(task['Title'], 'Answer Dvora on the EPR documentation')
+        self.assertEqual(task['Title'], 'Answer Maya on the EPR documentation')
         self.assertIn('which documentation you were referring to', task['Summary'])
-        for gone in ('Penn Forest', 'confidential', 'From: Uri'):
+        for gone in ('Penn Forest', 'confidential', 'From: Alex'):
             self.assertNotIn(gone, task['Summary'], gone)
 
     def test_an_fyi_keeps_the_verdict_s_own_line_although_it_has_no_task(self):
         """The whole point of asking for a title on every verdict: an fyi never becomes a task, so
         there was nowhere to keep the one sentence triage had already written, and the rail fell
-        back to the mail header - "MFA - PCC Report Error Check - 0 rows returned for period ending
+        back to the mail header - "Northwind - PCC Report Error Check - 0 rows returned for period ending
         09/15" over a row whose job is to say what a thing is (the owner, 2026-09-16)."""
         from taskuary import funnel
         s = MemoryStore()
@@ -120,9 +120,9 @@ class AutomaticRoadTests(unittest.TestCase):
             'title': 'Nightly PCC error check returned no rows',
             'summary': 'The scheduled PCC error check ran and returned nothing for the period ending 09/15.'}))
         with mock.patch.object(ingest, '_spawn'):
-            r = ingest.ingest_message(s, {'external_id': 'pcc', 'channel': 'email', 'from_email': 'rrdbreports@mfa.example',
+            r = ingest.ingest_message(s, {'external_id': 'pcc', 'channel': 'email', 'from_email': 'rrdbreports@northwind.example',
                                           'conversation_id': 'c-pcc', 'from_name': 'RRDB Reports',
-                                          'subject': 'MFA - PCC Report Error Check - 0 rows returned for period ending 09/15',
+                                          'subject': 'Northwind - PCC Report Error Check - 0 rows returned for period ending 09/15',
                                           'body': 'Rows returned: 0', 'sent_at': '2026-09-15 07:10:00'}, llm=llm)
         self.assertEqual(r['status'], 'filed')
         self.assertIsNone(r['task_id'])                                     # an fyi is not work...
@@ -159,7 +159,7 @@ class AutomaticRoadTests(unittest.TestCase):
                                                  'title': 'Roll out the screening tool',
                                                  'summary': 'J.D. is chasing the rollout.'}))
         with mock.patch.object(ingest, '_spawn'):
-            r = ingest.ingest_message(s, {'external_id': 'x', 'channel': 'email', 'from_email': 'jd@mfa.net',
+            r = ingest.ingest_message(s, {'external_id': 'x', 'channel': 'email', 'from_email': 'jd@northwind.example',
                                           'conversation_id': 'c1', 'subject': 'Re: Hosting', 'body': MAIL,
                                           'sent_at': '2026-09-14 09:00:00'}, llm=llm)
         self.assertEqual(s.get_task(r['task_id'])['Summary'], 'J.D. is chasing the rollout.')
@@ -170,13 +170,13 @@ class ExtractTests(unittest.TestCase):
         """The fallback must never be worse than the raw body it replaces."""
         out = triage.extract_ask({'Subject': 'Re: Hosting', 'BodyText': MAIL}, llm=None)
         self.assertIn('check back in on this', out['summary'])
-        for gone in ('Penn Forest', 'confidential', 'From: Uri', '540.776.7576', 'J.D. Hancock'):
+        for gone in ('Penn Forest', 'confidential', 'From: Alex', '540.776.7576', 'J.D. Ellis'):
             self.assertNotIn(gone, out['summary'], gone)
         self.assertEqual(out['checklist'], [])
 
     def test_the_brain_supplies_the_summary_and_the_todos(self):
         llm = mock.Mock(return_value=json.dumps({
-            'summary': 'J.D. Hancock is chasing the rollout of the interview screening tool.',
+            'summary': 'J.D. Ellis is chasing the rollout of the interview screening tool.',
             'checklist': ['Confirm the rollout date', 'Send HR a heads-up before the meeting']}))
         out = triage.extract_ask({'Subject': 'Re: Hosting', 'BodyText': MAIL}, llm=llm)
         self.assertEqual(out['checklist'], ['Confirm the rollout date', 'Send HR a heads-up before the meeting'])
@@ -184,7 +184,7 @@ class ExtractTests(unittest.TestCase):
         # the model reads the CLEANED body - the footer is not worth paying tokens for, and the
         # quoted thread is a different message's words
         sent = llm.call_args[0][1]
-        self.assertNotIn('confidential', sent); self.assertNotIn('From: Uri', sent)
+        self.assertNotIn('confidential', sent); self.assertNotIn('From: Alex', sent)
 
     def test_a_fenced_answer_is_still_read(self):
         llm = mock.Mock(return_value='```json\n{"summary": "s", "checklist": ["a"]}\n```')
@@ -202,19 +202,19 @@ class ExtractTests(unittest.TestCase):
 
 class PromoteTests(unittest.TestCase):
     def _msg(self, s):
-        return s.add_message({'Channel': 'email', 'FromEmail': 'jdhancock@mfa.net', 'FromName': 'J. D. Hancock',
+        return s.add_message({'Channel': 'email', 'FromEmail': 'jdhancock@northwind.example', 'FromName': 'J. D. Ellis',
                               'Subject': 'Re: Hosting for Interview Screening Tool', 'BodyText': MAIL,
                               'SentAt': '2026-09-10T09:00:00'})
 
     def test_promoting_a_message_files_the_ask_and_the_checklist(self):
         s = MemoryStore()
         mid = self._msg(s)
-        brain = mock.Mock(return_value=json.dumps({'summary': 'Hancock is chasing the rollout.',
+        brain = mock.Mock(return_value=json.dumps({'summary': 'Ellis is chasing the rollout.',
                                                    'checklist': ['Confirm the rollout date']}))
         with mock.patch('taskuary.llm.build_llm', return_value=brain):
             tid = ingest.task_from_message(s, mid, 'owner')
         t = s.get_task(tid)
-        self.assertEqual(t['Summary'], 'Hancock is chasing the rollout.')
+        self.assertEqual(t['Summary'], 'Ellis is chasing the rollout.')
         self.assertNotIn('confidential', t['Summary'])
         self.assertEqual([i['text'] for i in s.task_checklist(tid)], ['Confirm the rollout date'])
 
@@ -226,7 +226,7 @@ class PromoteTests(unittest.TestCase):
         summary = s.get_task(tid)['Summary']
         self.assertIn('check back in on this', summary)
         self.assertNotIn('Penn Forest', summary)          # the old code stored all of this
-        self.assertNotIn('From: Uri', summary)
+        self.assertNotIn('From: Alex', summary)
 
 
 class ContractTests(unittest.TestCase):
@@ -310,7 +310,7 @@ class BackfillTests(unittest.TestCase):
     a copy of the message, and never over a checklist they may have ticked."""
 
     def _task(self, s, summary, body=MAIL, closed=False):
-        mid = s.add_message({'Channel': 'email', 'FromEmail': 'jdhancock@mfa.net', 'Subject': 'Re: Hosting',
+        mid = s.add_message({'Channel': 'email', 'FromEmail': 'jdhancock@northwind.example', 'Subject': 'Re: Hosting',
                              'BodyText': body, 'SentAt': '2026-09-10T09:00:00'})
         tid = s.create_task({'Title': 'Hosting', 'Summary': summary, 'Kind': 'coding',
                              **({'Status': 'done'} if closed else {})}, 'owner')
@@ -318,7 +318,7 @@ class BackfillTests(unittest.TestCase):
         return tid
 
     def _brain(self):
-        return mock.Mock(return_value=json.dumps({'summary': 'Hancock is chasing the rollout.',
+        return mock.Mock(return_value=json.dumps({'summary': 'Ellis is chasing the rollout.',
                                                   'checklist': ['Confirm the rollout date']}))
 
     def test_it_finds_the_raw_body_slice_and_rewrites_it(self):
@@ -327,7 +327,7 @@ class BackfillTests(unittest.TestCase):
         rows = ingest.backfill_asks(s, self._brain(), dry_run=False)
         me = next(r for r in rows if r['task_id'] == tid)
         self.assertEqual(me['action'], 'rewrote')
-        self.assertEqual(s.get_task(tid)['Summary'], 'Hancock is chasing the rollout.')
+        self.assertEqual(s.get_task(tid)['Summary'], 'Ellis is chasing the rollout.')
         self.assertEqual([i['text'] for i in s.task_checklist(tid)], ['Confirm the rollout date'])
 
     def test_dry_run_is_the_default_and_writes_nothing(self):
@@ -341,7 +341,7 @@ class BackfillTests(unittest.TestCase):
     def test_a_real_summary_is_left_alone(self):
         """The one thing this must never do is overwrite a good ask."""
         s = MemoryStore()
-        tid = self._task(s, 'Hancock is chasing the interview screening rollout before an HR meeting.')
+        tid = self._task(s, 'Ellis is chasing the interview screening rollout before an HR meeting.')
         r = next(x for x in ingest.backfill_asks(s, self._brain(), dry_run=False) if x['task_id'] == tid)
         self.assertEqual(r['action'], 'skipped'); self.assertIn('not a copy', r['why'])
 
@@ -372,7 +372,7 @@ class BackfillTests(unittest.TestCase):
         ingest.backfill_asks(s, None, dry_run=False)
         summary = s.get_task(tid)['Summary']
         self.assertIn('check back in on this', summary)
-        self.assertNotIn('Penn Forest', summary); self.assertNotIn('From: Uri', summary)
+        self.assertNotIn('Penn Forest', summary); self.assertNotIn('From: Alex', summary)
 
     def test_the_prefix_test_is_what_identifies_a_copy(self):
         self.assertTrue(ingest._is_raw_body(MAIL[:1000], MAIL))

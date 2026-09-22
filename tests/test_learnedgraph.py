@@ -90,23 +90,23 @@ class SettleTests(unittest.TestCase):
         return s
 
     def test_an_explicit_key_is_the_identity_and_a_line_without_one_still_parses(self):
-        d = self.doc('- Uri answers vendors himself. [s:3 | ev: mem1 | seen: 2026-09-01 | k: vendor-mail]',
-                     '- Uri avoids tasks other people own. [s:3 | ev: mem2 | seen: 2026-09-01]')
+        d = self.doc('- Alex answers vendors himself. [s:3 | ev: mem1 | seen: 2026-09-01 | k: vendor-mail]',
+                     '- Alex avoids tasks other people own. [s:3 | ev: mem2 | seen: 2026-09-01]')
         ls = learnedgraph.lines(d)
         self.assertEqual(ls[0]['key'], 'vendor-mail')
-        self.assertEqual(ls[1]['key'], learnedgraph._key('Uri avoids tasks other people own.'))
+        self.assertEqual(ls[1]['key'], learnedgraph._key('Alex avoids tasks other people own.'))
 
     def test_settle_assigns_a_key_once_and_it_survives_a_rephrase(self):
-        s, d = self.store(), self.doc('- Uri answers vendors himself. [s:3 | ev: mem1 | seen: 2026-09-01]')
+        s, d = self.store(), self.doc('- Alex answers vendors himself. [s:3 | ev: mem1 | seen: 2026-09-01]')
         keyed = learn.settle(s, d, d, today='2026-09-05')
         k = learnedgraph.lines(keyed)[0]['key']
         self.assertIn(f'| k: {k}]', keyed)
-        rephrased = keyed.replace('Uri answers vendors himself.', 'Vendor mail is answered by Uri, not filed.')
+        rephrased = keyed.replace('Alex answers vendors himself.', 'Vendor mail is answered by Alex, not filed.')
         self.assertEqual(learnedgraph.lines(learn.settle(s, keyed, rephrased, today='2026-09-05'))[0]['key'], k)
 
     def test_two_bullets_on_one_key_merge_into_the_stronger_line(self):
-        d = self.doc('- Uri answers vendors himself. [s:3 | ev: mem1 | seen: 2026-09-01 | k: vendor-mail]',
-                     '- Uri replies to vendors personally. [s:5 | ev: mem2, mem3 | seen: 2026-09-04 | k: vendor-mail]')
+        d = self.doc('- Alex answers vendors himself. [s:3 | ev: mem1 | seen: 2026-09-01 | k: vendor-mail]',
+                     '- Alex replies to vendors personally. [s:5 | ev: mem2, mem3 | seen: 2026-09-04 | k: vendor-mail]')
         ls = learnedgraph.lines(learn.settle(self.store(), d, d, today='2026-09-05'))
         self.assertEqual(len(ls), 1)
         self.assertEqual(ls[0]['score'], 5)
@@ -114,13 +114,13 @@ class SettleTests(unittest.TestCase):
         self.assertIn('answers vendors himself', ls[0]['text'])          # the first line keeps its place and wording
 
     def test_new_evidence_restarts_the_clock(self):
-        old = self.doc('- Uri answers vendors himself. [s:3 | ev: mem1 | seen: 2026-06-01 | k: vendor-mail]')
-        new = self.doc('- Uri answers vendors himself. [s:4 | ev: mem1, mem9 | seen: 2026-06-01 | k: vendor-mail]')
+        old = self.doc('- Alex answers vendors himself. [s:3 | ev: mem1 | seen: 2026-06-01 | k: vendor-mail]')
+        new = self.doc('- Alex answers vendors himself. [s:4 | ev: mem1, mem9 | seen: 2026-06-01 | k: vendor-mail]')
         out = learn.settle(self.store(30), old, new, today='2026-09-05')
         self.assertEqual(learnedgraph.lines(out)[0]['seen'], '2026-09-05')   # and 30 reflections no longer count against it
 
     def test_reflections_spend_a_quiet_hypothesis_and_a_silent_funnel_spends_nothing(self):
-        d = self.doc('- Uri answers vendors himself. [s:5 | ev: mem1 | seen: 2026-06-01 | k: vendor-mail]')
+        d = self.doc('- Alex answers vendors himself. [s:5 | ev: mem1 | seen: 2026-06-01 | k: vendor-mail]')
         l = learnedgraph.lines(d)[0]
         self.assertEqual(learnedgraph.effective(l, []), 5)                        # no reflections ran: nothing is owed
         self.assertEqual(learnedgraph.effective(l, ['2026-06-02'] * 30), 2)       # 30 reflections passed it by = 3 points
@@ -132,7 +132,7 @@ class SettleTests(unittest.TestCase):
         self.assertIn('# LEARNED.md', spent)                                      # only the line goes
 
     def test_years_of_silence_cost_a_live_rule_and_an_owner_line_nothing(self):
-        d = self.doc('- Uri answers vendors himself. [s:5 | ev: mem1 | seen: 2026-01-01 | k: vendor-mail]',
+        d = self.doc('- Alex answers vendors himself. [s:5 | ev: mem1 | seen: 2026-01-01 | k: vendor-mail]',
                      '- Never open a task for payroll.',
                      section='## What becomes a task')
         out = learn.settle(self.store(200), d, d, today='2027-06-01')
@@ -146,7 +146,7 @@ class SettleTests(unittest.TestCase):
         for who in ('alice@x.com', 'bob@y.com', 'alice@x.com'):
             s.add_memory({'Scope': 'sender', 'ScopeKey': who, 'Source': 'verdict', 'Active': 1, 'CreatedBy': 'owner', 'Note': 'NOT OURS'})
         hyp = ('# LEARNED.md\n\n## Hypotheses - still being tested\n<!-- hypotheses:start -->\n'
-               '- Uri leaves matters with an assigned owner alone. [s:5 | ev: mem1, mem2, mem3 | seen: 2026-04-01 | k: assigned-owner]\n'
+               '- Alex leaves matters with an assigned owner alone. [s:5 | ev: mem1, mem2, mem3 | seen: 2026-04-01 | k: assigned-owner]\n'
                '<!-- hypotheses:end -->\n')
         s.save_doc('learned', hyp, 'reflect')
         fresh = learnedgraph.graph(s)['lines'][0]

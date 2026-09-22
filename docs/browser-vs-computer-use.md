@@ -84,7 +84,7 @@ The open-source stack is real and Apache-2.0-clean, so this is a choice, not a c
   hosted VLM per step.
 - **Bytebot** (Apache-2.0) — a whole containerized Linux desktop the agent owns, watched over VNC.
   The right *shape*: the agent gets its own machine, the owner watches a stream. Linux only, which is
-  not where MFA's applications live.
+  not where Northwind's applications live.
 - **Agent S3 / E2B desktop** — same shape, sandbox-first.
 - **Hosted CUAs** — Azure's `computer-use-preview` is registration-gated at $3/$12 per Mtok, and
   Copilot Studio's computer-use agents went GA on 2026-05-13. Both assume a VM you can screenshot.
@@ -117,7 +117,7 @@ conversation, and none of the reasons are about browser-vs-computer use:
 - **Credential custody.** We hold connector secrets in the store today; a portal login needs the same
   treatment plus an explicit owner grant, and the take-over button stays the path for anything typed
   once.
-- **MFA.** If ADP demands a code every session, unattended is impossible by design and the honest
+- **Northwind.** If ADP demands a code every session, unattended is impossible by design and the honest
   product is a 9am *prompt* with the page already open on the clock-in button — one click, not zero.
   If it accepts a remembered device, the restored profile carries it.
 - **A schedule that owns a browser.** `reports.py` runs work on a clock; nothing there starts a

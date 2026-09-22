@@ -72,7 +72,7 @@ class BrainTests(unittest.TestCase):
             self.assertNotIn('args', seen['prof'])           # untouched: run_cli applies the preset, hands and all
 
     def test_f08_notice_the_error_is_the_ask_not_a_footer(self):
-        body = 'Hi Uri, see the screenshot below from the census app.\nNotice the error at the top - can you fix it before Friday?\nThanks'
+        body = 'Hi Alex, see the screenshot below from the census app.\nNotice the error at the top - can you fix it before Friday?\nThanks'
         self.assertIn('fix it before Friday', triage.strip_boilerplate(body))
         footer = 'Please fix the importer today, it drops the last row of every file we load.\n\nNOTICE: This email is confidential and intended solely for the addressee.'
         self.assertNotIn('NOTICE', triage.strip_boilerplate(footer))

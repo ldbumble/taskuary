@@ -75,22 +75,22 @@ class SharedVerdictTests(unittest.TestCase):
         self.assertEqual(s.get_task(tid)['Status'], 'in_progress')                # a generated claim completes nothing
 
     def test_an_idea_about_work_the_owner_just_closed_opens_no_second_task(self):
-        """TQ-0487 (2026-09-10): Dvora's 13:32 spec arrived on the mail behind TQ-0482. The idea about
+        """TQ-0487 (2026-09-10): Maya's 13:32 spec arrived on the mail behind TQ-0482. The idea about
         it sat linked to that task for two hours, judged three times, creating nothing. The owner closed
         TQ-0482 at 15:17; the idea was re-said with fresh wording 38 seconds later, its Sig changed, and
         the re-judge read 'linked task not active' as 'about no task at all' - opening TQ-0487 on the
         very mail just closed, with a coder on it. A closed task is still the task this idea is about."""
         s = MemoryStore()
-        tid = s.create_task({'Title': 'Mindy gorelick annual epr- aug 2026', 'Kind': 'coding', 'Status': 'in_progress'}, 'router')
+        tid = s.create_task({'Title': 'Robin gorelick annual epr- aug 2026', 'Kind': 'coding', 'Status': 'in_progress'}, 'router')
         mid = s.add_message({'TaskId': tid, 'ExternalId': 'graph:epr', 'ConversationId': 'thread:epr', 'Channel': 'email',
-                             'FromName': 'Dvora E. Cohen', 'FromEmail': 'dcohen@example.com', 'Subject': 'Re: Mindy Gorelick Annual EPR- AUG 2026',
+                             'FromName': 'Maya E. Cohen', 'FromEmail': 'dcohen@example.com', 'Subject': 'Re: Robin Gorelick Annual EPR- AUG 2026',
                              'SentAt': STAMP, 'BodyText': 'I keep track via a spreadsheet: increase amount, effective date, retro flag.'})
-        row = idea(s, 'idea:dvora-spec', "Dvora replied at 13:32 though her auto-reply says she is out - she is reading.", {'mid': mid, 'tid': tid})
+        row = idea(s, 'idea:maya-spec', "Maya replied at 13:32 though her auto-reply says she is out - she is reading.", {'mid': mid, 'tid': tid})
         assistant.triage_ideas(s, [row], brain(kind='coding'))
         self.assertEqual(len(s.list_tasks()), 1, 'linked to open work, the first judgement opens nothing')
 
         s.update_task(tid, {'Status': 'done'}, 'owner')                            # the owner closed it from the assistant
-        again = idea(s, 'idea:dvora-spec', "Dvora's 13:32 spec landed after TQ-0001 closed. I'd open the build with those fields.", {'mid': mid})
+        again = idea(s, 'idea:maya-spec', "Maya's 13:32 spec landed after TQ-0001 closed. I'd open the build with those fields.", {'mid': mid})
         with mock.patch('taskuary.ingest._spawn') as spawn:
             assistant.triage_ideas(s, [again], brain(kind='coding'))
         a = json.loads(s.get_idea(row['IdeaId'])['ActionJson'])
@@ -104,11 +104,11 @@ class SharedVerdictTests(unittest.TestCase):
         not mean the post was read), and the owner's button is the road to the work - act(verb='task')
         carries the mail's evidence into a fresh assistant-owned task and names the completed one."""
         s = MemoryStore()
-        tid = s.create_task({'Title': 'Mindy gorelick annual epr- aug 2026', 'Kind': 'coding', 'Status': 'done'}, 'router')
+        tid = s.create_task({'Title': 'Robin gorelick annual epr- aug 2026', 'Kind': 'coding', 'Status': 'done'}, 'router')
         mid = s.add_message({'TaskId': tid, 'ExternalId': 'graph:epr2', 'ConversationId': 'thread:epr', 'Channel': 'email',
-                             'FromName': 'Dvora E. Cohen', 'Subject': 'Re: Mindy Gorelick Annual EPR- AUG 2026',
+                             'FromName': 'Maya E. Cohen', 'Subject': 'Re: Robin Gorelick Annual EPR- AUG 2026',
                              'SentAt': STAMP, 'BodyText': 'increase amount, effective date, retro flag'})
-        row = idea(s, 'idea:dvora-spec', "Dvora's 13:32 spec landed after the build closed.",
+        row = idea(s, 'idea:maya-spec', "Maya's 13:32 spec landed after the build closed.",
                    {'mid': mid, 'kind': 'coding', 'title': 'Add EPR increase and retro fields'})
         with mock.patch('taskuary.ingest._spawn'):
             out = assistant.act(s, row['IdeaId'], 'task', 'owner')

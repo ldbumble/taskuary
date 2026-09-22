@@ -127,7 +127,7 @@ def _tree_digest(paths: list, cap: int = 2000) -> str:
     with their weights, then an equal SHARE of the sample per folder - strided within each.
 
     "What does this system cover" is a question about breadth, so every folder gets the same voice
-    however big it is. A stride across the whole sorted tree does not: FanApp's 518-file website/ is
+    however big it is. A stride across the whole sorted tree does not: ledger's 518-file website/ is
     contiguous once sorted and swallowed 99% of the sample, burying the fifty sql/ scripts and
     twenty-seven reports/ that are the actual answer."""
     keep = sorted(p for p in paths if not _TREE_SKIP.search(p))
@@ -145,7 +145,7 @@ def _tree_digest(paths: list, cap: int = 2000) -> str:
 
 def _fit(text: str, cap: int) -> str:
     """Cut to the last COMPLETE sentence that fits. A routing-table entry that stops mid-word
-    ("...Azure SQL and Blob Storage data handling, facility and employee ID audits, Viventium payroll s")
+    ("...Azure SQL and Blob Storage data handling, facility and employee ID audits, Payworth payroll s")
     reads as broken data rather than as a description of anything."""
     t = ' '.join((text or '').split())
     if len(t) <= cap: return t
@@ -171,7 +171,7 @@ def _readme_blurb(tok, repo, llm) -> str:
     for what it covers - and summarize. Falls back to the README's first prose line with no AI.
 
     It read the README alone, which for a big internal system is a paragraph written years ago:
-    FanApp came back "an enterprise integration platform connecting MFA systems with HR, finance,
+    ledger came back "an enterprise integration platform connecting Northwind systems with HR, finance,
     identity, training, email, database and third-party APIs", which is true of half the estate and
     never mentions the bank feeds. The tree names them (TQ-0443)."""
     from .github import readme_text, repo_tree

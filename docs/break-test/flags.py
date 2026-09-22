@@ -13,12 +13,12 @@ EXPECT = {
     'next': 'next', 'done': 'done', 'later': 'later', 'tomorrow': 'skip', 'skip': 'skip', 'skip it': 'skip',
     'approve': 'approve', 'send it': 'approve', 'looks good, send it': 'approve',
     'reply and tell them we will look at it': 'reply', 'tell them to ignore it': 'reply',
-    'let them know we will fix it by Friday': 'reply', 'tell Chana it is handled': 'reply',
+    'let them know we will fix it by Friday': 'reply', 'tell Erin it is handled': 'reply',
     'reply: not ours, sorry': 'reply', 'remember to reply to him': 'reply',
     'not ours': 'not_ours', 'not my problem': 'not_ours', 'ignore it': 'not_ours',
     "don't ignore this one": None, 'leave it open': None, 'leave it with the agent': None,
     'never again': 'not_ours_remember', 'that sender is spam': 'not_ours_sender',
-    'remember that Kishan handles refunds': 'remembered',    # Taskuary writes the row itself
+    'remember that Ravi handles refunds': 'remembered',    # Taskuary writes the row itself
     'send it to the coder': 'coder', 'look into it': 'coder', 'can you check if the report ran?': None,
     "I'll take it": 'mine', "I'll handle this": 'mine', 'mine': 'mine', 'make it a task': 'mine',
     'close it': 'closed', 'close the task': 'closed', 'stop the agent': 'stop_agent', 'wrap it up': 'stop_agent',
@@ -26,10 +26,10 @@ EXPECT = {
     'skip all the newsletters': 'clear', "it's handled": 'done',
     "what's this about?": None, 'who sent this?': None, 'summarize the thread': None,
     'show me the draft': None, 'what did I miss?': None,
-    'make the reply shorter': 'redraft', 'forward it to Chana': 'forward', 'assign it to Chana': 'forward',
-    'ask Chana to handle it': 'forward', 'delete it': 'archive', 'archive it': 'archive',   # forward = 'forwarded' once written
+    'make the reply shorter': 'redraft', 'forward it to Erin': 'forward', 'assign it to Erin': 'forward',
+    'ask Erin to handle it': 'forward', 'delete it': 'archive', 'archive it': 'archive',   # forward = 'forwarded' once written
     'snooze it': 'later', 'remind me tomorrow': 'skip',
-    'approve and remember that Kishan handles refunds': 'approve',
+    'approve and remember that Ravi handles refunds': 'approve',
     'answer the agent: yes remove them': 'answer_agent', 'tell the agent yes': 'answer_agent',
     # naming another subject: resolved and done THERE, or asked about - never carried out on the table
     'not ours, facilities handles the payroll portal outage': None, 'close the payroll portal one': None,

@@ -47,7 +47,7 @@ def test_a_judged_idea_repeats_its_verdict_on_the_row(db):
 
 
 def test_the_verdict_names_the_road_it_chose(db):
-    an_idea(db, 'k2', 'Dvora is still waiting on the PAM review.',
+    an_idea(db, 'k2', 'Maya is still waiting on the PAM review.',
             {'intent': 'task', 'why': 'someone is waiting on an answer'})
     row = next(r for k, r in rows(db).items() if k.startswith('idea:'))
     assert row['RouteReason'] == 'triage: task - someone is waiting on an answer'

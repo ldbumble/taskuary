@@ -40,9 +40,6 @@ const DOCS = {
     blurb: "What the system has learned about YOU — style, responsibilities, what deserves a task — distilled from your verdicts: edited drafts, rejections, reclassifications. Hypotheses graduate on evidence; every line is yours to edit or delete, and SOUL.md always outranks it." },
 };
 const NAMES = Object.keys(DOCS);
-// The rail in Settings draws these, so the list of operator documents lives in ONE place rather
-// than being retyped beside the sidebar that lists it.
-export const OPERATOR_DOCS = NAMES.map((n) => ({ name: n, label: DOCS[n].label }));
 
 // The Assistant, and the gates a message passes in order. Shipped markdown (templates/how-it-works.md),
 // read-only: it describes what the code does, so it is reference rather than an operator document -
@@ -157,11 +154,7 @@ const OwnerCard = () => {
   );
 };
 
-// `sel` and `onSel` are how Settings' rail drives this: it owns which document is open, so the
-// page holds nothing but that document. Standalone (no onSel) it keeps its own tab strip and
-// shelf. `onCatalog` hands the rail the lists it has to draw - the profiles and playbooks on disk.
-export default function DocsView({ sel = null, onSel = null, onCatalog = null }) {
-  const rail = !!onSel;
+export default function DocsView() {
   const [manageProfiles, setManageProfiles] = useState(false);
   const [createProfile, setCreateProfile] = useState(false);
   const [importSkills, setImportSkills] = useState(false);
@@ -280,29 +273,6 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null })
     } catch (e) { setErr(e?.response?.data?.detail || `could not open playbook ${slug}`); }
   }, [tpl]);
 
-  // THE RAIL OWNS THE SELECTION. When Settings drives this page its sidebar is the only
-  // navigation - nothing in the page header, like every other settings page - so a click there is
-  // what moves the document. An `action` entry (New playbook, Manage profiles, Import skills)
-  // arrives down the same channel, because the shelf those buttons lived on is gone.
-  const selKey = sel ? `${sel.action || ""}|${sel.group || ""}|${sel.doc || ""}|${sel.n || ""}` : "";
-  useEffect(() => {
-    if (!sel) return;
-    const { action, group, doc } = sel;
-    if (action === "new-profile") { setCreateProfile(true); setManageProfiles(true); return; }
-    if (action === "manage-profiles") { setCreateProfile(false); setManageProfiles(true); return; }
-    if (action === "new-playbook") { setSection("playbooks"); setNewPlaybook({ connectorType: "" }); return; }
-    if (group === "profiles" && doc) { openProf(doc); return; }
-    if (group === "playbooks" && doc) { openPb(doc); return; }
-    if (doc) { setSection("documents"); setDocName(doc); return; }
-    // a group with no document named: the rail's own header, which behaves like the tab it replaced
-    if (group) chooseSection(group);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selKey]);
-
-  // ...and the rail draws the two lists this page already fetches, so nothing fetches them twice.
-  useEffect(() => { onCatalog?.({ profiles: profs, playbooks: books }); }, [onCatalog, profs, books]);
-
-
   // #playbook=<slug> (a connector card's link) opens it; #playbook=new:<type> starts one for that card
   useEffect(() => {
     const fromHash = () => {
@@ -403,9 +373,6 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null })
   // viewport-height list.
   return (
     <>
-    {/* No tab strip when the rail drives it: the sidebar is the only navigation,
-        like every other settings page (the owner, 2026-09-22). */}
-    {!rail && (
     <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 2.5, borderBottom: "1px solid #e1dcd5" }}>
       {[["documents", "Operator documents"], ["profiles", `Profiles${profs.length ? ` (${profs.length})` : ""}`],
         ["playbooks", `Playbooks${books.length ? ` (${books.length})` : ""}`],
@@ -419,19 +386,15 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null })
         </Box>
       ))}
     </Box>
-    )}
     {section === "how" ? <HowItWorks /> : (
     /* One screenful, two columns that scroll INSIDE themselves. The page used to grow past the
        viewport, which put "Who the documents speak for" - and its Save button - below the fold
        behind eight document rows (the owner, 2026-09-10: "should be in first view of the screen").
        alignItems stretch (not start) is what lets a column be told its height at all. */
-    <Box sx={{ display: "grid", gridTemplateColumns: rail ? "minmax(0, 1fr)" : { xs: "minmax(0, 1fr)", md: "300px minmax(0,1fr)" },
+    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "300px minmax(0,1fr)" },
       gap: 3, alignItems: { xs: "start", md: "stretch" },
       height: { md: "calc(100vh - 150px)" }, minHeight: { md: 420 } }}>
 
-      {/* THE SHELF IS THE RAIL. Kept for the standalone view; when Settings drives the
-          selection there is no second list beside the one in the sidebar. */}
-      {!rail && (
       <Box sx={{ display: "flex", flexDirection: "column", minHeight: 0,
                  maxHeight: { xs: "none", md: "100%" } }}>
         {section === "profiles" ? (
@@ -548,7 +511,6 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null })
           </>
         )}
       </Box>
-      )}
 
       <Box sx={{ minWidth: 0, display: "flex", flexDirection: "column", minHeight: 0 }}>
         {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5, flexShrink: 0 }}>{err}</Alert>}

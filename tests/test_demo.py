@@ -132,11 +132,20 @@ class TheWorldTests(unittest.TestCase):
         self.assertEqual(demo.seed(s), 0)
 
     def test_nobody_real_is_in_it(self):
+        """Every address in the demo world is on a RESERVED domain. This used to name the one real
+        domain it was guarding against, which put that domain in the repository the guard exists to
+        keep it out of; the invariant catches any real domain, including the ones nobody thought of."""
+        import re
         s = MemoryStore()
         demo.seed(s)
         blob = ' '.join(str(r) for r in s.feed(limit=50)) + (s.get_doc('soul') or '')
-        self.assertNotIn('@mfaheritage', blob)
-        self.assertIn('example', blob)                                   # reserved domains only
+        found = set(re.findall(r'[\w.+-]+@([\w.-]+)', blob))
+        self.assertTrue(found, 'the demo world has addresses in it')
+        # RFC 2606's reserved names, and anything under one of them (vendor.example.com)
+        ok = ('.example', '.test', '.invalid', '.localhost', 'example.com', 'example.net', 'example.org')
+        for domain in found:
+            self.assertTrue(domain.endswith(ok) or '.example.' in domain,
+                            f'{domain} is not a reserved domain - the demo may only invent people')
 
     def test_a_replayed_session_looks_like_a_session(self):
         s = MemoryStore()

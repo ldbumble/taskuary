@@ -16,8 +16,8 @@ const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, impo
 // the row from the owner's screenshot: title and gist are one sentence, cut at 140 and at 240
 const IDEA = {
   key: "msg:7001", who: "Assistant",
-  title: 'Both Valley Bank contacts auto-replied out at 16:01 on "Fuquay Operator LLC" — Jackie on maternity leave. I\'d resend to k',
-  preview: 'Both Valley Bank contacts auto-replied out at 16:01 on "Fuquay Operator LLC" — Jackie on maternity leave. I\'d resend to klazon/mhayes, the SFTP names Neil\'s re',
+  title: 'Both Summit Bank contacts auto-replied out at 16:01 on "Riverton Operator LLC" — Jackie on maternity leave. I\'d resend to k',
+  preview: 'Both Summit Bank contacts auto-replied out at 16:01 on "Riverton Operator LLC" — Jackie on maternity leave. I\'d resend to klazon/mhayes, the SFTP names Neil\'s re',
 };
 
 test("a gist that only restates the line above it is not shown", () => {
@@ -33,7 +33,7 @@ test("a real second fact still gets its line", () => {
 });
 
 test("it compares the words, not the whitespace or the case", () => {
-  assert.equal(gistFor({ title: "Both   Valley Bank contacts AUTO-REPLIED out", preview: "both valley bank contacts auto-replied out at 16:01" }), "");
+  assert.equal(gistFor({ title: "Both   Summit Bank contacts AUTO-REPLIED out", preview: "both summit bank contacts auto-replied out at 16:01" }), "");
   assert.equal(norm("  A   b \n c "), "a b c");
   assert.equal(gistFor({ title: "", preview: "anything" }), "anything");
   assert.equal(gistFor({ title: "x", preview: "" }), "");

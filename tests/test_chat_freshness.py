@@ -20,19 +20,19 @@ class ChatFreshnessTests(unittest.TestCase):
 
     def thread(self):
         s = MemoryStore()
-        tid = s.create_task({'Title': 'Teams chat with Mindy', 'Kind': 'reply', 'Status': 'open',
+        tid = s.create_task({'Title': 'Teams chat with Robin', 'Kind': 'reply', 'Status': 'open',
                              'Priority': 'normal', 'Source': 'teams'}, 'router')
-        first = s.add_message({'TaskId': tid, 'ExternalId': 'teams:first', 'ConversationId': 'teams:mindy',
-                               'Channel': 'teams', 'SourceName': 'Mindy', 'Subject': 'Teams chat with Mindy',
-                               'FromName': 'Mindy', 'SentAt': stamp(-20), 'BodyText': 'yes', 'Status': 'routed'})
+        first = s.add_message({'TaskId': tid, 'ExternalId': 'teams:first', 'ConversationId': 'teams:robin',
+                               'Channel': 'teams', 'SourceName': 'Robin', 'Subject': 'Teams chat with Robin',
+                               'FromName': 'Robin', 'SentAt': stamp(-20), 'BodyText': 'yes', 'Status': 'routed'})
         rid = s.add_review({'TaskId': tid, 'MessageId': first, 'Kind': 'draft', 'Status': 'pending',
                             'DraftText': 'ok give me 5 mins', 'Reason': 'needs a reply'})
         return s, tid, first, rid
 
     def add_later(self, s, tid):
-        return s.add_message({'TaskId': tid, 'ExternalId': 'teams:later', 'ConversationId': 'teams:mindy',
-                              'Channel': 'teams', 'SourceName': 'Mindy', 'Subject': 'Teams chat with Mindy',
-                              'FromName': 'Mindy', 'SentAt': stamp(),
+        return s.add_message({'TaskId': tid, 'ExternalId': 'teams:later', 'ConversationId': 'teams:robin',
+                              'Channel': 'teams', 'SourceName': 'Robin', 'Subject': 'Teams chat with Robin',
+                              'FromName': 'Robin', 'SentAt': stamp(),
                               'BodyText': 'Actually, the account works now. No need to reset it.', 'Status': 'routed'})
 
     def test_review_card_speaks_with_newest_message_and_marks_old_draft_stale(self):

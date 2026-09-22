@@ -626,7 +626,7 @@ class WhatItReadsTests(unittest.TestCase):
             s.add_message({'ExternalId': f'n:{i}', 'ConversationId': f'n{i}', 'Channel': 'report', 'SourceName': 'Nightly', 'Subject': 'Nightly — FAILED', 'FromName': 'Nightly',
                            'SentAt': _ago(0, i + 1), 'BodyText': 'Report error: Login timeout expired (0)', 'Status': 'feed'})
         _mail(s, 'notifications@github.com', '[o/r] Run failed: ci - master (abc1234)', 'ci: Some jobs were not successful\n\nci / build-web Succeeded in 27 seconds\n\n'
-              'ci / test (ubuntu-latest, 3.12) Failed in 49 seconds\n1\nci / test (windows-latest, 3.10) Failed in 3 minutes\n', days=0, conv='g1', status='ignored', name='Uri')
+              'ci / test (ubuntu-latest, 3.12) Failed in 49 seconds\n1\nci / test (windows-latest, 3.10) Failed in 3 minutes\n', days=0, conv='g1', status='ignored', name='Alex')
         txt = assistant._recent(s)
         self.assertIn('x3 [report] Nightly: "Nightly — FAILED"', txt)
         self.assertIn('[schedule: daily at 08:00 + on app start] -> "Report error: Login timeout expired (0)"', txt)

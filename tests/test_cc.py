@@ -42,11 +42,11 @@ class GraphTests(unittest.TestCase):
         with mock.patch.object(outbound, '_graph_token', return_value='t'), self._post(sent):
             out = outbound.send_email(self._store(), ['them@partner.example'], 'Re: x', 'body',
                                       reply_to_graph_id='AAA', mailbox='me@corp.example',
-                                      cc=['mindy@corp.example'])
+                                      cc=['robin@corp.example'])
         m = sent['body']['message']
         self.assertEqual([a['emailAddress']['address'] for a in m['toRecipients']], ['them@partner.example'])
-        self.assertEqual([a['emailAddress']['address'] for a in m['ccRecipients']], ['mindy@corp.example'])
-        self.assertEqual(out['cc'], ['mindy@corp.example'])
+        self.assertEqual([a['emailAddress']['address'] for a in m['ccRecipients']], ['robin@corp.example'])
+        self.assertEqual(out['cc'], ['robin@corp.example'])
 
     def test_no_cc_leaves_the_reply_exactly_as_it_was(self):
         sent = {}
@@ -58,9 +58,9 @@ class GraphTests(unittest.TestCase):
         sent = {}
         with mock.patch.object(outbound, '_graph_token', return_value='t'), self._post(sent):
             outbound.send_email(self._store(), ['them@partner.example'], 'Hello', 'body',
-                                mailbox='me@corp.example', cc=['mindy@corp.example', 'mindy@corp.example'])
+                                mailbox='me@corp.example', cc=['robin@corp.example', 'robin@corp.example'])
         m = sent['body']['message']
-        self.assertEqual([a['emailAddress']['address'] for a in m['ccRecipients']], ['mindy@corp.example'])
+        self.assertEqual([a['emailAddress']['address'] for a in m['ccRecipients']], ['robin@corp.example'])
 
 
 class SmtpTests(unittest.TestCase):
@@ -75,10 +75,10 @@ class SmtpTests(unittest.TestCase):
         S.sendmail.side_effect = lambda frm, to, data: sent.update(frm=frm, to=to, data=data)
         with mock.patch.object(imapmail.smtplib, 'SMTP', return_value=S):
             out = imapmail.send_smtp(MemoryStore(), conn, ['them@partner.example'], 'Re: x', 'body',
-                                     cc=['mindy@mine.example'])
-        self.assertEqual(sent['to'], ['them@partner.example', 'mindy@mine.example'])
-        self.assertIn('Cc: mindy@mine.example', sent['data'])
-        self.assertEqual(out['cc'], ['mindy@mine.example'])
+                                     cc=['robin@mine.example'])
+        self.assertEqual(sent['to'], ['them@partner.example', 'robin@mine.example'])
+        self.assertIn('Cc: robin@mine.example', sent['data'])
+        self.assertEqual(out['cc'], ['robin@mine.example'])
 
 
 class ChannelTests(unittest.TestCase):
@@ -86,9 +86,9 @@ class ChannelTests(unittest.TestCase):
         for ch in ('teams', 'whatsapp', 'telegram'):
             with self.assertRaisesRegex(RuntimeError, 'no cc'):
                 outbound.reply_to_message(MemoryStore(), {'Channel': ch, 'ConversationId': f'{ch}:1'},
-                                          'body', cc=['mindy@corp.example'])
+                                          'body', cc=['robin@corp.example'])
         with self.assertRaisesRegex(RuntimeError, 'no cc'):
-            outbound.send_out(MemoryStore(), 'teams', ['19:chat'], 'subject', 'body', cc=['mindy@corp.example'])
+            outbound.send_out(MemoryStore(), 'teams', ['19:chat'], 'subject', 'body', cc=['robin@corp.example'])
 
 
 class VerdictTests(unittest.TestCase):
@@ -106,11 +106,11 @@ class VerdictTests(unittest.TestCase):
             return {'channel': 'email', 'to': ['them@partner.example'], 'cc': cc or []}
         with mock.patch.object(outbound, 'reply_to_message', side_effect=fake):
             out = verdicts.decide(s, s.get_review(rid), 'approve', 'here is the answer',
-                                  cc=['mindy@corp.example'])
+                                  cc=['robin@corp.example'])
         self.assertTrue(out['ok'])
-        self.assertEqual(seen['cc'], ['mindy@corp.example'])
+        self.assertEqual(seen['cc'], ['robin@corp.example'])
         said = ' '.join(x['Body'] for x in s.list_comments(tid))
-        self.assertIn('copied mindy@corp.example', said)
+        self.assertIn('copied robin@corp.example', said)
 
     def test_the_door_passes_it_through(self):
         """POST /api/reviews/{id}/decide carries cc; rejecting copies nobody on nothing."""
@@ -126,9 +126,9 @@ class VerdictTests(unittest.TestCase):
                                side_effect=lambda st, m, b, to=None, cc=None, attachments=None: (seen.update(cc=cc),
                                    {'channel': 'email', 'to': ['them@partner.example'], 'cc': cc or []})[1]):
             r = c.post(f'/api/reviews/{rid}/decide',
-                       json={'verb': 'approve', 'final_text': 'the answer', 'cc': ['mindy@corp.example']})
+                       json={'verb': 'approve', 'final_text': 'the answer', 'cc': ['robin@corp.example']})
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(seen['cc'], ['mindy@corp.example'])
+        self.assertEqual(seen['cc'], ['robin@corp.example'])
 
 
 
@@ -154,13 +154,13 @@ class AddressBookTests(unittest.TestCase):
         colleague's mailbox is spelled."""
         s = server.store
         s.add_message({'ExternalId': 'ab1', 'Channel': 'email', 'SourceName': 'me@corp.example',
-                       'FromEmail': 'nechama@hrtgcs.example', 'FromName': 'Nechama Ozur, CPA',
+                       'FromEmail': 'paula@vendor.example', 'FromName': 'Paula Vance, CPA',
                        'Subject': 'monthly close', 'BodyText': '?', 'Status': 'filed',
                        'SentAt': '2026-09-02 15:00:00'})
         got = c.get('/api/people').json()['data']
-        row = next((p for p in got if p['Email'] == 'nechama@hrtgcs.example'), None)
+        row = next((p for p in got if p['Email'] == 'paula@vendor.example'), None)
         self.assertIsNotNone(row)
-        self.assertEqual(row['Name'], 'Nechama Ozur, CPA')
+        self.assertEqual(row['Name'], 'Paula Vance, CPA')
 
 if __name__ == '__main__':
     unittest.main()

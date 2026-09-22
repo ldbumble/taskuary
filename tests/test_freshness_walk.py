@@ -21,17 +21,17 @@ from taskuary.store import MemoryStore
 def stamp(seconds=0): return (datetime.now() + timedelta(seconds=seconds)).strftime('%Y-%m-%d %H:%M:%S')
 
 
-def teams_task(s, title='Teams chat with Mindy', conv='teams:mindy', ext='teams:first', body='can you reset my account?', with_review=True):
+def teams_task(s, title='Teams chat with Robin', conv='teams:robin', ext='teams:first', body='can you reset my account?', with_review=True):
     tid = s.create_task({'Title': title, 'Kind': 'reply', 'Status': 'open', 'Priority': 'normal', 'Source': 'teams'}, 'router')
-    first = s.add_message({'TaskId': tid, 'ExternalId': ext, 'ConversationId': conv, 'Channel': 'teams', 'SourceName': 'Mindy', 'Subject': title,
-                           'FromName': 'Mindy', 'SentAt': stamp(-20), 'BodyText': body, 'Status': 'routed'})
+    first = s.add_message({'TaskId': tid, 'ExternalId': ext, 'ConversationId': conv, 'Channel': 'teams', 'SourceName': 'Robin', 'Subject': title,
+                           'FromName': 'Robin', 'SentAt': stamp(-20), 'BodyText': body, 'Status': 'routed'})
     rid = s.add_review({'TaskId': tid, 'MessageId': first, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'ok give me 5 mins', 'Reason': 'needs a reply'}) if with_review else None
     return tid, first, rid
 
 
-def later(s, tid, conv='teams:mindy', text='Actually it works now.'):
-    return s.add_message({'TaskId': tid, 'ExternalId': f'teams:{text[:10]}', 'ConversationId': conv, 'Channel': 'teams', 'SourceName': 'Mindy',
-                          'Subject': 'Teams chat with Mindy', 'FromName': 'Mindy', 'SentAt': stamp(), 'BodyText': text, 'Status': 'routed'})
+def later(s, tid, conv='teams:robin', text='Actually it works now.'):
+    return s.add_message({'TaskId': tid, 'ExternalId': f'teams:{text[:10]}', 'ConversationId': conv, 'Channel': 'teams', 'SourceName': 'Robin',
+                          'Subject': 'Teams chat with Robin', 'FromName': 'Robin', 'SentAt': stamp(), 'BodyText': text, 'Status': 'routed'})
 
 
 def activate(s, *types):
@@ -164,7 +164,7 @@ class SupersedeTests(Base):
         self.assertEqual(len(self.s.list_reviews('pending')), 1)
 
     def test_a_second_line_judged_a_task_still_repoints_and_redrafts_the_pending_reply(self):
-        """Brad asked for the budgets link, then wrote again asking for access to the files. Triage
+        """Ray asked for the budgets link, then wrote again asking for access to the files. Triage
         called the second mail a task, so the draft was ONLY marked behind: still pinned to the
         first mail, warned as stale, with nothing behind the warning but a Refresh link (TQ-0665,
         2026-09-21). What the new line was judged to be does not change that a reply is owed to it."""
@@ -206,7 +206,7 @@ class SupersedeTests(Base):
 
     def test_the_owners_external_answer_retires_the_draft_and_the_notice_says_so(self):
         tid, first, rid = teams_task(self.s)
-        sent = {'ConversationId': 'teams:mindy', 'SentAt': stamp(), 'Channel': 'teams'}
+        sent = {'ConversationId': 'teams:robin', 'SentAt': stamp(), 'Channel': 'teams'}
         channels.retire_draft_answered_elsewhere(self.s, tid, sent)
         rv = self.s.get_review(rid)
         self.assertEqual(rv['Status'], 'superseded')

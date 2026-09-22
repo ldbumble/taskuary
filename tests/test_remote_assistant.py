@@ -122,7 +122,7 @@ class DoorwayBoundaryTests(unittest.TestCase):
         """A bot hears no fromMe: the named private chat is what says the words are the owner's."""
         store, connector = armed_store('telegram', TG_CHAT)
         ups = [{'update_id': 1, 'message': {'message_id': 1, 'text': 'what needs me?',
-                                            'chat': {'id': int(TG_CHAT), 'type': 'private'}, 'from': {'first_name': 'Uri'}}},
+                                            'chat': {'id': int(TG_CHAT), 'type': 'private'}, 'from': {'first_name': 'Alex'}}},
                {'update_id': 2, 'message': {'message_id': 2, 'text': 'from a stranger',
                                             'chat': {'id': 555, 'type': 'private'}, 'from': {'first_name': 'Stranger'}}}]
         with mock.patch.object(messengers, 'tg', return_value=ups), \
@@ -169,20 +169,20 @@ class WordsInsteadOfButtonsTests(unittest.TestCase):
         self.assertTrue(remote_assistant.turn_text(done).startswith('✅ coder finished'), 'the kind outranks the lane')
 
     def test_an_fyi_batch_is_its_items_one_per_line_and_no_summary(self):
-        """"4 things people told you, nothing to do: someone - 4 fyi; Uri - Run failed..." and under it
+        """"4 things people told you, nothing to do: someone - 4 fyi; Alex - Run failed..." and under it
         "fyi - people told you things; nothing to do" - on a phone that read as nothing (the owner,
         2026-09-18: "don't need random summary, just show the items")."""
-        batch = {'say': '2 things people told you, nothing to do: Uri - Run failed: ci; Chana - Rebecca is back Tuesday.',
+        batch = {'say': '2 things people told you, nothing to do: Alex - Run failed: ci; Erin - Rebecca is back Tuesday.',
                  'chips': [{'verb': 'next', 'label': 'All read, next'}],
                  'item': {'kind': 'fyis', 'lane': 'fyi', 'why': 'people told you things; nothing to do',
-                          'items': [{'who': 'Uri', 'title': 'Run failed: ci', 'channel': 'github'},
-                                    {'who': 'Chana', 'title': 'Rebecca is back Tuesday', 'channel': 'email'}]}}
+                          'items': [{'who': 'Alex', 'title': 'Run failed: ci', 'channel': 'github'},
+                                    {'who': 'Erin', 'title': 'Rebecca is back Tuesday', 'channel': 'email'}]}}
         text = remote_assistant.turn_text(batch)
         self.assertNotIn('people told you', text)
         head = text.split('\n\n')[0].split('\n')
         # ...numbered, so a number opens one; the chips take the numbers after the members
-        self.assertEqual(head[1:], [f"1 · {funnel.CHANNEL_MARKS['github']} Uri - Run failed: ci",
-                                    f"2 · {funnel.CHANNEL_MARKS['email']} Chana - Rebecca is back Tuesday"])
+        self.assertEqual(head[1:], [f"1 · {funnel.CHANNEL_MARKS['github']} Alex - Run failed: ci",
+                                    f"2 · {funnel.CHANNEL_MARKS['email']} Erin - Rebecca is back Tuesday"])
         self.assertTrue(head[0].endswith('2 fyi · nothing to do'), head[0])
         self.assertIn('Reply with a number to open one, or:\n3 · All read, next', text)
 
@@ -190,17 +190,17 @@ class WordsInsteadOfButtonsTests(unittest.TestCase):
         """The desktop's "Talk about it" on one member; the chat had four lines and no door into any of
         them (the owner, 2026-09-20: "how do you dig into one specific one?")."""
         store, connector = armed_store()
-        batch = {'kind': 'fyis', 'lane': 'fyi', 'items': [{'key': 'msg:7', 'who': 'Uri', 'title': 'Run failed: ci', 'channel': 'github'},
-                                                          {'key': 'msg:8', 'who': 'Chana', 'title': 'Back Tuesday', 'channel': 'email'}]}
+        batch = {'kind': 'fyis', 'lane': 'fyi', 'items': [{'key': 'msg:7', 'who': 'Alex', 'title': 'Run failed: ci', 'channel': 'github'},
+                                                          {'key': 'msg:8', 'who': 'Erin', 'title': 'Back Tuesday', 'channel': 'email'}]}
         text = remote_assistant.turn_text({'say': 'x', 'chips': [{'verb': 'next', 'label': 'All read, next'}], 'item': batch})
         remote_assistant.remember_offered(store, 'whatsapp', JID, text)
         with mock.patch.object(concierge, 'restore_current', return_value=batch), \
-             mock.patch.object(concierge, 'surface', return_value={'say': 'Chana: back Tuesday.', 'options': [], 'chips': [],
+             mock.patch.object(concierge, 'surface', return_value={'say': 'Erin: back Tuesday.', 'options': [], 'chips': [],
                                                                    'item': {'kind': 'fyi', 'lane': 'fyi'}}) as opened, \
              mock.patch.object(messengers, 'wa_send') as send:
             remote_assistant.respond(store, 'whatsapp', JID, '2', connector['ConnectorId'])
         self.assertEqual(opened.call_args.args[1], 'msg:8')
-        self.assertIn('Chana: back Tuesday.', send.call_args.args[2])
+        self.assertIn('Erin: back Tuesday.', send.call_args.args[2])
 
     def test_an_unknown_source_gets_no_invented_mark(self):
         said = {'say': 'Something landed.', 'item': {'lane': 'fyi', 'kind': 'fyi', 'who': 'Someone', 'channel': 'carrier_pigeon'}}
@@ -296,7 +296,7 @@ class SameWalkTests(unittest.TestCase):
         self.assertIn('Here is the draft.', text)
 
     def test_a_reply_aimed_at_someone_else_drafts_to_them_not_to_what_is_on_the_table(self):
-        """"reply to Chana ..." while Dovid's mail is on the table drafted to DOVID: the phone read the
+        """"reply to Erin ..." while Dovid's mail is on the table drafted to DOVID: the phone read the
         item and ignored the target the interpreter resolved, which the desktop's decide() honours."""
         store, connector = armed_store()
         _t, m, _r = waiting(store)
@@ -436,7 +436,7 @@ class CardParityTests(unittest.TestCase):
         if checklist: store.set_task_checklist(tid, list(checklist), 'owner')
         mid = store.add_message({'TaskId': tid, 'ExternalId': 'gh:50', 'ConversationId': 'c:gh50',
                                  'Channel': 'github', 'Subject': 'GitHub PR fixes allowed_hosts config behavior',
-                                 'FromName': 'Temikus', 'FromEmail': 'code@temik.me',
+                                 'FromName': 'Robin Vale', 'FromEmail': 'code@personal.example',
                                  'SentAt': '2026-09-17 23:03:00', 'BodyText': body or self.BODY, 'Status': 'routed'})
         return store, tid, mid
 
@@ -469,7 +469,7 @@ class CardParityTests(unittest.TestCase):
         store, tid, mid = self.armed()
         store.add_message({'TaskId': tid, 'ExternalId': 'gh:50#2', 'ConversationId': 'c:gh50',
                            'Channel': 'github', 'Subject': 'Re: GitHub PR fixes allowed_hosts config behavior',
-                           'FromName': 'Temikus', 'FromEmail': 'code@temik.me',
+                           'FromName': 'Robin Vale', 'FromEmail': 'code@personal.example',
                            'SentAt': '2026-09-17 23:40:00', 'BodyText': 'One more thought.', 'Status': 'routed'})
         self.assertIn('2 messages combined by triage', remote_assistant.decision_block(store, {'tid': tid, 'mid': mid}))
 
@@ -478,7 +478,7 @@ class CardParityTests(unittest.TestCase):
         store, tid, mid = self.armed()
         store.add_message({'TaskId': tid, 'ExternalId': 'gh:50#2', 'ConversationId': 'c:gh50',
                            'Channel': 'github', 'Subject': 'Re: GitHub PR fixes allowed_hosts config behavior',
-                           'FromName': 'Temikus', 'FromEmail': 'code@temik.me',
+                           'FromName': 'Robin Vale', 'FromEmail': 'code@personal.example',
                            'SentAt': '2026-09-17 23:40:00', 'BodyText': 'One more thought.', 'Status': 'routed'})
         self.assertIn('GitHub context', remote_assistant.decision_block(store, {'tid': tid, 'mid': mid}))
 
@@ -536,13 +536,13 @@ class CardParityTests(unittest.TestCase):
 
     def test_the_source_line_carries_the_ref_the_desktop_prints_in_its_corner(self):
         """So the owner can say "open TQ-0630" when they get back to a desktop."""
-        item = {'who': 'Temikus', 'channel': 'github', 'ref': 'TQ-0630'}
-        self.assertEqual(remote_assistant.source_line(item), '\U0001f419 Temikus \u00b7 github \u00b7 TQ-0630')
+        item = {'who': 'Robin Vale', 'channel': 'github', 'ref': 'TQ-0630'}
+        self.assertEqual(remote_assistant.source_line(item), '\U0001f419 Robin Vale \u00b7 github \u00b7 TQ-0630')
 
     def test_the_status_line_speaks_the_one_vocabulary(self):
         """lanes.json is the single table the desktop and the chat both read - never a second copy."""
-        out = {'say': 'Temikus wrote on github.', 'options': ['Next'],
-               'item': {'lane': 'queued', 'kind': 'todo', 'who': 'Temikus', 'channel': 'github',
+        out = {'say': 'Robin Vale wrote on github.', 'options': ['Next'],
+               'item': {'lane': 'queued', 'kind': 'todo', 'who': 'Robin Vale', 'channel': 'github',
                         'why': 'handed to an agent, not started yet'}}
         text = remote_assistant.turn_text(out)
         self.assertIn(f'{funnel.LANE_WORDS["queued"][0]} - handed to an agent, not started yet', text)

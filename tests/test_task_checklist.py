@@ -19,7 +19,7 @@ from taskuary.store import MemoryStore, SQLiteStore
 
 MSG = {'external_id': 'e1', 'channel': 'email', 'from_email': 'dana@vendor.example', 'from_name': 'Dana', 'conversation_id': 'AAQk-onboard',
        'subject': 'Re: Re: FW: stuff', 'sent_at': '2026-09-06 09:00:00',
-       'body': 'Hi Uri,\n\nTwo things before Friday: please add Priya to the payroll portal, and send me the August export.\n\nThanks,\nDana'}
+       'body': 'Hi Alex,\n\nTwo things before Friday: please add Priya to the payroll portal, and send me the August export.\n\nThanks,\nDana'}
 
 
 def verdict(title='Add Priya to payroll and send the August export', summary='Dana needs Priya added to the payroll portal and the August export sent, by Friday.',

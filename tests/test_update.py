@@ -217,7 +217,7 @@ if __name__ == '__main__':
 
 
 class TheHelperDoesNotStrandTheOwner(unittest.TestCase):
-    """Uri, 2026-09-15, on a machine running the packaged build: pressed Update, the app never came
+    """Alex, 2026-09-15, on a machine running the packaged build: pressed Update, the app never came
     back, and a console window sat there showing `find "10592"` - the wait loop, spinning on a PID
     that never went. Closing that window is what finally let the app reopen.
 

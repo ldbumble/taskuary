@@ -88,13 +88,13 @@ class RulingIsEvidenceTests(unittest.TestCase):
         s = MemoryStore(); seen = []
         tid = s.create_task({'Title': 'Resident refund request', 'Kind': 'general', 'Source': 'email'}, 'test')
         s.add_message({'TaskId': tid, 'ExternalId': 'e0', 'ConversationId': 'thread-1', 'Channel': 'email',
-                       'Subject': 'Re: Resident Refund Request', 'FromEmail': 'hudson@regencyhealthrehab.com',
+                       'Subject': 'Re: Resident Refund Request', 'FromEmail': 'hudson@riverbend.example',
                        'BodyText': 'the refund paperwork', 'Status': 'routed'})
-        ruled = arrive(s, 'e0b', brain('fyi'), frm='lynch@regencyhealthrehab.com', conv='thread-1', subject='Re: Resident Refund Request')
+        ruled = arrive(s, 'e0b', brain('fyi'), frm='lynch@riverbend.example', conv='thread-1', subject='Re: Resident Refund Request')
         s.set_message_status(ruled['message_id'], 'ignored')
         s.add_route(ruled['message_id'], None, 'ignore', None, 'not ours - resident refunds are not our task', [], 'owner')
-        out = arrive(s, 'e2', brain('task', 'asks the owner to approve', seen), frm='another@regencyhealthrehab.com',
-                     conv='thread-1', subject='Re: Resident Refund Request', body='Uri, can you approve this one?')
+        out = arrive(s, 'e2', brain('task', 'asks the owner to approve', seen), frm='another@riverbend.example',
+                     conv='thread-1', subject='Re: Resident Refund Request', body='Alex, can you approve this one?')
         self.assertEqual((out['status'], out['task_id']), ('attached', tid))
         self.assertIn('resident refunds are not our task', seen[0]['sys'])
 

@@ -1,6 +1,6 @@
 """Tiny client for the scratch server: python tq.py GET /api/x | POST /api/x '{"json":1}'"""
 import sys, json, re, urllib.request
-H = r'C:\Users\UNUSSB~1\AppData\Local\Temp\claude\C--Users-unussbaum-Documents-General-Testing-taskhub\4ed300c8-8b52-4c88-8747-64a79ae5215a\scratchpad\home7793\config.toml'
+H = r'C:\Users\UNUSSB~1\AppData\Local\Temp\claude\C--Users-owner-Documents-General-Testing-taskhub\4ed300c8-8b52-4c88-8747-64a79ae5215a\scratchpad\home7793\config.toml'
 TOK = re.search(r'^token = "(.*)"', open(H, encoding='utf-8').read(), re.M).group(1)
 BASE = 'http://127.0.0.1:7793'
 def call(method, path, body=None):

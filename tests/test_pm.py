@@ -43,7 +43,7 @@ class TelegramApprovalTests(unittest.TestCase):
         s.save_source({'Channel': 'telegram', 'Address': '555', 'ConnectorId': c['ConnectorId'], 'Active': 1}, 't')
         real, messengers.tg = messengers.tg, self.fake_tg([{'update_id': 8, 'message': {
             'message_id': 2, 'date': 1755900000, 'text': 'please fix the export',
-            'chat': {'id': 555}, 'from': {'first_name': 'Uri'}}}])
+            'chat': {'id': 555}, 'from': {'first_name': 'Alex'}}}])
         try: n = messengers.poll_telegram(s, c, [])
         finally: messengers.tg = real
         self.assertEqual(n, 1)
@@ -109,7 +109,7 @@ class PmPollTests(unittest.TestCase):
         c = conn(s, 'monday', {'me_id': '42'})
         data = {'boards': [{'name': 'Ops', 'items_page': {'items': [
             {'id': '10', 'name': 'Mine', 'updated_at': '2099-01-01T00:00:00Z', 'url': 'u', 'creator': {'name': 'Boss'},
-             'column_values': [{'type': 'people', 'text': 'Uri', 'persons_and_teams': [{'id': 42, 'kind': 'person'}]}]},
+             'column_values': [{'type': 'people', 'text': 'Alex', 'persons_and_teams': [{'id': 42, 'kind': 'person'}]}]},
             {'id': '11', 'name': 'Not mine', 'updated_at': '2099-01-01T00:00:00Z', 'url': 'u', 'creator': None,
              'column_values': [{'type': 'people', 'text': 'Someone', 'persons_and_teams': [{'id': 7, 'kind': 'person'}]}]},
         ]}}]}
@@ -151,14 +151,14 @@ class ClickUpTests(unittest.TestCase):
     def test_test_remembers_who_me_is_and_which_workspace(self):
         s = MemoryStore()
         c = conn(s, 'clickup')
-        routes = {'/user': {'user': {'id': 183, 'username': 'Uri', 'email': 'u@x.com'}},
+        routes = {'/user': {'user': {'id': 183, 'username': 'Alex', 'email': 'u@x.com'}},
                   '/team': {'teams': [{'id': '512', 'name': 'Acme'}]}}
         real, pm._clickup = pm._clickup, lambda c_, p, **kw: routes[p]
         try: detail = pm.test_clickup(s, c)
         finally: pm._clickup = real
         cfg = json.loads(s.get_connector_by_type('clickup')['ConfigJson'])
         self.assertEqual((cfg['user_id'], cfg['team_id']), ('183', '512'))
-        self.assertIn('Uri', detail)
+        self.assertIn('Alex', detail)
         self.assertTrue(any(x['Channel'] == 'clickup' for x in s.list_sources(active_only=False)))
 
     def test_token_goes_in_raw_without_bearer(self):

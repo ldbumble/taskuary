@@ -201,7 +201,7 @@ def store():
     wf = s.save_source({'Channel': 'report', 'Address': 'adp@walk', 'Active': 1,
                         'ConfigJson': json.dumps({'title': 'ADP hours export', 'type': 'agent', 'is_workflow': True, 'cron': '0 6 * * 1-5'})}, 't')
     s.add_report_run(wf, {'at': '2026-09-18 06:01:00', 'title': 'ADP hours export', 'failed': True, 'error': 'sign-in page'})
-    s.save_connector({'Type': 'outlook', 'Name': 'Uri mailbox', 'Active': 1, 'ConfigJson': '{}'}, 't')
+    s.save_connector({'Type': 'outlook', 'Name': 'Alex mailbox', 'Active': 1, 'ConfigJson': '{}'}, 't')
     s.save_connector({'Type': 'teams', 'Name': 'Teams', 'Active': 0, 'ConfigJson': '{}'}, 't')
     s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
     s.set_setting('intent_classify_enabled', '1', 't'); s.set_setting('poll_minutes', '10', 't')
@@ -224,7 +224,7 @@ class FactsTests(unittest.TestCase):
 
     def test_connections_and_agents(self):
         c = {r['name']: r for r in appfacts.connections(store())}
-        self.assertTrue(c['Uri mailbox']['active']); self.assertFalse(c['Teams']['active']); self.assertFalse(c['Teams']['has_secret'])
+        self.assertTrue(c['Alex mailbox']['active']); self.assertFalse(c['Teams']['active']); self.assertFalse(c['Teams']['has_secret'])
         self.assertEqual([a['name'] for a in appfacts.agents(store())], ['coder'])
 
     def test_find_by_name_is_case_insensitive_containment_and_id_wins(self):
@@ -239,7 +239,7 @@ class FactsTests(unittest.TestCase):
         self.assertIn('THE APP RIGHT NOW', b)
         self.assertIn('2 reports', b); self.assertIn('1 workflow', b)
         self.assertIn('Monthly AR Report', b); self.assertIn('ADP hours export', b); self.assertIn('failed', b)
-        self.assertIn('Uri mailbox', b); self.assertIn('Teams (off)', b)
+        self.assertIn('Alex mailbox', b); self.assertIn('Teams (off)', b)
         self.assertIn('walk me through my tasks', b)                                   # the scripts, by name
         self.assertLess(len(b), 2500)
         many = store()
@@ -420,7 +420,7 @@ class AppReadTests(unittest.TestCase):
     def test_connections_and_agents(self):
         s = self._store()
         out = concierge.read_op(s, 'connections.list', {})
-        self.assertIn('Uri mailbox', out); self.assertIn('Teams', out); self.assertIn('off', out)
+        self.assertIn('Alex mailbox', out); self.assertIn('Teams', out); self.assertIn('off', out)
         self.assertIn('outlook', concierge.read_op(s, 'connection.read', {'name': 'mailbox'}))
         self.assertIn('No connection by that name', concierge.read_op(s, 'connection.read', {'name': 'zoho'}))
         self.assertIn('coder', concierge.read_op(s, 'agents.list', {}))

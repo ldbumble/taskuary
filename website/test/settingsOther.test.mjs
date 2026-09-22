@@ -151,16 +151,11 @@ test("a live browser on an empty tab says it is an empty tab", () => {
 // wanted 1300 pushed the menu left of where the page before it had drawn it, and you watched the
 // thing you had just clicked slide away (the owner, 2026-09-18: "keep it the same as above").
 test("every settings page is one width, so the rail never moves", () => {
-  // The guarantee is THE RAIL NEVER MOVES; the mechanism changed and the guarantee did not. It
-  // used to be a single 980 cap on every page (a per-page width had slid the rail). Settings is
-  // full width now, and the rail is the grid's fixed first column, which cannot slide whatever
-  // the page beside it does (the owner, 2026-09-22: "setting layout is full width").
+  assert.match(src, /^const PAGE = \d+;$/m, "one number, not a table - and the tables live with it");
   assert.doesNotMatch(src, /PAGE_WIDTH/, "the per-page table is gone");
-  assert.doesNotMatch(src, /^const PAGE = \d+;$/m, "and so is the single cap that replaced it");
-  assert.match(src, /gridTemplateColumns: \{ xs: "minmax\(0, 1fr\)", md: `\$\{RAIL\}px minmax\(0,1fr\)` \}/,
-    "the rail is a FIXED first column - that is what pins it now");
-  assert.match(src, /maxWidth: "none"/, "and the page takes the rest of the window");
-  assert.match(src, /gap: 3, alignItems: "start", mx: "auto"/, "the grid itself is unchanged");
+  assert.match(src, /maxWidth: RAIL \+ GUTTER \+ PAGE/,
+    "the block is rail + gutter + page, and that sum is the same on every page");
+  assert.match(src, /gap: 3, alignItems: "start", mx: "auto"/, "and mx:auto is what centres it");
   assert.doesNotMatch(src, /minWidth: 0, maxWidth: \(!q &&/,
     "the page must not be capped inside a column that is wider than it - that is the void");
   // the width cannot depend on which page is showing, or the rail drifts again by another route

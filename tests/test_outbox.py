@@ -12,12 +12,12 @@ class OutboxEmailTests(unittest.TestCase):
         self.s = MemoryStore()
 
     def test_multiple_to_and_cc_are_saved_on_the_review_and_shown_to_the_drafter(self):
-        self.s.save_doc('style', '### Greeting & sign-off\n- Always end with:\n  Best,\n  Uri\n  MFA Heritage\n'
+        self.s.save_doc('style', '### Greeting & sign-off\n- Always end with:\n  Best,\n  Alex\n  Northwind Heritage\n'
                                     '### Tone & length\n- concise but complete\n', 'test')
         seen = {}
         def llm(system, user, max_tokens=0):
             seen['system'], seen['user'] = system, user
-            return 'Hi all,\n\nThe report is ready.\n\nBest,\nUri'
+            return 'Hi all,\n\nThe report is ready.\n\nBest,\nAlex'
         result = outbox.compose(self.s, 'email', ['a@example.com', 'b@example.com'], 'share the report',
                                 subject='Monthly report', cc=['copy@example.com'], llm=llm)
         review = self.s.get_review(result['reviewId'])
@@ -27,7 +27,7 @@ class OutboxEmailTests(unittest.TestCase):
         self.assertIn('TO: a@example.com, b@example.com', seen['user'])
         self.assertIn('CC: copy@example.com', seen['user'])
         self.assertIn('exact recurring signature STYLE.md', seen['system'])
-        self.assertIn('MFA Heritage', seen['system'])
+        self.assertIn('Northwind Heritage', seen['system'])
 
     def test_a_new_address_is_allowed_and_bad_or_missing_addresses_are_refused(self):
         made = outbox.compose(self.s, 'email', 'never-seen@example.com', 'say hello',

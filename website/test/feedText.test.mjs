@@ -46,10 +46,10 @@ test("the source chip hides when it only echoes the sender", () => {
 // subject)", next to a message nobody could see without opening it (owner, 2026-09-07).
 test("chat has no subject, so the row says what was actually said", () => {
   const said = "So what's their moves if it's free?";
-  assert.equal(subjectOf(row({ FromName: "Gabi", SourceName: "group chat", Preview: said })), said);
-  assert.equal(subjectOf(row({ FromName: "Hindy Spiegel", Subject: "Teams chat with Hindy Spiegel",
+  assert.equal(subjectOf(row({ FromName: "Tess", SourceName: "group chat", Preview: said })), said);
+  assert.equal(subjectOf(row({ FromName: "Gail Moreno", Subject: "Teams chat with Gail Moreno",
     Preview: "can you add Nathan to the call" })), "can you add Nathan to the call");
-  assert.equal(subjectOf(row({ FromName: "Gabi", SourceName: "group chat", Subject: "Gabi in group chat",
+  assert.equal(subjectOf(row({ FromName: "Tess", SourceName: "group chat", Subject: "Tess in group chat",
     Preview: "Budgeting" })), "Budgeting");
   // a chat WITH a real subject still has one
   assert.equal(subjectOf(row({ FromName: "Fireflies", Subject: "AI Agents", Preview: "Nathan invited" })), "AI Agents");
@@ -57,11 +57,11 @@ test("chat has no subject, so the row says what was actually said", () => {
 
 test("what it says has to fit the pill: one line, cut on a word", () => {
   const long = "Budgeting for the next quarter needs the new headcount plan from Nathan before anyone can sign it off";
-  const out = subjectOf(row({ FromName: "Gabi", Preview: long }));
+  const out = subjectOf(row({ FromName: "Tess", Preview: long }));
   assert.ok(out.length <= 91, `too long for the pill: ${out.length}`);
   assert.ok(out.endsWith("…") && !out.endsWith(" …"), `cut mid-word: ${out}`);
-  assert.equal(subjectOf(row({ FromName: "Gabi", Preview: "first line\nsecond line" })), "first line");
-  assert.equal(subjectOf(row({ FromName: "Gabi", Preview: "   " })), "");
+  assert.equal(subjectOf(row({ FromName: "Tess", Preview: "first line\nsecond line" })), "first line");
+  assert.equal(subjectOf(row({ FromName: "Tess", Preview: "   " })), "");
 });
 
 // A generated body (a report's error summary, the assistant's own note) is WRITTEN as structure -
@@ -80,7 +80,7 @@ test("a body with a list is split into its lead and its lines", () => {
 });
 
 test("ordinary mail is left exactly as it was", () => {
-  const body = "Hi Uri,\n\nCan you approve the refund for Heflin before Friday?\n\nThanks";
+  const body = "Hi Alex,\n\nCan you approve the refund for Heflin before Friday?\n\nThanks";
   const { lead, bullets } = structured(body);
   assert.equal(lead, body, "a body with no list must not be re-cut - a greeting is not a summary");
   assert.deepEqual(bullets, []);

@@ -871,7 +871,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
                              f'give it the path; otherwise the session would open in '
                              f'{profile.get("cwd") or os.getcwd()} and work the wrong tree')
     # ...and NO repo decided must not mean "the agent's default folder" either. That default is one
-    # particular checkout (FanApp, on this box), so a task nothing matched opened there and an agent
+    # particular checkout (ledger, on this box), so a task nothing matched opened there and an agent
     # worked a tree it had no business in - the same failure the refusal above exists to prevent, one
     # branch further along (the owner, 2026-09-03: "sent the coding agent the wrong repo again").
     if not cwd and not repo and task_id and agent:

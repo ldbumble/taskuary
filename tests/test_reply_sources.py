@@ -14,7 +14,7 @@ from unittest import mock
 from taskuary import learn, outbox, responder, verdicts
 from taskuary.store import MemoryStore
 
-STYLE = ('## Reply style\n\n- Two sentences, answer first.\n- Sign off: "Best, Uri" - the quokka signature line.\n')
+STYLE = ('## Reply style\n\n- Two sentences, answer first.\n- Sign off: "Best, Alex" - the quokka signature line.\n')
 LEARNED = '## Active\n- Mail from vendors about invoices deserves a task (the capybara rule) [s:3 | ev: rv1 | seen: 2026-08-01]\n'
 
 
@@ -39,7 +39,7 @@ def thread(s):
 
 def capture():
     seen = {}
-    return seen, (lambda system, user, **k: (seen.update(system=system, user=user), 'Here it is.\n\nBest, Uri')[1])
+    return seen, (lambda system, user, **k: (seen.update(system=system, user=user), 'Here it is.\n\nBest, Alex')[1])
 
 
 class VoiceTests(unittest.TestCase):
@@ -75,11 +75,11 @@ class VoiceTests(unittest.TestCase):
 class FeedbackRoutingTests(unittest.TestCase):
     def test_an_edited_drafts_note_becomes_a_writing_instruction_in_style_md_not_triage_learning(self):
         s = store(); tid, mid, rid = thread(s)
-        s.update_review_draft(rid, 'Here it is.\n\nBest, Uri', None)
+        s.update_review_draft(rid, 'Here it is.\n\nBest, Alex', None)
         events = []
         with mock.patch.object(learn, 'learn_from', side_effect=lambda st, ev, **k: events.append(ev)), \
              mock.patch('taskuary.outbound.reply_to_message', return_value={'channel': 'email', 'to': ['dana@vendor.example']}):
-            out = verdicts.decide(s, s.get_review(rid), 'edit', 'Attached. Best, Uri', 'shorter, and never say "please find attached"')
+            out = verdicts.decide(s, s.get_review(rid), 'edit', 'Attached. Best, Alex', 'shorter, and never say "please find attached"')
         self.assertTrue(out['ok'])
         style = s.get_doc('style')
         self.assertIn('## Owner notes', style); self.assertIn('never say "please find attached"', style)

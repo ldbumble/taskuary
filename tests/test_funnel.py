@@ -88,10 +88,10 @@ class FollowUpTests(unittest.TestCase):
     def test_an_fyi_follow_up_on_an_open_task_is_not_asked_you(self):
         s = store()
         t = s.create_task({'Title': 'Pto', 'Kind': 'coding', 'Status': 'waiting'}, 'o')
-        mail(s, 'PTO', who='Chana', email='chana@hrtgcs.com', body='Can you import pto for Aug 9 thru Aug 22?', hours=8, tid=t, conv='c:pto')
+        mail(s, 'PTO', who='Erin', email='erin@vendor.example', body='Can you import pto for Aug 9 thru Aug 22?', hours=8, tid=t, conv='c:pto')
         s.add_message({'TaskId': t, 'ExternalId': 'x:own', 'ConversationId': 'c:pto', 'Channel': 'email', 'Subject': 'RE: PTO', 'FromName': 'You',
                        'FromEmail': 'owner@ours.com', 'SentAt': ago(3), 'BodyText': 'Done. All PTO batches posted.', 'Status': 'context'})
-        m = mail(s, 'RE: PTO', who='Chana', email='chana@hrtgcs.com', body='Thank you!', hours=1, tid=t, conv='c:pto', status='filed')
+        m = mail(s, 'RE: PTO', who='Erin', email='erin@vendor.example', body='Thank you!', hours=1, tid=t, conv='c:pto', status='filed')
         s.add_route(m, t, 'attach', 1.0, 'triage: fyi - only says thanks · kept on TQ-0322 for the chain', [], 'triage')
         items = funnel.build(s)['items']
         self.assertEqual([(i['kind'], i['lane'], i['key']) for i in items], [('wrapup', 'report', f'wrap:{t}')])
@@ -103,7 +103,7 @@ class FollowUpTests(unittest.TestCase):
         t = s.create_task({'Title': 'Pto', 'Kind': 'coding', 'Status': 'waiting'}, 'o')
         s.add_message({'TaskId': t, 'ExternalId': 'x:own3', 'ConversationId': 'c:pto2', 'Channel': 'email', 'Subject': 'RE: PTO', 'FromName': 'You',
                        'FromEmail': 'owner@ours.com', 'SentAt': ago(3), 'BodyText': 'Done.', 'Status': 'context'})
-        mail(s, 'RE: PTO', who='Chana', email='chana@hrtgcs.com', body='Thanks! Can you also do the M44 period?', hours=1, tid=t, conv='c:pto2')
+        mail(s, 'RE: PTO', who='Erin', email='erin@vendor.example', body='Thanks! Can you also do the M44 period?', hours=1, tid=t, conv='c:pto2')
         self.assertEqual([(i['kind'], i['lane']) for i in funnel.build(s)['items']], [('todo', 'yours')])
 
     def test_the_wrap_up_counts_a_reply_typed_in_your_own_mail_client(self):
@@ -173,14 +173,14 @@ class ChatHasNoSubjectTests(unittest.TestCase):
         "(no subject)" beside a message you had to open to see (the owner, 2026-09-07)."""
         s = store()
         said = 'Budgeting'
-        m = mail(s, '', who='Gabi', email='', body=said, hours=0, channel='whatsapp', conv='wa:gabi', status='filed')
+        m = mail(s, '', who='Tess', email='', body=said, hours=0, channel='whatsapp', conv='wa:tess', status='filed')
         s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
         self.assertEqual(funnel.build(s)['items'][0]['title'], 'Budgeting')
         # ...and a long one fits the pill: one line, cut on a word, never mid-word
         s2 = store()
         long_said = ("So what's their moves if it's free? So it's a cool thing, but I mean, something like "
                      "someone you built this a month and a half ago. So now what?")
-        m2 = mail(s2, '', who='Gabi', email='', body=long_said, hours=0, channel='whatsapp', conv='wa:g2', status='filed')
+        m2 = mail(s2, '', who='Tess', email='', body=long_said, hours=0, channel='whatsapp', conv='wa:g2', status='filed')
         s2.add_route(m2, None, 'file', None, 'triage: fyi', [], 'triage')
         title = funnel.build(s2)['items'][0]['title']
         self.assertLessEqual(len(title), 91)
@@ -190,14 +190,14 @@ class ChatHasNoSubjectTests(unittest.TestCase):
     def test_a_synthesized_chat_title_gives_way_to_the_message(self):
         """Teams titles a chat after the people already named in the row."""
         s = store()
-        m = mail(s, 'Teams chat with Hindy Spiegel', who='Hindy Spiegel', email='h@mfa.test',
+        m = mail(s, 'Teams chat with Gail Moreno', who='Gail Moreno', email='h@northwind.test',
                  body='can you add Nathan to the call he wants to join', hours=0, channel='teams', conv='t:h', status='filed')
         s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
         self.assertEqual(funnel.build(s)['items'][0]['title'], 'can you add Nathan to the call he wants to join')
 
     def test_a_real_subject_is_still_the_title(self):
         s = store()
-        m = mail(s, 'AI Agents', who='Nathan', email='n@mfa.test', body='Nathan invited Fireflies here',
+        m = mail(s, 'AI Agents', who='Nathan', email='n@northwind.test', body='Nathan invited Fireflies here',
                  hours=0, channel='teams', conv='t:ai', status='filed')
         s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
         self.assertEqual(funnel.build(s)['items'][0]['title'], 'AI Agents')
@@ -210,13 +210,13 @@ class OneLinePerThreadTests(unittest.TestCase):
         it's only 1?")."""
         s = store()
         for n in range(3):
-            m = mail(s, '', who='Gabi', email='', body=f'line {n}', hours=0, channel='whatsapp', conv='wa:gabi', status='filed')
+            m = mail(s, '', who='Tess', email='', body=f'line {n}', hours=0, channel='whatsapp', conv='wa:tess', status='filed')
             s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
         items = funnel.build(s)['items']
-        self.assertEqual([(i['who'], i.get('more')) for i in items], [('Gabi', 2)])
+        self.assertEqual([(i['who'], i.get('more')) for i in items], [('Tess', 2)])
         # ...and a single line says nothing extra
         s2 = store()
-        m = mail(s2, '', who='Gabi', email='', body='just one', hours=0, channel='whatsapp', conv='wa:one', status='filed')
+        m = mail(s2, '', who='Tess', email='', body='just one', hours=0, channel='whatsapp', conv='wa:one', status='filed')
         s2.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
         self.assertIsNone(funnel.build(s2)['items'][0].get('more'))
 
@@ -226,11 +226,11 @@ class OneLinePerThreadTests(unittest.TestCase):
         first = s.create_task({'Title': 'Reorder the intake', 'Kind': 'general', 'Status': 'open'}, 'o')
         second = s.create_task({'Title': 'Fix the login', 'Kind': 'coding', 'Status': 'open'}, 'o')
         for n in range(7):
-            mid = mail(s, 'Reorder the intake', who='Gabi', email='', body=f'intake line {n}', hours=n / 100,
+            mid = mail(s, 'Reorder the intake', who='Tess', email='', body=f'intake line {n}', hours=n / 100,
                        tid=first, channel='whatsapp', conv='wa:long-room')
             s.add_route(mid, first, 'attach', 1.0, 'triage: same task', [], 'triage')
         for n in range(2):
-            mid = mail(s, 'Fix the login', who='Gabi', email='', body=f'login line {n}', hours=1 + n / 100,
+            mid = mail(s, 'Fix the login', who='Tess', email='', body=f'login line {n}', hours=1 + n / 100,
                        tid=second, channel='whatsapp', conv='wa:long-room')
             s.add_route(mid, second, 'attach', 1.0, 'triage: different task', [], 'triage')
 
@@ -357,24 +357,24 @@ class MutedTests(unittest.TestCase):
         s = store()
         s.set_setting('team_domains', 'ours.com', 't')
         for n in range(2):
-            m = mail(s, f'MFA Financial Report - .0{n} P&L', who='Nechama Ozur', email='nozur@hrtgcs.com',
+            m = mail(s, f'Northwind Financial Report - .0{n} P&L', who='Paula Vance', email='pvance@vendor.example',
                      body='generated by Intacct', hours=n + 1, status='filed')
             s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
-        keep = mail(s, 'RE: PointClickCare', who='Kishan', email='kishan@vendor.com', body='please respond', hours=1, status='filed')
+        keep = mail(s, 'RE: Careview', who='Ravi', email='ravi@vendor.com', body='please respond', hours=1, status='filed')
         s.add_route(keep, None, 'file', None, 'triage: fyi', [], 'triage')
         self.assertEqual(len(funnel.build(s)['items']), 3)
-        funnel.remember_mute(s, {'sender': 'nozur@hrtgcs.com', 'words': ['mfa', 'financials'], 'why': 'part of the financials process'}, 'o')
+        funnel.remember_mute(s, {'sender': 'pvance@vendor.example', 'words': ['northwind', 'financials'], 'why': 'part of the financials process'}, 'o')
         p = funnel.build(s)
-        self.assertEqual([i['who'] for i in p['items']], ['Kishan'])
+        self.assertEqual([i['who'] for i in p['items']], ['Ravi'])
         self.assertEqual((p['muted'], p['rules']), (2, ['part of the financials process']))
         # a rule reaches only the lanes with nothing to do
         t = s.create_task({'Title': 'Re-run .02', 'Kind': 'coding', 'Status': 'waiting'}, 'o')
-        mail(s, 'MFA Financial Report - can you re-run .02?', who='Nechama Ozur', email='nozur@hrtgcs.com',
+        mail(s, 'Northwind Financial Report - can you re-run .02?', who='Paula Vance', email='pvance@vendor.example',
              body='please re-run it', hours=0, tid=t)
         funnel.invalidate()
         self.assertIn('yours', [i['lane'] for i in funnel.build(s)['items'] if i.get('tid') == t])
         # ...and it is the owner's to take off again
-        funnel.remember_mute(s, {'sender': 'nozur@hrtgcs.com', 'words': ['mfa', 'financials'], 'why': 'x'}, 'o')
+        funnel.remember_mute(s, {'sender': 'pvance@vendor.example', 'words': ['northwind', 'financials'], 'why': 'x'}, 'o')
         self.assertEqual(len(funnel.mutes(s)), 1)              # rewritten, not stacked
 
 
@@ -423,7 +423,7 @@ class LanesTests(unittest.TestCase):
     def test_an_assistant_line_waits_a_day_to_be_seen_not_twelve_hours(self):
         """A mail going quiet after twelve hours is fine. The assistant's standing note that
         something is LOOSE is the opposite - still true tomorrow - and expiring it is how "TQ-0329
-        hasn't moved, Nechama asked for that file today" left the pipe unseen."""
+        hasn't moved, Paula asked for that file today" left the pipe unseen."""
         now = datetime.now()
         idea = {'kind': 'idea', 'lane': 'forgotten', 'when': (now - timedelta(hours=18)).strftime('%Y-%m-%d %H:%M:%S')}
         mail = {'kind': 'fyi', 'lane': 'fyi', 'when': (now - timedelta(hours=18)).strftime('%Y-%m-%d %H:%M:%S')}
@@ -616,23 +616,23 @@ class LanesTests(unittest.TestCase):
         m = mail(s, 'Team note', who='Lee', email='lee@ours.com', body='FYI.', hours=1, status='filed', conv='n1')
         s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
         t = s.create_task({'Title': 'T&E portal', 'Kind': 'coding', 'Status': 'waiting'}, 'o')
-        m2 = mail(s, 'RE: T&E Portal', who='Craig Neiswanger', email='craig@mfa.com', hours=0, tid=t)
+        m2 = mail(s, 'RE: T&E Portal', who='Craig Palmer', email='craig@northwind.example', hours=0, tid=t)
         s.add_review({'TaskId': t, 'MessageId': m2, 'Kind': 'reply', 'DraftText': 'Yes, go ahead.', 'Status': 'pending'})
         p = funnel.build(s)
         al = funnel.alerts(s, p['items'])
-        self.assertEqual([(a['kind'], a['lane'], a['text']) for a in al], [('review', 'approve', "Craig Neiswanger's reply is waiting for your yes")])
+        self.assertEqual([(a['kind'], a['lane'], a['text']) for a in al], [('review', 'approve', "Craig Palmer's reply is waiting for your yes")])
         fyi = next(i for i in p['items'] if i['lane'] == 'fyi')
         self.assertEqual([i['kind'] for i in funnel.more_urgent(p['items'], fyi['key'])], ['review'])
         self.assertEqual(funnel.more_urgent(p['items'], f'review:{s.list_reviews("pending")[0]["ReviewId"]}'), [])
         line = concierge._urgent_line(p['items'], fyi)
-        self.assertIn('MORE URGENT WAITING', line); self.assertIn('Craig Neiswanger - RE: T&E Portal (reply ready)', line)
+        self.assertIn('MORE URGENT WAITING', line); self.assertIn('Craig Palmer - RE: T&E Portal (reply ready)', line)
         funnel.settle(s, f'review:{s.list_reviews("pending")[0]["ReviewId"]}', 'surfaced')
         self.assertEqual(funnel.alerts(s), [])                            # once shown, it is no longer news
 
     def test_a_task_whose_reply_went_out_and_agent_finished_asks_to_be_closed(self):
         s = store()
         t = s.create_task({'Title': 'T&e portal', 'Kind': 'coding', 'Status': 'waiting'}, 'o')
-        m = mail(s, 'RE: T&E Portal', who='Craig', email='craig@mfa.com', hours=3, tid=t, conv='te')
+        m = mail(s, 'RE: T&E Portal', who='Craig', email='craig@northwind.example', hours=3, tid=t, conv='te')
         s.add_comment(t, 'coder', 'agent', 'CODER REPORT' + chr(10) + 'Summary: Bulk Approve removed and deployed.')
         r = s.add_review({'TaskId': t, 'MessageId': m, 'Kind': 'reply', 'DraftText': 'Done - it is off now.', 'Status': 'pending'})
         self.assertEqual([i['kind'] for i in funnel.build(s)['items']], ['review'])
@@ -672,8 +672,8 @@ class LanesTests(unittest.TestCase):
         self.assertEqual(funnel.build(s)['items'], [])
         # ...and a line about a thread the owner has since replied on is over too
         s.set_setting('team_domains', 'ours.com', 't')
-        mm = mail(s, 'PTO', who='Chana', email='chana@ours.com', hours=20, status='filed', conv='pto')   # a filed mail, past the window
-        s.upsert_idea({'key': 'asked:pto', 'kind': 'asked', 'text': 'Chana asked for the PTO import', 'sig': 'p', 'action': {'type': 'message', 'mid': mm}}, ago(hours=2))
+        mm = mail(s, 'PTO', who='Erin', email='erin@ours.com', hours=20, status='filed', conv='pto')   # a filed mail, past the window
+        s.upsert_idea({'key': 'asked:pto', 'kind': 'asked', 'text': 'Erin asked for the PTO import', 'sig': 'p', 'action': {'type': 'message', 'mid': mm}}, ago(hours=2))
         self.assertIn('asked', [i.get('idea_kind') for i in funnel.build(s)['items']])
         rr = s.add_review({'TaskId': None, 'MessageId': mm, 'Kind': 'reply', 'DraftText': 'Imported, all 80 files.', 'Status': 'pending'})
         s.decide_review(rr, 'approved', 'Imported, all 80 files.', 'owner')
@@ -772,13 +772,13 @@ class FeedUnreadTests(unittest.TestCase):
 
     def test_repeated_assistant_posts_follow_the_latest_idea_and_read_state(self):
         s = store()
-        old = s.add_message({'ExternalId': 'a1', 'Channel': 'assistant', 'Subject': 'Hindy still needs a sample',
+        old = s.add_message({'ExternalId': 'a1', 'Channel': 'assistant', 'Subject': 'Gail still needs a sample',
                              'FromName': 'Assistant', 'SentAt': ago(2), 'BodyText': 'send it', 'Status': 'feed',
                              'Brief': json.dumps({'ideas': [{'id': 1}]})})
         s.set_brief(old, json.dumps({'ideas': [{'id': 1}]}))
-        idea = s.upsert_idea({'key': 'hindy-sample', 'kind': 'idea', 'text': 'Hindy still needs a sample',
+        idea = s.upsert_idea({'key': 'gail-sample', 'kind': 'idea', 'text': 'Gail still needs a sample',
                               'sig': 'one', 'action': {'mid': 9}}, ago(2))
-        new = s.add_message({'ExternalId': 'a2', 'Channel': 'assistant', 'Subject': 'Hindy still needs a sample',
+        new = s.add_message({'ExternalId': 'a2', 'Channel': 'assistant', 'Subject': 'Gail still needs a sample',
                              'FromName': 'Assistant', 'SentAt': ago(1), 'BodyText': 'send it', 'Status': 'feed',
                              'Brief': json.dumps({'ideas': [{'id': idea['IdeaId']}]})})
         s.set_brief(new, json.dumps({'ideas': [{'id': idea['IdeaId']}]}))
@@ -909,13 +909,13 @@ class MemoryTests(unittest.TestCase):
         is the fact, not what the newest message happened to be."""
         s = store()
         t = s.create_task({'Title': 'Change her clock-out time to 4:40', 'Kind': 'task', 'Status': 'open'}, 'o')
-        ask = mail(s, 'clock-out', who='Mindy', email='mindy@ours.com', body='Can you change this to 4:40? Thanks!',
+        ask = mail(s, 'clock-out', who='Robin', email='robin@ours.com', body='Can you change this to 4:40? Thanks!',
                    hours=10, tid=t, channel='teams', conv='room')
         s.add_route(ask, t, 'create', None, 'triage: task', [], 'router')
         s.add_message({'TaskId': t, 'ExternalId': 'x:mine', 'ConversationId': 'room', 'Channel': 'teams', 'SourceName': 'inbox',
                        'Subject': 'clock-out', 'FromName': 'You', 'FromEmail': 'me@ours.com', 'Direction': 'in',
                        'SentAt': ago(9.5), 'BodyText': 'done', 'Status': 'context'})
-        thanks = mail(s, 'clock-out', who='Mindy', email='mindy@ours.com', body='thanks', hours=9, tid=t, status='filed',
+        thanks = mail(s, 'clock-out', who='Robin', email='robin@ours.com', body='thanks', hours=9, tid=t, status='filed',
                       channel='teams', conv='room')
         s.add_route(thanks, t, 'attach', 1.0, 'triage: fyi - a thank-you, nothing asked', [], 'triage')
         # the legacy pile has the wrap-up ("the reply went out - the task is still open"), which says

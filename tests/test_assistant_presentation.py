@@ -33,7 +33,7 @@ def brain(intent='task', kind='coding'):
     return llm
 
 
-def arrive(s, subject, body, who='Chana', email='chana@ours.com', hours=1, llm=None, conv=None):
+def arrive(s, subject, body, who='Erin', email='erin@ours.com', hours=1, llm=None, conv=None):
     msg = {'external_id': f'x:{subject}', 'channel': 'email', 'conversation_id': conv or f'c:{subject}', 'subject': subject, 'from_name': who,
            'from_email': email, 'sent_at': ago(hours), 'body': body, 'to': ['owner@ours.com'], 'source_name': 'owner@ours.com'}
     with mock.patch.object(ingest, '_spawn'):
@@ -62,7 +62,7 @@ class FyiHandfulTests(unittest.TestCase):
         asked = []
         def model(system, user, **kw):
             asked.append(user)
-            return '1. Chana says Rebecca is back Tuesday.'
+            return '1. Erin says Rebecca is back Tuesday.'
         with quiet(): out = concierge.surface(s, llm=model)
         card = out['item']
         self.assertEqual((card['kind'], len(card['items']), out['left']), ('fyis', 4, 1))
@@ -120,13 +120,13 @@ class FyiHandfulTests(unittest.TestCase):
 class SingleItemTests(unittest.TestCase):
     def test_the_card_reaches_the_whole_grouped_context_the_task_summary_and_the_checklist(self):
         s = store()
-        first = arrive(s, 'Reorder the seven steps', 'Step one goes last.', who='Gabi', email='gabi@ours.com', hours=3, llm=brain('task', 'coding'), conv='c:steps')
+        first = arrive(s, 'Reorder the seven steps', 'Step one goes last.', who='Tess', email='tess@ours.com', hours=3, llm=brain('task', 'coding'), conv='c:steps')
         tid = first['task_id']
         s.add_message({'TaskId': tid, 'ExternalId': 'x:two', 'ConversationId': 'c:steps', 'Channel': 'email', 'Subject': 'RE: Reorder the seven steps',
-                       'FromName': 'Gabi', 'FromEmail': 'gabi@ours.com', 'SentAt': ago(2), 'BodyText': 'And step four before three.', 'Status': 'routed'})
+                       'FromName': 'Tess', 'FromEmail': 'tess@ours.com', 'SentAt': ago(2), 'BodyText': 'And step four before three.', 'Status': 'routed'})
         s.add_message({'TaskId': tid, 'ExternalId': 'x:ctx', 'ConversationId': 'c:steps', 'Channel': 'email', 'Subject': 'RE: Reorder the seven steps',
                        'FromName': 'You', 'FromEmail': 'owner@ours.com', 'SentAt': ago(1), 'BodyText': 'Noted.', 'Status': 'context'})
-        s.update_task(tid, {'Summary': 'Gabi wants the onboarding steps reordered: one last, four before three.'}, 'owner')
+        s.update_task(tid, {'Summary': 'Tess wants the onboarding steps reordered: one last, four before three.'}, 'owner')
         s.set_task_checklist(tid, ['Move step one to the end', 'Put step four before three'], 'triage')
         with quiet(): out = concierge.surface(s, llm=lambda *a, **k: 'never asked')
         card = out['item']
@@ -169,7 +169,7 @@ class CounselIntroductionTests(unittest.TestCase):
         with quiet(): broke = concierge.surface(s, llm=lambda *a, **k: "I'm in Claude Code, so I don't have access to the queue.")
         self.assertIn('Craig wrote on email', broke['say'])                                         # out of character: the facts
         s, out = self._asked()
-        with quiet(): off = concierge.surface(s, llm=lambda *a, **k: 'Mindy asked to deploy gpt-4.1 (TQ-0312).')
+        with quiet(): off = concierge.surface(s, llm=lambda *a, **k: 'Robin asked to deploy gpt-4.1 (TQ-0312).')
         self.assertIn('Craig wrote on email', off['say'])                                           # another subject: the facts
 
 

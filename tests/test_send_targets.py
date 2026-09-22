@@ -37,7 +37,7 @@ class WhichChannelsTests(unittest.TestCase):
     def test_a_mailbox_of_any_kind_is_what_makes_email_sendable(self):
         s = MemoryStore()
         self.assertEqual(outbound.send_channels(s), [])
-        _conn(s, 'imap', 'work mail', cfg={'address': 'uri@example.org', 'imap_host': 'imap.example.org'})
+        _conn(s, 'imap', 'work mail', cfg={'address': 'alex@example.org', 'imap_host': 'imap.example.org'})
         self.assertEqual(outbound.send_channels(s), ['email'])
 
     def test_replies_switched_off_removes_the_channel_from_the_list(self):
@@ -134,12 +134,12 @@ class WhichDestinationsTests(unittest.TestCase):
 
     def test_email_offers_the_address_book_and_your_own_mailbox(self):
         s = MemoryStore()
-        _conn(s, 'imap', 'work mail', cfg={'address': 'uri@example.org', 'imap_host': 'imap.example.org'})
+        _conn(s, 'imap', 'work mail', cfg={'address': 'alex@example.org', 'imap_host': 'imap.example.org'})
         s.add_message({'Channel': 'email', 'ExternalId': 'imap:1', 'FromEmail': 'dana@vendor.com',
                        'FromName': 'Dana Reed', 'Subject': 'invoice', 'BodyText': 'x',
                        'SentAt': '2026-08-30 08:00:00', 'Status': 'filed'})
         (mail,) = outbound.send_targets(s)
-        self.assertEqual([t['to'] for t in mail['to']], ['dana@vendor.com', 'uri@example.org'])
+        self.assertEqual([t['to'] for t in mail['to']], ['dana@vendor.com', 'alex@example.org'])
         self.assertEqual(mail['to'][0]['name'], 'Dana Reed')
 
     def test_every_destination_carries_something_to_read(self):
@@ -182,7 +182,7 @@ class WhichDestinationsTests(unittest.TestCase):
 
     def test_email_address_book_is_not_cut_off_at_thirty_people(self):
         s = MemoryStore()
-        _conn(s, 'imap', 'work mail', cfg={'address': 'uri@example.org', 'imap_host': 'imap.example.org'})
+        _conn(s, 'imap', 'work mail', cfg={'address': 'alex@example.org', 'imap_host': 'imap.example.org'})
         for i in range(45):
             s.add_message({'Channel': 'email', 'ExternalId': f'imap:{i}',
                            'FromEmail': f'person{i}@example.org', 'FromName': f'Person {i}',

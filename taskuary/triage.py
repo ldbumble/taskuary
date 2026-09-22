@@ -40,7 +40,7 @@ FIELDS = {
         'classified. Being about the same system or person is not the same ask: two bugs in one app are two '
         'jobs. But an ask made two messages back is STILL THE ASK: when somebody asked for something and the '
         'exchange shows it was never delivered, that thread is live work, and a message moving it on - a '
-        'decision, an approval, a name with authority behind it ("Hindy wants them back on"), a changed '
+        'decision, an approval, a name with authority behind it ("Gail wants them back on"), a changed '
         'requirement, a nudge - is a task, however conversational it reads and however little it asks in its '
         'own words. Only a thread whose ask was plainly settled or dropped goes to fyi.',
     'idea_context':
@@ -80,7 +80,7 @@ FIELDS = {
 #
 # A REPLY LANDS AS A ROW TOO. This said "for a task", and reply_only is a different intent - so a
 # question triage decided to answer came back as intent/why alone, took the same fallback, and put
-# Dvora's whole mail on the card: her one sentence, her signature, the legal notice and the thread
+# Maya's whole mail on the card: her one sentence, her signature, the legal notice and the thread
 # under it, 5,998 characters of it (the owner, 2026-09-14). Answering for a reply as well costs a
 # title and two sentences on a call already being made, and it is the same question the model has
 # just answered for itself in `why`. The checklist stays the task's: what a reply owes is the reply.
@@ -290,7 +290,7 @@ def split_own(text: str, floor: int = None) -> tuple:
 
     strip_boilerplate finds the legal footer and the signature at the END of a body. A forwarded
     mail has neither there - it has a quote head, and under it somebody else's mail with their
-    signature - so Brad's one-sentence ask reached the card with 8,400 characters of chain beneath
+    signature - so Ray's one-sentence ask reached the card with 8,400 characters of chain beneath
     it, headers and both signatures included (TQ-0665, 2026-09-21). Cut at the quote first and the
     signature rules have the tail they were written for. A message with no chain is untouched, and
     nothing is ever cut down to nothing.
@@ -636,7 +636,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                                **({'project_context': project} if project else {}),
                                **({'routing_history': routing_history} if routing_history else {}),
                                **({'same_day_lines': [{k: c.get(k) for k in ('id', 'who', 'when', 'text', 'task_id')} for c in candidates]} if candidates is not None else {}),
-                               # 160 cut every real description mid-clause - taskuary lost "do the work, you approve", FanApp
+                               # 160 cut every real description mid-clause - taskuary lost "do the work, you approve", ledger
                                # lost the noun its whole sentence was about. This is the one line the model routes on.
                                **({'known_repositories': [{'repo': r.get('repo'), 'about': (r.get('about') or '')[:REPO_ABOUT]} for r in repos]} if repos else {}),
                                **({'body_truncated': True} if body_cut else {}),

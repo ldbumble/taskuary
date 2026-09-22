@@ -151,11 +151,11 @@ def test_the_message_an_idea_rides_into_triage_on_is_never_a_row(store):
     stamp = datetime.now().isoformat(' ')
     source = add(store, 'FW: AI Modus', status='filed')
     idea = store.upsert_idea({'key': 'idea:empty-forward', 'kind': 'idea', 'action': {'type': 'message', 'mid': source},
-                              'text': 'Hindy forwarded "FW: AI Modus" with nothing but her signature'}, stamp)
+                              'text': 'Gail forwarded "FW: AI Modus" with nothing but her signature'}, stamp)
     vehicle = store.add_message({'ExternalId': f"idea:{idea['IdeaId']}", 'ConversationId': f"idea:{idea['IdeaId']}",
                                  'Channel': 'assistant', 'SourceName': 'Assistant', 'FromName': 'Assistant',
-                                 'Subject': 'Assistant idea: Hindy forwarded "FW: AI Modus"',
-                                 'BodyText': 'Hindy forwarded it with nothing but her signature', 'Status': 'filed',
+                                 'Subject': 'Assistant idea: Gail forwarded "FW: AI Modus"',
+                                 'BodyText': 'Gail forwarded it with nothing but her signature', 'Status': 'filed',
                                  'SentAt': stamp})
     all_rows, unread = both(store)
     assert vehicle not in {r['row'].get('MessageId') for r in all_rows}, 'the vehicle is not a row in All'

@@ -98,10 +98,12 @@ visible, and arguing with it teaches the next one.</li>
 <li><strong>Work that can be done is done, and comes back for approval.</strong> A coding agent works in your
 checkout; replies wait on the task. Approving is always a human action.</li>
 </ol>
-<div class="callout rule"><p class="eyebrow">The one thing to understand</p><p>Taskuary never sends anything by itself. Replies, comments, invoices and posts all wait for you
+<p>:::rule The one thing to understand
+Taskuary never sends anything by itself. Replies, comments, invoices and posts all wait for you
 on the task. The only deliberate exception is an alert you configured, which fires the moment its
-rule trips — an alert that waits for approval is not an alert.</p>
-</div><h2 id="install-on-windows">Install on Windows<a class="anchor" href="#install-on-windows" aria-label="Link to this section">#</a></h2>
+rule trips — an alert that waits for approval is not an alert.
+:::</p>
+<h2 id="install-on-windows">Install on Windows<a class="anchor" href="#install-on-windows" aria-label="Link to this section">#</a></h2>
 <p>Download <a href="https://github.com/ldbumble/taskuary/releases/latest/download/Taskuary.exe">Taskuary.exe</a>
 and open it. It is one file: the app and the desktop shell together, with no Python and no
 installer.</p>
@@ -115,10 +117,12 @@ taskuary
 <pre><code class="language-bash">pip install &quot;taskuary[desktop]&quot;
 taskuary-desktop
 </code></pre>
-<div class="callout note"><p class="eyebrow">Which platform gets the most use</p><p>CI runs the full test matrix on Windows, Linux and macOS. Development happens mostly on Windows,
+<p>:::note Which platform gets the most use
+CI runs the full test matrix on Windows, Linux and macOS. Development happens mostly on Windows,
 so the terminal, the desktop shell and the agent presets are best exercised there; macOS and
-Linux may still have rough edges.</p>
-</div><h2 id="docker">Docker<a class="anchor" href="#docker" aria-label="Link to this section">#</a></h2>
+Linux may still have rough edges.
+:::</p>
+<h2 id="docker">Docker<a class="anchor" href="#docker" aria-label="Link to this section">#</a></h2>
 <p>Runs Taskuary without putting Python on the host:</p>
 <pre><code class="language-bash">git clone https://github.com/ldbumble/taskuary
 cd taskuary
@@ -222,10 +226,12 @@ routine triage does not burn the coding model.</p>
 <p><code>TASKUARY_HOME</code> moves all of it. Docker uses <code>/data</code> inside the container. <code>TASKUARY_HOST</code>,
 <code>TASKUARY_PORT</code> and <code>TASKUARY_TOKEN</code> override server settings at runtime without being written
 back to the config file.</p>
-<div class="callout warn"><p class="eyebrow">Before you expose it beyond localhost</p><p>Set <code>[server].token</code> in the config or provide <code>TASKUARY_TOKEN</code>, and send that token in the
+<p>:::warn Before you expose it beyond localhost
+Set <code>[server].token</code> in the config or provide <code>TASKUARY_TOKEN</code>, and send that token in the
 <code>X-Taskuary-Token</code> header. An unauthenticated Taskuary reachable from the network gives whoever
-finds it your mail, your repositories and an agent that can run commands.</p>
-</div><h2 id="what-leaves-your-machine">What leaves your machine<a class="anchor" href="#what-leaves-your-machine" aria-label="Link to this section">#</a></h2>
+finds it your mail, your repositories and an agent that can run commands.
+:::</p>
+<h2 id="what-leaves-your-machine">What leaves your machine<a class="anchor" href="#what-leaves-your-machine" aria-label="Link to this section">#</a></h2>
 <p>Taskuary calls the services you configure and nothing else. Hosted AI providers and coding CLIs
 receive the prompts their work needs. With a model running on your machine, those prompts stay
 on it too; connected services such as mail still use their own connections either way.</p>

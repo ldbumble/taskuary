@@ -63,7 +63,7 @@ def brain(intent='task', kind='coding', why='because', playbook=None):
 
 
 def arrive(s, subject='Can you fix the export?', body='The nightly export drops inter-company rows.',
-           who='Craig Neiswanger', email='craig@vendor.com', channel='email', conv=None, hours=1,
+           who='Craig Palmer', email='craig@vendor.com', channel='email', conv=None, hours=1,
            llm=None, to=('owner@ours.com',), **kw):
     """One message through the front door, exactly as a connector delivers it."""
     msg = {'external_id': f'x:{subject}:{hours}:{channel}', 'channel': channel, 'conversation_id': conv or f'c:{subject}',
@@ -131,8 +131,8 @@ class ArrivalsTests(unittest.TestCase):
         self.assertEqual(lanes(s), [('todo', 'queued')])
         # …and a colleague's ask does start one
         with mock.patch.object(ingest, '_spawn') as spawn:
-            arrive(s, subject='Fix the payroll import', body='It crashes on every file.', who='Chana',
-                   email='chana@ours.com', conv='c:payroll', hours=2, llm=brain('task', 'coding'))
+            arrive(s, subject='Fix the payroll import', body='It crashes on every file.', who='Erin',
+                   email='erin@ours.com', conv='c:payroll', hours=2, llm=brain('task', 'coding'))
         self.assertTrue(spawn.called, 'a known colleague is auto-worked')
 
     def test_a_question_becomes_a_reply_waiting_for_the_owners_yes(self):
@@ -150,8 +150,8 @@ class ArrivalsTests(unittest.TestCase):
                        email='news@vendor.com', llm=brain('fyi', None, 'a newsletter'))
         self.assertEqual((promo['status'], promo['task_id']), ('filed', None))
         self.assertEqual([(i['kind'], i['category']) for i in pile(s)], [('fyi', 'promo')])
-        person = arrive(s, subject='FYI - Rebecca is back Tuesday', body='Just so you know.', who='Chana',
-                        email='chana@ours.com', conv='c:fyi', hours=2, llm=brain('fyi', None, 'telling you something'))
+        person = arrive(s, subject='FYI - Rebecca is back Tuesday', body='Just so you know.', who='Erin',
+                        email='erin@ours.com', conv='c:fyi', hours=2, llm=brain('fyi', None, 'telling you something'))
         self.assertEqual(person['status'], 'filed')
         self.assertEqual(lanes(s), [('fyi', 'fyi'), ('fyi', 'fyi')])    # both are unread; the category still ranks/explains them
 
@@ -163,10 +163,10 @@ class ArrivalsTests(unittest.TestCase):
     def test_an_assistant_timeline_post_is_unread_too(self):
         s = store()
         s.add_message({'ExternalId': 'assistant:1', 'ConversationId': 'assistant', 'Channel': 'assistant',
-                       'SourceName': 'Assistant', 'Subject': 'Gabi sent a new requirement', 'FromName': 'Assistant',
+                       'SourceName': 'Assistant', 'Subject': 'Tess sent a new requirement', 'FromName': 'Assistant',
                        'SentAt': ago(), 'BodyText': 'I would add this to the spec.', 'Status': 'feed'})
         self.assertEqual([(i['kind'], i['category'], i['title']) for i in pile(s)],
-                         [('fyi', 'assistant', 'Gabi sent a new requirement')])
+                         [('fyi', 'assistant', 'Tess sent a new requirement')])
 
     def test_general_work_opens_a_conversation_and_starts_no_coder(self):
         s = store()
@@ -187,10 +187,10 @@ class ArrivalsTests(unittest.TestCase):
 
     def test_an_urgent_sender_jumps_the_queue(self):
         s = store()
-        s.save_policy({'Name': 'boss', 'Kind': 'sender', 'Pattern': 'hindy@ours.com', 'Action': 'escalate',
+        s.save_policy({'Name': 'boss', 'Kind': 'sender', 'Pattern': 'gail@ours.com', 'Action': 'escalate',
                        'Reason': 'the CFO', 'SortOrder': 10, 'Active': 1}, 'o')
         with mock.patch.object(ingest, '_spawn'):
-            arrive(s, subject='Board numbers', body='Need the deck fixed today.', who='Hindy', email='hindy@ours.com',
+            arrive(s, subject='Board numbers', body='Need the deck fixed today.', who='Gail', email='gail@ours.com',
                    llm=brain('task', 'coding'))
         self.assertEqual(lanes(s), [('todo', 'time')])                  # 'coming up', ahead of ordinary asks
 
@@ -225,7 +225,7 @@ class ArrivalsTests(unittest.TestCase):
     def test_a_meeting_inside_two_hours_is_time_sensitive_and_interrupts(self):
         s = store()
         s.set_setting('calendar_enabled', '1', 't')
-        ev = {'events': [{'subject': 'Payroll cutover', 'start': ahead(10), 'end': ahead(40), 'who': ['Chana'],
+        ev = {'events': [{'subject': 'Payroll cutover', 'start': ahead(10), 'end': ahead(40), 'who': ['Erin'],
                           'all_day': False, 'where': 'Teams', 'id': 'ev1'}]}
         # funnel imports _agenda by name, so that is the one to stand in for
         with mock.patch.object(funnel, '_agenda', return_value=ev['events']):
@@ -239,13 +239,13 @@ class ArrivalsTests(unittest.TestCase):
         s = store()
         with mock.patch.object(ingest, '_spawn'):
             first = arrive(s, conv='c:pto', subject='PTO import', body='Please import the August PTO.',
-                           who='Chana', email='chana@hrtgcs.com', hours=6, llm=brain('task', 'coding'))
+                           who='Erin', email='erin@vendor.example', hours=6, llm=brain('task', 'coding'))
         tid = first['task_id']
         s.add_message({'TaskId': tid, 'ExternalId': 'x:mine', 'ConversationId': 'c:pto', 'Channel': 'email',
                        'Subject': 'RE: PTO import', 'FromName': 'You', 'FromEmail': 'owner@ours.com',
                        'SentAt': ago(2), 'BodyText': 'Done - all 80 files posted.', 'Status': 'context'})
         thanks = ingest.ingest_message(s, {'external_id': 'x:ta', 'channel': 'email', 'conversation_id': 'c:pto',
-                                           'subject': 'RE: PTO import', 'from_name': 'Chana', 'from_email': 'chana@hrtgcs.com',
+                                           'subject': 'RE: PTO import', 'from_name': 'Erin', 'from_email': 'erin@vendor.example',
                                            'sent_at': ago(0), 'body': 'Thank you!'},
                                           llm=brain('fyi', None, 'only says thanks'))
         self.assertEqual((thanks['status'], thanks['task_id']), ('filed', tid))
@@ -264,9 +264,9 @@ class ArrivalsTests(unittest.TestCase):
                        if same else {'relationship': 'new'})
                 return json.dumps({'intent': 'task', 'kind': 'coding', 'why': 'an ask', **rel})
             return ingest.ingest_message(
-                s, {'external_id': f'wa:{mins}', 'channel': 'whatsapp', 'conversation_id': 'wa:gabi',
-                    'subject': 'WhatsApp with Gabi', 'from_name': 'Gabi', 'from_email': None,
-                    'sent_at': ago(minutes=mins), 'body': body, 'source_name': 'Gabi'}, llm=llm)
+                s, {'external_id': f'wa:{mins}', 'channel': 'whatsapp', 'conversation_id': 'wa:tess',
+                    'subject': 'WhatsApp with Tess', 'from_name': 'Tess', 'from_email': None,
+                    'sent_at': ago(minutes=mins), 'body': body, 'source_name': 'Tess'}, llm=llm)
         with mock.patch.object(ingest, '_spawn'):
             a = line('the dashboard agent is not running', 40)
             b = line('i mean the new one', 39)                       # seconds later: one thought, two messages
@@ -304,42 +304,42 @@ class ArrivalsTests(unittest.TestCase):
     def test_a_family_the_owner_muted_never_comes_back(self):
         s = store()
         for n in range(2):
-            out = arrive(s, subject=f'MFA Financial Report - .0{n}', body='from Intacct', who='Nechama Ozur',
-                         email='nozur@hrtgcs.com', hours=n + 1, llm=brain('fyi', None))
+            out = arrive(s, subject=f'Northwind Financial Report - .0{n}', body='from Intacct', who='Paula Vance',
+                         email='pvance@vendor.example', hours=n + 1, llm=brain('fyi', None))
             self.assertEqual(out['status'], 'filed')
         self.assertEqual(len(pile(s)), 2)
-        funnel.remember_mute(s, {'sender': 'nozur@hrtgcs.com', 'words': ['mfa', 'financial'], 'why': 'the financials process'}, 'o')
+        funnel.remember_mute(s, {'sender': 'pvance@vendor.example', 'words': ['northwind', 'financial'], 'why': 'the financials process'}, 'o')
         p = funnel.build(s)
         self.assertEqual((p['items'], p['muted']), ([], 2))
         # ...and the same sender asking something real still gets through
         with mock.patch.object(ingest, '_spawn'):
-            arrive(s, subject='MFA Financial Report - can you re-run .02?', body='please re-run it',
-                   who='Nechama Ozur', email='nozur@hrtgcs.com', hours=0, llm=brain('task', 'coding'))
+            arrive(s, subject='Northwind Financial Report - can you re-run .02?', body='please re-run it',
+                   who='Paula Vance', email='pvance@vendor.example', hours=0, llm=brain('task', 'coding'))
         self.assertEqual([i['lane'] for i in pile(s)], ['queued'])   # a coding ask reached the coder
 
 
 # ── what the owner says back, and what actually happens ──────────────────────────────────────
 class WrongThreadTests(unittest.TestCase):
     """A reply must join ITS OWN thread's task, or open a new one - never a third task that merely
-    looks similar. It did: "RE: July 2026 Financials" landed on the PointClickCare task after the
+    looks similar. It did: "RE: July 2026 Financials" landed on the Careview task after the
     financials task closed, and the reply drafted for that task was about the financials (the owner,
     2026-09-03: "the reply was about another task? How does this happen. really bad????")."""
 
     def _two_tasks(self, s):
         with mock.patch.object(ingest, '_spawn'):
-            fin = arrive(s, subject='July 2026 Financials', conv='c:fin', hours=6, who='Hindy Spiegel',
-                         email='hindy@hrtgcs.com', body='Please send the July financial package to the VPO list.',
+            fin = arrive(s, subject='July 2026 Financials', conv='c:fin', hours=6, who='Gail Moreno',
+                         email='gail@vendor.example', body='Please send the July financial package to the VPO list.',
                          llm=brain('task', 'coding'))
-            pcc = arrive(s, subject='PointClickCare custom data extract', conv='c:pcc', hours=5, who='Hindy Spiegel',
-                         email='hindy@hrtgcs.com', body='Compass needs a sample of the PointClickCare AR extract we consume.',
+            pcc = arrive(s, subject='Careview custom data extract', conv='c:pcc', hours=5, who='Gail Moreno',
+                         email='gail@vendor.example', body='Compass needs a sample of the Careview AR extract we consume.',
                          llm=brain('task', 'coding'))
         return fin['task_id'], pcc['task_id']
 
     def _reply_on_the_financials_thread(self, s):
         return ingest.ingest_message(s, {'external_id': 'x:fin2', 'channel': 'email', 'conversation_id': 'c:fin',
-                                         'subject': 'RE: July 2026 Financials', 'from_name': 'Hindy Spiegel',
-                                         'from_email': 'hindy@hrtgcs.com', 'sent_at': ago(0),
-                                         'body': 'The July financials bounced for Rene Gomez - his mailbox is full.',
+                                         'subject': 'RE: July 2026 Financials', 'from_name': 'Gail Moreno',
+                                         'from_email': 'gail@vendor.example', 'sent_at': ago(0),
+                                         'body': 'The July financials bounced for Paul Rivera - his mailbox is full.',
                                          'to': ['owner@ours.com']}, llm=brain('task', 'coding'))
 
     def test_a_reply_after_its_task_closed_is_new_work_not_another_tasks_mail(self):
@@ -350,15 +350,15 @@ class WrongThreadTests(unittest.TestCase):
             out = self._reply_on_the_financials_thread(s)
         self.assertEqual(out['status'], 'created')                          # new work, per the written rule
         self.assertNotIn(out['task_id'], (fin, pcc))
-        self.assertNotIn('Rene Gomez', ' '.join(str(m.get('BodyText') or '') for m in s.list_messages(pcc)))
+        self.assertNotIn('Paul Rivera', ' '.join(str(m.get('BodyText') or '') for m in s.list_messages(pcc)))
 
     def test_the_guard_itself_refuses_a_third_task_and_says_why(self):
         """What actually happened: route() scored the reply against the OPEN tasks and the
-        PointClickCare one won on sender plus body similarity. The guard is what stops that."""
+        Careview one won on sender plus body similarity. The guard is what stops that."""
         s = store()
         fin, pcc = self._two_tasks(s)
         msg = {'conversation_id': 'c:fin', 'subject': 'RE: July 2026 Financials', 'channel': 'email',
-               'from_email': 'hindy@hrtgcs.com', 'body': 'bounced for Rene Gomez'}
+               'from_email': 'gail@vendor.example', 'body': 'bounced for Paul Rivera'}
         attached = {'decision': 'attach', 'task_id': pcc, 'score': 0.61, 'reason': 'looked alike'}
         with_open = ingest.own_thread_only(s, msg, attached)
         self.assertEqual((with_open['decision'], with_open['task_id']), ('attach', fin))    # its own thread wins
@@ -388,12 +388,12 @@ class WrongThreadTests(unittest.TestCase):
         seen = {}
         def llm(system, user, **kw):
             seen['user'] = user
-            return 'Hindy, attached is the PointClickCare sample.'
+            return 'Gail, attached is the Careview sample.'
         with mock.patch('taskuary.calendar.context_for', return_value=''):
             text = responder.draft_reply(s, pcc, llm=llm)
-        self.assertIn('PointClickCare', seen['user'])
-        self.assertNotIn('Rene Gomez', seen['user'])                        # the other thread is not in this draft's context
-        self.assertIn('PointClickCare', text)
+        self.assertIn('Careview', seen['user'])
+        self.assertNotIn('Paul Rivera', seen['user'])                        # the other thread is not in this draft's context
+        self.assertIn('Careview', text)
 
     def test_the_newest_session_is_what_was_done_when_an_agent_ran_twice(self):
         from taskuary import responder
@@ -505,12 +505,12 @@ class ResponseTests(unittest.TestCase):
 
     def test_remember_keeps_the_fact_in_the_owners_words_once_confirmed(self):
         s, tid, mid, item = self._asked()
-        p = decide(s, 'remember that Hindy is the CFO and signs off on refunds', 'remember', key=item['key'],
-                   text_arg='Hindy is the CFO and signs off on refunds')['proposal']
-        self.assertEqual((p['kind'], p['params']['note'], p['settles']), ('memory.remember', 'Hindy is the CFO and signs off on refunds', False))
+        p = decide(s, 'remember that Gail is the CFO and signs off on refunds', 'remember', key=item['key'],
+                   text_arg='Gail is the CFO and signs off on refunds')['proposal']
+        self.assertEqual((p['kind'], p['params']['note'], p['settles']), ('memory.remember', 'Gail is the CFO and signs off on refunds', False))
         self.assertEqual([m['Note'] for m in s.list_memories()], [])     # nothing written on the words
         run(s, p)
-        self.assertIn('Hindy is the CFO and signs off on refunds', [m['Note'] for m in s.list_memories()])   # the row exists, not just the receipt
+        self.assertIn('Gail is the CFO and signs off on refunds', [m['Note'] for m in s.list_memories()])   # the row exists, not just the receipt
         self.assertEqual(funnel.next_item(s, item['key'])['key'], item['key'])                                 # ...and the walk did not move
 
     def test_send_it_to_the_coder_with_nothing_on_the_table_proposes_a_new_task(self):
@@ -587,19 +587,19 @@ class ResponseTests(unittest.TestCase):
     def test_a_sweep_is_confirmed_then_clears_these_and_remembers_the_kind(self):
         s = store()
         for n in range(3):
-            arrive(s, subject=f'MFA Financial Report - .0{n}', body='from Intacct', who='Nechama Ozur',
-                   email='nozur@hrtgcs.com', hours=n + 1, llm=brain('fyi', None))
-        keep = arrive(s, subject='RE: PointClickCare', body='please respond', who='Kishan',
-                      email='kishan@vendor.com', hours=1, llm=brain('fyi', None))
+            arrive(s, subject=f'Northwind Financial Report - .0{n}', body='from Intacct', who='Paula Vance',
+                   email='pvance@vendor.example', hours=n + 1, llm=brain('fyi', None))
+        keep = arrive(s, subject='RE: Careview', body='please respond', who='Ravi',
+                      email='ravi@vendor.com', hours=1, llm=brain('fyi', None))
         self.assertEqual(len(pile(s)), 4)
-        words = "skip all the mfa financial reports, that is taken care of"
+        words = "skip all the northwind financial reports, that is taken care of"
         p = decide(s, words, 'clear', key=pile(s)[0]['key'])['proposal']
         self.assertEqual((p['kind'], p['params']['text'], p['label']), ('pipe.clear', words, 'Clear them from the pipe'))
         self.assertEqual(len(pile(s)), 4)                              # nothing swept on the words
         r = run(s, p)
         self.assertEqual(r.json()['outcome']['cleared'], 3)
-        self.assertEqual([i['who'] for i in pile(s)], ['Kishan'])
-        self.assertEqual([r['sender'] for r in funnel.mutes(s)], ['nozur@hrtgcs.com'])
+        self.assertEqual([i['who'] for i in pile(s)], ['Ravi'])
+        self.assertEqual([r['sender'] for r in funnel.mutes(s)], ['pvance@vendor.example'])
         self.assertTrue(any('Cleared 3 from the pipe' in b for b in receipts(s)), receipts(s)[-2:])
         self.assertTrue(keep['message_id'])
 
@@ -656,10 +656,10 @@ class ResponseTests(unittest.TestCase):
         s, tid, mid, item = self._asked()
         with mock.patch.object(ingest, '_spawn'):
             arrive(s, subject='Resident refund for Mrs Garnett', body='Please approve the refund.',
-                   who='Rivka Mermelstein', email='rivka@ours.com', conv='c:refund', hours=2, llm=brain('task', 'coding'))
-        out = say(s, 'what did Rivka send about the refund?', key=item['key'])
+                   who='Nina Hart', email='nina@ours.com', conv='c:refund', hours=2, llm=brain('task', 'coding'))
+        out = say(s, 'what did Nina send about the refund?', key=item['key'])
         self.assertIsNotNone(out.get('item'))
-        self.assertIn('Rivka', f"{out['item'].get('who')} {out['say']}")
+        self.assertIn('Nina', f"{out['item'].get('who')} {out['say']}")
 
     def test_every_verb_the_contract_offers_is_one_the_code_can_carry_out(self):
         """The model may answer with any verb in the contract; each has to be a proposal or one of the roads."""
@@ -678,11 +678,11 @@ class WrongTargetTests(unittest.TestCase):
     def _two(self):
         """A drafted reply on the table; an outage from somebody else waiting behind it."""
         s = store()
-        out = arrive(s, subject='Where is the June invoice?', body='Can you send it?', who='Kishan Patel',
-                     email='kishan@vendor.com', conv='c:inv', hours=1, llm=brain('reply_only', None))
+        out = arrive(s, subject='Where is the June invoice?', body='Can you send it?', who='Ravi Shah',
+                     email='ravi@vendor.com', conv='c:inv', hours=1, llm=brain('reply_only', None))
         rv = s.pending_review(out['task_id']); s.save_review_draft(rv['ReviewId'], 'Attached.')
-        other = arrive(s, subject='Payroll portal is down', body='Nobody in Roanoke can clock in.', who='Miriam Schwartz',
-                       email='miriam@ours.com', conv='c:outage', channel='teams', hours=0, llm=brain('task', 'general'))
+        other = arrive(s, subject='Payroll portal is down', body='Nobody in Roanoke can clock in.', who='Elena Ross',
+                       email='elena@ours.com', conv='c:outage', channel='teams', hours=0, llm=brain('task', 'general'))
         return s, out, rv['ReviewId'], other
 
     def test_a_verb_about_another_subject_is_proposed_there_not_here(self):
@@ -801,16 +801,16 @@ class OneTruthPerTurnTests(unittest.TestCase):
         self.assertEqual(funnel.next_item(s, item['key'])['key'], item['key'])        # still on the table
 
     def test_a_second_decision_replaces_the_proposal_on_the_table(self):
-        """"approve and remember that Kishan handles refunds" is two decisions: one proposal is on the table at a
+        """"approve and remember that Ravi handles refunds" is two decisions: one proposal is on the table at a
         time, so the second replaces the first - the approve is cancelled, never sent on the side."""
         s, tid, rid, item = ResponseTests()._drafted()
         first = decide(s, 'approve', 'approve', key=item['key'])['proposal']
-        second = decide(s, 'and remember that Kishan handles refunds', 'remember', key=item['key'], text_arg='Kishan handles refunds')['proposal']
+        second = decide(s, 'and remember that Ravi handles refunds', 'remember', key=item['key'], text_arg='Ravi handles refunds')['proposal']
         self.assertEqual(second['kind'], 'memory.remember')
         self.assertEqual(operations.get(s, first['id'])['status'], 'cancelled')
         self.assertEqual(s.list_memories(), [])
         run(s, second)
-        self.assertEqual([m['Note'] for m in s.list_memories()], ['Kishan handles refunds'])
+        self.assertEqual([m['Note'] for m in s.list_memories()], ['Ravi handles refunds'])
         self.assertEqual(s.get_review(rid)['Status'], 'pending')                     # the approve never went out
 
 
@@ -918,9 +918,9 @@ class WalkFromWordsTests(unittest.TestCase):
         s = store()
         with mock.patch.object(ingest, '_spawn'):
             arrive(s, subject='Fix the export', body='Rows drop.', conv='c:b', hours=3, llm=brain('task', 'coding'))
-            arrive(s, subject='FYI - Rebecca is back', body='Just so you know.', who='Chana', email='chana@ours.com',
+            arrive(s, subject='FYI - Rebecca is back', body='Just so you know.', who='Erin', email='erin@ours.com',
                    conv='c:c', hours=2, llm=brain('fyi', None))
-            arrive(s, subject='FYI - lunch moved', body='Thursday now.', who='Chana', email='chana@ours.com',
+            arrive(s, subject='FYI - lunch moved', body='Thursday now.', who='Erin', email='erin@ours.com',
                    conv='c:d', hours=2, llm=brain('fyi', None))
         return s
 
@@ -983,24 +983,24 @@ class PipeTruthTests(unittest.TestCase):
     def test_a_chat_opener_waits_for_the_ask_it_opens(self):
         s = store()
         with mock.patch.object(ingest, '_spawn'):
-            hey = arrive(s, subject='', body='hey', who='Yosef Adler', email='', channel='whatsapp',
-                         conv='w:yosef', hours=0, external_id='w:1', llm=brain('reply_only', None))
+            hey = arrive(s, subject='', body='hey', who='Omar Keller', email='', channel='whatsapp',
+                         conv='w:omar', hours=0, external_id='w:1', llm=brain('reply_only', None))
         self.assertIsNone(hey['task_id'])                                  # no task, no drafted "Hey - what's up?"
         self.assertEqual(hey['status'], 'filed')
         self.assertEqual(s.list_reviews('pending'), [])
         with mock.patch.object(ingest, '_spawn'):
-            ask = arrive(s, subject='', body='did the invoice for Oak Ridge go out?', who='Yosef Adler', email='',
-                         channel='whatsapp', conv='w:yosef', hours=0, external_id='w:2', llm=brain('reply_only', None))
+            ask = arrive(s, subject='', body='did the invoice for Oak Ridge go out?', who='Omar Keller', email='',
+                         channel='whatsapp', conv='w:omar', hours=0, external_id='w:2', llm=brain('reply_only', None))
         self.assertTrue(ask['task_id'])                                    # the ASK is the task
         self.assertIn('Oak Ridge', s.get_task(ask['task_id'])['Title'] + s.get_task(ask['task_id'])['Summary'])
 
     def test_a_pending_draft_speaks_for_its_whole_thread(self):
         s = store()
-        out = arrive(s, subject='Nightly export drops rows', body='Can you fix it?', who='Chana Klein',
-                     email='chana@ours.com', conv='c:export', hours=5, llm=brain('reply_only', None))
+        out = arrive(s, subject='Nightly export drops rows', body='Can you fix it?', who='Erin Blake',
+                     email='erin@ours.com', conv='c:export', hours=5, llm=brain('reply_only', None))
         rv = s.pending_review(out['task_id']); s.save_review_draft(rv['ReviewId'], 'Fixed and pushed.')
-        arrive(s, subject='RE: Nightly export drops rows', body='Also keep two decimals.', who='Chana Klein',
-               email='chana@ours.com', conv='c:export', hours=1, llm=brain('fyi', None))
+        arrive(s, subject='RE: Nightly export drops rows', body='Also keep two decimals.', who='Erin Blake',
+               email='erin@ours.com', conv='c:export', hours=1, llm=brain('fyi', None))
         rows = [i for i in pile(s) if i.get('cid') == 'c:export']
         self.assertEqual([i['kind'] for i in rows], ['review'])            # one row, and it is the draft
         self.assertEqual(rows[0]['more'], 1)                               # ...which says how much it stands for
@@ -1038,15 +1038,15 @@ class PipeTruthTests(unittest.TestCase):
 
     def test_a_sweep_that_names_a_lane_writes_a_lane_rule(self):
         s = store()
-        arrive(s, subject='FYI - Rebecca is back', body='Just so you know.', who='Chana Klein',
-               email='chana@ours.com', conv='c:f1', hours=2, llm=brain('fyi', None))
-        out = concierge.clear_matching(s, 'skip all the fyi from Chana, I do not need those')
+        arrive(s, subject='FYI - Rebecca is back', body='Just so you know.', who='Erin Blake',
+               email='erin@ours.com', conv='c:f1', hours=2, llm=brain('fyi', None))
+        out = concierge.clear_matching(s, 'skip all the fyi from Erin, I do not need those')
         self.assertEqual(out['cleared'], 1)
         rule = funnel.mutes(s)[0]
-        self.assertEqual((rule.get('sender'), rule.get('lane'), rule.get('words')), ('chana@ours.com', 'fyi', []))
+        self.assertEqual((rule.get('sender'), rule.get('lane'), rule.get('words')), ('erin@ours.com', 'fyi', []))
         # ...and it means every fyi from her, not the mails with 'fyi' in the subject
-        self.assertTrue(funnel.muted(rule, {'email': 'chana@ours.com', 'lane': 'fyi', 'title': 'lunch on Thursday'}))
-        self.assertFalse(funnel.muted(rule, {'email': 'chana@ours.com', 'lane': 'asked', 'title': 'fyi about the audit'}))
+        self.assertTrue(funnel.muted(rule, {'email': 'erin@ours.com', 'lane': 'fyi', 'title': 'lunch on Thursday'}))
+        self.assertFalse(funnel.muted(rule, {'email': 'erin@ours.com', 'lane': 'asked', 'title': 'fyi about the audit'}))
 
 
 class AgentsStartAndFinishTests(unittest.TestCase):
@@ -1123,18 +1123,18 @@ class WalkOrderTests(unittest.TestCase):
         # an agent parked on a question (blocked), a draft for a yes (approve), a person's ask (asked),
         # a report that landed (report) and a colleague's fyi (fyi)
         with mock.patch.object(ingest, '_spawn'):
-            agent = arrive(s, subject='Fix the export', conv='c:agent', hours=8, who='Chana', email='chana@ours.com',
+            agent = arrive(s, subject='Fix the export', conv='c:agent', hours=8, who='Erin', email='erin@ours.com',
                            body='The export drops rows.', llm=brain('task', 'coding'))
-            asked = arrive(s, subject='Refund for Mrs Garnett', conv='c:ask', hours=4, who='Rivka', email='rivka@ours.com',
+            asked = arrive(s, subject='Refund for Mrs Garnett', conv='c:ask', hours=4, who='Nina', email='nina@ours.com',
                            body='Please approve the refund.', llm=brain('task', 'coding'))
         s.update_task(agent['task_id'], {'Status': 'in_progress'}, 'router')
-        draft = arrive(s, subject='Where is the June invoice?', conv='c:draft', hours=6, who='Kishan',
-                       email='kishan@vendor.com', body='Can you send it?', llm=brain('reply_only', None))
+        draft = arrive(s, subject='Where is the June invoice?', conv='c:draft', hours=6, who='Ravi',
+                       email='ravi@vendor.com', body='Can you send it?', llm=brain('reply_only', None))
         rep = s.add_message({'ExternalId': 'r1', 'Channel': 'report', 'SourceName': 'Nightly export',
                              'Subject': 'Nightly export - 0 errors', 'FromName': 'Nightly export',
                              'SentAt': ago(3), 'BodyText': 'all clear', 'Status': 'feed'})
         s.add_route(rep, None, 'feed', None, 'a report you set up', [], 'feed')
-        arrive(s, subject='FYI - Rebecca is back Tuesday', conv='c:fyi', hours=2, who='Chana', email='chana@ours.com',
+        arrive(s, subject='FYI - Rebecca is back Tuesday', conv='c:fyi', hours=2, who='Erin', email='erin@ours.com',
                body='Just so you know.', llm=brain('fyi', None))
         return agent['task_id'], draft['task_id'], asked['task_id']
 
@@ -1204,7 +1204,7 @@ class NeverWorkTests(unittest.TestCase):
         s = store()
         with mock.patch.object(ingest, '_spawn'):
             first = arrive(s, subject='Resident refund - Mrs Garnett', conv='c:refund', hours=6,
-                           who='Rivka', email='rivka@ours.com', body='Please approve.', llm=brain('task', 'coding'))
+                           who='Nina', email='nina@ours.com', body='Please approve.', llm=brain('task', 'coding'))
         c = TestClient(server.app)
         with mock.patch.object(server, 'store', s), mock.patch.dict(terminal.SESSIONS, {}, clear=True):
             c.post(f"/api/messages/{first['message_id']}/file", json={'learn': True})
@@ -1213,8 +1213,8 @@ class NeverWorkTests(unittest.TestCase):
             seen['sys'] = system
             return '{"intent": "fyi", "why": "a nudge on a thread the owner filed"}'
         again = ingest.ingest_message(s, {'external_id': 'x:again', 'channel': 'email', 'conversation_id': 'c:refund',
-                                          'subject': 'RE: Resident refund - Mrs Garnett', 'from_name': 'Rivka',
-                                          'from_email': 'rivka@ours.com', 'sent_at': ago(0),
+                                          'subject': 'RE: Resident refund - Mrs Garnett', 'from_name': 'Nina',
+                                          'from_email': 'nina@ours.com', 'sent_at': ago(0),
                                           'body': 'Any update on the approval?'}, llm=judged)
         self.assertEqual((again['status'], again['task_id']), ('filed', None))
         self.assertIn('on this very conversation you ruled earlier', seen['sys'].lower())
@@ -1226,8 +1226,8 @@ class NeverWorkTests(unittest.TestCase):
         from taskuary import playbooks
         menu = '- pto-import: PTO import' + chr(10) + '  when: PTO files arrive'
         with mock.patch.object(playbooks, 'menu', return_value=menu), mock.patch.object(ingest, '_spawn'):
-            out = arrive(s, subject='August PTO files', body='Attached - please import.', who='Chana',
-                         email='chana@ours.com', llm=brain('task', 'coding', playbook='pto-import'))
+            out = arrive(s, subject='August PTO files', body='Attached - please import.', who='Erin',
+                         email='erin@ours.com', llm=brain('task', 'coding', playbook='pto-import'))
         t = s.get_task(out['task_id'])
         self.assertEqual(t['Kind'], 'coding')
         self.assertIn('pto-import', str(t['Tags'] or ''), 'the playbook rides on the task, so the session is seeded from it')
@@ -1240,8 +1240,8 @@ class TellingItInAdvanceTests(unittest.TestCase):
 
     def _history(self, s):
         for n in range(2):
-            arrive(s, subject=f'MFA Financial Report - .0{n} P&L', body='from Intacct', who='Nechama Ozur',
-                   email='nozur@hrtgcs.com', hours=n + 1, llm=brain('fyi', None))
+            arrive(s, subject=f'Northwind Financial Report - .0{n} P&L', body='from Intacct', who='Paula Vance',
+                   email='pvance@vendor.example', hours=n + 1, llm=brain('fyi', None))
         for i in pile(s): funnel.settle(s, i['key'], 'done', 'owner')      # read already; the pipe is clear
         funnel.invalidate()
 
@@ -1254,19 +1254,19 @@ class TellingItInAdvanceTests(unittest.TestCase):
         s = store()
         self._history(s)
         self.assertEqual(pile(s), [])
-        p = decide(s, 'nechama emails about mfa financials reports should not show up anymore', 'clear')['proposal']
+        p = decide(s, 'paula emails about northwind financials reports should not show up anymore', 'clear')['proposal']
         self.assertEqual(p['kind'], 'pipe.clear'); self.assertEqual(funnel.mutes(s), [])   # no rule on the words
         out = run(s, p).json()['outcome']
         self.assertEqual(out['cleared'], 0)                                  # nothing to clear…
         self.assertTrue(out['ahead'])                                        # …so it was noted instead
         self.assertEqual([(r['sender'], r['words']) for r in funnel.mutes(s)],
-                         [('nozur@hrtgcs.com', ['nechama', 'mfa', 'financials'])])
+                         [('pvance@vendor.example', ['paula', 'northwind', 'financials'])])
         self.assertTrue(any('it is noted' in b and 'stay on the Timeline' in b for b in receipts(s)), receipts(s)[-2:])
         # …and it is visible as a memory too, so the owner can see and undo it
-        notes = [n for n in s.list_memories(active_only=True) if (n['ScopeKey'] or '') == 'nozur@hrtgcs.com']
+        notes = [n for n in s.list_memories(active_only=True) if (n['ScopeKey'] or '') == 'pvance@vendor.example']
         self.assertTrue(notes and 'should not show up' in notes[0]['Note'])
-        arrive(s, subject='MFA Financial Report - .098 P&L Detail ALF', body='from Intacct',
-               who='Nechama Ozur', email='nozur@hrtgcs.com', hours=0, llm=brain('fyi', None))
+        arrive(s, subject='Northwind Financial Report - .098 P&L Detail ALF', body='from Intacct',
+               who='Paula Vance', email='pvance@vendor.example', hours=0, llm=brain('fyi', None))
         funnel.invalidate()
         p = funnel.build(s)
         self.assertEqual((p['items'], p['muted']), ([], 1))
@@ -1274,27 +1274,27 @@ class TellingItInAdvanceTests(unittest.TestCase):
     def test_a_real_ask_from_a_muted_sender_still_reaches_the_owner(self):
         s = store()
         self._history(s)
-        self._sweep(s, 'nechama emails about mfa financials reports should not show up anymore')
+        self._sweep(s, 'paula emails about northwind financials reports should not show up anymore')
         with mock.patch.object(ingest, '_spawn'):
-            arrive(s, subject='MFA Financial Report - can you re-run .02 for me?', body='please re-run it',
-                   who='Nechama Ozur', email='nozur@hrtgcs.com', conv='c:rerun', hours=0, llm=brain('task', 'coding'))
+            arrive(s, subject='Northwind Financial Report - can you re-run .02 for me?', body='please re-run it',
+                   who='Paula Vance', email='pvance@vendor.example', conv='c:rerun', hours=0, llm=brain('task', 'coding'))
         funnel.invalidate()
         self.assertEqual([i['lane'] for i in pile(s)], ['queued'])          # a rule only reaches the quiet lanes
 
     def test_the_rule_is_the_owners_to_take_off_again(self):
         s = store()
         self._history(s)
-        self._sweep(s, 'nechama emails about mfa financials reports should not show up anymore')
+        self._sweep(s, 'paula emails about northwind financials reports should not show up anymore')
         c = TestClient(server.app)
         with mock.patch.object(server, 'store', s), mock.patch.dict(terminal.SESSIONS, {}, clear=True):
             listed = c.get('/api/funnel/mutes').json()['data']
             self.assertEqual(len(listed), 1)
             self.assertEqual(c.delete('/api/funnel/mutes/0').status_code, 200)
         self.assertEqual(funnel.mutes(s), [])
-        arrive(s, subject='MFA Financial Report - .099 P&L', body='from Intacct', who='Nechama Ozur',
-               email='nozur@hrtgcs.com', hours=0, llm=brain('fyi', None))
+        arrive(s, subject='Northwind Financial Report - .099 P&L', body='from Intacct', who='Paula Vance',
+               email='pvance@vendor.example', hours=0, llm=brain('fyi', None))
         funnel.invalidate()
-        self.assertEqual([i['who'] for i in pile(s)], ['Nechama Ozur'])     # back, because they said so
+        self.assertEqual([i['who'] for i in pile(s)], ['Paula Vance'])     # back, because they said so
 
 
 class WhichCheckoutTests(unittest.TestCase):
@@ -1302,13 +1302,13 @@ class WhichCheckoutTests(unittest.TestCase):
     twice: "the assistant sent the coding agent the wrong repo again... It was issue with the github
     trending report but it says fannapp???" (the owner, 2026-09-03). Two leaks, two rules."""
 
-    PROFILE = {'cmd': 'claude', 'cwd': 'C:/Users/x/Documents/FanApp',
-               'cwd_map': {'mfaVita/FanApp': 'C:/Users/x/Documents/FanApp',
-                           'mfaVita/TopE': 'C:/Users/x/Documents/TopE',
+    PROFILE = {'cmd': 'claude', 'cwd': 'C:/Users/x/Documents/ledger',
+               'cwd_map': {'northwind/ledger': 'C:/Users/x/Documents/ledger',
+                           'northwind/portal': 'C:/Users/x/Documents/portal',
                            'ldbumble/taskuary': 'C:/Users/x/Documents/taskhub'}}
     SOUL = ('# SOUL.md' + chr(10) + '## Repository map' + chr(10)
-            + '- **mfaVita/FanApp**: the fan mobile app' + chr(10)
-            + '- **mfaVita/TopE**: the expense portal' + chr(10)
+            + '- **northwind/ledger**: the fan mobile app' + chr(10)
+            + '- **northwind/portal**: the expense portal' + chr(10)
             + '- **ldbumble/taskuary**: this assistant, its connectors and its reports' + chr(10))
 
     def _report_task(self, s):
@@ -1330,10 +1330,10 @@ class WhichCheckoutTests(unittest.TestCase):
     def test_a_task_that_matches_nothing_refuses_rather_than_opening_the_default_folder(self):
         s = store()
         s.save_doc('soul', self.SOUL, 'owner')
-        tid = s.create_task({'Title': 'Henkin Medicaid overpayment', 'Kind': 'coding', 'Status': 'open'}, 'o')
-        s.add_message({'TaskId': tid, 'ExternalId': 'm1', 'Channel': 'email', 'Subject': 'Henkin Medicaid overpayment',
-                       'FromName': 'Rivka', 'FromEmail': 'rivka@ours.com', 'SentAt': ago(1),
-                       'BodyText': 'The county says Mrs Henkin was overpaid; please sort out the refund with them.',
+        tid = s.create_task({'Title': 'Carter Medicaid overpayment', 'Kind': 'coding', 'Status': 'open'}, 'o')
+        s.add_message({'TaskId': tid, 'ExternalId': 'm1', 'Channel': 'email', 'Subject': 'Carter Medicaid overpayment',
+                       'FromName': 'Nina', 'FromEmail': 'nina@ours.com', 'SentAt': ago(1),
+                       'BodyText': 'The county says Mrs Carter was overpaid; please sort out the refund with them.',
                        'Status': 'routed'})
         repo, why = terminal.guess_repo(s, tid, self.PROFILE)
         self.assertIsNone(repo, f'nothing here names a checkout (why={why})')
@@ -1342,14 +1342,14 @@ class WhichCheckoutTests(unittest.TestCase):
             terminal.open_session(s, 'coder', tid, None, None)
         self.assertIn('could not tell which checkout', str(caught.exception))
         self.assertIn('Pick the repository', str(caught.exception))
-        self.assertNotIn('FanApp', str(caught.exception).split('would put an agent in')[0])
+        self.assertNotIn('ledger', str(caught.exception).split('would put an agent in')[0])
 
     def test_a_repo_the_owner_tagged_always_wins(self):
         s = store()
         tid = self._report_task(s)
-        s.update_task(tid, {'Tags': 'repo:mfaVita/TopE'}, 'owner')
+        s.update_task(tid, {'Tags': 'repo:northwind/portal'}, 'owner')
         repo, why = terminal.guess_repo(s, tid, self.PROFILE)
-        self.assertEqual((repo, why), ('mfaVita/TopE', 'tagged on the task'))
+        self.assertEqual((repo, why), ('northwind/portal', 'tagged on the task'))
 
 
 class SettingProposalTests(unittest.TestCase):
@@ -1508,7 +1508,7 @@ class ApiActionsTests(unittest.TestCase):
     def test_splitting_a_second_ask_out_of_one_thread_gives_it_its_own_task(self):
         s = store(); out = self._ask(s); c = self.client(s)
         second = s.add_message({'TaskId': out['task_id'], 'ExternalId': 'x:second', 'ConversationId': 'c:Can you fix the export?',
-                                'Channel': 'email', 'Subject': 'Can you fix the export?', 'FromName': 'Craig Neiswanger',
+                                'Channel': 'email', 'Subject': 'Can you fix the export?', 'FromName': 'Craig Palmer',
                                 'FromEmail': 'craig@vendor.com', 'SentAt': ago(0), 'Status': 'routed',
                                 'BodyText': 'Also, please add Priya to the payroll distribution list.'})
         r = c.post(f'/api/messages/{second}/split', json={'kind': 'coding'})
@@ -1609,7 +1609,7 @@ class ApiActionsTests(unittest.TestCase):
         s = store()
         with mock.patch.object(ingest, '_spawn'):
             held = arrive(s, subject='Can you add Nathan to the call he wants to join', body='he wants to join',
-                          channel='teams', who='Hindy', email='hindy@htgcs.com', conv='c:teams',
+                          channel='teams', who='Gail', email='gail@vendor.example', conv='c:teams',
                           llm=brain('task', 'coding'))
         tid = held['task_id']
         s.tag_task(tid, ingest.NEEDS_REPO_TAG, actor='triage')
@@ -1650,7 +1650,7 @@ class InlineVerbTests(unittest.TestCase):
     def _meeting(self):
         s = store()
         s.set_setting('calendar_enabled', '1', 't')
-        ev = [{'subject': 'AI Agents', 'start': ahead(20), 'end': ahead(50), 'who': ['Hindy'],
+        ev = [{'subject': 'AI Agents', 'start': ahead(20), 'end': ahead(50), 'who': ['Gail'],
                'all_day': False, 'where': 'Teams', 'id': 'ev1'}]
         return s, ev
 
@@ -1695,7 +1695,7 @@ class InlineVerbTests(unittest.TestCase):
             p = concierge.propose_direct(s, 'regular_agent', key, table=True)
         self.assertEqual((p['kind'], p['params']['kind']), ('task.create_from_text', 'general'))
         self.assertIn('AI Agents', p['params']['text'])                      # the invite IS the brief
-        self.assertIn('Hindy', p['params']['text'])
+        self.assertIn('Gail', p['params']['text'])
         self.assertEqual(p['params']['title'], 'AI Agents')                  # ...and the item names the task
 
 

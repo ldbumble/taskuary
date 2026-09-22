@@ -15,7 +15,7 @@ DIGEST = """\U0001f64b People want
 2. Autumn Evans wants resolution on two refund threads.
 
 \U0001f680 In flight
-1. TQ-0646 is finished for the PointClickCare thread.
+1. TQ-0646 is finished for the Careview thread.
 
 \U0001f50e What happened
 1. No meetings are listed for today.
@@ -144,7 +144,7 @@ class BlockTests(unittest.TestCase):
 
     def test_a_block_never_ends_mid_sentence(self):
         """The old splitter took max() of the paragraph, line and space positions, so the space
-        always won and every break landed mid-sentence: '...asked Fri 18 Sep 10:34 re "MFA and'."""
+        always won and every break landed mid-sentence: '...asked Fri 18 Sep 10:34 re "Northwind and'."""
         for b in cf.blocks(DIGEST):
             self.assertFalse(b.rstrip().endswith(' and'), b[-60:])
             self.assertTrue(b.strip())
@@ -232,7 +232,7 @@ class ADraftToAPersonTests(unittest.TestCase):
         self.outbound, self.messengers, self.s = outbound, messengers, MemoryStore()
         self.mid = self.s.add_message({'ExternalId': 'whatsapp:1', 'Channel': 'whatsapp',
                                        'ConversationId': 'whatsapp:1234@s.whatsapp.net', 'Subject': 'hi',
-                                       'BodyText': 'can you check this?', 'FromName': 'Gabi',
+                                       'BodyText': 'can you check this?', 'FromName': 'Tess',
                                        'FromEmail': None, 'SentAt': '2026-09-19 10:00:00', 'Status': 'open'})
 
     def reply(self, body):

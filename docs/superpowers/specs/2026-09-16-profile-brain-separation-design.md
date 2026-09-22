@@ -26,7 +26,7 @@ The triage brain's verdict for that message (`route` row 8221):
 
 ```json
 {"intent": "task", "kind": "coding", "profile": "copilot",
- "repository": "mfaVita/FanApp", ...}
+ "repository": "northwind/ledger", ...}
 ```
 
 Triage named a *worker*, which is exactly what it is asked to do and exactly what

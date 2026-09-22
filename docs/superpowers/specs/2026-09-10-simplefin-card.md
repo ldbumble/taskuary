@@ -20,7 +20,7 @@ able to turn it on themselves.* That rules out more than it sounds like:
 | Plaid | production pricing is a sales conversation; an owner was quoted $1,000/month for a hobby app |
 | Stripe Financial Connections | needs a Stripe **business** account and is shaped around ACH/underwriting |
 | MX / Finicity / Akoya direct | enterprise contracts, no self-serve |
-| BAI2 / EDI bank files | set up per company by the bank's treasury desk and priced for that. The corporate banks already send them (MFA's FanApp consumes them), but nobody else can get one |
+| BAI2 / EDI bank files | set up per company by the bank's treasury desk and priced for that. The corporate banks already send them (Northwind's ledger consumes them), but nobody else can get one |
 | an open-source aggregator | does not exist and cannot: the data comes from bank agreements, not code. What is open source is the client side — SimpleFIN is an open protocol, Actual Budget and Firefly III are open clients |
 
 **SimpleFIN Bridge** is the one that passes: $1.50/month or $15/year **billed to the owner**,

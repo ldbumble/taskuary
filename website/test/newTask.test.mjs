@@ -6,11 +6,11 @@ import test from "node:test";
 import { ASK_TAG, BROWSER_TAG, NO_REPO, planTask, repoOf, wantsAsk, wantsBrowser, withoutAsk } from "../src/newTask.js";
 
 test("a repository means a coding task for a CLI in that checkout", () => {
-  const p = planTask("acme/fanapp", "live");
+  const p = planTask("acme/ledger", "live");
   assert.equal(p.kind, "coding");
   assert.equal(p.chat, false);
-  assert.equal(p.repo, "acme/fanapp");
-  assert.equal(p.tags, "repo:acme/fanapp");
+  assert.equal(p.repo, "acme/ledger");
+  assert.equal(p.tags, "repo:acme/ledger");
 });
 
 test("General means a general task, worked in the assistant's chat", () => {
@@ -30,12 +30,12 @@ test("the question to ask rides ON the task, so no navigation can lose it", () =
 test("only 'Ask the assistant' asks - filing it and the terminal do not", () => {
   assert.equal(planTask(NO_REPO, "file").tags, null);
   assert.equal(planTask(NO_REPO, "terminal").ask, false);
-  assert.equal(wantsAsk({ Tags: "repo:acme/fanapp" }), false);
+  assert.equal(wantsAsk({ Tags: "repo:acme/ledger" }), false);
   assert.equal(wantsAsk({}), false);
 });
 
 test("the marker is stripped once the question has been asked, and nothing else is", () => {
-  assert.equal(withoutAsk(`repo:acme/fanapp,${ASK_TAG}`), "repo:acme/fanapp");
+  assert.equal(withoutAsk(`repo:acme/ledger,${ASK_TAG}`), "repo:acme/ledger");
   assert.equal(withoutAsk(ASK_TAG), "");
   assert.equal(withoutAsk(""), "");
   assert.equal(wantsAsk({ Tags: withoutAsk(ASK_TAG) }), false);
@@ -49,7 +49,7 @@ test("no repository is never written as a repo tag", () => {
   // 'repo:none' was a tag pointing at nothing; the ask marker is the only tag a General task wears
   for (const pick of [NO_REPO, ""]) assert.equal(planTask(pick, "live").tags, ASK_TAG);
   assert.equal(planTask(NO_REPO, "file").tags, null);
-  assert.match(String(planTask("acme/fanapp", "live").tags), /^repo:/);
+  assert.match(String(planTask("acme/ledger", "live").tags), /^repo:/);
 });
 
 test("an empty picker - no repositories connected at all - is the chat, not a terminal", () => {
@@ -67,13 +67,13 @@ test("a question can still be worked in a terminal, when that is asked for", () 
 });
 
 test("'just file it' starts nobody, on either kind", () => {
-  assert.equal(planTask("acme/fanapp", "file").start, false);
+  assert.equal(planTask("acme/ledger", "file").start, false);
   assert.equal(planTask(NO_REPO, "file").start, false);
   assert.equal(planTask(NO_REPO, "live").start, true);
 });
 
 test("a task can say it needs a browser, on either kind", () => {
-  assert.equal(planTask("acme/fanapp", "live", true).tags, `repo:acme/fanapp,${BROWSER_TAG}`);
+  assert.equal(planTask("acme/ledger", "live", true).tags, `repo:acme/ledger,${BROWSER_TAG}`);
   assert.equal(planTask(NO_REPO, "live", true).tags, `${ASK_TAG},${BROWSER_TAG}`);
   assert.equal(planTask(NO_REPO, "terminal", true).tags, BROWSER_TAG);
   assert.equal(planTask(NO_REPO, "file", true).tags, BROWSER_TAG);
@@ -87,12 +87,12 @@ test("an already-created walkthrough's browser marker is detected exactly", () =
 
 test("and by default it does not", () => {
   for (const how of ["live", "file", "terminal"])
-    assert.equal(String(planTask("acme/fanapp", how).tags || "").includes(BROWSER_TAG), false);
+    assert.equal(String(planTask("acme/ledger", how).tags || "").includes(BROWSER_TAG), false);
   assert.equal(planTask(NO_REPO, "live").browser, false);
 });
 
 test("repoOf is what the API is given", () => {
-  assert.equal(repoOf("acme/fanapp"), "acme/fanapp");
+  assert.equal(repoOf("acme/ledger"), "acme/ledger");
   assert.equal(repoOf(NO_REPO), null);
   assert.equal(repoOf(""), null);
 });

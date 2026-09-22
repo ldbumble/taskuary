@@ -38,14 +38,14 @@ class CleanerTests(unittest.TestCase):
         """Outlook writes the label after the number - "(540) 776-7588 Office" - and the contact
         pattern anchored the number to the end of the line, so the block stopped being trimmed
         one line early and the number rode onto the card (TQ-0665)."""
-        body = 'Can you send me the link on the 2027 budgets?\n\nBrad West\n(540) 776-7588 Office\nbrad.west@mfa.example\n'
-        self.assertEqual(triage.strip_boilerplate(body).strip(), 'Can you send me the link on the 2027 budgets?\n\nBrad West')
+        body = 'Can you send me the link on the 2027 budgets?\n\nRay Colton\n(540) 776-7588 Office\nray.west@northwind.example\n'
+        self.assertEqual(triage.strip_boilerplate(body).strip(), 'Can you send me the link on the 2027 budgets?\n\nRay Colton')
 
     def test_own_words_stop_where_the_forwarded_chain_starts(self):
-        body = ('Uri,\n\nCan you send me the link on the 2027 budgets?\n\nThanks,\n\nBrad West\nVP Marketing\n\n'
-                'From: Yeatts, Michael L. <m@mfa.example>\nSent: Thursday, September 17, 2026 2:07 PM\n'
-                'To: West, Brad <b@mfa.example>\nSubject: Fw: 2027 Budgets\n\nMike Yeatts\nVice President\n')
-        self.assertEqual(triage.own_words(body).strip(), 'Uri,\n\nCan you send me the link on the 2027 budgets?')
+        body = ('Alex,\n\nCan you send me the link on the 2027 budgets?\n\nThanks,\n\nRay Colton\nVP Marketing\n\n'
+                'From: Barnes, Michael L. <m@northwind.example>\nSent: Thursday, September 17, 2026 2:07 PM\n'
+                'To: Colton, Ray <b@northwind.example>\nSubject: Fw: 2027 Budgets\n\nPeter Barnes\nVice President\n')
+        self.assertEqual(triage.own_words(body).strip(), 'Alex,\n\nCan you send me the link on the 2027 budgets?')
         # a message with no chain under it is its own words, whole
         plain = 'The payroll export failed again overnight - same KeyError as last week.'
         self.assertEqual(triage.own_words(plain), plain)
@@ -55,7 +55,7 @@ class CleanerTests(unittest.TestCase):
         self.assertEqual(triage.strip_boilerplate(body), body)
 
 
-PRIOR = 'Hi Uri,\n\nCould you look at the export job? It failed twice this week.\n\nThanks,\nDana'
+PRIOR = 'Hi Alex,\n\nCould you look at the export job? It failed twice this week.\n\nThanks,\nDana'
 
 
 class QuotedTests(unittest.TestCase):
@@ -66,7 +66,7 @@ class QuotedTests(unittest.TestCase):
 
     def test_an_outlook_style_quoted_history_is_dropped_when_retained(self):
         reply = ('Approved, go ahead.\n\n-----Original Message-----\nFrom: Dana Whitfield\nSent: Tuesday, September 6, 2026 9:00 AM\n'
-                 'To: Uri\nSubject: Export job\n\n' + PRIOR)
+                 'To: Alex\nSubject: Export job\n\n' + PRIOR)
         self.assertEqual(triage.dedupe_quoted(reply, [PRIOR]).strip(), 'Approved, go ahead.')
 
     def test_unique_forwarded_material_is_kept(self):
@@ -162,7 +162,7 @@ class ExchangeBudgetTests(unittest.TestCase):
         s.add_message({'ExternalId': 'a', 'ConversationId': 'q', 'Channel': 'email', 'Subject': 'Export', 'FromName': 'Dana', 'FromEmail': 'd@v.example',
                        'BodyText': first, 'SentAt': '2026-09-06 09:00:00', 'Status': 'filed'})
         quoted = 'Yes, twice.\n\nOn Tue, Dana wrote:\n> Could you look at the export job? It failed twice this week.'
-        s.add_message({'ExternalId': 'b', 'ConversationId': 'q', 'Channel': 'email', 'Subject': 'Re: Export', 'FromName': 'Uri', 'FromEmail': 'me@ours.example',
+        s.add_message({'ExternalId': 'b', 'ConversationId': 'q', 'Channel': 'email', 'Subject': 'Re: Export', 'FromName': 'Alex', 'FromEmail': 'me@ours.example',
                        'BodyText': quoted, 'SentAt': '2026-09-06 09:30:00', 'Status': 'context'})
         lines = ingest.exchange_lines(s, {'conversation_id': 'q', 'subject': 'Re: Export', 'sent_at': '2026-09-06 10:00:00'})
         self.assertEqual(sum('failed twice this week' in l for l in lines), 1)

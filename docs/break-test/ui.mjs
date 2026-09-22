@@ -1,7 +1,7 @@
 // Drive the Assistant tab like an owner would: open, start the walk, click chips, type words; after every
 // step record what the chat said, what the pipe holds, any "By the way" bar, and page errors.
 //   node ui.mjs <url-with-token> <outdir> <scenario.json>
-import { launch } from "file:///C:/Users/unussbaum/Documents/General/Testing/taskhub/website/browser.mjs";
+import { launch } from "file:///C:/Users/owner/Documents/General/Testing/taskhub/website/browser.mjs";
 import { writeFileSync, readFileSync, mkdirSync } from "node:fs";
 const [url, out, scenarioPath] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });

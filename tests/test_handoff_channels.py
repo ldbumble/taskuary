@@ -26,7 +26,7 @@ class HandingItToAPerson(unittest.TestCase):
         tid = _task()
         with mock.patch('taskuary.outbound.can_reply', return_value=False), \
              mock.patch('taskuary.outbound.draft_handoff', return_value='here you go'):
-            r = c.post(f'/api/tasks/{tid}/handoff', json={'to': 'gabi', 'channel': 'whatsapp', 'text': 'hi'})
+            r = c.post(f'/api/tasks/{tid}/handoff', json={'to': 'tess', 'channel': 'whatsapp', 'text': 'hi'})
         self.assertEqual(r.status_code, 422)
         self.assertIn('Connections', r.json()['detail'])
 
@@ -68,7 +68,7 @@ class HandingItToAPerson(unittest.TestCase):
         tid = _task()
         with mock.patch('taskuary.outbound.can_reply', return_value=True), \
              mock.patch('taskuary.outbound.send_out', return_value={'ok': True}):
-            c.post(f'/api/tasks/{tid}/handoff', json={'to': 'gabi', 'channel': 'whatsapp', 'text': 'yours'})
+            c.post(f'/api/tasks/{tid}/handoff', json={'to': 'tess', 'channel': 'whatsapp', 'text': 'yours'})
         self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], 'done')
 
     def test_a_draft_never_sends_anything(self):
@@ -76,7 +76,7 @@ class HandingItToAPerson(unittest.TestCase):
         with mock.patch('taskuary.outbound.draft_handoff', return_value='a drafted forward'), \
              mock.patch('taskuary.outbound.send_out') as send, \
              mock.patch('taskuary.outbound.send_email') as mail:
-            r = c.post(f'/api/tasks/{tid}/handoff', json={'to': 'gabi', 'channel': 'whatsapp', 'draft_only': True})
+            r = c.post(f'/api/tasks/{tid}/handoff', json={'to': 'tess', 'channel': 'whatsapp', 'draft_only': True})
         self.assertEqual(r.json()['draft'], 'a drafted forward')
         send.assert_not_called()
         mail.assert_not_called()

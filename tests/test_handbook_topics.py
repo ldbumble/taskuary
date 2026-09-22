@@ -2,7 +2,7 @@
 
 topic_of only slugifies, so "Intacct", "intacct " and "Sage Intacct" produced two shelves for one
 subject - the sprawl its own docstring promised to prevent. It compounds fast: a single afternoon
-on this install left `viventium-api` and `viventium-reimbursements`, one system on two shelves,
+on this install left `payworth-api` and `payworth-reimbursements`, one system on two shelves,
 and an agent looking up either would read half of what is known.
 
 snap_topic is deliberately conservative. A WRONG merge is worse than a duplicate: it files a fact
@@ -20,7 +20,7 @@ def E(*pairs):
 
 class SnappingToAnExistingShelf(unittest.TestCase):
     def test_a_narrower_topic_joins_the_shelf_that_exists(self):
-        self.assertEqual(snap_topic('viventium-api', E(('viventium', 5))), 'viventium')
+        self.assertEqual(snap_topic('payworth-api', E(('payworth', 5))), 'payworth')
 
     def test_the_case_the_docstring_always_promised(self):
         self.assertEqual(snap_topic('sage-intacct', E(('intacct', 3))), 'intacct')
@@ -36,16 +36,16 @@ class SnappingToAnExistingShelf(unittest.TestCase):
 
 class WhenItMustNotMerge(unittest.TestCase):
     def test_a_generic_word_is_not_enough_to_merge_on(self):
-        """Every system has an api. Filing viventium's api notes under `api` is worse than sprawl."""
-        self.assertEqual(snap_topic('viventium-api', E(('api', 9))), 'viventium-api')
+        """Every system has an api. Filing payworth's api notes under `api` is worse than sprawl."""
+        self.assertEqual(snap_topic('payworth-api', E(('api', 9))), 'payworth-api')
         self.assertEqual(snap_topic('billing-data', E(('data', 4))), 'billing-data')
 
     def test_a_broad_topic_never_files_under_a_narrow_one(self):
-        """`viventium` arriving while only `viventium-api` exists makes the broad shelf - and the
+        """`payworth` arriving while only `payworth-api` exists makes the broad shelf - and the
         NEXT specific topic snaps onto it. The sprawl unwinds instead of deepening."""
-        self.assertEqual(snap_topic('viventium', E(('viventium-api', 1))), 'viventium')
-        after = E(('viventium-api', 1), ('viventium', 1))
-        self.assertEqual(snap_topic('viventium-reimbursements', after), 'viventium')
+        self.assertEqual(snap_topic('payworth', E(('payworth-api', 1))), 'payworth')
+        after = E(('payworth-api', 1), ('payworth', 1))
+        self.assertEqual(snap_topic('payworth-reimbursements', after), 'payworth')
 
     def test_an_unrelated_topic_gets_its_own_shelf(self):
         self.assertEqual(snap_topic('brand-new', E(('payroll', 4))), 'brand-new')
@@ -61,11 +61,11 @@ class WhenItMustNotMerge(unittest.TestCase):
 class ThroughTheRealWriter(unittest.TestCase):
     def test_the_second_agent_lands_on_the_first_ones_shelf(self):
         s = MemoryStore()
-        post(s, 'Deductions are per-division', topic='Viventium', author='coder')
+        post(s, 'Deductions are per-division', topic='Payworth', author='coder')
         second = post(s, 'The import endpoint rejects blank cost centres',
-                      topic='Viventium API', author='coder')
-        self.assertEqual(second['Topic'], 'viventium')
-        self.assertEqual([r['Topic'] for r in s.lore_topics()], ['viventium'])
+                      topic='Payworth API', author='coder')
+        self.assertEqual(second['Topic'], 'payworth')
+        self.assertEqual([r['Topic'] for r in s.lore_topics()], ['payworth'])
 
     def test_it_still_falls_back_to_the_checkout_when_nothing_was_named(self):
         s = MemoryStore()

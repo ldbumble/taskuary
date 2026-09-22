@@ -806,7 +806,7 @@ class ApiTests(unittest.TestCase):
     def test_message_dispatch_promotes_and_runs(self):
         """'Send to coding agent' from the timeline: a filed message (report/ignored mail)
         becomes a task carrying the message, then the agent runs on it."""
-        out = c.post('/api/ingest/push', json={'subject': 'Process Check - FAILED', 'body': 'Pex export failed: LedgerBalance',
+        out = c.post('/api/ingest/push', json={'subject': 'Process Check - FAILED', 'body': 'Spendly export failed: LedgerBalance',
                                                'from_email': 'reports@vendor.com', 'channel': 'report'}).json()
         mid = out['message_id']
         self.assertIsNone(out['task_id'])
@@ -981,10 +981,10 @@ class ApiTests(unittest.TestCase):
         and the card asking for the yes said "already handled", because a pending review whose task
         is done is hidden from the queue. Answering again IS work: the task comes back, so one draft
         is visible to every surface, and a second click reuses it instead of stacking a new one."""
-        tid = server.store.create_task({'Title': "Gabi's question", 'Kind': 'reply', 'Status': 'done'}, 'test')
+        tid = server.store.create_task({'Title': "Tess's question", 'Kind': 'reply', 'Status': 'done'}, 'test')
         mid = server.store.add_message({'TaskId': tid, 'ExternalId': 'closed-thread-reply', 'Channel': 'whatsapp',
                                         'Subject': '', 'BodyText': "So what's their move if it's free?",
-                                        'FromName': 'Gabi', 'FromEmail': 'gabi@example.com', 'Status': 'routed'})
+                                        'FromName': 'Tess', 'FromEmail': 'tess@example.com', 'Status': 'routed'})
         rid = c.post(f'/api/messages/{mid}/reply', json={'draft': False}).json()['reviewId']
         rows = c.get('/api/reviews', params={'status': 'pending'}).json()['data']
         self.assertIn(rid, [r['ReviewId'] for r in rows])
@@ -1171,7 +1171,7 @@ class ApiTests(unittest.TestCase):
     def test_a_taskless_fyi_reply_and_manual_edits_survive_reopening(self):
         mid = server.store.add_message({'ExternalId': 'teams:fyi-reply', 'Channel': 'teams',
                                         'ConversationId': 'chat-fyi', 'Subject': 'Team update',
-                                        'FromName': 'Mindy', 'BodyText': 'Taking today off.', 'Status': 'filed'})
+                                        'FromName': 'Robin', 'BodyText': 'Taking today off.', 'Status': 'filed'})
         opened = c.post(f'/api/messages/{mid}/reply', json={'draft': False}).json()
         rid = opened['reviewId']
         self.assertEqual(opened['draft'], '')
@@ -1184,7 +1184,7 @@ class ApiTests(unittest.TestCase):
     def test_generate_with_ai_works_for_a_taskless_fyi_reply(self):
         mid = server.store.add_message({'ExternalId': 'teams:fyi-generate', 'Channel': 'teams',
                                         'ConversationId': 'chat-fyi-ai', 'Subject': 'Team update',
-                                        'FromName': 'Mindy', 'BodyText': 'Taking today off.', 'Status': 'filed'})
+                                        'FromName': 'Robin', 'BodyText': 'Taking today off.', 'Status': 'filed'})
         rid = c.post(f'/api/messages/{mid}/reply', json={'draft': False}).json()['reviewId']
         with mock.patch.object(server.responder, 'draft_for_message', return_value='Feel better soon.') as draft:
             out = c.post(f'/api/reviews/{rid}/draft').json()

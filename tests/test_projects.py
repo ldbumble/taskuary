@@ -14,7 +14,7 @@ class ProjectRelationshipTests(unittest.TestCase):
                                      '- **noble/app**: Noble customer operations\n'
                                      '- **other/payroll**: payroll and timesheets\n', 'owner')
 
-    def task(self, sender='rene@noble.example', name='Rene Gomez', channel='email', body='Please fix Noble', repo=None):
+    def task(self, sender='rene@noble.example', name='Paul Rivera', channel='email', body='Please fix Noble', repo=None):
         tid = self.s.create_task({'Title': body, 'Summary': body, 'Kind': 'coding',
                                   **({'Tags': f'repo:{repo}'} if repo else {})}, 'owner')
         self.s.add_message({'TaskId': tid, 'ExternalId': f'{channel}:{tid}', 'Channel': channel,
@@ -44,7 +44,7 @@ class ProjectRelationshipTests(unittest.TestCase):
                 server.set_task_repo(tid, server.RepoBody(repo='noble/app'))
             future = self.task(body='Please check the latest problem')
             self.assertEqual(projects.repositories_for_task(self.s, future)[0], ['noble/app'])
-            self.assertIn('Rene Gomez (email)', self.s.get_doc('soul'))
+            self.assertIn('Paul Rivera (email)', self.s.get_doc('soul'))
         finally:
             server.store = original
 
@@ -70,14 +70,14 @@ class ProjectRelationshipTests(unittest.TestCase):
         incoming = self.task(body='Payroll timesheet failure')
         profile = {'cwd_map': {'noble/app': 'C:/src/noble', 'other/payroll': 'C:/src/payroll'}}
         self.assertEqual(terminal.guess_repo(self.s, incoming, profile),
-                         ('noble/app', 'learned from 2 owner repository choices for Rene Gomez'))
+                         ('noble/app', 'learned from 2 owner repository choices for Paul Rivera'))
 
     def test_triage_receives_only_the_matching_project_context(self):
         for _ in range(2):
             tid = self.task(repo='noble/app')
             projects.learn_task_repository(self.s, tid, 'noble/app')
         seen = {}
-        msg = {'channel': 'email', 'from_name': 'Rene Gomez', 'from_email': 'rene@noble.example',
+        msg = {'channel': 'email', 'from_name': 'Paul Rivera', 'from_email': 'rene@noble.example',
                'subject': 'Question', 'body': 'Can you check the latest item?'}
         def brain(system, user, **_kwargs):
             seen.update(system=system, user=json.loads(user))
@@ -92,13 +92,13 @@ class ProjectRelationshipTests(unittest.TestCase):
         for i in range(2):
             tid = self.task(repo='noble/app')
             self.s.add_message({'TaskId': tid, 'ExternalId': f'wa:{i}', 'Channel': 'whatsapp',
-                                'FromName': 'Rene Gomez', 'FromEmail': '15551234567@s.whatsapp.net',
+                                'FromName': 'Paul Rivera', 'FromEmail': '15551234567@s.whatsapp.net',
                                 'ConversationId': 'whatsapp:15551234567@s.whatsapp.net', 'BodyText': 'Noble update'})
             projects.learn_task_repository(self.s, tid, 'noble/app')
         docsync.sync_projects(self.s)
         soul = self.s.get_doc('soul')
         self.assertIn('**noble/app**', soul)
-        self.assertIn('Rene Gomez (email, whatsapp)', soul)
+        self.assertIn('Paul Rivera (email, whatsapp)', soul)
         self.assertIn('learned from 2 owner-routed tasks', soul)
         self.assertNotIn('rene@noble.example', soul)
         self.assertNotIn('15551234567', soul)
@@ -108,7 +108,7 @@ class ProjectRelationshipTests(unittest.TestCase):
         for _ in range(2):
             tid = self.task(repo='noble/app')
             projects.learn_task_repository(self.s, tid, 'noble/app')
-        wa = {'Channel': 'whatsapp', 'FromName': 'Rene Gomez',
+        wa = {'Channel': 'whatsapp', 'FromName': 'Paul Rivera',
               'FromEmail': '15550001111@s.whatsapp.net', 'BodyText': 'hello'}
         ctx = projects.context_for_message(self.s, wa)
         self.assertEqual(ctx['relationship'], 'possible cross-channel identity')

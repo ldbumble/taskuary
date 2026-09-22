@@ -527,7 +527,7 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
     said, verb = [turn_text(out, lead, store)], decision.get('verb')
     # The words can name somebody OTHER than what is on the table. The interpreter resolves that into
     # `decision.target` and the desktop's decide() drafts THERE; drafting on `item` regardless answered
-    # whoever happened to be up - "reply to Chana" wrote to Dovid (2026-09-10 audit).
+    # whoever happened to be up - "reply to Erin" wrote to Dovid (2026-09-10 audit).
     on = decision.get('target') or item
     walk_on, prop = verb == 'next' or bool(out.get('settled')), out.get('proposal')
     # "Answer it" with nothing after it is not an answer. concierge fills an empty answer_agent with
@@ -848,7 +848,7 @@ def _chunks(text: str, limit=3900) -> list[str]:
 
     This used to take max() of the paragraph, line and space positions - and the space is
     always the latest of the three, so it won every time and the break landed mid-sentence:
-    '...asked Fri 18 Sep 10:34 re "MFA and' (the owner, 2026-09-19, with a screenshot)."""
+    '...asked Fri 18 Sep 10:34 re "Northwind and' (the owner, 2026-09-19, with a screenshot)."""
     from . import chatformat
     return chatformat.split(str(text or '').strip(), limit)
 

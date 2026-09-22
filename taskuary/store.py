@@ -742,7 +742,7 @@ class SQLiteStore:
             # WHAT TRIAGE CALLED IT, in its own words (triage.TASK_FIELDS answers a title on every
             # verdict). A task keeps its title on the task, but an fyi or a triaged report has no
             # task to hold one - so the rail fell back to the mail header and a row read
-            # "rrdbreports@mfa.net - MFA - PCC ..." (the owner, 2026-09-16). This is where the
+            # "rrdbreports@northwind.example - Northwind - PCC ..." (the owner, 2026-09-16). This is where the
             # verdict's line lives for a message that never became work.
             if 'TriageTitle' not in mcols:
                 self.cx.execute('ALTER TABLE message ADD COLUMN TriageTitle TEXT')

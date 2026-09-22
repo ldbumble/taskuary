@@ -12,7 +12,7 @@ from taskuary import server
 c = TestClient(server.app)
 EVENT = {'subject': 'Reimbursement app review', 'start': '2026-09-02T13:00:00',
          'end': '2026-09-02T14:00:00', 'where': 'Teams', 'organizer': 'dana@ours.com',
-         'who': ['dana@ours.com'], 'about': 'MFA and Viventium ESS link'}
+         'who': ['dana@ours.com'], 'about': 'Northwind and Payworth ESS link'}
 
 
 class PrepOpensTheChat(unittest.TestCase):

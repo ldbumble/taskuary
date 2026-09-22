@@ -449,10 +449,10 @@ class StaysOnSubjectTests(unittest.TestCase):
         s = store()
         t, m, r = drafted(s)
         seen = {}
-        wander = lambda sy, u, **k: seen.update(u=u) or "Mindy asked 13 hours ago to deploy gpt-4.1 (TQ-0312); I'd push it to the coder."
+        wander = lambda sy, u, **k: seen.update(u=u) or "Robin asked 13 hours ago to deploy gpt-4.1 (TQ-0312); I'd push it to the coder."
         out = concierge.surface(s, llm=wander)
         self.assertEqual(out['item']['rid'], r)
-        self.assertIn('Dana wrote on email', out['say']); self.assertNotIn('Mindy', out['say'])   # the facts, not Mindy
+        self.assertIn('Dana wrote on email', out['say']); self.assertNotIn('Robin', out['say'])   # the facts, not Robin
         self.assertTrue(seen['u'].startswith('THE ITEM ON THE TABLE - speak only about this one:'))
         self.assertNotIn('Coming next', seen['u'])                                       # no other items to wander to
         self.assertTrue(concierge.off_subject('TQ-0312 sat untouched', {'tid': 327}))
@@ -497,7 +497,7 @@ class ThreadTests(unittest.TestCase):
         for n in range(7):
             mids.append(s.add_message({'TaskId': t, 'ExternalId': f'wa:{n}', 'ConversationId': 'wa:room',
                                        'Channel': 'whatsapp', 'Direction': 'in', 'Subject': 'Reorder the seven steps',
-                                       'FromName': 'Gabi', 'SentAt': ago(0), 'BodyText': f'combined message {n}',
+                                       'FromName': 'Tess', 'SentAt': ago(0), 'BodyText': f'combined message {n}',
                                        'Status': 'routed'}))
         # Supporting context belongs in reasoning about whether the owner answered, but it is not an
         # eighth triaged ask and must not inflate the grouped-message count.
@@ -505,7 +505,7 @@ class ThreadTests(unittest.TestCase):
                        'Direction': 'in', 'Subject': 'Reorder the seven steps', 'FromName': 'You',
                        'SentAt': ago(0), 'BodyText': 'I will log it as a spec.', 'Status': 'context'})
         item = {'key': f'msg:{mids[-1]}', 'kind': 'asked', 'lane': 'asked', 'title': 'Reorder the seven steps',
-                'who': 'Gabi', 'when': ago(0), 'why': 'triage combined the ask', 'mid': mids[-1], 'tid': t}
+                'who': 'Tess', 'when': ago(0), 'why': 'triage combined the ask', 'mid': mids[-1], 'tid': t}
 
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             fx = concierge.facts(s, item)
@@ -519,7 +519,7 @@ class ThreadTests(unittest.TestCase):
         s = store()
         t, m, r = drafted(s)
         s.add_message({'TaskId': t, 'ExternalId': 'x:sent', 'ConversationId': 'c:Export still broken', 'Channel': 'email', 'Direction': 'out',
-                       'Subject': 'RE: Export still broken', 'FromName': 'Uri', 'FromEmail': 'uri@ours.com', 'SentAt': ago(0),
+                       'Subject': 'RE: Export still broken', 'FromName': 'Alex', 'FromEmail': 'alex@ours.com', 'SentAt': ago(0),
                        'BodyText': 'Sent it over just now - let me know if it opens.', 'Status': 'filed'})
         it = funnel.build(s)['items'][0]
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
@@ -649,66 +649,66 @@ class SweepTests(unittest.TestCase):
         s = store()
         s.set_setting('team_domains', 'ours.com', 't')
         for n in range(3):
-            m = s.add_message({'ExternalId': f'n{n}', 'ConversationId': f'n{n}', 'Channel': 'email', 'Subject': f'MFA Financial Report - .0{n}', 'FromName': 'Nechama Ozur',
-                               'FromEmail': 'nozur@ours.com', 'SentAt': ago(n), 'BodyText': 'attached', 'Status': 'filed'})
+            m = s.add_message({'ExternalId': f'n{n}', 'ConversationId': f'n{n}', 'Channel': 'email', 'Subject': f'Northwind Financial Report - .0{n}', 'FromName': 'Paula Vance',
+                               'FromEmail': 'pvance@ours.com', 'SentAt': ago(n), 'BodyText': 'attached', 'Status': 'filed'})
             s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
-        m = s.add_message({'ExternalId': 'k', 'ConversationId': 'k', 'Channel': 'email', 'Subject': 'RE: PointClickCare', 'FromName': 'Kishan Patel',
-                           'FromEmail': 'kishan@vendor.com', 'SentAt': ago(1), 'BodyText': 'please respond', 'Status': 'filed'})
+        m = s.add_message({'ExternalId': 'k', 'ConversationId': 'k', 'Channel': 'email', 'Subject': 'RE: Careview', 'FromName': 'Ravi Shah',
+                           'FromEmail': 'ravi@vendor.com', 'SentAt': ago(1), 'BodyText': 'please respond', 'Status': 'filed'})
         s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
         self.assertEqual(len(funnel.build(s)['items']), 4)
-        out = decided(s, "all the reports for nechama ozur you can remove. I don't need them", 'clear')
+        out = decided(s, "all the reports for paula vance you can remove. I don't need them", 'clear')
         p = out['proposal']; self.assertEqual((p['kind'], p['label']), ('pipe.clear', 'Clear them from the pipe'))
         self.assertEqual(len(funnel.build(s)['items']), 4)                                       # nothing swept on the words
         o = run(s, p).json()['outcome']
         self.assertEqual((o['cleared'], bool(o['remember'])), (3, True))
         line = last_receipt(s)
         self.assertIn('Cleared 3 from the pipe', line); self.assertIn('Read, not deleted', line); self.assertIn('remembered', line)
-        self.assertEqual([i['who'] for i in funnel.build(s)['items']], ['Kishan Patel'])                # Kishan stays
+        self.assertEqual([i['who'] for i in funnel.build(s)['items']], ['Ravi Shah'])                # Ravi stays
         again = decided(s, 'same for all resident refunds', 'clear')
         self.assertEqual(run(s, again['proposal']).json()['outcome']['cleared'], 0); self.assertIn('Nothing in the pipe matches', last_receipt(s))
         al = funnel.alerts(s, funnel.build(s)['items'])
-        self.assertEqual([(a['kind'], a['text']) for a in al], [('asked', 'Kishan Patel asked you: RE: PointClickCare')] if any(i['lane'] == 'asked' for i in funnel.build(s)['items']) else [])
+        self.assertEqual([(a['kind'], a['text']) for a in al], [('asked', 'Ravi Shah asked you: RE: Careview')] if any(i['lane'] == 'asked' for i in funnel.build(s)['items']) else [])
 
 
 class SweepPronounTests(unittest.TestCase):
     def test_skip_all_the_x_sweeps_and_remove_them_resolves_against_what_was_said_before(self):
         """Two tries in the owner's own words, both of which used to be answered with a promise and no
-        sweep (2026-09-03: "not removing the mfa financial reports in funnel?")."""
+        sweep (2026-09-03: "not removing the northwind financial reports in funnel?")."""
         s = store()
         s.set_setting('team_domains', 'ours.com', 't')
         for n in range(3):
-            m = s.add_message({'ExternalId': f'r{n}', 'ConversationId': f'r{n}', 'Channel': 'email', 'Subject': f'MFA Financial Report - .0{n} P&L',
-                               'FromName': 'Nechama Ozur', 'FromEmail': 'nozur@hrtgcs.com', 'SentAt': ago(n + 1), 'BodyText': 'generated by Intacct', 'Status': 'filed'})
+            m = s.add_message({'ExternalId': f'r{n}', 'ConversationId': f'r{n}', 'Channel': 'email', 'Subject': f'Northwind Financial Report - .0{n} P&L',
+                               'FromName': 'Paula Vance', 'FromEmail': 'pvance@vendor.example', 'SentAt': ago(n + 1), 'BodyText': 'generated by Intacct', 'Status': 'filed'})
             s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
-        keep = s.add_message({'ExternalId': 'k', 'ConversationId': 'k', 'Channel': 'email', 'Subject': 'RE: PointClickCare', 'FromName': 'Kishan Patel',
-                              'FromEmail': 'kishan@vendor.com', 'SentAt': ago(1), 'BodyText': 'please respond', 'Status': 'filed'})
+        keep = s.add_message({'ExternalId': 'k', 'ConversationId': 'k', 'Channel': 'email', 'Subject': 'RE: Careview', 'FromName': 'Ravi Shah',
+                              'FromEmail': 'ravi@vendor.com', 'SentAt': ago(1), 'BodyText': 'please respond', 'Status': 'filed'})
         s.add_route(keep, None, 'file', None, 'triage: fyi', [], 'triage')
-        first = decided(s, 'skip all the mfa financial reports. Those are part of the financials process, taken care of.', 'clear')
+        first = decided(s, 'skip all the northwind financial reports. Those are part of the financials process, taken care of.', 'clear')
         self.assertEqual(first['proposal']['kind'], 'pipe.clear'); self.assertEqual(funnel.mutes(s), [])      # no rule on the words
         self.assertEqual(run(s, first['proposal']).json()['outcome']['cleared'], 3)
         line = last_receipt(s)
         self.assertIn('Cleared 3 from the pipe', line)
-        self.assertIn('remembered as a rule: financial mfa from nozur@hrtgcs.com', line)
+        self.assertIn('remembered as a rule: financial northwind from pvance@vendor.example', line)
         self.assertIn('still reaches you', line)
         notes = [n['Note'] for n in s.list_memories(active_only=True)]                       # the reason is kept, in the owner's words
         self.assertTrue(any('financials process' in n for n in notes), notes)
         self.assertEqual([m['Scope'] for m in s.list_memories(active_only=True)], ['sender'])
-        self.assertEqual([i['who'] for i in funnel.build(s)['items']], ['Kishan Patel'])
+        self.assertEqual([i['who'] for i in funnel.build(s)['items']], ['Ravi Shah'])
         # ...and the rule it left behind is what keeps the NEXT batch out - a sweep alone only marked
         # the ones in front of them read (the owner, 2026-09-03: "was it one time dismiss not a memory")
-        self.assertEqual([(r['sender'], 'mfa' in r['words']) for r in funnel.mutes(s)], [('nozur@hrtgcs.com', True)])
+        self.assertEqual([(r['sender'], 'northwind' in r['words']) for r in funnel.mutes(s)], [('pvance@vendor.example', True)])
         for n in range(3, 5):
-            m = s.add_message({'ExternalId': f'r{n}', 'ConversationId': f'r{n}', 'Channel': 'email', 'Subject': f'MFA Financial Report - .0{n} Banks',
-                               'FromName': 'Nechama Ozur', 'FromEmail': 'nozur@hrtgcs.com', 'SentAt': ago(1), 'BodyText': 'generated by Intacct', 'Status': 'filed'})
+            m = s.add_message({'ExternalId': f'r{n}', 'ConversationId': f'r{n}', 'Channel': 'email', 'Subject': f'Northwind Financial Report - .0{n} Banks',
+                               'FromName': 'Paula Vance', 'FromEmail': 'pvance@vendor.example', 'SentAt': ago(1), 'BodyText': 'generated by Intacct', 'Status': 'filed'})
             s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
         funnel.invalidate()
         p = funnel.build(s)
-        self.assertEqual([i['who'] for i in p['items']], ['Kishan Patel'])
+        self.assertEqual([i['who'] for i in p['items']], ['Ravi Shah'])
         self.assertEqual(p['muted'], 2)                       # held back, not deleted: they are on the Timeline
         # ...and a real ask from that same sender still reaches them
         t = s.create_task({'Title': 'Re-run .02', 'Kind': 'coding', 'Status': 'waiting'}, 'o')
-        s.add_message({'TaskId': t, 'ExternalId': 'ask', 'ConversationId': 'ask', 'Channel': 'email', 'FromName': 'Nechama Ozur',
-                       'Subject': 'MFA Financial Report - can you re-run .02?', 'FromEmail': 'nozur@hrtgcs.com', 'SentAt': ago(0),
+        s.add_message({'TaskId': t, 'ExternalId': 'ask', 'ConversationId': 'ask', 'Channel': 'email', 'FromName': 'Paula Vance',
+                       'Subject': 'Northwind Financial Report - can you re-run .02?', 'FromEmail': 'pvance@vendor.example', 'SentAt': ago(0),
                        'BodyText': 'please re-run it', 'Status': 'routed'})
         funnel.invalidate()
         asked = [(i['title'], i['lane']) for i in funnel.build(s)['items'] if i.get('tid') == t]
@@ -775,23 +775,23 @@ class TwoRulesInOneSentenceTests(unittest.TestCase):
     nothing was on the table, so the chat said "Cleared. Moving on." and swept nothing; and one rule
     carrying both senders' words would have muted whichever came first (2026-09-03)."""
 
-    ASK = ("next. Can you make rules to not surface mfa financials reports from Nechama and resident "
+    ASK = ("next. Can you make rules to not surface northwind financials reports from Paula and resident "
            "refunds stuff from elisheva. Don't need to see them")
 
     def _pile(self, s):
         s.set_setting('team_domains', 'ours.com', 't')
         for n in range(3):
-            m = s.add_message({'ExternalId': f'n{n}', 'ConversationId': f'n{n}', 'Channel': 'email', 'FromName': 'Nechama Ozur',
-                               'Subject': f'MFA Financial Report - .{n}0 P&L', 'FromEmail': 'nozur@hrtgcs.com', 'SentAt': ago(n + 1),
+            m = s.add_message({'ExternalId': f'n{n}', 'ConversationId': f'n{n}', 'Channel': 'email', 'FromName': 'Paula Vance',
+                               'Subject': f'Northwind Financial Report - .{n}0 P&L', 'FromEmail': 'pvance@vendor.example', 'SentAt': ago(n + 1),
                                'BodyText': 'from Intacct', 'Status': 'filed'})
             s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
         for n in range(2):
             m = s.add_message({'ExternalId': f'e{n}', 'ConversationId': f'e{n}', 'Channel': 'email', 'FromName': 'Elisheva M',
-                               'Subject': f'RE: Resident Refund Request - Case {n}', 'FromEmail': 'elisheva@mfaheritage.net',
+                               'Subject': f'RE: Resident Refund Request - Case {n}', 'FromEmail': 'elisheva@northwind.example',
                                'SentAt': ago(n + 1), 'BodyText': 'approved', 'Status': 'filed'})
             s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
-        keep = s.add_message({'ExternalId': 'k', 'ConversationId': 'k', 'Channel': 'email', 'FromName': 'Kishan Patel',
-                              'Subject': 'RE: PointClickCare', 'FromEmail': 'kishan@vendor.com', 'SentAt': ago(1),
+        keep = s.add_message({'ExternalId': 'k', 'ConversationId': 'k', 'Channel': 'email', 'FromName': 'Ravi Shah',
+                              'Subject': 'RE: Careview', 'FromEmail': 'ravi@vendor.com', 'SentAt': ago(1),
                               'BodyText': 'please respond', 'Status': 'filed'})
         s.add_route(keep, None, 'file', None, 'triage: fyi', [], 'triage')
 
@@ -805,25 +805,25 @@ class TwoRulesInOneSentenceTests(unittest.TestCase):
         self.assertEqual(o['cleared'], 5)                                     # the ones in front of them, now
         self.assertIn('remembered as 2 rules', last_receipt(s))
         self.assertEqual([(r['sender'], sorted(r['words'])) for r in funnel.mutes(s)],
-                         [('nozur@hrtgcs.com', ['financials', 'mfa', 'nechama']),
-                          ('elisheva@mfaheritage.net', ['refunds', 'resident'])])
-        self.assertEqual([i['who'] for i in funnel.build(s)['items']], ['Kishan Patel'])
+                         [('pvance@vendor.example', ['financials', 'northwind', 'paula']),
+                          ('elisheva@northwind.example', ['refunds', 'resident'])])
+        self.assertEqual([i['who'] for i in funnel.build(s)['items']], ['Ravi Shah'])
         # ...and the next batch of both never enters, from either sender
         for n in (9, 10):
-            m = s.add_message({'ExternalId': f'n{n}', 'ConversationId': f'n{n}', 'Channel': 'email', 'FromName': 'Nechama Ozur',
-                               'Subject': f'MFA Financial Report - .{n}0 Banks', 'FromEmail': 'nozur@hrtgcs.com', 'SentAt': ago(0),
+            m = s.add_message({'ExternalId': f'n{n}', 'ConversationId': f'n{n}', 'Channel': 'email', 'FromName': 'Paula Vance',
+                               'Subject': f'Northwind Financial Report - .{n}0 Banks', 'FromEmail': 'pvance@vendor.example', 'SentAt': ago(0),
                                'BodyText': 'from Intacct', 'Status': 'filed'})
             s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
         m = s.add_message({'ExternalId': 'e9', 'ConversationId': 'e9', 'Channel': 'email', 'FromName': 'Elisheva M',
-                           'Subject': 'RE: Resident Refund Request - Case 9', 'FromEmail': 'elisheva@mfaheritage.net',
+                           'Subject': 'RE: Resident Refund Request - Case 9', 'FromEmail': 'elisheva@northwind.example',
                            'SentAt': ago(0), 'BodyText': 'approved', 'Status': 'filed'})
         s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
         funnel.invalidate()
         p = funnel.build(s)
-        self.assertEqual([i['who'] for i in p['items']], ['Kishan Patel'])
+        self.assertEqual([i['who'] for i in p['items']], ['Ravi Shah'])
         self.assertEqual(p['muted'], 3)
         # ...and a rule never becomes "everything from that person": the sender's own words are dropped
-        self.assertNotIn('nozur', sum([r['words'] for r in funnel.mutes(s)], []))
+        self.assertNotIn('pvance', sum([r['words'] for r in funnel.mutes(s)], []))
         # ...nor a second, broader verdict on the sender - the rule is the whole mechanism
         self.assertFalse(o['remember'] and not o['rules'])
 
@@ -859,7 +859,7 @@ class AgentGotThereFirstTests(unittest.TestCase):
     def test_an_item_an_agent_now_holds_is_put_back_with_a_word_and_the_walk_moves_on(self):
         s = store()
         t = s.create_task({'Title': 'Pto', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
-        m = s.add_message({'TaskId': t, 'ExternalId': 'x:pto', 'ConversationId': 'c:pto', 'Channel': 'email', 'Subject': 'PTO', 'FromName': 'Chana',
+        m = s.add_message({'TaskId': t, 'ExternalId': 'x:pto', 'ConversationId': 'c:pto', 'Channel': 'email', 'Subject': 'PTO', 'FromName': 'Erin',
                            'FromEmail': 'c@ours.com', 'SentAt': ago(3), 'BodyText': 'Can you import PTO for Aug 9-22?', 'Status': 'routed'})
         t2, m2, r2 = drafted(s, 'second', hours=1)
         first = funnel.build(s)['items'][0]

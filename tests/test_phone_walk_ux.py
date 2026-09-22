@@ -20,19 +20,19 @@ def store_with_a_draft():
     """A task with an arrived message and a reply waiting on the owner's yes."""
     s = MemoryStore()
     tid = s.create_task({'Title': 'Refund question', 'Kind': 'reply', 'Status': 'open'}, 'owner')
-    mid = s.add_message({'TaskId': tid, 'Channel': 'whatsapp', 'FromName': 'Gabi', 'FromEmail': 'gabi@x.com',
-                         'Subject': 'Reply to Gabi check-in', 'BodyText': 'Are we still on for Thursday, and did the refund land?',
+    mid = s.add_message({'TaskId': tid, 'Channel': 'whatsapp', 'FromName': 'Tess', 'FromEmail': 'tess@x.com',
+                         'Subject': 'Reply to Tess check-in', 'BodyText': 'Are we still on for Thursday, and did the refund land?',
                          'Status': 'open'})
     rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
                         'DraftText': 'Yes - Thursday still works, and the refund cleared this morning.'})
     return s, {'key': f'review:{rid}', 'kind': 'review', 'lane': 'approve', 'rid': rid, 'mid': mid, 'tid': tid,
-               'who': 'Gabi', 'channel': 'whatsapp', 'title': 'Reply to Gabi check-in'}
+               'who': 'Tess', 'channel': 'whatsapp', 'title': 'Reply to Tess check-in'}
 
 
 class ShowWhatYouAreApprovingTests(unittest.TestCase):
     def test_the_turn_carries_what_they_wrote_and_the_draft_itself(self):
         s, item = store_with_a_draft()
-        out = {'say': 'Gabi is owed a reply - the draft is below.', 'item': item,
+        out = {'say': 'Tess is owed a reply - the draft is below.', 'item': item,
                'options': ['Send the reply', 'Redraft it', 'Next']}
         text = remote_assistant.turn_text(out, store=s)
         self.assertIn('THEY WROTE', text)
@@ -70,7 +70,7 @@ class ANumberIsTheAnswerTests(unittest.TestCase):
     def test_a_picked_action_runs_instead_of_asking_the_same_thing_again(self):
         s, item = store_with_a_draft()
         prop = {'id': 'op1', 'status': 'proposed', 'settles': True, 'label': 'Send the reply'}
-        out = {'say': 'Send the reply: Gabi.', 'item': item, 'proposal': prop, 'decision': {'verb': 'approve'}}
+        out = {'say': 'Send the reply: Tess.', 'item': item, 'proposal': prop, 'decision': {'verb': 'approve'}}
         from taskuary import concierge
         with mock.patch.object(concierge, 'run_proposal', return_value={'status': 'done'}) as ran, \
              mock.patch.object(concierge, 'receipt', return_value='Done - Send the reply.'), \
@@ -83,7 +83,7 @@ class ANumberIsTheAnswerTests(unittest.TestCase):
     def test_words_we_only_interpreted_still_wait_for_a_yes(self):
         s, item = store_with_a_draft()
         prop = {'id': 'op1', 'status': 'proposed', 'settles': True, 'label': 'Send the reply'}
-        out = {'say': 'Send the reply: Gabi.', 'item': item, 'proposal': prop, 'decision': {'verb': 'approve'}}
+        out = {'say': 'Send the reply: Tess.', 'item': item, 'proposal': prop, 'decision': {'verb': 'approve'}}
         from taskuary import concierge
         with mock.patch.object(concierge, 'run_proposal') as ran:
             text = remote_assistant.carry_out(s, out, item, picked=False)

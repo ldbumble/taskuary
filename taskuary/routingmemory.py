@@ -19,7 +19,7 @@ Two halves, and the first is what makes the second possible:
 
 What a correction is worth depends on the field. `kind`, `profile` and `playbook` are ROUTING - a
 correction generalises straight to the next message like it. `system` is the one the owner types
-("this is ADP, not FanApp"): the fact that was missing entirely, because the only map triage had
+("this is ADP, not ledger"): the fact that was missing entirely, because the only map triage had
 was a list of git repositories. Title, summary and checklist are deliberately NOT here - correcting
 those teaches style, not routing, and style is LEARNED.md's, which already learns it from drafts.
 """
@@ -28,8 +28,8 @@ from loguru import logger
 from .projects import CONTEXT_CONFIDENCE, PUBLIC_MAIL, ROUTE_CONFIDENCE
 
 FIELDS = ('kind', 'profile', 'playbook', 'system')
-# A chat's "subject" is the ROOM ("Teams chat with Mindy Gorelick"), so a topic key made from it
-# says "chats with Mindy", which is wrong in both directions: it would not fire on the same ask
+# A chat's "subject" is the ROOM ("Teams chat with Robin Gorelick"), so a topic key made from it
+# says "chats with Robin", which is wrong in both directions: it would not fire on the same ask
 # from anyone else, and it would damp a real bug she reports tomorrow. Chat learns by sender only.
 from .ingest import CHAT_CHANNELS
 
@@ -87,7 +87,7 @@ def learn_correction(store, task_id: int, field: str, value: str, actor: str = '
 # colleague's correction must not speak for everyone who shares their domain, so the domain tier
 # needs two independent corrections (.86) where a named sender needs one (.72). This is the bar
 # projects._identity_links already sets on repository edges - learned the same way, by a single
-# repo choice on one address branding the whole of mfa.net.
+# repo choice on one address branding the whole of northwind.example.
 FLOOR = {'sender': CONTEXT_CONFIDENCE, 'subject': CONTEXT_CONFIDENCE, 'sender_domain': ROUTE_CONFIDENCE}
 TIERS = ('sender', 'subject', 'sender_domain')      # most specific first; a weaker tier never overrules
 

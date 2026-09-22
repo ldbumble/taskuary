@@ -33,7 +33,7 @@ class LifecycleTests(unittest.TestCase):
         # 1. a person asks; triage made it a coding task with nobody on it
         t = s.create_task({'Title': 'T&E portal', 'Kind': 'coding', 'Status': 'open'}, 'router')
         m = s.add_message({'TaskId': t, 'ExternalId': 'x:te', 'ConversationId': 'te', 'Channel': 'email', 'Subject': 'RE: T&E Portal', 'FromName': 'Craig',
-                           'FromEmail': 'craig@mfa.com', 'SentAt': ago(1), 'BodyText': 'I still see Bulk approve - can you turn it off?', 'Status': 'routed'})
+                           'FromEmail': 'craig@northwind.example', 'SentAt': ago(1), 'BodyText': 'I still see Bulk approve - can you turn it off?', 'Status': 'routed'})
         s.add_route(m, t, 'create', .9, 'a concrete ask', [], 'router')
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             p = funnel.pile(s, force=True)
@@ -93,7 +93,7 @@ class LifecycleTests(unittest.TestCase):
             out = concierge.surface(s)
         self.assertEqual(out['item']['rid'], r); self.assertIn('the agent removed Bulk Approve and Deny', out['say']); self.assertIn('approve the draft below', out['say'])
         # 8. approving sends and CLOSES the task; the pipe empties and says so
-        sent = {'channel': 'email', 'to': ['craig@mfa.com'], 'cc': []}
+        sent = {'channel': 'email', 'to': ['craig@northwind.example'], 'cc': []}
         with mock.patch('taskuary.outbound.reply_to_message', return_value=sent), mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             done = verdicts.decide(s, s.get_review(r), 'approve', 'Done - both are off now.', None, 'owner')
         self.assertTrue(done['ok']); self.assertEqual(s.get_task(t)['Status'], 'done')
@@ -114,7 +114,7 @@ class LifecycleTests(unittest.TestCase):
         s = self.s
         t = s.create_task({'Title': 'July financials', 'Kind': 'coding', 'Status': 'open'}, 'router')
         m = s.add_message({'TaskId': t, 'ExternalId': 'x:financials', 'ConversationId': 'financials',
-                           'Channel': 'email', 'Subject': 'RE: July financials', 'FromName': 'Nechama',
+                           'Channel': 'email', 'Subject': 'RE: July financials', 'FromName': 'Paula',
                            'SentAt': ago(minutes=30), 'BodyText': 'Please adjust these.', 'Status': 'routed'})
         s.add_route(m, t, 'create', .9, 'a concrete ask', [], 'router')
         with mock.patch.object(funnel, 'DWELL', 0), mock.patch('taskuary.terminal.live_sessions', return_value=[]):

@@ -55,9 +55,9 @@ test("the second line names who has it, never guesses", () => {
 
 test("a thread whose last word is yours is waiting on them, not on you", () => {
   // an open task, and you replied (from anywhere) or Taskuary sent the reply: the ball is theirs
-  const row = { TaskId: 7, Category: "coding", TheirTurn: 1, FromName: "Gabi", Channel: "whatsapp" };
+  const row = { TaskId: 7, Category: "coding", TheirTurn: 1, FromName: "Tess", Channel: "whatsapp" };
   assert.equal(stateOf(row), "theirs");
-  assert.match(subline(row), /TQ-0007 · you replied · waiting on Gabi/);
+  assert.match(subline(row), /TQ-0007 · you replied · waiting on Tess/);
   assert.equal(STATES.theirs.loud, undefined);                        // never on you, so never loud
   // their next line arrives: the server clears TheirTurn and the row is work again
   assert.equal(stateOf({ TaskId: 7, Category: "coding", TheirTurn: 0 }), "todo");
@@ -87,7 +87,7 @@ test("a message whose triage failed has an explicit error state with a retry hin
 // choosing").
 test("a message a standing rule turned away says so, and asks nothing", () => {
   const t = triageSummary({ Decision: "ignore", MsgStatus: "ignored",
-    RouteReason: "policy 'not-a-task: noreply-securityapp@mfaheritage.net': owner said not a task" });
+    RouteReason: "policy 'not-a-task: noreply-securityapp@northwind.example': owner said not a task" });
   assert.equal(t.status, "ignored");
   assert.match(t.line, /not a task/);
   assert.equal(t.choose, false, "nothing is left to choose - the rule already chose");

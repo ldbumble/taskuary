@@ -21,7 +21,7 @@ class CatalogueTests(unittest.TestCase):
         self.assertEqual(connectorcatalog.by_type('mssql')['group'], 'Databases')      # the tab's own section, not "Everything else"
 
     def test_mentions_count_whole_words_once_per_text(self):
-        hits = connectorcatalog.mentions(['ADP hours export is late', 'adp again', 'the adapter broke', 'Viventium ESS link'])
+        hits = connectorcatalog.mentions(['ADP hours export is late', 'adp again', 'the adapter broke', 'Payworth ESS link'])
         self.assertEqual(hits.get('adp'), 2)                                            # "adapter" is not ADP
         self.assertNotIn('adp', connectorcatalog.mentions(['adp'], exclude_types={'adp'}))
 

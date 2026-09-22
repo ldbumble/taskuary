@@ -679,7 +679,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         if behind:
             store.mark_review_stale(behind['ReviewId'])
             # WHATEVER the new line was judged to be. This rewrote the draft only when the follow-up
-            # was reply_only, so Brad's second mail - judged a task, because it asked for access -
+            # was reply_only, so Ray's second mail - judged a task, because it asked for access -
             # left the pending reply pinned to his first one, warned as behind, with nothing behind
             # the warning (TQ-0665, 2026-09-21). The reply is owed to the newest line either way, and
             # the owner still approves it. An fyi never reaches here: it files and returns above.
@@ -1125,8 +1125,8 @@ def own_thread_only(store, msg: dict, r: dict) -> dict:
     route() scores content: sender 1.0 plus a decent body cosine can clear the bar on its own. So
     when a thread's task has CLOSED, its next reply had no thread signal to win with and landed on
     whatever open task looked most like it. That is how "RE: July 2026 Financials" (and the
-    undeliverable bounce behind it) joined the PointClickCare task - and the reply drafted for that
-    task was then about Rene Gomez's full mailbox, correctly written from the newest message on the
+    undeliverable bounce behind it) joined the Careview task - and the reply drafted for that
+    task was then about Paul Rivera's full mailbox, correctly written from the newest message on the
     wrong pile (the owner, 2026-09-03: "the reply was about another task? How does this happen").
 
     The rule that was already written down (routing.py) is kept: their reply on a closed thread is
@@ -1302,7 +1302,7 @@ def repo_candidates(store) -> list:
         for link in store.project_links(kind=REPO_KIND):
             repo, name = str(link.get('Value') or '').strip(), str(link.get('ProjectName') or '').strip()
             # never a restatement of the name: a DISCOVERED repository's project is named after the
-            # repository itself, so `or ProjectName` described mfaVita/FanApp as "mfaVita/FanApp" -
+            # repository itself, so `or ProjectName` described northwind/ledger as "northwind/ledger" -
             # a routing table of bare names, against which triage can place nothing (TQ-0443). A
             # project the owner named for the WORK still describes its repo perfectly well.
             about = str(link.get('ProjectDescription') or '').strip() or ('' if name.lower() == repo.lower() else name)

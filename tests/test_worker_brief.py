@@ -21,7 +21,7 @@ from taskuary.store import MemoryStore
 TEMPLATES = pathlib.Path(__file__).resolve().parents[1] / 'taskuary' / 'templates'
 MSG = {'external_id': 'e1', 'channel': 'email', 'from_email': 'dana@vendor.example', 'from_name': 'Dana', 'conversation_id': 'AAQk-exp',
        'subject': 'August export', 'sent_at': '2026-09-06 09:00:00',
-       'body': 'Hi Uri, could you fix the nightly export and send me the August file? The distinctive phrase is quokka.\nDana'}
+       'body': 'Hi Alex, could you fix the nightly export and send me the August file? The distinctive phrase is quokka.\nDana'}
 
 
 def make(s, kind='coding', checklist=('Fix the nightly export', 'Send Dana the August file')):

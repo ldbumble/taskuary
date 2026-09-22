@@ -42,7 +42,7 @@ def tearDownModule():
 CHAT = 'teams:19:vp-security-chat@thread.v2'
 # every test speaks about something different: the router attaches on subject + body
 # similarity, so two tests sharing one wording would join each other's tasks
-ASK = {'northwind': ('VPN Helpdesk', "Can someone reset John's MFA? He is locked out of the app again."),
+ASK = {'northwind': ('VPN Helpdesk', "Can someone reset John's Northwind? He is locked out of the app again."),
        'vpn': ('VPN certificate renewals', 'The VPN certificate expires Friday - who is renewing it?'),
        'pct': ('Collection %', 'Why does the percentage stay the same if I exclude those payers?'),
        'badge': ('Badge printer offline', 'The badge printer on floor 2 is offline again, can someone look?'),
@@ -89,12 +89,12 @@ class NotATaskTests(unittest.TestCase):
         """The support chat is a ROOM. Richard's "Thank you" was filed as nothing to do - which
         says nothing about Ivan's request, and nothing about Richard's NEXT one either."""
         conv = CHAT + '-room'
-        first = push(1, conv=conv, about='vpn', from_name='Richard Spencer')
+        first = push(1, conv=conv, about='vpn', from_name='Richard Lowe')
         c.post(f"/api/messages/{first['message_id']}/file")
         asked = []
-        other = push(2, conv=conv, about='badge', from_name='Ivan Stanley', sent_at=stamp(hours=3), calls=asked)
+        other = push(2, conv=conv, about='badge', from_name='Ivan Brooks', sent_at=stamp(hours=3), calls=asked)
         self.assertEqual(other['status'], 'created')
-        same = push(3, conv=conv, about='vpn', from_name='Richard Spencer', sent_at=stamp(hours=4), calls=asked)
+        same = push(3, conv=conv, about='vpn', from_name='Richard Lowe', sent_at=stamp(hours=4), calls=asked)
         self.assertNotEqual(same['status'], 'filed')                 # ...and Richard is not muted either
         self.assertGreaterEqual(len(asked), 1)
 
@@ -177,7 +177,7 @@ class SentToAgentTests(unittest.TestCase):
     def test_the_promoted_message_becomes_the_task_the_thread_then_joins(self):
         conv = 'AAQkADNj-process-check'
         first = push(1, conv=conv, channel='email', from_email='reports@vendor.com', subject='Process Check - FAILED',
-                     body='Pex export failed: LedgerBalance mismatch on 3 rows', intent='fyi')
+                     body='Spendly export failed: LedgerBalance mismatch on 3 rows', intent='fyi')
         self.assertEqual((first['status'], first['task_id']), ('filed', None))
         server.store.upsert_agent('coder', 'coding', 'cli', '{"cmd": "claude"}')
         with mock.patch.object(server.hub_term, 'start_on_task', return_value={'sid': 's1'}) as coder, \

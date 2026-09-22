@@ -121,16 +121,16 @@ class RetentionTests(unittest.TestCase):
         item = {'key': f'msg:{m}', 'kind': 'asked', 'lane': 'asked', 'title': 'Fix the export', 'mid': m, 'tid': t}
         dock = chat(s, 'send it to the coder when the export fix is ready', days=30, item=item)
         # an fyi discussed in that chat and promoted later: its discussion travelled onto the task (PW-133)
-        fyi = s.add_message({'ExternalId': 'x:fyi', 'ConversationId': 'c:fyi', 'Channel': 'email', 'Subject': 'FYI - Rebecca is back', 'FromName': 'Chana',
-                             'FromEmail': 'chana@ours.com', 'SentAt': ago(days=30), 'BodyText': 'Back Tuesday.', 'Status': 'filed'})
+        fyi = s.add_message({'ExternalId': 'x:fyi', 'ConversationId': 'c:fyi', 'Channel': 'email', 'Subject': 'FYI - Rebecca is back', 'FromName': 'Erin',
+                             'FromEmail': 'erin@ours.com', 'SentAt': ago(days=30), 'BodyText': 'Back Tuesday.', 'Status': 'filed'})
         operations.discuss(s, 'owner', 'make this a task when she is back', message_id=fyi)
         promoted = s.create_task({'Title': 'Welcome Rebecca back', 'Kind': 'task', 'Status': 'open'}, 'o')
         operations.link_discussion(s, promoted, [fyi])
         op = operations.record_direct(s, 'task.complete', t, {}, 'owner', {'status': 'done'})
         s.add_comment(t, 'coder', 'agent', 'CODER REPORT\nSummary: fixed the export.')
         rv = s.add_review({'TaskId': t, 'MessageId': m, 'Kind': 'reply', 'DraftText': 'Fixed.', 'Status': 'approved'})
-        mem = concierge.remember_fact(s, 'Hindy signs off on refunds')
-        funnel.remember_mute(s, {'sender': 'nozur@hrtgcs.com', 'words': ['mfa'], 'why': 'the financials process'}, 'o')
+        mem = concierge.remember_fact(s, 'Gail signs off on refunds')
+        funnel.remember_mute(s, {'sender': 'pvance@vendor.example', 'words': ['northwind'], 'why': 'the financials process'}, 'o')
         s.add_correction({'OpId': op['id'], 'MessageId': m, 'TaskId': t, 'Sender': 'craig@vendor.com', 'Topic': 'export', 'Verdict': 'fyi',
                           'VerdictRouteId': None, 'Change': 'coding', 'ContextJson': '{}'})
         self.assertEqual(retention.cleanup(s)['removed'], [dock])
@@ -141,8 +141,8 @@ class RetentionTests(unittest.TestCase):
         self.assertEqual([h['type'] for h in operations.history(s, task_id=t) if h['type'] != 'discussion'], ['operation', 'correction'])
         self.assertTrue(any('CODER REPORT' in c['Body'] for c in s.list_comments(t)))
         self.assertEqual(s.get_review(rv)['Status'], 'approved')
-        self.assertEqual([x['Note'] for x in s.list_memories()], ['Hindy signs off on refunds'])
-        self.assertEqual([r['sender'] for r in funnel.mutes(s)], ['nozur@hrtgcs.com'])
+        self.assertEqual([x['Note'] for x in s.list_memories()], ['Gail signs off on refunds'])
+        self.assertEqual([r['sender'] for r in funnel.mutes(s)], ['pvance@vendor.example'])
         self.assertEqual(len(s.corrections(task_id=t)), 1)
 
 

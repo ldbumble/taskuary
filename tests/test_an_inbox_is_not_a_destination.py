@@ -37,7 +37,7 @@ def test_a_source_chat_is_an_inbox(store):
 
 def test_an_email_source_is_not_an_inbox_in_this_sense(store):
     """Mailing yourself is an ordinary thing a report does - "Automation ideas" does it today."""
-    store.save_source({'Channel': 'email', 'Address': 'unussbaum@example.com', 'Active': 1,
+    store.save_source({'Channel': 'email', 'Address': 'owner@example.com', 'Active': 1,
                        'Owner': 'test', 'ConfigJson': '{}'}, 'test')
     assert 'email' not in outbound.input_chats(store)
 

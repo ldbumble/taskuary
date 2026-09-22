@@ -74,7 +74,7 @@ class TaskControls(unittest.TestCase):
         2026-09-22, TQ-0666)."""
         tid = self.s.create_task({'Title': 'Work', 'Kind': 'coding'}, 'owner')
         self.s.upsert_agent('coder', 'coding', 'cli', '{}')
-        why = 'I could not tell which checkout this belongs in, and guessing would put an agent in C:/FanApp.'
+        why = 'I could not tell which checkout this belongs in, and guessing would put an agent in C:/ledger.'
         with mock.patch.object(server.hub_term, 'session_for', return_value=None), \
              mock.patch.object(server.hub_term, 'start_on_task', side_effect=ValueError(why)):
             _, r = self.run_op('dispatch.prepare', tid, {'kind': 'coding'})

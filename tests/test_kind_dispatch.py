@@ -1,6 +1,6 @@
 """`kind` routes the task, and triage is the only thing that decides it.
 
-Owner, 2026-08-30 (TQ-0253), after a CyberHoot training reminder got a full coder run and a
+Owner, 2026-08-30 (TQ-0253), after a PhishGuard training reminder got a full coder run and a
 drafted reply back to the mailer: the exception to everything-goes-to-the-agent is not "an
 automated sender", it is "clearly not a coding job" - and it belongs in TRIAGE.md, not in a
 hardcoded rule. So there is exactly one gate on the work: coding starts a session, general
@@ -27,7 +27,7 @@ def llm_says(kind):
 
 def mail(**kw):
     base = {'external_id': 'x1', 'channel': 'email', 'subject': 'Outstanding Assignment', 'body': NOTICE,
-            'from_email': 'hoots@cyberhoot.com', 'from_name': 'CyberHoot', 'conversation_id': None,
+            'from_email': 'alerts@phishguard.example', 'from_name': 'PhishGuard', 'conversation_id': None,
             'sent_at': '2026-08-30 09:00', 'source_link': None, 'source_name': 'dana@northwind.example'}
     return {**base, **kw}
 
@@ -76,7 +76,7 @@ class DispatchTests(unittest.TestCase):
         self.assertEqual(spawned, ['_auto_code'])
 
     def test_the_same_robot_dispatches_when_triage_calls_it_coding(self):
-        """Nothing looks at the SENDER any more. The identical CyberHoot address gets an agent
+        """Nothing looks at the SENDER any more. The identical PhishGuard address gets an agent
         the moment triage says the work is keyboard work - that judgement is TRIAGE.md's alone."""
         s = store()
         _out, spawned = ingested(s, mail(external_id='r1'), 'coding')

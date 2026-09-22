@@ -1829,7 +1829,7 @@ export const FilterPills = ({ options, value, onChange }) => (
 // ── PICKING A PERSON ────────────────────────────────────────────────────────────────────
 // Everyone Taskuary has seen (/api/people), searched by name OR address, with the option row
 // laid out so it survives a long name beside a long address. It used to be a bare Autocomplete
-// whose <li> had no width control at all, so "Nechama Ozur, CPA · NOzur@hrtgcs.com" wrapped over
+// whose <li> had no width control at all, so "Paula Vance, CPA · PVance@vendor.example" wrapped over
 // the row beneath it and the list read as broken (owner, 2026-09-02). One component now, because
 // there is no reason for looping someone in and handing work over to disagree about how a person
 // is chosen.

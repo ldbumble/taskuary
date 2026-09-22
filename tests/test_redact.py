@@ -27,9 +27,9 @@ class WhatCountsAsACredentialTests(unittest.TestCase):
             self.assertNotIn(raw, out); self.assertIn(f'[redacted:{label}]', out)
 
     def test_a_password_inside_a_url_goes_but_the_host_stays(self):
-        out = redact.scrub('clone https://ldbumble:hunter2pass@github.com/mfa/fanapp.git now')
+        out = redact.scrub('clone https://ldbumble:hunter2pass@github.com/northwind/ledger.git now')
         self.assertNotIn('hunter2pass', out); self.assertIn('[redacted:url-credentials]', out)
-        self.assertIn('github.com/mfa/fanapp.git', out)     # still legible as a URL
+        self.assertIn('github.com/northwind/ledger.git', out)     # still legible as a URL
 
     def test_connection_strings_lose_only_the_password(self):
         out = redact.scrub('psql postgres://admin:s3cretPw@db.internal:5432/prod')
@@ -74,7 +74,7 @@ class WhatMustSurviveTests(unittest.TestCase):
         self.assertIn(digest, redact.scrub(f'the bundle hash is {digest} on master'))
 
     def test_ordinary_mail_is_returned_unchanged(self):
-        body = 'Hi Uri - the March invoices are attached. Can you approve by Friday? Thanks, Dana'
+        body = 'Hi Alex - the March invoices are attached. Can you approve by Friday? Thanks, Dana'
         self.assertEqual(body, redact.scrub(body))
 
     def test_empty_and_none_are_safe(self):

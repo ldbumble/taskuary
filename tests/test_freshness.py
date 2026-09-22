@@ -51,7 +51,7 @@ class DraftPinsWhatItReadTests(unittest.TestCase):
     def test_a_line_that_landed_before_the_thread_was_read_is_seen_not_behind(self):
         """The pin used to be taken when the job was QUEUED, not when the writer read the thread -
         and the two are seconds apart, because the draft waits its turn behind the rest of a sync.
-        Brad wrote twice in one morning; both mails arrived in one poll; the draft ANSWERED BOTH and
+        Ray wrote twice in one morning; both mails arrived in one poll; the draft ANSWERED BOTH and
         was still labelled behind the thread, which disabled the only button that sends it (TQ-0665,
         2026-09-21). What the model read is what the draft is pinned to."""
         s, tid, first, rid = thread()

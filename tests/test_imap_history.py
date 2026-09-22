@@ -17,7 +17,7 @@ from taskuary import histgen, imapmail, spawn
 from taskuary.store import MemoryStore
 
 CARD = {'ConnectorId': 1, 'Type': 'imap', 'Name': 'Work mail', 'Active': 1, 'Secret': 'pw',
-        'ConfigJson': '{"address": "uri@example.com", "imap_host": "imap.example.com"}'}
+        'ConfigJson': '{"address": "alex@example.com", "imap_host": "imap.example.com"}'}
 
 
 class FakeImap:
@@ -42,7 +42,7 @@ class FakeImap:
 
 
 def raw(subject, body, date='Mon, 01 Sep 2026 09:15:00 +0000', mid='<a@b>'):
-    return ('Subject: %s\r\nFrom: uri@example.com\r\nTo: dana@vendor.com\r\n'
+    return ('Subject: %s\r\nFrom: alex@example.com\r\nTo: dana@vendor.com\r\n'
             'Date: %s\r\nMessage-ID: %s\r\nContent-Type: text/plain\r\n\r\n%s'
             % (subject, date, mid, body)).encode()
 
@@ -71,7 +71,7 @@ class FindingTheSentFolder(unittest.TestCase):
 
     def test_a_folder_with_a_space_reaches_select_quoted(self):
         M = FakeImap(LIST_SPECIAL, [raw('hi', 'there')])
-        with mock.patch.object(imapmail, '_login', return_value=(M, 'uri@example.com')):
+        with mock.patch.object(imapmail, '_login', return_value=(M, 'alex@example.com')):
             imapmail.sent_window(dict(CARD), 90)
         self.assertEqual(M.selected, '"[Gmail]/Sent Mail"')
         self.assertTrue(M.readonly)                       # the owner's outbox is never written to
@@ -81,7 +81,7 @@ class FindingTheSentFolder(unittest.TestCase):
 class ReadingWhatYouSent(unittest.TestCase):
     def _window(self, folders=LIST_PLAIN, msgs=(), **kw):
         M = FakeImap(folders, msgs, **kw)
-        with mock.patch.object(imapmail, '_login', return_value=(M, 'uri@example.com')):
+        with mock.patch.object(imapmail, '_login', return_value=(M, 'alex@example.com')):
             return imapmail.sent_window(dict(CARD), 90)
 
     def test_a_sent_mail_comes_back_shaped_for_the_readers(self):
@@ -90,7 +90,7 @@ class ReadingWhatYouSent(unittest.TestCase):
         r = rows[0]
         self.assertEqual(r['subject'], 'Re: the ledger')
         self.assertIn('thanks for the nudge', r['body'])
-        self.assertEqual(r['from_email'], 'uri@example.com')
+        self.assertEqual(r['from_email'], 'alex@example.com')
         self.assertEqual(r['to'], ['dana@vendor.com'])
         self.assertTrue(r['sent_at'].startswith('2026-09-01'))
         self.assertEqual(r['conversation_id'], '<a@b>')
@@ -106,7 +106,7 @@ class ReadingWhatYouSent(unittest.TestCase):
             if cmd == 'fetch' and a[0] == '1': raise OSError('truncated')
             return real(cmd, *a)
         M.uid = flaky
-        with mock.patch.object(imapmail, '_login', return_value=(M, 'uri@example.com')):
+        with mock.patch.object(imapmail, '_login', return_value=(M, 'alex@example.com')):
             rows = imapmail.sent_window(dict(CARD), 90)
         self.assertEqual([r['subject'] for r in rows], ['two'])
 
@@ -193,7 +193,7 @@ class TheSourceRowHealsItself(unittest.TestCase):
         c = self._card(s)
         self.assertEqual(self._mail(s), [])
         self.assertTrue(imapmail.ensure_source(s, c))
-        self.assertEqual(self._mail(s), [('uri@example.com', 1)])
+        self.assertEqual(self._mail(s), [('alex@example.com', 1)])
         self.assertFalse(imapmail.ensure_source(s, c))      # idempotent: never a second row
 
     def test_a_card_with_no_address_yet_is_left_alone(self):
@@ -215,7 +215,7 @@ class TheSourceRowHealsItself(unittest.TestCase):
 
 
 def reply_raw(uid_body, ref='<orig@them>', date='Mon, 01 Sep 2026 11:00:00 +0000'):
-    return ('Subject: RE: the report\r\nFrom: uri@example.com\r\nTo: dana@vendor.com\r\n'
+    return ('Subject: RE: the report\r\nFrom: alex@example.com\r\nTo: dana@vendor.com\r\n'
             'Date: %s\r\nMessage-ID: <r%s@us>\r\nReferences: %s\r\nContent-Type: text/plain\r\n\r\n%s'
             % (date, abs(hash(uid_body)) % 999, ref, uid_body)).encode()
 
@@ -227,7 +227,7 @@ class ReplyingFromOutlookNotFromHere(unittest.TestCase):
 
     def _inbound(self, s):
         return s.add_message({'ExternalId': 'in1', 'ConversationId': '<orig@them>', 'Channel': 'email',
-                              'SourceName': 'uri@example.com', 'Subject': 'the report', 'FromName': 'Dana',
+                              'SourceName': 'alex@example.com', 'Subject': 'the report', 'FromName': 'Dana',
                               'FromEmail': 'dana@vendor.com', 'SentAt': '2026-09-01 06:00:00',
                               'BodyText': 'where is it?', 'Status': 'filed'})
 
@@ -235,7 +235,7 @@ class ReplyingFromOutlookNotFromHere(unittest.TestCase):
         s = MemoryStore()
         mid = self._inbound(s)
         M = FakeImap(LIST_PLAIN, [reply_raw('going out today.')])
-        n, uid = imapmail.poll_sent(s, M, 'uri@example.com', 0, 7)
+        n, uid = imapmail.poll_sent(s, M, 'alex@example.com', 0, 7)
         self.assertEqual((n, uid), (1, 1))
         self.assertEqual(M.selected, 'INBOX.Sent')
         self.assertTrue(M.readonly)                        # the owner's outbox is never written to
@@ -247,11 +247,11 @@ class ReplyingFromOutlookNotFromHere(unittest.TestCase):
         s = MemoryStore()
         self._inbound(s)
         M = FakeImap(LIST_PLAIN, [reply_raw('going out today.')])
-        _n, uid = imapmail.poll_sent(s, M, 'uri@example.com', 0, 7)
-        self.assertEqual(imapmail.poll_sent(s, M, 'uri@example.com', uid, 7), (0, uid))
+        _n, uid = imapmail.poll_sent(s, M, 'alex@example.com', 0, 7)
+        self.assertEqual(imapmail.poll_sent(s, M, 'alex@example.com', uid, 7), (0, uid))
 
     def test_a_mailbox_with_no_sent_folder_is_not_an_error(self):
-        self.assertEqual(imapmail.poll_sent(MemoryStore(), FakeImap(LIST_NONE), 'uri@example.com', 0, 7), (0, 0))
+        self.assertEqual(imapmail.poll_sent(MemoryStore(), FakeImap(LIST_NONE), 'alex@example.com', 0, 7), (0, 0))
 
 
 class ChildProcessesOpenNoWindow(unittest.TestCase):

@@ -10,7 +10,7 @@ import { VERDICTS, roadOf, roadOfCard, verdictOf } from "../src/timelineState.js
 // word as a newsletter.
 test("the row's word is the road triage took", () => {
   assert.equal(roadOf({ RouteReason: "triage: fyi - automated notice" }), "fyi");
-  assert.equal(roadOf({ RouteReason: "triage: reply_only - Hindy asks a simple question", TaskId: 404 }), "reply");
+  assert.equal(roadOf({ RouteReason: "triage: reply_only - Gail asks a simple question", TaskId: 404 }), "reply");
   assert.equal(roadOf({ RouteReason: "triage: task - fix the export", TaskId: 7, TaskKind: "coding" }), "coding");
   assert.equal(roadOf({ RouteReason: "triage: task - weigh the quotes", TaskId: 8, TaskKind: "general" }), "general");
   assert.equal(roadOf({ RouteReason: "triage: task - sign it yourself", TaskId: 9, TaskKind: "task" }), "task");
@@ -66,7 +66,7 @@ test("what is WAITING outranks what triage called the job", () => {
 // missing tags??"). Read off `Decision`, the verdict itself, never off the reason prose.
 test("a row triage never judged still says what happened to it", () => {
   assert.equal(verdictOf({ Decision: "ignore", MsgStatus: "ignored",
-                           RouteReason: "policy 'not-a-task: cfg@olbanking.com': owner said not a task" }), "ignored");
+                           RouteReason: "policy 'not-a-task: cfg@bank.example': owner said not a task" }), "ignored");
   assert.equal(verdictOf({ MsgStatus: "error", Decision: "file",
                            RouteReason: "AI triage failed (azure_openai error 500) - unclassified" }), "error");
   assert.equal(verdictOf({ MsgStatus: "filed", Decision: "file", RouteReason: "triage: fyi - a newsletter" }), null,

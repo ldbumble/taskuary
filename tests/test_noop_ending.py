@@ -1,8 +1,8 @@
 """The cheap ending has to actually be cheap.
 
-Reported (TQ-0252): a CyberHoot security-training reminder went to the coding agent, the agent
-correctly found nothing to do - and the wrap-up mailed hoots@cyberhoot.com "Done. This was just
-a CyberHoot training reminder, not an engineering or repo issue, so I closed it as FYI with no
+Reported (TQ-0252): a PhishGuard security-training reminder went to the coding agent, the agent
+correctly found nothing to do - and the wrap-up mailed alerts@phishguard.example "Done. This was just
+a PhishGuard training reminder, not an engineering or repo issue, so I closed it as FYI with no
 further action." A reply nobody asked for, written about our own filing rather than to the
 sender. Every task going to the agent is the owner's rule; a no-op ending answering a robot in
 our own internal vocabulary was never part of it.
@@ -17,7 +17,7 @@ from unittest import mock
 from taskuary import coder
 from taskuary.store import MemoryStore
 
-NOTICE = ('Your CyberHoot assignment "Common Scams and How to Avoid Them" is outstanding, due '
+NOTICE = ('Your PhishGuard assignment "Common Scams and How to Avoid Them" is outstanding, due '
           '2026-09-06. Please complete it.\nYou are receiving this email because you are enrolled.')
 NOOP = {'determination': 'a training reminder, not repo work', 'actions': 'nothing changed',
         'summary': 'nothing to do here', 'outcome': 'nothing_to_do'}
@@ -32,7 +32,7 @@ def task_with(s, from_email, body=NOTICE, channel='email'):
 
 class NoOpEndingTests(unittest.TestCase):
     def test_a_robots_notice_with_nothing_done_drafts_no_reply(self):
-        s = MemoryStore(); tid, _ = task_with(s, 'hoots@cyberhoot.com')
+        s = MemoryStore(); tid, _ = task_with(s, 'alerts@phishguard.example')
         with mock.patch('taskuary.responder.write_draft') as wd:
             out = coder.finish(s, tid, NOOP, None, 'coder')
         wd.assert_not_called()
@@ -77,7 +77,7 @@ class NoOpEndingTests(unittest.TestCase):
     def test_a_held_draft_means_somebody_is_waiting(self):
         """Triage drafted a reply and it was held when the session started - that is standing
         proof there is an answer owed, and a no-op report does not cancel it."""
-        s = MemoryStore(); tid, mid = task_with(s, 'hoots@cyberhoot.com')
+        s = MemoryStore(); tid, mid = task_with(s, 'alerts@phishguard.example')
         s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
                             'Reason': 'needs a reply'})
         s.hold_reviews(tid, 'the agent is looking at it')

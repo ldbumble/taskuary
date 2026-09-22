@@ -993,11 +993,11 @@ const PLANNED_TITLES = { google_sheets: "Google Sheets", sharepoint_list: "Share
   sqlite: "SQLite", gcp: "Google Cloud", kubernetes: "Kubernetes", grafana: "Grafana",
   elastic: "Elasticsearch", perplexity: "Perplexity", serpapi: "SerpAPI", browserbase: "Browserbase",
   netsuite: "NetSuite", sap: "SAP", workday: "Workday", adp: "ADP",
-  epic: "Epic (EMR)", cerner: "Oracle Cerner (EMR)", pointclickcare: "PointClickCare (EMR)" };
+  epic: "Epic (EMR)", cerner: "Oracle Cerner (EMR)", careview: "Careview (EMR)" };
 const KNOWN_PLANNED = [];
 const PLACED = new Set(["graphql", "sqlite", "gcp", "kubernetes", "grafana", "elastic",
   "perplexity", "serpapi", "browserbase", "google_sheets", "sharepoint_list", "local_file",
-  "netsuite", "sap", "workday", "adp", "epic", "cerner", "pointclickcare", "stooq"]);
+  "netsuite", "sap", "workday", "adp", "epic", "cerner", "careview", "stooq"]);
 
 const VoiceVocabulary = ({ onBack }) => {
   const [text, setText] = useState("");
@@ -1055,7 +1055,7 @@ const VoiceVocabulary = ({ onBack }) => {
       </Typography>
       <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL, p: 2 }}>
         <TextField fullWidth multiline minRows={12} value={text} onChange={(e) => setText(e.target.value)} disabled={busy || genBusy}
-          label="Words and phrases" placeholder={"Taskuary\nPointClickCare\nIntacct\nTQ-0243"}
+          label="Words and phrases" placeholder={"Taskuary\nCareview\nIntacct\nTQ-0243"}
           helperText={`One term or phrase per line · up to ${limit} · 50 characters and 5 words per entry`} />
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1.5 }}>
           <Typography variant="caption" sx={{ color: terms.length > limit ? "error.main" : FAINT }}>{terms.length}/{limit}</Typography>

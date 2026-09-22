@@ -29,7 +29,7 @@ def arrive(store, invite: bool, llm=None):
     """One mail landing, exactly as channels hands it over."""
     return ingest.ingest_message(store, {
         'external_id': 'graph:inv-1', 'channel': 'email', 'subject': TEAMS_INVITE['subject'],
-        'body': TEAMS_INVITE['bodyPreview'], 'from_name': 'Hindy Spiegel', 'from_email': 'hspiegel@example.test',
+        'body': TEAMS_INVITE['bodyPreview'], 'from_name': 'Gail Moreno', 'from_email': 'gmoreno@example.test',
         'to': ['owner@example.test'], 'source_name': 'owner@example.test', 'sent_at': '2026-09-14 10:59:47',
         'invite': invite}, llm=llm)
 

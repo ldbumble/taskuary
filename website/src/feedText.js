@@ -5,7 +5,7 @@
 // sender + source we already show, so drop it. Reports stamp the title as from, source AND
 // the start of the subject, which read "Morning digest · Morning digest — Morning digest — …".
 // Chat is not mail. WhatsApp and Slack send no subject at all, and Teams synthesizes one from the
-// people already named in the row ("Teams chat with Hindy Spiegel"), so the row read as a sender and
+// people already named in the row ("Teams chat with Gail Moreno"), so the row read as a sender and
 // nothing else while the work pill said "(no subject)". What was SAID is the title, one line, cut on
 // a word to fit the pill (owner, 2026-09-07).
 const CHAT_TITLE = /^((teams|slack|whatsapp|telegram)\s+)?(group\s+)?(chat|conversation)\s+with\b/i;
@@ -38,7 +38,7 @@ export const sourceOf = (r) => {
 // A GENERATED body - a report's error summary, the assistant's own note - is written as structure:
 // a lead, then a list. The Summary pane ran the whole thing through one flattening clamp, so the
 // list arrived mashed into the sentence as a wall of run-on text. Split it so the pane can draw the
-// list as a list. A body with NO list comes back untouched: a mail's "Hi Uri," followed by a blank
+// list as a list. A body with NO list comes back untouched: a mail's "Hi Alex," followed by a blank
 // line is a greeting, not a summary, and re-cutting on that would hide the actual question.
 const BULLET = /^[-•*]\s+/;
 export const structured = (body) => {

@@ -13,14 +13,14 @@ import unittest
 from taskuary.routing import draft_task_fields
 
 BANNER = ('This email was sent from outside the organisation. ** Do not click links or download '
-          'attachments unless you know the content is safe. **\n\nHello Uri,\n\n'
+          'attachments unless you know the content is safe. **\n\nHello Alex,\n\n'
           'Our Docusign is still pending.\n\nThank you,\nAnna')
 
 
 class PriorityIsNotGuessedTests(unittest.TestCase):
     def test_the_external_mail_banner_is_not_an_emergency(self):
         """The exact mail that came in urgent: 'download' contains 'down'."""
-        self.assertEqual(draft_task_fields({'subject': 'RE: Valley Bank', 'body': BANNER})['priority'], 'normal')
+        self.assertEqual(draft_task_fields({'subject': 'RE: Summit Bank', 'body': BANNER})['priority'], 'normal')
 
     def test_the_word_urgent_in_the_body_is_not_a_priority(self):
         """Senders call their own mail urgent constantly; that is their judgement, not yours."""
@@ -29,7 +29,7 @@ class PriorityIsNotGuessedTests(unittest.TestCase):
             self.assertEqual(draft_task_fields({'subject': 's', 'body': body})['priority'], 'normal', body)
 
     def test_a_rule_is_what_makes_a_task_urgent(self):
-        f = draft_task_fields({'subject': 'RE: Valley Bank', 'body': BANNER}, urgent=True)
+        f = draft_task_fields({'subject': 'RE: Summit Bank', 'body': BANNER}, urgent=True)
         self.assertEqual(f['priority'], 'urgent')
 
     def test_urgency_does_not_disturb_the_rest_of_the_draft(self):

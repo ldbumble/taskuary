@@ -183,7 +183,7 @@ def _gemini(cfg, key, data, mime, name, terms=()):
                                       'X-Goog-Upload-Command': 'upload, finalize'})
     if uploaded.status_code >= 300: _fail(uploaded, LABELS['gemini_stt'])
     f = uploaded.json().get('file') or uploaded.json()
-    uri, file_name = f.get('uri'), f.get('name')
+    uri, file_name = f.get('alex'), f.get('name')
     if not uri: raise RuntimeError('Google Gemini transcription upload returned no file URI')
     try:
         state = str(f.get('state') or 'ACTIVE').upper()
@@ -202,7 +202,7 @@ def _gemini(cfg, key, data, mime, name, terms=()):
         if terms: tc['custom_vocabulary'] = list(terms)
         if cfg.get('language'): tc['language_codes'] = [cfg['language']]
         r = requests.post('https://generativelanguage.googleapis.com/v1beta/interactions', headers=auth, timeout=180,
-                          json={'model': model, 'input': [{'type': 'audio', 'uri': uri, 'mime_type': mime}],
+                          json={'model': model, 'input': [{'type': 'audio', 'alex': uri, 'mime_type': mime}],
                                 'generation_config': {'transcription_config': tc}})
         if r.status_code >= 300: _fail(r, LABELS['gemini_stt'])
         body = r.json()

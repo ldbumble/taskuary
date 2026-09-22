@@ -25,7 +25,7 @@ done when: the reply went out and the days are on the calendar
 Managers approve; the assistant prepares everything and asks before anything is written.
 """
 MSG = {'external_id': 'pto1', 'channel': 'email', 'from_email': 'sam@ours.example', 'from_name': 'Sam', 'conversation_id': 'AAQk-pto',
-       'subject': 'PTO 12-14 October', 'body': 'Hi Uri, can I take 12 to 14 October off? I have the days.', 'sent_at': '2026-09-06 09:00:00'}
+       'subject': 'PTO 12-14 October', 'body': 'Hi Alex, can I take 12 to 14 October off? I have the days.', 'sent_at': '2026-09-06 09:00:00'}
 
 
 class ProcedureTests(unittest.TestCase):

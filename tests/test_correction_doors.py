@@ -24,11 +24,11 @@ c, s = TestClient(server.app), server.store
 
 def arrived(start='coding'):
     """A task as triage left it, with the verdict on file to be overturned."""
-    tid = s.create_task({'Title': 'Clock out Mindy at 3:40', 'Kind': start, 'Source': 'teams'}, 'router')
-    mid = s.add_message({'TaskId': tid, 'Channel': 'teams', 'FromEmail': 'm@mfa.net', 'Direction': 'in',
-                         'Subject': 'Teams chat with Mindy', 'BodyText': 'clock me out', 'Status': 'routed'})
+    tid = s.create_task({'Title': 'Clock out Robin at 3:40', 'Kind': start, 'Source': 'teams'}, 'router')
+    mid = s.add_message({'TaskId': tid, 'Channel': 'teams', 'FromEmail': 'm@northwind.example', 'Direction': 'in',
+                         'Subject': 'Teams chat with Robin', 'BodyText': 'clock me out', 'Status': 'routed'})
     s.add_route(mid, tid, 'create', None, 'r', [], 'triage',
-                verdict={'intent': 'task', 'kind': start, 'profile': 'analyst', 'repository': 'mfaVita/FanApp'})
+                verdict={'intent': 'task', 'kind': start, 'profile': 'analyst', 'repository': 'northwind/ledger'})
     return tid, mid
 
 
@@ -105,7 +105,7 @@ class TheOtherCorrections(unittest.TestCase):
         self.assertGreater(row['LEARNED'], 0)
 
     def test_choosing_a_different_repository_teaches(self):
-        row = wrote(lambda t, m, bg: c.put(f'/api/tasks/{t}/repo', json={'repo': 'mfaVita/TopE', 'agent': 'coder'}))
+        row = wrote(lambda t, m, bg: c.put(f'/api/tasks/{t}/repo', json={'repo': 'northwind/portal', 'agent': 'coder'}))
         self.assertGreater(row['LEARNED'], 0, 'a rerouted checkout reached the profile as nothing at all')
 
     def test_saying_where_it_belongs_teaches_twice(self):
@@ -142,7 +142,7 @@ class TheAssistantCanSetRoutingMemory(unittest.TestCase):
     def test_it_writes_a_scoped_weighted_fact(self):
         tid, _ = arrived()
         self.run_call(tid, {'field': 'system', 'value': 'ADP'})
-        got = [f for f in s.routing_facts('system') if f['SignalKey'] == 'm@mfa.net']
+        got = [f for f in s.routing_facts('system') if f['SignalKey'] == 'm@northwind.example']
         self.assertEqual([f['Value'] for f in got], ['ADP'])
         self.assertTrue(got[0]['Confirmed'], "the owner said it in words - that is their word, not a guess")
 

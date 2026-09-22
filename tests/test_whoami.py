@@ -16,7 +16,7 @@ class ProfileTests(unittest.TestCase):
         o = s.get_connector_by_type('outlook')
         s.save_connector({'ConnectorId': o['ConnectorId'], 'Active': 1, 'Secret': 'RT',
                           'ConfigJson': json.dumps({'auth': 'user', 'account': 'dana@other.example', 'name': 'Dana W'})}, 't')
-        s.save_source({'Channel': 'email', 'Address': 'uri@theacropora.com', 'ConnectorId': o['ConnectorId'], 'Active': 1}, 't')
+        s.save_source({'Channel': 'email', 'Address': 'alex@personal.example', 'ConnectorId': o['ConnectorId'], 'Active': 1}, 't')
         s.save_source({'Channel': 'teams', 'Address': 'dana@northwind.example', 'ConnectorId': s.get_connector_by_type('teams')['ConnectorId'], 'Active': 1}, 't')
         tg = s.get_connector_by_type('telegram')
         s.save_connector({'ConnectorId': tg['ConnectorId'], 'ConfigJson': json.dumps({'notify_chat': '777'})}, 't')
@@ -37,18 +37,18 @@ class ProfileTests(unittest.TestCase):
         the bot, discovery knows the PAT's login - so the page read as if the connectors knew nothing."""
         s = MemoryStore()
         wa = s.get_connector_by_type('whatsapp'); s.save_connector({'ConnectorId': wa['ConnectorId'], 'Active': 1}, 't')
-        s.save_connector({'ConnectorId': s.get_connector_by_type('telegram')['ConnectorId'], 'ConfigJson': json.dumps({'bot_username': 'uri_hub_bot'})}, 't')
+        s.save_connector({'ConnectorId': s.get_connector_by_type('telegram')['ConnectorId'], 'ConfigJson': json.dumps({'bot_username': 'alex_hub_bot'})}, 't')
         s.save_connector({'ConnectorId': s.get_connector_by_type('github')['ConnectorId'], 'ConfigJson': json.dumps({'login': 'ldbumble'})}, 't')
         from taskuary import messengers
-        with mock.patch.object(messengers, 'wa_status', return_value={'connected': True, 'me': 'Uri', 'jid': '15550100200:12@s.whatsapp.net', 'phone': '+15550100200'}):
+        with mock.patch.object(messengers, 'wa_status', return_value={'connected': True, 'me': 'Alex', 'jid': '15550100200:12@s.whatsapp.net', 'phone': '+15550100200'}):
             by = {(i['channel'], i['kind']): i for i in whoami.profile(s)['identities']}
-        self.assertEqual((by[('whatsapp', 'your number')]['value'], by[('whatsapp', 'your number')]['name']), ('+15550100200', 'Uri'))
-        self.assertEqual(by[('telegram', 'your bot')]['value'], '@uri_hub_bot')
+        self.assertEqual((by[('whatsapp', 'your number')]['value'], by[('whatsapp', 'your number')]['name']), ('+15550100200', 'Alex'))
+        self.assertEqual(by[('telegram', 'your bot')]['value'], '@alex_hub_bot')
         self.assertEqual(by[('github', 'login')]['value'], 'ldbumble')
         with mock.patch.object(messengers, 'wa_status', side_effect=RuntimeError('bridge down')):
             self.assertNotIn(('whatsapp', 'your number'), {(i['channel'], i['kind']) for i in whoami.profile(s)['identities']})   # absent, not an error
         # the bridge's jid becomes a phone in wa_status itself
-        with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: {'connected': True, 'me': 'Uri', 'jid': '15550100200:12@s.whatsapp.net', 'qr': '', 'pairingCode': ''}):
+        with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: {'connected': True, 'me': 'Alex', 'jid': '15550100200:12@s.whatsapp.net', 'qr': '', 'pairingCode': ''}):
             self.assertEqual(messengers.wa_status(wa)['phone'], '+15550100200')
 
     def test_a_card_set_up_before_discover_and_test_learns_its_login_on_first_look(self):
@@ -59,9 +59,9 @@ class ProfileTests(unittest.TestCase):
         s.save_connector({'ConnectorId': gh['ConnectorId'], 'Active': 1, 'Secret': 'ghp_x'}, 't')
         s.save_connector({'ConnectorId': tg['ConnectorId'], 'Active': 1, 'Secret': '123:abc'}, 't')
         fake = mock.Mock(); fake.json.return_value = {'login': 'ldbumble'}; fake.raise_for_status = lambda: None
-        with mock.patch('requests.get', return_value=fake) as g, mock.patch('taskuary.messengers.tg', return_value={'username': 'uri_hub_bot'}):
+        with mock.patch('requests.get', return_value=fake) as g, mock.patch('taskuary.messengers.tg', return_value={'username': 'alex_hub_bot'}):
             by = {(i['channel'], i['kind']): i for i in whoami.profile(s)['identities']}
-        self.assertEqual(by[('github', 'login')]['value'], 'ldbumble'); self.assertEqual(by[('telegram', 'your bot')]['value'], '@uri_hub_bot')
+        self.assertEqual(by[('github', 'login')]['value'], 'ldbumble'); self.assertEqual(by[('telegram', 'your bot')]['value'], '@alex_hub_bot')
         self.assertEqual(json.loads(s.get_connector(gh['ConnectorId'])['ConfigJson'])['login'], 'ldbumble')        # saved on the card: one call, ever
         with mock.patch('requests.get', side_effect=AssertionError('must not be called again')):
             self.assertEqual({(i['channel'], i['kind']): i for i in whoami.profile(s)['identities']}[('github', 'login')]['value'], 'ldbumble')
@@ -72,12 +72,12 @@ class ProfileTests(unittest.TestCase):
         s = MemoryStore()
         first = s.get_connector_by_type('github')
         s.save_connector({'ConnectorId': first['ConnectorId'], 'Name': 'Work GitHub', 'Active': 1,
-                          'ConfigJson': json.dumps({'login': 'work-uri'})}, 't')
+                          'ConfigJson': json.dumps({'login': 'work-alex'})}, 't')
         s.save_connector({'Type': 'github', 'Name': 'Personal GitHub', 'Active': 1,
-                          'ConfigJson': json.dumps({'login': 'personal-uri'})}, 't')
+                          'ConfigJson': json.dumps({'login': 'personal-alex'})}, 't')
         rows = [i for i in whoami.profile(s)['identities']
                 if i['channel'] == 'github' and i['kind'] == 'login' and i['source'] != 'you typed it here']
-        self.assertEqual([r['value'] for r in rows], ['work-uri', 'personal-uri'])
+        self.assertEqual([r['value'] for r in rows], ['work-alex', 'personal-alex'])
         self.assertIn('Work GitHub', rows[0]['source'])
         self.assertIn('Personal GitHub', rows[1]['source'])
 
@@ -85,7 +85,7 @@ class ProfileTests(unittest.TestCase):
         s = MemoryStore()
         wa = s.get_connector_by_type('whatsapp'); s.save_connector({'ConnectorId': wa['ConnectorId'], 'Active': 1}, 't')
         from taskuary import messengers
-        with mock.patch.object(messengers, 'wa_status', return_value={'connected': True, 'me': 'Uri', 'jid': '', 'phone': ''}):
+        with mock.patch.object(messengers, 'wa_status', return_value={'connected': True, 'me': 'Alex', 'jid': '', 'phone': ''}):
             row = {(i['channel'], i['kind']): i for i in whoami.profile(s)['identities']}[('whatsapp', 'your number')]
         self.assertIn('restart the bridge', row['value']); self.assertIn('older code', row['source'])
 
@@ -110,8 +110,8 @@ class EndpointTests(unittest.TestCase):
     def test_the_page_reads_saves_and_previews(self):
         r = c_api.get('/api/whoami').json()
         self.assertIn('identities', r); self.assertIn('told_to_agents', r); self.assertEqual(r['styles'], list(whoami.STYLES))
-        r = c_api.patch('/api/whoami', json={'owner_telegram': '@uri'}).json()
-        self.assertEqual(r['facts']['owner_telegram'], '@uri')
+        r = c_api.patch('/api/whoami', json={'owner_telegram': '@alex'}).json()
+        self.assertEqual(r['facts']['owner_telegram'], '@alex')
         self.assertEqual(c_api.patch('/api/whoami', json={'coder_auto_enabled': '0'}).status_code, 422)   # never a back door into settings
         pv = c_api.get('/api/whoami/avatar', params={'style': 'grid', 'seed': 'abc'}).json()
         self.assertTrue(pv['svg'].startswith('<svg')); self.assertEqual((pv['style'], pv['seed']), ('grid', 'abc'))

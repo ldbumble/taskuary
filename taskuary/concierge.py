@@ -107,7 +107,7 @@ CONTRACT_HEAD = (
 # from the phone is settled on the desk, because both go through parse_decision and the same operations.
 DECIDE_RULE = (
     "When the owner has DECIDED about an item, end with one final line exactly like DECIDE: <verb> where verb is one of: "
-    "reply (a reply to write - the gist after a colon: DECIDE: reply: tell Kishan it is not owned here), approve (send the "
+    "reply (a reply to write - the gist after a colon: DECIDE: reply: tell Ravi it is not owned here), approve (send the "
     "drafted reply as it stands), redraft (write the draft again - the change after a colon), coder (hand it to the coding "
     "agent - everything wanted after a colon, in the owner's words), regular_agent (hand it to a non-coding agent), mine "
     "(they will do it themselves), not_ours (file this one), not_ours_remember (file this kind from now on), "
@@ -732,7 +732,7 @@ _REF = re.compile(r'\bTQ-0*(\d+)\b')
 
 def off_subject(say: str, item: dict | None) -> bool:
     """The model wandered: it names a task that is not the one on the table, or names none of the item's
-    own words at all (2026-09-03: the words were Mindy's TQ-0312, the card was TQ-0327; later the words were
+    own words at all (2026-09-03: the words were Robin's TQ-0312, the card was TQ-0327; later the words were
     Ayush's commit, the card the Morning digest - a resumed conversation narrating from memory)."""
     if not item: return False
     named = {int(n) for n in _REF.findall(say or '')}
@@ -1071,8 +1071,8 @@ def _sender_for(store, words: list) -> str:
     return max(tally, key=tally.get) if tally else ''
 
 
-# "skip all the fyi from Chana and Dovid" names a LANE, not a subject. Read as subject words it
-# wrote "fyi from chana@ours.com" and "dovid from dovid@ours.com" - one rule about a word nobody
+# "skip all the fyi from Erin and Dovid" names a LANE, not a subject. Read as subject words it
+# wrote "fyi from erin@ours.com" and "dovid from dovid@ours.com" - one rule about a word nobody
 # writes in a subject line, one about a man's own name (the 2026-09-03 break test).
 LANE_RULE_WORDS = {'fyi': 'fyi', 'fyis': 'fyi', 'report': 'report', 'reports': 'report'}
 
@@ -1105,7 +1105,7 @@ def _rule_words(rule: dict) -> str:
 
 def _sweep_words(text: str) -> list:
     """The TARGET, not the reason and not the rest of the instruction. Sentence by sentence: the first
-    one that names anything is the target ("skip all the mfa financial reports"), and what follows is
+    one that names anything is the target ("skip all the northwind financial reports"), and what follows is
     usually why ("those are part of the financials process, taken care of") - matching on the why swept
     a real ask that merely said "financials". A sentence that is pure instruction ("next.", "can you
     make rules to...") names nothing and is passed over (the owner, 2026-09-03)."""
@@ -1244,13 +1244,13 @@ def clear_selected(store, sel: dict, actor: str = 'owner') -> dict:
 
 
 def clear_matching(store, text: str, actor: str = 'owner', hint: str = '') -> dict:
-    """'Remove all the Nechama Ozur reports': every pile item whose sender or subject carries the owner's
+    """'Remove all the Paula Vance reports': every pile item whose sender or subject carries the owner's
     words is marked read - it leaves the pipe and stays on the Timeline; nothing is deleted. 'Don't need
     them' / 'never again' also names the sender so the page can write the standing verdict.
 
     `hint` is what the owner said just before: "remove them from the pipeline" names nothing on its own,
     and a sweep that matches nothing is worse than none - the assistant promised twice and the mails
-    stayed (the owner, 2026-09-03: "not removing the mfa financial reports in funnel?")."""
+    stayed (the owner, 2026-09-03: "not removing the northwind financial reports in funnel?")."""
     used = _sweep_words(text)
     hit, titles, mids, swept = _sweep(store, used, actor)
     # "remove them from the pipeline" names nothing of its own: the target is the last thing the owner
@@ -1263,7 +1263,7 @@ def clear_matching(store, text: str, actor: str = 'owner', hint: str = '') -> di
     # against the sender, so triage reads it on the next one instead of filing it as work again
     note, sender, rules = '', next((m for m in mids if m), None), []
     # Nothing in the pipe matches right now - but the words are a standing instruction, so the rule
-    # is written anyway. Told in advance ("don't show me Nechama's MFA financial reports"), it used to
+    # is written anyway. Told in advance ("don't show me Paula's Northwind financial reports"), it used to
     # need something on the pile to attach to, so it was written NOWHERE and the next batch walked
     # straight in (the owner, 2026-09-03: "the memory seems not to be working... how does it work?").
     if not hit and used and _STANDING.search(text):
@@ -1285,7 +1285,7 @@ def clear_matching(store, text: str, actor: str = 'owner', hint: str = '') -> di
                                'Source': 'assistant', 'Active': 1, 'CreatedBy': actor})
         except Exception as e: logger.warning(f'concierge: the standing note did not save - {e}'); note = ''
         # ...and the rules themselves, which are what keep the next batch out of the pipe (the note above
-        # is evidence for triage). ONE PER SENDER: "not surface mfa financials from Nechama and resident
+        # is evidence for triage). ONE PER SENDER: "not surface northwind financials from Paula and resident
         # refunds stuff from elisheva" is two rules, and a single one carrying both senders' words would
         # have muted whichever sender happened to come first (the owner, 2026-09-03).
         for one in _rules_from(swept):
@@ -1577,7 +1577,7 @@ def remember_fact(store, note: str, actor: str = 'owner') -> int:
 
 
 def forward_item(store, item: dict, who: str, text: str, actor: str = 'owner') -> dict:
-    """"Forward it to Chana" / "ask Dovid to handle it": the hand-off written for the owner's yes,
+    """"Forward it to Erin" / "ask Dovid to handle it": the hand-off written for the owner's yes,
     never sent from a sentence. The address comes from the people who have actually written (the
     same book the task page's hand-off picker uses); a name nobody knows is said so, not guessed."""
     from . import outbound

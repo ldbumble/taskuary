@@ -90,14 +90,14 @@ class ActsTests(unittest.TestCase):
         self.assertIsNone(self._turn('setting.set', label='warp drive', value='on').get('proposal'))
 
     def test_connections_pause_resume_and_test(self):
-        cid = next(c['connector_id'] for c in __import__('taskuary.appfacts', fromlist=['x']).connections(self.s) if c['name'] == 'Uri mailbox')
-        done = concierge.run_proposal(self.s, self._turn('connection.pause', name='uri mailbox')['proposal'])
+        cid = next(c['connector_id'] for c in __import__('taskuary.appfacts', fromlist=['x']).connections(self.s) if c['name'] == 'Alex mailbox')
+        done = concierge.run_proposal(self.s, self._turn('connection.pause', name='alex mailbox')['proposal'])
         self.assertFalse(self.s.get_connector(cid)['Active']); self.assertEqual(done['outcome']['undo']['kind'], 'connection.resume')
-        concierge.run_proposal(self.s, self._turn('connection.resume', name='uri mailbox')['proposal'])
+        concierge.run_proposal(self.s, self._turn('connection.resume', name='alex mailbox')['proposal'])
         self.assertTrue(self.s.get_connector(cid)['Active'])
-        with mock.patch('taskuary.channels.test_connector', return_value={'ok': True, 'detail': 'signed in as Uri'}):
-            done = concierge.run_proposal(self.s, self._turn('connection.test', name='uri mailbox')['proposal'])
-        self.assertIn('answered: signed in as Uri', concierge.receipt(self.s, done))
+        with mock.patch('taskuary.channels.test_connector', return_value={'ok': True, 'detail': 'signed in as Alex'}):
+            done = concierge.run_proposal(self.s, self._turn('connection.test', name='alex mailbox')['proposal'])
+        self.assertIn('answered: signed in as Alex', concierge.receipt(self.s, done))
 
     def test_a_script_is_named_and_the_outcome_says_which(self):
         done = concierge.run_proposal(self.s, self._turn('script.start', name='set up taskuary')['proposal'])
@@ -146,5 +146,5 @@ class AuditAndPhoneTests(unittest.TestCase):
     def test_set_up_from_a_phone_opens_on_the_connections(self):
         from taskuary import remote_assistant
         words = remote_assistant.script_words(self.s, 'set up Taskuary')
-        self.assertIn('what is connected', words); self.assertIn('Uri mailbox (outlook)', words); self.assertIn('catalogue, off', words)
+        self.assertIn('what is connected', words); self.assertIn('Alex mailbox (outlook)', words); self.assertIn('catalogue, off', words)
         self.assertIn('sentence', remote_assistant.script_words(self.s, 'set up a report'))

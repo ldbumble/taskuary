@@ -71,7 +71,7 @@ import unittest
 from taskuary import counsel
 from taskuary.store import MemoryStore
 
-DOC = ("# COUNSEL.md — I am Taskuary\n\nI have Uri's back.\n\n"
+DOC = ("# COUNSEL.md — I am Taskuary\n\nI have Alex's back.\n\n"
        "## What I do, and what I never do\n- I SURFACE the top eligible item.\n\n"
        "## My goal\n- Walk them through Unread.\n\n"
        "## Voice\n- Be plain, direct, and concise.\n")
@@ -81,7 +81,7 @@ class Sections(unittest.TestCase):
     def test_sections_split_on_h2_and_keep_the_intro(self):
         s = counsel.sections(DOC)
         self.assertEqual(list(s), ['', 'What I do, and what I never do', 'My goal', 'Voice'])
-        self.assertIn("I have Uri's back.", s[''])
+        self.assertIn("I have Alex's back.", s[''])
         self.assertEqual(s['Voice'].strip(), '- Be plain, direct, and concise.')
 
     def test_each_role_gets_its_sections_and_nothing_else(self):
@@ -92,7 +92,7 @@ class Sections(unittest.TestCase):
         for f in (counsel.for_discussion, counsel.for_worker):
             out = f(st)
             self.assertIn('Be plain', out); self.assertNotIn('I SURFACE', out); self.assertNotIn('Walk them through', out)
-            self.assertIn("I have Uri's back.", out, 'the intro travels with every role')
+            self.assertIn("I have Alex's back.", out, 'the intro travels with every role')
 
     def test_renamed_headings_fall_back_to_the_whole_document(self):
         st = MemoryStore(); st.save_doc('counsel', "# Mine\n\n## How I talk\n- Short.\n", 'owner')
@@ -540,7 +540,7 @@ CONTRACT = (
     "choices and no button covers them, end with one final line exactly like: OPTIONS: first choice | second choice. "
     "Otherwise no options line.\n"
     "When the owner has DECIDED about an item, end with one final line exactly like DECIDE: <verb> where verb is one of: "
-    "reply (a reply to write - the gist after a colon: DECIDE: reply: tell Kishan it is not owned here), approve (send the "
+    "reply (a reply to write - the gist after a colon: DECIDE: reply: tell Ravi it is not owned here), approve (send the "
     "drafted reply as it stands), redraft (write the draft again - the change after a colon), coder (hand it to the coding "
     "agent - everything wanted after a colon, in the owner's words), regular_agent (hand it to a non-coding agent), mine "
     "(they will do it themselves), not_ours (file this one), not_ours_remember (file this kind from now on), "
@@ -614,11 +614,11 @@ class Migration(unittest.TestCase):
 
     def test_an_owner_edited_document_keeps_every_word_and_gains_the_section(self):
         st = MemoryStore()
-        mine = "# COUNSEL.md — I am Taskuary\n\nUri's rule: never touch Friday.\n\n## Voice\n- Dry.\n\n## My goal\n- Finish.\n"
+        mine = "# COUNSEL.md — I am Taskuary\n\nAlex's rule: never touch Friday.\n\n## Voice\n- Dry.\n\n## My goal\n- Finish.\n"
         st.save_doc('counsel', mine, 'owner')
         self.assertEqual(counsel.migrate(st), 'appended')
         after = st.get_doc('counsel')
-        self.assertIn("Uri's rule: never touch Friday.", after); self.assertIn('- Dry.', after)
+        self.assertIn("Alex's rule: never touch Friday.", after); self.assertIn('- Dry.', after)
         self.assertLess(after.index('## When the owner decides'), after.index('## My goal'))
         self.assertIn('coder and setup are not the same road', after)
         rows = [r for r in st.audit_rows() if r['Action'] == 'migrated']

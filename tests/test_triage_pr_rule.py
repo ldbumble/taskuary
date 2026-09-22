@@ -54,11 +54,11 @@ class PrRuleTests(unittest.TestCase):
     def test_a_doc_that_stopped_tracking_the_template_still_gets_the_fix(self):
         """The owner's TRIAGE.md is UpdatedBy='migration', so the template rightly no longer
         overwrites it - the rest of the document is theirs. One sentence is replaced, in place."""
-        mine = "MY OWN RULE: anything from Dvora is urgent.\n\n" + store_mod._PR_RULE_WAS + "And my last line."
+        mine = "MY OWN RULE: anything from Maya is urgent.\n\n" + store_mod._PR_RULE_WAS + "And my last line."
         after = self._reopen(mine).doc('triage')
         self.assertNotIn(store_mod._PR_RULE_WAS, after)
         self.assertIn('A PULL REQUEST is a task, and its kind is coding', after)
-        self.assertIn('MY OWN RULE: anything from Dvora is urgent.', after)   # nothing else touched
+        self.assertIn('MY OWN RULE: anything from Maya is urgent.', after)   # nothing else touched
         self.assertIn('And my last line.', after)
 
     def test_it_runs_once_and_never_edits_a_doc_again(self):

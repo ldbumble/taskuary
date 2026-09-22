@@ -14,7 +14,7 @@ from taskuary import ingest
 from taskuary.store import MemoryStore
 from taskuary.triage import classify_intent
 
-OWNER, ASKER, PEER = 'uri@ours.example', 'moshe@vendor.example', 'priya@ours.example'
+OWNER, ASKER, PEER = 'alex@ours.example', 'moshe@vendor.example', 'priya@ours.example'
 
 
 def _thread(*rows):
@@ -50,7 +50,7 @@ class WhoCountsTests(unittest.TestCase):
     def test_your_own_replies_are_not_somebody_else(self):
         """The owner having answered already is a different fact, and not this one."""
         s = _thread((ASKER, 'Moshe Benjamin', '2026-08-26 10:00:00'),
-                    (OWNER, 'Uri', '2026-08-26 10:20:00'))
+                    (OWNER, 'Alex', '2026-08-26 10:20:00'))
         self.assertEqual(ingest.others_on_thread(s, ARRIVING, mine=[OWNER]), {})
 
     def test_being_cc_d_is_not_answering(self):

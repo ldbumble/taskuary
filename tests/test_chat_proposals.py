@@ -143,7 +143,7 @@ class InterpretationTests(unittest.TestCase):
 
     def test_a_decision_that_names_another_item_targets_that_one_and_an_unknown_name_asks(self):
         s, tid, mid, item = asked()
-        other = arrive(s, subject='Payroll portal is down', body='Nobody can clock in.', who='Miriam', email='miriam@ours.com', conv='c:outage', hours=0,
+        other = arrive(s, subject='Payroll portal is down', body='Nobody can clock in.', who='Elena', email='elena@ours.com', conv='c:outage', hours=0,
                        llm=brain('task', 'general'))
         mine = next(i for i in pile(s) if i.get('mid') == mid)
         out = say(s, 'not ours, the payroll portal outage is facilities', key=mine['key'], model='Filing that one.\nDECIDE: not_ours ON: payroll portal outage')
@@ -153,8 +153,8 @@ class InterpretationTests(unittest.TestCase):
 
     def test_a_decision_that_names_one_fyi_targets_that_entry_not_the_handful(self):
         s = store()
-        a = arrive(s, subject='FYI - Rebecca is back Tuesday', body='Just so you know.', who='Chana', email='chana@ours.com', conv='c:a', hours=2, llm=brain('fyi', None))
-        b = arrive(s, subject='FYI - lunch moved', body='Thursday now.', who='Chana', email='chana@ours.com', conv='c:b', hours=1, llm=brain('fyi', None))
+        a = arrive(s, subject='FYI - Rebecca is back Tuesday', body='Just so you know.', who='Erin', email='erin@ours.com', conv='c:a', hours=2, llm=brain('fyi', None))
+        b = arrive(s, subject='FYI - lunch moved', body='Thursday now.', who='Erin', email='erin@ours.com', conv='c:b', hours=1, llm=brain('fyi', None))
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             batch = concierge.surface(s, llm=None)['item']
         self.assertEqual((batch['kind'], len(batch['items'])), ('fyis', 2))
@@ -205,10 +205,10 @@ class ExecutionTests(unittest.TestCase):
 
     def test_remember_and_close_are_proposals_that_do_what_they_say(self):
         s, tid, mid, item = asked()
-        p = say(s, 'remember that Hindy signs off on refunds', key=item['key'], model='Noted.\nDECIDE: remember: Hindy signs off on refunds')['proposal']
-        self.assertEqual((p['kind'], p['params']['note'], p['settles']), ('memory.remember', 'Hindy signs off on refunds', False))
+        p = say(s, 'remember that Gail signs off on refunds', key=item['key'], model='Noted.\nDECIDE: remember: Gail signs off on refunds')['proposal']
+        self.assertEqual((p['kind'], p['params']['note'], p['settles']), ('memory.remember', 'Gail signs off on refunds', False))
         self.assertEqual([m['Note'] for m in s.list_memories()], [])
-        run(s, p); self.assertIn('Hindy signs off on refunds', [m['Note'] for m in s.list_memories()])
+        run(s, p); self.assertIn('Gail signs off on refunds', [m['Note'] for m in s.list_memories()])
         p = say(s, 'close it', key=item['key'], model='Closing.\nDECIDE: close')['proposal']
         self.assertEqual((p['kind'], p['target']), ('task.complete', tid)); self.assertEqual(s.get_task(tid)['Status'], 'open')
         run(s, p); self.assertEqual(s.get_task(tid)['Status'], 'done')

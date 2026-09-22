@@ -25,7 +25,7 @@ MAIL_SELECT = ('id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentD
 MAIL_LIST_SELECT = ','.join(f for f in MAIL_SELECT.split(',') if f != 'body')
 # ...and the field that says where the sender's own words END. uniqueBody is the part of the body
 # unique to THIS message - the mailbox drawing the line that everything else has to guess at from
-# text, which on a forwarded mail is what buried Brad's one-sentence ask (TQ-0665). It rides in the
+# text, which on a forwarded mail is what buried Ray's one-sentence ask (TQ-0665). It rides in the
 # $select the bodies already come back on: no extra request, and never in a LISTING, where the whole
 # point is to carry no weight.
 MAIL_BODY_SELECT = 'id,body,uniqueBody'
@@ -1241,7 +1241,7 @@ def mark_slack_read(tok: str, channel: str, ts: str):
 # FIRST line, before policies and before any AI call.
 POLL_OVERLAP = timedelta(minutes=5)
 # The same hedge at startup scale. A watermark that jumped to `now` while the mail behind it was
-# still eventually-consistent hides that mail for good (the Richard Spencer case above), and a
+# still eventually-consistent hides that mail for good (the Richard Lowe case above), and a
 # shutdown is exactly when nobody is polling to catch it. So the catch-up reaches back PAST the
 # watermark - but by this, not by a rounded-up day: asking for 24h after 8.75h closed pulled 272
 # messages the database already had, to keep 93 (the owner's mailbox, 2026-09-17).

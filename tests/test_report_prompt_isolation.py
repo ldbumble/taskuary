@@ -41,7 +41,7 @@ class ReportPromptIsolation(unittest.TestCase):
 
 class GeneralCheckPromptTests(unittest.TestCase):
     def test_a_line_about_one_mail_must_add_what_the_mail_does_not(self):
-        """The general check raised "Hindy forwarded X with nothing but her signature ... I'd ask her
+        """The general check raised "Gail forwarded X with nothing but her signature ... I'd ask her
         what she wants" about a mail already on the Timeline as an fyi (the owner, 2026-09-07: "Why
         did assistant triagger on bare email meaning saying the same thing?").
 

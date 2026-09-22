@@ -15,18 +15,18 @@ from fastapi.testclient import TestClient
 from taskuary import outbound, responder, server, verdicts
 from taskuary.store import MemoryStore
 
-STYLE = '## Reply style\n\n- Two sentences, answer first.\n- Sign off: "Best,\nUri Nussbaum\nMFA Heritage"\n'
+STYLE = '## Reply style\n\n- Two sentences, answer first.\n- Sign off: "Best,\nAlex Doyle\nNorthwind Heritage"\n'
 
 
 def store():
     s = MemoryStore()
-    s.set_setting('owner_email', 'uri@northwind.example', 't')
+    s.set_setting('owner_email', 'alex@northwind.example', 't')
     s.save_doc('style', STYLE, 'owner')
     return s
 
 
-def mail(s, tid=None, to=('uri@northwind.example', 'sam@vendor.example'), cc=('pat@vendor.example', 'Uri@Northwind.example'), meta=None, ext='m1'):
-    return s.add_message({'TaskId': tid, 'ExternalId': ext, 'ConversationId': 'AAQk-x', 'Channel': 'email', 'SourceName': 'uri@northwind.example',
+def mail(s, tid=None, to=('alex@northwind.example', 'sam@vendor.example'), cc=('pat@vendor.example', 'Alex@Northwind.example'), meta=None, ext='m1'):
+    return s.add_message({'TaskId': tid, 'ExternalId': ext, 'ConversationId': 'AAQk-x', 'Channel': 'email', 'SourceName': 'alex@northwind.example',
                           'Subject': 'August export', 'FromName': 'Dana', 'FromEmail': 'dana@vendor.example', 'SentAt': '2026-09-06 09:00:00',
                           'BodyText': 'Could you send the August export?', 'Status': 'routed',
                           'RecipientsJson': json.dumps({'to': list(to), 'cc': list(cc)}), 'MailMetaJson': json.dumps(meta) if meta else None})
@@ -50,8 +50,8 @@ class EnvelopeTests(unittest.TestCase):
 
     def test_a_chat_message_has_no_envelope(self):
         s = store()
-        mid = s.add_message({'ExternalId': 't1', 'ConversationId': 'teams:x', 'Channel': 'teams', 'SourceName': 'Mindy', 'Subject': 'chat',
-                             'FromName': 'Mindy', 'SentAt': '2026-09-06 09:00:00', 'BodyText': 'hi', 'Status': 'routed'})
+        mid = s.add_message({'ExternalId': 't1', 'ConversationId': 'teams:x', 'Channel': 'teams', 'SourceName': 'Robin', 'Subject': 'chat',
+                             'FromName': 'Robin', 'SentAt': '2026-09-06 09:00:00', 'BodyText': 'hi', 'Status': 'routed'})
         self.assertIsNone(outbound.reply_envelope(s, s.get_message(mid)))
 
 
@@ -92,8 +92,8 @@ class PinnedAndSentTests(unittest.TestCase):
         responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: 'Here it is.')
         sent = {}
         with mock.patch.object(outbound, 'reply_to_message', side_effect=lambda st, m, body, to=None, cc=None, attachments=None: sent.update(body=body) or {'channel': 'email', 'to': to, 'cc': cc}):
-            verdicts.decide(s, s.get_review(rid), 'edit', 'Attached - the numbers are final.\n\nBest,\nUri Nussbaum\nMFA Heritage')
-        self.assertEqual(sent['body'], 'Attached - the numbers are final.\n\nBest,\nUri Nussbaum\nMFA Heritage')
+            verdicts.decide(s, s.get_review(rid), 'edit', 'Attached - the numbers are final.\n\nBest,\nAlex Doyle\nNorthwind Heritage')
+        self.assertEqual(sent['body'], 'Attached - the numbers are final.\n\nBest,\nAlex Doyle\nNorthwind Heritage')
 
 
 class PerConnectorEnvelopeTests(unittest.TestCase):
@@ -111,7 +111,7 @@ class PerConnectorEnvelopeTests(unittest.TestCase):
     def test_the_imap_mailbox_puts_the_envelope_on_the_headers_and_in_the_smtp_conversation(self):
         s, msg, env = self.thread('imap:99')
         s.save_connector({'Type': 'imap', 'Name': 'Work mail', 'Active': 1, 'Secret': 'app-password',
-                          'ConfigJson': json.dumps({'address': 'uri@northwind.example', 'imap_host': 'imap.northwind.example',
+                          'ConfigJson': json.dumps({'address': 'alex@northwind.example', 'imap_host': 'imap.northwind.example',
                                                     'smtp_host': 'smtp.northwind.example'})}, 'owner')
         seen = {}
         class FakeSMTP:
@@ -124,7 +124,7 @@ class PerConnectorEnvelopeTests(unittest.TestCase):
             sock = None
         with mock.patch('smtplib.SMTP', FakeSMTP), mock.patch('taskuary.imapmail.verify_pin', lambda *a, **k: None):
             out = outbound.reply_to_message(s, msg, 'Here it is.', to=env['to'], cc=env['cc'])
-        self.assertEqual((seen['host'], seen['user']), ('smtp.northwind.example', 'uri@northwind.example'))
+        self.assertEqual((seen['host'], seen['user']), ('smtp.northwind.example', 'alex@northwind.example'))
         self.assertEqual(seen['rcpt'], env['to'] + env['cc'])                    # the envelope, not just the header
         self.assertIn('To: ' + ', '.join(env['to']), seen['raw'])
         self.assertIn('Cc: ' + ', '.join(env['cc']), seen['raw'])
@@ -145,8 +145,8 @@ class PerConnectorEnvelopeTests(unittest.TestCase):
 
     def test_a_cc_is_refused_on_a_chat_rather_than_dropped(self):
         s = store()
-        mid = s.add_message({'ExternalId': 't9', 'ConversationId': 'teams:19:x', 'Channel': 'teams', 'SourceName': 'Mindy',
-                             'Subject': 'chat', 'FromName': 'Mindy', 'SentAt': '2026-09-06 09:00:00', 'BodyText': 'hi', 'Status': 'routed'})
+        mid = s.add_message({'ExternalId': 't9', 'ConversationId': 'teams:19:x', 'Channel': 'teams', 'SourceName': 'Robin',
+                             'Subject': 'chat', 'FromName': 'Robin', 'SentAt': '2026-09-06 09:00:00', 'BodyText': 'hi', 'Status': 'routed'})
         with self.assertRaises(RuntimeError) as e:
             outbound.reply_to_message(s, s.get_message(mid), 'ok', cc=['pat@vendor.example'])
         self.assertIn('no cc', str(e.exception))
@@ -157,35 +157,35 @@ class SignatureTests(unittest.TestCase):
         s = store()
         tid = s.create_task({'Title': 'August export', 'Kind': 'reply', 'Status': 'open', 'Priority': 'normal', 'Source': channel}, 'router')
         mid = mail(s, tid) if channel == 'email' else s.add_message({'TaskId': tid, 'ExternalId': 't1', 'ConversationId': 'teams:x', 'Channel': 'teams',
-                                                                      'SourceName': 'Mindy', 'Subject': 'chat', 'FromName': 'Mindy', 'SentAt': '2026-09-06 09:00:00',
+                                                                      'SourceName': 'Robin', 'Subject': 'chat', 'FromName': 'Robin', 'SentAt': '2026-09-06 09:00:00',
                                                                       'BodyText': 'hi', 'Status': 'routed'})
         rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'needs a reply'})
         return s, tid, mid, rid
 
     def test_the_signature_comes_from_style_md_or_the_setting(self):
         s = store()
-        self.assertEqual(responder.signature_for(s), 'Best,\nUri Nussbaum\nMFA Heritage')
-        s.set_setting('email_signature', 'Regards,\nUri', 'owner')
-        self.assertEqual(responder.signature_for(s), 'Regards,\nUri')
+        self.assertEqual(responder.signature_for(s), 'Best,\nAlex Doyle\nNorthwind Heritage')
+        s.set_setting('email_signature', 'Regards,\nAlex', 'owner')
+        self.assertEqual(responder.signature_for(s), 'Regards,\nAlex')
 
     def test_a_draft_a_redraft_and_a_manual_draft_carry_it_exactly_once(self):
         s, tid, mid, rid = self.thread()
         responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: 'Here it is.')
         text = s.get_review(rid)['DraftText']
-        self.assertTrue(text.endswith('Best,\nUri Nussbaum\nMFA Heritage')); self.assertEqual(text.count('MFA Heritage'), 1)
-        responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: 'Here it is again.\n\nBest,\nUri Nussbaum\nMFA Heritage')   # the model signed already
-        self.assertEqual(s.get_review(rid)['DraftText'].count('MFA Heritage'), 1)
+        self.assertTrue(text.endswith('Best,\nAlex Doyle\nNorthwind Heritage')); self.assertEqual(text.count('Northwind Heritage'), 1)
+        responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: 'Here it is again.\n\nBest,\nAlex Doyle\nNorthwind Heritage')   # the model signed already
+        self.assertEqual(s.get_review(rid)['DraftText'].count('Northwind Heritage'), 1)
         with mock.patch.object(server, 'store', s):
             r = TestClient(server.app).patch(f'/api/reviews/{rid}', json={'body': 'Attached.'}).json()
-        self.assertEqual(r['draft'].count('MFA Heritage'), 1); self.assertTrue(r['draft'].startswith('Attached.'))
+        self.assertEqual(r['draft'].count('Northwind Heritage'), 1); self.assertTrue(r['draft'].startswith('Attached.'))
         with mock.patch.object(server, 'store', s):
             r2 = TestClient(server.app).patch(f'/api/reviews/{rid}', json={'body': r['draft']}).json()
-        self.assertEqual(r2['draft'].count('MFA Heritage'), 1)                              # saving again adds nothing
+        self.assertEqual(r2['draft'].count('Northwind Heritage'), 1)                              # saving again adds nothing
 
     def test_chat_gets_no_signature(self):
         s, tid, mid, rid = self.thread('teams')
         responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: 'on it')
-        self.assertNotIn('MFA Heritage', s.get_review(rid)['DraftText'])
+        self.assertNotIn('Northwind Heritage', s.get_review(rid)['DraftText'])
 
 
 if __name__ == '__main__':

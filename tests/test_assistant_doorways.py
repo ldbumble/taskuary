@@ -27,7 +27,7 @@ def store():
     cid = s.get_connector_by_type('telegram')['ConnectorId']
     s.save_connector({'ConnectorId': cid, 'Active': 1, 'Secret': 'TOK', 'ConfigJson': json.dumps({})}, 'o')
     s.save_source({'Channel': 'telegram', 'Address': '4242', 'ConnectorId': cid, 'Active': 0,
-                   'Owner': 'discovered: Uri'}, 'o')
+                   'Owner': 'discovered: Alex'}, 'o')
     s.save_source({'Channel': 'telegram', 'Address': '-1001234567890', 'ConnectorId': cid, 'Active': 1,
                    'Owner': 'discovered: Night shift'}, 'o')
     return s
@@ -55,7 +55,7 @@ def test_the_catch_all_is_not_a_chat(store):
 
 
 def test_the_discovered_title_is_what_you_read(store):
-    assert remote_assistant.candidates(store, telegram(store))[0]['name'] == 'Uri'
+    assert remote_assistant.candidates(store, telegram(store))[0]['name'] == 'Alex'
 
 
 # ── setting it ──────────────────────────────────────────────────────────────────────────

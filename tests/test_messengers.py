@@ -173,9 +173,9 @@ class WhatsAppTests(unittest.TestCase):
         with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: {'connected': False, 'me': '', 'qr': '2@abc,def,ghi', 'pairingCode': ''}):
             st = messengers.wa_status(c)
         self.assertFalse(st['connected']); self.assertTrue(st['qr_svg'].startswith('data:image/svg+xml'))
-        with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: {'connected': True, 'me': 'Uri', 'qr': '', 'pairingCode': ''}):
+        with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: {'connected': True, 'me': 'Alex', 'qr': '', 'pairingCode': ''}):
             st = messengers.wa_status(c)
-        self.assertEqual((st['connected'], st['me'], st['qr_svg']), (True, 'Uri', ''))
+        self.assertEqual((st['connected'], st['me'], st['qr_svg']), (True, 'Alex', ''))
         with mock.patch.object(server.store, 'get_connector', return_value={**c, 'Type': 'whatsapp'}), \
              mock.patch.object(messengers.requests, 'get', side_effect=messengers.requests.ConnectionError('refused')):
             r = c_api.get(f"/api/connectors/{c['ConnectorId']}/wa/status")
@@ -189,7 +189,7 @@ class WhatsAppTests(unittest.TestCase):
         feed = {'seq': 4, 'messages': [
             {'seq': 1, 'id': 'a', 'jid': '155@s.whatsapp.net', 'name': 'Marcus', 'text': 'export is broken', 'ts': 1755700000},
             {'seq': 2, 'id': 'b', 'jid': '120363@g.us', 'group': True, 'name': 'Rita', 'text': 'standup moved to 10', 'ts': 1755700100},
-            {'seq': 3, 'id': 'c', 'jid': '120363@g.us', 'group': True, 'name': 'Uri', 'text': 'ok', 'ts': 1755700200, 'fromMe': True},
+            {'seq': 3, 'id': 'c', 'jid': '120363@g.us', 'group': True, 'name': 'Alex', 'text': 'ok', 'ts': 1755700200, 'fromMe': True},
             {'seq': 4, 'id': 'd', 'jid': 'status@broadcast', 'name': 'x', 'text': 'story', 'ts': 1755700300}]}
         with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: feed):
             rows = messengers.wa_chats(c)

@@ -30,7 +30,7 @@
 
 - **Style:** concise fast.ai density, matching the surrounding file. Never run autoformatters (black/yapf/autopep8) — they re-expand this code.
 - **Test gate:** the whole `pytest` from the repo root must pass before anything is pushed. `no tests ran` is a failure, not a pass.
-- **Shared checkout:** a live `coder` session works in `C:\Users\unussbaum\Documents\General\Testing\taskhub` and shares its git index. Build every commit off a temporary index (`GIT_INDEX_FILE` + `read-tree`/`hash-object`/`write-tree`/`commit-tree`/guarded `update-ref`), never `git add -A`, never `git commit -a`.
+- **Shared checkout:** a live `coder` session works in `C:\Users\owner\Documents\General\Testing\taskhub` and shares its git index. Build every commit off a temporary index (`GIT_INDEX_FILE` + `read-tree`/`hash-object`/`write-tree`/`commit-tree`/guarded `update-ref`), never `git add -A`, never `git commit -a`.
 - **Heredocs eat backslashes** in this environment. Patch Python by line index or use the editor tool; do not pipe source through a bash heredoc.
 - **`INTENT_SYSTEM` is not what runs here.** The owner's store holds a `triage` doc (15,908 chars, `UpdatedBy=migration`) that replaces it wholesale (`triage.py:408`). Behaviour changes must live in the blocks *appended* after the override (`triage.py:466`), not in the constant. Edit the constant too, for installs without a doc, but never rely on it.
 - **Scope:** this is step 1 of the spec's three. `provider` stays on the profile row and `default_agent` keeps its name; steps 2 and 3 move those. Do not start them here.
@@ -488,9 +488,9 @@ class RepairTests(unittest.TestCase):
 
     def test_a_human_assignee_is_left_alone(self):
         s = store()
-        h = s.create_task({'Title': 'mine', 'Kind': 'coding', 'Assignee': 'uri'}, 'test')
+        h = s.create_task({'Title': 'mine', 'Kind': 'coding', 'Assignee': 'alex'}, 'test')
         hub_agents.repair_role_assignees(s)
-        self.assertEqual(self.rows(s)[h], 'uri')
+        self.assertEqual(self.rows(s)[h], 'alex')
 
     def test_it_is_idempotent(self):
         s = store()

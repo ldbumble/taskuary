@@ -234,7 +234,7 @@ class SharedSessionTests(unittest.TestCase):
     def test_source_message_and_its_attachment_ride_into_the_general_agent(self):
         store = MemoryStore(); tid = general_task(store)
         mid = store.add_message({'ExternalId': 'attached-email', 'Channel': 'email',
-                                 'Subject': 'Complete the form', 'FromName': 'Mindy',
+                                 'Subject': 'Complete the form', 'FromName': 'Robin',
                                  'BodyText': 'Please fill out the attached PAM form.'})
         store.attach_message(mid, tid)
         store.upsert_agent('my-codex', 'coding', 'cli', json.dumps({'cmd': 'codex'}))

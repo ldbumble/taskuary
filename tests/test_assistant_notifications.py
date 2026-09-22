@@ -33,8 +33,8 @@ def store():
 
 def task(s, title='Import census'):
     t = s.create_task({'Title': title, 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
-    s.add_message({'TaskId': t, 'ExternalId': f'x:{title}', 'ConversationId': f'c:{title}', 'Channel': 'email', 'Subject': title, 'FromName': 'Chana',
-                   'FromEmail': 'chana@ours.com', 'SentAt': ago(2), 'BodyText': 'Please import it.', 'Status': 'routed'})
+    s.add_message({'TaskId': t, 'ExternalId': f'x:{title}', 'ConversationId': f'c:{title}', 'Channel': 'email', 'Subject': title, 'FromName': 'Erin',
+                   'FromEmail': 'erin@ours.com', 'SentAt': ago(2), 'BodyText': 'Please import it.', 'Status': 'routed'})
     return t
 
 

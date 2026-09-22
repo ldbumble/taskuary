@@ -61,7 +61,7 @@ def recent_closures(store, msg: dict, days: int = RECENT_DAYS, limit: int = RECE
     the same sender, or two words of the same subject - newest first, each with how it ended.
 
     This is past_work aimed one step earlier. The coder has had this block since it was written;
-    triage never has, so a condition that repeats - a scheduled check reporting the same two Pex
+    triage never has, so a condition that repeats - a scheduled check reporting the same two Spendly
     export failures every run - was judged new work every morning, an agent was started, and the
     agent read the determination in its own context file and reported that yesterday had already
     answered it (TQ-0668 -> TQ-0672, 2026-09-22). The judge is shown what the agent would have
@@ -76,7 +76,7 @@ def recent_closures(store, msg: dict, days: int = RECENT_DAYS, limit: int = RECE
     toks = set(tokens(msg.get('subject') or ''))
     # RANKED, then capped - not filtered by a cleverer rule. Weighting the shared words by how rare
     # they are in the window was tried and measured nothing: across 60 closed titles every shared word
-    # appeared once or twice, so "pex" and "failures" scored alike. What actually separates them is
+    # appeared once or twice, so "spendly" and "failures" scored alike. What actually separates them is
     # meaning, which is the model's job - so the code ranks by how much of a closed task's title the
     # arrival shares, hands over the best few, and the prompt says to weigh them (triage.FIELDS).
     out = []

@@ -49,35 +49,35 @@ class TriagePicksTests(unittest.TestCase):
 
     def test_a_repository_description_reaches_the_model_whole(self):
         """160 characters cut every real description mid-clause - taskuary's lost "do the work, you
-        approve", FanApp's lost the noun the sentence was about. It is the one line routing turns on."""
+        approve", ledger's lost the noun the sentence was about. It is the one line routing turns on."""
         s, seen = store(), []
-        about = ('FanApp syncs BAI files from the banks into our database. It covers cash balances and the '
+        about = ('ledger syncs BAI files from the banks into our database. It covers cash balances and the '
                  'cash dashboard, AP/AR, payroll feeds, identity and training integrations, and hundreds of '
                  'scheduled processes.')
         self.assertGreater(len(about), 160)
-        projects.ensure_repository(s, 'mfaVita/FanApp', about, actor='github')
+        projects.ensure_repository(s, 'northwind/ledger', about, actor='github')
         with mock.patch.object(ingest, '_spawn'): ingest.ingest_message(s, dict(MSG), llm=verdict(seen=seen))
-        got = next(r['about'] for r in seen[0]['user']['known_repositories'] if r['repo'] == 'mfaVita/FanApp')
+        got = next(r['about'] for r in seen[0]['user']['known_repositories'] if r['repo'] == 'northwind/ledger')
         self.assertEqual(got, about)
 
     def test_the_soul_map_describes_a_repo_whose_project_row_says_nothing(self):
         """A discovered project is NAMED after its repository, so `ProjectDescription or ProjectName`
-        described mfaVita/FanApp as "mfaVita/FanApp" - and claimed the key before the SOUL map's real
+        described northwind/ledger as "northwind/ledger" - and claimed the key before the SOUL map's real
         one-liner could fill it. Triage was handed three bare owner/name strings, could place nothing
-        against them, and mail about the cash dashboard never reached FanApp (TQ-0443)."""
+        against them, and mail about the cash dashboard never reached ledger (TQ-0443)."""
         s = MemoryStore()
-        projects.ensure_repository(s, 'mfaVita/FanApp', None, actor='github')   # GitHub carried no description
+        projects.ensure_repository(s, 'northwind/ledger', None, actor='github')   # GitHub carried no description
         s.save_doc('soul', '## Repository map\n'
-                           '- **mfaVita/FanApp**: Syncs BAI files from banks into our database.\n', 'owner')
+                           '- **northwind/ledger**: Syncs BAI files from banks into our database.\n', 'owner')
         about = {r['repo']: r['about'] for r in ingest.repo_candidates(s)}
-        self.assertEqual(about['mfaVita/FanApp'], 'Syncs BAI files from banks into our database.')
+        self.assertEqual(about['northwind/ledger'], 'Syncs BAI files from banks into our database.')
 
     def test_a_project_named_for_the_work_still_describes_its_repo(self):
         """...but a project the owner named for the WORK is a real description, and still wins."""
         s = MemoryStore()
         pid = s.ensure_project('Cash reporting', None, 'owner')
-        s.upsert_project_link(pid, projects.REPO_KIND, 'mfaVita/FanApp', 'mfaVita/FanApp', 1.0, True, 'owner')
-        self.assertEqual({r['repo']: r['about'] for r in ingest.repo_candidates(s)}['mfaVita/FanApp'], 'Cash reporting')
+        s.upsert_project_link(pid, projects.REPO_KIND, 'northwind/ledger', 'northwind/ledger', 1.0, True, 'owner')
+        self.assertEqual({r['repo']: r['about'] for r in ingest.repo_candidates(s)}['northwind/ledger'], 'Cash reporting')
 
     def test_a_validated_pick_is_persisted_and_startup_uses_it(self):
         s = store()

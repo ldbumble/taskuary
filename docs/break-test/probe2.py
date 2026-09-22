@@ -2,7 +2,7 @@
 close under a live agent, 'skip it', the dead end after everything was shown."""
 import os, sys, json, tempfile, contextlib
 os.environ['TASKUARY_HOME'] = tempfile.mkdtemp(prefix='tq-probe2-')
-REPO = r'C:\Users\unussbaum\Documents\General\Testing\taskhub'
+REPO = r'C:\Users\owner\Documents\General\Testing\taskhub'
 sys.path[:0] = [REPO, REPO + r'\tests']
 from unittest import mock
 from datetime import datetime, timedelta
@@ -27,8 +27,8 @@ def three(s):
     with mock.patch.object(ingest, '_spawn'):
         a = arrive(s, subject='Are you around Tuesday?', body='Quick call?', llm=brain('reply_only', None))
         b = arrive(s, subject='Fix the export', body='Rows drop.', conv='c:b', hours=3, llm=brain('task', 'coding'))
-        c = arrive(s, subject='FYI - Rebecca is back', body='Just so you know.', who='Chana', email='chana@ours.com', conv='c:c', hours=2, llm=brain('fyi', None))
-        d = arrive(s, subject='FYI - lunch moved', body='Thursday now.', who='Chana', email='chana@ours.com', conv='c:d', hours=2, llm=brain('fyi', None))
+        c = arrive(s, subject='FYI - Rebecca is back', body='Just so you know.', who='Erin', email='erin@ours.com', conv='c:c', hours=2, llm=brain('fyi', None))
+        d = arrive(s, subject='FYI - lunch moved', body='Thursday now.', who='Erin', email='erin@ours.com', conv='c:d', hours=2, llm=brain('fyi', None))
     return a, b, c, d
 
 # 1. cold start: the owner types before anything is on the table
@@ -44,7 +44,7 @@ with world(s) as (c, _):
     for _ in range(2): c.post('/api/concierge/next', json={}).json()          # review, then todo
     out = c.post('/api/concierge/next', json={}).json()
     key = out['item']['key']; show('fyi batch surfaced', f"key={key} say={out['say'][:100]!r}")
-    for t in ('next', 'done', 'not ours', 'skip all the fyi from Chana'):
+    for t in ('next', 'done', 'not ours', 'skip all the fyi from Erin'):
         o = c.post('/api/concierge/say', json={'text': t, 'key': key}).json()
         show(f'on the fyi batch: {t!r}', f"decision={o.get('decision')} say={o['say'][:110]!r}")
     show('pile after', *keys(s))
@@ -70,13 +70,13 @@ with world(s) as (c, _):
 s = store(); three(s)
 with world(s) as (c, _):
     before = keys(s)
-    o = c.post('/api/concierge/say', json={'text': 'what did Chana say about Rebecca?', 'key': None}).json()
+    o = c.post('/api/concierge/say', json={'text': 'what did Erin say about Rebecca?', 'key': None}).json()
     show('lookup', f"item={(o.get('item') or {}).get('key')} say={o['say'][:100]!r}", 'before: ' + str(before), 'after:  ' + str(keys(s)))
 
 # 6. close it under a live agent; not ours under a live agent
 for words in ('close it', 'not ours', 'done'):
     s = store()
-    with mock.patch.object(ingest, '_spawn'): out = arrive(s, who='Chana', email='chana@ours.com', llm=brain('task', 'coding'))
+    with mock.patch.object(ingest, '_spawn'): out = arrive(s, who='Erin', email='erin@ours.com', llm=brain('task', 'coding'))
     tid = out['task_id']; s.update_task(tid, {'Status': 'in_progress'}, 'router')
     live = session(tid, idle=200, waiting=True, tail=['Remove the old rows too? (y/n)'])
     with world(s, live) as (c, _):

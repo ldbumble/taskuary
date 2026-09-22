@@ -739,7 +739,7 @@ def parse(store, text: str, cands: list, max_lines: int = MAX_LINES) -> list:
     except ValueError: return []
     by = {c['key']: c for c in cands}
     # an open idea already about this message or task keeps its key: the model invents a slug per run, and
-    # one situation came back as idea:hindy-sample-file, idea:hindy-sample-file-compass, idea:hindy-in-...
+    # one situation came back as idea:gail-sample-file, idea:gail-sample-file-compass, idea:gail-in-...
     aimed = {}
     for i in store.list_ideas('open'):
         try: a = json.loads(i.get('ActionJson') or '{}')

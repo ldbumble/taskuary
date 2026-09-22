@@ -56,9 +56,9 @@ class GitLabTests(unittest.TestCase):
              'web_url': 'https://gitlab.com/acme/importer/-/issues/4', 'author': {'name': 'Rina'}}
     def test_test_and_poll(self):
         s = MemoryStore(); c = conn(s, 'gitlab')
-        with wired({'/api/v4/user': {'name': 'Uri', 'username': 'uri'},
+        with wired({'/api/v4/user': {'name': 'Alex', 'username': 'alex'},
                     '/api/v4/issues': [self.ISSUE], '/api/v4/merge_requests': []}):
-            self.assertIn('Uri', devtools.test(s, c))
+            self.assertIn('Alex', devtools.test(s, c))
             self.assertEqual(devtools.poll(s, c, SINCE), 1)
         self.assertIn('gitlab', feed_channels(s))
         row = next(r for r in s.feed() if r['Channel'] == 'gitlab')
@@ -71,7 +71,7 @@ class AzdoTests(unittest.TestCase):
         wi = {'id': 88, 'fields': {'System.Title': 'Fix PTO rounding', 'System.State': 'Active',
                                    'System.WorkItemType': 'Bug', 'System.TeamProject': 'Census',
                                    'System.Description': 'cents off', 'System.ChangedDate': '2026-08-21T09:00:00Z',
-                                   'System.CreatedBy': {'displayName': 'Chana'}}}
+                                   'System.CreatedBy': {'displayName': 'Erin'}}}
         with wired({'/_apis/projects': {'count': 3}, '/_apis/wit/wiql': {'workItems': [{'id': 88}]},
                     '/_apis/wit/workitems?ids=88': {'value': [wi]}}):
             self.assertIn('3 project', devtools.test(s, c))
@@ -90,9 +90,9 @@ class LinearTests(unittest.TestCase):
         node = {'identifier': 'ENG-42', 'title': 'Rotate the API keys', 'description': None,
                 'url': 'https://linear.app/acme/issue/ENG-42', 'updatedAt': '2026-08-19T08:00:00Z',
                 'state': {'name': 'Todo'}, 'creator': {'name': 'Dana'}, 'project': {'name': 'Security'}}
-        with wired({'graphql': {'data': {'viewer': {'name': 'Uri', 'email': 'u@x'},
+        with wired({'graphql': {'data': {'viewer': {'name': 'Alex', 'email': 'u@x'},
                                          'issues': {'nodes': [node]}}}}):
-            self.assertIn('Uri', devtools.test(s, c))
+            self.assertIn('Alex', devtools.test(s, c))
             self.assertEqual(devtools.poll(s, c, SINCE), 1)
         row = next(r for r in s.feed() if r['Channel'] == 'linear')
         self.assertIn('ENG-42', row['Subject']); self.assertEqual(row['SourceName'], 'Security')
@@ -108,7 +108,7 @@ class TrelloTests(unittest.TestCase):
         card = {'id': 'abc', 'name': 'Renew SSL cert', 'desc': 'expires 9/1',
                 'dateLastActivity': '2026-08-18T12:00:00Z', 'url': 'https://trello.com/c/abc',
                 'idBoard': 'b1', 'board': {'name': 'Ops'}}
-        with wired({'/members/me/cards': [card], '/members/me': {'fullName': 'Uri'}}):
+        with wired({'/members/me/cards': [card], '/members/me': {'fullName': 'Alex'}}):
             self.assertEqual(devtools.poll(s, c, SINCE), 1)
         row = next(r for r in s.feed() if r['Channel'] == 'trello')
         self.assertEqual((row['Subject'], row['SourceName']), ('Renew SSL cert', 'Ops'))

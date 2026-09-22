@@ -76,7 +76,7 @@ verdict-on-thread and pipe rule runs outside the model — before it and after i
    Review. A thread already belonging to a task joins *that* task — never a third one that merely
    looks similar; if its task has closed, the reply is new work.
 8. **The pipe.** Marketing, filed items and your own sent mail never enter. Your window and cap bound
-   it. Your **standing rules** ("stop showing me the MFA financial reports from Nechama") hold a whole
+   it. Your **standing rules** ("stop showing me the Northwind financial reports from Paula") hold a whole
    family back — quiet lanes only, so anything that actually asks you something still reaches you.
 
 ## Where an instruction actually lives

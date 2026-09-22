@@ -108,14 +108,14 @@ class SeedArgvTests(unittest.TestCase):
     def test_devin_reports_an_accepted_prompt_while_its_first_turn_is_still_hidden(self):
         class Fake:
             argv, alive, accepted = ['devin.exe'], True, True
-            seeded = 'TASK TQ-0572 - Test. REPO: FanApp. ASK: Say hi for test.'
+            seeded = 'TASK TQ-0572 - Test. REPO: ledger. ASK: Say hi for test.'
             raw = 'Devin CLI\nSWE-1.6 Slow\nAsk Devin to build features'
             def scrollback(self): return self.raw
         t = Fake()
         self.assertTrue(terminal.prompt_pending(t))
         # Devin truncates long argv prompts in its UI; seeing their beginning is enough to know
         # the first model turn arrived, and the observation remains latched after it scrolls away.
-        t.raw += '\nTASK TQ-0572 - Test. REPO: FanApp. ASK: Say hi for test. [prompt truncated here: 840 chars]'
+        t.raw += '\nTASK TQ-0572 - Test. REPO: ledger. ASK: Say hi for test. [prompt truncated here: 840 chars]'
         self.assertFalse(terminal.prompt_pending(t))
         t.raw = 'later screen with no original prompt'
         self.assertFalse(terminal.prompt_pending(t))
@@ -1114,7 +1114,7 @@ class RepoRoutingTests(unittest.TestCase):
 
     SOUL = ('## Repository map\n'
             '- **northwind/Census**: Python enterprise integration services, payroll imports, timesheets\n'
-            '- **northwind/TopE**: a travel and expense reimbursement platform with AI receipt validation\n')
+            '- **northwind/portal**: a travel and expense reimbursement platform with AI receipt validation\n')
 
     def setUp(self):
         server.store.save_doc('soul', self.SOUL, 'test')
@@ -1129,10 +1129,10 @@ class RepoRoutingTests(unittest.TestCase):
         prof = json.loads(server.store.get_agent('coder')['Config'])
         tid = self._task('Reimbursement app', 'approving reimbursements shows an error on each transaction')
         repo, why = terminal.guess_repo(server.store, tid, prof)
-        self.assertEqual(repo, 'northwind/TopE')           # NOT the one with a path
+        self.assertEqual(repo, 'northwind/portal')           # NOT the one with a path
         self.assertTrue(why)
         ranked = terminal.rank_repos(server.store, tid, prof)
-        self.assertEqual(ranked[0][0], 'northwind/TopE')
+        self.assertEqual(ranked[0][0], 'northwind/portal')
         self.assertFalse(ranked[0][2])                   # ...and we know we have no path for it
         # a payroll task still goes to the integrations repo
         pay = self._task('payroll import posts to the wrong month', 'the timesheets import is off')
@@ -1143,8 +1143,8 @@ class RepoRoutingTests(unittest.TestCase):
         # pin that with a search that must come up empty. CI has no claude, so resolution is
         # mocked too: this test is about the repo guard, not the binary.
         with mock.patch.object(terminal, 'find_checkout', return_value=None),              mock.patch('taskuary.agents._resolve_cmd', return_value=[sys.executable]),              self.assertRaises(ValueError) as e:
-            terminal.open_session(server.store, 'coder', self._task('x'), 'northwind/TopE')
-        self.assertIn('no local path for northwind/TopE', str(e.exception))
+            terminal.open_session(server.store, 'coder', self._task('x'), 'northwind/portal')
+        self.assertIn('no local path for northwind/portal', str(e.exception))
         self.assertIn('search of your code folders', str(e.exception))
         self.assertIn('Pick the repository', str(e.exception))    # the fix is ON the task now
         self.assertIn('wrong tree', str(e.exception))
@@ -1152,26 +1152,26 @@ class RepoRoutingTests(unittest.TestCase):
     def test_the_api_lists_every_repo_with_whether_it_can_be_opened(self):
         tid = self._task('Reimbursement app', 'approving reimbursements errors out')
         out = c.get(f'/api/tasks/{tid}/repos').json()
-        self.assertEqual(out['picked'], 'northwind/TopE')
+        self.assertEqual(out['picked'], 'northwind/portal')
         by = {r['repo']: r for r in out['data']}
-        self.assertFalse(by['northwind/TopE']['has_path'])
+        self.assertFalse(by['northwind/portal']['has_path'])
         self.assertTrue(by['northwind/Census']['has_path'])
-        self.assertIn('reimbursement', by['northwind/TopE']['what'])
+        self.assertIn('reimbursement', by['northwind/portal']['what'])
 
     def test_pinning_a_repo_overrides_the_guess_and_takes_the_path_with_it(self):
         tid = self._task('Reimbursement app', 'approving reimbursements errors out')
         here = os.getcwd()
-        r = c.put(f'/api/tasks/{tid}/repo', json={'repo': 'northwind/TopE', 'path': here, 'agent': 'coder'})
+        r = c.put(f'/api/tasks/{tid}/repo', json={'repo': 'northwind/portal', 'path': here, 'agent': 'coder'})
         self.assertEqual(r.status_code, 200)
         prof = json.loads(server.store.get_agent('coder')['Config'])
-        self.assertEqual(prof['cwd_map']['northwind/TopE'], here)          # the path stuck
-        self.assertEqual(terminal.guess_repo(server.store, tid, prof), ('northwind/TopE', 'tagged on the task'))
-        self.assertIn('repo:northwind/TopE', server.store.get_task(tid)['Tags'])
+        self.assertEqual(prof['cwd_map']['northwind/portal'], here)          # the path stuck
+        self.assertEqual(terminal.guess_repo(server.store, tid, prof), ('northwind/portal', 'tagged on the task'))
+        self.assertIn('repo:northwind/portal', server.store.get_task(tid)['Tags'])
         # ...and the prompt now says so, which is the whole point
-        self.assertIn('REPO: northwind/TopE', terminal.seed_text(server.store, tid, None, 'northwind/TopE', here))
+        self.assertIn('REPO: northwind/portal', terminal.seed_text(server.store, tid, None, 'northwind/portal', here))
         # a bad path is refused rather than silently stored
         self.assertEqual(c.put(f'/api/tasks/{tid}/repo',
-                               json={'repo': 'northwind/TopE', 'path': os.path.join(here, 'nope')}).status_code, 422)
+                               json={'repo': 'northwind/portal', 'path': os.path.join(here, 'nope')}).status_code, 422)
         # unpinning hands the choice back to the guess
         c.put(f'/api/tasks/{tid}/repo', json={'repo': None})
         self.assertNotIn('repo:', str(server.store.get_task(tid)['Tags'] or ''))

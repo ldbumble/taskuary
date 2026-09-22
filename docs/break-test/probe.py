@@ -2,7 +2,7 @@
 server's decision, and diffing the receipt against the real effect. No model anywhere."""
 import os, sys, json, re, tempfile, contextlib, io
 os.environ['TASKUARY_HOME'] = tempfile.mkdtemp(prefix='tq-probe-')
-REPO = r'C:\Users\unussbaum\Documents\General\Testing\taskhub'
+REPO = r'C:\Users\owner\Documents\General\Testing\taskhub'
 sys.path[:0] = [REPO, REPO + r'\tests']
 from unittest import mock
 from fastapi.testclient import TestClient
@@ -25,7 +25,7 @@ def b_general():
     return s, [], f"msg:{out['message_id']}"
 def b_fyi():
     s = store()
-    out = arrive(s, subject='FYI - Rebecca is back Tuesday', body='Just so you know.', who='Chana', email='chana@ours.com', conv='c:fyi', hours=2, llm=brain('fyi', None))
+    out = arrive(s, subject='FYI - Rebecca is back Tuesday', body='Just so you know.', who='Erin', email='erin@ours.com', conv='c:fyi', hours=2, llm=brain('fyi', None))
     return s, [], f"msg:{out['message_id']}"
 def b_report(bad=False):
     s = store()
@@ -38,14 +38,14 @@ def b_report(bad=False):
     return s, [], f'msg:{m}' if False else f'report:{m}'
 def b_agent():
     s = store()
-    with mock.patch.object(ingest, '_spawn'): out = arrive(s, who='Chana', email='chana@ours.com', llm=brain('task', 'coding'))
+    with mock.patch.object(ingest, '_spawn'): out = arrive(s, who='Erin', email='erin@ours.com', llm=brain('task', 'coding'))
     tid = out['task_id']; s.update_task(tid, {'Status': 'in_progress'}, 'router')
     live = session(tid, idle=200, waiting=True, tail=['Remove the old rows too? (y/n)'])
     return s, live, f'agent:{tid}'
 def b_meeting():
     s = store(); s.set_setting('calendar_enabled', '1', 't')
     return s, [], 'meeting:*'
-MEETING = [{'subject': 'Payroll cutover', 'start': ahead(10), 'end': ahead(40), 'who': ['Chana'], 'all_day': False, 'where': 'Teams', 'id': 'ev1'}]
+MEETING = [{'subject': 'Payroll cutover', 'start': ahead(10), 'end': ahead(40), 'who': ['Erin'], 'all_day': False, 'where': 'Teams', 'id': 'ev1'}]
 def b_proposal():
     s = store()
     with mock.patch.object(ingest, '_spawn'): out = arrive(s, llm=brain('task', 'coding'))
@@ -66,12 +66,12 @@ BUILDERS = {'review': b_review, 'review(no draft)': lambda: b_review(''), 'todo(
             'agent-asking': b_agent, 'meeting': b_meeting, 'proposal': b_proposal, 'idea': b_idea}
 
 PHRASES = ['next', 'done', 'later', 'tomorrow', 'skip', 'skip it', 'approve', 'send it', 'looks good, send it', 'yes', 'ok', 'sure', 'go ahead', 'do it', 'no', 'nah',
-           'reply and tell them we will look at it', 'tell them to ignore it', 'let them know we will fix it by Friday', 'tell Chana it is handled',
+           'reply and tell them we will look at it', 'tell them to ignore it', 'let them know we will fix it by Friday', 'tell Erin it is handled',
            'not ours', 'not my problem', 'ignore it', "don't ignore this one", 'leave it open', 'leave it with the agent', 'never again', 'that sender is spam',
-           'remember that Kishan handles refunds', 'remember to reply to him', 'send it to the coder', 'look into it', 'can you check if the report ran?',
+           'remember that Ravi handles refunds', 'remember to reply to him', 'send it to the coder', 'look into it', 'can you check if the report ran?',
            "I'll take it", "I'll handle this", 'mine', 'make it a task', 'close it', 'close the task', 'stop the agent', 'wrap it up', 'rerun it', 'split it',
-           "what's this about?", 'who sent this?', 'summarize the thread', 'show me the draft', 'make the reply shorter', 'forward it to Chana', 'assign it to Chana',
-           'ask Chana to handle it', 'delete it', 'archive it', 'snooze it', 'remind me tomorrow', 'approve and remember that Kishan handles refunds',
+           "what's this about?", 'who sent this?', 'summarize the thread', 'show me the draft', 'make the reply shorter', 'forward it to Erin', 'assign it to Erin',
+           'ask Erin to handle it', 'delete it', 'archive it', 'snooze it', 'remind me tomorrow', 'approve and remember that Ravi handles refunds',
            'reply: not ours, sorry', 'skip all the newsletters', "it's handled", 'answer the agent: yes remove them', 'tell the agent yes', 'yes remove them',
            'set up a weekly report on refunds', 'never mind', 'hold on', 'wait', 'stop', 'cancel', 'undo', 'go back', 'what did I miss?',
            # the sentence names ANOTHER subject than the card on the table (the A1 finding)

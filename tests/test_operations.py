@@ -17,7 +17,7 @@ from taskuary import ingest, operations, server
 from taskuary.store import MemoryStore
 
 MSG = {'external_id': 'e1', 'channel': 'email', 'from_email': 'dana@vendor.example', 'from_name': 'Dana', 'conversation_id': 'AAQk-x',
-       'subject': 'August export', 'sent_at': '2026-09-06 09:00:00', 'body': 'Hi Uri, could you send me the August export? Dana'}
+       'subject': 'August export', 'sent_at': '2026-09-06 09:00:00', 'body': 'Hi Alex, could you send me the August export? Dana'}
 
 
 def arrive(s, intent='fyi', kind='general', **over):

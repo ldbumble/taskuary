@@ -72,7 +72,7 @@ test("frames parse into something drawable; other messages pass through; junk is
 });
 
 test("urls are shown without scheme, cut in the middle when long", () => {
-  assert.equal(shortUrl("https://login.pointclickcare.com/home/userLogin.xhtml"), "login.pointclickcare.com/home/userLogin.xhtml");
+  assert.equal(shortUrl("https://login.careview.com/home/userLogin.xhtml"), "login.careview.com/home/userLogin.xhtml");
   assert.equal(shortUrl("https://a.test/"), "a.test");
   assert.equal(shortUrl(""), "");
   const long = shortUrl(`https://a.test/${"x".repeat(200)}`, 40);

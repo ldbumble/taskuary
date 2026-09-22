@@ -32,7 +32,7 @@ def opened(s, subject='PTO', body='Can you import pto for Aug 9 thru Aug 22?'):
     """The ask that started the task, its message on the thread, and the owner's own reply back."""
     t = s.create_task({'Title': subject.title(), 'Kind': 'coding', 'Status': 'waiting'}, 'o')
     s.add_message({'TaskId': t, 'ExternalId': 'x:ask', 'ConversationId': 'c1', 'Channel': 'email', 'Subject': subject,
-                   'FromName': 'Chana', 'FromEmail': 'chana@hrtgcs.com', 'SentAt': ago(hours=8),
+                   'FromName': 'Erin', 'FromEmail': 'erin@vendor.example', 'SentAt': ago(hours=8),
                    'BodyText': body, 'Status': 'routed'})
     s.add_message({'TaskId': t, 'ExternalId': 'x:mine', 'ConversationId': 'c1', 'Channel': 'email', 'Subject': f'RE: {subject}',
                    'FromName': 'You', 'FromEmail': 'owner@ours.com', 'SentAt': ago(hours=3),
@@ -42,7 +42,7 @@ def opened(s, subject='PTO', body='Can you import pto for Aug 9 thru Aug 22?'):
 
 def reply(body='Thank you!', subject='RE: PTO'):
     return {'external_id': 'x:thanks', 'channel': 'email', 'conversation_id': 'c1', 'subject': subject,
-            'from_name': 'Chana', 'from_email': 'chana@hrtgcs.com', 'sent_at': ago(hours=1), 'body': body}
+            'from_name': 'Erin', 'from_email': 'erin@vendor.example', 'sent_at': ago(hours=1), 'body': body}
 
 
 def brain(intent, why='because', kind=None):
@@ -102,8 +102,8 @@ class FollowUpVerdictTests(unittest.TestCase):
         """The evidence the verdict needs: what was asked before, and what the owner already sent -
         with the signature and the legal footer trimmed off both."""
         s = store()
-        opened(s, body=('Where are we holding with the AI generated comments?\n\nThank you!\n\nChana\n'
-                        'Phone:\nEmail:\n\n732‑905‑6440 x505\nchana@hrtgcs.com\n\n'
+        opened(s, body=('Where are we holding with the AI generated comments?\n\nThank you!\n\nErin\n'
+                        'Phone:\nEmail:\n\n732‑905‑6440 x505\nerin@vendor.example\n\n'
                         'NOTICE: This confidential message contains information intended for a specific individual.'))
         seen = {}
         def fake(system, user, **kw):
@@ -112,7 +112,7 @@ class FollowUpVerdictTests(unittest.TestCase):
         ex = seen['user']['exchange']
         self.assertEqual(len(ex), 2)
         self.assertIn('Where are we holding', ex[0]); self.assertIn('you ·', ex[1])
-        for junk in ('NOTICE:', '732', 'Phone:', 'chana@hrtgcs.com'):
+        for junk in ('NOTICE:', '732', 'Phone:', 'erin@vendor.example'):
             self.assertNotIn(junk, ex[0], junk)
 
     def test_a_document_that_never_names_a_signal_is_told_what_it_means(self):

@@ -124,7 +124,7 @@ class ProcedureTests(unittest.TestCase):
                  mock.patch.object(blackboard, 'live_count', return_value=0), mock.patch.object(ingest, '_spawn', lambda fn, *a: fn(*a)), \
                  mock.patch('taskuary.senders.known', return_value=(True, 'a colleague')):
                 out = ingest.ingest_message(s, {'external_id': 'pto1', 'channel': 'email', 'conversation_id': 'c:pto', 'subject': 'PTO next Friday',
-                                                'from_name': 'Chana', 'from_email': 'chana@ours.com', 'body': 'Can I take next Friday off?', 'to': ['owner@ours.com']}, llm=llm)
+                                                'from_name': 'Erin', 'from_email': 'erin@ours.com', 'body': 'Can I take next Friday off?', 'to': ['owner@ours.com']}, llm=llm)
             t = s.get_task(out['task_id'])
             self.assertEqual((t['Kind'], playbooks.of_task(t)), ('general', 'pto'))                          # the procedure, not a coding verdict (PW-205)
             self.assertEqual(start.call_count, 1)                                                            # one start

@@ -140,22 +140,22 @@ class TheReplyHasToSurviveTheTrip(unittest.TestCase):
         self.assertFalse([c for c in s.list_comments(tid) if 'You replied' in c['Body']])
 
     def test_a_whatsapp_reply_retires_the_unused_draft_and_says_so(self):
-        """Gabi answered in WhatsApp after Taskuary drafted a reply. The sync is the verdict:
+        """Tess answered in WhatsApp after Taskuary drafted a reply. The sync is the verdict:
         never leave the old Approve button asking the owner to send a second answer."""
         from taskuary import concierge, general
         from taskuary.channels import ingest_own_message
         s = _store()
-        mid = s.add_message({'ExternalId': 'wa-in', 'ConversationId': 'whatsapp:gabi',
-                             'Channel': 'whatsapp', 'SourceName': 'Gabi', 'Subject': 'Chat with Gabi',
-                             'FromName': 'Gabi', 'SentAt': '2026-09-04 12:30:00',
+        mid = s.add_message({'ExternalId': 'wa-in', 'ConversationId': 'whatsapp:tess',
+                             'Channel': 'whatsapp', 'SourceName': 'Tess', 'Subject': 'Chat with Tess',
+                             'FromName': 'Tess', 'SentAt': '2026-09-04 12:30:00',
                              'BodyText': 'Awesome. 2 pm works. Your house?', 'Status': 'routed'})
-        tid = s.create_task({'Title': 'Reply to Gabi', 'Kind': 'reply', 'Status': 'open'}, 'router')
+        tid = s.create_task({'Title': 'Reply to Tess', 'Kind': 'reply', 'Status': 'open'}, 'router')
         s.attach_message(mid, tid)
         rid = s.add_review({'MessageId': mid, 'TaskId': tid, 'Kind': 'draft_reply',
                             'Status': 'pending', 'DraftText': 'Yes, my house.'})
 
-        ingest_own_message(s, {'external_id': 'wa-out', 'conversation_id': 'whatsapp:gabi',
-                               'channel': 'whatsapp', 'source_name': 'Gabi', 'sent_at': '2026-09-04 12:36:00',
+        ingest_own_message(s, {'external_id': 'wa-out', 'conversation_id': 'whatsapp:tess',
+                               'channel': 'whatsapp', 'source_name': 'Tess', 'sent_at': '2026-09-04 12:36:00',
                                'body': 'yes'}, 'your line in this chat - kept for context')
 
         self.assertEqual(s.get_review(rid)['Status'], 'superseded')
@@ -168,15 +168,15 @@ class TheReplyHasToSurviveTheTrip(unittest.TestCase):
     def test_an_earlier_owner_line_does_not_retire_a_later_ask(self):
         from taskuary.channels import ingest_own_message
         s = _store()
-        mid = s.add_message({'ExternalId': 'wa-new-ask', 'ConversationId': 'whatsapp:gabi',
-                             'Channel': 'whatsapp', 'SourceName': 'Gabi', 'FromName': 'Gabi',
+        mid = s.add_message({'ExternalId': 'wa-new-ask', 'ConversationId': 'whatsapp:tess',
+                             'Channel': 'whatsapp', 'SourceName': 'Tess', 'FromName': 'Tess',
                              'SentAt': '2026-09-04 12:30:00', 'BodyText': 'Your house?', 'Status': 'routed'})
-        tid = s.create_task({'Title': 'Reply to Gabi', 'Kind': 'reply', 'Status': 'open'}, 'router')
+        tid = s.create_task({'Title': 'Reply to Tess', 'Kind': 'reply', 'Status': 'open'}, 'router')
         s.attach_message(mid, tid)
         rid = s.add_review({'MessageId': mid, 'TaskId': tid, 'Kind': 'draft_reply',
                             'Status': 'pending', 'DraftText': 'Yes.'})
-        ingest_own_message(s, {'external_id': 'wa-old-out', 'conversation_id': 'whatsapp:gabi',
-                               'channel': 'whatsapp', 'source_name': 'Gabi', 'sent_at': '2026-09-04 12:20:00',
+        ingest_own_message(s, {'external_id': 'wa-old-out', 'conversation_id': 'whatsapp:tess',
+                               'channel': 'whatsapp', 'source_name': 'Tess', 'sent_at': '2026-09-04 12:20:00',
                                'body': 'Earlier answer'}, 'your line in this chat - kept for context')
         self.assertEqual(s.get_review(rid)['Status'], 'pending')
 

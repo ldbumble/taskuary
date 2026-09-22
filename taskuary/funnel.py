@@ -61,7 +61,7 @@ FEED_DAYS = 7
 HOURS_DEFAULT, MAX_DEFAULT = 12, 25
 # The assistant's OWN lines get a longer window than mail. A mail going quiet after twelve hours
 # is fine; its standing note that something is loose is the opposite - it is still true tomorrow,
-# and expiring it is how "TQ-0329 hasn't moved, Nechama asked for that file today" left the pipe
+# and expiring it is how "TQ-0329 hasn't moved, Paula asked for that file today" left the pipe
 # unseen (the owner, 2026-09-04: "ideas ... should come back every time assistant thinks of
 # something new"). Measured on the owner's own store: at 12h two of the 64 open ideas reach the
 # pipe, at 24h five, at 72h thirty-eight - so a day is the point where more becomes a flood
@@ -95,7 +95,7 @@ MUTED_LANES = ('fyi', 'report', 'forgotten')   # only what has nothing to do: a 
 
 def mutes(store) -> list:
     """The owner's standing rules: [{'sender': <email or ''>, 'words': [...], 'why': '...'}]. Written
-    when they sweep the pipe with a reason ("skip all the mfa financial reports, that is taken care
+    when they sweep the pipe with a reason ("skip all the northwind financial reports, that is taken care
     of") - a sweep alone marked the ones in front of them read and the next batch walked straight back
     in (the owner, 2026-09-03: "was it one time dismiss not a memory")."""
     try: return json.loads(store.get_settings().get(MUTES_KEY) or '[]') or []
@@ -110,7 +110,7 @@ def remember_mute(store, rule: dict, actor: str = 'owner') -> None:
 
 def like(words, hay: set) -> int:
     """How many of the owner's words this item carries. Prefixes count BOTH ways: they type
-    "financials" about a "Financial Report" and "nozure" about nozur@ (2026-09-03)."""
+    "financials" about a "Financial Report" and "pvancer" about pvance@ (2026-09-03)."""
     long = [h for h in hay if len(h) >= 4]
     return sum(1 for w in words if w in hay or any(h.startswith(w) or (len(w) >= 4 and w.startswith(h)) for h in long))
 
@@ -119,7 +119,7 @@ def muted(rule: dict, i: dict) -> bool:
     from .routing import tokens
     key = str(rule.get('sender') or '').lower()
     if key and key not in (str(i.get('email') or '').lower(), str(i.get('who') or '').lower()): return False
-    # a rule can name a LANE rather than words: "skip all the fyi from Chana" is every fyi she sends,
+    # a rule can name a LANE rather than words: "skip all the fyi from Erin" is every fyi she sends,
     # not the mails with 'fyi' in the subject (2026-09-03)
     if rule.get('lane'): return i.get('lane') == rule['lane'] and bool(key)
     words = [w for w in (rule.get('words') or []) if w]
@@ -128,7 +128,7 @@ def muted(rule: dict, i: dict) -> bool:
 
 
 # Chat is not mail: WhatsApp and Slack send no subject at all, and Teams titles a chat after the
-# people the row already names ("Teams chat with Hindy Spiegel"). Both left the pipe and the work
+# people the row already names ("Teams chat with Gail Moreno"). Both left the pipe and the work
 # list reading "(no subject)" next to a message you had to open to see (owner, 2026-09-07).
 _CHAT_TITLE = re.compile(r'^((teams|slack|whatsapp|telegram) )?(group )?(chat|conversation) with\b', re.I)
 PILL = 90                        # one line in a pill; the rest is an ellipsis, cut on a word
@@ -140,7 +140,7 @@ def says(r: dict) -> str:
     # already stored as the task's Title (ingest), but this read Subject BEFORE it - so a row whose
     # work triage had already named in a sentence went out wearing a mail header instead, and the
     # rail's one line was the least readable thing on the screen (the owner, 2026-09-16: a row
-    # reading "rrdbreports@mfa.net - MFA - PCC ..."). Only the agent rows ever preferred it.
+    # reading "rrdbreports@northwind.example - Northwind - PCC ..."). Only the agent rows ever preferred it.
     # the TASK's title first - it is the whole job, where a follow-up's own line is only the latest
     # thing said about it - then this message's own verdict line, for the rows that never became work
     title = _short(r.get('Title') or r.get('TriageTitle') or '', 140)

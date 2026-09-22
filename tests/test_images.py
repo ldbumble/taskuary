@@ -127,7 +127,7 @@ class TheOpenAICompatibleShapeTests(unittest.TestCase):
 
     def test_azure_speaks_the_same_body_with_its_own_url_and_header(self):
         s = MemoryStore()
-        c = _conn(s, 'azure_openai_image', {'endpoint': 'https://mfa.openai.azure.com', 'deployment': 'gpt-image-1'})
+        c = _conn(s, 'azure_openai_image', {'endpoint': 'https://northwind.openai.azure.com', 'deployment': 'gpt-image-1'})
         with mock.patch.object(images.requests, 'post', return_value=_resp(payload={'data': [{'b64_json': B64}]})) as post:
             images.generate(s, 'a duck', c=c)
         url, kw = post.call_args.args[0], post.call_args.kwargs

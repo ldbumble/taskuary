@@ -1,7 +1,7 @@
 """When Windows refuses the update, say which refusal it is.
 
 Reported 2026-09-02 from Settings → Updates:
-    [Errno 13] Permission denied: 'C:\\Users\\uri\\Downloads\\Taskuary.new.exe'
+    [Errno 13] Permission denied: 'C:\\Users\\alex\\Downloads\\Taskuary.new.exe'
 A true sentence that tells the owner nothing they can act on - and it invites the two wrong
 answers, run as administrator and install as a service, neither of which touches any of the
 three real causes.

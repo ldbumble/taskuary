@@ -75,7 +75,7 @@ class RestoreTests(unittest.TestCase):
         self.c.post('/api/concierge/next', json={})
         self.c.post('/api/funnel/settle', json={'key': f'msg:{m2}', 'verb': 'later'})
         self.assertIsNone(self.c.get('/api/concierge').json()['current'])
-        t3, m3 = asked(self.s, 'PTO import', 'Chana', 0)
+        t3, m3 = asked(self.s, 'PTO import', 'Erin', 0)
         self.assertEqual(self.c.post('/api/concierge/next', json={}).json()['item']['key'], f'msg:{m3}')
         self.s.update_task(t3, {'Status': 'done'}, 'owner'); funnel.invalidate()
         st = self.c.get('/api/concierge').json()
@@ -84,15 +84,15 @@ class RestoreTests(unittest.TestCase):
 
     def test_a_named_item_and_the_fyi_handful_are_written_down_too(self):
         t, m = asked(self.s)
-        other_t, other_m = asked(self.s, 'Refund for Mrs Garnett', 'Rivka', 1)
+        other_t, other_m = asked(self.s, 'Refund for Mrs Garnett', 'Nina', 1)
         self.c.post('/api/concierge/next', json={})
         self.c.post('/api/concierge/next', json={'key': f'msg:{other_m}'})                                # the owner pulled another in
         self.assertEqual(self.c.get('/api/concierge').json()['current']['key'], f'msg:{other_m}')
         s2 = store(); patches, c2 = client(s2)
         for p in patches: p.start(); self.addCleanup(p.stop)
         for n in range(2):
-            mm = s2.add_message({'ExternalId': f'f{n}', 'ConversationId': f'f{n}', 'Channel': 'email', 'Subject': f'FYI {n}', 'FromName': 'Chana',
-                                 'FromEmail': 'chana@ours.com', 'SentAt': ago(n), 'BodyText': 'fyi', 'Status': 'filed'})
+            mm = s2.add_message({'ExternalId': f'f{n}', 'ConversationId': f'f{n}', 'Channel': 'email', 'Subject': f'FYI {n}', 'FromName': 'Erin',
+                                 'FromEmail': 'erin@ours.com', 'SentAt': ago(n), 'BodyText': 'fyi', 'Status': 'filed'})
             s2.add_route(mm, None, 'file', None, 'triage: fyi', [], 'triage')
         batch = c2.post('/api/concierge/next', json={}).json()['item']
         self.assertEqual(batch['kind'], 'fyis')

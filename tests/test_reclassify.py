@@ -66,7 +66,7 @@ class RoadTests(unittest.TestCase):
 
 class MemoryTests(unittest.TestCase):
     def test_the_verdict_is_written_where_the_next_one_reads_it(self):
-        mid = _msg('honey cake recipe', frm='gabi@corp.example')
+        mid = _msg('honey cake recipe', frm='tess@corp.example')
         before = len(S.list_memories())
         out = c.post(f'/api/messages/{mid}/reclassify', json={'road': 'reply'}).json()
         self.assertTrue(out['memory'])
@@ -77,7 +77,7 @@ class MemoryTests(unittest.TestCase):
 
     def test_it_is_evidence_about_the_topic_not_a_rule_about_the_person(self):
         """A verdict keyed to the sender alone is how one message becomes a policy about someone."""
-        mid = _msg('quarterly close checklist', frm='gabi@corp.example')
+        mid = _msg('quarterly close checklist', frm='tess@corp.example')
         out = c.post(f'/api/messages/{mid}/reclassify', json={'road': 'task'}).json()
         mem = next(m for m in S.list_memories() if m['MemoryId'] == out['memory'])
         self.assertEqual(mem['Scope'], 'subject')

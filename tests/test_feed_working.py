@@ -32,7 +32,7 @@ class WorkingTests(unittest.TestCase):
 
 class DigestBriefTests(unittest.TestCase):
     def test_the_brief_reads_the_words_and_names_the_ask_that_slipped(self):
-        s = MemoryStore(); s.set_setting('owner_email', 'uri@ours.com', 't'); s.set_setting('calendar_enabled', '0', 't')
+        s = MemoryStore(); s.set_setting('owner_email', 'alex@ours.com', 't'); s.set_setting('calendar_enabled', '0', 't')
         old = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')
         mid = s.add_message({'Channel': 'email', 'Subject': 'RE: Stampli Approvers', 'FromName': 'Sam', 'FromEmail': 'teammate@northwind.example',
                              'BodyText': 'Can you send me the GL expense list?', 'Status': 'filed', 'ConversationId': 'cv1', 'SentAt': old})

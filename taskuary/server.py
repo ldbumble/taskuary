@@ -5230,7 +5230,7 @@ def _heal_blank_doc(name: str) -> str:
 
 @app.get('/api/how-it-works')
 def how_it_works():
-    """The reference page on the Docs tab: the Assistant, and the gates a message passes in order.
+    """The reference page in Settings → Docs: the Assistant, and the gates a message passes in order.
     Shipped with the app (templates/how-it-works.md) and read-only - it describes what the code does,
     so it is not an operator document to edit and never becomes a `doc` row."""
     from pathlib import Path
@@ -5259,7 +5259,7 @@ def put_doc(name: str, body: DocBody):
     return {'ok': True}
 
 # ── playbooks: the fourth operator document, one file per kind of job (playbooks.py) ──────
-# Read by the Docs tab's Playbooks shelf and by every connector card (filtered by `uses`). Agents
+# Read by the Docs section's Playbooks shelf and by every connector card (filtered by `uses`). Agents
 # may GET these; writing is the owner's (guard.py denies agent tokens) - an agent PROPOSES one.
 @app.get('/api/playbooks')
 def list_playbooks():
@@ -5327,7 +5327,7 @@ def delete_playbook(slug: str):
 @app.get('/api/learned/graph')
 def learned_graph():
     """LEARNED.md as a picture: lines, the verdicts that fed them, each line's score over time,
-    the lines that died - the Docs tab's Visualize view (discussion #27)."""
+    the lines that died - the Docs section's Visualize view (discussion #27)."""
     return learnedgraph.graph(store)
 
 class AdoptBody(BaseModel): key: str
@@ -5371,7 +5371,7 @@ def soul_write(body: InterviewBody):
 
 @app.post('/api/doc/{name}/generate')
 def doc_generate(name: str, days: int = 90):
-    """The Docs tab's 'Generate from history': read the last N days of the mailbox itself
+    """The Docs section's 'Generate from history': read the last N days of the mailbox itself
     (sent + inbox over Graph; Taskuary's own record when no Graph mailbox is connected),
     distill it, and fill the doc's marked block. Slow by nature - one or two Graph sweeps
     plus an AI pass - the button shows it working."""

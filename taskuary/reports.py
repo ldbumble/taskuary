@@ -1636,7 +1636,7 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
             store.add_route(mid, None, 'feed', None, f'the report ran; its alert could not be sent: {str(e)[:200]}',
                             [], 'report')
     # the digest report is ALSO what keeps DIGEST.md alive: one run, two homes - the Timeline
-    # row you read in the morning, and the doc the Docs tab shows
+    # row you read in the morning, and the doc Settings → Docs shows
     if 'digest' in {cfg.get('type'), *(s.get('type') for s in cfg.get('sources') or [])}:
         from .digest import HEADER
         store.save_doc('digest', f'{HEADER}_refreshed {stamp[:16]}_\n\n{strip_directive(body)}\n', 'digest')

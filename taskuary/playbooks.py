@@ -5,7 +5,7 @@ CODER.md is one playbook - the one about code - and "work only in the repository
 names" is the wrong first rule for a bill. So a playbook is a fourth operator document with a
 DIRECTORY instead of a file: ~/.taskuary/playbooks/<slug>.md, six labelled lines on top
 (when / uses / steps / alone / ask first / done when) and any prose below. Two doors to the
-same file: the Docs tab's Playbooks shelf edits the words, and every connector card lists the
+same file: the Docs section's Playbooks shelf edits the words, and every connector card lists the
 playbooks whose `uses:` line names it.
 
 Three consumers, none of which re-reads the mail to second-guess triage:

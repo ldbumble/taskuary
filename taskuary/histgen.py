@@ -1,6 +1,6 @@
 """Generate operator guidance from the mailbox's OWN history - the three months of mail
 that predate Taskuary. learn.py distills verdicts the funnel has witnessed; this bootstraps
-from what it never saw: the Docs tab's "Generate from history" button reads the Graph
+from what it never saw: the Docs section's "Generate from history" button reads the Graph
 mailbox (sent + inbox, paged), pairs what the owner ANSWERED against what they let sit,
 and writes the distilled guidance into a marked block of the doc - regenerate any time,
 lines outside the markers are never touched. No Graph mailbox connected? It falls back to
@@ -16,7 +16,7 @@ from loguru import logger
 HIST_START, HIST_END = '<!-- fromhistory:start -->', '<!-- fromhistory:end -->'
 DAYS = 90
 
-# Live progress + receipts for the Docs tab: the button polls this while a generation runs,
+# Live progress + receipts for Settings → Docs: the button polls this while a generation runs,
 # and afterwards `evidence` shows exactly what was read and what each line contributed -
 # the distillation is inspectable, not a vibe. One generation at a time (module-level).
 STATUS = {'state': 'idle', 'what': '', 'doc': '', 'evidence': []}

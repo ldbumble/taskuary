@@ -63,7 +63,7 @@
       "label": "Learn from your verdicts",
       "type": "switch",
       "desc": "Your corrections teach LEARNED.md — style, responsibilities, what deserves a task.",
-      "help": "Every correction you make — editing a draft before sending, rejecting one, reclassifying a task as a question, promoting something triage filed, 'Not a task' / 'Not our task' — is distilled into LEARNED.md (Docs tab): first as a hypothesis with a strength counter and the evidence behind it, promoted into the active profile only once it keeps holding across separate episodes. The active sections ride into every triage call, draft and agent run; SOUL.md always outranks them.\n\nRules that would HIDE mail (treat as fyi, never a task) never activate themselves — they wait in the doc's 'Proposed rules' for you to adopt or delete. Off: nothing new is learned; the doc stays as it is and is still injected."
+      "help": "Every correction you make — editing a draft before sending, rejecting one, reclassifying a task as a question, promoting something triage filed, 'Not a task' / 'Not our task' — is distilled into LEARNED.md (Settings → Docs): first as a hypothesis with a strength counter and the evidence behind it, promoted into the active profile only once it keeps holding across separate episodes. The active sections ride into every triage call, draft and agent run; SOUL.md always outranks them.\n\nRules that would HIDE mail (treat as fyi, never a task) never activate themselves — they wait in the doc's 'Proposed rules' for you to adopt or delete. Off: nothing new is learned; the doc stays as it is and is still injected."
     },
     "reply_channels": {
       "group": "Replies",
@@ -80,7 +80,7 @@
         "github"
       ],
       "desc": "Which channels get a drafted reply at all. Switch one off and its questions just file.",
-      "help": "A question arriving somewhere you never answer from should not open a reply task whose draft has nowhere to go. Turn a channel off and messages from it still land on the Timeline and can still become real tasks — they simply never get a draft, and the funnel says so in the row's reason ('replies are off for slack').\n\nOne answer for the whole app: triage uses it to decide whether a question becomes a reply task, the coder wrap-up uses it to decide whether to draft at all, and the Review buttons use it to decide whether Approve can actually send. They cannot disagree.\n\nTwo rules are not yours to change here: GitHub also needs 'Reply to issue/PR authors' on its own card (a reply there is a PUBLIC comment), and the read-only trackers — Jira, Linear, Sentry, PagerDuty and friends — can never carry a reply because Taskuary only reads them."
+      "help": "A question arriving somewhere you never answer from should not open a reply task whose draft has nowhere to go. Turn a channel off and messages from it still land on the Timeline and can still become real tasks — they simply never get a draft, and the funnel says so in the row's reason ('replies are off for slack').\n\nOne answer for the whole app: triage uses it to decide whether a question becomes a reply task, the coder wrap-up uses it to decide whether to draft at all, and the approval buttons on the task use it to decide whether Approve can actually send. They cannot disagree.\n\nTwo rules are not yours to change here: GitHub also needs 'Reply to issue/PR authors' on its own card (a reply there is a PUBLIC comment), and the read-only trackers — Jira, Linear, Sentry, PagerDuty and friends — can never carry a reply because Taskuary only reads them."
     },
     "calendar_enabled": {
       "group": "Replies",
@@ -149,8 +149,8 @@
       "group": "Assistant",
       "label": "Lines per post, at most",
       "type": "number",
-      "desc": "The assistant checks in every 30 minutes and on startup (the 'Assistant' report on the Reports tab — edit its prompt for what it watches for, change the cadence, delete it to turn it off) and posts only when it has something to say. How it SPEAKS is COUNSEL.md on the Docs tab: edit that to change its voice, how bold it is, what it takes a position on. This caps how much one post says. 5 by default.",
-      "help": "One AI call per post, and none when there is nothing new. Every line has a key and a state, so it never says the same thing twice. Talk back under a suggestion to correct it or ask a follow-up; the answer and your correction stay with the idea and inform later checks. 'Follow up' drafts the chase in your voice onto the task — nothing is sent by itself; 'Make it a task' starts the agent. Voice: COUNSEL.md (Docs tab); what to watch for: the report's prompt. Without an AI connector the facts still post, in the hub's own words. 'Run now' on the Reports tab's Assistant row posts regardless of the schedule."
+      "desc": "The assistant checks in every 30 minutes and on startup (the 'Assistant' report on the Reports tab — edit its prompt for what it watches for, change the cadence, delete it to turn it off) and posts only when it has something to say. How it SPEAKS is COUNSEL.md in Settings → Docs: edit that to change its voice, how bold it is, what it takes a position on. This caps how much one post says. 5 by default.",
+      "help": "One AI call per post, and none when there is nothing new. Every line has a key and a state, so it never says the same thing twice. Talk back under a suggestion to correct it or ask a follow-up; the answer and your correction stay with the idea and inform later checks. 'Follow up' drafts the chase in your voice onto the task — nothing is sent by itself; 'Make it a task' starts the agent. Voice: COUNSEL.md (Settings → Docs); what to watch for: the report's prompt. Without an AI connector the facts still post, in the hub's own words. 'Run now' on the Reports tab's Assistant row posts regardless of the schedule."
     },
     "assistant_followup_hours": {
       "group": "Assistant",
@@ -217,7 +217,7 @@
         "auto",
         "off"
       ],
-      "desc": "An agent asks a question mid-task, Taskuary asks the person, and their reply lands back on the same task. This is what happens next. ask = Review offers one click, 'Type this into the agent's session'. auto = it is typed in the moment it arrives, as if you relayed it. off = it just sits on the task.",
+      "desc": "An agent asks a question mid-task, Taskuary asks the person, and their reply lands back on the same task. This is what happens next. ask = the task offers one click, 'Type this into the agent's session'. auto = it is typed in the moment it arrives, as if you relayed it. off = it just sits on the task.",
       "help": "Only a LIVE session is ever typed into. If the agent already exited nothing happens and the answer simply waits on the task, so `auto` cannot lose anything.\n\nThe reason this is a choice rather than always-on: `auto` puts someone else's words into your agent's session without you reading them first. That is usually what you want on your own team's mail and rarely what you want from a stranger's reply, and Taskuary cannot tell the difference well enough to decide for you."
     },
     "git_flow": {

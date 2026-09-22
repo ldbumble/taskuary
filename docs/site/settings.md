@@ -47,7 +47,7 @@ not a rule here, and muting a sender is **Skip this sender**.
 
 ## Verdicts & notes
 
-Two layers, one loop. `LEARNED.md` on the Docs tab is the general profile — your style, your
+Two layers, one loop. `LEARNED.md` in Settings → Docs is the general profile — your style, your
 responsibilities, what deserves a task — written by a nightly pass. This page is the evidence
 that pass reads: one dated line per verdict you gave, plus notes you write yourself, each tied to
 a sender, a domain, a subject, or everyone.

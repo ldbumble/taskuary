@@ -144,7 +144,7 @@ of nudges you do not want.
 
 Four things shape it:
 
-- `COUNSEL.md` on the Docs tab — how it speaks, and how readily it takes a position.
+- `COUNSEL.md` in Settings → Docs — how it speaks, and how readily it takes a position.
 - The **Assistant** report — what it watches, its schedule, its model.
 - **Settings → Assistant** — thresholds such as how long a reply or task must be quiet.
 - **Settings → Learning** — whether your verdicts feed back into `LEARNED.md`.

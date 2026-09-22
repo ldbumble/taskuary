@@ -1,5 +1,5 @@
 <!-- STYLE.md - how {{owner_first}} writes replies, layered onto SOUL.md for every draft
-the responder writes. Yours to edit. The "Generate from history" button on the Docs tab
+the responder writes. Yours to edit. The "Generate from history" button in Settings → Docs
 reads your last three months of sent mail and fills the marked block below - regenerate
 any time; your own lines OUTSIDE the markers always survive. Comments like this one are
 stripped before the model sees the document. -->

@@ -82,13 +82,11 @@
     <article>
 <p>Settings is a rail of pages, each one long page you scroll. This reference covers the
 <strong>Configuration</strong> page — every knob, in the sections the app itself shows them in.</p>
-<p>:::note This page writes itself
-Everything below the next heading is generated from <code>taskuary/settings_schema.json</code>, the same file
+<div class="callout note"><p class="eyebrow">This page writes itself</p><p>Everything below the next heading is generated from <code>taskuary/settings_schema.json</code>, the same file
 the Settings page and the assistant read. A knob added to the app appears here on the next build,
 with the same name, the same group and the same help text. It cannot drift, and nobody has to
-remember to update it.
-:::</p>
-<p>The other Settings pages are documented where their subject is: <strong>About you</strong> and the per-channel
+remember to update it.</p>
+</div><p>The other Settings pages are documented where their subject is: <strong>About you</strong> and the per-channel
 identities, <strong>Routing policies</strong> (<a href="how-it-works#what-triage-actually-decides">the deterministic layer</a>),
 <strong>Verdicts &amp; notes</strong> (<a href="how-it-works#correcting-it-teaches-it">the evidence behind LEARNED.md</a>),
 <strong>Audit integrity</strong>, and <strong>Updates</strong> (<a href="index#updating">updating</a>).</p>
@@ -169,7 +167,7 @@ is what you see if those cards cannot load.</li>
 <h3 id="learn-from-your-verdicts">Learn from your verdicts<a class="anchor" href="#learn-from-your-verdicts" aria-label="Link to this section">#</a></h3>
 <p><code>learn_enabled</code> · type: switch</p>
 <p>Your corrections teach LEARNED.md — style, responsibilities, what deserves a task.</p>
-<p>Every correction you make — editing a draft before sending, rejecting one, reclassifying a task as a question, promoting something triage filed, &#39;Not a task&#39; / &#39;Not our task&#39; — is distilled into LEARNED.md (Docs tab): first as a hypothesis with a strength counter and the evidence behind it, promoted into the active profile only once it keeps holding across separate episodes. The active sections ride into every triage call, draft and agent run; SOUL.md always outranks them.</p>
+<p>Every correction you make — editing a draft before sending, rejecting one, reclassifying a task as a question, promoting something triage filed, &#39;Not a task&#39; / &#39;Not our task&#39; — is distilled into LEARNED.md (Settings → Docs): first as a hypothesis with a strength counter and the evidence behind it, promoted into the active profile only once it keeps holding across separate episodes. The active sections ride into every triage call, draft and agent run; SOUL.md always outranks them.</p>
 <p>Rules that would HIDE mail (treat as fyi, never a task) never activate themselves — they wait in the doc&#39;s &#39;Proposed rules&#39; for you to adopt or delete. Off: nothing new is learned; the doc stays as it is and is still injected.</p>
 <h2 id="replies">Replies<a class="anchor" href="#replies" aria-label="Link to this section">#</a></h2>
 <h3 id="draft-replies-on">Draft replies on<a class="anchor" href="#draft-replies-on" aria-label="Link to this section">#</a></h3>
@@ -177,7 +175,7 @@ is what you see if those cards cannot load.</li>
 <p>Which channels get a drafted reply at all. Switch one off and its questions just file.</p>
 <p>Options: <code>email</code>, <code>teams</code>, <code>slack</code>, <code>telegram</code>, <code>whatsapp</code>, <code>imessage</code>, <code>discord</code>, <code>github</code></p>
 <p>A question arriving somewhere you never answer from should not open a reply task whose draft has nowhere to go. Turn a channel off and messages from it still land on the Timeline and can still become real tasks — they simply never get a draft, and the funnel says so in the row&#39;s reason (&#39;replies are off for slack&#39;).</p>
-<p>One answer for the whole app: triage uses it to decide whether a question becomes a reply task, the coder wrap-up uses it to decide whether to draft at all, and the Review buttons use it to decide whether Approve can actually send. They cannot disagree.</p>
+<p>One answer for the whole app: triage uses it to decide whether a question becomes a reply task, the coder wrap-up uses it to decide whether to draft at all, and the approval buttons on the task use it to decide whether Approve can actually send. They cannot disagree.</p>
 <p>Two rules are not yours to change here: GitHub also needs &#39;Reply to issue/PR authors&#39; on its own card (a reply there is a PUBLIC comment), and the read-only trackers — Jira, Linear, Sentry, PagerDuty and friends — can never carry a reply because Taskuary only reads them.</p>
 <h3 id="check-your-calendar-when-a-reply-is-about-time">Check your calendar when a reply is about time<a class="anchor" href="#check-your-calendar-when-a-reply-is-about-time" aria-label="Link to this section">#</a></h3>
 <p><code>calendar_enabled</code> · type: switch</p>
@@ -200,8 +198,8 @@ is what you see if those cards cannot load.</li>
 <h2 id="assistant">Assistant<a class="anchor" href="#assistant" aria-label="Link to this section">#</a></h2>
 <h3 id="lines-per-post-at-most">Lines per post, at most<a class="anchor" href="#lines-per-post-at-most" aria-label="Link to this section">#</a></h3>
 <p><code>assistant_max_lines</code> · type: number</p>
-<p>The assistant checks in every 30 minutes and on startup (the &#39;Assistant&#39; report on the Reports tab — edit its prompt for what it watches for, change the cadence, delete it to turn it off) and posts only when it has something to say. How it SPEAKS is COUNSEL.md on the Docs tab: edit that to change its voice, how bold it is, what it takes a position on. This caps how much one post says. 5 by default.</p>
-<p>One AI call per post, and none when there is nothing new. Every line has a key and a state, so it never says the same thing twice. Talk back under a suggestion to correct it or ask a follow-up; the answer and your correction stay with the idea and inform later checks. &#39;Follow up&#39; drafts the chase in your voice onto the task — nothing is sent by itself; &#39;Make it a task&#39; starts the agent. Voice: COUNSEL.md (Docs tab); what to watch for: the report&#39;s prompt. Without an AI connector the facts still post, in the hub&#39;s own words. &#39;Run now&#39; on the Reports tab&#39;s Assistant row posts regardless of the schedule.</p>
+<p>The assistant checks in every 30 minutes and on startup (the &#39;Assistant&#39; report on the Reports tab — edit its prompt for what it watches for, change the cadence, delete it to turn it off) and posts only when it has something to say. How it SPEAKS is COUNSEL.md in Settings → Docs: edit that to change its voice, how bold it is, what it takes a position on. This caps how much one post says. 5 by default.</p>
+<p>One AI call per post, and none when there is nothing new. Every line has a key and a state, so it never says the same thing twice. Talk back under a suggestion to correct it or ask a follow-up; the answer and your correction stay with the idea and inform later checks. &#39;Follow up&#39; drafts the chase in your voice onto the task — nothing is sent by itself; &#39;Make it a task&#39; starts the agent. Voice: COUNSEL.md (Settings → Docs); what to watch for: the report&#39;s prompt. Without an AI connector the facts still post, in the hub&#39;s own words. &#39;Run now&#39; on the Reports tab&#39;s Assistant row posts regardless of the schedule.</p>
 <h3 id="silence-before-a-follow-up">Silence before a follow-up<a class="anchor" href="#silence-before-a-follow-up" aria-label="Link to this section">#</a></h3>
 <p><code>assistant_followup_hours</code> · type: number</p>
 <p>Hours after your last reply on a thread — one that asked for or promised something — before &#39;no answer yet, follow up?&#39; appears. 24 by default.</p>
@@ -251,7 +249,7 @@ is what you see if those cards cannot load.</li>
 <h2 id="coder-agent">Coder agent<a class="anchor" href="#coder-agent" aria-label="Link to this section">#</a></h2>
 <h3 id="hand-answers-to-the-working-agent">Hand answers to the working agent<a class="anchor" href="#hand-answers-to-the-working-agent" aria-label="Link to this section">#</a></h3>
 <p><code>answer_to_agent</code> · type: select</p>
-<p>An agent asks a question mid-task, Taskuary asks the person, and their reply lands back on the same task. This is what happens next. ask = Review offers one click, &#39;Type this into the agent&#39;s session&#39;. auto = it is typed in the moment it arrives, as if you relayed it. off = it just sits on the task.</p>
+<p>An agent asks a question mid-task, Taskuary asks the person, and their reply lands back on the same task. This is what happens next. ask = the task offers one click, &#39;Type this into the agent&#39;s session&#39;. auto = it is typed in the moment it arrives, as if you relayed it. off = it just sits on the task.</p>
 <p>Options: <code>ask</code>, <code>auto</code>, <code>off</code></p>
 <p>Only a LIVE session is ever typed into. If the agent already exited nothing happens and the answer simply waits on the task, so <code>auto</code> cannot lose anything.</p>
 <p>The reason this is a choice rather than always-on: <code>auto</code> puts someone else&#39;s words into your agent&#39;s session without you reading them first. That is usually what you want on your own team&#39;s mail and rarely what you want from a stranger&#39;s reply, and Taskuary cannot tell the difference well enough to decide for you.</p>
@@ -401,7 +399,7 @@ sent; <code>draft</code> is the targeted default; <code>task_only</code> files a
 <p>Nothing writes into this table by itself. <strong>Not a task</strong> teaches a verdict in Verdicts &amp; notes,
 not a rule here, and muting a sender is <strong>Skip this sender</strong>.</p>
 <h2 id="verdicts-notes">Verdicts &amp; notes<a class="anchor" href="#verdicts-notes" aria-label="Link to this section">#</a></h2>
-<p>Two layers, one loop. <code>LEARNED.md</code> on the Docs tab is the general profile — your style, your
+<p>Two layers, one loop. <code>LEARNED.md</code> in Settings → Docs is the general profile — your style, your
 responsibilities, what deserves a task — written by a nightly pass. This page is the evidence
 that pass reads: one dated line per verdict you gave, plus notes you write yourself, each tied to
 a sender, a domain, a subject, or everyone.</p>

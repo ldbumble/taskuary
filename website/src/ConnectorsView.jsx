@@ -1016,7 +1016,7 @@ const VoiceVocabulary = ({ onBack }) => {
       .catch((e) => { if (alive) { setErr(e?.response?.data?.detail || "Could not load voice vocabulary"); setBusy(false); } });
     return () => { alive = false; };
   }, []);
-  // same narration as the Docs tab: poll while it runs so the button says what it is reading
+  // same narration as Settings → Docs: poll while it runs so the button says what it is reading
   useEffect(() => {
     if (!genBusy) return undefined;
     const t = setInterval(async () => {
@@ -1437,7 +1437,7 @@ function ConnectorIdentity({ conn, reload, onCreated }) {
 /* ── "Remove connection" on every detail page: wipes creds/config, turns sources off ── */
 /* The second door to a playbook (docs/beyond-code.md): the card is where you look for "what does
    this thing do for us", so it lists every playbook whose `uses:` line names this connection, and
-   opens each on the Docs tab (#playbook=<slug>), where the words are edited. */
+   opens each in Settings → Docs (#playbook=<slug>), where the words are edited. */
 function CardPlaybooks({ type }) {
   const [books, setBooks] = useState(null);
   useEffect(() => {

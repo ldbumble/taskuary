@@ -4,7 +4,7 @@ The digest used to be its own once-a-day machinery writing only the DIGEST.md do
 opened. It became a REPORT (reports.run_digest, seeded on first run): the summary lands on the
 Timeline where mornings actually start, the prompt below is edited like any report's on the
 Reports tab, deleting the source turns the whole thing off - and the same run keeps DIGEST.md fresh
-for the Docs tab.
+for Settings → Docs.
 
 Then it was a brief of COUNTS - the window by tag, who wrote how often - and the owner
 (2026-08-30): "useless... more like a summary assistant, not just stats but what's going on, what

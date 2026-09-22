@@ -32,7 +32,7 @@ It also leaves itself a NOTE: each check ends with what it looked at and found n
 something becomes worth raising, whatever it would otherwise work out again - and the next check
 starts by reading it (assistant_notes). Half-hourly checks are cheap only if each one does not
 start from zero; a quiet check still rewrites the note, it just posts nothing. How it SPEAKS is
-COUNSEL.md (Docs tab) - the owner edits that to change its voice and what it takes a position on;
+COUNSEL.md (Settings → Docs) - the owner edits that to change its voice and what it takes a position on;
 the report's prompt is what it watches for.
 """
 import json, math, re, threading

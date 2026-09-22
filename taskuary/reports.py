@@ -21,6 +21,9 @@ PLANNED = ['graphql',
            'stooq']    # its CSV endpoint serves a JS proof-of-work challenge now (2026-09-08) - not reachable from REST
 
 MAX_ROWS, BODY_CHARS, AI_CHARS = 200, 20000, 12000     # per report; override with cfg['max_rows']
+# What separates a report's CONCLUSION from the evidence under it. Defined once because two
+# places must agree on it: the composer writes it, and the routing judge cuts at it.
+RAW_MARK = '\n\n--- raw data ---\n'
 SUMMARY_TOKENS = 1500     # a report summary is prose, not a triage verdict - give it room
 
 
@@ -1220,7 +1223,7 @@ def render_report(store, cfg: dict, llm=None):
             if not ai:
                 ai = ('(the model returned an empty summary - it may have spent its budget thinking. '
                       'Try a shorter prompt, or a non-reasoning model for report summaries.)')
-            return head, f"{ai}\n\n--- raw data ---\n{summary[:4000]}"
+            return head, f"{ai}{RAW_MARK}{summary[:4000]}"
         except Exception as e:
             logger.warning(f'AI summary failed for report: {e}')
             return head, f'(AI summary failed: {str(e)[:200]})\n\n{summary}'
@@ -1885,8 +1888,27 @@ _FLAG = re.compile(r'^[ \t>*_\-]*(TIMELINE|WORK|ALERT|SEND)\s*:\s*(yes|no)\b[ \t
 
 def judge_state(res: dict) -> str:
     """What a judge reads: one finished run, as the text it came back with. Both roads get the same
-    thing, so a chat judge and a decision model can be compared on the same evidence."""
-    return f"{res['head']}\n\n{res['body']}"[:AI_CHARS]
+    thing, so a chat judge and a decision model can be compared on the same evidence.
+
+    THE CONCLUSION, NOT THE ROWS UNDER IT. When a report has an ai_prompt its body is the model's
+    summary, then RAW_MARK, then the rows. The judge is cut off at that line, because the
+    summariser read those rows ALREADY and with knowledge the judge does not have: the prompt. An
+    error check whose prompt says "facilities 66 and 67 were divested, their 403 is expected, do
+    not report it" correctly summarises two such rows as "all clear" - and a judge shown the rows
+    underneath reads `success: 0` and a 403, answers yes, and the all-clear lands on the work rail
+    every single run (SourceId 4, five runs on 2026-09-22). Re-reading the rows re-litigates a
+    decision already made with better information, and an alert that arrives whether or not
+    anything is wrong is one you stop reading.
+
+    A report with no ai_prompt has no summary and no marker, so its rows ARE its conclusion and
+    the judge still sees every one of them.
+    """
+    body = str(res.get('body') or '')
+    cut = body.find(RAW_MARK)
+    if cut != -1:
+        body = body[:cut]
+    return f"{res['head']}\n\n{body}".strip()[:AI_CHARS]
+
 
 
 def chat_judge(llm):

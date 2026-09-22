@@ -34,6 +34,14 @@ export const sentReplyReview = (reviews = []) =>
   reviews.find((review) => review.Kind !== "action" &&
     ["approved", "edited", "sent"].includes(review.Status));
 
+// ...and the proposals themselves, which share the reply's stage rather than getting one of their
+// own: lanes.json has ONE lane for both ("a reply or an action is drafted and waits for your yes"),
+// and one lane on the rail must be one section on the page or the two surfaces disagree about how
+// many things are happening. Oldest first - a proposal is queued after the reply it follows, and
+// the reply stays on top because sending it is what settles the task.
+export const pendingProposals = (reviews = []) =>
+  (reviews || []).filter((review) => review.Kind === "action" && review.Status === "pending").reverse();
+
 export const replyPhase = (reviews = []) => {
   const replyReviews = reviews.filter((review) => review.Kind !== "action");
   const latest = replyReviews[0];
@@ -53,8 +61,11 @@ export const replyPhase = (reviews = []) => {
 // start - so the page opened on an empty pane offering a button, with the ask itself folded away
 // (the owner, 2026-09-14: "it should be the task (number 1 pane) ... why is the agent expanded?").
 // A live session never reaches here at all; TasksView pins the agent stage while a pty is alive.
-export const focusStage = ({ kind, task, agent, reply, hasSender } = {}) => {
+export const focusStage = ({ kind, task, agent, reply, hasSender, proposal } = {}) => {
   if (reply === "draft ready") return "reply";
+  // a proposal is the same stage and the same kind of ask. It has no sender and it can outlive the
+  // task being closed, so it is judged before either of those gates.
+  if (proposal) return "reply";
   if (hasSender && kind === "reply" && !["sent", "not needed"].includes(reply)) return "reply";
   if (["done", "dropped"].includes(task)) return "task";
   if (agent && agent !== "not started") return "agent";

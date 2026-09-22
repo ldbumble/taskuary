@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
-  agentPhase, focusStage, ownerControlsCompletion, pendingReplyReview, replyPhase, sentReplyReview, taskPhase, timelinePhases,
+  agentPhase, focusStage, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, sentReplyReview, taskPhase, timelinePhases,
 } from "../src/taskLifecycle.js";
 
 test("task, agent and reply phases remain independent", () => {
@@ -128,4 +128,24 @@ test("needs you is the one phase that wears the loud colour", () => {
   assert.match(ui, /if \(value === "needs you"\) return LC\.needsYou;/);
   // ...and only that one: a draft waiting for a yes is not an agent blocked on you
   assert.match(ui, /if \(value === "draft ready" \|\| value === "approval needed" \|\| value === "ready"\) return LC\.you;/);
+});
+
+// A PROPOSAL IS A DECISION TOO. A playbook drafted after a coding job, or a setting proposed in
+// chat, has no sender and still needs a yes - so the stage cannot be gated on there being someone
+// to reply to, and the page cannot open folded over the only thing asking for you.
+test("a proposal waiting on you opens the stage, sender or no sender", () => {
+  const p = { kind: "coding", task: "open", agent: "not started", reply: "not drafted",
+              hasSender: false, proposal: true };
+  assert.equal(focusStage(p), "reply");
+  assert.equal(focusStage({ ...p, proposal: false }), "task");
+  assert.equal(focusStage({ ...p, task: "done" }), "reply", "a closed task still owes the yes");
+});
+
+test("proposals are not the reply, and the reply is not a proposal", () => {
+  const reviews = [{ ReviewId: 3, Kind: "action", Status: "pending" },
+                   { ReviewId: 2, Kind: "action", Status: "rejected" },
+                   { ReviewId: 1, Kind: "draft", Status: "pending" }];
+  assert.equal(pendingReplyReview(reviews).ReviewId, 1);
+  assert.deepEqual(pendingProposals(reviews).map((r) => r.ReviewId), [3]);
+  assert.deepEqual(pendingProposals([]), []);
 });

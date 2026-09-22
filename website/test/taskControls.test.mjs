@@ -28,7 +28,7 @@ test("each control carries the caption that names its effect on task versus agen
     assert.ok(tasks.slice(opening, at).includes(title), `${label}: caption "${title}"`);
   }
   // and the one dynamic label still says what it does in every state it can take
-  assert.match(tasks, /const replyPrimary = pendingReview \? "Edit draft in Review" : sentReview \? "Write another" : "Write reply";/);
+  assert.match(tasks, /const replyPrimary = pendingReview \? "Open the draft" : sentReview \? "Write another" : "Write reply";/);
 });
 
 test("the agent card's bar is the same bar as the task's and the reply's", () => {
@@ -121,7 +121,7 @@ test("complete, reopen, coding start and stop run the shared operations road, ne
   assert.doesNotMatch(tasks, /patch\(\{ Status: "open" \}\)/, "reopen is an operation, not a raw PATCH");
 });
 
-test("saving a result never completes the task, drafts never send, a question waits in Review", () => {
+test("saving a result never completes the task, drafts never send, a question waits on the task", () => {
   assert.match(tasks, /\/wrap`, \{ close: false \}/);
   assert.match(tasks, /\/reply`, \{ draft: generate \}/);
   assert.match(tasks, /\/clarify`, \{ body: text/);

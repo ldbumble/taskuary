@@ -22,6 +22,7 @@ import { progressLine } from "./checklist.js";
 import { deliveryCc, deliveryFiles, replyContext } from "./replyDelivery.js";
 import { sizeText } from "./replyFiles.js";
 import { completionTransition, cutAway, filterForSelectedState } from "./taskFilter.js";
+import ReviewDecision from "./ReviewDecision.jsx";
 import { onLive } from "./live.js";
 import { pollWhileActive } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS } from "./theme.jsx";
@@ -50,7 +51,7 @@ import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { agentWorkspaceMode } from "./taskWorkspace.js";
 import { ASK_TAG } from "./newTask.js";
 import {
-  agentPhase, focusStage, ownerControlsCompletion, pendingReplyReview, replyPhase, sentReplyReview, taskPhase,
+  agentPhase, focusStage, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, sentReplyReview, taskPhase,
 } from "./taskLifecycle.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
@@ -93,7 +94,7 @@ const KIND_OPTIONS = [
   { key: "task", label: "your task", hint: "yours to do - nothing works it, and it is not on the Board" },
   { key: "general", label: "agent · general", hint: "research, writing, analysis, planning - an agent runs it without a repository" },
   { key: "coding", label: "agent · coding", hint: "the configured CLI in a repository terminal" },
-  { key: "reply", label: "reply", hint: "drafted by the model triage uses and approved in Review - it never opens a session" },
+  { key: "reply", label: "reply", hint: "drafted by the model triage uses and approved on the task - it never opens a session" },
 ];
 const KINDS = KIND_OPTIONS.map((o) => o.key);
 const kindLabel = (kind) => KIND_OPTIONS.find((o) => o.key === kind)?.label || kind;
@@ -154,7 +155,7 @@ const askedAgo = (t) => {
   return `asked you ${mins < 60 ? `${mins}m` : `${Math.round(mins / 60)}h`} ago`;
 };
 
-export default function TasksView({ selected, onSelect, onChanged, autostart, onAutostarted, onGoReview, onGoReports, active = true }) {
+export default function TasksView({ selected, onSelect, onChanged, autostart, onAutostarted, onGoReports, active = true }) {
   const [tasks, setTasks] = useState(null);
   // "live" on arrival: what is still on somebody's plate is what you came here for. "all"
   // opens on a list whose top is whatever finished most recently. ("" = all; the rest derive.)
@@ -609,9 +610,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   useEffect(() => { if (!liveSession) setPeek(false); }, [liveSession]);
   const liveCodingSession = !isGeneral && liveSession;
   const agentWaiting = liveSession && isWaiting(term);
-  // Proposals also live in Review and are usually newer than the reply. They have their own
-  // action card; the Reply stage must show only communication intended for the sender.
+  // Proposals are queued after the reply, so they must not be mistaken for it - but they SHARE
+  // its stage. lanes.json has one lane for both ("a reply or an action is drafted and waits for
+  // your yes"), and one lane on the rail is one section on the page (the owner, 2026-09-22: "put
+  // playbook proposal combined into the reply ready section as it's part of the approval/action").
   const pendingReview = pendingReplyReview(detail?.reviews || []);
+  const proposals = pendingProposals(detail?.reviews || []);
   const sentReview = sentReplyReview(detail?.reviews || []);
   // A successful Review send is the reply even before (or when) the external channel ingests an
   // outbound copy. Put that receipt into the task's conversation as a real-looking outgoing
@@ -649,7 +653,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       if (stale(id)) return;
       setAskSenderOpen(false); setSenderQuestion("");
       await Promise.all([loadDetail(id), loadTasks()]);
-      onChanged?.(); onGoReview?.();
+      onChanged?.();
     } catch (e) {
       if (!stale(id)) setErr(e?.response?.data?.detail || "Could not prepare the question for the sender");
     } finally { if (!stale(id)) setAskingSender(false); }
@@ -679,7 +683,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
       await api.post(`/api/messages/${sourceMessage.MessageId}/reply`, { draft: generate });
       if (stale(id)) return;
       await loadDetail(id);
-      onChanged?.(); onGoReview?.();
+      onChanged?.();
     } catch (e) { if (!stale(id)) setErr(e?.response?.data?.detail || "Could not open the reply"); }
     if (!stale(id)) setOpeningReply(false);
   };
@@ -717,7 +721,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // the envelope on the reply, read from the same Deliver blob Review reads
   const replyOf = pendingReview || sentReview;
   const replyCc = deliveryCc(replyOf), replyFiles = deliveryFiles(replyOf);
-  const replyPrimary = pendingReview ? "Edit draft in Review" : sentReview ? "Write another" : "Write reply";
+  const replyPrimary = pendingReview ? "Open the draft" : sentReview ? "Write another" : "Write reply";
   const checklist = detail?.checklist || [];
   const checklistPct = checklist.length ? (checklist.filter((i) => i.done).length / checklist.length) * 100 : 0;
   const tickItem = async (i) => {
@@ -758,6 +762,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // to a strip under a heading that says the agent is working.
   const stage = sessionView ? "agent" : (openStage || (peek ? "task" : focusStage({
     kind: t?.Kind, task: taskState, agent: agentState, reply: replyState, hasSender: !!sourceMessage,
+    proposal: proposals.length > 0,
   })));
   // only a folded heading is a control: exactly one stage is open, so clicking the open one has
   // nothing to do and must not offer a chevron that does nothing.
@@ -1562,10 +1567,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       so it carries on instead of starting over.
                     </Typography>
                     {/* the card used to name Review without offering a way to get there */}
-                    {wrapped.drafting && onGoReview && (
+                    {wrapped.drafting && (
                       <Button size="small" variant="contained" disableElevation sx={{ mt: 1 }}
                         startIcon={<ForwardToInboxIcon sx={{ fontSize: 15 }} />}
-                        onClick={onGoReview}>Read the draft in Review</Button>
+                        onClick={() => setOpenStage("reply")}>Read the draft</Button>
                     )}
                   </Box>
                 ) : workspaceMode === "live" && peek ? (
@@ -1635,97 +1640,120 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           <Button size="small" variant="contained" disableElevation disabled={!!openingReply}
                             sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
                             startIcon={<ForwardToInboxIcon sx={{ fontSize: 14 }} />}
-                            onClick={() => (pendingReview && onGoReview ? onGoReview() : openReply(false))}>
+                            onClick={() => (pendingReview ? setOpenStage("reply") : openReply(false))}>
                             {replyPrimary}</Button>
                           {!pendingReview && <Tooltip title="Generate reply — the model drafts it, nothing is sent">
                             <span><IconButton size="small" sx={{ color: ACCENT2 }} disabled={!!openingReply}
                               onClick={() => openReply(true)}><TaskuaryMark size={14} /></IconButton></span>
                           </Tooltip>}
-                          <Tooltip title="Ask sender — a question waits in Review for your approval">
+                          <Tooltip title="Ask sender — a question waits on the task for your approval">
                             <IconButton size="small" sx={{ color: "#9a7444" }} onClick={() => setAskSenderOpen(true)}>
                               <ChatBubbleOutlineIcon sx={{ fontSize: 15 }} /></IconButton>
                           </Tooltip>
                         </Box>
                       : null} />
-                  {stage === "reply" && (sourceMessage ? (
+                  {stage === "reply" && ((pendingReview || proposals.length || sourceMessage) ? (
                     <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
-                      {/* the bar comes FIRST, above the letter it acts on */}
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
-                        {pendingReview && onGoReview ? (
-                          <Button size="small" variant="contained" disableElevation sx={primaryBtn}
-                            startIcon={<ForwardToInboxIcon sx={{ fontSize: 16 }} />} onClick={onGoReview}>Edit draft in Review</Button>
-                        ) : (
-                          <>
-                            <Button size="small" variant="contained" disableElevation disabled={!!openingReply}
-                              sx={primaryBtn}
-                              startIcon={openingReply === "write" ? <CircularProgress size={12} /> : <ForwardToInboxIcon sx={{ fontSize: 16 }} />}
-                              title="Opens a draft in Review. Nothing is sent until you approve it."
-                              onClick={() => openReply(false)}>{replyPrimary}</Button>
-                            <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />
-                            <Button size="small" variant="outlined" disabled={!!openingReply} sx={barBtn}
-                              startIcon={openingReply === "generate" ? <CircularProgress size={12} /> : <TaskuaryMark size={14} />}
-                              title="Opens a draft in Review. Nothing is sent until you approve it."
-                              onClick={() => openReply(true)}>Generate reply</Button>
-                          </>
-                        )}
-                        <Button size="small" variant="outlined" sx={barBtn}
-                          startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 15, color: "#9a7444" }} />}
-                          title="Drafts a question to the sender. It waits in Review for your approval; nothing is sent now."
-                          onClick={() => setAskSenderOpen(true)}>Ask sender</Button>
-                        <Box sx={{ flex: 1, minWidth: 12 }} />
-                        <Typography variant="caption" sx={{ color: FAINT, textAlign: "right", maxWidth: 320 }}>
-                          {/* no More button: with these on the surface there is nothing left to hide */}
-                          {pendingReview
-                            ? "Nothing is sent until you approve it in Review."
-                            : sentReview
-                            ? `Sent${sentReview.DecidedAt ? ` · ${fmtDateTime(sentReview.DecidedAt)}` : ""}. ${completionIsManual ? "The task remains under your control." : "The automatic task can now be complete."}`
-                            : "A reply is optional. Starting or stopping an agent does not send one."}
-                        </Typography>
-                      </Box>
-                      {/* THE ENVELOPE, above the letter - the same three facts Review stacks over the
-                          same draft, read from the same Deliver blob (replyDelivery.js). Read-only
-                          here on purpose: Edit draft in Review is the button beside it, and a CC you
-                          could change on a card with no Send would have nowhere to go. */}
-                      <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mt: 1.1, minWidth: 0 }}>
-                        <Typography sx={{ color: ACCENT2, fontSize: 9.5, fontWeight: 800, letterSpacing: "1.5px", flexShrink: 0 }}>TO</Typography>
-                        <Typography variant="body2" noWrap sx={{ color: INK, fontWeight: 650 }}>
-                          {replyContext(pendingReview || sentReview || sourceMessage)}
-                        </Typography>
-                      </Box>
-                      {replyCc.length > 0 && (
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, mt: 0.6, flexWrap: "wrap", minWidth: 0 }}>
-                          <Typography sx={{ color: ACCENT2, fontSize: 9.5, fontWeight: 800, letterSpacing: "1.5px", flexShrink: 0 }}>CC</Typography>
-                          {replyCc.map((a) => (
-                            <Box key={a} sx={{ px: 0.8, py: 0.15, borderRadius: 99, bgcolor: "#eef1ec", border: "1px solid #d9e0d6" }}>
-                              <Typography sx={{ fontSize: 11.5, color: INK }}>{a}</Typography>
+                      {/* the bar comes FIRST, above the letter it acts on. What it no longer holds is
+                          "Edit draft in Review": the draft is right here, and a button whose whole job
+                          was sending you to another tab to do this card's own job is gone. */}
+                      {sourceMessage && (
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
+                          {!pendingReview && (
+                            <>
+                              <Button size="small" variant="contained" disableElevation disabled={!!openingReply}
+                                sx={primaryBtn}
+                                startIcon={openingReply === "write" ? <CircularProgress size={12} /> : <ForwardToInboxIcon sx={{ fontSize: 16 }} />}
+                                title="Opens a draft here. Nothing is sent until you approve it."
+                                onClick={() => openReply(false)}>{replyPrimary}</Button>
+                              <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />
+                              <Button size="small" variant="outlined" disabled={!!openingReply} sx={barBtn}
+                                startIcon={openingReply === "generate" ? <CircularProgress size={12} /> : <TaskuaryMark size={14} />}
+                                title="Opens a draft here. Nothing is sent until you approve it."
+                                onClick={() => openReply(true)}>Generate reply</Button>
+                            </>
+                          )}
+                          <Button size="small" variant="outlined" sx={barBtn}
+                            startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 15, color: "#9a7444" }} />}
+                            title="Drafts a question to the sender. It waits here for your approval; nothing is sent now."
+                            onClick={() => setAskSenderOpen(true)}>Ask sender</Button>
+                          <Box sx={{ flex: 1, minWidth: 12 }} />
+                          <Typography variant="caption" sx={{ color: FAINT, textAlign: "right", maxWidth: 320 }}>
+                            {/* no More button: with these on the surface there is nothing left to hide */}
+                            {pendingReview
+                              ? "Nothing is sent until you approve it."
+                              : sentReview
+                              ? `Sent${sentReview.DecidedAt ? ` · ${fmtDateTime(sentReview.DecidedAt)}` : ""}. ${completionIsManual ? "The task remains under your control." : "The automatic task can now be complete."}`
+                              : "A reply is optional. Starting or stopping an agent does not send one."}
+                          </Typography>
+                        </Box>
+                      )}
+                      {/* THE DECISION ITSELF, on the task that owns it - the same component the review
+                          queue mounts, so two surfaces cannot say different things about one draft. */}
+                      {pendingReview ? (
+                        <ReviewDecision review={pendingReview}
+                          onChanged={() => { loadDetail(selected); onChanged?.(); }} />
+                      ) : (
+                        <>
+                          {/* THE ENVELOPE over what was sent, read from the same Deliver blob
+                              (replyDelivery.js). Read-only: this one is history, not a decision. */}
+                          <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mt: 1.1, minWidth: 0 }}>
+                            <Typography sx={{ color: ACCENT2, fontSize: 9.5, fontWeight: 800, letterSpacing: "1.5px", flexShrink: 0 }}>TO</Typography>
+                            <Typography variant="body2" noWrap sx={{ color: INK, fontWeight: 650 }}>
+                              {replyContext(sentReview || sourceMessage)}
+                            </Typography>
+                          </Box>
+                          {replyCc.length > 0 && (
+                            <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, mt: 0.6, flexWrap: "wrap", minWidth: 0 }}>
+                              <Typography sx={{ color: ACCENT2, fontSize: 9.5, fontWeight: 800, letterSpacing: "1.5px", flexShrink: 0 }}>CC</Typography>
+                              {replyCc.map((a) => (
+                                <Box key={a} sx={{ px: 0.8, py: 0.15, borderRadius: 99, bgcolor: "#eef1ec", border: "1px solid #d9e0d6" }}>
+                                  <Typography sx={{ fontSize: 11.5, color: INK }}>{a}</Typography>
+                                </Box>
+                              ))}
                             </Box>
-                          ))}
-                        </Box>
+                          )}
+                          {replyFiles.length > 0 && (
+                            <Box sx={{ display: "flex", alignItems: "center", gap: 0.7, mt: 0.6, flexWrap: "wrap" }}>
+                              {replyFiles.map((f) => (
+                                <Chip key={f.name} size="small" icon={<AttachFileIcon sx={{ fontSize: 13 }} />}
+                                  label={f.size ? `${f.name} · ${sizeText(f.size)}` : f.name}
+                                  sx={{ height: 21, fontSize: 10.5, bgcolor: PANEL2, maxWidth: 320 }} />
+                              ))}
+                            </Box>
+                          )}
+                          {sentReview?.DraftText && (
+                            <Box sx={{ bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.25,
+                              px: 1.1, py: 0.85, mt: 0.9 }}>
+                              <Typography variant="overline" sx={{ color: FAINT, fontSize: 8.5,
+                                fontWeight: 750, letterSpacing: 1.25 }}>What was sent</Typography>
+                              <Typography variant="body2" sx={{ color: DIM, whiteSpace: "pre-wrap",
+                                overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 3,
+                                WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                                {sentReview.DraftText}</Typography>
+                            </Box>
+                          )}
+                        </>
                       )}
-                      {replyFiles.length > 0 && (
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 0.7, mt: 0.6, flexWrap: "wrap" }}>
-                          {replyFiles.map((f) => (
-                            <Chip key={f.name} size="small" icon={<AttachFileIcon sx={{ fontSize: 13 }} />}
-                              label={f.size ? `${f.name} · ${sizeText(f.size)}` : f.name}
-                              sx={{ height: 21, fontSize: 10.5, bgcolor: PANEL2, maxWidth: 320 }} />
+                      {/* A PROPOSAL IS THE SAME KIND OF ASK, so it shares this section rather than
+                          taking a fourth stage: lanes.json has one `approve` lane for a reply and an
+                          action alike, and one lane on the rail is one section on the page. */}
+                      {proposals.length > 0 && (
+                        <Box sx={{ mt: 1.4, pt: 1.1, borderTop: `1px solid ${BORDER}` }}>
+                          <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.25,
+                            fontSize: 9, fontWeight: 750, display: "block", mb: 0.5 }}>
+                            {proposals.length === 1 ? "Also waiting on you" : `Also waiting on you · ${proposals.length}`}
+                          </Typography>
+                          {proposals.map((p) => (
+                            <ReviewDecision key={p.ReviewId} review={p}
+                              onChanged={() => { loadDetail(selected); onChanged?.(); }} />
                           ))}
-                        </Box>
-                      )}
-                      {(pendingReview?.DraftText || (sentReview && sentReview.DraftText)) && (
-                        <Box sx={{ bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.25,
-                          px: 1.1, py: 0.85, mt: 0.9 }}>
-                          <Typography variant="overline" sx={{ color: FAINT, fontSize: 8.5,
-                            fontWeight: 750, letterSpacing: 1.25 }}>{pendingReview ? "Current draft" : "What was sent"}</Typography>
-                          <Typography variant="body2" sx={{ color: DIM, whiteSpace: "pre-wrap",
-                            overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 3,
-                            WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                            {(pendingReview || sentReview).DraftText}</Typography>
                         </Box>
                       )}
                     </Box>
                   ) : (
                     <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.9 }}>
-                      No inbound sender is attached to this task, so there is nothing to reply to.
+                      Nothing is waiting on you here, and no inbound sender is attached to this task.
                     </Typography>
                   ))}
                 </Box>}
@@ -1888,7 +1916,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
         <DialogTitle>Ask the sender · {detail?.ref}</DialogTitle>
         <DialogContent sx={{ pt: "8px !important" }}>
           <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
-            Write the one fact the agent or task needs. This becomes a clarification draft in Review; it is not sent until you approve it.
+            Write the one fact the agent or task needs. This becomes a clarification draft on the task; it is not sent until you approve it.
             The task stays open while you wait for the sender's answer.
           </Typography>
           <TextField autoFocus fullWidth multiline minRows={3} label="Question for the sender"
@@ -1899,7 +1927,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           <Button onClick={() => setAskSenderOpen(false)} disabled={askingSender}>Cancel</Button>
           <Button variant="contained" disableElevation onClick={askSender}
             disabled={askingSender || !senderQuestion.trim()}>
-            {askingSender ? <CircularProgress size={15} /> : "Put in Review"}
+            {askingSender ? <CircularProgress size={15} /> : "Put it on the task"}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1953,7 +1981,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
             </Box>
           )}
           <Typography variant="caption" sx={{ color: DIM }}>
-            To do stays on your list. General / non-coding opens the visual assistant. Coding opens the agent's repository terminal. Reply creates a draft in Review.
+            To do stays on your list. General / non-coding opens the visual assistant. Coding opens the agent's repository terminal. Reply creates a draft on the task.
           </Typography>
         </DialogContent>
         <DialogActions>

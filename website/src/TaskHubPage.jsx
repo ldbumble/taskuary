@@ -447,7 +447,6 @@ export default function TaskHubPage() {
             <Box sx={{ display: tab === "Tasks" ? "block" : "none" }}>
               <TasksView key={`t${tick}`} selected={selectedTask} onSelect={selectTask} active={tab === "Tasks"}
                 onChanged={refreshPending} autostart={autostart} onAutostarted={() => setAutostart(null)}
-                onGoReview={() => { refreshPending(); go("Review"); }}
                 onGoReports={(sid) => { window.location.hash = `report=${sid}`; go("Reports"); }} />
             </Box>
           )}

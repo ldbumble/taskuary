@@ -14,7 +14,7 @@ test("each control carries the caption that names its effect on task versus agen
     ["Mark task done", "Closes the task and ends the live agent session with it."],
     ["Reopen task", "Reopens the task only. No agent starts until you choose one."],
     // one ending, and it writes the session up either way (2026-09-16)
-    ["Save and end session", "The task stays open: Mark task done completes it and drafts the reply."],
+    ["Save and end session", "ends it, and drafts the reply to whoever asked. The task stays open until you complete it."],
     ["Save stopped run result", "Saves the stopped session's result and report. The task stays open."],
     // its label varies - "Write another" once a reply has already gone - but the caption does not
     // ONE reply button now, and it writes: the twin that drafted it was the thing the first one
@@ -154,4 +154,13 @@ test("a task nobody sent offers no reply to write", () => {
   assert.match(tasks, /const replyMessage = hasCorrespondent\(sourceMessage\) \? sourceMessage : null;/);
   assert.match(tasks, /api\.post\(`\/api\/messages\/\$\{replyMessage\.MessageId\}\/reply`/);
   assert.match(tasks, /Nobody sent this one, so there is nobody to answer/);
+});
+
+test("a draft that cannot be sent says why on the card, not in a tooltip", () => {
+  // outbound.send_block writes one sentence for exactly this (PW-044) and every other surface
+  // shows it; the task page kept it in the hover of the button that replaced Send
+  const decision = fs.readFileSync(path.join(process.cwd(), "src", "ReviewDecision.jsx"), "utf8");
+  assert.match(decision, /r\.CanSend === false && \(/);
+  assert.match(decision, /No reply can be sent from here — \{r\.SendBlock/);
+  assert.match(decision, /The draft stays for you to use/);
 });

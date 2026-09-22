@@ -374,8 +374,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     await api.post(`/api/tasks/${selected}/comments`, { body: comment });
     setComment(""); loadDetail(selected);
   };
-  // Finish the AGENT RUN, not the task. It files the durable result and closes this session;
-  // task completion and any reply remain explicit controls in their own sections.
+  // Finish the AGENT RUN, not the task. It files the durable result, closes this session and drafts
+  // the reply to whoever asked (coder.wrap -> finish(keep_open=True)); completing the task stays a
+  // separate control, because what the work was worth is the owner's verdict and not the run's.
   const wrapUp = async () => {
     if (!canWrap) return;
     const id = selected;
@@ -1417,7 +1418,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           what the handover note was for.
                           Task completion stays separate (PW-217/218): this ends the AGENT. */}
                       <Button size="small" variant="outlined" sx={liveCtl} disabled={!!wrapping} startIcon={<DoneAllIcon sx={{ fontSize: 13 }} />}
-                        title="Writes up what this session did and ends it. The task stays open: Mark task done completes it and drafts the reply."
+                        title="Writes up what this session did, ends it, and drafts the reply to whoever asked. The task stays open until you complete it."
                         onClick={wrapUp}>Save and end session</Button>
 
                     </Box>

@@ -160,6 +160,16 @@ export default function ReviewDecision({ review: r, onChanged, onOpenTask }) {
       {!proposal && <ReplyFiles reviewId={r.ReviewId} files={deliveryFiles(r)}
         text={value} channel={r.Channel} onChanged={onChanged} />}
       {!proposal && <CcRow cc={ccNow} setCc={setCc} channel={r.Channel} />}
+      {/* WHY THERE IS NO SEND BUTTON, on the surface rather than under a hover. The server writes
+          this one sentence for exactly this (outbound.send_block, PW-044) and every other surface
+          shows it; here it lived only in the tooltip of the button that replaced Send, so a drafted
+          answer with nowhere to go looked like a card that had simply lost its button. The draft is
+          real and worth reading - a GitHub task with replies off is still answered, by hand. */}
+      {!proposal && r.CanSend === false && (
+        <Typography variant="caption" sx={{ display: "block", color: DIM, mb: 0.5 }}>
+          No reply can be sent from here — {r.SendBlock || "this channel cannot be replied to"}. The draft stays for you to use.
+        </Typography>
+      )}
       <TextField fullWidth multiline minRows={2} maxRows={r.Kind === "action" ? 24 : 8}
         value={value} onChange={(e) => setText(e.target.value)}
         placeholder={r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — hit Draft with AI"}

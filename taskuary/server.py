@@ -217,7 +217,7 @@ async def token_gate(request: Request, call_next):
     # ...and a request some OTHER page told the browser to make is not the owner asking, whatever
     # token the browser had lying around. The Intuit callback is the one cross-site arrival by
     # design - a redirect from their site, proving itself with the one-time state it was issued.
-    elif (request.url.path.startswith('/api') and request.url.path not in ('/api/quickbooks/callback', '/api/zoho/callback')
+    elif (request.url.path.startswith('/api') and request.url.path not in ('/api/quickbooks/callback', '/api/zoho/callback', '/api/linkedin/callback')
           and not guard.origin_ok(request.headers)):
         logger.warning(f'refused {request.method} {request.url.path} from origin {request.headers.get("origin")!r}')
         return JSONResponse({'detail': 'this request came from another site. Taskuary answers its own '
@@ -231,7 +231,7 @@ async def token_gate(request: Request, call_next):
         # It proves itself with the one-time state it was issued (quickbooks_authorize), not the token.
         file_read = request.url.path.startswith(('/api/attachments/', '/api/task-artifacts/'))
         if not (file_read and guard.token_matches(request.query_params.get('token'), tok)) \
-                and request.url.path not in ('/api/quickbooks/callback', '/api/zoho/callback'):
+                and request.url.path not in ('/api/quickbooks/callback', '/api/zoho/callback', '/api/linkedin/callback'):
             # In JSON, like every other refusal: an HTML body left `detail` undefined, so a tab that
             # was open across a token change answered every click with whichever screen's generic
             # "that did not work" fallback happened to be nearest (2026-09-10 audit).
@@ -4558,6 +4558,63 @@ def zoho_callback(code: str = None, state: str = '', error: str = None):
         store.audit('connector', cid, 'zoho_connected', ACTOR, detail={'organization_id': first.get('organization_id')})
     except Exception as e: return page(str(e)[:300], False)
     return page(f'Zoho Invoice organization {first.get("name") or first.get("organization_id")} is connected. Press Test on the card to verify it.')
+
+# LinkedIn takes the same local OAuth road as QuickBooks and Zoho. What differs is the end of it:
+# there is no company or organization to choose, and the token that arrives IS the card's secret
+# rather than a refresh token, because LinkedIn grants refresh tokens only to approved apps.
+_LI_STATES = {}
+
+@app.get('/api/connectors/{cid}/linkedin/status')
+def linkedin_status(cid: int):
+    from . import linkedin
+    c = store.get_connector(cid, with_secret=True)
+    if not c or c['Type'] != 'linkedin': raise HTTPException(404, 'not a LinkedIn connector')
+    conf = json.loads(c.get('ConfigJson') or '{}')
+    return {'redirect_uri': linkedin.redirect_uri(cfg['server']), 'connected': bool(c.get('Secret')),
+            'has_app': bool(conf.get('client_id') and conf.get('client_secret')),
+            'member': conf.get('member_name') or '', 'days_left': linkedin.days_left(conf)}
+
+@app.get('/api/connectors/{cid}/linkedin/authorize')
+def linkedin_authorize(cid: int):
+    from . import linkedin
+    c = store.get_connector(cid)
+    if not c or c['Type'] != 'linkedin': raise HTTPException(404, 'not a LinkedIn connector')
+    nonce = secrets.token_urlsafe(16); _LI_STATES[cid] = (nonce, time.time())
+    try: return {'url': linkedin.authorize_url(json.loads(c.get('ConfigJson') or '{}'),
+                                               linkedin.redirect_uri(cfg['server']), f'tq-{cid}-{nonce}')}
+    except linkedin.LinkedInError as e: raise HTTPException(409, str(e))
+
+@app.get('/api/linkedin/callback', response_class=HTMLResponse)
+def linkedin_callback(code: str = None, state: str = '', error: str = None,
+                      error_description: str = None):
+    from . import linkedin
+    from html import escape as _esc
+    csp = {'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'"}
+    page = lambda msg, ok=True: HTMLResponse(f'<!doctype html><meta charset=utf-8><title>Taskuary</title><body style="font:15px system-ui;padding:40px;color:#262521;background:#f6f4f1">'
+        f'<p style="font-weight:700">{"Connected" if ok else "Not connected"}</p><p>{_esc(str(msg))}</p><p style="color:#6e685f">You can close this tab and go back to Taskuary.</p>', headers=csp)
+    if error: return page(f'LinkedIn said: {error_description or error}', False)
+    if not (code and state.startswith('tq-')): return page('the callback came back without a code', False)
+    try: cid, nonce = int(state.split('-')[1]), state.split('-', 2)[2]
+    except (ValueError, IndexError): return page('bad state', False)
+    issued = _LI_STATES.pop(cid, None)
+    if not issued or issued[0] != nonce or time.time() - issued[1] > 900:
+        return page('this Connect link expired; press Connect on the LinkedIn card again', False)
+    c = store.get_connector(cid, with_secret=True)
+    if not c or c['Type'] != 'linkedin': return page('no such LinkedIn card', False)
+    try:
+        conf = linkedin.connection(store, cid)
+        linkedin.exchange_code(conf, code, linkedin.redirect_uri(cfg['server']))
+        # name the member on the card straight away: "Connected" over a card that cannot say WHO
+        # is connected is the failure mode of every OAuth button
+        me = linkedin.whoami(conf)
+        linkedin._save(conf, member_name=me.get('name') or '', member_urn=me.get('author') or '')
+        store.save_connector({'ConnectorId': cid, 'Active': True}, ACTOR)
+        store.audit('connector', cid, 'linkedin_connected', ACTOR, detail={'member': me.get('name') or ''})
+    except Exception as e: return page(str(e)[:300], False)
+    left = linkedin.days_left(json.loads((store.get_connector(cid) or {}).get('ConfigJson') or '{}'))
+    return page(f'{me.get("name") or "Your LinkedIn account"} is connected'
+                + (f' - the token lasts {left} more days' if left else '')
+                + '. Press Test on the card to verify it.')
 
 @app.get('/api/connectors/{cid}/zoho/customers')
 def zoho_customers(cid: int):

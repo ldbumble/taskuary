@@ -15,11 +15,17 @@ THE TWO DOORS TO w_member_social, because picking the wrong one is weeks of your
                       per use case, and rejection is terminal for that app - you must make a new
                       one. This is the door for posting as an ORGANISATION. We do not use it.
 
-CREDENTIALS. The card takes an access token, not a client id and secret, on purpose: LinkedIn has
-no device-code flow, so a desktop app either ships a redirect listener or asks for a token that
-LinkedIn's own portal will generate for you (My Apps -> Auth -> OAuth 2.0 token generator). The
-token is short-lived (60 days), which the card says, and a refresh_token is stored when the owner
-has one so a later version can renew it without asking again.
+CREDENTIALS ARE A SIGN-IN, not a pasted token. LinkedIn has no device-code flow, so the choice is
+a redirect listener or making the owner fetch a token by hand from the app's own portal. Taskuary
+already serves a local port, so it takes the redirect: the card holds the app's client id and
+secret, Connect opens LinkedIn's consent screen, and the code comes back to
+/api/linkedin/callback - the same road QuickBooks and Zoho Invoice take, down to the one-time
+state that proves the callback answers a Connect we actually started.
+
+The access token that arrives IS the card's secret. It lasts 60 days, so the card keeps its expiry
+and says how long is left rather than waiting for a 401 to explain itself. LinkedIn grants a
+refresh token only to approved apps; when one arrives it is kept and spent automatically, and when
+one does not, reconnecting is a button rather than a trip back to the portal.
 
 THE AUTHOR URN is not something a person can paste from memory: it is `urn:li:person:{sub}` where
 `sub` comes from the OIDC userinfo endpoint. `linkedin_me` fetches it, and `linkedin_post` calls
@@ -27,6 +33,8 @@ that itself rather than making the owner find it - a card that needs a hand-copi
 card nobody sets up twice.
 """
 import json
+from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
 
 import requests
 
@@ -59,6 +67,79 @@ def _fail(r):
                            'Check the token has not expired (they last 60 days) and that the app '
                            'has the Share on LinkedIn product added, which grants w_member_social.')
     raise RuntimeError(f'LinkedIn returned {r.status_code}: {said}')
+
+
+# What a post needs (w_member_social) plus who is posting (openid/profile). These are the scopes
+# the SELF-SERVE "Share on LinkedIn" product grants - asking for more here is what sends an app
+# into Community Management review, where a rejection is terminal.
+SCOPES = 'openid profile email w_member_social'
+AUTH = 'https://www.linkedin.com/oauth/v2'
+
+
+class LinkedInError(RuntimeError): pass
+
+
+def connection(store, connector_id=None) -> dict:
+    """The card as a cfg the OAuth helpers can write back through - `_store`/`_cid` are the handle
+    _save needs, the same shape zoho.connection carries."""
+    from .reports import _card, _connector
+    cfg = _card(store, 'linkedin', 'token', connector_id)
+    c = _connector(store, 'linkedin', connector_id)
+    return {**cfg, '_store': store, '_cid': (c or {}).get('ConnectorId')}
+
+
+def redirect_uri(server_cfg: dict) -> str:
+    """Where LinkedIn sends the code back. It must be registered on the app's Auth tab EXACTLY,
+    so the card shows this string rather than describing it."""
+    return f"http://localhost:{server_cfg.get('port') or 7787}/api/linkedin/callback"
+
+
+def authorize_url(cfg: dict, redirect: str, state: str) -> str:
+    if not cfg.get('client_id'):
+        raise LinkedInError('add the Client ID and Client Secret from developer.linkedin.com first')
+    return AUTH + '/authorization?' + urlencode({
+        'response_type': 'code', 'client_id': cfg['client_id'],
+        'redirect_uri': redirect, 'state': state, 'scope': SCOPES})
+
+
+def _save(cfg, token=None, **values):
+    store, cid = cfg.get('_store'), cfg.get('_cid')
+    if not (store and cid): return
+    row = store.get_connector(cid) or {}
+    conf = json.loads(row.get('ConfigJson') or '{}'); conf.update({k: v for k, v in values.items() if v})
+    body = {'ConnectorId': cid, 'ConfigJson': json.dumps(conf)}
+    if token: body['Secret'] = token; cfg['token'] = token
+    store.save_connector(body, 'linkedin')
+    cfg.update(conf)
+
+
+def exchange_code(cfg: dict, code: str, redirect: str) -> dict:
+    """The code for a token, once. LinkedIn answers 200 with an `error` field for some failures
+    rather than a 4xx, so the body is read either way - trusting the status alone stores an empty
+    token and the card then says it is connected."""
+    r = requests.post(AUTH + '/accessToken', timeout=TIMEOUT,
+                      headers={'Content-Type': 'application/x-www-form-urlencoded'},
+                      data={'grant_type': 'authorization_code', 'code': code, 'redirect_uri': redirect,
+                            'client_id': cfg.get('client_id'), 'client_secret': cfg.get('client_secret')})
+    try: j = r.json()
+    except ValueError: j = {}
+    if r.status_code != 200 or j.get('error') or not j.get('access_token'):
+        said = j.get('error_description') or j.get('error') or (r.text or '')[:240]
+        raise LinkedInError(f'LinkedIn refused the code ({r.status_code}): {said}')
+    expires = int(j.get('expires_in') or 0)
+    _save(cfg, j['access_token'],
+          expires_at=(datetime.now(timezone.utc) + timedelta(seconds=expires)).isoformat() if expires else '',
+          refresh_token=j.get('refresh_token') or '')
+    return j
+
+
+def days_left(cfg: dict):
+    """How long this token has, or None when nothing said. A card that goes quiet after 60 days is
+    a card the owner reconnects at the worst possible moment."""
+    at = str(cfg.get('expires_at') or '').strip()
+    if not at: return None
+    try: return max(0, (datetime.fromisoformat(at) - datetime.now(timezone.utc)).days)
+    except ValueError: return None
 
 
 def whoami(cfg) -> dict:

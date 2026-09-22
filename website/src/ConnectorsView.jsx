@@ -771,16 +771,21 @@ const DATA_META = {
       "Give the project; a dataset is optional and lets a query name tables without qualifying them.",
       "Test runs SELECT 1."] },
   linkedin: { title: "LinkedIn", types: ["linkedin_me", "linkedin_post"],
-    fields: [["API version (blank = 202609) — LinkedIn dates its REST surface by month", "version"]],
-    secretLabel: "access token (write-only) — from the app's OAuth 2.0 token generator",
+    fields: [["LinkedIn app client id (developer.linkedin.com → your app → Auth)", "client_id"],
+      ["LinkedIn app client secret", "client_secret"],
+      ["API version (blank = 202609) — LinkedIn dates its REST surface by month", "version"]],
+    secretLabel: "access token (write-only) — Connect fills it in",
+    connect: { label: "Sign in with LinkedIn", status: (cid) => `/api/connectors/${cid}/linkedin/status`,
+      start: (cid) => `/api/connectors/${cid}/linkedin/authorize`,
+      text: "Opens LinkedIn's consent screen in a new tab. The token returns directly to Taskuary." },
     desc: "Publish to your own LinkedIn feed. A draft an agent writes never posts itself: the card ships at authority READ, so every post is a proposal you approve on the task.",
     howto: ["Create an app at developer.linkedin.com/apps. It must be associated with a LinkedIn Page you are an admin of — that is LinkedIn's rule, not ours, and there is no way around it.",
       "On the app's Products tab, add 'Share on LinkedIn'. It is SELF-SERVE and granted immediately. Do NOT request Community Management: that one needs a registered legal entity and a narrated screencast, and a rejection is terminal for the app.",
-      "Auth tab → OAuth 2.0 token generator → tick w_member_social and openid/profile → Generate. Paste the token under Credentials (write-only).",
-      "Test calls whoami and comes back with your name — that is the token proving itself.",
-      "Tokens last 60 days. When one expires the card fails with LinkedIn's own words and you generate another the same way.",
-      "Your author id is never typed in: it is fetched from the token each time a post goes out."],
-    agent: ["The LinkedIn app is the owner's to create (developer.linkedin.com/apps, associated with a Page they admin, with the 'Share on LinkedIn' product added). Ask for an access token from the Auth tab's OAuth 2.0 token generator with scope w_member_social, and save it as Secret.",
+      "On the Auth tab, add the redirect URL shown here EXACTLY, then paste the client id and secret below and Save.",
+      "Press Sign in with LinkedIn. Consent opens in a new tab and the token comes back on its own — nothing to copy.",
+      "Tokens last 60 days and the card says how many are left. When one runs out, Reconnect is the whole of it.",
+      "Your author id is never typed in: it is read from the token when a post goes out."],
+    agent: ["The LinkedIn app is the owner's to create (developer.linkedin.com/apps, associated with a Page they admin, with the 'Share on LinkedIn' product added). Ask them to paste the client id and secret and press Sign in with LinkedIn — do NOT ask for a token, and never print one.",
       "Test (POST {base}/api/connectors/{cid}/test{hdr}) — it answers with the member's name.",
       "You may NOT publish. Draft the post and propose it: TASKUARY-PROPOSE {\"action\": \"run_tool\", \"type\": \"linkedin_post\", \"text\": \"<the post>\"}. Show the full text — the owner is approving something that goes out under their own name.",
       "SETUP DONE."] },
@@ -2446,7 +2451,9 @@ function OAuthConnect({ conn, meta, reload }) {
       )}
       {st?.redirect_uri && (
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75, lineHeight: 1.6 }}>
-          The Intuit app must list this redirect URI, exactly: <Box component="code" sx={{ ...mono, fontSize: 11, color: INK, bgcolor: "#fff", px: 0.6, borderRadius: 0.75, border: `1px solid ${BORDER}` }}>{st.redirect_uri}</Box>
+          {/* named from the card, not hardcoded: three providers share this box now, and it told
+              a Zoho owner their INTUIT app needed the URI. */}
+          The {meta.title} app must list this redirect URL, exactly: <Box component="code" sx={{ ...mono, fontSize: 11, color: INK, bgcolor: "#fff", px: 0.6, borderRadius: 0.75, border: `1px solid ${BORDER}` }}>{st.redirect_uri}</Box>
         </Typography>
       )}
       {err && <Typography variant="body2" sx={{ color: "#6b2733", mt: 0.75 }}>✗ {err}</Typography>}

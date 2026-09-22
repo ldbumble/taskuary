@@ -607,7 +607,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const liveSession = !!term?.alive;
   // what fills the page: the session, unless the owner stepped back to the task behind it (peek)
   const sessionView = liveSession && !peek;
-  useEffect(() => { if (!liveSession) setPeek(false); }, [liveSession]);
+  // ...and a stage you opened by hand does not outlive the session you opened it on. The agent
+  // finishes, its wrap-up writes the reply (coder.wrap), and the page went on showing the closed
+  // pane with that draft folded away below (the owner, 2026-09-22: "when you hit session closed a
+  // reply should automatically pop up"). Cleared, focusStage picks - and a draft ready outranks all.
+  useEffect(() => { if (!liveSession) { setPeek(false); setOpenStage(null); } }, [liveSession]);
   const liveCodingSession = !isGeneral && liveSession;
   const agentWaiting = liveSession && isWaiting(term);
   // Proposals are queued after the reply, so they must not be mistaken for it - but they SHARE
@@ -1649,12 +1653,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           <Button size="small" variant="contained" disableElevation disabled={!!openingReply}
                             sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
                             startIcon={<ForwardToInboxIcon sx={{ fontSize: 14 }} />}
-                            onClick={() => (pendingReview ? setOpenStage("reply") : openReply(false))}>
+                            onClick={() => (pendingReview ? setOpenStage("reply") : openReply(true))}>
                             {replyPrimary}</Button>
-                          {!pendingReview && <Tooltip title="Generate reply — the model drafts it, nothing is sent">
-                            <span><IconButton size="small" sx={{ color: ACCENT2 }} disabled={!!openingReply}
-                              onClick={() => openReply(true)}><TaskuaryMark size={14} /></IconButton></span>
-                          </Tooltip>}
                           <Tooltip title="Ask sender — a question waits on the task for your approval">
                             <IconButton size="small" sx={{ color: "#9a7444" }} onClick={() => setAskSenderOpen(true)}>
                               <ChatBubbleOutlineIcon sx={{ fontSize: 15 }} /></IconButton>
@@ -1668,19 +1668,17 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           was sending you to another tab to do this card's own job is gone. */}
                       {sourceMessage && (
                         <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
+                          {/* ONE button, and it WRITES. "Write reply" opened an empty box and left the
+                              model behind a second press ("you should not have to hit draft with AI again
+                              to make it go" - the owner, 2026-09-22), and the twin beside it did the thing
+                              the first one was named for. The box is still editable, and Redraft below
+                              writes it again. */}
                           {!pendingReview && (
-                            <>
-                              <Button size="small" variant="contained" disableElevation disabled={!!openingReply}
-                                sx={primaryBtn}
-                                startIcon={openingReply === "write" ? <CircularProgress size={12} /> : <ForwardToInboxIcon sx={{ fontSize: 16 }} />}
-                                title="Opens a draft here. Nothing is sent until you approve it."
-                                onClick={() => openReply(false)}>{replyPrimary}</Button>
-                              <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />
-                              <Button size="small" variant="outlined" disabled={!!openingReply} sx={barBtn}
-                                startIcon={openingReply === "generate" ? <CircularProgress size={12} /> : <TaskuaryMark size={14} />}
-                                title="Opens a draft here. Nothing is sent until you approve it."
-                                onClick={() => openReply(true)}>Generate reply</Button>
-                            </>
+                            <Button size="small" variant="contained" disableElevation disabled={!!openingReply}
+                              sx={primaryBtn}
+                              startIcon={openingReply ? <CircularProgress size={12} /> : <ForwardToInboxIcon sx={{ fontSize: 16 }} />}
+                              title="Drafts the reply here, from this task's own context. Nothing is sent until you approve it."
+                              onClick={() => openReply(true)}>{replyPrimary}</Button>
                           )}
                           <Button size="small" variant="outlined" sx={barBtn}
                             startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 15, color: "#9a7444" }} />}

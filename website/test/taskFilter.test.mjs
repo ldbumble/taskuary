@@ -70,7 +70,9 @@ test("with a live session, X steps back to the task first and the session keeps 
   const { readFile } = await import("node:fs/promises");
   const source = await readFile(new URL("../src/TasksView.jsx", import.meta.url), "utf8");
   assert.match(source, /const sessionView = liveSession && !peek;/);
-  assert.match(source, /useEffect\(\(\) => \{ if \(!liveSession\) setPeek\(false\); \}, \[liveSession\]\);/, "the session ending puts the page back");
+  // ...and it drops a hand-picked stage with it, so the reply the wrap-up just wrote is what the
+  // page opens on rather than the pane that has finished (2026-09-22)
+  assert.match(source, /if \(!liveSession\) \{ setPeek\(false\); setOpenStage\(null\); \}/, "the session ending puts the page back");
   assert.match(source, /workspaceMode === "live" && peek \?/, "the terminal folds to a line instead of unmounting the page");
   assert.match(source, /Back to the session/);
   // the task card, the reply card, context & history and earlier runs all come back while peeking

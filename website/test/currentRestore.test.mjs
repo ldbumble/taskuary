@@ -39,3 +39,19 @@ test("the freshness poll adopts the server's Current, except while a turn of our
   assert.match(poll, /setCurrentItem\(said\);/);
   assert.match(poll, /currentRef\.current = said;/);
 });
+
+// The bracket round a batch is drawn behind its rows, between a sticky opaque band heading above it
+// and the next row below. Both edges were landing on something: its top four pixels under the
+// heading (which paints over it, so the group read as a row with its top cut off) and its label on
+// the next fyi's subject (the owner, 2026-09-22: "you don't see the on the table when choosing 4
+// fyi's? and top of the items looks cut off why?"). Geometry is measured in a browser -
+// website/batch_bracket_check.mjs against a demo server - so this pins the arithmetic behind it.
+test("a batch's bracket clears the sticky heading and leaves room for its own label", () => {
+  const view = read("AssistantView.jsx");
+  assert.match(view, /const BATCH_TAIL = \d+;/, "the gap under a bracket has a name");
+  assert.match(view, /if \(wasInBatch && !inBatch\) stackHeight \+= BATCH_TAIL;/);
+  assert.match(view, /if \(inBatch && !wasInBatch && stackHeight === 0\) stackHeight \+= 4;/);
+  assert.match(view, /top: Math\.max\(0, mem\[0\]\.top - 4\)/, "never above the stack, where the heading paints");
+  assert.match(view, /height: mem\[mem\.length - 1\]\.top \+ ROW_H \+ 1 - Math\.max\(0, mem\[0\]\.top - 4\)/,
+    "the bottom edge stays where it was when the top is clamped");
+});

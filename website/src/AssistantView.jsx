@@ -69,6 +69,7 @@ const waitingLine = (items) => {
 // overrides its lane's word - agentdone, wrapup - is judged on the word it actually shows.
 const BAND_SAYS = { reports: "report", fyi: "fyi", agents: "agent working" };
 const ROW_H = 33, CUR_H = 57;   // a Timeline row (30px + its 3px gap); the current one opens up to two lines
+const BATCH_TAIL = 13;          // the gap a bracket leaves under itself for its own label
 // what sits UNDER the bands and still has to fit: the pile's own padding, the cheer line and the
 // two quiet notes, and the scroller's bottom padding (funnelPile.FOOT_PX)
 const PILE_FOOT = FOOT_PX;
@@ -266,7 +267,19 @@ function Pile({ pile, current, onPull }) {
         // not off the band, which is what the fyi pill means. It takes real height, so the rows under
         // it move down by exactly that and the stack still measures true.
         const moreTops = [];
+        let wasInBatch = false;
         const positioned = shown.map((item) => {
+          // ...and the ROW AFTER the bracket steps down by the height of the bracket's own label, so
+          // "on the table · 4 fyi" hangs in a gap instead of being printed across the next fyi's
+          // subject (the owner, 2026-09-22). One gap, once, while a batch is up: no row is reordered
+          // and nothing above it moves, which is what "the row wears the ring where it sits" protects.
+          const inBatch = batchKeys.has(item.key);
+          // ...and when the batch OPENS the band there is nowhere above it for the bracket's own
+          // edge to go: the stack starts flush under the sticky heading. Four pixels here put the
+          // ring around the first card instead of along its top border.
+          if (inBatch && !wasInBatch && stackHeight === 0) stackHeight += 4;
+          if (wasInBatch && !inBatch) stackHeight += BATCH_TAIL;
+          wasInBatch = inBatch;
           const top = stackHeight;
           stackHeight += item.key === curKey ? CUR_H : ROW_H;
           if (byKey[item.key]) { moreTops.push({ top: stackHeight, mark: byKey[item.key] }); stackHeight += MORE_PX; }
@@ -274,8 +287,14 @@ function Pile({ pile, current, onPull }) {
         });
         // the bracket spans its members where they already are: it adds no height and moves no row
         const mem = positioned.filter(({ item }) => batchKeys.has(item.key));
+        if (mem.length && wasInBatch) stackHeight += BATCH_TAIL;      // ...the batch ends the band
+        // Its bottom edge is where it always was; its TOP is clamped into the stack. Four pixels of
+        // breathing room above the first member is four pixels UNDER the band heading, which is
+        // sticky, opaque and painted above it - so the bracket's top edge and both its corners
+        // simply were not there, and the group read as a row with its top cut off (2026-09-22).
         const bracket = mem.length
-          ? { top: mem[0].top - 4, height: mem[mem.length - 1].top + ROW_H - mem[0].top + 5 } : null;
+          ? { top: Math.max(0, mem[0].top - 4),
+              height: mem[mem.length - 1].top + ROW_H + 1 - Math.max(0, mem[0].top - 4) } : null;
         return (
           <div className="tq-pile-band" key={level} data-tq-run={level}>
             {/* the category, said once, in the one place importance exists in this product - and

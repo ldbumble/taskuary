@@ -28,7 +28,7 @@ def _preview(body, n: int) -> str:
     Every mail from outside the company opens with a security banner, so the Timeline's Message step
     read "This email was sent from outside of MFA. ** Do not click links..." on every one of them and
     never reached the message: the owner was looking at a CI failure whose summary said nothing about
-    CI (2026-09-15). triage.strip_boilerplate is already the app's one answer to this - assistant.py
+    CI (2026-09-15). triage.own_words is already the app's one answer to this - assistant.py
     imports the same pattern - so this reuses it rather than inventing a second rule.
 
     Only the head of the body is scanned: a banner sits at the top, and running the stripper over
@@ -36,10 +36,10 @@ def _preview(body, n: int) -> str:
     untouched - category_of re-reads the raw body below, because "unsubscribe" in a footer is how a
     promo is recognised.
     """
-    from .triage import strip_boilerplate
+    from .triage import own_words
     text = str(body or '')
     if not text: return ''
-    return (strip_boilerplate(text[:n * 4]) or text)[:n]
+    return (own_words(text[:n * 4]) or text)[:n]
 
 
 def idea_lane(idea: dict) -> str:

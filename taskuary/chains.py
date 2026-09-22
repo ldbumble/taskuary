@@ -61,7 +61,7 @@ def fetch_graph(tok: str, upn: str, ids: list) -> list:
     out = []
     for gid in ids:
         r = _ch.requests.get(f'{_ch.GRAPH}/users/{upn}/messages/{gid}', headers={'Authorization': f'Bearer {tok}'},
-                             timeout=30, params={'$select': _ch.MAIL_SELECT})
+                             timeout=30, params={'$select': _ch.MAIL_FULL_SELECT})
         r.raise_for_status(); out.append(r.json())
     return out
 
@@ -91,7 +91,8 @@ def _keep(store, conv: str, ext: str, m: dict, mailbox: str, before: str = None,
     own = bool(frm) and frm.lower() == str(mailbox or '').lower()
     mid = store.add_message({'TaskId': None, 'ExternalId': ext, 'ConversationId': conv, 'Channel': 'email', 'SourceName': mailbox,
                        'Subject': m.get('subject'), 'FromName': 'You' if own else m.get('from_name'), 'FromEmail': frm or None,
-                       'SentAt': m.get('sent_at'), 'BodyText': m.get('body'), 'SourceLink': m.get('source_link'),
+                       'SentAt': m.get('sent_at'), 'BodyText': m.get('body'), 'OwnText': m.get('own_text') or None,
+                       'SourceLink': m.get('source_link'),
                        'Status': 'context' if own else 'history',
                        'RecipientsJson': json.dumps({'to': list(m.get('to') or []), 'cc': list(m.get('cc') or [])})
                                          if (m.get('to') or m.get('cc')) else None})
@@ -112,7 +113,8 @@ def refresh_outlook(store, tok: str, mailbox: str, conversation_id: str, before:
             frm = (m.get('from') or {}).get('emailAddress') or {}
             atts = _ch.mail_attachments(tok, mailbox, m['id']) if m.get('hasAttachments') else None   # one extra call, only when the mail says so
             added += _keep(store, conversation_id, f"graph:{m['id']}",
-                           {'subject': m.get('subject'), 'body': _ch._body(m), 'from_name': frm.get('name'), 'from_email': frm.get('address'),
+                           {'subject': m.get('subject'), 'body': _ch._body(m), 'own_text': _ch._own(m),
+                            'from_name': frm.get('name'), 'from_email': frm.get('address'),
                             'to': _ch._addrs(m.get('toRecipients')), 'cc': _ch._addrs(m.get('ccRecipients')),
                             'sent_at': _ch._local(m.get('receivedDateTime') or ''), 'source_link': m.get('webLink')}, mailbox, before, atts)
         cov = {'complete': stopped is None, 'listed': len(listed), 'added': added, 'error': stopped}

@@ -369,10 +369,10 @@ def facts(store, item: dict) -> str:
         task_messages = [m for m in task_chain if str(m.get('Status') or '') != 'context']
     grouped = len(task_messages) > 1
     if grouped:
-        from .triage import strip_boilerplate
+        from .triage import own_words
         combined = []
         for m in task_messages:
-            body = strip_boilerplate(str(m.get('BodyText') or ''))
+            body = own_words(str(m.get('BodyText') or ''))
             combined.append(f"  {str(m.get('SentAt') or '')[:16]} "
                             f"{'YOU' if _own_word(m) else (m.get('FromName') or m.get('FromEmail') or '?')}: "
                             f"{_cut(body, 800)}")
@@ -381,8 +381,8 @@ def facts(store, item: dict) -> str:
                      + _cut('\n'.join(combined), 6_000))
     elif item.get('mid'):
         m = store.get_message(item['mid']) or {}
-        from .triage import strip_boilerplate
-        body = strip_boilerplate(str(m.get('BodyText') or item.get('preview') or ''))
+        from .triage import own_words
+        body = own_words(str(m.get('BodyText') or item.get('preview') or ''))
         if body: lines.append(f"what they wrote:\n{_cut(body, 400 if item['kind'] == 'report' else FACT_CHARS)}")   # a report's body is for the button, not the intro
         sent = store.sent_reply(message_id=item['mid']) if not item.get('tid') else None
         if sent: lines.append(f"YOU ALREADY REPLIED ({str(sent.get('DecidedAt') or sent.get('CreatedAt') or '')[:16]}): {_cut(sent.get('FinalText') or sent.get('DraftText'), 240)}")

@@ -135,7 +135,7 @@ def build(store, include_weak: bool = True) -> list:
             'id': f"m{m['MessageId']}", 'channel': m.get('Channel'), 'conv': m.get('ConversationId'), 'sent_at': m.get('SentAt'),
             'from': m.get('FromEmail'), 'from_name': m.get('FromName'),
             'from_kind': _kind_of(m.get('FromEmail'), m.get('FromName'), mine, domains),
-            'subject': m.get('Subject') or '', 'body': m.get('BodyText') or '',
+            'subject': m.get('Subject') or '', 'body': m.get('BodyText') or '', 'own_text': m.get('OwnText') or '',
             'to': msg['to'], 'cc': msg['cc'],
             'addressed_to_you': addressed_to_you(msg, mine) if rec else None,
             'recipients': (len(msg['to'] or []) + len(msg['cc'] or [])) if rec else None,

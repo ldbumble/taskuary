@@ -43,11 +43,11 @@ def _first(s, n): return ' '.join(str(s or '').split())[:n]
 
 
 def _line(r) -> str:
-    from .triage import strip_boilerplate
+    from .triage import own_words
     when = str(r.get('SentAt') or '')[:10]
     who = 'you' if r.get('Status') == 'context' else (r.get('FromName') or r.get('FromEmail') or '?')
     tag = f" · TQ-{r['TaskId']:04d}" if r.get('TaskId') else ''
-    return f"- {when} {who}: \"{_first(r.get('Subject'), 80)}\"{tag} - {_first(strip_boilerplate(str(r.get('BodyText') or '')), 160)}"
+    return f"- {when} {who}: \"{_first(r.get('Subject'), 80)}\"{tag} - {_first(own_words(str(r.get('BodyText') or '')), 160)}"
 
 
 def dossier(store, msg: dict, days: int = DAYS, exclude_mid: int = None, skip_conv: bool = False, calendar: bool = True) -> str:
@@ -105,7 +105,7 @@ def msg_of(row: dict) -> dict:
     rec = json.loads(row.get('RecipientsJson') or 'null') or {}
     return {'external_id': row.get('ExternalId'), 'channel': row.get('Channel'), 'conversation_id': row.get('ConversationId'),
             'subject': row.get('Subject'), 'from_name': row.get('FromName'), 'from_email': row.get('FromEmail'),
-            'sent_at': row.get('SentAt'), 'body': row.get('BodyText'), 'source_name': row.get('SourceName'),
+            'sent_at': row.get('SentAt'), 'body': row.get('BodyText'), 'own_text': row.get('OwnText'), 'source_name': row.get('SourceName'),
             'to': rec.get('to'), 'cc': rec.get('cc')}
 
 

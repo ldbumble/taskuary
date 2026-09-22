@@ -234,13 +234,13 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
                  f'this:\n{sty[:2500]}' if sty else ''))
     # LEARNED.md is triage's document (PW-058): what deserves a task is not how to write a reply
     if notes: system += '\n\nYour own writing instructions:\n' + '\n'.join(f'- {n}' for n in notes)
-    from .triage import strip_boilerplate
+    from .triage import sender_body
     # the writer reads the same assembled conversation triage reads (PW-054): the whole chain, history
     # included, cleaned and de-quoted under one budget, with the cut said out loud - not the last six
     # messages chopped at 4,000 characters each and nothing said about the rest
     from .ingest import exchange_lines
     lines = exchange_lines(store, {'conversation_id': last.get('ConversationId'), 'subject': last.get('Subject'), 'sent_at': None})
-    thread = '\n\n'.join(lines) if lines else f"--- {last.get('FromName') or last.get('FromEmail')} · {last.get('SentAt')} · {last.get('Channel')}\n{strip_boilerplate(str(last.get('BodyText') or ''))[:4000]}"
+    thread = '\n\n'.join(lines) if lines else f"--- {last.get('FromName') or last.get('FromEmail')} · {last.get('SentAt')} · {last.get('Channel')}\n{sender_body(str(last.get('BodyText') or ''), last.get('OwnText'), budget=4000)[0]}"
     # WHAT THE MODEL READ, stamped where it was read. Taken by the caller before this function was
     # entered, it named the thread as it stood while the job was still QUEUED - so a line that landed
     # in the seconds before the writer ran, and that the writer then answered, counted as unseen and
@@ -342,7 +342,7 @@ def draft_for_message(store, m: dict, review_id: int, llm=None) -> str:
     Same voice, same rules, same channel-awareness; the context is the message itself."""
     from .llm import build_llm
     from .ingest import notes_for
-    from .triage import strip_boilerplate
+    from .triage import sender_body
     llm = llm or build_llm(store)
     if not llm: raise RuntimeError('no AI connector is set up to write replies')
     soul = store.doc('soul') or ''
@@ -361,7 +361,7 @@ def draft_for_message(store, m: dict, review_id: int, llm=None) -> str:
     notes = writing_notes(store)                                     # explicit writing instructions only (PW-060)
     if notes: system += '\n\nYour own writing instructions:\n' + '\n'.join(f'- {n}' for n in notes)
     user = (f"Subject: {m.get('Subject') or ''}\nFrom: {m.get('FromName')} <{m.get('FromEmail')}>\n\n"
-            f"{strip_boilerplate(str(m.get('BodyText') or ''))[:4000]}")
+            f"{sender_body(str(m.get('BodyText') or ''), m.get('OwnText'), budget=4000)[0]}")
     from . import calendar as cal
     calendar = cal.context_for(store, f"{m.get('Subject') or ''} {m.get('BodyText') or ''}")
     from . import knowledge

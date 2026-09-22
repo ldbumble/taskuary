@@ -15,7 +15,7 @@ def build(store, tid: int, instruction: str = None, repo: str = None, context_bu
     """The sections, as data. `render` turns them into prompt text; callers choose what else rides."""
     from . import operations
     from .ingest import exchange_lines
-    from .triage import strip_boilerplate
+    from .triage import own_words
     t = store.get_task(tid) or {}
     msgs = [m for m in store.list_messages(tid) if m.get('Status') not in ('context', 'skipped')]
     last = msgs[-1] if msgs else None
@@ -24,7 +24,7 @@ def build(store, tid: int, instruction: str = None, repo: str = None, context_bu
         lines = exchange_lines(store, {'conversation_id': last.get('ConversationId'), 'subject': last.get('Subject'),
                                        'sent_at': None}, budget=context_budget)
         context = '\n'.join(lines)
-        if not context: context = strip_boilerplate(str(last.get('BodyText') or ''))
+        if not context: context = own_words(str(last.get('BodyText') or ''))
     atts = [a for m in msgs for a in store.list_attachments(m['MessageId']) if a.get('Path')]
     return {
         'task': f"{task_ref(tid)} - {t.get('Title') or ''}",
@@ -34,7 +34,7 @@ def build(store, tid: int, instruction: str = None, repo: str = None, context_bu
         'repository': repo or '',
         'context': context,
         'latest': {'from': (last.get('FromName') or last.get('FromEmail') or '') if last else '', 'channel': last.get('Channel') if last else '',
-                   'subject': last.get('Subject') if last else '', 'body': strip_boilerplate(str(last.get('BodyText') or '')) if last else ''},
+                   'subject': last.get('Subject') if last else '', 'body': own_words(str(last.get('BodyText') or '')) if last else ''},
         'attachments': [{'name': a.get('Name'), 'path': a.get('Path')} for a in atts[:8]],
         'message_ids': [m['MessageId'] for m in msgs],
         'revision': operations.context_revision(store, 'task', tid),

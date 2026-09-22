@@ -1392,28 +1392,30 @@
       "type": "postgresql",
       "title": "PostgreSQL",
       "group": "Databases",
-      "planned": true,
-      "desc": "Postgres databases without a hand-written URL",
+      "planned": false,
+      "desc": "Query PostgreSQL as a report or an agent tool - host, database, user, and the password as the card secret.",
       "match": [
+        "postgres",
         "postgresql"
       ]
     },
     {
       "type": "mysql",
-      "title": "MySQL",
+      "title": "MySQL / MariaDB",
       "group": "Databases",
-      "planned": true,
-      "desc": "MySQL and MariaDB databases",
+      "planned": false,
+      "desc": "Query MySQL or MariaDB as a report or an agent tool.",
       "match": [
-        "mysql"
+        "mysql",
+        "mariadb"
       ]
     },
     {
       "type": "snowflake",
       "title": "Snowflake",
       "group": "Databases",
-      "planned": true,
-      "desc": "Warehouses, queries and scheduled reports",
+      "planned": false,
+      "desc": "Query Snowflake with an account identifier, warehouse and role.",
       "match": [
         "snowflake"
       ]
@@ -1422,12 +1424,11 @@
       "type": "bigquery",
       "title": "Google BigQuery",
       "group": "Databases",
-      "planned": true,
-      "desc": "Datasets and scheduled SQL queries",
+      "planned": false,
+      "desc": "Query BigQuery by project and dataset, using the Google credentials already on the machine.",
       "match": [
-        "google bigquery",
-        "google",
-        "bigquery"
+        "bigquery",
+        "big query"
       ]
     },
     {
@@ -1456,8 +1457,8 @@
       "type": "clickhouse",
       "title": "ClickHouse",
       "group": "Databases",
-      "planned": true,
-      "desc": "Analytical databases and queries",
+      "planned": false,
+      "desc": "Query ClickHouse over HTTP - built for the analytical questions a report asks.",
       "match": [
         "clickhouse"
       ]
@@ -2212,6 +2213,47 @@
       "desc": "About 3,600 third-party endpoints behind one key, billed per call with no subscription. Search the catalogue free; every call is a proposal you approve.",
       "match": [
         "treg"
+      ]
+    },
+    {
+      "type": "oracle",
+      "title": "Oracle Database",
+      "group": "Databases",
+      "planned": true,
+      "desc": "Query Oracle through SQLAlchemy",
+      "match": [
+        "oracle"
+      ]
+    },
+    {
+      "type": "cockroachdb",
+      "title": "CockroachDB",
+      "group": "Databases",
+      "planned": true,
+      "desc": "Postgres-compatible distributed SQL",
+      "match": [
+        "cockroach",
+        "cockroachdb"
+      ]
+    },
+    {
+      "type": "duckdb",
+      "title": "DuckDB",
+      "group": "Databases",
+      "planned": true,
+      "desc": "A local analytical database over a file or parquet",
+      "match": [
+        "duckdb"
+      ]
+    },
+    {
+      "type": "neo4j",
+      "title": "Neo4j",
+      "group": "Databases",
+      "planned": true,
+      "desc": "Cypher queries against a graph database",
+      "match": [
+        "neo4j"
       ]
     }
   ]

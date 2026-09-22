@@ -687,6 +687,13 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'entra_signins': run_entra_signins, 'entra_licenses': run_entra_licenses,
             'prometheus': run_prometheus, 'datadog': run_datadog,
             'winrm': run_winrm, 'mcp': run_mcp, 'rest': run_rest,
+            # Named database cards: the same reader as 'Any database', with the dialect, the
+            # default port and the driver name filled in. All reads - see databases.py.
+            'postgresql': _lazy('databases', 'runner')('postgresql'),
+            'mysql': _lazy('databases', 'runner')('mysql'),
+            'clickhouse': _lazy('databases', 'runner')('clickhouse'),
+            'snowflake': _lazy('databases', 'runner')('snowflake'),
+            'bigquery': _lazy('databases', 'runner')('bigquery'),
             # treg over its hosted MCP: search the catalogue (free), then call one endpoint.
             # The call is a write whatever the endpoint does - it spends money, and the same
             # door reaches endpoints that publish and order.
@@ -789,7 +796,8 @@ def executor_for(type_name):
 
 # Which connector CARD owns each executor type: the s3/cloudwatch types run on the aws
 # card's keys, the blob/logs types on the azure card's app - roles and creds resolve there.
-CARD_OF = {'treg_tools': 'treg', 'treg_search': 'treg', 'treg_call': 'treg',
+CARD_OF = {'postgresql': 'postgresql', 'mysql': 'mysql', 'clickhouse': 'clickhouse', 'snowflake': 'snowflake', 'bigquery': 'bigquery', 
+           'treg_tools': 'treg', 'treg_search': 'treg', 'treg_call': 'treg',
            'linkedin_me': 'linkedin', 'linkedin_post': 'linkedin',
            's3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 'azure_logs': 'azure', 'calendar': 'outlook',
            'entra_users': 'azure', 'entra_groups': 'azure', 'entra_signins': 'azure', 'entra_licenses': 'azure',

@@ -62,6 +62,9 @@ ACTIONS = {
     # reading the portfolio are windows; placing an order is not, and the card ships at 'read'
     # (DEFAULT_SCOPE) so an agent can only ever propose one. robinhood_read additionally
     # refuses any tool the server has not marked readOnlyHint - see robinhood._call.
+    # A named database card runs SELECTs. The engine's own user is the real ceiling, so point
+    # these at a read-only account and the ladder holds even if everything above it fails.
+    'postgresql': 'read', 'mysql': 'read', 'clickhouse': 'read', 'snowflake': 'read', 'bigquery': 'read',
     # treg: the catalogue is free to read; CALLING spends money and can reach a publish or an
     # order, so it is a write on a card that ships at read - every call is a proposal.
     'treg_tools': 'read', 'treg_search': 'read', 'treg_call': 'write',
@@ -121,6 +124,7 @@ DEFAULT_SCOPE = {
     'coingecko': 'read', 'alchemy': 'read', 'frankfurter': 'read', 'yahoo': 'read', 'sec_edgar': 'read',
     'twelvedata': 'read', 'alphavantage': 'read', 'fred': 'read',
     'finnhub': 'read', 'polygon': 'read', 'tiingo': 'read', 'fmp': 'read', 'alpaca': 'read',
+    'postgresql': 'read', 'mysql': 'read', 'clickhouse': 'read', 'snowflake': 'read', 'bigquery': 'read',
     'treg': 'read',                                          # a catalogue is a window; spending is the owner's call
     'linkedin': 'read',                                      # publishing under your own name is never unattended
     'robinhood': 'read',                                     # a broker starts as a window; raising it is the owner's call

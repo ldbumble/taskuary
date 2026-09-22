@@ -21,7 +21,7 @@ import { outcomeOf } from "./dispatchOutcome.js";
 import { progressLine } from "./checklist.js";
 import { deliveryCc, deliveryFiles, replyContext } from "./replyDelivery.js";
 import { sizeText } from "./replyFiles.js";
-import { completionTransition, filterForSelectedState } from "./taskFilter.js";
+import { completionTransition, cutAway, filterForSelectedState } from "./taskFilter.js";
 import { onLive } from "./live.js";
 import { pollWhileActive } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS } from "./theme.jsx";
@@ -502,16 +502,16 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // Search means the whole archive, regardless of the selected state pill or today's cutoff. That
   // is what makes a completed PR/task discoverable instead of merely searching the visible rows.
   const bucket = (tasks || []).filter((x) => search ? taskMatchesQuery(x, search) : (!filter || inBucket(x, filter)));
-  const cut = !search && filter !== "live" && !older;
-  const shown = cut ? bucket.filter(touchedToday) : bucket;
+  // ONE RULE, FOR THE ROWS AND FOR THE COUNTS. The cut used to be decided per pill, which gave
+  // `in progress` a wider window than `all` - live work of any age against today only - so two
+  // live rows from last night counted for one pill and not the other and "all 5" sat over
+  // "in progress 4 · done 2" (the owner, 2026-09-22: "that doesn't add up?").
+  const keep = (x) => !!search || !cutAway(stateOf(x).key, touchedToday(x), older);
+  const shown = bucket.filter(keep);
   const nOlder = bucket.length - shown.length;
   // A count that outruns the rows beneath it reads as a bug: "done 175" over fifteen rows says
-  // the list is broken, not cut. Each pill counts what clicking it would SHOW - today's, while
-  // the cut holds - and the rest stay behind "show N more from before today".
-  const countIn = (key) => {
-    const rows = (tasks || []).filter((x) => !key || inBucket(x, key));
-    return !search && key !== "live" && !older ? rows.filter(touchedToday).length : rows.length;
-  };
+  // the list is broken, not cut. Each pill counts what clicking it would SHOW, by the same rule.
+  const countIn = (key) => (tasks || []).filter((x) => (!key || inBucket(x, key)) && keep(x)).length;
   // A task may finish while its detail stays open (especially an assistant conversation). Move
   // the selected bucket with it so Done never sits under an In progress filter. Search and All
   // are deliberate cross-status views, so neither is changed.

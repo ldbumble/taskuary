@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { completionTransition, filterForSelectedState, nextTaskId } from "../src/taskFilter.js";
+import { completionTransition, cutAway, filterForSelectedState, nextTaskId } from "../src/taskFilter.js";
 
 test("a selected task that finishes moves the rail from in progress to done", () => {
   assert.equal(filterForSelectedState("live", "done"), "done");
@@ -79,4 +79,34 @@ test("with a live session, X steps back to the task first and the session keeps 
     assert.match(source, gate);
   }
   assert.doesNotMatch(source, /\{!term\?\.alive && <Fold title=\{`Context & history/, "no gate left on the raw flag");
+});
+
+// THE CUT BELONGS TO THE ROW. Applying it per pill gave `in progress` a wider window than `all`
+// (live work of any age vs today only), so "all 5" sat over "in progress 4 · done 2" and the
+// arithmetic could not close (the owner, 2026-09-22: "that doesn't add up?").
+test("live work shows at any age; finished work stops at today", () => {
+  assert.equal(cutAway("needs_you", false, false), false);   // live, last touched yesterday - still live
+  assert.equal(cutAway("working", false, false), false);
+  assert.equal(cutAway("queued", false, false), false);
+  assert.equal(cutAway("done", false, false), true);         // finished and not today - behind "show older"
+  assert.equal(cutAway("dropped", false, false), true);
+  assert.equal(cutAway("done", true, false), false);         // finished today - shown
+});
+
+test("show older lifts the cut off everything", () => {
+  assert.equal(cutAway("done", false, true), false);
+  assert.equal(cutAway("dropped", false, true), false);
+});
+
+// the rows that prompted it: TQ-0667 and TQ-0664, both `waiting` and both last touched 2026-09-21,
+// counted for the in-progress pill and not for all.
+test("all is a superset of its own buckets", () => {
+  const rows = [{ key: "needs_you", today: false }, { key: "needs_you", today: false },
+    { key: "needs_you", today: true }, { key: "done", today: true }, { key: "done", today: false }];
+  const shown = (pred) => rows.filter((r) => !cutAway(r.key, r.today, false)).filter(pred).length;
+  const all = shown(() => true), done = shown((r) => r.key === "done");
+  const live = shown((r) => !["done", "dropped"].includes(r.key));
+  assert.equal(live, 3);
+  assert.equal(done, 1);
+  assert.equal(all, live + done);
 });

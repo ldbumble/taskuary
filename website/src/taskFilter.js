@@ -26,3 +26,11 @@ export const completionTransition = (liveIds, current, status = "done") => ({
   filter: "live",
   seen: { id: current, key: status },
 });
+
+// THE CUT BELONGS TO THE ROW, not to the pill you are standing on. Live work has no age - it is
+// live whether it arrived this morning or last night - so cutting per pill gave `in progress` a
+// wider window than `all`, and "all 5" sat over "in progress 4 · done 2" with two live rows from
+// last night counted by one and not the other (the owner, 2026-09-22: "that doesn't add up?").
+// History does have an age, and that is what "show older" is for.
+export const cutAway = (stateKey, touchedToday, older) =>
+  !older && ["done", "dropped"].includes(stateKey) && !touchedToday;

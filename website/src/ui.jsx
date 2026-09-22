@@ -1,5 +1,6 @@
 // Shared Task Hub atoms: chips, channel icons, relative time. Light + compact.
 import { says } from "./laneSays.js";
+import { laneMeta } from "./funnelPile.js";
 import React, { useEffect, useState } from "react";
 import { Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
   DialogContentText, DialogTitle, InputAdornment, MenuItem, Select, TextField, Tooltip, Typography } from "@mui/material";
@@ -1016,12 +1017,29 @@ export const busyNow = (t) => (t?.Session?.alive ? !isWaiting(t.Session) : t?.Ru
 // The ladder, top down: dropped, done, an agent is ACTUALLY running it, else it is yours.
 // "in_progress with nothing running" used to read as "agent working" - a task whose agent
 // finished without closing it then sat there looking busy and nobody was told.
+// THE RAIL SAYS WHAT THE WORK RAIL SAYS. Everything that was not done, dropped or busy fell
+// through to ONE red "needs you", so a coder parked on a question and a reply waiting for your
+// yes wore the identical chip - two different moves, one word (the owner, 2026-09-22: "right now
+// it has tags needs you, which is agent stopped but now you are going to move that to reply
+// needed... just keep the same tags in in progress like in work").
+// The words come from taskuary/lanes.json, the one vocabulary the Work rail, chat and the
+// Timeline already build their tables from, so this rail cannot invent a fourth one.
+const taskLane = (t) => {
+  if (t.Session?.alive) return isWaiting(t.Session) ? "blocked" : "working";
+  if (t.RunStatus === "running") return "working";
+  if (t.RunStatus === "error") return "broken";        // it failed: your move, never back to queued
+  if (t.ReviewStatus === "pending") return "approve";  // a reply, or an action, waits for your yes
+  return "yours";                                      // real work with nobody on it
+};
+const laneState = (lane) => {
+  const m = laneMeta(lane), c = ROLES[m.role || "muted"];
+  return { key: lane, label: m.word, solid: c.solid, c: { bg: c.tint, fg: c.ink, bd: c.bd } };
+};
 export const stateOf = (t) => {
   if (!t) return ST.queued;
   if (t.Status === "dropped") return ST.dropped;
   if (t.Status === "done") return ST.done;
-  if (busyNow(t)) return ST.working;
-  return ST.needs_you;                       // incl. a session sitting at a question
+  return laneState(taskLane(t));
 };
 export const StateChip = ({ task }) => {
   const st = stateOf(task);

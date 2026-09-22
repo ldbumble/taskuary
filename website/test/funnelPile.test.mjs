@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { LANES, LANE_META, attentionBand, levelOf, ageText, agoText, arrivals, chipsOf, lastSaidIndex, cardFor, currentItemFromPile, currentPresentationChanged, departures, displayRevision, drawOrder, followsItem, keysOf, laneMeta, refreshCurrentPresentation, refreshPilePresentation, statusLine, topAlert } from "../src/funnelPile.js";
+import { LANES, LANE_META, attentionBand, levelOf, ageText, agoText, arrivals, chipsOf, lastSaidIndex, cardFor, currentItemFromPile, currentPresentationChanged, departures, displayRevision, drawOrder, followsItem, keysOf, laneMeta, refreshCurrentPresentation, refreshPilePresentation, rowMeta, statusLine, topAlert } from "../src/funnelPile.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 const cardsSrc = () => read("assistantCards.jsx");
@@ -393,4 +393,26 @@ test("a loud lane wears its mark and its bigger pill", () => {
   assert.match(feed, /className=\{`tq-pile-tag\$\{m\.loud \? " loud" : ""\}`\}/);
   assert.match(feed, /\{m\.loud && m\.mark \? `\$\{m\.mark\} ` : ""\}\{m\.word\}/);
   assert.match(read("assistantView.css"), /\.tq-pile-tag\.loud \{[^}]*font-size: 11px/);
+});
+
+// THE TASKS RAIL AND THE WORK RAIL SAY THE SAME THING. The rail used to paint everything that was
+// not done, dropped or busy with one red "needs you" chip, so a coder parked on a question and a
+// reply waiting for your yes were indistinguishable (the owner, 2026-09-22). These two words must
+// never collapse into one again, and they are the vocabulary's, not this rail's.
+test("a waving agent and a waiting reply are two different words", () => {
+  assert.equal(rowMeta({ lane: "blocked" }).word, "agent waving");
+  assert.equal(rowMeta({ lane: "approve" }).word, "reply ready");
+  assert.notEqual(rowMeta({ lane: "blocked" }).word, rowMeta({ lane: "approve" }).word);
+});
+
+test("every lane the Tasks rail can land on has a word and a role", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("../src/ui.jsx", import.meta.url), "utf8");
+  const body = source.slice(source.indexOf("const taskLane ="), source.indexOf("const laneState ="));
+  const lanes = [...new Set([...body.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]))].filter((l) => LANES.includes(l));
+  assert.ok(lanes.length >= 5, "taskLane must still be reading lanes by name");
+  for (const lane of lanes) {
+    assert.ok(rowMeta({ lane }).word, `lane ${lane} has no word in lanes.json`);
+    assert.ok("role" in rowMeta({ lane }), `lane ${lane} has no role, so the chip has no colour`);
+  }
 });

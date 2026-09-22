@@ -96,6 +96,23 @@ def _now(): return datetime.now().isoformat(sep=' ', timespec='seconds')
 # The one sentence of TRIAGE.md that was wrong, and what replaces it on a doc that has stopped
 # tracking the shipped template (the migration in _ensure_schema). The canonical wording lives in
 # templates/triage.md; test_triage_pr_rule.py pins these two together so they cannot drift apart.
+# THE CONTRACT LINE, which is the first thing the model reads and is therefore read as the whole
+# schema. It named intent/kind/why, so a verdict that answered exactly that was obeying the
+# document - and the title and summary every row is drawn from were asked for 16,000 characters
+# later, in a block the code appends when the document forgets them. On a long forwarded mail the
+# model followed the line and dropped the pair (TQ-0665). templates/triage.md carries the new
+# wording; test_verdict_shape.py pins the two together so they cannot drift apart.
+_SHAPE_WAS = ('Classify one inbound work message. Answer JSON only: {"intent": "task|reply_only|fyi", '
+              '"kind": "coding|general|task", "why": "<one concrete sentence: what you saw in the message '
+              'and which rule it hit - the owner reads this to judge the verdict, 25 words max>"}.')
+_SHAPE_NOW = (_SHAPE_WAS[:-2].rstrip('}')
+              + ', "title": "<what this IS, 12 words max, in your own words - never the subject line handed back>"'
+              + ', "summary": "<what was said and by whom, two sentences - the point itself, never the signature, '
+                'the confidentiality footer or quoted earlier mail>"'
+              + ', "checklist": ["<on a task only: one distinct requested outcome each>"]}.\n\n'
+              + 'Every row the owner reads is drawn from `title` and `summary`, so answer them WHATEVER the '
+                'verdict: an fyi and a report are rows too, and "RE: RE: FW: 0 rows returned for period ending '
+                '09/15" is a mail header, not a sentence.')
 _PR_RULE_WAS = ("A stranger's pull request or issue is fyi (or reply_only if it asks a real question) - never "
                 "task: the owner promotes what deserves work. ")
 _PR_RULE_NOW = (
@@ -943,6 +960,19 @@ class SQLiteStore:
                                     (body.replace(_PR_RULE_WAS, _PR_RULE_NOW), _now()))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) "
                                 "VALUES ('triage_pr_rule_fixed', '1', 'migration')")
+            # ...and the same surgery for the CONTRACT LINE, for the same reason: a document the
+            # owner or a generator has touched stops tracking the template, and this install's
+            # named intent/kind/why, so a model that answered exactly that was obeying it. One
+            # sentence replaced, in place; everything else in the document stays as they left it.
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='triage_answer_shape_fixed'").fetchone():
+                row = self.cx.execute("SELECT Content FROM doc WHERE Name='triage'").fetchone()
+                body = (row['Content'] or '') if row else ''
+                if _SHAPE_WAS in body:
+                    self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name='triage'",
+                                    (body.replace(_SHAPE_WAS, _SHAPE_NOW), _now()))
+                    logger.info('triage: the contract line now names title, summary and checklist')
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) "
+                                "VALUES ('triage_answer_shape_fixed', '1', 'migration')")
             # THE WHATSAPP CATCH-ALL IS GONE, so the row for it goes too. '*' admitted every direct
             # chat on an account that is the owner's own phone; nothing honours it now (messengers
             # .poll_whatsapp skips it, the door refuses a new one), and a dead row with a live-looking

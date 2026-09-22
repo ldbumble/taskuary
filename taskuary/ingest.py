@@ -452,6 +452,10 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
         except Exception as e:
             fail['err'] = str(e)[:200]
             raise
+    # what the brain can CARRY rides through the wrapper too. Without this the classifier saw a
+    # plain function, could not tell that an enforceable schema would be honoured, and sent none -
+    # verified on the wire, which is the only place that answers it (TQ-0665).
+    _guarded.takes_want = getattr(llm, 'takes_want', None)
     from .learn import injectable
     notes, notes_left = relevant_notes(store, [msg.get('from_email') or ''],
                                        f"{msg.get('subject') or ''} {msg.get('body') or ''}"[:4000],

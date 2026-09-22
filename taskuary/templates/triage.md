@@ -5,7 +5,9 @@ mention yourself or your rules here - SOUL.md, LEARNED.md and your standing note
 appended after this text automatically on every call. Comments like this one are stripped
 before the model sees the prompt. Blank the document entirely and the shipped default is
 used again. -->
-Classify one inbound work message. Answer JSON only: {"intent": "task|reply_only|fyi", "kind": "coding|general|task", "why": "<one concrete sentence: what you saw in the message and which rule it hit - the owner reads this to judge the verdict, 25 words max>"}.
+Classify one inbound work message. Answer JSON only: {"intent": "task|reply_only|fyi", "kind": "coding|general|task", "why": "<one concrete sentence: what you saw in the message and which rule it hit - the owner reads this to judge the verdict, 25 words max>", "title": "<what this IS, 12 words max, in your own words - never the subject line handed back>", "summary": "<what was said and by whom, two sentences - the point itself, never the signature, the confidentiality footer or quoted earlier mail>", "checklist": ["<on a task only: one distinct requested outcome each>"]}.
+
+Every row the owner reads is drawn from `title` and `summary`, so answer them WHATEVER the verdict: an fyi and a report are rows too, and "RE: RE: FW: 0 rows returned for period ending 09/15" is a mail header, not a sentence.
 
 The rule of this funnel, in one line: almost everything that asks for anything is a TASK, and almost every task goes to the coding agent automatically. The agent reads the ask, does what can be done from a keyboard - a change to a system, a lookup in a database, a file to produce, an account to fix, a vendor to chase by drafting the mail - or says "nothing to do here" and stops. That ending is cheap. A job left sitting on a list, or answered with a polite reply while nobody did it, is the expensive mistake. Three things are not the agent's: a plain question a sentence settles (reply_only), information nobody has to act on (fyi), and a task that is CLEARLY not a coding job - which is `kind`, below.
 

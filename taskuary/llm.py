@@ -12,9 +12,10 @@ triage.classify_intent expects. Which brain is the owner's choice (setting `tria
 Cloud keys are cheap and instant per message; a CLI run is slower and heavier but keeps
 everything on one model (and one bill). Configure it in Settings -> Triage & routing.
 """
-import base64, json, mimetypes, requests
+import base64, json, mimetypes, re, requests
 from pathlib import Path
 from time import sleep
+from typing import NamedTuple
 
 from . import redact
 
@@ -115,10 +116,12 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     # profile (run_cli's own default is 1200s). The cap cut two of one report's four runs off at
     # exactly "timed out after 300s" (2026-09-03).
     if not (cwd or cli_tools or research): prof['timeout'] = min(int(prof.get('timeout') or 300), 300)
-    def llm(system, user, max_tokens=MAX_TOKENS, images=None):
+    def llm(system, user, max_tokens=MAX_TOKENS, images=None, want=None):
         """max_tokens is advisory here - a CLI has no such flag; the system prompt already says
         how long the answer should be. `images` is accepted and dropped: a CLI reads files off
-        disk itself, and the prompt already names their paths."""
+        disk itself, and the prompt already names their paths. `want` is accepted and dropped
+        too, and takes_want is never set: there is no wire to put a schema on, so the prompt and
+        the caller's recheck (ask_json) are the whole contract here."""
         from .agents import run_cli
         kwargs = {'cancel': cancel} if cancel is not None else {}
         if extra_env: kwargs['extra_env'] = extra_env
@@ -128,6 +131,9 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
         llm.session_id = sid or resume
         return out
     llm.session_id = resume
+    # said out loud, not merely absent: a brain that CANNOT carry a schema is the one whose answer
+    # is worth rechecking in code (llm.ask_json). Silence means "do not second-guess me".
+    llm.takes_want = False
     return llm
 
 
@@ -221,7 +227,10 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
             try:
                 # A backup has no access to the primary CLI's native conversation.
                 context = fallback_user if candidate != primary and fallback_user is not None else user
-                out = brain(system, context, **kwargs)
+                # ...and a schema is dropped for the brain that cannot carry one - per brain, so a
+                # CLI backup does not take the schema away from the API brain behind it
+                kw = kwargs if getattr(brain, 'takes_want', False) else {k: v for k, v in kwargs.items() if k != 'want'}
+                out = brain(system, context, **kw)
                 failover.last_pick = candidate
                 failover.session_id = getattr(brain, 'session_id', None)
                 return out
@@ -232,6 +241,7 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
                                 f'{candidate or "automatic AI"} is unavailable; trying {brains[i + 1][0]}')
         raise last
     failover.last_pick, failover.session_id = primary, resume
+    failover.takes_want = True          # it forwards one to each brain that can carry it, and drops it for the rest
     return failover
 
 
@@ -245,6 +255,48 @@ RETRY_STATUS = (429, 500, 502, 503, 504)   # the ENDPOINT's problem; a 4xx is th
 RETRY_TRIES = 3                            # attempts per call - bounded: a poll thread waits on this
 RETRY_WAIT = (1, 4)                        # seconds before attempt 2, then before attempt 3
 RETRY_WAIT_MAX = 30                        # a longer Retry-After is an outage, not a pause
+
+
+class JsonAnswer(NamedTuple):
+    """What the model said: the parsed object (None when it was not JSON), the text it actually
+    sent - which the Triage tab shows when a verdict cannot be read - and why parsing failed."""
+    data: dict
+    raw: str
+    error: str
+
+
+def ask_json(brain, system: str, user: str, want: dict = None, need=(), **kw) -> JsonAnswer:
+    """Ask for a JSON object of a known shape, and get one - or get back what the model did say.
+
+    Three layers, because no single one reaches every brain (TQ-0665):
+      - `want` is a JSON schema, handed to the provider when the provider can enforce it
+        (takes_want is True). That is the only layer the model cannot talk its way out of.
+      - `need` names the keys the caller cannot do without, and is asked for a second time ONLY
+        of a brain that has said it cannot carry a schema (takes_want is False - a CLI, which is
+        a prompt in and text out). A brain that says nothing either way is left alone: a second
+        call is the owner's money, and it is worth spending only where we know the first one had
+        no schema behind it. Where the provider enforced the shape, a missing key is the model's
+        considered answer and asking again buys nothing.
+      - What comes back is parsed here, once, so a caller never re-implements the fence-stripping.
+
+    Never more than one retry: the caller's fallback is what a missing key has always meant, and a
+    model that ignored the shape twice will ignore it a third time at the owner's expense.
+    """
+    def ask(text):
+        raw = str(brain(system, text, **kw) or '')
+        try: return JsonAnswer(json.loads(re.sub(r'^```(json)?|```$', '', raw.strip(), flags=re.M)), raw, '')
+        except ValueError as e: return JsonAnswer(None, raw, f'{type(e).__name__}: {e}')
+
+    carries = getattr(brain, 'takes_want', None)
+    if want is not None and carries: kw['want'] = want
+    def short(a): return [k for k in need if not (a.data or {}).get(k)] if carries is False else []
+    first = ask(user)
+    if first.data is not None and not short(first): return first
+    again = (f"\n\nYour last answer left out: {', '.join(short(first))}. Answer the whole JSON object "
+             'again, including those.' if first.data is not None
+             else '\n\nAnswer with the JSON object only - no prose, no code fence.')
+    second = ask(user + again)
+    return second if second.data is not None and not short(second) else (second if second.data is not None else first)
 
 
 def retry_wait(last, attempt: int) -> float:
@@ -280,14 +332,24 @@ def make_llm(t, cfg: dict, key: str):
         import anthropic
         cli = anthropic.Anthropic(api_key=key)
         model = cfg.get('model') or 'claude-opus-5'
-        def llm(system, user, max_tokens=MAX_TOKENS, images=None):
+        def llm(system, user, max_tokens=MAX_TOKENS, images=None, want=None):
             # images FIRST: every provider reads a picture better when the question follows it
             content = ([{'type': 'image', 'source': {'type': 'base64', 'media_type': ct, 'data': b64}}
                         for ct, b64 in (images or [])] + [{'type': 'text', 'text': user}]) if images else user
+            # `want` is a schema the answer MUST fit. Anthropic has no response_format; a tool the
+            # model is forced to call is the same thing - the tool's input schema is the answer's,
+            # and what comes back is the tool call's arguments rather than prose.
+            forced = ({'tools': [{'name': want.get('name') or 'answer', 'description': 'Answer with these fields.',
+                                  'input_schema': want.get('schema') or want}],
+                       'tool_choice': {'type': 'tool', 'name': want.get('name') or 'answer'}} if want else {})
             r = cli.messages.create(model=model, max_tokens=max_tokens, system=system,
-                                    messages=[{'role': 'user', 'content': content}])
+                                    messages=[{'role': 'user', 'content': content}], **forced)
             if r.stop_reason == 'refusal': raise RuntimeError('model refused the request')
+            if want:
+                call = next((b for b in r.content if b.type == 'tool_use'), None)
+                if call is not None: return json.dumps(call.input)
             return next((b.text for b in r.content if b.type == 'text'), '')
+        llm.takes_want = True
         return llm
     if t == 'openai':
         urls = ['https://api.openai.com/v1/chat/completions']
@@ -330,27 +392,43 @@ def make_llm(t, cfg: dict, key: str):
     else:
         raise RuntimeError(f'unknown AI connector type: {t}')
 
-    def llm(system, user, max_tokens=MAX_TOKENS, images=None):
-        # two independent compat axes: newer models reject max_tokens ("use
+    def llm(system, user, max_tokens=MAX_TOKENS, images=None, want=None):
+        # three independent compat axes: newer models reject max_tokens ("use
         # max_completion_tokens"), older Azure api-versions reject max_completion_tokens,
-        # and older Azure resources 404 the v1 url - walk the grid until one works
+        # older Azure resources 404 the v1 url - and not every model behind this one schema can
+        # be handed a response_format. Walk the grid until one works.
         content = ([{'type': 'image_url', 'image_url': {'url': f'data:{ct};base64,{b64}'}}
                     for ct, b64 in (images or [])] + [{'type': 'text', 'text': user}]) if images else user
         msgs = [{'role': 'system', 'content': system}, {'role': 'user', 'content': content}]
         last = None
-        for url in urls:
-            for tok_param in ('max_completion_tokens', 'max_tokens'):
-                body = {'messages': msgs, tok_param: max_tokens}
-                if model: body['model'] = model
-                # a local model may spend its first call loading weights off disk - give it room
-                r = post_retrying(url, headers, body, 180 if t == 'ollama' else 60)
-                if r.status_code == 200:
-                    return r.json()['choices'][0]['message']['content']
-                last = r
-                if r.status_code == 404: break                     # wrong surface -> next url
-                if not (r.status_code == 400 and 'max_completion_tokens' in r.text):
-                    raise RuntimeError(f'{t} error {r.status_code} at {url.split("?")[0]}{tried(r)}: {r.text[:300]}')
+
+        def once(fmt):
+            """The url x token-parameter grid with this response_format. The answer, or None when
+            the endpoint refused the FORMAT and the same question is worth asking without it."""
+            nonlocal last
+            for url in urls:
+                for tok_param in ('max_completion_tokens', 'max_tokens'):
+                    body = {'messages': msgs, tok_param: max_tokens,
+                            **({'model': model} if model else {}), **({'response_format': fmt} if fmt else {})}
+                    # a local model may spend its first call loading weights off disk - give it room
+                    r = post_retrying(url, headers, body, 180 if t == 'ollama' else 60)
+                    if r.status_code == 200: return r.json()['choices'][0]['message']['content']
+                    last = r
+                    if r.status_code == 404: break                      # wrong surface -> next url
+                    if r.status_code == 400 and fmt: return None        # cannot carry a schema -> ask without one
+                    if not (r.status_code == 400 and 'max_completion_tokens' in r.text):
+                        raise RuntimeError(f'{t} error {r.status_code} at {url.split("?")[0]}{tried(r)}: {r.text[:300]}')
+            return None
+
+        # `want` is a JSON schema the answer MUST fit, and the strongest form is worth asking for:
+        # a strict schema is obeyed even when the prose contract in the prompt says something
+        # narrower (verified against gpt-5.4, TQ-0665). An old model or a route that cannot carry
+        # it answers 400, and then the prompt is all there is - which is where we were before.
+        for fmt in ([{'type': 'json_schema', 'json_schema': {**want, 'strict': True}}] if want else []) + [None]:
+            out = once(fmt)
+            if out is not None: return out
         raise RuntimeError(f'{t} error {last.status_code} at {urls[-1].split("?")[0]}{tried(last)}: {last.text[:300]}')
+    llm.takes_want = True
     return llm
 
 

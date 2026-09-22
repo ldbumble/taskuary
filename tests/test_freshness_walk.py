@@ -179,6 +179,24 @@ class SupersedeTests(Base):
         self.assertIn(('_auto_draft', rid), spawned)                               # ...and rewritten from it
         self.assertEqual(len(self.s.list_reviews('pending')), 1)
 
+    def test_the_second_message_adds_its_own_boxes_to_the_task_list(self):
+        """Re-triaged means re-triaged: what the new line ASKS FOR joins the list, nothing already
+        on it moves or unticks, and the addition is said on the task rather than made silently.
+
+        The code was there; on TQ-0665 it did nothing, because the verdict came back with no
+        checklist at all - the same field the model dropped along with title and summary. The
+        schema now requires it, so this is the link that had never actually run on that thread."""
+        tid, first, rid = mail_task(self.s)
+        self.s.set_task_checklist(tid, ['Send the August export'], 'triage')
+        llm = lambda *a, **k: json.dumps({'intent': 'task', 'kind': 'coding', 'why': 'he needs access',
+                                          'checklist': ['Send the August export', 'Grant access to the census files']})
+        with mock.patch.object(ingest, '_spawn'):
+            ingest.ingest_message(self.s, mail('I also need access to the census files.', 'm:second'), llm=llm)
+        boxes = [i['text'] for i in self.s.task_checklist(tid)]
+        self.assertEqual(boxes, ['Send the August export', 'Grant access to the census files'])   # added, not replaced
+        said = [c['Body'] for c in self.s.list_comments(tid) if 'New from the latest message' in (c['Body'] or '')]
+        self.assertTrue(said and 'Grant access to the census files' in said[0])
+
     def test_an_fyi_line_leaves_the_draft_alone(self):
         tid, first, rid = mail_task(self.s)
         llm = lambda *a, **k: json.dumps({'intent': 'fyi', 'why': 'thanks'})

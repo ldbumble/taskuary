@@ -81,6 +81,32 @@ TASK_FIELDS = (
     'For a task, also answer "checklist": ["<one distinct requested outcome each>"] - drawn only from what the '
     'message and exchange actually ask for; never invent a requirement, never list anything as already done.')
 
+def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None) -> dict:
+    """The answer's shape as a JSON schema, for the brains whose wire can carry one (llm.ask_json).
+
+    Prose asks; a schema binds. Handed this, gpt-5.4 answered `title` and `summary` even when the
+    prompt's own contract line named neither - which is exactly the failure it exists to stop.
+
+    Two rules shape it. Strict mode's: every property is required, so an OPTIONAL field is a
+    nullable one instead, and nothing outside the list may be answered. And ours: it names only
+    the fields the prompt EXPLAINED. Given a wider schema on a plain mail, the model dutifully
+    filled in a `relationship` and a `repo_reason` for a thread that had neither (TQ-0665)."""
+    p = {'intent': {'type': 'string', 'enum': ['task', 'reply_only', 'fyi']},
+         'why': {'type': 'string'}, 'title': {'type': 'string'}, 'summary': {'type': 'string'},
+         'kind': {'type': ['string', 'null'], 'enum': ['coding', 'general', 'task', None]},
+         'checklist': {'type': ['array', 'null'], 'items': {'type': 'string'}}}
+    if playbooks: p['playbook'] = {'type': ['string', 'null']}
+    if profiles: p['profile'] = {'type': ['string', 'null']}
+    if repos: p.update(repository={'type': ['string', 'null']}, needs_repo_choice={'type': 'boolean'},
+                       repo_reason={'type': 'string'})
+    if candidates is not None:
+        p.update(relationship={'type': ['string', 'null'], 'enum': ['new', 'continues', 'answers', 'uncertain', None]},
+                 related_message_ids={'type': ['array', 'null'], 'items': {'type': 'integer'}},
+                 existing_task_id={'type': ['integer', 'null']})
+    return {'name': 'triage_verdict',
+            'schema': {'type': 'object', 'additionalProperties': False, 'required': list(p), 'properties': p}}
+
+
 INTENT_SYSTEM = (
     'Classify one inbound work message. Answer JSON only: '
     '{"intent": "task|reply_only|fyi", "kind": "coding|general|task", "profile": "<on kind general only: a name from THE WORKERS>", '
@@ -561,9 +587,15 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                            'screenshot of the error IS the request. Read them before deciding.')
             # the last thing asked for, after every block that says how to JUDGE: the output shape
             if shape: system += '\n\nWHATEVER ELSE YOU ANSWER, THE SHAPE IS FIXED:\n' + TASK_FIELDS
-            out = llm(system, user, images=images) if images else llm(system, user)
-            raw_answer = str(out or '')
-            j = json.loads(re.sub(r'^```(json)?|```$', '', raw_answer.strip(), flags=re.M))
+            # ...and the shape goes on the WIRE as well, where the brain has one: a schema the
+            # provider enforces cannot be talked out of by a longer message. `need` is the recheck
+            # behind it, for a CLI brain that has no wire to put a schema on - one more ask, naming
+            # what was left out. Both exist because neither reaches every brain (TQ-0665).
+            from .llm import ask_json
+            answer = ask_json(llm, system, user, want=verdict_schema(repos, candidates, playbooks, profiles),
+                              need=('title', 'summary'), **({'images': images} if images else {}))
+            raw_answer, j = answer.raw, answer.data
+            if j is None: raise ValueError(answer.error or 'the response was not JSON')
             if j.get('intent') in ('task', 'reply_only', 'fyi'):
                 # `kind` is the model's SECOND verdict and it ROUTES the task to one of three
                 # places: coding starts an agent, general opens the assistant's chat, task goes on

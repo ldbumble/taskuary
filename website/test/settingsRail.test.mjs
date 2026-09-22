@@ -100,6 +100,12 @@ test("the rail offers only the sections the page will actually draw", () => {
     "Other is empty in the schema by design - it is a catch-all, not a page");
   assert.match(src, /useEffect\(\(\) => \{ onSections\(cfgKey \? cfgKey\.split\("\|"\) : \[\]\); \}, \[cfgKey, onSections\]\);/,
     "the page tells the rail what it drew");
-  assert.match(src, /const sectionsOf = useCallback\(\(k\) => \(k === "config" && cfgSecs\) \|\| SECTIONS\[k\] \|\| \[\], \[cfgSecs\]\);/,
-    "and the rail, the scroll-spy and the search crumbs all read that one list");
+  assert.match(src, /const sectionsOf = useCallback\(\(k\) => \(k === "config" && cfgSecs\)/,
+    "the rail, the scroll-spy and the search crumbs all read one list");
+  assert.match(src, /\|\| \(k === "docs" \? docsTree\(docCat\) : null\) \|\| SECTIONS\[k\] \|\| \[\], \[cfgSecs, docCat\]\);/,
+    "...and Docs contributes its tree to that same list");
+  // Docs is the one page whose entries SWITCH the document instead of scrolling to a heading, so
+  // it is the one page the scroll-spy must sit out - it has no headings to measure.
+  assert.match(src, /const names = q \|\| page === "docs" \? \[\] : sectionsOf\(page\);/,
+    "the scroll-spy skips the page that has nothing to scroll to");
 });

@@ -76,9 +76,6 @@ def add_many(store, tid: int, text: str, actor: str = 'owner') -> dict:
     return {'queued': len(items), **deliver(store, tid)}
 
 
-PEER = 'router'          # the actor a peer briefing is queued under (blackboard.peer_update); never an answer
-
-
 def _screen(t) -> list:
     """The RENDERED tail where the session has one - a TUI's chooser is drawn in place and the raw
     stream keeps the frames that went before it - else the raw tail the small test doubles carry."""
@@ -91,7 +88,7 @@ def state(store, tid: int) -> tuple:
     task stands right now: the run's own word first (an open request), then the rendered screen.
 
     Read off the RAW tail, Claude's first-run trust dialog and its AskUserQuestion chooser both
-    read `parked`, and the next peer briefing was typed straight into them - Enter on "No, exit"
+    read `parked`, and the next queued note was typed straight into them - Enter on "No, exit"
     ended the session, the notes left behind reopened it, and the loop ran until the folder was
     trusted by hand (measured 2026-09-20)."""
     from . import terminal as term, workerstate as ws
@@ -133,14 +130,6 @@ def deliver(store, tid: int) -> dict:
     notes = pending[:1] if drip(store) else pending
     left = len(pending) - len(notes)
     if st == 'asking':
-        # A question is the OWNER's to answer. A peer briefing (blackboard.peer_update) queued under
-        # `router` is not an answer to anything: typed into a chooser it picks whatever the cursor is
-        # on. It keeps its place until the agent's next stop; an owner's note behind it goes now.
-        yours = [n for n in pending if (n.get('CreatedBy') or 'owner') != PEER]
-        if not yours:
-            return {'delivered': 0, 'state': 'asking', 'held': len(pending)}
-        notes = yours[:1] if drip(store) else yours
-        left = len(pending) - len(notes)
         # An agent parked on a QUESTION is asking the OWNER, so the words they write next are the
         # ANSWER to it: bound to its open request where the worker reported one, typed in plainly
         # where it did not. They used to queue behind the question and never arrive at all - the card

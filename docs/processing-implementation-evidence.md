@@ -2656,10 +2656,14 @@ prose after the fact (`selfclose.ASK_MARKER`/`ask_marker`, `GeneralSession.send_
 recording `turn_end` and `input_needed`, PW-225). An explicit finish
 (`taskuary --done`) now saves the run's own last spoken message - the Stop hook's
 `turn_end` - as the Finished result, falling back to the `--done` sentence only
-when the run said nothing (`selfclose.declare`, PW-230). Peers hear about each
-other as they start and stop through the waiting room, a briefing typed in on
-the next natural pause rather than a push into a running turn
-(`blackboard.peer_update`, `terminal.open_session`, `Term._pump`, PW-173).
+when the run said nothing (`selfclose.declare`, PW-230). Peers are read where
+reading is free, never announced into a running session: PW-173's refresh is the
+live briefing an agent is handed at start (`blackboard.briefing`, `wall_text`)
+and `taskuary --board` whenever it wants them fresh. The start/stop push built
+here on 2026-09-06 (`blackboard.peer_update`) was **removed on 2026-09-22**: it
+spent one of the receiving agent's turns on news that was neither time-critical
+nor invalidating, which is the cost "LLMs Get Lost in Multi-Turn Conversation"
+(arXiv:2505.06120) measures at unreliability +112%.
 Claude Code hooks are now validated against the installed CLI version
 (`hooks.cli_version`/`supported`, PW-223).
 

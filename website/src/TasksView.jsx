@@ -84,7 +84,7 @@ const inBucket = (t, key) => (key === "live" ? !["done", "dropped"].includes(sta
                                              : stateOf(t).key === key);
 const PRIORITIES = ["low", "normal", "high", "urgent"];
 // what a task IS decides which machinery works it: coding gets a repo session, a reply
-// gets the responder and the Review queue, general gets the visual conversation. Keep the
+// gets the responder and the review queue, general gets the visual conversation. Keep the
 // explicit non-coding label: calling this only "assistant" hid the option the owner asked for.
 // WHO works it, then what it is - the owner's own words (2026-09-10: "tag tasks as reply/your
 // task/agent (maybe coding vs general)"). "your task" is deliberately the same phrase the work
@@ -1664,7 +1664,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   {stage === "reply" && ((pendingReview || proposals.length || sourceMessage) ? (
                     <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
                       {/* the bar comes FIRST, above the letter it acts on. What it no longer holds is
-                          "Edit draft in Review": the draft is right here, and a button whose whole job
+                          that jump to another tab: the draft is right here, and a button whose whole job
                           was sending you to another tab to do this card's own job is gone. */}
                       {sourceMessage && (
                         <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>

@@ -1490,7 +1490,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
 
 def _carry_out(store, tid: int, text: str, words: dict, item0: dict | None, actor: str) -> dict:
     """The two decisions that are already a REVIEW for the owner's yes rather than a proposal card: a switch
-    (proposals.py puts it in Review, nothing changes until approved) and a hand-off to a person (a draft,
+    (proposals.py puts it on the task, nothing changes until approved) and a hand-off to a person (a draft,
     sent only on approval)."""
     rec = lambda body, card=None: record_related(store, tid, item0, 'assistant', body, card)
     if words['verb'] == 'setting':
@@ -2491,7 +2491,7 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
                     'you mean - the sender or its TQ ref - and I will do it there.')
             rec('assistant', say_)
             return {'say': say_, 'options': [], 'chips': walk_chips(len(p['items'])), 'decision': None}
-    # a switch is already a proposal in Review (proposals.py); a hand-off to a person is a DRAFT for approval
+    # a switch is already a proposal on the task (proposals.py); a hand-off to a person is a DRAFT for approval
     if decision and verb == 'setting': return _carry_out(store, tid, text, {**decision, 'said': text}, item, actor)
     if decision and verb == 'forward' and item:
         who = (decision.get('text') or '').split(':')[0].strip()

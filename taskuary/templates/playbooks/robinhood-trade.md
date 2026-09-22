@@ -8,12 +8,12 @@ steps:     run robinhood_tools first and use only the names it prints → read t
            justifies it → say plainly what would make it the wrong trade
 alone:     reading. Positions, balances, order history, transactions, watchlists, quotes, and writing up what the report means.
 ask first: EVERY order, without exception - propose it and stop. Also ask before proposing at all when the analysis rests on one source, when the position would be more than the owner has sized before, when the market is closed, or when the report itself flagged its data as partial or capped.
-done when: the proposal is in Review carrying the tool, the symbol, the side, the size, the price you actually saw and the reasoning - or the owner approved it and Robinhood's confirmation is on the task
+done when: the proposal is on the task carrying the tool, the symbol, the side, the size, the price you actually saw and the reasoning - or the owner approved it and Robinhood's confirmation is on the task
 
 <!-- WHY THIS PLAYBOOK IS SHAPED LIKE THIS
 
 The Robinhood card ships at authority READ, so `robinhood_order` cannot run for an agent at all:
-it becomes a proposal the owner approves in Review. This playbook does not soften that, and it
+it becomes a proposal the owner approves on the task. This playbook does not soften that, and it
 should not be edited to. An agent here reads untrusted email upstream of a live brokerage
 account, and the approval click is the thing standing between those two facts.
 

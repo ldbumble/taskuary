@@ -155,11 +155,16 @@ test("the by-the-way bar shows the first alert nobody has put down - and only wh
   assert.strictEqual(topAlert(null, new Set()), null);
 });
 
-test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the mark, four tabs each side, the bubble off it", () => {
+test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the mark, equal tabs each side, the bubble off it", () => {
   const page = read("TaskHubPage.jsx");
   const tabs = page.match(/const TABS = \[([^\]]+)\]/)[1].split(",").map((t) => t.trim().replace(/"/g, ""));
-  assert.strictEqual(tabs.indexOf("Assistant"), 4);
-  assert.strictEqual(tabs.length, 9);                       // four to each side of it
+  // DEAD CENTRE, whatever the count. The strip is absolutely centred on the window, so an odd
+  // number with the Assistant in the middle is the thing that has to hold - not "nine". Review
+  // left (its decisions live on the task) and Docs moved into Settings, so it is seven now.
+  assert.strictEqual(tabs.length % 2, 1, "an even strip has no middle for the Assistant to sit in");
+  assert.strictEqual(tabs.indexOf("Assistant"), (tabs.length - 1) / 2);
+  assert.ok(!tabs.includes("Review"), "decisions are made on the task, not on a tab of their own");
+  assert.ok(!tabs.includes("Docs"), "Docs is a section of Settings");
   assert.ok(!tabs.includes("Timeline"));                    // the Timeline is the Assistant's rail now...
   assert.match(page, /if \(t === "Timeline"\) t = "Assistant"/);   // ...and old links to it still land
   assert.doesNotMatch(page, /<FeedView/);                   // the rail is mounted by the Assistant, nowhere else

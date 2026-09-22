@@ -165,7 +165,7 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
 
     `cc` loops somebody in on this answer. Replies get the list chosen at approval; a new outbound
     email starts with the list deliberately saved in its delivery envelope, which remains visible
-    and editable in Review."""
+    and editable on the task."""
     from . import learn, outbound
     rid = rv['ReviewId']
     # A verdict lands ONCE. There was no guard at all, so "approve" typed and the Approve button

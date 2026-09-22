@@ -140,7 +140,7 @@ WORKFLOW_SYSTEM = (
     'You turn a plain-English request into ONE Taskuary workflow configuration. Workflows do work '
     'or keep state; reports only read and summarize. This builder supports exactly two workflow types:\n'
     '- "zoho_monthly_invoices": opens a monthly customer batch, copies each customer\'s last invoice '
-    'into a Zoho draft, and leaves every send in Review for owner approval.\n'
+    'into a Zoho draft, and leaves every send on the task for owner approval.\n'
     '- "agent": runs a configured CLI AI agent with write access, using a saved skill and/or prompt, '
     'then files its result. A job that only retrieves or summarizes data is a report, not a workflow.\n\n'
     'Answer JSON only in one of two shapes:\n'

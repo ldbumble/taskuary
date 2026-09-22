@@ -68,7 +68,7 @@ const LaneTag = ({ lane }) => {
 // ...and on the Timeline the tag is TRIAGE's word, the one the row's own Triage tab highlights -
 // nothing else (the owner, 2026-09-07: "the tag on the row should match what the triage shows").
 // The lane is about what is waiting NOW, so everything finished read "fyi" whatever triage had
-// said about it: a question triage sent to Review showed the same word as a newsletter.
+// said about it: a question triage sent to the task showed the same word as a newsletter.
 // WHAT THE TAG WILL SAY, or null when nothing has a word for this row - one place, so the state
 // mark can fill exactly the gap the tag leaves instead of guessing at it from a transport detail.
 export const tagMeta = (row) =>
@@ -3566,7 +3566,7 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
     setBusy(`${i.id}:${verb}`); setErr("");
     try {
       const { data } = await api.post(`/api/assistant/ideas/${i.id}/${verb}`, { days: 1 });
-      if (verb === "followup") setNotes((n) => ({ ...n, [i.id]: `drafted — the chase waits in Review on ${data.ref}` }));
+      if (verb === "followup") setNotes((n) => ({ ...n, [i.id]: `drafted — the chase waits on the task on ${data.ref}` }));
       if (verb === "task" && data.taskId) onOpenTask?.(data.taskId);
     } catch (e) { setErr(e?.response?.data?.detail || "That did not work"); }
     setBusy(null); load(); onChanged?.();

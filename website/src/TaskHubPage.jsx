@@ -1,6 +1,6 @@
 // Task Hub shell - clean light enterprise workspace, compact: slim top bar, pill tabs,
 // content underneath. The Assistant (the Timeline's rail + Taskuary's chat) in the middle,
-// Board, Tasks, Review and Reports to its left, Hub, Connections, Docs and Settings to its right.
+// Board, Tasks and Reports to its left, Hub, Connections and Settings to its right.
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Badge, Box, Button, CircularProgress, IconButton, MenuItem, Popover, Select, Snackbar, Tooltip, Typography } from "@mui/material";
 import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
@@ -16,10 +16,8 @@ import { theme, ACCENT, ALERT, BG, BORDER, DIM, FAINT, INK, PANEL, GRADIENT } fr
 import BoardView from "./BoardView.jsx";
 const HubView = React.lazy(() => import("./HubView.jsx"));
 import TasksView from "./TasksView.jsx";
-import ReviewView from "./ReviewView.jsx";
 import ConnectorsView from "./ConnectorsView.jsx";
 import ReportsView from "./ReportsView.jsx";
-import DocsView from "./DocsView.jsx";
 import SettingsView from "./SettingsView.jsx";
 import { SetupChip, SetupPanel, useSetup } from "./SetupWizard.jsx";
 import { DEMO } from "./demoApi.js";
@@ -30,20 +28,26 @@ import { TaskuaryMark } from "./ui.jsx";
 import AssistantView from "./AssistantView.jsx";
 
 // The strip reads left to right as the day does: what arrived (Timeline), what is being worked
-// (Board, Tasks), what is waiting on you (Review), then what has been WRITTEN DOWN - Reports and
-// Hub, which holds hard-earned discoveries and developed company ideas - and last the plumbing.
-// Hub was next to Board first, which put a slow surface in the middle of
-// the two fast ones. Nine tabs is the most this strip holds at a readable size; the next one has
-// to displace something.
+// (Board, Tasks), then what has been WRITTEN DOWN - Reports and Hub, which holds hard-earned
+// discoveries and developed company ideas - and last the plumbing. Hub was next to Board first,
+// which put a slow surface in the middle of the two fast ones. Nine tabs was the most this strip
+// held at a readable size; it holds seven now, and the next one still has to displace something.
 //
-// Review stays even though a draft reply also shows on the Timeline: a proposal (proposals.py,
-// Kind 'action') carries no MessageId, so it has no Timeline row to live on. Drop this tab and an
-// agent asking permission has nowhere to ask.
+// THERE IS NO REVIEW TAB. It used to be here because a proposal (proposals.py, Kind 'action')
+// carries no MessageId and so has no Timeline row of its own - but it does have a TASK, and the
+// task page decides it now, in stage 3 beside the reply. Nothing is left needing a third place:
+// work's decisions live on its task, and answering filed chatter - the one thing that never
+// becomes a task - is decided in the Assistant, on the card that offered the reply.
+// Its red count came with it and sits on Tasks, counting TASKS rather than reviews.
+//
+// Docs is not here either: it is a section of Settings, after About you. That also keeps the
+// strip symmetric about the Assistant, three tabs to each side.
+//
 // The Assistant IS the Timeline: one tab, the Timeline's rail with the pipe at its top on the left
-// and Taskuary's chat on the right (AssistantView.jsx, funnel.py). It wears the mark in the MIDDLE of
-// the strip, four tabs to each side - what is being worked on the left of it, what has been written
-// down and the plumbing on the right. "Timeline" as a destination still resolves to it (go()).
-const TABS = ["Board", "Tasks", "Review", "Reports", "Assistant", "Hub", "Connections", "Docs", "Settings"];
+// and Taskuary's chat on the right (AssistantView.jsx, funnel.py). It wears the mark in the MIDDLE
+// of the strip - what is being worked to the left of it, what has been written down and the
+// plumbing to the right. "Timeline" as a destination still resolves to it (go()).
+const TABS = ["Board", "Tasks", "Reports", "Assistant", "Hub", "Connections", "Settings"];
 const SUPPORT_URL = "https://github.com/ldbumble/taskuary/issues/new/choose";
 
 // The bell: what is FAILING right now - a connector whose poll errors, the triage brain down, a
@@ -182,7 +186,7 @@ export default function TaskHubPage() {
     if (/^#(?:task=\d+|new-task)/.test(hash)) return "Tasks";
     if (/^#report=/.test(hash)) return "Reports";
     if (/^#connector=/.test(hash)) return "Connections";
-    if (/^#(?:playbook=|profiles(?:$|=))/.test(hash)) return "Docs";
+    if (/^#(?:playbook=|profiles(?:$|=))/.test(hash)) return "Settings";
     if (/^#settings=/.test(hash)) return "Settings";
     return "Assistant";
   });
@@ -273,12 +277,15 @@ export default function TaskHubPage() {
   useEffect(() => { if (tab === "Assistant") setEverAssistant(true); }, [tab]);
 
   const refreshPending = useCallback(async () => {
-    try { setPending(((await api.get("/api/reviews", { params: { status: "pending" } })).data.data || []).length); }
+    try {
+      const rows = (await api.get("/api/reviews", { params: { status: "pending" } })).data.data || [];
+      setPending(new Set(rows.map((r) => r.TaskId ?? `rv:${r.ReviewId}`)).size);
+    }
     catch { /* badge is optional */ }
   }, []);
   useEffect(() => { refreshPending(); }, [refreshPending, tick]);
   // The badge counts a queue the server changes on its own - a drafter finishing, a reply that
-  // landed. Counting only on mount and on the refresh icon left "Review · 2" over three drafts.
+  // landed. Counting only on mount and on the refresh icon left "Tasks · 2" over three drafts.
   useEffect(() => onLive(["feed-changed", "task-changed"], refreshPending, { wait: 250, max: 1500 }), [refreshPending]);
 
   // A terminal belongs to the task it is working - there is no dock and no terminal tab.
@@ -290,8 +297,8 @@ export default function TaskHubPage() {
       const m = /task=(\d+)/.exec(window.location.hash || ""); if (m) openTask(Number(m[1]));
       // a card's "open on the Timeline": the rail on the Assistant tab reads the same hash and pins the row
       if (/^#msg=\d+/.test(window.location.hash || "")) go("Assistant");
-      // a connector card's playbook link: the words live on the Docs tab (DocsView reads the hash itself)
-      if (/^#(?:playbook=|profiles(?:$|=))/.test(window.location.hash || "")) go("Docs");
+      // a connector card's playbook link: the words live in Settings → Docs (DocsView reads the hash itself)
+      if (/^#(?:playbook=|profiles(?:$|=))/.test(window.location.hash || "")) go("Settings");
       // a card's "change the judge" / a connector's phone-doorway link: SettingsView reads the page and group
       if (/^#settings=/.test(window.location.hash || "")) go("Settings");
     };
@@ -353,7 +360,7 @@ export default function TaskHubPage() {
               "& .MuiOutlinedInput-notchedOutline": { borderColor: "#d8cfbe" } }}>
             {TABS.map((t) => (
               <MenuItem key={t} value={t} sx={{ fontSize: 12.5, fontWeight: t === "Assistant" ? 800 : 400 }}>
-                {t === "Assistant" ? "✦ Taskuary" : t}{t === "Review" && pending > 0 ? ` · ${pending > 99 ? "99+" : pending}` : ""}
+                {t === "Assistant" ? "✦ Taskuary" : t}{t === "Tasks" && pending > 0 ? ` · ${pending > 99 ? "99+" : pending}` : ""}
               </MenuItem>
             ))}
           </Select>
@@ -391,7 +398,7 @@ export default function TaskHubPage() {
                   border: `1px solid ${tab === t ? "#d8cfbe" : "transparent"}`,
                   transition: "all .15s", "&:hover": { color: INK, bgcolor: tab === t ? "#eae4d8" : "#e9e3d8" } }}>
                 {t}
-                {t === "Review" && pending > 0 && (
+                {t === "Tasks" && pending > 0 && (
                   <Box component="span" sx={{ display: "inline-flex", alignItems: "center", justifyContent: "center",
                     minWidth: 16, height: 16, px: 0.45, borderRadius: 99, bgcolor: ALERT, color: "#fffdfb",
                     fontSize: 9.5, fontWeight: 700 }}>{pending > 99 ? "99+" : pending}</Box>
@@ -455,10 +462,8 @@ export default function TaskHubPage() {
               <HubView key={`hub${tick}`} onOpenTask={openTask} />
             </React.Suspense>
           )}
-          {tab === "Review" && <ReviewView key={`r${tick}`} onOpenTask={openTask} onChanged={refreshPending} />}
           {tab === "Reports" && <ReportsView key={`rp${tick}-${reset}`} />}
           {tab === "Connections" && <ConnectorsView key={`c${tick}-${reset}`} onNavigate={go} />}
-          {tab === "Docs" && <DocsView key={`d${tick}-${reset}`} />}
           {tab === "Settings" && <SettingsView key={`s${tick}-${reset}`} onNavigate={go} />}
         </Box>
         {/* The floating mark is gone (the owner, 2026-09-15: "we also don't need the taskuary image in

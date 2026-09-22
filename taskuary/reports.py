@@ -140,7 +140,7 @@ def run_intacct_create(cfg):
     "APBILLITEMS": [{"ACCOUNTNO": "6120", "AMOUNT": "412.50"}]}} - create one record.
 
     A WRITE. The Intacct card ships at scope `read`, so an agent cannot run this directly: it
-    PROPOSES it (TASKUARY-PROPOSE run_tool) and the owner approves it in Review."""
+    PROPOSES it (TASKUARY-PROPOSE run_tool) and the owner approves it on the task."""
     from .intacct import create
     out = create(cfg, (cfg.get('object') or '').strip(), cfg.get('record') or cfg.get('fields'))
     return f"{out['object']} created — key {out['key'] or '(none returned)'}", json.dumps(out, indent=1, default=str)
@@ -2018,7 +2018,7 @@ def send_alert(store, src: dict, cfg: dict, why: str, head: str, body: str) -> d
     # addressed before the picker knew better still holds the old chat, and goes on posting into it
     # every run - #140 "Assistant for Backend Monitoring" was alerting into the WhatsApp group it
     # reads (the owner, 2026-09-17: "it should never send to input channels"). Delivery is not
-    # guarded here: it waits in Review, so a person chose to send that one.
+    # guarded here: it waits on the task, so a person chose to send that one.
     from . import outbound
     refuse = outbound.refuse_input_chat(store, a.get('channel') or 'whatsapp', to)
     if refuse: raise RuntimeError(f'the alert was not sent: {refuse}. Point it at your own chat under Reports.')
@@ -2142,7 +2142,7 @@ def deliver_report(store, src: dict, cfg: dict, subject: str, body: str) -> dict
                           '_task_title': f'Report · {cfg.get("title") or "report"} → {who}'[:140], '_task_kind': 'task',
                           'Deliver': json.dumps({'channel': d.get('channel') or 'email', 'to': to, 'subject': subj})})
         store.add_route(mid, None, 'draft', None,
-                        f'outbound report waiting for you - approve in Review and it goes to {who}', [], 'report')
+                        f'outbound report waiting for you - approve on the task and it goes to {who}', [], 'report')
         store.audit('message', mid, 'outbound_drafted', 'report', 'agent', {'to': to, 'channel': d.get('channel')})
         return {'gate': 'review', 'message_id': mid, 'to': to}
     from . import outbound

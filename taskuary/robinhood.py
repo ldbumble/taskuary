@@ -15,7 +15,7 @@ https://agent.robinhood.com/mcp/trading. Two facts about it shape this whole fil
 THE SAFETY MODEL, which is why this is not four lines:
 
 - The card ships at scope `read` (scopes.DEFAULT_SCOPE), so `robinhood_order` - a `write` - is
-  refused for an agent and becomes a PROPOSAL the owner approves in Review. Same ladder the
+  refused for an agent and becomes a PROPOSAL the owner approves on the task. Same ladder the
   QuickBooks bill and the Intacct post already ride, and deliberate: an agent that reads
   untrusted email is upstream of this connection.
 
@@ -71,7 +71,7 @@ def _call(cfg, must_read: bool):
                 raise PermissionError(
                     f'{tool} is not read-only, so it cannot run as a read. Placing an order is '
                     'robinhood_order, which the card refuses at scope read - it becomes a '
-                    'proposal you approve in Review.')
+                    'proposal you approve on the task.')
         return tool, _text(s.call_tool(tool, args))
     finally:
         s.close()
@@ -94,7 +94,7 @@ def run_robinhood_read(cfg):
 
 def run_robinhood_order(cfg):
     """{"tool": "...", "args": {...}} - place an order. A `write`: at the card's shipped scope
-    this never runs for an agent - it is proposed, and the owner approves it in Review."""
+    this never runs for an agent - it is proposed, and the owner approves it on the task."""
     tool, out = _call(cfg, must_read=False)
     return f'robinhood order via {tool}', out[:4000]
 

@@ -502,7 +502,7 @@ DEFAULT_SETTINGS = {'default_action': 'draft', 'auto_draft_enabled': '1', 'attac
                     # (your own repo, no review ceremony). Either way 'Agents may push' gates it.
                     'git_flow': 'pr',
                     # an agent may PROPOSE high-impact actions (open a PR, comment publicly,
-                    # close an issue, run a tool); each lands in Review for approval
+                    # close an issue, run a tool); each lands on the task for approval
                     'proposals_enabled': '1',
                     # once the hub has READ something, say so at the source: mark the mail
                     # seen, the chat read. Off by default - the funnel is a reader, and a
@@ -991,7 +991,7 @@ class SQLiteStore:
                                 "VALUES ('whatsapp_star_dropped', '1', 'migration')")
                 if gone: logger.info(f'whatsapp: dropped the {gone} catch-all source row - named chats only now')
             # An INVOICE, a REPORT or a proposed SETTING with no task has nowhere left to be
-            # answered once the Review tab is gone; rows filed before add_review asked for one are
+            # answered once the task page is gone; rows filed before add_review asked for one are
             # still sitting in live stores. Each gets the task it should have had, titled with the
             # words it already carries. Scoped to those two kinds on purpose: a task-less `draft` is
             # the answer to filed chatter and is MEANT to stay task-less - it is decided in the
@@ -1313,7 +1313,7 @@ class SQLiteStore:
         self._exec(f"UPDATE task SET {','.join(f'{c}=?' for c in cols)}, UpdatedBy=?, UpdatedAt=?{closed} WHERE TaskId=?",
                    [fields[c] for c in cols] + [actor, _now(), task_id])
         # closing a task IS the decision: its pending reviews (escalations, drafts) resolve
-        # with it instead of haunting the Review queue for a task that's already handled
+        # with it instead of haunting the review queue for a task that's already handled
         if fields.get('Status') in ('done', 'dropped'):
             self._exec("UPDATE review SET Status='superseded', DecidedBy=?, DecidedAt=? "
                        "WHERE TaskId=? AND Status='pending'", (actor, _now(), task_id))
@@ -3542,7 +3542,7 @@ class SQLiteStore:
     def add_review(self, fields):
         # A review that NEEDS a task says so, by naming it. Three callers file one that nothing
         # else owns - a setting proposed in chat, a Zoho invoice, an outbound report - and once
-        # the Review tab is gone those have no page to be answered on, so they ask for a task here.
+        # the task page is gone those have no page to be answered on, so they ask for a task here.
         #
         # This is opt-in, deliberately, and a blanket "every review gets a task" was tried first
         # and is wrong: answering filed chatter is a REPLY, not a project (server.py, the /reply
@@ -3623,7 +3623,7 @@ class SQLiteStore:
                          + ' ORDER BY IFNULL(rv.DecidedAt, rv.CreatedAt) DESC, rv.ReviewId DESC LIMIT 1', values)
     def hold_reviews(self, task_id, reason=None):
         """Park this task's pending reply drafts while an agent works it. A draft written from the
-        mail alone promises what the session has not found yet - and it sat in Review as if it
+        mail alone promises what the session has not found yet - and it sat on the task as if it
         were ready to send. Held leaves the queue; the wrap-up brings it back, rewritten."""
         with self.lock:
             cur = self.cx.execute("UPDATE review SET Status='held', Reason=COALESCE(?, Reason) "

@@ -12,7 +12,7 @@ by one middleware over the METHOD and PATH, before any handler sees the request,
 capability added next month is refused by default rather than discovered later.
 
 What is left is everything worth showing: a timeline of work arriving, triage verdicts with
-their reasons, drafts waiting in Review, a board with agents on it, reports, the assistant's
+their reasons, drafts waiting on the task, a board with agents on it, reports, the assistant's
 posts, the wall. All of it invented, all of it already in the database, and the coding
 sessions REPLAY a recorded transcript so the board is alive without a CLI existing.
 """
@@ -101,7 +101,7 @@ CANNED = [
     "the two lines that decide it. In the demo I answer from a script - in your own Taskuary this "
     "is your CLI or your API key doing the work.",
     "I looked at what is on the timeline. Three things are waiting on you and one of them has been "
-    "waiting since Tuesday; the rest is filed. Ask me to draft the chase and it lands in Review.",
+    "waiting since Tuesday; the rest is filed. Ask me to draft the chase and it lands on the task.",
     "That is a report, not a question - give me the schedule and I will write it every morning "
     "before you are up.",
 ]
@@ -191,7 +191,7 @@ ASSIST = [
     ('assistant', """Six things came in, four are handled. What is actually yours:
 
 - **TQ-0001 - month-end short by 4,180.** The coder has a fix and is waiting on your approval; it found the four inter-company transfers the export drops.
-- **TQ-0003 - AP cutover Thursday.** Ruth needs a yes or a date. A reply is drafted in Review.
+- **TQ-0003 - AP cutover Thursday.** Ruth needs a yes or a date. A reply is drafted on the task.
 - **TQ-0005 - Sam wants the Q3 numbers.** Also drafted.
 
 The newsletter, the thank-you and the maintenance notice are filed. Nothing there needs you."""),
@@ -303,7 +303,7 @@ def seed(store) -> int:
 
     # ...and the rest of a working morning, out of the same named pictures the regression desk
     # uses (testing.Factory), so the demo shows every surface with something in it: a draft
-    # waiting in Review, an agent mid-run, a scheduled report that filed, a chat, a thread.
+    # waiting on the task, an agent mid-run, a scheduled report that filed, a chat, a thread.
     # every picture is given its own words: the desk's defaults ("please look", "Sam Delgado")
     # are placeholders for a test to assert on, and a demo is read by people
     f.pending_draft(title='Can you confirm the AP cutover date?', subject='AP cutover - Thursday?',

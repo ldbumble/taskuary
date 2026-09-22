@@ -1258,7 +1258,7 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
     if who.startswith('agent:') and who != str(t.get('Assignee') or ''):
         _teach_routing(task_id, 'profile', who.split(':', 1)[1], background=background)
     # "This is not a coding task - it just needs an answer." Changing the kind to reply IS that
-    # verdict, so the task enters the Review queue the way a question would have at triage:
+    # verdict, so the task enters the review queue the way a question would have at triage:
     # a draft review appears (auto-drafted when that is on), instead of a repo session.
     if fields.get('Kind') == 'reply' and t.get('Kind') != 'reply':
         mid = coder_reply_target(store, task_id)
@@ -2383,7 +2383,7 @@ class IdeaBody(BaseModel): days: int = 1
 
 @app.post('/api/assistant/ideas/{iid}/{verb}')
 def assistant_act(iid: int, verb: str, body: IdeaBody = None, background: BackgroundTasks = None):
-    """One button on one line: followup (the chase, drafted into Review), task (the agent starts),
+    """One button on one line: followup (the chase, drafted onto the task), task (the agent starts),
     discuss (the full Assistant workspace), dismiss, snooze, or done."""
     try:
         if verb == 'discuss':
@@ -2593,7 +2593,7 @@ def handoff(task_id: int, body: HandoffBody):
     # Handing work to a person ENDS it here. The forward went out and somebody else owns the
     # thing now, so leaving the card open on 'needs you' is the funnel asking for a second
     # decision about work the owner just gave away. Closing it also retires the task's pending
-    # reviews, so the Review queue stops asking about a draft that has already been forwarded.
+    # reviews, so the review queue stops asking about a draft that has already been forwarded.
     store.update_task(task_id, {'Status': 'done'}, ACTOR)
     store.audit('task', task_id, 'handoff', ACTOR,
                 detail={'to': body.to, 'channel': body.channel, 'closed': True})
@@ -2990,7 +2990,7 @@ def clarify_with_sender(tid: int, body: ClarifyBody):
     """Prepare, but never send, the question an agent needs answered.
 
     This is deliberately its own review kind instead of reusing open_reply(): a task can have
-    an action proposal or a final-answer draft already parked in Review, and a clarification
+    an action proposal or a final-answer draft already parked on the task, and a clarification
     must not overwrite either. Approval sends the question through the normal human gate while
     stopping the blocked terminal and leaving the coding task waiting for the answer.
     """
@@ -3014,7 +3014,7 @@ def clarify_with_sender(tid: int, body: ClarifyBody):
         rid = store.add_review({'TaskId': tid, 'MessageId': m['MessageId'], 'Kind': 'clarification',
                                 'Status': 'pending', 'DraftText': text,
                                 'Reason': 'the agent needs missing information from the sender'})
-    store.add_comment(tid, ACTOR, 'human', 'Clarification drafted for the sender; waiting for your approval in Review.')
+    store.add_comment(tid, ACTOR, 'human', 'Clarification drafted for the sender; waiting for your approval on the task.')
     store.audit('review', rid, 'clarification_drafted', ACTOR, detail={'message_id': m['MessageId']})
     return {'reviewId': rid, 'taskId': tid, 'draft': text}
 
@@ -4645,7 +4645,7 @@ def report_preview(body: dict):
     if t == 'zoho_monthly_invoices':
         selected = len((body or {}).get('customers') or [])
         return {'ok': bool(selected), 'headline': f'{selected} customer invoice(s) per monthly batch',
-                'summary': ('The schedule opens an editable batch. Prepare creates Zoho drafts; each email waits in Review. Nothing sends automatically.'
+                'summary': ('The schedule opens an editable batch. Prepare creates Zoho drafts; each email waits on the task. Nothing sends automatically.'
                             if selected else 'Choose at least one Zoho customer.'), 'rows': selected, 'chart': ''}
     conn = store.get_connector_by_type(card_of(t)) if t in REGISTRY and card_of(t) else None
     if conn:

@@ -913,7 +913,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # every kind names its OWN ending. Without the two lines in the middle a general or a
         # task fell through to "sent to the coding agent" - which nothing had done - and the
         # Timeline quotes this verbatim, so the panel would have stated a lie under the verdict.
-        act = (('a reply draft goes to Review for you' + (f' - {unsendable}, so it cannot be sent from here' if unsendable else '')) if f['kind'] == 'reply'
+        act = (('a reply draft goes to the task for you' + (f' - {unsendable}, so it cannot be sent from here' if unsendable else '')) if f['kind'] == 'reply'
                else 'yours to do - nothing is working it' if f['kind'] == 'task'
                else 'not auto-worked: github items queue for you to promote' if msg.get('no_auto')
                else f'not auto-worked: {held}' if held

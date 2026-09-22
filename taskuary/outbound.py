@@ -223,7 +223,7 @@ SENDABLE = ('email', 'teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'disc
 # 'own' and 'assistant' are rows TASKUARY WROTE: work you started here, a note to yourself, a
 # meeting prep, the assistant speaking up. Nobody sent them, so there is nobody to answer - and
 # without them here a prep task closing drafted a reply, signed it in the owner's name, and put
-# it in Review addressed to no one at all.
+# it on the task addressed to no one at all.
 NEVER = {'report', 'own', 'assistant', 'jira', 'asana', 'monday', 'clickup', 'todoist', 'gitlab',
          'azdo', 'linear', 'trello', 'notion', 'sentry', 'pagerduty', 'aws', 'azure'}
 

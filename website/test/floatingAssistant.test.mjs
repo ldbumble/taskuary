@@ -15,7 +15,7 @@ test("the assistant header stays small and opens app-level walkthrough and add c
   assert.match(source, /\["Inbox"/);
   assert.match(source, /\["Tasks"/);
   assert.match(source, /\["Agent work"/);
-  assert.match(source, /\["Review"/);
+  assert.match(source, /\["Waiting on you"/);   // the walk is over what needs a yes, not over a tab
   assert.match(source, />Task<\/Button>/);
   assert.match(source, />Report<\/Button>/);
   assert.match(source, />Connection<\/Button>/);

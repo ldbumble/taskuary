@@ -171,7 +171,7 @@ const demoReply = (taskId, asked) => {
       state["/api/tasks/detail"][String(taskId)].reviews.push(review);
     }
     const preview = text.replace(/^(when|uses|steps|alone|ask first|done when):/gm, "**$1:**").replaceAll("\n", "\n\n");
-    return `Here is the scripted example draft. In your own Taskuary, your AI adapts it to your answers and connections.\n\n${preview}\nThe draft is in Review (rv${review.ReviewId}) for you to edit. Nothing is saved to your real workspace from this demo.`;
+    return `Here is the scripted example draft. In your own Taskuary, your AI adapts it to your answers and connections.\n\n${preview}\nThe draft is on the task (rv${review.ReviewId}) for you to edit. Nothing is saved to your real workspace from this demo.`;
   }
   if (task?.SourceRef !== "assistant:dock") return REPLIES[assistantBox(taskId).messages.length % REPLIES.length];
   const attention = feedRows().find((r) => r.NeedsYou) || feedRows()[0];
@@ -182,7 +182,7 @@ const demoReply = (taskId, asked) => {
   }
   if (/task|outstanding|stuck|quiet/i.test(asked) && work) {
     const ref = work.ref || `TQ-${String(work.TaskId).padStart(4, "0")}`;
-    return `Start with [${ref}](#task=${work.TaskId}) — **${work.Title}**. It is ${work.Status || "open"}; after that, I would clear anything already waiting in Review.`;
+    return `Start with [${ref}](#task=${work.TaskId}) — **${work.Title}**. It is ${work.Status || "open"}; after that, I would clear anything already waiting on the task.`;
   }
   if (attention) {
     const ref = attention.TaskId ? `[TQ-${String(attention.TaskId).padStart(4, "0")}](#task=${attention.TaskId})` : "the newest Timeline item";

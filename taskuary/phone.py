@@ -115,7 +115,7 @@ def intercept(store, channel: str, chat_id: str, text: str, quoted: str = None) 
     store.audit('review', rid, f'phone_{verb}', 'owner-phone', detail={'channel': channel})
     if out.get('send_error'):
         _ack(store, channel, chat_id, f"rv{rid} approved, but sending FAILED: {out['send_error']} "
-                                      '- it is back in Review wearing the error.')
+                                      '- it is back on the task wearing the error.')
     elif verb in ('approve', 'edit'):
         sent = out.get('sent') or {}
         _ack(store, channel, chat_id, f"✓ rv{rid} sent by {sent.get('channel') or 'its channel'}"

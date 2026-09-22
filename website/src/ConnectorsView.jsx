@@ -584,9 +584,9 @@ const DATA_META = {
       "Test logs in for real and then tries to READ \u2014 a green card that only proves the password works hides the usual failure, which is a role with permission on nothing.",
       "Build the reports on the REPORTS tab: name an object (GLENTRY, APBILL, VENDOR, GLACCOUNT\u2026), the fields you want and any filters. Nobody remembers the field ids: the source card's 'What fields does APBILL have?' asks Sage itself and lists them, custom fields included, and the same lookup is a report in its own right when you want to hear about a new one.",
       "Or just say what you want in English: at the top of the Reports tab for a whole report, or on any source card for that one card. Either way it reads the object's real field list before writing the query.",
-      "Writing is the same gateway, by object: intacct_create makes a record (an AP bill, a vendor, a journal batch) and intacct_update changes one that names itself (RECORDNO). The card ships at scope READ, so nothing an agent runs can post \u2014 it proposes, you approve in Review, and the receipt carries the key Intacct assigned."],
+      "Writing is the same gateway, by object: intacct_create makes a record (an AP bill, a vendor, a journal batch) and intacct_update changes one that names itself (RECORDNO). The card ships at scope READ, so nothing an agent runs can post \u2014 it proposes, you approve on the task, and the receipt carries the key Intacct assigned."],
     agent: ["Reads are yours: run_tool with type intacct (object, fields, filters) for rows, or intacct_fields to ask Sage what an object actually HAS. Never guess a field id \u2014 a wrong one is refused by the gateway.",
-      "You may NOT post to the books yourself. Propose it, and say in the session what it is for: TASKUARY-PROPOSE {\"action\": \"run_tool\", \"type\": \"intacct_create\", \"object\": \"APBILL\", \"record\": {\"VENDORID\": ..., \"WHENCREATED\": ..., \"APBILLITEMS\": [{\"ACCOUNTNO\": ..., \"AMOUNT\": ...}]}}. The owner approves it in Review and it posts then, not before. intacct_update is the same road.",
+      "You may NOT post to the books yourself. Propose it, and say in the session what it is for: TASKUARY-PROPOSE {\"action\": \"run_tool\", \"type\": \"intacct_create\", \"object\": \"APBILL\", \"record\": {\"VENDORID\": ..., \"WHENCREATED\": ..., \"APBILLITEMS\": [{\"ACCOUNTNO\": ..., \"AMOUNT\": ...}]}}. The owner approves it on the task and it posts then, not before. intacct_update is the same road.",
       "Read the object fields BEFORE you propose a write: a refused proposal is a wasted approval."] },
   quickbooks: { title: "QuickBooks Online", types: ["quickbooks", "quickbooks_vendors", "quickbooks_accounts", "quickbooks_bill", "quickbooks_expense"],
     fields: [["Intuit app client id (developer.intuit.com → your app → Keys & credentials)", "client_id"],
@@ -600,7 +600,7 @@ const DATA_META = {
     howto: ["developer.intuit.com → Dashboard → Create an app → QuickBooks Online and Payments → scope Accounting. Keys & credentials has a Development (sandbox) and a Production tab — production keys need the app's short questionnaire; sandbox keys work the same day against Intuit's test company.",
       "On that same page add the REDIRECT URI shown on this card (http://localhost:<port>/api/quickbooks/callback) — Intuit refuses a sign-in whose redirect is not registered, character for character.",
       "Paste the client id and secret here, choose production or sandbox, Save, then Connect to QuickBooks: Intuit's sign-in opens, you pick the company, and the browser comes back to Taskuary with the token. Test reads the company name and a vendor list.",
-      "Reads (queries, vendors, accounts) run at the card's default scope. The two WRITES — a bill, a paid expense — need scope write on this card; below that an agent can only PROPOSE one, which lands in Review with the vendor, amount and account, and approving it posts it. That is the design: nothing reaches the books without a click until you say otherwise.",
+      "Reads (queries, vendors, accounts) run at the card's default scope. The two WRITES — a bill, a paid expense — need scope write on this card; below that an agent can only PROPOSE one, which lands on the task with the vendor, amount and account, and approving it posts it. That is the design: nothing reaches the books without a click until you say otherwise.",
       "Build the reports on the REPORTS tab: 'QuickBooks Online' with a query in QBO's SQL (SELECT * FROM Bill WHERE TxnDate >= '2026-08-01'), or the vendor / account lists as their own reports."],
     agent: ["GET {base}/api/connectors/{cid}/quickbooks/status{hdr}: has_app says whether the Intuit keys are saved; connected says whether a token is. Neither is yours to make - the owner creates the app at developer.intuit.com and presses Connect (a browser sign-in). Ask for the client id and secret, save them in ConfigJson, tell them the redirect URI from status to register, then ask them to press Connect on the card.",
       "Once connected, POST {base}/api/connectors/{cid}/test{hdr}. A 401 in the detail means the refresh token expired (100 days unused) - the owner presses Connect again.",
@@ -613,10 +613,10 @@ const DATA_META = {
       "Connect an agent at robinhood.com/agentic-trading and paste the token it issues under Credentials. Leave the url blank unless Robinhood gives you a different one.",
       "Test lists the tools YOUR account exposes. Robinhood publishes no manifest, so this is how you learn the names — the names it prints are what you put in a report's \"tool\".",
       "Reads: 'robinhood_read' with a tool and its args. It refuses any tool Robinhood has not marked read-only, so it cannot be talked into placing an order.",
-      "The card ships at authority READ, so 'robinhood_order' never runs for an agent — it PROPOSES the trade and you approve it in Review. Raising the card to write removes that click. Robinhood's own warning is worth repeating: AI agents can make errors, misinterpret instructions, and act on incomplete or outdated information."],
+      "The card ships at authority READ, so 'robinhood_order' never runs for an agent — it PROPOSES the trade and you approve it on the task. Raising the card to write removes that click. Robinhood's own warning is worth repeating: AI agents can make errors, misinterpret instructions, and act on incomplete or outdated information."],
     agent: ["Run robinhood_tools FIRST - the tool names are not documented anywhere and differ by account; never guess one.",
       "Reads are yours: run_tool with type robinhood_read, a \"tool\" from that manifest and its \"args\". A tool the server has not marked read-only is refused, by design - do not try to route around it.",
-      "You may NOT place a trade. Propose it and say what the analysis was: TASKUARY-PROPOSE {\"action\": \"run_tool\", \"type\": \"robinhood_order\", \"tool\": \"<from the manifest>\", \"args\": {...}}. The owner approves it in Review and it executes then, not before.",
+      "You may NOT place a trade. Propose it and say what the analysis was: TASKUARY-PROPOSE {\"action\": \"run_tool\", \"type\": \"robinhood_order\", \"tool\": \"<from the manifest>\", \"args\": {...}}. The owner approves it on the task and it executes then, not before.",
       "Quote the numbers you based it on in the proposal - a trade the owner cannot check is a trade they should refuse."] },
   zoho_invoice: { title: "Zoho Invoice", types: ["zoho_monthly_invoices"],
     fields: [["Zoho API client id (api-console.zoho.com)", "client_id"],
@@ -624,13 +624,13 @@ const DATA_META = {
       ["accounts URL — change only for a non-US Zoho data center", "accounts_url", "https://accounts.zoho.com"],
       ["organization id — filled in by Connect", "organization_id"]],
     secretLabel: "refresh token (write-only) — Connect fills it in",
-    desc: "Monthly billing as a controlled workflow: copy prior invoices, enter this month's amounts, create Zoho drafts, then approve each outgoing email in Review.",
+    desc: "Monthly billing as a controlled workflow: copy prior invoices, enter this month's amounts, create Zoho drafts, then approve each outgoing email on the task.",
     connect: { label: "Connect to Zoho Invoice", status: (cid) => `/api/connectors/${cid}/zoho/status`, start: (cid) => `/api/connectors/${cid}/zoho/authorize`,
       text: "Opens Zoho sign-in in a new tab. The refresh token returns directly to Taskuary." },
     howto: ["At api-console.zoho.com create a Server-based application and add the redirect URI shown here exactly.",
       "Paste the client id and secret, Save, then Connect. For a non-US account use its accounts host, such as accounts.zoho.eu.",
       "Test reads the organization and active customers. Then open Reports and create a Monthly Zoho invoices workflow; its schedule opens a batch but never sends it.",
-      "Confirm amounts, Prepare drafts, and approve customer emails in Review. The customer/month reference prevents duplicate invoices on retries."],
+      "Confirm amounts, Prepare drafts, and approve customer emails on the task. The customer/month reference prevents duplicate invoices on retries."],
     agent: ["The owner connects Zoho in the browser. Do not ask for or print refresh tokens.",
       "Invoice sends are owner-gated Review actions. Never bypass Review or create a second invoice for the same workflow/customer/period."] },
   teller: { title: "Bank & card feed (Teller)", types: ["teller_accounts", "teller_transactions", "teller_balances", "teller_spend"],
@@ -791,7 +791,7 @@ const DATA_META = {
       clear: ["google_client_id", "google_client_secret"],
       ok: (c) => { const k = parse(c?.ConfigJson); return !!(c && k.google_client_id && k.google_client_secret); } } },
   /* Files OUT as well as in (files.py) — the first two cards that can put a document somewhere.
-     Both ship at authority 'read', so the first save is a proposal in Review; the Authority
+     Both ship at authority 'read', so the first save is a proposal on the task; the Authority
      dropdown on the card, or a routing policy for the narrow case, is what stops it asking. */
   smb_file: { title: "Network file share", types: ["smb_read", "smb_write", "smb_move"],
     fields: [["share root — e.g. \\\\fileserv\\Ops\\Documents", "share"],
@@ -802,10 +802,10 @@ const DATA_META = {
       "Leave username and password blank on a domain-joined machine: Taskuary runs as you, and it reaches whatever you can open in Explorer. Fill them in only for a share your own account cannot reach — Test says which of the two happened.",
       "Test reaches the root and counts what is in it. \"not reachable as a folder\" means the path or the credentials, and the error says which.",
       "REPORTS tab: 'Network share' reads a file, a folder listing (newest first — \"did today's export arrive?\") or a glob like exports/sales-*.csv, which reads the newest match.",
-      "Writing is an AGENT tool, not a report. At authority 'read' an agent proposes the save and you approve it in Review with the destination and size in front of you; raise Authority to 'write' once you are happy for it to file documents unattended."],
+      "Writing is an AGENT tool, not a report. At authority 'read' an agent proposes the save and you approve it on the task with the destination and size in front of you; raise Authority to 'write' once you are happy for it to file documents unattended."],
     agent: ["Ask for the share root and save it as `share` in ConfigJson. Ask whether their own Windows login reaches it (usually yes on a work machine) - if so leave username and Secret empty and say why.",
       "Test (POST {base}/api/connectors/{cid}/test{hdr}). A failure naming the folder is the path; one naming the account is the credentials. Do not retry the same values.",
-      "Turn the connector on. Leave Authority at read unless the owner ASKS for unattended filing - explain that at read they approve each save in Review, which is how the first few should go anyway. SETUP DONE."] },
+      "Turn the connector on. Leave Authority at read unless the owner ASKS for unattended filing - explain that at read they approve each save on the task, which is how the first few should go anyway. SETUP DONE."] },
   sftp: { title: "SFTP", types: ["sftp_list", "sftp_get", "sftp_put", "sftp_move"],
     fields: [["host", "host"], ["port (blank = 22)", "port"], ["username", "username"],
       ["base folder (optional — blank = wherever the login lands)", "root"],
@@ -1455,7 +1455,7 @@ function CardPlaybooks({ type }) {
       </Typography>
       {books.length === 0 && (
         <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>
-          No playbook names this connection yet. One is drafted for you the first time an agent finishes a job with it; approve it in Review and the next such job runs on it.
+          No playbook names this connection yet. One is drafted for you the first time an agent finishes a job with it; approve it on the task and the next such job runs on it.
         </Typography>
       )}
       {books.map((b) => (

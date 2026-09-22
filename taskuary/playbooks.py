@@ -57,7 +57,7 @@ its original request, reply to its sender, or change its routing. Generalize dat
 item numbers into reusable inputs; exclude private example details from the saved playbook.
 When enough is known, show the draft. At the very end of your answer emit TASKUARY-PROPOSE
 followed by a single JSON object with action="write_playbook", slug="new", text=the full markdown,
-and why=a short explanation. Taskuary consumes this marker and queues the draft in Review.
+and why=a short explanation. Taskuary consumes this marker and queues the draft on the task.
 Use a markdown # title and the six labels: when:, uses:, steps:, alone:, ask first:, done when:.
 Never save the file directly. Never claim the proposal is saved or approved.
 """
@@ -112,7 +112,7 @@ def collect_setup_draft(store, task_id, reply):
         queued = next(({'reviewId': r['ReviewId']} for r in store.list_reviews('pending')
                        if r['TaskId'] == task_id and r.get('DraftText') == json.dumps(draft)), None)
         queued = queued or proposals.queue(store, task_id, draft, 'assistant')
-        outcome = (f"Draft ready in Review (rv{queued['reviewId']}). You can edit it before approving."
+        outcome = (f"Draft ready on the task (rv{queued['reviewId']}). You can edit it before approving."
                    if queued else 'The draft could not be queued. Check that playbooks are enabled in Settings.')
     except (ValueError, TypeError) as e:
         outcome = f'The draft could not be queued: {e} Ask the assistant to correct it.'

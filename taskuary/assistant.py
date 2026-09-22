@@ -8,7 +8,7 @@ before them; cold: work nothing has touched; and its own ideas
 from the day's mail), asks the model for its read GIVEN WHAT IT ALREADY SAID, and posts only what
 is new as ONE row on the Timeline. The owner can talk back to every line; a correction or question
 gets an answer and becomes context for later checks. A concrete suggestion may also offer Follow up
-(the chase is drafted in Review) or Make it a task.
+(the chase is drafted on the task) or Make it a task.
 
 It never repeats itself: every idea has a key and a state (idea table). Said once with the same
 facts is said; dismissed stays dismissed until the facts change; snoozed sleeps. Those legacy states
@@ -225,7 +225,7 @@ def followups(store, hours: int, want=('followup', 'promise')) -> list:
 def unanswered(store, days: float = 2, hours: int = 3) -> list:
     """The mirror of followups(): threads where THEIR last word asked the owner for something and
     nothing of the owner's came after it - the ask that slipped. `hours` old at least (fresh mail
-    is not yet missed). Each carries what covers it: a draft in Review, a task and its state, or
+    is not yet missed). Each carries what covers it: a draft on the task, a task and its state, or
     nothing at all - the morning brief's "what slipped" is built from these."""
     from .categories import sender_class, team_domains_of
     from .triage import own_words
@@ -247,7 +247,7 @@ def unanswered(store, days: float = 2, hours: int = 3) -> list:
         if not _ASKS.search(body): continue
         tid = next((c.get('TaskId') for c in reversed(chain) if c.get('TaskId')), None)
         t = store.get_task(tid) if tid else None
-        cover = ('a draft waits for you in Review' if tid in pend else
+        cover = ('a draft waits for you on the task' if tid in pend else
                  f"{task_ref(tid)} is {t.get('Status')}" + (', an agent is on it' if t.get('RunStatus') == 'running' else '') if t else 'no task, no draft')
         who = last.get('FromName') or last.get('FromEmail') or 'someone'
         age = datetime.now() - (_dt(last['SentAt']) or datetime.now())
@@ -264,7 +264,7 @@ def unanswered(store, days: float = 2, hours: int = 3) -> list:
 
 def cold(store, days: int) -> list:
     """Open work nothing has touched for `days`: no comment, no message, no run. A live agent on
-    it is activity; a draft waiting in Review is the owner's to move."""
+    it is activity; a draft waiting on the task is the owner's to move."""
     cut = _since(days)
     out = []
     for t in store.list_tasks(active_only=True):
@@ -276,7 +276,7 @@ def cold(store, days: int) -> list:
         ref = task_ref(t['TaskId'])
         out.append({'key': f'cold:{ref}', 'kind': 'cold', 'sig': last,
                     'facts': f"{ref} \"{_short(t.get('Title'), 80)}\" [{t['Status']}, kind {t.get('Kind')}] - nothing has happened on it for {age} days"
-                             + (' and a draft waits for you in Review' if wait else ''),
+                             + (' and a draft waits for you on the task' if wait else ''),
                     'text': (f"{ref} has a reply waiting on you for {age} days - \"{_short(t.get('Title'), 60)}\"" if wait
                              else f"{ref} has sat quiet for {age} days - \"{_short(t.get('Title'), 60)}\". Push it or drop it?"),
                     'action': {'type': 'task', 'tid': t['TaskId']}})
@@ -698,7 +698,7 @@ def _open(store, cap: int = 20) -> str:
     def line(t):
         last = _dt(store.task_last_activity(t['TaskId']) or t.get('UpdatedAt') or t.get('CreatedAt'))
         age = f"{int((datetime.now() - last).total_seconds() // 3600)}h since anything happened" if last else ''
-        state = f"{t.get('RunAgent') or 'an agent'} is working it" if t.get('RunStatus') == 'running' else 'a draft waits for you in Review' if t.get('ReviewStatus') == 'pending' else age
+        state = f"{t.get('RunAgent') or 'an agent'} is working it" if t.get('RunStatus') == 'running' else 'a draft waits for you on the task' if t.get('ReviewStatus') == 'pending' else age
         return f"- {task_ref(t['TaskId'])} [{t['Status']}, {t.get('Kind')}] {_short(t.get('Title'), 80)}" + (f" - {state}" if state else '')
     return '\n'.join(line(t) for t in ts[:cap]) or '(nothing open)'
 
@@ -804,7 +804,7 @@ def contradicts_sent_reply(store, line: dict) -> bool:
 
     The full reply is also put into the model's people context. This is the final factual gate:
     a model may overlook context, but Taskuary must not publish "nobody replied" when its own
-    Review table records the exact response and the successful decision.
+    review table records the exact response and the successful decision.
     """
     if not _UNANSWERED_CLAIM.search(str(line.get('text') or '')): return False
     return bool(sent_reply_for(store, line))
@@ -1580,7 +1580,7 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
 
 # ── the buttons ──────────────────────────────────────────────────────────────────────────────
 def nudge(store, mid: int, why: str, actor: str = 'owner', llm=None) -> dict:
-    """The chase, drafted in the owner's voice and parked in Review - never sent by itself."""
+    """The chase, drafted in the owner's voice and parked on the task - never sent by itself."""
     from .ingest import task_from_message
     from . import responder
     m = store.get_message(mid)
@@ -1591,7 +1591,7 @@ def nudge(store, mid: int, why: str, actor: str = 'owner', llm=None) -> dict:
                             'Reason': f'follow-up the assistant suggested: {why[:160]}'})
     try: responder.write_draft(store, tid, rid, actor=actor, llm=llm, nudge=why)
     except Exception as e: logger.warning(f'follow-up draft failed for review {rid}: {e}')   # Review keeps the empty draft; 'Draft with AI' retries
-    store.add_comment(tid, 'assistant', 'agent', f'FOLLOW-UP\n{why}\nThe chase is drafted in Review - approving sends it.')
+    store.add_comment(tid, 'assistant', 'agent', f'FOLLOW-UP\n{why}\nThe chase is drafted on the task - approving sends it.')
     return {'taskId': tid, 'ref': task_ref(tid), 'reviewId': rid}
 
 

@@ -135,7 +135,7 @@ class Factory:
         return _pic(tid=tid, mid=mid, rid=rid)
 
     def held_draft(self, title='held draft'):
-        """Park the pending reply while an agent works it. Leaves the Review queue."""
+        """Park the pending reply while an agent works it. Leaves the review queue."""
         p = self.pending_draft(title=title)
         self.s.hold_reviews(p.tid, 'held while an agent works the task')
         return p

@@ -114,7 +114,7 @@ reason in reverse — a closed task with open items is a lie about its own state
 ## Replies
 
 The Reply section exists whenever the task has an incoming sender. It shows one of three things:
-no draft yet, a draft ready, or a reply sent. **Open in Review** is the only road out — type your
+no draft yet, a draft ready, or a reply sent. **Open on the task** is the only road out — type your
 own or generate one, edit it, approve it.
 
 One reply is special. A **clarification** stops the active agent when it is sent and moves the
@@ -133,7 +133,7 @@ Two levels, and the difference is worth holding onto:
 
 `CODER.md` is the playbook for code. Every other kind of recurring job gets its own page the
 first time an agent does it: on close, Taskuary asks whether that will recur and drafts the
-playbook into Review. Approve it, and the next message like it is matched to that playbook by
+playbook onto the task. Approve it, and the next message like it is matched to that playbook by
 triage, and the agent is seeded from it instead of from `CODER.md`'s repository rules.
 
 Each connector card lists the playbooks that name it, and the words themselves are edited on the

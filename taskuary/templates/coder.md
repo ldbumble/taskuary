@@ -60,7 +60,7 @@ only what its `alone` line allows, ask John here in the session for anything on 
 and you are finished when `done when` is true. It outranks the repository rules above for that
 job. When there is no playbook and you have just done a kind of job that will plainly recur, say
 so, or draft one yourself: `TASKUARY-PROPOSE {"action": "write_playbook", "slug": "<slug>",
-"text": "<the playbook as markdown>"}`. Nothing is filed until John approves it in Review.
+"text": "<the playbook as markdown>"}`. Nothing is filed until John approves it on the task.
 
 ## GitHub etiquette
 - Comment meaningful progress on the issue when one exists.

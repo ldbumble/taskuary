@@ -11,7 +11,7 @@ gets posted. So the card carries five verbs, split the way the scope ladder want
   quickbooks_expense   WRITE  {"vendor", "amount", "account", "paid_from", "date", "memo"}   - a card/bank purchase
 
 The card ships at scope `read`, so an agent cannot post directly: it proposes (TASKUARY-PROPOSE
-{"action": "run_tool", "type": "quickbooks_bill", ...}), the proposal lands in Review with the
+{"action": "run_tool", "type": "quickbooks_bill", ...}), the proposal lands on the task with the
 vendor, the amount and the account on it, and approving RUNS it. Raise the card to `write` and a
 routing policy can let small, known bills through without the click - that is the owner's choice
 to make once, not the agent's to make each time.

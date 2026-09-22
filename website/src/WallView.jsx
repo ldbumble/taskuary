@@ -180,7 +180,7 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
       {wrapNotice && <Alert severity="error" onClose={() => setWrapNotice("")} sx={{ mb: 1 }}>{wrapNotice}</Alert>}
       {wrapDone && <Alert severity="success" onClose={() => setWrapDone(null)} sx={{ mb: 1 }}
         action={<Button color="inherit" size="small" onClick={() => onOpenTask?.(wrapDone.tid)}>Open {wrapDone.ref}</Button>}>
-        Wrapped up {wrapDone.ref}{wrapDone.line ? ` — ${wrapDone.line}` : ""}. {wrapDone.drafting ? "A reply is drafted for your approval in Review; the task closes when you send or dismiss it." : "The task is closed."}
+        Wrapped up {wrapDone.ref}{wrapDone.line ? ` — ${wrapDone.line}` : ""}. {wrapDone.drafting ? "A reply is drafted for your approval on the task; the task closes when you send or dismiss it." : "The task is closed."}
       </Alert>}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 1.25 }}>
         <Typography sx={{ color: INK, fontWeight: 800, fontSize: 15 }}>The wall</Typography>

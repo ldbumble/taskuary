@@ -9,9 +9,9 @@ So: ＋ New on the Timeline, and two forks that both end in the same place.
 
 - SAY IT NOW: the AI writes the message from your ask, in your voice (the same SOUL/STYLE/
   LEARNED documents every reply uses - one voice, whichever direction the mail is travelling),
-  and parks it in Review. You read it and press send. Nothing leaves on its own.
+  and parks it on the task. You read it and press send. Nothing leaves on its own.
 - FIND OUT FIRST: it becomes a task like any other and an agent works it. When the agent
-  finishes it drafts the message from what it actually found, and THAT lands in Review. Same
+  finishes it drafts the message from what it actually found, and THAT lands on the task. Same
   lifecycle, same buttons, same one approval at the end.
 
 The row on the Timeline is created either way, at the moment you pressed the button, marked

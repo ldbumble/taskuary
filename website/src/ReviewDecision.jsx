@@ -1,5 +1,5 @@
 // ONE DECISION, WHEREVER IT IS SHOWN. What they wrote, what we would say back, and the verdict
-// buttons - extracted from the Review tab so the task page can hold the decision instead of
+// buttons - extracted from the review queue so the task page can hold the decision instead of
 // sending you to another tab to make it (2026-09-22). A proposal (a playbook, a setting, an
 // action) renders through the same card: proposalPresentation() gives it its own title, its
 // destination and its own labels, and nothing is sent to a sender.

@@ -966,7 +966,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         if extra: t.seeded, t.accepted = seed, True   # the CLI submits it itself; kept so harvest drops the echo
         else: t.seed(seed)               # no prompt argument on this CLI: type it in, verified
     # A reply drafted from the mail alone promises what this session has not worked out yet, so
-    # it stops waiting in Review and comes back rewritten from the report - see coder.raise_reply.
+    # it stops waiting on the task and comes back rewritten from the report - see coder.raise_reply.
     if task_id and store.hold_reviews(task_id, 'held while an agent works the task - the reply is written from what it finds'):
         logger.debug(f'held the pending reply on task {task_id} while {agent or "a session"} works it')
     store.audit('terminal', 0, 'open', actor, detail={'sid': t.sid, 'agent': agent, 'cwd': cwd, 'task': task_id})

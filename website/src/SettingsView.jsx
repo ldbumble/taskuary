@@ -30,6 +30,8 @@ import { ChannelIcon, ConfirmDelete, Empty } from "./ui.jsx";
 import { notifyState } from "./notify.js";
 import { normalizeBrainOptions } from "./brainOptions.js";
 import { ABOUT_SECTIONS, AUDIT_SECTIONS, secId, scrollToSection, sectionOffset, SCROLL_TOP } from "./settingsMap.js";
+import MenuBookIcon from "@mui/icons-material/MenuBook";
+import DocsView from "./DocsView.jsx";
 
 
 const KINDS = ["keyword", "sender", "sender_domain", "noreply", "first_time_sender"];
@@ -280,6 +282,7 @@ const PAGE = 980;
 
 const PAGES = {
   about: { title: "About you", icon: AccountCircleIcon, desc: "Who the system knows you are — your identities per channel, the facts only you can add, your avatar." },
+  docs: { title: "Docs", icon: MenuBookIcon, desc: "The documents the system writes from and writes to — how you sound, what triage is told, what it has learned, and the playbooks your agents follow." },
   config: { title: "Configuration", icon: TuneIcon, desc: "Triage, drafting, coder and display knobs — how the funnel behaves." },
   policies: { title: "Routing policies", icon: AltRouteIcon, desc: "Deterministic rules the AI can never override — ignores, escalations, auto-answers." },
   memory: { title: "Verdicts & notes", icon: PsychologyIcon, desc: "The evidence behind LEARNED.md — every verdict you gave, one line each, plus notes you write. Toggle off what it learned wrong." },
@@ -735,6 +738,7 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate, onJump, onSections 
   }
 
   if (page === "about") return <AboutYou />;
+  if (page === "docs") return <DocsView />;
   if (page === "updates") return <UpdateCard />;
 
   if (page === "audit") {
@@ -813,7 +817,10 @@ function SettingsPages({ page, setPage, q, setQ, onNavigate, onJump, onSections 
 
 // One page, a rail, and a search box that is always reachable. The landing grid meant every
 // trip between two settings went section -> back -> section; these six are edited together.
-const NAV = ["about", "config", "policies", "memory", "audit", "updates"];
+// Docs is a SECTION here rather than a tab of its own: it is configuration you read, it sits
+// where About you leaves off, and moving it in keeps the top strip symmetric about the
+// Assistant now that Review is gone (the owner, 2026-09-22).
+const NAV = ["about", "docs", "config", "policies", "memory", "audit", "updates"];
 const RAIL = 236, GUTTER = 24;   // the rail's own width, and the grid gap beside it
 
 export default function SettingsView({ onNavigate }) {
@@ -886,6 +893,9 @@ export default function SettingsView({ onNavigate }) {
   // blanked the hash before the parent ever read it.
   useEffect(() => {
     const hash = window.location.hash || "";
+    // #playbook=<slug> / #profiles come from a connector card and name no settings page. They are
+    // left in place for DocsView to read; this only has to open the page that renders it.
+    if (/^#(?:playbook=|profiles(?:$|=))/.test(hash)) { goTo("docs", ""); return; }
     if (!/settings=/.test(hash)) return;
     const m = /settings=([\w-]+)/.exec(hash);
     const g = /group=([^&]+)/.exec(hash);

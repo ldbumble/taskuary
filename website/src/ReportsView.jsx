@@ -714,7 +714,7 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
     try {
       const { data } = await api.post(`/api/invoice-batches/${batch.BatchId}/prepare`); setBatch(data.batch);
       setMsg(data.errors?.length ? `${data.created} drafts created; ${data.errors.length} need attention: ${data.errors.join("; ")}`
-        : `${data.created} drafts created${data.reused ? `, ${data.reused} existing drafts reused` : ""}. They are waiting in Review.`);
+        : `${data.created} drafts created${data.reused ? `, ${data.reused} existing drafts reused` : ""}. They are waiting on the task.`);
     } catch (e) { setMsg(e?.response?.data?.detail || "Could not prepare drafts"); }
     setBusy("");
   };
@@ -770,7 +770,7 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
         </Box>)}
         {batch?.items?.length > 0 && <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1.5 }}>
           <Button variant="contained" disableElevation disabled={!!busy || batch.Status === "done"} onClick={prepare}>{busy === "prepare" ? "Preparing…" : "Prepare Zoho drafts"}</Button>
-          <Typography variant="caption" sx={{ color: DIM }}>Each prepared customer becomes a separate approval in Review.</Typography>
+          <Typography variant="caption" sx={{ color: DIM }}>Each prepared customer becomes a separate approval on the task.</Typography>
         </Box>}
       </Box>}
       {msg && <Alert severity={/failed|could not|need attention|Choose|No /.test(msg) ? "warning" : "success"} sx={{ mt: 1.5 }}>{msg}</Alert>}
@@ -1391,7 +1391,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                     <Typography variant="caption" sx={{ color: (cfg.deliver.gate === "auto") ? "#55697a" : FAINT, flex: 1, minWidth: 200 }}>
                       {cfg.deliver.gate === "auto"
                         ? "This report will send on its schedule with nobody reading it first. Everything else in Taskuary waits for you — this is the one place you can turn that off, deliberately."
-                        : "Each run lands in Review as a draft. Approving it sends; editing first is fine."}
+                        : "Each run lands on the task as a draft. Approving it sends; editing first is fine."}
                     </Typography>
                   </Box>
                 </>
@@ -1620,7 +1620,7 @@ function Composer({ onDraft, kind = "report" }) {
       <TextField fullWidth size="small" multiline minRows={2} value={ask} disabled={busy}
         sx={{ bgcolor: "#fff" }}
         placeholder={kind === "workflow"
-          ? "On the first of each month, prepare Zoho invoices for Acme and Northwind and leave every send in Review."
+          ? "On the first of each month, prepare Zoho invoices for Acme and Northwind and leave every send on the task."
             + NL + "Every Monday, have the coder run /weekly-user-review and file what it finds."
           : "Read C:/exports/daily-*.csv every morning, total the units by site and flag anything under 70."
             + NL + "Every Monday, list the AP bills from Intacct due in the next 30 days and call out anything over 10k."}

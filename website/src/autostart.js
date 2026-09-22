@@ -20,7 +20,7 @@ export const isGeneralKind = (kind) => GENERAL_KINDS.has(String(kind || "general
 // 2026-09-10). A `reply` is drafted by the same model triage uses: it never opens a session and
 // never queues for a slot, so a card for it on the floor is a worker that does not exist. A `task`
 // is the owner's own list with nothing working it, and `setup` is a walk-through in the chat. All
-// three stay in Tasks and in Review - they are simply not agent work.
+// three stay in Tasks and on the task - they are simply not agent work.
 //
 // Stated as what is NOT agent work, so it FAILS OPEN: a kind nobody has thought of yet keeps its
 // card rather than disappearing from the one screen that is meant to show everything running.

@@ -9,7 +9,7 @@ The recording starts by clicking **Walk me through my tasks**, bringing Ruth's
 request forward without a long opening hold.
 The story is for someone new to Taskuary: Ruth asks for the latest vendor spend
 numbers; Connections shows the inbox, business data and AI choices; **Send to
-agent** opens the general assistant; the prepared reply waits in Review; the
+agent** opens the general assistant; the prepared reply waits on the task; the
 owner approves it. There are no coding tasks in the walkthrough.
 
 The optional static-demo URL is `/demo/?workflow=numbers`. Its authored example

@@ -50,7 +50,7 @@ export default function NewPlaybookDialog({ connectorType = "", onClose, onManua
     <DialogTitle id="new-playbook-title">{task ? "Build your playbook with AI" : "New playbook"}</DialogTitle>
     {task ? <DialogContent sx={{ display: "flex", flexDirection: "column", minHeight: 0, p: 0 }}>
       <Typography sx={{ px: 3, pb: 1, color: "text.secondary", fontSize: 13 }}>
-        Your assistant will draft the steps and review rules with you. Approve the finished draft in Review.
+        Your assistant will draft the steps and review rules with you. Approve the finished draft on the task.
       </Typography>
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
         <Suspense fallback={<CircularProgress sx={{ m: 3 }} />}><GeneralWorkspace task={task} compact /></Suspense>

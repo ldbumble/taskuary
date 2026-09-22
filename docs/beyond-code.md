@@ -74,7 +74,7 @@ file; the playbook is one more section.
 the task still lands on the agent with the ask, and the agent does the job *with the owner in the
 session* (that is what the live terminal is for). On close, the same on-close pass that writes
 Social entries (`handbook.learn_from_session`) asks one more question: *did this session do a kind
-of job that will recur? Draft its playbook.* The draft lands in Review as a proposal; approving it
+of job that will recur? Draft its playbook.* The draft lands on the task as a proposal; approving it
 files it. The second transaction matches it. That is the accretion: every kind of task is done by
 hand once, by the agent with the owner watching, and never twice.
 
@@ -103,7 +103,7 @@ the period was open. A thin card still says what is missing.
    Playbooks section on every connector card (one file, two doors), the menu triage is shown (it
    answers `"playbook": "<slug>"` and the task is tagged `playbook:<slug>`), the seed block that
    outranks CODER.md's repository rules, the whole page in the context file, and the on-close
-   question whose answer is a `write_playbook` proposal in Review - editable there, filed only on
+   question whose answer is a `write_playbook` proposal on the task - editable there, filed only on
    approval. An agent may propose one itself the same way.
 3. **A card feed in.** Two roads, cheapest first:
    - *Statement mail.* Card issuers already email statements and alerts; the mailbox connector
@@ -148,7 +148,7 @@ The whole job, with nothing new beyond them:
    local path the share card accepts as a source), `smb_write` to file it under the name the
    playbook dictates - or one `smb_write` with the mail's `attachment` id, for the copy that came by
    mail - and `sftp_move` to mark the remote file handled.
-5. Each call is an audit row, and each write was either approved in Review or covered by a routing
+5. Each call is an audit row, and each write was either approved on the task or covered by a routing
    policy the owner wrote from the playbook's `alone:` line.
 6. `done when:` names the destination path, so there is something for `proof.py` to check.
 

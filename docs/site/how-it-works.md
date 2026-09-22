@@ -24,7 +24,7 @@ Every message gets exactly one verdict, and there are only five places it can go
 | Road | What it means | What happens |
 |---|---|---|
 | **fyi** | nothing to do | filed; it stays readable and nothing is created |
-| **reply** | a sentence settles it | a draft goes to Review for you to approve |
+| **reply** | a sentence settles it | a draft goes to the task for you to approve |
 | **coding** | an agent at a keyboard | a CLI session starts in the checkout it picks |
 | **general** | worth thinking about | a conversation opens on the task; no system is touched |
 | **task** | yours to do | it lands on your list and nothing works it |
@@ -134,7 +134,7 @@ around the edges — they are what the models are actually told.
 Playbooks are the ones that grow. `CODER.md` is the playbook for code; every other kind of job —
 a card charge to post as a bill, a new hire to set up — gets its own page the first time an agent
 does it. On close, Taskuary asks whether that was a kind of job that will recur, and drafts the
-playbook into Review.
+playbook onto the task.
 
 **Generate from history** on `TRIAGE.md` and `STYLE.md` bootstraps all of this from your last
 three months of mail: it compares what arrived with what you actually answered, and writes the

@@ -341,7 +341,7 @@ def dock_snapshot(store) -> str:
         lines.append(f"- {task_ref(t['TaskId'])} | {t.get('Status') or 'open'} | {t.get('Priority') or 'normal'} | {one_line(t.get('Title'))}{run}{review}")
 
     lines.append('\nPENDING REVIEW')
-    if not reviews: lines.append('- Nothing is waiting in Review.')
+    if not reviews: lines.append('- Nothing is waiting on the task.')
     for r in reviews:
         ref = task_ref(r['TaskId']) if r.get('TaskId') else f"message {r.get('MessageId')}"
         lines.append(f"- rv{r.get('ReviewId')} | {ref} | {r.get('Kind') or 'review'} | "

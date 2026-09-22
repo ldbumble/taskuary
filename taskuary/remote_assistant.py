@@ -558,7 +558,7 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
         if rid:                                             # the draft is the next thing to read, so go to it
             nxt = concierge.surface(store, f'review:{rid}', actor=actor)
             return '\n\n'.join(said + [turn_text(nxt, store=store)])
-        said.append('I could not write that draft here - it is waiting on the Review tab.')
+        said.append('I could not write that draft here - it is waiting on the task page.')
     if walk_on:
         nxt = concierge.surface(store, actor=actor)
         return '\n\n'.join(said + [turn_text(nxt, store=store)])

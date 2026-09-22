@@ -33,7 +33,7 @@ ACTIONS = {
     'intacct': 'read', 'intacct_fields': 'read',      # readByQuery and lookup; nothing posts
     # QuickBooks: the reads are reads. The two writes post to the books, which is exactly what the
     # ladder is for - the card ships at 'read', so an agent can only PROPOSE a bill (proposals.py,
-    # run_tool) and the owner approves it in Review. Raising the card to 'write' is the owner's call.
+    # run_tool) and the owner approves it on the task. Raising the card to 'write' is the owner's call.
     'quickbooks': 'read', 'quickbooks_vendors': 'read', 'quickbooks_accounts': 'read',
     'quickbooks_bill': 'write', 'quickbooks_expense': 'write',
     'zoho_monthly_invoices': 'read', 'zoho_customers': 'read', 'zoho_invoices': 'read',

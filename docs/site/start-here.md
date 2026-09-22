@@ -17,11 +17,11 @@ Three sentences, because the rest of this site is detail:
    settles it, an agent should work it, let's talk it through, or it's yours. That verdict is
    visible, and arguing with it teaches the next one.
 3. **Work that can be done is done, and comes back for approval.** A coding agent works in your
-   checkout; replies wait in Review. Approving is always a human action.
+   checkout; replies wait on the task. Approving is always a human action.
 
 :::rule The one thing to understand
 Taskuary never sends anything by itself. Replies, comments, invoices and posts all wait for you
-in Review. The only deliberate exception is an alert you configured, which fires the moment its
+on the task. The only deliberate exception is an alert you configured, which fires the moment its
 rule trips — an alert that waits for approval is not an alert.
 :::
 

@@ -351,13 +351,13 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
         except Exception as e: logger.debug(f'handbook: nothing filed for task {tid} - {e}')
     # 'drafting' must be what finish() ACTUALLY did, not a second guess at it: recomputing it from
     # reply_target alone skipped the can-this-channel-even-reply rule, so a GitHub task with
-    # replies off closed with no draft while the card still promised one in Review.
+    # replies off closed with no draft while the card still promised one on the task.
     fin = {}
     if close and (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'):
         fin = finish(store, tid, rep, None, agent, reply_source(text, final_message), owner_done=actor == 'owner') or {}
         from . import selfclose; selfclose.unclaim(store, tid, actor)   # the owner ended it; the mark that kept it open has done its job
     # ...and the last question, once the report and the reply are in hand: was this a KIND of job that
-    # will recur, done here for the first time? The answer is a proposal in Review, never a file
+    # will recur, done here for the first time? The answer is a proposal on the task, never a file
     # (playbooks.py) - the second such job matches it. Last on purpose: the receipt and the sender's
     # answer are what a close is for, and this call must never be the one the drafter's AI budget goes to.
     from . import playbooks
@@ -438,7 +438,7 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,
     except Exception as e: logger.warning(f'reply draft failed for task {task_id}: {e}')
     # a refresh that failed is an unresolved freshness state the owner sees: the draft waits, stale, for one that succeeds
     if fresh.get('state') == 'unresolved': store.mark_review_stale(rid)
-    # the ping that matters most: work FINISHED and its reply is sitting in Review on you
+    # the ping that matters most: work FINISHED and its reply is sitting on the task on you
     if (store.get_settings().get('notify_level') or 'needs_me') != 'off':
         from .outbound import notify
         from .phone import ping_tail
@@ -449,5 +449,5 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,
         # 'approve' in the chat sends it (phone.py), so 'done' really can mean done
         tail = ping_tail(store, rid, (store.get_review(rid) or {}).get('DraftText'))
         try: notify(store, f'{task_ref(task_id)} is done - the reply is drafted and waiting on '
-                           f'your approval in Review.\n{head}{tail}')
+                           f'your approval on the task.\n{head}{tail}')
         except Exception as e: logger.warning(f'notify failed for task {task_id}: {e}')

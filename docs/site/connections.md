@@ -100,7 +100,7 @@ machine.
 
 **Finance** — Sage Intacct, QuickBooks Online, Zoho Invoice, and bank and card feeds through
 SimpleFIN or Teller. These are the cards where the read/write distinction bites: each ships at
-`read`, so an agent proposes a bill or an invoice and you approve it in Review. Raising a card to
+`read`, so an agent proposes a bill or an invoice and you approve it on the task. Raising a card to
 `write` is what lets a routing policy pass small, known items through without you.
 
 **Markets** — Yahoo Finance, CoinGecko, Alchemy, ECB reference rates, SEC EDGAR filings, and a

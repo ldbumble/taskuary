@@ -199,7 +199,7 @@ def fields_of(cfg, obj):
 #
 # What keeps this safe is NOT this module: the Intacct card ships at scope `read` (scopes.py), so
 # an agent calling these through /api/tools/run is refused. It reaches them only by PROPOSING
-# (proposals.py, run_tool), and the owner approves the proposal in Review. That is the same road
+# (proposals.py, run_tool), and the owner approves the proposal on the task. That is the same road
 # a QuickBooks bill takes, and it is deliberate: nothing posts to the books on an agent's say-so.
 
 def _record_xml(parent, fields):

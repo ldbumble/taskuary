@@ -82,7 +82,7 @@ def sync_connections(store, actor='system'):
                      'WRITES to the books (quickbooks_bill, quickbooks_expense) are never yours to run directly: '
                      'propose one - TASKUARY-PROPOSE {"action": "run_tool", "type": "quickbooks_bill", "vendor": ..., '
                      '"amount": ..., "account": ..., "date": ..., "memo": ..., "doc_number": ...} in your session - '
-                     'and the owner approves it in Review.'.replace('{auth}', auth))
+                     'and the owner approves it on the task.'.replace('{auth}', auth))
     block = '\n'.join(lines) or '_(no connections yet — add them in the Connections tab)_'
     head, rest = doc.split(CONN_START, 1)
     _, tail = rest.split(CONN_END, 1)

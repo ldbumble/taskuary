@@ -122,7 +122,7 @@ export const DEMO_ASSISTANT_TRANSCRIPTS = {
     { id: "demo-8899-5", role: "user", at: "2026-09-03 08:07:00", text: "Leave that for the close check. Anything noisy?" },
     { id: "demo-8899-6", role: "assistant", at: "2026-09-03 08:07:10", text: "Two FYIs: a maintenance window and a newsletter. Neither started work, and both were filed." },
     { id: "demo-8899-7", role: "user", at: "2026-09-03 08:11:00", text: "That's right. Done." },
-    { id: "demo-8899-8", role: "assistant", at: "2026-09-03 08:12:00", text: "Overnight is clear. The cutover reply remains in Review for later." },
+    { id: "demo-8899-8", role: "assistant", at: "2026-09-03 08:12:00", text: "Overnight is clear. The cutover reply remains on the task for later." },
   ],
   8898: [
     { id: "demo-8898-1", role: "user", at: "2026-09-02 16:38:00", text: "What changed in month-end since lunch?" },

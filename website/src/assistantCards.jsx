@@ -490,7 +490,7 @@ export function AgentDoneCard({ card, onOpenTask, onDone, onSurface }) {
     try {
       const { data } = await api.post(`/api/messages/${card.mid}/reply`, { draft: true, instruction: null });
       if (data.reviewId) onSurface?.(`review:${data.reviewId}`, "A draft from the agent's findings - read it below.");
-      else onDone?.("A reply is open in Review.");
+      else onDone?.("A reply is drafted on the task.");
     } catch (e) { setErr(errText(e)); }
     setBusy(false);
   };
@@ -514,7 +514,7 @@ export function AgentDoneCard({ card, onOpenTask, onDone, onSurface }) {
         <Button size="small" variant="contained" disableElevation onClick={show} sx={primary}>{open ? "Fold the report" : "Show the final report"}</Button>
         {!!card.mid && (
           <Button size="small" variant="outlined" disabled={busy} onClick={reply} sx={quiet}
-            title="Write the sender a reply from what the agent found - it lands in Review for your yes">
+            title="Write the sender a reply from what the agent found - it lands on the task for your yes">
             {busy ? "Drafting…" : "Reply from this"}</Button>
         )}
         <Button size="small" onClick={() => onOpenTask?.(card.tid)} sx={faint}>Open {card.ref}</Button>

@@ -22,7 +22,7 @@ const WALKTHROUGHS = [
   ["Inbox", "Walk me through the emails that need my attention, exactly one email at a time. Name the sender and subject, explain what they need, recommend the next action, and show the matching reply or task action when one is available. Ask one question, then stop and wait for my answer."],
   ["Tasks", "Walk me through my outstanding tasks, exactly one task at a time. Start with the most consequential or stuck task, explain its state and the next action, show its task action card, ask one question, then stop and wait for my answer."],
   ["Agent work", "Walk me through recent agent work, exactly one result at a time. Explain what the agent changed or found, what remains unresolved, and which action I should take next. Ask one question, then stop and wait for my answer."],
-  ["Review", "Walk me through items waiting in Review, exactly one item at a time. Name the rv number and its task when available so the action card shows the exact draft. Explain the decision, recommend Send, Redraft, or Dismiss, ask one question, then stop and wait for my answer."],
+  ["Waiting on you", "Walk me through the drafts and proposals waiting for my yes, exactly one item at a time. Name the rv number and its task when available so the action card shows the exact draft. Explain the decision, recommend Send, Redraft, or Dismiss, ask one question, then stop and wait for my answer."],
 ];
 
 const errorText = (e) => e?.response?.data?.detail || e?.message || "Taskuary could not open.";
@@ -134,7 +134,7 @@ export default function FloatingAssistant({ onNavigate, onChanged, activeTab }) 
               </Button>
             ))}
             <Box sx={{ flex: 1 }} />
-            {["Assistant", "Tasks", "Review"].map((tab) => (
+            {["Assistant", "Tasks"].map((tab) => (
               <Button key={tab} size="small" endIcon={<LaunchIcon sx={{ fontSize: "12px !important" }} />} onClick={() => go(tab)}
                 sx={{ minWidth: 0, px: 0.55, py: 0.2, fontSize: 10.5, color: DIM, textTransform: "none" }}>{tab}</Button>
             ))}

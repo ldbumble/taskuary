@@ -24,7 +24,7 @@ export const agentPhase = ({ session, run, transcript, report, conversation } = 
   return "not started";
 };
 
-// Action proposals (write a playbook, push a branch, close an issue) share the Review table
+// Action proposals (write a playbook, push a branch, close an issue) share the review table
 // with outbound replies, but they are not communication. A proposal is normally queued after
 // the reply, so blindly taking reviews[0] makes its JSON envelope appear as the current draft.
 export const pendingReplyReview = (reviews = []) =>

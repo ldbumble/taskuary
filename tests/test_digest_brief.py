@@ -51,7 +51,7 @@ class UnansweredTests(unittest.TestCase):
         s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending'})
         got = assistant.unanswered(s, days=3)
         self.assertEqual(len(got), 1)
-        self.assertIn('a draft waits for you in Review', got[0]['facts'])
+        self.assertIn('a draft waits for you on the task', got[0]['facts'])
 
     def test_a_fresh_ask_is_not_yet_missed(self):
         s = _store()

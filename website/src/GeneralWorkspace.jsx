@@ -333,7 +333,7 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
             <Button size="small" variant="outlined" disabled={!!busy} sx={{ color: "#867f74", borderColor: "#d6cec1" }} onClick={() => decide(review, "no_reply")}>Dismiss</Button>
           </>}
           <Box sx={{ flex: 1 }} />
-          <Button size="small" onClick={() => onNavigate?.("Review")}>All review</Button>
+          <Button size="small" onClick={() => onNavigate?.("Assistant")}>All that needs you</Button>
         </div>
       </>}
       {focusedTask && <>

@@ -963,7 +963,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         if (!elsewhere) { setCurrent(null); deferInChat(() => surfaceRef.current?.(`review:${cur.rid}`), 300); } else loadPile();
         return;
       }
-      if (verb === "setting" || verb === "forwarded") { loadPile(); return; }   // Taskuary put these in Review itself
+      if (verb === "setting" || verb === "forwarded") { loadPile(); return; }   // Taskuary put these on the task itself
       setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: cur?.tid, ref: cur?.ref,
                               text: `That needs a confirmation card and none came back${cur?.ref ? ` - ${cur.ref} is untouched` : ""}. Say it again.` }]);
     } catch (e) { setErr(errText(e)); }

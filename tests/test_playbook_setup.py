@@ -96,7 +96,7 @@ def test_api_assistant_turn_queues_a_review_without_writing_and_hides_envelope(t
          mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(playbooks, 'folder', return_value=tmp_path):
         session = general.start_session(store, tid, connector_id=connector['ConnectorId'])
         visible = session.send_prompt('Prepare the draft')
-        assert 'Draft ready in Review' in visible and 'TASKUARY-PROPOSE' not in visible
+        assert 'Draft ready on the task' in visible and 'TASKUARY-PROPOSE' not in visible
         assert list(tmp_path.iterdir()) == []
         session.send_prompt('Show it again')
     reviews = store.list_reviews('pending')

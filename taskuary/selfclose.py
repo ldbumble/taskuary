@@ -18,7 +18,7 @@ So the ending moves to where the knowledge is. Two roads in, deliberately differ
 
 Both land in coder.wrap, which is exactly what the Done button calls. Nothing about the ending
 is different because a machine started it: the same report, the same proposals, the same drafted
-reply sitting in Review with the task tagged "reply pending". The owner still approves what goes
+reply sitting on the task with the task tagged "reply pending". The owner still approves what goes
 out - that is the part a person is genuinely needed for, and it is the only part left.
 
 What keeps this honest is that closing is the WRONG move most of the time it is tempting. An
@@ -197,7 +197,7 @@ def declare(store, tid: int, summary: str = '', agent: str = 'agent') -> dict:
     #
     # This does reverse TQ-0297 (2026-09-01), where an explicit finish closed under the owner
     # mid-review. What is different is that an ending now leaves the owner everything it used to
-    # take: the agent's sentence is a comment, the report and any drafted reply wait in Review, and
+    # take: the agent's sentence is a comment, the report and any drafted reply wait on the task, and
     # a closed task reopens from the Timeline. The judge is still vetoed - it gets no word here.
     if not _mark(tid): return {'closed': False, 'why': 'a self-close already ran for this task'}
     result = _finished(store, tid, term.session_for(tid), line)

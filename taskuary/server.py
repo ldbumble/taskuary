@@ -627,7 +627,8 @@ def _run_operation(op: dict, background: BackgroundTasks):
         k = str(p.get('kind') or 'task').lower()
         if k == 'general': return chat_message(mid, background)
         if k == 'coding':
-            out = dispatch_message(mid, DispatchBody(kind='coding', agent=p.get('agent'), instruction=p.get('instructions')), background)
+            out = dispatch_message(mid, DispatchBody(kind='coding', agent=p.get('agent'), brain=p.get('brain'),
+                                                     instruction=p.get('instructions'), model=p.get('model')), background)
             # a repository still to choose is a decision, not a start: the item stays where it is (PW-135)
             if out.get('dispatch') == 'needs_repo':
                 raise operations.Halt(f"{out.get('ref') or 'it'} needs a repository first - {out.get('reason') or 'pick one'}", out)
@@ -641,7 +642,8 @@ def _run_operation(op: dict, background: BackgroundTasks):
         # the handler directly skipped that, so the task page's Start showed "422: I could not tell which
         # checkout this belongs in" as a dead end - and its advice named a task menu the card redesign
         # had already removed (the owner, 2026-09-22: "don't see anywhere on agent or task to choose repo").
-        out = dispatch_task(tid, DispatchBody(kind=p.get('kind'), agent=p.get('agent'), instruction=p.get('instructions'), model=p.get('model')), background)
+        out = dispatch_task(tid, DispatchBody(kind=p.get('kind'), agent=p.get('agent'), brain=p.get('brain'),
+                                              instruction=p.get('instructions'), model=p.get('model')), background)
         if out.get('dispatch') == 'needs_repo':
             raise operations.Halt(f"{out.get('ref') or 'it'} needs a repository first - {out.get('reason') or 'pick one'}", out)
         return out
@@ -2221,9 +2223,12 @@ def _dispatch_task_to_its_agent(tid: int, body: DispatchBody, background: Backgr
 
     agent = body.agent or hub_agents.default_agent(store)
     if not store.get_agent(agent): raise HTTPException(422, f'unknown agent: {agent}')
-    ses = start_session(store, tid, agent, body.model, body.instruction)
+    # THE BRAIN TRAVELS WITH THE ROLE. This called start_session without it, so a picked CLI got as
+    # far as the door and no further: "chose devin from start coding agent screen but it started
+    # claude code" (the owner, 2026-09-22). agent = who works it, brain = what runs it.
+    ses = start_session(store, tid, agent, body.model, body.instruction, brain=body.brain)
     existing = bool((ses or {}).get('existing'))
-    return {'dispatch': 'session', 'agent': agent, 'model': body.model, 'started': not existing, 'existing': existing,
+    return {'dispatch': 'session', 'agent': agent, 'brain': body.brain, 'model': body.model, 'started': not existing, 'existing': existing,
             'accepted': (ses or {}).get('accepted'),      # the prompt was submitted, not merely typed (PW-209)
             'taskId': tid, 'ref': task_ref(tid), 'session': ses}
 

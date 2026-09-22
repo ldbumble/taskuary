@@ -65,3 +65,17 @@ test("task references use readable sans-serif digits", () => {
   assert.match(ui.slice(ui.indexOf("export const RefChip"), ui.indexOf("export const ActionChip")),
     /IBM Plex Sans/);
 });
+
+test("the New sheet reports what the dispatch answered, not what it hoped", () => {
+  // a coding task with no checkout comes back needs_repo with started:false, and this said
+  // "is on it in a live session" over the top of it (the owner, 2026-09-22)
+  const sheet = src("NewSheet.jsx");
+  assert.match(sheet, /import \{ outcomeOf \}/);
+  assert.match(sheet, /outcomeOf\(out\)\.text/);
+  assert.doesNotMatch(sheet, /setOk\(`\$\{data\.ref\} — \$\{agent\}/);   // never the hoped-for sentence
+});
+
+test("the brain picked in the New sheet and on the task page travels with the role", () => {
+  assert.match(src("NewSheet.jsx"), /brain: brain \|\| null/);
+  assert.match(src("TasksView.jsx"), /brain: run\.brain \|\| null/);
+});

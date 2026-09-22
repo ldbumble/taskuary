@@ -18,6 +18,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import api from "./api";
 import { ACCENT, ACCENT2, BORDER, DIM, FAINT, GRADIENT, INK, PANEL, PANEL2, ROLES, mono } from "./theme.jsx";
 import { ChannelIcon, AgentPicker, useAgents, TaskuaryMark } from "./ui.jsx";
+import { outcomeOf } from "./dispatchOutcome.js";
 import { NO_REPO, planTask } from "./newTask.js";
 import { emailRecipientOptions, normalizeEmails, recipientLabel, recipientOptions } from "./recipientOptions.js";
 import FormControlLabel from "@mui/material/FormControlLabel";
@@ -166,8 +167,13 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask }) {
           // planTask put on the task (GeneralWorkspace), which is why the words are not passed as a prop
           setOk(`${data.ref} — open on Tasks; the assistant already has the question.`);
         } else {
-          await api.post(`/api/tasks/${data.taskId}/dispatch`, { agent, brain: brain || null, model: model || null });
-          setOk(`${data.ref} — ${agent} is on it in a live session.`);
+          // WHAT THE ANSWER SAID, not what the button hoped. A task with no checkout comes back
+          // `needs_repo` with started: false, and this announced "is on it in a live session" over
+          // the top of it (the owner, 2026-09-22: "hit the new button with coding agent but it did
+          // not start"). One reading of a dispatch answer, the same one every other surface uses.
+          const { data: out } = await api.post(`/api/tasks/${data.taskId}/dispatch`,
+            { agent, brain: brain || null, model: model || null });
+          setOk(`${data.ref} — ${outcomeOf(out).text}.`);
         }
         aboutRef.current?.clear(); setHasAbout(false); onDone?.(); onOpenTask?.(data.taskId);
       } else {

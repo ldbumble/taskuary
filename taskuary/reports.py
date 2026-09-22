@@ -1190,6 +1190,30 @@ def report_system(store, cfg: dict, charts: bool = False) -> str:
 NO_BRAIN = '(AI prompt set, but no active AI connector'
 
 
+def headline_from(summary: str, fallback: str) -> str:
+    """What the run CONCLUDED, for the headline - or the row count, when it concluded nothing.
+
+    A row count describes the INPUT. Once a prompt has read those rows it is the summary that
+    says what was found, and the two can disagree flatly: an error check whose prompt discounts
+    two known-divested facilities answers "all clear" under a headline reading "- 2 rows", which
+    reads as two problems to the owner and to anything else that only sees the line (2026-09-22).
+
+    Only a SHORT first line is promoted. A summary that opens with a paragraph is prose, not a
+    verdict, and squeezing it into a headline would lose more than the count does.
+
+    And only over a headline that is JUST a count. A multi-source run heads itself
+    "cash: 3 rows - ledger: 7 rows - the box: FAILED", which names which source died; a summary
+    saying "all good" over that would hide the failure, because the summary need never mention
+    it. A headline already saying something specific is left alone.
+    """
+    keep = str(fallback or '')
+    if '\u00b7' in keep or 'FAILED' in keep or not _LEADING_COUNT.match(keep):
+        return keep
+    first = next((l.strip(' #*_-\t') for l in str(summary or '').splitlines() if l.strip(' #*_-\t')), '')
+    return first if 0 < len(first) <= 60 else keep
+
+
+
 def render_report(store, cfg: dict, llm=None):
     """Run the executor(s), then (optionally) the AI pass: cfg['ai_prompt'] + a configured
     AI connector turn raw rows into the summary that lands on the timeline. The report may
@@ -1223,7 +1247,7 @@ def render_report(store, cfg: dict, llm=None):
             if not ai:
                 ai = ('(the model returned an empty summary - it may have spent its budget thinking. '
                       'Try a shorter prompt, or a non-reasoning model for report summaries.)')
-            return head, f"{ai}{RAW_MARK}{summary[:4000]}"
+            return headline_from(ai, head), f"{ai}{RAW_MARK}{summary[:4000]}"
         except Exception as e:
             logger.warning(f'AI summary failed for report: {e}')
             return head, f'(AI summary failed: {str(e)[:200]})\n\n{summary}'

@@ -770,6 +770,38 @@ const DATA_META = {
       "Authenticate the machine, not the card: gcloud auth application-default login, or set GOOGLE_APPLICATION_CREDENTIALS to a service-account key file.",
       "Give the project; a dataset is optional and lets a query name tables without qualifying them.",
       "Test runs SELECT 1."] },
+  /* Social. Nothing here lands on the Timeline: a public timeline is not an inbox, so these are
+     report sources and tools. All three ship at authority READ, so a post an agent drafts is a
+     proposal you approve on the task - a post cannot be recalled, and that is the whole reason. */
+  bluesky: { title: "Bluesky", types: ["bluesky_me", "bluesky_timeline", "bluesky_post"],
+    fields: [["your handle — e.g. alex.bsky.social", "handle"],
+      ["service (blank = bsky.social)", "base_url", "https://bsky.social"]],
+    secretLabel: "app password (write-only) — never your account password",
+    desc: "Read your Bluesky feed and publish to it. An app password is the whole setup — no app to register, no review, nobody to be approved by.",
+    howto: ["In the Bluesky app: Settings → Privacy and security → App passwords → Add. It shows a password once.",
+      "Paste it under Credentials (write-only) and put your handle above it. Use an APP password — your login password is refused by design.",
+      "Test signs in for real and answers with your handle and follower count.",
+      "On the REPORTS tab: your home feed, or one account's posts by handle. Good for watching what a competitor or a customer is saying.",
+      "Posts are capped at 300 characters, and a drafted one waits for your approval on the task."],
+    agent: ["Ask the owner for their handle and an app password (Bluesky → Settings → Privacy and security → App passwords). Save the handle as handle and the password as Secret. Never ask for their account password.",
+      "Test (POST {base}/api/connectors/{cid}/test{hdr}) — it answers with the handle.",
+      "You may NOT post. Draft it and propose it: TASKUARY-PROPOSE {\"action\": \"run_tool\", \"type\": \"bluesky_post\", \"text\": \"<the post, 300 chars or fewer>\"}. Show the full text — it goes out under their name and cannot be recalled.",
+      "SETUP DONE."] },
+  mastodon: { title: "Mastodon", types: ["mastodon_me", "mastodon_timeline", "mastodon_post"],
+    fields: [["your instance — e.g. https://mastodon.social", "base_url", "https://mastodon.social"],
+      ["character cap if your instance raised it (blank = 500)", "max_chars"]],
+    secretLabel: "access token (write-only)",
+    desc: "Your Mastodon timeline as a report source, and posts back to it. Works with any instance, including one you run yourself.",
+    howto: ["On YOUR instance: Preferences → Development → New application. Tick read and write scopes and Submit.",
+      "Open the application and copy 'Your access token'. Paste it under Credentials (write-only).",
+      "Set the instance URL above — every Mastodon server is its own API, so there is no default that is right for everyone.",
+      "Test verifies the token and answers with your handle and which instance it lives on.",
+      "On the REPORTS tab: home, public or local timeline. The HTML is stripped, so a summary reads words rather than markup.",
+      "Posts default to public and 500 characters; raise the cap here if your instance did."],
+    agent: ["Ask the owner for their instance URL and an access token (their instance → Preferences → Development → New application, read and write scopes). Save the URL as base_url and the token as Secret.",
+      "Test (POST {base}/api/connectors/{cid}/test{hdr}) — it answers with the handle and instance.",
+      "You may NOT post. Draft it and propose it: TASKUARY-PROPOSE {\"action\": \"run_tool\", \"type\": \"mastodon_post\", \"text\": \"<the post>\", \"visibility\": \"public\"}. Show the full text — it goes out under their name.",
+      "SETUP DONE."] },
   linkedin: { title: "LinkedIn", types: ["linkedin_me", "linkedin_post"],
     fields: [["LinkedIn app client id (developer.linkedin.com → your app → Auth)", "client_id"],
       ["LinkedIn app client secret", "client_secret"],
@@ -1543,7 +1575,7 @@ export default function ConnectorsView({ onNavigate }) {
     /* Publishing under your own name is neither a channel nor a data source: nothing arrives
        from here, and the only verb is "post". It gets its own shelf so the Messaging group
        keeps meaning "things that talk to you". */
-    { title: "Social", cards: [...dataCards(["linkedin"]), ...catalogCards("Social")] },
+    { title: "Social", cards: [...dataCards(["linkedin", "bluesky", "mastodon"]), ...catalogCards("Social")] },
     /* Not a data source and not a channel: these give an AGENT reach. A Zoho card means
        "Taskuary can see this system of ours"; a card here means "an agent can reach outward
        through this". Different question, different shelf. */

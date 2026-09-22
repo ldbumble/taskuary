@@ -336,6 +336,15 @@ def test_connector(store, cid: int) -> dict:
         elif c['Type'] == 'robinhood':
             from . import robinhood
             detail = robinhood.test(store, c)
+        elif c['Type'] in ('bluesky', 'mastodon'):
+            # whoami, like LinkedIn: the one call that proves the credential AND comes back
+            # with something the owner recognises. Posting would be a strange thing for Test.
+            from .reports import REGISTRY, resolve_cfg
+            rtype = f"{c['Type']}_me"
+            out = REGISTRY[rtype](resolve_cfg(store, {'type': rtype}))
+            row = (out.get('rows') or [{}])[0]
+            detail = (f"signed in as {row.get('handle') or '?'}"
+                      f" - {row.get('followers')} followers, {row.get('posts')} posts")
         elif c['Type'] == 'linkedin':
             # whoami, which is the one call that proves the token AND returns something the
             # owner recognises - a post would be a strange thing for a Test button to do

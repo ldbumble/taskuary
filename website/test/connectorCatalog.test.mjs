@@ -9,6 +9,10 @@ const CATEGORIES = [
   "AI — agents & models", "AI — voice", "Email", "Messaging", "Developer",
   "Project management", "Databases", "Cloud & infrastructure", "Corporate systems",
   "Markets & finance", "Observability", "Agentic web", "Files & sheets", "Everything else",
+  // Social arrived last because it had NO roadmap at all until Bluesky and Mastodon were built
+  // (2026-09-22) - a category holding two working cards and nothing else reads as a finished
+  // subject. The order is the catalogue's own, by where each group's first planned card sits.
+  "Social",
 ];
 
 test("every connector category has several roadmap entries", () => {

@@ -2170,6 +2170,85 @@
       ]
     },
     {
+      "type": "bluesky",
+      "title": "Bluesky",
+      "group": "Social",
+      "planned": false,
+      "desc": "Read your Bluesky feed and publish to it. An app password is all it takes - no review, no company to be approved by.",
+      "match": [
+        "bluesky",
+        "bsky",
+        "at protocol",
+        "atproto"
+      ]
+    },
+    {
+      "type": "mastodon",
+      "title": "Mastodon",
+      "group": "Social",
+      "planned": false,
+      "desc": "Your Mastodon timeline as a report source, and posts back to it. Works with any instance, yours included.",
+      "match": [
+        "mastodon",
+        "fediverse",
+        "toot"
+      ]
+    },
+    {
+      "type": "threads",
+      "title": "Threads",
+      "group": "Social",
+      "planned": true,
+      "desc": "Meta's Threads API - posting to your own profile.",
+      "match": [
+        "threads",
+        "meta threads"
+      ]
+    },
+    {
+      "type": "reddit",
+      "title": "Reddit",
+      "group": "Social",
+      "planned": true,
+      "desc": "Watch subreddits and your own inbox; post and reply with a script app.",
+      "match": [
+        "reddit",
+        "subreddit"
+      ]
+    },
+    {
+      "type": "youtube",
+      "title": "YouTube",
+      "group": "Social",
+      "planned": true,
+      "desc": "Channel statistics and new comments on your videos, as a report.",
+      "match": [
+        "youtube",
+        "yt"
+      ]
+    },
+    {
+      "type": "discourse",
+      "title": "Discourse",
+      "group": "Social",
+      "planned": true,
+      "desc": "Forum topics and replies from any Discourse instance.",
+      "match": [
+        "discourse",
+        "forum"
+      ]
+    },
+    {
+      "type": "substack",
+      "title": "Substack",
+      "group": "Social",
+      "planned": true,
+      "desc": "Your publication’s subscriber numbers and new posts, as a report.",
+      "match": [
+        "substack"
+      ]
+    },
+    {
       "type": "nvidia_nim",
       "title": "NVIDIA NIM",
       "group": "AI — agents & models",

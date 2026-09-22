@@ -708,6 +708,12 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'treg_call': _lazy('treg', 'run_treg_call'),
             # LinkedIn: read who you are, and the one WRITE. Registered like QuickBooks' bill -
             # it exists so it can be PROPOSED, because the card ships at read.
+            'bluesky_me': _lazy('social', 'run_bluesky_me'),
+            'bluesky_timeline': _lazy('social', 'run_bluesky_timeline'),
+            'bluesky_post': _lazy('social', 'run_bluesky_post'),
+            'mastodon_me': _lazy('social', 'run_mastodon_me'),
+            'mastodon_timeline': _lazy('social', 'run_mastodon_timeline'),
+            'mastodon_post': _lazy('social', 'run_mastodon_post'),
             'linkedin_me': _lazy('linkedin', 'run_linkedin_me'),
             'linkedin_post': _lazy('linkedin', 'run_linkedin_post'),
             # Robinhood over its hosted MCP: the manifest, the reads, and the one write.
@@ -805,6 +811,8 @@ def executor_for(type_name):
 CARD_OF = {'postgresql': 'postgresql', 'mysql': 'mysql', 'clickhouse': 'clickhouse', 'snowflake': 'snowflake', 'bigquery': 'bigquery', 
            'treg_tools': 'treg', 'treg_search': 'treg', 'treg_call': 'treg',
            'linkedin_me': 'linkedin', 'linkedin_post': 'linkedin',
+           'bluesky_me': 'bluesky', 'bluesky_timeline': 'bluesky', 'bluesky_post': 'bluesky',
+           'mastodon_me': 'mastodon', 'mastodon_timeline': 'mastodon', 'mastodon_post': 'mastodon',
            's3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 'azure_logs': 'azure', 'calendar': 'outlook',
            'entra_users': 'azure', 'entra_groups': 'azure', 'entra_signins': 'azure', 'entra_licenses': 'azure',
            'intacct_fields': 'intacct', 'intacct_create': 'intacct', 'intacct_update': 'intacct',
@@ -944,6 +952,20 @@ def linkedin_connection(store, connector_id=None) -> dict:
     return _card(store, 'linkedin', 'token', connector_id)
 
 
+def bluesky_connection(store, connector_id=None) -> dict:
+    """The app password is the secret, and it arrives as `app_password` because that is what
+    social.session reads. `_cid` rides along so the session cache is per CARD - two Bluesky
+    accounts on one install must not share one login."""
+    from .reports import _connector as _c       # noqa: F401 - same module, named for the reader
+    cfg = _card(store, 'bluesky', 'app_password', connector_id)
+    c = _connector(store, 'bluesky', connector_id)
+    return {**cfg, '_cid': (c or {}).get('ConnectorId')}
+
+
+def mastodon_connection(store, connector_id=None) -> dict:
+    return _card(store, 'mastodon', 'token', connector_id)
+
+
 def treg_connection(store, connector_id=None) -> dict:
     return _card(store, 'treg', 'token', connector_id)
 
@@ -1006,6 +1028,10 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  'robinhood_tools': robinhood_connection, 'robinhood_read': robinhood_connection,
                  'robinhood_order': robinhood_connection,
                  'linkedin_me': linkedin_connection, 'linkedin_post': linkedin_connection,
+                 'bluesky_me': bluesky_connection, 'bluesky_timeline': bluesky_connection,
+                 'bluesky_post': bluesky_connection,
+                 'mastodon_me': mastodon_connection, 'mastodon_timeline': mastodon_connection,
+                 'mastodon_post': mastodon_connection,
                  'treg_tools': treg_connection, 'treg_search': treg_connection, 'treg_call': treg_connection,
                  **{e: engine_connection(e) for e in
                     ('postgresql', 'mysql', 'clickhouse', 'snowflake', 'bigquery')},

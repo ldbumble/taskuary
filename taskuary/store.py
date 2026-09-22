@@ -562,6 +562,9 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  # research reads the public web - a report source, and a tool an agent may use
                  'exa': 'report,tool', 'tavily': 'report,tool',
                  'firecrawl': 'report,tool', 'reader': 'report,tool',
+                 # social: a public timeline is not an inbox, so these are report sources and
+                 # tools - never triggers. The only verb that leaves the house is a post.
+                 'bluesky': 'report,tool', 'mastodon': 'report,tool',
                  'brave_search': 'report,tool', 'serpapi': 'report,tool', 'serper': 'report,tool',
                  'scrapingbee': 'report,tool', 'apify': 'report,tool',
                  # aws/azure: the per-OBJECT picker carries the intent (report by default,
@@ -911,6 +914,7 @@ class SQLiteStore:
                          ('zoho_invoice', 'Zoho Invoice'),
                          ('exa', 'Exa search'), ('tavily', 'Tavily search'),
                          ('firecrawl', 'Firecrawl'), ('reader', 'Jina Reader'),
+                         ('bluesky', 'Bluesky'), ('mastodon', 'Mastodon'),
                          ('brave_search', 'Brave Search'), ('serpapi', 'SerpApi'),
                          ('serper', 'Serper'), ('scrapingbee', 'ScrapingBee'), ('apify', 'Apify'),
                          ('gemini_stt', 'Google Gemini transcription'), ('groq_stt', 'Groq (Whisper)'), ('openai_stt', 'OpenAI transcription'), ('deepgram', 'Deepgram'),

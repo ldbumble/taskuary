@@ -71,6 +71,8 @@ ACTIONS = {
     # LinkedIn: reading who you are is a read; putting words on your feed under your name
     # is a write, and the card ships at read, so a post is always a proposal you approve.
     'linkedin_me': 'read', 'linkedin_post': 'write',
+    'bluesky_me': 'read', 'bluesky_timeline': 'read', 'bluesky_post': 'write',
+    'mastodon_me': 'read', 'mastodon_timeline': 'read', 'mastodon_post': 'write',
     'robinhood_tools': 'read', 'robinhood_read': 'read', 'robinhood_order': 'write',
     'markets_screen': 'read',    # the screen only reads through whichever provider it borrows
     # the semantic layer (semantic.py) reaches the ERP only through those same reads. The check
@@ -132,6 +134,7 @@ DEFAULT_SCOPE = {
     'postgresql': 'read', 'mysql': 'read', 'clickhouse': 'read', 'snowflake': 'read', 'bigquery': 'read',
     'treg': 'read',                                          # a catalogue is a window; spending is the owner's call
     'linkedin': 'read',                                      # publishing under your own name is never unattended
+    'bluesky': 'read', 'mastodon': 'read',                   # ...and a public post cannot be recalled
     'robinhood': 'read',                                     # a broker starts as a window; raising it is the owner's call
     'screen': 'read',
     'zoho_invoice': 'write',

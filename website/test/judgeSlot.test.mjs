@@ -29,7 +29,10 @@ test("there is a card to paste the key on, and it says what it is for", () => {
   // names the AI cards explicitly, so a card left out of both lists is a key with nowhere to go.
   const view = read("ConnectorsView.jsx");
   assert.match(view, /^ {2}typesafe: \{ group: "AI — agents & models"/m);
-  assert.match(view, /channelCards\(\["anthropic".*"typesafe"\]\)/);
+  // the list spans lines now that nine OpenAI-compatible providers joined it, so match it
+  // whole rather than end-to-end on one line
+  const named = view.slice(view.indexOf('channelCards(["anthropic"'), view.indexOf('catalogCards("AI'));
+  assert.match(named, /"typesafe"/);
   assert.match(view, /Where runs go/);          // where it is picked, said on the card itself
 });
 

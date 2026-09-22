@@ -2142,6 +2142,67 @@
       "match": [
         "deepseek"
       ]
+    },
+    {
+      "type": "linkedin",
+      "title": "LinkedIn",
+      "group": "Social",
+      "planned": false,
+      "desc": "Publish to your own LinkedIn feed - an agent drafts it, you approve it, it posts. Nothing comes in.",
+      "match": [
+        "linkedin"
+      ]
+    },
+    {
+      "type": "nvidia_nim",
+      "title": "NVIDIA NIM",
+      "group": "AI — agents & models",
+      "planned": true,
+      "desc": "Open models on NVIDIA-hosted endpoints, OpenAI-compatible",
+      "match": [
+        "nvidia nim",
+        "nvidia"
+      ]
+    },
+    {
+      "type": "sambanova",
+      "title": "SambaNova",
+      "group": "AI — agents & models",
+      "planned": true,
+      "desc": "Open-weights models on SambaNova hardware, OpenAI-compatible",
+      "match": [
+        "sambanova"
+      ]
+    },
+    {
+      "type": "deepinfra",
+      "title": "DeepInfra",
+      "group": "AI — agents & models",
+      "planned": true,
+      "desc": "Open models at per-token prices, OpenAI-compatible",
+      "match": [
+        "deepinfra"
+      ]
+    },
+    {
+      "type": "novita",
+      "title": "Novita AI",
+      "group": "AI — agents & models",
+      "planned": true,
+      "desc": "Open models on Novita, OpenAI-compatible",
+      "match": [
+        "novita"
+      ]
+    },
+    {
+      "type": "hyperbolic",
+      "title": "Hyperbolic",
+      "group": "AI — agents & models",
+      "planned": true,
+      "desc": "Open-weights inference, OpenAI-compatible",
+      "match": [
+        "hyperbolic"
+      ]
     }
   ]
 }

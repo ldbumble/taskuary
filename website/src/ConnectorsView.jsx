@@ -1044,7 +1044,7 @@ const ConnCard = ({ c }) => (
 
 // The catalog's sections, named once: the rail reads them before `groups` is built (groups
 // needs the loaded connectors), and they must stay in step.
-const GROUP_TITLES = ["AI — agents & models", "AI — voice", "Email", "Messaging", "Developer", "Project management",
+const GROUP_TITLES = ["AI — agents & models", "AI — voice", "Email", "Messaging", "Social", "Developer", "Project management",
   "Databases", "Cloud & infrastructure", "Corporate systems", "Markets & finance", "Wallets & onchain", "Observability", "Agentic web", "Files & sheets", "Everything else"];
 // planned types read as raw identifiers on a card ("sharepoint_list"), which looks unfinished
 // in a way the feature is not. Named here; anything unnamed falls back to a de-underscored key.
@@ -1328,7 +1328,10 @@ export default function ConnectorsView({ onNavigate }) {
     { title: "AI — agents & models", cards: [
       { key: "agents", title: "AI CLI agents", desc: "Claude / Codex / Qwen Code / OpenCode / Kimi / Gemini — connect a coding CLI. Choose the default and model in Settings → Configuration → Triage & agents",
         channel: "cli", haystack: "ai cli agents claude codex qwen 通义千问 opencode deepseek 深度求索 kimi moonshot 月之暗面 glm 智谱 minimax gemini command args resume", go: () => setOpen({ kind: "agents" }) },
-      ...channelCards(["anthropic", "openai", "azure_openai", "openrouter", "meta", "ollama", "typesafe"]),
+      ...channelCards(["anthropic", "openai", "azure_openai", "openrouter", "meta", "ollama", "typesafe",
+        // the nine that speak the OpenAI surface (llm.OPENAI_COMPATIBLE). Four of them -
+        // groq, cerebras, gemini, mistral - need no payment method at all.
+        "groq", "cerebras", "gemini", "deepseek", "mistral", "together", "xai", "cohere", "perplexity"]),
       ...catalogCards("AI — agents & models"),
     ]},
     // speech to text: voice notes on the chat channels arrive as text, and the prompt boxes get a mic
@@ -1355,6 +1358,10 @@ export default function ConnectorsView({ onNavigate }) {
     // mail and chat are different jobs: one group held nine cards and read as a wall
     { title: "Email", cards: [...channelCards(["outlook", "gmail", "imap"]), ...catalogCards("Email")] },
     { title: "Messaging", cards: [...channelCards(["teams", "slack", "telegram", "whatsapp", "imessage", "discord"]), ...catalogCards("Messaging")] },
+    /* Publishing under your own name is neither a channel nor a data source: nothing arrives
+       from here, and the only verb is "post". It gets its own shelf so the Messaging group
+       keeps meaning "things that talk to you". */
+    { title: "Social", cards: [...channelCards(["linkedin"]), ...catalogCards("Social")] },
     { title: "Developer", cards: [...channelCards(["github", "gitlab", "azdo", "sentry", "pagerduty"]), ...catalogCards("Developer")] },
     { title: "Project management", cards: [...channelCards(["jira", "asana", "monday", "clickup", "todoist", "linear", "trello", "notion"]), ...catalogCards("Project management")] },
     /* One "Data connections" bucket held eleven cards that have nothing to do with each

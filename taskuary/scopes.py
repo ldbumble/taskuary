@@ -62,6 +62,9 @@ ACTIONS = {
     # reading the portfolio are windows; placing an order is not, and the card ships at 'read'
     # (DEFAULT_SCOPE) so an agent can only ever propose one. robinhood_read additionally
     # refuses any tool the server has not marked readOnlyHint - see robinhood._call.
+    # LinkedIn: reading who you are is a read; putting words on your feed under your name
+    # is a write, and the card ships at read, so a post is always a proposal you approve.
+    'linkedin_me': 'read', 'linkedin_post': 'write',
     'robinhood_tools': 'read', 'robinhood_read': 'read', 'robinhood_order': 'write',
     'markets_screen': 'read',    # the screen only reads through whichever provider it borrows
     # the semantic layer (semantic.py) reaches the ERP only through those same reads. The check
@@ -115,6 +118,7 @@ DEFAULT_SCOPE = {
     'coingecko': 'read', 'alchemy': 'read', 'frankfurter': 'read', 'yahoo': 'read', 'sec_edgar': 'read',
     'twelvedata': 'read', 'alphavantage': 'read', 'fred': 'read',
     'finnhub': 'read', 'polygon': 'read', 'tiingo': 'read', 'fmp': 'read', 'alpaca': 'read',
+    'linkedin': 'read',                                      # publishing under your own name is never unattended
     'robinhood': 'read',                                     # a broker starts as a window; raising it is the owner's call
     'screen': 'read',
     'zoho_invoice': 'write',

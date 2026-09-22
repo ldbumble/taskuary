@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+const read = (n) => fs.readFileSync(path.join(process.cwd(), "src", n), "utf8");
 import { PLANNED_CONNECTORS, plannedFor } from "../src/connectorCatalog.js";
 
 const CATEGORIES = [
@@ -15,11 +18,13 @@ test("every connector category has several roadmap entries", () => {
   }
 });
 
-test("the requested Grok API connector is in the AI category", () => {
-  const grok = plannedFor("AI — agents & models").find((c) => c.type === "xai");
-  assert.deepEqual(grok, {
-    type: "xai", title: "xAI (Grok API)", desc: "Grok models through xAI's API",
-  });
+test("the requested Grok API connector is BUILT, not merely planned", () => {
+  // it was a roadmap entry; it speaks the OpenAI surface, so it became a real card. A type that
+  // is live must not also sit on the roadmap, or Connections draws it twice.
+  assert.equal(plannedFor("AI — agents & models").find((c) => c.type === "xai"), undefined);
+  const view = read("ConnectorsView.jsx");
+  assert.match(view, /^ {2}xai: \{ group: "AI — agents & models"/m);
+  assert.match(view, /"xai"/);
 });
 
 test("Everything else is a useful catalog rather than an empty bucket", () => {

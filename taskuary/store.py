@@ -868,6 +868,7 @@ class SQLiteStore:
                          ('typesafe', 'TypeSafe Jev (decisions only)'),
                          ('mssql', 'Microsoft SQL Server'),
                          ('telegram', 'Telegram'), ('whatsapp', 'WhatsApp'),
+                         ('linkedin', 'LinkedIn'),
                          ('imessage', 'Apple Messages'),
                          ('gmail', 'Gmail / Google Workspace'), ('imap', 'Any mailbox (IMAP)'),
                          ('winrm', 'Remote Windows (WinRM)'),

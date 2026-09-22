@@ -32,7 +32,8 @@ BODY_PROMO_STRONG = re.compile(r'manage (your )?(email )?preferences|view (this 
                                r'you are receiving this (email )?because|update your (email )?preferences', re.I)
 BODY_AUTOMATED = re.compile(r'this is an automated (message|email|notification)|do not reply to this (message|email)|'
                             r'automatically generated|please do not reply', re.I)
-CHAT = {'teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'discord'}
+CHAT = {'teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'discord',
+        'mattermost', 'rocketchat', 'matrix', 'google_chat'}
 
 
 def _domain(email): return (email or '').rsplit('@', 1)[-1].lower().strip()

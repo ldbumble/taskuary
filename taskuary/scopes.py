@@ -99,6 +99,10 @@ ACTIONS = {
     'prometheus': 'read', 'datadog': 'read',
     # search and page-reading: they fetch, nothing upstream moves
     'exa': 'read', 'tavily': 'read', 'firecrawl': 'read', 'reader': 'read',
+    'brave_search': 'read', 'serpapi': 'read', 'serper': 'read', 'scrapingbee': 'read',
+    # apify RUNS an actor, which is somebody else's code - but on Apify's machine, under their
+    # account, and what comes back is rows. Nothing in YOUR world moves, so it reads.
+    'apify': 'read',
     'rest': 'read',          # run_rest is GET-only by construction
     'rss': 'read', 'digest': 'read', 'evening_inbox': 'read', 'automate': 'read',  # Taskuary's own traffic
     # ── write: the everyday work an agent is here to do ───────────────────────────────
@@ -119,6 +123,7 @@ DEFAULT_SCOPE = {
     'github': 'write', 'outlook': 'write', 'teams': 'write', 'slack': 'write',
     'telegram': 'write', 'whatsapp': 'write', 'imessage': 'write', 'discord': 'write',
     'gmail': 'write', 'imap': 'write',
+    'mattermost': 'write', 'rocketchat': 'write', 'matrix': 'write', 'google_chat': 'write',
     'mssql': 'read', 'database': 'read', 'prometheus': 'read', 'datadog': 'read',
     'intacct': 'read', 'quickbooks': 'read', 'teller': 'read', 'simplefin': 'read',
     'coingecko': 'read', 'alchemy': 'read', 'frankfurter': 'read', 'yahoo': 'read', 'sec_edgar': 'read',

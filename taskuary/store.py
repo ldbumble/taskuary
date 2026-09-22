@@ -133,8 +133,10 @@ _PR_RULE_NOW = (
 
 # conversation ids that name a CHAT rather than a topic - one id for every message ever exchanged
 # there, so an owner verdict on it covers an episode, not the relationship (owner_verdict_on_thread)
-CHAT_PREFIXES = ('teams:', 'slack:', 'telegram:', 'whatsapp:', 'imessage:')
-CHAT_CHANNELS = {'teams', 'slack', 'telegram', 'whatsapp', 'discord', 'imessage'}
+CHAT_PREFIXES = ('teams:', 'slack:', 'telegram:', 'whatsapp:', 'imessage:',
+                 'mattermost:', 'rocketchat:', 'matrix:', 'google_chat:')
+CHAT_CHANNELS = {'teams', 'slack', 'telegram', 'whatsapp', 'discord', 'imessage',
+                 'mattermost', 'rocketchat', 'matrix', 'google_chat'}
 # (CHAT_VERDICT_HOURS is gone: a chat ruling carries nothing forward at all - see
 # owner_verdict_on_thread. "Nothing to do here" is about the message it was said on.)
 
@@ -560,6 +562,8 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  # research reads the public web - a report source, and a tool an agent may use
                  'exa': 'report,tool', 'tavily': 'report,tool',
                  'firecrawl': 'report,tool', 'reader': 'report,tool',
+                 'brave_search': 'report,tool', 'serpapi': 'report,tool', 'serper': 'report,tool',
+                 'scrapingbee': 'report,tool', 'apify': 'report,tool',
                  # aws/azure: the per-OBJECT picker carries the intent (report by default,
                  # which polls nothing) - the card itself is just a connection and a tool
                  'aws': 'report,tool', 'azure': 'report,tool',
@@ -577,6 +581,10 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  'gitlab': 'trigger', 'azdo': 'trigger', 'linear': 'trigger', 'trello': 'trigger',
                  # notion edits are information, not assignments; discord is a chat channel
                  'notion': 'feed', 'discord': 'trigger,tool',
+                 # the four other chat servers, same as discord: a room is a trigger, and the
+                 # card is a tool because an agent may post back into it
+                 'mattermost': 'trigger,tool', 'rocketchat': 'trigger,tool',
+                 'matrix': 'trigger,tool', 'google_chat': 'trigger,tool',
                  'sentry': 'trigger', 'pagerduty': 'trigger',
                  # speech to text: no role - the funnel and the prompt box ask the first active one
                  'gemini_stt': '', 'groq_stt': '', 'openai_stt': '', 'deepgram': '', 'elevenlabs_stt': '', 'stt_server': '', 'local_whisper': '',
@@ -888,6 +896,8 @@ class SQLiteStore:
                          ('clickup', 'ClickUp'), ('todoist', 'Todoist'),
                          ('gitlab', 'GitLab'), ('azdo', 'Azure DevOps'), ('linear', 'Linear'),
                          ('trello', 'Trello'), ('notion', 'Notion'), ('discord', 'Discord'),
+                         ('mattermost', 'Mattermost'), ('rocketchat', 'Rocket.Chat'),
+                         ('matrix', 'Matrix'), ('google_chat', 'Google Chat'),
                          ('sentry', 'Sentry'), ('pagerduty', 'PagerDuty'),
                          ('prometheus', 'Prometheus'), ('datadog', 'Datadog'),
                          ('intacct', 'Sage Intacct'), ('quickbooks', 'QuickBooks Online'), ('teller', 'Bank & card feed (Teller)'),
@@ -901,6 +911,8 @@ class SQLiteStore:
                          ('zoho_invoice', 'Zoho Invoice'),
                          ('exa', 'Exa search'), ('tavily', 'Tavily search'),
                          ('firecrawl', 'Firecrawl'), ('reader', 'Jina Reader'),
+                         ('brave_search', 'Brave Search'), ('serpapi', 'SerpApi'),
+                         ('serper', 'Serper'), ('scrapingbee', 'ScrapingBee'), ('apify', 'Apify'),
                          ('gemini_stt', 'Google Gemini transcription'), ('groq_stt', 'Groq (Whisper)'), ('openai_stt', 'OpenAI transcription'), ('deepgram', 'Deepgram'),
                          ('elevenlabs_stt', 'ElevenLabs Scribe'), ('stt_server', 'Any Whisper server'), ('local_whisper', 'Local Whisper'),
                          # image models (images.py). Seeded like every other card: DEFAULT_ROLES

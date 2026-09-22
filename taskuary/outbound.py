@@ -219,7 +219,11 @@ def send_teams(store, chat_id: str, body: str, connector_id=None) -> dict:
 # 'report' and the read-only trackers can never carry a reply: nothing is written back to
 # Jira or Sentry by design. github is gated on its own card switch (a public comment is the
 # owner's call). Everything else is the owner's setting.
-SENDABLE = ('email', 'teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'discord', 'github')
+# The four chat servers that behave like Discord. Named here, not imported, so outbound stays
+# free of chatservers until a message actually goes to one.
+CHAT_SERVERS = ('mattermost', 'rocketchat', 'matrix', 'google_chat')
+SENDABLE = ('email', 'teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'discord', 'github',
+            'mattermost', 'rocketchat', 'matrix', 'google_chat')
 # 'own' and 'assistant' are rows TASKUARY WROTE: work you started here, a note to yourself, a
 # meeting prep, the assistant speaking up. Nobody sent them, so there is nobody to answer - and
 # without them here a prep task closing drafted a reply, signed it in the owner's name, and put
@@ -350,7 +354,12 @@ def send_out(store, channel: str, to, subject: str, body: str, cc: list = None) 
         from .devtools import discord_send
         if not to: raise RuntimeError('no channel id - a Discord message needs one to land in')
         return discord_send(store, to[0], f'**{subject}**\n\n{body}' if subject else body)
-    raise RuntimeError(f'cannot send on {ch} - email, Teams, Telegram, WhatsApp, Apple Messages and Discord can carry a report out')
+    if ch in CHAT_SERVERS:
+        from . import chatservers
+        if not to: raise RuntimeError(f'no room id - a {ch} message needs one to land in')
+        return chatservers.send(store, ch, to[0], f'{subject}\n\n{body}' if subject else body)
+    raise RuntimeError(f'cannot send on {ch} - email, Teams, Telegram, WhatsApp, Apple Messages, '
+                       'Discord, Mattermost, Rocket.Chat, Matrix and Google Chat can carry a report out')
 
 
 # ── where a report may be SENT: the destinations the builder is allowed to offer ────────
@@ -358,7 +367,8 @@ def send_out(store, channel: str, to, subject: str, body: str, cc: list = None) 
 # silent failure at 6am - so the report builder PICKS both the channel and the destination
 # out of what Taskuary can actually reach today. A channel with no connection behind it, or
 # one switched off under Settings → Replies, is not an option at all.
-REPORTABLE = ('email', 'teams', 'telegram', 'whatsapp', 'imessage', 'discord')   # what send_out can carry
+REPORTABLE = ('email', 'teams', 'telegram', 'whatsapp', 'imessage', 'discord',
+              'mattermost', 'rocketchat', 'matrix', 'google_chat')   # what send_out can carry
 MAILBOXES = ('outlook', 'gmail', 'imap')
 
 
@@ -599,6 +609,11 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
         if not chat: raise RuntimeError('this chat message has no channel id to answer in')
         connector_id = _source_connector_id(store, 'discord', chat)
         return discord_send(store, chat, body, connector_id) if connector_id else discord_send(store, chat, body)
+    if ch in CHAT_SERVERS:
+        from . import chatservers
+        chat = str(msg.get('ConversationId') or '').split(':', 1)[-1]   # '<type>:<room id>'
+        if not chat: raise RuntimeError('this chat message has no room id to answer in')
+        return chatservers.send(store, ch, chat, body, _source_connector_id(store, ch, chat))
     if ch == 'github':
         # the answer is a PUBLIC comment on the issue/PR - so it goes only with the owner's
         # explicit say-so (the GitHub card's 'Reply to issue/PR authors' switch)

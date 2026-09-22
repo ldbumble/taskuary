@@ -1190,7 +1190,8 @@ def others_on_thread(store, msg: dict, mine=()) -> dict:
 # unfinished sentence from "Also, separate thing:": a reader, holding the exchange, OURS AND
 # THEIRS. Our own replies are the strongest boundary in the conversation and nothing ever showed
 # them to a classifier before.
-CHAT_CHANNELS = {'teams', 'slack', 'telegram', 'whatsapp', 'discord', 'imessage'}
+CHAT_CHANNELS = {'teams', 'slack', 'telegram', 'whatsapp', 'discord', 'imessage',
+                 'mattermost', 'rocketchat', 'matrix', 'google_chat'}
 BURST_SECONDS = 120     # a line typed this soon after the last is the same sentence, finished
 
 

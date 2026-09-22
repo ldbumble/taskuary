@@ -683,6 +683,9 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             # the web as a source: plain REST, a key on a card, nothing new in the exe
             'exa': _research('exa'), 'tavily': _research('tavily'),
             'firecrawl': _research('firecrawl'), 'reader': _research('reader'),
+            'brave_search': _research('brave'), 'serpapi': _research('serpapi'),
+            'serper': _research('serper'), 'scrapingbee': _research('scrapingbee'),
+            'apify': _research('apify'),
             'local_file': run_local_file,
             'aws': run_aws, 's3_object': run_s3, 'cloudwatch_logs': run_cwlogs,
             'azure': run_azure, 'azure_blob': run_azblob, 'azure_logs': run_azlogs,
@@ -933,6 +936,24 @@ def _apikey_card(typ):
     return lambda store, connector_id=None: _card(store, typ, 'api_key', connector_id)
 
 
+def linkedin_connection(store, connector_id=None) -> dict:
+    """The access token IS the card's secret, and it arrives as `token` because that is the name
+    linkedin._headers reads. Without this the card holds a token nobody can spend: resolve_cfg
+    hands the config back untouched and every call answers "LinkedIn needs an access token" with
+    the token sitting right there on the card (2026-09-22)."""
+    return _card(store, 'linkedin', 'token', connector_id)
+
+
+def treg_connection(store, connector_id=None) -> dict:
+    return _card(store, 'treg', 'token', connector_id)
+
+
+def engine_connection(engine):
+    """One resolver per named database card. Its write-only secret is the PASSWORD, exactly as on
+    the 'Any database' card - databases.url_for builds the URL around it."""
+    return lambda store, connector_id=None: _card(store, engine, 'password', connector_id)
+
+
 def robinhood_connection(store, connector_id=None) -> dict:
     """The MCP url (optional - it defaults) plus the bearer token, which IS the card's one
     write-only Secret. `url` and `token` are both CONNECTION_KEYS, so a tool call cannot point
@@ -968,6 +989,9 @@ def alpaca_connection(store, connector_id=None) -> dict:
 CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database': database_connection,
                  'exa': _apikey_card('exa'), 'tavily': _apikey_card('tavily'),
                  'firecrawl': _apikey_card('firecrawl'), 'reader': _apikey_card('reader'),
+                 'brave_search': _apikey_card('brave_search'), 'serpapi': _apikey_card('serpapi'),
+                 'serper': _apikey_card('serper'), 'scrapingbee': _apikey_card('scrapingbee'),
+                 'apify': _apikey_card('apify'),
                  # fred needs no entry here - fredgraph.csv is keyless, unlike its JSON api
                  'td_quotes': _apikey_card('twelvedata'), 'td_indicator': _apikey_card('twelvedata'),
                  'av_quotes': _apikey_card('alphavantage'),
@@ -981,6 +1005,10 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  # the write shares the card, so an approved proposal reaches the same account
                  'robinhood_tools': robinhood_connection, 'robinhood_read': robinhood_connection,
                  'robinhood_order': robinhood_connection,
+                 'linkedin_me': linkedin_connection, 'linkedin_post': linkedin_connection,
+                 'treg_tools': treg_connection, 'treg_search': treg_connection, 'treg_call': treg_connection,
+                 **{e: engine_connection(e) for e in
+                    ('postgresql', 'mysql', 'clickhouse', 'snowflake', 'bigquery')},
                  'aws': aws_connection, 's3_object': aws_connection, 'cloudwatch_logs': aws_connection,
                  'azure': azure_connection, 'azure_blob': azure_connection, 'azure_logs': azure_connection,
                  'entra_users': azure_connection, 'entra_groups': azure_connection,

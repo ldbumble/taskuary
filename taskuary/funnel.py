@@ -41,7 +41,8 @@ KIND_MARKS = {k['key']: k['mark'] for k in _VOCAB['kinds']}
 # ...and where it came from. The desktop paints a brand logo here; a chat gets one emoji per source,
 # and a source we have no mark for gets NONE - an invented glyph says something untrue about it.
 CHANNEL_MARKS = {'email': '📧', 'teams': '👥', 'slack': '💬', 'telegram': '✈️', 'whatsapp': '📱', 'imessage': '📱',
-                 'discord': '🎮', 'github': '🐙', 'gitlab': '🦊', 'jira': '🐞', 'sentry': '🚨', 'pagerduty': '📟',
+                 'discord': '🎮', 'mattermost': '💬', 'rocketchat': '🚀', 'matrix': '💬',
+                 'google_chat': '💬', 'github': '🐙', 'gitlab': '🦊', 'jira': '🐞', 'sentry': '🚨', 'pagerduty': '📟',
                  'report': '📄', 'own': '📝', 'assistant': '✨', 'ai': '✨', 'idea': '💡', 'meeting': '📅',
                  'promise': '🤝', 'followup': '📨', 'prep': '📅', 'cold': '🥶'}
 

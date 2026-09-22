@@ -339,6 +339,63 @@ const META = {
     agent: ["The Discord app and bot are the owner's to create (discord.com/developers > Bot > Reset Token, Message Content intent ON, invited to the server). Ask for the bot token and save it as Secret.",
       "List the channels yourself: GET https://discord.com/api/v10/users/@me/guilds with header Authorization: Bot <token>, then GET https://discord.com/api/v10/guilds/<id>/channels for each server; text channels have type 0. Show names, ask which to watch, add each chosen id with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"discord\", \"Address\": \"<channel id>\", \"ConnectorId\": {cid}, \"Active\": true}.",
       "Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on, SETUP DONE."] },
+  /* Four more chat servers, all shaped like Discord above: a room id per source, and a reply
+     goes back in. Three of them are the same object with different spelling - a server you host
+     and a token - which is why they read almost identically. Google Chat is the odd one: OAuth
+     rather than a token, and it borrows the Gmail card's client so there is one registration in
+     Google Cloud rather than two. */
+  mattermost: { group: "Messaging", channel: "mattermost", srcLabel: "Channel IDs", srcPh: "4xp9fdt7pbgiijzwbn3qf6qc4c",
+    fields: [["server url", "base_url", "https://chat.yourcompany.com"], pollSecondsField("mattermost")],
+    secretLabel: "personal access token (write-only)",
+    desc: "Your own Mattermost server — watched channels land on the Timeline through triage, and approved replies post back into the channel.",
+    howto: ["An admin turns on personal access tokens: System Console → Integrations → Integration Management.",
+      "Your Profile → Security → Personal Access Tokens → Create. Paste it under Credentials (write-only).",
+      "Enter the server url (https://chat.yourcompany.com — no /api/v4, that is added).",
+      "Add each channel ID under Sources (open a channel → View Info shows its ID).",
+      "Test authenticates for real; approving a drafted reply posts it into the same channel."],
+    agent: ["Ask the owner for the server url and a personal access token (Profile > Security > Personal Access Tokens; an admin must enable them first). Save the url as base_url and the token as Secret.",
+      "List the channels yourself: GET {base_url}/api/v4/users/me/teams with header Authorization: Bearer <token>, then GET {base_url}/api/v4/users/me/teams/<team id>/channels. Show names, ask which to watch, add each chosen id with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"mattermost\", \"Address\": \"<channel id>\", \"ConnectorId\": {cid}, \"Active\": true}.",
+      "Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on, SETUP DONE."] },
+  rocketchat: { group: "Messaging", channel: "rocketchat", srcLabel: "Room IDs", srcPh: "GENERAL",
+    fields: [["server url", "base_url", "https://chat.yourcompany.com"],
+      ["user id (issued beside the token)", "user_id", "", "Rocket.Chat authenticates with two values: the token and the id of the user it belongs to. Only the token is a secret."],
+      pollSecondsField("rocketchat")],
+    secretLabel: "personal access token (write-only)",
+    desc: "Rocket.Chat rooms through triage, replies back in the room. Two values, not one — the token and the user id issued with it.",
+    howto: ["Avatar → My Account → Personal Access Tokens → Add. Rocket.Chat shows a TOKEN and a USER ID; you need both.",
+      "Paste the token under Credentials (write-only) and the user id in its own field.",
+      "Enter the server url (https://chat.yourcompany.com — no /api/v1, that is added).",
+      "Add each room ID under Sources. The room name works for public channels; a private room needs its rid.",
+      "Test authenticates for real; approving a drafted reply posts it into the same room."],
+    agent: ["Ask the owner for the server url, a personal access token AND the user id shown beside it (avatar > My Account > Personal Access Tokens). Save url as base_url, the user id as user_id, the token as Secret.",
+      "List the rooms yourself: GET {base_url}/api/v1/channels.list with headers X-Auth-Token and X-User-Id. Show names, ask which to watch, add each with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"rocketchat\", \"Address\": \"<room id>\", \"ConnectorId\": {cid}, \"Active\": true}.",
+      "Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on, SETUP DONE."] },
+  matrix: { group: "Messaging", channel: "matrix", srcLabel: "Room IDs", srcPh: "!AbCdEf:matrix.org",
+    fields: [["homeserver url (blank = matrix.org)", "base_url", "https://matrix-client.matrix.org"], pollSecondsField("matrix")],
+    secretLabel: "access token (write-only)",
+    desc: "Any Matrix homeserver — matrix.org or your own. Rooms land on the Timeline through triage and replies go back as your account, not a bot.",
+    howto: ["In Element: Settings → Help & About → Advanced → Access Token. Copy it.",
+      "Paste it under Credentials (write-only). Leave the homeserver blank for matrix.org.",
+      "Add each room ID under Sources — Room Settings → Advanced → Internal room ID (!AbCdEf:matrix.org).",
+      "The account must have JOINED the room; an access token grants what that account can see, nothing more.",
+      "Test authenticates for real; approving a drafted reply posts it into the same room."],
+    agent: ["Ask the owner for an access token (Element > Settings > Help & About > Advanced > Access Token) and, if not matrix.org, the homeserver url. Save the url as base_url and the token as Secret.",
+      "List the rooms yourself: GET {base_url}/_matrix/client/v3/joined_rooms with header Authorization: Bearer <token>, then GET .../rooms/<id>/state/m.room.name for each name. Show them, ask which to watch, add each with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"matrix\", \"Address\": \"<!room:server>\", \"ConnectorId\": {cid}, \"Active\": true}.",
+      "Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on, SETUP DONE."] },
+  google_chat: { group: "Messaging", channel: "google_chat", srcLabel: "Space names", srcPh: "spaces/AAAAxxxxxxx",
+    fields: [["Google OAuth client id (blank = reuse the Gmail card's)", "google_client_id"],
+      ["Google OAuth client secret (blank = reuse the Gmail card's)", "google_client_secret"],
+      pollSecondsField("google_chat")],
+    secretLabel: "Google refresh token (write-only)",
+    desc: "Google Chat spaces on the Timeline, replies back into the space. Reuses the Gmail card's OAuth client, so there is one registration in Google Cloud rather than two.",
+    howto: ["In Google Cloud: enable the Google Chat API on the project whose OAuth client you use (the Gmail card's, if you have one).",
+      "Run the OAuth consent flow with scopes chat.messages and chat.spaces.readonly, and paste the refresh token under Credentials (write-only).",
+      "Leave the client id and secret blank to reuse the Gmail card's; fill them only for a separate project.",
+      "Add each space under Sources (spaces/AAAAxxxxxxx — Manage Space → the URL carries it).",
+      "The account must already be IN the space. Nothing here can join one for you."],
+    agent: ["This one needs the owner: the Chat API enabled on a Google Cloud project, and an OAuth refresh token with scopes chat.messages and chat.spaces.readonly. Ask for the refresh token and save it as Secret; leave google_client_id/secret blank if a Gmail card is already connected.",
+      "List the spaces yourself after the token is saved: POST {base}/api/connectors/{cid}/test{hdr} names them. Ask which to watch, add each with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"google_chat\", \"Address\": \"spaces/AAAA…\", \"ConnectorId\": {cid}, \"Active\": true}.",
+      "Turn the connector on, SETUP DONE."] },
   anthropic: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["model (default claude-opus-5)", "model"]], secretLabel: "API key",
     desc: "Claude via the Anthropic API - powers intent triage (task / reply-only / FYI) once enabled.",
@@ -713,6 +770,20 @@ const DATA_META = {
       "Authenticate the machine, not the card: gcloud auth application-default login, or set GOOGLE_APPLICATION_CREDENTIALS to a service-account key file.",
       "Give the project; a dataset is optional and lets a query name tables without qualifying them.",
       "Test runs SELECT 1."] },
+  linkedin: { title: "LinkedIn", types: ["linkedin_me", "linkedin_post"],
+    fields: [["API version (blank = 202609) — LinkedIn dates its REST surface by month", "version"]],
+    secretLabel: "access token (write-only) — from the app's OAuth 2.0 token generator",
+    desc: "Publish to your own LinkedIn feed. A draft an agent writes never posts itself: the card ships at authority READ, so every post is a proposal you approve on the task.",
+    howto: ["Create an app at developer.linkedin.com/apps. It must be associated with a LinkedIn Page you are an admin of — that is LinkedIn's rule, not ours, and there is no way around it.",
+      "On the app's Products tab, add 'Share on LinkedIn'. It is SELF-SERVE and granted immediately. Do NOT request Community Management: that one needs a registered legal entity and a narrated screencast, and a rejection is terminal for the app.",
+      "Auth tab → OAuth 2.0 token generator → tick w_member_social and openid/profile → Generate. Paste the token under Credentials (write-only).",
+      "Test calls whoami and comes back with your name — that is the token proving itself.",
+      "Tokens last 60 days. When one expires the card fails with LinkedIn's own words and you generate another the same way.",
+      "Your author id is never typed in: it is fetched from the token each time a post goes out."],
+    agent: ["The LinkedIn app is the owner's to create (developer.linkedin.com/apps, associated with a Page they admin, with the 'Share on LinkedIn' product added). Ask for an access token from the Auth tab's OAuth 2.0 token generator with scope w_member_social, and save it as Secret.",
+      "Test (POST {base}/api/connectors/{cid}/test{hdr}) — it answers with the member's name.",
+      "You may NOT publish. Draft the post and propose it: TASKUARY-PROPOSE {\"action\": \"run_tool\", \"type\": \"linkedin_post\", \"text\": \"<the post>\"}. Show the full text — the owner is approving something that goes out under their own name.",
+      "SETUP DONE."] },
   treg: { title: "treg (agent tools)", types: ["treg_tools", "treg_search", "treg_call"],
     fields: [["MCP url — blank uses treg's own (https://treg.to/mcp/)", "url"],
              ["max cost per call in USD (default 0.25)", "max_cost"]],
@@ -846,9 +917,15 @@ const DATA_META = {
       "Enter the site if not US1 (datadoghq.eu, us3.datadoghq.com, …), the application key, and paste the API key (write-only).",
       "Test validates the key pair for real.",
       "Build the reports on the REPORTS tab: all monitors, or filtered by name — Alert and Warn states sort to the top."] },
-  /* Research: the web as a report source. All four are one REST call with a key - what is NOT
-     here is anything that DRIVES a browser (log in, click, fill), because that runs over CDP
-     through Playwright or Stagehand and cannot be reached from an API at all. */
+  /* Research: the web as a report source. Every one of these is a single REST call with a key -
+     what is NOT here is anything that DRIVES a browser (log in, click, fill), because that runs
+     over CDP through Playwright or Stagehand and cannot be reached from an API at all.
+     They divide into two jobs. SEARCH the web: Exa and Tavily read it for an agent, Brave answers
+     from its own index, SerpApi and Serper hand back a search engine's page as it ranked it.
+     READ one page: Jina and Firecrawl for a page that will simply be served, ScrapingBee for one
+     that fights back, Apify when the job is a crawl somebody already wrote. Overlapping on
+     purpose - the bill and the terms differ far more than the results do, so the choice is
+     yours. */
   exa: { title: "Exa", types: ["exa"], fields: [],
     secretLabel: "API key (write-only)",
     desc: "Neural web search with the page text already extracted — a research source for reports, and a tool an agent can call.",
@@ -877,6 +954,41 @@ const DATA_META = {
       "Test reads a page for real, key or no key.",
       "Paste a key from jina.ai only if you hit the anonymous rate limit.",
       "On the REPORTS tab, give it a URL — same shape as Firecrawl, no account required."] },
+  brave_search: { title: "Brave Search", types: ["brave_search"], fields: [],
+    secretLabel: "Subscription token (write-only)",
+    desc: "Brave's own index of the web — not a reseller of somebody else's results. The free tier is 2,000 queries a month and takes no card.",
+    howto: ["Get a token at api-dashboard.search.brave.com — the free plan asks for no payment method.",
+      "Paste it here (write-only) and Test runs a real search.",
+      "On the REPORTS tab: a query, how many results, optionally a country or a freshness window (pd, pw, pm, py).",
+      "Each result carries its own description and age, so a summary can say how old a claim is."] },
+  serpapi: { title: "SerpApi", types: ["serpapi"], fields: [],
+    secretLabel: "API key (write-only)",
+    desc: "A real search engine results page, as it was ranked — including the answer box and the order, which a neural search deliberately throws away.",
+    howto: ["Get a key at serpapi.com → Dashboard (100 free searches a month).",
+      "Paste it here (write-only) and Test runs a real search.",
+      "On the REPORTS tab: a query, and optionally an engine (google, bing, duckduckgo, google_news…) or a location.",
+      "Use it when the RANKING is the finding — who comes up first for your product name."] },
+  serper: { title: "Serper", types: ["serper"], fields: [],
+    secretLabel: "API key (write-only)",
+    desc: "The same Google results as SerpApi at a fraction of the price. Same job, different bill — the card exists so the choice is yours.",
+    howto: ["Get a key at serper.dev (2,500 free searches, no card).",
+      "Paste it here (write-only) and Test runs a real search.",
+      "On the REPORTS tab: a query, how many results, optionally a country code (gl).",
+      "When Google shows an answer box it arrives as the first row, so a factual question often needs nothing else."] },
+  scrapingbee: { title: "ScrapingBee", types: ["scrapingbee"], fields: [],
+    secretLabel: "API key (write-only)",
+    desc: "Fetch a page that fights back: rotating proxies and, with render on, a headless browser run on their machine.",
+    howto: ["Get a key at scrapingbee.com → Dashboard (1,000 free credits).",
+      "Paste it here (write-only) and Test fetches a page for real.",
+      "On the REPORTS tab: a URL, plus render for a page built by JavaScript and premium for one behind bot protection.",
+      "Try Jina Reader or Firecrawl FIRST — they are cheaper and quieter. This is the one for a page that refuses them."] },
+  apify: { title: "Apify", types: ["apify"], fields: [],
+    secretLabel: "API token (write-only)",
+    desc: "Run one of thousands of ready-made scrapers and take its rows back in the same call — a crawl somebody else already wrote and maintains.",
+    howto: ["Get a token at console.apify.com → Settings → Integrations ($5 of free usage a month).",
+      "Paste it here (write-only) and Test runs a small actor for real.",
+      "On the REPORTS tab: an actor (apify/website-content-crawler, apify/google-maps-scraper, …) and its input as JSON.",
+      "It waits for the actor to finish, so it fits actors that answer in a couple of minutes. A long crawl is the wrong shape for a report and says so."] },
   /* Files & sheets people already keep. Both cards borrow: SharePoint the Outlook card's tenant
      app (one registration, Graph mail AND Sites), Sheets the Gmail card's Google OAuth client. The
      offer appears only when there is something to borrow - `reuse.ok` reads the other card. */
@@ -1420,11 +1532,12 @@ export default function ConnectorsView({ onNavigate }) {
       ] },
     // mail and chat are different jobs: one group held nine cards and read as a wall
     { title: "Email", cards: [...channelCards(["outlook", "gmail", "imap"]), ...catalogCards("Email")] },
-    { title: "Messaging", cards: [...channelCards(["teams", "slack", "telegram", "whatsapp", "imessage", "discord"]), ...catalogCards("Messaging")] },
+    { title: "Messaging", cards: [...channelCards(["teams", "slack", "telegram", "whatsapp", "imessage", "discord",
+        "mattermost", "rocketchat", "matrix", "google_chat"]), ...catalogCards("Messaging")] },
     /* Publishing under your own name is neither a channel nor a data source: nothing arrives
        from here, and the only verb is "post". It gets its own shelf so the Messaging group
        keeps meaning "things that talk to you". */
-    { title: "Social", cards: [...channelCards(["linkedin"]), ...catalogCards("Social")] },
+    { title: "Social", cards: [...dataCards(["linkedin"]), ...catalogCards("Social")] },
     /* Not a data source and not a channel: these give an AGENT reach. A Zoho card means
        "Taskuary can see this system of ours"; a card here means "an agent can reach outward
        through this". Different question, different shelf. */
@@ -1466,7 +1579,7 @@ export default function ConnectorsView({ onNavigate }) {
     { title: "Observability", cards: [...dataCards(["prometheus", "datadog"]), ...catalogCards("Observability")] },
     // the web as a source: one REST call and a key each. What is deliberately NOT here is
     // anything that drives a browser - logging in, clicking - which needs CDP, not an API.
-    { title: "Agentic web", cards: [...dataCards(["exa", "tavily", "firecrawl", "reader"]), ...catalogCards("Agentic web")] },
+    { title: "Agentic web", cards: [...dataCards(["exa", "tavily", "brave_search", "serpapi", "serper", "reader", "firecrawl", "scrapingbee", "apify"]), ...catalogCards("Agentic web")] },
     { title: "Files & sheets", cards: [...dataCards(["knowledge", "sharepoint", "google_sheets", "smb_file", "sftp"]), ...catalogCards("Files & sheets")] },
     { title: "Everything else", cards: [...catalogCards("Everything else"), ...plannedCards(KNOWN_PLANNED, true)] },
   ];

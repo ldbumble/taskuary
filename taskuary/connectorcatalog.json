@@ -760,6 +760,17 @@
       ]
     },
     {
+      "type": "serper",
+      "title": "Serper",
+      "group": "Agentic web",
+      "planned": false,
+      "desc": "The same Google results as SerpApi at a fraction of the price. Same job, different bill.",
+      "match": [
+        "serper",
+        "serper.dev"
+      ]
+    },
+    {
       "type": "gemini_stt",
       "title": "Google Gemini transcription",
       "group": "AI — voice",
@@ -1180,19 +1191,20 @@
       "type": "google_chat",
       "title": "Google Chat",
       "group": "Messaging",
-      "planned": true,
-      "desc": "Spaces, threads and direct messages",
+      "planned": false,
+      "desc": "Google Chat spaces on the Timeline, replies back into the space. Reuses the Gmail card's OAuth client.",
       "match": [
         "google chat",
-        "google"
+        "hangouts chat",
+        "gchat"
       ]
     },
     {
       "type": "mattermost",
       "title": "Mattermost",
       "group": "Messaging",
-      "planned": true,
-      "desc": "Self-hosted team channels",
+      "planned": false,
+      "desc": "Your own Mattermost server on the Timeline - each watched channel is a source, and replies go back as the account you connect with.",
       "match": [
         "mattermost"
       ]
@@ -1201,10 +1213,12 @@
       "type": "matrix",
       "title": "Matrix",
       "group": "Messaging",
-      "planned": true,
-      "desc": "Open Matrix rooms and direct messages",
+      "planned": false,
+      "desc": "Any Matrix homeserver - matrix.org or your own. Rooms in through triage, replies back as your account.",
       "match": [
-        "matrix"
+        "matrix",
+        "element chat",
+        "matrix.org"
       ]
     },
     {
@@ -1244,11 +1258,12 @@
       "type": "rocketchat",
       "title": "Rocket.Chat",
       "group": "Messaging",
-      "planned": true,
-      "desc": "Self-hosted chat rooms",
+      "planned": false,
+      "desc": "Rocket.Chat channels through triage, replies back in the room. A token and the user id beside it.",
       "match": [
         "rocket.chat",
-        "rocketchat"
+        "rocketchat",
+        "rocket chat"
       ]
     },
     {
@@ -1876,8 +1891,8 @@
       "type": "serpapi",
       "title": "SerpAPI",
       "group": "Agentic web",
-      "planned": true,
-      "desc": "Structured search-engine results",
+      "planned": false,
+      "desc": "A search engine results page as it was ranked, answer box included - for when the ORDER is the finding.",
       "match": [
         "serpapi"
       ]
@@ -1896,8 +1911,8 @@
       "type": "brave_search",
       "title": "Brave Search",
       "group": "Agentic web",
-      "planned": true,
-      "desc": "Independent web and news search",
+      "planned": false,
+      "desc": "Brave's own index of the web, not a reseller of somebody else's results - 2,000 free queries a month and no card.",
       "match": [
         "brave search",
         "brave",
@@ -1922,8 +1937,8 @@
       "type": "apify",
       "title": "Apify",
       "group": "Agentic web",
-      "planned": true,
-      "desc": "Hosted crawlers and structured web datasets",
+      "planned": false,
+      "desc": "Run one of thousands of ready-made scrapers and take its rows back in the same call.",
       "match": [
         "apify"
       ]
@@ -1932,8 +1947,8 @@
       "type": "scrapingbee",
       "title": "ScrapingBee",
       "group": "Agentic web",
-      "planned": true,
-      "desc": "Rendered pages and extraction",
+      "planned": false,
+      "desc": "Fetch a page that fights back: rotating proxies and, with render on, a headless browser run on their machine.",
       "match": [
         "scrapingbee"
       ]
@@ -2254,6 +2269,49 @@
       "desc": "Cypher queries against a graph database",
       "match": [
         "neo4j"
+      ]
+    },
+    {
+      "type": "zulip",
+      "title": "Zulip",
+      "group": "Messaging",
+      "planned": true,
+      "desc": "Threaded team chat you can host yourself - topics inside streams, which is a shape triage would read well.",
+      "match": [
+        "zulip"
+      ]
+    },
+    {
+      "type": "line",
+      "title": "LINE",
+      "group": "Messaging",
+      "planned": true,
+      "desc": "LINE Messaging API - the default channel for work in Japan, Taiwan and Thailand.",
+      "match": [
+        "line",
+        "line messaging"
+      ]
+    },
+    {
+      "type": "brightdata",
+      "title": "Bright Data",
+      "group": "Agentic web",
+      "planned": true,
+      "desc": "Proxy and scraping infrastructure at the scale where a page actively refuses ordinary fetches.",
+      "match": [
+        "bright data",
+        "brightdata",
+        "luminati"
+      ]
+    },
+    {
+      "type": "diffbot",
+      "title": "Diffbot",
+      "group": "Agentic web",
+      "planned": true,
+      "desc": "Turns a page into structured records - articles, products, people - rather than into text to re-read.",
+      "match": [
+        "diffbot"
       ]
     }
   ]

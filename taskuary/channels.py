@@ -15,6 +15,7 @@ from . import spawn
 from .github import _h as gh_headers, list_accessible_repos
 from .ingest import ingest_message, rev_id, seen_before
 from .counsel import is_invite
+from .llm import AI_TYPES        # every brain picker and every brain Test read the one list
 
 GRAPH = 'https://graph.microsoft.com/v1.0'
 MAIL_SELECT = ('id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,bodyPreview,body,'
@@ -205,11 +206,12 @@ def test_connector(store, cid: int) -> dict:
         elif c['Type'] == 'imessage':
             from .imessage import test as imessage_test
             detail = imessage_test(store, c)
-        elif c['Type'] in ('exa', 'tavily', 'firecrawl', 'reader'):
+        elif c['Type'] in RESEARCH:
             # a real call, not a key-shape check: these all fail the same way (401) and the
             # owner should find that out here rather than from an empty report on Monday
             from .reports import REGISTRY, resolve_cfg
-            probe = ({'url': 'https://example.com'} if c['Type'] in ('firecrawl', 'reader')
+            probe = ({'url': 'https://example.com'} if c['Type'] in PAGE_READERS
+                     else {'actor': 'apify~hello-world'} if c['Type'] == 'apify'
                      else {'query': 'taskuary local-first ai task hub', 'num': 1})
             head, _body = REGISTRY[c['Type']](resolve_cfg(store, {**probe, 'type': c['Type'], 'max_rows': 1}))
             detail = f'{c["Type"]} answered: {head}'
@@ -219,6 +221,9 @@ def test_connector(store, cid: int) -> dict:
         elif c['Type'] in ('gitlab', 'azdo', 'linear', 'trello', 'notion', 'discord', 'sentry', 'pagerduty'):
             from . import devtools
             detail = devtools.test(store, store.get_connector(c['ConnectorId'], with_secret=True))
+        elif c['Type'] in CHAT_SERVERS:
+            from . import chatservers
+            detail = chatservers.test(store, store.get_connector(c['ConnectorId'], with_secret=True))
         elif c['Type'] == 'mssql':
             from .mssql import test as mssql_test
             conn_cfg = _cfg(c)
@@ -325,12 +330,32 @@ def test_connector(store, cid: int) -> dict:
             got = jev.ask(c['Secret'] or '', 'A scheduled check ran and came back clean.',
                           {'ok': ('is this a clean result?', 'nothing is wrong in it')})
             detail = f"Jev answered: {got['ok'][1]:.2f} confident"
-        elif c['Type'] in ('anthropic', 'openai', 'azure_openai', 'openrouter', 'ollama', 'meta'):
+        elif c['Type'] in AI_TYPES:
             from .llm import test_ai
             detail = test_ai(store, cid)
         elif c['Type'] == 'robinhood':
             from . import robinhood
             detail = robinhood.test(store, c)
+        elif c['Type'] == 'linkedin':
+            # whoami, which is the one call that proves the token AND returns something the
+            # owner recognises - a post would be a strange thing for a Test button to do
+            from .linkedin import run_linkedin_me
+            from .reports import resolve_cfg
+            head, _body = run_linkedin_me(resolve_cfg(store, {'type': 'linkedin_me'}))
+            detail = f'LinkedIn answered: {head}'
+        elif c['Type'] == 'treg':
+            from .treg import run_treg_tools
+            from .reports import resolve_cfg
+            head, _body = run_treg_tools(resolve_cfg(store, {'type': 'treg_tools', 'max_rows': 5}))
+            detail = f'treg answered: {head}'
+        elif c['Type'] in DB_ENGINES:
+            # SELECT 1 through the real driver: a card that cannot reach the server, or is missing
+            # its driver, says so here rather than in a scheduled report nobody is watching
+            from . import databases
+            from .reports import _card
+            cfg = _card(store, c['Type'], 'password', cid)
+            head, _body = databases.runner(c['Type'])({**cfg, 'query': 'SELECT 1', 'max_rows': 1})
+            detail = f"{c['Type']} answered: {head}"
         elif c['Type'] == 'sharepoint':
             from . import sharepoint
             detail = sharepoint.test(store, c)
@@ -948,6 +973,17 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
     return n
 
 
+# Four chat servers that behave exactly like Discord - one watched room per source, and a
+# reply can go back. Named here rather than imported so the module stays lazy (chatservers
+# is loaded only when a card of one of these types is actually reached).
+CHAT_SERVERS = ('mattermost', 'rocketchat', 'matrix', 'google_chat')
+# Every card whose Test is one real call through its own executor. Named as sets because the
+# dispatcher below used to list four of them by hand, and a card added without a branch here
+# answers "no test for connector type 'x'" - a working connector that looks broken.
+PAGE_READERS = ('firecrawl', 'reader', 'scrapingbee')
+RESEARCH = ('exa', 'tavily', 'brave_search', 'serpapi', 'serper', 'apify') + PAGE_READERS
+DB_ENGINES = ('postgresql', 'mysql', 'clickhouse', 'snowflake', 'bigquery')
+
 CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'github',
           'telegram': 'telegram', 'whatsapp': 'whatsapp', 'imessage': 'imessage',
           'gmail': 'email', 'imap': 'email',
@@ -955,6 +991,8 @@ CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'git
           'clickup': 'clickup', 'todoist': 'todoist',
           'gitlab': 'gitlab', 'azdo': 'azdo', 'linear': 'linear', 'trello': 'trello',
           'notion': 'notion', 'discord': 'discord', 'sentry': 'sentry', 'pagerduty': 'pagerduty',
+          'mattermost': 'mattermost', 'rocketchat': 'rocketchat', 'matrix': 'matrix',
+          'google_chat': 'google_chat',
           # cloud objects are DISCOVERED sources: each carries its own mode (report/feed/tasks/off)
           'aws': 'aws', 'azure': 'azure'}
 # A cloud object's mode lives on the SOURCE, not the connector - one bucket can feed the
@@ -1525,6 +1563,11 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
                 # per SOURCE, like slack: each watched channel id is its own source
                 from . import devtools
                 n += devtools.poll_discord(store, full, s, since, llm, file_only)
+            elif c['Type'] in CHAT_SERVERS:
+                # the same shape as Discord, and for the same reason: one watched room per
+                # source, so a rate limit in one room cannot skip the rooms after it
+                from . import chatservers
+                n += chatservers.POLLS[c['Type']](store, full, s, since, llm, file_only)
             elif c['Type'] == 'slack':
                 # paged like mail: one page of 25 and a watermark at 'now' lost the rest (audit 2026-09-02)
                 hist_all, cursor = [], None

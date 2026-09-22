@@ -42,6 +42,14 @@ export const sentReplyReview = (reviews = []) =>
 export const pendingProposals = (reviews = []) =>
   (reviews || []).filter((review) => review.Kind === "action" && review.Status === "pending").reverse();
 
+// A row Taskuary wrote itself - work you started here, a scheduled report, the assistant speaking -
+// has no correspondent, so there is nobody a reply could go to. The same list as coder.no_one_behind,
+// which is what stops a finished session drafting into the void; the buttons never asked, so "Write
+// reply" on a task the owner typed himself drafted an answer TO HIM - the model's own analysis, with
+// a letter suggested underneath it, in the box that sends (the owner, 2026-09-22, TQ-0674).
+export const NO_ONE_BEHIND = ["", "own", "report", "assistant"];
+export const hasCorrespondent = (m) => !!m && !NO_ONE_BEHIND.includes(String(m?.Channel || "").toLowerCase());
+
 export const replyPhase = (reviews = []) => {
   const replyReviews = reviews.filter((review) => review.Kind !== "action");
   const latest = replyReviews[0];

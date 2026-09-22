@@ -14,6 +14,11 @@ MSG_COLS = ('TaskId', 'ExternalId', 'ConversationId', 'Channel', 'SourceName', '
             'FromName', 'FromEmail', 'SentAt', 'BodyText', 'SourceLink', 'Status', 'Direction', 'RecipientsJson',
             'MailMetaJson', 'OwnText', 'TriageTitle', 'RankValue', 'RankWhy')
 RUN_COLS = ('Status', 'TraceJson', 'Result', 'LastError', 'SessionId', 'DiffText')
+def _fold(value):
+    """Case-fold for search. casefold() beats lower() on the pairs that differ (German ss)."""
+    return str(value or '').casefold()
+
+
 REVIEW_COLS = ('TaskId', 'MessageId', 'RunId', 'Kind', 'DraftText', 'FinalText', 'Status', 'Reason', 'Deliver')
 POLICY_COLS = ('Name', 'Kind', 'Pattern', 'Action', 'Reason', 'SortOrder', 'Active')
 SOURCE_COLS = ('Channel', 'Address', 'Owner', 'ConnectorId', 'Active', 'ConfigJson')
@@ -358,6 +363,9 @@ INDEXES = (
     'CREATE INDEX IF NOT EXISTS idx_route_message ON route(MessageId, RouteId)',
     'CREATE INDEX IF NOT EXISTS idx_route_task ON route(TaskId)',
     'CREATE INDEX IF NOT EXISTS idx_review_message ON review(MessageId, ReviewId)',
+    # Board / funnel / assistant filter on live Status (+ today's done via ClosedAt).
+    # Without this, active_only is a full task-table scan (301 ms COUNT at 1M rows).
+    'CREATE INDEX IF NOT EXISTS idx_task_status ON task(Status, ClosedAt, TaskId)',
     'CREATE INDEX IF NOT EXISTS idx_review_task ON review(TaskId, Status)',
     'CREATE INDEX IF NOT EXISTS idx_run_task ON run(TaskId, Status)',
     'CREATE INDEX IF NOT EXISTS idx_attachment_message ON attachment(MessageId)',
@@ -625,6 +633,12 @@ class SQLiteStore:
         # nowhere to put the -wal file), so tests keep the default journal.
         self.cx = sqlite3.connect(path, check_same_thread=False, timeout=5.0)
         self.cx.row_factory = sqlite3.Row
+        # SQLite's own LOWER()/LIKE fold ASCII only, so "muller" finds "MULLER" and "muller" does
+        # not find "MULLER" once it is spelt MULLER with an umlaut. Search folds both the column
+        # and the pattern through Python instead, which knows the rest of the alphabet. It is a
+        # per-row callback: fine over a mailbox this size, and the thing to revisit - a folded
+        # column, indexed - if the archive ever gets big enough to feel it.
+        self.cx.create_function('tq_fold', 1, _fold, deterministic=True)
         # A second, read-only connection for the rail's "did anything change?" look (processing_rail):
         # asked on the shared writer connection it would queue behind a running sync, and a cache HIT
         # is the one read that must never wait. A memory database has nowhere to open a second one.
@@ -1423,22 +1437,65 @@ class SQLiteStore:
 
     def task_has_tag(self, task_id, tag) -> bool:
         return tag in re.split(r'[\s,]+', str((self.get_task(task_id) or {}).get('Tags') or ''))
-    def list_tasks(self, status=None, active_only=False, search=True):
+    @staticmethod
+    def _like_pat(term):
+        """A LIKE pattern for one search word. % and _ typed in the box are literals, not wildcards."""
+        t = _fold(term).replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+        return f'%{t}%'
+
+    def _search_where(self, q):
+        """AND of the typed words; each word may match the task OR any of its messages.
+
+        Taken from PR #49, which had the field list right - the same eighteen the Tasks tab used to
+        filter on in the browser, so a search means the same thing now that it runs here. The one
+        change is tq_fold on both sides: #49 lowered the pattern in Python (Unicode) and the column
+        in SQL (ASCII), so a task titled "MULLER invoice" with an umlaut was findable by no
+        spelling of the word at all.
+        """
+        where, p = [], []
+        for term in str(q or '').split():
+            pat = self._like_pat(term)
+            where.append("""(
+                tq_fold(t.Title) LIKE ? ESCAPE '\\'
+                OR tq_fold(t.Summary) LIKE ? ESCAPE '\\'
+                OR tq_fold(t.Kind) LIKE ? ESCAPE '\\'
+                OR tq_fold(t.Status) LIKE ? ESCAPE '\\'
+                OR tq_fold(t.Priority) LIKE ? ESCAPE '\\'
+                OR tq_fold(t.Assignee) LIKE ? ESCAPE '\\'
+                OR tq_fold(t.Source) LIKE ? ESCAPE '\\'
+                OR tq_fold(t.SourceRef) LIKE ? ESCAPE '\\'
+                OR tq_fold(t.Tags) LIKE ? ESCAPE '\\'
+                OR tq_fold(printf('TQ-%04d', t.TaskId)) LIKE ? ESCAPE '\\'
+                OR CAST(t.TaskId AS TEXT) LIKE ? ESCAPE '\\'
+                OR EXISTS (
+                    SELECT 1 FROM message m WHERE m.TaskId=t.TaskId AND (
+                        tq_fold(m.Channel) LIKE ? ESCAPE '\\'
+                        OR tq_fold(m.SourceName) LIKE ? ESCAPE '\\'
+                        OR tq_fold(m.Subject) LIKE ? ESCAPE '\\'
+                        OR tq_fold(m.FromName) LIKE ? ESCAPE '\\'
+                        OR tq_fold(m.FromEmail) LIKE ? ESCAPE '\\'
+                        OR tq_fold(m.ExternalId) LIKE ? ESCAPE '\\'
+                        OR tq_fold(m.SourceLink) LIKE ? ESCAPE '\\'
+                    )
+                )
+            )""")
+            p.extend([pat] * 18)
+        return where, p
+
+    def list_tasks(self, status=None, active_only=False, q=None):
         """Task rows, each carrying its latest review, run and handover note.
 
-        `search` builds the message-search blobs the Tasks tab filters on locally. They are seven
-        GROUP_CONCAT(DISTINCT) columns over the WHOLE message table - seven temp B-trees and an
-        automatic index over the materialised result - and on a real store (270 tasks, 5,275
-        messages) they were 34ms of a 35ms query. Everything else in this row costs under 7ms, so
-        a caller that is not searching should not pay for them. SearchSources is not optional:
+        `q` searches HERE rather than in the browser. It used to be six more GROUP_CONCAT(DISTINCT)
+        columns over the WHOLE message table - seven temp B-trees, 34ms of a 35ms query and 69KB of
+        a 319KB payload on a store of 270 tasks - shipped to every caller so that the Tasks tab
+        could filter them locally. Nothing reads them now, so nothing builds or sends them, and the
+        saving grows with the message table rather than with the task table. SearchSources stays:
         Board and Tasks both draw "Report - <source>" from it.
         """
-        blobs = ('''ms.SearchChannels, ms.SearchSubjects, ms.SearchPeople,
-                       ms.SearchEmails, ms.SearchExternalIds, ms.SearchLinks,''' if search else '')
-        q = f'''SELECT t.*, rv.Status ReviewStatus, rv.Kind ReviewKind,
+        query = f'''SELECT t.*, rv.Status ReviewStatus, rv.Kind ReviewKind,
                        rn.Status RunStatus, rn.AgentName RunAgent,
                        ho.Body HandoverNote,
-                       {blobs} ms.SearchSources
+                       ms.SearchSources
                 FROM task t
                LEFT JOIN (
                    SELECT TaskId, Status, Kind FROM review
@@ -1454,17 +1511,9 @@ class SQLiteStore:
                        SELECT MAX(CommentId) FROM comment WHERE Body LIKE 'HANDOVER NOTE%' GROUP BY TaskId
                    )
                 ) ho ON ho.TaskId=t.TaskId'''
-        agg = ('''GROUP_CONCAT(DISTINCT Channel) SearchChannels,
-                          GROUP_CONCAT(DISTINCT Subject) SearchSubjects,
-                          GROUP_CONCAT(DISTINCT FromName) SearchPeople,
-                          GROUP_CONCAT(DISTINCT FromEmail) SearchEmails,
-                          GROUP_CONCAT(DISTINCT ExternalId) SearchExternalIds,
-                          GROUP_CONCAT(DISTINCT SourceLink) SearchLinks,''' if search else '')
-        q += f'''
+        query += '''
                LEFT JOIN (
-                   SELECT TaskId,
-                          {agg}
-                          GROUP_CONCAT(DISTINCT SourceName) SearchSources
+                   SELECT TaskId, GROUP_CONCAT(DISTINCT SourceName) SearchSources
                    FROM message GROUP BY TaskId
                ) ms ON ms.TaskId=t.TaskId'''
         where, p = [], []
@@ -1478,9 +1527,11 @@ class SQLiteStore:
             # the Board's Done column is today only; older finished work lives on Tasks
             where.append("(t.Status IN ('open','in_progress','waiting') "
                          "OR (t.Status='done' AND IFNULL(t.ClosedAt, t.UpdatedAt) >= date('now','localtime')))")
+        qw, qp = self._search_where(q)
+        where += qw; p += qp
         if where:
-            q += ' WHERE ' + ' AND '.join(where)
-        return self._rows(q + ' ORDER BY t.TaskId DESC', p)
+            query += ' WHERE ' + ' AND '.join(where)
+        return self._rows(query + ' ORDER BY t.TaskId DESC', p)
     def delete_task(self, task_id):
         for q in ("UPDATE message SET TaskId=NULL, Status='filed' WHERE TaskId=?", 'UPDATE route SET TaskId=NULL WHERE TaskId=?',
                   'DELETE FROM review WHERE TaskId=?', 'DELETE FROM comment WHERE TaskId=?',

@@ -503,13 +503,13 @@ def _playbook_brief(task, books=None):
             'uses': uses, 'missing': found is None}
 
 @app.get('/api/tasks')
-def tasks(status: str = None, active: bool = False, search: bool = False):
+def tasks(status: str = None, active: bool = False, q: str = None):
     """An interactive session IS an agent working - the UI has to see it, or a task with a
     live CLI on it reads as 'queued' while the agent sits there asking a question.
 
-    `search` asks for the message-search blobs the Tasks tab filters on locally. They aggregate
-    the whole message table (see store.list_tasks) and were 34ms of a 35ms query plus 69KB of a
-    319KB payload on a real store, so opening a tab no longer pays for a search nobody ran."""
+    `q` searches here. It replaces `search`, which asked for six GROUP_CONCAT blobs over the whole
+    message table so the Tasks tab could grep them in the browser - 34ms of a 35ms query and 69KB
+    of a 319KB payload on a real store. Nothing is shipped to be searched now; the words are."""
     qs = {q['TaskId']: q for q in store.queued_dispatches()}
     wc = store.waiting_counts()
     agented = store.agented_task_ids()      # the Board's Done lane shows agent work only
@@ -522,7 +522,7 @@ def tasks(status: str = None, active: bool = False, search: bool = False):
                       'Session': sessions.get(t['TaskId']),
                       'Queued': _queued_info(qs.get(t['TaskId'])), 'Waiting': wc.get(t['TaskId'], 0),
                       'HadAgent': t['TaskId'] in agented}
-                     for t in store.list_tasks(status, active_only=active, search=search)]}
+                     for t in store.list_tasks(status, active_only=active, q=q)]}
 
 @app.post('/api/tasks')
 def create_task(body: TaskBody):
@@ -1924,6 +1924,16 @@ def open_reply(mid: int, body: OpenReplyBody = None):
     sends; nothing here does."""
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
+    # NOBODY SENT IT, SO THERE IS NOBODY TO ANSWER. A finished session already knows this rule and
+    # skips the draft (coder.no_one_behind); this door did not ask, so pressing Write reply on a task
+    # the owner typed himself sent the drafter a thread with no correspondent in it - and it answered
+    # the OWNER, analysis first, with a letter suggested underneath, in the box whose button sends
+    # (the owner, 2026-09-22, TQ-0674). A channel that cannot CARRY a reply is a different question
+    # and still drafts (PW-237): there the answer is real, it just leaves by another road.
+    from .coder import no_one_behind
+    if no_one_behind(m.get('Channel')):
+        raise HTTPException(422, 'nobody sent this, so there is nobody to answer - work it, or write '
+                                 'what you found on the task itself')
     try: _refresh_chat_context(task_id=m.get('TaskId'), message_id=mid)
     except RuntimeError as e: raise HTTPException(503, str(e))
     # The requested row may no longer be the end of the conversation after that sync.  Draft and

@@ -808,9 +808,9 @@ def repair_role_assignees(store) -> int:
     actually worked those, and rewriting the stamp to `coder` would make the task claim otherwise.
     Only tasks still open can still be dispatched, so only they are corrected."""
     role, fixed = coding_role(store), 0
-    # search=False: list_tasks otherwise builds seven GROUP_CONCAT blobs over the whole message
-    # table - 34ms of a 35ms query on a real store, and a boot repair searches nothing
-    for t in store.list_tasks(search=False):
+    # the six search blobs this used to opt out of are gone for everyone: search runs in SQL now,
+    # so nothing builds a GROUP_CONCAT over the whole message table to be filtered in a browser
+    for t in store.list_tasks():
         who = str(t.get('Assignee') or '')
         if str(t.get('Status') or '').lower() not in LIVE_STATUSES: continue
         if str(t.get('Kind') or '').lower() != 'coding' or not who.startswith('agent:'): continue

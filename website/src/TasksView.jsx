@@ -16,7 +16,6 @@ import api from "./api";
 import { runOperation } from "./taskOps.js";
 import { agentName } from "./agentWork.js";
 import { lazyGeneral } from "./lazyGeneral.js";
-import { taskMatchesQuery } from "./taskSearch.js";
 import { outcomeOf } from "./dispatchOutcome.js";
 import { progressLine } from "./checklist.js";
 import { deliveryCc, deliveryFiles, replyContext } from "./replyDelivery.js";
@@ -51,7 +50,7 @@ import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { agentWorkspaceMode } from "./taskWorkspace.js";
 import { ASK_TAG } from "./newTask.js";
 import {
-  agentPhase, focusStage, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, sentReplyReview, taskPhase,
+  agentPhase, focusStage, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, sentReplyReview, taskPhase,
 } from "./taskLifecycle.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
@@ -161,6 +160,8 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // opens on a list whose top is whatever finished most recently. ("" = all; the rest derive.)
   const [filter, setFilter] = useState("live");
   const [query, setQuery] = useState("");
+  // what the loaded rows are FOR. The box is debounced because every change is now a round trip.
+  const [sent, setSent] = useState("");
   // "all" and "done" pile up for months; today's are the ones you came to look at, the rest
   // wait behind one button. In progress is never cut: what is still on a plate must show.
   const [older, setOlder] = useState(false);
@@ -246,24 +247,27 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // fetch everything once and filter on the derived state - the server only knows raw
   // Status, and the state a person cares about is a combination of three columns
   // ?active=1 is open/in_progress/waiting PLUS today's done - exactly what "in progress" and an
-  // un-expanded "done" show. The archive, and the message-search blobs (seven GROUP_CONCAT
-  // aggregates over the WHOLE message table: 34ms of a 35ms query and 69KB of a 319KB payload on
-  // a real store), wait until something actually asks: a search, "show older", or "all".
+  // un-expanded "done" show. The archive waits until something asks: "show older", or "all".
+  //
+  // A SEARCH IS ITS OWN QUERY. It used to mean "load every task ever filed, with six GROUP_CONCAT
+  // aggregates over the whole message table, and grep them here" - which is how you search only if
+  // you have already paid to hold the archive in a browser. ?q= searches in SQL and returns the
+  // matches, so the rows below ARE the result and nothing is shipped to be filtered.
   const fullLoaded = useRef(false);
   const loadTasks = useCallback(async (full = false) => {
     const want = full || fullLoaded.current;      // once upgraded, never silently downgrade
     const seq = ++taskLoadSeq.current;
     try {
-      const params = want ? { search: 1 } : { active: 1 };
+      const params = sent ? { q: sent } : want ? {} : { active: 1 };
       const next = (await api.get("/api/tasks", { params })).data.data || [];
       if (seq === taskLoadSeq.current) {
         setTasks(next);
-        if (want) fullLoaded.current = true;
+        if (want && !sent) fullLoaded.current = true;   // a search result is not the full set
       }
     } catch (e) {
       if (seq === taskLoadSeq.current) setErr(e?.response?.data?.detail || "Failed to load tasks");
     }
-  }, []);
+  }, [sent]);
 
   const loadDetail = useCallback(async (id) => {
     if (!id) { setDetail(null); return; }
@@ -494,20 +498,26 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   const t = detail?.task?.TaskId === selected ? detail.task : null;
   const isGeneral = isGeneralKind(t?.Kind);
   const search = query.trim();
-  // The three gestures that need more than the live set. "done" on its own does NOT: ?active=1
-  // already carries today's, which is what it shows until "show older". "all" does, because
-  // today's DROPPED tasks only ever appear there and active does not include them.
   useEffect(() => {
-    if ((search || older || filter === "") && !fullLoaded.current) loadTasks(true);
-  }, [search, older, filter, loadTasks]);
+    const id = setTimeout(() => setSent(search), 250);
+    return () => clearTimeout(id);
+  }, [search]);
+  // The two gestures that need more than the live set. "done" on its own does NOT: ?active=1
+  // already carries today's, which is what it shows until "show older". "all" does, because
+  // today's DROPPED tasks only ever appear there and active does not include them. A search no
+  // longer belongs here at all - it asks the server for its own answer.
+  useEffect(() => {
+    if ((older || filter === "") && !fullLoaded.current) loadTasks(true);
+  }, [older, filter, loadTasks]);
   // Search means the whole archive, regardless of the selected state pill or today's cutoff. That
-  // is what makes a completed PR/task discoverable instead of merely searching the visible rows.
-  const bucket = (tasks || []).filter((x) => search ? taskMatchesQuery(x, search) : (!filter || inBucket(x, filter)));
+  // is what makes a completed PR/task discoverable instead of merely searching the visible rows -
+  // and the rows ARE the matches now, so there is nothing left here to filter them by.
+  const bucket = (tasks || []).filter((x) => sent || (!filter || inBucket(x, filter)));
   // ONE RULE, FOR THE ROWS AND FOR THE COUNTS. The cut used to be decided per pill, which gave
   // `in progress` a wider window than `all` - live work of any age against today only - so two
   // live rows from last night counted for one pill and not the other and "all 5" sat over
   // "in progress 4 · done 2" (the owner, 2026-09-22: "that doesn't add up?").
-  const keep = (x) => !!search || !cutAway(stateOf(x).key, touchedToday(x), older);
+  const keep = (x) => !!sent || !cutAway(stateOf(x).key, touchedToday(x), older);
   const shown = bucket.filter(keep);
   const nOlder = bucket.length - shown.length;
   // A count that outruns the rows beneath it reads as a bug: "done 175" over fifteen rows says
@@ -643,6 +653,9 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     .sort((a, b) => tsMs(a.SentAt) - tsMs(b.SentAt));
   const sourceMessage = [...storedMessages].reverse()
     .find((m) => m.Status !== "context" && m.Direction !== "out");
+  // ...and whether there is anybody at the other end of it (taskLifecycle.hasCorrespondent). Every
+  // reply door hangs off this, so a task you typed yourself offers no reply to write.
+  const replyMessage = hasCorrespondent(sourceMessage) ? sourceMessage : null;
   const workContext = t?.Playbook
     ? `Playbook · ${t.Playbook.title}${t.Playbook.uses?.length ? ` · uses ${t.Playbook.uses.join(", ")}` : ""}`
     : t?.Source === "report" && sourceMessage?.SourceName
@@ -680,11 +693,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
     } finally { if (!stale(id)) setSavingMine(false); }
   };
   const openReply = async (generate = false) => {
-    if (!sourceMessage?.MessageId || openingReply) return;
+    if (!replyMessage?.MessageId || openingReply) return;
     const id = selected;
     setOpeningReply(generate ? "generate" : "write"); setErr("");
     try {
-      await api.post(`/api/messages/${sourceMessage.MessageId}/reply`, { draft: generate });
+      await api.post(`/api/messages/${replyMessage.MessageId}/reply`, { draft: generate });
       if (stale(id)) return;
       await loadDetail(id);
       onChanged?.();
@@ -769,7 +782,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
   // to read what the task is and where it came from, and that lives on the task card, not folded
   // to a strip under a heading that says the agent is working.
   const stage = sessionView ? "agent" : (openStage || (peek ? "task" : focusStage({
-    kind: t?.Kind, task: taskState, agent: agentState, reply: replyState, hasSender: !!sourceMessage,
+    kind: t?.Kind, task: taskState, agent: agentState, reply: replyState, hasSender: !!replyMessage,
     // what the agent is parked ON decides whether the proposal or the agent opens: an agent
     // waiting for approval is released by the very proposal sitting in stage 3
     proposal: proposals.length > 0, agentSub: term ? subState(term) : null,
@@ -1642,13 +1655,13 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                   borderLeft: "4px solid #9a7444" }}>
                   <WorkflowHeading number="3" title="Reply"
                     description={term?.alive
-                      ? (sourceMessage ? "Reply controls return when the agent stops." : "No inbound sender is attached to this task.")
-                      : sourceMessage
+                      ? (replyMessage ? "Reply controls return when the agent stops." : "No inbound sender is attached to this task.")
+                      : replyMessage
                         ? "What goes back to the sender. Sending and task completion are separate decisions."
-                        : "External communication, when this task has a sender."}
-                    chip={<LifecycleChip kind="reply" phase={sourceMessage ? replyState : "not available"} compact />}
+                        : "Nobody sent this one, so there is nobody to answer. Work it, or write what you found on the task."}
+                    chip={<LifecycleChip kind="reply" phase={replyMessage ? replyState : "not available"} compact />}
                     tone="#9a7444" {...stageProps("reply")}
-                    action={stage !== "reply" && sourceMessage
+                    action={stage !== "reply" && replyMessage
                       ? <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35 }}>
                           <Button size="small" variant="contained" disableElevation disabled={!!openingReply}
                             sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
@@ -1661,12 +1674,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                           </Tooltip>
                         </Box>
                       : null} />
-                  {stage === "reply" && ((pendingReview || proposals.length || sourceMessage) ? (
+                  {stage === "reply" && ((pendingReview || proposals.length || replyMessage) ? (
                     <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
                       {/* the bar comes FIRST, above the letter it acts on. What it no longer holds is
                           that jump to another tab: the draft is right here, and a button whose whole job
                           was sending you to another tab to do this card's own job is gone. */}
-                      {sourceMessage && (
+                      {replyMessage && (
                         <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
                           {/* ONE button, and it WRITES. "Write reply" opened an empty box and left the
                               model behind a second press ("you should not have to hit draft with AI again

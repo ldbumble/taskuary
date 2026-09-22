@@ -79,7 +79,7 @@ class WhichRoleTests(unittest.TestCase):
 
 class RepairTests(unittest.TestCase):
     def rows(self, s):
-        return {t['TaskId']: t.get('Assignee') for t in s.list_tasks(search=False)}
+        return {t['TaskId']: t.get('Assignee') for t in s.list_tasks()}
 
     def test_a_coding_task_routed_to_a_cli_is_corrected(self):
         """TQ-0585 held agent:copilot; TQ-0586 held agent:analyst on coding work."""

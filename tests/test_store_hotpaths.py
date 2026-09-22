@@ -306,31 +306,41 @@ class ListTasksJoinTests(unittest.TestCase):
                        'SourceName': 'org/app', 'Subject': 'org/app#31 Fix validation',
                        'FromName': 'octocat', 'FromEmail': 'octocat@users.noreply.github.com',
                        'SourceLink': 'https://github.com/org/app/pull/31', 'Status': 'routed'})
-        row = s.list_tasks()[0]
-        self.assertEqual(row['SearchChannels'], 'github')
-        self.assertEqual(row['SearchSources'], 'org/app')
-        self.assertIn('org/app#31', row['SearchSubjects'])
-        self.assertEqual(row['SearchPeople'], 'octocat')
-        self.assertIn('gh:org/app#31', row['SearchExternalIds'])
-        self.assertIn('/pull/31', row['SearchLinks'])
+        # The identity a task picks up from its messages is FINDABLE - which used to mean these
+        # were shipped as columns for the browser to grep, and now means the search reaches them.
+        self.assertEqual(s.list_tasks()[0]['SearchSources'], 'org/app')   # the label, still a column
+        for word in ('github', 'org/app', 'org/app#31', 'octocat',
+                     'octocat@users.noreply.github.com', 'gh:org/app#31', '/pull/31'):
+            self.assertEqual([t['TaskId'] for t in s.list_tasks(q=word)], [tid], f'{word} finds it')
+        # every word must match, not any of them
+        self.assertEqual([t['TaskId'] for t in s.list_tasks(q='octocat validation')], [tid])
+        self.assertEqual(s.list_tasks(q='octocat nonsense'), [])
+        # the alphabet past ASCII: PR #49 lowered the pattern in Python and the column in SQL
+        other = s.create_task({'Title': 'MULLER invoice'.replace('U', 'Ü', 1)}, 't')
+        for spelling in ('müller', 'MÜLLER', 'Müller'):
+            self.assertEqual([t['TaskId'] for t in s.list_tasks(q=spelling)], [other], spelling)
 
     def test_the_search_blobs_are_only_built_when_somebody_is_searching(self):
-        """Those seven GROUP_CONCAT(DISTINCT) columns aggregate the WHOLE message table on every
-        call - seven temp B-trees and an automatic index over the result. On a real store (270
-        tasks, 5,275 messages) that was 34ms of a 35ms query, and the Tasks tab asked for it on
-        every open. SearchSources stays: Board and Tasks both draw "Report - <source>" from it.
+        """Those six GROUP_CONCAT(DISTINCT) columns aggregated the WHOLE message table on every
+        call - temp B-trees and an automatic index over the result. On a real store (270 tasks,
+        5,275 messages) that was 34ms of a 35ms query, and every caller paid it so that the Tasks
+        tab could filter them in the browser. Search runs in SQL now, so they are built for nobody.
+        SearchSources stays: Board and Tasks both draw "Report - <source>" from it.
         """
         s = MemoryStore()
         tid = s.create_task({'Title': 'Fix validation', 'Source': 'github'}, 't')
         s.add_message({'TaskId': tid, 'ExternalId': 'gh:org/app#31', 'Channel': 'github',
                        'SourceName': 'org/app', 'Subject': 'org/app#31 Fix validation',
                        'FromName': 'octocat', 'Status': 'routed'})
-        light = s.list_tasks(search=False)[0]
-        self.assertEqual(light['SearchSources'], 'org/app')      # the label still has its source
+        row = s.list_tasks()[0]
+        self.assertEqual(row['SearchSources'], 'org/app')        # the label still has its source
         for gone in ('SearchSubjects', 'SearchPeople', 'SearchEmails', 'SearchChannels',
                      'SearchExternalIds', 'SearchLinks'):
-            self.assertNotIn(gone, light, f'{gone} was built for a caller that is not searching')
-        self.assertIn('org/app#31', s.list_tasks(search=True)[0]['SearchSubjects'])
+            self.assertNotIn(gone, row, f'{gone} is built for nobody now - search runs in SQL')
+        # ...and what they were for still works, from the same words, without shipping them
+        self.assertEqual([t['TaskId'] for t in s.list_tasks(q='org/app#31')], [tid])
+        self.assertEqual([t['TaskId'] for t in s.list_tasks(q='octocat')], [tid])
+        self.assertEqual(s.list_tasks(q='nothing matches this'), [])
 
     def test_latest_review_run_and_handover_land_on_the_row(self):
         fx = Factory()

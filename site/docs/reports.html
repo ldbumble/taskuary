@@ -112,12 +112,10 @@ share one builder, which is why they share one page here.</p>
 <p>Sources at the top, one prompt at the bottom. Every source runs on its own connection and query,
 the results are stacked under labelled headers, and the prompt sees all of them at once. One
 source failing is reported in place and never takes the whole report down.</p>
-<p>:::rule Connections owns the credential, Reports owns the question
-You do not configure a connection here. A source names the connector card its credentials live
+<div class="callout rule"><p class="eyebrow">Connections owns the credential, Reports owns the question</p><p>You do not configure a connection here. A source names the connector card its credentials live
 on. That separation is why the same database can answer five different reports without five
-copies of its password.
-:::</p>
-<h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to this section">#</a></h2>
+copies of its password.</p>
+</div><h2 id="sources">Sources<a class="anchor" href="#sources" aria-label="Link to this section">#</a></h2>
 <p>A source card carries a type, an optional label, whatever that type needs to run, and a row cap.
 The type picker is grouped by where the data lives: this computer, files and sheets, databases,
 AWS, Azure, Microsoft 365, monitoring, corporate systems, the AI itself, the web, and Taskuary&#39;s
@@ -210,11 +208,9 @@ blank means once a day while the app is open, and a slot missed while the app wa
 once on reopen.</p>
 <p><strong>Run due now</strong> on the Reports tab runs everything owed; <strong>Run now</strong> on a row runs that one
 report immediately.</p>
-<p>:::note Once a day means once a day
-A daily slot is a cap on the whole report, not on each way of triggering it. If the 08:00 slot
-has already produced today&#39;s run, opening the app at 09:00 does not produce a second one.
-:::</p>
-<h2 id="the-assistant">The Assistant<a class="anchor" href="#the-assistant" aria-label="Link to this section">#</a></h2>
+<div class="callout note"><p class="eyebrow">Once a day means once a day</p><p>A daily slot is a cap on the whole report, not on each way of triggering it. If the 08:00 slot
+has already produced today&#39;s run, opening the app at 09:00 does not produce a second one.</p>
+</div><h2 id="the-assistant">The Assistant<a class="anchor" href="#the-assistant" aria-label="Link to this section">#</a></h2>
 <p>The Assistant is a report of type <code>assistant</code>. It runs on its own schedule and when the app
 opens, and it posts on the Timeline <strong>only</strong> when it finds something worth saying: an unanswered
 reply, context for an upcoming meeting, a task gone quiet, a pattern across incoming work, or
@@ -285,12 +281,10 @@ and <code>in</code> takes a comma-separated list.</li>
 <li><code>readByQuery</code> does not group or count. &quot;How many bills per person&quot; is the rows with the person
 field included, plus a prompt that counts them.</li>
 </ul>
-<p>:::warn A named business number is not a query to write from scratch
-The chart of accounts is configured per organisation, so a hand-written GL query is plausible and
+<div class="callout warn"><p class="eyebrow">A named business number is not a query to write from scratch</p><p>The chart of accounts is configured per organisation, so a hand-written GL query is plausible and
 wrong. Use a metric that has been proved against figures you already knew, and say plainly when
-a number has not been.
-:::</p>
-<p>Leaving the field list blank returns every field on the object — right for a list you want to
+a number has not been.</p>
+</div><p>Leaving the field list blank returns every field on the object — right for a list you want to
 eyeball, wrong for GL detail.</p>
 <h2 id="api">API<a class="anchor" href="#api" aria-label="Link to this section">#</a></h2>
 <table>

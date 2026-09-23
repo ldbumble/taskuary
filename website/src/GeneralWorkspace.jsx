@@ -8,10 +8,6 @@ import AttachFileIcon from "@mui/icons-material/AttachFile";
 import CloseIcon from "@mui/icons-material/Close";
 import SendIcon from "@mui/icons-material/ArrowUpward";
 import EventRepeatIcon from "@mui/icons-material/EventRepeat";
-import TerminalIcon from "@mui/icons-material/Terminal";
-import ViewDayIcon from "@mui/icons-material/ViewDay";
-import FunctionsIcon from "@mui/icons-material/Functions";
-import PublicIcon from "@mui/icons-material/Public";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
@@ -23,18 +19,15 @@ import AddCommentOutlinedIcon from "@mui/icons-material/AddCommentOutlined";
 import api from "./api.js";
 import { streamAssistant, toolTarget } from "./assistantStream.js";
 import { wantsAsk, wantsBrowser, withoutAsk } from "./newTask.js";
-import { paneFor } from "./generalPane.js";
 import { FULL_SX, useFullScreen } from "./fullScreen.js";
 import { pickFor } from "./assistantProvider.js";
 import { agentName, workOf, doingNow, trailText, turnStart, elapsedText } from "./agentWork.js";
 import { Md } from "./md.jsx";
-import { SessionPane, TerminalPane } from "./TerminalView.jsx";
-import SemanticPanel from "./SemanticPanel.jsx";
+import { SessionPane } from "./TerminalView.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
 import "./generalWorkspace.css";
 import { ModelSelect, TaskuaryMark } from "./ui.jsx";
 
-const savedView = () => localStorage.getItem("taskuary_general_view") || "assistant";
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
 const textOf = (message) => (message?.content || []).filter((p) => p.type === "text").map((p) => p.text).join("\n").trim();
 const initial = (messages) => (messages || []).map((m) => ({
@@ -553,7 +546,6 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
   dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   onDockNewChat }) {
   const [data, setData] = useState(null);
-  const [view, setView] = useState(() => dock ? "assistant" : savedView());
   const [connectorId, setConnectorId] = useState("");
   const [model, setModel] = useState("");
   const [attachments, setAttachments] = useState([]);
@@ -566,9 +558,6 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
   const [answered, setAnswered] = useState("");
   const [ownPrompt, setOwnPrompt] = useState(null);
   const [reportBusy, setReportBusy] = useState(false);
-  // A browser this pane asked for, before the task row it was mounted with catches up
-  const [browserOn, setBrowserOn] = useState(false);
-  const [browserBusy, setBrowserBusy] = useState(false);
   // the whole window, where it stands - the dock is exempt, it has its own expand
   const { full, toggle: toggleFull } = useFullScreen();
   const [newChatBusy, setNewChatBusy] = useState(false);
@@ -609,16 +598,6 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
     return () => { live = false; };
   }, [accept, task.TaskId]);
 
-  const chooseView = async (next) => {
-    localStorage.setItem("taskuary_general_view", next);
-    if (next === "assistant" && view !== "assistant") {
-      try {
-        const r = await api.get(`/api/tasks/${task.TaskId}/assistant`);
-        accept(r.data); setRevision((k) => k + 1);
-      } catch (e) { setError(errText(e)); }
-    }
-    setView(next);
-  };
   const updateProvider = async (nextId, nextModel = model) => {
     setConnectorId(String(nextId)); setModel(nextModel); setError("");
     try {
@@ -671,18 +650,6 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
     }, 2500);
     return () => { live = false; clearInterval(timer); };
   }, [busy, task.TaskId, data?.messages]);
-  /* THE BROWSER, on demand. It used to arrive only with the task - the New task dialog's checkbox
-     or a set-up walk - so a conversation that turned out to need a page could never get one, and no
-     browser ever appeared in the agent tab (the owner, 2026-09-14). The button is the mark: the task
-     carries needs:browser from now on and a running session gets its Chrome without a restart. */
-  const openBrowser = async () => {
-    setError(""); setBrowserBusy(true);
-    try {
-      const { data: fresh } = await api.post(`/api/tasks/${task.TaskId}/assistant/browser`);
-      setBrowserOn(true); accept(fresh); setRevision((k) => k + 1);
-    } catch (e) { setError(errText(e)); }
-    finally { setBrowserBusy(false); }
-  };
   const makeReport = async () => {
     setError(""); setNotice(""); setReportBusy(true);
     try {
@@ -718,9 +685,10 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
   // name the backend that is thinking. The session's own provider is the truth once it has one; on
   // a first turn there is no session yet, so fall back to the one the picker is showing.
   const pickedLabel = (data?.providers || []).find((p) => String(p.id) === String(connectorId))?.label;
-  // the chat IS the workspace, running or not (generalPane.js) - a session only decides whether
-  // there is a terminal to show beside it
-  const pane = paneFor(view, !!session);
+  // the chat IS the workspace, running or not - a session only decides whether a browser sits
+  // beside it. It used to be one of four bodies behind a switcher (a fake terminal of the same
+  // conversation, a browser button, a numbers panel); a general agent is a chat the way a coding
+  // agent is a terminal, so there is nothing to switch (the owner, 2026-09-22).
   const asking = data?.asking && data.asking.request_id !== answered ? data.asking : null;
   const answerAsk = (text) => { setAnswered(asking.request_id); setOwnPrompt({ id: `ask:${asking.request_id}`, text }); };
   const promptUsed = (id) => { if (ownPrompt?.id === id) setOwnPrompt(null); else onPromptUsed?.(id); };
@@ -741,7 +709,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
       minHeight: 0, display: "flex", flexDirection: "column",
       ...(compact ? { height: "100%" } : { flex: "1 1 auto" }),
       ...(full && !dock ? FULL_SX : null) }}>
-      {/* the strip wraps when its box is narrow - a phone, or a half-width Wall pane; scrolled sideways it hid the view buttons entirely */}
+      {/* the strip wraps when its box is narrow - a phone, or a half-width Wall pane; scrolled sideways it hid its buttons entirely */}
       {!dock && <Box sx={{ minHeight: 39, px: 1.25, py: { xs: 0.5, md: 0 }, display: "flex", alignItems: "center", gap: 0.8, borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL,
         flexWrap: "wrap", flexShrink: 0 }}>
         <Box sx={{ width: 7, height: 7, borderRadius: 99, bgcolor: session?.alive ? "#78a17b" : "#c7a258" }} />
@@ -758,24 +726,6 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
         </Select>
         <TextField size="small" value={model} placeholder="provider default" onChange={(e) => setModel(e.target.value)}
           onBlur={() => connectorId && updateProvider(connectorId, model)} sx={{ width: 150, flexShrink: 0, "& input": { py: 0.55, fontSize: 11.5 } }} />
-        <Button size="small" startIcon={<ViewDayIcon sx={{ fontSize: 14 }} />} variant={view === "assistant" ? "contained" : "text"}
-          title="The conversation. What the assistant is doing shows here as it works."
-          onClick={() => chooseView("assistant")} sx={{ minWidth: 0, fontSize: 11, flexShrink: 0 }}>Assistant</Button>
-        <Button size="small" startIcon={<TerminalIcon sx={{ fontSize: 14 }} />} variant={view === "terminal" ? "contained" : "text"}
-          title="The same conversation as raw session output - what the CLI actually printed."
-          onClick={() => chooseView("terminal")} sx={{ minWidth: 0, fontSize: 11, flexShrink: 0 }}>Terminal</Button>
-        {/* what it is ALLOWED to state as fact about our own numbers - the chat teaches it, this shows it */}
-        {/* only while there is not one: a browser is a thing you are given once, not a toggle */}
-        {!wantsBrowser(task) && !browserOn && (
-          <Button size="small" startIcon={<PublicIcon sx={{ fontSize: 14 }} />} disabled={browserBusy}
-            title="Open a browser for this task - it appears beside the conversation and the agent drives it while you watch"
-            onClick={openBrowser} sx={{ minWidth: 0, fontSize: 11, flexShrink: 0 }}>
-            {browserBusy ? "Opening…" : "Browser"}
-          </Button>
-        )}
-        <Button size="small" startIcon={<FunctionsIcon sx={{ fontSize: 14 }} />} variant={view === "numbers" ? "contained" : "text"}
-          title="Certified numbers: the figures this assistant is allowed to state as fact about your own systems, because each was proved against numbers you already knew. Teach it one by asking for a figure it does not have yet."
-          onClick={() => chooseView("numbers")} sx={{ minWidth: 0, fontSize: 11, flexShrink: 0 }}>Numbers</Button>
         <Button size="small" onClick={toggleFull} sx={{ minWidth: 0, fontSize: 11, flexShrink: 0 }}
           title={full ? "Back to the page (Esc)" : "Give this conversation and its browser the whole window"}
           startIcon={full ? <CloseFullscreenIcon sx={{ fontSize: 13 }} /> : <OpenInFullIcon sx={{ fontSize: 13 }} />}>
@@ -839,16 +789,8 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
       <input ref={fileRef} hidden type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple onChange={(e) => upload(e.target.files)} />
       {uploading && <Box sx={{ px: 1, py: 0.5, color: FAINT, fontSize: 11 }}>Attaching image…</Box>}
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-        {pane === "numbers" ? (
-          <SemanticPanel />
-        ) : pane === "terminal" ? (
-          <TerminalPane sid={session.sid} height="100%" />
-        ) : pane === "terminal-empty" ? (
-          <Box sx={{ p: 2, color: FAINT, fontSize: 11.5 }}>
-            Nothing has run on this task yet — ask something and the session's own output appears here.
-          </Box>
-        ) : session ? (
-          <SessionPane sid={session.sid} height="100%" expectBrowser={wantsBrowser(task) || browserOn}>{thread}</SessionPane>
+        {session ? (
+          <SessionPane sid={session.sid} height="100%" expectBrowser={wantsBrowser(task)}>{thread}</SessionPane>
         ) : thread}
       </Box>
     </Box>

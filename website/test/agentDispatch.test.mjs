@@ -38,7 +38,9 @@ test("opening a general task reads state without starting an agent", () => {
   const workspace = src("GeneralWorkspace.jsx");
   const mount = workspace.slice(workspace.indexOf("useEffect(() => {", workspace.indexOf("export function GeneralWorkspace")));
   assert.match(mount, /api\.get\(`\/api\/tasks\/\$\{task\.TaskId\}\/assistant`\)/);
-  assert.doesNotMatch(mount.slice(0, mount.indexOf("const chooseView")), /assistant\/session/);
+  const before = mount.indexOf("const updateProvider");
+  assert.ok(before > 0, "the provider change (which does start a session) comes after the mount");
+  assert.doesNotMatch(mount.slice(0, before), /assistant\/session/);
 });
 
 test("every live agent ends the same way, and never without being written up", () => {

@@ -18,7 +18,9 @@ test("an open Assistant always pulls durable provider corrections", () => {
   assert.match(view, /Provider messages can arrive while this conversation is already open/);
   assert.match(view, /const \{ data: st \} = await api\.get\("\/api\/concierge"\)/);
   assert.match(view, /onLive\(\["feed-changed", "task-changed"\], \(ev, meta\) => \{ if \(!coveredByReload\(meta, forcedLoadStartedAt\.current\)\) loadPile\(true\); \}, \{ wait: 1500, max: 5000 \}\)/);
-  assert.match(view, /pollWhileActive\(active, \(\) => loadPile\(false\), 30000\)/);
+  assert.match(view, /pollWhileActive\(active, \(\) => \{\s*if \(first \|\| !liveUp\(\) \|\| \+\+n % 10 === 0\) loadPile\(false\);\s*else readChat\(\)/);
+  // under a live socket the tick reads only the chat: provider turns push no event (store.add_comment)
+  assert.match(view, /if \(!\(await readChat\(epoch\)\)\) return;/);
   assert.match(view, /if \(pileFlight\.current\)/);
   assert.match(view, /pileForcePending\.current = true/);
   assert.match(view, /queueMicrotask\(\(\) => loadPileRef\.current\?\.\(true\)\)/);

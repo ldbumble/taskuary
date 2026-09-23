@@ -60,6 +60,11 @@ export function connect() {
   ws.onerror = () => { try { ws.close(); } catch { /* already gone */ } };
 }
 
+// Whether pushes are arriving right now: a safety poll only needs to run when they are not.
+export function liveUp() {
+  return !!ws && ws.readyState === 1;
+}
+
 // Keep the socket up for the whole page, not only while Timeline is mounted (that tab
 // unmounts when you open Board, and tearing the socket down with it was the old bug).
 export function holdLive() {

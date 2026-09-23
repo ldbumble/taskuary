@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { onLive, holdLive, connect, __testFanout, __testReset } from "../src/live.js";
+import { onLive, holdLive, connect, liveUp, __testFanout, __testReset } from "../src/live.js";
 
 function FakeWS(url) {
   this.url = url;
@@ -228,3 +228,12 @@ test("without a wait the callback still gets a meta, and hello gets none", async
     stop();
   });
 });
+
+// The Assistant's 30 s pile poll runs only while this is false: an open socket already pushes every write.
+test("liveUp is true only while the socket is open", () => withSocket(() => {
+  assert.equal(liveUp(), false);
+  connect();
+  assert.equal(liveUp(), true);
+  FakeWS.instances[0].close();
+  assert.equal(liveUp(), false);
+}));

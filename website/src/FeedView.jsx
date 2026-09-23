@@ -1457,7 +1457,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
             flex sibling of the scroller, so nothing can slide over it and nothing has to be
             measured to keep it out of the way. */}
         <Box sx={{ flexShrink: 0, bgcolor: "transparent",
-          px: 1.5, py: 1.25, display: "flex", flexDirection: "column", gap: 1 }}>
+          px: 1.5, pt: 1.25, pb: 0.5, display: "flex", flexDirection: "column", gap: 1 }}>
           {Object.values(savedReplies).map((saved) => (
             <Box key={saved.reviewId} data-interrupted-reply={saved.reviewId} sx={{ fontSize: 11, color: DIM }}>
               <Box component="details">
@@ -1498,10 +1498,13 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                 fontSize: 11.5, background: GRADIENT, ml: "auto" }}>New</Button>
           </Box>
 
-          {/* ONE centred line, not two. The counts and the sync clock were separate rows justified
-              to different edges, which is most of why the dock read as scattered - and centring is
-              what kills a ragged edge, because there is no second edge to fail to line up with. */}
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap", justifyContent: "center", minHeight: 20 }}>
+          {/* Two fixed rows: the counts with Sync now pinned at the right, then the clock under them. They used
+              to share one wrapping centred line, so whether Sync now wrapped depended on what the clock said -
+              "checked … · linkedin failed" wrapped it, "syncing · reading whatsapp" did not - and every sync
+              moved the button and the whole list under it twice (the owner, 2026-09-23: "it should stay in same
+              place at all times regardless of errors"). Nothing here can wrap: the clock ellipses, the button
+              has one width whatever its label says. */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, minHeight: 20, pl: 0.5 }}>
             {rows && stats.map((s2) => (
               <Box key={s2.label} onClick={() => s2.f && setView(s2.f)}
                 sx={{ display: "flex", alignItems: "baseline", gap: 0.4, cursor: s2.f ? "pointer" : "default",
@@ -1512,24 +1515,30 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
               </Box>
             ))}
             {!rows && <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>Loading item counts…</Typography>}
-            <Typography variant="caption" noWrap sx={{ color: syncing || bgSync ? ACCENT : FAINT, fontSize: 10.5 }}>
-              {syncUnknown ? "Sync status unavailable — rechecking"
-                : <NextIn atRef={nextAtRef} render={(nextIn) => syncFace({ busy: syncing || bgSync, what: syncWhat, every, lastAt: lastSync, nextIn, checked: true, started: syncStarted, failed: syncFailed })} />}
-            </Typography>
+            <Box sx={{ flex: 1 }} />
             <Button size="small" variant="text" disabled={!syncUnknown && (syncing || bgSync)} onClick={() => syncNow(false)}
               title={syncing || bgSync ? syncWhat : "read the mailboxes, chats and repos now"}
               startIcon={<SyncIcon data-tq-sync-icon sx={{ fontSize: 12,
                 color: syncing || bgSync ? ACCENT : "inherit",
                 ...(!syncUnknown && (syncing && !bgSync || bgSync && (!syncPhase || syncPhase === "fetching"))
                   ? { animation: "tqSyncSpin .8s linear infinite" } : {}) }} />}
-              sx={{ minWidth: 0, minHeight: { xs: 30, md: 20 }, py: 0, px: { xs: 1, md: 0.6 }, fontSize: 10.5,
+              sx={{ width: 118, flexShrink: 0, justifyContent: "flex-start", minHeight: { xs: 30, md: 20 }, py: 0, px: { xs: 1, md: 0.6 }, fontSize: 10.5,
                 lineHeight: 1.2, whiteSpace: "nowrap", color: DIM,
+                // paint containment keeps the spin's compositor layer inside the button: without it Chrome
+                // assumes the rotating icon may overlap everything painted after it, promotes the rail to
+                // layers and re-renders every row's text (LCD -> greyscale) as each sync starts and stops -
+                // the whole list visibly flickered every 10-30 s with nothing changed (the owner, 2026-09-23)
+                contain: "paint",
                 "@keyframes tqSyncSpin": { to: { transform: "rotate(360deg)" } },
                 "&.Mui-disabled": { color: DIM, opacity: 1 },
                 "& .MuiButton-startIcon": { mr: 0.35 }, "&:hover": { bgcolor: PANEL2 } }}>
               {syncUnknown ? "Check status" : syncing || bgSync ? syncPhaseLabel(syncPhase) : "Sync now"}
             </Button>
           </Box>
+          <Typography variant="caption" noWrap sx={{ color: syncing || bgSync ? ACCENT : FAINT, fontSize: 10.5, minWidth: 0, pl: 0.5 }}>
+            {syncUnknown ? "Sync status unavailable — rechecking"
+              : <NextIn atRef={nextAtRef} render={(nextIn) => syncFace({ busy: syncing || bgSync, what: syncWhat, every, lastAt: lastSync, nextIn, checked: true, started: syncStarted, failed: syncFailed })} />}
+          </Typography>
           {/* a brain that errors on every call used to look like slow triage: rows parked on
               "triaging…" and nothing saying why. The last error stays until it answers again. */}
           {triageErr && (
@@ -1588,7 +1597,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
             delete railRef.current?.dataset.tqHoverLocked;
           }}
           sx={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden",
-          position: "relative", px: 1, pt: 1, pb: 3,
+          position: "relative", px: 1, pt: 0, pb: 3,
           "&[data-tq-scrolling='true'] .tqRow [data-tq-keep]": {
             transition: "none !important",
           },

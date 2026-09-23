@@ -273,9 +273,9 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
         # NEXT DISMISSES AN ERROR (the owner, 2026-09-23: "next on error should dismiss it no?" / "i hit
         # next on LinkedIn and it went to passed not gone"): walked past, it is GONE from the rail and the
         # walk - not waiting in Passed - until the error CHANGES (its sig), which is a new failure
-        if st.get('Status') == 'surfaced' and not (st.get('Note') and st['Note'] != card.get('sig')):
-            if not include_read: continue
-            card.update(surfaced=True, surfaced_at=st.get('At'))
+        # ...and that holds for the rail's read-inclusive pile too, or Passed keeps it on screen (2026-09-23:
+        # "still see linkedin error. can't get rid of it")
+        if st.get('Status') == 'surfaced' and not (st.get('Note') and st['Note'] != card.get('sig')): continue
         cards.append(card)
     cards = funnel._order(cards)
     return {'rev': snapshot['snapshot_revision'], 'items': cards, 'hidden': 0, 'muted': 0,

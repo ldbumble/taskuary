@@ -782,6 +782,8 @@ def _apply_states(items: list, states: dict, now: datetime, keep_surfaced: bool 
                 # shown, but CHANGED since - the agent rewrote the draft, the question moved on: new again
                 if i.get('sig') and st.get('Note') and st['Note'] != i['sig']:
                     out.append(i); continue
+                # a broken connection walked past is dismissed, not Passed - until its error changes (above)
+                if i.get('kind') == 'connection': continue
                 # Read is gone from the ordinary queue. Only unresolved work that is still on the
                 # owner (a draft/approval or an agent question) remains addressable and marked.
                 if not keep_surfaced and i['lane'] not in ('blocked', 'approve', 'working'): continue

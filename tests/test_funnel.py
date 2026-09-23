@@ -1052,7 +1052,7 @@ class ABrokenConnectionSaysSoTests(unittest.TestCase):
         return c['ConnectorId']
 
     def test_a_connection_that_stopped_answering_is_on_the_rail(self):
-        self._broken('github', 'ldbumble/FckSignups: no such repository - it was renamed or deleted')
+        self._broken('github', 'northwind/ledger: no such repository - it was renamed or deleted')
         rows = funnel.broken_connections(self.s)
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]['lane'], 'broken')
@@ -1073,7 +1073,7 @@ class ABrokenConnectionSaysSoTests(unittest.TestCase):
         self.assertEqual(funnel.broken_connections(self.s), [])
 
     def test_it_reaches_the_pile_the_rail_actually_draws(self):
-        self._broken('github', 'ldbumble/FckSignups: no such repository')
+        self._broken('github', 'northwind/ledger: no such repository')
         funnel.invalidate()
         keys = [i['key'] for i in funnel.pile(self.s, force=True)['items']]
         self.assertTrue(any(k.startswith('conn:') for k in keys), keys[:8])
@@ -1082,7 +1082,7 @@ class ABrokenConnectionSaysSoTests(unittest.TestCase):
         """A broken connection is a condition with no receipt of its own - so Next put the same one back
         on the table on every press (the owner, 2026-09-23: "when I hit next it takes me back to linkedin
         failed"). Shown, it is walked past; a NEW error makes it news again."""
-        cid = self._broken('github', 'ldbumble/FckSignups: no such repository')
+        cid = self._broken('github', 'northwind/ledger: no such repository')
         funnel.invalidate()
         first = funnel.next_item(self.s)
         self.assertEqual(first['key'], f'conn:{cid}')
@@ -1096,7 +1096,7 @@ class ABrokenConnectionSaysSoTests(unittest.TestCase):
 
     def test_handled_puts_a_broken_connection_down_until_the_error_changes(self):
         """No task to close (the owner, 2026-09-23): Handled hides the row; a DIFFERENT failure is news."""
-        cid = self._broken('github', 'ldbumble/FckSignups: no such repository')
+        cid = self._broken('github', 'northwind/ledger: no such repository')
         funnel.invalidate()
         funnel.settle(self.s, f'conn:{cid}', 'done')
         self.assertTrue(self.s.funnel_states()[f'conn:{cid}']['Note'])                  # it remembers which error
@@ -1106,10 +1106,25 @@ class ABrokenConnectionSaysSoTests(unittest.TestCase):
         funnel.invalidate()
         self.assertEqual((funnel.next_item(self.s) or {}).get('key'), f'conn:{cid}', 'a new error comes back')
 
+    def test_a_walked_past_error_is_not_kept_in_passed(self):
+        """The rail reads the pile WITH what was read, and filed the walked-past error under Passed - so
+        Next never made it go (the owner, 2026-09-23: "still see linkedin error. can't get rid of it")."""
+        from taskuary import processing_unread
+        cid = self._broken('linkedin', 'LinkedIn needs an access token')
+        funnel.invalidate()
+        key = f'conn:{cid}'
+        sig = next(c['sig'] for c in funnel.broken_connections(self.s) if c['key'] == key)
+        self.s.set_funnel_state(key, 'surfaced', note=sig)
+        for inc in (False, True):
+            keys = [i['key'] for i in processing_unread.build(self.s, include_read=inc)['items']]
+            self.assertNotIn(key, keys, f'include_read={inc}')
+        self.s.touch_connector(cid, 'LinkedIn: 401 unauthorised')
+        self.assertIn(key, [i['key'] for i in processing_unread.build(self.s, include_read=True)['items']], 'a new error is news')
+
     def test_next_dismisses_an_error_until_it_changes(self):
         """An error is not work that comes back in an hour (the owner, 2026-09-23: "next on error should
         dismiss it no?"): walked past, it is not offered again - until the error itself changes."""
-        cid = self._broken('github', 'ldbumble/FckSignups: no such repository')
+        cid = self._broken('github', 'northwind/ledger: no such repository')
         funnel.invalidate()
         first = funnel.next_item(self.s)
         self.s.set_funnel_state(first['key'], 'surfaced', note=first.get('sig'))

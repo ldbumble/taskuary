@@ -3,6 +3,19 @@ import { createRoot } from "react-dom/client";
 import TaskHubPage from "./TaskHubPage.jsx";
 import { startTracking } from "./demoTrack";
 
+// A page left open across a rebuild asks for chunk names that no longer exist ("Failed to fetch
+// dynamically imported module .../HubView-<old hash>.js", the owner, 2026-09-23, mid-walk). Vite
+// raises this for EVERY lazy chunk, so one reload here covers what lazyGeneral.js covered for one.
+// Once per session: a second failure is a real error and goes to the boundary instead of looping.
+window.addEventListener("vite:preloadError", (e) => {
+  let tried = false;
+  try { tried = sessionStorage.getItem("tq-chunk-reload") === "1"; sessionStorage.setItem("tq-chunk-reload", "1"); } catch { /* storage disabled */ }
+  if (tried) return;
+  e.preventDefault();
+  window.location.reload();
+});
+window.addEventListener("load", () => setTimeout(() => { try { sessionStorage.removeItem("tq-chunk-reload"); } catch { /* storage disabled */ } }, 10000));
+
 // A render error must land on the PAGE, not take the app down: one bad row in one view was
 // white-screening everything, terminal sessions included. The boundary names the error, and
 // "try again" just re-renders - state and sessions live server-side, so nothing is lost.

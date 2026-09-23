@@ -1496,13 +1496,15 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                 fontSize: 11.5, background: GRADIENT, ml: "auto" }}>New</Button>
           </Box>
 
-          {/* ONE centred line, not two. The counts and the sync clock were separate rows justified
-              to different edges, which is most of why the dock read as scattered - and centring is
-              what kills a ragged edge, because there is no second edge to fail to line up with. */}
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap", justifyContent: "center", minHeight: 20 }}>
+          {/* ONE line, and it never wraps. It used to wrap whenever the clock ran long - "running the reports
+              that were due", "· linkedin failed" - so Sync now dropped to a second line and the whole list
+              under it jumped with every sync (the owner, 2026-09-23: "it should stay in same place at all
+              times"). The counts keep their size, the clock takes what is left and ellipses, and the button
+              has one width whatever its label says, flush right under + New. */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "nowrap", minHeight: 20 }}>
             {rows && stats.map((s2) => (
               <Box key={s2.label} onClick={() => s2.f && setView(s2.f)}
-                sx={{ display: "flex", alignItems: "baseline", gap: 0.4, cursor: s2.f ? "pointer" : "default",
+                sx={{ display: "flex", alignItems: "baseline", gap: 0.4, flexShrink: 0, cursor: s2.f ? "pointer" : "default",
                   ...(s2.f ? { "&:hover .thubStatLbl": { color: ALERT_INK } } : {}) }}>
                 <Typography sx={{ fontWeight: 700, fontSize: 11.5,
                   color: s2.hot && s2.n ? ALERT_INK : INK }}>{s2.n}</Typography>
@@ -1510,7 +1512,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
               </Box>
             ))}
             {!rows && <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>Loading item counts…</Typography>}
-            <Typography variant="caption" noWrap sx={{ color: syncing || bgSync ? ACCENT : FAINT, fontSize: 10.5 }}>
+            <Typography variant="caption" noWrap sx={{ color: syncing || bgSync ? ACCENT : FAINT, fontSize: 10.5, flex: 1, minWidth: 0, textAlign: "right" }}>
               {syncUnknown ? "Sync status unavailable — rechecking"
                 : <NextIn atRef={nextAtRef} render={(nextIn) => syncFace({ busy: syncing || bgSync, what: syncWhat, every, lastAt: lastSync, nextIn, checked: true, started: syncStarted })} />}
             </Typography>
@@ -1520,7 +1522,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                 color: syncing || bgSync ? ACCENT : "inherit",
                 ...(!syncUnknown && (syncing && !bgSync || bgSync && (!syncPhase || syncPhase === "fetching"))
                   ? { animation: "tqSyncSpin .8s linear infinite" } : {}) }} />}
-              sx={{ minWidth: 0, minHeight: { xs: 30, md: 20 }, py: 0, px: { xs: 1, md: 0.6 }, fontSize: 10.5,
+              sx={{ width: 112, flexShrink: 0, justifyContent: "flex-end", minHeight: { xs: 30, md: 20 }, py: 0, pl: { xs: 1, md: 0.6 }, pr: 0, fontSize: 10.5,
                 lineHeight: 1.2, whiteSpace: "nowrap", color: DIM,
                 // paint containment keeps the spin's compositor layer inside the button: without it Chrome
                 // assumes the rotating icon may overlap everything painted after it, promotes the rail to

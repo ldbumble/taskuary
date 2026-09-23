@@ -2084,9 +2084,11 @@ function ChannelDetail({ conn, sources, reload, onBack, onCreated, onNavigate })
               chat stays out, because a public bot can be messaged by anyone. The field at the bottom is only
               for an id you already know.
             </Typography>
-            <Button size="small" variant="outlined" onClick={syncHere} disabled={srcSync} sx={{ mb: 1 }}
+            {/* one line at any width: wrapped on a phone, it shrank to one line as "Syncing…" and the list under it jumped */}
+            <Button size="small" variant="outlined" onClick={syncHere} disabled={srcSync} sx={{ mb: 1, maxWidth: "100%" }}
               startIcon={srcSync ? <CircularProgress size={11} /> : <SyncIcon sx={{ fontSize: 14 }} />}>
-              {srcSync ? "Syncing…" : "Sync now — pull in chats that messaged the bot"}
+              <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {srcSync ? "Syncing…" : "Sync now — pull in chats that messaged the bot"}</Box>
             </Button>
           </>
         )}

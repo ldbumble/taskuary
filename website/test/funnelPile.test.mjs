@@ -301,7 +301,8 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.match(cards, /api\.get\(`\/api\/tasks\/\$\{card\.tid\}`\)/);
   assert.match(cards, /filter\(\(m\) => String\(m\.Status \|\| ""\) !== "context"\)/);
   assert.match(cards, /messages combined by triage/);
-  assert.match(cards, /const \[full, setFull\] = useState\(true\)/);
+  assert.match(cards, /<Clamp><CombinedTaskText card=\{card\} list=\{false\} \/><\/Clamp>/);   // the message shown, More only when it is cut off
+  assert.match(cards, /\(over \|\| open\) && <button/);
   // reply + paused agent + ordinary message, each WITHOUT the checklist - that stays on the task (2026-09-23)
   assert.equal((cards.match(/<CombinedTaskText card=\{card\} list=\{false\} \/>/g) || []).length, 3);
   assert.match(read("SettingsView.jsx"), /funnel_hours/); assert.match(read("SettingsView.jsx"), /funnel_max/);

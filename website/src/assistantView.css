@@ -183,7 +183,11 @@
 .tq-card-also button:disabled { opacity: .45; cursor: default; }
 /* More: the rest of the thing, unfolded in place */
 .tq-card-more { display: block; margin-top: 6px; font: inherit; font-size: 11px; color: #55697a; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
-.tq-card-clamp .tq-card-full { max-height: 150px; overflow: hidden; -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
+.tq-card-clamp .tq-card-full { max-height: 150px; overflow: hidden; }
+.tq-card-clamp.over .tq-card-full { -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
+/* the card's box on the same ground as the rail's work/timeline switch (theme PANEL2) - the near-white
+   it wore read as no box at all on the card's paper (2026-09-23) */
+.tq-card .tq-card-full, .tq-card .tq-card-excerpt { background: #e9e3d8; border-color: #ddd5c7; }
 /* the start of the walk: who wants what, one row shape for every kind */
 .tq-sum-group { margin-top: 10px; }
 /* the group's name in the page's own voice - letter-spaced mono capitals read as machinery (2026-09-23) */

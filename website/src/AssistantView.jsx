@@ -501,7 +501,10 @@ function Line({ m, live, last, actions, fresh }) {
       <div className={passed ? "tq-msg tq-step" : "tq-msg"}>
         {!passed && <div className="avatar"><TaskuaryMark size={18} /></div>}
         <div className="body">
-          {m.text ? (looksMd(m.text) ? <Md text={m.text} /> : m.text.split("\n").map((p, i) => <p key={i}>{p}</p>)) : null}
+          {/* NOT OVER A LIVE CARD: the card's lead says who wants what, and the sentence above it said
+              the same thing first (the owner, 2026-09-23: "remove the text above the card - it's duplicate").
+              A proposal keeps its sentence - that is the question its Confirm answers. */}
+          {m.text && !(card && inCard && kind !== "proposal") ? (looksMd(m.text) ? <Md text={m.text} /> : m.text.split("\n").map((p, i) => <p key={i}>{p}</p>)) : null}
           {passed && (
             <div className="tq-step-done"><i>✓</i><b>{(m.card.n ?? 0) + 1} of {m.card.total}</b>
               <span>·</span>{m.card.title}</div>

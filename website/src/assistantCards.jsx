@@ -98,6 +98,28 @@ function TaskLead({ card, fallback }) {
   return <Lead text={firstSentence(sum) || firstSentence(card?.summary) || fallback || card?.title} who={card?.who} />;
 }
 
+// MORE ONLY WHEN THERE IS MORE (the owner, 2026-09-23: "the less button when there is only one line
+// don't show"). The box shows the opening; the toggle appears only if the text is actually cut off -
+// measured, since the text arrives after the card draws - and the fade only then too.
+export function Clamp({ children, what = "the whole message" }) {
+  const [open, setOpen] = useState(false);
+  const [over, setOver] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || open) return undefined;
+    const check = () => { const box = el.querySelector(".tq-card-full") || el; setOver(box.scrollHeight > box.clientHeight + 4); };
+    check();
+    const ro = new ResizeObserver(check); ro.observe(el);
+    const mo = new MutationObserver(check); mo.observe(el, { childList: true, subtree: true, characterData: true });
+    return () => { ro.disconnect(); mo.disconnect(); };
+  }, [open]);
+  return <>
+    <div ref={ref} className={open ? "" : `tq-card-clamp${over ? " over" : ""}`}>{children}</div>
+    {(over || open) && <button type="button" className="tq-card-more" onClick={() => setOpen((v) => !v)}>{open ? "Less" : `More - ${what}`}</button>}
+  </>;
+}
+
 // THE STEP NOTHING ELSE TAKES. Sending a reply, an agent finishing and pressing Next all leave the
 // task open (the owner, 2026-09-15: "We need button for Completed inline with the chat"). One road:
 // the same task.complete the spoken "close it" takes. Since 2026-09-23 it is a word on the card's
@@ -327,7 +349,12 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
   if (rv?.gone) return <CardShell card={card} kicker="already handled" title={card.title} sub="This one is no longer waiting on you." />;
   const verb = action
     ? <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv} startIcon={<DoneRoundedIcon />} onClick={() => decide("approve")} sx={primary}>{busy === "approve" ? "Running…" : "Run it"}</Button>
-    : rv?.CanSend === false ? null : stale ? (
+    : rv?.CanSend === false ? null : rv && !value.trim() && !stale ? (
+      /* NOTHING TO SEND YET: a disabled Send was the only button, and the redraft word it covers was
+         hidden as its duplicate - no way to get a draft from the card at all (2026-09-23) */
+      <Button size="small" variant="contained" disableElevation disabled={!!busy} startIcon={<RefreshRoundedIcon />}
+        onClick={redraft} sx={primary}>{busy === "redraft" ? "Drafting…" : "Draft with AI"}</Button>
+    ) : stale ? (
       /* the road out of the warning, on the card that carries it: a stale draft disabled the
          only button here and named no way forward (the owner, 2026-09-21: "just reprocess it
          then"). Refreshing is the primary action while the thread is ahead of the draft. */
@@ -340,6 +367,7 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
         {busy === "approve" ? "Sending…" : "Send reply"}</Button>
     );
   const then = action ? <><b>Run it</b> does what the agent proposed - nothing runs until you press it.</>
+    : rv && !value.trim() && !stale ? <><b>Draft with AI</b> writes one for you to approve here - nothing is sent.</>
     : stale ? <><b>Refresh the draft</b> rewrites it from the newest message; you still approve it.</>
     : rv ? <><b>Send reply</b> emails {who}.</> : null;
   return (
@@ -513,18 +541,15 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone }) {
   // Open, like the mail card: a digest behind a "Read it" is a digest nobody reads (the owner,
   // 2026-09-04: "Same with Morning digest should be open like here is your morning digest?").
   // .tq-card-full caps at 420px and scrolls, so a long report cannot run away with the page.
-  // The report reads open still, but CLAMPED to its opening lines: the headline is the lead, the first
-  // lines are the box, and More unfolds the rest in place (2026-09-23)
-  const [full, setFull] = useState(false);
+  // The report reads open still, CLAMPED to its opening lines (Clamp): the headline is the lead, the
+  // first lines are the box, and More - only when there is more - unfolds the rest in place (2026-09-23)
   return (
     <CardShell card={card} kicker={card.bad ? "a report failed" : "report"} title={card.title}>
       {card.bad && <div className="tq-card-excerpt">The run failed — the cause is in the report.</div>}
       {card.brief_today && <TodayMeetingsStrip />}
-      {card.mid && <div className={full ? "" : "tq-card-clamp"}><FullText mid={card.mid} revision={card.presentation_revision} /></div>}
+      {card.mid && <Clamp what="the whole report"><FullText mid={card.mid} revision={card.presentation_revision} /></Clamp>}
       <Foot close={card} onDone={onDone} promote={card.bad ? "rerun" : null}
-        verb={!card.bad && card.mid && <Button size="small" variant="contained" disableElevation onClick={() => setFull((v) => !v)} sx={primary}>{full ? "Fold it" : "Read it"}</Button>}
-        then={card.bad ? "Running it again reruns the report in the background; it comes back here." : card.mid ? <><b>Read it</b> opens the whole report here.</> : null}
-        more={card.bad && card.mid ? <Button size="small" onClick={() => setFull((v) => !v)} sx={faint}>{full ? "Less" : "More"}</Button> : null}
+        then={card.bad ? "Running it again reruns the report in the background; it comes back here." : null}
         where={<Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
     </CardShell>
   );
@@ -623,8 +648,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface })
   // Shown, not offered. Clicking "Read it" to find out what a thing IS put a step in front of every
   // decision (the owner, 2026-09-04: "by default it should show the full email - not the full chain
   // ... don't want to have to click read it"). FullText fetches this ONE message, so it is the mail
-  // that arrived and never the thread behind it.
-  const [full, setFull] = useState(true);
+  // that arrived and never the thread behind it - shown whole when it fits, clamped with More when not.
   const post = async (verb, path, body, receipt, after) => {
     setBusy(verb); setErr("");
     try { const { data } = await api.post(path, body || {}); after?.(data); if (receipt) onDone?.(typeof receipt === "function" ? receipt(data) : receipt); }
@@ -666,9 +690,8 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface })
   return (
     <CardShell card={card} kicker={card.kind === "fyi" ? "fyi" : suggestedKind === "coding" ? "coding · nobody on it" : own ? "on your list" : "asked you"}
       lead={<TaskLead card={card} fallback={card.channel === "own" ? card.preview : card.title} />} err={err}>
-      {!full && card.preview && <div className="tq-card-excerpt">{card.preview}</div>}
-      {full && card.mid && <div className="tq-card-clamp"><CombinedTaskText card={card} list={false} /></div>}
-      {card.mid && <button type="button" className="tq-card-more" onClick={() => setFull((v) => !v)}>{full ? "Less" : "More - the whole message"}</button>}
+      {card.mid ? <Clamp><CombinedTaskText card={card} list={false} /></Clamp>
+        : card.preview && <div className="tq-card-excerpt">{card.preview}</div>}
       <Foot verb={verb} close={card} onDone={onDone}
         covers={own ? [suggestedKind === "coding" ? "coder" : "regular_agent"] : ["reply"]}
         then={!verb ? null : own ? <><b>Hand to agent</b> starts {suggestedKind === "coding" ? "a coding agent" : "an agent"} on it; it comes back here when it stops.</>

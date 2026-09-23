@@ -27,25 +27,25 @@ class KindTests(unittest.TestCase):
     guess. It used to be `task`, and before that a keyword hit for "deploy" or a traceback opened
     a coding session on its own - the classifier's explicit `coding` is what does that now."""
     def test_prose_that_merely_mentions_deployment_is_not_coding(self):
-        self.assertEqual(draft_task_fields({'subject': 'Teams chat with Priya', 'body': JOB_SCOPE})['kind'], 'general')
+        self.assertEqual(draft_task_fields({'subject': 'Teams chat with Priya', 'body': JOB_SCOPE})['kind'], 'task')
 
     def test_one_soft_word_is_somebody_talking_about_their_week(self):
         for body in ("We had an error in judgement on the vendor call.",
                      "The deploy team is hiring two people this quarter.",
                      "My endpoint of the process is the monthly close."):
-            self.assertEqual(draft_task_fields({'subject': 'chat', 'body': body})['kind'], 'general', body)
+            self.assertEqual(draft_task_fields({'subject': 'chat', 'body': body})['kind'], 'task', body)
 
     def test_code_words_alone_no_longer_buy_a_coding_session(self):
         for body in ('The nightly export is broken and the deploy failed.',
                      'Traceback (most recent call last):\n  File "app/run.py", line 3',
                      'see https://github.com/o/r/pull/18 when you can',
                      'please look at services/export.py'):
-            self.assertEqual(draft_task_fields({'subject': 'x', 'body': body})['kind'], 'general', body)
+            self.assertEqual(draft_task_fields({'subject': 'x', 'body': body})['kind'], 'task', body)
 
     def test_the_classifiers_explicit_kind_is_kept(self):
         self.assertEqual(draft_task_fields({'subject': 'x', 'body': 'x'}, kind='coding')['kind'], 'coding')
         self.assertEqual(draft_task_fields({'subject': 'x', 'body': 'x'}, kind='task')['kind'], 'task')
-        self.assertEqual(draft_task_fields({'subject': 'x', 'body': 'x'}, kind='robot')['kind'], 'general')
+        self.assertEqual(draft_task_fields({'subject': 'x', 'body': 'x'}, kind='robot')['kind'], 'task')
 
     def test_a_question_is_still_a_reply(self):
         self.assertEqual(draft_task_fields({'subject': 'T&E', 'body': 'Can you send me the numbers?'})['kind'], 'reply')
@@ -53,7 +53,7 @@ class KindTests(unittest.TestCase):
     def test_real_work_with_no_code_in_it_is_general_not_coding(self):
         """Chasing a vendor is work with no repository: the assistant can help think it through; no agent is dispatched."""
         f = draft_task_fields({'subject': 'March invoice', 'body': 'The vendor never sent it. Someone needs to chase them.'})
-        self.assertEqual(f['kind'], 'general')
+        self.assertEqual(f['kind'], 'task')
 
 
 class DispatchGateTests(unittest.TestCase):
@@ -75,12 +75,12 @@ class DispatchGateTests(unittest.TestCase):
     def test_a_task_with_no_code_in_it_is_general_and_buys_no_session(self):
         s, out, started = self._ingest('Teams chat with Priya', JOB_SCOPE)
         self.assertEqual(started, [])                                    # no session bought
-        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')  # labelled with the default, honestly
+        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'task')  # labelled with the default, honestly
 
     def test_code_words_without_a_classifier_no_longer_reach_the_coder(self):
         s, out, started = self._ingest('export down', 'The export is broken and the deploy failed.')
         self.assertEqual(started, [])
-        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')
+        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'task')
 
     def test_the_classifiers_explicit_coding_still_reaches_the_coder(self):
         s, out, started = self._ingest('export down', 'The export is broken and the deploy failed.',
@@ -90,7 +90,7 @@ class DispatchGateTests(unittest.TestCase):
 
     def test_the_route_line_says_which_way_it_went(self):
         s, _out, _ = self._ingest('Teams chat with Priya', JOB_SCOPE)
-        self.assertIn('sent to the assistant', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])   # PW-069: general starts its assistant
+        self.assertIn('yours to do', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])   # unnamed kind: the owner's list (2026-09-23)
         s2, _out2, _ = self._ingest('export down', 'The export is broken and the deploy failed.',
                                     llm=lambda *a, **k: '{"intent": "task", "kind": "coding", "why": "a broken job"}', classify='1')
         self.assertIn('sent to the coding agent', s2._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])

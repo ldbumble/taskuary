@@ -1,0 +1,18 @@
+[
+ [
+  "The rule of this funnel, in one line: almost everything that asks for anything is a TASK, and almost every task goes to the coding agent automatically. The agent reads the ask, does what can be done from a keyboard - a change to a system, a lookup in a database, a file to produce, an account to fix, a vendor to chase by drafting the mail - or says \"nothing to do here\" and stops. That ending is cheap. A job left sitting on a list, or answered with a polite reply while nobody did it, is the expensive mistake. Three things are not the agent's: a plain question a sentence settles (reply_only), information nobody has to act on (fyi), and a task that is CLEARLY not a coding job - which is `kind`, below.",
+  "The rule of this funnel, in one line: almost everything that asks for anything is a TASK. A job left sitting unnoticed, or answered with a polite reply while nobody did it, is the expensive mistake. WHO does it is `kind`, below, and it is never the coding agent by default. Two things are not tasks: a plain question a sentence settles (reply_only), and information nobody has to act on (fyi)."
+ ],
+ [
+  "coding is the default and the bar for general is high. The test is not \"is there a repository in this\" - most of what the agent does is not code. A system to change, an account to unlock, a database to query, a file or a report to produce, a document to draft, a vendor to chase by writing to them, something to look up: all `coding`, because an agent can make a start on every one of them, and if it turns out it cannot it says \"nothing to do here\" and stops, which costs almost nothing.",
+  "`coding` is for work INSIDE a system this install holds the code or the credentials for: a change to one of the owner's repositories, a query against one of their databases, a file or report produced from them, an account on a system they run. The test is where the work happens, not what it is about - a repository whose SUBJECT matches the message (a bank-feed repository, for a mail about a bank feed) is not a reason. Chasing a person, asking a vendor, following up by email is never coding. Coding is not the default; say it only when the work is typed into one of those systems."
+ ],
+ [
+  "Say `general` when there is nothing to type at a system, but thinking, reading or research would help: weigh an option, make sense of a thread, work out what to ask, get ready for something. It opens a **conversation with the assistant** - no agent touches a system, but the work is not left to the owner alone either.",
+  "Say `general` when there is nothing to type at a system, but thinking, reading or research would help: weigh an option, make sense of a thread, work out what to ask, get ready for something. It opens a **conversation with the assistant** - no agent touches a system, but the work is not left to the owner alone either. A person to chase, a vendor to ask, a follow-up to write is `general` too: the assistant drafts it for the owner's yes, and nothing is typed into any system."
+ ],
+ [
+  "When you genuinely cannot tell, say general: an assistant can read and think about anything, while a coding session started on a guess works in the wrong place.",
+  "When you genuinely cannot tell, say task: it lands on the owner's own list and nothing starts on a guess - an agent started on a guess works in the wrong place."
+ ]
+]

@@ -293,7 +293,7 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   // prep is the chat line's word now (concierge.CHIPS meeting), not a button on the card
   assert.doesNotMatch(cardsSrc(), /Prep me/);
   assert.match(cards, /SourceMark/); assert.match(cards, /ChannelIcon/);   // the logo of where it came from
-  assert.match(cards, /On the Timeline/);                                   // every card links to the whole of it
+  assert.doesNotMatch(cards, /On the Timeline/);                            // a dead link: Chat mode reads no #msg= (2026-09-23)
   // Once triage combines chat lines into a task, both an ordinary item and its pending reply show
   // that exact task bundle together. The conversation endpoint is intentionally not used here: a
   // long WhatsApp room may contain several separate tasks.

@@ -135,14 +135,14 @@ class GeneralDefaultTests(unittest.TestCase):
         s = store(replies_off=()); spawned = []
         with mock.patch.object(ingest, '_spawn', side_effect=lambda f, *a: spawned.append(f.__name__)):
             out = ingest.ingest_message(s, {**Q, 'body': 'Please sort out the badge situation.'}, llm=lambda *a, **k: '{"intent": "task", "why": "an ask"}')
-        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')
+        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'task')
         self.assertNotIn('_auto_code', spawned)                          # no coding session on a guess (PW-068)
 
     def test_an_invalid_kind_is_general_too(self):
         s = store(replies_off=())
         with mock.patch.object(ingest, '_spawn'):
             out = ingest.ingest_message(s, {**Q, 'body': 'Please sort out the badge situation.'}, llm=lambda *a, **k: '{"intent": "task", "kind": "robot", "why": "x"}')
-        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')
+        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'task')
 
     def test_explicit_coding_and_owner_task_decisions_are_kept(self):
         s = store(replies_off=()); spawned = []
@@ -154,16 +154,16 @@ class GeneralDefaultTests(unittest.TestCase):
 
     def test_the_keyword_fallback_no_longer_guesses_coding(self):
         f = routing.draft_task_fields({'subject': 'Stack trace in the nightly export', 'body': 'Traceback (most recent call last): the export crashed with a KeyError again, can someone fix'})
-        self.assertEqual(f['kind'], 'general')
+        self.assertEqual(f['kind'], 'task')
         self.assertEqual(routing.draft_task_fields({'subject': 'x', 'body': 'Are you free Tuesday?'})['kind'], 'reply')
         self.assertEqual(routing.draft_task_fields({'subject': 'x', 'body': 'x'}, kind='coding')['kind'], 'coding')
 
     def test_the_classifier_instructions_default_to_general(self):
         self.assertNotIn('Cannot tell? Say coding', triage.INTENT_SYSTEM)
-        self.assertIn('Cannot tell? Say general', triage.INTENT_SYSTEM)
+        self.assertIn('Cannot tell? Say task', triage.INTENT_SYSTEM)                  # 2026-09-23: unsure is the owner's list
         from pathlib import Path
         doc = (Path(__file__).parent.parent / 'taskuary' / 'templates' / 'triage.md').read_text(encoding='utf-8')
-        self.assertNotIn('say coding', doc.lower()); self.assertIn('say general', doc.lower())
+        self.assertNotIn('say coding', doc.lower()); self.assertIn('say task', doc.lower())
 
 
 if __name__ == '__main__':

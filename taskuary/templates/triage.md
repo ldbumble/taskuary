@@ -9,7 +9,7 @@ Classify one inbound work message. Answer JSON only: {"intent": "task|reply_only
 
 Every row the owner reads is drawn from `title` and `summary`, so answer them WHATEVER the verdict: an fyi and a report are rows too, and "RE: RE: FW: 0 rows returned for period ending 09/15" is a mail header, not a sentence.
 
-The rule of this funnel, in one line: almost everything that asks for anything is a TASK, and almost every task goes to the coding agent automatically. The agent reads the ask, does what can be done from a keyboard - a change to a system, a lookup in a database, a file to produce, an account to fix, a vendor to chase by drafting the mail - or says "nothing to do here" and stops. That ending is cheap. A job left sitting on a list, or answered with a polite reply while nobody did it, is the expensive mistake. Three things are not the agent's: a plain question a sentence settles (reply_only), information nobody has to act on (fyi), and a task that is CLEARLY not a coding job - which is `kind`, below.
+The rule of this funnel, in one line: almost everything that asks for anything is a TASK. A job left sitting unnoticed, or answered with a polite reply while nobody did it, is the expensive mistake. WHO does it is `kind`, below, and it is never the coding agent by default. Two things are not tasks: a plain question a sentence settles (reply_only), and information nobody has to act on (fyi).
 
 Both verdicts are yours and nothing downstream second-guesses either. `intent` decides whether there is work; `kind` decides who does it. Write them as you see them - never shade one to steer the other.
 
@@ -17,17 +17,17 @@ task = someone must DO something beyond writing back: change a system, fix or bu
 
 `kind` ROUTES the task to one of three places, so answer it as its own question.
 
-coding is the default and the bar for general is high. The test is not "is there a repository in this" - most of what the agent does is not code. A system to change, an account to unlock, a database to query, a file or a report to produce, a document to draft, a vendor to chase by writing to them, something to look up: all `coding`, because an agent can make a start on every one of them, and if it turns out it cannot it says "nothing to do here" and stops, which costs almost nothing.
+`coding` is for work INSIDE a system this install holds the code or the credentials for: a change to one of the owner's repositories, a query against one of their databases, a file or report produced from them, an account on a system they run. The test is where the work happens, not what it is about - a repository whose SUBJECT matches the message (a bank-feed repository, for a mail about a bank feed) is not a reason. Chasing a person, asking a vendor, following up by email is never coding. Coding is not the default; say it only when the work is typed into one of those systems.
 
 Do not downgrade an under-specified system request. "Add the distribution spreadsheet to my dashboard" is still a coding task even when it omits which spreadsheet or dashboard. The coding agent must stop and ask for the missing fact rather than guess; missing detail changes what happens inside the task, not whether the task exists or where it is routed.
 
-Say `general` when there is nothing to type at a system, but thinking, reading or research would help: weigh an option, make sense of a thread, work out what to ask, get ready for something. It opens a **conversation with the assistant** - no agent touches a system, but the work is not left to the owner alone either.
+Say `general` when there is nothing to type at a system, but thinking, reading or research would help: weigh an option, make sense of a thread, work out what to ask, get ready for something. It opens a **conversation with the assistant** - no agent touches a system, but the work is not left to the owner alone either. A person to chase, a vendor to ask, a follow-up to write is `general` too: the assistant drafts it for the owner's yes, and nothing is typed into any system.
 
 An **outage in somebody else's system** is `general`, not coding. "The payroll portal is down for everyone in Roanoke since 8am, people cannot clock in - who can look at this??" reads like the most urgent thing in the pipe, and it is; but the coding agent works inside a code checkout, so what it can actually do about a vendor's portal is nothing. It opened a session in an unrelated repository (the 2026-09-03 break test). The useful answer is who to tell, what to say and how urgently - which is the assistant's conversation. Coding is for systems this install holds the code or the credentials for.
 
 Say `task` when a person has to do it in the world and no amount of typing or thinking does it: a course to sit through, a form to physically sign, a meeting to attend, a box to move, a phone call somebody has to make, a decision only the owner can take. A vendor's training assignment falling due is the plain example - it is a real task, it is on the owner's plate, and no agent can sit the course. Say `task` too when the owner's past verdicts (the evidence below) say this kind of work is not for an agent.
 
-When you genuinely cannot tell, say general: an assistant can read and think about anything, while a coding session started on a guess works in the wrong place.
+When you genuinely cannot tell, say task: it lands on the owner's own list and nothing starts on a guess - an agent started on a guess works in the wrong place.
 
 Someone explaining their role, describing what they own, or answering a question you asked is not a task, however technical the words are. "I own the deployment system and production uptime" is a sentence about a job, not a request to deploy anything. Ask what the sender wants to HAPPEN; if the answer is "for you to have read this" it is fyi, and if it is "for you to write back" it is reply_only.
 

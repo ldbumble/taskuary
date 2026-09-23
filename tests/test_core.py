@@ -109,10 +109,10 @@ class CoreTests(unittest.TestCase):
              mock.patch('taskuary.general.provider_options', return_value=[]):
             out = ingest_message(s, self.msg(external_id='ac4'), llm=TASK_LLM)
         self.assertFalse(any(getattr(c[0][0], '__name__', '') == '_auto_code' for c in spawn.call_args_list))
-        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')
-        # PW-069 retains a positive routing explanation when no assistant is configured.
+        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'task')                 # 2026-09-23: unnamed is the owner's list
+        # nothing starts on a guess, and the route line says it is the owner's to do
         spawn.assert_not_called()
-        self.assertIn('no assistant provider is configured', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
+        self.assertIn('yours to do', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
 
     def test_a_first_time_email_sender_never_starts_the_coder_by_itself(self):
         """The one road from a stranger's text to an agent on this machine with nobody in between

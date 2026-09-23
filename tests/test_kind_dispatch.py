@@ -136,13 +136,18 @@ class ConsistencyTests(unittest.TestCase):
         doc = (Path(taskuary.__file__).parent / 'templates' / 'triage.md').read_text(encoding='utf-8')
         for text, name in ((doc, 'triage.md'), (INTENT_SYSTEM, 'INTENT_SYSTEM')):
             low = text.lower()
-            self.assertIn('from a keyboard', low, name)                   # the one test coding has to pass
-            self.assertIn('say general', low, name)                       # the tie-break, both ways (PW-067)
+            # the one test coding has to pass: the work happens INSIDE a system this install holds
+            self.assertIn('holds the code or the credentials for', low, name)
+            self.assertIn('say task', low, name)                          # the tie-break (2026-09-23; was general, PW-067)
             # three destinations, named in both - a kind the doc does not describe is a kind the
             # model will not answer, and the router would then route on a value nothing produced
             for k in ('coding', 'general', 'task'):
                 self.assertIn(k, low, f'{name} must name {k}')
-            self.assertIn('almost every task goes to the coding agent', low, name)
+            # never coding by default (the owner, 2026-09-23: "i don't like coding by default"), and a
+            # repository that only matches the topic is not a reason (TQ-0694)
+            self.assertNotIn('almost every task goes to the coding agent', low, name)
+            self.assertNotIn('this is the default', low, name)
+            self.assertIn('never coding', low, name)
             # the two claims that used to contradict the rest of the document
             self.assertNotIn('and every task goes to the coding agent', low, name)
             self.assertNotIn('not a routing decision', low, name)
@@ -198,3 +203,24 @@ class VerdictMarksAreEvidenceTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class CodingIsNotTheDefaultMigrationTests(unittest.TestCase):
+    """An owner's TRIAGE.md that stopped tracking the template gets the kind rules swapped once, in place."""
+    def test_the_shipped_paragraphs_are_swapped_and_nothing_else(self):
+        import os, tempfile
+        from taskuary import store as store_mod
+        from taskuary.store import SQLiteStore
+        p = os.path.join(tempfile.mkdtemp(), 't.db')
+        old = 'MY OWN RULE: Erin is always urgent.\n\n' + '\n\n'.join(w for w, _n in store_mod._KIND_RULES) + '\n\nMy last line.'
+        s = SQLiteStore(p); s.save_doc('triage', old, 'owner')
+        s.cx.execute("DELETE FROM setting WHERE Name='triage_coding_not_default'"); s.cx.commit(); s.cx.close()
+        after = SQLiteStore(p).doc('triage')
+        for was, now in store_mod._KIND_RULES:
+            self.assertIn(now, after)
+            if was not in now: self.assertNotIn(was, after)                 # the general rule only grows a sentence
+        self.assertIn('MY OWN RULE: Erin is always urgent.', after); self.assertIn('My last line.', after)
+
+    def test_an_unnamed_kind_is_the_owners_list(self):
+        from taskuary.routing import draft_task_fields
+        self.assertEqual(draft_task_fields({'subject': 'Valley BAI feed', 'body': 'Kevin still has not started the feed.'})['kind'], 'task')

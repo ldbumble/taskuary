@@ -63,9 +63,12 @@ export function sourceColor(item) {
 }
 
 // the link every card carries: the task when there is one, else the row on the Timeline
-const Where = ({ card, onOpenTask, onTimeline, label }) => card?.tid
+// ...and only the task: the Timeline link set a #msg= that nothing in Chat mode reads, so it was a
+// button that did nothing (the owner, 2026-09-23: "on the timeline does nothing"). A card with no task
+// opens its whole text in place (More), which is what the link was for.
+const Where = ({ card, onOpenTask, label }) => card?.tid
   ? <Button size="small" onClick={() => onOpenTask?.(card.tid)} sx={faint}>{label || `Open ${card.ref || "task"}`} ↗</Button>
-  : card?.mid ? <Button size="small" onClick={() => onTimeline?.(card.mid)} sx={faint}>On the Timeline ↗</Button> : null;
+  : null;
 
 // ONE CARD, FIVE PARTS, EVERY KIND (the owner, 2026-09-23: "all cards should be equal ... there should be
 // summary of who wants what ... buttons should be next or do action now with link to task"): where it
@@ -179,6 +182,27 @@ export function Foot({ verb, then, where, covers = [], close, onDone, more, prom
       {shut.err && <div className="tq-card-err">{shut.err}</div>}
     </>
   );
+}
+
+// AN ADVISOR IDEA made into a task: its text IS the task's summary, so the box repeated the lead word for
+// word (the owner, 2026-09-23: "what is the gray part doing? sounds like a repeat. maybe where it got it
+// from?"). What the lead does not say is WHY the Advisor raised it - the `why:` line every idea carries
+// (assistant._idea_message) - so that is the box, said as whose reason it is.
+function AdvisorWhy({ mid }) {
+  const [why, setWhy] = useState(null);
+  useEffect(() => {
+    let live = true;
+    if (mid == null || mid === "") { setWhy(""); return () => { live = false; }; }   // no mail behind it: ask for nothing
+    api.get(`/api/messages/${mid}`).then(({ data }) => {
+      if (!live) return;
+      const body = cleanText(data?.BodyText || "");
+      const at = body.search(/\n\s*why:\s*/i);
+      setWhy(at >= 0 ? body.slice(at).replace(/^\s*why:\s*/i, "").trim() : "");
+    }).catch(() => live && setWhy(""));
+    return () => { live = false; };
+  }, [mid]);
+  if (!why) return null;
+  return <div className="tq-card-excerpt"><b>Why the Advisor raised it:</b> {why}</div>;
 }
 
 // the whole text, unfolded under the card on request - a report as markdown, a mail as it was written
@@ -703,7 +727,8 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface })
   return (
     <CardShell card={card} kicker={card.kind === "fyi" ? "fyi" : suggestedKind === "coding" ? "coding · nobody on it" : own ? "on your list" : "asked you"}
       lead={<TaskLead card={card} fallback={card.channel === "own" ? card.preview : card.title} />} err={err}>
-      {card.mid ? <Clamp><CombinedTaskText card={card} list={false} /></Clamp>
+      {card.channel === "assistant" && card.mid ? <AdvisorWhy mid={card.mid} />
+        : card.mid ? <Clamp><CombinedTaskText card={card} list={false} /></Clamp>
         : card.preview && <div className="tq-card-excerpt">{card.preview}</div>}
       <Foot verb={verb} close={card} onDone={onDone}
         covers={own ? [suggestedKind === "coding" ? "coder" : "regular_agent"] : ["reply"]}
@@ -882,7 +907,7 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
       {/* the one card whose verb IS Next: marking the handful read moves on (fyis carries no `next`) */}
       <Foot verb={<Button size="small" variant="contained" disableElevation onClick={() => onDone?.(`Read — ${items.length} fyi let go.`)} sx={primary}>All read, next</Button>}
         then={<><b>All read, next</b> marks {items.length === 1 ? "it" : `all ${items.length}`} read - they stay on the Timeline.</>}
-        where={items[0]?.mid ? <Button size="small" onClick={() => onTimeline?.(items[0].mid)} sx={faint}>On the Timeline ↗</Button> : null} />
+        where={null} />
     </CardShell>
   );
 }

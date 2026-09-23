@@ -124,6 +124,10 @@ _SUMMARY_NOW = ('"summary": "<two sentences. The first says who wants what from 
                 "('Erin Blake wants the Q3 numbers before Friday'), or on an fyi who says what ('Payworth says the "
                 "September statement is ready'); the second adds the one detail that matters - a date, an amount, "
                 'what was already done. Never the signature, the confidentiality footer or quoted earlier mail>"')
+# The kind rules as shipped before 2026-09-23 and what replaced them (templates/triage.md) - kept as
+# data so the swap is exact; test_kind_dispatch.py holds the template to the "now" side.
+with open(__file__[:__file__.replace('\\', '/').rfind('/') + 1] + 'triage_kind_rules.json', encoding='utf-8') as _f:
+    _KIND_RULES = [tuple(p) for p in json.load(_f)]
 _SHAPE_WAS = ('Classify one inbound work message. Answer JSON only: {"intent": "task|reply_only|fyi", '
               '"kind": "coding|general|task", "why": "<one concrete sentence: what you saw in the message '
               'and which rule it hit - the owner reads this to judge the verdict, 25 words max>"}.')
@@ -1050,6 +1054,20 @@ class SQLiteStore:
                                     (body.replace(_SUMMARY_WAS, _SUMMARY_NOW), _now()))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) "
                                 "VALUES ('triage_summary_who_wants_what', '1', 'migration')")
+            # ...and CODING IS NOT THE DEFAULT any more (the owner, 2026-09-23: "i don't like coding by
+            # default"): an Advisor idea about chasing a bank's contact went to the coding agent in a
+            # repository that only matched its topic (TQ-0694). The paragraphs that said otherwise are
+            # swapped where they still read as shipped - an owner's own rewording of one is theirs.
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='triage_coding_not_default'").fetchone():
+                row = self.cx.execute("SELECT Content FROM doc WHERE Name='triage'").fetchone()
+                body = (row['Content'] or '') if row else ''
+                fixed = body
+                for was, now in _KIND_RULES: fixed = fixed.replace(was, now)
+                if fixed != body:
+                    self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name='triage'", (fixed, _now()))
+                    logger.info('triage: coding is no longer the default kind; unsure is a task')
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) "
+                                "VALUES ('triage_coding_not_default', '1', 'migration')")
             # THE WHATSAPP CATCH-ALL IS GONE, so the row for it goes too. '*' admitted every direct
             # chat on an account that is the owner's own phone; nothing honours it now (messengers
             # .poll_whatsapp skips it, the door refuses a new one), and a dead row with a live-looking

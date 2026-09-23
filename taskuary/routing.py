@@ -161,11 +161,12 @@ def draft_task_fields(msg, urgent: bool = False, kind: str = None):
     # the assistant's chat now, and a keyword scan that could not tell what this is has no
     # business opening one - `task` is the honest end of a guess: it lands on the owner's list
     # and waits, which is what the old word did.
-    # A kind nobody named is GENERAL (the owner, 2026-09-05, PW-067): a general agent can read
-    # and think about anything, and no coding session starts on a keyword guess. `coding` and
-    # `task` are the classifier's (or the owner's) explicit calls; a plain question is a reply.
+    # A kind nobody named is TASK - the owner's list, where nothing starts on a guess (the owner,
+    # 2026-09-23: "if a triage is unknown ... it should just be task. I don't like coding by default";
+    # it was GENERAL from 2026-09-05, PW-067). `coding` and `general` are the classifier's explicit
+    # calls; a plain question is a reply.
     kind = (kind if kind in ('coding', 'general', 'task') else
-            'reply' if body.rstrip().endswith('?') or any(w in low for w in _ASKS) else 'general')
+            'reply' if body.rstrip().endswith('?') or any(w in low for w in _ASKS) else 'task')
     # THE ASK, NOT THE EMAIL. This stored body[:1000], so a task's own summary was the greeting, the
     # signature, the legal footer and the quoted thread underneath - 5,998 characters of Maya's
     # reply, of which the ask was the first sentence (the owner, 2026-09-14: "why is the whole email

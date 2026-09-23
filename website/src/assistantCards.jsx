@@ -243,15 +243,20 @@ function FullText({ mid, revision }) {
   const none = mid == null || mid === "";
   const got = useFetched(none ? null : `/api/messages/${mid}`, revision);
   const doc = none ? { error: "" } : got;
+  const [whole, setWhole] = useState(false);
   if (!doc) return <div className="tq-card-full">…</div>;
   if (doc.error) return <div className="tq-card-err">{doc.error}</div>;
-  const body = cleanText(doc.BodyText || "");
+  // what they WROTE (ReadText: no chain, signature, legal footer or banner); the whole email on request
+  const raw = cleanText(doc.BodyText || "");
+  const read = doc.ReadText != null ? cleanText(doc.ReadText) : raw;
+  const body = whole ? raw : read;
   const cut = body.indexOf("\n--- raw data ---");
   const text = cut >= 0 ? body.slice(0, cut) : body;
   const morning = doc.SourceName === "Morning digest" || /^Morning digest\b/i.test(doc.Subject || "");
   return (
     <div className="tq-card-full">
       {morning ? <DigestText text={text} /> : looksMd(text) ? <Md text={text} /> : (text || "(empty)")}
+      {read !== raw && <button type="button" className="tq-card-more" onClick={() => setWhole((v) => !v)}>{whole ? "Just what they wrote" : "Show the whole email"}</button>}
       {doc.SourceLink && <div className="tq-card-note"><a href={doc.SourceLink} target="_blank" rel="noreferrer" style={{ color: "#55697a" }}>open the original</a></div>}
     </div>
   );
@@ -318,7 +323,7 @@ function CombinedTaskText({ card, list = true }) {
         Email context · {messages.length} messages combined by triage
       </div>
       {messages.map((m, n) => {
-        const body = cleanText(m.BodyText || "");
+        const body = cleanText(m.ReadText ?? m.BodyText ?? "");
         return (
           <div key={m.MessageId || n} style={{ padding: "7px 0", borderTop: n ? "1px solid #e2ddd4" : 0 }}>
             <div className="tq-card-note" style={{ marginBottom: 3 }}>
@@ -1011,6 +1016,38 @@ export function SetupCard({ card, onNavigate, onHandOff }) {
    something the checklist contradicts. `image` is a shot of the tab, and it is decoration with a
    caption's job: a card whose image fails to load is still a complete stop, which is why it is
    rendered with onError rather than reserved space. */
+// A WINDOW ONTO THE TAB, NOT A PICTURE OF IT. A screenshot was either too small to read or a zoomed
+// corner of one (the owner, 2026-09-23: "maybe skip the images and just have a window into settings you
+// can scroll. like we have session window"). So a stop draws the tab itself - live, scrollable, the real
+// thing - in a box the size of the AI stop's terminal. Loaded only when a stop shows it. The Assistant
+// stop keeps its picture: the walk runs inside the Assistant, and a window onto it would hold itself.
+const TAB_WINDOWS = {
+  connections: React.lazy(() => import("./ConnectorsView.jsx")),
+  docs: React.lazy(() => import("./DocsView.jsx")),
+  settings: React.lazy(() => import("./SettingsView.jsx")),
+  board: React.lazy(() => import("./BoardView.jsx")),
+  tasks: React.lazy(() => import("./TasksView.jsx")),
+  reports: React.lazy(() => import("./ReportsView.jsx")),
+  hub: React.lazy(() => import("./HubView.jsx")),
+};
+
+function TabWindow({ stop, go }) {
+  // Tasks picks its first task on arrival: that choice stays IN the window. Treated as a click, it
+  // carried the owner off to the Tasks tab the moment the stop drew.
+  const [sel, setSel] = useState(null);
+  const View = TAB_WINDOWS[stop];
+  if (!View) return null;
+  // a task opened from the Board or the Hub goes to its real tab, where there is room to work on it
+  const openTask = (id) => id && go({ tab: "Tasks", hash: `task=${typeof id === "object" ? id.TaskId : id}` });
+  return (
+    <div className="tq-walk-window">
+      <React.Suspense fallback={<div className="tq-card-full">…</div>}>
+        <View active onNavigate={(tab) => go({ tab })} onOpenTask={openTask} onSelect={setSel} selected={sel} />
+      </React.Suspense>
+    </div>
+  );
+}
+
 export function WalkCard({ card, at, total, onNavigate, onNext, onBack, onRestart, onFinish, onSaved }) {
   const { openSetup, opening, pane, note } = useCliSetup();
   const [cli, setCli] = useState(null);
@@ -1050,7 +1087,8 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onBack, onRestar
           rather than leaving a torn box - the words above and below already carry the stop. */}
       {/* THE WHOLE TAB, as wide as the card (assistantView.css .tq-walk-shot says why it is neither the
           old 540px thumbnail nor the zoomed corner that replaced it). */}
-      {card.image && (
+      {TAB_WINDOWS[card.key] && <TabWindow stop={card.key} go={go} />}
+      {card.image && !TAB_WINDOWS[card.key] && (
         <div className="tq-walk-shot" title={card.goto ? `Open ${card.goto.tab}` : undefined}
           role={card.goto ? "button" : undefined} tabIndex={card.goto ? 0 : undefined}
           onClick={() => go(card.goto)} onKeyDown={(e) => { if (e.key === "Enter") go(card.goto); }}

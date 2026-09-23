@@ -68,6 +68,19 @@ test("a tab stop shows the whole tab, clickable, and a missing image never leave
   assert.match(css, /\.tq-walk-shot \{[^}]*aspect-ratio: 1280 \/ 760/);   // the capture's own shape, so nothing is cropped
 });
 
+// A window onto the tab, not a picture of it (the owner, 2026-09-23: "maybe skip the images and just have a
+// window into settings you can scroll. like we have session window"). The Assistant stop keeps its picture:
+// the walk runs inside the Assistant. Tasks' own first pick stays in the window instead of leaving the walk.
+test("a tab stop is the tab itself in a scrollable window, and the Assistant stop keeps its picture", () => {
+  const cards = read("assistantCards.jsx");
+  const table = cards.slice(cards.indexOf("const TAB_WINDOWS"), cards.indexOf("function TabWindow"));
+  for (const stop of ["connections", "docs", "settings", "board", "tasks", "reports", "hub"]) assert.match(table, new RegExp(`${stop}: React\.lazy`));
+  assert.doesNotMatch(table, /assistant:/);
+  assert.match(cards, /onSelect=\{setSel\} selected=\{sel\}/);
+  assert.match(cards, /card\.image && !TAB_WINDOWS\[card\.key\]/);
+  assert.match(read("assistantView.css"), /\.tq-walk-window \{[^}]*overflow: auto/);
+});
+
 test("the AI stop opens the real terminal rather than describing one", () => {
   const card = walkCard(read("assistantCards.jsx"));
   assert.match(card, /CliPane/);

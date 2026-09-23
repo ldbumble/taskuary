@@ -85,24 +85,31 @@ export const firstSentence = (s) => String(s || "").trim().split(/(?<=[.!?])\s+/
 // fetched both again; the box also BLANKED to "…" whenever the item's message id moved - which a
 // grouped task's does, between the walk's copy and the rail's. Now a url is fetched once in flight,
 // the last answer is drawn at once, a refresh swaps it in only if it changed, and nothing blanks.
-const fetched = new Map(), inFlight = new Map();
+// A read is shared only for the SAME revision: joining whatever was in flight for the url made a newer
+// revision wait on an older, slower answer and draw it - the stale text won the race (PW-106). Each url
+// numbers its reads, and only the newest may land; a superseded one changes nothing.
+const fetched = new Map(), inFlight = new Map(), newest = new Map();
 function useFetched(url, revision) {
   const [data, setData] = useState(() => (url ? fetched.get(url) ?? null : null));
   useEffect(() => {
     if (!url) { setData(null); return undefined; }
     let live = true;
     setData(fetched.has(url) ? fetched.get(url) : null);     // a DIFFERENT thing never shows the last one's text
-    let flight = inFlight.get(url);
+    const key = `${url}|${revision ?? ""}`;
+    let flight = inFlight.get(key);
     if (!flight) {
+      const seq = (newest.get(url) || 0) + 1;
+      newest.set(url, seq);
       flight = api.get(url).then(({ data: d }) => {
+        if (newest.get(url) !== seq) return { seq };
         const was = fetched.get(url);
         const same = was && JSON.stringify(was) === JSON.stringify(d);
         if (!same) fetched.set(url, d);
-        return same ? was : d;
-      }).catch((e) => fetched.get(url) || { error: errText(e) }).finally(() => inFlight.delete(url));
-      inFlight.set(url, flight);
+        return { seq, d: same ? was : d };
+      }).catch((e) => ({ seq, d: fetched.get(url) || { error: errText(e) } })).finally(() => inFlight.delete(key));
+      inFlight.set(key, flight);
     }
-    flight.then((d) => { if (live) setData(d); });
+    flight.then(({ seq, d }) => { if (live && seq === newest.get(url) && d !== undefined) setData(d); });
     return () => { live = false; };
   }, [url, revision]);
   return data;

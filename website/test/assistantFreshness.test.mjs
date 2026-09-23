@@ -40,7 +40,10 @@ test("lazy card reads are revision-bound and discard superseded responses", () =
   assert.match(cards, /\}, \[url, revision\]\);/);
   assert.match(cards, /useFetched\(none \? null : `\/api\/messages\/\$\{mid\}`, revision\)/);
   assert.match(cards, /useFetched\(card\?\.tid \? `\/api\/tasks\/\$\{card\.tid\}` : null, card\?\.presentation_revision\)/);
-  assert.match(cards, /flight\.then\(\(d\) => \{ if \(live\) setData\(d\); \}\)/);
+  // shared only within one revision, and only the url's newest read may land - joining any in-flight read
+  // for the url let an older, slower answer draw over a newer revision (PW-106)
+  assert.match(cards, /const key = `\$\{url\}\|\$\{revision \?\? ""\}`;/);
+  assert.match(cards, /flight\.then\(\(\{ seq, d \}\) => \{ if \(live && seq === newest\.get\(url\) && d !== undefined\) setData\(d\); \}\)/);
   assert.match(cards, /\[card\.rid, card\.mid, card\.presentation_revision\]/);
   assert.match(cards, /\[open, card\.tid, card\.presentation_revision\]/);
   assert.ok((cards.match(/return \(\) => \{ live = false; \}/g) || []).length >= 4);

@@ -24,7 +24,7 @@ import api from "./api.js";
 import { DEMO } from "./demoApi.js";
 import { readNdjson, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
-import { liveUp, onLive } from "./live.js";
+import { onLive } from "./live.js";
 import { Md, looksMd } from "./md.jsx";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
@@ -667,33 +667,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     deferredChat.current.clear();
   }, []);
   useEffect(() => cancelDeferredChat, [cancelDeferredChat]);
-  // Provider messages can arrive while this conversation is already open. The server writes
-  // the resulting correction (for example, "you replied in WhatsApp; draft removed") into the
-  // durable conversation, so read new turns on every freshness check -- not only when an agent
-  // watcher event happens to accompany them.
-  // The live socket carries no event for these turns (store.add_comment pokes nothing), so this read
-  // runs on the 30 s tick even while the socket is up - the pile beside it does not need to.
-  const readChat = useCallback(async (epoch = chatEpoch.current) => {
-    const { data: st } = await api.get("/api/concierge");
-    if (epoch !== chatEpoch.current || resettingRef.current) return false;
-    setMsgs((m) => mergeDurableTurns(m, st.messages || []).messages);
-    // ...AND WHAT IS ON THE TABLE, from the same answer. The walk can be driven from somewhere
-    // else - a phone chat holding the handoff, another tab - and this one followed the WORDS while
-    // its rail went on ringing whatever the desk itself last put up: the chat showed four fyis and
-    // the rail ringed the report before them (the owner, 2026-09-22: "it's out of sync again while
-    // talking to assistant on whatsapp"). Current is the server's persisted, validated word
-    // (PW-162) wherever it is read; never while a turn of ours is in flight, because that answer
-    // is the newer truth and the poll would drag the table back a step.
-    if (!turnFlight.current) {
-      const said = st.current || null;
-      if ((said?.key || null) !== (currentRef.current?.key || null)) {
-        currentRef.current = said;
-        setCurrent(said?.key || null);
-        setCurrentItem(said);
-      }
-    }
-    return true;
-  }, []);
   const loadPile = useCallback(async (force = false) => {
     if (resettingRef.current) return;
     if (pileFlight.current) {
@@ -724,7 +697,28 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       if (hasNextSelection(data)) selectionContractSeen.current = true;
       selectionRef.current = captured;
       setPile((p) => refreshPilePresentation(p, data));
-      if (!(await readChat(epoch))) return;
+      // Provider messages can arrive while this conversation is already open. The server writes
+      // the resulting correction (for example, "you replied in WhatsApp; draft removed") into the
+      // durable conversation, so read new turns on every freshness check -- not only when an agent
+      // watcher event happens to accompany them.
+      const { data: st } = await api.get("/api/concierge");
+      if (epoch !== chatEpoch.current || resettingRef.current) return;
+      setMsgs((m) => mergeDurableTurns(m, st.messages || []).messages);
+      // ...AND WHAT IS ON THE TABLE, from the same answer. The walk can be driven from somewhere
+      // else - a phone chat holding the handoff, another tab - and this one followed the WORDS while
+      // its rail went on ringing whatever the desk itself last put up: the chat showed four fyis and
+      // the rail ringed the report before them (the owner, 2026-09-22: "it's out of sync again while
+      // talking to assistant on whatsapp"). Current is the server's persisted, validated word
+      // (PW-162) wherever it is read; never while a turn of ours is in flight, because that answer
+      // is the newer truth and the poll would drag the table back a step.
+      if (!turnFlight.current) {
+        const said = st.current || null;
+        if ((said?.key || null) !== (currentRef.current?.key || null)) {
+          currentRef.current = said;
+          setCurrent(said?.key || null);
+          setCurrentItem(said);
+        }
+      }
       if (data.events?.length) {
         // The watcher's word is a strip notice the server keeps (PW-165/166) and, here, a spoken line.
         // Background activity is never permission to choose, replace, clear, or advance the subject.
@@ -786,7 +780,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     } })();
     pileFlight.current = request;
     return request;
-  }, [readChat]);
+  }, []);
   useEffect(() => { loadPileRef.current = loadPile; }, [loadPile]);
   // FeedView's initial filter is the unfiltered JSON object below. Treat that as the
   // starting state instead of a change: otherwise mount starts the normal cached read,
@@ -804,17 +798,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // Writes push an event and force one fresh rebuild. The timer is only a disconnected-socket
   // safety net: rebuilding this multi-source pile every five seconds starved Board, Tasks and
   // Past chats behind work whose answer had not changed.
-  // It rebuilt the pile every 30 s even under a live socket. With pushes arriving the pile only needs
-  // what no write announces - a Later coming due - so every tenth tick; the chat is still read each tick
-  // (readChat). The first call is the tab becoming active, with the live listener off until then: a full read.
-  useEffect(() => {
-    let n = 0, first = true;
-    return pollWhileActive(active, () => {
-      if (first || !liveUp() || ++n % 10 === 0) loadPile(false);
-      else readChat().catch(() => { /* the next tick reads again */ });
-      first = false;
-    }, 30000);
-  }, [active, loadPile, readChat]);
+  useEffect(() => pollWhileActive(active, () => loadPile(false), 30000), [active, loadPile]);
   // a sync lands rows several times a second; one forced rebuild after the burst, not one per row -
   // and a CEILING, because a run that keeps talking pushed the trailing timer out indefinitely and
   // left the pile on its 30-second safety poll (2026-09-10 audit).

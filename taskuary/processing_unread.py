@@ -270,10 +270,11 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
         if held and st.get('Status') == 'done' and st.get('Note') and st['Note'] != card.get('sig'): held = False
         if held and not include_read: continue
         card.update(unread=not held, deferred=held, actionable=not held, order_band=funnel._band(card))
-        # NEXT DISMISSES AN ERROR (the owner, 2026-09-23: "next on error should dismiss it no?"): an error
-        # is not work that comes back in an hour - walked past, it stays in Passed and the walk never offers
-        # it again, until the error CHANGES (its sig) or the connection answers and the row is gone
+        # NEXT DISMISSES AN ERROR (the owner, 2026-09-23: "next on error should dismiss it no?" / "i hit
+        # next on LinkedIn and it went to passed not gone"): walked past, it is GONE from the rail and the
+        # walk - not waiting in Passed - until the error CHANGES (its sig), which is a new failure
         if st.get('Status') == 'surfaced' and not (st.get('Note') and st['Note'] != card.get('sig')):
+            if not include_read: continue
             card.update(surfaced=True, surfaced_at=st.get('At'))
         cards.append(card)
     cards = funnel._order(cards)

@@ -1244,6 +1244,20 @@ def report_system(store, cfg: dict, charts: bool = False) -> str:
 NO_BRAIN = '(AI prompt set, but no active AI connector'
 
 
+_DIGITS = re.compile(r'\d+')
+
+
+def same_failure_as_last(store, source_id, error: str) -> bool:
+    """Did the run before this one fail with this same error? Numbers are not the error - a timestamp,
+    a run id, an attempt count - so they are read as one; the words are compared, whole."""
+    try: prev = (store.report_runs(int(source_id), 1) or [None])[0]
+    except Exception: return False
+    if not prev or not prev.get('failed'): return False
+    # the run history keeps the exception bare where the body says "Report error: ..." - one error either way
+    norm = lambda s: _DIGITS.sub('#', ' '.join(re.sub(r'^\s*report error:\s*', '', str(s or ''), flags=re.I).split()))[:300]
+    return bool(prev.get('error')) and norm(prev['error']) == norm(error)
+
+
 def headline_from(summary: str, fallback: str) -> str:
     """What the run CONCLUDED, for the headline - or the row count, when it concluded nothing.
 
@@ -1662,6 +1676,11 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
     res = read_result(subject.split('—', 1)[-1].strip(), strip_directive(body), failed)
     d = decide_for(store, cfg, res, report_llm(store, cfg, llm))
     speak, said_why, send = d['timeline'] or d['work'], d['why'], d['send']
+    # THE SAME FAILURE, AGAIN, IS NOT NEWS (the owner, 2026-09-23: "same for a failed report run, next
+    # should dismiss it"): the first failure reaches the owner, and Next puts it down; a run that fails the
+    # SAME way as the run before it stays in the run history and reaches nobody - a different error, or a
+    # failure after a good run, is a new failure and reaches them as before.
+    if failed and same_failure_as_last(store, src['SourceId'], body): speak = False
     body = verdict_of(body)[2]
     if not speak:
         # quiet for the OWNER is not quiet for the recipients: a report that goes somewhere still

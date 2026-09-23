@@ -40,9 +40,9 @@ test("it compares the words, not the whitespace or the case", () => {
   assert.equal(gistFor(null), "");
 });
 
-test("the two doors are named for what each one does", () => {
+test("the line opens its message, and talking about it is one of the opened line's actions", () => {
   const card = read("assistantCards.jsx");
-  assert.match(card, /\{open === i\.key \? "Hide" : "Full message"\}/);
+  assert.match(card, /title=\{open === i\.key \? "Fold it" : "Read it here"\}/);
   assert.match(card, /onSurface\?\.\(i\.key\)\} sx=\{faint\}>Talk about it</);
   assert.doesNotMatch(card, />Dig in</);
   assert.doesNotMatch(card, /\? "Fold" : "Read"/);
@@ -52,7 +52,7 @@ test("acting on it belongs to the one you opened", () => {
   const card = read("assistantCards.jsx");
   // four buttons on every row is twelve on a three-fyi card, in a card whose point is that
   // nothing here needs you
-  assert.match(card, /\{open === i\.key && i\.mid && \(\s*<div className="tq-card-actions"/);
+  assert.match(card, /\{open === i\.key && \(\s*<div className="tq-card-actions tq-fyi-acts"/);
   assert.match(card, /\{open !== i\.key && !folded && gistFor\(i\) &&/);
 });
 

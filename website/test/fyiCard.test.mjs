@@ -17,13 +17,14 @@ test("each fyi entry shows its own summary and acts alone through the proposal r
   // ...and past a handful every line folds to one, so ten fyi is a list you skim rather than a card
   // you scroll past with twenty doors on it (the owner, 2026-09-16: "4 fyi or 10 fyis at one time")
   assert.match(fyis, /const folded = items\.length > FOLD_AT/);
-  assert.match(fyis, /\{\(!folded \|\| open === i\.key\) && \(\s*<div className="tq-fyi-doors">/);
-  for (const label of ["Reply", "Make task", "Coding agent", "Regular agent"]) assert.match(fyis, new RegExp(`>${label}</Button>`));
+  assert.doesNotMatch(fyis, /tq-fyi-doors/);                                         // no door on every line (2026-09-23)
+  assert.match(fyis, /<button type="button" className="tq-fyi-line" onClick=\{\(\) => setOpen/);   // the line IS the control
+  for (const label of ["Reply", "Make task", "Coding agent", "Regular agent", "Talk about it"]) assert.match(fyis, new RegExp(`>${label}</Button>`));
   assert.match(fyis, /propose\("mine", i\)/); assert.match(fyis, /propose\("coder", i\)/); assert.match(fyis, /propose\("regular_agent", i\)/);
   assert.match(fyis, /onPropose\?\.\(verb, i\.key\)/);                               // the entry's own key, never the handful's
   assert.match(fyis, /api\.post\(`\/api\/messages\/\$\{i\.mid\}\/reply`, \{ draft: true \}\)/);   // a reply drafts at once
   assert.doesNotMatch(fyis.slice(0, fyis.indexOf('variant="contained"')), /onDone\?\./);  // no entry action settles the handful
-  assert.match(fyis, /\{open === i\.key && i\.mid && \(\s*<div className="tq-card-actions"/);   // ...and they belong to the one you opened
+  assert.match(fyis, /\{open === i\.key && \(\s*<div className="tq-card-actions tq-fyi-acts"/);   // ...and they belong to the one you opened
   const view = read("AssistantView.jsx");
   assert.match(view, /api\.post\("\/api\/concierge\/propose", \{ verb, key, table \}\)/);
   assert.match(view, /onPropose=\{actions\.propose\}/);

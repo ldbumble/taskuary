@@ -848,41 +848,37 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
   return (
     <CardShell card={card} kicker={`${items.length} fyi · nothing to decide`}
       lead={<Lead text={`${items.length} message${items.length === 1 ? "" : "s"} just want${items.length === 1 ? "s" : ""} you to know something.`} />} err={err}>
+      {/* THE BOX, like every card's: one line per message - who, what, and its first line - and nothing
+          else. The two doors each line wore ("Full message", "Talk about it") made four fyi a card of
+          eight buttons (the owner, 2026-09-23: "you never redesigned the fyi cards"). A line is the
+          control: it opens that one message in place, with its actions under it. Past a handful the
+          first lines go too, so ten fyi is a list you skim (2026-09-16: "4 fyi or 10 fyis at one time"). */}
+      <div className="tq-fyi-box">
       {items.map((i) => (
-        <div key={i.key} className={`tq-fyi${folded && open !== i.key ? " lean" : ""}`}>
-          {/* The LINE is the item: it wraps rather than being cut, and it is said once - an
-              assistant's idea files the same sentence as title and gist (fyiRow.gistFor). */}
-          <div className="tq-fyi-line" onClick={folded ? () => setOpen((o) => (o === i.key ? null : i.key)) : undefined}>
+        <div key={i.key} className={`tq-fyi${open === i.key ? " open" : ""}`}>
+          <button type="button" className="tq-fyi-line" onClick={() => setOpen((o) => (o === i.key ? null : i.key))}
+            aria-expanded={open === i.key} title={open === i.key ? "Fold it" : "Read it here"}>
             <SourceMark item={i} size={13} />
             <b>{i.who || "someone"}</b>
             <span className="t">{i.title}</span>
-            {folded && <span className="chev">{open === i.key ? "\u25be" : "\u25b8"}</span>}
-          </div>
+            <span className="chev">{open === i.key ? "\u25be" : "\u25b8"}</span>
+          </button>
           {open !== i.key && !folded && gistFor(i) && <div className="tq-fyi-gist">{gistFor(i)}</div>}
-          {open === i.key && folded && gistFor(i) && <div className="tq-fyi-gist">{gistFor(i)}</div>}
           {open === i.key && i.mid && <FullText mid={i.mid} revision={i.presentation_revision || card.presentation_revision} />}
-          {/* two doors, each named for what it does: one unfolds the message under this line, the
-              other takes the item into the conversation. "Read" and "Dig in" said one thing twice.
-              On a folded batch they belong to the line you opened - twenty of them is the problem. */}
-          {(!folded || open === i.key) && (
-          <div className="tq-fyi-doors">
-            {i.mid && <Button size="small" onClick={() => setOpen((o) => (o === i.key ? null : i.key))} sx={faint}>
-              {open === i.key ? "Hide" : "Full message"}</Button>}
-            <Button size="small" onClick={() => onSurface?.(i.key)} sx={faint}>Talk about it</Button>
-          </div>
-          )}
-          {/* ...and acting on it belongs to the ONE you opened. Four buttons on every row is twelve
-              on a three-fyi card, and the card's whole point is that none of them needs you. */}
-          {open === i.key && i.mid && (
-            <div className="tq-card-actions" style={{ marginTop: 2 }}>
-              <Button size="small" disabled={!!busy} onClick={() => reply(i)} sx={faint}>Reply</Button>
-              <Button size="small" disabled={!!busy} onClick={() => propose("mine", i)} sx={faint}>Make task</Button>
-              <Button size="small" disabled={!!busy} onClick={() => propose("coder", i)} sx={faint}>Coding agent</Button>
-              <Button size="small" disabled={!!busy} onClick={() => propose("regular_agent", i)} sx={faint}>Regular agent</Button>
+          {/* ...and acting on it belongs to the ONE you opened, through the same proposal road the words
+              take (PW-151) - never on the handful, never marking its siblings */}
+          {open === i.key && (
+            <div className="tq-card-actions tq-fyi-acts">
+              {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => reply(i)} sx={quiet}>Reply</Button>}
+              {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("mine", i)} sx={quiet}>Make task</Button>}
+              {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("coder", i)} sx={quiet}>Coding agent</Button>}
+              {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("regular_agent", i)} sx={quiet}>Regular agent</Button>}
+              <Button size="small" onClick={() => onSurface?.(i.key)} sx={faint}>Talk about it</Button>
             </div>
           )}
         </div>
       ))}
+      </div>
       {/* the one card whose verb IS Next: marking the handful read moves on (fyis carries no `next`) */}
       <Foot verb={<Button size="small" variant="contained" disableElevation onClick={() => onDone?.(`Read — ${items.length} fyi let go.`)} sx={primary}>All read, next</Button>}
         then={<><b>All read, next</b> marks {items.length === 1 ? "it" : `all ${items.length}`} read - they stay on the Timeline.</>}

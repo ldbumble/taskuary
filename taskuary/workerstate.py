@@ -153,7 +153,11 @@ def status(store, tid: int) -> dict:
     live = _live(tid) is not None
     evs = events(store, tid, sid) if sid else []
     requests = [_public_request(e) for e in open_requests(evs)]
-    out = {'sid': sid, 'live': live, 'requests': requests, 'result': None, 'state': 'unknown'}
+    # what the run SAID last - the Stop hook's last_assistant_message (hooks.py) - so a card with the screen
+    # folded still shows what the agent is waiting on (the owner, 2026-09-23: "when it's closed you can't
+    # see any of the questions")
+    said = next((e['Text'] for e in reversed(evs) if e['Kind'] == 'turn_end' and e.get('Text')), '')
+    out = {'sid': sid, 'live': live, 'requests': requests, 'result': None, 'state': 'unknown', 'said': said}
     if not evs: return out
     last = evs[-1]
     if last['Kind'] in TERMINAL: out['state'] = last['Kind']; return out

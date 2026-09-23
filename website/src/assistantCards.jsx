@@ -494,6 +494,8 @@ export function AgentCard({ card, onDone, onOpenTask }) {
   };
   const working = card.lane === "working";
   const who = chat ? "assistant" : "agent";
+  const worker = useFetched(!chat && card.tid ? `/api/tasks/${card.tid}/worker` : null, card.presentation_revision);
+  const lastSaid = String(worker?.said || "").trim();
   const resume = async () => {
     setBusy(true); setErr("");
     try {
@@ -514,6 +516,11 @@ export function AgentCard({ card, onDone, onOpenTask }) {
         : (card.choices || []).length && card.request_id ? says(subState(card), card.working || card.agent || who) : card.why || says(subState(card), card.working || card.agent || who)} who={card.working || card.agent} />}
       sub={card.paused ? null : card.title} err={err}>
       {card.paused && card.tid && <CombinedTaskText card={card} list={false} />}
+      {/* THE SCREEN FOLDED: what the agent said last, in the card's box - the question it is waiting on
+          was only on the screen, so folding it hid the one thing to answer (2026-09-23) */}
+      {!chat && !live && !card.paused && !!lastSaid && (
+        <Clamp what="all it said"><div className="tq-card-full"><Md text={lastSaid} /></div></Clamp>
+      )}
       {chat && live ? (
         <div className="tq-card-chat" style={{ height: big ? 640 : 340 }}>
           <React.Suspense fallback={<div className="tq-card-tail">Opening the conversation…</div>}>
@@ -555,16 +562,20 @@ export function AgentCard({ card, onDone, onOpenTask }) {
       )}
       {/* the chat above already has a composer, and it talks to the assistant. This box queues into
           the WAITING ROOM, which is a terminal's letterbox - two of them is two different sends. */}
-      {!card.paused && !(chat && live) && <TextField fullWidth multiline minRows={1} maxRows={5} value={text} onChange={(e) => setText(e.target.value)}
+      {/* ONE place to answer (the owner, 2026-09-23: "why do we need both?"): with the screen open you type
+          into the agent itself, so the box is only for the folded card - and it is not a queue there: the
+          waiting room types it in at once when the agent is parked at its prompt */}
+      {!card.paused && !live && <TextField fullWidth multiline minRows={1} maxRows={5} value={text} onChange={(e) => setText(e.target.value)}
         placeholder={card.asking ? "Or answer here — it goes straight in, it is waiting for it" : "Tell it what to do next"}
         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); answer(); } }}
         sx={{ mt: 1, "& textarea": { fontSize: 12.5 } }} />}
       <Foot close={card} onDone={onDone} covers={["answer_agent"]}
         verb={card.paused
           ? <Button size="small" variant="contained" disableElevation disabled={busy} onClick={resume} sx={primary}>{busy ? "Continuing…" : "Continue this session"}</Button>
-          : !(chat && live) && <Button size="small" variant="contained" disableElevation disabled={busy || !text.trim()} onClick={answer} sx={primary}>{busy ? "Sending…" : "Answer"}</Button>}
+          : !live && <Button size="small" variant="contained" disableElevation disabled={busy || !text.trim()} onClick={answer} sx={primary}>{busy ? "Sending…" : "Answer"}</Button>}
         then={card.paused ? <><b>Continue this session</b> picks it up where Taskuary stopped.</>
-          : !(chat && live) ? <><b>Answer</b> goes straight to {card.working || card.agent || `the ${who}`}; it picks up where it stopped.</> : null}
+          : !live ? <><b>Answer</b> goes straight to {card.working || card.agent || `the ${who}`}; it picks up where it stopped.</>
+          : chat ? null : "Type into its screen above - that is the agent itself."}
         where={<Button size="small" onClick={() => onOpenTask?.(card.tid, { start: false })} sx={faint}>
           {chat ? "Open the task" : "Open agent workspace"} ↗</Button>} />
     </CardShell>

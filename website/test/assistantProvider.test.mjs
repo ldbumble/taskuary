@@ -42,7 +42,8 @@ test("the workspace and the agent card use those readings", () => {
   const body = card.slice(card.indexOf("export function AgentCard"));
   assert.ok(body.indexOf("tq-card-chat") < body.indexOf("tq-card-term"),
     "the chat branch must be reached before the terminal one, so an assistant is never drawn as a screen");
-  assert.match(body, /!\(chat && live\) && <TextField/, "the waiting-room box is not offered beside a live chat composer");
+  // ...nor beside a live SCREEN: one place to answer, whichever is open (2026-09-23: "why do we need both?")
+  assert.match(body, /!card\.paused && !live && <TextField/, "the box is not offered beside a live chat composer or an open screen");
 });
 
 test("a coding screen is shown whole or not at all", () => {

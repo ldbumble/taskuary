@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Box, Typography } from "@mui/material";
-import api from "./api.js";
+import { useCalendarToday } from "./calendarToday.js";
 import { fmtTime12 } from "./ui.jsx";
 import { DIM, FAINT, INK, mono } from "./theme.jsx";
 
@@ -8,13 +8,12 @@ import { DIM, FAINT, INK, mono } from "./theme.jsx";
 // meeting at its hour, plus the compact numbered list that still works for short meetings.
 // Timeline and Assistant intentionally share this component so the brief cannot drift again.
 export default function TodayMeetingsStrip() {
-  const [today, setToday] = useState(null);
+  // the last answer at once, a fresh one behind it (calendarToday.js) - never a pop-in
+  const today = useCalendarToday();
   const [tick, setTick] = useState(0);
   useEffect(() => {
-    let alive = true;
-    api.get("/api/calendar/today").then(({ data }) => alive && setToday(data)).catch(() => alive && setToday({ events: [] }));
     const id = setInterval(() => setTick((value) => value + 1), 60000);
-    return () => { alive = false; clearInterval(id); };
+    return () => clearInterval(id);
   }, []);
   if (!today) return null;
   const events = (today.events || []).filter((event) => !event.all_day);

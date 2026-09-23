@@ -18,7 +18,8 @@ test("Timeline and Assistant share the meeting rail for today's digest", () => {
   const welcome = view.slice(view.indexOf('className="tq-welcome"'), view.indexOf('className="tq-modes"'));
   assert.match(welcome, /<TodayMeetingsStrip \/>/);
   assert.match(strip, /TODAY’S MEETINGS/);
-  assert.match(strip, /api\.get\("\/api\/calendar\/today"\)/);
+  assert.match(strip, /useCalendarToday\(\)/);                                     // shown at once from the last answer
+  assert.match(read("calendarToday.js"), /api\.get\("\/api\/calendar\/today"\)/);
 });
 
 test("Settings has no empty Agents destination and profile links go straight to Docs", () => {

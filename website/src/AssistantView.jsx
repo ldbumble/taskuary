@@ -38,6 +38,7 @@ import { mergeDurableTurns } from "./assistantTurns.js";
 import { AgentCard, AgentDoneCard, BriefCard, CardNav, WhoWantsWhat, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WalkCard, WrapupCard, sourceColor } from "./assistantCards.jsx";
 import { summarize } from "./walkSummary.js";
 import TodayMeetingsStrip from "./TodayMeetingsStrip.jsx";
+import { refreshToday } from "./calendarToday.js";
 import FeedView from "./FeedView.jsx";
 import { MORE_PX } from "./funnelPile.js";
 import GeneralWorkspace from "./GeneralWorkspace.jsx";
@@ -541,6 +542,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [walk, setWalk] = useState(null);
   const [msgs, setMsgs] = useState([]);
   const [pile, setPile] = useState(null);
+  // the day's meetings are asked for NOW, not when the welcome first draws - the strip is ready with it
+  useEffect(() => { refreshToday(); }, []);
   const [busy, setBusy] = useState(false);
   // the walk validates Current against the pile before it can say anything, and that read was
   // 5-47s (2026-09-09). busy is the TURN's interlock and surface() refuses to run while it is

@@ -22,14 +22,18 @@ def _fold(value):
 REVIEW_COLS = ('TaskId', 'MessageId', 'RunId', 'Kind', 'DraftText', 'FinalText', 'Status', 'Reason', 'Deliver')
 POLICY_COLS = ('Name', 'Kind', 'Pattern', 'Action', 'Reason', 'SortOrder', 'Active')
 SOURCE_COLS = ('Channel', 'Address', 'Owner', 'ConnectorId', 'Active', 'ConfigJson')
-# The four reports this app seeds, as (sentinel setting, the Address the seeder writes, the config
-# type). KEEP IN STEP with the four seeding blocks below - tests/test_assistant_blocks.py builds a
-# fresh store and asserts this table describes the rows that actually appeared. The ownership heal
-# reads it; nothing else may write `Owner='template'`.
-SEEDED_REPORTS = (('digest_report_seeded', 'Morning digest', 'digest'),
-                  ('automate_report_seeded', 'Automation ideas', 'automate'),
+# The reports this app seeds, as (sentinel setting, the Address the seeder writes, the config type).
+# KEEP IN STEP with the seeding blocks below - tests/test_assistant_blocks.py builds a fresh store and
+# asserts this table describes the rows that actually appeared. The ownership heal reads it, and
+# RETIRED_SEEDS beside it; nothing else may write `Owner='template'`.
+SEEDED_REPORTS = (('automate_report_seeded', 'Automation ideas', 'automate'),
                   ('assistant_report_seeded', 'Assistant', 'assistant'),
                   ('evening_inbox_report_seeded', 'End of day checkup', 'evening_inbox'))
+# ...and the ones a fresh install no longer gets, which older installs still carry and the heal still
+# owes. The Morning digest: the walk now opens with who wants what (the owner, 2026-09-23: "remove the
+# morning digest as report by default if the walk through does that"). An install that has one keeps
+# it until its owner deletes it; the report type itself is still there to make one by hand.
+RETIRED_SEEDS = (('digest_report_seeded', 'Morning digest', 'digest'),)
 MEMORY_COLS = ('Scope', 'ScopeKey', 'Note', 'Source', 'Active', 'CreatedBy')
 PROJECT_COLS = ('Name', 'Description', 'Active', 'CreatedBy', 'UpdatedBy')
 ROUTING_FACT_COLS = ('Field', 'Signal', 'SignalKey', 'Value', 'Confidence', 'EvidenceCount',
@@ -1079,18 +1083,8 @@ class SQLiteStore:
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) "
                                 "VALUES ('review_task_backfilled', '1', 'migration')")
             self._heal_seeded_report_owner()
-            # the Morning digest ships as a real REPORT (reports.run_digest): the brief lands
-            # on the Timeline, its prompt is edited on the Reports tab, and deleting the
-            # source turns it off - the sentinel keeps a deletion deleted across restarts.
-            # It is also the working demo of how reports work, on data every install has.
-            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='digest_report_seeded'").fetchone():
-                from .digest import PROMPT
-                self.cx.execute('INSERT INTO source (Channel, Address, Owner, Active, ConfigJson) VALUES (?,?,?,?,?)',
-                                ('report', 'Morning digest', 'template', 1,
-                                 json.dumps({'type': 'digest', 'title': 'Morning digest', 'days': 1, 'daily_at': '08:00',
-                                             'on_startup': True, 'once_per_day': True, 'ai_prompt': PROMPT})))
-                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('digest_report_seeded', '1', 'template')")
-            # ...and its sibling: the weekly 'what should you automate next' brief (toil.py) -
+            # The Morning digest is no longer seeded (RETIRED_SEEDS): the walk opens the day with who
+            # wants what. The weekly 'what should you automate next' brief (toil.py) -
             # same deal: a real report, prompt on the Reports tab, deleting it turns it off.
             # It also runs on startup, once a WEEK: seeded on cron alone, a fresh install saw
             # nothing from it until the following Monday, so the third shipped report was
@@ -1203,7 +1197,7 @@ class SQLiteStore:
         store - reopening a :memory: store would just hand back an empty one."""
         if self.cx.execute("SELECT 1 FROM setting WHERE Name='seeded_report_owner_healed'").fetchone(): return
         healed = []
-        for sentinel, address, kind in SEEDED_REPORTS:
+        for sentinel, address, kind in SEEDED_REPORTS + RETIRED_SEEDS:
             if not self.cx.execute('SELECT 1 FROM setting WHERE Name=?', (sentinel,)).fetchone(): continue
             # The name the seeder gave it, and the type it seeded, LOWEST id first. Address
             # follows the title (ReportsView posts Address: c.title), so a renamed row is

@@ -73,7 +73,8 @@ class BriefVoiceTests(unittest.TestCase):
     def test_the_scheduled_run_hands_the_digest_system_to_the_model(self):
         s = MemoryStore()
         s.create_task({'Title': 'PTO import mapping'}, 'o')
-        src = next(x for x in s.list_sources() if x['Channel'] == 'report')          # the seeded Morning digest
+        from tests.digest_fixture import add_digest
+        src = add_digest(s)                                                        # an older install's Morning digest
         seen = {}
         def llm(system, user, **kw): seen['system'] = system; return '- morning.'
         reports.run_report_source(s, src, llm=llm)
@@ -193,9 +194,8 @@ class OnceADayTests(unittest.TestCase):
 
     def test_the_seeded_digest_ships_once_a_day(self):
         import json
-        s = MemoryStore()
-        cfg = next(json.loads(x['ConfigJson']) for x in s.list_sources()
-                   if x['Channel'] == 'report' and json.loads(x['ConfigJson']).get('type') == 'digest')
+        from tests.digest_fixture import add_digest
+        cfg = json.loads(add_digest(MemoryStore())['ConfigJson'])                  # as older installs carry it
         self.assertEqual((cfg['daily_at'], cfg['on_startup'], cfg['once_per_day']), ('08:00', True, True))
 
 

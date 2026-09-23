@@ -212,16 +212,18 @@ class DocSyncTests(unittest.TestCase):
 
 
 class DigestReportTests(unittest.TestCase):
-    def test_the_morning_digest_ships_seeded_and_stays_deleted(self):
-        """The digest is a real report: seeded once with an editable prompt, and a deletion
-        is a decision the next launch respects - the sentinel keeps it deleted."""
+    def test_an_older_installs_digest_stays_deleted(self):
+        """The digest is no longer seeded (the walk opens the day), but an install seeded before that
+        has one with an editable prompt, and deleting it is a decision the next launch respects."""
         import json, os, tempfile
         from taskuary.store import SQLiteStore
+        from tests.digest_fixture import add_digest
         p = os.path.join(tempfile.mkdtemp(), 'd.db')
         s = SQLiteStore(p)
         digest_of = lambda st: [x for x in st.list_sources(active_only=False)
                                 if x['Channel'] == 'report' and json.loads(x['ConfigJson']).get('type') == 'digest']
-        src = digest_of(s)[0]                     # Automation ideas ships seeded too - filter to the digest
+        self.assertEqual(digest_of(s), [])        # a fresh install: none
+        src = add_digest(s)
         cfg = json.loads(src['ConfigJson'])
         self.assertEqual((cfg['type'], cfg['title']), ('digest', 'Morning digest'))
         self.assertIn('TQ-ref', cfg['ai_prompt'])           # the editable ask, on the Reports tab
@@ -265,8 +267,9 @@ class DigestReportTests(unittest.TestCase):
         from taskuary.store import MemoryStore
         from taskuary.reports import run_report_source
         s = MemoryStore()
+        from tests.digest_fixture import add_digest
         s.create_task({'Title': 'PTO import mapping'}, 'o')
-        src = next(x for x in s.list_sources() if x['Channel'] == 'report')
+        src = add_digest(s)
         out = run_report_source(s, src, llm=lambda sys_, usr, **kw: '- TQ-0001 is in flight.')
         row = s.get_message(out['message_id'])
         self.assertEqual(row['Channel'], 'report')
@@ -276,7 +279,7 @@ class DigestReportTests(unittest.TestCase):
         self.assertIn('morning brief', s.get_doc('digest'))
         # no AI connected: the raw activity files instead of nothing
         s2 = MemoryStore()
-        out2 = run_report_source(s2, next(x for x in s2.list_sources() if x['Channel'] == 'report'), llm=None)
+        out2 = run_report_source(s2, add_digest(s2), llm=None)
         self.assertIn('OPEN WORK', s2.get_message(out2['message_id'])['BodyText'])
 
 

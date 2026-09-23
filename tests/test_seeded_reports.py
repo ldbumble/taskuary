@@ -1,8 +1,8 @@
 """What a fresh install already has running.
 
-Four reports ship: the Morning digest (an AI pass over the hub's own data), the end-of-day Inbox
-checkup, the Assistant (a voice on the Timeline) and Automation ideas (the weekly 'what should
-you automate next' brief).
+Three reports ship: the end-of-day Inbox checkup, the Assistant (a voice on the Timeline) and
+Automation ideas (the weekly 'what should you automate next' brief). The Morning digest used to be a
+fourth; since 2026-09-23 the walk opens the day with who wants what, so a fresh install has none.
 Each is a real report - prompt on the Reports tab, deleting the row is the off switch, and a
 sentinel setting keeps a deletion deleted across restarts.
 
@@ -28,16 +28,22 @@ def _ago(days):
 
 
 class WhatShipsTests(unittest.TestCase):
-    def test_the_four_shipped_reports_are_there_and_active(self):
+    def test_the_three_shipped_reports_are_there_and_active(self):
         got = _reports(MemoryStore())
-        self.assertEqual(sorted(got), ['Assistant', 'Automation ideas', 'End of day checkup', 'Morning digest'])
-        self.assertEqual([got[n]['type'] for n in ('Morning digest', 'End of day checkup', 'Automation ideas', 'Assistant')],
-                         ['digest', 'evening_inbox', 'automate', 'assistant'])
+        self.assertEqual(sorted(got), ['Assistant', 'Automation ideas', 'End of day checkup'])
+        self.assertEqual([got[n]['type'] for n in ('End of day checkup', 'Automation ideas', 'Assistant')],
+                         ['evening_inbox', 'automate', 'assistant'])
 
-    def test_the_three_startup_reports_have_something_to_say_the_moment_the_app_opens(self):
+    def test_a_fresh_install_gets_no_morning_digest(self):
+        """The walk's opener does its job now; the report type stays for anyone who makes one."""
+        s = MemoryStore()
+        self.assertNotIn('digest', {c.get('type') for c in _reports(s).values()})
+        self.assertIsNone(s.get_settings().get('digest_report_seeded'))
+
+    def test_the_startup_reports_have_something_to_say_the_moment_the_app_opens(self):
         """The evening ritual alone waits for evening; the other shipped reports greet launch."""
         got = _reports(MemoryStore())
-        for name in ('Morning digest', 'Automation ideas', 'Assistant'):
+        for name in ('Automation ideas', 'Assistant'):
             self.assertTrue(is_due(got[name], None, startup=True), name)
 
     def test_the_evening_checkup_is_eight_hours_at_six_and_waits_for_its_first_slot(self):

@@ -196,6 +196,8 @@ class ReportScheduleAndBrainTests(unittest.TestCase):
         from taskuary.store import MemoryStore
         from taskuary.reports import is_due
         s = MemoryStore()
+        from tests.digest_fixture import add_digest
+        add_digest(s)                              # an older install, which still has both
         cfgs = {c['title']: c for c in (json.loads(x.get('ConfigJson') or '{}')
                                         for x in s.list_sources(active_only=False) if x.get('Channel') == 'report')
                 if c.get('title') in ('Morning digest', 'Automation ideas')}

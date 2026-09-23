@@ -52,7 +52,7 @@ class ReportOrderTests(unittest.TestCase):
         ran = []
         n = self._run(s, ran, boom=('mssql',))
         self.assertEqual(sorted(t for t in ran if t in ('mssql', 'sql')), ['mssql', 'sql'])
-        self.assertIn('digest', ran)                                 # the local ones ran too
+        self.assertIn('automate', ran)                               # the local ones ran too
         self.assertEqual(n, len(ran) - 1)                            # only the raiser is uncounted
 
     def test_even_a_raising_report_is_touched_so_it_waits_for_its_next_slot(self):

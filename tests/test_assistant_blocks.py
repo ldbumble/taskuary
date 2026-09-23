@@ -561,6 +561,8 @@ class OwnershipHealTests(unittest.TestCase):
         the four seeded rows, then the heal's own sentinel is dropped so it runs on the next open."""
         from taskuary.store import MemoryStore
         s = F.store()
+        from tests.digest_fixture import add_digest
+        add_digest(s)                                        # an older install: it was seeded then, and the heal still owes it
         for addr in ('Morning digest', 'Automation ideas', 'Assistant'):
             s._exec("UPDATE source SET Owner='owner' WHERE Channel='report' AND Address=?", (addr,))
         mine = s.save_source({'Channel': 'report', 'Address': 'Assistant for Backend Monitoring', 'Active': 1,
@@ -625,12 +627,14 @@ class OwnershipHealTests(unittest.TestCase):
     def test_the_table_the_heal_reads_describes_the_rows_the_seeder_writes(self):
         """The heal keys on (sentinel, Address, type) held in SEEDED_REPORTS. A seed that changed any
         of the three without changing the table would make the heal silently find nothing."""
-        from taskuary.store import SEEDED_REPORTS
+        from taskuary.store import SEEDED_REPORTS, RETIRED_SEEDS
         s = F.store()
         seeded = {r['Address']: (r['Owner'], json.loads(r['ConfigJson'] or '{}').get('type'))
                   for r in s.list_sources(active_only=False) if r['Channel'] == 'report'}
         settings = s.get_settings()
-        self.assertEqual(len(SEEDED_REPORTS), 4)
+        self.assertEqual(len(SEEDED_REPORTS), 3)
+        for sentinel, address, kind in RETIRED_SEEDS:                    # retired: no longer written, still healed
+            self.assertIsNone(settings.get(sentinel)); self.assertNotIn(address, seeded)
         for sentinel, address, kind in SEEDED_REPORTS:
             with self.subTest(row=address):
                 self.assertEqual(settings.get(sentinel), '1', f'{sentinel} is not a sentinel the seeder sets')

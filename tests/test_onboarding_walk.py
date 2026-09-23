@@ -249,7 +249,7 @@ class EveryStopSaysWhatYouAlreadyHaveTests(unittest.TestCase):
         said = next(o for o in walk.state(s)['stops'] if o['key'] == 'reports')['facts']
         # both halves counted and named separately; only the first few names are listed, because a
         # card is not a directory - the count is the answer and the names are the sanity check
-        self.assertIn('5 reports:', said)
+        self.assertIn('4 reports:', said)                   # the three shipped + one of theirs
         self.assertIn('1 workflows: Chase overdue invoices', said)
 
     def test_a_stop_with_nothing_to_count_says_none_yet_rather_than_nothing(self):

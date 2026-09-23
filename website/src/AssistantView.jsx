@@ -199,7 +199,11 @@ function Pile({ pile, current, onPull, error, onRetry }) {
   // urgent, your task and agents working draw in full; reports and fyi divide what is left of the
   // rail's height, floor of two (funnelPile.fillCaps). It is MEASURED from the scroller, so the
   // answer follows the window instead of being a number somebody picked.
-  const bands = bandsOf(drawn);
+  // PASSED means you moved ON from it: the card on the table has been shown (the walk marks it at once)
+  // but you are still on it, so it keeps its band until Next takes you past it (the owner, 2026-09-23:
+  // "it started in your task and moved to passed without touching anything")
+  const atTable = (i) => !!current && (i.key === current.key || (current.aliases || []).includes(i.key) || (i.aliases || []).includes(current.key));
+  const bands = bandsOf(drawn.map((i) => (i.surfaced && atTable(i) ? { ...i, surfaced: false } : i)));
   const sig = bands.map((b) => `${b.level}:${b.items.length}`).join(",");
   const wrapRef = useRef(null);
   const [room, setRoom] = useState(0);

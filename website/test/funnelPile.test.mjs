@@ -193,7 +193,7 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   // owner, 2026-09-17: "isn't there a current word on the border around chosen task?").
   assert.match(view, /\{isCur && <b className="tq-pile-now">on the table<\/b>\}/);
   assert.match(read("assistantView.css"), /\.tq-pile-batch b, \.tq-pile-now \{/);
-  assert.match(view, /const bands = bandsOf\(drawn\)/);          // grouped by category, headings freeze
+  assert.match(view, /const bands = bandsOf\(drawn\.map\(/);          // grouped by category, headings freeze
   // ...each band taking the room it has, less the extra height of the row on the table - which is
   // 24px taller than the rest and drawn inside one of those bands
   assert.match(view, /fillCaps\(room - \(curKey \? CUR_H - ROW_H : 0\), bands\)/);

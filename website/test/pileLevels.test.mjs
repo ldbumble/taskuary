@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { LEVEL_META, LEVEL_ORDER, levelLabel, levelOf, levelsOf } from "../src/funnelPile.js";
@@ -55,4 +57,9 @@ test("the menu offers only the runs the pile holds, in the order the rail draws 
   assert.deepEqual(levelsOf(pile), ["task", "reports", "fyi"]);
   assert.deepEqual(levelsOf([]), []);
   assert.deepEqual(levelsOf(null), []);
+});
+
+test("the card on the table keeps its band - it is passed only once Next moves you on", () => {
+  const view = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
+  assert.match(view, /bandsOf\(drawn\.map\(\(i\) => \(i\.surfaced && atTable\(i\) \? \{ \.\.\.i, surfaced: false \} : i\)\)\)/);
 });

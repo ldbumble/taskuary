@@ -467,7 +467,10 @@ class LanesTests(unittest.TestCase):
             self.assertIsNone(funnel.next_item(s))                                             # but not straight back on the table
             s.set_funnel_state(f'agent:{t}', 'surfaced', 'owner'); s._exec("UPDATE funnel_state SET At=? WHERE Key=?", (ago(minutes=45), f'agent:{t}'))
             funnel.invalidate()
-            self.assertEqual(funnel.next_item(s)['key'], f'agent:{t}')                        # half an hour on, it comes round again
+            self.assertIsNone(funnel.next_item(s))                                             # passed: not back within the hour (2026-09-23)
+            s._exec("UPDATE funnel_state SET At=? WHERE Key=?", (ago(minutes=75), f'agent:{t}'))
+            funnel.invalidate()
+            self.assertEqual(funnel.next_item(s)['key'], f'agent:{t}')                        # an hour on, it comes round again
             self.assertIn('shown already, still waiting', funnel.summary(funnel.build(s)['items']))
         # ...and when the agent picks the work back up, the shown item rides up to the shelf instead of vanishing
         busy = [dict(live[0], idle=2, waiting=False)]

@@ -192,13 +192,16 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # start back unread (`back`, above), the walk skipped it for the mark, and stranded it at the end
     # as "1 unread thing still waits. Say next" for as long as Next was pressed (the owner, 2026-09-18:
     # "it skipped it but then saw it at the end and hitting next just confuses it"). The mark ages out
-    # with the receipt, so the row comes round again when the hour brings it back. blocked/approve keep
-    # their own 30-minute cooldown (funnel_selection._eligible).
+    # with the receipt, so the row comes round again when the hour brings it back.
+    # ONE CLOCK FOR ALL OF THEM (the owner, 2026-09-23: "promote later after an hour or so unless it's
+    # silenced until tomorrow"): an agent waving and a reply ready kept a 30-minute cooldown of their own
+    # and the mark for good, so the rail's Passed band and the walk disagreed about when they were back.
+    # The mark is the timer now - task_return_minutes, an hour by default - and Tomorrow is the silence.
     card.pop('surfaced', None); card.pop('surfaced_at', None)
     shown = next((st for k in [card['key'], *card['aliases']] for st in [(states or {}).get(k)] if st and st.get('Status') == 'surfaced'), None)
     if shown and card['lane'] in ('approve', 'blocked', 'queued', 'stopped'):
         shown_at = processing_all._stamp(shown.get('At'))
-        if card['lane'] in ('approve', 'blocked') or shown_at is None or shown_at > now - timedelta(minutes=quiet):
+        if shown_at is None or shown_at > now - timedelta(minutes=quiet):
             card.update(surfaced=True, surfaced_at=shown.get('At'))
     if card['lane'] == 'fyi' and not card.get('sig'):
         summaries = [r for r in view.get('processing_summaries', [])
@@ -267,8 +270,10 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
         if held and st.get('Status') == 'done' and st.get('Note') and st['Note'] != card.get('sig'): held = False
         if held and not include_read: continue
         card.update(unread=not held, deferred=held, actionable=not held, order_band=funnel._band(card))
-        if st.get('Status') == 'surfaced' and not (st.get('Note') and st['Note'] != card.get('sig')):
-            card.update(surfaced=True, surfaced_at=st.get('At'))
+        shown_at = processing_all._stamp(st.get('At')) if st.get('Status') == 'surfaced' else None
+        if (shown_at is not None and shown_at > now - timedelta(minutes=return_minutes(store))
+                and not (st.get('Note') and st['Note'] != card.get('sig'))):
+            card.update(surfaced=True, surfaced_at=st.get('At'))       # passed for the hour, then back
         cards.append(card)
     cards = funnel._order(cards)
     return {'rev': snapshot['snapshot_revision'], 'items': cards, 'hidden': 0, 'muted': 0,

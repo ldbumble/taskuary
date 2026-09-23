@@ -1259,7 +1259,8 @@ def next_item(store, key: str = None, only: str = None, include_surfaced: bool =
         return _present_one(store, item) or batch_item(store, key)
     if getattr(store, 'processing_reads_active', lambda: False)():
         return capture_selection(store, only=only, exclude=exclude).selected
-    again = (datetime.now() - timedelta(minutes=30)).strftime('%Y-%m-%d %H:%M:%S')
+    from .processing_unread import return_minutes        # the same hour the canonical pile's mark holds
+    again = (datetime.now() - timedelta(minutes=return_minutes(store))).strftime('%Y-%m-%d %H:%M:%S')
     ready = [i for i in pile(store, force=True)['items'] if not i.get('settling') and i['lane'] != 'working'
              and not _not_yet(i) and i.get('key') != exclude
              and (include_surfaced or not i.get('surfaced')

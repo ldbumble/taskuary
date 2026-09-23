@@ -339,7 +339,7 @@ export const LEVEL_META = {
   task: { word: "your task", hint: "an open task with no agent, a reply waiting for your yes, an agent waiting on your answer, a hand-off that has not started, a check that failed" },
   reports: { word: "reports", hint: "a report you set up landed, or an agent finished a job" },
   fyi: { word: "fyi", hint: "people told you things, and ideas nobody has turned into work - read them or don't" },
-  passed: { word: "passed", hint: "still yours - you pressed Next on these; they wait down here until you come back to them" },
+  passed: { word: "passed", hint: "still yours - you pressed Next on these; they come back to Your task and the walk after an hour (Tomorrow holds one until the morning)" },
   agents: { word: "agents working", hint: "an agent has these; nothing for you until one stops or asks" },
 };
 // PASSED: work you walked past with Next. Next settles nothing - the task is still yours - but leaving

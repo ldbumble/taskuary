@@ -78,10 +78,12 @@ CHIP_HINTS = {'not_ours_sender': 'Their mail keeps arriving and stays readable -
               'mine': "Your own list - no agent starts", 'next': 'Read it and move on'}
 # per kind, in the order they are offered. `next` is last on every one of them: moving on is always available,
 # and it is the one word that is never a decision about the thing itself.
-CHIPS = {'review': ('approve', 'close', 'redraft', 'not_ours', 'next'), 'action': ('approve', 'not_ours', 'next'),
-         'agent': ('answer_agent', 'stop_agent', 'next'), 'meeting': ('prep', 'regular_agent', 'next'),
+# `skip` (Tomorrow) on the kinds that come back after the hour: passing one with Next returns it in an
+# hour, and Tomorrow is how to silence it until the morning instead (2026-09-23)
+CHIPS = {'review': ('approve', 'close', 'redraft', 'not_ours', 'skip', 'next'), 'action': ('approve', 'not_ours', 'skip', 'next'),
+         'agent': ('answer_agent', 'stop_agent', 'skip', 'next'), 'meeting': ('prep', 'regular_agent', 'next'),
          'report': ('rerun', 'regular_agent', 'next'), 'agentdone': ('close', 'reply', 'next'),
-         'wrapup': ('close', 'next'), 'idea': ('followup', 'mine', 'done', 'next'), 'task': ('close', 'next'),
+         'wrapup': ('close', 'next'), 'idea': ('followup', 'mine', 'done', 'next'), 'task': ('close', 'skip', 'next'),
          'asked': ('reply', 'regular_agent', 'coder', 'mine', 'not_ours', 'not_ours_sender', 'next'),
          'todo': ('reply', 'regular_agent', 'coder', 'mine', 'not_ours', 'not_ours_sender', 'next'),
          'fyi': ('not_ours', 'not_ours_sender', 'block_sender', 'mine', 'next'),

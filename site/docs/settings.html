@@ -204,9 +204,9 @@ is what you see if those cards cannot load.</li>
 <p><code>funnel_max</code> · type: number</p>
 <p>How many items the pipe shows at once. The rest wait their turn and slide in as you clear it.</p>
 <p>Order is kept: an agent waiting on you or a draft for your yes is never the one held back.</p>
-<h3 id="an-open-task-comes-back-after-minutes">An open task comes back after (minutes)<a class="anchor" href="#an-open-task-comes-back-after-minutes" aria-label="Link to this section">#</a></h3>
+<h3 id="passed-work-comes-back-after-minutes">Passed work comes back after (minutes)<a class="anchor" href="#passed-work-comes-back-after-minutes" aria-label="Link to this section">#</a></h3>
 <p><code>task_return_minutes</code> · type: number</p>
-<p>How long a task you cleared from Work stays quiet before it is raised again. Sixty by default.</p>
+<p>How long something you passed with Next - an agent waiting, a reply ready, a task nobody is on - waits in Passed before it is back in Your task and the walk. Sixty by default; Tomorrow holds it until the morning.</p>
 <p>Done takes a task off the work tab, it does not close it — the task stays open in Tasks. Rather than let it sit there unseen, the work tab raises it again once it has been quiet this long, and keeps doing so until somebody closes it. Use the Completed button on the card to end it for good. Later and Skip still outrank this: a task you put down until tomorrow stays down.</p>
 <h3 id="fyi-read-together">FYI read together<a class="anchor" href="#fyi-read-together" aria-label="Link to this section">#</a></h3>
 <p><code>fyi_batch</code> · type: number</p>

@@ -453,9 +453,9 @@
     },
     "task_return_minutes": {
       "group": "Assistant",
-      "label": "An open task comes back after (minutes)",
+      "label": "Passed work comes back after (minutes)",
       "type": "number",
-      "desc": "How long a task you cleared from Work stays quiet before it is raised again. Sixty by default.",
+      "desc": "How long something you passed with Next - an agent waiting, a reply ready, a task nobody is on - waits in Passed before it is back in Your task and the walk. Sixty by default; Tomorrow holds it until the morning.",
       "help": "Done takes a task off the work tab, it does not close it — the task stays open in Tasks. Rather than let it sit there unseen, the work tab raises it again once it has been quiet this long, and keeps doing so until somebody closes it. Use the Completed button on the card to end it for good. Later and Skip still outrank this: a task you put down until tomorrow stays down."
     },
     "fyi_batch": {

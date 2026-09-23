@@ -79,7 +79,6 @@ def _eligible(items: list[dict], scope: dict, now: datetime) -> list[dict]:
     # module only from its public capture wrapper.
     from . import funnel
 
-    again = (now - timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
     exclude = scope["exclude"]
     excluded_keys = ({key for key in exclude[5:].split(",") if key}
                      if exclude and exclude.startswith("fyis:") else {exclude})
@@ -91,14 +90,9 @@ def _eligible(items: list[dict], scope: dict, now: datetime) -> list[dict]:
         and not funnel._not_yet(item)
         and item.get("key") not in excluded_keys
         and not excluded_keys.intersection(item.get('aliases', []))
-        and (
-            scope["include_surfaced"]
-            or not item.get("surfaced")
-            or (
-                item.get("lane") in ("blocked", "approve")
-                and funnel._ts(item.get("surfaced_at")) <= again
-            )
-        )
+        # the mark IS the return clock (processing_unread: task_return_minutes) - no second cooldown
+        # here, or the walk would take a waving agent back while the rail still showed it as passed
+        and (scope["include_surfaced"] or not item.get("surfaced"))
     ]
     if scope["only"] == "mail" and not any(item.get("processing_id") for item in items):
         ready = [item for item in ready

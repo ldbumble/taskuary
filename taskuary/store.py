@@ -742,6 +742,9 @@ class SQLiteStore:
             # thread has moved since - a verdict rechecks it wherever it lands (PW-055)
             if 'ContextRevision' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN ContextRevision TEXT')
             if 'Stale' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN Stale INTEGER DEFAULT 0')
+            # who wrote the draft: 'agent:<name>' when the agent that did the work wrote it itself
+            # (coder.agent_reply), NULL when the responder did - the end of the run keeps the former
+            if 'DraftBy' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN DraftBy TEXT')
             # the triage-generated checklist (PW-075): JSON items with stable ids, separate from Status
             tcols = {r[1] for r in self.cx.execute('PRAGMA table_info(task)')}
             if 'Checklist' not in tcols:
@@ -3772,8 +3775,8 @@ class SQLiteStore:
     def update_review_reason(self, rid, reason, run_id=None):
         self._exec('UPDATE review SET Reason=?, RunId=COALESCE(?, RunId) WHERE ReviewId=?', (reason, run_id, rid))
         self._review_changed(rid)
-    def update_review_draft(self, rid, draft, run_id):
-        self._exec('UPDATE review SET DraftText=?, RunId=?, DraftError=NULL WHERE ReviewId=?', (draft, run_id, rid))
+    def update_review_draft(self, rid, draft, run_id, by=None):
+        self._exec('UPDATE review SET DraftText=?, RunId=?, DraftError=NULL, DraftBy=? WHERE ReviewId=?', (draft, run_id, by, rid))
         self._review_changed(rid)
     def set_review_draft_error(self, rid, error: str):
         """The draft could not be written: keep the review pending and say why (PW-046)."""

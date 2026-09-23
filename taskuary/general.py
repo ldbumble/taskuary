@@ -528,6 +528,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # about has an answer owed, and closing it drafts that answer. A task the owner opened to
     # think out loud in has nobody waiting, so it stays open until they say otherwise.
     if sources and selfclose.mode(store) != 'off': system = system + '\n\n' + selfclose.CHAT_LINE
+    if sources: system = system + '\n\n' + selfclose.REPLY_LINE
     md = store.checklist_markdown(tid) if hasattr(store, 'checklist_markdown') else ''
     head = (f"TASK {detail.get('ref') or tid}\nTITLE: {task.get('Title') or ''}\n"
             f"SUMMARY: {task.get('Summary') or ''}\nSTATUS: {task.get('Status') or ''}\n"
@@ -988,6 +989,11 @@ class GeneralSession:
             # signal to Taskuary, not prose for the owner, so it comes out of what gets filed and
             # what gets shown - the sentence after it becomes the closing comment.
             from . import selfclose
+            reply, drafted = selfclose.reply_marker(reply)
+            if drafted:
+                from . import coder
+                out = coder.agent_reply(self.store, self.task_id, drafted, 'assistant')
+                if not out.get('ok'): logger.info(f"assistant reply draft not saved on task {self.task_id}: {out.get('why')}")
             reply, closing = selfclose.chat_marker(reply)
             reply, asked, choices = selfclose.ask_marker(reply)
             reply = reply or (closing or '') or (asked or '')

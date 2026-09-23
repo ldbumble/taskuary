@@ -105,6 +105,50 @@ def reply_target(store, task_id: int):
     return next((m['MessageId'] for m in reversed(store.list_messages(task_id)) if m.get('Status') != 'context'), None)
 
 
+# ── the agent's own words ───────────────────────────────────────────────────────────────
+# The agent that did the work often writes the better answer: it knows what it found, and a second
+# model redrafting from its transcript loses the nuance (the owner, 2026-09-23: "sometimes the agent
+# that did the work is better for response than another ai generating it based off of transcript").
+# It used to have no way to hand that answer over - it asked "should I draft the reply?", wrote it
+# on its own screen, and the task's reply stayed empty until the responder wrote a different one.
+# Now it says so: `taskuary --reply` (a shell) or a [[TASKUARY-REPLY]] block (the general chat), the
+# text becomes the task's pending reply as written, and the end of the run keeps it.
+AGENT_DRAFT = 'agent:'
+
+def agent_drafted(rv) -> bool:
+    return bool(rv) and str(rv.get('DraftBy') or '').startswith(AGENT_DRAFT) and bool(str(rv.get('DraftText') or '').strip())
+
+
+def own_draft(store, task_id: int):
+    """The pending reply the agent wrote itself, if there is one."""
+    return next((r for r in (store.pending_review(task_id, 'draft_reply', live_only=False),
+                             store.pending_review(task_id, 'draft', live_only=False)) if agent_drafted(r)), None)
+
+
+def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: int = None) -> dict:
+    """Put the agent's reply on the task as the pending draft - the same review the responder would
+    write into (held, live or new; one per answer, PW-236), marked as the agent's. Nothing is sent:
+    the owner approves it like every other reply."""
+    text = str(text or '').strip()
+    if not text: return {'ok': False, 'why': 'no reply text'}
+    held = store.held_review(task_id) or {}
+    mid = reply_target(store, task_id) or held.get('MessageId')
+    if not mid: return {'ok': False, 'why': 'nobody is waiting on a reply on this task - there is no one to draft it to'}
+    live = None if held else (store.pending_review(task_id, 'draft_reply', live_only=False) or store.pending_review(task_id, 'draft', live_only=False))
+    why = f'{agent} wrote this reply in its session - approve to send'
+    if held:
+        rid = held['ReviewId']; store.unhold_review(rid, why)
+    elif live:
+        rid = live['ReviewId']; store.update_review_reason(rid, why, run_id)
+    else:
+        rid = store.add_review({'TaskId': task_id, 'MessageId': mid, 'RunId': run_id, 'Kind': 'draft_reply', 'Status': 'pending', 'Reason': why})
+    rv = store.get_review(rid) or {}
+    if rv.get('MessageId') != mid: store.update_review_message(rid, mid)
+    store.update_review_draft(rid, text, run_id or rv.get('RunId'), by=AGENT_DRAFT + agent)
+    store.add_comment(task_id, agent, 'agent', f'{agent} drafted the reply itself - it is on the task, waiting on your approval.')
+    return {'ok': True, 'review_id': rid, 'message_id': mid}
+
+
 # ── the cheap ending ────────────────────────────────────────────────────────────────────
 # Almost everything a keyboard can do goes to the coding agent (the owner's rule), and the
 # whole bargain is that an agent with nothing to do says "nothing to do here" and stops CHEAPLY.
@@ -213,7 +257,7 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'cod
     # nobody can send does not hold a task the owner just closed
     if owner_done and mid and not can_send: mid = None
     # a held draft is proof somebody IS waiting on an answer, so it is never quietly dropped here
-    if mid and not held and nobody_waiting(store, mid, rep):
+    if mid and not held and not own_draft(store, task_id) and nobody_waiting(store, mid, rep):
         store.add_comment(task_id, actor, 'agent', 'Nothing needed doing here and the sender is not waiting on an '
                                                    'answer - filed with the report, no reply drafted.')
         mid = None
@@ -432,6 +476,16 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,
         rid = store.add_review({'TaskId': task_id, 'MessageId': mid, 'RunId': run_id, 'Kind': 'draft_reply', 'Status': 'pending',
                                 'Reason': why if fresh.get('state') in ('changed', 'unresolved') else 'coder finished the work - reply awaiting approval'})
     if (held or live) and (held or live).get('MessageId') != mid: store.update_review_message(rid, mid)
+    rv = store.get_review(rid) or {}
+    if agent_drafted(rv):
+        # the agent that did the work wrote this reply itself (agent_reply): its words stand and no second
+        # model rewrites them - only a thread that moved on (or could not be checked) is flagged for a reread
+        who = str(rv.get('DraftBy'))[len(AGENT_DRAFT):] or 'the agent'
+        store.update_review_reason(rid, f"{who}'s own reply from the session - approve to send"
+                                   + (' (the thread moved on after it was written - reread it)' if fresh.get('state') == 'changed' else ''), run_id)
+        if fresh.get('state') in ('changed', 'unresolved'): store.mark_review_stale(rid)
+        _notify_done(store, task_id, rid)
+        return
     src = complete_result or resolution_text(rep)
     if fresh.get('state') == 'changed' and fresh.get('latest'):
         l = fresh['latest']
@@ -450,6 +504,10 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,
     except Exception as e: logger.warning(f'reply draft failed for task {task_id}: {e}')
     # a refresh that failed is an unresolved freshness state the owner sees: the draft waits, stale, for one that succeeds
     if fresh.get('state') == 'unresolved': store.mark_review_stale(rid)
+    _notify_done(store, task_id, rid)
+
+
+def _notify_done(store, task_id: int, rid: int) -> None:
     # the ping that matters most: work FINISHED and its reply is sitting on the task on you
     if (store.get_settings().get('notify_level') or 'needs_me') != 'off':
         from .outbound import notify
@@ -463,3 +521,5 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,
         try: notify(store, f'{task_ref(task_id)} is done - the reply is drafted and waiting on '
                            f'your approval on the task.\n{head}{tail}')
         except Exception as e: logger.warning(f'notify failed for task {task_id}: {e}')
+
+

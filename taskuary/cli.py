@@ -122,6 +122,11 @@ def main():
                          'this transcript, and draft the reply the sender gets (you are not '
                          'sending it - the owner approves it). Give one sentence on what you did '
                          'or found. Do not run this while waiting on the owner.')
+    ap.add_argument('--reply', metavar='TEXT',
+                    help="write the reply the person who asked will get, in your own words - it becomes this "
+                         "task's pending reply for the owner to approve (you are not sending it), and "
+                         "finishing keeps it instead of redrafting. Use - to read it from stdin.")
+    ap.add_argument('--reply-file', metavar='PATH', help='--reply, read from a file (for a long or multi-line reply)')
     args = ap.parse_args()
     if args.demo:
         import os, tempfile
@@ -133,6 +138,29 @@ def main():
     # --done goes over HTTP, unlike --note. A note is a database row and any process can write
     # one; ENDING a task needs the live session's scrollback, which exists only inside the
     # running server - this process would find no transcript and wrap an empty one.
+    if args.reply is not None or args.reply_file:
+        import os, sys, requests
+        try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except (AttributeError, OSError): pass
+        tid = os.environ.get('TASKUARY_TASK')
+        if not str(tid).isdigit():
+            print('not in a Taskuary session - TASKUARY_TASK is not set, so there is no task to reply on')
+            return
+        if args.reply_file: text = open(args.reply_file, encoding='utf-8').read()
+        else: text = sys.stdin.read() if args.reply == '-' else args.reply
+        srv = config.load()['server']
+        host = '127.0.0.1' if srv.get('host') in ('0.0.0.0', '::', '', None) else srv['host']
+        base = f"http://{host}:{srv.get('port') or 7787}"
+        hdr = {'X-Taskuary-Token': srv['token']} if srv.get('token') else {}
+        try:
+            r = requests.post(f'{base}/api/agent/reply', timeout=60, headers=hdr,
+                              json={'task_id': int(tid), 'text': text, 'agent': os.environ.get('TASKUARY_AGENT') or 'agent'})
+            out = r.json() if r.headers.get('content-type', '').startswith('application/json') else {}
+        except Exception as e:
+            print(f'could not reach Taskuary at {base}: {e}'); return
+        print('reply saved on the task, waiting on the owner to approve and send it.' if out.get('ok')
+              else f"not saved: {out.get('why') or out.get('detail') or r.text[:200]}")
+        return
     if args.done is not None:
         import os, sys, requests
         try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')

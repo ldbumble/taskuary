@@ -276,8 +276,8 @@ def spawn_on_stop(store, term, said: str = '') -> None:
 # Short on purpose. Every character here rides on a command line that a canonical tty caps at
 # 1024 bytes, so the WHOLE rule lives in CODER.md (which rides in as RULES) and this is only the
 # part that must survive a blanked document: the command, and what pressing it does.
-SEED_LINE = ('WHEN FINISHED: run `taskuary --done "<one sentence>"` - it closes the task and '
-             "drafts the sender's reply for the owner.")
+SEED_LINE = ('REPLY: save the answer for the person who asked with `taskuary --reply "<text>"` - the owner approves it. '
+             'WHEN FINISHED: run `taskuary --done "<one sentence>"` - it closes the task and drafts the reply unless you saved one.')
 # ...and its opposite, for a session the owner opened to sit in (stays_open): the one thing the
 # agent must NOT do is end it. Said in the prompt, because CODER.md's finishing rules say the
 # reverse and an agent reading both without this line picks the one with a command in it.
@@ -300,6 +300,23 @@ CHAT_LINE = (
     f'approves it before it leaves. Only on a real ending. Never write it when you have asked a '
     f'question, offered options, or still need something; a conversation that is still going is '
     f'not an ending, and neither is an answer the owner may want to push back on.')
+
+
+# ...and its reply. The chat writes the answer the sender gets inside a marked block; the words between
+# the markers become the task's pending reply as written (coder.agent_reply) and stay in the chat too.
+REPLY_OPEN, REPLY_CLOSE = '[[TASKUARY-REPLY]]', '[[/TASKUARY-REPLY]]'
+_REPLY_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?REPLY\s*\]\](.*?)\[\[\s*/\s*TASKUARY[-_ ]?REPLY\s*\]\]', re.I | re.S)
+REPLY_LINE = (f'REPLYING FOR THE OWNER: when you write the answer the person who asked will get, put exactly that '
+              f'text between {REPLY_OPEN} and {REPLY_CLOSE}. It becomes the reply waiting on the owner\'s approval, '
+              f'in your words - nothing is sent until they approve it.')
+
+
+def reply_marker(text: str) -> tuple:
+    """(reply with the markers taken out, the marked reply text) - or (text, None) when it wrote none."""
+    m = _REPLY_RE.search(text or '')
+    if not m: return text, None
+    said = m.group(1).strip()
+    return (text[:m.start()] + said + text[m.end():]).strip(), said or None
 
 
 def chat_marker(text: str) -> tuple:

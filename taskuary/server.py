@@ -2975,6 +2975,17 @@ def agent_done(body: AgentDoneBody):
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     return selfclose.declare(store, body.task_id, body.summary, body.agent)
 
+class AgentReplyBody(BaseModel): task_id: int; text: str; agent: str = 'agent'
+
+@app.post('/api/agent/reply')
+def agent_reply(body: AgentReplyBody):
+    """`taskuary --reply "..."` from inside an agent's own shell: the agent that did the work writes the
+    answer the sender gets, and it becomes the task's pending reply as written (coder.agent_reply).
+    Nothing is sent - the owner approves it - and the end of the run keeps it instead of redrafting."""
+    from . import coder
+    if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
+    return coder.agent_reply(store, body.task_id, body.text, body.agent)
+
 @app.get('/api/tasks/{tid}/diff')
 def task_diff(tid: int, scope: str = 'task'):
     """What THIS task's agent changed in its checkout, per file (scope=checkout: everything a

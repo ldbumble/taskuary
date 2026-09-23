@@ -1048,10 +1048,8 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onBack, onRestar
           a smear (the owner, 2026-09-18: "the images look unclear"). Whole, at the shot's own shape,
           and clickable: the picture of the tab is the way to the tab. A broken image removes itself
           rather than leaving a torn box - the words above and below already carry the stop. */}
-      {/* ZOOMED IN, not shrunk to fit. Whole-and-small put a 1280px page into 540px and the words
-          became texture (the owner, 2026-09-18: "zoom it in even if you can only see part of it").
-          The picture is drawn at twice the box and the box shows its top-left - where a tab's name,
-          its navigation and its first card live - and pans to the rest on hover. */}
+      {/* THE WHOLE TAB, as wide as the card (assistantView.css .tq-walk-shot says why it is neither the
+          old 540px thumbnail nor the zoomed corner that replaced it). */}
       {card.image && (
         <div className="tq-walk-shot" title={card.goto ? `Open ${card.goto.tab}` : undefined}
           role={card.goto ? "button" : undefined} tabIndex={card.goto ? 0 : undefined}

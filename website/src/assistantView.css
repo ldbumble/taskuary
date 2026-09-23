@@ -281,14 +281,14 @@
    130px crop of a page corner - a search box and half a heading - under five bullets of text. */
 .tq-walk-progress { height: 3px; margin: 7px 0 8px; border-radius: 2px; background: #ebe6de; overflow: hidden; }
 .tq-walk-progress i { display: block; height: 100%; border-radius: 2px; background: #718b75; transition: width .3s ease; }
-/* capped at 540px wide: a 790px picture made a 700px card, and the card's own title scrolled off the
-   top of a 900px-tall window before you could read it. ZOOMED: the shot is drawn at twice the box
-   (a 1280px page at ~1080px, so its words are words) and the box is a window onto its top-left that
-   pans to the bottom-right on hover. */
-.tq-walk-shot { display: block; width: 100%; max-width: 540px; aspect-ratio: 1280 / 760; overflow: hidden; position: relative;
-  border-radius: 8px; border: 1px solid #ddd8cf; background: #f6f4f1; margin: 0 0 8px; transition: box-shadow .15s; }
-.tq-walk-shot img { display: block; width: 200%; height: auto; transform: translate(0, 0); transition: transform 2.4s ease-in-out; }
-.tq-walk-shot:hover img, .tq-walk-shot:focus-visible img { transform: translate(-50%, -50%); }
+/* THE WHOLE TAB, AS BIG AS THE CARD. 540px of whole page made its words texture (2026-09-18), and the
+   fix - a 540px window onto a 2x zoom of the top-left corner - showed a search box and half a heading
+   (the owner, 2026-09-23: "looks like a joke and does not take up the whole page"). Big instead of
+   cropped: the card's full width, bounded by the window's height so the title and the verbs above and
+   below it stay on screen - on a short window it narrows rather than pushing them off. */
+.tq-walk-shot { display: block; width: min(100%, calc((100vh - 520px) * 1280 / 760)); aspect-ratio: 1280 / 760; overflow: hidden;
+  position: relative; border-radius: 8px; border: 1px solid #ddd8cf; background: #f6f4f1; margin: 0 0 8px; transition: box-shadow .15s; }
+.tq-walk-shot img { display: block; width: 100%; height: 100%; object-fit: contain; object-position: top center; }
 .tq-walk-shot:hover, .tq-walk-shot:focus-visible { box-shadow: 0 0 0 2px #b9c8bb; outline: none; }
 .tq-pile-retry { margin-top: 8px; font: 600 11.5px 'IBM Plex Sans', system-ui, sans-serif; padding: 4px 12px;
   border-radius: 99px; border: 1px solid #ddd8cf; background: #fffdf9; color: #41525f; cursor: pointer; }

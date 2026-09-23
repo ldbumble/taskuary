@@ -25,7 +25,6 @@ import { DEMO } from "./demoApi.js";
 import { readNdjson, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { onLive } from "./live.js";
-import PreviousWork from "./PreviousWork.jsx";
 import { Md, looksMd } from "./md.jsx";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
@@ -809,13 +808,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // caused the write reloaded the rows itself, and this was the fourth full build of one press
     return onLive(["feed-changed", "task-changed"], (ev, meta) => { if (!coveredByReload(meta, forcedLoadStartedAt.current)) loadPile(true); }, { wait: 1500, max: 5000 });
   }, [active, loadPile]);
-  useEffect(() => { const el = bodyRef.current; if (el) el.scrollTop = el.scrollHeight; }, [msgs, busy]);
+  // ...but only once there IS a conversation: on the empty welcome it scrolled "Good morning" and the
+  // day's meetings off the top of the screen (the owner, 2026-09-23: "this is cutting off the top")
+  useEffect(() => { const el = bodyRef.current; if (el && el.querySelector(".tq-msg:not(.tq-welcome-msg)")) el.scrollTop = el.scrollHeight; }, [msgs, busy]);
   // ...and again whenever the thread GROWS - a card that loaded its draft, a report that unfolded - so the
   // bottom of the conversation is always what you see, unless you have scrolled up to read
   useEffect(() => {
     const el = bodyRef.current, inner = el?.firstElementChild;
     if (!el || !inner || typeof ResizeObserver === "undefined") return undefined;
-    const ro = new ResizeObserver(() => { if (el.scrollHeight - el.scrollTop - el.clientHeight < 240) el.scrollTop = el.scrollHeight; });
+    const ro = new ResizeObserver(() => { if (el.scrollHeight - el.scrollTop - el.clientHeight < 240 && el.querySelector(".tq-msg:not(.tq-welcome-msg)")) el.scrollTop = el.scrollHeight; });
     ro.observe(inner);
     return () => ro.disconnect();
   }, []);
@@ -1422,14 +1423,17 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         <div className="tq-chat-inner">
           {!state && !err && <Box sx={{ display: "grid", placeItems: "center", py: 6 }}><CircularProgress size={22} /></Box>}
           {state && !shown.length && !busy && (
+            <div className="tq-msg tq-welcome-msg"><div className="avatar"><TaskuaryMark size={18} /></div>
             <div className="tq-welcome">
-              <TaskuaryMark size={30} />
+              {/* TASKUARY SPEAKING, the way every line of the chat is: the mark is the speaker's avatar in
+                  the left column, never inline with the greeting (the owner, 2026-09-23: "it should be the
+                  person talking"), and the whole day fits one screen without scrolling */}
               <b>{greeting()}</b>
               {/* the start of the walk: the day's meetings, then who wants what - the best of the Morning
                   digest, on the screen the day opens on (2026-09-23) */}
               <div className="tq-welcome-sum"><TodayMeetingsStrip /></div>
               <span>{items.length ? summarize(items).lead : "Nothing is waiting on you - ask me anything, or set something up."}</span>
-              {!!items.length && <div className="tq-welcome-sum"><WhoWantsWhat groups={summarize(items).groups} onRow={actions.surface} /></div>}
+              {!!items.length && <div className="tq-welcome-sum"><WhoWantsWhat groups={summarize(items).groups} onRow={actions.surface} max={3} quiet={["read"]} /></div>}
               <div className="tq-modes">
                 <button type="button" className="tq-chip primary" disabled={busy || resetting || starting || !canAdvance} onClick={() => start(null)}
                   title="Everything in the pipe, most important first - mail, reports, agents, meetings">{starting ? "Reading your pipe..." : "Walk me through my tasks"}</button>
@@ -1452,7 +1456,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                   </button>
                 ))}
               </div>
-            </div>
+            </div></div>
           )}
           {shown.map((m, i) => <Line key={m.id} m={m} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx}
                                      actions={actions} fresh={currentItem} />)}
@@ -1467,14 +1471,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         </div>
       </div>
       )}
-      {/* Unfinished work from before, with its own recap - listed, never resumed by arriving here
-          (previous-work.test.mjs: "Loading the welcome card never starts an agent"). It is a LABEL
-          along the bottom, not a shelf above the conversation: on top it pushed the walk off the
-          screen (the owner, 2026-09-17), and inside the welcome card it would unmount the moment a
-          line lands in the chat - reviewing one saved draft puts a line there, which took the shelf
-          away with the rest of the list still on it. It draws nothing when there is nothing saved. */}
-      {state && !old && !handoff && !walk && <PreviousWork active={active} onOpenTask={onOpenTask}
-        onReview={(rid) => surfaceRef.current?.(`review:${rid}`)} />}
+      {/* NO "Continue previous work" bar either: a second label along the bottom, for work the rail already
+          lists (the owner, 2026-09-23: "still see bottom label"). */}
       {/* NO BOTTOM STRIP. The pinned reminder line restated what the rail and the card already show (the owner,
           2026-09-23: "remove the label that is constantly reminding you of tasks ... it's now in the
           screen"). A new message on the card you are reading refreshes that card; its draft says it is stale. */}

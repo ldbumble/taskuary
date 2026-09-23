@@ -727,12 +727,19 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface })
 // opener in place of the Morning digest (2026-09-23). Rows come from the LIVE pile, so a row settled
 // since the chat opened is gone from here too; a row's click brings that one card up.
 const ROWS_PER_GROUP = 5;
+// the group's name in the rail band's own pill (the owner, 2026-09-23: "should be circle pills with
+// colors"): who is waiting on you wears the rail's "your task" colour, an agent the working blue, your
+// own list the report beige, and what needs no decision the muted one
+const GROUP_ROLE = { people: "you", you: "info", agents: "working", read: "muted" };
 // the groups themselves - also drawn on the empty chat's welcome, which is what the walk starts from
-export function WhoWantsWhat({ groups, onRow }) {
-  return (groups || []).map((g) => (
+// `quiet` groups show their pill and count only - on the day's opener, what needs no decision is on the
+// rail already, and its rows were what pushed the way in off the screen (2026-09-23: "one screen")
+export function WhoWantsWhat({ groups, onRow, max = ROWS_PER_GROUP, quiet = [] }) {
+  return (groups || []).map((g) => ({ g, n: quiet.includes(g.key) ? 0 : max })).map(({ g, n }) => (
     <div key={g.key} className="tq-sum-group">
-      <div className="tq-sum-head">{g.word} · {g.rows.length}</div>
-      {g.rows.slice(0, ROWS_PER_GROUP).map((i) => (
+      <div className="tq-sum-head"><span style={{ color: ROLES[GROUP_ROLE[g.key]].ink, background: ROLES[GROUP_ROLE[g.key]].tint,
+        borderColor: ROLES[GROUP_ROLE[g.key]].bd }}>{g.word}</span><em>{g.rows.length}</em></div>
+      {g.rows.slice(0, n).map((i) => (
         <button key={i.key} type="button" className="tq-sum-row" onClick={() => onRow?.(i.key)} title="Bring this one up now">
           <span className="dot" style={{ background: sourceColor(i) }} />
           <b>{whoOf(i)}</b>
@@ -740,7 +747,7 @@ export function WhoWantsWhat({ groups, onRow }) {
           <span className="st">{stateOf(i, laneMeta(i.lane).word)}</span>
         </button>
       ))}
-      {g.rows.length > ROWS_PER_GROUP && <div className="tq-sum-more">and {g.rows.length - ROWS_PER_GROUP} more</div>}
+      {n > 0 && g.rows.length > n && <div className="tq-sum-more">and {g.rows.length - n} more</div>}
     </div>
   ));
 }

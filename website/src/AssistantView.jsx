@@ -473,7 +473,7 @@ function Line({ m, live, last, actions, fresh }) {
     report: <ReportCard card={c} onOpenTask={actions.openTask} onTimeline={actions.timeline} onDone={actions.done} />,
     agentdone: <AgentDoneCard card={c} onOpenTask={actions.openTask} onDone={actions.done} onSurface={actions.surface} />,
     idea: <IdeaCard card={c} onAct={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} onNavigate={actions.navigate} />,
-    message: <MessageCard card={c} onDone={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} onSurface={actions.surface} />,
+    message: <MessageCard card={c} onDone={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} onSurface={actions.surface} onNavigate={actions.navigate} />,
     setup: <SetupCard card={m.card} onNavigate={actions.navigate} onHandOff={actions.handOff} />,
     walk: <WalkCard card={m.card} at={m.card.n} total={m.card.total} onNavigate={actions.navigate}
       onNext={() => actions.walk(m.card.n + 1)} onBack={() => actions.walk(m.card.n - 1)}

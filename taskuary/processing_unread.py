@@ -270,10 +270,11 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
         if held and st.get('Status') == 'done' and st.get('Note') and st['Note'] != card.get('sig'): held = False
         if held and not include_read: continue
         card.update(unread=not held, deferred=held, actionable=not held, order_band=funnel._band(card))
-        shown_at = processing_all._stamp(st.get('At')) if st.get('Status') == 'surfaced' else None
-        if (shown_at is not None and shown_at > now - timedelta(minutes=return_minutes(store))
-                and not (st.get('Note') and st['Note'] != card.get('sig'))):
-            card.update(surfaced=True, surfaced_at=st.get('At'))       # passed for the hour, then back
+        # NEXT DISMISSES AN ERROR (the owner, 2026-09-23: "next on error should dismiss it no?"): an error
+        # is not work that comes back in an hour - walked past, it stays in Passed and the walk never offers
+        # it again, until the error CHANGES (its sig) or the connection answers and the row is gone
+        if st.get('Status') == 'surfaced' and not (st.get('Note') and st['Note'] != card.get('sig')):
+            card.update(surfaced=True, surfaced_at=st.get('At'))
         cards.append(card)
     cards = funnel._order(cards)
     return {'rev': snapshot['snapshot_revision'], 'items': cards, 'hidden': 0, 'muted': 0,

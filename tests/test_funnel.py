@@ -1093,3 +1093,29 @@ class ABrokenConnectionSaysSoTests(unittest.TestCase):
         self.s.touch_connector(cid, 'a different failure: 401 unauthorised')
         funnel.invalidate()
         self.assertEqual((funnel.next_item(self.s) or {}).get('key'), first['key'], 'a new error is news again')
+
+    def test_handled_puts_a_broken_connection_down_until_the_error_changes(self):
+        """No task to close (the owner, 2026-09-23): Handled hides the row; a DIFFERENT failure is news."""
+        cid = self._broken('github', 'ldbumble/FckSignups: no such repository')
+        funnel.invalidate()
+        funnel.settle(self.s, f'conn:{cid}', 'done')
+        self.assertTrue(self.s.funnel_states()[f'conn:{cid}']['Note'])                  # it remembers which error
+        funnel.invalidate()
+        self.assertNotEqual((funnel.next_item(self.s) or {}).get('key'), f'conn:{cid}')
+        self.s.touch_connector(cid, 'a different failure: 401 unauthorised')
+        funnel.invalidate()
+        self.assertEqual((funnel.next_item(self.s) or {}).get('key'), f'conn:{cid}', 'a new error comes back')
+
+    def test_next_dismisses_an_error_until_it_changes(self):
+        """An error is not work that comes back in an hour (the owner, 2026-09-23: "next on error should
+        dismiss it no?"): walked past, it is not offered again - until the error itself changes."""
+        cid = self._broken('github', 'ldbumble/FckSignups: no such repository')
+        funnel.invalidate()
+        first = funnel.next_item(self.s)
+        self.s.set_funnel_state(first['key'], 'surfaced', note=first.get('sig'))
+        self.s._exec("UPDATE funnel_state SET At=datetime('now', '-3 hours') WHERE Key=?", (first['key'],))
+        funnel.invalidate()
+        self.assertNotEqual((funnel.next_item(self.s) or {}).get('key'), first['key'], 'three hours on, still dismissed')
+        self.s.touch_connector(cid, 'a different failure: 401 unauthorised')
+        funnel.invalidate()
+        self.assertEqual((funnel.next_item(self.s) or {}).get('key'), first['key'], 'a new error is news again')

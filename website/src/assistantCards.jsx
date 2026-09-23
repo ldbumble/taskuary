@@ -708,7 +708,7 @@ export function IdeaCard({ card, onAct, onOpenTask, onTimeline, onNavigate }) {
 
 // a person wrote something: read it here, reply, hand it to an agent, or say it is not ours - and
 // two doors for "not ours": one that teaches memory so it never comes back, one for just today
-export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface }) {
+export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, onNavigate }) {
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
   const [repoAsk, setRepoAsk] = useState(null);
@@ -749,6 +749,17 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface })
   // the one immediate road for "asked you": a draft, written now, sent only on your yes (PW-126)
   const draftReply = () => post("reply", `/api/messages/${card.mid}/reply`, { draft: true }, null,
     (data) => onSurface?.(data?.reviewId ? `review:${data.reviewId}` : null, "Drafting a reply…"));
+  // A BROKEN CONNECTION is not a message and has no task: its row clears itself on the next good check,
+  // so the card's verb is the way to FIX it - the connection's own card - and Next puts it down until the
+  // error changes (2026-09-23)
+  if (card.kind === "connection") return (
+    <CardShell card={card} kicker="a connection stopped answering" title={card.title} err={err}>
+      {card.why && <div className="tq-card-excerpt">{card.why}</div>}
+      <Foot verb={<Button size="small" variant="contained" disableElevation sx={primary}
+          onClick={() => { window.location.hash = `connector=${card.channel}`; onNavigate?.("Connections"); }}>Open the connection</Button>}
+        then={<><b>Open the connection</b> takes you to its card; once it answers again this clears by itself. Next puts it down until the error changes.</>} />
+    </CardShell>
+  );
   const own = card.kind === "todo" || card.channel === "own";
   const hand = suggestedKind === "coding" ? "Hand to coding agent" : "Hand to agent";
   const verb = !asks || !card.mid ? null : own

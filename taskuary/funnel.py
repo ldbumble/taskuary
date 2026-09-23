@@ -774,7 +774,9 @@ def _apply_states(items: list, states: dict, now: datetime, keep_surfaced: bool 
     for i in items:
         st = states.get(i['key'])
         if st:
-            if st['Status'] == 'done': continue
+            # done is for good - except on a CONDITION whose error has changed since (a broken connection's
+            # sig): that is a new failure, not the one put down
+            if st['Status'] == 'done' and not (i.get('kind') == 'connection' and st.get('Note') and st['Note'] != i.get('sig')): continue
             if st['Status'] in ('later', 'skip') and (not st.get('Until') or _ts(st['Until']) > stamp): continue
             if st['Status'] == 'surfaced':
                 # shown, but CHANGED since - the agent rewrote the draft, the question moved on: new again
@@ -1336,6 +1338,10 @@ def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, n
     """The owner's word on one item. done: gone for good. later: back in `hours` (LATER_HOURS by
     default). skip: back tomorrow morning. surfaced: shown in this walk - and, with `read`, READ: once
     it has been put in the chat it leaves Unread (the owner, 2026-09-06). ack: an alert was seen."""
+    # Handled on a broken connection remembers WHICH error it put down (its sig), so a different failure
+    # comes back rather than staying hidden (processing_unread compares the two)
+    if verb == 'done' and note is None and str(key or '').startswith('conn:'):
+        note = next((c.get('sig') for c in broken_connections(store) if c['key'] == key), None)
     if verb not in VERBS: raise ValueError(f'unknown verb: {verb}')
     if key.startswith('fyis:'):                                   # a batch: the verb lands on every member
         # ...and wakes the tabs ONCE. Each settle empties the pile cache and fires the live event

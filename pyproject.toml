@@ -71,10 +71,11 @@ include = ["taskuary*"]
 [tool.setuptools.package-data]
 # whatsapp/ too: the bridge error tells you to run `node bridge.mjs` out of the package, and
 # a pip install without it is an instruction pointing at a directory that does not exist.
-# lanes.json is the ONE lane vocabulary the desktop imports at build time and funnel.py reads at
-# runtime - a wheel without it cannot name a lane at all.
+# *.json: every data file at the package root is read at runtime - lanes.json is the ONE lane
+# vocabulary, and triage_kind_rules.json, settings_schema.json and connectorcatalog.json were all
+# missing from the wheel once (the container died on the first; 2026-09-23). Name them by glob.
 # A GLOB HERE DOES NOT CROSS A DIRECTORY SEPARATOR: `web/*` matches nothing inside `web/assets/`,
 # which is why that line exists - and `web/walk/*` had to be added after the setup walk's nine
 # screenshots shipped broken. Every new subdirectory under web/ needs its own line, or its files
 # are simply absent from the wheel while the repo tree looks right.
-taskuary = ["lanes.json", "web/*", "web/assets/*", "web/walk/*", "templates/*.md", "templates/history/*.md", "skills/*/*.md", "whatsapp/*"]
+taskuary = ["*.json", "web/*", "web/assets/*", "web/walk/*", "templates/*.md", "templates/history/*.md", "skills/*/*.md", "whatsapp/*"]

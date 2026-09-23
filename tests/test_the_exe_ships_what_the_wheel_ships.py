@@ -10,6 +10,7 @@ The two lists cannot be kept in step by remembering, so this asks them.
 """
 import ast
 import re
+from fnmatch import fnmatch
 import unittest
 from pathlib import Path
 
@@ -37,11 +38,16 @@ class TheExeShipsWhatTheWheelShipsTests(unittest.TestCase):
         self.assertFalse(missing, f'the wheel ships {sorted(missing)} and taskuary.spec does not - '
                                   'an exe without them is a different program')
 
-    def test_lanes_json_by_name_because_it_is_read_at_import(self):
-        """Named on its own: every module that touches a lane pulls it in before the app can answer
-        anything, so its absence is not a degraded feature - it is a dead install."""
-        self.assertIn('lanes.json', spec_data())
-        self.assertIn('lanes.json', wheel_data())
+    def test_every_json_beside_the_code_is_in_both(self):
+        """Asked of the FILES, not the list: lanes.json is read at import (workerstate), and so is
+        triage_kind_rules.json (store) - a list that named lanes.json and nothing else shipped a
+        container that died on the second (2026-09-23). A file in the tree that neither glob
+        catches is a dead install, not a degraded feature."""
+        files = sorted(f.name for f in (ROOT / 'taskuary').glob('*.json'))
+        self.assertIn('lanes.json', files)
+        for name in files:
+            self.assertTrue(any(fnmatch(name, g) for g in wheel_data()), f'pyproject does not ship {name}')
+            self.assertTrue(any(fnmatch(name, g) for g in spec_data()), f'taskuary.spec does not ship {name}')
 
     def test_the_file_the_import_actually_reads_is_where_both_of_them_put_it(self):
         self.assertTrue((ROOT / 'taskuary' / 'lanes.json').is_file())

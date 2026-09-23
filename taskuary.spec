@@ -46,7 +46,7 @@ a = Analysis(['taskuary/desktop.py'],
              # Keep this list beside
              # [tool.setuptools.package-data] in pyproject.toml: the two must say the same thing.
              datas=[('taskuary/web', 'taskuary/web'), ('taskuary/templates', 'taskuary/templates'),
-                    ('taskuary/skills', 'taskuary/skills'), ('taskuary/lanes.json', 'taskuary'),
+                    ('taskuary/skills', 'taskuary/skills'), ('taskuary/*.json', 'taskuary'),   # lanes, triage kind rules, settings schema, connector catalogue
                     ('taskuary/whatsapp', 'taskuary/whatsapp'), *datas],
              binaries=bins,
              hiddenimports=['taskuary.server', 'webview.platforms.edgechromium', 'webview.platforms.winforms',

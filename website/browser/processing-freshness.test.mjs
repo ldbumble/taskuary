@@ -68,6 +68,16 @@ const holdNextTaskResponse = async (page, taskId) => {
   };
 };
 
+// A reply card folds what they wrote behind "More - what they wrote" since the one-card walk (904916c2):
+// open it the way the owner would before reading the source, and again if a refresh redrew the card.
+async function openFold(page) {
+  await page.evaluate(() => {
+    if (document.querySelector(".tq-msg .tq-card-full")) return;
+    [...document.querySelectorAll(".tq-msg .tq-card-more")].filter((b) => b.innerText.startsWith("More - what they wrote")).pop()?.click();
+  });
+  await page.waitForSelector(".tq-msg .tq-card-full", { visible: true, timeout: 10000 });
+}
+
 test("PW-106 refreshes same-ID source and drafts while preserving Current and owner edits", { timeout: 150000 }, async (t) => {
   const harness = await startHarness();
   t.after(() => harness.close());
@@ -128,6 +138,7 @@ test("PW-106 refreshes same-ID source and drafts while preserving Current and ow
   const history = (await fixtureRequest(harness, "/api/concierge")).messages;
   assert.ok(history.some((turn) => turn.card?.key === target.key));
 
+  await openFold(page);
   const memberMarker = "Synthetic older member joins the same task context.";
   await fixtureRequest(harness, "/api/fixture/processing/member", "POST", {
     message_id: target.mid, body: memberMarker,
@@ -147,7 +158,7 @@ test("PW-106 refreshes same-ID source and drafts while preserving Current and ow
   await waitDraft(page, "");
   assert.equal(await currentDraft(page), "", "clearing a backend draft must clear the rendered old text");
 
-  await page.waitForSelector(".tq-msg .tq-card-full", { visible: true, timeout: 10000 });
+  await openFold(page);
   const original = await fixtureRequest(harness, `/api/messages/${target.mid}`);
   const marker = "Synthetic same-ID source freshness marker.";
   await fixtureRequest(harness, "/api/fixture/processing/source", "POST", {

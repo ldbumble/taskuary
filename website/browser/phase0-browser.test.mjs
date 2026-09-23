@@ -47,7 +47,8 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
   await page.waitForFunction(() => {
     const walk = [...document.querySelectorAll("button")]
       .find((button) => button.innerText === "Walk me through my tasks");
-    return !!walk && !walk.disabled && !document.querySelector(".tq-msg")
+    // the day's welcome is drawn as a .tq-msg too (904916c2); "no conversation yet" is no OTHER line
+    return !!walk && !walk.disabled && !document.querySelector(".tq-msg:not(.tq-welcome-msg)")
       && !document.querySelector(".tq-pile-row.current");
   }, { timeout: limits.firstVisibleMs });
 
@@ -73,8 +74,9 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
   // (the owner, 2026-09-16: "maybe just subject should be there to clean it up").
   assert.equal(await page.$(".tq-pile-next"), null, "the NEXT/current pills are gone from the row");
   const expectedNext = await page.$eval(".tq-pile-row.next .card b", (node) => node.textContent.trim());
-  await page.evaluate(() => [...document.querySelectorAll(".tq-msg .tq-verbs .tq-verb")]
-    .find((button) => button.innerText === "Next")?.click());
+  // Next sits in the card's own foot since the one-card walk (904916c2), not in the verb line under it
+  await page.evaluate(() => [...document.querySelectorAll(".tq-msg button")]
+    .filter((button) => button.innerText.trim() === "Next").pop()?.click());
   await page.waitForFunction((title) => document.querySelector(".tq-pile-row.current .card b")?.textContent.trim() === title,
     { timeout: 15000 }, expectedNext);
   await page.waitForFunction(() => !document.querySelector(".tq-typing"), { timeout: 15000 });

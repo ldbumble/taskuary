@@ -425,12 +425,14 @@ function Pile({ pile, current, onPull, error, onRetry }) {
     </div>
   );
 }
-// the two ways to use the stage - shown in the chat's header and on the task view's empty stage,
-// so whichever one you are in, the other is one click away
-const StageMode = ({ mode, setMode }) => (
+// the ways to use the stage - shown in the chat's header and on the task view's empty stage,
+// so whichever one you are in, the other is one click away. Game swaps the whole tab for the office
+// (AssistantGame.jsx): the same pile, walked instead of talked through.
+const StageMode = ({ mode, setMode, onGame }) => (
   <div className="tq-stage-mode" title="What a click on a row does">
     <button type="button" className={mode === "chat" ? "on" : ""} onClick={() => setMode("chat")} title="Rows go to the conversation - Taskuary walks you through them">Chat</button>
     <button type="button" className={mode === "task" ? "on" : ""} onClick={() => setMode("task")} title="Rows open here on their own - the message, the triage, the agent's work, the draft">Task</button>
+    {onGame && <button type="button" onClick={onGame} title="The same items as an office you walk around - people in the lobby, fyi's in the coffee room, points for every move">Game</button>}
   </div>
 );
 
@@ -541,7 +543,7 @@ function Line({ m, live, last, actions, fresh }) {
 }
 
 // ── the page ─────────────────────────────────────────────────────────────────────────────────
-export default function AssistantView({ onOpenTask, onNavigate, onChanged, active = true }) {
+export default function AssistantView({ onOpenTask, onNavigate, onChanged, onGame, active = true }) {
   const [state, setState] = useState(null);           // /api/concierge: the dock task, its turns, the AI choices
   const handoff = state?.handoff || null;             // the walk is in a phone chat: this tab is locked behind it
   // A set-up walk-through, running HERE. The conversation binds to that task's own session - which
@@ -1394,7 +1396,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             is a phrase for an AI to interpret, since none may be connected yet when this gets pressed. */}
         <Tooltip title="A walk through every part of Taskuary — one step at a time, no AI needed">
           <button type="button" className="tq-chip tq-phone-hide" disabled={busy || resetting || walking} onClick={setup}>Set up Taskuary</button></Tooltip>
-        <StageMode mode={stageMode} setMode={setStageMode} />
+        <StageMode mode={stageMode} setMode={setStageMode} onGame={onGame} />
         <Tooltip title="The Timeline"><IconButton size="small" onClick={() => setRailOpen(true)} sx={{ display: { xs: "inline-flex", md: "none" } }}><ViewSidebarIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
         <Tooltip title={speakOnState ? "Reading replies aloud — click to stop" : "Read replies aloud"}><IconButton size="small" className="tq-phone-hide" onClick={toggleSpeak}>{speakOnState ? <VolumeUpIcon sx={{ fontSize: 18, color: "#526b53" }} /> : <VolumeOffIcon sx={{ fontSize: 18, color: DIM }} />}</IconButton></Tooltip>
         <Tooltip title={state?.scripted ? "Scripted demo - no AI is running" : `AI: ${state?.provider || "none"}${state?.model ? ` · ${state.model}` : ""}`}><IconButton size="small" className="tq-phone-hide" onClick={(e) => setAiEl(e.currentTarget)}><TuneIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
@@ -1560,7 +1562,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         Hovering a row opens it here; clicking pins it. You get the message that arrived, why triage sent it
         where it did, what the agent is doing about it, and the reply waiting to go — each on its own tab.
       </Typography>
-      <Box sx={{ mt: 1 }}><StageMode mode={stageMode} setMode={setStageMode} /></Box>
+      <Box sx={{ mt: 1 }}><StageMode mode={stageMode} setMode={setStageMode} onGame={onGame} /></Box>
     </Box>
   );
 

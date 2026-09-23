@@ -15,6 +15,14 @@ export const ZONES = [
 ];
 export const zoneMeta = (key) => ZONES.find((z) => z.key === key) || null;
 
+// which room a spot on the office floor belongs to (GameScene's world units): walking across a line
+// takes you into that room
+export function zoneAt(x, z) {
+  if (x < -5.15) return "archive";
+  if (x > 5.15) return z < 1.9 ? "coffee" : "hq";
+  return z < 4.2 ? "floor" : "lobby";
+}
+
 const LANE_ZONE = {
   blocked: "floor", working: "floor", queued: "floor", stopped: "floor",
   approve: "lobby", asked: "lobby", yours: "lobby", time: "lobby", unjudged: "lobby",
@@ -119,7 +127,7 @@ export const QUESTS = [
 ];
 export const questProgress = (s, q) => Math.min(q.n, s?.dayBy?.[q.move] || 0);
 
-const KEY = "taskuary.studioGame.v1";
+const KEY = "taskuary.assistantGame.v1";
 export function loadGame(store = globalThis.localStorage, now = Date.now()) {
   try { const s = JSON.parse(store?.getItem(KEY) || "null"); return s && typeof s.xp === "number" ? { ...fresh(now), ...s } : fresh(now); }
   catch { return fresh(now); }

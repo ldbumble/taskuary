@@ -26,6 +26,7 @@ import { useHandRaise, playSound, desktopNotify } from "./handraise.js";
 import { dismissHandRaise, enqueueHandRaise, handRaiseWhat, isWatchingTask } from "./handraiseState.js";
 import { TaskuaryMark } from "./ui.jsx";
 import AssistantView from "./AssistantView.jsx";
+const AssistantGame = React.lazy(() => import("./AssistantGame.jsx"));
 
 // The strip reads left to right as the day does: what arrived (Timeline), what is being worked
 // (Board, Tasks), then what has been WRITTEN DOWN - Reports and Hub, which holds hard-earned
@@ -270,6 +271,9 @@ export default function TaskHubPage() {
   const [everTasks, setEverTasks] = useState(tab === "Tasks");
   const [everBoard, setEverBoard] = useState(false);
   const [everAssistant, setEverAssistant] = useState(tab === "Assistant");
+  // the Assistant as a chat or as the game - remembered per browser, like any view choice
+  const [asstGame, setAsstGame] = useState(() => { try { return localStorage.getItem("taskuary.assistantMode") === "game"; } catch { return false; } });
+  const pickAsstGame = (on) => { setAsstGame(on); try { localStorage.setItem("taskuary.assistantMode", on ? "game" : "chat"); } catch { /* private window */ } };
   useEffect(() => { if (tab === "Tasks") setEverTasks(true); }, [tab]);
   // ...and the Board, which can hold a live session too: mounted once opened, hidden after. The
   // Assistant is the normal landing tab, but a deep link does not boot it until it is opened.
@@ -441,7 +445,16 @@ export default function TaskHubPage() {
               and pipe animation are on-screen state worth keeping, and polling is gated on `active`. */}
           {everAssistant && (
             <Box sx={{ display: tab === "Assistant" ? "block" : "none" }}>
-              <AssistantView key={`a${tick}`} onOpenTask={openTask} onNavigate={go} onChanged={refreshPending} active={tab === "Assistant"} />
+              {/* Game is the same Assistant, walked: the chat stays mounted behind it so its conversation survives the switch */}
+              <Box sx={{ display: asstGame ? "none" : "block" }}>
+                <AssistantView key={`a${tick}`} onOpenTask={openTask} onNavigate={go} onChanged={refreshPending}
+                  onGame={() => pickAsstGame(true)} active={tab === "Assistant" && !asstGame} />
+              </Box>
+              {asstGame && (
+                <React.Suspense fallback={<CircularProgress size={22} sx={{ m: 4 }} />}>
+                  <AssistantGame onOpenTask={openTask} onExit={() => pickAsstGame(false)} active={tab === "Assistant"} />
+                </React.Suspense>
+              )}
             </Box>
           )}
           {(everBoard || tab === "Board") && (

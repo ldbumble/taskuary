@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { zoneOf, zoneItems, bossHp, matchFor, award, levelOf, fresh, shareCard, loadGame, saveGame, COMBO_WINDOW, XP } from "../src/studioGame.js";
+import { zoneAt, zoneOf, zoneItems, bossHp, matchFor, award, levelOf, fresh, shareCard, loadGame, saveGame, COMBO_WINDOW, XP } from "../src/assistantGame.js";
 
 const at = Date.parse("2026-09-23T10:00:00Z");
 
@@ -73,4 +73,12 @@ test("a broken store never breaks the game", () => {
   const mem = new Map(), store = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v) };
   saveGame({ ...fresh(at), xp: 42 }, store);
   assert.equal(loadGame(store, at).xp, 42);
+});
+
+test("walking across a room's line takes you into it", () => {
+  assert.equal(zoneAt(0, 0), "floor");
+  assert.equal(zoneAt(0, 6), "lobby");
+  assert.equal(zoneAt(8, -1), "coffee");
+  assert.equal(zoneAt(8, 6), "hq");
+  assert.equal(zoneAt(-8, 3), "archive");
 });

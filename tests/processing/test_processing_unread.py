@@ -140,7 +140,7 @@ def test_assistant_digest_post_does_not_duplicate_its_own_idea(store):
     kinds = sorted((i['kind'], i['title']) for i in unread['items'])
     assert kinds == [('fyi', 'A plain Assistant note'), ('idea', 'End of day checkup fired on its own')], kinds
     # the one row that remains says who is talking - the owner saw "unknown" on it (2026-09-06)
-    assert next(i for i in unread['items'] if i['kind'] == 'idea')['who'] == 'Assistant'
+    assert next(i for i in unread['items'] if i['kind'] == 'idea')['who'] == 'Advisor'
 
 
 def test_the_message_an_idea_rides_into_triage_on_is_never_a_row(store):
@@ -153,7 +153,7 @@ def test_the_message_an_idea_rides_into_triage_on_is_never_a_row(store):
     idea = store.upsert_idea({'key': 'idea:empty-forward', 'kind': 'idea', 'action': {'type': 'message', 'mid': source},
                               'text': 'Gail forwarded "FW: AI Modus" with nothing but her signature'}, stamp)
     vehicle = store.add_message({'ExternalId': f"idea:{idea['IdeaId']}", 'ConversationId': f"idea:{idea['IdeaId']}",
-                                 'Channel': 'assistant', 'SourceName': 'Assistant', 'FromName': 'Assistant',
+                                 'Channel': 'assistant', 'SourceName': 'Advisor', 'FromName': 'Advisor',
                                  'Subject': 'Assistant idea: Gail forwarded "FW: AI Modus"',
                                  'BodyText': 'Gail forwarded it with nothing but her signature', 'Status': 'filed',
                                  'SentAt': stamp})
@@ -175,7 +175,7 @@ def test_the_task_an_ideas_vehicle_carries_is_still_a_row_while_an_agent_works_i
     idea = store.upsert_idea({'key': 'idea:browser-job', 'kind': 'idea', 'text': 'Four master runs today all fail "browser"',
                               'action': {'type': 'task', 'tid': tid, 'triage': {'intent': 'task'}}}, stamp)
     vehicle = store.add_message({'ExternalId': f"idea:{idea['IdeaId']}", 'ConversationId': f"idea:{idea['IdeaId']}",
-                                 'Channel': 'assistant', 'SourceName': 'Assistant', 'FromName': 'Assistant', 'TaskId': tid,
+                                 'Channel': 'assistant', 'SourceName': 'Advisor', 'FromName': 'Advisor', 'TaskId': tid,
                                  'Subject': 'Assistant idea: four master runs today', 'BodyText': 'all fail "browser"',
                                  'Status': 'routed', 'SentAt': stamp})
     all_rows, unread = both(store)

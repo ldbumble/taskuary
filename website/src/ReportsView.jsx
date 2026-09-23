@@ -195,7 +195,7 @@ const TYPE_LABELS = {
   fmp_fundamentals: "FMP — fundamentals", fmp_ratios: "FMP — ratios", alpaca_quotes: "Alpaca — quotes", alpaca_bars: "Alpaca — bars",
   markets_screen: "Strategy screen — only the rows that match",
   metric: "A certified number (Assistant \u2192 Numbers)", metric_check: "Re-prove the certified numbers",
-  digest: "Taskuary digest", evening_inbox: "End-of-day Inbox brief", automate: "Automation ideas (own data)", assistant: "Assistant — its post on the Timeline (its voice: COUNSEL.md, Docs section)",
+  digest: "Taskuary digest", evening_inbox: "End-of-day Inbox brief", automate: "Automation ideas (own data)", assistant: "Advisor — its post on the Timeline (its voice: COUNSEL.md, Docs section)",
   agent: "AI agent — run a skill or a prompt",
   local_file: "File on this computer",
   google_sheets: "Google Sheet", sharepoint_list: "SharePoint list", sharepoint_file: "SharePoint file",
@@ -1156,7 +1156,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
               {workflow
                 ? "Give the AI agent a saved skill or a plain-English job that writes data. It runs with write access on this workflow's schedule and files its result on the Timeline."
                 : isAssistant
-                ? "Point it at the systems it should read on every check — write the query here, or reuse a data view you already saved. This report reads only those sources; the general Assistant and Morning digest are separate."
+                ? "Point it at the systems it should read on every check — write the query here, or reuse a data view you already saved. This report reads only those sources; the general Advisor and Morning digest are separate."
                 : "Sources at the top feed one prompt at the bottom. Add as many as you want — the same connection twice with different queries is fine, and every source's rows reach the summary together."}
             </Typography>
             <TextField required label="title — becomes the Timeline headline" value={cfg.title || ""} sx={{ bgcolor: "#fff", maxWidth: 720, mb: 2 }}
@@ -1169,10 +1169,10 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                   Taskuary's own tables (the Taskuary cards) and anything a report can read — Intacct queries, databases, REST or MCP tools, cloud systems, files, agent skills. Every card has a Test that shows its data; the prompt can place a card where it talks about it (Insert source, under the prompt). This check reads only the sources below.
                 </Typography>
                 {/* "I don't know what fields off hand Intacct has set up" - so this step cannot be a
-                    form. Describe what the Assistant should keep an eye on and the composer adds
+                    form. Describe what the Advisor should keep an eye on and the composer adds
                     the cards for it: only systems that are actually connected, field names read off
                     the real schema, and a question back rather than a guessed filter. */}
-                <SourceComposer hint="Describe what the Assistant should keep an eye on"
+                <SourceComposer hint="Describe what the Advisor should keep an eye on"
                   placeholder={"AP bills from Intacct due in the next 30 days, and the cash balance by entity."
                     + NL + "Anything unpaid over 10k, this week's failed sign-ins, and yesterday's census by site."}
                   onSources={(list, prompt) => {
@@ -1284,7 +1284,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.75 }}>
                 <AutoAwesomeIcon sx={{ fontSize: 15, color: "#55697a" }} />
                 <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 700 }}>
-                  {isAssistant ? "WHAT SHOULD THE ASSISTANT SURFACE?" : `ONE PROMPT OVER ALL ${srcs.length > 1 ? `${srcs.length} SOURCES` : "THE ROWS"}`}
+                  {isAssistant ? "WHAT SHOULD THE ADVISOR SURFACE?" : `ONE PROMPT OVER ALL ${srcs.length > 1 ? `${srcs.length} SOURCES` : "THE ROWS"}`}
                 </Typography>
               </Box>
               <TextField fullWidth multiline minRows={3} value={cfg.ai_prompt || ""} sx={{ bgcolor: "#fff" }} inputRef={promptRef}

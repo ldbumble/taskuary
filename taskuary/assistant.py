@@ -852,7 +852,7 @@ def system_checks(store, source_ids=None, inline=None) -> str:
     ids = saved if source_ids is None else _ids(source_ids)
     subs = own if inline is None else _inline(inline)
     if not ids and not subs:
-        return '(none selected - add a data source, or choose saved data views, on Reports -> Assistant)'
+        return '(none selected - add a data source, or choose saved data views, on Reports -> Advisor)'
     from . import reports
     found = {s['SourceId']: s for s in store.list_sources(active_only=False) if s.get('Channel') == 'report'}
     jobs = []                                     # (title, cfg to render, or a note to print instead)
@@ -862,7 +862,7 @@ def system_checks(store, source_ids=None, inline=None) -> str:
         try: cfg_ = json.loads(src.get('ConfigJson') or '{}')
         except ValueError: cfg_ = {}
         title = str(cfg_.get('title') or src.get('Address') or f'report {sid}')
-        if cfg_.get('type') == 'assistant': jobs.append((title, None, 'Skipped: an Assistant cannot watch itself.'))
+        if cfg_.get('type') == 'assistant': jobs.append((title, None, 'Skipped: an Advisor cannot watch itself.'))
         else: jobs.append((title, cfg_, None))
     for i, sub in enumerate(subs, 1):
         jobs.append((str(sub.get('label') or sub.get('title') or '').strip() or f"{sub.get('type')} #{i}", sub, None))
@@ -1166,10 +1166,10 @@ def _idea_message(store, i: dict, a: dict, report_title=None) -> tuple:
     active = bool(task and task.get('Status') in ('open', 'in_progress', 'waiting'))
     working = bool(active and any(r.get('Status') == 'running' for r in store.list_runs(tid)))
     stamp = i.get('LastSaid') or i.get('FirstSeen') or datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    who = report_title or 'Assistant'
+    who = report_title or 'Advisor'
     # one arrival per idea: the stamp in the id made every re-say a fresh message, and a fresh task once the first closed
     msg = {'external_id': f"idea:{i['IdeaId']}", 'channel': CHANNEL, 'from_name': who, 'source_name': who,
-           'conversation_id': str(i.get('Key') or f"idea:{i['IdeaId']}"), 'subject': f"Assistant idea: {_cut(i.get('Text'), 100)}",
+           'conversation_id': str(i.get('Key') or f"idea:{i['IdeaId']}"), 'subject': f"Advisor idea: {_cut(i.get('Text'), 100)}",
            'sent_at': stamp, 'body': str(i.get('Text') or '') + (f"\n\nwhy: {a.get('why')}" if a.get('why') else ''),
            'idea_context': {'report': report_title, 'kind': i.get('Kind'),
                             'linked_task': f"{task_ref(tid)} [{task.get('Status')}] {_short(task.get('Title'), 80)}" if task else None,
@@ -1448,7 +1448,7 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     if systems_only and not (_ids(watch_source_ids) or _inline(watch_sources)):
         why = ('this report reads nothing: no Taskuary block is ticked and no data source is chosen '
                '- tick a block, or choose a source, on the report')
-        logger.warning(f"assistant: {report_title or 'Assistant'} ran and read nothing - {why}")
+        logger.warning(f"assistant: {report_title or 'Advisor'} ran and read nothing - {why}")
         return {'ran': True, 'said': 0, 'reads_nothing': True, 'summary': why, 'inputs': '',
                 'reviewed': {'notes': '', 'scope': 'nothing', 'systems': 0, 'why': why}}
     state = {i['Key']: i for i in store.list_ideas()}
@@ -1522,7 +1522,7 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
         # chose "every run", in which case the check still says it ran, in one line, with what it
         # read behind it. A setting that promises every run and then shows nothing is a lie.
         if not always_post: return {'ran': True, 'said': 0, 'reviewed': rv, 'inputs': read}
-        who = (report_title or 'Assistant') if own_post else 'Assistant'
+        who = (report_title or 'Advisor') if own_post else 'Advisor'
         me = f'assistant:{report_id}' if own_post else 'assistant'
         mid = store.add_message({'TaskId': None, 'ExternalId': f'{me}:{stamp}', 'ConversationId': me, 'Channel': CHANNEL,
                                  'SourceName': who, 'Subject': f'{who} - nothing to report', 'FromName': who,
@@ -1551,7 +1551,7 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     head = rows[0]['Text'] if len(rows[0]['Text']) <= 90 else rows[0]['Text'][:90].rsplit(' ', 1)[0] + '…'
     subj = head + (f' (+{len(rows) - 1} more)' if len(rows) > 1 else '')
     identity = f'assistant:{report_id}' if own_post else 'assistant'
-    name = (report_title or 'Assistant') if own_post else 'Assistant'
+    name = (report_title or 'Advisor') if own_post else 'Advisor'
     mid = store.add_message({'TaskId': None, 'ExternalId': f'{identity}:{stamp}', 'ConversationId': identity, 'Channel': CHANNEL,
                              'SourceName': name, 'Subject': subj, 'FromName': name, 'SentAt': stamp,
                              'BodyText': body, 'Status': 'feed'})
@@ -1623,7 +1623,7 @@ def act(store, idea_id: int, verb: str, actor: str = 'owner', llm=None, days: in
             # This is NEW work noticed after an earlier task was completed. A message can point
             # at only one task, so do not steal it from history or rename/reopen the completed
             # task. Carry the evidence into a fresh assistant-owned task instead.
-            title = str(a.get('title') or i.get('Text') or 'Assistant follow-up').strip()[:200]
+            title = str(a.get('title') or i.get('Text') or 'Advisor follow-up').strip()[:200]
             source_text = str(message.get('BodyText') or '').strip()
             summary = str(i.get('Text') or '').strip()
             if source_text and source_text not in summary: summary += f'\n\nSource message: {source_text}'

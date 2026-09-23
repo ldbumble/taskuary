@@ -391,7 +391,7 @@ def compact_inventory(snapshot, query, *, include_excluded=False, degraded_ok=Fa
             target = {'kind': kind, 'id': entity[id_field]}
             title = entity.get('Title') or entity.get('Subject') or entity.get('Text') or entity.get('Reason') or kind.title()
             # an idea is the assistant's own word; idea rows carry no author field, and the fallback read "unknown"
-            actor, status = (entity.get('CreatedBy') or ('Assistant' if kind == 'idea' else '')), entity.get('Status') or ''
+            actor, status = (entity.get('CreatedBy') or ('Advisor' if kind == 'idea' else '')), entity.get('Status') or ''
             preview = str(entity.get('Summary') or entity.get('Text') or entity.get('Reason') or '')[:400]
             category = 'todo' if kind == 'task' else kind
             open_task = kind == 'task' and status in ('open', 'in_progress', 'waiting')

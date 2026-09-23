@@ -14,7 +14,7 @@ const RAW_HEADINGS = [
   ["FINISHED THIS WINDOW", "✅ Finished"],
   ["VERDICTS GIVEN THIS WINDOW", "📌 Decisions"],
   ["WHAT THE ASSIST" + "ANT ALREADY RAISED", "💡 New ideas"],
-  ["THE ASSIST" + "ANT'S NOTES TO ITSELF", "🗒️ Assistant context"],
+  ["THE ASSIST" + "ANT'S NOTES TO ITSELF", "🗒️ Advisor context"],
   ["THE WINDOW IN NUMBERS", "📊 At a glance"],
 ];
 

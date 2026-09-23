@@ -95,7 +95,7 @@ build it from a database, a cloud account, a REST endpoint, an RSS feed or an MC
 preview it against the live source before scheduling.
 
 Two reports exist from the start: the **Morning digest** — one brief a day covering what slipped,
-today's meetings, what happened and what is in flight — and the **Assistant**, which posts only
+today's meetings, what happened and what is in flight — and the **Advisor**, which posts only
 when it notices something between briefs. Both speak in the voice you set in `COUNSEL.md`. Delete
 either to switch it off.
 
@@ -165,5 +165,5 @@ pip install --upgrade taskuary
 
 - [How it works](how-it-works) — one message from arrival to approval.
 - [Connections](connections) — what Taskuary may read, and what it may do with it.
-- [Reports and the Assistant](reports) — before you build your first report.
+- [Reports and the Advisor](reports) — before you build your first report.
 - The live API reference is at `/api/docs` while Taskuary is running.

@@ -6,7 +6,7 @@ CANDIDATES:
 [cold:TQ-0001] TQ-0001 "Reconcile the Q3 ledger" [open, kind coding] - nothing has happened on it for 9 days
 
 CONFIGURED SYSTEM CHECKS (pulled live for this check; failures are also worth noticing):
-(none selected - add a data source, or choose saved data views, on Reports -> Assistant)
+(none selected - add a data source, or choose saved data views, on Reports -> Advisor)
 
 WHAT PEOPLE SAID (the last two days, by thread, newest first; the last lines of each, oldest first. Each head quotes what triage decided when the latest line arrived: when you disagree, say so in your line - 'triage filed this as fyi, but...' - never raise a thread as if nothing had judged it):
 - Dana Reed [email] re "Q3 ledger" - 1 new, last word THEIRS <day> <mon> <time> (latest mid 1)
@@ -42,7 +42,7 @@ CANDIDATES:
 (none)
 
 CONFIGURED SYSTEM CHECKS (pulled live for this check; failures are also worth noticing):
-(none selected - add a data source, or choose saved data views, on Reports -> Assistant)
+(none selected - add a data source, or choose saved data views, on Reports -> Advisor)
 
 WHAT PEOPLE SAID (the last two days, by thread, newest first; the last lines of each, oldest first. Each head quotes what triage decided when the latest line arrived: when you disagree, say so in your line - 'triage filed this as fyi, but...' - never raise a thread as if nothing had judged it):
 - Dana Reed [email] re "Q3 ledger" - 1 new, last word THEIRS <day> <mon> <time> (latest mid 1)

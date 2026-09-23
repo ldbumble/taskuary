@@ -27,13 +27,17 @@ SOURCE_COLS = ('Channel', 'Address', 'Owner', 'ConnectorId', 'Active', 'ConfigJs
 # asserts this table describes the rows that actually appeared. The ownership heal reads it, and
 # RETIRED_SEEDS beside it; nothing else may write `Owner='template'`.
 SEEDED_REPORTS = (('automate_report_seeded', 'Automation ideas', 'automate'),
-                  ('assistant_report_seeded', 'Assistant', 'assistant'),
+                  ('assistant_report_seeded', 'Advisor', 'assistant'),
                   ('evening_inbox_report_seeded', 'End of day checkup', 'evening_inbox'))
 # ...and the ones a fresh install no longer gets, which older installs still carry and the heal still
 # owes. The Morning digest: the walk now opens with who wants what (the owner, 2026-09-23: "remove the
 # morning digest as report by default if the walk through does that"). An install that has one keeps
 # it until its owner deletes it; the report type itself is still there to make one by hand.
-RETIRED_SEEDS = (('digest_report_seeded', 'Morning digest', 'digest'),)
+RETIRED_SEEDS = (('digest_report_seeded', 'Morning digest', 'digest'),
+                 # the Advisor was seeded as 'Assistant' until 2026-09-23 - the name the Assistant TAB
+                 # also answers to (the owner: "rename assistant that reviews everything in the reports
+                 # tab and gives you ideas ... since assistant is the one that walks you through")
+                 ('assistant_report_seeded', 'Assistant', 'assistant'))
 MEMORY_COLS = ('Scope', 'ScopeKey', 'Note', 'Source', 'Active', 'CreatedBy')
 PROJECT_COLS = ('Name', 'Description', 'Active', 'CreatedBy', 'UpdatedBy')
 ROUTING_FACT_COLS = ('Field', 'Signal', 'SignalKey', 'Value', 'Confidence', 'EvidenceCount',
@@ -1083,6 +1087,19 @@ class SQLiteStore:
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) "
                                 "VALUES ('review_task_backfilled', '1', 'migration')")
             self._heal_seeded_report_owner()
+            # THE ADVISOR, by its new name. The seeded review-and-ideas report was called 'Assistant',
+            # which is also the tab that walks you through the day (2026-09-23). Renamed once, and only
+            # while it still wears the seeded name - a title the owner chose is theirs. Found the way
+            # assistant.seeded_source finds it (Owner='template', type 'assistant'); every internal key
+            # (the `assistant` thread, its notes, its idea keys) stays exactly as it is.
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='assistant_report_renamed_advisor'").fetchone():
+                for r in self.cx.execute("SELECT SourceId, Address, ConfigJson FROM source WHERE Channel='report' AND Owner='template'").fetchall():
+                    try: c = json.loads(r['ConfigJson'] or '{}')
+                    except ValueError: continue
+                    if c.get('type') != 'assistant' or r['Address'] != 'Assistant' or c.get('title', 'Assistant') != 'Assistant': continue
+                    c['title'] = 'Advisor'
+                    self.cx.execute("UPDATE source SET Address='Advisor', ConfigJson=? WHERE SourceId=?", (json.dumps(c), r['SourceId']))
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('assistant_report_renamed_advisor', '1', 'migration')")
             # The Morning digest is no longer seeded (RETIRED_SEEDS): the walk opens the day with who
             # wants what. The weekly 'what should you automate next' brief (toil.py) -
             # same deal: a real report, prompt on the Reports tab, deleting it turns it off.
@@ -1104,8 +1121,8 @@ class SQLiteStore:
             if not self.cx.execute("SELECT 1 FROM setting WHERE Name='assistant_report_seeded'").fetchone():
                 from .assistant import PROMPT as ASSISTANT_PROMPT
                 self.cx.execute('INSERT INTO source (Channel, Address, Owner, Active, ConfigJson) VALUES (?,?,?,?,?)',
-                                ('report', 'Assistant', 'template', 1,
-                                 json.dumps({'type': 'assistant', 'title': 'Assistant', 'every_minutes': 30, 'on_startup': True,
+                                ('report', 'Advisor', 'template', 1,
+                                 json.dumps({'type': 'assistant', 'title': 'Advisor', 'every_minutes': 30, 'on_startup': True,
                                              'ai_prompt': ASSISTANT_PROMPT})))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('assistant_report_seeded', '1', 'template')")
             # The close of the day deserves a different lens from the Morning digest: eight

@@ -12,7 +12,7 @@ fresh build produces, so the site and the source cannot drift apart.
 | [How it works](https://taskuary.com/docs/how-it-works) | The Timeline, the five roads, what triage decides, the documents that govern it |
 | [Connections](https://taskuary.com/docs/connections) | The accounts Taskuary may read, and the role that says what it may do |
 | [Tasks and agents](https://taskuary.com/docs/tasks-and-agents) | The task, the agent work and the reply as three separate lives |
-| [Reports and the Assistant](https://taskuary.com/docs/reports) | The report pipeline, and the report whose job is to judge |
+| [Reports and the Advisor](https://taskuary.com/docs/reports) | The report pipeline, and the report whose job is to judge |
 | [On your phone](https://taskuary.com/docs/phone) | The same assistant over WhatsApp or Telegram |
 | [Settings reference](https://taskuary.com/docs/settings) | Every setting — generated from `taskuary/settings_schema.json` |
 | [When something is wrong](https://taskuary.com/docs/troubleshooting) | What to check, in the order worth checking it |

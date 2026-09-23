@@ -189,7 +189,7 @@ class PostTests(unittest.TestCase):
         out = assistant.run(s, llm=llm, force=True)
         self.assertEqual(out['said'], 2)
         row = s.get_message(out['message_id'])
-        self.assertEqual((row['Channel'], row['FromName'], row['Status']), ('assistant', 'Assistant', 'feed'))
+        self.assertEqual((row['Channel'], row['FromName'], row['Status']), ('assistant', 'Advisor', 'feed'))
         ideas = json.loads(row['Brief'])['ideas']
         self.assertEqual([i['kind'] for i in ideas], ['followup', 'idea'])
         self.assertEqual(ideas[0]['action']['type'], 'followup')            # the candidate keeps its buttons
@@ -239,11 +239,11 @@ class PostTests(unittest.TestCase):
         self.assertIn('No answer from Dana', s.get_message(out['message_id'])['BodyText'])
 
     def test_the_reports_tab_is_the_switch_the_clock_and_the_instruction(self):
-        """The 'Assistant' report ships seeded like the Morning digest: hourly, on startup, its prompt the
+        """The 'Advisor' report ships seeded like the Morning digest: hourly, on startup, its prompt the
         editable instruction. Deleting it (or switching it off) turns the post off - except for 'ask now'."""
         s = self._seed()
         src = assistant.source(s)
-        self.assertEqual((src['Address'], src['cfg']['type'], src['cfg']['every_minutes'], src['Active']), ('Assistant', 'assistant', 30, 1))
+        self.assertEqual((src['Address'], src['cfg']['type'], src['cfg']['every_minutes'], src['Active']), ('Advisor', 'assistant', 30, 1))
         self.assertIn('What I promised', src['cfg']['ai_prompt'])
         seen = []
         def llm(system, user, **k): seen.append(system); return '{"say": []}'

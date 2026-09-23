@@ -1,4 +1,4 @@
-Reports are how Taskuary reads the systems you work in. The Assistant is a report with a different
+Reports are how Taskuary reads the systems you work in. The Advisor is a report with a different
 job: instead of filing what it read, it decides whether any of it is worth your attention. They
 share one builder, which is why they share one page here.
 
@@ -52,7 +52,7 @@ describe what you want instead, in three places:
 |---|---|
 | **Describe the report you want**, top of the Reports tab | A whole report — type, query, prompt and schedule — dropped into the builder |
 | **let AI fill this in**, on any source card | That one card, in the type it is already set to |
-| **Describe what the Assistant should keep an eye on** | Every source the ask needs, plus the instruction to judge them by |
+| **Describe what the Advisor should keep an eye on** | Every source the ask needs, plus the instruction to judge them by |
 
 Four things keep this from being a wish machine:
 
@@ -120,9 +120,9 @@ A daily slot is a cap on the whole report, not on each way of triggering it. If 
 has already produced today's run, opening the app at 09:00 does not produce a second one.
 :::
 
-## The Assistant
+## The Advisor
 
-The Assistant is a report of type `assistant`. It runs on its own schedule and when the app
+The Advisor is a report of type `assistant`. It runs on its own schedule and when the app
 opens, and it posts on the Timeline **only** when it finds something worth saying: an unanswered
 reply, context for an upcoming meeting, a task gone quiet, a pattern across incoming work, or
 something in the systems it watches that does not look right. Each suggestion names its evidence
@@ -131,11 +131,11 @@ and offers **Make it a task**, **Done**, **Snooze a day** and **Not this**.
 Its pipeline is itself, so its Pipeline step looks different from every other report:
 
 - **Systems and data views to check** — source cards owned by this check alone. Anything a report
-  can read belongs here, and no saved report needs to stand behind it: the Assistant pulls each
+  can read belongs here, and no saved report needs to stand behind it: the Advisor pulls each
   one silently and files no intermediate report.
 - **…and pull these saved data views too** — existing reports it should also read. A report can
   stay switched off as a standalone schedule and still be pulled here.
-- **What should the Assistant surface?** — one instruction over all of the above plus its own
+- **What should the Advisor surface?** — one instruction over all of the above plus its own
   view of your work.
 
 Every post records what it reviewed and leaves a note for its next check, so it does not research
@@ -145,11 +145,11 @@ of nudges you do not want.
 Four things shape it:
 
 - `COUNSEL.md` in Settings → Docs — how it speaks, and how readily it takes a position.
-- The **Assistant** report — what it watches, its schedule, its model.
-- **Settings → Assistant** — thresholds such as how long a reply or task must be quiet.
+- The **Advisor** report — what it watches, its schedule, its model.
+- **Settings → Advisor** — thresholds such as how long a reply or task must be quiet.
 - **Settings → Learning** — whether your verdicts feed back into `LEARNED.md`.
 
-Delete the Assistant report to switch it off. Its **Preview** shows exactly what a run would hand
+Delete the Advisor report to switch it off. Its **Preview** shows exactly what a run would hand
 the model, which is the fastest way to find out whether a watched source returns what you think
 it does.
 
@@ -158,7 +158,7 @@ Timeline daily. Deleting that report turns the brief off.
 
 ### Ideas it raises
 
-Beyond what it watches, the Assistant looks at the shape of your own work and occasionally raises
+Beyond what it watches, the Advisor looks at the shape of your own work and occasionally raises
 an **idea**: a system your mail keeps naming that nothing here reads, for instance. It raises at
 most one per run and never one you have already answered. If the connector is on the roadmap
 rather than built, saying yes is a vote for building it.

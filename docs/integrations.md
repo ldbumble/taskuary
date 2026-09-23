@@ -11,7 +11,7 @@ existing links keep working.
 - [How it works](https://taskuary.com/docs/how-it-works) — the Timeline, the five roads, what triage decides
 - [Connections](https://taskuary.com/docs/connections) — what Taskuary may read, and what it may do with it
 - [Tasks and agents](https://taskuary.com/docs/tasks-and-agents) — the three lives of a task
-- [Reports and the Assistant](https://taskuary.com/docs/reports) — the pipeline, and the report that judges
+- [Reports and the Advisor](https://taskuary.com/docs/reports) — the pipeline, and the report that judges
 - [On your phone](https://taskuary.com/docs/phone) — WhatsApp and Telegram
 - [Settings reference](https://taskuary.com/docs/settings) — every knob, generated from the schema
 - [When something is wrong](https://taskuary.com/docs/troubleshooting) — what to check, in order

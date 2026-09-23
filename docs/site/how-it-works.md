@@ -9,7 +9,7 @@ the order things happened. An email from a vendor, a pull request, a Teams messa
 morning's spend report and a failed nightly export are one list.
 
 Each row shows where it came from above its original time, so mail, chat, GitHub, a SQL report
-and an Assistant post are told apart at a glance. Calendar entries show the meeting time. Open a
+and an Advisor post are told apart at a glance. Calendar entries show the meeting time. Open a
 row for the full message, its attachments, what triage decided and why, any drafted reply, and
 the actions available on it.
 
@@ -149,7 +149,7 @@ result into a marked block, leaving anything you wrote outside that block alone.
 - **Wall** — every live terminal side by side, each with its own prompt box.
 - **Tasks** — the durable task, its agent sessions and the reply, as three separate records.
 - **Review** — the outbound queue.
-- **Reports** — connected data on a schedule; see [Reports and the Assistant](reports).
+- **Reports** — connected data on a schedule; see [Reports and the Advisor](reports).
 - **Hub** — what agents have learned, by topic, so knowledge survives past one job.
 - **Docs** — the documents above.
 - **Settings** — everything else; see the [Settings reference](settings).

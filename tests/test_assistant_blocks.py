@@ -504,7 +504,7 @@ class OwnerIsProvenanceTests(unittest.TestCase):
         cfg = json.loads(s.get_source(sid)['ConfigJson'])
         before = (assistant.own_identity(s, sid), assistant.notes_key(s, sid))
         self.assertEqual(before, (False, 'assistant_notes'))
-        server.save_source(server.SourceBody(SourceId=sid, Channel='report', Address='Assistant', Active=True,
+        server.save_source(server.SourceBody(SourceId=sid, Channel='report', Address='Advisor', Active=True,
                                              ConfigJson=json.dumps({**cfg, 'every_minutes': 45})))   # the Save button
         server.save_source(server.SourceBody(SourceId=sid, Active=False))                            # the on/off Switch
         server.save_source(server.SourceBody(SourceId=sid, Active=True))
@@ -522,7 +522,7 @@ class OwnerIsProvenanceTests(unittest.TestCase):
         reports.run_report_source(s, s.get_source(sid), lambda *a, **k: json.dumps(
             {'say': [{'key': 'idea:ledger', 'text': 'The ledger looks stuck.', 'why': 'nothing moved'}]}))
         self.assertIn('idea:ledger', {i['Key'] for i in s.list_ideas()})                 # not report:<sid>:idea:ledger
-        posts = [m for m in s.recent_messages('2000-01-01', limit=80) if str(m.get('FromName') or '') == 'Assistant']
+        posts = [m for m in s.recent_messages('2000-01-01', limit=80) if str(m.get('FromName') or '') == 'Advisor']
         self.assertTrue(posts and posts[0]['ConversationId'] == 'assistant', 'the Assistant left its own Timeline thread')
 
     def test_a_discovered_chats_name_survives_the_toggle_too(self):
@@ -551,7 +551,7 @@ def _reopened(s):
 class OwnershipHealTests(unittest.TestCase):
     """The heal for installs already damaged by the save-takes-over bug. The owner's own box:
 
-        137 report 'Assistant'                        Owner='owner'     <- the seeded one, wounded
+        137 report 'Advisor'                          Owner='owner'     <- the seeded one, wounded
         140 report 'Assistant for Backend Monitoring' Owner='owner'     <- theirs, must not move
         141 report 'End of day checkup'               Owner='template'  <- intact, must not be rewritten
         ideas: report:137:* = 0, report:140:* = 11, bare = 334          <- and NONE of them may move
@@ -563,7 +563,7 @@ class OwnershipHealTests(unittest.TestCase):
         s = F.store()
         from tests.digest_fixture import add_digest
         add_digest(s)                                        # an older install: it was seeded then, and the heal still owes it
-        for addr in ('Morning digest', 'Automation ideas', 'Assistant'):
+        for addr in ('Morning digest', 'Automation ideas', 'Advisor'):
             s._exec("UPDATE source SET Owner='owner' WHERE Channel='report' AND Address=?", (addr,))
         mine = s.save_source({'Channel': 'report', 'Address': 'Assistant for Backend Monitoring', 'Active': 1,
                               'Owner': 'owner', 'ConfigJson': json.dumps(
@@ -580,7 +580,7 @@ class OwnershipHealTests(unittest.TestCase):
         self.assertEqual(len([k for k in before if k.startswith(f'report:{mine}:')]), 11)
         s2 = _reopened(s)
         rows = {r['Address']: r for r in s2.list_sources(active_only=False) if r['Channel'] == 'report'}
-        for addr in ('Morning digest', 'Automation ideas', 'Assistant', 'End of day checkup'):
+        for addr in ('Morning digest', 'Automation ideas', 'Advisor', 'End of day checkup'):
             with self.subTest(row=addr): self.assertEqual(rows[addr]['Owner'], 'template', f'{addr} was left wounded')
         self.assertEqual(rows['Assistant for Backend Monitoring']['Owner'], 'owner', "the owner's own report was taken over")
         # ...and not one idea key moved: report:<mine>:* carry state (declined, snoozed, said)
@@ -595,7 +595,7 @@ class OwnershipHealTests(unittest.TestCase):
         s, mine = self._damaged()
         s2 = _reopened(s)
         seeded = assistant.seeded_source(s2)
-        self.assertEqual(seeded['Address'], 'Assistant')
+        self.assertEqual(seeded['Address'], 'Advisor')
         self.assertFalse(assistant.own_identity(s2, seeded['SourceId']))
         self.assertTrue(assistant.own_identity(s2, mine))
         self.assertFalse(assistant.own_identity(s2, None))
@@ -609,7 +609,7 @@ class OwnershipHealTests(unittest.TestCase):
         self.assertEqual(s2.get_settings().get('seeded_report_owner_healed'), '1')
         s3 = _reopened(s2)                                   # the sentinel is set: a second open does nothing
         rows = {r['Address']: r['Owner'] for r in s3.list_sources(active_only=False) if r['Channel'] == 'report'}
-        self.assertEqual(rows['Assistant'], 'template')
+        self.assertEqual(rows['Advisor'], 'template')
         self.assertEqual(rows['Assistant for Backend Monitoring'], 'owner')
 
     def test_a_deleted_or_renamed_seeded_row_is_simply_not_healed(self):
@@ -618,7 +618,7 @@ class OwnershipHealTests(unittest.TestCase):
         can identify, so it touches nothing and says nothing - it must not guess and adopt the
         owner's report instead."""
         s, mine = self._damaged()
-        s._exec("DELETE FROM source WHERE Channel='report' AND Address='Assistant'")
+        s._exec("DELETE FROM source WHERE Channel='report' AND Address='Advisor'")
         s2 = _reopened(s)
         self.assertIsNone(assistant.seeded_source(s2))
         self.assertEqual({r['Address']: r['Owner'] for r in s2.list_sources(active_only=False)
@@ -633,8 +633,11 @@ class OwnershipHealTests(unittest.TestCase):
                   for r in s.list_sources(active_only=False) if r['Channel'] == 'report'}
         settings = s.get_settings()
         self.assertEqual(len(SEEDED_REPORTS), 3)
+        live = {s_ for s_, _a, _k in SEEDED_REPORTS}
         for sentinel, address, kind in RETIRED_SEEDS:                    # retired: no longer written, still healed
-            self.assertIsNone(settings.get(sentinel)); self.assertNotIn(address, seeded)
+            self.assertNotIn(address, seeded)
+            # a retired NAME of a live seed (the Advisor was 'Assistant') shares its sentinel
+            if sentinel not in live: self.assertIsNone(settings.get(sentinel))
         for sentinel, address, kind in SEEDED_REPORTS:
             with self.subTest(row=address):
                 self.assertEqual(settings.get(sentinel), '1', f'{sentinel} is not a sentinel the seeder sets')

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Reports and the Assistant — Taskuary documentation</title>
+<title>Reports and the Advisor — Taskuary documentation</title>
 <meta name="description" content="Reading the systems you work in on a schedule, and the report whose job is to judge.">
 <link rel="icon" href="/favicon.ico">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -55,9 +55,9 @@
       <div class="secs" hidden><a class="sec" href="./tasks-and-agents#a-tasks-three-lives">A task's three lives</a><a class="sec" href="./tasks-and-agents#sending-work-to-a-coding-agent">Sending work to a coding agent</a><a class="sec" href="./tasks-and-agents#the-general-agent">The general agent</a><a class="sec" href="./tasks-and-agents#sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="./tasks-and-agents#several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="./tasks-and-agents#checklists-and-closing">Checklists and closing</a><a class="sec" href="./tasks-and-agents#replies">Replies</a><a class="sec" href="./tasks-and-agents#profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="./tasks-and-agents#how-work-is-ordered">How work is ordered</a></div>
     </div>
 <div class="entry on">
-      <a class="page" href="./reports" aria-current="page">Reports and the Assistant</a>
-      <button class="chev" type="button" aria-expanded="true" aria-label="Hide Reports and the Assistant's sections"></button>
-      <div class="secs"><a class="sec" href="#a-report-is-a-pipeline" data-sec="a-report-is-a-pipeline">A report is a pipeline</a><a class="sec" href="#sources" data-sec="sources">Sources</a><a class="sec" href="#letting-the-ai-write-the-source-cards" data-sec="letting-the-ai-write-the-source-cards">Letting the AI write the source cards</a><a class="sec" href="#the-ai-pass" data-sec="the-ai-pass">The AI pass</a><a class="sec" href="#where-a-run-goes" data-sec="where-a-run-goes">Where a run goes</a><a class="sec" href="#schedules" data-sec="schedules">Schedules</a><a class="sec" href="#the-assistant" data-sec="the-assistant">The Assistant</a><a class="sec" href="#stateful-workflows" data-sec="stateful-workflows">Stateful workflows</a><a class="sec" href="#sage-intacct-specifically" data-sec="sage-intacct-specifically">Sage Intacct, specifically</a><a class="sec" href="#api" data-sec="api">API</a></div>
+      <a class="page" href="./reports" aria-current="page">Reports and the Advisor</a>
+      <button class="chev" type="button" aria-expanded="true" aria-label="Hide Reports and the Advisor's sections"></button>
+      <div class="secs"><a class="sec" href="#a-report-is-a-pipeline" data-sec="a-report-is-a-pipeline">A report is a pipeline</a><a class="sec" href="#sources" data-sec="sources">Sources</a><a class="sec" href="#letting-the-ai-write-the-source-cards" data-sec="letting-the-ai-write-the-source-cards">Letting the AI write the source cards</a><a class="sec" href="#the-ai-pass" data-sec="the-ai-pass">The AI pass</a><a class="sec" href="#where-a-run-goes" data-sec="where-a-run-goes">Where a run goes</a><a class="sec" href="#schedules" data-sec="schedules">Schedules</a><a class="sec" href="#the-advisor" data-sec="the-advisor">The Advisor</a><a class="sec" href="#stateful-workflows" data-sec="stateful-workflows">Stateful workflows</a><a class="sec" href="#sage-intacct-specifically" data-sec="sage-intacct-specifically">Sage Intacct, specifically</a><a class="sec" href="#api" data-sec="api">API</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./phone">On your phone</a>
@@ -67,7 +67,7 @@
 <div class="entry">
       <a class="page" href="./settings">Settings reference</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Settings reference's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./settings#how-to-read-this">How to read this</a><a class="sec" href="./settings#triage-agents">Triage &amp; agents</a><a class="sec" href="./settings#triage-routing">Triage &amp; routing</a><a class="sec" href="./settings#replies">Replies</a><a class="sec" href="./settings#assistant">Assistant</a><a class="sec" href="./settings#assistant-on-your-phone">Assistant on your phone</a><a class="sec" href="./settings#coder-agent">Coder agent</a><a class="sec" href="./settings#notifications">Notifications</a><a class="sec" href="./settings#attachments-images">Attachments &amp; images</a><a class="sec" href="./settings#sync-startup">Sync &amp; startup</a><a class="sec" href="./settings#display">Display</a><a class="sec" href="./settings#routing-policies">Routing policies</a><a class="sec" href="./settings#verdicts-notes">Verdicts &amp; notes</a><a class="sec" href="./settings#audit-integrity">Audit integrity</a></div>
+      <div class="secs" hidden><a class="sec" href="./settings#how-to-read-this">How to read this</a><a class="sec" href="./settings#triage-agents">Triage &amp; agents</a><a class="sec" href="./settings#triage-routing">Triage &amp; routing</a><a class="sec" href="./settings#replies">Replies</a><a class="sec" href="./settings#assistant">Assistant</a><a class="sec" href="./settings#assistant-on-your-phone">Assistant on your phone</a><a class="sec" href="./settings#advisor">Advisor</a><a class="sec" href="./settings#coder-agent">Coder agent</a><a class="sec" href="./settings#notifications">Notifications</a><a class="sec" href="./settings#attachments-images">Attachments &amp; images</a><a class="sec" href="./settings#sync-startup">Sync &amp; startup</a><a class="sec" href="./settings#display">Display</a><a class="sec" href="./settings#routing-policies">Routing policies</a><a class="sec" href="./settings#verdicts-notes">Verdicts &amp; notes</a><a class="sec" href="./settings#audit-integrity">Audit integrity</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./troubleshooting">When something is wrong</a>
@@ -78,9 +78,9 @@
     <p class="note">Everything here is stored on your own machine, in the same SQLite file as your tasks.</p>
   </aside>
   <main id="doc">
-    <p class="eyebrow">Reports and the Assistant</p>
+    <p class="eyebrow">Reports and the Advisor</p>
     <article>
-<p>Reports are how Taskuary reads the systems you work in. The Assistant is a report with a different
+<p>Reports are how Taskuary reads the systems you work in. The Advisor is a report with a different
 job: instead of filing what it read, it decides whether any of it is worth your attention. They
 share one builder, which is why they share one page here.</p>
 <h2 id="a-report-is-a-pipeline">A report is a pipeline<a class="anchor" href="#a-report-is-a-pipeline" aria-label="Link to this section">#</a></h2>
@@ -151,7 +151,7 @@ describe what you want instead, in three places:</p>
 <td>That one card, in the type it is already set to</td>
 </tr>
 <tr>
-<td><strong>Describe what the Assistant should keep an eye on</strong></td>
+<td><strong>Describe what the Advisor should keep an eye on</strong></td>
 <td>Every source the ask needs, plus the instruction to judge them by</td>
 </tr>
 </tbody></table>
@@ -210,8 +210,8 @@ once on reopen.</p>
 report immediately.</p>
 <div class="callout note"><p class="eyebrow">Once a day means once a day</p><p>A daily slot is a cap on the whole report, not on each way of triggering it. If the 08:00 slot
 has already produced today&#39;s run, opening the app at 09:00 does not produce a second one.</p>
-</div><h2 id="the-assistant">The Assistant<a class="anchor" href="#the-assistant" aria-label="Link to this section">#</a></h2>
-<p>The Assistant is a report of type <code>assistant</code>. It runs on its own schedule and when the app
+</div><h2 id="the-advisor">The Advisor<a class="anchor" href="#the-advisor" aria-label="Link to this section">#</a></h2>
+<p>The Advisor is a report of type <code>assistant</code>. It runs on its own schedule and when the app
 opens, and it posts on the Timeline <strong>only</strong> when it finds something worth saying: an unanswered
 reply, context for an upcoming meeting, a task gone quiet, a pattern across incoming work, or
 something in the systems it watches that does not look right. Each suggestion names its evidence
@@ -219,11 +219,11 @@ and offers <strong>Make it a task</strong>, <strong>Done</strong>, <strong>Snooz
 <p>Its pipeline is itself, so its Pipeline step looks different from every other report:</p>
 <ul>
 <li><strong>Systems and data views to check</strong> — source cards owned by this check alone. Anything a report
-can read belongs here, and no saved report needs to stand behind it: the Assistant pulls each
+can read belongs here, and no saved report needs to stand behind it: the Advisor pulls each
 one silently and files no intermediate report.</li>
 <li><strong>…and pull these saved data views too</strong> — existing reports it should also read. A report can
 stay switched off as a standalone schedule and still be pulled here.</li>
-<li><strong>What should the Assistant surface?</strong> — one instruction over all of the above plus its own
+<li><strong>What should the Advisor surface?</strong> — one instruction over all of the above plus its own
 view of your work.</li>
 </ul>
 <p>Every post records what it reviewed and leaves a note for its next check, so it does not research
@@ -232,17 +232,17 @@ of nudges you do not want.</p>
 <p>Four things shape it:</p>
 <ul>
 <li><code>COUNSEL.md</code> in Settings → Docs — how it speaks, and how readily it takes a position.</li>
-<li>The <strong>Assistant</strong> report — what it watches, its schedule, its model.</li>
-<li><strong>Settings → Assistant</strong> — thresholds such as how long a reply or task must be quiet.</li>
+<li>The <strong>Advisor</strong> report — what it watches, its schedule, its model.</li>
+<li><strong>Settings → Advisor</strong> — thresholds such as how long a reply or task must be quiet.</li>
 <li><strong>Settings → Learning</strong> — whether your verdicts feed back into <code>LEARNED.md</code>.</li>
 </ul>
-<p>Delete the Assistant report to switch it off. Its <strong>Preview</strong> shows exactly what a run would hand
+<p>Delete the Advisor report to switch it off. Its <strong>Preview</strong> shows exactly what a run would hand
 the model, which is the fastest way to find out whether a watched source returns what you think
 it does.</p>
 <p>The morning brief is a separate report of type <code>digest</code>: it writes <code>DIGEST.md</code> and lands on the
 Timeline daily. Deleting that report turns the brief off.</p>
 <h3 id="ideas-it-raises">Ideas it raises<a class="anchor" href="#ideas-it-raises" aria-label="Link to this section">#</a></h3>
-<p>Beyond what it watches, the Assistant looks at the shape of your own work and occasionally raises
+<p>Beyond what it watches, the Advisor looks at the shape of your own work and occasionally raises
 an <strong>idea</strong>: a system your mail keeps naming that nothing here reads, for instance. It raises at
 most one per run and never one you have already answered. If the connector is on the roadmap
 rather than built, saying yes is a vote for building it.</p>

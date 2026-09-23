@@ -113,7 +113,7 @@ const CATEGORIES = [
 ];
 const CHANNEL_LABELS = { email: "Mailboxes", teams: "Teams chats", slack: "Slack channels",
   telegram: "Telegram chats", whatsapp: "WhatsApp chats", imessage: "Apple Messages chats", discord: "Discord channels",
-  github: "Repositories", gitlab: "GitLab instances", report: "Reports", assistant: "Assistant posts", own: "Your own notes",
+  github: "Repositories", gitlab: "GitLab instances", report: "Reports", assistant: "Advisor posts", own: "Your own notes",
   jira: "Jira issues", asana: "Asana tasks", monday: "Monday items", linear: "Linear issues",
   clickup: "ClickUp tasks", todoist: "Todoist tasks",
   trello: "Trello cards", notion: "Notion pages", azdo: "Azure DevOps items",

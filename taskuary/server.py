@@ -6935,7 +6935,7 @@ def assistant_blocks(source_id: int = None, blocks: str = None, taskuary: str = 
         if not src: raise HTTPException(404, f'no source {source_id}')
         try: cfg = json.loads(src.get('ConfigJson') or '{}')
         except ValueError: cfg = {}
-        if cfg.get('type') != 'assistant': raise HTTPException(404, f"source {source_id} is a {cfg.get('type') or 'rest'} report, not an Assistant")
+        if cfg.get('type') != 'assistant': raise HTTPException(404, f"source {source_id} is a {cfg.get('type') or 'rest'} report, not an Advisor")
     if blocks is not None:
         # the unsaved choice wins over the saved one. A malformed string is the owner's editor
         # mid-keystroke, not an attack: price the saved report rather than 400 at them.

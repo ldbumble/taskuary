@@ -30,8 +30,8 @@ def _ago(days):
 class WhatShipsTests(unittest.TestCase):
     def test_the_three_shipped_reports_are_there_and_active(self):
         got = _reports(MemoryStore())
-        self.assertEqual(sorted(got), ['Assistant', 'Automation ideas', 'End of day checkup'])
-        self.assertEqual([got[n]['type'] for n in ('End of day checkup', 'Automation ideas', 'Assistant')],
+        self.assertEqual(sorted(got), ['Advisor', 'Automation ideas', 'End of day checkup'])
+        self.assertEqual([got[n]['type'] for n in ('End of day checkup', 'Automation ideas', 'Advisor')],
                          ['evening_inbox', 'automate', 'assistant'])
 
     def test_a_fresh_install_gets_no_morning_digest(self):
@@ -43,7 +43,7 @@ class WhatShipsTests(unittest.TestCase):
     def test_the_startup_reports_have_something_to_say_the_moment_the_app_opens(self):
         """The evening ritual alone waits for evening; the other shipped reports greet launch."""
         got = _reports(MemoryStore())
-        for name in ('Automation ideas', 'Assistant'):
+        for name in ('Automation ideas', 'Advisor'):
             self.assertTrue(is_due(got[name], None, startup=True), name)
 
     def test_the_evening_checkup_is_eight_hours_at_six_and_waits_for_its_first_slot(self):
@@ -122,3 +122,29 @@ class HealingAnOlderInstallTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TheAdvisorWasCalledAssistantTests(unittest.TestCase):
+    """The review-and-ideas report was seeded as 'Assistant' - the name the walk's tab answers to
+    (2026-09-23). An older install's seeded row is renamed once; a title its owner chose is theirs."""
+
+    def test_a_fresh_install_calls_it_the_advisor(self):
+        self.assertIn('Advisor', _reports(MemoryStore()))
+
+    def test_the_seeded_name_is_renamed_and_an_owners_is_not(self):
+        import os, tempfile
+        from taskuary.store import SQLiteStore
+        for title, want in (('Assistant', 'Advisor'), ('My watcher', 'My watcher')):
+            p = os.path.join(tempfile.mkdtemp(), 't.db')
+            s = SQLiteStore(p)
+            src = next(r for r in s.list_sources(active_only=False) if r['Channel'] == 'report'
+                       and json.loads(r['ConfigJson'] or '{}').get('type') == 'assistant')
+            cfg = json.loads(src['ConfigJson']); cfg['title'] = title
+            s.cx.execute("UPDATE source SET Address=?, ConfigJson=? WHERE SourceId=?", (title, json.dumps(cfg), src['SourceId']))
+            s.cx.execute("DELETE FROM setting WHERE Name='assistant_report_renamed_advisor'")
+            s.cx.commit(); s.cx.close()
+            again = SQLiteStore(p)
+            row = next(r for r in again.list_sources(active_only=False) if r['SourceId'] == src['SourceId'])
+            self.assertEqual((row['Address'], json.loads(row['ConfigJson'])['title']), (want, want), title)
+            self.assertEqual(row['Owner'], 'template')
+            again.cx.close()

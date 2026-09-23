@@ -95,6 +95,28 @@ class EveryCardIsOnThePage(unittest.TestCase):
     LinkedIn did: the Credentials step was there, ticked, and empty.
     """
 
+    def test_every_working_card_is_rendered_by_some_group(self):
+        """THE OTHER DIRECTION, and the one that was missing.
+
+        The test below asks that everything a group LISTS is described. It never asked whether a
+        working connector is listed at all - so eight market cards (Twelve Data, Alpha Vantage,
+        Finnhub, Polygon, Tiingo, FMP, Alpaca, FRED) sat seeded, registered, scoped and testable,
+        with report types the Reports tab OFFERED, and no way to open the card their API key has
+        to live on. A report could be built and could never run. Robinhood and Company Hub had
+        card definitions that no group rendered, which is the same hole by a shorter route
+        (2026-09-22).
+        """
+        src = (ROOT / 'website' / 'src' / 'ConnectorsView.jsx').read_text(encoding='utf-8')
+        groups = src[src.index('const groups = ['):src.index('const hits = q ?')]
+        listed = set(re.findall(r'specialCards\("([a-z0-9_]+)"', groups))
+        for call in re.findall(r'(?:channelCards|dataCards|plannedCards)\(\[(.*?)\]\)', groups, re.S):
+            listed |= set(re.findall(r'"([a-z0-9_]+)"', call))
+        catalogue = json.loads((ROOT / 'taskuary' / 'connectorcatalog.json').read_text(encoding='utf-8'))
+        working = {r['type'] for r in catalogue['cards'] if not r['planned']}
+        missing = sorted(t for t in {c['Type'] for c in MemoryStore().list_connectors()} & working
+                         if t not in listed)
+        self.assertEqual(missing, [], f'seeded and working, but no group renders it: {missing}')
+
     def test_every_type_a_group_lists_is_also_described(self):
         src = (ROOT / 'website' / 'src' / 'ConnectorsView.jsx').read_text(encoding='utf-8')
         described = set(re.findall(r'^  ([a-z0-9_]+): \{', src, re.M))

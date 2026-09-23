@@ -64,6 +64,9 @@ me" from "someone asked the team".
 | **WhatsApp** | A local bridge for inbound messages, approved replies and notifications. Unofficial protocol — use a number you can afford to lose |
 | **Discord** | Watches selected bot channels and posts approved replies back into the originating channel |
 | **Apple Messages** | macOS only. Reads the Mac's local Messages history and replies through Messages.app; needs Full Disk Access and Automation permissions |
+| **Mattermost**, **Rocket.Chat** | A server you host. Each watched channel is its own source, and approved replies post back into it. Rocket.Chat needs two values — the token and the user id issued beside it |
+| **Matrix** | Any homeserver, matrix.org or your own. Replies go back as your account rather than a bot, so the account has to have joined the room |
+| **Google Chat** | Spaces on the Timeline and replies back into them. Reuses the Gmail card's OAuth client, so there is one registration in Google Cloud rather than two |
 
 Chat is different from mail in one way that matters: a chat message often has no clock on it.
 "Can you look at this when you get a chance" is a real ask with no deadline, and Taskuary keeps
@@ -89,9 +92,13 @@ addressed to you, and triage settles most of them without an AI call at all.
 
 The full list is long and grows; these are the ones worth knowing about by shape.
 
-**Databases and files** — SQL Server, any SQLAlchemy URL (PostgreSQL, MySQL, Snowflake, Oracle),
-raw ODBC through pyodbc, SQLite, SharePoint Lists, Google Sheets, a Windows/SMB share, SFTP, REST
-and RSS, and any MCP server tool.
+**Databases and files** — SQL Server, SQLite, SharePoint Lists, Google Sheets, a Windows/SMB
+share, SFTP, REST and RSS, and any MCP server tool. **PostgreSQL**, **MySQL**, **ClickHouse**,
+**Snowflake** and **BigQuery** each have their own card: the same executor with the dialect filled
+in, the default port known and the missing driver named in the error you actually get. The older
+**Any database (connection string)** card is still there for anything else with a SQLAlchemy URL,
+including raw ODBC through pyodbc. All of them are reads — these cards ship no write verb at all,
+and the engine's own user is the ceiling, so point them at a read-only account.
 
 **Cloud and monitoring** — AWS (S3 buckets, CloudWatch log groups, arbitrary service calls),
 Azure (blob containers, Log Analytics, arbitrary ARM paths, and it can reuse the Outlook app
@@ -104,7 +111,39 @@ SimpleFIN or Teller. These are the cards where the read/write distinction bites:
 `write` is what lets a routing policy pass small, known items through without you.
 
 **Markets** — Yahoo Finance, CoinGecko, Alchemy, ECB reference rates, SEC EDGAR filings, and a
-strategy screen that filters another card's rows.
+strategy screen that filters another card's rows. With a key: **Twelve Data** (quotes and computed
+indicators across stocks, FX and crypto), **Alpha Vantage** (slow limits, no card, no expiry),
+**Finnhub** (quotes plus company news, earnings dates and insider transactions), **Polygon.io**
+(bars and full-market snapshots), **Tiingo** (properly adjusted end-of-day history), **Financial
+Modeling Prep** (fundamentals and ratios rather than prices) and **Alpaca** (a broker's own feed —
+read only; this card has no order executor at all). **FRED** needs no key or account whatsoever and
+is the one a fresh install can use immediately.
+
+Which to pick is a question of what you are watching, not of which is best: Finnhub if you follow
+companies, Tiingo or Polygon if you follow prices, FMP if you follow balance sheets, FRED if you
+follow the economy.
+
+**The web** — search it or read one page of it, each a single REST call with a key. **Exa** and
+**Tavily** read the web for an agent (Tavily can hand back a written answer with its sources beside
+it); **Brave Search** answers from its own index; **SerpApi** and **Serper** give back a search
+engine's page as it was ranked, which matters when the ORDER is the finding. To read one page:
+**Jina Reader** (no account at all), **Firecrawl** (clean markdown), **ScrapingBee** (for a page
+that fights back) and **Apify** (when the crawl is one somebody already wrote). They overlap on
+purpose — the bill and the terms differ far more than the results do.
+
+What is deliberately NOT here is anything that DRIVES a browser — logging in, clicking, filling a
+form. That runs over CDP through a real browser session and cannot be reached from an API, so a
+card promising it would be a card that never works.
+
+**Social** — **LinkedIn**, **Bluesky** and **Mastodon**. Nothing from these reaches the Timeline as
+work: a public timeline is not an inbox, so they are report sources and tools rather than triggers.
+All three ship at `read`, which means a post an agent drafts is a proposal you approve on the task.
+A public post cannot be recalled, and that is the whole reason.
+
+**Agent tools** — **treg** puts thousands of endpoints across many providers behind one key, billed
+per call. Searching its catalogue is free and commits nothing, so an agent may do it unattended;
+calling an endpoint spends real money and can reach services that publish or order, so the card
+ships at `read` and every call becomes a proposal.
 
 **Your own documents** — the **Knowledge base** card indexes SharePoint library folders and
 folders on this machine (docx, pptx, xlsx, html, text, and pdf with `pypdf`) into Taskuary's own
@@ -115,9 +154,13 @@ instructions.
 
 :::warn Planned is not available
 The Connections page lists cards that are on the roadmap as well as ones that work — NetSuite,
-SAP, Workday, ADP, Epic, Cerner, PointClickCare, and a long tail of market-data providers. A
-planned card tells you so on its face. If the assistant suggests connecting one, saying yes is a
-vote for building it, not a connection.
+SAP, Workday, ADP, Epic, Cerner, PointClickCare among them. A planned card tells you so on its
+face. If the assistant suggests connecting one, saying yes is a vote for building it, not a
+connection.
+
+(This callout used to name "a long tail of market-data providers" here. Eight of them were built
+and the sentence was not updated, so the docs called working cards planned — the market cards
+above all work.)
 :::
 
 ## Coding CLIs and AI providers

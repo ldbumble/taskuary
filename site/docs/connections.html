@@ -180,6 +180,18 @@ me&quot; from &quot;someone asked the team&quot;.</p>
 <td><strong>Apple Messages</strong></td>
 <td>macOS only. Reads the Mac&#39;s local Messages history and replies through Messages.app; needs Full Disk Access and Automation permissions</td>
 </tr>
+<tr>
+<td><strong>Mattermost</strong>, <strong>Rocket.Chat</strong></td>
+<td>A server you host. Each watched channel is its own source, and approved replies post back into it. Rocket.Chat needs two values — the token and the user id issued beside it</td>
+</tr>
+<tr>
+<td><strong>Matrix</strong></td>
+<td>Any homeserver, matrix.org or your own. Replies go back as your account rather than a bot, so the account has to have joined the room</td>
+</tr>
+<tr>
+<td><strong>Google Chat</strong></td>
+<td>Spaces on the Timeline and replies back into them. Reuses the Gmail card&#39;s OAuth client, so there is one registration in Google Cloud rather than two</td>
+</tr>
 </tbody></table>
 <p>Chat is different from mail in one way that matters: a chat message often has no clock on it.
 &quot;Can you look at this when you get a chance&quot; is a real ask with no deadline, and Taskuary keeps
@@ -226,9 +238,13 @@ held until the ask it opens arrives.</p>
 addressed to you, and triage settles most of them without an AI call at all.</p>
 <h2 id="data-and-report-sources">Data and report sources<a class="anchor" href="#data-and-report-sources" aria-label="Link to this section">#</a></h2>
 <p>The full list is long and grows; these are the ones worth knowing about by shape.</p>
-<p><strong>Databases and files</strong> — SQL Server, any SQLAlchemy URL (PostgreSQL, MySQL, Snowflake, Oracle),
-raw ODBC through pyodbc, SQLite, SharePoint Lists, Google Sheets, a Windows/SMB share, SFTP, REST
-and RSS, and any MCP server tool.</p>
+<p><strong>Databases and files</strong> — SQL Server, SQLite, SharePoint Lists, Google Sheets, a Windows/SMB
+share, SFTP, REST and RSS, and any MCP server tool. <strong>PostgreSQL</strong>, <strong>MySQL</strong>, <strong>ClickHouse</strong>,
+<strong>Snowflake</strong> and <strong>BigQuery</strong> each have their own card: the same executor with the dialect filled
+in, the default port known and the missing driver named in the error you actually get. The older
+<strong>Any database (connection string)</strong> card is still there for anything else with a SQLAlchemy URL,
+including raw ODBC through pyodbc. All of them are reads — these cards ship no write verb at all,
+and the engine&#39;s own user is the ceiling, so point them at a read-only account.</p>
 <p><strong>Cloud and monitoring</strong> — AWS (S3 buckets, CloudWatch log groups, arbitrary service calls),
 Azure (blob containers, Log Analytics, arbitrary ARM paths, and it can reuse the Outlook app
 registration), Microsoft Entra ID, Prometheus, Datadog, WinRM for PowerShell on a remote Windows
@@ -238,7 +254,34 @@ SimpleFIN or Teller. These are the cards where the read/write distinction bites:
 <code>read</code>, so an agent proposes a bill or an invoice and you approve it on the task. Raising a card to
 <code>write</code> is what lets a routing policy pass small, known items through without you.</p>
 <p><strong>Markets</strong> — Yahoo Finance, CoinGecko, Alchemy, ECB reference rates, SEC EDGAR filings, and a
-strategy screen that filters another card&#39;s rows.</p>
+strategy screen that filters another card&#39;s rows. With a key: <strong>Twelve Data</strong> (quotes and computed
+indicators across stocks, FX and crypto), <strong>Alpha Vantage</strong> (slow limits, no card, no expiry),
+<strong>Finnhub</strong> (quotes plus company news, earnings dates and insider transactions), <strong>Polygon.io</strong>
+(bars and full-market snapshots), <strong>Tiingo</strong> (properly adjusted end-of-day history), <strong>Financial
+Modeling Prep</strong> (fundamentals and ratios rather than prices) and <strong>Alpaca</strong> (a broker&#39;s own feed —
+read only; this card has no order executor at all). <strong>FRED</strong> needs no key or account whatsoever and
+is the one a fresh install can use immediately.</p>
+<p>Which to pick is a question of what you are watching, not of which is best: Finnhub if you follow
+companies, Tiingo or Polygon if you follow prices, FMP if you follow balance sheets, FRED if you
+follow the economy.</p>
+<p><strong>The web</strong> — search it or read one page of it, each a single REST call with a key. <strong>Exa</strong> and
+<strong>Tavily</strong> read the web for an agent (Tavily can hand back a written answer with its sources beside
+it); <strong>Brave Search</strong> answers from its own index; <strong>SerpApi</strong> and <strong>Serper</strong> give back a search
+engine&#39;s page as it was ranked, which matters when the ORDER is the finding. To read one page:
+<strong>Jina Reader</strong> (no account at all), <strong>Firecrawl</strong> (clean markdown), <strong>ScrapingBee</strong> (for a page
+that fights back) and <strong>Apify</strong> (when the crawl is one somebody already wrote). They overlap on
+purpose — the bill and the terms differ far more than the results do.</p>
+<p>What is deliberately NOT here is anything that DRIVES a browser — logging in, clicking, filling a
+form. That runs over CDP through a real browser session and cannot be reached from an API, so a
+card promising it would be a card that never works.</p>
+<p><strong>Social</strong> — <strong>LinkedIn</strong>, <strong>Bluesky</strong> and <strong>Mastodon</strong>. Nothing from these reaches the Timeline as
+work: a public timeline is not an inbox, so they are report sources and tools rather than triggers.
+All three ship at <code>read</code>, which means a post an agent drafts is a proposal you approve on the task.
+A public post cannot be recalled, and that is the whole reason.</p>
+<p><strong>Agent tools</strong> — <strong>treg</strong> puts thousands of endpoints across many providers behind one key, billed
+per call. Searching its catalogue is free and commits nothing, so an agent may do it unattended;
+calling an endpoint spends real money and can reach services that publish or order, so the card
+ships at <code>read</code> and every call becomes a proposal.</p>
 <p><strong>Your own documents</strong> — the <strong>Knowledge base</strong> card indexes SharePoint library folders and
 folders on this machine (docx, pptx, xlsx, html, text, and pdf with <code>pypdf</code>) into Taskuary&#39;s own
 SQLite. Once anything is indexed, a <code>kb_search</code> report answers questions from it on a schedule,
@@ -246,9 +289,12 @@ agents call the same search as a tool, and the reply drafter, the assistant and 
 are handed the passages that bear on a thread. Passages are treated as facts to cite, never as
 instructions.</p>
 <div class="callout warn"><p class="eyebrow">Planned is not available</p><p>The Connections page lists cards that are on the roadmap as well as ones that work — NetSuite,
-SAP, Workday, ADP, Epic, Cerner, PointClickCare, and a long tail of market-data providers. A
-planned card tells you so on its face. If the assistant suggests connecting one, saying yes is a
-vote for building it, not a connection.</p>
+SAP, Workday, ADP, Epic, Cerner, PointClickCare among them. A planned card tells you so on its
+face. If the assistant suggests connecting one, saying yes is a vote for building it, not a
+connection.</p>
+<p>(This callout used to name &quot;a long tail of market-data providers&quot; here. Eight of them were built
+and the sentence was not updated, so the docs called working cards planned — the market cards
+above all work.)</p>
 </div><h2 id="coding-clis-and-ai-providers">Coding CLIs and AI providers<a class="anchor" href="#coding-clis-and-ai-providers" aria-label="Link to this section">#</a></h2>
 <p><strong>AI providers</strong> — Anthropic, OpenAI, Azure OpenAI, OpenRouter, Ollama (and any OpenAI-compatible
 local server: LM Studio, llama.cpp, vLLM), and the Meta Model API.</p>

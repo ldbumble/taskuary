@@ -29,10 +29,20 @@ def nav_api(tmp_path, monkeypatch):
     rid = db.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'reply',
                          'Status': 'pending', 'DraftText': 'Initial draft'})
     client = TestClient(server.app)
+    before = set(threading.enumerate())
     try:
         yield db, client, mid, rid
     finally:
         client.close()
+        # the streamed Next answers from a daemon thread that goes on to build the rail (_with_pile), and that
+        # thread starts another as it ends (refresh-after); closing the database under either was a native
+        # access violation that took the whole run down on Windows now and then. Let every thread this test
+        # started - and every thread THEY started - finish before the close.
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            left = [t for t in threading.enumerate() if t not in before and t.daemon and t.is_alive()]
+            if not left: break
+            for t in left: t.join(timeout=max(0.1, deadline - time.monotonic()))
         funnel.invalidate()
         db.cx.close()
 

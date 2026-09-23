@@ -452,7 +452,7 @@ export default function TaskHubPage() {
               </Box>
               {asstGame && (
                 <React.Suspense fallback={<CircularProgress size={22} sx={{ m: 4 }} />}>
-                  <AssistantGame onOpenTask={openTask} onExit={() => pickAsstGame(false)} active={tab === "Assistant"} />
+                  <AssistantGame onOpenTask={openTask} onNavigate={go} onExit={() => pickAsstGame(false)} active={tab === "Assistant"} />
                 </React.Suspense>
               )}
             </Box>

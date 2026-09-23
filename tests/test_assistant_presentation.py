@@ -105,6 +105,18 @@ class FyiHandfulTests(unittest.TestCase):
             self.assertEqual(c.post('/api/concierge/propose', json={'verb': 'mine', 'key': 'msg:999'}).status_code, 422)
         self.assertEqual(s.get_message(second['mid'])['Status'], 'filed')                          # three proposals, no effect
 
+    def test_the_words_an_item_carries_are_read_without_reading_it(self):
+        # the Assistant Game asks which words a card offers: the chat's own chips_for, and nothing moves
+        s = store(); got = five_fyi(s)
+        key = funnel.build(s, keep_surfaced=True)['items'][0]['key']
+        before = dict(s.funnel_states())
+        with mock.patch.object(server, 'store', s), quiet():
+            c = client(s)
+            words = c.get('/api/concierge/chips', params={'key': key}).json()['chips']
+            self.assertEqual(c.get('/api/concierge/chips', params={'key': 'msg:999'}).status_code, 404)
+        self.assertTrue(words and all(w['verb'] in concierge.CHIP_WORDS for w in words))
+        self.assertEqual(dict(s.funnel_states()), before)                                        # shown to nobody, marked nothing
+
     def test_reply_on_one_entry_drafts_at_once_and_marks_nothing(self):
         s = store(); got = five_fyi(s)
         with quiet(), mock.patch.object(concierge, 'brain', return_value=None): card = concierge.surface(s)['item']

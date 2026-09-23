@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { zoneAt, zoneOf, zoneItems, bossHp, matchFor, award, levelOf, fresh, shareCard, loadGame, saveGame, COMBO_WINDOW, XP } from "../src/assistantGame.js";
+import { CHIP_MOVE, zoneAt, zoneOf, zoneItems, bossHp, matchFor, award, levelOf, fresh, shareCard, loadGame, saveGame, COMBO_WINDOW, XP } from "../src/assistantGame.js";
 
 const at = Date.parse("2026-09-23T10:00:00Z");
 
@@ -81,4 +81,11 @@ test("walking across a room's line takes you into it", () => {
   assert.equal(zoneAt(8, -1), "coffee");
   assert.equal(zoneAt(8, 6), "hq");
   assert.equal(zoneAt(-8, 3), "archive");
+});
+
+test("an agent's own news stands at its desk, and every chat word scores as a real move", () => {
+  assert.equal(zoneOf({ kind: "agentdone", lane: "report" }), "floor");
+  assert.equal(zoneOf({ kind: "wrapup", lane: "report" }), "floor");
+  assert.equal(zoneOf({ kind: "report", lane: "report" }), "coffee");
+  for (const move of Object.values(CHIP_MOVE)) assert.ok(move in XP, `${move} has no points`);
 });

@@ -15,6 +15,8 @@ import { FileChips } from "./BoardView.jsx";
 import { WorkLine, isWaiting } from "./ui.jsx";
 import { studioSeats, studioTaskIsLive, studioTaskState } from "./studioModel.js";
 import { laneMeta } from "./funnelPile.js";
+import { proposalOf } from "./proposalCard.js";
+import { Btn, G, ItemInspector, Moves, Who, errText, glass } from "./gameItem.jsx";
 import {
   ZONES, zoneMeta, zoneItems, needsYou, bossHp, matchFor, award, levelOf, loadGame, saveGame, shareCard,
   MOVE_WORDS, ACHIEVEMENTS, QUESTS, questProgress, COMBO_WINDOW, comboMult,
@@ -22,12 +24,7 @@ import {
 
 const GameScene = React.lazy(() => import("./GameScene.jsx"));
 
-// the game wears its own dark glass over the warm room - the one screen in the app that is meant to be loud
-const G = { bg: "rgba(20,24,30,.9)", line: "rgba(255,255,255,.1)", ink: "#f3f1ec", dim: "#aeb6bf", faint: "#7c8590",
-  gold: "#f0c05a", mint: "#7fd1c6", red: "#e0697d", green: "#8fcf8f", card: "rgba(255,255,255,.05)" };
-const glass = { bgcolor: G.bg, color: G.ink, border: `1px solid ${G.line}`, borderRadius: "14px",
-  boxShadow: "0 18px 50px rgba(10,14,20,.35)", backdropFilter: "blur(10px)" };
-const errText = (e) => e?.response?.data?.detail || e?.message || "that did not go through";
+// the game wears its own dark glass over the warm room - the one screen in the app that is meant to be loud (gameItem.jsx)
 
 // a few synthesized blips; nothing to download, off with one click
 function useSound() {
@@ -58,7 +55,7 @@ const MARKS = { approve: { glyph: "✓", tone: "send" }, fyi: { glyph: "i", tone
   broken: { glyph: "!", tone: "bad" }, forgotten: { glyph: "?", tone: "ask" } };
 const markOf = (item) => MARKS[item.lane] || (needsYou(item) ? { glyph: "!", tone: "need" } : null);
 
-export default function AssistantGame({ onOpenTask, onExit, active = true }) {
+export default function AssistantGame({ onOpenTask, onExit, onNavigate, active = true }) {
   const [tasks, setTasks] = useState(null);
   const [agents, setAgents] = useState([]);
   const [cap, setCap] = useState(null);
@@ -67,7 +64,6 @@ export default function AssistantGame({ onOpenTask, onExit, active = true }) {
   const [clock, setClock] = useState(Date.now());
   const [pile, setPile] = useState([]);
   const [hub, setHub] = useState({ topics: [], data: [] });
-  const [reviews, setReviews] = useState({});
   const [focus, setFocus] = useState("all");
   const [picked, setPicked] = useState(null);     // the lobby/coffee/archive item or cabinet topic in hand
   const [game, setGame] = useState(() => loadGame());
@@ -98,14 +94,12 @@ export default function AssistantGame({ onOpenTask, onExit, active = true }) {
   }, []);
   // the rest of the office: the assistant's pile (people, fyi's, ghosts), the Hub's cabinets, and the drafts behind "reply ready"
   const loadWorld = useCallback(async () => {
-    const [p, h, r] = await Promise.all([
+    const [p, h] = await Promise.all([
       api.get("/api/funnel/pile").catch(() => null),
       api.get("/api/hub").catch(() => null),
-      api.get("/api/reviews").catch(() => null),
     ]);
     if (p) setPile(p.data?.items || []);
     if (h) setHub({ topics: h.data?.topics || [], data: h.data?.data || [] });
-    if (r) setReviews(Object.fromEntries((r.data?.data || []).map((v) => [v.ReviewId, v])));
   }, []);
 
   useEffect(() => {
@@ -176,7 +170,7 @@ export default function AssistantGame({ onOpenTask, onExit, active = true }) {
 
   // the one door every real move goes through: do it, and only if it went through, score it
   const play = async (move, key, run) => {
-    setBusy(key || move || "ask");
+    setBusy(key || move || "busy");
     try {
       const out = await run();
       const left = key ? pileRef.current.filter((i) => i.key !== key || move === "draft") : pileRef.current;
@@ -199,19 +193,9 @@ export default function AssistantGame({ onOpenTask, onExit, active = true }) {
   useEffect(() => { if (!banner) return undefined; const t = setTimeout(() => setBanner(null), 2600); return () => clearTimeout(t); }, [banner]);
 
   const settle = (item, verb, move) => play(move, item.key, () => api.post("/api/funnel/settle", { key: item.key, verb }));
-  const draft = (item) => play("draft", item.key, () => api.post(`/api/messages/${item.mid}/reply`, { draft: true, instruction: null }));
-  const approve = (item, text) => play("approve", item.key, () => api.post(`/api/reviews/${item.rid}/decide`, { verb: "approve", final_text: text, note: null }));
-  const dispatch = (item, kind) => play("dispatch", item.key, async () => {
-    const { data } = await api.post(`/api/messages/${item.mid}/dispatch`, { kind });
-    if (data?.dispatch === "needs_repo") { toast({ kind: "info", text: "Pick a checkout", sub: `${data.ref || "the task"} needs to know which repository`, ms: 4200 }); if (data.taskId) onOpenTask(data.taskId); }
-    else toast({ kind: "info", text: `${data?.ref || "It"} → ${data?.agent || kind === "coding" ? "the coder" : "an agent"}`, sub: "you'll hear when it's done" });
-    return data;
-  });
-  const answer = (item, text) => play("answer", item.key, () => api.post(`/api/tasks/${item.tid}/worker/answer`, { request_id: item.request_id, text }));
-  const ghost = (item, verb) => play(verb === "followup" ? "followup" : "rest", item.key, () => api.post("/api/concierge/act", { key: item.key, verb }));
-  const jumpIn = (tid) => {
+  const jumpIn = (tid, opts) => {
     if (!opened.current.has(tid)) { opened.current.add(tid); const r = award(gameRef.current, "open"); gameRef.current = r.state; setGame(r.state); saveGame(r.state); toast({ kind: "xp", text: `+${r.gained} XP`, sub: "Jumped into the code space" }); }
-    onOpenTask(tid);
+    onOpenTask(tid, opts);
   };
   const ask = async (text) => {
     if (!text.trim()) return;
@@ -222,7 +206,13 @@ export default function AssistantGame({ onOpenTask, onExit, active = true }) {
     if (scored) lastAsk.current = Date.now();
     setBusy("ask");
     const data = await play(scored ? "ask" : null, null, async () => (await api.post("/api/concierge/say", { text, key })).data);
-    if (data) setChat((c) => [...c, { who: "core", text: data.say || "Done." }]);
+    if (!data) return;
+    // the answer arrives the way the chat's does: words, the buttons that go with them, a proposal to confirm,
+    // or the thing it pointed at. A reply request drafts at once, as it does in the chat (PW-126).
+    const item = data.item || (key ? byKey[key] : null);
+    setChat((c) => [...c, { who: "core", text: data.say || "Done.", chips: data.chips || [], options: data.options || [],
+      proposal: proposalOf(data), item }]);
+    if (data.decision?.verb === "reply" && item?.mid) play("draft", item.key, () => api.post(`/api/messages/${item.mid}/reply`, { draft: true, instruction: data.decision.text || null }));
   };
   const share = async () => {
     try { await navigator.clipboard.writeText(shareCard(game)); toast({ kind: "info", text: "Run copied", sub: "counts only - no names, no subjects" }); }
@@ -230,6 +220,8 @@ export default function AssistantGame({ onOpenTask, onExit, active = true }) {
   };
 
   if (!tasks) return <CircularProgress size={22} sx={{ m: 4 }} />;
+  // what every room hands its items: the one in hand, the moves, and the roads out
+  const room = { picked, setPicked, agents, busy, play, onOpenTask: jumpIn, onNavigate };
   const lv = levelOf(game.xp);
   const comboLeft = Math.max(0, 1 - (Date.now() - game.lastAt) / COMBO_WINDOW);
   const combo = comboLeft > 0 ? game.combo : 0;
@@ -335,13 +327,11 @@ export default function AssistantGame({ onOpenTask, onExit, active = true }) {
         <Box sx={{ overflowY: "auto", minHeight: 0, px: 1, py: 0.9, display: folded ? "none" : "block" }}>
           {focus === "all" && <Briefing pile={pile} agents={agents} onGo={(i) => { const z = zoneItems([i]); go(Object.keys(z).find((k) => z[k].length), i.key); }} />}
           {focus === "floor" && <FloorSpace seated={seated} queue={queue} live={live} agents={agents} clock={clock} pick={pick} setPick={setPick}
-            items={zones.floor} busy={busy} onAnswer={answer} onJump={jumpIn} cap={cap} setCap={setCap} free={free} desks={desks} />}
-          {focus === "lobby" && <PeopleSpace items={zones.lobby} picked={picked} setPicked={setPicked} agents={agents} reviews={reviews} busy={busy}
-            onDraft={draft} onApprove={approve} onDispatch={dispatch} onSettle={settle} onOpenTask={jumpIn} />}
-          {focus === "coffee" && <CoffeeSpace items={zones.coffee} picked={picked} setPicked={setPicked} busy={busy} onSettle={settle} />}
-          {focus === "archive" && <ArchiveSpace ghosts={zones.archive} hub={hub} picked={picked} setPicked={setPicked} busy={busy} onGhost={ghost}
-            play={play} reload={loadWorld} />}
-          {focus === "hq" && <CoreSpace chat={chat} onAsk={ask} busy={busy} pile={pile} agents={agents} picked={picked && byKey[picked]}
+            {...room} items={zones.floor} onJump={jumpIn} cap={cap} setCap={setCap} free={free} desks={desks} />}
+          {focus === "lobby" && (zones.lobby.length ? <ItemList {...room} items={zones.lobby} /> : <Empty text="Nobody is waiting in the lobby. Lobby Zero." />)}
+          {focus === "coffee" && <CoffeeSpace {...room} items={zones.coffee} onSettle={settle} />}
+          {focus === "archive" && <ArchiveSpace {...room} ghosts={zones.archive} hub={hub} reload={loadWorld} />}
+          {focus === "hq" && <CoreSpace chat={chat} onAsk={ask} {...room} pile={pile}
             onGo={(i) => { const z = zoneItems([i]); go(Object.keys(z).find((k) => z[k].length), i.key); }} />}
         </Box>
       </Box>
@@ -415,16 +405,6 @@ function MapButton({ on, onClick, k, name, n }) {
   );
 }
 
-function Btn({ children, onClick, disabled, kind = "ghost", title }) {
-  const bg = { gold: G.gold, mint: G.mint, ghost: G.card, red: "rgba(224,105,125,.15)" }[kind];
-  return (
-    <Box component="button" type="button" onClick={onClick} disabled={disabled} title={title}
-      sx={{ border: `1px solid ${kind === "ghost" ? G.line : "transparent"}`, bgcolor: bg, color: kind === "gold" || kind === "mint" ? "#1c1f24" : G.ink,
-        borderRadius: "9px", px: 1.2, py: 0.6, fontSize: 12, fontWeight: 800, cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.5 : 1,
-        "&:hover": { filter: disabled ? "none" : "brightness(1.12)" } }}>{children}</Box>
-  );
-}
-
 function Card({ on, onClick, children, accent }) {
   return (
     <Box onClick={onClick} sx={{ mb: 0.9, p: 1.15, borderRadius: "11px", cursor: onClick ? "pointer" : "default",
@@ -435,14 +415,6 @@ function Card({ on, onClick, children, accent }) {
   );
 }
 
-const Who = ({ item }) => (
-  <Box sx={{ display: "flex", alignItems: "center", gap: 0.7 }}>
-    <Typography noWrap sx={{ fontSize: 11, fontWeight: 800, color: G.dim }}>{item.who || "—"}</Typography>
-    <Typography sx={{ fontSize: 10, color: G.faint }}>· {item.channel}</Typography>
-    <Typography sx={{ fontSize: 10, fontWeight: 800, color: needsYou(item) ? G.red : G.faint, ml: "auto", letterSpacing: 0.5 }}>{laneMeta(item.lane).word}</Typography>
-  </Box>
-);
-
 const Match = ({ item, agents }) => {
   const m = matchFor(item, agents);
   return (
@@ -451,6 +423,22 @@ const Match = ({ item, agents }) => {
     </Box>
   );
 };
+
+// a room's list: one row per item; the one in hand opens into the inspector, with every move it carries
+function ItemList({ items, picked, setPicked, agents, busy, play, onOpenTask, onNavigate, accent }) {
+  return items.map((i) => {
+    const on = picked === i.key;
+    return (
+      <Card key={i.key} on={on} onClick={() => setPicked(on ? null : i.key)} accent={accent?.(i) || (needsYou(i) ? G.red : null)}>
+        <Who item={i} />
+        <Typography sx={{ fontSize: 13, fontWeight: 700, mt: 0.3 }}>{i.title}</Typography>
+        {!on && (i.preview || i.why) && <Typography noWrap sx={{ fontSize: 11.5, color: G.faint, mt: 0.2 }}>{i.preview || i.why}</Typography>}
+        {on && <><Match item={i} agents={agents} />
+          <ItemInspector item={i} agents={agents} busy={busy} play={play} onOpenTask={onOpenTask} onNavigate={onNavigate} /></>}
+      </Card>
+    );
+  });
+}
 
 function Briefing({ pile, agents, onGo }) {
   const top = pile.filter(needsYou).slice(0, 4);
@@ -471,15 +459,24 @@ function Briefing({ pile, agents, onGo }) {
   </>;
 }
 
-function FloorSpace({ seated, queue, live, agents, clock, pick, setPick, items, busy, onAnswer, onJump, cap, setCap, free, desks }) {
-  const blocked = Object.fromEntries(items.filter((i) => i.lane === "blocked" && i.tid).map((i) => [i.tid, i]));
+function FloorSpace({ seated, queue, live, agents, clock, pick, setPick, items, busy, play, onJump, onOpenTask, onNavigate, picked, setPicked, cap, setCap, free, desks }) {
+  // what the floor wants from you that is not just a desk at work: a raised hand, a stopped or saved
+  // session, a finished job to read, a task nobody is on - each opens into the inspector
+  const seatedIds = new Set(seated.map((t) => t.TaskId));
+  const calls = items.filter((i) => !(i.lane === "working" && seatedIds.has(i.tid)));
+  const byTid = Object.fromEntries(items.filter((i) => i.tid).map((i) => [i.tid, i]));
   return <>
+    {calls.length > 0 && <>
+      <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color: G.red, px: 0.5, mb: 0.6 }}>ON THE FLOOR FOR YOU · {calls.length}</Typography>
+      <ItemList items={calls} picked={picked} setPicked={setPicked} agents={agents} busy={busy} play={play} onOpenTask={onOpenTask} onNavigate={onNavigate} />
+    </>}
+    <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color: G.faint, px: 0.5, mb: 0.6, mt: calls.length ? 1.2 : 0 }}>AT THE DESKS · {seated.length}</Typography>
     {seated.map((task) => {
       const liveRow = live[task.TaskId];
       const state = studioTaskState(task, liveRow, agents, clock);
-      const selected = pick === task.TaskId, ask = blocked[task.TaskId];
+      const selected = pick === task.TaskId, item = byTid[task.TaskId];
       return (
-        <Card key={task.TaskId} on={selected} onClick={() => setPick(task.TaskId)} accent={state.tone === "waiting" ? G.red : G.green}>
+        <Card key={task.TaskId} on={selected} onClick={() => setPick(selected ? null : task.TaskId)} accent={state.tone === "waiting" ? G.red : G.green}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.7 }}>
             <Typography noWrap sx={{ fontSize: 11, fontWeight: 800, color: state.tone === "waiting" ? G.red : G.green }}>{state.agent}</Typography>
             <Typography sx={{ ...mono, fontSize: 10, color: G.faint, ml: "auto" }}>{task.ref}</Typography>
@@ -495,25 +492,13 @@ function FloorSpace({ seated, queue, live, agents, clock, pick, setPick, items, 
             </Box>
           )}
           {liveRow?.files?.length > 0 && <Box sx={{ pt: 0.6 }}><FileChips files={liveRow.files} /></Box>}
-          {selected && ask && (
-            <Box sx={{ mt: 0.9 }}>
-              <Typography sx={{ fontSize: 12, color: G.gold, fontWeight: 700 }}>✋ {ask.preview || ask.why}</Typography>
-              {!!ask.request_id && (ask.choices || []).length > 0 && (
-                <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5, mt: 0.6 }}>
-                  {ask.choices.map((c) => <Btn key={c} kind="mint" disabled={!!busy} onClick={(e) => { e.stopPropagation(); onAnswer(ask, c); }}>{c} · +60</Btn>)}
-                </Box>
-              )}
-            </Box>
-          )}
-          {selected && (
-            <Box sx={{ display: "flex", gap: 0.6, mt: 0.9 }}>
-              <Btn kind="gold" onClick={(e) => { e.stopPropagation(); onJump(task.TaskId); }}>⌨ Jump into the code space</Btn>
-            </Box>
-          )}
+          {selected && (item
+            ? <ItemInspector item={item} agents={agents} busy={busy} play={play} onOpenTask={onOpenTask} onNavigate={onNavigate} />
+            : <Box sx={{ display: "flex", gap: 0.6, mt: 0.9 }}><Btn kind="gold" onClick={() => onJump(task.TaskId)}>⌨ Jump into the code space</Btn></Box>)}
         </Card>
       );
     })}
-    {!seated.length && <Empty text="The floor is quiet. New work will bring an agent to a desk." />}
+    {!seated.length && <Empty text="The desks are quiet. New work will bring an agent to one." />}
     {queue.length > 0 && <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color: G.faint, px: 0.5, mt: 1.2, mb: 0.6 }}>WAITING FOR A DESK · {queue.length}</Typography>}
     {queue.slice(0, 6).map((task) => (
       <Card key={task.TaskId} onClick={() => onJump(task.TaskId)}>
@@ -521,7 +506,7 @@ function FloorSpace({ seated, queue, live, agents, clock, pick, setPick, items, 
         <Typography noWrap sx={{ fontSize: 12.5, color: G.dim }}>{task.Title}</Typography>
       </Card>
     ))}
-    {queue.length > 6 && <Typography sx={{ fontSize: 11, color: G.faint, px: 0.5 }}>+{queue.length - 6} more waiting · Columns lists them all</Typography>}
+    {queue.length > 6 && <Typography sx={{ fontSize: 11, color: G.faint, px: 0.5 }}>+{queue.length - 6} more waiting</Typography>}
     <Box sx={{ mt: 1.5, px: 0.5 }}>
       <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.75 }}>
         <Typography sx={{ fontSize: 11.5, color: G.dim, flex: 1 }}>Desks (agents at once)</Typography>
@@ -535,70 +520,18 @@ function FloorSpace({ seated, queue, live, agents, clock, pick, setPick, items, 
   </>;
 }
 
-function PeopleSpace({ items, picked, setPicked, agents, reviews, busy, onDraft, onApprove, onDispatch, onSettle, onOpenTask }) {
-  const [text, setText] = useState({});
-  if (!items.length) return <Empty text="Nobody is waiting in the lobby. Lobby Zero." />;
-  return items.map((i) => {
-    const on = picked === i.key, rv = i.rid ? reviews[i.rid] : null, m = matchFor(i, agents);
-    const draft = text[i.key] ?? rv?.DraftText ?? "";
-    const stop = (f) => (e) => { e.stopPropagation(); f(); };
-    return (
-      <Card key={i.key} on={on} onClick={() => setPicked(on ? null : i.key)} accent={needsYou(i) ? G.red : null}>
-        <Who item={i} />
-        <Typography sx={{ fontSize: 13, fontWeight: 700, mt: 0.3 }}>{i.title}</Typography>
-        {on && <>
-          {i.preview && <Typography sx={{ fontSize: 12, color: G.dim, mt: 0.6, whiteSpace: "pre-wrap" }}>“{i.preview}”</Typography>}
-          <Match item={i} agents={agents} />
-          {i.lane === "approve" && (
-            <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 0.8 }}>
-              <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: 1, color: G.faint, mb: 0.4 }}>THE DRAFT - EDIT, THEN SEND</Typography>
-              <Box component="textarea" value={draft} onChange={(e) => setText((t) => ({ ...t, [i.key]: e.target.value }))} rows={5}
-                sx={{ width: "100%", boxSizing: "border-box", bgcolor: "rgba(0,0,0,.25)", color: G.ink, border: `1px solid ${G.line}`, borderRadius: "8px",
-                  p: 1, fontSize: 12.5, fontFamily: "inherit", resize: "vertical" }} />
-            </Box>
-          )}
-          <Box sx={{ display: "flex", gap: 0.6, mt: 0.9, flexWrap: "wrap" }}>
-            {i.lane === "approve" && i.rid && <Btn kind="gold" disabled={!!busy || !draft.trim()} onClick={stop(() => onApprove(i, draft))} title="Sends it for real">📨 Send it · +40</Btn>}
-            {i.lane !== "approve" && i.mid && <Btn kind={m.verb === "draft" ? "gold" : "ghost"} disabled={!!busy} onClick={stop(() => onDraft(i))}>✍ Draft a reply · +20</Btn>}
-            {i.lane !== "approve" && i.mid && <Btn kind={m.verb === "dispatch" ? "gold" : "ghost"} disabled={!!busy} onClick={stop(() => onDispatch(i, m.kind || "general"))}>🤖 Hand to {m.verb === "dispatch" ? m.who : "an agent"} · +45</Btn>}
-            <Btn disabled={!!busy} onClick={stop(() => onSettle(i, "done", "done"))}>✓ Done · +12</Btn>
-            <Btn disabled={!!busy} onClick={stop(() => onSettle(i, "later", "later"))}>⏭ Later</Btn>
-            {i.tid && <Btn onClick={stop(() => onOpenTask(i.tid))}>Open {i.ref}</Btn>}
-          </Box>
-        </>}
-      </Card>
-    );
-  });
-}
-
-function CoffeeSpace({ items, picked, setPicked, busy, onSettle }) {
+function CoffeeSpace({ items, onSettle, ...room }) {
   if (!items.length) return <Empty text="The pot is empty and so is the room. Nothing to catch up on." />;
-  const readable = items.filter((i) => i.lane !== "broken");
+  // the pot drains what is only there to be known - a broken connection or a failed report is not read away
+  const readable = items.filter((i) => i.lane === "fyi" || (i.lane === "report" && !i.bad));
   const drain = async () => { for (const i of readable) await onSettle(i, "done", "read"); };
   return <>
-    {readable.length > 1 && <Box sx={{ mb: 1 }}><Btn kind="mint" disabled={!!busy} onClick={drain}>☕ Drain the pot - catch up on all {readable.length}</Btn></Box>}
-    {items.map((i) => {
-      const on = picked === i.key;
-      return (
-        <Card key={i.key} on={on} onClick={() => setPicked(on ? null : i.key)} accent={i.lane === "broken" ? G.red : G.mint}>
-          <Who item={i} />
-          <Typography sx={{ fontSize: 13, fontWeight: 700, mt: 0.3 }}>{i.title}</Typography>
-          {(on || i.lane === "broken") && (i.preview || i.why) && <Typography sx={{ fontSize: 12, color: G.dim, mt: 0.5 }}>{i.preview || i.why}</Typography>}
-          {on && (
-            <Box sx={{ display: "flex", gap: 0.6, mt: 0.8 }}>
-              {i.lane === "broken"
-                ? <Typography sx={{ fontSize: 11.5, color: G.gold }}>The machine's broken: sign it back in from Connections.</Typography>
-                : <Btn kind="mint" disabled={!!busy} onClick={(e) => { e.stopPropagation(); onSettle(i, "done", "read"); }}>☕ Sip · got it · +8</Btn>}
-              <Btn disabled={!!busy} onClick={(e) => { e.stopPropagation(); onSettle(i, "later", "later"); }}>Later</Btn>
-            </Box>
-          )}
-        </Card>
-      );
-    })}
+    {readable.length > 1 && <Box sx={{ mb: 1 }}><Btn kind="mint" disabled={!!room.busy} onClick={drain}>☕ Drain the pot - all {readable.length} read</Btn></Box>}
+    <ItemList {...room} items={items} accent={(i) => i.lane === "broken" || i.bad ? G.red : G.mint} />
   </>;
 }
 
-function ArchiveSpace({ ghosts, hub, picked, setPicked, busy, onGhost, play, reload }) {
+function ArchiveSpace({ ghosts, hub, picked, setPicked, busy, play, reload, ...room }) {
   const [files, setFiles] = useState(null);
   const [form, setForm] = useState(null);
   const pulled = useRef(new Set()), voted = useRef(new Set());
@@ -617,23 +550,10 @@ function ArchiveSpace({ ghosts, hub, picked, setPicked, busy, onGhost, play, rel
   const input = { width: "100%", boxSizing: "border-box", bgcolor: "rgba(0,0,0,.25)", color: G.ink, border: `1px solid ${G.line}`, borderRadius: "8px",
     p: 0.9, fontSize: 12.5, fontFamily: "inherit", mb: 0.6 };
   return <>
-    {ghosts.length > 0 && <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color: "#b9c3ff", px: 0.5, mb: 0.6 }}>👻 GHOSTS · THREADS THAT SLIPPED · {ghosts.length}</Typography>}
-    {ghosts.map((i) => {
-      const on = picked === i.key;
-      return (
-        <Card key={i.key} on={on} onClick={() => setPicked(on ? null : i.key)} accent="#b9c3ff">
-          <Who item={i} />
-          <Typography sx={{ fontSize: 13, fontWeight: 700, mt: 0.3 }}>{i.title}</Typography>
-          {on && <>
-            <Typography sx={{ fontSize: 12, color: G.dim, mt: 0.5 }}>{i.why}</Typography>
-            <Box sx={{ display: "flex", gap: 0.6, mt: 0.8 }}>
-              <Btn kind="gold" disabled={!!busy} onClick={(e) => { e.stopPropagation(); onGhost(i, "followup"); }}>📨 Bust it - follow up · +35</Btn>
-              <Btn disabled={!!busy} onClick={(e) => { e.stopPropagation(); onGhost(i, "dismiss"); }}>🕯 Let it rest · +6</Btn>
-            </Box>
-          </>}
-        </Card>
-      );
-    })}
+    {ghosts.length > 0 && <>
+      <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color: "#b9c3ff", px: 0.5, mb: 0.6 }}>👻 GHOSTS · THREADS THAT SLIPPED · {ghosts.length}</Typography>
+      <ItemList {...room} items={ghosts} picked={picked} setPicked={setPicked} busy={busy} play={play} accent={() => "#b9c3ff"} />
+    </>}
     <Box sx={{ display: "flex", alignItems: "center", px: 0.5, mt: ghosts.length ? 1.4 : 0, mb: 0.6 }}>
       <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color: G.faint, flex: 1 }}>🗄 FILING CABINETS · THE HUB · {hub.topics.length}</Typography>
       <Btn kind="mint" onClick={() => setForm({ title: "", body: "", topic: topic || "" })}>+ File a lesson</Btn>
@@ -666,39 +586,49 @@ function ArchiveSpace({ ghosts, hub, picked, setPicked, busy, onGhost, play, rel
         <Typography sx={{ fontSize: 13, fontWeight: 700, mt: 0.3 }}>{f.Title}</Typography>
         <Typography sx={{ fontSize: 12, color: G.dim, mt: 0.4 }}>{f.Body}</Typography>
         <Box sx={{ mt: 0.7 }}>
-          <Btn disabled={voted.current.has(f.LoreId) || !!busy} onClick={(e) => { e.stopPropagation(); vote(f); }}>👍 Useful · +10</Btn>
+          <Btn disabled={voted.current.has(f.LoreId) || !!busy} onClick={() => vote(f)}>👍 Useful · +10</Btn>
         </Box>
       </Card>
     ))}
   </>;
 }
 
-function CoreSpace({ chat, onAsk, busy, pile, agents, picked, onGo }) {
+function CoreSpace({ chat, onAsk, busy, play, pile, agents, picked, onGo }) {
   const [text, setText] = useState("");
   const end = useRef(null);
   useEffect(() => { end.current?.scrollIntoView({ block: "end" }); }, [chat.length]);
   const send = (t) => { onAsk(t); setText(""); };
   const board = pile.filter((i) => needsYou(i) || i.kind === "agent").slice(0, 5);
+  const inHand = pile.find((i) => i.key === picked);
   return <>
     <Box sx={{ mb: 1 }}>
       {chat.map((m, n) => (
-        <Box key={n} sx={{ display: "flex", justifyContent: m.who === "you" ? "flex-end" : "flex-start", mb: 0.6 }}>
+        <Box key={n} sx={{ display: "flex", flexDirection: "column", alignItems: m.who === "you" ? "flex-end" : "flex-start", mb: 0.6 }}>
           <Box sx={{ maxWidth: "88%", px: 1.1, py: 0.7, borderRadius: m.who === "you" ? "11px 11px 2px 11px" : "11px 11px 11px 2px",
             bgcolor: m.who === "you" ? G.gold : "rgba(127,209,198,.12)", color: m.who === "you" ? "#1c1f24" : G.ink,
             border: m.who === "you" ? "none" : "1px solid rgba(127,209,198,.3)" }}>
             <Typography sx={{ fontSize: 12.5, whiteSpace: "pre-wrap" }}>{m.text}</Typography>
           </Box>
+          {/* what came with the answer - the thing it pointed at, its choices, and the buttons for it, all live */}
+          {m.who === "core" && n === chat.length - 1 && <Box sx={{ maxWidth: "94%", width: "100%" }}>
+            {m.item && <Box sx={{ mt: 0.5 }}><Btn kind="mint" onClick={() => onGo(m.item)}>Go to it → {m.item.title}</Btn></Box>}
+            {!!m.options?.length && <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mt: 0.5 }}>
+              {m.options.map((o) => <Btn key={o} disabled={!!busy} onClick={() => send(o)}>{o}</Btn>)}</Box>}
+            {(!!m.chips?.length || m.proposal) && m.item?.key && (
+              <Moves item={m.item} given={m.chips} initial={m.proposal} busy={busy} play={play} />
+            )}
+          </Box>}
         </Box>
       ))}
-      {busy === "ask" && <Typography sx={{ fontSize: 11.5, color: G.mint, px: 0.5 }}>✦ thinking…</Typography>}
+      {busy === "busy" && <Typography sx={{ fontSize: 11.5, color: G.mint, px: 0.5 }}>✦ thinking…</Typography>}
       <div ref={end} />
     </Box>
-    {picked && <Typography sx={{ fontSize: 11, color: G.faint, mb: 0.5 }}>Asking about: <b style={{ color: G.dim }}>{picked.title}</b></Typography>}
-    <Box sx={{ display: "flex", gap: 0.6, flexWrap: "wrap", mb: 0.8 }}>
+    {inHand && <Typography sx={{ fontSize: 11, color: G.faint, mb: 0.5 }}>Asking about: <b style={{ color: G.dim }}>{inHand.title}</b></Typography>}
+    <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mb: 0.8 }}>
       {["What should I do next?", "Who should take the top thing?", "What's slipping?"].map((q) =>
         <Btn key={q} disabled={!!busy} onClick={() => send(q)}>{q}</Btn>)}
     </Box>
-    <Box component="form" onSubmit={(e) => { e.preventDefault(); send(text); }} sx={{ display: "flex", gap: 0.6, mb: 1.5 }}>
+    <Box component="form" onSubmit={(e) => { e.preventDefault(); if (text.trim()) send(text); }} sx={{ display: "flex", gap: 0.6, mb: 1.5 }}>
       <Box component="input" value={text} onChange={(e) => setText(e.target.value)} placeholder="Ask the core…"
         sx={{ flex: 1, bgcolor: "rgba(0,0,0,.25)", color: G.ink, border: `1px solid ${G.line}`, borderRadius: "9px", px: 1, py: 0.7, fontSize: 12.5, fontFamily: "inherit" }} />
       <Btn kind="mint" disabled={!!busy || !text.trim()} onClick={() => send(text)}>Ask</Btn>

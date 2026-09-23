@@ -61,6 +61,15 @@ const read = (url) => {
     pick: "demo:scripted", provider: "Scripted demo", model: "", scripted: true,
   });
   if (p === "/api/funnel/pile") return clone(scriptedAssistant.pile);
+  // the words a card offers (concierge.chips_for) - the demo names a few per kind; nothing behind them runs here
+  if (p === "/api/concierge/chips") {
+    const key = new URLSearchParams(query(url)).get("key");
+    const item = scriptedAssistant.pile.items.find((i) => i.key === key);
+    const words = { review: [["redraft", "Redraft it"], ["not_ours", "Not ours"], ["skip", "Tomorrow"]], agent: [["stop_agent", "Save and end session"], ["skip", "Tomorrow"]],
+      asked: [["mine", "Put it on my list"], ["not_ours", "Not ours"], ["not_ours_sender", "Ignore this sender"]], fyi: [["not_ours_sender", "Ignore this sender"], ["mine", "Put it on my list"]],
+      idea: [["followup", "Draft a follow-up"], ["mine", "Put it on my list"], ["done", "Handled"]], report: [["rerun", "Run it again"]] }[item?.kind] || [];
+    return { key, chips: words.map(([verb, label]) => ({ verb, label })) };
+  }
   if (p === "/api/concierge/chats") return clone({ data: scriptedAssistant.chats });
   if (p === "/api/reviews") {
     const status = new URLSearchParams(query(url)).get("status");

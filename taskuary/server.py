@@ -3569,6 +3569,16 @@ def concierge_say(body: ConciergeSayBody):
         return concierge.say(store, body.text, body.key, actor=ACTOR)
     except ValueError as e: raise HTTPException(422, str(e))
 
+@app.get('/api/concierge/chips')
+def concierge_chips(key: str):
+    """The action words one item carries - chips_for, read only. The Assistant Game offers an item the same
+    words the chat would put under it, gated the same way (cannot()), without surfacing it: asking what you
+    COULD do with a thing is not reading it, so nothing is marked and the walk does not move."""
+    from . import concierge, funnel
+    item = funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
+    if not item: raise HTTPException(404, 'that one is not in the pipe any more')
+    return {'key': key, 'chips': concierge.chips_for(store, item)}
+
 class ConciergeProposeBody(BaseModel): verb: str; key: str; text: str | None = None; table: bool = False
 
 @app.post('/api/concierge/propose')

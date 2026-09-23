@@ -80,6 +80,34 @@ export const CardNav = React.createContext({ onNext: null, also: [], items: null
 // the first sentence of triage's summary - it now answers "who wants what" (triage.TASK_FIELDS)
 export const firstSentence = (s) => String(s || "").trim().split(/(?<=[.!?])\s+/)[0] || "";
 
+// WHAT A CARD READS, fetched once and kept (the owner, 2026-09-23: "this opens then rerenders"). The
+// lead and the box each fetched the same task, and every rail refresh (a new presentation_revision)
+// fetched both again; the box also BLANKED to "…" whenever the item's message id moved - which a
+// grouped task's does, between the walk's copy and the rail's. Now a url is fetched once in flight,
+// the last answer is drawn at once, a refresh swaps it in only if it changed, and nothing blanks.
+const fetched = new Map(), inFlight = new Map();
+function useFetched(url, revision) {
+  const [data, setData] = useState(() => (url ? fetched.get(url) ?? null : null));
+  useEffect(() => {
+    if (!url) { setData(null); return undefined; }
+    let live = true;
+    setData(fetched.has(url) ? fetched.get(url) : null);     // a DIFFERENT thing never shows the last one's text
+    let flight = inFlight.get(url);
+    if (!flight) {
+      flight = api.get(url).then(({ data: d }) => {
+        const was = fetched.get(url);
+        const same = was && JSON.stringify(was) === JSON.stringify(d);
+        if (!same) fetched.set(url, d);
+        return same ? was : d;
+      }).catch((e) => fetched.get(url) || { error: errText(e) }).finally(() => inFlight.delete(url));
+      inFlight.set(url, flight);
+    }
+    flight.then((d) => { if (live) setData(d); });
+    return () => { live = false; };
+  }, [url, revision]);
+  return data;
+}
+
 // the asker, in bold, when the sentence opens with them
 function Lead({ text, who }) {
   const t = String(text || "").trim();
@@ -91,13 +119,8 @@ function Lead({ text, who }) {
 
 // who wants what, for a card with a task behind it: the task's own summary, which triage writes
 function TaskLead({ card, fallback }) {
-  const [sum, setSum] = useState(null);
-  useEffect(() => {
-    let live = true;
-    if (!card?.tid) { setSum(""); return () => { live = false; }; }
-    api.get(`/api/tasks/${card.tid}`).then(({ data }) => live && setSum(String(data?.task?.Summary || ""))).catch(() => live && setSum(""));
-    return () => { live = false; };
-  }, [card?.tid, card?.presentation_revision]);
+  const doc = useFetched(card?.tid ? `/api/tasks/${card.tid}` : null, card?.presentation_revision);
+  const sum = String(doc?.task?.Summary || "");
   return <Lead text={firstSentence(sum) || firstSentence(card?.summary) || fallback || card?.title} who={card?.who} />;
 }
 
@@ -207,18 +230,12 @@ function AdvisorWhy({ mid }) {
 
 // the whole text, unfolded under the card on request - a report as markdown, a mail as it was written
 function FullText({ mid, revision }) {
-  const [doc, setDoc] = useState(null);
-  const shownFor = useRef(null);
-  useEffect(() => {
-    let live = true;
-    if (shownFor.current !== mid) { setDoc(null); shownFor.current = mid; }   // a different message: blank
-    // ...and a card with no mail behind it asks for nothing. A task whose only message a skip rule
-    // hid has no mid, and fetching /api/messages/null painted FastAPI's own validation sentence
-    // ("path.mid: Input should be a valid integer") into the card (the owner, 2026-09-15).
-    if (mid == null || mid === "") { setDoc({ error: "" }); return () => { live = false; }; }
-    api.get(`/api/messages/${mid}`).then(({ data }) => live && setDoc(data)).catch((e) => live && setDoc({ error: errText(e) }));
-    return () => { live = false; };
-  }, [mid, revision]);
+  // a card with no mail behind it asks for nothing. A task whose only message a skip rule hid has no
+  // mid, and fetching /api/messages/null painted FastAPI's own validation sentence ("path.mid: Input
+  // should be a valid integer") into the card (the owner, 2026-09-15).
+  const none = mid == null || mid === "";
+  const got = useFetched(none ? null : `/api/messages/${mid}`, revision);
+  const doc = none ? { error: "" } : got;
   if (!doc) return <div className="tq-card-full">…</div>;
   if (doc.error) return <div className="tq-card-err">{doc.error}</div>;
   const body = cleanText(doc.BodyText || "");
@@ -239,17 +256,9 @@ function FullText({ mid, revision }) {
 // `list={false}` on the walk's cards: the checklist and the task's history live on the Tasks tab, and
 // the card links there rather than repeating them (the owner, 2026-09-23)
 function CombinedTaskText({ card, list = true }) {
-  const [doc, setDoc] = useState(null);
-  const shownFor = useRef(null);
-  useEffect(() => {
-    let live = true;
-    if (!card?.tid) { setDoc({ messages: [] }); return () => { live = false; }; }
-    // same task, newer presentation: keep what is on screen and swap it when the fresh copy lands
-    const identity = `${card.tid}:${card.mid || ""}`;
-    if (shownFor.current !== identity) { setDoc(null); shownFor.current = identity; }
-    api.get(`/api/tasks/${card.tid}`).then(({ data }) => live && setDoc(data)).catch((e) => live && setDoc({ error: errText(e) }));
-    return () => { live = false; };
-  }, [card?.tid, card?.mid, card?.presentation_revision]);
+  // the TASK is the identity - which of its messages the item happens to name does not change what the
+  // task bundles, so a moved mid neither blanks nor refetches it; a newer presentation refreshes quietly
+  const doc = useFetched(card?.tid ? `/api/tasks/${card.tid}` : null, card?.presentation_revision);
   if (!card?.tid) return <FullText mid={card?.mid} revision={card?.presentation_revision} />;
   if (!doc) return <div className="tq-card-full">…</div>;
   if (doc.error) return <div className="tq-card-err">{doc.error}</div>;

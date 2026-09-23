@@ -35,8 +35,12 @@ test("selection freshness preserves explicit action advancement while background
 test("lazy card reads are revision-bound and discard superseded responses", () => {
   const cards = read("assistantCards.jsx");
   assert.match(cards, /function FullText\(\{ mid, revision \}\)/);
-  assert.match(cards, /\[mid, revision\]/);
-  assert.match(cards, /\[card\?\.tid, card\?\.mid, card\?\.presentation_revision\]/);
+  // one cached loader (useFetched): a newer revision refreshes quietly, a superseded answer is dropped by
+  // `live`, and a grouped task is keyed on the TASK - a moved mid neither blanks nor refetches (2026-09-23)
+  assert.match(cards, /\}, \[url, revision\]\);/);
+  assert.match(cards, /useFetched\(none \? null : `\/api\/messages\/\$\{mid\}`, revision\)/);
+  assert.match(cards, /useFetched\(card\?\.tid \? `\/api\/tasks\/\$\{card\.tid\}` : null, card\?\.presentation_revision\)/);
+  assert.match(cards, /flight\.then\(\(d\) => \{ if \(live\) setData\(d\); \}\)/);
   assert.match(cards, /\[card\.rid, card\.mid, card\.presentation_revision\]/);
   assert.match(cards, /\[open, card\.tid, card\.presentation_revision\]/);
   assert.ok((cards.match(/return \(\) => \{ live = false; \}/g) || []).length >= 4);

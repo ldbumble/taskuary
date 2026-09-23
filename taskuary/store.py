@@ -107,13 +107,21 @@ def _now(): return datetime.now().isoformat(sep=' ', timespec='seconds')
 # later, in a block the code appends when the document forgets them. On a long forwarded mail the
 # model followed the line and dropped the pair (TQ-0665). templates/triage.md carries the new
 # wording; test_verdict_shape.py pins the two together so they cannot drift apart.
+# The summary's wording inside that line. It used to ask for "what was said and by whom", which
+# the model answered as a report of the mail; every card in the walk leads with this sentence, and
+# the owner wants it to say who wants what (2026-09-23), so the ask is the first thing read.
+_SUMMARY_WAS = ('"summary": "<what was said and by whom, two sentences - the point itself, never the signature, '
+                'the confidentiality footer or quoted earlier mail>"')
+_SUMMARY_NOW = ('"summary": "<two sentences. The first says who wants what from the owner, the asker first '
+                "('Erin Blake wants the Q3 numbers before Friday'), or on an fyi who says what ('Payworth says the "
+                "September statement is ready'); the second adds the one detail that matters - a date, an amount, "
+                'what was already done. Never the signature, the confidentiality footer or quoted earlier mail>"')
 _SHAPE_WAS = ('Classify one inbound work message. Answer JSON only: {"intent": "task|reply_only|fyi", '
               '"kind": "coding|general|task", "why": "<one concrete sentence: what you saw in the message '
               'and which rule it hit - the owner reads this to judge the verdict, 25 words max>"}.')
 _SHAPE_NOW = (_SHAPE_WAS[:-2].rstrip('}')
               + ', "title": "<what this IS, 12 words max, in your own words - never the subject line handed back>"'
-              + ', "summary": "<what was said and by whom, two sentences - the point itself, never the signature, '
-                'the confidentiality footer or quoted earlier mail>"'
+              + ', ' + _SUMMARY_NOW
               + ', "checklist": ["<on a task only: one distinct requested outcome each>"]}.\n\n'
               + 'Every row the owner reads is drawn from `title` and `summary`, so answer them WHATEVER the '
                 'verdict: an fyi and a report are rows too, and "RE: RE: FW: 0 rows returned for period ending '
@@ -1025,6 +1033,15 @@ class SQLiteStore:
                     logger.info('triage: the contract line now names title, summary and checklist')
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) "
                                 "VALUES ('triage_answer_shape_fixed', '1', 'migration')")
+            # ...and the summary inside that line now asks who wants what - same surgery, once
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='triage_summary_who_wants_what'").fetchone():
+                row = self.cx.execute("SELECT Content FROM doc WHERE Name='triage'").fetchone()
+                body = (row['Content'] or '') if row else ''
+                if _SUMMARY_WAS in body:
+                    self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name='triage'",
+                                    (body.replace(_SUMMARY_WAS, _SUMMARY_NOW), _now()))
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) "
+                                "VALUES ('triage_summary_who_wants_what', '1', 'migration')")
             # THE WHATSAPP CATCH-ALL IS GONE, so the row for it goes too. '*' admitted every direct
             # chat on an account that is the owner's own phone; nothing honours it now (messengers
             # .poll_whatsapp skips it, the door refuses a new one), and a dead row with a live-looking

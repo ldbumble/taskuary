@@ -67,6 +67,20 @@ class DocumentSaysTheShapeTests(unittest.TestCase):
         s.cx.commit()
         self.assertIn(store_mod._SHAPE_WAS, SQLiteStore(str(self.path)).doc('triage'))
 
+    def test_the_summary_leads_with_who_wants_what_on_a_document_the_old_fix_already_reached(self):
+        """Installs the shape fix already ran on hold the old summary wording; the walk's cards lead with
+        that sentence, so it asks who wants what now (2026-09-23) - swapped once, the rest untouched."""
+        self.assertIn(store_mod._SUMMARY_NOW, TEMPLATE)
+        self.assertNotIn(store_mod._SUMMARY_WAS, TEMPLATE)
+        old = store_mod._SHAPE_NOW.replace(store_mod._SUMMARY_NOW, store_mod._SUMMARY_WAS)
+        s = SQLiteStore(str(self.path))
+        s.save_doc('triage', 'MY OWN RULE.\n\n' + old, 'owner')
+        s.cx.execute("DELETE FROM setting WHERE Name='triage_summary_who_wants_what'"); s.cx.commit()
+        after = SQLiteStore(str(self.path)).doc('triage')
+        self.assertNotIn(store_mod._SUMMARY_WAS, after)
+        self.assertIn('who wants what', after)
+        self.assertIn('MY OWN RULE.', after)
+
 
 class SchemaOnTheWireTests(unittest.TestCase):
     """What the provider can enforce, the provider enforces."""

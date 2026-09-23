@@ -260,7 +260,7 @@ export function CardShell({ card, kicker, title, lead, sub, children, err }) {
     <div className="tq-card">
       <div className="tq-card-kicker"><span className="src"><SourceMark item={card} /></span><span className="dot" style={{ background: edge(card?.lane) }} />{kicker || meta.word}
         {when && <em>{when}</em>}</div>
-      {lead || (title && <Lead text={title} who={card?.who} />)}
+      {lead || (typeof title === "string" ? <Lead text={title} who={card?.who} /> : title && <div className="tq-card-lead">{title}</div>)}
       {sub && <div className="tq-card-sub">{sub}</div>}
       {/* why it is BACK. Clearing a task never closed it, so the work tab raises it again once it has
           been quiet - and the card has to say that itself, or the only answer is "why am I seeing this
@@ -991,24 +991,22 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onBack, onRestar
           {pane && <CliPane pane={pane} height="38vh" />}
         </div>
       )}
-      {/* The walk is scripted and reaches no model - but a question typed during it is an ordinary
-          turn, answered beside the walk while the walk keeps its place (walk.py's own design). One
-          line: it is a reassurance, not a paragraph to read fourteen times. */}
-      <div className="tq-card-note">Questions? Ask below in your own words — the walk keeps your place.</div>
-      <div className="tq-card-actions">
-        {/* the checklist's five stops carry the label the panel's own row uses, so the walk and the
-            panel name the same destination the same way; a tab stop is its tab and needs none */}
-        {card.goto && <Button size="small" variant="contained" disableElevation onClick={() => go(card.goto)}
-          sx={primary}>{card.goto.label || `Open ${card.goto.tab}`}</Button>}
-        {/* Back and Next are one act each - a position moved (walk.go takes any stop). Start over is
-            the reset the server always had and the card never offered (the owner, 2026-09-18: "we
-            also need a button to start over the walk through"). */}
-        {!first && <Button size="small" onClick={onBack} sx={faint}>‹ Back</Button>}
-        {!last && <Button size="small" onClick={onNext} sx={faint}>Next ›</Button>}
-        <span className="sp" />
-        {!first && <Button size="small" onClick={onRestart} sx={faint} title="back to the first stop">Start over</Button>}
-        <Button size="small" onClick={onFinish} sx={faint}>Finish</Button>
-      </div>
+      {/* THE SAME FOOT AS EVERY OTHER CARD (the owner, 2026-09-23: "match the walk through cards to the
+          cards used to walk you through tasks"): the stop's own verb - its tab, under the label the
+          checklist panel's row uses - then Next, and Back / Start over / Finish on the Also line.
+          Back and Next are one act each - a position moved (walk.go takes any stop); Start over is the
+          reset the server always had (the owner, 2026-09-18: "we also need a button to start over").
+          The walk is scripted and reaches no model - but a question typed during it is an ordinary
+          turn, answered beside the walk while the walk keeps its place (walk.py's own design). */}
+      <CardNav.Provider value={{ onNext: last ? null : onNext, also: [
+        ...(!first ? [{ verb: "back", label: "‹ Back", onClick: onBack }] : []),
+        ...(!first ? [{ verb: "restart", label: "Start over", title: "back to the first stop", onClick: onRestart }] : []),
+        { verb: "finish", label: "Finish", onClick: onFinish }] }}>
+        <Foot verb={card.goto && <Button size="small" variant="contained" disableElevation onClick={() => go(card.goto)}
+            sx={primary}>{card.goto.label || `Open ${card.goto.tab}`}</Button>}
+          then={card.goto ? <><b>{card.goto.label || `Open ${card.goto.tab}`}</b> takes you there. Questions? Ask below in your own words - the walk keeps your place.</>
+            : "Questions? Ask below in your own words - the walk keeps your place."} />
+      </CardNav.Provider>
     </CardShell>
   );
 }

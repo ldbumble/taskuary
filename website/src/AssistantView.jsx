@@ -942,7 +942,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       await loadPile(true);                   // validate/resume Current under the requested scope
       if (epoch !== chatEpoch.current || resettingRef.current) return;
       // the line is already on screen: surface must not post a second copy of it
-      if (!currentRef.current) await surface(null, null);
+      // resume what is on the table only if you have not PASSED it: a passed item waits in Passed for
+      // its hour, and starting the walk put it straight back in front of you (the owner, 2026-09-23:
+      // "it's in the passed section but showing up on assistant first")
+      if (!currentRef.current || currentRef.current.surfaced) await surface(null, null);
     } catch (e) {
       // the owner's line is on screen now, so a failure has to be answered on screen too -
       // an unhandled rejection would leave "Walk me through my tasks." sitting there alone

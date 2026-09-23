@@ -59,7 +59,7 @@ test("a box means an item you can tick, and the job is not said twice", () => {
   // ...and every remaining box belongs to one item
   assert.equal((combined.match(/tq-task-box/g) || []).length, 1);
   assert.match(combined, /const ownTask = messages\.length === 1/);
-  assert.match(combined, /const repeatReceipt = ownTask/);
+  assert.match(combined, /const repeatReceipt = messages\.length === 1 && sameWords\(onlyBody, taskWords\)/);   // any channel (2026-09-23)
   assert.match(combined, /!repeatReceipt && <FullText/);
   // the 25px indent existed to clear that header box; without it the list starts at the edge
   const css = read("assistantView.css");

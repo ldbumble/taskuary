@@ -305,7 +305,11 @@ function CombinedTaskText({ card, list = true }) {
   const taskWords = cleanText(taskText).toLocaleLowerCase();
   // An `own` source message is the receipt for creating the task. When its body is exactly the task
   // text, showing it beneath the task list says the same sentence a third time and adds no context.
-  const repeatReceipt = ownTask && list && onlyBody && onlyBody === taskWords;   // with no list above it, the body IS the task
+  // ...and the lead now says the task's summary, so a lone message that IS that summary (a task made by
+  // hand, an Advisor idea) is the same words twice, whatever its channel (the owner, 2026-09-23: "2
+  // sections?"). Same = equal, or one opens with the other's first 80 characters.
+  const sameWords = (a, b) => !!a && !!b && (a === b || a.startsWith(b.slice(0, 80)) || b.startsWith(a.slice(0, 80)));
+  const repeatReceipt = messages.length === 1 && sameWords(onlyBody, taskWords);
   if (messages.length <= 1) return <>{task}{!repeatReceipt && <FullText mid={card?.mid} revision={card?.presentation_revision} />}</>;
   return <>
     {task}
@@ -342,7 +346,7 @@ export function CardShell({ card, kicker, title, lead, sub, children, err }) {
       {/* why it is BACK. Clearing a task never closed it, so the work tab raises it again once it has
           been quiet - and the card has to say that itself, or the only answer is "why am I seeing this
           again?" (the owner, 2026-09-15: "if they ask why explain it should be closed") */}
-      {card?.why_open && <div className="tq-card-excerpt">{card.why_open}</div>}
+      {card?.why_open && <div className="tq-card-sub">{card.why_open}</div>}
       {children}
       {err && <div className="tq-card-err">{err}</div>}
     </div>

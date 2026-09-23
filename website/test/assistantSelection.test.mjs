@@ -143,11 +143,11 @@ test("Assistant echoes one captured selection and never retries a 409 through th
 
 test("Walk validates Current without creating a turn and stale gestures remove their optimistic line", () => {
   const start = view.slice(view.indexOf("const start = async"), view.indexOf("// The day used to write itself"));
-  assert.ok(start.indexOf("await loadPile(true)") < start.indexOf("if (!currentRef.current) await surface"));
-  assert.ok(start.indexOf("epoch !== chatEpoch.current") < start.indexOf("if (!currentRef.current) await surface"),
+  assert.ok(start.indexOf("await loadPile(true)") < start.indexOf("if (!currentRef.current || currentRef.current.surfaced) await surface"));
+  assert.ok(start.indexOf("epoch !== chatEpoch.current") < start.indexOf("if (!currentRef.current || currentRef.current.surfaced) await surface"),
     "a reset while the pile request is held cancels the old Walk before navigation");
   assert.match(start, /finally \{\s*startFlight\.current = false/);
-  assert.match(start, /if \(!currentRef\.current\) await surface/);
+  assert.match(start, /if \(!currentRef\.current \|\| currentRef\.current\.surfaced\) await surface/);   // a passed item is not resumed (2026-09-23)
   const surface = view.slice(view.indexOf("const surface = useCallback"), view.indexOf("useEffect(() => { surfaceRef.current"));
   assert.ok(surface.indexOf("const activeScope") < surface.indexOf("const optimisticId"),
     "an async capture is revalidated before drawing or posting its navigation");

@@ -47,10 +47,15 @@ export function zoneItems(items = []) {
   return out;
 }
 
-// what waits on YOU - the boss's health bar. fyi, reports and a working agent do not.
+// what waits on YOU: a room's red count. fyi, reports and a working agent do not.
 const ON_YOU = new Set(["blocked", "approve", "asked", "yours", "unjudged", "broken", "stopped"]);
 export const needsYou = (item) => ON_YOU.has(item?.lane);
-export const bossHp = (items = []) => items.filter(needsYou).length;
+// THE INBOX BOSS is the walk to the bottom: its health is everything you have not seen yet. Seen is the chat's
+// own mark (`surfaced` - read in the chat, or with Next here) or handled outright (gone from the pile). An agent
+// at work waits on nobody, so it never stands between you and the bottom. Zero is the bottom - the boss is down.
+const unseen = (i, passed) => i.lane !== "working" && !i.surfaced && !passed.has(i.key);
+export const bossHp = (items = [], passed = new Set()) => items.filter((i) => unseen(i, passed)).length;
+export const atBottom = (items = [], passed = new Set()) => bossHp(items, passed) === 0;
 
 // The matchmaker: who is right for this, and the one move that gets it there. It routes on the
 // judged lane/kind and on the agents actually configured - never on the subject line.
@@ -75,13 +80,13 @@ export function matchFor(item, agents = []) {
 // ── points ────────────────────────────────────────────────────────────────────────────────────
 export const XP = {
   answer: 60, dispatch: 45, approve: 40, followup: 35, file: 25, draft: 20, prep: 20, resume: 15, wrap: 15, vote: 10,
-  sort: 10, rerun: 10, done: 12, read: 8, open: 5, ask: 5, pull: 3, later: 0, rest: 6, set: 30, rep: 5, next: 2,
+  sort: 10, rerun: 10, done: 12, read: 8, open: 5, ask: 5, pull: 3, later: 0, rest: 6, set: 30, rep: 5, next: 2, bottom: 50, gymclear: 30,
 };
 export const MOVE_WORDS = {
   answer: "Unblocked an agent", dispatch: "Handed off", approve: "Reply sent", followup: "Ghost busted",
   file: "Filed to memory", draft: "Draft summoned", vote: "Upvoted a file", done: "Cleared", read: "Caught up",
   open: "Jumped in", ask: "Asked the core", pull: "Pulled a file", later: "Dodged", rest: "Laid to rest",
-  set: "Set complete - task done", rep: "Rep", next: "Moved on", prep: "Prepped for a meeting", resume: "Agent back on its feet", wrap: "Session saved", sort: "Sorted away", rerun: "Report rerun",
+  bottom: "Inbox Boss defeated", gymclear: "Gym cleared - every set done", set: "Set complete - task done", rep: "Rep", next: "Moved on", prep: "Prepped for a meeting", resume: "Agent back on its feet", wrap: "Session saved", sort: "Sorted away", rerun: "Report rerun",
 };
 
 // the chat's action words (concierge.CHIP_WORDS) scored as the move they are - a word the server adds
@@ -115,6 +120,8 @@ export const ACHIEVEMENTS = [
   { key: "combo5", name: "On Fire", says: "a 5-move combo", test: (s) => s.best >= 5 },
   { key: "librarian", name: "Librarian", says: "filed a lesson to memory", test: (s) => (s.by.file || 0) >= 1 },
   { key: "sender", name: "Send It", says: "sent 5 replies", test: (s) => (s.by.approve || 0) >= 5 },
+  { key: "bottom", name: "Boss Slayer", says: "beat the Inbox Boss - walked to the bottom of the pile", test: (s) => (s.by.bottom || 0) >= 1 },
+  { key: "gymclear", name: "Rest Day Earned", says: "finished every one of your own tasks", test: (s) => (s.by.gymclear || 0) >= 1 },
   { key: "century", name: "Triple Digits", says: "100 XP in one day", test: (s) => s.today >= 100 },
 ];
 
@@ -133,7 +140,7 @@ export function award(state, move, now = Date.now(), world = null) {
   Object.assign(s, { xp: s.xp + gained, today: s.today + gained, moves: s.moves + 1, lastAt: now, best: Math.max(s.best, s.combo) });
   s.by[move] = (s.by[move] || 0) + 1;
   s.dayBy[move] = (s.dayBy[move] || 0) + 1;
-  const quests = QUESTS.filter((q) => !s.quests.includes(q.key) && s.dayBy[q.move] >= q.n);
+  const quests = (world?.quests || QUESTS).filter((q) => q.n > 0 && !s.quests.includes(q.key) && s.dayBy[q.move] >= q.n);
   for (const q of quests) { s.quests.push(q.key); s.xp += q.xp; s.today += q.xp; }
   const unlocked = ACHIEVEMENTS.filter((a) => !s.got.includes(a.key) && a.test(s, world));
   s.got.push(...unlocked.map((a) => a.key));
@@ -141,12 +148,22 @@ export function award(state, move, now = Date.now(), world = null) {
 }
 
 // daily quests read the day's tally - they reset with it
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 export const QUESTS = [
-  { key: "q-reply", says: "Send 3 replies", move: "approve", n: 3, xp: 50 },
-  { key: "q-hand", says: "Hand 2 things to agents", move: "dispatch", n: 2, xp: 50 },
-  { key: "q-coffee", says: "Catch up on 4 fyi's", move: "read", n: 4, xp: 30 },
-  { key: "q-gym", says: "Do 5 reps", move: "rep", n: 5, xp: 40 },
+  { key: "q-reply", says: (n) => `Send ${plural(n, "reply", "replies")}`, move: "approve", n: 3, xp: 50 },
+  { key: "q-hand", says: (n) => `Hand ${plural(n, "thing", "things")} to agents`, move: "dispatch", n: 2, xp: 50 },
+  { key: "q-coffee", says: (n) => `Catch up on ${plural(n, "fyi", "fyi's")}`, move: "read", n: 4, xp: 30 },
+  { key: "q-gym", says: (n) => `Do ${plural(n, "rep", "reps")}`, move: "rep", n: 5, xp: 40 },
 ];
+// TODAY'S QUESTS, sized to what you actually have: the goal, or what is possible today if that is less - what
+// you already did plus what is still waiting. The sum does not move as you work (a sent reply leaves the pile
+// and joins the tally), so a target never shrinks under you. Nothing to do and nothing done: no quest today.
+export function questsFor(state, avail = {}) {
+  return QUESTS.map((q) => {
+    const done = state?.dayBy?.[q.move] || 0, n = Math.min(q.n, done + (avail[q.move] || 0));
+    return { ...q, n, label: q.says(Math.max(n, 1)) };
+  }).filter((q) => q.n > 0 || state?.quests?.includes(q.key));
+}
 export const questProgress = (s, q) => Math.min(q.n, s?.dayBy?.[q.move] || 0);
 
 const KEY = "taskuary.assistantGame.v1";

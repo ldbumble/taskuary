@@ -53,6 +53,8 @@ const GYM_SPOTS = [[-10, 3.9], [-8.3, 3.9], [-6.6, 3.9], [-10, 6.2], [-8.3, 6.2]
 export const POOLS = [["mail", "meeting", 4], ["chat", "meeting", 4], ["coffee", "coffee", 6], ["archive", "archive", 5], ["gym", "gym", 6]];
 export const poolOf = (n) => n.zone === "meeting" ? (n.sub === "email" ? "mail" : "chat") : n.zone;
 
+// the open door in the studio's back wall (between the wall pieces at x -4.2 and -2.45)
+const DOOR = { x0: -4.1, x1: -2.55, x: -3.33 };
 const MOVE_KEYS = { w: "up", ArrowUp: "up", s: "down", ArrowDown: "down", a: "left", ArrowLeft: "left", d: "right", ArrowRight: "right" };
 
 const clamp01 = (value) => Math.max(0, Math.min(1, value));
@@ -83,7 +85,7 @@ function shortLine(value, length = 34) {
 const MARK_COLORS = { need: "#d9a441", send: "#6f9a6e", info: "#6d8fa6", bad: "#b04a5c", ask: "#c76a79" };
 
 export default function GameScene({ seats, selectedId, onSelect, focus = "all", onZone, npcs = [], cabinets = [],
-  picked = null, onPick, onCabinet, onCore, zoneCounts = {}, inset = { left: 0, right: 0 }, active = true, meetings = [] }) {
+  picked = null, onPick, onCabinet, onCore, onExit, zoneCounts = {}, inset = { left: 0, right: 0 }, active = true, meetings = [] }) {
   const hostRef = useRef(null);
   const labelRefs = useRef([]);
   const tagRefs = useRef(new Map());     // id -> DOM node of an NPC / zone / cabinet tag
@@ -95,7 +97,7 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
   const [hoverKey, setHoverKey] = useState(null);
 
   seatsRef.current = seats;
-  props.current = { onSelect, onZone, onPick, onCabinet, onCore, selectedId, focus, picked, npcs, cabinets, zoneCounts, inset, active, meetings };
+  props.current = { onSelect, onZone, onPick, onCabinet, onCore, onExit, selectedId, focus, picked, npcs, cabinets, zoneCounts, inset, active, meetings };
 
   useEffect(() => { sceneApi.current?.sync(seats); }, [seats]);
   useEffect(() => { sceneApi.current?.syncNpcs(npcs); }, [npcs]);
@@ -834,6 +836,7 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
     let near = null, nearAt = 0, lastZoneAt = 0;
     const fwd = new THREE.Vector3(), side = new THREE.Vector3(), move = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0), wp = new THREE.Vector3();
     const coreAnchor = group(core, 0, 2.4, 0);
+    const doorSpot = group(room, DOOR.x, 0, -3.5), doorAnchor = group(room, DOOR.x, 3.5, -3.8);
     const findNear = () => {
       const here = you.root.position, cands = [];
       const consider = (obj, reach, hit) => {
@@ -847,6 +850,7 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
         consider(seat.person.root, 1.5, { kind: "desk", id: seat.descriptor.task.TaskId, anchor: seat.anchor, say: `${seat.descriptor.state.agent} · ${seat.descriptor.task.ref}` }); });
       cabinetMeshes.forEach((c) => { if (c.topic) consider(c.cab, 1.4, { kind: "cabinet", id: c.topic.Topic, anchor: c.anchor, say: `open ${c.topic.Topic}` }); });
       consider(core, 2.2, { kind: "core", anchor: coreAnchor, say: "talk to the core" });
+      consider(doorSpot, 1.3, { kind: "door", anchor: doorAnchor, say: "leave - back to the chat" });
       near = cands.sort((a, b) => a.d - b.d)[0] || null;
     };
     const interact = (n) => {
@@ -855,6 +859,7 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
       else if (n.kind === "desk") { p.onZone?.("floor"); p.onSelect?.(n.id); }
       else if (n.kind === "cabinet") p.onCabinet?.(n.id);
       else if (n.kind === "core") p.onCore?.();
+      else if (n.kind === "door") p.onExit?.();
     };
     let animationFrame = 0;
     const animate = () => {
@@ -893,7 +898,16 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
         if (move.lengthSq() > 0) {
           move.normalize();
           const next = you.root.position.clone().addScaledVector(move, Math.min(raw, 0.25) * 4.2);
-          next.x = Math.max(-10.9, Math.min(10.9, next.x)); next.z = Math.max(-3.5, Math.min(8.3, next.z));
+          // the back wall stops you everywhere but the open door, which leads out of the game and back to the chat
+          const doorway = next.x > DOOR.x0 && next.x < DOOR.x1;
+          next.x = Math.max(-10.9, Math.min(10.9, next.x)); next.z = Math.max(doorway ? -4.4 : -3.5, Math.min(8.3, next.z));
+          if (doorway && next.z < -3.8) {
+            held.clear();
+            next.set(DOOR.x, 0, -2.7);                        // the next visit starts just inside
+            you.root.position.set(next.x, 0.12, next.z); you.goal.set(next.x, 0, next.z);
+            p.onExit?.();
+            return;
+          }
           if (Math.hypot(next.x - 8.3, next.z - 6.4) < 1.25) next.copy(you.root.position);   // around the core, not through it
           you.root.position.set(next.x, 0.12, next.z);
           you.goal.set(next.x, 0, next.z);
@@ -989,6 +1003,7 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
 
       for (const [zone, anchor] of Object.entries(zoneAnchors)) place(tagRefs.current.get(`zone:${zone}`), anchor, p.focus === "all" || p.focus === zone || hoverZone === zone);
       place(tagRefs.current.get("you"), you.anchor, true);
+      place(tagRefs.current.get("door"), doorAnchor, p.focus === "all" || p.focus === "floor");
       if (now - nearAt > 0.1) { nearAt = now; findNear(); }
       const nearNode = tagRefs.current.get("near");
       if (nearNode && nearNode.dataset.say !== (near?.say || "")) { nearNode.dataset.say = near?.say || ""; nearNode.textContent = near ? `E · ${near.say}` : ""; }
@@ -1106,6 +1121,9 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
 
       <Box ref={tagRef("near")} sx={{ ...pinned, transform: "translate(-50%, 10px)", pointerEvents: "none", px: 1, py: 0.3, borderRadius: "7px", bgcolor: "#1c1f24",
         color: "#f0c05a", fontSize: 11, fontWeight: 800, whiteSpace: "nowrap", border: "1px solid #f0c05a", zIndex: 5 }} />
+      <Box ref={tagRef("door")} onClick={() => onExit?.()} title="Walk out through the door (or click) - back to the Assistant's chat"
+        sx={{ ...pinned, px: 1, py: 0.35, borderRadius: "7px", cursor: "pointer", whiteSpace: "nowrap", bgcolor: "#1c1f24", color: "#f3f1ec",
+          fontSize: 11, fontWeight: 800, border: "1px solid rgba(255,255,255,.25)", "&:hover": { borderColor: "#f0c05a", color: "#f0c05a" } }}>🚪 Back to chat</Box>
       <Box ref={tagRef("you")} sx={{ ...pinned, pointerEvents: "none", px: 0.8, py: 0.15, borderRadius: 99, bgcolor: "#f0c05a",
         color: "#1c1f24", fontSize: 10, fontWeight: 900, letterSpacing: 1 }}>YOU</Box>
 

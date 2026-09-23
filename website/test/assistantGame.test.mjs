@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { CHIP_MOVE, channelKind, zoneAt, zoneOf, zoneItems, bossHp, matchFor, award, levelOf, fresh, shareCard, loadGame, saveGame, COMBO_WINDOW, XP } from "../src/assistantGame.js";
+import { atBottom, CHIP_MOVE, channelKind, questsFor, zoneAt, zoneOf, zoneItems, bossHp, matchFor, award, levelOf, fresh, shareCard, loadGame, saveGame, COMBO_WINDOW, XP } from "../src/assistantGame.js";
 
 const at = Date.parse("2026-09-23T10:00:00Z");
 
@@ -16,8 +16,10 @@ test("every lane has a room, and an agent always sits on the floor", () => {
   assert.deepEqual([z.meeting.length, z.coffee.length, z.floor.length], [1, 1, 1]);
 });
 
-test("the boss's health is only what waits on you", () => {
-  assert.equal(bossHp([{ lane: "approve" }, { lane: "fyi" }, { lane: "working" }, { lane: "blocked" }]), 2);
+test("the boss's health is what you have not seen - read in the chat counts, a working agent never does", () => {
+  const items = [{ key: "a", lane: "approve" }, { key: "b", lane: "fyi" }, { key: "c", lane: "working" }, { key: "d", lane: "blocked", surfaced: true }];
+  assert.equal(bossHp(items), 2);
+  assert.equal(bossHp(items, new Set(["a", "b"])), 0);
 });
 
 test("the matchmaker routes on the judged kind and the agents you have, never on words", () => {
@@ -97,4 +99,22 @@ test("mail sits at the table, chat huddles, a tool is neither", () => {
   assert.equal(channelKind({ channel: "teams" }), "chat");
   assert.equal(channelKind({ channel: "whatsapp" }), "chat");
   assert.equal(channelKind({ channel: "github" }), "tool");
+});
+
+test("the bottom is nothing left you have not seen - a working agent never blocks it", () => {
+  const items = [{ key: "a", lane: "fyi" }, { key: "b", lane: "asked" }, { key: "c", lane: "working" }];
+  assert.equal(atBottom(items, new Set(["a"])), false);
+  assert.equal(atBottom(items, new Set(["a", "b"])), true);
+  assert.equal(atBottom([], new Set()), true);
+  assert.equal(award(fresh(at), "bottom", at).gained, 50);
+});
+
+test("quests are sized to what you have, and a target never shrinks as you work", () => {
+  let s = fresh(at);
+  const one = questsFor(s, { approve: 1, read: 0, dispatch: 5, rep: 2 });
+  assert.deepEqual(one.map((q) => [q.key, q.n, q.label]), [["q-reply", 1, "Send 1 reply"], ["q-hand", 2, "Hand 2 things to agents"], ["q-gym", 2, "Do 2 reps"]]);
+  const r = award(s, "approve", at, { quests: one });
+  assert.equal(r.quests.length, 1, "the one reply there was completes the quest");
+  s = r.state;
+  assert.equal(questsFor(s, { approve: 0 }).find((q) => q.key === "q-reply").n, 1, "sending it did not shrink the target");
 });

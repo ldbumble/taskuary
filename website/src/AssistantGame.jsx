@@ -20,7 +20,7 @@ import { Btn, G, ItemInspector, Moves, Who, errText, glass } from "./gameItem.js
 import { runOperation } from "./taskOps.js";
 import {
   channelKind, ZONES, zoneMeta, zoneItems, needsYou, bossHp, matchFor, award, levelOf, loadGame, saveGame, shareCard,
-  MOVE_WORDS, ACHIEVEMENTS, QUESTS, questProgress, COMBO_WINDOW, comboMult,
+  MOVE_WORDS, ACHIEVEMENTS, questsFor, questProgress, COMBO_WINDOW, comboMult,
 } from "./assistantGame.js";
 
 const GameScene = React.lazy(() => import("./GameScene.jsx"));
@@ -71,7 +71,12 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
   const [passed, setPassed] = useState(() => new Set());   // what Next already read this visit
   const [game, setGame] = useState(() => loadGame());
   const [toasts, setToasts] = useState([]);
-  const [banner, setBanner] = useState(null);     // a level-up or trophy, big and brief
+  // big moments, one at a time: a queue, so a trophy won by the same move never covers the boss falling.
+  // setBanner(b) queues it (the bottom and a cleared gym jump the line); setBanner(null) puts the shown one down.
+  const [banners, setBanners] = useState([]);
+  const banner = banners[0] || null;
+  const setBanner = (b) => setBanners((q) => !b ? q.slice(1) : q.some((x) => x.title === b.title && x.kind === b.kind) ? q
+    : b.kind === "bottom" || b.kind === "gymclear" ? [b, ...q] : [...q, b]);
   const [busy, setBusy] = useState("");
   const [trophies, setTrophies] = useState(false);
   const [folded, setFolded] = useState(false);    // the room panel, down to its title bar
@@ -164,8 +169,19 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
     coffee: zones.coffee.length, archive: zones.archive.length, hq: 0,
   }), [zones, gym]);
   const byKey = useMemo(() => Object.fromEntries(pile.map((i) => [i.key, i])), [pile]);
-  const hp = bossHp(pile), hpMax = useRef(1);
+  // the boss: what is left before the bottom. Its bar is measured against the most it has had this visit.
+  const hp = bossHp(pile, passed), hpMax = useRef(1);
   hpMax.current = Math.max(hpMax.current, hp, 1);
+  // today's quests, sized to what is actually here (questsFor): replies you could send, things an agent could
+  // take, fyi's to read, boxes left to tick
+  const quests = useMemo(() => questsFor(game, {
+    approve: pile.filter((i) => i.lane === "approve" || (i.lane === "asked" && i.mid)).length,
+    dispatch: pile.filter((i) => matchFor(i, agents).verb === "dispatch").length,
+    read: pile.filter((i) => (i.lane === "fyi" || i.lane === "report" || i.kind === "fyis") && !i.bad && !passed.has(i.key)).length,
+    rep: mine.reduce((n, t) => n + rowChecklist(t).filter((c) => !c.done).length, 0),
+  }), [game, pile, agents, mine, passed]);
+  const questsRef = useRef(quests);
+  questsRef.current = quests;
 
   useEffect(() => {
     if (pick && !desks.some((task) => task?.TaskId === pick)) setPick(null);
@@ -199,14 +215,14 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
       const out = await run();
       const left = key ? pileRef.current.filter((i) => i.key !== key || move === "draft") : pileRef.current;
       pileRef.current = left;
-      const world = { meeting: zoneItems(left).meeting.filter(needsYou).length, coffee: zoneItems(left).coffee.length };
+      const world = { meeting: zoneItems(left).meeting.filter(needsYou).length, coffee: zoneItems(left).coffee.length, quests: questsRef.current };
       if (!move) { if (key) setPile(left); return out; }       // a move that does not score (a second question inside a minute)
       const r = award(gameRef.current, move, Date.now(), world);
       gameRef.current = r.state; setGame(r.state); saveGame(r.state);
       if (r.gained > 0) { sound.coin(); toast({ kind: "xp", text: `+${r.gained} XP`, sub: `${MOVE_WORDS[move]}${r.mult > 1 ? ` · combo x${r.mult}` : ""}` }); }
-      r.quests.forEach((q) => toast({ kind: "quest", text: `Quest done +${q.xp}`, sub: q.says, ms: 3600 }));
-      r.unlocked.forEach((a, i) => setTimeout(() => { sound.level(); setBanner({ kind: "trophy", title: a.name, sub: a.says }); }, 500 + i * 1800));
-      if (r.levelUp) setTimeout(() => { sound.level(); setBanner({ kind: "level", title: `Level ${r.levelUp.level}`, sub: r.levelUp.title }); }, 300);
+      r.quests.forEach((q) => toast({ kind: "quest", text: `Quest done +${q.xp}`, sub: q.label || q.says(q.n), ms: 3600 }));
+      if (r.levelUp) { sound.level(); setBanner({ kind: "level", title: `Level ${r.levelUp.level}`, sub: r.levelUp.title }); }
+      r.unlocked.forEach((a) => { sound.level(); setBanner({ kind: "trophy", title: a.name, sub: a.says }); });
       if (key) setPile(left);
       setPicked((p) => p === key && move !== "draft" ? null : p);
       loadWorld(); load();
@@ -214,7 +230,7 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
     } catch (e) { sound.nope(); toast({ kind: "err", text: "Didn't land", sub: errText(e), ms: 4200 }); return null; }
     finally { setBusy(""); }
   };
-  useEffect(() => { if (!banner) return undefined; const t = setTimeout(() => setBanner(null), 2600); return () => clearTimeout(t); }, [banner]);
+  useEffect(() => { if (!banner) return undefined; const t = setTimeout(() => setBanner(null), banner.kind === "bottom" || banner.kind === "gymclear" ? 4200 : 2600); return () => clearTimeout(t); }, [banner]);
 
   const settle = (item, verb, move) => play(move, item.key, () => api.post("/api/funnel/settle", { key: item.key, verb }));
   // NEXT, the chat's own: this one is read (settle surfaced, read - "shown is read"), and the next thing in
@@ -226,6 +242,27 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
     return order.find((i) => pile.indexOf(i) > at) || order[0] || null;
   };
   const passedRef = useRef(passed);
+  // THE BOTTOM: the boss falls the moment nothing is left unseen - by your moves here, the chat, or the pile
+  // moving on its own. Confetti every time; the points once a day (the bottom is a daily walk, not a farm).
+  const [confetti, setConfetti] = useState(0);
+  const win = (move, title, sub) => {
+    setConfetti((n) => n + 1);
+    sound.level();
+    if (gameRef.current.dayBy?.[move]) { setBanner({ kind: move, title, sub }); return; }
+    const r = award(gameRef.current, move);
+    gameRef.current = r.state; setGame(r.state); saveGame(r.state);
+    setBanner({ kind: move, title: `${title} · +${r.gained} XP`, sub });
+    r.unlocked.forEach((a) => setBanner({ kind: "trophy", title: a.name, sub: a.says }));
+  };
+  const prevHp = useRef(null), prevGym = useRef(null);
+  useEffect(() => {
+    if (prevHp.current > 0 && hp === 0) win("bottom", "Inbox Boss defeated", "The bottom of the pile - everything seen, nothing left behind");
+    prevHp.current = hp;
+  }, [hp]);          // win() reads refs, so the count alone decides when it runs
+  useEffect(() => {
+    if (prevGym.current > 0 && gym.length === 0) win("gymclear", "Gym cleared", "Every one of your own tasks is done");
+    prevGym.current = gym.length;
+  }, [gym.length]);
   const next = async (item) => {
     const read = knowOnly(item);
     const ok = await play(read ? "read" : "next", read ? item.key : null,
@@ -282,7 +319,7 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
           <GameScene seats={sceneSeats} selectedId={pick} onSelect={(id) => { setPick(id); go("floor"); }}
             focus={focus} onZone={(z) => go(z)} npcs={npcs} cabinets={hub.topics} picked={picked} zoneCounts={zoneCounts}
             onPick={(key) => { const i = byKey[key]; if (i) { const z = zoneItems([i]); go(Object.keys(z).find((k) => z[k].length), key); } else if (key.startsWith("task:")) go("gym", key); }}
-            onCabinet={(topic) => go("archive", topic)} onCore={() => go("hq")}
+            onCabinet={(topic) => go("archive", topic)} onCore={() => go("hq")} onExit={onExit}
             inset={wide ? { left: 180, right: folded ? 0 : 344 } : { left: 0, right: 0 }} active={active} meetings={meetings} />
         </React.Suspense>
       </Box>
@@ -315,7 +352,7 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
         <Box sx={{ flex: "1 1 220px", minWidth: 180 }}>
           <Box sx={{ display: "flex", alignItems: "baseline", gap: 1 }}>
             <Typography sx={{ fontSize: 10, letterSpacing: 1.3, fontWeight: 800, color: G.red }}>INBOX BOSS</Typography>
-            <Typography sx={{ ...mono, fontSize: 10.5, color: G.dim, ml: "auto" }}>{hp ? `${hp} waiting on you` : "defeated ✦"}</Typography>
+            <Typography sx={{ ...mono, fontSize: 10.5, color: G.dim, ml: "auto" }}>{hp ? `${hp} to the bottom` : "defeated ✦ you're at the bottom"}</Typography>
           </Box>
           <Box sx={{ height: 9, mt: 0.5, borderRadius: 5, bgcolor: "rgba(255,255,255,.08)", overflow: "hidden", border: `1px solid ${G.line}` }}>
             <Box sx={{ height: "100%", width: `${(hp / hpMax.current) * 100}%`, transition: "width .6s cubic-bezier(.2,.9,.3,1.2)",
@@ -324,14 +361,14 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
         </Box>
 
         <Box sx={{ display: { xs: "none", xl: "flex" }, gap: 0.75 }}>
-          {QUESTS.map((q) => {
+          {quests.map((q) => {
             const n = questProgress(game, q), done = game.quests?.includes(q.key);
             return (
               <Box key={q.key} title={`+${q.xp} XP when done today`} sx={{ px: 1, py: 0.5, borderRadius: "9px", bgcolor: done ? "rgba(143,207,143,.15)" : G.card,
                 border: `1px solid ${done ? "rgba(143,207,143,.5)" : G.line}`, minWidth: 118 }}>
-                <Typography noWrap sx={{ fontSize: 10.5, fontWeight: 700, color: done ? G.green : G.ink }}>{done ? "✓ " : ""}{q.says}</Typography>
+                <Typography noWrap sx={{ fontSize: 10.5, fontWeight: 700, color: done ? G.green : G.ink }}>{done ? "✓ " : ""}{q.label}</Typography>
                 <Box sx={{ height: 3, mt: 0.4, borderRadius: 2, bgcolor: "rgba(255,255,255,.1)" }}>
-                  <Box sx={{ height: "100%", width: `${(n / q.n) * 100}%`, borderRadius: 2, bgcolor: done ? G.green : G.mint }} />
+                  <Box sx={{ height: "100%", width: `${q.n ? (n / q.n) * 100 : 100}%`, borderRadius: 2, bgcolor: done ? G.green : G.mint }} />
                 </Box>
               </Box>
             );
@@ -370,7 +407,7 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
           <Typography sx={{ fontSize: 14, color: G.dim }}>{folded ? "▾" : "▴"}</Typography>
         </Box>
         <Box sx={{ overflowY: "auto", minHeight: 0, px: 1, py: 0.9, display: folded ? "none" : "block" }}>
-          {focus === "all" && <Briefing pile={pile} agents={agents} onGo={(i) => { const z = zoneItems([i]); go(Object.keys(z).find((k) => z[k].length), i.key); }} />}
+          {focus === "all" && <Briefing pile={pile} agents={agents} hp={hp} passed={passed} onGo={(i) => { const z = zoneItems([i]); go(Object.keys(z).find((k) => z[k].length), i.key); }} />}
           {focus === "floor" && <FloorSpace seated={seated} queue={queue} live={live} agents={agents} clock={clock} pick={pick} setPick={setPick}
             {...room} items={zones.floor} onJump={jumpIn} cap={cap} setCap={setCap} free={free} desks={desks} />}
           {focus === "meeting" && <MeetingSpace {...room} items={zones.meeting} />}
@@ -394,13 +431,14 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
           </Box>
         ))}
       </Box>
+      <Confetti burst={confetti} />
       {banner && (
         <Box onClick={() => setBanner(null)} sx={{ position: "absolute", inset: 0, zIndex: 10, display: "grid", placeItems: "center", cursor: "pointer",
           background: "radial-gradient(circle, rgba(20,24,30,.35), rgba(20,24,30,0) 60%)" }}>
           <Box sx={{ ...glass, px: 5, py: 3, textAlign: "center", borderColor: G.gold, animation: "sgBoom .5s cubic-bezier(.2,.9,.3,1.5)",
             "@keyframes sgBoom": { from: { opacity: 0, transform: "scale(.6) rotate(-3deg)" }, to: { opacity: 1, transform: "none" } } }}>
-            <Typography sx={{ fontSize: 11, letterSpacing: 3, color: G.gold, fontWeight: 900 }}>{banner.kind === "level" ? "LEVEL UP" : "TROPHY UNLOCKED"}</Typography>
-            <Typography sx={{ fontSize: 34, fontWeight: 900 }}>{banner.kind === "level" ? "⬆ " : "🏆 "}{banner.title}</Typography>
+            <Typography sx={{ fontSize: 11, letterSpacing: 3, color: G.gold, fontWeight: 900 }}>{banner.kind === "level" ? "LEVEL UP" : banner.kind === "bottom" ? "BOTTOM OF THE PILE" : banner.kind === "gymclear" ? "EVERY SET DONE" : "TROPHY UNLOCKED"}</Typography>
+            <Typography sx={{ fontSize: 34, fontWeight: 900 }}>{banner.kind === "level" ? "⬆ " : banner.kind === "bottom" ? "⚔ " : banner.kind === "gymclear" ? "💪 " : "🏆 "}{banner.title}</Typography>
             <Typography sx={{ fontSize: 14, color: G.dim }}>{banner.sub}</Typography>
           </Box>
         </Box>
@@ -486,22 +524,38 @@ function ItemList({ items, picked, setPicked, agents, busy, play, onOpenTask, on
   });
 }
 
-function Briefing({ pile, agents, onGo }) {
-  const top = pile.filter(needsYou).slice(0, 4);
-  const rest = pile.length - top.length;
+// the briefing reads the walk: what you have not seen yet comes first (the boss's health), then what you have
+// seen that is still on you - so the bottom never looks like a to-do list that did not move
+function Briefing({ pile, agents, onGo, hp, passed }) {
+  const fresh = pile.filter((i) => i.lane !== "working" && !i.surfaced && !passed.has(i.key));
+  const onYou = pile.filter((i) => needsYou(i) && !fresh.includes(i));
   if (!pile.length) return <Empty text="Nothing is waiting anywhere in the office. Inbox Boss defeated - go get a coffee." />;
+  const row = (i, accent) => {
+    const m = matchFor(i, agents);
+    return (
+      <Card key={i.key} onClick={() => onGo(i)} accent={accent}>
+        <Who item={i} />
+        <Typography sx={{ fontSize: 13, fontWeight: 700, mt: 0.3 }}>{i.title}</Typography>
+        <Typography sx={{ fontSize: 11, color: G.mint, mt: 0.4 }}>✦ {m.who} · {m.why}</Typography>
+      </Card>
+    );
+  };
+  const head = (text, color) => <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color, px: 0.5, mb: 0.6, mt: 0.4 }}>{text}</Typography>;
   return <>
-    {top.map((i) => {
-      const m = matchFor(i, agents);
-      return (
-        <Card key={i.key} onClick={() => onGo(i)} accent={G.red}>
-          <Who item={i} />
-          <Typography sx={{ fontSize: 13, fontWeight: 700, mt: 0.3 }}>{i.title}</Typography>
-          <Typography sx={{ fontSize: 11, color: G.mint, mt: 0.4 }}>✦ {m.who} · {m.why}</Typography>
-        </Card>
-      );
-    })}
-    {rest > 0 && <Typography sx={{ fontSize: 11.5, color: G.faint, px: 0.5 }}>+{rest} more around the office that don't need you - fyi's in the coffee room, agents at work.</Typography>}
+    {hp > 0 ? <>
+      {head(`⚔ NOT SEEN YET · ${hp} TO THE BOTTOM`, G.red)}
+      {fresh.slice(0, 4).map((i) => row(i, G.red))}
+      {fresh.length > 4 && <Typography sx={{ fontSize: 11.5, color: G.faint, px: 0.5, mb: 1 }}>+{fresh.length - 4} more - press N on any of them to walk the lot</Typography>}
+    </> : (
+      <Box sx={{ mb: 1, p: 1.1, borderRadius: "11px", bgcolor: "rgba(143,207,143,.1)", border: "1px solid rgba(143,207,143,.4)" }}>
+        <Typography sx={{ fontSize: 13, fontWeight: 900, color: G.green }}>⚔ You're at the bottom</Typography>
+        <Typography sx={{ fontSize: 11.5, color: G.dim }}>Everything has been seen. {onYou.length ? "What is left is still yours to settle:" : "Nothing is left on you."}</Typography>
+      </Box>
+    )}
+    {onYou.length > 0 && <>
+      {hp > 0 && head(`SEEN, STILL ON YOU · ${onYou.length}`, G.gold)}
+      {onYou.slice(0, 4).map((i) => row(i, G.gold))}
+    </>}
   </>;
 }
 
@@ -642,11 +696,20 @@ function GymSpace({ gym, picked, setPicked, busy, play, reload, onOpenTask, onNe
 
 function CoffeeSpace({ items, onSettle, ...room }) {
   if (!items.length) return <Empty text="The pot is empty and so is the room. Nothing to catch up on." />;
-  // the pot drains what is only there to be known - a broken connection or a failed report is not read away
-  const readable = items.filter((i) => i.lane === "fyi" || (i.lane === "report" && !i.bad));
-  const drain = async () => { for (const i of readable) await onSettle(i, "done", "read"); };
+  // THE WHOLE POT, the count the room's badge shows: what is only there to be known is read away (done), and a
+  // broken connection or a failed report is put down the way Next puts it down (read, back if the error changes) -
+  // never marked done, because nothing fixed it
+  const knowOnly = (i) => (i.lane === "fyi" || i.lane === "report" || i.kind === "fyis") && !i.bad;
+  const drain = async () => {
+    for (const i of items) {
+      if (knowOnly(i)) await onSettle(i, "done", "read");
+      else await room.play("next", i.key, () => api.post("/api/funnel/settle", { key: i.key, verb: "surfaced", read: true }));
+    }
+  };
+  const broken = items.filter((i) => !knowOnly(i)).length;
   return <>
-    {readable.length > 1 && <Box sx={{ mb: 1 }}><Btn kind="mint" disabled={!!room.busy} onClick={drain}>☕ Drain the pot - all {readable.length} read</Btn></Box>}
+    {items.length > 1 && <Box sx={{ mb: 1 }}><Btn kind="mint" disabled={!!room.busy} onClick={drain}
+      title={broken ? `${broken} broken - set aside until its error changes, never marked fixed` : undefined}>☕ Drain the pot - all {items.length}</Btn></Box>}
     <ItemList {...room} items={items} accent={(i) => i.lane === "broken" || i.bad ? G.red : G.mint} />
   </>;
 }
@@ -768,6 +831,42 @@ function CoreSpace({ chat, onAsk, busy, play, pile, agents, picked, onGo }) {
     })}
     {!board.length && <Empty text="Nothing to match. Everyone has what they need." />}
   </>;
+}
+
+// CONFETTI, when the boss falls: a canvas over the game that pours for a few seconds, then clears itself.
+// Nothing at all under reduced motion - the banner still says it.
+function Confetti({ burst }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!burst || !canvas || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
+    const ctx = canvas.getContext("2d"), dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    canvas.width = w * dpr; canvas.height = h * dpr; ctx.scale(dpr, dpr);
+    const colors = [G.gold, G.mint, G.red, "#b9c3ff", G.green, "#ffffff"];
+    // speeds are per second, so a slow machine pours the same shower in the same time, just in fewer frames
+    const bits = Array.from({ length: 280 }, () => ({ x: Math.random() * w, y: -10 - Math.random() * h * 0.35, vx: (Math.random() - 0.5) * 120,
+      vy: 160 + Math.random() * 260, r: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 12, s: 6 + Math.random() * 8,
+      c: colors[Math.floor(Math.random() * colors.length)], round: Math.random() < 0.25 }));
+    const t0 = performance.now();
+    let raf = 0, last = t0;
+    const frame = (now) => {
+      const age = (now - t0) / 1000, dt = Math.min(0.1, (now - last) / 1000);
+      last = now;
+      ctx.clearRect(0, 0, w, h);
+      ctx.globalAlpha = Math.max(0, Math.min(1, 4.2 - age));
+      for (const b of bits) {
+        b.x += (b.vx + Math.sin(now / 400 + b.r) * 40) * dt; b.y += b.vy * dt; b.r += b.vr * dt;
+        ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.r); ctx.fillStyle = b.c;
+        if (b.round) { ctx.beginPath(); ctx.arc(0, 0, b.s / 2.5, 0, Math.PI * 2); ctx.fill(); } else ctx.fillRect(-b.s / 2, -b.s / 4, b.s, b.s / 2);
+        ctx.restore();
+      }
+      if (age < 4.2) raf = requestAnimationFrame(frame); else ctx.clearRect(0, 0, w, h);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, [burst]);
+  return <Box component="canvas" ref={ref} sx={{ position: "absolute", inset: 0, width: "100%", height: "100%", zIndex: 11, pointerEvents: "none" }} />;
 }
 
 const Empty = ({ text }) => <Typography sx={{ fontSize: 12, color: G.faint, px: 0.75, py: 1, lineHeight: 1.55 }}>{text}</Typography>;

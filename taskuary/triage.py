@@ -254,6 +254,16 @@ EXCHANGE_BUDGET = 12000
 NL = chr(10)
 
 
+def strip_banner(text: str) -> str:
+    """The words to SHOW: a mail system's external-sender banner and a client's clutter lines removed,
+    everything else as it arrived. triage read past these from the start, but every surface that shows a
+    message - the card, the task's source list, the phone - printed them first (the owner, 2026-09-23:
+    "this email etc or template of all emails ... should be removed from everywhere"). The mail as STORED
+    is untouched; this is how it is read."""
+    kept = NL.join(l for l in _BANNER.sub('', text or '').splitlines() if not _CLUTTER.match(l)).strip()
+    return kept or (text or '')
+
+
 def strip_boilerplate(text: str) -> str:
     """The words the sender actually typed: the legal footer and the signature block go,
     everything before them stays byte-for-byte."""

@@ -770,7 +770,8 @@ def _body(store, item: dict | None) -> tuple[dict, str, bool]:
     except Exception as e:
         logger.debug(f'the phone could not read the message: {e}')
         return {}, '', False
-    return msg, str(msg.get('BodyText') or '').strip(), item.get('kind') == 'report' or msg.get('Channel') == 'report'
+    from .triage import strip_banner
+    return msg, strip_banner(str(msg.get('BodyText') or '')).strip(), item.get('kind') == 'report' or msg.get('Channel') == 'report'
 
 
 def _draft_text(store, item: dict | None) -> str:

@@ -503,7 +503,10 @@ function Line({ m, live, last, actions, fresh }) {
           {/* NOT OVER A LIVE CARD: the card's lead says who wants what, and the sentence above it said
               the same thing first (the owner, 2026-09-23: "remove the text above the card - it's duplicate").
               A proposal keeps its sentence - that is the question its Confirm answers. */}
-          {m.text && !(card && inCard && kind !== "proposal") ? (looksMd(m.text) ? <Md text={m.text} /> : m.text.split("\n").map((p, i) => <p key={i}>{p}</p>)) : null}
+          {/* ...nor over one the walk has moved past: the line under it (the item's mark, its title and its
+              task) is the trail, and the sentence was that line at length (2026-09-23: "we just hit next,
+              don't need all this text") */}
+          {m.text && !(m.card && kind && !["proposal", "walk", "setup"].includes(kind)) ? (looksMd(m.text) ? <Md text={m.text} /> : m.text.split("\n").map((p, i) => <p key={i}>{p}</p>)) : null}
           {passed && (
             <div className="tq-step-done"><i>✓</i><b>{(m.card.n ?? 0) + 1} of {m.card.total}</b>
               <span>·</span>{m.card.title}</div>

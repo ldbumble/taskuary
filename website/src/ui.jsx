@@ -1093,8 +1093,13 @@ export const timeAgo = (s) => {
 };
 
 // Bodies arrive as HTML (email) or oddly-spaced stripped text - make them readable.
+// A MAIL SYSTEM'S EXTERNAL-SENDER BANNER is not something anybody said: it led every card, every task's
+// source list and every Timeline reader (the owner, 2026-09-23: "this email ... template of all emails
+// should be removed from everywhere"). The SAME rule as triage._BANNER - test_banner_is_one_rule holds
+// the two together - and it only changes what is shown; the mail as stored stays whole.
+export const BANNER = /(this email was sent from outside of[^*\n]*(\*\*[^*]*\*\*)?\s*|\[?\s*you don'?t often get email from \S+\.?( learn why this is important( at \S+)?)?\s*\]?)/gi;
 export const cleanText = (s) => (s || "").replace(/<(style|script|head)[^>]*>[\s\S]*?<\/\1>/gi, " ")
-  .replace(/<[^>]+>/g, " ").replace(/&nbsp;|&#\d+;|&\w+;/g, " ")
+  .replace(/<[^>]+>/g, " ").replace(/&nbsp;|&#\d+;|&\w+;/g, " ").replace(BANNER, "")
   .replace(/[^\S\n]+/g, " ").replace(/ ?\n ?/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 
 // Mail carries the whole thread quoted underneath the new text. Find where the new part

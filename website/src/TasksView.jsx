@@ -1239,29 +1239,32 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                         </Box>
                         {sourceOpen && (
                           <Box sx={{ mt: 0.85, maxWidth: 900, border: `1px solid ${BORDER}`, borderRadius: 1.5, overflow: "hidden" }}>
-                            {sourceMessage && (
-                              <Box sx={{ p: 1.1, display: "flex", gap: 1.1, alignItems: "flex-start" }}>
-                                <ChannelIcon channel={sourceMessage.Channel} sx={{ color: "#55697a", mt: 0.25 }} />
+                            {/* EVERY MESSAGE the task was made from, not the newest one under a "2 messages"
+                                count (the owner, 2026-09-23: "there are 2 items in this task source, i don't see
+                                the teams or the email message") - oldest first, each with who and when */}
+                            {(inbound.length ? inbound : sourceMessage ? [sourceMessage] : []).map((m, n) => (
+                              <Box key={m.MessageId || n} sx={{ p: 1.1, display: "flex", gap: 1.1, alignItems: "flex-start",
+                                borderTop: n ? `1px solid ${BORDER}` : 0 }}>
+                                <ChannelIcon channel={m.Channel} sx={{ color: "#55697a", mt: 0.25 }} />
                                 <Box sx={{ minWidth: 0, flex: 1 }}>
                                   <Box sx={{ display: "flex", gap: 0.75, alignItems: "baseline", flexWrap: "wrap" }}>
                                     <Typography sx={{ color: INK, fontSize: 11.5, fontWeight: 650 }}>
-                                      {sourceMessage.FromName || sourceMessage.FromEmail || sourceMessage.Channel}
+                                      {m.FromName || m.FromEmail || m.Channel}
                                     </Typography>
                                     <Typography variant="caption" sx={{ color: FAINT }}>
-                                      {sourceMessage.SentAt ? `· ${fmtDateTime(sourceMessage.SentAt)}` : ""}
-                                      {inbound.length > 1 ? ` · ${inbound.length} messages` : ""}
+                                      {m.SentAt ? `· ${fmtDateTime(m.SentAt)}` : ""}
                                     </Typography>
-                                    {sourceMessage.SourceLink && <Link href={sourceMessage.SourceLink} target="_blank"
+                                    {m.SourceLink && <Link href={m.SourceLink} target="_blank"
                                       rel="noopener" sx={{ fontSize: 11 }}>open the original</Link>}
                                   </Box>
-                                  {sourceMessage.Subject && <Typography variant="body2" sx={{ color: INK, fontWeight: 600, mt: 0.1 }}>
-                                    {sourceMessage.Subject}</Typography>}
+                                  {m.Subject && <Typography variant="body2" sx={{ color: INK, fontWeight: 600, mt: 0.1 }}>
+                                    {m.Subject}</Typography>}
                                   <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap",
                                     overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 3,
-                                    WebkitBoxOrient: "vertical", overflow: "hidden" }}>{cleanText(sourceMessage.BodyText)}</Typography>
+                                    WebkitBoxOrient: "vertical", overflow: "hidden" }}>{cleanText(m.BodyText)}</Typography>
                                 </Box>
                               </Box>
-                            )}
+                            ))}
                             {sourceRoute && (
                               <Box sx={{ p: 1.1, bgcolor: PANEL2, borderTop: `1px solid ${BORDER}`,
                                 display: "flex", gap: 1.1, alignItems: "flex-start" }}>

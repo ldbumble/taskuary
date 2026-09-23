@@ -31,12 +31,13 @@ import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
 import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, hasNextSelection, interactiveCardIndex, keysOf, lastSaidIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, pendingAlerts, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, hasNextSelection, interactiveCardIndex, keysOf, lastSaidIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine } from "./funnelPile.js";
 import { coveredByReload, heldSince } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
 import { AgentCard, AgentDoneCard, BriefCard, CardNav, WhoWantsWhat, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WalkCard, WrapupCard, sourceColor } from "./assistantCards.jsx";
 import { summarize } from "./walkSummary.js";
+import TodayMeetingsStrip from "./TodayMeetingsStrip.jsx";
 import FeedView from "./FeedView.jsx";
 import { MORE_PX } from "./funnelPile.js";
 import GeneralWorkspace from "./GeneralWorkspace.jsx";
@@ -553,8 +554,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [currentItem, setCurrentItem] = useState(null);   // ...and the item itself, drawn at the top of the pipe
   const [text, setText] = useState("");
   const phone = useMediaQuery("(max-width:600px)");     // the composer's hint is one line there
-  const [acked, setAcked] = useState(() => new Set());
-  const [notices, setNotices] = useState([]);           // the page's own strip notices: a newer message on Current (PW-165)
   const [chatsOpen, setChatsOpen] = useState(false);
   const [chats, setChats] = useState([]);
   const [chatsLoading, setChatsLoading] = useState(false);
@@ -734,14 +733,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         if (fresh) {
           const newer = fresh.mid && cur.mid && fresh.mid !== cur.mid;
           if (newer) {
-            // an update about Current is a strip notice (PW-165), never a line the chat writes by itself; the
-            // context refresh below is passive and the subject does not change
+            // an update about Current is never a line the chat writes by itself: the card refreshes in place
+            // (below) and, with speech on, it is said aloud
             const preview = String(fresh.preview || "").replace(/\s+/g, " ").trim().slice(0, 180);
             const line = `New message from ${fresh.who || "someone"} arrived on ${fresh.ref || fresh.title || "this thread"}`
               + (preview ? `: “${preview}”` : "") + ". The context is refreshed."
               + (fresh.rid ? " The earlier draft is now out of date; redraft it before sending." : "");
-            const key = `notice:msg:${fresh.mid}`;
-            setNotices((n) => [...n.filter((x) => x.key !== key), { key, item: cur.key, kind: "update", lane: cur.lane, text: line, notice: true, local: true }]);
             speakRef.current?.(line);
           }
           const refreshed = refreshCurrentPresentation(cur, fresh);
@@ -820,10 +817,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const items = pile?.items || [];
   const ready = items.filter((i) => !i.settling);
   const canAdvance = canAdvanceSelection(pile, ready, only.current);
-  // an alert about something already IN the conversation is noise: the card is right there
-  const shownKeys = useMemo(() => new Set(msgs.slice(-8).map((m) => m.card?.key).filter(Boolean)), [msgs]);
-  const pending = useMemo(() => pendingAlerts([...(pile?.alerts || []), ...notices], acked, currentItem, shownKeys), [pile, notices, acked, currentItem, shownKeys]);
-  const alert = pending[0] || null;
   const say = useCallback((line) => { if (speakOnState) speak(line); }, [speakOnState]);
   useEffect(() => { speakRef.current = say; }, [say]);
   // The rail came WITH an answer - a turn's or a settle's - read on the server after that write. The
@@ -1231,13 +1224,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     } catch (e) { setErr(errText(e)); }
     setBusy(false);
   };
-  // Later puts the NOTICE down, not the item or the task behind it; Open is the owner's own navigation to it
-  // (PW-166) - the one road by which a background update ever reaches the table
-  const ack = async (a, go) => {
-    setAcked((s) => new Set([...s, a.key]));
-    if (!a.local) api.post("/api/funnel/settle", { key: a.key, verb: "ack" }).catch(() => {});
-    if (go) surface(a.item, `Open — ${a.text}`);
-  };
   // past chats are read, a page at a time (PW-157): listing them changes nothing on the server
   const [chatsNext, setChatsNext] = useState(null);
   const openChats = async () => {
@@ -1265,7 +1251,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     only.current = sharedFilter.current && sharedFilter.current !== "{}" ? `view:${sharedFilter.current}` : null;
     currentRef.current = null;
     selectionRef.current = null;
-    setMsgs([]); setText(""); setWork([]); setErr(""); setAcked(new Set()); setNotices([]);
+    setMsgs([]); setText(""); setWork([]); setErr(""); 
     setOld(null); setChatsOpen(false); setCurrent(null); setCurrentItem(null);
     setState((s) => s ? { ...s, messages: [] } : s);
     try {
@@ -1433,7 +1419,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             <div className="tq-welcome">
               <TaskuaryMark size={30} />
               <b>{greeting()}</b>
-              {/* the start of the walk: who wants what, before the first card (2026-09-23) */}
+              {/* the start of the walk: the day's meetings, then who wants what - the best of the Morning
+                  digest, on the screen the day opens on (2026-09-23) */}
+              <div className="tq-welcome-sum"><TodayMeetingsStrip /></div>
               <span>{items.length ? summarize(items).lead : "Nothing is waiting on you - ask me anything, or set something up."}</span>
               {!!items.length && <div className="tq-welcome-sum"><WhoWantsWhat groups={summarize(items).groups} onRow={actions.surface} /></div>}
               <div className="tq-modes">
@@ -1481,17 +1469,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           away with the rest of the list still on it. It draws nothing when there is nothing saved. */}
       {state && !old && !handoff && !walk && <PreviousWork active={active} onOpenTask={onOpenTask}
         onReview={(rid) => surfaceRef.current?.(`review:${rid}`)} />}
-      {/* ONE bottom strip for every unsolicited update (PW-165), kept until Open or Later (PW-166); the rest of
-          the queue waits behind it and comes up as each is put down */}
-      {/* while the walk is in a chat the interruption is SENT there (remote_assistant.push_alerts);
-          a strip on the locked tab would only be a button that cannot act */}
-      {alert && !old && !handoff && !walk && (
-        <div className="tq-btw" role="status">
-          <span className="dot" /><div className="txt"><b>By the way —</b>{alert.text}.{pending.length > 1 ? ` (+${pending.length - 1} more)` : ""}</div>
-          <button type="button" className="tq-chip primary" onClick={() => ack(alert, true)}>{alert.item === current ? "Open the update" : current ? "Switch to it" : "Open"}</button>
-          <button type="button" className="tq-chip" onClick={() => ack(alert, false)}>Later</button>
-        </div>
-      )}
+      {/* NO BOTTOM STRIP. The pinned reminder line restated what the rail and the card already show (the owner,
+          2026-09-23: "remove the label that is constantly reminding you of tasks ... it's now in the
+          screen"). A new message on the card you are reading refreshes that card; its draft says it is stale. */}
       {/* the walk is on the phone: this tab does not get to answer the same item (the owner, 2026-09-07:
           "make the desktop unavailable if sent to whatsapp otherwise it's confusing") */}
       {!old && handoff && (

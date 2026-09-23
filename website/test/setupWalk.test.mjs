@@ -31,7 +31,7 @@ test("the walk is the task's own conversation, with its browser, mounted right h
 test("while a walk runs the dock conversation stands down rather than competing for the keyboard", () => {
   assert.match(view, /\{!walk && \(\s*<div className="tq-chat-body"/, "the chat body steps aside");
   assert.match(view, /\{!old && !handoff && !walk && \(\s*<div className="tq-compose">/, "and so does the composer");
-  assert.match(view, /\{alert && !old && !handoff && !walk && \(/, "no by-the-way strip over a walk");
+  assert.doesNotMatch(view, /className="tq-btw"/, "no reminder strip at all, over a walk or not");
 });
 
 test("leaving puts down the WALK, never the task or its session", () => {

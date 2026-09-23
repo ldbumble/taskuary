@@ -13,6 +13,10 @@ test("Timeline and Assistant share the meeting rail for today's digest", () => {
   assert.match(feed, /<TodayMeetingsStrip \/>/);
   assert.doesNotMatch(feed, /const TodayStrip/);
   assert.match(cards, /card\.brief_today && <TodayMeetingsStrip \/>/);
+  // ...and the screen the day opens on draws it too: the walk's opener took the digest's job (2026-09-23)
+  const view = read("AssistantView.jsx");
+  const welcome = view.slice(view.indexOf('className="tq-welcome"'), view.indexOf('className="tq-modes"'));
+  assert.match(welcome, /<TodayMeetingsStrip \/>/);
   assert.match(strip, /TODAY’S MEETINGS/);
   assert.match(strip, /api\.get\("\/api\/calendar\/today"\)/);
 });

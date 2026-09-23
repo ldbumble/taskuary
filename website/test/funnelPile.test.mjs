@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { LANES, LANE_META, attentionBand, levelOf, ageText, agoText, arrivals, chipsOf, lastSaidIndex, cardFor, currentItemFromPile, currentPresentationChanged, departures, displayRevision, drawOrder, followsItem, keysOf, laneMeta, refreshCurrentPresentation, refreshPilePresentation, rowMeta, statusLine, topAlert } from "../src/funnelPile.js";
+import { LANES, LANE_META, attentionBand, levelOf, ageText, agoText, arrivals, chipsOf, lastSaidIndex, cardFor, currentItemFromPile, currentPresentationChanged, departures, displayRevision, drawOrder, followsItem, keysOf, laneMeta, refreshCurrentPresentation, refreshPilePresentation, rowMeta, statusLine } from "../src/funnelPile.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 const cardsSrc = () => read("assistantCards.jsx");
@@ -140,21 +140,6 @@ test("the header line counts the pipe and what is on you", () => {
   assert.strictEqual(statusLine([{ lane: "fyi" }], true), "thinking…");
 });
 
-test("the by-the-way bar shows the first alert nobody has put down - and only what outranks the table", () => {
-  const alerts = [{ key: "alert:a", item: "a", kind: "meeting", lane: "time", text: "Standup starts in 10 min" },
-    { key: "alert:b", item: "b", kind: "agent", lane: "blocked", text: "codex asked you something" },
-    { key: "alert:c", item: "c", kind: "review", lane: "approve", text: "Craig's reply is waiting for your yes" }];
-  assert.strictEqual(topAlert(alerts, new Set()).key, "alert:a");
-  assert.strictEqual(topAlert(alerts, new Set(["alert:a"])).key, "alert:b");
-  assert.strictEqual(topAlert(alerts, new Set(["alert:a", "alert:b"])).key, "alert:c");   // nothing on the table: a draft is worth a word
-  assert.strictEqual(topAlert(alerts.slice(2), new Set(), { key: "x", lane: "fyi" }).key, "alert:c");   // on an fyi: the draft outranks it
-  assert.strictEqual(topAlert(alerts.slice(2), new Set(), { key: "x", lane: "approve" }), null);      // on another draft: it does not
-  assert.strictEqual(topAlert(alerts.slice(2), new Set(), { key: "c", lane: "approve" }), null);      // it IS the one on the table
-  assert.strictEqual(topAlert(alerts.slice(1, 2), new Set(), { key: "x", lane: "blocked" }), null);   // equal owner-wait bands do not interrupt
-  assert.strictEqual(topAlert(alerts, new Set(["alert:a", "alert:b", "alert:c"])), null);
-  assert.strictEqual(topAlert(null, new Set()), null);
-});
-
 test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the mark, equal tabs each side, the bubble off it", () => {
   const page = read("TaskHubPage.jsx");
   const tabs = page.match(/const TABS = \[([^\]]+)\]/)[1].split(",").map((t) => t.trim().replace(/"/g, ""));
@@ -191,7 +176,7 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.match(view, /const visibleItems = items\.slice\(0, revealed\)/); // first load paints incrementally
   assert.match(view, /requestAnimationFrame\(addBatch\)/);              // progressive batches do not impose one frame per row
   assert.match(view, /count \+ 24/);                                     // large accounts finish promptly
-  assert.match(view, /By the way/);
+  assert.doesNotMatch(view, /By the way|className="tq-btw"/);   // no bottom strip: the rail and the card already say it (2026-09-23)
   assert.doesNotMatch(view, /tq-pipe-walls/);             // no funnel: what comes out next is the FIRST row
   // What is on the table STAYS WHERE IT IS. Hoisting it to the top of one flat stack would tear a
   // row out of its category on every Next now that the rail is grouped - and an fyi batch would
@@ -334,19 +319,6 @@ test("a few kinds say more than their lane does", async () => {
   assert.equal(rowMeta({ kind: "report", lane: "report" }).word, laneMeta("report").word);
   assert.equal(rowMeta({ kind: "fyi", lane: "fyi" }).word, "fyi");
   assert.equal(rowMeta(null).word, "fyi");
-});
-
-test("alerts consume shared bands and cannot displace time-critical Current with an agent wait", () => {
-  const wait = { key: "alert:agent", item: "agent", kind: "agent", lane: "blocked", order_band: 2 };
-  const urgent = { key: "alert:urgent", item: "urgent", kind: "asked", lane: "time", order_band: 1 };
-  assert.equal(topAlert([wait], new Set(), { key: "now", kind: "idea", lane: "asked", order_band: 1 }), null);
-  assert.equal(topAlert([wait, urgent], new Set(), { key: "now", lane: "approve", order_band: 2 }), urgent);
-  // an agent waiting and a meeting that is not imminent are BOTH the owner's task now (one level for
-  // what triage called work, 2026-09-07), so neither interrupts the other: an alert has to outrank
-  // the card on the table, and only urgent does. The agent still waits in the rail at its own age.
-  assert.equal(topAlert([wait], new Set(), { key: "later", kind: "meeting", lane: "time", calendar_ready: false }), null);
-  assert.equal(topAlert([urgent], new Set(), { key: "later", kind: "meeting", lane: "time", calendar_ready: false }), urgent);
-  assert.equal(topAlert([urgent], new Set(), { key: "now", lane: "fyi" }, new Set(["urgent"])), null);
 });
 
 test("the action words hang on the last thing Taskuary SAID about the item, not on a passive notice", () => {

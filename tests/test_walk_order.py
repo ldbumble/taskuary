@@ -10,6 +10,8 @@ Two things the owner reported on 2026-09-10, looking at a pipe of 1 pending repl
   "just surface the morning digest report to the top of the work and then we are good"
       Today's brief is what you read before anything else; it was filed as a landed result (band 3),
       behind every piece of work and sorted oldest-first among a dozen other report runs.
+      Since 2026-09-23 the walk opens with who wants what, and the brief is a report again - still
+      first among the reports ("morning digest is in your tasks. Let's at least put it in the reports").
 """
 import json, unittest
 from datetime import datetime, timedelta
@@ -151,15 +153,19 @@ class TodaysBriefLeadsTests(unittest.TestCase):
                 self.assertEqual((now - timedelta(hours=late)).date(), now.date(), 'the later run left today')
                 self.assertGreater(early, late, 'the 07:20 brief must still be older than the 08:00 one')
 
-    def test_todays_digest_is_work_and_leads_the_pipe(self):
+    def test_todays_digest_is_a_report_and_leads_the_reports(self):
         s = store()
         report_source(s)
+        report_source(s, title='Headcount', kind='metric')
+        report_run(s, title='Headcount', hours=today_ago(3), body='5 rows')
         report_run(s, hours=today_ago(2))
         drafted(s, hours=20)
         items = funnel.build(s)['items']
-        self.assertTrue(funnel.todays_brief(items[0]), f"the brief did not lead: {items[0]['title']}")
-        self.assertEqual(items[0]['order_band'], 2)               # work, not a landed result
-        self.assertIn('your brief for today', items[0]['why'])
+        self.assertFalse(funnel.todays_brief(items[0]), 'the work comes first, not the brief')
+        reports = [i for i in items if i['kind'] == 'report']
+        self.assertTrue(funnel.todays_brief(reports[0]), f"the brief did not lead the reports: {reports[0]['title']}")
+        self.assertEqual(reports[0]['order_band'], 3)             # a report, not work
+        self.assertIn('your brief for today', reports[0]['why'])
 
     def test_yesterdays_digest_is_an_ordinary_landed_report(self):
         """A stale brief at the top of the day is worse than no brief at all."""
@@ -184,9 +190,9 @@ class TodaysBriefLeadsTests(unittest.TestCase):
         briefs = [i for i in items if i['kind'] == 'report']
         self.assertEqual(len(briefs), 2, 'both runs are still on the timeline')
         self.assertEqual([funnel.todays_brief(i) for i in briefs], [True, False], 'one brief leads, the other lands')
-        self.assertTrue(funnel.todays_brief(items[0]))
-        self.assertIn('the 08:00 one', items[0]['preview'] or items[0].get('why') or '')
-        self.assertEqual([i['order_band'] for i in briefs], [2, 3])
+        self.assertTrue(funnel.todays_brief(briefs[0]))
+        self.assertIn('the 08:00 one', briefs[0]['preview'] or briefs[0].get('why') or '')
+        self.assertEqual([i['order_band'] for i in briefs], [3, 3])
         self.assertIn('a later brief has replaced this one', briefs[1]['why'])
 
     def test_an_ordinary_report_run_today_is_not_the_brief(self):

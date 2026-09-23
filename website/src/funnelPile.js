@@ -414,16 +414,6 @@ export function fillCaps(avail, bands, { row = ROW_PX, head = HEAD_PX, more = MO
   return caps;
 }
 
-// The strip's queue (PW-165/166): a NOTICE (the watcher's word about an agent, a newer message on Current) is
-// always pending until Open or Later, whatever is on the table; an alert the pile derives from its own rows
-// shows only while it outranks the table and is not the very card in front of the owner.
-export const pendingAlerts = (alerts, acked, current = null, shown = null) => {
-  const band = current ? attentionBand(current) : 5;
-  return (alerts || []).filter((a) => !acked.has(a.key)
-    && (a.notice || (a.item !== current?.key && !shown?.has(a.item) && attentionBand(a) < band)));
-};
-export const topAlert = (alerts, acked, current = null, shown = null) => pendingAlerts(alerts, acked, current, shown)[0] || null;
-
 // A live event says "something was written". If a FORCED pile load STARTED after the newest event
 // of the burst arrived, that load read the database after the write committed (the event is sent
 // on commit), so a second reload would fetch the same rows again. A press of Next did exactly that:

@@ -16,7 +16,9 @@ export const groupOf = (i) => {
   if (!i) return "read";
   if (i.kind === "action" || i.kind === "agent" || i.kind === "agentdone" || AGENT_LANES.has(i.lane)) return "agents";
   if (READ_LANES.has(i.lane) || ["fyis", "report", "idea", "wrapup"].includes(i.kind)) return "read";
-  if (i.kind === "todo" || i.channel === "own") return "you";
+  // what YOU made - a task born by hand or from the assistant. A person's ask triage filed as a to-do
+  // is still someone else wanting something
+  if (i.channel === "own" || i.channel === "assistant") return "you";
   return "people";
 };
 

@@ -288,13 +288,7 @@
 .tq-walk-can button:hover { border-color: #b9c3cb; background: #f6f4f1; }
 .tq-walk-can .plain { color: #6e685f; border-style: dashed; }
 
-/* the pinned "by the way": one line, above the composer, whatever the chat is on */
-.tq-btw { margin: 0 20px 8px; padding: 8px 12px; border: 1px solid #cbd4dc; border-radius: 10px; background: #fffdfb; display: flex; align-items: center; gap: 10px; box-shadow: 0 6px 18px rgba(51,45,35,.08); animation: tqBtw .35s ease both; }
-@keyframes tqBtw { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-.tq-btw .dot { width: 8px; height: 8px; border-radius: 50%; background: #55697a; flex: 0 0 8px; animation: tqPulse 1.4s ease-in-out infinite; }
-@keyframes tqPulse { 50% { opacity: .35; } }
-.tq-btw .txt { flex: 1; min-width: 0; font-size: 12px; color: #262521; }
-.tq-btw .txt b { color: #41525f; margin-right: 4px; }
+@keyframes tqPulse { 50% { opacity: .35; } }   /* the day strip's now-dot */
 
 /* ...and UNFINISHED WORK under it: the same bottom edge, none of the urgency. No pulse, no shadow,
    no entrance - nothing here is news, it is work waiting where it was left, and it is shut until

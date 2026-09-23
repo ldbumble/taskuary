@@ -724,8 +724,9 @@ def from_wrapped(store, now: datetime, busy: set) -> list:
 # reports because both were one band): what asks you, then what waits for an agent, then what broke, then what landed.
 def _band(item):
     lane = item.get('lane')
-    # today's brief is WORK, not a landed result: it is the thing the owner reads before anything else
-    if todays_brief(item): return attention_band(actionable=True)
+    # today's brief is a REPORT again, first among the reports (the sort key below) - it led Your task
+    # from 2026-09-10 until the walk's own opener took over its job (the owner, 2026-09-23: "morning
+    # digest is in your tasks. Let's at least put it in the reports")
     if item.get('kind') == 'meeting':
         return attention_band(urgent=not _not_yet(item), actionable=True)
     # a landed result is its own level; 'slipped' is an idea nobody judged, which is an fyi, not work

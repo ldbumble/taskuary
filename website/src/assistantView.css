@@ -181,6 +181,7 @@
 .tq-card-also { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin-top: 6px; font-size: 10.5px; color: #8a847a; }
 .tq-card-also button { font: inherit; color: #55697a; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .tq-card-also button:disabled { opacity: .45; cursor: default; }
+.tq-card-more-actions { margin-top: 6px; padding-top: 7px; border-top: 1px solid #ebe6de; }
 /* More: the rest of the thing, unfolded in place */
 .tq-card-more { display: block; margin-top: 6px; font: inherit; font-size: 11px; color: #55697a; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .tq-card-clamp .tq-card-full { max-height: 150px; overflow: hidden; }

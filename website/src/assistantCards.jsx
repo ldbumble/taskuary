@@ -139,11 +139,17 @@ function useClose(card, onDone) {
 // names the conversation verbs the card's own button already is, so a word is never offered twice.
 // `promote` lifts one conversation word into the verb's place when the card has no button of its own
 // for it - the word stays the one road (2026-09-07: "only one place"), it just stands first.
-export function Foot({ verb, then, where, covers = [], close, onDone, more, promote }) {
+// `extra` adds a card's own words (a road the conversation has no word for); `inline` keeps them on the
+// quiet line - the set-up walk's Back / Start over / Finish move you, they are not actions on a thing.
+// Everywhere else they sit behind ONE "More actions", opened in place - six underlined words under
+// every card read as a second row of buttons (the owner, 2026-09-23: "maybe a more actions button as
+// it's confusing").
+export function Foot({ verb, then, where, covers = [], close, onDone, more, promote, extra = [], inline = false }) {
   const nav = React.useContext(CardNav);
   const shut = useClose(close || {}, onDone);
+  const [open, setOpen] = useState(false);
   const lifted = !verb && promote ? (nav.also || []).find((a) => a.verb === promote) : null;
-  const also = (nav.also || []).filter((a) => !covers.includes(a.verb) && a !== lifted);
+  const also = [...(nav.also || []).filter((a) => !covers.includes(a.verb) && a !== lifted), ...extra];
   const words = [...also, ...(close?.tid && !also.some((a) => a.verb === "close")
     ? [{ verb: "close", label: shut.busy ? "Closing…" : "Close the task", title: "Close the task - it stops coming back to Work", onClick: shut.run, disabled: shut.busy }] : [])];
   return (
@@ -153,12 +159,21 @@ export function Foot({ verb, then, where, covers = [], close, onDone, more, prom
         {verb || (lifted && <Button size="small" variant="contained" disableElevation disabled={lifted.disabled} onClick={lifted.onClick} title={lifted.title} sx={primary}>{lifted.label}</Button>)}
         {nav.onNext && <Button size="small" variant="outlined" disabled={nav.busy} onClick={nav.onNext} sx={quiet}>Next</Button>}
         {more}
+        {!inline && !!words.length && (
+          <Button size="small" onClick={() => setOpen((o) => !o)} sx={faint} aria-expanded={open}>
+            {open ? "Fewer actions ▴" : "More actions ▾"}</Button>
+        )}
         <span className="sp" />
         {where}
       </div>
-      {!!words.length && (
-        <div className="tq-card-also">Also:{words.map((a) => (
+      {inline && !!words.length && (
+        <div className="tq-card-also">{words.map((a) => (
           <button key={a.verb || a.label} type="button" title={a.title || undefined} disabled={a.disabled} onClick={a.onClick}>{a.label}</button>
+        ))}</div>
+      )}
+      {!inline && open && (
+        <div className="tq-card-actions tq-card-more-actions">{words.map((a) => (
+          <Button key={a.verb || a.label} size="small" variant="outlined" title={a.title || undefined} disabled={a.disabled} onClick={a.onClick} sx={quiet}>{a.label}</Button>
         ))}</div>
       )}
       {shut.err && <div className="tq-card-err">{shut.err}</div>}
@@ -385,15 +400,13 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
           you are responding to") - one press away, under the draft */}
       {card.mid && <button type="button" className="tq-card-more" onClick={() => setFull((v) => !v)}>{full ? "Less" : "More - what they wrote"}</button>}
       {full && card.mid && <CombinedTaskText card={card} list={false} />}
+      {/* "Close without sending" arrives as a conversation word; off the walk (no words), the same
+          road is still offered under More actions */}
       <Foot verb={verb} then={then} covers={["approve", "redraft"]}
+        extra={card.tid && !nav.also?.length ? [{ verb: "finish", label: busy === "finish" ? "Closing…" : "Mark done without sending",
+          title: "Marks the task done, dismisses the draft, and ends any live agent session. No reply is sent.",
+          disabled: !!busy || !rv, onClick: finish }] : []}
         where={<Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
-      {/* "Close without sending" arrives as a conversation word on the Also line; off the walk (no
-          words), the same road is still here */}
-      {card.tid && !nav.also?.length && (
-        <div className="tq-card-also">Also:<button type="button" disabled={!!busy || !rv} onClick={finish}
-          title="Marks the task done, dismisses the draft, and ends any live agent session. No reply is sent.">
-          {busy === "finish" ? "Closing…" : "Mark done without sending"}</button></div>
-      )}
     </CardShell>
   );
 }
@@ -630,11 +643,10 @@ export function IdeaCard({ card, onAct, onOpenTask, onTimeline, onNavigate }) {
           // the buttons are the short way; saying it is the real one (2026-09-04: "all the ideas
           // should just say it and I will create it")
           : "Say what you want done with it and I'll create it."}
+        extra={(card.idea_kind === "connect" || card.idea_kind === "health") && onAct && !nav.also?.length
+          ? [{ verb: "seen", label: card.idea_kind === "connect" ? "Not for us" : "Seen",
+               onClick: () => onAct(card.idea_kind === "connect" ? "Not for us - remembered." : "Seen.") }] : []}
         where={<Where card={{ ...card, tid: a.tid || card.tid, mid: a.mid || card.mid }} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
-      {(card.idea_kind === "connect" || card.idea_kind === "health") && onAct && !nav.also?.length && (
-        <div className="tq-card-also">Also:<button type="button" onClick={() => onAct(card.idea_kind === "connect" ? "Not for us - remembered." : "Seen.")}>
-          {card.idea_kind === "connect" ? "Not for us" : "Seen"}</button></div>
-      )}
     </CardShell>
   );
 }
@@ -683,9 +695,10 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface })
   const draftReply = () => post("reply", `/api/messages/${card.mid}/reply`, { draft: true }, null,
     (data) => onSurface?.(data?.reviewId ? `review:${data.reviewId}` : null, "Drafting a reply…"));
   const own = card.kind === "todo" || card.channel === "own";
+  const hand = suggestedKind === "coding" ? "Hand to coding agent" : "Hand to agent";
   const verb = !asks || !card.mid ? null : own
     ? <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={() => startAgent(suggestedKind)} sx={primary}>
-        {busy === "agent" ? "Handing it over…" : suggestedKind === "coding" ? "Hand to coding agent" : "Hand to agent"}</Button>
+        {busy === "agent" ? "Handing it over…" : hand}</Button>
     : <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={draftReply} sx={primary}>{busy === "reply" ? "Drafting…" : "Draft a reply"}</Button>;
   return (
     <CardShell card={card} kicker={card.kind === "fyi" ? "fyi" : suggestedKind === "coding" ? "coding · nobody on it" : own ? "on your list" : "asked you"}
@@ -694,7 +707,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface })
         : card.preview && <div className="tq-card-excerpt">{card.preview}</div>}
       <Foot verb={verb} close={card} onDone={onDone}
         covers={own ? [suggestedKind === "coding" ? "coder" : "regular_agent"] : ["reply"]}
-        then={!verb ? null : own ? <><b>Hand to agent</b> starts {suggestedKind === "coding" ? "a coding agent" : "an agent"} on it; it comes back here when it stops.</>
+        then={!verb ? null : own ? <><b>{hand}</b> starts {suggestedKind === "coding" ? "a coding agent" : "an agent"} on it; it comes back here when it stops.</>
           : <><b>Draft a reply</b> writes one for you to approve here - nothing is sent.</>}
         where={<Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
       {repoAsk && (
@@ -1025,7 +1038,7 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onBack, onRestar
         ...(!first ? [{ verb: "back", label: "‹ Back", onClick: onBack }] : []),
         ...(!first ? [{ verb: "restart", label: "Start over", title: "back to the first stop", onClick: onRestart }] : []),
         { verb: "finish", label: "Finish", onClick: onFinish }] }}>
-        <Foot verb={card.goto && <Button size="small" variant="contained" disableElevation onClick={() => go(card.goto)}
+        <Foot inline verb={card.goto && <Button size="small" variant="contained" disableElevation onClick={() => go(card.goto)}
             sx={primary}>{card.goto.label || `Open ${card.goto.tab}`}</Button>}
           then={card.goto ? <><b>{card.goto.label || `Open ${card.goto.tab}`}</b> takes you there. Questions? Ask below in your own words - the walk keeps your place.</>
             : "Questions? Ask below in your own words - the walk keeps your place."} />

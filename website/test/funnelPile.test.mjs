@@ -247,7 +247,7 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.match(view, /chip: runChip/);                    // one road for every one of them
   assert.match(view, /triage moved it up/);                // the rail shows promotions
   assert.match(view, /data\.events\?\.length/);           // the watcher's lines land in the chat as they happen
-  assert.match(cardsSrc(), /Show the final report/);        // ...and a finished job's report reads right there
+  assert.match(cardsSrc(), /show the final report/i);        // ...and a finished job's report reads right there
   // a rerun is the chat line's word now, not a second button on the card (2026-09-07: "only one place")
   assert.doesNotMatch(cardsSrc(), /Run it again/);
   assert.match(cardsSrc(), /Open walkthrough/);             // set-up opens the Assistant operator, not a coding checkout
@@ -317,7 +317,8 @@ test("the Assistant page IS the Timeline: the landing tab, mid-strip wearing the
   assert.match(cards, /filter\(\(m\) => String\(m\.Status \|\| ""\) !== "context"\)/);
   assert.match(cards, /messages combined by triage/);
   assert.match(cards, /const \[full, setFull\] = useState\(true\)/);
-  assert.equal((cards.match(/<CombinedTaskText card=\{card\} \/>/g) || []).length, 4); // reply + paused agent + ordinary message + task card
+  // reply + paused agent + ordinary message, each WITHOUT the checklist - that stays on the task (2026-09-23)
+  assert.equal((cards.match(/<CombinedTaskText card=\{card\} list=\{false\} \/>/g) || []).length, 3);
   assert.match(read("SettingsView.jsx"), /funnel_hours/); assert.match(read("SettingsView.jsx"), /funnel_max/);
 });
 

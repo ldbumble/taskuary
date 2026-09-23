@@ -30,14 +30,18 @@ test("each fyi entry shows its own summary and acts alone through the proposal r
   assert.match(view, /card: \{ kind: "proposal", key: data\.key, title: data\.label, op: data\.id/);   // the same card the words make
 });
 
-test("the task card carries the whole grouped context, the task summary and the checklist", () => {
+test("the grouped context, the task summary and the checklist stay renderable - on the Tasks tab, not the walk", () => {
   const cards = read("assistantCards.jsx");
   const combined = cards.slice(cards.indexOf("function CombinedTaskText"), cards.indexOf("export function CardShell"));
   assert.match(combined, /doc\.task\?\.Summary/); assert.match(combined, /className="tq-task-focus"/);
   assert.match(combined, /items\.map/); assert.match(combined, /tq-task-focus-item/);
   assert.match(combined, /Email context · \{messages\.length\} messages combined by triage/);
+  // the walk's cards lead with who wants what and link to the task; the checklist lives on the task
+  // (the owner, 2026-09-23: "let's keep the detail task list on the actual task tab")
+  assert.match(combined, /const task = list && /);
   const task = cards.slice(cards.indexOf("export function TaskCard"), cards.indexOf("export function FyisCard"));
-  assert.match(task, /\{card\.tid && <CombinedTaskText card=\{card\} \/>\}/);
+  assert.match(task, /lead=\{<TaskLead card=\{card\} \/>\}/);
+  assert.doesNotMatch(cards, /<CombinedTaskText card=\{card\} \/>/, "every card in the walk passes list={false}");
 });
 
 test("a box means an item you can tick, and the job is not said twice", () => {

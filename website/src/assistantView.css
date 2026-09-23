@@ -148,6 +148,11 @@
 .tq-welcome { text-align: center; color: #6e685f; padding: 48px 16px 24px; }
 .tq-welcome b { display: block; font-size: 17px; color: #262521; margin: 10px 0 4px; }
 .tq-welcome span { font-size: 12.5px; line-height: 1.5; }
+/* the start of the walk on the empty chat: the rows read left to right, whatever the welcome centres */
+.tq-welcome-sum { max-width: 640px; margin: 14px auto 6px; text-align: left; }
+.tq-welcome .tq-sum-row b { display: inline; font-size: 12.5px; margin: 0; }
+.tq-welcome .tq-sum-row span { font-size: 12.5px; }
+.tq-welcome .tq-sum-row .st { font-size: 11px; }
 .tq-modes { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
 .tq-chip { border: 1px solid #d8d1c5; background: #fffdfb; color: #41525f; border-radius: 99px; padding: 5px 12px; font: 600 11.5px 'IBM Plex Sans', system-ui, sans-serif; cursor: pointer; transition: all .15s; }
 .tq-chip:hover { border-color: #55697a; background: #f4f6f8; }
@@ -164,8 +169,33 @@
 .tq-verb.primary { border-color: #8fa38f; background: #f1f5f1; color: #3f5943; }
 .tq-verb.primary:hover { background: #e6ede6; }
 
-/* the card under a line: paper, a hairline, the lane's colour on the left edge only */
-.tq-card { margin: 8px 0 4px; border: 1px solid #ddd8cf; border-left-width: 4px; border-radius: 11px; background: #fffdf9; padding: 10px 12px; box-shadow: 0 4px 16px rgba(51,45,35,.06); }
+/* the card under a line: paper and a hairline. The lane is the kicker's DOT - never an edge (2026-09-23) */
+.tq-card { margin: 8px 0 4px; border: 1px solid #ddd8cf; border-radius: 11px; background: #fffdf9; padding: 12px 14px 11px; box-shadow: 0 4px 16px rgba(51,45,35,.06); }
+/* part 2, who wants what: one sentence, the asker in bold */
+.tq-card-lead { margin-top: 7px; font-size: 14.5px; line-height: 1.42; color: #262521; overflow-wrap: anywhere; }
+.tq-card-lead b { font-weight: 650; }
+/* part 4, what the verb does - said before it is pressed */
+.tq-card-then { margin-top: 9px; font-size: 11.5px; line-height: 1.45; color: #4d4a43; }
+.tq-card-then b { font-weight: 650; color: #262521; }
+/* every other word, one quiet line - no second row of buttons */
+.tq-card-also { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin-top: 6px; font-size: 10.5px; color: #8a847a; }
+.tq-card-also button { font: inherit; color: #55697a; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.tq-card-also button:disabled { opacity: .45; cursor: default; }
+/* More: the rest of the thing, unfolded in place */
+.tq-card-more { display: block; margin-top: 6px; font: inherit; font-size: 11px; color: #55697a; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.tq-card-clamp .tq-card-full { max-height: 150px; overflow: hidden; -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
+/* the start of the walk: who wants what, one row shape for every kind */
+.tq-sum-group { margin-top: 10px; }
+.tq-sum-head { font: 750 9.5px/1.2 'IBM Plex Mono', Consolas, monospace; letter-spacing: .13em; text-transform: uppercase; color: #6e685f; margin-bottom: 3px; }
+.tq-sum-row { display: grid; grid-template-columns: 8px minmax(0, 150px) minmax(0, 1fr) auto; align-items: center; gap: 9px; width: 100%;
+  min-height: 32px; padding: 0 6px; border: 0; border-top: 1px solid #efeae2; background: none; font: inherit; font-size: 12.5px; color: #262521; text-align: left; cursor: pointer; border-radius: 6px; }
+.tq-sum-row:hover { background: #f4f1ec; }
+.tq-sum-row .dot { width: 7px; height: 7px; border-radius: 50%; }
+.tq-sum-row b { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-sum-row .what { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #4d4a43; }
+.tq-sum-row .st { font-size: 11px; color: #6e685f; white-space: nowrap; }
+.tq-sum-more { font-size: 11px; color: #8a847a; padding: 4px 6px 0 23px; }
+@media (max-width: 520px) { .tq-sum-row { grid-template-columns: 8px minmax(0, 90px) minmax(0, 1fr); } .tq-sum-row .st { display: none; } }
 .tq-card-kicker { display: flex; align-items: center; gap: 7px; font: 750 9px/1.2 'IBM Plex Mono', Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; color: #6e685f; }
 .tq-card-kicker .dot { width: 7px; height: 7px; border-radius: 50%; background: #d3ccc1; }
 .tq-card-kicker .src { display: inline-flex; align-items: center; margin-right: 2px; }

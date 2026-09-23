@@ -31,11 +31,12 @@ import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./
 import { BORDER, DIM, FAINT, INK, ROLES } from "./theme.jsx";
 import ProposalCard from "./ProposalCard.jsx";
 import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, hasNextSelection, interactiveCardIndex, keysOf, laneCounted, lastSaidIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, pendingAlerts, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, hasNextSelection, interactiveCardIndex, keysOf, lastSaidIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, pendingAlerts, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, statusLine, topAlert } from "./funnelPile.js";
 import { coveredByReload, heldSince } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
-import { AgentCard, AgentDoneCard, BriefCard, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WalkCard, WrapupCard, sourceColor } from "./assistantCards.jsx";
+import { AgentCard, AgentDoneCard, BriefCard, CardNav, WhoWantsWhat, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, TaskCard, WalkCard, WrapupCard, sourceColor } from "./assistantCards.jsx";
+import { summarize } from "./walkSummary.js";
 import FeedView from "./FeedView.jsx";
 import { MORE_PX } from "./funnelPile.js";
 import GeneralWorkspace from "./GeneralWorkspace.jsx";
@@ -52,15 +53,6 @@ const isOpenWalk = (t) => !!t && t.SourceRef === "assistant:setup" && !["done", 
 // what a PERSON sent, whatever lane it landed in (funnel.came_in): a slipped follow-up about a mail
 // is still mail, and the walk that skipped it said "0 of them are mail" with five in the pipe
 const incoming = (items) => (items || []).filter((i) => i.mid && !["report", "own", "assistant"].includes(i.channel || "email"));
-const waitingLine = (items) => {
-  const n = (items || []).length, came = incoming(items).length;
-  // the counting words come from the one vocabulary (taskuary/lanes.json via funnelPile), not from a
-  // third copy written out here - this line said "landed" while the row beside it said "report"
-  const by = ["forgotten", "report", "fyi"]
-    .map((lane) => [laneCounted(lane), (items || []).filter((i) => i.lane === lane).length]).filter(([, k]) => k);
-  return `${n} waiting${came ? ` - ${came} came in` : ""}${by.length ? `, ${by.map(([w, k]) => `${k} ${w}`).join(", ")}` : ""}.`
-    + " I'll take you through them one at a time.";
-};
 
 // WHAT THE HEADING ALREADY SAID. A row speaks only when its own word ADDS something: "slipped"
 // under fyi does, "fyi" under fyi does not, and "agent finished" under agents working does -
@@ -493,6 +485,15 @@ function Line({ m, live, last, actions, fresh }) {
   // one walk (the owner, running it). It keeps its place in the trail as one muted line that counts
   // itself, so scrolling up reads as the steps already passed.
   const passed = !live && kind === "walk" && !!m.card;
+  // THE WORDS RIDE IN THE CARD (2026-09-23): Next beside the card's verb, every other word on its
+  // quiet Also line. Only answer chips (a model's own options) and a card-less line keep the strip.
+  const inCard = !!card && kind !== "walk" && kind !== "setup";
+  const verbs = inCard ? chips.filter((c) => c.verb) : [];
+  const strip = inCard ? chips.filter((c) => !c.verb) : chips;
+  const nextChip = verbs.find((c) => c.verb === "next");
+  const nav = { busy: actions.busy, items: actions.items, surface: actions.surface,
+    onNext: nextChip ? () => actions.chip(nextChip) : null,
+    also: verbs.filter((c) => c.verb !== "next").map((c) => ({ verb: c.verb, label: c.label, title: c.hint, disabled: actions.busy, onClick: () => actions.chip(c) })) };
   return (
     <>
       <div className={passed ? "tq-msg tq-step" : "tq-msg"}>
@@ -509,14 +510,14 @@ function Line({ m, live, last, actions, fresh }) {
               {m.card.tid && <a href={`#task=${m.card.tid}`} style={{ color: "#55697a", marginLeft: 4 }}>{m.card.ref}</a>}
             </div>
           )}
-          {card}
+          {card && <CardNav.Provider value={nav}>{card}</CardNav.Provider>}
           {/* The action words, in the assistant's own line - one place to look, chosen by the server from
               the item's kind and already filtered to what this one can carry (concierge.chips_for). A
               strip over the composer and a second row under the bubble said the same things twice and
               neither was where the sentence was (the owner, 2026-09-07). */}
-          {last && !!chips.length && (
+          {last && !!strip.length && (
             <div className="tq-verbs">
-              {chips.map((c, i) => (
+              {strip.map((c, i) => (
                 <button key={c.verb || c.label} type="button" className={i === 0 ? "tq-verb primary" : "tq-verb"}
                   title={c.hint || undefined} disabled={actions.busy} onClick={() => actions.chip(c)}>{c.label}</button>
               ))}
@@ -1351,7 +1352,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     pull(key, asUser);
   };
 
-  const actions = { done, start, handOff, openTask: onOpenTask, timeline, navigate: onNavigate,
+  const actions = { done, start, handOff, openTask: onOpenTask, timeline, navigate: onNavigate, items,
     walk: walkTo, walkSaved, walkRestart, chip: runChip, busy: busy || resetting || !!handoff,
     confirm: confirmProposal, cancel: cancelProposal, propose: proposeDirect, preview: previewProposal,
     surface: (key, note) => {
@@ -1432,8 +1433,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             <div className="tq-welcome">
               <TaskuaryMark size={30} />
               <b>{greeting()}</b>
-              <span>{items.length ? `How can I help? ${waitingLine(ready)}`
-                : "How can I help? Nothing is waiting on you - ask me anything, or set something up."}</span>
+              {/* the start of the walk: who wants what, before the first card (2026-09-23) */}
+              <span>{items.length ? summarize(items).lead : "Nothing is waiting on you - ask me anything, or set something up."}</span>
+              {!!items.length && <div className="tq-welcome-sum"><WhoWantsWhat groups={summarize(items).groups} onRow={actions.surface} /></div>}
               <div className="tq-modes">
                 <button type="button" className="tq-chip primary" disabled={busy || resetting || starting || !canAdvance} onClick={() => start(null)}
                   title="Everything in the pipe, most important first - mail, reports, agents, meetings">{starting ? "Reading your pipe..." : "Walk me through my tasks"}</button>

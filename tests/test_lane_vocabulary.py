@@ -67,6 +67,12 @@ def test_a_lane_label_still_reads_as_the_row_does():
 
 
 def test_the_walk_line_reads_its_counting_words_from_the_vocabulary():
+    # the walk opens with who wants what now (walkSummary.js, 2026-09-23); each row's word is the lane's
+    # own word from the one vocabulary, never a copy written into the page
     view = (ROOT / 'website' / 'src' / 'AssistantView.jsx').read_text(encoding='utf-8')
-    assert 'laneCounted(lane)' in view
-    assert '["landed", "report"]' not in view, 'the third copy of the counting words is gone'
+    cards = (ROOT / 'website' / 'src' / 'assistantCards.jsx').read_text(encoding='utf-8')
+    walk = (ROOT / 'website' / 'src' / 'walkSummary.js').read_text(encoding='utf-8')
+    assert 'summarize(items).lead' in view
+    assert 'stateOf(i, laneMeta(i.lane).word)' in cards
+    assert '["landed", "report"]' not in view + walk, 'the third copy of the counting words is gone'
+    assert 'agent waving' not in walk and 'asked you' not in walk

@@ -607,7 +607,17 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     # a judgement made BEFORE routing rides in on the message (an assistant idea judged by triage_ideas,
     # a chat line judged by chat_route) and is reused below - never a second model call for one message
     verdict = msg.pop('_verdict', None)
-    if is_chat(msg):
+    echo = echo_route(store, msg)
+    if echo and not is_chat(msg):
+        # the mail is the copy: kept on the task for the chain, never judged, drafted to or put on the pile
+        mid = _land(store, msg, echo['task_id'], 'filed')
+        store.add_route(mid, echo['task_id'], 'attach', 1.0, echo['reason'], [], 'triage')
+        logger.info(f"ingest: {msg.get('subject') or 'a mail'} echoes {task_ref(echo['task_id'])} - filed on it")
+        return {'status': 'filed', 'task_id': echo['task_id'], 'message_id': mid}
+    if echo:
+        # the chat line is the real one (its reply goes back where it was said): it joins as the newest line
+        r = echo
+    elif is_chat(msg):
         # a room is not a topic: nothing joins on the room id alone. Two facts join without a
         # model (a line typed seconds after the last, an answer to a live agent); everything else
         # is the verdict's `relationship`, among this room's lines from this same day (PW-031..034)
@@ -1116,6 +1126,45 @@ def identity_route(store, msg: dict) -> dict:
         return {'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [],
                 'reason': f"this thread's task {task_ref(home)} is closed - judged as new; the reply stays on the thread"}
     return {'decision': 'attach', 'task_id': home, 'score': 1.0, 'candidates': [], 'reason': 'attached: same conversation thread'}
+
+
+# A chat app mails you what you missed in it: "X sent a message" with their line quoted. That mail is
+# not a second ask, and it has no thread in common with the chat, so identity_route opened a second
+# task for one question (a Teams line and its notification mail, one hour apart, 2026-09-23). What
+# they share is the WORDS, from the same person, close together - never a sender or a subject rule.
+ECHO_HOURS = 12
+ECHO_MIN = 20           # a line this short ("ok", "thanks!") is said too often to identify one message
+ECHO_KEY = 160          # a notification quotes the start of a long line, so the start is what is matched
+_INVISIBLE = re.compile('[­​-‏⁠﻿]')
+
+def _plain(t) -> str: return ' '.join(_INVISIBLE.sub(' ', str(t or '')).lower().split())
+
+def _same_person(a, b) -> bool:
+    a, b = sorted((_plain(a), _plain(b)), key=len)
+    return len(a) >= 3 and a in b
+
+
+def echo_route(store, msg: dict) -> dict | None:
+    """The open task this message already is, when it is a copy of a line that came the other way:
+    a notification mail quoting a chat line, or the chat line arriving after its notification. The
+    chat line is the one quoted, so its start must appear in the mail; the sender's name must match
+    and the two must be close in time."""
+    chat = is_chat(msg)
+    from .store import norm_stamp
+    try: since = (datetime.fromisoformat(norm_stamp(msg.get('sent_at'))[:19]) - timedelta(hours=ECHO_HOURS)).strftime('%Y-%m-%d %H:%M:%S')
+    except ValueError: return None
+    for m in store.recent_messages(since):
+        if m['MessageId'] == msg.get('_mid') or is_chat({'channel': m.get('Channel')}) == chat or is_ours(m): continue
+        tid = _open_task(store, m.get('TaskId'))
+        if not tid or not _same_person(m.get('FromName'), msg.get('from_name')): continue
+        if _secs(m.get('SentAt'), msg.get('sent_at')) > ECHO_HOURS * 3600: continue
+        line, mail = ((msg.get('body'), (store.get_message(m['MessageId']) or {}).get('BodyText')) if chat
+                      else (m.get('BodyText'), msg.get('body')))
+        key = _plain(line).rstrip('.… ')[:ECHO_KEY]
+        if len(key) >= ECHO_MIN and key in _plain(mail):
+            return {'decision': 'attach', 'task_id': tid, 'score': 1.0, 'candidates': [], 'echo': True,
+                    'reason': f"the same words from {m.get('FromName')} already came by {m.get('Channel')} on {task_ref(tid)} - one message, two ways"}
+    return None
 
 
 def own_thread_only(store, msg: dict, r: dict) -> dict:

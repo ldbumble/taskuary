@@ -8,7 +8,8 @@ import { BORDER, FAINT, INK, PANEL, ROLES, mono } from "./theme.jsx";
 import { zoneAt } from "./assistantGame.js";
 
 // The Assistant Game's office. The studio room in the middle is the Agent Floor (one desk per agent
-// that can run at once); around it sit the Lobby where people wait on you, the Coffee Room of fyi's,
+// that can run at once); around it sit the Meeting Room where people wait on you (mail at the table,
+// chat in the huddle), the Gym of your own tasks, the Coffee Room of fyi's,
 // the Memory Archive's filing cabinets (the Hub) haunted by threads that slipped, and the Assistant
 // Core. Every figure is backed by a real item. You walk it: WASD/arrows, E to talk to whoever is near.
 
@@ -33,16 +34,24 @@ const YOU = { shirt: "#2c3140", skin: "#d2a07c", hair: "#2a2622" };
 export const ZONE_VIEW = {
   all: { target: [0, 1, 2.3], zoom: 0.92 },
   floor: { target: [0, 1, 0.2], zoom: 1.4 },
-  lobby: { target: [0, 0.8, 6.4], zoom: 1.55 },
+  meeting: { target: [0, 0.8, 6.4], zoom: 1.55 },
   coffee: { target: [8.3, 0.8, -1], zoom: 1.6 },
   hq: { target: [8.3, 0.8, 6.4], zoom: 1.7 },
-  archive: { target: [-8.3, 1, 2.3], zoom: 1.3 },
+  archive: { target: [-8.3, 1, -0.9], zoom: 1.6 },
+  gym: { target: [-8.3, 0.8, 5.7], zoom: 1.65 },
 };
-const YOU_SPOT = { all: [4.4, 4.3], floor: [3.9, 3.4], lobby: [2.6, 5.9], coffee: [6.3, 0.6], hq: [6.4, 7.6], archive: [-6.2, 2.6] };
-const LOBBY_SPOTS = [[-3.4, 7.7], [-2.1, 7.7], [-0.8, 7.7], [0.5, 7.7], [-2.75, 6.6], [-1.45, 6.6]];
+const YOU_SPOT = { all: [4.4, 4.3], floor: [3.9, 3.4], meeting: [3.4, 5.4], coffee: [6.3, 0.6], hq: [6.4, 7.6], archive: [-5.8, -2.6], gym: [-5.9, 7.9] };
+// the meeting room: mail sits along the far side of the table, chat huddles by the window with phones out
+const MAIL_SPOTS = [[-3.3, 5.35], [-2, 5.35], [-0.7, 5.35], [0.6, 5.35]];
+const CHAT_SPOTS = [[2.3, 7.4], [3.3, 7.9], [3.6, 6.8], [2.6, 8.3]];
 const COFFEE_SPOTS = [[7.3, -2.2], [9.2, -2.2], [6.6, -0.6], [10, -0.6], [7.6, 0.9], [9.4, 0.9]];
-const GHOST_SPOTS = [[-9.5, 0.4], [-7, -1.4], [-9.2, 4.6], [-6.8, 6.4], [-8.2, 2.6]];
-const CABINET_SPOTS = Array.from({ length: 8 }, (_, i) => [-10.35 + (i % 4) * 1.18, i < 4 ? -3.2 : 7.8]);
+const GHOST_SPOTS = [[-9.6, -1.5], [-7, -2], [-8.3, -0.6], [-9.8, 0.2], [-6.6, 0.3]];
+const CABINET_SPOTS = Array.from({ length: 8 }, (_, i) => [-10.35 + (i % 4) * 1.18, i < 4 ? -3.2 : 1.7]);
+// the gym: one station per task you own - a bench, a rack, a bag, a treadmill - and whoever trains there is the task
+const GYM_SPOTS = [[-10, 3.9], [-8.3, 3.9], [-6.6, 3.9], [-10, 6.2], [-8.3, 6.2], [-6.6, 6.2]];
+// which pool of figures a person stands in: mail and chat are two groups in one room
+export const POOLS = [["mail", "meeting", 4], ["chat", "meeting", 4], ["coffee", "coffee", 6], ["archive", "archive", 5], ["gym", "gym", 6]];
+export const poolOf = (n) => n.zone === "meeting" ? (n.sub === "email" ? "mail" : "chat") : n.zone;
 
 const MOVE_KEYS = { w: "up", ArrowUp: "up", s: "down", ArrowDown: "down", a: "left", ArrowLeft: "left", d: "right", ArrowRight: "right" };
 
@@ -74,7 +83,7 @@ function shortLine(value, length = 34) {
 const MARK_COLORS = { need: "#d9a441", send: "#6f9a6e", info: "#6d8fa6", bad: "#b04a5c", ask: "#c76a79" };
 
 export default function GameScene({ seats, selectedId, onSelect, focus = "all", onZone, npcs = [], cabinets = [],
-  picked = null, onPick, onCabinet, onCore, zoneCounts = {}, inset = { left: 0, right: 0 }, active = true }) {
+  picked = null, onPick, onCabinet, onCore, zoneCounts = {}, inset = { left: 0, right: 0 }, active = true, meetings = [] }) {
   const hostRef = useRef(null);
   const labelRefs = useRef([]);
   const tagRefs = useRef(new Map());     // id -> DOM node of an NPC / zone / cabinet tag
@@ -86,11 +95,12 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
   const [hoverKey, setHoverKey] = useState(null);
 
   seatsRef.current = seats;
-  props.current = { onSelect, onZone, onPick, onCabinet, onCore, selectedId, focus, picked, npcs, cabinets, zoneCounts, inset, active };
+  props.current = { onSelect, onZone, onPick, onCabinet, onCore, selectedId, focus, picked, npcs, cabinets, zoneCounts, inset, active, meetings };
 
   useEffect(() => { sceneApi.current?.sync(seats); }, [seats]);
   useEffect(() => { sceneApi.current?.syncNpcs(npcs); }, [npcs]);
   useEffect(() => { sceneApi.current?.syncCabinets(cabinets); }, [cabinets]);
+  useEffect(() => { sceneApi.current?.meetings(meetings); }, [meetings]);
   useEffect(() => { sceneApi.current?.fly(focus); }, [focus]);
   useEffect(() => { sceneApi.current?.resize(); }, [inset.left, inset.right]);
 
@@ -111,7 +121,7 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
-    renderer.domElement.setAttribute("aria-label", "Interactive 3D office: the agents at their desks, people waiting in the lobby, fyi's in the coffee room, the memory archive and the assistant core");
+    renderer.domElement.setAttribute("aria-label", "Interactive 3D office: the agents at their desks, your tasks in the gym, people waiting in the meeting room, fyi's in the coffee room, the memory archive and the assistant core");
     renderer.domElement.tabIndex = 0;
     host.prepend(renderer.domElement);
 
@@ -335,19 +345,46 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
       tag(box(room, w, 0.35, d, base, x, -0.13, z, 0.15), { zoneKey });
       tag(box(room, w - 0.22, 0.08, d - 0.2, top, x, 0.08, z, 0.06), { zoneKey });
     };
-    pad("lobby", 10.3, 4.5, 0, 6.6, "#d6cdbb", "#e9e3d7");
+    pad("meeting", 10.3, 4.5, 0, 6.6, "#d6cdbb", "#e9e3d7");
     pad("coffee", 6, 6.2, 8.3, -0.95, "#d8c7b1", "#ead8c2");
     pad("hq", 6, 4.5, 8.3, 6.6, "#2c323b", "#39414c");
-    pad("archive", 6, 12.75, -8.3, 2.25, "#cbc2b2", "#ddd5c6");
+    pad("archive", 6, 6.45, -8.3, -0.9, "#cbc2b2", "#ddd5c6");
+    pad("gym", 6, 6.1, -8.3, 5.75, "#4b524f", "#5d6662");
 
-    // lobby: reception desk, a sofa, a rug, the queue line people wait on
-    box(room, 6.2, 0.012, 2.4, "#cfd6c8", -1.4, 0.135, 7.1, 0.1);
-    box(room, 2.4, 0.95, 0.7, "#8a6a5c", 3.1, 0.6, 5.2, 0.08);
-    box(room, 2.6, 0.08, 0.86, "#d9c3a3", 3.1, 1.1, 5.2, 0.04);
-    box(room, 0.36, 0.26, 0.05, "#435357", 3.1, 1.28, 5.05, 0.02);
-    box(room, 2.2, 0.42, 0.8, "#637d8d", -3.9, 0.35, 5.1, 0.14);
-    box(room, 2.2, 0.62, 0.22, "#637d8d", -3.9, 0.66, 4.78, 0.1);
-    for (let i = 0; i < 6; i += 1) box(room, 0.06, 0.012, 0.3, "#b99b73", -3.8 + i * 1.1, 0.145, 8.35, 0.004);
+    // meeting room: the long table mail gathers at, its chairs, the screen of what is coming up, and
+    // the window corner where chat huddles
+    box(room, 6.4, 0.012, 3.1, "#cfd6c8", -1.35, 0.135, 6.5, 0.1);
+    box(room, 5, 0.1, 1.5, "#8a6a5c", -1.35, 0.95, 6.5, 0.06);
+    for (const x of [-3.4, 0.7]) box(room, 0.12, 0.8, 1.1, "#6f5548", x, 0.52, 6.5, 0.03);
+    for (let i = 0; i < 4; i += 1) {
+      box(room, 0.5, 0.1, 0.5, "#c8c6b4", -3.3 + i * 1.3, 0.58, 7.6, 0.08);
+      box(room, 0.5, 0.55, 0.1, "#c8c6b4", -3.3 + i * 1.3, 0.85, 7.88, 0.05);
+    }
+    box(room, 0.22, 0.012, 0.3, "#f4f1ea", -2.6, 1.01, 6.3, 0.004);
+    box(room, 0.22, 0.012, 0.3, "#f4f1ea", -0.1, 1.01, 6.7, 0.004);
+    const meetScreen = canvasTexture((ctx, canvas) => { ctx.fillStyle = "#1e2a2f"; ctx.fillRect(0, 0, canvas.width, canvas.height); }, 512, 288);
+    const drawMeetings = (list) => {
+      const ctx = meetScreen.canvas.getContext("2d");
+      ctx.fillStyle = "#1e2a2f"; ctx.fillRect(0, 0, 512, 288);
+      ctx.fillStyle = "#7fd1c6"; ctx.font = "800 26px Segoe UI, sans-serif"; ctx.fillText("COMING UP", 26, 46);
+      ctx.font = "500 21px Segoe UI, sans-serif";
+      (list.length ? list.slice(0, 4) : [{ title: "nothing on the calendar soon" }]).forEach((m, i) => {
+        ctx.fillStyle = list.length ? "#e8eee5" : "#7c8590";
+        ctx.fillText(shortLine(`${m.when ? `${m.when}  ` : ""}${m.title}`, 36), 26, 96 + i * 46);
+      });
+      meetScreen.texture.needsUpdate = true;
+    };
+    drawMeetings([]);
+    box(room, 0.1, 1.25, 2.1, "#2a2f35", -4.7, 1.55, 6.5, 0.04);
+    box(room, 0.1, 0.9, 0.1, "#3a4047", -4.7, 0.55, 6.5, 0.02);
+    const meetGeometry = new THREE.PlaneGeometry(1.95, 1.1);
+    geometries.set("meet-screen", meetGeometry);
+    const meetPlane = new THREE.Mesh(meetGeometry, new THREE.MeshBasicMaterial({ map: meetScreen.texture }));
+    meetPlane.rotation.y = Math.PI / 2;
+    meetPlane.position.set(-4.64, 1.55, 6.5);
+    room.add(meetPlane);
+    box(room, 1.6, 0.012, 1.6, "#d9cbb4", 3, 0.135, 7.6, 0.2);
+    box(room, 0.5, 0.75, 0.5, "#b99b73", 4.3, 0.5, 8.2, 0.06);
 
     // coffee room: counter, the machine, a fridge, two round tables
     box(room, 5.2, 1, 0.8, "#b28b6a", 8.3, 0.6, -3.55, 0.06);
@@ -400,13 +437,28 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
     coreLight.position.set(8.3, 2, 6.4);
     scene.add(coreLight);
 
-    // archive: two walls of filing cabinets (one per Hub topic), a reading table in the middle
+    // archive: two rows of filing cabinets facing each other (one per Hub topic), ghosts in the aisle
     box(room, 0.17, 1.6, 12.4, "#d9d0bf", -11.2, 0.9, 2.25, 0.05);
-    box(room, 1.8, 0.08, 1.1, "#a98d6b", -8.3, 0.9, 2.3, 0.04);
-    for (const [x, z] of [[-9.05, 1.9], [-7.55, 1.9], [-9.05, 2.7], [-7.55, 2.7]]) box(room, 0.08, 0.8, 0.08, "#8f7657", x, 0.5, z);
-    const lampMat = new THREE.MeshStandardMaterial({ color: "#f3d48a", emissive: "#d9a441", emissiveIntensity: 0.9 });
-    materials.set("lamp", lampMat);
-    ball(room, 0.14, 0.1, 0.14, lampMat, -8.3, 1.25, 2.3);
+
+    // gym: rubber floor, a mirror wall, and the kit - bench and barbell, a rack, a bag, a treadmill
+    const mirrorMat = new THREE.MeshStandardMaterial({ color: "#cfe3ea", roughness: 0.08, metalness: 0.4 });
+    materials.set("mirror", mirrorMat);
+    box(room, 0.05, 1.2, 5.2, mirrorMat, -11.08, 1.2, 5.75, 0.01);
+    for (let i = 0; i < 9; i += 1) box(room, 5.6, 0.004, 0.02, "#6c7571", -8.3, 0.125, 2.95 + i * 0.66, 0.001);
+    const benchAt = (x, z) => {
+      box(room, 1.1, 0.12, 0.34, "#2f3438", x, 0.52, z, 0.05);
+      box(room, 0.08, 0.4, 0.08, "#8a9095", x, 0.3, z);
+      cylinder(room, 0.025, 0.025, 1.5, "#b8bec2", x, 1.02, z - 0.25).rotation.z = Math.PI / 2;
+      for (const d of [-0.62, 0.62]) cylinder(room, 0.2, 0.2, 0.06, "#2a2d31", x + d, 1.02, z - 0.25).rotation.z = Math.PI / 2;
+    };
+    benchAt(-9.95, 4.8); benchAt(-6.65, 7.1);
+    box(room, 1.3, 0.08, 0.4, "#555c60", -8.3, 0.5, 4.75, 0.02);
+    for (let i = 0; i < 5; i += 1) for (const d of [-0.12, 0.12]) ball(room, 0.07, 0.07, 0.07, "#2a2d31", -8.8 + i * 0.25 + d, 0.6, 4.75);
+    cylinder(room, 0.2, 0.2, 0.9, "#8a3646", -10.1, 1.25, 7.2);
+    cylinder(room, 0.01, 0.01, 0.9, "#9aa0a6", -10.1, 2.15, 7.2);
+    box(room, 1.3, 0.12, 0.6, "#2f3438", -8.3, 0.22, 7.35, 0.04);
+    box(room, 0.1, 0.9, 0.1, "#5a6166", -8.3, 0.7, 7.05, 0.02);
+    box(room, 0.5, 0.2, 0.1, "#1e2a2f", -8.3, 1.18, 7.05, 0.02);
     const cabinetMeshes = CABINET_SPOTS.map(([x, z], i) => {
       const cab = group(room, x, 0.12, z);
       const body = box(cab, 1.02, 2.05, 0.72, "#7d8a8f", 0, 1.03, 0, 0.05);
@@ -464,7 +516,7 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
         markTextures.set(key, canvasTexture((ctx) => {
           ctx.fillStyle = color; ctx.beginPath(); ctx.arc(64, 64, 54, 0, Math.PI * 2); ctx.fill();
           ctx.strokeStyle = "rgba(255,255,255,.9)"; ctx.lineWidth = 7; ctx.stroke();
-          ctx.fillStyle = "#fff"; ctx.font = "800 70px Segoe UI, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillStyle = "#fff"; ctx.font = `800 ${[...glyph].length > 1 ? 44 : 70}px Segoe UI, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
           ctx.fillText(glyph, 64, 69);
         }, 128, 128).texture);
       }
@@ -499,20 +551,27 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
     youRoot.add(gem);
     const you = { root: youRoot, body: youBody, goal: new THREE.Vector3(YOU_SPOT.all[0], 0, YOU_SPOT.all[1]), anchor: group(youRoot, 0, 2.5, 0) };
 
-    // standing figures for the lobby and the coffee room, ghosts for the archive - pooled, a real
+    // standing figures for the meeting room, the coffee room and the gym, ghosts for the archive - pooled, a real
     // item fills one or it is hidden
-    const standing = (spots, zone, offset) => spots.map(([x, z], i) => {
+    // what each figure holds says how it reached you: an envelope, a phone, a mug, a pair of dumbbells
+    const facing = { mail: () => 0, chat: (x, z) => Math.atan2(2.9 - x, 7.6 - z), coffee: (x, z) => Math.atan2(8.4 - x, -0.6 - z), gym: () => Math.PI * 0.25 };
+    const standing = (spots, pool, zone, offset) => spots.map(([x, z], i) => {
       const holder = group(room, x, 0.12, z);
       const body = character(holder, SKINS[(i + offset) % SKINS.length], true);
-      body.root.rotation.y = zone === "lobby" ? Math.PI * 0.95 : Math.atan2(8.4 - x, -0.6 - z);
-      const mug = zone === "coffee" ? cylinder(body.arms[1], 0.06, 0.05, 0.12, "#f4f1ea", 0.05, -0.55, 0.06) : null;
+      body.root.rotation.y = facing[pool](x, z);
+      if (pool === "coffee") cylinder(body.arms[1], 0.06, 0.05, 0.12, "#f4f1ea", 0.05, -0.55, 0.06);
+      if (pool === "mail") box(body.arms[1], 0.22, 0.14, 0.02, "#f7f3ea", 0.05, -0.56, 0.1, 0.01);
+      if (pool === "chat") box(body.arms[1], 0.08, 0.15, 0.02, "#1c1f24", 0.05, -0.56, 0.1, 0.01);
+      if (pool === "gym") for (const arm of body.arms) cylinder(arm, 0.035, 0.035, 0.26, "#2a2d31", 0.04, -0.56, 0).rotation.z = Math.PI / 2;
       const mark = makeMark(holder, 2.2);
       const anchor = group(holder, 0, 2.5, 0);
       holder.visible = false;
-      return { holder, body, mug, mark, anchor, zone, item: null, arrivalAt: -100, phase: i * 1.7 };
+      return { holder, body, mark, anchor, zone, pool, item: null, arrivalAt: -100, phase: i * 1.7 };
     });
-    const lobbyPool = standing(LOBBY_SPOTS, "lobby", 3);
-    const coffeePool = standing(COFFEE_SPOTS, "coffee", 5);
+    const mailPool = standing(MAIL_SPOTS, "mail", "meeting", 3);
+    const chatPool = standing(CHAT_SPOTS, "chat", "meeting", 1);
+    const coffeePool = standing(COFFEE_SPOTS, "coffee", "coffee", 5);
+    const gymPool = standing(GYM_SPOTS, "gym", "gym", 2);
     const ghostMat = new THREE.MeshStandardMaterial({ color: "#f5f7ff", emissive: "#aab7ff", emissiveIntensity: 0.35, transparent: true, opacity: 0.78, roughness: 0.4 });
     materials.set("ghost", ghostMat);
     const ghostPool = GHOST_SPOTS.map(([x, z], i) => {
@@ -525,9 +584,9 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
       const mark = makeMark(holder, 1.72);
       const anchor = group(holder, 0, 2, 0);
       holder.visible = false;
-      return { holder, mark, anchor, zone: "archive", item: null, arrivalAt: -100, phase: i * 2.1, home: new THREE.Vector3(x, 0.5, z) };
+      return { holder, mark, anchor, zone: "archive", pool: "archive", item: null, arrivalAt: -100, phase: i * 2.1, home: new THREE.Vector3(x, 0.5, z) };
     });
-    const npcPools = { lobby: lobbyPool, coffee: coffeePool, archive: ghostPool };
+    const npcPools = { mail: mailPool, chat: chatPool, coffee: coffeePool, archive: ghostPool, gym: gymPool };
 
     // ── desks (the Agent Floor) ────────────────────────────────────────────────────────────────
     function makeScreen() {
@@ -633,8 +692,8 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
     };
     const markFor = (item) => item.mark ? [item.mark.glyph, MARK_COLORS[item.mark.tone] || MARK_COLORS.need] : [null];
     const syncNpcs = (list) => {
-      for (const [zone, pool] of Object.entries(npcPools)) {
-        const mine = list.filter((n) => n.zone === zone);
+      for (const [name, pool] of Object.entries(npcPools)) {
+        const mine = list.filter((n) => poolOf(n) === name);
         pool.forEach((slot, i) => {
           const item = mine[i] || null;
           if (item && item.key !== slot.item?.key) slot.arrivalAt = performance.now() / 1000;
@@ -655,7 +714,8 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
     };
     let hovered = -1, hoverNpc = null, hoverCab = null, hoverZone = null, hoverCore = false;
     const select = () => {};
-    sceneApi.current = { sync, syncNpcs, syncCabinets, select, fly, reset: resetCamera, resize: () => resize() };
+    sceneApi.current = { sync, syncNpcs, syncCabinets, select, fly, reset: resetCamera, resize: () => resize(), meetings: drawMeetings };
+    drawMeetings(props.current.meetings || []);
     sync(seatsRef.current);
     syncNpcs(props.current.npcs || []);
     syncCabinets(props.current.cabinets || []);
@@ -767,7 +827,7 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
       node.style.top = `${y}px`;
     };
     const zoneAnchors = {
-      floor: group(room, -3.6, 4.4, -3.6), lobby: group(room, -4, 1.6, 8.6), coffee: group(room, 8.3, 2.9, -2.6),
+      floor: group(room, -3.6, 4.4, -3.6), meeting: group(room, 1.8, 1.8, 8.6), gym: group(room, -8.3, 2.4, 8.6), coffee: group(room, 8.3, 2.9, -2.6),
       hq: group(room, 8.3, 3.1, 6.4), archive: group(room, -8.3, 2.8, -3.9),
     };
     // who you are standing next to: E talks to them. The nearest real thing within reach wins.
@@ -782,7 +842,7 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
         if (d < reach) cands.push({ d, at: obj, ...hit });
       };
       for (const pool of Object.values(npcPools)) for (const slot of pool) if (slot.item)
-        consider(slot.holder, 1.5, { kind: "npc", key: slot.item.key, anchor: slot.anchor, say: slot.zone === "archive" ? "bust the ghost" : `talk to ${slot.item.who || "them"}` });
+        consider(slot.holder, 1.5, { kind: "npc", key: slot.item.key, anchor: slot.anchor, say: slot.zone === "archive" ? "bust the ghost" : slot.zone === "gym" ? `train · ${shortLine(slot.item.title, 26)}` : `talk to ${slot.item.who || "them"}` });
       workstations.forEach((seat) => { if (seat.group.visible && seat.descriptor)
         consider(seat.person.root, 1.5, { kind: "desk", id: seat.descriptor.task.TaskId, anchor: seat.anchor, say: `${seat.descriptor.state.agent} · ${seat.descriptor.task.ref}` }); });
       cabinetMeshes.forEach((c) => { if (c.topic) consider(c.cab, 1.4, { kind: "cabinet", id: c.topic.Topic, anchor: c.anchor, say: `open ${c.topic.Topic}` }); });
@@ -897,7 +957,7 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
       });
 
       for (const pool of Object.values(npcPools)) pool.forEach((slot, i) => {
-        if (!slot.item) { place(tagRefs.current.get(`npc:${i}:${slot.zone}`), slot.anchor, false); return; }
+        if (!slot.item) { place(tagRefs.current.get(`npc:${i}:${slot.pool}`), slot.anchor, false); return; }
         const arrival = reduced ? 1 : smooth((now - slot.arrivalAt) / 0.7);
         const lit = slot.item.key === p.picked || slot.item.key === hoverNpc;
         if (slot.zone === "archive") {
@@ -910,12 +970,14 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
           const b = slot.body;
           b.torso.position.y = b.baseY + Math.sin(now * 1.7 + slot.phase) * 0.012;
           b.head.rotation.y = Math.sin(now * 0.6 + slot.phase) * 0.25;
-          if (slot.zone === "coffee") { b.arms[1].rotation.x = -1.2 + Math.max(0, Math.sin(now * 0.8 + slot.phase)) * -0.5; }
+          if (slot.pool === "coffee") { b.arms[1].rotation.x = -1.2 + Math.max(0, Math.sin(now * 0.8 + slot.phase)) * -0.5; }
+          else if (slot.pool === "chat") { b.arms[1].rotation.x = -2 + Math.sin(now * 5 + slot.phase) * 0.06; b.head.rotation.x = 0.3; }
+          else if (slot.pool === "gym") { const lift = Math.max(0, Math.sin(now * 2.6 + slot.phase)); b.arms.forEach((a) => { a.rotation.x = -0.4 - lift * 1.3; }); b.torso.position.y = b.baseY - lift * 0.05; }
           else if (slot.item.mark?.tone === "need") { b.arms[0].rotation.z = -2.5 + Math.sin(now * 3 + slot.phase) * 0.25; b.arms[0].position.y = 0.62; }
           else { b.arms[0].rotation.z = 0; b.arms[0].position.y = 0.5; }
         }
         if (slot.mark.visible) slot.mark.position.y = (slot.zone === "archive" ? 1.72 : 2.2) + Math.sin(now * 3 + slot.phase) * 0.08;
-        place(tagRefs.current.get(`npc:${i}:${slot.zone}`), slot.anchor, lit || p.focus === slot.zone);
+        place(tagRefs.current.get(`npc:${i}:${slot.pool}`), slot.anchor, lit || p.focus === slot.zone);
       });
 
       cabinetMeshes.forEach((c, i) => {
@@ -975,7 +1037,6 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
 
   const tagRef = (id) => (node) => { if (node) tagRefs.current.set(id, node); else tagRefs.current.delete(id); };
   const pinned = { position: "absolute", display: "none", transform: "translate(-50%, -100%)", zIndex: 3 };
-  const slotsFor = (zone, n) => npcs.filter((x) => x.zone === zone).slice(0, n);
 
   return (
     <Box ref={hostRef} data-studio-scene="three" sx={{ position: "absolute", inset: 0, overflow: "hidden",
@@ -1013,13 +1074,14 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
       ))}
 
       {/* speech bubbles: who is standing there, and what they came about */}
-      {[["lobby", 6], ["coffee", 6], ["archive", 5]].flatMap(([zone, n]) => slotsFor(zone, n).map((item, i) => (
-        <Box key={`npc:${i}:${zone}`} ref={tagRef(`npc:${i}:${zone}`)} onClick={() => onPick?.(item.key)}
+      {POOLS.flatMap(([pool, zone, n]) => npcs.filter((x) => poolOf(x) === pool).slice(0, n).map((item, i) => (
+        <Box key={`npc:${i}:${pool}`} ref={tagRef(`npc:${i}:${pool}`)} onClick={() => onPick?.(item.key)}
           sx={{ ...pinned, maxWidth: 190, px: 1, py: 0.55, borderRadius: "10px 10px 10px 2px", cursor: "pointer",
             bgcolor: item.key === picked ? "#1f242c" : zone === "archive" ? "rgba(236,240,255,.94)" : "rgba(255,253,249,.94)",
             color: item.key === picked ? "#fff" : INK, border: `1px solid ${item.key === picked ? "#1f242c" : BORDER}`,
             boxShadow: "0 8px 22px rgba(30,34,40,.16)", outline: hoverKey === item.key ? "2px solid #d9a441" : "none" }}>
-          <Typography noWrap sx={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.3, opacity: 0.8 }}>{item.who}</Typography>
+          <Typography noWrap sx={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.3, opacity: 0.8 }}>
+            {item.sub === "email" ? "✉ " : item.sub === "chat" ? "💬 " : item.zone === "gym" ? "🏋 " : ""}{item.who}</Typography>
           <Typography noWrap sx={{ fontSize: 11, fontWeight: 600 }}>{item.title}</Typography>
         </Box>
       )))}
@@ -1032,7 +1094,7 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
         </Box>
       ))}
 
-      {[["floor", "🖥 Agent Floor"], ["lobby", "🛋 The Lobby"], ["coffee", "☕ Coffee Room"], ["hq", "✦ Assistant Core"], ["archive", "🗄 Memory Archive"]].map(([zone, name]) => (
+      {[["floor", "🖥 Agent Floor"], ["gym", "🏋 The Gym"], ["meeting", "🗓 Meeting Room"], ["coffee", "☕ Coffee Room"], ["hq", "✦ Assistant Core"], ["archive", "🗄 Memory Archive"]].map(([zone, name]) => (
         <Box key={zone} ref={tagRef(`zone:${zone}`)} onClick={() => onZone?.(zone)}
           sx={{ ...pinned, px: 1.2, py: 0.45, borderRadius: 99, cursor: "pointer", whiteSpace: "nowrap",
             bgcolor: focus === zone ? "#f0c05a" : "rgba(24,28,34,.82)", color: focus === zone ? "#1c1f24" : "#fff",
@@ -1050,7 +1112,7 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
       <Box sx={{ position: "absolute", left: "50%", bottom: 12, transform: "translateX(-50%)", zIndex: 4,
         display: { xs: "none", sm: "flex" }, alignItems: "center", gap: 1, px: 1.2, py: 0.65, borderRadius: "8px",
         bgcolor: "rgba(24,28,34,.78)", backdropFilter: "blur(7px)" }}>
-        <Typography sx={{ fontSize: 10.5, color: "#cfd5dc" }}>WASD / arrows walk · E talk · 1-5 jump · Esc out · drag to turn</Typography>
+        <Typography sx={{ fontSize: 10.5, color: "#cfd5dc" }}>WASD walk · E talk · N next · 1-6 jump · Esc out</Typography>
         <Box component="button" type="button" onClick={() => sceneApi.current?.reset()}
           sx={{ border: 0, bgcolor: "transparent", color: "#f0c05a", fontSize: 10.5, fontWeight: 700,
             cursor: "pointer", p: 0, "&:hover": { textDecoration: "underline" } }}>Reset view</Box>

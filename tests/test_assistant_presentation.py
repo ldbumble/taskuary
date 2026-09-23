@@ -117,6 +117,18 @@ class FyiHandfulTests(unittest.TestCase):
         self.assertTrue(words and all(w['verb'] in concierge.CHIP_WORDS for w in words))
         self.assertEqual(dict(s.funnel_states()), before)                                        # shown to nobody, marked nothing
 
+    def test_next_from_the_game_reads_the_item_as_the_chat_does(self):
+        # the game's Next is settle(surfaced, read) - the same call concierge.surface makes - and read
+        # never rides on any other verb: Done is Done, not a read receipt with extra steps
+        s = store(); got = five_fyi(s)
+        key = funnel.build(s, keep_surfaced=True)['items'][0]['key']
+        with mock.patch.object(server, 'store', s), quiet(), mock.patch.object(funnel, 'settle', wraps=funnel.settle) as settle:
+            c = client(s)
+            self.assertEqual(c.post('/api/funnel/settle', json={'key': key, 'verb': 'surfaced', 'read': True}).status_code, 200)
+            self.assertEqual(c.post('/api/funnel/settle', json={'key': key, 'verb': 'later', 'read': True}).status_code, 200)
+        self.assertEqual([(a[1:3], kw.get('read')) for a, kw in settle.call_args_list], [((key, 'surfaced'), True), ((key, 'later'), False)])
+        self.assertEqual(s.funnel_states()[key]['Status'], 'later')
+
     def test_reply_on_one_entry_drafts_at_once_and_marks_nothing(self):
         s = store(); got = five_fyi(s)
         with quiet(), mock.patch.object(concierge, 'brain', return_value=None): card = concierge.surface(s)['item']

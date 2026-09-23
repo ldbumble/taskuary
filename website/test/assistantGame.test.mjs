@@ -1,18 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { CHIP_MOVE, zoneAt, zoneOf, zoneItems, bossHp, matchFor, award, levelOf, fresh, shareCard, loadGame, saveGame, COMBO_WINDOW, XP } from "../src/assistantGame.js";
+import { CHIP_MOVE, channelKind, zoneAt, zoneOf, zoneItems, bossHp, matchFor, award, levelOf, fresh, shareCard, loadGame, saveGame, COMBO_WINDOW, XP } from "../src/assistantGame.js";
 
 const at = Date.parse("2026-09-23T10:00:00Z");
 
 test("every lane has a room, and an agent always sits on the floor", () => {
-  assert.equal(zoneOf({ lane: "approve" }), "lobby");
+  assert.equal(zoneOf({ lane: "approve" }), "meeting");
+  assert.equal(zoneOf({ kind: "task", lane: "asked" }), "gym");
   assert.equal(zoneOf({ lane: "fyi" }), "coffee");
   assert.equal(zoneOf({ lane: "forgotten" }), "archive");
   assert.equal(zoneOf({ kind: "agent", lane: "report" }), "floor");
   assert.equal(zoneOf({ lane: "something-new" }), "coffee", "an unknown lane is still drawn somewhere, never dropped");
   const z = zoneItems([{ lane: "asked" }, { lane: "fyi" }, { kind: "agent", lane: "blocked" }]);
-  assert.deepEqual([z.lobby.length, z.coffee.length, z.floor.length], [1, 1, 1]);
+  assert.deepEqual([z.meeting.length, z.coffee.length, z.floor.length], [1, 1, 1]);
 });
 
 test("the boss's health is only what waits on you", () => {
@@ -46,7 +47,7 @@ test("levels climb and trophies unlock once", () => {
   const r = award(fresh(at), "answer", at);
   assert.deepEqual(r.unlocked.map((a) => a.key).sort(), ["first", "unblock"]);
   assert.equal(award(r.state, "answer", at + 1).unlocked.some((a) => a.key === "first"), false);
-  const room = award(fresh(at), "read", at, { coffee: 0, lobby: 3 });
+  const room = award(fresh(at), "read", at, { coffee: 0, meeting: 3 });
   assert.ok(room.unlocked.some((a) => a.key === "coffee"), "emptying the coffee room is judged on the room");
 });
 
@@ -77,10 +78,11 @@ test("a broken store never breaks the game", () => {
 
 test("walking across a room's line takes you into it", () => {
   assert.equal(zoneAt(0, 0), "floor");
-  assert.equal(zoneAt(0, 6), "lobby");
+  assert.equal(zoneAt(0, 6), "meeting");
+  assert.equal(zoneAt(-8, 6), "gym");
   assert.equal(zoneAt(8, -1), "coffee");
   assert.equal(zoneAt(8, 6), "hq");
-  assert.equal(zoneAt(-8, 3), "archive");
+  assert.equal(zoneAt(-8, 0), "archive");
 });
 
 test("an agent's own news stands at its desk, and every chat word scores as a real move", () => {
@@ -88,4 +90,11 @@ test("an agent's own news stands at its desk, and every chat word scores as a re
   assert.equal(zoneOf({ kind: "wrapup", lane: "report" }), "floor");
   assert.equal(zoneOf({ kind: "report", lane: "report" }), "coffee");
   for (const move of Object.values(CHIP_MOVE)) assert.ok(move in XP, `${move} has no points`);
+});
+
+test("mail sits at the table, chat huddles, a tool is neither", () => {
+  assert.equal(channelKind({ channel: "email" }), "email");
+  assert.equal(channelKind({ channel: "teams" }), "chat");
+  assert.equal(channelKind({ channel: "whatsapp" }), "chat");
+  assert.equal(channelKind({ channel: "github" }), "tool");
 });

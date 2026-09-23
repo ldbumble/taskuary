@@ -21,6 +21,15 @@ export const DEMO = import.meta.env?.VITE_DEMO === "1";
 const clone = (x) => JSON.parse(JSON.stringify(x ?? null));
 const state = clone(FIXTURES);          // the recording, as this visitor has changed it
 installDemoAssistantTimeline(state);
+// Two tasks that are the owner's own ("your task": nothing works them) - the recording has none, and
+// the Assistant Game's gym is where they train. Invented, like everything in the demo world.
+for (const [id, title, boxes] of [[31, "Renew the building access badges", [["Collect the expiring list", true], ["Order new badges", false], ["Book the handover", false]]],
+  [32, "Quarterly vendor spend review", [["Pull the spend export", true], ["Flag the three biggest changes", true], ["Send the summary to finance", false], ["File it", false]]]]) {
+  const row = { TaskId: id, Title: title, Summary: null, Kind: "task", Status: "open", Priority: "normal", Source: "owner", CreatedBy: "owner",
+    CreatedAt: "2026-09-02 09:00:00", ref: `TQ-00${id}`, Session: null, Waiting: 0, HadAgent: false,
+    Checklist: JSON.stringify(boxes.map(([text, done], n) => ({ id: `c${id}-${n}`, text, done }))) };
+  for (const k of ["/api/tasks", "/api/tasks?active=1"]) (state[k] ||= { data: [] }).data.push(clone(row));
+}
 const scriptedAssistant = createDemoAssistantState();
 const numbersWorkflow = typeof location !== "undefined" && new URLSearchParams(location.search).get("workflow") === "numbers";
 if (numbersWorkflow) installNumbersWorkflow(state, scriptedAssistant);
@@ -585,6 +594,16 @@ const write = (method, url, body) => {
     return { ok: true };
   }
 
+  if (method === "patch" && (m = p.match(/^\/api\/tasks\/(\d+)\/checklist\/([^/]+)$/))) {
+    let closed = false;
+    for (const k of ["/api/tasks", "/api/tasks?active=1"]) for (const t of state[k]?.data || []) {
+      if (String(t.TaskId) !== m[1] || !t.Checklist) continue;
+      const list = JSON.parse(t.Checklist).map((c) => (c.id === m[2] ? { ...c, done: !!body?.done } : c));
+      t.Checklist = JSON.stringify(list);
+      if (list.every((c) => c.done)) { t.Status = "done"; closed = true; }
+    }
+    return { ok: true, closed, demo: true };
+  }
   if (p === "/api/settings" || p.startsWith("/api/setup")) return { ok: true };
 
   // everything else is a door out of the demo - and there is nothing on the other side of it

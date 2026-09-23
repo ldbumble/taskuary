@@ -1,6 +1,6 @@
-// The Studio as a game: the office is the assistant, every real item has a place in it, and
-// every real move you make earns points. Pure and dependency-free (test/studioGame.test.mjs) -
-// the scene draws it, StudioView calls the real endpoints, this file only decides WHERE a thing
+// The Assistant, played as a game: the office is the assistant, every real item has a place in it,
+// and every real move you make earns points. Pure and dependency-free (test/assistantGame.test.mjs) -
+// GameScene draws it, AssistantGame calls the real endpoints, this file only decides WHERE a thing
 // lives, WHO should take it, and WHAT the move was worth.
 //
 // Nothing here reads words. A zone comes from the lane triage already judged, a match from the
@@ -8,33 +8,41 @@
 
 export const ZONES = [
   { key: "floor", name: "Agent Floor", hotkey: "1", blurb: "agents at their desks - jump into a code space" },
-  { key: "lobby", name: "The Lobby", hotkey: "2", blurb: "people waiting on a reply from you" },
-  { key: "coffee", name: "Coffee Room", hotkey: "3", blurb: "fyi's and reports - catch up over a cup" },
-  { key: "archive", name: "Memory Archive", hotkey: "4", blurb: "filing cabinets of what the team knows - and the ghosts of threads that slipped" },
-  { key: "hq", name: "Assistant Core", hotkey: "5", blurb: "ask who should take what" },
+  { key: "gym", name: "The Gym", hotkey: "2", blurb: "your own tasks - every checklist tick is a rep" },
+  { key: "meeting", name: "Meeting Room", hotkey: "3", blurb: "people waiting on you - email at the table, chat in the huddle" },
+  { key: "coffee", name: "Coffee Room", hotkey: "4", blurb: "fyi's and reports - catch up over a cup" },
+  { key: "archive", name: "Memory Archive", hotkey: "5", blurb: "filing cabinets of what the team knows - and the ghosts of threads that slipped" },
+  { key: "hq", name: "Assistant Core", hotkey: "6", blurb: "ask who should take what" },
 ];
 export const zoneMeta = (key) => ZONES.find((z) => z.key === key) || null;
 
 // which room a spot on the office floor belongs to (GameScene's world units): walking across a line
 // takes you into that room
 export function zoneAt(x, z) {
-  if (x < -5.15) return "archive";
+  if (x < -5.15) return z < 2.5 ? "archive" : "gym";
   if (x > 5.15) return z < 1.9 ? "coffee" : "hq";
-  return z < 4.2 ? "floor" : "lobby";
+  return z < 4.2 ? "floor" : "meeting";
 }
+
+// how a person reached you: mail sits at the meeting table, a chat message huddles by the window, and
+// a tool (GitHub, Jira, a monitor) is neither - it is a notice, standing with the chat
+const MAIL = new Set(["email", "outlook", "gmail", "imap", "exchange"]);
+const CHAT = new Set(["teams", "slack", "whatsapp", "telegram", "imessage", "discord", "mattermost", "rocketchat", "matrix", "google_chat", "sms"]);
+export const channelKind = (item) => MAIL.has(item?.channel) ? "email" : CHAT.has(item?.channel) ? "chat" : "tool";
 
 const LANE_ZONE = {
   blocked: "floor", working: "floor", queued: "floor", stopped: "floor",
-  approve: "lobby", asked: "lobby", yours: "lobby", time: "lobby", unjudged: "lobby",
+  approve: "meeting", asked: "meeting", time: "meeting", unjudged: "meeting", yours: "gym",
   fyi: "coffee", report: "coffee", broken: "coffee",
   forgotten: "archive",
 };
 // an agent's own news - waving, stopped, finished, wrapped up - stands at its desk, whatever lane it rides in
 const AGENT_KINDS = new Set(["agent", "agentdone", "wrapup"]);
-export const zoneOf = (item) => AGENT_KINDS.has(item?.kind) ? "floor" : LANE_ZONE[item?.lane] || "coffee";
+// your own task (Kind "task", the Tasks tab's "your task") trains in the gym, whatever lane it rides in
+export const zoneOf = (item) => AGENT_KINDS.has(item?.kind) ? "floor" : item?.kind === "task" ? "gym" : LANE_ZONE[item?.lane] || "coffee";
 
 export function zoneItems(items = []) {
-  const out = { floor: [], lobby: [], coffee: [], archive: [], hq: [] };
+  const out = { floor: [], gym: [], meeting: [], coffee: [], archive: [], hq: [] };
   for (const i of items) out[zoneOf(i)].push(i);
   return out;
 }
@@ -67,13 +75,13 @@ export function matchFor(item, agents = []) {
 // ── points ────────────────────────────────────────────────────────────────────────────────────
 export const XP = {
   answer: 60, dispatch: 45, approve: 40, followup: 35, file: 25, draft: 20, prep: 20, resume: 15, wrap: 15, vote: 10,
-  sort: 10, rerun: 10, done: 12, read: 8, open: 5, ask: 5, pull: 3, later: 0, rest: 6,
+  sort: 10, rerun: 10, done: 12, read: 8, open: 5, ask: 5, pull: 3, later: 0, rest: 6, set: 30, rep: 5, next: 2,
 };
 export const MOVE_WORDS = {
   answer: "Unblocked an agent", dispatch: "Handed off", approve: "Reply sent", followup: "Ghost busted",
   file: "Filed to memory", draft: "Draft summoned", vote: "Upvoted a file", done: "Cleared", read: "Caught up",
   open: "Jumped in", ask: "Asked the core", pull: "Pulled a file", later: "Dodged", rest: "Laid to rest",
-  prep: "Prepped for a meeting", resume: "Agent back on its feet", wrap: "Session saved", sort: "Sorted away", rerun: "Report rerun",
+  set: "Set complete - task done", rep: "Rep", next: "Moved on", prep: "Prepped for a meeting", resume: "Agent back on its feet", wrap: "Session saved", sort: "Sorted away", rerun: "Report rerun",
 };
 
 // the chat's action words (concierge.CHIP_WORDS) scored as the move they are - a word the server adds
@@ -102,7 +110,8 @@ export const ACHIEVEMENTS = [
   { key: "handoff3", name: "Matchmaker", says: "handed 3 things to the right agent", test: (s) => (s.by.dispatch || 0) >= 3 },
   { key: "ghost3", name: "Ghostbuster", says: "busted 3 ghost threads", test: (s) => (s.by.followup || 0) + (s.by.rest || 0) >= 3 },
   { key: "coffee", name: "Coffee Break", says: "emptied the coffee room", test: (s, w) => w?.coffee === 0 && (s.by.read || 0) >= 1 },
-  { key: "lobby", name: "Lobby Zero", says: "nobody left waiting in the lobby", test: (s, w) => w?.lobby === 0 && s.moves >= 1 },
+  { key: "meeting", name: "Room Cleared", says: "nobody left waiting in the meeting room", test: (s, w) => w?.meeting === 0 && s.moves >= 1 },
+  { key: "gymrat", name: "Gym Rat", says: "finished 3 of your own tasks", test: (s) => (s.by.set || 0) >= 3 },
   { key: "combo5", name: "On Fire", says: "a 5-move combo", test: (s) => s.best >= 5 },
   { key: "librarian", name: "Librarian", says: "filed a lesson to memory", test: (s) => (s.by.file || 0) >= 1 },
   { key: "sender", name: "Send It", says: "sent 5 replies", test: (s) => (s.by.approve || 0) >= 5 },
@@ -136,6 +145,7 @@ export const QUESTS = [
   { key: "q-reply", says: "Send 3 replies", move: "approve", n: 3, xp: 50 },
   { key: "q-hand", says: "Hand 2 things to agents", move: "dispatch", n: 2, xp: 50 },
   { key: "q-coffee", says: "Catch up on 4 fyi's", move: "read", n: 4, xp: 30 },
+  { key: "q-gym", says: "Do 5 reps", move: "rep", n: 5, xp: 40 },
 ];
 export const questProgress = (s, q) => Math.min(q.n, s?.dayBy?.[q.move] || 0);
 

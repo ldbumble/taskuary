@@ -17,8 +17,9 @@ import { studioSeats, studioTaskIsLive, studioTaskState } from "./studioModel.js
 import { laneMeta } from "./funnelPile.js";
 import { proposalOf } from "./proposalCard.js";
 import { Btn, G, ItemInspector, Moves, Who, errText, glass } from "./gameItem.jsx";
+import { runOperation } from "./taskOps.js";
 import {
-  ZONES, zoneMeta, zoneItems, needsYou, bossHp, matchFor, award, levelOf, loadGame, saveGame, shareCard,
+  channelKind, ZONES, zoneMeta, zoneItems, needsYou, bossHp, matchFor, award, levelOf, loadGame, saveGame, shareCard,
   MOVE_WORDS, ACHIEVEMENTS, QUESTS, questProgress, COMBO_WINDOW, comboMult,
 } from "./assistantGame.js";
 
@@ -65,7 +66,9 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
   const [pile, setPile] = useState([]);
   const [hub, setHub] = useState({ topics: [], data: [] });
   const [focus, setFocus] = useState("all");
-  const [picked, setPicked] = useState(null);     // the lobby/coffee/archive item or cabinet topic in hand
+  const [picked, setPicked] = useState(null);     // the item (or cabinet topic, or gym task) in hand
+  const [mine, setMine] = useState([]);            // your own tasks (Kind "task") - the gym's stations
+  const [passed, setPassed] = useState(() => new Set());   // what Next already read this visit
   const [game, setGame] = useState(() => loadGame());
   const [toasts, setToasts] = useState([]);
   const [banner, setBanner] = useState(null);     // a level-up or trophy, big and brief
@@ -87,7 +90,10 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
       api.get("/api/settings").catch(() => ({ data: {} })),
     ]);
     // the same floor as the columns, so the same rule: only work an agent runs (isAgentKind)
-    setTasks((taskResponse.data.data || []).filter((task) => task.Status !== "dropped" && isAgentKind(task.Kind)));
+    const all = (taskResponse.data.data || []).filter((task) => task.Status !== "dropped");
+    setTasks(all.filter((task) => isAgentKind(task.Kind)));
+    // ...and the rest of the list, the one the Board leaves out: yours to do, nothing works it
+    setMine(all.filter((task) => task.Kind === "task" && task.Status !== "done"));
     setAgents(agentResponse.data.data || agentResponse.data.agents || []);
     const row = (settingResponse.data.data || []).find((setting) => setting.Name === "auto_sessions");
     setCap((current) => current == null ? Math.max(1, Math.min(8, parseInt(row?.Value, 10) || 4)) : current);
@@ -132,14 +138,31 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
     liveRow: live[task.TaskId] || null,
     state: studioTaskState(task, live[task.TaskId], agents, clock),
   } : null), [desks, live, agents, clock]);
-  const zones = useMemo(() => zoneItems(pile), [pile]);
-  const npcs = useMemo(() => ["lobby", "coffee", "archive"].flatMap((zone) => zones[zone].map((i) => ({
-    key: i.key, zone, who: i.who || laneMeta(i.lane).word, title: i.title, mark: markOf(i),
-  }))), [zones]);
+  // Next read these: what only wanted knowing leaves the room; what still needs you stays, read
+  const shown = useMemo(() => pile.filter((i) => !passed.has(i.key) || needsYou(i)), [pile, passed]);
+  const zones = useMemo(() => zoneItems(shown), [shown]);
+  // the gym: every task of yours, with its pile item when the assistant has one on it (that brings the moves)
+  const gym = useMemo(() => {
+    const byTid = Object.fromEntries(zones.gym.filter((i) => i.tid).map((i) => [i.tid, i]));
+    const rows = mine.map((t) => ({ key: byTid[t.TaskId]?.key || `task:${t.TaskId}`, task: t, item: byTid[t.TaskId] || null }));
+    const seen = new Set(mine.map((t) => t.TaskId));
+    return [...rows, ...zones.gym.filter((i) => !seen.has(i.tid)).map((i) => ({ key: i.key, task: null, item: i }))];
+  }, [mine, zones]);
+  const npcs = useMemo(() => [
+    ...["meeting", "coffee", "archive"].flatMap((zone) => zones[zone].filter((i) => i.kind !== "meeting").map((i) => ({
+      key: i.key, zone, sub: channelKind(i), who: i.who || laneMeta(i.lane).word, title: i.title, mark: markOf(i) }))),
+    ...gym.map((g) => {
+      const list = rowChecklist(g.task), done = list.filter((c) => c.done).length;
+      return { key: g.key, zone: "gym", who: g.task?.ref || g.item?.ref || "your task", title: g.task?.Title || g.item?.title,
+        mark: g.item && needsYou(g.item) ? { glyph: "!", tone: "need" } : list.length ? { glyph: `${done}/${list.length}`, tone: "send" } : null };
+    }),
+  ], [zones, gym]);
+  const meetings = useMemo(() => zones.meeting.filter((i) => i.kind === "meeting" || i.lane === "time")
+    .map((i) => ({ title: i.title, when: String(i.event?.start || i.when || "").slice(11, 16) })), [zones]);
   const zoneCounts = useMemo(() => ({
-    floor: zones.floor.filter(needsYou).length, lobby: zones.lobby.filter(needsYou).length,
+    floor: zones.floor.filter(needsYou).length, gym: gym.length, meeting: zones.meeting.filter(needsYou).length,
     coffee: zones.coffee.length, archive: zones.archive.length, hq: 0,
-  }), [zones]);
+  }), [zones, gym]);
   const byKey = useMemo(() => Object.fromEntries(pile.map((i) => [i.key, i])), [pile]);
   const hp = bossHp(pile), hpMax = useRef(1);
   hpMax.current = Math.max(hpMax.current, hp, 1);
@@ -148,13 +171,14 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
     if (pick && !desks.some((task) => task?.TaskId === pick)) setPick(null);
   }, [desks, pick]);
 
-  // keys: 1-5 jump into a space, Esc walks back out. Never while you are typing.
+  // keys: 1-6 jump into a space, N is Next, Esc walks back out. Never while you are typing.
   useEffect(() => {
     if (!active) return undefined;
     const onKey = (e) => {
       if (e.target?.closest?.("input, textarea, [contenteditable=true]") || e.metaKey || e.ctrlKey || e.altKey) return;
       const z = ZONES.find((x) => x.hotkey === e.key);
       if (z) { e.preventDefault(); go(z.key); }
+      else if ((e.key === "n" || e.key === "N") && byKey[picked]) { e.preventDefault(); next(byKey[picked]); }
       else if (e.key === "Escape") { e.preventDefault(); go("all"); }
     };
     window.addEventListener("keydown", onKey);
@@ -175,7 +199,7 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
       const out = await run();
       const left = key ? pileRef.current.filter((i) => i.key !== key || move === "draft") : pileRef.current;
       pileRef.current = left;
-      const world = { lobby: zoneItems(left).lobby.filter(needsYou).length, coffee: zoneItems(left).coffee.length };
+      const world = { meeting: zoneItems(left).meeting.filter(needsYou).length, coffee: zoneItems(left).coffee.length };
       if (!move) { if (key) setPile(left); return out; }       // a move that does not score (a second question inside a minute)
       const r = award(gameRef.current, move, Date.now(), world);
       gameRef.current = r.state; setGame(r.state); saveGame(r.state);
@@ -193,6 +217,27 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
   useEffect(() => { if (!banner) return undefined; const t = setTimeout(() => setBanner(null), 2600); return () => clearTimeout(t); }, [banner]);
 
   const settle = (item, verb, move) => play(move, item.key, () => api.post("/api/funnel/settle", { key: item.key, verb }));
+  // NEXT, the chat's own: this one is read (settle surfaced, read - "shown is read"), and the next thing in
+  // the assistant's ranked order comes up, wherever in the office it stands - you walk there
+  const knowOnly = (i) => (i.lane === "fyi" || i.lane === "report" || i.kind === "fyis") && !i.bad;
+  const nextAfter = (key) => {
+    const order = pileRef.current.filter((i) => i.key !== key && !passedRef.current.has(i.key) && i.lane !== "working");
+    const at = pile.findIndex((i) => i.key === key);
+    return order.find((i) => pile.indexOf(i) > at) || order[0] || null;
+  };
+  const passedRef = useRef(passed);
+  const next = async (item) => {
+    const read = knowOnly(item);
+    const ok = await play(read ? "read" : "next", read ? item.key : null,
+      () => api.post("/api/funnel/settle", { key: item.key, verb: "surfaced", read: true }));
+    if (ok == null) return;
+    passedRef.current = new Set([...passedRef.current, item.key]);
+    setPassed(passedRef.current);
+    const n = nextAfter(item.key);
+    if (!n) { toast({ kind: "quest", text: "Pile walked ✦", sub: "nothing left you haven't seen" }); go("all"); return; }
+    const z = zoneItems([n]);
+    go(Object.keys(z).find((k) => z[k].length), n.key);
+  };
   const jumpIn = (tid, opts) => {
     if (!opened.current.has(tid)) { opened.current.add(tid); const r = award(gameRef.current, "open"); gameRef.current = r.state; setGame(r.state); saveGame(r.state); toast({ kind: "xp", text: `+${r.gained} XP`, sub: "Jumped into the code space" }); }
     onOpenTask(tid, opts);
@@ -221,7 +266,7 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
 
   if (!tasks) return <CircularProgress size={22} sx={{ m: 4 }} />;
   // what every room hands its items: the one in hand, the moves, and the roads out
-  const room = { picked, setPicked, agents, busy, play, onOpenTask: jumpIn, onNavigate };
+  const room = { picked, setPicked, agents, busy, play, onOpenTask: jumpIn, onNavigate, onNext: next };
   const lv = levelOf(game.xp);
   const comboLeft = Math.max(0, 1 - (Date.now() - game.lastAt) / COMBO_WINDOW);
   const combo = comboLeft > 0 ? game.combo : 0;
@@ -236,9 +281,9 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
         <React.Suspense fallback={<Box sx={{ position: "absolute", inset: 0, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
           <GameScene seats={sceneSeats} selectedId={pick} onSelect={(id) => { setPick(id); go("floor"); }}
             focus={focus} onZone={(z) => go(z)} npcs={npcs} cabinets={hub.topics} picked={picked} zoneCounts={zoneCounts}
-            onPick={(key) => { const i = byKey[key]; if (i) { const z = zoneItems([i]); go(Object.keys(z).find((k) => z[k].length), key); } }}
+            onPick={(key) => { const i = byKey[key]; if (i) { const z = zoneItems([i]); go(Object.keys(z).find((k) => z[k].length), key); } else if (key.startsWith("task:")) go("gym", key); }}
             onCabinet={(topic) => go("archive", topic)} onCore={() => go("hq")}
-            inset={wide ? { left: 180, right: folded ? 0 : 344 } : { left: 0, right: 0 }} active={active} />
+            inset={wide ? { left: 180, right: folded ? 0 : 344 } : { left: 0, right: 0 }} active={active} meetings={meetings} />
         </React.Suspense>
       </Box>
 
@@ -328,7 +373,8 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
           {focus === "all" && <Briefing pile={pile} agents={agents} onGo={(i) => { const z = zoneItems([i]); go(Object.keys(z).find((k) => z[k].length), i.key); }} />}
           {focus === "floor" && <FloorSpace seated={seated} queue={queue} live={live} agents={agents} clock={clock} pick={pick} setPick={setPick}
             {...room} items={zones.floor} onJump={jumpIn} cap={cap} setCap={setCap} free={free} desks={desks} />}
-          {focus === "lobby" && (zones.lobby.length ? <ItemList {...room} items={zones.lobby} /> : <Empty text="Nobody is waiting in the lobby. Lobby Zero." />)}
+          {focus === "meeting" && <MeetingSpace {...room} items={zones.meeting} />}
+          {focus === "gym" && <GymSpace {...room} gym={gym} reload={() => { load(); loadWorld(); }} />}
           {focus === "coffee" && <CoffeeSpace {...room} items={zones.coffee} onSettle={settle} />}
           {focus === "archive" && <ArchiveSpace {...room} ghosts={zones.archive} hub={hub} reload={loadWorld} />}
           {focus === "hq" && <CoreSpace chat={chat} onAsk={ask} {...room} pile={pile}
@@ -425,7 +471,7 @@ const Match = ({ item, agents }) => {
 };
 
 // a room's list: one row per item; the one in hand opens into the inspector, with every move it carries
-function ItemList({ items, picked, setPicked, agents, busy, play, onOpenTask, onNavigate, accent }) {
+function ItemList({ items, picked, setPicked, agents, busy, play, onOpenTask, onNavigate, onNext, accent }) {
   return items.map((i) => {
     const on = picked === i.key;
     return (
@@ -434,7 +480,7 @@ function ItemList({ items, picked, setPicked, agents, busy, play, onOpenTask, on
         <Typography sx={{ fontSize: 13, fontWeight: 700, mt: 0.3 }}>{i.title}</Typography>
         {!on && (i.preview || i.why) && <Typography noWrap sx={{ fontSize: 11.5, color: G.faint, mt: 0.2 }}>{i.preview || i.why}</Typography>}
         {on && <><Match item={i} agents={agents} />
-          <ItemInspector item={i} agents={agents} busy={busy} play={play} onOpenTask={onOpenTask} onNavigate={onNavigate} /></>}
+          <ItemInspector item={i} agents={agents} busy={busy} play={play} onOpenTask={onOpenTask} onNavigate={onNavigate} onNext={onNext} /></>}
       </Card>
     );
   });
@@ -459,7 +505,7 @@ function Briefing({ pile, agents, onGo }) {
   </>;
 }
 
-function FloorSpace({ seated, queue, live, agents, clock, pick, setPick, items, busy, play, onJump, onOpenTask, onNavigate, picked, setPicked, cap, setCap, free, desks }) {
+function FloorSpace({ seated, queue, live, agents, clock, pick, setPick, items, busy, play, onJump, onOpenTask, onNavigate, onNext, picked, setPicked, cap, setCap, free, desks }) {
   // what the floor wants from you that is not just a desk at work: a raised hand, a stopped or saved
   // session, a finished job to read, a task nobody is on - each opens into the inspector
   const seatedIds = new Set(seated.map((t) => t.TaskId));
@@ -468,7 +514,7 @@ function FloorSpace({ seated, queue, live, agents, clock, pick, setPick, items, 
   return <>
     {calls.length > 0 && <>
       <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color: G.red, px: 0.5, mb: 0.6 }}>ON THE FLOOR FOR YOU · {calls.length}</Typography>
-      <ItemList items={calls} picked={picked} setPicked={setPicked} agents={agents} busy={busy} play={play} onOpenTask={onOpenTask} onNavigate={onNavigate} />
+      <ItemList items={calls} picked={picked} setPicked={setPicked} agents={agents} busy={busy} play={play} onOpenTask={onOpenTask} onNavigate={onNavigate} onNext={onNext} />
     </>}
     <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color: G.faint, px: 0.5, mb: 0.6, mt: calls.length ? 1.2 : 0 }}>AT THE DESKS · {seated.length}</Typography>
     {seated.map((task) => {
@@ -493,7 +539,7 @@ function FloorSpace({ seated, queue, live, agents, clock, pick, setPick, items, 
           )}
           {liveRow?.files?.length > 0 && <Box sx={{ pt: 0.6 }}><FileChips files={liveRow.files} /></Box>}
           {selected && (item
-            ? <ItemInspector item={item} agents={agents} busy={busy} play={play} onOpenTask={onOpenTask} onNavigate={onNavigate} />
+            ? <ItemInspector item={item} agents={agents} busy={busy} play={play} onOpenTask={onOpenTask} onNavigate={onNavigate} onNext={onNext} />
             : <Box sx={{ display: "flex", gap: 0.6, mt: 0.9 }}><Btn kind="gold" onClick={() => onJump(task.TaskId)}>⌨ Jump into the code space</Btn></Box>)}
         </Card>
       );
@@ -518,6 +564,80 @@ function FloorSpace({ seated, queue, live, agents, clock, pick, setPick, items, 
         sx={{ mt: 0.25, color: G.gold }} />
     </Box>
   </>;
+}
+
+// the checklist rides on every task row (store.list_tasks selects t.*), so a station draws its reps for free
+const rowChecklist = (t) => {
+  try { const a = JSON.parse(t?.Checklist || "[]"); return Array.isArray(a) ? a.filter((i) => i && i.text) : []; }
+  catch { return []; }
+};
+
+// the meeting room, split the way the people reached you: coming up, mail, chat, and the tools that pinged
+function MeetingSpace({ items, ...room }) {
+  if (!items.length) return <Empty text="The meeting room is empty. Nobody is waiting on you." />;
+  const groups = [
+    ["📅 COMING UP", items.filter((i) => i.kind === "meeting" || i.lane === "time"), "#7fd1c6"],
+    ["✉ EMAIL · AT THE TABLE", items.filter((i) => i.kind !== "meeting" && i.lane !== "time" && channelKind(i) === "email"), "#f0c05a"],
+    ["💬 CHAT · IN THE HUDDLE", items.filter((i) => i.kind !== "meeting" && i.lane !== "time" && channelKind(i) === "chat"), "#b9c3ff"],
+    ["🔧 FROM YOUR TOOLS", items.filter((i) => i.kind !== "meeting" && i.lane !== "time" && channelKind(i) === "tool"), "#aeb6bf"],
+  ].filter(([, list]) => list.length);
+  return groups.map(([label, list, color], n) => (
+    <Box key={label} sx={{ mt: n ? 1.2 : 0 }}>
+      <Typography sx={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color, px: 0.5, mb: 0.6 }}>{label} · {list.length}</Typography>
+      <ItemList {...room} items={list} />
+    </Box>
+  ));
+}
+
+// THE GYM: your own tasks as stations. Each checklist box is a rep, the last one (or Finish) is the set.
+function GymSpace({ gym, picked, setPicked, busy, play, reload, onOpenTask, onNext, ...room }) {
+  if (!gym.length) return <Empty text="No tasks of your own. Rest day." />;
+  const tick = (t, c) => play(c.done ? null : "rep", null, async () => {
+    const { data } = await api.patch(`/api/tasks/${t.TaskId}/checklist/${c.id}`, { done: !c.done });
+    // the last tick closes the task (server: tick_checklist) - that is the set, scored on its own
+    if (data?.closed) await play("set", null, async () => true);
+    reload();
+    return data;
+  });
+  const finish = (g) => play("set", g.item?.key || null, async () => { const out = await runOperation(api, "task.complete", g.task.TaskId); reload(); return out || true; });
+  return gym.map((g) => {
+    const on = picked === g.key, list = rowChecklist(g.task), done = list.filter((c) => c.done).length;
+    const title = g.task?.Title || g.item?.title, ref = g.task?.ref || g.item?.ref;
+    return (
+      <Card key={g.key} on={on} onClick={() => setPicked(on ? null : g.key)} accent={g.item && needsYou(g.item) ? G.red : G.gold}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.7 }}>
+          <Typography sx={{ fontSize: 11, fontWeight: 800, color: G.gold }}>🏋 {ref}</Typography>
+          {list.length > 0 && <Typography sx={{ ...mono, fontSize: 10.5, color: G.dim, ml: "auto" }}>{done}/{list.length} reps</Typography>}
+        </Box>
+        <Typography sx={{ fontSize: 13, fontWeight: 700, mt: 0.3 }}>{title}</Typography>
+        {list.length > 0 && (
+          <Box sx={{ height: 5, mt: 0.6, borderRadius: 3, bgcolor: "rgba(255,255,255,.08)", overflow: "hidden" }}>
+            <Box sx={{ height: "100%", width: `${(done / list.length) * 100}%`, bgcolor: done === list.length ? G.green : G.gold, transition: "width .4s" }} />
+          </Box>
+        )}
+        {on && <Box onClick={(e) => e.stopPropagation()}>
+          {g.task?.Summary && <Typography sx={{ fontSize: 12, color: G.dim, mt: 0.7, whiteSpace: "pre-wrap" }}>{g.task.Summary}</Typography>}
+          {list.length > 0 && <Box sx={{ mt: 0.8 }}>
+            {list.map((c) => (
+              <Box key={c.id || c.text} component="button" type="button" disabled={!!busy || !c.id} onClick={() => tick(g.task, c)}
+                sx={{ display: "flex", alignItems: "center", gap: 0.8, width: "100%", textAlign: "left", border: 0, bgcolor: "transparent", color: G.ink,
+                  px: 0.4, py: 0.45, borderRadius: "6px", cursor: "pointer", "&:hover": { bgcolor: G.card } }}>
+                <Box sx={{ width: 16, height: 16, borderRadius: "4px", flexShrink: 0, display: "grid", placeItems: "center", fontSize: 11, fontWeight: 900,
+                  border: `2px solid ${c.done ? G.green : G.faint}`, bgcolor: c.done ? G.green : "transparent", color: "#1c1f24" }}>{c.done ? "✓" : ""}</Box>
+                <Typography sx={{ fontSize: 12.5, color: c.done ? G.faint : G.ink, textDecoration: c.done ? "line-through" : "none", flex: 1 }}>{c.text}</Typography>
+                {!c.done && <Typography sx={{ fontSize: 10.5, color: G.gold, fontWeight: 800 }}>+5</Typography>}
+              </Box>
+            ))}
+          </Box>}
+          {g.item && <ItemInspector item={g.item} agents={room.agents} busy={busy} play={play} onOpenTask={onOpenTask} onNavigate={room.onNavigate} onNext={onNext} />}
+          <Box sx={{ display: "flex", gap: 0.5, mt: 0.9, flexWrap: "wrap" }}>
+            {g.task && <Btn kind="gold" disabled={!!busy} onClick={() => finish(g)} title="Closes the task - every box on it is ticked">🏁 Finish the set · +30</Btn>}
+            {(g.task || g.item?.tid) && <Btn onClick={() => onOpenTask((g.task || g.item).TaskId || g.item.tid)}>Open {ref}</Btn>}
+          </Box>
+        </Box>}
+      </Card>
+    );
+  });
 }
 
 function CoffeeSpace({ items, onSettle, ...room }) {

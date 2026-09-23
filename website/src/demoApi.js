@@ -35,6 +35,34 @@ const numbersWorkflow = typeof location !== "undefined" && new URLSearchParams(l
 if (numbersWorkflow) installNumbersWorkflow(state, scriptedAssistant);
 let numbersStarted = false;
 scriptedAssistant.transcripts[scriptedAssistant.activeTaskId] = scriptedAssistant.messages;
+// The rest of the Assistant Game's office, invented like everything in the demo world: people who wrote on
+// chat (the meeting room's huddle), a meeting coming up for its screen, one more ghost, and a finished
+// agent waiting to be read. Each is a real pile item with a message behind it, so every button answers.
+{
+  const soon = new Date(Date.now() + 70 * 60000);
+  const at = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:00`;
+  const said = {
+    41: ["teams", "Gail Moreno", "gmoreno@northwind.example", "Can you sign off the new rota before 3?", "Hi - the weekend rota is in the shared folder. Can you sign it off before 3 so I can post it? Two swaps from last week are already in."],
+    42: ["whatsapp", "Omar Keller", "+1 555 0142", "Driver is at the loading dock - which door?", "The furniture delivery is here early. Door B is blocked by the recycling pickup - OK to use door D?"],
+    43: ["slack", "Erin Blake", "@erin", "Heads up: the payroll portal moved to single sign-on", "From Monday the payroll portal signs in through the company login. Nothing to do unless your bookmark breaks."],
+    44: ["email", "Paula Vance", "pvance@vendor.example", "Badge printer quote", "Following up on the badge printer quote from last week - it is valid until Friday. Want me to hold it?"],
+  };
+  const one = (state["/api/messages/one"] ||= {});
+  for (const [mid, [channel, who, from, subject, body]] of Object.entries(said))
+    one[mid] = { MessageId: Number(mid), TaskId: null, Channel: channel, Subject: subject, FromName: who, FromEmail: from, SentAt: at(new Date(Date.now() - 50 * 60000)),
+      BodyText: body, ReadText: body, SourceLink: null, Status: "feed", Direction: "in" };
+  scriptedAssistant.pile.items.push(
+    { key: "msg:41", kind: "asked", lane: "asked", title: said[41][3], who: said[41][1], when: at(new Date()), why: "asked you to sign something off today", mid: 41, channel: "teams", preview: said[41][4] },
+    { key: "msg:42", kind: "asked", lane: "asked", title: said[42][3], who: said[42][1], when: at(new Date()), why: "a one-line answer settles it", mid: 42, channel: "whatsapp", preview: said[42][4] },
+    { key: "meeting:ops", kind: "meeting", lane: "time", title: "Operations review", who: "Calendar", when: at(soon), why: "starts in about an hour", channel: "meeting",
+      event: { subject: "Operations review", start: at(soon), who: ["Gail Moreno", "Ray Colton", "Marcus Reed"], where: "Room 2", about: "Weekly numbers, the AP cutover, and the census sync." } },
+    { key: "msg:43", kind: "fyi", lane: "fyi", title: said[43][3], who: said[43][1], when: at(new Date()), why: "an announcement - nothing to do", mid: 43, channel: "slack", preview: said[43][4] },
+    { key: "idea:badges", kind: "idea", lane: "forgotten", title: "The badge printer quote has gone quiet", who: "Paula Vance", when: "2026-09-01 14:00:00",
+      why: "no reply since Monday; the quote runs out Friday", idea_kind: "cold", channel: "assistant", action: { type: "followup", mid: 44 }, mid: 44 },
+    { key: "agentdone:4", kind: "agentdone", lane: "report", title: "Reconcile the August GL export", who: "coder", when: at(new Date()), tid: 4, ref: "TQ-0004",
+      summary: "Found the two inter-company rows the export dropped; the fix is on a branch with a test.", channel: "github" },
+  );
+}
 let nextId = 9000;
 
 const path = (url) => String(url || "").split("?")[0];

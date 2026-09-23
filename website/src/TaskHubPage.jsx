@@ -272,7 +272,10 @@ export default function TaskHubPage() {
   const [everBoard, setEverBoard] = useState(false);
   const [everAssistant, setEverAssistant] = useState(tab === "Assistant");
   // the Assistant as a chat or as the game - remembered per browser, like any view choice
-  const [asstGame, setAsstGame] = useState(() => { try { return localStorage.getItem("taskuary.assistantMode") === "game"; } catch { return false; } });
+  // ...and the public demo opens straight into the game: it is the one that shows off what the assistant does
+  const [asstGame, setAsstGame] = useState(() => {
+    try { const v = localStorage.getItem("taskuary.assistantMode"); return v ? v === "game" : DEMO; } catch { return DEMO; }
+  });
   const pickAsstGame = (on) => { setAsstGame(on); try { localStorage.setItem("taskuary.assistantMode", on ? "game" : "chat"); } catch { /* private window */ } };
   useEffect(() => { if (tab === "Tasks") setEverTasks(true); }, [tab]);
   // ...and the Board, which can hold a live session too: mounted once opened, hidden after. The

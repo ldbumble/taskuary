@@ -205,10 +205,10 @@ outside systems, send messages, run tools, or start agents. Its changes reset wh
 
 ## Installs
 
-![Daily installs of taskuary from PyPI, mirror traffic excluded](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/downloads.svg)
+![Daily installs of taskuary from PyPI, mirror traffic excluded](https://raw.githubusercontent.com/ldbumble/taskuary/stats/downloads.svg)
 
 Updated daily from PyPI with mirror traffic excluded. The raw series is
-[docs/downloads.csv](docs/downloads.csv).
+[downloads.csv on the `stats` branch](https://github.com/ldbumble/taskuary/blob/stats/downloads.csv).
 
 ## Documentation
 

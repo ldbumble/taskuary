@@ -153,6 +153,19 @@ function loadStats(){
     var wmax = Math.max.apply(null, (d.what || []).map(function(x){ return x.n; }).concat([1]));
     html += '<h2>Which ones</h2>' + table(['event', 'what', 'count'],
       (d.what || []).map(function(x){ return [x.Kind, x.What, x.n]; }), wmax);
+
+    /* Where they came from and where they went. The landing page counts its own outbound clicks
+       as `cta`, so "repo", "download" and "install" below are people LEAVING for something that
+       matters - the only measure of the page that is not a vanity number. */
+    var pmax = Math.max.apply(null, (d.pages || []).map(function(x){ return x.sessions; }).concat([1]));
+    html += '<h2>Which page</h2>' + table(['page', 'sessions'],
+      (d.pages || []).map(function(x){ return [x.page, x.sessions]; }), pmax);
+    var rmax = Math.max.apply(null, (d.refs || []).map(function(x){ return x.sessions; }).concat([1]));
+    html += '<h2>Where they came from</h2>' + table(['source', 'sessions'],
+      (d.refs || []).map(function(x){ return [x.src, x.sessions]; }), rmax);
+    var cmax = Math.max.apply(null, (d.countries || []).map(function(x){ return x.sessions; }).concat([1]));
+    html += '<h2>Country</h2>' + table(['country', 'sessions'],
+      (d.countries || []).map(function(x){ return [x.country, x.sessions]; }), cmax);
     $('out').innerHTML = html;
   }).catch(function(e){
     if (e.message !== 'signed out') $('out').innerHTML = '<div class="msg">' + esc(e.message) + '</div>';

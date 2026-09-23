@@ -448,5 +448,98 @@ docker compose up -d</div>
       .catch(function(){});
   })();
 </script>
+
+<script>
+  /* WHO REACHES THIS PAGE, AND WHETHER THEY LEAVE FOR SOMETHING THAT MATTERS.
+     Counted first-party, into our own D1 through functions/api/ev.js - the collector the demo
+     already uses. No cookie, no third-party script, no ad network: an id that lives in
+     sessionStorage and dies with the tab, and a country Cloudflare already knows from routing
+     the request. Nothing here is a consent banner's business, which is the point.
+
+     The landing page had no counting at all, so GitHub's referrer table was the only evidence
+     it did anything (2026-09-22). That table shows arrivals AT GitHub; it cannot show how many
+     people read this page and left, which is the number that says whether the page works.
+
+     The three things worth knowing, and all of them are a `cta`:
+       repo      they went to look at the source
+       download  they took the Windows exe
+       install   they copied the pip line
+     Anything else outbound is counted under its own host, so a link nobody thought to measure
+     is still measured. Kinds match functions/api/ev.js - `cta` was already allowed there. */
+  (function(){
+    var ENDPOINT = '/api/ev', KEY = 'tq_site_sid';
+    if (!/(^|\.)taskuary\.com$/.test(location.hostname)) return;   /* a fork or a local copy counts nothing */
+
+    var sid = (function(){
+      try {
+        var s = sessionStorage.getItem(KEY);
+        if (!s) { s = Math.random().toString(36).slice(2) + Date.now().toString(36); sessionStorage.setItem(KEY, s); }
+        return s;
+      } catch (e) { return 'nostore'; }
+    })();
+
+    var queue = [], timer = null, started = Date.now();
+
+    function flush(beacon){
+      if (!queue.length) return;
+      var body = JSON.stringify({
+        sid: sid, page: location.pathname.slice(0, 120),
+        ref: (document.referrer || '').split('/').slice(0, 3).join('/').slice(0, 200),
+        mobile: matchMedia('(max-width: 900px)').matches,
+        events: queue.splice(0, 40)
+      });
+      try {
+        if (beacon && navigator.sendBeacon) navigator.sendBeacon(ENDPOINT, new Blob([body], {type: 'application/json'}));
+        else fetch(ENDPOINT, {method: 'POST', body: body, keepalive: true,
+                              headers: {'content-type': 'application/json'}})['catch'](function(){});
+      } catch (e) { /* counting is never worth an error in the page */ }
+    }
+
+    function track(kind, what, n){
+      queue.push({kind: kind, what: String(what || '').slice(0, 80), n: n || 0});
+      clearTimeout(timer);
+      timer = setTimeout(function(){ flush(false); }, 2000);
+    }
+
+    track('open', 'landing');
+    /* a four-second visit and a two-minute one are different verdicts on the page, and only the
+       second one means anybody read it */
+    [15, 60, 180].forEach(function(sec){
+      setTimeout(function(){ track('dwell', sec + 's', sec); }, sec * 1000);
+    });
+
+    /* One listener on the document rather than one per link: the footer and the hero both carry
+       GitHub links, and a link added later would otherwise be added untracked. */
+    document.addEventListener('click', function(e){
+      var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+      if (!a) return;
+      var href = a.getAttribute('href') || '';
+      if (href.charAt(0) === '#' || href.indexOf('mailto:') === 0) return;
+      var url;
+      try { url = new URL(href, location.href); } catch (err) { return; }
+      if (url.hostname === location.hostname) {
+        if (/^\/demo/.test(url.pathname)) track('cta', 'demo');
+        else if (/^\/docs/.test(url.pathname)) track('cta', 'docs');
+        return;
+      }
+      var what = /\.exe($|\?)/i.test(url.pathname) ? 'download'
+               : /\/releases/.test(url.pathname) ? 'releases'
+               : url.hostname === 'github.com' ? 'repo'
+               : url.hostname.replace(/^www\./, '').slice(0, 40);
+      track('cta', what);
+      flush(true);                    /* the tab is about to change - a queued click is a lost one */
+    }, true);
+
+    /* the pip line is copied, not clicked, so a click on the code block is the only signal there is */
+    var pip = document.querySelector('code, .install, pre');
+    if (pip) pip.addEventListener('copy', function(){ track('cta', 'install'); flush(true); });
+
+    addEventListener('pagehide', function(){
+      track('leave', '', Math.round((Date.now() - started) / 1000));
+      flush(true);
+    });
+    document.addEventListener('visibilitychange', function(){ if (document.hidden) flush(true); });
+  })();
+</script>
 </body>
 </html>

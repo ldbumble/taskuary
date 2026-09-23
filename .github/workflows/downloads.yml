@@ -31,18 +31,33 @@ jobs:
         run: python -m unittest tests/test_pypi_downloads.py
 
       # The CSV is the long memory: the API only keeps 180 days, and merging into a committed
-      # history is what lets the series outlive that window.
+      # history is what lets the series outlive that window. It lives on the `stats` branch now,
+      # so it is fetched from there rather than read out of this checkout.
+      - name: Take the existing history from the stats branch
+        run: |
+          set -euo pipefail
+          git fetch origin stats --depth=1 2>/dev/null \
+            && git show origin/stats:downloads.csv > docs/downloads.csv \
+            || echo 'no stats branch yet - starting the history from what PyPI still has'
       - run: python tools/pypi_downloads.py --package taskuary --history docs/downloads.csv --out docs/downloads.svg
 
-      - name: Commit the chart directly to master
+      # The `stats` branch holds ONLY these two files, as an orphan with no shared history.
+      # It is not protected, so the bot can write it; nothing else lives there, so it can never
+      # carry a torn snapshot of master; and the README reads the badge from it directly.
+      - name: Publish the chart to the stats branch
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add docs/downloads.csv docs/downloads.svg
-          if git diff --quiet --cached; then
-            echo 'No download changes to commit.'
+          cp docs/downloads.csv docs/downloads.svg "$RUNNER_TEMP/"
+          git fetch origin stats --depth=1 2>/dev/null && git checkout stats || git checkout --orphan stats
+          git rm -rq --cached . 2>/dev/null || true
+          find . -maxdepth 1 ! -name . ! -name .git -exec rm -rf {} +
+          cp "$RUNNER_TEMP/downloads.csv" "$RUNNER_TEMP/downloads.svg" .
+          git add downloads.csv downloads.svg
+          if git diff --quiet --cached HEAD 2>/dev/null; then
+            echo 'No download changes to publish.'
             exit 0
           fi
-          git commit -m 'docs: update download counts'
-          git push origin HEAD:master
+          git commit -m 'stats: update download counts'
+          git push origin HEAD:stats

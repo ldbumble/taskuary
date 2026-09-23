@@ -224,9 +224,9 @@ taskuary --demo
 
 ## 安装量
 
-![PyPI 每日安装量，不含镜像流量。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/downloads.svg)
+![PyPI 每日安装量，不含镜像流量。](https://raw.githubusercontent.com/ldbumble/taskuary/stats/downloads.svg)
 
-数据每天更新，不包含镜像流量。原始数据见 [docs/downloads.csv](docs/downloads.csv)。
+数据每天更新，不包含镜像流量。原始数据见 [`stats` 分支上的 downloads.csv](https://github.com/ldbumble/taskuary/blob/stats/downloads.csv)。
 
 ## 文档
 

@@ -49,7 +49,11 @@ export async function onRequestGet({ request, env }) {
   const days = Math.min(90, Math.max(1, Number(url.searchParams.get("days")) || 14));
   const since = new Date(Date.now() - days * 86400000).toISOString();
   const q = (sql) => env.DEMO_EVENTS.prepare(sql).bind(since).all().then((r) => r.results || []);
-  const [visits, kinds, what, depth] = await Promise.all([
+  // Ref, Country and Page have been written on every row since this table existed and nothing
+  // ever queried them, so "who is reaching us" was the one question the dashboard could not
+  // answer while already holding the answer (2026-09-22). Each bucket counts SESSIONS, not rows:
+  // by rows, one visitor who clicked a lot looks like a crowd.
+  const [visits, kinds, what, depth, pages, refs, countries] = await Promise.all([
     q(`SELECT substr(At,1,10) d, COUNT(DISTINCT Sid) sessions, COUNT(*) events
        FROM ev WHERE At>=? GROUP BY d ORDER BY d`),
     q(`SELECT Kind, COUNT(*) n FROM ev WHERE At>=? GROUP BY Kind ORDER BY n DESC`),
@@ -58,6 +62,17 @@ export async function onRequestGet({ request, env }) {
     q(`SELECT CASE WHEN c=1 THEN '1 (bounced)' WHEN c<5 THEN '2-4' WHEN c<15 THEN '5-14' ELSE '15+' END bucket,
               COUNT(*) sessions FROM (SELECT Sid, COUNT(*) c FROM ev WHERE At>=? GROUP BY Sid)
        GROUP BY bucket ORDER BY sessions DESC`),
+    q(`SELECT CASE WHEN Page='' OR Page='/' THEN 'landing' WHEN Page LIKE '/demo%' THEN 'demo'
+                   ELSE Page END page, COUNT(DISTINCT Sid) sessions
+       FROM ev WHERE At>=? GROUP BY page ORDER BY sessions DESC LIMIT 20`),
+    // the referrer is stored as scheme+host only, never a full url - which page on Reddit sent
+    // someone is not ours to keep, and the host answers the question anyway
+    q(`SELECT CASE WHEN Ref='' THEN '(direct or unknown)'
+                   ELSE replace(replace(Ref,'https://',''),'http://','') END src,
+              COUNT(DISTINCT Sid) sessions
+       FROM ev WHERE At>=? GROUP BY src ORDER BY sessions DESC LIMIT 25`),
+    q(`SELECT CASE WHEN Country='' THEN '??' ELSE Country END country, COUNT(DISTINCT Sid) sessions
+       FROM ev WHERE At>=? GROUP BY country ORDER BY sessions DESC LIMIT 25`),
   ]);
-  return statsJson({ days, visits, kinds, what, depth });
+  return statsJson({ days, visits, kinds, what, depth, pages, refs, countries });
 }

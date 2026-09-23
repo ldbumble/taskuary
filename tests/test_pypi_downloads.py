@@ -159,12 +159,41 @@ class TheCommandTests(unittest.TestCase):
 
 
 class TheWorkflowTests(unittest.TestCase):
-    def test_the_daily_update_pushes_directly_without_opening_a_pr(self):
+    def test_the_daily_update_publishes_to_the_stats_branch_without_opening_a_pr(self):
+        """No pull request, and not master either.
+
+        It pushed straight to master until master was protected with "require a pull request".
+        `enforce_admins` is false there, so a human admin still pushes through and the Actions bot
+        - which is not an admin - does not: the nightly job failed five runs in a row while
+        building the chart correctly every time, and the README badge went nine days stale
+        (2026-09-22).
+
+        A daily PR is the other answer and it is worse: one pull request a day, for a number, each
+        waiting on three required checks. The chart is a generated artifact rather than source, so
+        it goes to an unprotected `stats` branch that holds nothing else - which also means it can
+        never carry a torn snapshot of master into the history people read.
+        """
         workflow = (Path(__file__).resolve().parent.parent / '.github' / 'workflows' / 'downloads.yml').read_text(encoding='utf-8')
-        self.assertIn('git push origin HEAD:master', workflow)
+        self.assertIn('git push origin HEAD:stats', workflow)
+        self.assertNotIn('HEAD:master', workflow)
         self.assertIn('python -m unittest tests/test_pypi_downloads.py', workflow)
         self.assertNotIn('create-pull-request', workflow)
         self.assertNotIn('automation/downloads', workflow)
+
+    def test_the_history_is_read_back_from_the_stats_branch(self):
+        """The CSV is the long memory - PyPI only keeps 180 days. Generating it from an empty file
+        every night would silently shorten the series to whatever the API still has, and nobody
+        would notice until the chart got mysteriously shorter."""
+        workflow = (Path(__file__).resolve().parent.parent / '.github' / 'workflows' / 'downloads.yml').read_text(encoding='utf-8')
+        self.assertIn('git show origin/stats:downloads.csv', workflow)
+
+    def test_the_readme_badge_points_at_the_branch_that_is_actually_updated(self):
+        """A badge reading from master would now be frozen for ever: nothing updates that copy."""
+        root = Path(__file__).resolve().parent.parent
+        for name in ('README.md', 'README.zh-CN.md'):
+            text = (root / name).read_text(encoding='utf-8')
+            self.assertIn('taskuary/stats/downloads.svg', text, name)
+            self.assertNotIn('taskuary/master/docs/downloads.svg', text, name)
 
 
 if __name__ == '__main__':

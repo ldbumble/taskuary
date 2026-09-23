@@ -67,7 +67,7 @@ CHIP_WORDS = {'approve': 'Send the reply', 'redraft': 'Redraft it', 'reply': 'Re
               'not_ours_sender': 'Ignore this sender', 'block_sender': 'Block them in Settings',
               'archive': 'Archive it', 'close': 'Close the task',
               'done': 'Handled', 'later': 'Later', 'skip': 'Tomorrow', 'next': 'Next', 'answer_agent': 'Answer it',
-              'stop_agent': 'Stop the agent', 'rerun': 'Run it again', 'split': 'Split it in two',
+              'stop_agent': 'Save and end session', 'rerun': 'Run it again', 'split': 'Split it in two',
               'prep': 'Prep me', 'followup': 'Draft a follow-up'}
 # What the word will actually DO, on hover - written where the difference matters. "Ignore this
 # sender" and "Block them in Settings" are one line apart and not remotely the same act.
@@ -1894,11 +1894,14 @@ PROPOSALS = {
     'close': ('task.complete', 'Close the task', True), 'done': ('item.settle', 'Mark it handled', True),
     'later': ('item.settle', 'Push it back', True), 'skip': ('item.settle', 'Skip until tomorrow', True),
     'approve': ('review.approve', 'Send the reply', True), 'answer_agent': ('agent.answer', 'Send the answer to the agent', True),
-    'stop_agent': ('agent.stop', 'Stop the agent', False), 'rerun': ('report.rerun', 'Run the report again', True),
+    'stop_agent': ('agent.stop', 'Save and end session', False), 'rerun': ('report.rerun', 'Run the report again', True),
     'remember': ('memory.remember', 'Remember it', False), 'split': ('task.split', 'Split it in two', False),
     'clear': ('pipe.clear', 'Clear them from the pipe', False), 'setup': ('task.setup', 'Open the walk-through', False),
 }
-AUTO = ('done', 'skip', 'later', 'close')     # settles what is on the table; nothing leaves, nothing is handed off
+# ...and ending the agent's session, which the task page's own button does on the click: it writes the
+# session up and drafts the reply for your yes - nothing leaves (the owner, 2026-09-23: "it should be save
+# end session as well same as in task", having been asked to confirm a card that read "wrap: false")
+AUTO = ('done', 'skip', 'later', 'close', 'stop_agent')     # settles what is on the table; nothing leaves, nothing is handed off
 # the operations that take the item off the table, so the walk moves on after them (the page reads
 # `settles` off the proposal it is holding; a chat comes back a turn later and has only the kind)
 SETTLING_KINDS = frozenset(kind for kind, _label, settles in PROPOSALS.values() if settles)
@@ -2031,12 +2034,15 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     elif verb == 'stop_agent':
         end = _agent_task(store, item, text)
         if not end: raise ValueError('no agent is running right now - nothing to stop')
-        asked_wrap = wrap = bool(re.search(r"\b(wrap|finished|it'?s done)\b", text, re.I))
-        if wrap:                                     # a wrap writes the report FROM the transcript: without one there is nothing to wrap
-            from . import terminal as term
-            try: wrap = bool((term.transcript_for(store, end) or ('',))[0].strip())
-            except Exception: wrap = False
-        target, params, label = end, {'wrap': wrap}, ('Wrap it up' if wrap else label)
+        # THE TASK PAGE'S "Save and end session", whatever the words: the session is written up whenever
+        # there is a transcript to write it from (a wrap writes the report FROM it), and simply ended when
+        # there is none. It used to write up only on the word "wrap" - so the button stopped an agent and
+        # threw its work away, where the page's button of the same meaning kept it.
+        asked_wrap = bool(re.search(r"\b(wrap|finished|it'?s done)\b", text, re.I))
+        from . import terminal as term
+        try: wrap = bool((term.transcript_for(store, end) or ('',))[0].strip())
+        except Exception: wrap = False
+        target, params = end, {'wrap': wrap}
         if asked_wrap and not wrap: note = ' There is no transcript to write a report from yet, so there is nothing to wrap - this stops the agent and the task stays open.'
     elif verb == 'rerun': target = it.get('source_id')
     elif verb == 'remember':
@@ -2063,7 +2069,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     head = f"Changed to: {label} - {summary}" if op['version'] > 1 else f"{label}: {summary}"
     say_ = lead + f"{head}.{note} Nothing has been started - confirm below, or tell me what to change."
     return {**op, 'verb': verb, 'label': label, 'summary': summary, 'settles': bool(settles and not elsewhere),
-            'key': it.get('key'), 'ref': it.get('ref'), 'tid': it.get('tid'), 'say': say_}
+            'key': it.get('key'), 'ref': it.get('ref'), 'tid': it.get('tid'), 'say': say_, 'note': note.strip()}
 
 
 def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'owner', table: bool = False) -> dict:
@@ -2082,7 +2088,7 @@ def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'own
     record_related(store, tid, item, 'user', f"{PROPOSALS[verb][1]}: {item.get('title') or item.get('ref') or key}")
     prop = propose_for(store, tid, {'verb': verb, 'text': text or ''}, item, text or '', actor, table=item if table else None)
     prop['settles'] = bool(table and PROPOSALS[verb][2])
-    if table and verb in AUTO: prop.update(auto=True, say=f"{prop['label']} - {_where(item)}.")
+    if table and verb in AUTO: prop.update(auto=True, say=f"{prop['label']} - {_where(item)}." + (f" {prop['note']}" if prop.get('note') else ''))
     record_related(store, tid, item, 'assistant', prop['say'], {'kind': 'proposal', 'key': prop.get('key'), 'title': prop['label'], 'op': prop['id'],
                                                                'tid': prop.get('tid'), 'ref': prop.get('ref'), 'lane': item.get('lane')})
     return prop
@@ -2264,7 +2270,6 @@ def describe_op(store, op: dict) -> tuple:
     if kind == 'preference.exclude_sender': label = 'Silence this sender' if p.get('scope') == 'sender' else 'File it and remember this kind'
     if kind == 'item.settle': label = {'later': 'Push it back', 'skip': 'Skip until tomorrow'}.get(str(p.get('verb')), 'Mark it handled')
     if kind == 'task.complete' and p.get('agent'): label = 'Close the task and stop its agent'
-    if kind == 'agent.stop' and p.get('wrap'): label = 'Wrap it up'
     if kind == 'report.create': label = 'Create the report'
     if kind == 'connection.create': label = 'Create the connection'
     if kind in toolcatalog.INSTANT or kind == 'report.delete':
@@ -2324,7 +2329,7 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
         if o.get('existing'): return f" {o.get('agent') or 'An agent'} was already on it."
         if o.get('started') or o.get('chat'): return f" {o.get('agent') or 'The agent'} is on it - moving on."
     if kind == 'item.settle' and o.get('closed'): return f" {task_ref(int(o['closed']))} closed."
-    if kind == 'agent.stop' and not p.get('wrap'): return ' The task stays open - say close it when you want it closed.'
+    if kind == 'agent.stop': return ' The task stays open - say close it when you want it closed.'
     if kind == 'memory.remember': return ' A memory settles nothing: the walk is where it was.'
     if kind == 'report.create' and o.get('sourceId'):
         return f" \"{o.get('title')}\" is on the Reports tab{' and runs on its schedule' if o.get('enabled') else ', switched off'}."
@@ -2536,7 +2541,8 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         # 2026-09-07: "I did already - it should close it; only confirm when you are not sure"). A hand-off, a
         # send, a rule or a verb aimed elsewhere still waits for the button.
         if verb in AUTO and not elsewhere:
-            prop.update(auto=True, say=f"{prop['label']} - {_where(target_item or {})}.")
+            # ...and a run at once still says what it could not do ("nothing to wrap")
+            prop.update(auto=True, say=f"{prop['label']} - {_where(target_item or {})}." + (f" {prop['note']}" if prop.get('note') else ''))
         rec('assistant', prop['say'], {'kind': 'proposal', 'key': prop.get('key'), 'title': prop['label'], 'op': prop['id'],
                                         'tid': prop.get('tid'), 'ref': prop.get('ref'), 'lane': (target_item or {}).get('lane')})
         return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}

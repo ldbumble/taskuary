@@ -6,7 +6,7 @@ export function proposalOf(data) { return data && data.proposal && data.proposal
 
 // the box's four facts: what will happen, on what, with which parameters, and the button that does it
 export function describe(p) {
-  const hidden = new Set(["key", "tid", "rid", "hint", "config", "processing_context"]);   // a revision map, not a fact for the owner
+  const hidden = new Set(["key", "tid", "rid", "hint", "config", "processing_context", "wrap"]);   // wrap: whether a transcript exists - machinery, never a fact to confirm   // a revision map, not a fact for the owner
   // A nested value printed as "[object Object]", which is the one thing a confirmation card must never
   // do: the selector IS what the owner is being asked to approve (the owner, 2026-09-07). Flatten it
   // into the fields it actually holds.

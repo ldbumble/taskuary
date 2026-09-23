@@ -25,7 +25,7 @@ it brings in until it says something useful and surprising"). Handed only subjec
 wrote 'no content given' in its own notes; so the check now reads WHAT PEOPLE SAID (the words of every
 human thread of the last two days, the owner's lines marked), who is OUT OF OFFICE (from auto-replies -
 a chase to someone away is worse than silence), the CALENDAR, and the actual words in every rolled-up
-arrival (including machine mail), with each report's schedule and each failure's cause beside the count. That is where "Yittie said exporting freezes the
+arrival (including machine mail), with each report's schedule, when it last ran and what that run did, and each failure's cause beside the count. That is where "Yittie said exporting freezes the
 app - and she is in Monday's meeting" comes from.
 
 It also leaves itself a NOTE: each check ends with what it looked at and found nothing in, when
@@ -503,7 +503,7 @@ def blk_label(bid: str) -> str:
 # ── the model's pass: its own read, given what it already said ───────────────────────────────
 CONTRACT = ('\n\nYou are writing your POST on the owner\'s Timeline - the short list of things worth saying right now. You get '
             'CANDIDATES the hub found itself (each with a key), WHAT PEOPLE SAID (the words, by thread), who is OUT OF OFFICE, the '
-            'CALENDAR, what arrived (with each report\'s schedule and each failure\'s cause), what got done, what is open, and WHAT '
+            'CALENDAR, what arrived (with each report\'s schedule, when it last ran and what that run did, and each failure\'s cause), what got done, what is open, and WHAT '
             'YOU ALREADY SAID. Answer JSON only: {"say": [{"key": "<a candidate key, or idea:<short-slug> for a thought of your own>", '
             '"text": "<one line, under 30 words, first person: the fact and what I would do - quote the phrase or name the cause when there is one>", '
             '"section": "<people|loose|ideas|systems - which part of the post this belongs under: people = what somebody said '
@@ -536,13 +536,25 @@ def _schedules(store) -> dict:
     nothing without its clock: 25 digests in two days on an on_startup report is 25 launches, not a
     scheduler bug, and two seeded reports at one timestamp is one launch, not a restart to explain."""
     from . import reports
-    out = {}
+    out, st = {}, store.get_settings()
     for src in store.list_sources(active_only=False):
         if src.get('Channel') != 'report': continue
         try: c = json.loads(src.get('ConfigJson') or '{}')
         except ValueError: continue
-        out[c.get('title') or src.get('Address')] = reports.schedule_words(c)
+        out[c.get('title') or src.get('Address')] = reports.schedule_words(c) + _last_run(st, src)
     return out
+
+def _last_run(settings: dict, src: dict) -> str:
+    """'; last ran Tue 22 Sep 20:37, nothing to report so nothing was filed' - or ''. The clock alone
+    misled: a routed report whose judge holds a run back files NO message, so the newest mid read as
+    the last firing and a 140-minute timer looked stalled two runs after it fired on time (TQ-0685).
+    The run record on the source (reports.LAST_RUN) is the receipt the arrivals cannot carry."""
+    from .reports import LAST_RUN
+    try: rec = json.loads(settings.get(f"{LAST_RUN}{src['SourceId']}") or '{}')
+    except (ValueError, TypeError): rec = {}
+    if not rec.get('at'): return ''
+    what = 'failed' if rec.get('failed') else f"posted mid {rec['message_id']}" if rec.get('message_id') else 'nothing to report so nothing was filed'
+    return f"; last ran {_when(rec['at'])}, {what}"
 
 _FAILS = re.compile(r'fail|error|denied|timeout|could not|unable', re.I)
 _GH_FAILED = re.compile(r'^(.+?) Failed in ', re.M)          # the job lines of GitHub's "Run failed" mail

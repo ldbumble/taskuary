@@ -633,6 +633,24 @@ class WhatItReadsTests(unittest.TestCase):
         self.assertIn('-> failed: test (ubuntu-latest, 3.12), test (windows-latest, 3.10)', txt)
         self.assertEqual(assistant._schedules(s)['Nightly'], 'daily at 08:00 + on app start')
 
+    def test_arrivals_say_when_a_report_last_ran_even_when_it_posted_nothing(self):
+        # A routed report whose judge held the run back files NO message, so the newest mid read as
+        # its last firing: a 140-minute timer looked stalled two runs after it fired on time (TQ-0685).
+        from taskuary.reports import LAST_RUN
+        s = _store()
+        s._exec("INSERT INTO source (Channel, Address, Owner, Active, ConfigJson) VALUES ('report', 'Error check', 't', 1, ?)",
+                (json.dumps({'type': 'mssql', 'title': 'Error check', 'every_minutes': 140}),))
+        sid = s._one("SELECT SourceId FROM source WHERE Address='Error check'")['SourceId']
+        s.add_message({'ExternalId': 'e:1', 'ConversationId': 'e', 'Channel': 'report', 'SourceName': 'Error check', 'Subject': 'Error check - 3 rows',
+                       'FromName': 'Error check', 'SentAt': _ago(0, 5), 'BodyText': 'three errors', 'Status': 'feed'})
+        s.set_setting(f'{LAST_RUN}{sid}', json.dumps({'at': _ago(0, 0), 'message_id': None, 'said': 0, 'failed': False}), 'report')
+        txt = assistant._recent(s)
+        self.assertIn(f'[schedule: every 140 minutes; last ran {assistant._when(_ago(0, 0))}, nothing to report so nothing was filed]', txt)
+        s.set_setting(f'{LAST_RUN}{sid}', json.dumps({'at': _ago(0, 0), 'message_id': 9793, 'said': 1, 'failed': False}), 'report')
+        self.assertIn('; last ran ', assistant._schedules(s)['Error check']); self.assertIn(', posted mid 9793]', assistant._recent(s))
+        s.set_setting(f'{LAST_RUN}{sid}', json.dumps({'at': _ago(0, 0), 'message_id': 9799, 'failed': True, 'error': 'Login timeout'}), 'report')
+        self.assertIn(', failed]', assistant._recent(s))
+
     def test_arrivals_carry_the_email_body_not_just_the_subject(self):
         s = _store()
         _mail(s, 'notifications@github.com', 'Devarajan invited you to acme-hiring-screener',

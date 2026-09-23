@@ -792,7 +792,8 @@ def _run_operation(op: dict, background: BackgroundTasks):
         if out['state'] == 'no_request': return waitroom_add(tid, {'text': str(p.get('text') or 'yes')})
         if not out['delivered']: raise RuntimeError(f"{out['state']}: {out.get('why') or ''}")
         return out
-    if kind == 'agent.stop': return _wrap_task(tid, True) if p.get('wrap') else stop_task_agent(tid)
+    # the page's "Save and end session" (TasksView.wrapUp posts close=False): the agent ends, the task stays
+    if kind == 'agent.stop': return _wrap_task(tid, False) if p.get('wrap') else stop_task_agent(tid)
     if kind == 'report.rerun': return report_rerun(tid)
     if kind == 'memory.remember':
         from . import concierge
